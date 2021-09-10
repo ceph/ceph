@@ -14,11 +14,8 @@
 namespace crimson::os::seastore {
 
 struct onode_layout_t {
-  // around 350 bytes for fixed fields in object_info_t,
-  // the left are for the variable-sized fields like oid
-  // FIXME: object_info_t may need to shrinked, at least
-  // 	    oid doesn't need to be held in it.
-  static constexpr int MAX_OI_LENGTH = 1024;
+  // The expected decode size of object_info_t without oid.
+  static constexpr int MAX_OI_LENGTH = 232;
   // We might want to move the ss field out of onode_layout_t.
   // The reason is that ss_attr may grow to relative large, as
   // its clone_overlap may grow to a large size, if applications
@@ -26,7 +23,9 @@ struct onode_layout_t {
   // the number of objects per OSD, so that all objects' metadata
   // can be cached in memory) and do many modifications between
   // snapshots.
-  static constexpr int MAX_SS_LENGTH = 128;
+  // TODO: implement flexible-sized onode value to store inline ss_attr
+  // effectively.
+  static constexpr int MAX_SS_LENGTH = 1;
 
   ceph_le32 size{0};
   ceph_le32 oi_size{0};
