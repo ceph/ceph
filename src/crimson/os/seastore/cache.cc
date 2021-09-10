@@ -653,10 +653,10 @@ void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
       efforts.retire.bytes += i->get_length();
     }
 
-    efforts.fresh.extents += t.fresh_block_list.size();
-    for (auto &i: t.fresh_block_list) {
+    efforts.fresh.extents += t.get_num_fresh_blocks();
+    t.for_each_fresh_block([&](auto &i) {
       efforts.fresh.bytes += i->get_length();
-    }
+    });
 
     for (auto &i: t.mutated_block_list) {
       if (!i->is_valid()) {
@@ -680,7 +680,7 @@ void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
   } else {
     // read transaction won't have non-read efforts
     assert(t.retired_set.empty());
-    assert(t.fresh_block_list.empty());
+    assert(t.get_num_fresh_blocks() == 0);
     assert(t.mutated_block_list.empty());
     assert(t.onode_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
@@ -703,7 +703,7 @@ void Cache::on_transaction_destruct(Transaction& t)
     }
     // read transaction won't have non-read efforts
     assert(t.retired_set.empty());
-    assert(t.fresh_block_list.empty());
+    assert(t.get_num_fresh_blocks() == 0);
     assert(t.mutated_block_list.empty());
     assert(t.onode_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
@@ -883,8 +883,8 @@ record_t Cache::prepare_record(Transaction &t)
     retire_extent(i);
   }
 
-  record.extents.reserve(t.fresh_block_list.size());
-  for (auto &i: t.fresh_block_list) {
+  record.extents.reserve(t.inline_block_list.size());
+  for (auto &i: t.inline_block_list) {
     DEBUGT("fresh block {}", t, *i);
     if (!i->is_inline()) {
       continue;
@@ -920,7 +920,8 @@ void Cache::complete_commit(
   LOG_PREFIX(Cache::complete_commit);
   DEBUGT("enter", t);
 
-  for (auto &i: t.fresh_block_list) {
+  
+  t.for_each_fresh_block([&](auto &i) {
     if (i->is_inline()) {
       i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     }
@@ -929,18 +930,17 @@ void Cache::complete_commit(
 
     if (!i->is_valid()) {
       DEBUGT("invalid {}", t, *i);
-      continue;
+    } else {
+      i->state = CachedExtent::extent_state_t::CLEAN;
+      DEBUGT("fresh {}", t, *i);
+      add_extent(i);
+      if (cleaner) {
+	cleaner->mark_space_used(
+	  i->get_paddr(),
+	  i->get_length());
+      }
     }
-
-    i->state = CachedExtent::extent_state_t::CLEAN;
-    DEBUGT("fresh {}", t, *i);
-    add_extent(i);
-    if (cleaner) {
-      cleaner->mark_space_used(
-	i->get_paddr(),
-	i->get_length());
-    }
-  }
+  });
 
   // Add new copy of mutated blocks, set_io_wait to block until written
   for (auto &i: t.mutated_block_list) {
