@@ -33,9 +33,6 @@ namespace ssd {
 using namespace std;
 using namespace librbd::cache::pwl;
 
-// SSD: this number can be updated later
-const unsigned long int ops_appended_together = MAX_WRITES_PER_SYNC_POINT;
-
 static bool is_valid_pool_root(const WriteLogPoolRoot& root) {
   return root.pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
          root.first_valid_entry >= DATA_RING_BUFFER_OFFSET &&
@@ -79,7 +76,7 @@ void WriteLog<I>::collect_read_extents(
   ldout(m_image_ctx.cct, 5) << dendl;
   auto write_entry = std::static_pointer_cast<WriteLogEntry>(map_entry.log_entry);
   buffer::list hit_bl;
-  hit_bl = write_entry->get_cache_bl();
+  write_entry->copy_cache_bl(&hit_bl);
   bool writesame = write_entry->is_writesame_entry();
   auto hit_extent_buf = std::make_shared<ImageExtentBuf>(
       hit_extent, hit_bl, true, read_buffer_offset, writesame);
