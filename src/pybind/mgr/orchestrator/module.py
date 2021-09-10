@@ -819,9 +819,10 @@ Usage:
     def _osd_rm_start(self,
                       osd_id: List[str],
                       replace: bool = False,
-                      force: bool = False) -> HandleCommandResult:
+                      force: bool = False,
+                      zap: bool = False) -> HandleCommandResult:
         """Remove OSD daemons"""
-        completion = self.remove_osds(osd_id, replace=replace, force=force)
+        completion = self.remove_osds(osd_id, replace=replace, force=force, zap=zap)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
