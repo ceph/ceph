@@ -202,9 +202,15 @@ public:
   bool auth_is_best() {
     if ((head.op & CEPH_MDS_OP_WRITE) || head.op == CEPH_MDS_OP_OPEN ||
         (head.op == CEPH_MDS_OP_GETATTR && (head.args.getattr.mask & CEPH_STAT_RSTAT)) ||
-	head.op == CEPH_MDS_OP_READDIR || send_to_auth) 
+	head.op == CEPH_MDS_OP_READDIR || head.op == CEPH_MDS_OP_MKNOD ||
+	head.op == CEPH_MDS_OP_SYMLINK || head.op == CEPH_MDS_OP_LINK ||
+	head.op == CEPH_MDS_OP_UNLINK || head.op == CEPH_MDS_OP_RENAME ||
+	head.op == CEPH_MDS_OP_SETLAYOUT || head.op == CEPH_MDS_OP_SETDIRLAYOUT ||
+	head.op == CEPH_MDS_OP_SETXATTR || head.op == CEPH_MDS_OP_RMXATTR ||
+	head.op == CEPH_MDS_OP_SETFILELOCK || head.op == CEPH_MDS_OP_SETATTR ||
+	send_to_auth)
       return true;
-    return false;    
+    return false;
   }
 
   void dump(Formatter *f) const;
