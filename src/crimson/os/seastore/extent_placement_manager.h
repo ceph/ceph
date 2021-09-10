@@ -371,11 +371,13 @@ public:
           auto old_addr = extent->get_paddr();
           cache.mark_delayed_extent_inline(t, extent);
           inline_list.emplace_back(old_addr, extent);
-          continue;
-        }
-        auto& allocator_ptr = get_allocator(extent->backend_type, extent->hint);
-        alloc_map[allocator_ptr.get()].emplace_back(extent);
-        num_ool_extents++;
+        } else {
+	  auto& allocator_ptr = get_allocator(
+	    extent->backend_type, extent->hint
+	  );
+	  alloc_map[allocator_ptr.get()].emplace_back(extent);
+	  num_ool_extents++;
+	}
       }
       DEBUGT("{} inline extents, {} ool extents",
         t,
