@@ -7,7 +7,7 @@ import tempfile
 import threading
 import time
 
-from orchestrator import OrchestratorError
+# from orchestrator import OrchestratorError
 from mgr_util import verify_tls_files
 from ceph.utils import datetime_now
 from ceph.deployment.inventory import Devices
@@ -357,12 +357,18 @@ class SSLCerts:
         return (cert_str, key_str)
 
     def generate_cert(self, addr: str = '') -> Tuple[str, str]:
+        have_ip = True
         if addr:
             try:
-                ipaddress.IPv4Address(addr)
+                ip = x509.IPAddress(ipaddress.IPv4Address(addr))
             except Exception:
-                raise OrchestratorError(
-                    f'Address supplied to build cert ({addr}) is not valid IPv4 address')
+                try:
+                    ip = x509.IPAddress(ipaddress.IPv6Address(addr))
+                except Exception:
+                    have_ip = False
+                    pass
+        else:
+            ip = x509.IPAddress(ipaddress.IPv4Address(self.mgr.get_mgr_ip()))
 
         private_key = rsa.generate_private_key(
             public_exponent=65537, key_size=4096, backend=default_backend())
@@ -382,13 +388,13 @@ class SSLCerts:
         builder = builder.not_valid_after(datetime.now() + timedelta(days=(365 * 10 + 3)))
         builder = builder.serial_number(x509.random_serial_number())
         builder = builder.public_key(public_key)
-        builder = builder.add_extension(
-            x509.SubjectAlternativeName(
-                [x509.IPAddress(ipaddress.IPv4Address(
-                    addr if addr else str(self.mgr.get_mgr_ip())))]
-            ),
-            critical=False
-        )
+        if have_ip:
+            builder = builder.add_extension(
+                x509.SubjectAlternativeName(
+                    [ip]
+                ),
+                critical=False
+            )
         builder = builder.add_extension(
             x509.BasicConstraints(ca=False, path_length=None), critical=True,
         )
