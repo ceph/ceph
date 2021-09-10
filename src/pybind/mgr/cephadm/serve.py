@@ -672,6 +672,15 @@ class CephadmServe:
             return False
         self.log.debug('Applying service %s spec' % service_name)
 
+        if service_type == 'agent':
+            try:
+                assert self.mgr.cherrypy_thread
+                assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+            except Exception:
+                self.log.info(
+                    'Delaying applying agent spec until cephadm endpoint root cert created')
+                return False
+
         self._apply_service_config(spec)
 
         if service_type == 'osd':
@@ -930,6 +939,15 @@ class CephadmServe:
             # ignore daemons for deleted services
             if dd.service_name() in self.mgr.spec_store.spec_deleted:
                 continue
+
+            if dd.daemon_type == 'agent':
+                try:
+                    assert self.mgr.cherrypy_thread
+                    assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+                except Exception:
+                    self.log.info(
+                        f'Delaying checking {dd.name()} until cephadm endpoint finished creating root cert')
+                    continue
 
             # These daemon types require additional configs after creation
             if dd.daemon_type in REQUIRES_POST_ACTIONS:
