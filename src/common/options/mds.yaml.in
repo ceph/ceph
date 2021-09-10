@@ -395,6 +395,15 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_dir_prefetch
+  type: bool
+  level: advanced
+  desc: flag to prefetch entire dir
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_tick_interval
   type: float
   level: advanced

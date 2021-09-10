@@ -1,0 +1,4 @@
+overrides:
+  ceph:
+    cephfs:
+      mds_dir_prefetch: true
