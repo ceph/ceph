@@ -14,6 +14,8 @@ import rbd
 import requests
 import uuid
 import time
+import os
+import subprocess
 from datetime import datetime, timedelta
 from threading import Event
 from collections import defaultdict
@@ -1072,6 +1074,62 @@ Device report is generated separately. To see it run 'ceph telemetry show-device
 
         if 'report_id' not in report:
             raise RuntimeError('report_id not found in report')
+
+        #--------- Tests for the perf channel ---------------#
+
+        # Create a test pool. In command line, this is the same as
+        # `ceph osd pool create test_pool 100`
+        r, outb, outs = self.mon_command({
+                'prefix': 'osd pool create',
+                'pool': 'test_pool',
+                'pg_num': 100
+        })
+
+        # Get a copy of the perf report before any IO changes have been made:
+        perf_report_1 = self.compile_report(channels=['perf'])
+
+        # Set up a test file that will be uploaded to the test pool.
+        f = open('test_file.txt', 'w')
+        f.write("Hello World!")
+        f.close()
+
+        # Upload test_file to the test pool. In command line, this is the same as
+        # `rados -p test_pool put test_file test_file.txt`. Then, remove the text file.
+        subprocess.run(['rados', '-p', 'test_pool', 'put', 'test_file', 'test_file.txt'])
+        os.remove('test_file.txt')
+
+        # Give the rados command some time to execute.
+        time.sleep(5)
+
+        # Get a second report and compare it to the first report to see if any
+        # changes, particularly writes to test_pool, have been made.
+        perf_report_2 = self.compile_report(channels=['perf'])
+        # [TODO: INSERT COMPARISON HERE]
+
+        # Download the test_file object from the pool. This is the same as
+        # rados -p test_pool rm test_file
+        subprocess.run(['rados', '-p', 'test_pool', 'rm', 'test_file'])
+
+        # Give the rados command some time to execute.
+        time.sleep(5)
+
+        # Get a third report and compare it to the second report to see if any
+        # changes, particularly reads from test_pool, have been made.
+        perf_report_3 = self.compile_report(channels=['perf'])
+        # [TODO: INSERT COMPARISON HERE]
+
+        # Delete the test pool. In command line, this is the same as
+        # `ceph osd pool delete test_pool test_pool --yes-i-really-really-mean-it`
+        r, outb, outs = self.mon_command({
+                'prefix': 'osd pool delete',
+                'pool': 'test_pool',
+                'pool2': 'test_pool',
+                'yes_i_really_really_mean_it': True
+        })
+
+        if r != 0:
+            raise RuntimeError('{}'.format(outs))
+        #-----------------------------------------------------#
 
     def shutdown(self) -> None:
         self.run = False
