@@ -116,7 +116,7 @@ Scanner::scan_valid_records_ret Scanner::scan_valid_records(
     cursor.offset.offset = segment_manager.get_block_size();
   }
   auto retref = std::make_unique<size_t>(0);
-  auto budget_used = *retref;
+  auto &budget_used = *retref;
   return crimson::repeat(
     [=, &cursor, &budget_used, &handler]() mutable
     -> scan_valid_records_ertr::future<seastar::stop_iteration> {
