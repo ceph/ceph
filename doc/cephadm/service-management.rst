@@ -388,6 +388,26 @@ specification.
    .. prompt:: bash #
 
     ceph orch apply -i myservice.yaml [--dry-run]
+
+
+.. _orch-rm:
+
+Removing a Service
+==================
+
+In order to remove a service including the removal
+of all daemons of that service, run
+
+.. prompt:: bash
+
+  ceph orch rm <service-name>
+
+For example:
+
+.. prompt:: bash
+
+  ceph orch rm rgw.myrgw
+
     
 Deployment of Daemons
 =====================
@@ -451,6 +471,8 @@ Disabling automatic deployment of daemons
 
 Cephadm supports disabling the automated deployment and removal of daemons on a
 per service basis. The CLI supports two commands for this.
+
+In order to fully remove a service, see :ref:`orch-rm`.
 
 Disabling automatic management of daemons
 -----------------------------------------
