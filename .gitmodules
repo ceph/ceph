@@ -74,3 +74,6 @@
 	path = src/libkmip
 	url = https://github.com/ceph/libkmip
 	branch = ceph-master
+[submodule "src/SQLiteCpp"]
+	path = src/SQLiteCpp
+	url = https://github.com/SRombauts/SQLiteCpp

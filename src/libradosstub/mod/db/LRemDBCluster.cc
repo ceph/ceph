@@ -4,6 +4,11 @@
 #include "LRemDBCluster.h"
 #include "LRemDBRadosClient.h"
 
+#define dout_subsys ceph_subsys_rados
+#undef dout_prefix
+#define dout_prefix *_dout << "LRemDBCluster: " << this << " " << __func__ \
+                           << ": "
+
 namespace librados {
 
 LRemDBCluster::File::File()
@@ -25,9 +30,6 @@ LRemDBCluster::LRemDBCluster()
 }
 
 LRemDBCluster::~LRemDBCluster() {
-  for (auto pool_pair : m_pools) {
-    pool_pair.second->put();
-  }
 }
 
 LRemRadosClient *LRemDBCluster::create_rados_client(CephContext *cct) {
@@ -38,7 +40,7 @@ int LRemDBCluster::register_object_handler(int64_t pool_id,
                                             const ObjectLocator& locator,
                                             ObjectHandler* object_handler) {
   std::lock_guard locker{m_lock};
-  auto pool = get_pool(m_lock, pool_id);
+  auto pool = get_cached_pool(m_lock, pool_id);
   if (pool == nullptr) {
     return -ENOENT;
   }
@@ -61,7 +63,7 @@ void LRemDBCluster::unregister_object_handler(int64_t pool_id,
                                                const ObjectLocator& locator,
                                                ObjectHandler* object_handler) {
   std::lock_guard locker{m_lock};
-  auto pool = get_pool(m_lock, pool_id);
+  auto pool = get_cached_pool(m_lock, pool_id);
   if (pool == nullptr) {
     return;
   }
@@ -76,25 +78,69 @@ void LRemDBCluster::unregister_object_handler(int64_t pool_id,
   object_handlers.erase(object_handler);
 }
 
-int LRemDBCluster::pool_create(const std::string &pool_name) {
-  std::lock_guard locker{m_lock};
-  if (m_pools.find(pool_name) != m_pools.end()) {
-    return -EEXIST;
+LRemDBCluster::PoolRef LRemDBCluster::make_pool(const string& name, int id) {
+  auto pool = std::make_shared<Pool>();
+  pool->pool_id = id;
+  m_pools[name] = pool;
+
+  return pool;
+}
+
+int LRemDBCluster::init(LRemDBStore::Cluster& dbc) {
+  map<string, LRemDBStore::PoolRef> pools;
+
+  int r = dbc.list_pools(&pools);
+  if (r < 0) {
+    return r;
   }
-  Pool *pool = new Pool();
-  pool->pool_id = ++m_pool_id;
-  m_pools[pool_name] = pool;
+
+  for (auto& iter : pools) {
+    auto& name = iter.first;
+    auto& pool_info = *iter.second;
+
+    make_pool(name, pool_info.get_id());
+  }
+
   return 0;
 }
 
-int LRemDBCluster::pool_delete(const std::string &pool_name) {
+int LRemDBCluster::pool_create(LRemDBStore::Cluster& dbc,
+                               const std::string &pool_name) {
+  if (pool_name.empty()) {
+    return -EINVAL;
+  }
+
+  std::lock_guard locker{m_lock};
+
+  auto pool = get_pool(m_lock, dbc, pool_name);
+  if (pool) {
+    return -EEXIST;
+  }
+
+  SQLite::Transaction transaction(dbc.new_transaction());
+
+  string v;
+  int r = dbc.create_pool(pool_name, v);
+  if (r < 0) {
+    return r;
+  }
+
+  transaction.commit();
+
+  make_pool(pool_name, r);
+
+  return r;
+}
+
+int LRemDBCluster::pool_delete(LRemDBStore::Cluster& dbc,
+                               const std::string &pool_name) {
   std::lock_guard locker{m_lock};
   Pools::iterator iter = m_pools.find(pool_name);
   if (iter == m_pools.end()) {
     return -ENOENT;
   }
-  iter->second->put();
   m_pools.erase(iter);
+#warning FIXME --  remove pool from store
   return 0;
 }
 
@@ -113,28 +159,82 @@ int LRemDBCluster::pool_list(std::list<std::pair<int64_t, std::string> >& v) {
   return 0;
 }
 
-LRemDBCluster::Pool *LRemDBCluster::get_pool(int64_t pool_id) {
+int64_t LRemDBCluster::pool_lookup(const std::string &pool_name) {
   std::lock_guard locker{m_lock};
-  return get_pool(m_lock, pool_id);
+  Pools::iterator iter = m_pools.find(pool_name);
+  if (iter == m_pools.end()) {
+    return -ENOENT;
+  }
+  return iter->second->pool_id;
 }
 
-LRemDBCluster::Pool *LRemDBCluster::get_pool(const ceph::mutex& lock,
+int LRemDBCluster::pool_reverse_lookup(int64_t id, std::string *name) {
+  std::lock_guard locker{m_lock};
+  for (Pools::iterator iter = m_pools.begin(); iter != m_pools.end(); ++iter) {
+    if (iter->second->pool_id == id) {
+      *name = iter->first;
+      return 0;
+    }
+  }
+  return -ENOENT;
+}
+
+LRemDBCluster::PoolRef LRemDBCluster::get_pool(LRemDBStore::Cluster& dbc,
+                                               int64_t pool_id) {
+  std::lock_guard locker{m_lock};
+  return get_pool(m_lock, dbc, pool_id);
+}
+
+LRemDBCluster::PoolRef LRemDBCluster::get_pool(const ceph::mutex& lock,
+                                               LRemDBStore::Cluster& dbc,
                                                int64_t pool_id) {
   for (auto &pool_pair : m_pools) {
     if (pool_pair.second->pool_id == pool_id) {
       return pool_pair.second;
     }
   }
+
+  LRemDBStore::PoolRef pool;
+  int r = dbc.get_pool(pool_id, &pool);
+  if (r < 0) {
+    return nullptr;
+  }
+
+  return make_pool(pool->get_name(), pool->get_id());
+}
+
+LRemDBCluster::PoolRef LRemDBCluster::get_cached_pool(const ceph::mutex& lock,
+                                                      int64_t pool_id) {
+  for (auto &pool_pair : m_pools) {
+    if (pool_pair.second->pool_id == pool_id) {
+      return pool_pair.second;
+    }
+  }
+
   return nullptr;
 }
 
-LRemDBCluster::Pool *LRemDBCluster::get_pool(const std::string &pool_name) {
+LRemDBCluster::PoolRef LRemDBCluster::get_pool(LRemDBStore::Cluster& dbc,
+                                               const std::string &pool_name) {
   std::lock_guard locker{m_lock};
+  return get_pool(m_lock, dbc, pool_name);
+}
+
+LRemDBCluster::PoolRef LRemDBCluster::get_pool(const ceph::mutex& lock,
+                                               LRemDBStore::Cluster& dbc,
+                                               const std::string &pool_name) {
   Pools::iterator iter = m_pools.find(pool_name);
   if (iter != m_pools.end()) {
     return iter->second;
   }
-  return nullptr;
+
+  LRemDBStore::PoolRef pool;
+  int r = dbc.get_pool(pool_name, &pool);
+  if (r < 0) {
+    return nullptr;
+  }
+
+  return make_pool(pool_name, pool->get_id());
 }
 
 void LRemDBCluster::allocate_client(uint32_t *nonce, uint64_t *global_id) {

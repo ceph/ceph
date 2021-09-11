@@ -4,6 +4,7 @@
 #pragma once
 
 #include "LRemRadosClient.h"
+#include "LRemDBStore.h"
 #include "include/ceph_assert.h"
 #include <list>
 #include <string>
@@ -83,6 +84,7 @@ private:
   uint32_t m_nonce;
   uint64_t m_global_id;
 
+  std::shared_ptr<LRemDBStore::Cluster> m_dbc;
 };
 
 } // namespace librados

@@ -288,7 +288,8 @@ add_library(rgw_a STATIC
     ${rgw_a_srcs})
 
 target_compile_definitions(rgw_a PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
-target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/libradosstub")
+target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
+
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   find_package(RabbitMQ REQUIRED)

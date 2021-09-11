@@ -336,6 +336,19 @@ else()
   include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
 endif()
 
+find_package(sqlitecpp 3.1.1 QUIET)
+if(sqlitecpp_FOUND)
+  include_directories(SYSTEM "${sqlitecpp_INCLUDE_DIR}")
+else()
+  message(STATUS "Could not find sqlitecpp, will build it")
+  # set(old_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+  # set(BUILD_SHARED_LIBS FALSE)
+  add_subdirectory(SQLiteCpp)
+  # set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
+  # unset(old_BUILD_SHARED_LIBS)
+  include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/SQLiteCpp/include")
+endif()
+
 # in osd/PeeringState.h, the number of elements in PeeringState::Active::reactions
 # is now 21 which exceeds the default value of BOOST_MPL_LIMIT_VECTOR_SIZE, which
 # is 20. so we need to override it. see

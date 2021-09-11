@@ -17,7 +17,7 @@
 #include "LRemClassHandler.h"
 #include "LRemIoCtxImpl.h"
 #include "LRemRadosClient.h"
-#include "mod/mem/LRemMemCluster.h"
+#include "mod/db/LRemDBCluster.h"
 #include "objclass/objclass.h"
 #include "osd/osd_types.h"
 #include <arpa/inet.h>
@@ -47,7 +47,7 @@ void set_cluster(LRemClusterRef cluster_ref) {
 LRemClusterRef get_cluster() {
   auto &cluster_ref = cluster();
   if (cluster_ref.get() == nullptr) {
-    cluster_ref.reset(new librados::LRemMemCluster());
+    cluster_ref.reset(new librados::LRemDBCluster());
   }
   return cluster_ref;
 }

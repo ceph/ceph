@@ -15,7 +15,7 @@ public:
   LRemDBIoCtxImpl();
   LRemDBIoCtxImpl(LRemDBRadosClient *client, int64_t m_pool_id,
                    const std::string& pool_name,
-                   LRemDBCluster::Pool *pool);
+                   LRemDBCluster::PoolRef pool);
   ~LRemDBIoCtxImpl() override;
 
   LRemIoCtxImpl *clone() override;
@@ -102,7 +102,7 @@ public:
   LRemTransactionStateRef init_transaction(const std::string& oid) override;
 
 protected:
-  LRemDBCluster::Pool *get_pool() {
+  LRemDBCluster::PoolRef& get_pool() {
     return m_pool;
   }
 
@@ -110,7 +110,7 @@ private:
   LRemDBIoCtxImpl(const LRemDBIoCtxImpl&);
 
   LRemDBRadosClient *m_client = nullptr;
-  LRemDBCluster::Pool *m_pool = nullptr;
+  LRemDBCluster::PoolRef m_pool;
 
   void append_clone(bufferlist& src, bufferlist* dest);
   size_t clip_io(size_t off, size_t len, size_t bl_len);
@@ -124,7 +124,7 @@ private:
                                            const SnapContext &snapc,
                                            uint64_t *opt_epoch = nullptr);
 
-  typedef boost::function<int(LRemDBCluster::Pool *, bool)> PoolOperation;
+  typedef boost::function<int(LRemDBCluster::PoolRef&, bool)> PoolOperation;
   int pool_op(LRemTransactionStateRef& trans,
               bool write,
               PoolOperation op);

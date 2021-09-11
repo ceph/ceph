@@ -42,19 +42,16 @@ LRemDBIoCtxImpl::LRemDBIoCtxImpl() {
 
 LRemDBIoCtxImpl::LRemDBIoCtxImpl(const LRemDBIoCtxImpl& rhs)
     : LRemIoCtxImpl(rhs), m_client(rhs.m_client), m_pool(rhs.m_pool) {
-  m_pool->get();
 }
 
 LRemDBIoCtxImpl::LRemDBIoCtxImpl(LRemDBRadosClient *client, int64_t pool_id,
                                    const std::string& pool_name,
-                                   LRemDBCluster::Pool *pool)
+                                   LRemDBCluster::PoolRef pool)
     : LRemIoCtxImpl(client, pool_id, pool_name), m_client(client),
       m_pool(pool) {
-  m_pool->get();
 }
 
 LRemDBIoCtxImpl::~LRemDBIoCtxImpl() {
-  m_pool->put();
 }
 
 LRemIoCtxImpl *LRemDBIoCtxImpl::clone() {
@@ -1110,7 +1107,7 @@ int LRemDBIoCtxImpl::xattr_get(LRemTransactionStateRef& trans,
     return -EBLOCKLISTED;
   }
 
-  int r = pool_op(trans, false, [&](LRemDBCluster::Pool *pool, bool write) {
+  int r = pool_op(trans, false, [&](LRemDBCluster::PoolRef& pool, bool write) {
     LRemDBCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(trans->locator);
     if (it == pool->file_xattrs.end()) {
       attrset->clear();
@@ -1143,7 +1140,7 @@ int LRemDBIoCtxImpl::setxattr(LRemTransactionStateRef& trans, const char *name,
 
   ldout(cct, 20) << ": -> name=" << name << " bl=" << bl << dendl;
 
-  return pool_op(trans, true, [&](LRemDBCluster::Pool *pool, bool write) {
+  return pool_op(trans, true, [&](LRemDBCluster::PoolRef& pool, bool write) {
     pool->file_xattrs[trans->locator][name] = bl;
     return 0;
   });
@@ -1159,7 +1156,7 @@ int LRemDBIoCtxImpl::rmxattr(LRemTransactionStateRef& trans, const char *name) {
 
   ldout(cct, 20) << ": -> name=" << name << dendl;
 
-  return pool_op(trans, true, [&](LRemDBCluster::Pool *pool, bool write) {
+  return pool_op(trans, true, [&](LRemDBCluster::PoolRef& pool, bool write) {
     pool->file_xattrs[trans->locator].erase(name);
     return 0;
   });

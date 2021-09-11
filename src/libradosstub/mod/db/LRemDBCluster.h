@@ -10,7 +10,6 @@
 #include "include/interval_set.h"
 #include "include/int_types.h"
 #include "common/ceph_mutex.h"
-#include "common/RefCountedObj.h"
 #include <boost/shared_ptr.hpp>
 #include <list>
 #include <map>
@@ -18,6 +17,10 @@
 #include <string>
 
 namespace librados {
+
+namespace LRemDBStore {
+  class Cluster;
+}
 
 class LRemDBCluster : public LRemCluster {
 public:
@@ -56,7 +59,7 @@ public:
   typedef std::map<ObjectLocator, FileSnapshots> Files;
 
   typedef std::set<uint64_t> SnapSeqs;
-  struct Pool : public RefCountedObject {
+  struct Pool {
     Pool();
 
     int64_t pool_id = 0;
@@ -74,6 +77,7 @@ public:
     FileXAttrs file_xattrs;
     FileHandlers file_handlers;
   };
+  using PoolRef = std::shared_ptr<Pool>;
 
   LRemDBCluster();
   ~LRemDBCluster() override;
@@ -85,14 +89,17 @@ public:
   void unregister_object_handler(int64_t pool_id, const ObjectLocator& locator,
                                  ObjectHandler* object_handler) override;
 
-  int pool_create(const std::string &pool_name);
-  int pool_delete(const std::string &pool_name);
+  int pool_create(LRemDBStore::Cluster& dbc, const std::string &pool_name);
+  int pool_delete(LRemDBStore::Cluster& dbc, const std::string &pool_name);
   int pool_get_base_tier(int64_t pool_id, int64_t* base_tier);
   int pool_list(std::list<std::pair<int64_t, std::string> >& v);
   int64_t pool_lookup(const std::string &name);
+  int pool_reverse_lookup(int64_t id, std::string *name);
 
-  Pool *get_pool(int64_t pool_id);
-  Pool *get_pool(const std::string &pool_name);
+  PoolRef get_pool(LRemDBStore::Cluster& dbc,
+                   int64_t pool_id);
+  PoolRef get_pool(LRemDBStore::Cluster& dbc,
+                   const std::string &pool_name);
 
   void allocate_client(uint32_t *nonce, uint64_t *global_id);
   void deallocate_client(uint32_t nonce);
@@ -103,9 +110,10 @@ public:
   void transaction_start(LRemTransactionStateRef& state);
   void transaction_finish(LRemTransactionStateRef& state);
 
+  int init(LRemDBStore::Cluster& dbc);
 private:
 
-  typedef std::map<std::string, Pool*>		Pools;
+  typedef std::map<std::string, PoolRef>		Pools;
   typedef std::set<uint32_t> Blocklist;
 
   mutable ceph::mutex m_lock =
@@ -122,8 +130,17 @@ private:
   ceph::condition_variable m_transaction_cond;
   std::set<ObjectLocator> m_transactions;
 
-  Pool *get_pool(const ceph::mutex& lock, int64_t pool_id);
+  LRemDBCluster::PoolRef make_pool(const string& name, int id);
+  PoolRef get_cached_pool(const ceph::mutex& lock,
+                          int64_t pool_id);
 
+  PoolRef get_pool(const ceph::mutex& lock,
+                   LRemDBStore::Cluster& dbc,
+                   int64_t pool_id);
+
+  PoolRef get_pool(const ceph::mutex& lock,
+                   LRemDBStore::Cluster& dbc,
+                   const std::string &pool_name);
 };
 
 } // namespace librados

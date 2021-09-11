@@ -1,4 +1,5 @@
 add_library(lrem_mod_db STATIC
+  mod/db/LRemDBStore.cc
   mod/db/LRemDBCluster.cc
   mod/db/LRemDBIoCtxImpl.cc
   mod/db/LRemDBRadosClient.cc)
@@ -10,7 +11,9 @@ add_library(lrem_mod_mem STATIC
   mod/mem/LRemMemRadosClient.cc)
 target_include_directories(lrem_mod_mem PUBLIC "${CMAKE_SOURCE_DIR}/src/libradosstub")
 target_link_libraries(lrem_mod_mem PRIVATE
-  lrem_mod_db)
+  lrem_mod_db
+  SQLiteCpp
+  sqlite3)
  
 add_library(librados_stub_impl STATIC
   LRemClassHandler.cc
