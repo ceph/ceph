@@ -82,6 +82,8 @@ something like:
 See :ref:`orchestrator-cli-placement-spec` for details of the placement
 specification.  See :ref:`multisite` for more information of setting up multisite RGW.
 
+See also :ref:`multisite`.
+
 Setting up HTTPS
 ----------------
 
@@ -250,3 +252,8 @@ Useful hints for ingress
 
 * It is good to have at least 3 RGW daemons.
 * We recommend at least 3 hosts for the ingress service.
+
+Further Reading
+===============
+
+* :ref:`object-gateway`
