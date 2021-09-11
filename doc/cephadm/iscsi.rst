@@ -67,3 +67,8 @@ The specification can then be applied using:
 
 
 See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
+
+Further Reading
+===============
+
+* RBD: :ref:`ceph-iscsi`
