@@ -8,6 +8,7 @@
 #include <boost/intrusive/list.hpp>
 
 #include "crimson/common/log.h"
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cached_extent.h"
@@ -33,12 +34,14 @@ public:
     RETIRED
   };
   get_extent_ret get_extent(paddr_t addr, CachedExtentRef *out) {
+    LOG_PREFIX(Transaction::get_extent);
     if (retired_set.count(addr)) {
       return get_extent_ret::RETIRED;
     } else if (auto iter = write_set.find_offset(addr);
 	iter != write_set.end()) {
       if (out)
 	*out = CachedExtentRef(&*iter);
+      TRACET("Found offset {} in write_set: {}", *this, addr, *iter);
       return get_extent_ret::PRESENT;
     } else if (
       auto iter = read_set.find(addr);
@@ -48,6 +51,7 @@ public:
       assert(iter->ref->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
       if (out)
 	*out = iter->ref;
+      TRACET("Found offset {} in read_set: {}", *this, addr, *(iter->ref));
       return get_extent_ret::PRESENT;
     } else {
       return get_extent_ret::ABSENT;
@@ -58,6 +62,7 @@ public:
     ceph_assert(!is_weak());
     if (ref->is_initial_pending()) {
       ref->state = CachedExtent::extent_state_t::INVALID;
+      write_set.erase(*ref);
     } else if (ref->is_mutation_pending()) {
       ref->state = CachedExtent::extent_state_t::INVALID;
       write_set.erase(*ref);
@@ -83,6 +88,7 @@ public:
   void add_fresh_extent(
     CachedExtentRef ref,
     bool delayed = false) {
+    LOG_PREFIX(Transaction::add_fresh_extent);
     ceph_assert(!is_weak());
     if (delayed) {
       assert(ref->is_logical());
@@ -94,29 +100,38 @@ public:
       offset += ref->get_length();
       inline_block_list.push_back(ref);
     }
+    TRACET("adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
   void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
+    LOG_PREFIX(Transaction::mark_delayed_extent_inline);
+    TRACET("removing {} from write_set", *this, *ref);
     write_set.erase(*ref);
     ref->set_paddr(make_record_relative_paddr(offset));
     offset += ref->get_length();
     inline_block_list.push_back(ref);
+    TRACET("adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
   void mark_delayed_extent_ool(LogicalCachedExtentRef& ref, paddr_t final_addr) {
+    LOG_PREFIX(Transaction::mark_delayed_extent_ool);
+    TRACET("removing {} from write_set", *this, *ref);
     write_set.erase(*ref);
     ref->set_paddr(final_addr);
     assert(!ref->get_paddr().is_null());
     assert(!ref->is_inline());
     ool_block_list.push_back(ref);
+    TRACET("adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
   void add_mutated_extent(CachedExtentRef ref) {
+    LOG_PREFIX(Transaction::add_mutated_extent);
     ceph_assert(!is_weak());
     mutated_block_list.push_back(ref);
+    TRACET("adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
