@@ -868,6 +868,8 @@ It is also possible to specify directly device paths in specific hosts like the 
 
 This can easily be done with other filters, like `size` or `vendor` as well.
 
+.. _cephadm-osd-activate:
+
 Activate existing OSDs
 ======================
 
