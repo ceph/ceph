@@ -1,3 +1,5 @@
+.. _rados-troubleshooting-mon:
+
 =================================
  Troubleshooting Monitors
 =================================

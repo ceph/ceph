@@ -253,6 +253,8 @@ To access the admin socket, first enter the daemon container on the host::
     [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
 
 
+.. _cephadm-restore-quorum:
+
 Restoring the MON quorum
 ------------------------
 
