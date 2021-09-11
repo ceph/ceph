@@ -578,7 +578,7 @@ public:
   void erase(CachedExtent &extent) {
     assert(extent.parent_index);
     assert(extent.is_linked());
-    auto erased = extent_index.erase(
+    [[maybe_unused]] auto erased = extent_index.erase(
       extent_index.s_iterator_to(extent));
     extent.parent_index = nullptr;
 
