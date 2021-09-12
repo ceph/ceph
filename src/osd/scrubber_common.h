@@ -17,6 +17,10 @@ namespace Scrub {
 /// high/low OP priority
 enum class scrub_prio_t : bool { low_priority = false, high_priority = true };
 
+/// Identifies a specific scrub activation within an interval,
+/// see ScrubPGgIF::m_current_token
+using act_token_t = uint32_t;
+
 }  // namespace Scrub
 
 
@@ -134,9 +138,9 @@ struct ScrubPgIF {
 
   virtual void send_replica_pushes_upd(epoch_t epoch_queued) = 0;
 
-  virtual void send_start_replica(epoch_t epoch_queued) = 0;
+  virtual void send_start_replica(epoch_t epoch_queued, Scrub::act_token_t token) = 0;
 
-  virtual void send_sched_replica(epoch_t epoch_queued) = 0;
+  virtual void send_sched_replica(epoch_t epoch_queued, Scrub::act_token_t token) = 0;
 
   virtual void send_full_reset(epoch_t epoch_queued) = 0;
 

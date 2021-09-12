@@ -328,15 +328,29 @@ public:
 class PGScrubItem : public PGOpQueueable {
  protected:
   epoch_t epoch_queued;
+  Scrub::act_token_t activation_index;
   std::string_view message_name;
   PGScrubItem(spg_t pg, epoch_t epoch_queued, std::string_view derivative_name)
-      : PGOpQueueable{pg}, epoch_queued{epoch_queued}, message_name{derivative_name}
+      : PGOpQueueable{pg}
+      , epoch_queued{epoch_queued}
+      , activation_index{0}
+      , message_name{derivative_name}
+  {}
+  PGScrubItem(spg_t pg,
+	      epoch_t epoch_queued,
+	      Scrub::act_token_t op_index,
+	      std::string_view derivative_name)
+      : PGOpQueueable{pg}
+      , epoch_queued{epoch_queued}
+      , activation_index{op_index}
+      , message_name{derivative_name}
   {}
   op_type_t get_op_type() const final { return op_type_t::bg_scrub; }
   std::ostream& print(std::ostream& rhs) const final
   {
     return rhs << message_name << "(pgid=" << get_pgid()
-	       << "epoch_queued=" << epoch_queued << ")";
+	       << "epoch_queued=" << epoch_queued
+	       << " scrub-token=" << activation_index << ")";
   }
   void run(OSD* osd,
 	   OSDShard* sdata,
@@ -454,15 +468,16 @@ class PGScrubMapsCompared : public PGScrubItem {
 
 class PGRepScrub : public PGScrubItem {
  public:
-  PGRepScrub(spg_t pg, epoch_t epoch_queued) : PGScrubItem{pg, epoch_queued, "PGRepScrub"}
+  PGRepScrub(spg_t pg, epoch_t epoch_queued, Scrub::act_token_t op_token)
+      : PGScrubItem{pg, epoch_queued, op_token, "PGRepScrub"}
   {}
   void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
 
 class PGRepScrubResched : public PGScrubItem {
  public:
-  PGRepScrubResched(spg_t pg, epoch_t epoch_queued)
-      : PGScrubItem{pg, epoch_queued, "PGRepScrubResched"}
+  PGRepScrubResched(spg_t pg, epoch_t epoch_queued, Scrub::act_token_t op_token)
+      : PGScrubItem{pg, epoch_queued, op_token, "PGRepScrubResched"}
   {}
   void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
