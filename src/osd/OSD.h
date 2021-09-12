@@ -638,16 +638,19 @@ public:
 
   void queue_for_rep_scrub(PG* pg,
 			   Scrub::scrub_prio_t with_high_priority,
-			   unsigned int qu_priority);
+			   unsigned int qu_priority,
+			   Scrub::act_token_t act_token);
 
   /// Signals a change in the number of in-flight recovery writes
   void queue_scrub_replica_pushes(PG *pg, Scrub::scrub_prio_t with_priority);
 
-  /// (not in Crimson) Queue a SchedReplica event to be sent to the replica, to trigger
-  /// a re-check of the availability of the scrub map prepared by the backend.
+  /// (not in Crimson) Queue a SchedReplica event to be sent to the replica, to
+  /// trigger a re-check of the availability of the scrub map prepared by the
+  /// backend.
   void queue_for_rep_scrub_resched(PG* pg,
 				   Scrub::scrub_prio_t with_high_priority,
-				   unsigned int qu_priority);
+				   unsigned int qu_priority,
+				   Scrub::act_token_t act_token);
 
   void queue_for_pg_delete(spg_t pgid, epoch_t e);
   bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
@@ -661,7 +664,8 @@ private:
   template <class MSG_TYPE>
   void queue_scrub_event_msg(PG* pg,
 			     Scrub::scrub_prio_t with_priority,
-			     unsigned int qu_priority);
+			     unsigned int qu_priority,
+			     Scrub::act_token_t act_token);
 
   /// An alternative version of queue_scrub_event_msg(), in which the queuing priority is
   /// provided by the executing scrub (i.e. taken from PgScrubber::m_flags)
