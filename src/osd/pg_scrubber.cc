@@ -30,7 +30,7 @@ using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace std::literals;
 
-#define dout_context (m_pg->cct)
+#define dout_context (m_pg->get_cct())
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this->m_pg)
@@ -2124,7 +2124,7 @@ namespace Scrub {
 
 void ReplicaReservations::release_replica(pg_shard_t peer, epoch_t epoch)
 {
-  auto m = new MOSDScrubReserve(spg_t(m_pg->info.pgid.pgid, peer.shard), epoch,
+  auto m = new MOSDScrubReserve(spg_t(m_pg_info.pgid.pgid, peer.shard), epoch,
 				MOSDScrubReserve::RELEASE, m_pg->pg_whoami);
   m_osds->send_message_osd_cluster(peer.osd, m, epoch);
 }
@@ -2132,8 +2132,9 @@ void ReplicaReservations::release_replica(pg_shard_t peer, epoch_t epoch)
 ReplicaReservations::ReplicaReservations(PG* pg, pg_shard_t whoami)
     : m_pg{pg}
     , m_acting_set{pg->get_actingset()}
-    , m_osds{m_pg->osd}
+    , m_osds{m_pg->get_pg_osd(ScrubberPasskey())}
     , m_pending{static_cast<int>(m_acting_set.size()) - 1}
+    , m_pg_info{m_pg->get_pg_info(ScrubberPasskey())}
 {
   epoch_t epoch = m_pg->get_osdmap_epoch();
 
@@ -2147,7 +2148,7 @@ ReplicaReservations::ReplicaReservations(PG* pg, pg_shard_t whoami)
     for (auto p : m_acting_set) {
       if (p == whoami)
 	continue;
-      auto m = new MOSDScrubReserve(spg_t(m_pg->info.pgid.pgid, p.shard), epoch,
+      auto m = new MOSDScrubReserve(spg_t(m_pg_info.pgid.pgid, p.shard), epoch,
 				    MOSDScrubReserve::REQUEST, m_pg->pg_whoami);
       m_osds->send_message_osd_cluster(p.osd, m, epoch);
       m_waited_for_peers.push_back(p);

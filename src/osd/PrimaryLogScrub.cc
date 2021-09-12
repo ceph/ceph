@@ -9,7 +9,7 @@
 #include "PrimaryLogPG.h"
 #include "scrub_machine.h"
 
-#define dout_context (m_pg->cct)
+#define dout_context (m_pg->get_cct())
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this->m_pg)
@@ -43,7 +43,7 @@ bool PrimaryLogScrub::get_store_errors(const scrub_ls_arg_t& arg,
 
 void PrimaryLogScrub::_scrub_finish()
 {
-  auto& info = m_pg->info;  ///< a temporary alias
+  auto& info = m_pg->get_pg_info(ScrubberPasskey{});  ///< a temporary alias
 
   dout(10) << __func__
 	   << " info stats: " << (info.stats.stats_invalid ? "invalid" : "valid")

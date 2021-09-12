@@ -161,12 +161,20 @@ class PGRecoveryStats {
  *
  */
 
+/// Facilitating scrub-realated object access to private PG data
+class ScrubberPasskey {
+private:
+  friend class Scrub::ReplicaReservations;
+  friend class PrimaryLogScrub;
+  ScrubberPasskey() {}
+  ScrubberPasskey(const ScrubberPasskey&) = default;
+  ScrubberPasskey& operator=(const ScrubberPasskey&) = delete;
+};
+
 class PG : public DoutPrefixProvider, public PeeringState::PeeringListener {
   friend struct NamedState;
   friend class PeeringState;
   friend class PgScrubber;
-  friend class PrimaryLogScrub;
-  friend class Scrub::ReplicaReservations;
   friend class Scrub::LocalReservation;  // dout()-only friendship
   friend class Scrub::ReservedByRemotePrimary;  //  dout()-only friendship
 
@@ -1330,6 +1338,18 @@ protected:
 
   // ref to recovery_state.info
   const pg_info_t &info;
+
+
+// ScrubberPasskey getters:
+public:
+  const pg_info_t& get_pg_info(ScrubberPasskey) const {
+    return info;
+  }
+
+  OSDService* get_pg_osd(ScrubberPasskey) const {
+    return osd;
+  }
+
 };
 
 #endif
