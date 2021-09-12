@@ -175,7 +175,7 @@ void ActivePyModules::update_cache_metrics() {
     perfcounter->set(l_mgr_cache_miss, hit_miss_ratio.second);
 }
 
-PyObject *ActivePyModules::get_python(const std::string &what)
+PyObject *ActivePyModules::cacheable_get_python(const std::string &what)
 {
   uint64_t ttl_seconds = g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds");
   if(ttl_seconds > 0) {
@@ -187,8 +187,8 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     } catch (std::out_of_range& e) {}
   }
 
-  PyObject *obj = _get_python(what);
-  if(ttl_seconds && ttl_cache.is_allowed(what)) {
+  PyObject *obj = get_python(what);
+  if(ttl_seconds && ttl_cache.is_cacheable(what)) {
     ttl_cache.insert(what, obj);
     Py_INCREF(obj);
   }
@@ -196,13 +196,15 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   return obj;
 }
 
-PyObject *ActivePyModules::_get_python(const std::string &what)
+PyObject *ActivePyModules::get_python(const std::string &what)
 {
   uint64_t ttl_seconds = g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds");
 
   PyFormatter pf;
   PyJSONFormatter jf;
+  // Use PyJSONFormatter if TTL cache is enabled.
   Formatter &f = ttl_seconds ? (Formatter&)jf : (Formatter&)pf;
+
   // Drop the GIL, as most of the following blocks will block on
   // a mutex -- they are all responsible for re-taking the GIL before
   // touching the PyFormatter instance or returning from the function.

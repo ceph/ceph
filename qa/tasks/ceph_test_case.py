@@ -86,6 +86,11 @@ class CephTestCase(unittest.TestCase):
        self._mon_configs_set.add((section, key))
        self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "set", section, key, str(value))
 
+    def cluster_cmd(self, command: str):
+        assert self.ceph_cluster is not None
+        return self.ceph_cluster.mon_manager.raw_cluster_cmd(*(command.split(" ")))
+
+
     def assert_cluster_log(self, expected_pattern, invert_match=False,
                            timeout=10, watch_channel=None):
         """

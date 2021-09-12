@@ -82,8 +82,8 @@ public:
   MonClient &get_monc() {return monc;}
   Objecter  &get_objecter() {return objecter;}
   Client    &get_client() {return client;}
+  PyObject *cacheable_get_python(const std::string &what);
   PyObject *get_python(const std::string &what);
-  PyObject *_get_python(const std::string &what);
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();
   PyObject *get_metadata_python(

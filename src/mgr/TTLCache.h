@@ -57,7 +57,7 @@ template <class Key, class Value> class Cache {
   std::pair<uint64_t, uint64_t> get_hit_miss_ratio() {
     return std::make_pair(hits.load(), misses.load());
   }
-  bool is_allowed(Key key) {
+  bool is_cacheable(Key key) {
     for (auto k : allowed_keys) {
       if (key == k) return true;
     }
@@ -73,7 +73,7 @@ template <class Key, class Value>
 class TTLCacheBase : public Cache<Key, std::pair<Value, ttl_time_point>> {
  private:
   uint16_t ttl;
-  float ttl_spread_percent;
+  float ttl_spread_ratio;
   using value_type = std::pair<Value, ttl_time_point>;
   using cache = Cache<Key, value_type>;
 
@@ -89,7 +89,7 @@ class TTLCacheBase : public Cache<Key, std::pair<Value, ttl_time_point>> {
  public:
   TTLCacheBase(uint16_t ttl_ = 0, uint16_t size = UINT16_MAX,
                float spread = 0.25)
-      : Cache<Key, value_type>(size), ttl{ttl_}, ttl_spread_percent{spread} {}
+      : Cache<Key, value_type>(size), ttl{ttl_}, ttl_spread_ratio{spread} {}
   ~TTLCacheBase(){};
   void insert(Key key, Value value);
   Value get(Key key);

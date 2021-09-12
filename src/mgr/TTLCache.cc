@@ -11,11 +11,11 @@ void TTLCacheBase<Key, Value>::insert(Key key, Value value) {
   auto now = std::chrono::steady_clock::now();
 
   if (!ttl) return;
-  uint16_t ttl_spread = ttl * this->ttl_spread_percent;
+  int16_t random_ttl_offset =
+      ttl * ttl_spread_ratio * (2l * rand() / float(RAND_MAX) - 1);
   // in order not to have spikes of misses we increase or decrease by 25% of
   // the ttl
-  uint16_t spreaded_ttl =
-      ttl + (rand() / float(RAND_MAX) - .5) * 2 * ttl_spread;
+  int16_t spreaded_ttl = ttl + random_ttl_offset;
   auto expiration_date = now + std::chrono::seconds(spreaded_ttl);
   cache::insert(key, {value, expiration_date});
 }
