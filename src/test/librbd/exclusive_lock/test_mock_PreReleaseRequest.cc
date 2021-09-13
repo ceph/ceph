@@ -102,9 +102,14 @@ public:
     if (!mock_image_ctx.clone_copy_on_read) {
       expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING,
                            ((mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0));
+      if ((mock_image_ctx.features & RBD_FEATURE_JOURNALING) == 0) {
+        expect_test_features(mock_image_ctx, RBD_FEATURE_DIRTY_CACHE,
+                             ((mock_image_ctx.features & RBD_FEATURE_DIRTY_CACHE) != 0));
+      }
     }
     if (mock_image_ctx.clone_copy_on_read ||
-        (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
+        (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0 ||
+        (mock_image_ctx.features & RBD_FEATURE_DIRTY_CACHE) != 0) {
       expect_set_require_lock(mock_image_dispatch, init_shutdown,
                               librbd::io::DIRECTION_BOTH, r);
     } else {
