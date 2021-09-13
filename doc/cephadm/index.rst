@@ -36,7 +36,7 @@ versions of Ceph.
     iscsi
     custom-container
     monitoring
-    service-management
+    Service Management <services/index>
     upgrade
     Cephadm operations <operations>
     Client Setup <client-setup>
