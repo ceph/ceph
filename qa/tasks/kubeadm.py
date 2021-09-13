@@ -416,7 +416,7 @@ def pod_network(ctx, config):
                         {
                             'blockSize': 26,
                             'cidr': str(ctx.kubeadm[cluster_name].pod_subnet),
-                            'encapsulation': 'VXLANCrossSubnet',
+                            'encapsulation': 'IPIPCrossSubnet',
                             'natOutgoing': 'Enabled',
                             'nodeSelector': 'all()',
                         }
