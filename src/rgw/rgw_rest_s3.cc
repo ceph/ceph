@@ -5023,10 +5023,10 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op, optional_yiel
   /*
    * FIXME: if s->object != new_obj, drop op and create a new op to handle
    * operation. Or remove this comment if it's not applicable anymore
+   * dang: This could be problematic, since we're not actually replacing op, but
+   * we are replacing s->object.  Something might have a pointer to it.
    */
-
-  s->object = store->get_object(new_obj);
-  s->object->set_bucket(s->bucket.get());
+  s->object = s->bucket->get_object(new_obj);
 
   return 0;
 }
@@ -5055,6 +5055,9 @@ int RGWHandler_REST_S3Website::serve_errordoc(const DoutPrefixProvider *dpp, int
   getop->if_unmod = NULL;
   getop->if_match = NULL;
   getop->if_nomatch = NULL;
+  /* This is okay.  It's an error, so nothing will run after this, and it can be
+   * called by abort_early(), which can be called before s->object or s->bucket
+   * are set up. Note, it won't have bucket. */
   s->object = store->get_object(errordoc_key);
 
   ret = init_permissions(getop.get(), y);
