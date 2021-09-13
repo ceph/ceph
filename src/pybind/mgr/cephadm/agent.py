@@ -171,7 +171,8 @@ class HostData:
                 up_to_date = True
             else:
                 # we got old counter value with message, inform agent of new timestamp
-                self.mgr.agent_helpers._request_agent_acks({host})
+                if not self.mgr.cache.messaging_agent(host):
+                    self.mgr.agent_helpers._request_agent_acks({host})
                 self.mgr.log.info(
                     f'Received old metadata from agent on host {host}. Requested up-to-date metadata.')
 
@@ -206,6 +207,7 @@ class AgentMessageThread(threading.Thread):
 
     def run(self) -> None:
         self.mgr.log.info(f'Sending message to agent on host {self.host}')
+        self.mgr.cache.sending_agent_message[self.host] = True
         try:
             assert self.mgr.cherrypy_thread
             root_cert = self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
@@ -232,6 +234,7 @@ class AgentMessageThread(threading.Thread):
             ssl_ctx.load_cert_chain(cert_fname, key_fname)
         except Exception as e:
             self.mgr.log.error(f'Failed to get certs for connecting to agent: {e}')
+            self.mgr.cache.sending_agent_message[self.host] = False
             return
         try:
             bytes_len: str = str(len(self.data.encode('utf-8')))
@@ -242,6 +245,7 @@ class AgentMessageThread(threading.Thread):
                 bytes_len = '0' + bytes_len
         except Exception as e:
             self.mgr.log.error(f'Failed to get length of json payload: {e}')
+            self.mgr.cache.sending_agent_message[self.host] = False
             return
         for retry_wait in [3, 5]:
             try:
@@ -262,8 +266,10 @@ class AgentMessageThread(threading.Thread):
             except Exception as e:
                 # if it's not a connection error, something has gone wrong. Give up.
                 self.mgr.log.error(f'Failed to contact agent on host {self.host}: {e}')
+                self.mgr.cache.sending_agent_message[self.host] = False
                 return
         self.mgr.log.error(f'Could not connect to agent on host {self.host}')
+        self.mgr.cache.sending_agent_message[self.host] = False
         return
 
 
@@ -273,7 +279,8 @@ class CephadmAgentHelpers:
 
     def _request_agent_acks(self, hosts: Set[str], increment: bool = False) -> None:
         for host in hosts:
-            self.mgr.cache.metadata_up_to_date[host] = False
+            if increment:
+                self.mgr.cache.metadata_up_to_date[host] = False
             if host not in self.mgr.cache.agent_counter:
                 self.mgr.cache.agent_counter[host] = 1
             elif increment:

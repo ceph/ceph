@@ -460,6 +460,7 @@ class HostCache():
         self.metadata_up_to_date = {}  # type: Dict[str, bool]
         self.agent_keys = {}  # type: Dict[str, str]
         self.agent_ports = {}  # type: Dict[str, int]
+        self.sending_agent_message = {}  # type: Dict[str, bool]
 
     def load(self):
         # type: () -> None
@@ -940,6 +941,11 @@ class HostCache():
             self.registry_login_queue.remove(host)
             return True
         return False
+
+    def messaging_agent(self, host: str) -> bool:
+        if host not in self.sending_agent_message or not self.sending_agent_message[host]:
+            return False
+        return True
 
     def host_metadata_up_to_date(self, host: str) -> bool:
         if host not in self.metadata_up_to_date or not self.metadata_up_to_date[host]:
