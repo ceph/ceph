@@ -156,7 +156,7 @@ class TestFlavor(object):
                 ),
             ],
         )
-        assert util.get_install_task_flavor(config) == 'basic'
+        assert util.get_install_task_flavor(config) == 'default'
 
     def test_get_install_task_flavor_simple(self):
         config = dict(

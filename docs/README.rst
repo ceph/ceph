@@ -95,7 +95,7 @@ where:
 * ``ceph``: ceph branch to be used.
 * ``kernel``: version of the kernel to be used.
 * ``email``: email address to send the results to.
-* ``flavor``: the kernel flavor to run against
+* ``flavor``: the ceph packages shaman flavor to run against
 * ``teuth``: version of teuthology to run
 * ``mtype``: machine type of the run
 * ``templates``: template file used for further modifying the suite (optional)

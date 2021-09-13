@@ -38,7 +38,7 @@ def get_flavor(config):
     Determine the flavor to use.
     """
     config = config or dict()
-    flavor = config.get('flavor', 'basic')
+    flavor = config.get('flavor', 'default')
 
     if config.get('path'):
         # local dir precludes any other flavors

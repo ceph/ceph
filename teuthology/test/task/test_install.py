@@ -106,7 +106,7 @@ class TestInstall(object):
 
     def test_get_flavor_default(self):
         config = dict()
-        assert install.get_flavor(config) == 'basic'
+        assert install.get_flavor(config) == 'default'
 
     def test_get_flavor_simple(self):
         config = dict(

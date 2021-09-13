@@ -479,7 +479,7 @@ class GitbuilderProject(object):
         )
         # when we're initializing with a remote we most likely have
         # a task config, not the entire teuthology job config
-        self.flavor = self.job_config.get("flavor", "basic")
+        self.flavor = self.job_config.get("flavor", "default")
         self.tag = self.job_config.get("tag")
 
     def _init_from_config(self):
@@ -548,10 +548,6 @@ class GitbuilderProject(object):
     def base_url(self):
         """
         The base url that points at this project on gitbuilder.
-
-        For example::
-
-            http://gitbuilder.ceph.com/ceph-deb-raring-x86_64-basic/ref/master
 
         :returns: A string of the base url for this project
         """

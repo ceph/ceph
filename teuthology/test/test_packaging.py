@@ -311,7 +311,7 @@ class TestBuilderProject(object):
             pytest.skip()
 
     def _get_remote(self, arch="x86_64", system_type="deb", distro="ubuntu",
-                    codename="trusty", version="14.04"):
+                    codename="focal", version="20.04"):
         rem = Mock()
         rem.system_type = system_type
         rem.os.name = distro
@@ -342,7 +342,7 @@ class TestBuilderProject(object):
         assert expected is not None
         config = dict(
             os_type="ubuntu",
-            os_version="14.04",
+            os_version="20.04",
             sha1="sha1",
         )
         gp = self.klass("ceph", config)
@@ -353,7 +353,7 @@ class TestBuilderProject(object):
     def test_init_from_config_branch_ref(self):
         config = dict(
             os_type="ubuntu",
-            os_version="14.04",
+            os_version="20.04",
             branch='jewel',
         )
         gp = self.klass("ceph", config)
@@ -364,7 +364,7 @@ class TestBuilderProject(object):
     def test_init_from_config_tag_ref(self):
         config = dict(
             os_type="ubuntu",
-            os_version="14.04",
+            os_version="20.04",
             tag='v10.0.1',
         )
         gp = self.klass("ceph", config)
@@ -375,7 +375,7 @@ class TestBuilderProject(object):
     def test_init_from_config_tag_overrides_branch_ref(self, caplog):
         config = dict(
             os_type="ubuntu",
-            os_version="14.04",
+            os_version="20.04",
             branch='jewel',
             tag='v10.0.1',
         )
@@ -390,7 +390,7 @@ class TestBuilderProject(object):
     def test_init_from_config_branch_overrides_sha1(self, caplog):
         config = dict(
             os_type="ubuntu",
-            os_version="14.04",
+            os_version="20.04",
             branch='jewel',
             sha1='sha1',
         )
@@ -656,7 +656,7 @@ class TestShamanProject(TestBuilderProject):
                 .test_init_from_remote_base_url(
                     "https://shaman.ceph.com/api/search?status=ready"
                     "&project=ceph&flavor=default"
-                    "&distros=ubuntu%2F14.04%2Fx86_64&ref=master"
+                    "&distros=ubuntu%2F20.04%2Fx86_64&ref=master"
                 )
 
     def test_init_from_remote_base_url_debian(self):
@@ -690,7 +690,7 @@ class TestShamanProject(TestBuilderProject):
         ):
             super(TestShamanProject, self).test_init_from_config_base_url(
                 "https://shaman.ceph.com/api/search?status=ready&project=ceph" \
-                "&flavor=default&distros=ubuntu%2F14.04%2Fx86_64&sha1=sha1"
+                "&flavor=default&distros=ubuntu%2F20.04%2Fx86_64&sha1=sha1"
             )
 
     @patch('teuthology.packaging.ShamanProject._get_package_sha1')

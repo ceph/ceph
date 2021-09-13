@@ -135,7 +135,7 @@ class Run(object):
             kernel_hash = None
         else:
             kernel_hash = util.get_gitbuilder_hash(
-                'kernel', self.args.kernel_branch, self.args.flavor,
+                'kernel', self.args.kernel_branch, 'default',
                 self.args.machine_type, self.args.distro,
                 self.args.distro_version,
             )
@@ -148,7 +148,7 @@ class Run(object):
             log.info("kernel sha1: {hash}".format(hash=kernel_hash))
             kernel_dict = dict(kernel=dict(kdb=True, sha1=kernel_hash))
             if kernel_hash != 'distro':
-                kernel_dict['kernel']['flavor'] = self.args.flavor
+                kernel_dict['kernel']['flavor'] = 'default'
         else:
             kernel_dict = dict()
         return kernel_dict

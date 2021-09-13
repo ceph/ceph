@@ -164,7 +164,7 @@ class TestRun(object):
             'base_yaml_paths': [],
             'ceph_branch': 'master',
             'machine_type': 'smithi',
-            'flavor': 'basic',
+            'flavor': 'default',
             'kernel_branch': 'testing',
             'suite': 'krbd',
         }
@@ -247,7 +247,7 @@ class TestScheduleSuite(object):
             StringIO(frag2_read_output),
             contextlib.closing(BytesIO())
         ]
-        m_get_install_task_flavor.return_value = 'basic'
+        m_get_install_task_flavor.return_value = 'default'
         m_get_package_versions.return_value = dict()
         m_has_packages_for_distro.return_value = True
         # schedule_jobs() is just neutered; check calls below
@@ -260,7 +260,7 @@ class TestScheduleSuite(object):
         assert(count == 1)
         assert runobj.base_config['suite_sha1'] == 'suite_hash'
         m_has_packages_for_distro.assert_has_calls(
-            [call('ceph_sha1', 'ubuntu', '14.04', 'basic', {})],
+            [call('ceph_sha1', 'ubuntu', '14.04', 'default', {})],
         )
         frags = (frag1_read_output, frag2_read_output)
         expected_job = dict(
@@ -320,7 +320,7 @@ class TestScheduleSuite(object):
         ]
         m_build_matrix.return_value = build_matrix_output
         m_open.side_effect = [StringIO('field: val\n') for i in range(11)]
-        m_get_install_task_flavor.return_value = 'basic'
+        m_get_install_task_flavor.return_value = 'default'
         m_get_package_versions.return_value = dict()
         m_has_packages_for_distro.side_effect = [
             False for i in range(11)
@@ -383,7 +383,7 @@ class TestScheduleSuite(object):
         ] + [
             contextlib.closing(BytesIO())
         ] 
-        m_get_install_task_flavor.return_value = 'basic'
+        m_get_install_task_flavor.return_value = 'default'
         m_get_package_versions.return_value = dict()
         # NUM_FAILS, then success
         m_has_packages_for_distro.side_effect = \
@@ -397,7 +397,7 @@ class TestScheduleSuite(object):
         count = runobj.schedule_suite()
         assert count == 1
         m_has_packages_for_distro.assert_has_calls(
-            [call('ceph_sha1' + '^' * i, 'ubuntu', '14.04', 'basic', {})
+            [call('ceph_sha1' + '^' * i, 'ubuntu', '14.04', 'default', {})
              for i in range(NUM_FAILS+1)]
         )
         m_find_git_parent.assert_has_calls(

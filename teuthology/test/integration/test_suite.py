@@ -19,14 +19,14 @@ class TestSuiteOnline(object):
 
     def test_kernel_hash_saya(self):
         # We don't currently have these packages.
-        assert suite.get_hash('kernel', 'master', 'basic', 'saya') is None
+        assert suite.get_hash('kernel', 'master', 'default', 'saya') is None
 
     def test_all_master_branches(self):
         # Don't attempt to send email
         config.results_email = None
         job_config = suite.create_initial_config('suite', 'master',
                                                  'master', 'master', 'testing',
-                                                 'basic', 'centos', 'plana')
+                                                 'default', 'centos', 'plana')
         assert ((job_config.branch, job_config.teuthology_branch,
                  job_config.suite_branch) == ('master', 'master', 'master'))
 
@@ -71,7 +71,7 @@ class TestSuiteOnline(object):
         config.results_email = None
         job_config = suite.create_initial_config('MY_SUITE', 'master',
                                                  'master', 'master', 'testing',
-                                                 'basic', 'centos', 'plana')
+                                                 'default', 'centos', 'plana')
         assert job_config['suite'] == 'MY_SUITE'
 
     def test_config_kernel_section(self):
@@ -79,7 +79,7 @@ class TestSuiteOnline(object):
         config.results_email = None
         job_config = suite.create_initial_config('MY_SUITE', 'master',
                                                  'master', 'master', 'testing',
-                                                 'basic', 'centos', 'plana')
+                                                 'default', 'centos', 'plana')
         assert job_config['kernel']['kdb'] is True
 
 

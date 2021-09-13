@@ -51,7 +51,7 @@ Standard arguments:
   -f <flavor>, --flavor <flavor>
                               The ceph packages shaman flavor to run with:
                               ('default', 'crimson', 'notcmalloc', 'jaeger')
-                              [default=default]
+                              [default: default]
   -t <branch>, --teuthology-branch <branch>
                               The teuthology branch to run against.
                               Default value is determined in the next order.
