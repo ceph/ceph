@@ -112,3 +112,9 @@ A few notes:
   * The backend service (``nfs.mynfs`` in this example) should include
     a *port* property that is not 2049 to avoid conflicting with the
     ingress service, which could be placed on the same host(s).
+
+Further Reading
+===============
+
+* CephFS: :ref:`cephfs-nfs`
+* MGR: :ref:`mgr-nfs`
