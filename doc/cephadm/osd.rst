@@ -880,3 +880,9 @@ activates all existing OSDs on a host.
    ceph cephadm osd activate <host>...
 
 This will scan all existing disks for OSDs and deploy corresponding daemons.
+
+Futher Reading
+==============
+
+* :ref:`ceph-volume`
+* :ref:`rados-index`
