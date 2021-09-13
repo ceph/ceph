@@ -26,6 +26,20 @@ void segment_manager_info_t<SegmentInfoT>::init_segment_infos(
   }
 }
 
+void segment_info_t::set_open() {
+  assert(state == Segment::segment_state_t::EMPTY);
+  state = Segment::segment_state_t::OPEN;
+}
+
+void segment_info_t::set_empty() {
+  assert(state == Segment::segment_state_t::CLOSED);
+  state = Segment::segment_state_t::EMPTY;
+}
+
+void segment_info_t::set_closed() {
+  state = Segment::segment_state_t::CLOSED;
+}
+
 bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
 {
   const auto &other = static_cast<const SpaceTrackerSimple&>(_other);
@@ -179,23 +193,6 @@ void SegmentCleaner::register_metrics()
     sm::make_counter("segments_released", stats.segments_released,
 		     sm::description("total number of extents released by SegmentCleaner")),
   });
-}
-
-SegmentCleaner::get_segment_ret SegmentCleaner::get_segment()
-{
-  for (auto& segment_info : segments) {
-    if (segment_info.is_empty()) {
-      mark_open(segment_info.segment);
-      logger().debug("{}: returning segment {}", __func__, segment_info.segment);
-      return get_segment_ret(
-	get_segment_ertr::ready_future_marker{},
-	segment_info.segment);
-    }
-  }
-  assert(0 == "out of space handling todo");
-  return get_segment_ret(
-    get_segment_ertr::ready_future_marker{},
-    0);
 }
 
 SegmentCleaner::get_segment_ret SegmentCleaner::get_segment(device_id_t id)
