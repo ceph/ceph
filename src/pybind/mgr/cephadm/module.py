@@ -1536,13 +1536,15 @@ Then run the following:
         host_offline = host in self.offline_hosts
 
         if host_offline and not offline:
-            return "{} is offline, please use --offline and --force to remove this host. This can potentially cause data loss".format(host)
+            raise OrchestratorValidationError(
+                "{} is offline, please use --offline and --force to remove this host. This can potentially cause data loss".format(host))
 
         if not host_offline and offline:
-            return "{} is online, please remove host without --offline.".format(host)
+            raise OrchestratorValidationError(
+                "{} is online, please remove host without --offline.".format(host))
 
         if offline and not force:
-            return "Removing an offline host requires --force"
+            raise OrchestratorValidationError("Removing an offline host requires --force")
 
         # check if there are daemons on the host
         if not force:
