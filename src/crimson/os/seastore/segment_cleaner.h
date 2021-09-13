@@ -42,18 +42,19 @@ struct segment_manager_info_t {
       segment_size(segment_size),
       block_size(block_size),
       empty_segments(empty_segments),
-      size(size)
+      size(size),
+      avail_bytes(segment_size * num_segments)
   {}
 
   void init_segment_infos(SegmentInfoT&&);
 
-  unavail_segment_info_set_t usis;
   device_id_t device_id = 0;
   device_segment_id_t num_segments = 0;
   segment_off_t segment_size = 0;
   segment_off_t block_size = 0;
   size_t empty_segments = 0;
   size_t size = 0;
+  size_t avail_bytes = 0;
   std::vector<SegmentInfoT> segment_infos;
 };
 
@@ -66,6 +67,10 @@ struct segment_info_t {
   segment_id_t segment;
 
   bool out_of_line = false;
+
+  void set_open();
+  void set_empty();
+  void set_closed();
 
   bool is_in_journal(journal_seq_t tail_committed) const {
     return !out_of_line &&
@@ -85,6 +90,8 @@ struct segment_info_t {
     return state == Segment::segment_state_t::OPEN;
   }
 };
+
+class SegmentCleaner;
 
 // for keeping track of segment managers' various information,
 // like empty segments, opened segments and so on.
@@ -191,6 +198,8 @@ public:
   void clear() {
     sm_info_vec.clear();
     total_segments = 0;
+    total_bytes = 0;
+    journal_segments = 0;
   }
   void add_segment_manager(
     SegmentManager& segment_manager,
@@ -210,6 +219,7 @@ public:
 	segment_manager.get_size());
     sm_info_vec[segment_manager.get_device_id()]->init_segment_infos(std::move(segment_info));
     total_segments += segment_manager.get_num_segments();
+    total_bytes += segment_manager.get_size();
   }
 
   device_segment_id_t size() const {
@@ -247,12 +257,60 @@ public:
     auto& sm_info = sm_info_vec[id];
     return sm_info->segment_infos.end();
   }
+  // the following methods are used for keeping track of
+  // seastore disk space usage
+  void segment_used(segment_id_t segment, bool full_unavail = false) {
+    auto& sm_info = sm_info_vec[segment.device_id()];
+    sm_info->empty_segments--;
+    if (full_unavail)
+      sm_info->avail_bytes -= sm_info->segment_size;
+  }
+  void segment_emptied(segment_id_t segment) {
+    auto& sm_info = sm_info_vec[segment.device_id()];
+    sm_info->empty_segments++;
+    sm_info->avail_bytes += sm_info->segment_size;
+  }
+  void space_used(paddr_t addr, extent_len_t len) {
+    auto& sm_info = sm_info_vec[addr.segment.device_id()];
+    sm_info->avail_bytes -= len;
+  }
+  size_t get_empty_segments(device_id_t d_id) {
+    return sm_info_vec[d_id]->empty_segments;
+  }
+  size_t get_total_bytes() const {
+    return total_bytes;
+  }
+  size_t get_available_bytes(device_id_t d_id) const {
+    auto& sm_info = sm_info_vec[d_id];
+    return sm_info->avail_bytes;
+  }
+  size_t get_available_bytes() const {
+    size_t empty_space = 0;
+    for (auto& sm_info : sm_info_vec) {
+      if (sm_info) {
+	empty_space += get_available_bytes(sm_info->device_id);
+      }
+    }
+    return empty_space;
+  }
+  void new_journal_segment() {
+    ++journal_segments;
+  }
+  void journal_segment_emptied() {
+    --journal_segments;
+  }
+  device_segment_id_t get_journal_segments() const {
+    return journal_segments;
+  }
 private:
   device_segment_id_t total_segments;
   std::vector<std::optional<segment_manager_info_t<SegmentInfoT>>> sm_info_vec;
+  device_segment_id_t  journal_segments = 0;
+  size_t total_bytes = 0;
 
   friend class SegmentCleaner;
 };
+
 /**
  * Callback interface for managing available segments
  */
@@ -261,7 +319,6 @@ public:
   using get_segment_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
   using get_segment_ret = get_segment_ertr::future<segment_id_t>;
-  virtual get_segment_ret get_segment() = 0;
   virtual get_segment_ret get_segment(device_id_t id) = 0;
 
   virtual void close_segment(segment_id_t) {}
@@ -635,13 +692,10 @@ private:
   const bool detailed;
   const config_t config;
 
-  internal_segment_id_t num_segments = 0;
-
   ExtentReaderRef scanner;
 
   SpaceTrackerIRef space_tracker;
   segment_info_set_t<segment_info_t> segments;
-  size_t empty_segments;
   uint64_t used_bytes = 0;
   bool init_complete = false;
 
@@ -724,7 +778,6 @@ public:
   using init_segments_ret = init_segments_ertr::future<init_segments_ret_bare>;
   init_segments_ret init_segments();
 
-  get_segment_ret get_segment() final;
   get_segment_ret get_segment(device_id_t id) final;
 
   void close_segment(segment_id_t segment) final;
@@ -736,6 +789,8 @@ public:
     assert(segment.device_segment_id() <
       segments[segment.device_id()]->num_segments);
     segments[segment].journal_segment_seq = seq;
+    segments[segment].out_of_line = false;
+    segments.new_journal_segment();
     assert(segments[segment].is_open());
   }
 
@@ -779,6 +834,10 @@ public:
     mark_closed(segment);
     segments[segment].journal_segment_seq = seq;
     segments[segment].out_of_line = out_of_line;
+    if (!segments[segment].out_of_line) {
+      assert(journal_device_id == segment.device_id());
+      segments.new_journal_segment();
+    }
   }
 
   segment_seq_t get_seq(segment_id_t id) final {
@@ -807,6 +866,7 @@ public:
       addr.segment,
       addr.offset,
       len);
+    segments.space_used(addr, len);
     gc_process.maybe_wake_on_space_used();
     assert(ret > 0);
   }
@@ -1030,6 +1090,8 @@ private:
   }
 
   size_t get_bytes_available_current_segment() const {
+    auto segment_size =
+      segments[journal_head.offset.segment.device_id()]->segment_size;
     return segment_size - get_bytes_used_current_segment();
   }
 
@@ -1048,9 +1110,7 @@ private:
 
   /// Returns free space available for writes
   size_t get_available_bytes() const {
-    return (empty_segments * segment_size) +
-      get_bytes_available_current_segment() +
-      get_bytes_scanned_current_segment();
+    return segments.get_available_bytes();
   }
   size_t get_projected_available_bytes() const {
     return (get_available_bytes() > projected_used_bytes) ?
@@ -1060,12 +1120,12 @@ private:
 
   /// Returns total space available
   size_t get_total_bytes() const {
-    return segment_size * num_segments;
+    return segments.get_total_bytes();
   }
 
   /// Returns total space not free
   size_t get_unavailable_bytes() const {
-    return get_total_bytes() - get_available_bytes();
+    return segments.get_total_bytes() - segments.get_available_bytes();
   }
   size_t get_projected_unavailable_bytes() const {
     return (get_total_bytes() > get_projected_available_bytes()) ?
@@ -1083,9 +1143,17 @@ private:
 
   /// Return bytes contained in segments in journal
   size_t get_journal_segment_bytes() const {
-    assert(journal_head >= journal_tail_committed);
-    return (journal_head.segment_seq - journal_tail_committed.segment_seq + 1) *
-      segment_size;
+    if (journal_head == journal_seq_t()) {
+      // this for calculating journal bytes in the journal
+      // replay phase in which journal_head is not set
+      return segments.get_journal_segments() * segments[journal_device_id]->segment_size;
+    } else {
+      assert(journal_head >= journal_tail_committed);
+      auto segment_size =
+	segments[journal_head.offset.segment.device_id()]->segment_size;
+      return (journal_head.segment_seq - journal_tail_committed.segment_seq + 1) *
+	segment_size;
+    }
   }
 
   /**
@@ -1269,27 +1337,32 @@ private:
       assert(segments[segment].is_open());
     } else {
       assert(segments[segment].is_empty());
-      assert(empty_segments > 0);
-      --empty_segments;
+      assert(segments.get_empty_segments(segment.device_id()) > 0);
+      segments.segment_used(segment, true);
     }
     crimson::get_logger(ceph_subsys_seastore).debug(
-      "mark_closed: empty_segments: {}",
-      empty_segments);
-    segments[segment].state = Segment::segment_state_t::CLOSED;
+      "mark_closed: device: {} empty_segments: {}",
+      segment.device_id(),
+      segments.get_empty_segments(segment.device_id()));
+    segments[segment].set_closed();
   }
 
   void mark_empty(segment_id_t segment) {
+    auto& segment_info = segments[segment];
     assert(segment.device_id() ==
       segments[segment.device_id()]->device_id);
     assert(segment.device_segment_id() <
       segments[segment.device_id()]->num_segments);
-    assert(segments[segment].is_closed());
-    ++empty_segments;
+    assert(segment_info.is_closed());
+    segments.segment_emptied(segment);
     if (space_tracker->get_usage(segment) != 0) {
       space_tracker->dump_usage(segment);
       assert(space_tracker->get_usage(segment) == 0);
     }
-    segments[segment].state = Segment::segment_state_t::EMPTY;
+    segment_info.set_empty();
+    if (!segment_info.out_of_line) {
+      segments.journal_segment_emptied();
+    }
     maybe_wake_gc_blocked_io();
   }
 
@@ -1300,9 +1373,9 @@ private:
     assert(segment.device_segment_id() <
       segments[segment.device_id()]->num_segments);
     assert(segments[segment].is_empty());
-    assert(empty_segments > 0);
-    --empty_segments;
-    segments[segment].state = Segment::segment_state_t::OPEN;
+    assert(segments.get_empty_segments(segment.device_id()) > 0);
+    segments.segment_used(segment);
+    segments[segment].set_open();
   }
 };
 using SegmentCleanerRef = std::unique_ptr<SegmentCleaner>;

@@ -95,8 +95,6 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
       ret);
   }
 
-  void set_segment_written_to(paddr_t addr) final {}
-
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
   void update_journal_tail_committed(journal_seq_t paddr) final {}
 
