@@ -1556,10 +1556,19 @@ Then run the following:
                 for d in daemons:
                     daemons_table += "{:<20} {:<15}\n".format(d.daemon_type, d.daemon_id)
 
-                return "Not allowed to remove %s from cluster. " \
-                    "The following daemons are running in the host:" \
-                    "\n%s\nPlease run 'ceph orch host drain %s' to remove daemons from host" % (
-                        host, daemons_table, host)
+                raise OrchestratorValidationError("Not allowed to remove %s from cluster. "
+                                                  "The following daemons are running in the host:"
+                                                  "\n%s\nPlease run 'ceph orch host drain %s' to remove daemons from host" % (
+                                                      host, daemons_table, host))
+
+        # check, if there we're removing the last _admin host
+        if not force:
+            p = PlacementSpec(label='_admin')
+            admin_hosts = p.filter_matching_hostspecs(self.inventory.all_specs())
+            if len(admin_hosts) == 1 and admin_hosts[0] == host:
+                raise OrchestratorValidationError(f"Host {host} is the last host with the '_admin'"
+                                                  " label. Please add the '_admin' label to a host"
+                                                  " or add --force to this command")
 
         def run_cmd(cmd_args: dict) -> None:
             ret, out, err = self.mon_command(cmd_args)
