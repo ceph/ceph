@@ -129,15 +129,14 @@ def wait(m, c):
 
 
 @contextmanager
-def with_host(m: CephadmOrchestrator, name, addr='1::4', refresh_hosts=True):
-    # type: (CephadmOrchestrator, str) -> None
+def with_host(m: CephadmOrchestrator, name, addr='1::4', refresh_hosts=True, rm_with_force=True):
     with mock.patch("cephadm.utils.resolve_ip", return_value=addr):
         wait(m, m.add_host(HostSpec(hostname=name)))
         if refresh_hosts:
             CephadmServe(m)._refresh_hosts_and_daemons()
             receive_agent_metadata(m, name)
         yield
-        wait(m, m.remove_host(name))
+        wait(m, m.remove_host(name, force=rm_with_force))
 
 
 def assert_rm_service(cephadm: CephadmOrchestrator, srv_name):

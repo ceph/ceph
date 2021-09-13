@@ -1356,6 +1356,8 @@ class TestCephadm(object):
                             assert len(cephadm_module.cache.get_daemons_by_type('mgr')) == 3
                             assert len(cephadm_module.cache.get_daemons_by_type('crash')) == 1
 
+                        cephadm_module.offline_hosts = {}
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     @mock.patch("cephadm.CephadmOrchestrator._host_ok_to_stop")
     @mock.patch("cephadm.module.HostCache.get_daemon_types")
@@ -1663,3 +1665,14 @@ Traceback (most recent call last):
 
             with with_osd_daemon(cephadm_module, _run_cephadm, 'test', 1, ceph_volume_lvm_list=_ceph_volume_list):
                 pass
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_host_rm_last_admin(self, cephadm_module: CephadmOrchestrator):
+        with pytest.raises(OrchestratorError):
+            with with_host(cephadm_module, 'test', refresh_hosts=False, rm_with_force=False):
+                cephadm_module.inventory.add_label('test', '_admin')
+                pass
+            assert False
+        with with_host(cephadm_module, 'test1', refresh_hosts=False, rm_with_force=True):
+            with with_host(cephadm_module, 'test2', refresh_hosts=False, rm_with_force=False):
+                cephadm_module.inventory.add_label('test2', '_admin')

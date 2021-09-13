@@ -12,7 +12,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 3
+LAST_MIGRATION = 4
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class Migrations:
         self.nfs_migration_queue = json.loads(v) if v else []
 
         # for some migrations, we don't need to do anything except for
-        # setting migration_current = 1.
+        # incrementing migration_current.
         # let's try to shortcut things here.
         self.migrate(True)
 
@@ -67,6 +67,10 @@ class Migrations:
         if self.mgr.migration_current == 2 and not startup:
             if self.migrate_2_3():
                 self.set(3)
+
+        if self.mgr.migration_current == 3:
+            if self.migrate_3_4():
+                self.set(4)
 
     def migrate_0_1(self) -> bool:
         """
@@ -258,6 +262,16 @@ class Migrations:
             if ret:
                 self.mgr.log.warning(f'Failed to migrate export ({ret}): {err}\nExport was:\n{ex}')
         self.mgr.log.info(f'Done migrating nfs.{service_id}')
+
+    def migrate_3_4(self) -> bool:
+        # We can't set any host with the _admin label, but we're
+        # going to warn when calling `ceph orch host rm...`
+        if 'client.admin' not in self.mgr.keys.keys:
+            self.mgr._client_keyring_set(
+                entity='client.admin',
+                placement='label:_admin',
+            )
+        return True
 
 
 def queue_migrate_nfs_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:
