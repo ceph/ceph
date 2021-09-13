@@ -146,6 +146,41 @@ secure) requirements on communication with the monitors.
 .. confval:: ms_mon_service_mode
 .. confval:: ms_mon_client_mode
 
+
+Compression modes
+-----------------
+
+The v2 protocol supports two compression modes:
+
+* *force* mode provides:
+
+  - In multi-availability zones deployment, compressing replication messages between OSDs saves latency.
+  - In the public cloud, inter-AZ communications are expensive. Thus, minimizing message 
+    size reduces network costs to cloud provider.
+  - When using instance storage on AWS (probably other public clouds as well) the instances with NVMe
+    provide low network bandwidth relative to the device bandwidth. 
+    In this case, NW compression can improve the overall performance since this is clearly 
+    the bottleneck.
+
+* *none* mode provides:
+
+  - messages are transmitted without compression. 
+
+
+Compression mode configuration options
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For all connections, there is an option that controls compression usage in secure mode
+
+.. confval:: ms_compress_secure
+
+There is a parallel set of options that apply specifically to OSDs, 
+allowing administrators to set different requirements on communication between OSDs.
+
+.. confval:: ms_osd_compress_mode
+.. confval:: ms_osd_compress_min_size
+.. confval:: ms_osd_compression_algorithm
+
 Transitioning from v1-only to v2-plus-v1
 ----------------------------------------
 
