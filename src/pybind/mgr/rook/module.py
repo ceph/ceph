@@ -222,7 +222,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def get_hosts(self):
         # type: () -> List[orchestrator.HostSpec]
-        return [orchestrator.HostSpec(n) for n in self.rook_cluster.get_node_names()]
+        return self.rook_cluster.get_hosts()
 
     @handle_orch_error
     def describe_service(self,
@@ -484,6 +484,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         res = self._rook_cluster.remove_osds(osd_ids, replace, force, self.mon_command)
         return OrchResult(res)
 
+    def add_host_label(self, host: str, label: str) -> OrchResult[str]:
+        return self.rook_cluster.add_host_label(host, label)
+    
+    def remove_host_label(self, host: str, label: str) -> OrchResult[str]:
+        return self.rook_cluster.remove_host_label(host, label)
     """
     @handle_orch_error
     def create_osds(self, drive_group):
