@@ -472,7 +472,8 @@ class CephadmUpgrade:
         if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
             # need to wait for metadata to come in
             self.mgr.agent_helpers._request_agent_acks(
-                set([h for h in self.mgr.cache.get_hosts() if not self.mgr.cache.host_metadata_up_to_date(h)]))
+                set([h for h in self.mgr.cache.get_hosts() if
+                     (not self.mgr.cache.host_metadata_up_to_date(h) and h in self.mgr.cache.agent_ports and not self.mgr.cache.messaging_agent(h))]))
             return
 
         first = False
@@ -688,6 +689,7 @@ class CephadmUpgrade:
                         'redeploy',
                         image=target_image if not d_entry[1] else None
                     )
+                    self.mgr.cache.metadata_up_to_date[d.hostname] = False
                 except Exception as e:
                     self._fail_upgrade('UPGRADE_REDEPLOY_DAEMON', {
                         'severity': 'warning',

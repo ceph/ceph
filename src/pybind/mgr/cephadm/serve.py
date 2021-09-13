@@ -101,8 +101,6 @@ class CephadmServe:
                                 self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
                         if 'agent' not in self.mgr.spec_store:
                             self.mgr.agent_helpers._apply_agent()
-                        for host in self.mgr.cache.get_hosts():
-                            self.mgr.cache.metadata_up_to_date[host] = False
                     else:
                         if 'agent' in self.mgr.spec_store:
                             self.mgr.spec_store.rm('agent')
