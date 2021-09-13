@@ -13,7 +13,7 @@ Manager Plugin
 
 Ceph Filesystem clients periodically forward various metrics to Ceph Metadata Servers (MDS)
 which in turn get forwarded to Ceph Manager by MDS rank zero. Each active MDS forward its
-respective set of metrics to MDS rank zero. Metrics are aggergated and forwarded to Ceph
+respective set of metrics to MDS rank zero. Metrics are aggregated and forwarded to Ceph
 Manager.
 
 Metrics are divided into two categories - global and per-mds. Global metrics represent
