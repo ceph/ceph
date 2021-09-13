@@ -269,6 +269,8 @@ To disable monitoring and remove the software that supports it, run the followin
   $ ceph orch rm alertmanager
   $ ceph mgr module disable prometheus
 
+See also :ref:`orch-rm`.
+
 Setting up RBD-Image monitoring
 -------------------------------
 
