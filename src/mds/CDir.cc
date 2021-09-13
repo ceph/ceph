@@ -963,6 +963,7 @@ void CDir::finish_old_fragment(MDSContext::vec& waiters, bool replay)
     }
   }
 
+  ceph_assert(!scrub_is_in_progress());
   ceph_assert(dir_auth_pins == 0);
   ceph_assert(auth_pins == 0);
 
@@ -2705,7 +2706,7 @@ bool CDir::is_exportable(mds_rank_t dest) const
 
 void CDir::encode_export(bufferlist& bl)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ceph_assert(!is_projected());
   encode(first, bl);
   encode(*fnode, bl);
@@ -2721,8 +2722,15 @@ void CDir::encode_export(bufferlist& bl)
   encode(dir_rep_by, bl);  
   encode(get_replicas(), bl);
 
-  get(PIN_TEMPEXPORTING);
+  if (scrub_infop) {
+    encode(true, bl);
+    scrub_infop->encode(bl);
+  } else {
+    encode(false, bl);
+  }
+
   ENCODE_FINISH(bl);
+  get(PIN_TEMPEXPORTING);
 }
 
 void CDir::finish_export()
@@ -2734,11 +2742,13 @@ void CDir::finish_export()
   pop_auth_subtree.zero();
   put(PIN_TEMPEXPORTING);
   dirty_old_rstat.clear();
+
+  scrub_infop.reset();
 }
 
 void CDir::decode_import(bufferlist::const_iterator& blp, LogSegment *ls)
 {
-  DECODE_START(1, blp);
+  DECODE_START(2, blp);
   decode(first, blp);
   {
     auto _fnode = allocate_fnode();
@@ -2770,7 +2780,19 @@ void CDir::decode_import(bufferlist::const_iterator& blp, LogSegment *ls)
 
   decode(dir_rep_by, blp);
   decode(get_replicas(), blp);
-  if (is_replicated()) get(PIN_REPLICATED);
+
+  if (struct_v >= 2) {
+    bool has_scrub_info;
+    decode(has_scrub_info, blp);
+    if (has_scrub_info) {
+      scrub_info();
+      scrub_infop->decode(blp);
+    }
+  }
+  DECODE_FINISH(blp);
+
+  if (is_replicated())
+    get(PIN_REPLICATED);
 
   replica_nonce = 0;  // no longer defined
 
@@ -2794,7 +2816,6 @@ void CDir::decode_import(bufferlist::const_iterator& blp, LogSegment *ls)
       ls->dirty_dirfrag_dirfragtree.push_back(&inode->item_dirty_dirfrag_dirfragtree);
     }
   }
-  DECODE_FINISH(blp);
 }
 
 void CDir::abort_import()
@@ -2811,6 +2832,7 @@ void CDir::abort_import()
   pop_auth_subtree_nested.sub(pop_auth_subtree);
   pop_me.zero();
   pop_auth_subtree.zero();
+  scrub_infop.reset();
 }
 
 void CDir::encode_dirstat(bufferlist& bl, const session_info_t& info, const DirStat& ds) {
@@ -3568,9 +3590,9 @@ void CDir::scrub_finished()
   if (scrub_infop->header->get_recursive())
     scrub_infop->last_recursive = scrub_infop->last_local;
 
-  scrub_infop->last_scrub_dirty = true;
-
   scrub_infop->directory_scrubbing = false;
+  scrub_infop->last_scrub_dirty = true;
+  std::string().swap(scrub_infop->next_to_scrub);
   scrub_infop->header->dec_num_pending();
 }
 

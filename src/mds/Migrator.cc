@@ -22,6 +22,7 @@
 #include "Server.h"
 
 #include "MDBalancer.h"
+#include "ScrubStack.h"
 #include "MDLog.h"
 #include "MDSMap.h"
 #include "Mutation.h"
@@ -1582,12 +1583,14 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
   auto req = make_message<MExportDir>(dir->dirfrag(), it->second.tid);
   map<client_t,entity_inst_t> exported_client_map;
   map<client_t,client_metadata_t> exported_client_metadata_map;
-  uint64_t num_exported_inodes = 0;
-  encode_export_dir(req->export_data, dir, // recur start point
-                    exported_client_map, exported_client_metadata_map,
-                    num_exported_inodes);
+  set<ScrubHeaderRef> scrub_headers;
+  uint64_t num_exported_inodes =
+    encode_export_dir(req->export_data, dir, exported_client_map,
+		      exported_client_metadata_map, scrub_headers);
   encode(exported_client_map, req->client_map, mds->mdsmap->get_up_features());
   encode(exported_client_metadata_map, req->client_map);
+  for (auto &hdr : scrub_headers)
+    encode(*hdr, req->scrub_headers);
 
   // add bounds to message
   set<CDir*> bounds;
@@ -1739,16 +1742,16 @@ void Migrator::finish_export_inode(CInode *in, mds_rank_t peer,
   finish_export_inode_caps(in, peer, peer_imported);
 }
 
-void Migrator::encode_export_dir(bufferlist& exportbl,
-				CDir *dir,
-				map<client_t,entity_inst_t>& exported_client_map,
-				map<client_t,client_metadata_t>& exported_client_metadata_map,
-                                uint64_t &num_exported)
+uint64_t Migrator::encode_export_dir(bufferlist& exportbl, CDir *dir,
+				    map<client_t, entity_inst_t>& exported_client_map,
+				    map<client_t, client_metadata_t>& exported_client_metadata_map,
+				    set<ScrubHeaderRef>& scrub_headers)
 {
+  uint64_t num_exported = 0;
   // This has to be declared before ENCODE_STARTED as it will need to be referenced after ENCODE_FINISH.
   std::vector<CDir*> subdirs;
   
-  ENCODE_START(1, 1, exportbl);
+  ENCODE_START(2, 1, exportbl);
   dout(7) << *dir << " " << dir->get_num_head_items() << " head items" << dendl;
   
   ceph_assert(dir->get_projected_version() == dir->get_version());
@@ -1820,11 +1823,22 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
     }
   }
 
+  if (dir->scrub_is_in_progress()) {
+    ScrubHeaderRef header = dir->get_scrub_header();
+    encode(header->get_tag(), exportbl);
+    scrub_headers.insert(std::move(header));
+  } else {
+    encode((__u32)0, exportbl);
+  }
+
   ENCODE_FINISH(exportbl);
   // subdirs
   for (const auto &dir : subdirs) {
-    encode_export_dir(exportbl, dir, exported_client_map, exported_client_metadata_map, num_exported);
+    num_exported +=
+      encode_export_dir(exportbl, dir, exported_client_map,
+			exported_client_metadata_map, scrub_headers);
   }
+  return num_exported;
 }
 
 void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
@@ -1849,6 +1863,8 @@ void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
   dir->take_waiting(CDir::WAIT_ANY_MASK, finished);    // all dir waiters
   
   // pop
+  if (dir->scrub_is_in_progress())
+    mds->scrubstack->finish_export_dir(dir);
   dir->finish_export();
 
   // dentries
@@ -2705,17 +2721,17 @@ void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
   encode(client_map, le->client_map, mds->mdsmap->get_up_features());
   encode(client_metadata_map, le->client_map);
 
+  mds->scrubstack->decode_import_headers(m->scrub_headers.cbegin());
+
   auto blp = m->export_data.cbegin();
-  int num_imported_inodes = 0;
+  uint64_t num_imported_inodes = 0;
+  LogSegment *ls = mds->mdlog->get_current_segment();
   while (!blp.end()) {
-    decode_import_dir(blp,
-                      oldauth, 
-                      dir,                 // import root
-                      le,
-                      mds->mdlog->get_current_segment(),
+    num_imported_inodes += 
+      decode_import_dir(blp, dir, // import root
+                      oldauth, le, ls,
                       it->second.peer_exports,
-                      it->second.updated_scatterlocks,
-                      num_imported_inodes);
+                      it->second.updated_scatterlocks);
   }
   dout(10) << " " << m->bounds.size() << " imported bounds" << dendl;
   
@@ -2844,6 +2860,8 @@ void Migrator::import_reverse(CDir *dir)
     q.pop_front();
     
     // dir
+    if (dir->scrub_is_in_progress())
+      mds->scrubstack->abort_import_dir(cur);
     cur->abort_import();
 
     for (auto &p : *cur) {
@@ -3183,6 +3201,8 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
     // reexport!
     export_empty_import(dir);
   }
+
+  mds->scrubstack->scrub_kick();
 }
 
 void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
@@ -3356,15 +3376,13 @@ void Migrator::finish_import_inode_caps(CInode *in, mds_rank_t peer, bool auth_c
   }
 }
 
-void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
-				mds_rank_t oldauth,
-				CDir *import_root,
-				EImportStart *le,
-				LogSegment *ls,
-				map<CInode*,map<client_t,Capability::Export> >& peer_exports,
-				list<ScatterLock*>& updated_scatterlocks, int &num_imported)
+uint64_t Migrator::decode_import_dir(bufferlist::const_iterator& blp, CDir *import_root,
+				    mds_rank_t oldauth, EImportStart *le, LogSegment *ls,
+				    map<CInode*,map<client_t,Capability::Export> >& peer_exports,
+				    list<ScatterLock*>& updated_scatterlocks)
 {
-  DECODE_START(1, blp);
+  uint64_t num_imported = 0;
+  DECODE_START(2, blp);
   // set up dir
   dirfrag_t df;
   decode(df, blp);
@@ -3487,15 +3505,20 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
     dir->verify_fragstat();
 #endif
 
+  if (struct_v >= 2) {
+    string scrub_tag;
+    decode(scrub_tag, blp);
+    if(!scrub_tag.empty())
+      mds->scrubstack->add_import_dir(dir, scrub_tag);
+  }
+
   dir->inode->maybe_export_pin();
 
   dout(7) << " done " << *dir << dendl;
   DECODE_FINISH(blp);
+
+  return num_imported;
 }
-
-
-
-
 
 // authority bystander
 

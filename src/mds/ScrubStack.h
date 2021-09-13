@@ -89,6 +89,10 @@ public:
    */
   std::string_view scrub_summary();
 
+  void scrub_kick() {
+    kick_off_scrubs();
+  }
+
   static bool is_idle(std::string_view state_str) {
     return state_str == "idle";
   }
@@ -97,6 +101,10 @@ public:
 
   void advance_scrub_status();
 
+  void decode_import_headers(bufferlist::const_iterator blp);
+  void add_import_dir(CDir *dir, const std::string& tag);
+  void abort_import_dir(CDir *dir);
+  void finish_export_dir(CDir *dir);
   void handle_mds_failure(mds_rank_t mds);
 
   void dispatch(const cref_t<Message> &m);
@@ -173,7 +181,8 @@ private:
   /**
    * Move the inode/dirfrag back to scrub queue.
    */
-  void remove_from_waiting(MDSCacheObject *obj, bool kick=true);
+  void remove_from_waiting(CInode *in, bool kick=true);
+  void remove_from_waiting(CDir *dir, bool kick=true);
   /**
    * Validate authority of the inode. If current mds is not auth of the inode,
    * forword scrub to auth mds.
@@ -181,10 +190,10 @@ private:
   bool validate_inode_auth(CInode *in);
 
   /**
-   * Scrub a file inode.
+   * Scrub store an inode.
    * @param in The inode to scrub
    */
-  void scrub_file_inode(CInode *in);
+  void scrub_inode_store(CInode *in);
 
   /**
    * Callback from completion of CInode::validate_disk_state
@@ -200,24 +209,15 @@ private:
    * final scrub of the inode.
    *
    * @param in The directory indoe to scrub
-   * @param added_children set to true if we pushed some of our children
-   * @param done set to true if we started to do final scrub
    */
-  void scrub_dir_inode(CInode *in, bool *added_children, bool *done);
+  void scrub_dir_inode(CInode *in);
   /**
    * Scrub a dirfrag. It queues child dentries, then does final
    * scrub of the dirfrag.
    *
    * @param dir The dirfrag to scrub (must be auth)
-   * @param done set to true if we started to do final scrub
    */
-  void scrub_dirfrag(CDir *dir, bool *done);
-  /**
-   * Scrub a directory-representing dentry.
-   *
-   * @param in The directory inode we're doing final scrub on.
-   */
-  void scrub_dir_inode_final(CInode *in);
+  void scrub_dirfrag(CDir *dir);
   /**
    * Set scrub state
    * @param next_state State to move the scrub to.

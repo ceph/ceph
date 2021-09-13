@@ -93,6 +93,17 @@ public:
     struct scrub_stamps {
       version_t version = 0;
       utime_t time;
+
+      void encode(ceph::buffer::list& bl) const {
+	using ceph::encode;
+	encode(version, bl);
+	encode(time, bl);
+      }
+      void decode(ceph::buffer::list::const_iterator& p) {
+	using ceph::decode;
+	decode(version, p);
+	decode(time, p);
+      }
     };
 
     scrub_info_t() {}
@@ -102,8 +113,28 @@ public:
 
     bool directory_scrubbing = false; /// safety check
     bool last_scrub_dirty = false; /// is scrub info dirty or is it flushed to fnode?
+    std::string next_to_scrub;
 
     ScrubHeaderRef header;
+
+    void encode(ceph::buffer::list& bl) const {
+      ENCODE_START(1, 1, bl);
+      using ceph::encode;
+      last_recursive.encode(bl);
+      last_local.encode(bl);
+      encode(last_scrub_dirty, bl);
+      encode(next_to_scrub, bl);
+      ENCODE_FINISH(bl);
+    }
+    void decode(ceph::buffer::list::const_iterator& p) {
+      DECODE_START(1, p);
+      using ceph::decode;
+      last_recursive.decode(p);
+      last_local.decode(p);
+      decode(last_scrub_dirty, p);
+      decode(next_to_scrub, p);
+      DECODE_FINISH(p);
+    }
   };
 
   // -- pins --
@@ -299,6 +330,9 @@ public:
    * @post It has set up its internal scrubbing state.
    */
   void scrub_initialize(const ScrubHeaderRef& header);
+  void scrub_update_next(std::string_view n) {
+    scrub_infop->next_to_scrub = n;
+  }
   const ScrubHeaderRef& get_scrub_header() {
     static const ScrubHeaderRef nullref;
     return scrub_infop ? scrub_infop->header : nullref;

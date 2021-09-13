@@ -24,6 +24,7 @@ public:
   ceph::buffer::list export_data;
   std::vector<dirfrag_t> bounds;
   ceph::buffer::list client_map;
+  ceph::buffer::list scrub_headers;
 
 protected:
   MExportDir() : MMDSOp{MSG_MDS_EXPORTDIR} {}
@@ -49,6 +50,7 @@ public:
     encode(bounds, payload);
     encode(export_data, payload);
     encode(client_map, payload);
+    encode(scrub_headers, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -57,6 +59,7 @@ public:
     decode(bounds, p);
     decode(export_data, p);
     decode(client_map, p);
+    decode(scrub_headers, p);
   }
 private:
   template<class T, typename... Args>
