@@ -26,6 +26,9 @@ Notable Changes
   systems to become stable (each fs with 1 active and 0 stopping daemons), a
   rolling upgrade of all MDS daemons can be performed.
 
+* Dashboard: now allows users to set up and display a custom message (MOTD, warning,
+  etc.) in a sticky banner at the top of the page. For more details, see:
+  https://docs.ceph.com/en/pacific/mgr/dashboard/#message-of-the-day-motd
 
 Changelog
 ---------
