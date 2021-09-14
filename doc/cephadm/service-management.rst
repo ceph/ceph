@@ -172,8 +172,8 @@ specification.
 
 .. _orchestrator-cli-placement-spec:
 
-Placement Specification
-=======================
+Daemon Placement
+================
 
 For the orchestrator to deploy a *service*, it needs to know where to deploy
 *daemons*, and how many to deploy.  This is the role of a placement
@@ -346,8 +346,8 @@ Or in YAML:
       host_pattern: "*"
 
 
-Changing the number of monitors
--------------------------------
+Changing the number of daemons
+------------------------------
 
 By specifying ``count``, only the number of daemons specified will be created:
 
@@ -389,31 +389,11 @@ YAML can also be used to specify limits on hosts:
         - host2
         - host3
 
-.. _orch-rm:
+Algorithm description
+---------------------
 
-Removing a Service
-==================
-
-In order to remove a service including the removal
-of all daemons of that service, run
-
-.. prompt:: bash
-
-  ceph orch rm <service-name>
-
-For example:
-
-.. prompt:: bash
-
-  ceph orch rm rgw.myrgw
-
-    
-Deployment of Daemons
-=====================
-
-Cephadm uses a declarative state to define the layout of the cluster. This
-state consists of a list of service specifications containing placement
-specifications (See :ref:`orchestrator-cli-service-spec` ). 
+Cephadm's declarative state consists of a list of service specifications
+containing placement specifications.
 
 Cephadm continually compares a list of daemons actually running in the cluster
 against the list in the service specifications. Cephadm adds new daemons and
@@ -456,12 +436,29 @@ Finally, cephadm removes daemons on hosts that are outside of the list of
 candidate hosts.
 
 .. note::
-    
+
    There is a special case that cephadm must consider.
 
-   If there are fewer hosts selected by the placement specification than 
+   If there are fewer hosts selected by the placement specification than
    demanded by ``count``, cephadm will deploy only on the selected hosts.
 
+.. _orch-rm:
+
+Removing a Service
+==================
+
+In order to remove a service including the removal
+of all daemons of that service, run
+
+.. prompt:: bash
+
+  ceph orch rm <service-name>
+
+For example:
+
+.. prompt:: bash
+
+  ceph orch rm rgw.myrgw
 
 .. _cephadm-spec-unmanaged:
 
