@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "futurized_store.h"
 #include "cyanstore/cyan_store.h"
 #ifdef WITH_BLUESTORE
