@@ -277,6 +277,7 @@ form the monmap by following these steps:
 
 3. Follow the steps in :ref:`rados-mon-remove-from-unhealthy`
 
+.. _cephadm-manually-deploy-mgr:
 
 Manually deploying a MGR daemon
 -------------------------------
