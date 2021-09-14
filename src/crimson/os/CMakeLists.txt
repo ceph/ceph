@@ -5,11 +5,12 @@ add_subdirectory(cyanstore)
 
 if(WITH_BLUESTORE)
   add_subdirectory(alienstore)
+  set(alienstore_lib crimson-alienstore)
 endif()
 
 add_subdirectory(seastore)
 target_link_libraries(crimson-os
   crimson-cyanstore
-  crimson-alienstore
+  ${alienstore_lib}
   crimson-seastore
   crimson)
