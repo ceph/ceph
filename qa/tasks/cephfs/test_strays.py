@@ -879,110 +879,71 @@ ln dir_1/original dir_2/linkto
     def test_dirfrag_limit(self):
         """
         That the directory fragment size cannot exceed mds_bal_fragment_size_max (using a limit of 50 in all configurations).
-
-        That fragmentation (forced) will allow more entries to be created.
-
-        That unlinking fails when the stray directory fragment becomes too large and that unlinking may continue once those strays are purged.
         """
 
         LOW_LIMIT = 50
-        for mds in self.fs.get_daemon_names():
-            self.fs.mds_asok(["config", "set", "mds_bal_fragment_size_max", str(LOW_LIMIT)], mds)
+        self.config_set('mds', 'mds_bal_fragment_size_max', str(LOW_LIMIT))
+        time.sleep(10) # for config to reach MDS; async create is fast!!
 
         try:
-            self.mount_a.run_python(dedent("""
-                import os
-                path = os.path.join("{path}", "subdir")
-                os.mkdir(path)
-                for n in range(0, {file_count}):
-                    with open(os.path.join(path, "%s" % n), 'w') as f:
-                        f.write(str(n))
-                """.format(
-            path=self.mount_a.mountpoint,
-            file_count=LOW_LIMIT+1
-            )))
+            self.mount_a.create_n_files("subdir/file", LOW_LIMIT+1, finaldirsync=True)
         except CommandFailedError:
-            pass # ENOSPAC
+            pass # ENOSPC
         else:
-            raise RuntimeError("fragment size exceeded")
+            self.fail("fragment size exceeded")
 
-        # Now test that we can go beyond the limit if we fragment the directory
 
-        self.mount_a.run_python(dedent("""
-            import os
-            path = os.path.join("{path}", "subdir2")
-            os.mkdir(path)
-            for n in range(0, {file_count}):
-                with open(os.path.join(path, "%s" % n), 'w') as f:
-                    f.write(str(n))
-            dfd = os.open(path, os.O_DIRECTORY)
-            os.fsync(dfd)
-            """.format(
-        path=self.mount_a.mountpoint,
-        file_count=LOW_LIMIT
-        )))
+    def test_dirfrag_limit_fragmented(self):
+        """
+        That fragmentation (forced) will allow more entries to be created.
+        """
 
-        # Ensure that subdir2 is fragmented
-        mds_id = self.fs.get_active_names()[0]
-        self.fs.mds_asok(["dirfrag", "split", "/subdir2", "0/0", "1"], mds_id)
+        LOW_LIMIT = 50
+        self.config_set('mds', 'mds_bal_fragment_size_max', str(LOW_LIMIT))
+        self.config_set('mds', 'mds_bal_merge_size', 1) # disable merging
+        time.sleep(10) # for config to reach MDS; async create is fast!!
 
-        # remount+flush (release client caps)
-        self.mount_a.umount_wait()
-        self.fs.mds_asok(["flush", "journal"], mds_id)
-        self.mount_a.mount_wait()
+        # Test that we can go beyond the limit if we fragment the directory
+        self.mount_a.create_n_files("subdir/file", LOW_LIMIT, finaldirsync=True)
+        self.mount_a.umount_wait() # release client caps
+
+        # Ensure that subdir is fragmented
+        self.fs.rank_asok(["dirfrag", "split", "/subdir", "0/0", "1"])
+        self.fs.rank_asok(["flush", "journal"])
 
         # Create 50% more files than the current fragment limit
-        self.mount_a.run_python(dedent("""
-            import os
-            path = os.path.join("{path}", "subdir2")
-            for n in range({file_count}, ({file_count}*3)//2):
-                with open(os.path.join(path, "%s" % n), 'w') as f:
-                    f.write(str(n))
-            """.format(
-        path=self.mount_a.mountpoint,
-        file_count=LOW_LIMIT
-        )))
+        self.mount_a.mount_wait()
+        self.mount_a.create_n_files("subdir/file", (LOW_LIMIT*3)//2, finaldirsync=True)
+
+    def test_dirfrag_limit_strays(self):
+        """
+        That unlinking fails when the stray directory fragment becomes too
+        large and that unlinking may continue once those strays are purged.
+        """
+
+        LOW_LIMIT = 10
+        # N.B. this test is inherently racy because stray removal may be faster
+        # than slow(er) file creation.
+        self.config_set('mds', 'mds_bal_fragment_size_max', LOW_LIMIT)
+        time.sleep(10) # for config to reach MDS; async create is fast!!
 
         # Now test the stray directory size is limited and recovers
         strays_before = self.get_mdc_stat("strays_created")
         try:
-            self.mount_a.run_python(dedent("""
-                import os
-                path = os.path.join("{path}", "subdir3")
-                os.mkdir(path)
-                for n in range({file_count}):
-                    fpath = os.path.join(path, "%s" % n)
-                    with open(fpath, 'w') as f:
-                        f.write(str(n))
-                    os.unlink(fpath)
-                """.format(
-            path=self.mount_a.mountpoint,
-            file_count=LOW_LIMIT*10 # 10 stray directories, should collide before this count
-            )))
+            # 10 stray directories: expect collisions
+            self.mount_a.create_n_files("subdir/file", LOW_LIMIT*10, finaldirsync=True, unlink=True)
         except CommandFailedError:
-            pass # ENOSPAC
+            pass # ENOSPC
         else:
-            raise RuntimeError("fragment size exceeded")
-
+            self.fail("fragment size exceeded")
         strays_after = self.get_mdc_stat("strays_created")
         self.assertGreaterEqual(strays_after-strays_before, LOW_LIMIT)
 
         self._wait_for_counter("mds_cache", "strays_enqueued", strays_after)
         self._wait_for_counter("purge_queue", "pq_executed", strays_after)
 
-        self.mount_a.run_python(dedent("""
-            import os
-            path = os.path.join("{path}", "subdir4")
-            os.mkdir(path)
-            for n in range({file_count}):
-                fpath = os.path.join(path, "%s" % n)
-                with open(fpath, 'w') as f:
-                    f.write(str(n))
-                os.unlink(fpath)
-            """.format(
-        path=self.mount_a.mountpoint,
-        file_count=LOW_LIMIT
-        )))
+        # verify new files can be created and unlinked
+        self.mount_a.create_n_files("subdir/file", LOW_LIMIT, dirsync=True, unlink=True)
 
     def test_purge_queue_upgrade(self):
         """
