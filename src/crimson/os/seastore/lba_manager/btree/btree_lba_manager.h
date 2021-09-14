@@ -135,6 +135,8 @@ private:
 
   static btree_range_pin_t &get_pin(CachedExtent &e);
 
+  seastar::metrics::metric_group metrics;
+  void register_metrics();
   template <typename F, typename... Args>
   auto with_btree(
     op_context_t c,
