@@ -308,10 +308,12 @@ case $1 in
     --crimson)
         ceph_osd=crimson-osd
         nodaemon=1
+        msgr=2
         ;;
     --crimson-foreground)
         ceph_osd=crimson-osd
         nodaemon=0
+        msgr=2
         ;;
     --osd-args)
         extra_osd_args="$2"
