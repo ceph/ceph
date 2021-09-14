@@ -20,11 +20,12 @@ public:
   }
 
   int exec(const std::string& sql);
+  int exec(SQLite::Statement& stmt);
   int create_table(const std::string& name, const std::string& defs);
 
 
   SQLite::Transaction new_transaction();
-  SQLite::Statement query(const std::string& sql);
+  SQLite::Statement statement(const std::string& sql);
 
   struct Transaction {
     SQLite::Transaction trans;
@@ -96,6 +97,7 @@ namespace LRemDBStore {
     int create_table() override;
 
     int read_meta(LRemDBStore::Obj::Meta *pmeta);
+    int write_meta(const LRemDBStore::Obj::Meta& pmeta);
   };
   using ObjRef = std::shared_ptr<Obj>;
 

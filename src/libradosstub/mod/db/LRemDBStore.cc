@@ -42,12 +42,12 @@ template <class T>
 string encode_base64(const T& t)
 {
   bufferlist bl;
-  ::encode(t, bl);
+  ceph::encode(t, bl);
 
   char dst[bl.length() * 2];
-  char dend = dst + sizeof(dst);
+  char *dend = dst + sizeof(dst);
 
-  int r = ceph_armor(dst, dend, bl.c_str(), bl.length());
+  int r = ceph_armor(dst, dend, bl.c_str(), dend);
   assert (r >= 0);
 
   return string(dst);
@@ -72,7 +72,7 @@ int decode_base64(const string& s, T *t)
   bl.push_back(bp);
 
   try {
-    decode(*t, bl);
+    ceph::decode(*t, bl);
   } catch (buffer::error& err) {
     return -EIO;
   }
@@ -90,8 +90,8 @@ SQLite::Transaction LRemDBOps::new_transaction() {
   return SQLite::Transaction(*db);
 }
 
-SQLite::Statement LRemDBOps::query(const string& sql) {
-  dout(20) << "Query: " << sql << dendl;
+SQLite::Statement LRemDBOps::statement(const string& sql) {
+  dout(20) << "Statement: " << sql << dendl;
   return SQLite::Statement(*db, sql);
 }
 
@@ -123,6 +123,21 @@ int LRemDBOps::exec(const string& sql)
   return 0;
 }
 
+int LRemDBOps::exec(SQLite::Statement& stmt)
+{
+  int r;
+
+  try {
+    dout(20) << "SQL: " << stmt.getExpandedSQL() << dendl;
+    r = stmt.exec();
+    /* return code is not interesting */
+  } catch (SQLite::Exception& e) {
+    std::cerr << "exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << std::endl;
+    return -EIO;
+  }
+  return r;
+}
+
 LRemDBStore::Cluster::Cluster(const string& cluster_name) {
   string dbname = string("cluster-") + cluster_name + ".db3";
   dbo = make_shared<LRemDBOps>(dbname, SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
@@ -145,7 +160,7 @@ int LRemDBStore::Cluster::list_pools(std::map<string, PoolRef> *pools)
 
   pools->clear();
   try {
-    auto q = dbo->query("SELECT * from pools");
+    auto q = dbo->statement("SELECT * from pools");
 
     while (q.executeStep()) {
       int         id      = q.getColumn(0);
@@ -167,7 +182,7 @@ int LRemDBStore::Cluster::get_pool(const string& name, PoolRef *pool) {
 //ldout(g_ceph_context, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "()" << dendl;
 
   try {
-    auto q = dbo->query("SELECT * from pools WHERE name = ?");
+    auto q = dbo->statement("SELECT * from pools WHERE name = ?");
 
     q.bind(1, name);
 
@@ -192,7 +207,7 @@ int LRemDBStore::Cluster::get_pool(int id, PoolRef *pool) {
 //ldout(g_ceph_context, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "()" << dendl;
 
   try {
-    auto q = dbo->query("SELECT * from pools WHERE id = ?");
+    auto q = dbo->statement("SELECT * from pools WHERE id = ?");
 
     q.bind(1, id);
 
@@ -252,7 +267,7 @@ int LRemDBStore::Pool::create(const string& _name, const string& _val) {
 
 int LRemDBStore::Pool::read() {
   try {
-    auto q = dbo->query("SELECT * from pools WHERE name = ?");
+    auto q = dbo->statement("SELECT * from pools WHERE name = ?");
 
     q.bind(1, name);
 
@@ -334,7 +349,7 @@ int LRemDBStore::Obj::create_table() {
 
 int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
   try {
-    auto q = dbo->query("SELECT size, mtime, objver, snap_id, snaps, snap_overlap, epoch from ? WHERE nspace = ? AND oid = ?");
+    auto q = dbo->statement("SELECT size, mtime, objver, snap_id, snaps, snap_overlap, epoch from ? WHERE nspace = ? AND oid = ?");
 
     q.bind(1, table_name);
     q.bind(2, nspace);
@@ -352,8 +367,8 @@ int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
         dout(0) << "ERROR: failed to decode snaps for nspace=" << nspace << " oid=" << oid << dendl;
         return -EIO;
       }
-      string snap_verlap_str = (const char *)q.getColumn(5);
-      r = decode_base64(snap_verlap_str, &pmeta->snap_overlap);
+      string snap_overlap_str = (const char *)q.getColumn(5);
+      r = decode_base64(snap_overlap_str, &pmeta->snap_overlap);
       if (r < 0) {
         dout(0) << "ERROR: failed to decode snap_overlap for nspace=" << nspace << " oid=" << oid << dendl;
         return -EIO;
@@ -371,6 +386,28 @@ int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
   return -ENOENT;
 }
 
+int LRemDBStore::Obj::write_meta(const LRemDBStore::Obj::Meta& meta) {
+  auto q = dbo->statement("INSERT INTO ? VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"); 
+
+  q.bind(1, table_name);
+  q.bind(2, nspace);
+  q.bind(3, oid);
+
+  q.bind(4, (long long)meta.size);
+  q.bind(5, ceph::to_iso_8601(meta.mtime));
+  q.bind(6, (long long)meta.objver);
+  q.bind(7, (long long)meta.snap_id);
+  q.bind(8, encode_base64(meta.snaps));
+  q.bind(9, encode_base64(meta.snap_overlap));
+  q.bind(10, (long long)meta.epoch);
+
+  int r = dbo->exec(q);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
 int LRemDBStore::KVTableBase::create_table() {
   int r = dbo->create_table(table_name, join( { "nspace TEXT",
                                                 "oid TEXT",
