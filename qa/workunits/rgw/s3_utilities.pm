@@ -154,7 +154,7 @@ sub ceph_os_info
         my $ceph_v = get_command_output ( "ceph -v" );
         my @ceph_arr = split(" ",$ceph_v);
         $ceph_v = "Ceph Version:   $ceph_arr[2]";
-        my $os_distro = os_pretty_name()
+        my $os_distro = os_pretty_name();
         $os_distro = "Linux Flavor:$os_distro";
         return ($ceph_v, $os_distro);
 }
