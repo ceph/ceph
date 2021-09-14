@@ -324,11 +324,10 @@ TransactionManager::rewrite_logical_extent(
     *lextent,
     *nlextent);
 
-  if (need_delayed_allocation(extent->backend_type)) {
-    // hold old poffset for later mapping updating assert check
-    nlextent->set_paddr(lextent->get_paddr());
-    return rewrite_extent_iertr::now();
-  }
+  /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
+   * extents since we're going to do it again once we either do the ool write
+   * or allocate a relative inline addr.  TODO: refactor SegmentCleaner to
+   * avoid this complication. */
   return lba_manager->update_mapping(
     t,
     lextent->get_laddr(),

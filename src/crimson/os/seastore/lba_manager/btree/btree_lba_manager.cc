@@ -229,11 +229,12 @@ void BtreeLBAManager::complete_transaction(
 
   // ...but add_pin from parent->leaf
   std::vector<CachedExtentRef> to_link;
-  to_link.reserve(t.get_fresh_block_list().size());
-  for (auto &e: t.get_fresh_block_list()) {
+  to_link.reserve(t.get_num_fresh_blocks());
+  t.for_each_fresh_block([&](auto &e) {
     if (e->is_valid() && (is_lba_node(*e) || e->is_logical()))
       to_link.push_back(e);
-  }
+  });
+
   std::sort(
     to_link.begin(), to_link.end(),
     [](auto &l, auto &r) -> bool { return get_depth(*l) > get_depth(*r); });
