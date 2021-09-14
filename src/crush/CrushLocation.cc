@@ -1,20 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "include/compat.h"
+#include <vector>
+
 #include "CrushLocation.h"
 #include "CrushWrapper.h"
+#include "common/SubProcess.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
-#include "include/str_list.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "include/common_fwd.h"
 #include "include/compat.h"
-
-#include "common/SubProcess.h"
-
-#include <vector>
+#include "include/str_list.h"
 
 namespace TOPNSPC::crush {
 
