@@ -20,6 +20,13 @@ Notable Changes
   For more details, see:
   https://docs.ceph.com/en/latest/rados/operations/placement-groups/
 
+* CephFS: the upgrade procedure for CephFS is now simpler. It is no longer
+  necessary to stop all MDS before upgrading the sole active MDS. After
+  disabling standby-replay, reducing max_mds to 1, and waiting for the file
+  systems to become stable (each fs with 1 active and 0 stopping daemons), a
+  rolling upgrade of all MDS daemons can be performed.
+
+
 Changelog
 ---------
 
