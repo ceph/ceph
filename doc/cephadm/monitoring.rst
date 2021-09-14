@@ -83,6 +83,8 @@ steps below:
 
      ceph orch apply grafana
 
+.. _cephadm-monitoring-networks-ports:
+
 Networks and Ports
 ~~~~~~~~~~~~~~~~~~
 
