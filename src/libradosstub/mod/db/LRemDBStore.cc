@@ -5,6 +5,11 @@
 #include "SQLiteCpp/SQLiteCpp.h"
 #include "SQLiteCpp/Exception.h"
 
+#include "common/armor.h"
+#include "common/ceph_time.h"
+#include "common/debug.h"
+#include "common/iso_8601.h"
+
 #include "LRemDBStore.h"
 #include "LRemDBCluster.h"
 
@@ -12,6 +17,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "LRemDBStore: " << this << " " << __func__ \
                            << ": "
+#define dout_context g_ceph_context
+
 using namespace std;
 
 
@@ -31,6 +38,48 @@ static inline string join(std::vector<string> v, const string& sep = ", ")
   return result;
 }
 
+template <class T>
+string encode_base64(const T& t)
+{
+  bufferlist bl;
+  ::encode(t, bl);
+
+  char dst[bl.length() * 2];
+  char dend = dst + sizeof(dst);
+
+  int r = ceph_armor(dst, dend, bl.c_str(), bl.length());
+  assert (r >= 0);
+
+  return string(dst);
+}
+
+template <class T>
+int decode_base64(const string& s, T *t)
+{
+  int ssize = s.size();
+  char dst[ssize];
+  char *dend = dst + ssize;
+
+  const char *src = s.c_str();
+  const char *send = src + ssize;
+
+  int r = ceph_unarmor(dst, dend, src, send);
+  if (r < 0) {
+    return r;
+  }
+  bufferptr bp(dst, ssize);
+  bufferlist bl;
+  bl.push_back(bp);
+
+  try {
+    decode(*t, bl);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  return 0;
+}
+
 namespace librados {
 
 LRemDBOps::LRemDBOps(const string& name, int flags) {
@@ -42,7 +91,7 @@ SQLite::Transaction LRemDBOps::new_transaction() {
 }
 
 SQLite::Statement LRemDBOps::query(const string& sql) {
-  cout << "Query: " << sql << std::endl;
+  dout(20) << "Query: " << sql << dendl;
   return SQLite::Statement(*db, sql);
 }
 
@@ -64,7 +113,7 @@ int LRemDBOps::create_table(const string& name, const string& defs)
 int LRemDBOps::exec(const string& sql)
 {
   try {
-    cout << "SQL: " << sql << std::endl;
+    dout(20) << "SQL: " << sql << dendl;
     db->exec(sql);
     /* return code is not interesting */
   } catch (SQLite::Exception& e) {
@@ -107,7 +156,7 @@ int LRemDBStore::Cluster::list_pools(std::map<string, PoolRef> *pools)
     }
 
   } catch (SQLite::Exception& e) {
-    std::cout << "exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << std::endl;
+    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
     return -EIO;
   }
 
@@ -132,7 +181,7 @@ int LRemDBStore::Cluster::get_pool(const string& name, PoolRef *pool) {
     }
 
   } catch (SQLite::Exception& e) {
-    std::cout << "exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << std::endl;
+    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
     return -EIO;
   }
 
@@ -157,7 +206,7 @@ int LRemDBStore::Cluster::get_pool(int id, PoolRef *pool) {
     }
 
   } catch (SQLite::Exception& e) {
-    std::cout << "exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << std::endl;
+    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
     return -EIO;
   }
 
@@ -215,12 +264,11 @@ int LRemDBStore::Pool::read() {
     }
 
   } catch (SQLite::Exception& e) {
-    std::cout << "exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << std::endl;
+    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
     return -EIO;
   }
 
-
-  std::cout << "pool " << name << " not found" << std::endl;
+  dout(20) << "pool " << name << " not found" << dendl;
   return -ENOENT;
 }
 
@@ -274,6 +322,7 @@ int LRemDBStore::Obj::create_table() {
                                                 "snap_id INTEGER",
                                                 "snaps TEXT",
                                                 "snap_overlap TEXT",
+                                                "epoch INTEGER",
                                                 "data BLOB",
                                                 "PRIMARY KEY (nspace, oid)" } ));
   if (r < 0) {
@@ -281,6 +330,45 @@ int LRemDBStore::Obj::create_table() {
   }
 
   return 0;
+}
+
+int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
+  try {
+    auto q = dbo->query("SELECT size, mtime, objver, snap_id, snaps, snap_overlap, epoch from ? WHERE nspace = ? AND oid = ?");
+
+    q.bind(1, table_name);
+    q.bind(2, nspace);
+    q.bind(3, oid);
+
+    if (q.executeStep()) {
+      pmeta->size = (long long)q.getColumn(0);
+      string mtime_str = (const char *)q.getColumn(1);
+      pmeta->mtime = ceph::from_iso_8601(mtime_str).value_or(ceph::real_time());
+      pmeta->objver = (long long)q.getColumn(2);
+      pmeta->snap_id = (long long)q.getColumn(3);
+      string snaps_str = (const char *)q.getColumn(4);
+      int r = decode_base64(snaps_str, &pmeta->snaps);
+      if (r < 0) {
+        dout(0) << "ERROR: failed to decode snaps for nspace=" << nspace << " oid=" << oid << dendl;
+        return -EIO;
+      }
+      string snap_verlap_str = (const char *)q.getColumn(5);
+      r = decode_base64(snap_verlap_str, &pmeta->snap_overlap);
+      if (r < 0) {
+        dout(0) << "ERROR: failed to decode snap_overlap for nspace=" << nspace << " oid=" << oid << dendl;
+        return -EIO;
+      }
+      pmeta->epoch = (long long)q.getColumn(6);
+
+      return 0;
+    }
+
+  } catch (SQLite::Exception& e) {
+    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
+    return -EIO;
+  }
+
+  return -ENOENT;
 }
 
 int LRemDBStore::KVTableBase::create_table() {

@@ -5,6 +5,8 @@
 
 #include "SQLiteCpp/SQLiteCpp.h"
 
+#include "include/interval_set.h"
+
 namespace librados {
 
 class LRemDBOps {
@@ -34,7 +36,6 @@ public:
 };
 
 using LRemDBOpsRef = std::shared_ptr<LRemDBOps>;
-
 
 namespace LRemDBStore {
 
@@ -79,7 +80,22 @@ namespace LRemDBStore {
         const std::string& _nspace, const std::string& _oid) : TableBase(_dbo, _pool_id, "obj",
                                                                          _nspace, _oid) {}
 
+    struct Meta {
+      uint64_t size;
+
+      ceph::real_time mtime;
+      uint64_t objver;
+
+      uint64_t snap_id;
+      std::vector<uint64_t> snaps;
+      interval_set<uint64_t> snap_overlap;
+
+      uint64_t epoch;
+    };
+
     int create_table() override;
+
+    int read_meta(LRemDBStore::Obj::Meta *pmeta);
   };
   using ObjRef = std::shared_ptr<Obj>;
 
