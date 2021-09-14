@@ -94,7 +94,6 @@ int LRemDBIoCtxImpl::append(LRemTransactionStateRef& trans, const bufferlist &bl
 
   LRemDBCluster::SharedFile file;
   file = get_file_safe(trans, true, CEPH_NOSNAP, snapc, &epoch);
-  epoch = ++m_pool->epoch;
 
   std::unique_lock l{file->lock};
   auto off = file->data.length();

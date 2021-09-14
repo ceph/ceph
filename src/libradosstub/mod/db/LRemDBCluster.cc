@@ -239,6 +239,7 @@ LRemDBCluster::PoolRef LRemDBCluster::get_pool(const ceph::mutex& lock,
 
 void LRemDBCluster::allocate_client(uint32_t *nonce, uint64_t *global_id) {
   std::lock_guard locker{m_lock};
+#warning move global_id, nonce into pool storage
   *nonce = m_next_nonce++;
   *global_id = m_next_global_id++;
 }
