@@ -7,6 +7,11 @@ from ceph_volume.api import lvm as api
 from ceph_volume.devices.lvm import zap
 
 
+class TestZap(object):
+    def test_invalid_osd_id_passed(self):
+        with pytest.raises(SystemExit):
+            zap.Zap(argv=['--osd-id', 'foo']).main()
+
 class TestFindAssociatedDevices(object):
 
     def test_no_lvs_found_that_match_id(self, monkeypatch, device_info):
