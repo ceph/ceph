@@ -776,7 +776,7 @@ class RookCluster(object):
                             "osd": ("ceph-osd-id", service_id),
                             "mon": ("mon", service_id),
                             "mgr": ("mgr", service_id),
-                            "ceph_nfs": ("ceph_nfs", service_id),
+                            "nfs": ("nfs", service_id),
                             "rgw": ("ceph_rgw", service_id),
                         }[service_type]
                     except KeyError:
