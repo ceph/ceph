@@ -144,6 +144,32 @@ following these instructions:
 
 The Specification can then be changed and re-applied as above.
 
+Updating Service Specifications
+-------------------------------
+
+The Ceph Orchestrator maintains a declarative state of each
+service in a ``ServiceSpec``. For certain operations, like updating
+the RGW HTTP port, we need to update the existing
+specification.
+
+1. List the current ``ServiceSpec``:
+
+   .. prompt:: bash #
+
+    ceph orch ls --service_name=<service-name> --export > myservice.yaml
+
+2. Update the yaml file:
+
+   .. prompt:: bash #
+
+    vi myservice.yaml
+
+3. Apply the new ``ServiceSpec``:
+
+   .. prompt:: bash #
+
+    ceph orch apply -i myservice.yaml [--dry-run]
+
 .. _orchestrator-cli-placement-spec:
 
 Placement Specification
@@ -362,33 +388,6 @@ YAML can also be used to specify limits on hosts:
         - host1
         - host2
         - host3
-
-Updating Service Specifications
-===============================
-
-The Ceph Orchestrator maintains a declarative state of each
-service in a ``ServiceSpec``. For certain operations, like updating
-the RGW HTTP port, we need to update the existing
-specification.
-
-1. List the current ``ServiceSpec``:
-
-   .. prompt:: bash #
-
-    ceph orch ls --service_name=<service-name> --export > myservice.yaml
-
-2. Update the yaml file:
-
-   .. prompt:: bash #
-
-    vi myservice.yaml
-
-3. Apply the new ``ServiceSpec``:
-   
-   .. prompt:: bash #
-
-    ceph orch apply -i myservice.yaml [--dry-run]
-
 
 .. _orch-rm:
 
