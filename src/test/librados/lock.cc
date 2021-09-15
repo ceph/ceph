@@ -120,6 +120,20 @@ TEST_F(LibRadosLock, BreakLock) {
   ASSERT_EQ(0, rados_break_lock(ioctx, "foo", "TestLock8", clients, "Cookie"));
 }
 
+TEST_F(LibRadosLock, MaxSharedLock) {
+  char buf[128];
+  memset(buf, 0, sizeof(buf));
+  ASSERT_EQ(0, rados_conf_get(cluster, "max_shared_locks_per_obj", buf, sizeof(buf)));
+  auto max_locks = std::stoull(string(buf));
+
+  for (uint64_t i = 0; i < max_locks; i++) {
+    std::stringstream sstm;
+    sstm << "shared_lock_cookie_" << i;
+    ASSERT_EQ(0, rados_lock_shared(ioctx, "foo", "TestLock9", sstm.str().c_str(), "Tag", "", NULL, 0));
+  }
+  ASSERT_EQ(-EBUSY, rados_lock_shared(ioctx, "foo", "TestLock9", "busy_shared_lock_cookie", "Tag", "", NULL, 0));
+}
+
 // EC testing
 TEST_F(LibRadosLockEC, LockExclusive) {
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLockEC1", "Cookie", "", NULL,  0));
@@ -225,3 +239,16 @@ TEST_F(LibRadosLockEC, BreakLock) {
   ASSERT_EQ(0, rados_break_lock(ioctx, "foo", "TestLockEC8", clients, "Cookie"));
 }
 
+TEST_F(LibRadosLockEC, MaxSharedLock) {
+  char buf[128];
+  memset(buf, 0, sizeof(buf));
+  ASSERT_EQ(0, rados_conf_get(cluster, "max_shared_locks_per_obj", buf, sizeof(buf)));
+  auto max_locks = std::stoull(string(buf));
+
+  for (uint64_t i = 0; i < max_locks; i++) {
+    std::stringstream sstm;
+    sstm << "shared_lock_cookie_ec_" << i;
+    ASSERT_EQ(0, rados_lock_shared(ioctx, "foo", "TestLockEC9", sstm.str().c_str(), "Tag", "", NULL, 0));
+  }
+  ASSERT_EQ(-EBUSY, rados_lock_shared(ioctx, "foo", "TestLockEC9", "busy_shared_lock_cookie_ec", "Tag", "", NULL, 0));
+}

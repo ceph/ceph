@@ -3,15 +3,55 @@
 #include "include/radosstriper/libradosstriper.h"
 #include "include/radosstriper/libradosstriper.hpp"
 #include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "test/libradosstriper/TestCase.h"
 
+#include <algorithm>
 #include <fcntl.h>
 #include <errno.h>
 #include "gtest/gtest.h"
 
 using namespace librados;
 using namespace libradosstriper;
+using std::count_if;
 using std::string;
+
+TEST(ParallelStriperMaxSharedLock,  MultiIoReadWrite) {
+  StriperMaxSharedLockTest::pool_name = get_temp_pool_name();
+  create_one_pool_pp(StriperMaxSharedLockTest::pool_name, StriperMaxSharedLockTest::s_cluster);
+
+  string max_locks_str;
+  StriperMaxSharedLockTest::s_cluster.conf_get("max_shared_locks_per_obj", max_locks_str);
+  auto max_locks = std::stoull(max_locks_str);
+
+  const size_t size = 8192;
+  char buf[size];
+
+  memset(buf, 0xcc, size);
+  ParallelStriperMaxSharedLockTest parallel_striper;
+
+  parallel_striper.sync_write(buf, size, max_locks + 1);
+  ASSERT_EQ(max_locks + 1, parallel_striper.refs.size());
+  ASSERT_EQ(
+    1,
+    count_if(
+      parallel_striper.refs.begin(),
+      parallel_striper.refs.end(),
+      [] (auto&& x) {
+        return x->ret == -EBUSY;
+      }));
+
+  parallel_striper.sync_read(buf, size, max_locks + 1);
+  ASSERT_EQ(max_locks + 1, parallel_striper.refs.size());
+  ASSERT_EQ(
+    1,
+    count_if(
+      parallel_striper.refs.begin(),
+      parallel_striper.refs.end(),
+      [] (auto&& x) {
+        return x->ret == -EBUSY;
+      }));
+}
 
 TEST_F(StriperTest, SimpleWrite) {
   char buf[128];

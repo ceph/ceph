@@ -3,8 +3,10 @@
 #include "include/radosstriper/libradosstriper.h"
 #include "include/radosstriper/libradosstriper.hpp"
 #include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "test/libradosstriper/TestCase.h"
 
+#include <algorithm>
 #include <boost/scoped_ptr.hpp>
 #include <fcntl.h>
 #include <semaphore.h>
@@ -13,6 +15,7 @@
 using namespace librados;
 using namespace libradosstriper;
 using std::pair;
+using std::count_if;
 
 class AioTestData
 {
@@ -44,6 +47,42 @@ void set_completion_complete(rados_completion_t cb, void *arg)
   AioTestData *test = static_cast<AioTestData*>(arg);
   test->m_complete = true;
   test->notify();
+}
+
+TEST(ParallelStriperMaxSharedLock,  MultiAioReadWrite) {
+  StriperMaxSharedLockTest::pool_name = get_temp_pool_name();
+  create_one_pool_pp(StriperMaxSharedLockTest::pool_name, StriperMaxSharedLockTest::s_cluster);
+
+  std::string max_locks_str;
+  StriperMaxSharedLockTest::s_cluster.conf_get("max_shared_locks_per_obj", max_locks_str);
+  auto max_locks = std::stoull(max_locks_str);
+
+  const size_t size = 8192;
+  char buf[size];
+  memset(buf, 0xcc, size);
+  ParallelStriperMaxSharedLockTest parallel_striper;
+
+  parallel_striper.async_write(buf, size, max_locks + 1);
+  ASSERT_EQ(max_locks + 1, parallel_striper.refs.size());
+  ASSERT_EQ(
+    1,
+    count_if(
+      parallel_striper.refs.begin(),
+      parallel_striper.refs.end(),
+      [] (auto&& x) {
+        return x->ret == -EBUSY;
+      }));
+
+  parallel_striper.async_read(buf, size, max_locks + 1);
+  ASSERT_EQ(max_locks + 1, parallel_striper.refs.size());
+  ASSERT_EQ(
+    1,
+    count_if(
+      parallel_striper.refs.begin(),
+      parallel_striper.refs.end(),
+      [] (auto&& x) {
+        return x->ret == -EBUSY;
+      }));
 }
 
 TEST_F(StriperTest, SimpleWrite) {

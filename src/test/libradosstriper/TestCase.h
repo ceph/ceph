@@ -10,7 +10,11 @@
 #include "include/radosstriper/libradosstriper.hpp"
 #include "gtest/gtest.h"
 
+#include <functional>
+#include <mutex>
+#include <memory>
 #include <string>
+#include <vector>
 
 /**
  * These test cases create a temporary pool that lives as long as the
@@ -77,6 +81,42 @@ protected:
   librados::Rados &cluster;
   librados::IoCtx ioctx;
   libradosstriper::RadosStriper striper;
+};
+
+class StriperMaxSharedLockTest {
+public:
+  StriperMaxSharedLockTest()
+    : ret{0},
+      ioctx{std::make_unique<librados::IoCtx>()},
+      cluster{std::make_unique<librados::Rados>()},
+      striper{std::make_unique<libradosstriper::RadosStriper>()} {}
+
+  void init();
+  static void destory();
+
+  static std::string pool_name;
+  static librados::Rados s_cluster;
+
+  int ret;
+  std::unique_ptr<librados::IoCtx> ioctx;
+  std::unique_ptr<librados::Rados> cluster;
+  std::unique_ptr<libradosstriper::RadosStriper> striper;
+};
+
+class ParallelStriperMaxSharedLockTest {
+public:
+  ~ParallelStriperMaxSharedLockTest() {
+    StriperMaxSharedLockTest::destory();
+  }
+
+  void sync_read(char *, const size_t, const size_t);
+  void sync_write(char *, const size_t, const size_t);
+  void async_read(char *, const size_t, const size_t);
+  void async_write(char *, const size_t, const size_t);
+  void access(std::function<int(rados_striper_t&)>, const size_t);
+
+  std::mutex m;
+  std::vector<std::unique_ptr<StriperMaxSharedLockTest>> refs;
 };
 
 #endif

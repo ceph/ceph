@@ -14,6 +14,12 @@
 
 #include <iostream>
 #include <errno.h>
+#include <memory>
+#include <vector>
+
+using std::make_unique;
+using std::vector;
+using std::unique_ptr;
 
 #include "include/types.h"
 #include "common/Clock.h"
@@ -61,6 +67,70 @@ void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_
 void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_info_t>& lockers)
 {
   lock_info(ioctx, oid, name, lockers, NULL, NULL);
+}
+
+class SharedLock {
+public:
+  SharedLock(const string& lock_name)
+    : lock{make_unique<Lock>(lock_name)},
+      ioctx{make_unique<IoCtx>()},
+      cluster{make_unique<Rados>()} {}
+
+  static void destory() {
+    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
+  }
+
+  void init() {
+    connect_cluster_pp(*cluster);
+    cluster->ioctx_create(pool_name.c_str(), *ioctx);
+  }
+
+  void write_and_lock(const char *oid, bufferlist& bl) {
+    ioctx->write(oid, bl, bl.length(), 0);
+    lock_ret = lock->lock_shared(ioctx.get(), oid);
+  }
+
+  static string pool_name;
+  static Rados s_cluster;
+
+  unique_ptr<Lock> lock;
+  unique_ptr<IoCtx> ioctx;
+  unique_ptr<Rados> cluster;
+  int lock_ret;
+};
+
+string SharedLock::pool_name;
+Rados SharedLock::s_cluster;
+
+TEST (ClsLock, TestMaxStriperSharedLock) {
+  SharedLock::pool_name = get_temp_pool_name();
+  create_one_pool_pp(SharedLock::pool_name, SharedLock::s_cluster);
+
+  string max_locks_str;
+  SharedLock::s_cluster.conf_get("max_shared_locks_per_obj", max_locks_str);
+  auto max_locks = std::stoull(max_locks_str);
+  char oid[] = "striper_lock_test";
+  bufferlist bl;
+  std::vector<unique_ptr<SharedLock>> locks;
+
+  for(size_t i = 0; i < max_locks + 1; i++) {
+    auto lock = std::make_unique<SharedLock>("striper.lock");
+    lock->init();
+    lock->write_and_lock(oid, bl);
+    locks.push_back(std::move(lock));
+  }
+
+  ASSERT_EQ(max_locks + 1, locks.size());
+  ASSERT_EQ(
+    1,
+    std::count_if(
+      locks.begin(),
+      locks.end(),
+      [] (auto&& x) {
+        return x->lock_ret == -EBUSY;
+      }));
+
+  SharedLock::destory();
 }
 
 TEST(ClsLock, TestMultiLocking) {

@@ -104,6 +104,19 @@ TEST_F(LibRadosLockPP, BreakLockPP) {
   ASSERT_EQ(0, ioctx.break_lock("foo", "TestLockPP8", it->client, "Cookie"));
 }
 
+TEST_F(LibRadosLockPP, MaxSharedLockPP) {
+  std::string max_locks_str;
+  cluster.conf_get("max_shared_locks_per_obj", max_locks_str);
+  auto max_locks = std::stoull(max_locks_str);
+
+  for (uint64_t i = 0; i < max_locks; i++) {
+    std::stringstream sstm;
+    sstm << "shared_lock_cookie_" << i;
+    ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLockPP9", sstm.str(), "Tag", "", NULL, 0));
+  }
+  ASSERT_EQ(-EBUSY, ioctx.lock_shared("foo", "TestLockPP9", "busy_shared_lock_cookie", "Tag", "", NULL, 0));
+}
+
 // EC testing
 TEST_F(LibRadosLockECPP, LockExclusivePP) {
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP1", "Cookie", "", NULL,  0));
@@ -190,4 +203,17 @@ TEST_F(LibRadosLockECPP, BreakLockPP) {
   ASSERT_EQ(me, it->client);
   ASSERT_EQ("Cookie", it->cookie);
   ASSERT_EQ(0, ioctx.break_lock("foo", "TestLockECPP8", it->client, "Cookie"));
+}
+
+TEST_F(LibRadosLockECPP, MaxSharedLockPP) {
+  std::string max_locks_str;
+  cluster.conf_get("max_shared_locks_per_obj", max_locks_str);
+  auto max_locks = std::stoull(max_locks_str);
+
+  for (uint64_t i = 0; i < max_locks; i++) {
+    std::stringstream sstm;
+    sstm << "shared_lock_cookie_ec_" << i;
+    ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLockECPP9", sstm.str(), "Tag", "", NULL, 0));
+  }
+  ASSERT_EQ(-EBUSY, ioctx.lock_shared("foo", "TestLockECPP9", "busy_shared_lock_cookie_ec", "Tag", "", NULL, 0));
 }
