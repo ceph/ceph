@@ -5912,6 +5912,28 @@ struct object_info_t {
     auto p = std::cbegin(bl);
     decode(p);
   }
+
+  void encode_no_oid(ceph::buffer::list& bl, uint64_t features) {
+    // TODO: drop soid field and remove the denc no_oid methods
+    auto tmp_oid = hobject_t(hobject_t::get_max());
+    tmp_oid.swap(soid);
+    encode(bl, features);
+    soid = tmp_oid;
+  }
+  void decode_no_oid(ceph::buffer::list::const_iterator& bl) {
+    decode(bl);
+    ceph_assert(soid.is_max());
+  }
+  void decode_no_oid(const ceph::buffer::list& bl) {
+    auto p = std::cbegin(bl);
+    decode_no_oid(p);
+  }
+  void decode_no_oid(const ceph::buffer::list& bl, const hobject_t& _soid) {
+    auto p = std::cbegin(bl);
+    decode_no_oid(p);
+    soid = _soid;
+  }
+
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<object_info_t*>& o);
 
@@ -5934,6 +5956,11 @@ struct object_info_t {
 
   explicit object_info_t(const ceph::buffer::list& bl) {
     decode(bl);
+  }
+
+  explicit object_info_t(const ceph::buffer::list& bl, const hobject_t& _soid) {
+    decode_no_oid(bl);
+    soid = _soid;
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(object_info_t)
