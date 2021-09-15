@@ -22,6 +22,7 @@
 #include "cls/lock/cls_lock_types.h"
 #include "cls/lock/cls_lock_ops.h"
 
+#include "common/ceph_context.h"
 #include "global/global_context.h"
 
 #include "include/compat.h"
@@ -183,6 +184,16 @@ static int lock_obj(cls_method_context_t hctx,
   if (lockers.size() && tag != linfo.tag) {
     CLS_LOG(20, "cannot take lock on object, conflicting tag");
     return -EBUSY;
+  }
+
+  if (lock_type == ClsLockType::SHARED) {
+    const uint64_t max_shared_locks =
+      g_ceph_context->_conf.get_val<uint64_t>("max_shared_locks_per_obj");
+    assert(lockers.size() <= max_shared_locks);
+    if (lockers.size() == max_shared_locks) {
+      CLS_LOG(10, "nr shared locks %" PRIu64 " reaches %" PRIu64, lockers.size(), max_shared_locks);
+      return -EBUSY;
+    }
   }
 
   ClsLockType existing_lock_type = linfo.lock_type;
