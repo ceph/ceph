@@ -257,7 +257,6 @@ void RGWOp_User_Modify::execute(optional_yield y)
   std::string access_key;
   std::string secret_key;
   std::string key_type_str;
-  std::string caps;
   std::string op_mask_str;
   std::string default_placement_str;
   std::string placement_tags_str;
@@ -278,7 +277,6 @@ void RGWOp_User_Modify::execute(optional_yield y)
   RESTArgs::get_string(s, "email", email, &email, &email_set);
   RESTArgs::get_string(s, "access-key", access_key, &access_key);
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
-  RESTArgs::get_string(s, "user-caps", caps, &caps);
   RESTArgs::get_bool(s, "generate-key", false, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
   RESTArgs::get_int32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets, &quota_set);
@@ -301,7 +299,6 @@ void RGWOp_User_Modify::execute(optional_yield y)
   if (email_set)
     op_state.set_user_email(email);
 
-  op_state.set_caps(caps);
   op_state.set_access_key(access_key);
   op_state.set_secret_key(secret_key);
 
