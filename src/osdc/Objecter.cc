@@ -871,10 +871,15 @@ void Objecter::_linger_submit(LingerOp *info,
 
   // Populate Op::target
   OSDSession *s = NULL;
-  _calc_target(&info->target, nullptr);
+  int r = _calc_target(&info->target, nullptr);
+  switch (r) {
+  case RECALC_OP_TARGET_POOL_EIO:
+    _check_linger_pool_eio(info);
+    return;
+  }
 
   // Create LingerOp<->OSDSession relation
-  int r = _get_session(info->target.osd, &s, sul);
+  r = _get_session(info->target.osd, &s, sul);
   ceph_assert(r == 0);
   unique_lock sl(s->lock);
   _session_linger_op_assign(s, info);
