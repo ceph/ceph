@@ -221,6 +221,11 @@ options:
   flags:
   - no_mon_update
   - startup
+- name: max_striper_locks_per_obj
+  type: uint
+  level: basic
+  desc: maximum number of an object can be locked by striper lock at the same time
+  default: 30
 - name: lockdep
   type: bool
   level: dev
@@ -1031,11 +1036,11 @@ options:
   level: advanced
   desc: Allowing compression when on-wire encryption is enabled
   long_desc: Combining encryption with compression reduces the level of security of
-    messages between peers. In case both encryption and compression are enabled, 
-    compression setting will be ignored and message will not be compressed. 
-    This behaviour can be override using this setting. 
+    messages between peers. In case both encryption and compression are enabled,
+    compression setting will be ignored and message will not be compressed.
+    This behaviour can be override using this setting.
   default: false
-  see_also: 
+  see_also:
   - ms_osd_compress_mode
   flags:
   - runtime
@@ -1495,11 +1500,11 @@ options:
 - name: mon_initial_members
   type: str
   level: advanced
-  fmt_desc: The IDs of initial monitors in a cluster during startup. If 
-    specified, Ceph requires an odd number of monitors to form an 
+  fmt_desc: The IDs of initial monitors in a cluster during startup. If
+    specified, Ceph requires an odd number of monitors to form an
     initial quorum (e.g., 3).
-  note: A *majority* of monitors in your cluster must be able to reach 
-    each other in order to establish a quorum. You can decrease the initial 
+  note: A *majority* of monitors in your cluster must be able to reach
+    each other in order to establish a quorum. You can decrease the initial
     number of monitors to establish a quorum with this setting.
   services:
   - mon
@@ -2466,13 +2471,13 @@ options:
   desc: number of PGs for new pools
   fmt_desc: The default number of placement groups for a pool. The default
     value is the same as ``pg_num`` with ``mkpool``.
-  long_desc: With default value of `osd_pool_default_pg_autoscale_mode` being 
-    `on` the number of PGs for new pools will start out with 1 pg, unless the 
+  long_desc: With default value of `osd_pool_default_pg_autoscale_mode` being
+    `on` the number of PGs for new pools will start out with 1 pg, unless the
     user specifies the pg_num.
   default: 32
   services:
   - mon
-  see_also: 
+  see_also:
   - osd_pool_default_pg_autoscale_mode
   flags:
   - runtime
