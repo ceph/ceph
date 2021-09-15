@@ -1165,8 +1165,10 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
   LOG_PREFIX(Cache::get_root);
   if (t.root) {
     DEBUGT("root already on transaction {}", t, *t.root);
-    return get_root_iertr::make_ready_future<RootBlockRef>(
-      t.root);
+    return t.root->wait_io().then([&t] {
+      return get_root_iertr::make_ready_future<RootBlockRef>(
+	t.root);
+    });
   } else {
     auto ret = root;
     DEBUGT("waiting root {}", t, *ret);
