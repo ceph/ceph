@@ -603,13 +603,6 @@ Request Parameters
 :Example: ``s3``
 :Required: No
 
-``user-caps``
-
-:Description: User capabilities.
-:Type: String
-:Example: ``usage=read, write; users=read``
-:Required: No
-
 ``max-buckets``
 
 :Description: Specify the maximum number of buckets the user can own.
