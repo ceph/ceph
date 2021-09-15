@@ -372,6 +372,16 @@ on the number of replicas, clones and snapshots.
 - **MAX AVAIL:** An estimate of the notional amount of data that can be written
   to this pool.
 - **OBJECTS:** The notional number of objects stored per pool.
+- **QUOTA OBJECTS:** The number of quota objects.
+- **QUOTA BYTES:** The number of bytes in the quota objects.
+- **DIRTY:** The number of objects in the cache pool that have been written to
+  the cache pool but have not been flushed yet to the base pool. This field is
+  only available when cache tiering is in use.
+- **USED COMPR:** amount of space allocated for compressed data (i.e. this
+  includes comrpessed data plus all the allocation, replication and erasure
+  coding overhead).
+- **UNDER COMPR:** amount of data passed through compression (summed over all
+  replicas) and beneficial enough to be stored in a compressed form.
 
 .. note:: The numbers in the **POOLS** section are notional. They are not 
    inclusive of the number of replicas, snapshots or clones. As a result, 
