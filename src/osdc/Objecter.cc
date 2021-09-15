@@ -3181,6 +3181,7 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   int flags = op->target.flags;
   flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
+  flags |= CEPH_OSD_FLAG_SUPPORTSPOOLEIO;
 
   // Nothing checks this any longer, but needed for compatibility with
   // pre-luminous osds
