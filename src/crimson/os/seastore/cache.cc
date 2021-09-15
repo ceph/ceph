@@ -1170,12 +1170,18 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
   } else {
     auto ret = root;
     DEBUGT("waiting root {}", t, *ret);
-    return ret->wait_io().then([FNAME, ret, &t] {
+    return ret->wait_io().then([this, FNAME, ret, &t] {
       DEBUGT("got root read {}", t, *ret);
-      t.root = ret;
-      t.add_to_read_set(ret);
-      return get_root_iertr::make_ready_future<RootBlockRef>(
-	ret);
+      if (!ret->is_valid()) {
+	DEBUGT("root became invalid: {}", t, *ret);
+	invalidate(t, *ret);
+	return get_root_iertr::make_ready_future<RootBlockRef>();
+      } else {
+	t.root = ret;
+	t.add_to_read_set(ret);
+	return get_root_iertr::make_ready_future<RootBlockRef>(
+	  ret);
+      }
     });
   }
 }
