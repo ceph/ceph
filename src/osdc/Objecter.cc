@@ -2316,11 +2316,21 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   ceph_assert(op->session == NULL);
   OSDSession *s = NULL;
 
-  bool check_for_latest_map = _calc_target(&op->target, nullptr)
-    == RECALC_OP_TARGET_POOL_DNE;
+  bool check_for_latest_map = false;
+  int r = _calc_target(&op->target, nullptr);
+  switch(r) {
+  case RECALC_OP_TARGET_POOL_DNE:
+    check_for_latest_map = true;
+    break;
+  case RECALC_OP_TARGET_POOL_EIO:
+    if (op->has_completion()) {
+      op->complete(osdc_errc::pool_eio, -EIO);
+    }
+    return;
+  }
 
   // Try to get a session, including a retry if we need to take write lock
-  int r = _get_session(op->target.osd, &s, sul);
+  r = _get_session(op->target.osd, &s, sul);
   if (r == -EAGAIN ||
       (check_for_latest_map && sul.owns_lock_shared()) ||
       cct->_conf->objecter_debug_inject_relock_delay) {
@@ -2707,6 +2717,11 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->osd = -1;
     return RECALC_OP_TARGET_POOL_DNE;
   }
+
+  if (pi->has_flag(pg_pool_t::FLAG_EIO)) {
+    return RECALC_OP_TARGET_POOL_EIO;
+  }
+
   ldout(cct,30) << __func__ << "  base pi " << pi
 		<< " pg_num " << pi->get_pg_num() << dendl;
 
