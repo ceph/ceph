@@ -108,6 +108,7 @@ class CapsHelper(CephFSTestCase):
                     self.assertEqual(data, contents1)
 
     def conduct_neg_test_for_write_caps(self, filepaths, mounts):
+        possible_errmsgs = ('permission denied', 'operation not permitted')
         cmdargs = ['echo', 'some random data', Raw('|'), 'tee']
 
         for mount in mounts:
@@ -115,7 +116,7 @@ class CapsHelper(CephFSTestCase):
                 if path.find(mount.hostfs_mntpt) != -1:
                     cmdargs.append(path)
                     mount.negtestcmd(args=cmdargs, retval=1,
-                                     errmsg='permission denied')
+                                     errmsgs=possible_errmsgs)
                     cmdargs.pop(-1)
 
     def get_mon_cap_from_keyring(self, client_name):

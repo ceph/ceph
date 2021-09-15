@@ -970,7 +970,7 @@ class TestFsAuthorize(CapsHelper):
             contents = self.mount_a.read_file(filepath)
             self.assertEqual(filedata, contents)
             cmdargs = ['echo', 'some random data', Raw('|'), 'sudo', 'tee', filepath]
-            self.mount_a.negtestcmd(args=cmdargs, retval=1, errmsg='permission denied')
+            self.mount_a.negtestcmd(args=cmdargs, retval=1, errmsgs='permission denied')
 
     def test_single_path_authorize_on_nonalphanumeric_fsname(self):
         """

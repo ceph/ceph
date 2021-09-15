@@ -742,44 +742,66 @@ class CephFSMount(object):
         kwargs['user'] = 'root'
         return self.run_as_user(**kwargs)
 
-    def _verify(self, proc, retval=None, errmsg=None):
-        if retval:
-            msg = ('expected return value: {}\nreceived return value: '
-                   '{}\n'.format(retval, proc.returncode))
-            assert proc.returncode == retval, msg
+    def assert_retval(self, proc_retval, exp_retval):
+        msg = (f'expected return value: {exp_retval}\n'
+               f'received return value: {proc_retval}\n')
+        assert proc_retval == exp_retval, msg
 
-        if errmsg:
-            stderr = proc.stderr.getvalue().lower()
-            msg = ('didn\'t find given string in stderr -\nexpected string: '
-                   '{}\nreceived error message: {}\nnote: received error '
-                   'message is converted to lowercase'.format(errmsg, stderr))
-            assert errmsg in stderr, msg
+    def _verify(self, proc, exp_retval=None, exp_errmsgs=None):
+        if exp_retval is None and exp_errmsgs is None:
+            raise RuntimeError('Method didn\'t get enough parameters. Pass '
+                               'return value or error message expected from '
+                               'the command/process.')
 
-    def negtestcmd(self, args, retval=None, errmsg=None, stdin=None,
+        if exp_retval is not None:
+            self.assert_retval(proc.returncode, exp_retval)
+        if exp_errmsgs is None:
+            return
+
+        if isinstance(exp_errmsgs, str):
+            exp_errmsgs = (exp_errmsgs, )
+
+        proc_stderr = proc.stderr.getvalue().lower()
+        msg = ('didn\'t find any of the expected string in stderr.\n'
+               f'expected string: {exp_errmsgs}\n'
+               f'received error message: {proc_stderr}\n'
+               'note: received error message is converted to lowercase')
+        for e in exp_errmsgs:
+            if e in proc_stderr:
+                break
+        # this else is meant for for loop.
+        else:
+            assert False, msg
+
+    def negtestcmd(self, args, retval=None, errmsgs=None, stdin=None,
                    cwd=None, wait=True):
         """
         Conduct a negative test for the given command.
 
-        retval and errmsg are parameters to confirm the cause of command
+        retval and errmsgs are parameters to confirm the cause of command
         failure.
+
+        Note: errmsgs is expected to be a tuple, but in case there's only
+        error message, it can also be a string. This method will handle
+        that internally.
         """
         proc = self.run_shell(args=args, wait=wait, stdin=stdin, cwd=cwd,
                               check_status=False)
-        self._verify(proc, retval, errmsg)
+        self._verify(proc, retval, errmsgs)
         return proc
 
-    def negtestcmd_as_user(self, args, user, retval=None, errmsg=None,
+    def negtestcmd_as_user(self, args, user, retval=None, errmsgs=None,
                            stdin=None, cwd=None, wait=True):
         proc = self.run_as_user(args=args, user=user, wait=wait, stdin=stdin,
                                 cwd=cwd, check_status=False)
-        self._verify(proc, retval, errmsg)
+        self._verify(proc, retval, errmsgs)
         return proc
 
-    def negtestcmd_as_root(self, args, retval=None, errmsg=None, stdin=None,
+    def negtestcmd_as_root(self, args, retval=None, errmsgs=None, stdin=None,
                            cwd=None, wait=True):
         proc = self.run_as_root(args=args, wait=wait, stdin=stdin, cwd=cwd,
                                 check_status=False)
-        self._verify(proc, retval, errmsg)
+        self._verify(proc, retval, errmsgs)
         return proc
 
     def open_for_reading(self, basename):
