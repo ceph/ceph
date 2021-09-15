@@ -161,7 +161,8 @@ class TestWorker(object):
     @patch("subprocess.Popen")
     @patch("teuthology.worker.symlink_worker_log")
     @patch("time.sleep")
-    def test_run_with_watchdog_with_reporting(self, m_sleep, m_symlink_log, m_popen):
+    @patch("teuthology.worker.report.try_push_job_info")
+    def test_run_with_watchdog_with_reporting(self, m_tpji, m_sleep, m_symlink_log, m_popen):
         config = {
             "name": "the_name",
             "job_id": "1",
