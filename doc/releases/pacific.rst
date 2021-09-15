@@ -55,6 +55,8 @@ Changelog
 * common/options: Set osd_client_message_cap to 256 (`pr#42615 <https://github.com/ceph/ceph/pull/42615>`_, Mark Nelson)
 * compression/snappy: use uint32_t to be compatible with 1.1.9 (`pr#42542 <https://github.com/ceph/ceph/pull/42542>`_, Kefu Chai, Nathan Cutler)
 * debian/control: ceph-mgr-modules-core does not Recommend ceph-mgr-roo… (`pr#42300 <https://github.com/ceph/ceph/pull/42300>`_, Kefu Chai)
+* debian/control: dh-systemd is part of debhelper now (`pr#43151 <https://github.com/ceph/ceph/pull/43151>`_, David Galloway)
+* debian/control: remove cython from Build-Depends (`pr#43131 <https://github.com/ceph/ceph/pull/43131>`_, Kefu Chai)
 * doc/ceph-volume: add lvm migrate/new-db/new-wal (`pr#43089 <https://github.com/ceph/ceph/pull/43089>`_, Dimitri Savineau)
 * doc/rados/operations: s/max_misplaced/target_max_misplaced_ratio/ (`pr#42250 <https://github.com/ceph/ceph/pull/42250>`_, Paul Reece, Kefu Chai)
 * doc/releases/pacific.rst: remove notes about autoscaler (`pr#42265 <https://github.com/ceph/ceph/pull/42265>`_, Neha Ojha)
@@ -180,7 +182,8 @@ Changelog
 * SimpleRADOSStriper: use debug_cephsqlite (`pr#42659 <https://github.com/ceph/ceph/pull/42659>`_, Patrick Donnelly)
 * src/pybind/mgr/mirroring/fs/snapshot_mirror.py: do not assume a cephf… (`pr#42226 <https://github.com/ceph/ceph/pull/42226>`_, Sébastien Han)
 * test/rgw: fix use of poll() with timers in unittest_rgw_dmclock_scheduler (`pr#42651 <https://github.com/ceph/ceph/pull/42651>`_, Casey Bodley)
-* Warning Cleanup and Clang Compile Fix (`pr#40692 <https://github.com/ceph/ceph/pull/40692>`_, Adam C. Emerson)
+* Warning Cleanup and Clang Compile Fix (`pr#40692 <https://github.com/ceph/ceph/pull/40692>`_, Adam C. Emerson)i
+* workunits/rgw: semicolon terminates perl statements (`pr#43168 <https://github.com/ceph/ceph/pull/43168>`_, Matt Benjamin)
 
 v16.2.5 Pacific
 ===============
