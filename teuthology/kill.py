@@ -67,7 +67,7 @@ def kill_run(run_name, archive_base=None, owner=None, machine_type=None,
         nuke_targets(targets, owner)
 
 
-def kill_job(run_name, job_id, archive_base=None, owner=None, save_logs=False):
+def kill_job(run_name, job_id, archive_base=None, owner=None, skip_nuke=False):
     serializer = report.ResultsSerializer(archive_base)
     job_info = serializer.job_info(run_name, job_id)
     if not owner:
@@ -81,7 +81,8 @@ def kill_job(run_name, job_id, archive_base=None, owner=None, save_logs=False):
     # the necessary nodes ain't locked yet, we do not use job_info to get them,
     # but use find_targets():
     targets = find_targets(run_name, owner, job_id)
-    nuke_targets(targets, owner, save_logs)
+    if not skip_nuke:
+        nuke_targets(targets, owner)
 
 
 def find_run_info(serializer, run_name):
@@ -219,7 +220,7 @@ def find_targets(run_name, owner, job_id=None):
     return out_obj
 
 
-def nuke_targets(targets_dict, owner, save_logs=False):
+def nuke_targets(targets_dict, owner):
     targets = targets_dict.get('targets')
     if not targets:
         log.info("No locked machines. Not nuking anything")
@@ -241,10 +242,7 @@ def nuke_targets(targets_dict, owner, save_logs=False):
         '--owner',
         owner
     ]
-    if save_logs:
-        nuke_args.extend(['--no-reboot', '--keep-logs'])
-    else:
-        nuke_args.extend(['--reboot-all', '--unlock'])
+    nuke_args.extend(['--reboot-all', '--unlock'])
 
     proc = subprocess.Popen(
         nuke_args,
