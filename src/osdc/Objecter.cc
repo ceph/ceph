@@ -1066,6 +1066,13 @@ void Objecter::_scan_requests(
 	unregister_lingers.push_back(op);
       }
       break;
+    case RECALC_OP_TARGET_POOL_EIO:
+      _check_linger_pool_eio(op);
+      ldout(cct, 10) << " need to unregister linger op "
+		     << op->linger_id << dendl;
+      op->get();
+      unregister_lingers.push_back(op);
+      break;
     }
   }
 
@@ -1094,6 +1101,9 @@ void Objecter::_scan_requests(
       break;
     case RECALC_OP_TARGET_POOL_DNE:
       _check_op_pool_dne(op, &sl);
+      break;
+    case RECALC_OP_TARGET_POOL_EIO:
+      _check_op_pool_eio(op, &sl);
       break;
     }
   }
@@ -1565,6 +1575,37 @@ void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *s
   }
 }
 
+// sl may be unlocked.
+void Objecter::_check_op_pool_eio(Op *op, std::unique_lock<std::shared_mutex> *sl)
+{
+  // rwlock is locked unique
+
+  // we had a new enough map
+  ldout(cct, 10) << "check_op_pool_eio tid " << op->tid
+		 << " concluding pool " << op->target.base_pgid.pool()
+		 << " has eio" << dendl;
+  if (op->has_completion()) {
+    num_in_flight--;
+    op->complete(osdc_errc::pool_eio, -EIO);
+  }
+
+  OSDSession *s = op->session;
+  if (s) {
+    ceph_assert(s != NULL);
+    ceph_assert(sl->mutex() == &s->lock);
+    bool session_locked = sl->owns_lock();
+    if (!session_locked) {
+      sl->lock();
+    }
+    _finish_op(op, 0);
+    if (!session_locked) {
+      sl->unlock();
+    }
+  } else {
+    _finish_op(op, 0);	// no session
+  }
+}
+
 void Objecter::_send_op_map_check(Op *op)
 {
   // rwlock is locked unique
@@ -1656,6 +1697,23 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
     }
   } else {
     _send_linger_map_check(op);
+  }
+}
+
+void Objecter::_check_linger_pool_eio(LingerOp *op)
+{
+  // rwlock is locked unique
+
+  std::unique_lock wl{op->watch_lock};
+  if (op->on_reg_commit) {
+    op->on_reg_commit->defer(std::move(op->on_reg_commit),
+			     osdc_errc::pool_dne, cb::list{});
+    op->on_reg_commit = nullptr;
+  }
+  if (op->on_notify_finish) {
+    op->on_notify_finish->defer(std::move(op->on_notify_finish),
+				osdc_errc::pool_dne, cb::list{});
+    op->on_notify_finish = nullptr;
   }
 }
 
