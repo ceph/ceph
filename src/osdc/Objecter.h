@@ -2467,6 +2467,7 @@ public:
     RECALC_OP_TARGET_POOL_DNE,
     RECALC_OP_TARGET_OSD_DNE,
     RECALC_OP_TARGET_OSD_DOWN,
+    RECALC_OP_TARGET_POOL_EIO,
   };
   bool _osdmap_full_flag() const;
   bool _osdmap_has_pool_full() const;
@@ -2517,9 +2518,11 @@ public:
 
 private:
   void _check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *sl);
+  void _check_op_pool_eio(Op *op, std::unique_lock<std::shared_mutex> *sl);
   void _send_op_map_check(Op *op);
   void _op_cancel_map_check(Op *op);
   void _check_linger_pool_dne(LingerOp *op, bool *need_unregister);
+  void _check_linger_pool_eio(LingerOp *op);
   void _send_linger_map_check(LingerOp *op);
   void _linger_cancel_map_check(LingerOp *op);
   void _check_command_map_dne(CommandOp *op);

@@ -70,6 +70,9 @@ const char* osdc_error_category::message(int ev, char*,
 
   case osdc_errc::timed_out:
     return "Operation timed out";
+
+  case osdc_errc::pool_eio:
+    return "Pool EIO flag set";
   }
 
   return "Unknown error";
@@ -96,6 +99,8 @@ osdc_error_category::default_error_condition(int ev) const noexcept {
     return ceph::errc::does_not_exist;
   case osdc_errc::timed_out:
     return bs::errc::timed_out;
+  case osdc_errc::pool_eio:
+    return bs::errc::io_error;
   }
 
   return { ev, *this };
@@ -149,6 +154,8 @@ int osdc_error_category::from_code(int ev) const noexcept {
     return -ENOENT;
   case osdc_errc::timed_out:
     return -ETIMEDOUT;
+  case osdc_errc::pool_eio:
+    return -EIO;
   }
   return -EDOM;
 }
