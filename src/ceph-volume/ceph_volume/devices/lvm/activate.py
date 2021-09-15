@@ -265,13 +265,8 @@ class Activate(object):
 
         if osd_id and osd_fsid:
             tags = {'ceph.osd_id': osd_id, 'ceph.osd_fsid': osd_fsid}
-        elif not osd_id and osd_fsid:
-            tags = {'ceph.osd_fsid': osd_fsid}
-        elif osd_id and not osd_fsid:
-            raise RuntimeError('could not activate osd.{}, please provide the '
-                               'osd_fsid too'.format(osd_id))
         else:
-            raise RuntimeError('Please provide both osd_id and osd_fsid')
+            raise RuntimeError('Please provide both osd_id and osd_fsid.')
         lvs = api.get_lvs(tags=tags)
         if not lvs:
             raise RuntimeError('could not find osd.%s with osd_fsid %s' %

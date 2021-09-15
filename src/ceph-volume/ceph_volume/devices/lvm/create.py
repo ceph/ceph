@@ -25,6 +25,8 @@ class Create(object):
         prepare_step = Prepare([])
         prepare_step.safe_prepare(args)
         osd_id = prepare_step.osd_id
+        if not args.osd_id:
+            args.osd_id = osd_id
         try:
             # we try this for activate only when 'creating' an OSD, because a rollback should not
             # happen when doing normal activation. For example when starting an OSD, systemd will call

@@ -23,52 +23,17 @@ class TestActivate(object):
     # test the negative side effect with an actual functional run, so we must
     # setup a perfect scenario for this test to check it can really work
     # with/without osd_id
-    def test_no_osd_id_matches_fsid(self, is_root, monkeypatch, capture):
-        FooVolume = api.Volume(lv_name='foo', lv_path='/dev/vg/foo',
-                               lv_tags="ceph.osd_fsid=1234")
-        volumes = []
-        volumes.append(FooVolume)
-        monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: volumes)
-        monkeypatch.setattr(activate, 'activate_filestore', capture)
-        args = Args(osd_id=None, osd_fsid='1234', filestore=True)
-        activate.Activate([]).activate(args)
-        assert capture.calls[0]['args'][0] == [FooVolume]
-
-    def test_no_osd_id_matches_fsid_bluestore(self, is_root, monkeypatch, capture):
-        FooVolume = api.Volume(lv_name='foo', lv_path='/dev/vg/foo',
-                               lv_tags="ceph.osd_fsid=1234")
-        volumes = []
-        volumes.append(FooVolume)
-        monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: volumes)
-        monkeypatch.setattr(activate, 'activate_bluestore', capture)
-        args = Args(osd_id=None, osd_fsid='1234', bluestore=True)
-        activate.Activate([]).activate(args)
-        assert capture.calls[0]['args'][0] == [FooVolume]
-
-    def test_no_osd_id_no_matching_fsid(self, is_root, monkeypatch, capture):
-        FooVolume = api.Volume(lv_name='foo', lv_path='/dev/vg/foo',
-                               lv_tags="ceph.osd_fsid=1111")
-        volumes = []
-        volumes.append(FooVolume)
-        monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: [])
-        monkeypatch.setattr(api, 'get_single_lv', lambda **kwargs: [])
-        monkeypatch.setattr(activate, 'activate_filestore', capture)
-
-        args = Args(osd_id=None, osd_fsid='2222')
-        with pytest.raises(RuntimeError):
-            activate.Activate([]).activate(args)
-
     def test_osd_id_no_osd_fsid(self, is_root):
         args = Args(osd_id=42, osd_fsid=None)
         with pytest.raises(RuntimeError) as result:
             activate.Activate([]).activate(args)
-        assert result.value.args[0] == 'could not activate osd.42, please provide the osd_fsid too'
+        assert result.value.args[0] == 'Please provide both osd_id and osd_fsid.'
 
     def test_no_osd_id_no_osd_fsid(self, is_root):
         args = Args(osd_id=None, osd_fsid=None)
         with pytest.raises(RuntimeError) as result:
             activate.Activate([]).activate(args)
-        assert result.value.args[0] == 'Please provide both osd_id and osd_fsid'
+        assert result.value.args[0] == 'Please provide both osd_id and osd_fsid.'
 
     def test_filestore_no_systemd(self, is_root, monkeypatch, capture):
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
@@ -100,7 +65,7 @@ class TestActivate(object):
         volumes.append(JournalVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
 
-        args = Args(osd_id=None, osd_fsid='1234', no_systemd=True, filestore=True)
+        args = Args(osd_id='0', osd_fsid='1234', no_systemd=True, filestore=True)
         activate.Activate([]).activate(args)
         assert fake_enable.calls == []
         assert fake_start_osd.calls == []
@@ -135,7 +100,7 @@ class TestActivate(object):
         volumes.append(JournalVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
 
-        args = Args(osd_id=None, osd_fsid='1234', no_systemd=True,
+        args = Args(osd_id='0', osd_fsid='1234', no_systemd=True,
                     filestore=True, auto_detect_objectstore=True)
         activate.Activate([]).activate(args)
         assert fake_enable.calls == []
@@ -171,7 +136,7 @@ class TestActivate(object):
         volumes.append(JournalVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
 
-        args = Args(osd_id=None, osd_fsid='1234', no_systemd=False,
+        args = Args(osd_id='0', osd_fsid='1234', no_systemd=False,
                     filestore=True, auto_detect_objectstore=False)
         activate.Activate([]).activate(args)
         assert fake_enable.calls != []
@@ -207,7 +172,7 @@ class TestActivate(object):
         volumes.append(JournalVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
 
-        args = Args(osd_id=None, osd_fsid='1234', no_systemd=False,
+        args = Args(osd_id='0', osd_fsid='1234', no_systemd=False,
                     filestore=True)
         activate.Activate([]).activate(args)
         assert fake_enable.calls != []
@@ -231,7 +196,7 @@ class TestActivate(object):
         volumes.append(DataVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
 
-        args = Args(osd_id=None, osd_fsid='1234', no_systemd=True, bluestore=True)
+        args = Args(osd_id='0', osd_fsid='1234', no_systemd=True, bluestore=True)
         activate.Activate([]).activate(args)
         assert fake_enable.calls == []
         assert fake_start_osd.calls == []
@@ -254,7 +219,7 @@ class TestActivate(object):
         volumes.append(DataVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
 
-        args = Args(osd_id=None, osd_fsid='1234', no_systemd=False,
+        args = Args(osd_id='0', osd_fsid='1234', no_systemd=False,
                     bluestore=True)
         activate.Activate([]).activate(args)
         assert fake_enable.calls != []
@@ -278,7 +243,7 @@ class TestActivate(object):
         volumes.append(DataVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
 
-        args = Args(osd_id=None, osd_fsid='1234', no_systemd=True,
+        args = Args(osd_id='0', osd_fsid='1234', no_systemd=True,
                     bluestore=True, auto_detect_objectstore=True)
         activate.Activate([]).activate(args)
         assert fake_enable.calls == []
@@ -304,7 +269,7 @@ class TestActivate(object):
         volumes.append(DataVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: deepcopy(volumes))
 
-        args = Args(osd_id=None, osd_fsid='1234', no_systemd=False,
+        args = Args(osd_id='0', osd_fsid='1234', no_systemd=False,
                     bluestore=True, auto_detect_objectstore=False)
         activate.Activate([]).activate(args)
         assert fake_enable.calls != []
