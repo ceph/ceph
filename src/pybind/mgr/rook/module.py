@@ -81,6 +81,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             default='local',
             desc='storage class name for LSO-discovered PVs',
         ),
+        Option(
+            'drive_group_interval',
+            type='float',
+            default=300,
+            desc='interval in seconds between re-application of applied drive_groups',
+        ),
     ]
 
     @staticmethod
@@ -116,6 +122,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._rook_env = RookEnv()
         self._k8s_AppsV1_api: Optional[client.AppsV1Api] = None
         self.storage_class = self.get_module_option('storage_class')
+        self.drive_group_interval = self.get_module_option('drive_group_interval')
+        self.load_drive_groups()
 
         self._shutdown = threading.Event()
         
@@ -132,6 +140,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             self.log.debug(' mgr option %s = %s',
                            opt['name'], getattr(self, opt['name']))  # type: ignore
         assert isinstance(self.storage_class, str)
+        assert isinstance(self.drive_group_interval, float)
         self.rook_cluster.storage_class = self.storage_class
 
     def shutdown(self) -> None:
@@ -191,12 +200,16 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             self._k8s_StorageV1_api,
             self._k8s_AppsV1_api,
             self._rook_env,
-            self.storage_class)
+            self.storage_class,
+            self)
 
         self._initialized.set()
 
         while not self._shutdown.is_set():
-            self._shutdown.wait(5)
+            for drive_group in self.drive_group_map:
+                self.rook_cluster.add_osds(DriveGroupSpec.from_json(self.drive_group_map[drive_group]))
+            assert isinstance(self.drive_group_interval, float) 
+            self._shutdown.wait(self.drive_group_interval)
 
     @handle_orch_error
     def get_inventory(self, host_filter: Optional[orchestrator.InventoryFilter] = None, refresh: bool = False) -> List[orchestrator.InventoryHost]:
@@ -492,22 +505,25 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self.rook_cluster.remove_pods(names)
 
     def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> OrchResult[List[str]]:
-        result_list = []
-        all_hosts = raise_if_exception(self.get_hosts())
         for drive_group in specs:
-            matching_hosts = drive_group.placement.filter_matching_hosts(lambda label=None, as_hostspec=None: all_hosts)
-
-            if not self.rook_cluster.node_exists(matching_hosts[0]):
-                raise RuntimeError("Node '{0}' is not in the Kubernetes "
-                               "cluster".format(matching_hosts))
-
-            # Validate whether cluster CRD can accept individual OSD
-            # creations (i.e. not useAllDevices)
-            if not self.rook_cluster.can_create_osd():
-                raise RuntimeError("Rook cluster configuration does not "
-                                "support OSD creation.")
-            result_list.append(self.rook_cluster.add_osds(drive_group, matching_hosts))
+            self.drive_group_map[drive_group.service_id] = drive_group.to_json()
+        self.save_drive_groups()
+        result_list = []
+        for drive_group in specs:
+            result_list.append(self.rook_cluster.add_osds(drive_group))
         return OrchResult(result_list)
+
+    def load_drive_groups(self) -> None:
+        stored_drive_group = self.get_store("drive_group_map")
+        if stored_drive_group == None:
+            self.drive_group_map = {}
+        else:
+            assert stored_drive_group
+            self.drive_group_map = json.loads(stored_drive_group)
+    
+    def save_drive_groups(self) -> None:
+        json_drive_group_map = json.dumps(self.drive_group_map)
+        self.set_store("drive_group_map", json_drive_group_map)
 
     def remove_osds(self, osd_ids: List[str], replace: bool = False, force: bool = False, zap: bool = False) -> OrchResult[str]:
         assert self._rook_cluster is not None

@@ -12,7 +12,7 @@ import logging
 from contextlib import contextmanager
 from time import sleep
 import re
-from orchestrator import OrchResult
+import json
 
 import jsonpatch
 from urllib.parse import urljoin
@@ -26,8 +26,9 @@ from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec, HostPlacementSpec
 from ceph.utils import datetime_now
 from ceph.deployment.drive_selection.matchers import SizeMatcher
-from mgr_module import NFS_POOL_NAME
+from mgr_module import NFS_POOL_NAME, MgrModule
 from mgr_util import merge_dicts
+from orchestrator import OrchResult
 
 from typing import Optional, Tuple, TypeVar, List, Callable, Any, cast, Generic, \
     Iterable, Dict, Iterator, Type
@@ -416,7 +417,8 @@ class DefaultCreator():
 
             for device in to_create:
                 new_scds = self.device_to_device_set(drive_group, device)
-                new_cluster.spec.storage.storageClassDeviceSets.append(new_scds)
+                if new_scds.name not in [scds.name for scds in new_cluster.spec.storage.storageClassDeviceSets]:
+                    new_cluster.spec.storage.storageClassDeviceSets.append(new_scds)
             return new_cluster
         return _add_osds
 
@@ -635,7 +637,7 @@ class DefaultRemover():
 class RookCluster(object):
     # import of client.CoreV1Api must be optional at import time.
     # Instead allow mgr/rook to be imported anyway.
-    def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', customObjects_api: 'client.CustomObjectsApi', storageV1_api: 'client.StorageV1Api', appsV1_api: 'client.AppsV1Api', rook_env: 'RookEnv', storage_class: 'str'):
+    def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', customObjects_api: 'client.CustomObjectsApi', storageV1_api: 'client.StorageV1Api', appsV1_api: 'client.AppsV1Api', rook_env: 'RookEnv', storage_class: 'str', mgr: 'MgrModule'):
         self.rook_env = rook_env  # type: RookEnv
         self.coreV1_api = coreV1_api  # client.CoreV1Api
         self.batchV1_api = batchV1_api
@@ -652,8 +654,6 @@ class RookCluster(object):
                                             label_selector="rook_cluster={0}".format(
                                                 self.rook_env.namespace))
         self.nodes: KubernetesResource[client.V1Node] = KubernetesResource(self.coreV1_api.list_node)
-        self.drive_group_map: Dict[str, Any] = {}
-        self.drive_group_lock = threading.Lock()
         
     def rook_url(self, path: str) -> str:
         prefix = "/apis/ceph.rook.io/%s/namespaces/%s/" % (
@@ -1079,30 +1079,36 @@ class RookCluster(object):
             return new
         return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _update_mon_count)
 
-    def add_osds(self, drive_group, matching_hosts):
-        # type: (DriveGroupSpec, List[str]) -> str
+    def add_osds(self, drive_group):
+        # type: (DriveGroupSpec) -> str
+        add_osds = self.get_osd_patch(drive_group)
+        return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, add_osds)
+    
+    def get_osd_patch(self, drive_group: DriveGroupSpec) -> Callable[[CrdClassT, CrdClassT], CrdClassT]:
+        all_hosts = self.get_hosts()
+        matching_hosts = drive_group.placement.filter_matching_hosts(lambda label=None, as_hostspec=None: all_hosts)
+
+        if not self.node_exists(matching_hosts[0]):
+            raise RuntimeError("Node '{0}' is not in the Kubernetes "
+                            "cluster".format(matching_hosts))
+
+        # Validate whether cluster CRD can accept individual OSD
+        # creations (i.e. not useAllDevices)
+        if not self.can_create_osd():
+            raise RuntimeError("Rook cluster configuration does not "
+                            "support OSD creation.")
+
         assert drive_group.objectstore in ("bluestore", "filestore")
         assert drive_group.service_id
         storage_class = self.get_storage_class()
         inventory = self.get_discovered_devices()
-        self.creator: Optional[DefaultCreator] = None
+        creator: Optional[DefaultCreator] = None
         if storage_class.metadata.labels and ('local.storage.openshift.io/owner-name' in storage_class.metadata.labels):
-            self.creator = LSOCreator(inventory, self.coreV1_api, self.storage_class)    
+            creator = LSOCreator(inventory, self.coreV1_api, self.storage_class)    
         else:
-            self.creator = DefaultCreator(inventory, self.coreV1_api, self.storage_class)
-        _add_osds = self.creator.add_osds(self.rook_pods, drive_group, matching_hosts)
-        with self.drive_group_lock:
-            self.drive_group_map[drive_group.service_id] = _add_osds
-            return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _add_osds)
-
-    @threaded
-    def drive_group_loop(self) -> None:
-        ten_minutes = 10 * 60
-        while True:
-            sleep(ten_minutes)
-            with self.drive_group_lock:
-                for _, add_osd in self.drive_group_map.items():
-                    self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, add_osd)
+            creator = DefaultCreator(inventory, self.coreV1_api, self.storage_class)
+        add_osds = creator.add_osds(self.rook_pods, drive_group, matching_hosts)
+        return add_osds
 
     def remove_osds(self, osd_ids: List[str], replace: bool, force: bool, mon_command: Callable) -> str:
         inventory = self.get_discovered_devices()
