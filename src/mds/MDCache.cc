@@ -309,6 +309,8 @@ void MDCache::remove_inode(CInode *o)
     snap_inode_map.erase(o->vino());
   }
 
+  clear_taken_inos(o->ino());
+
   if (o->ino() < MDS_INO_SYSTEM_BASE) {
     if (o == root) root = 0;
     if (o == myin) myin = 0;
