@@ -1,4 +1,4 @@
-version: '1'
+version: '3.8'
 
 services:
   postgres:
@@ -36,7 +36,7 @@ services:
     ports: 
         - 8080:8080
   pulpito:
-    build: ./pulpito
+    image: quay.io/ceph-infra/pulpito
     environment:
       PULPITO_PADDLES_ADDRESS: http://paddles:8080
     depends_on:
@@ -51,10 +51,17 @@ services:
         retries: 2
     ports:
         - 8081:8081
-  teutholgy:
+  teuthology:
     build: ./teuthology
     depends_on:
         pulpito:
             condition: service_healthy
     links:
         - paddles
+  beanstalk:
+        build: ../../beanstalk/alpine
+        depends_on:
+            pulpito:
+                condition: service_healthy
+        ports:
+            - "11300:11300"
