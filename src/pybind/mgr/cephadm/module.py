@@ -1123,6 +1123,9 @@ To check that the host is reachable:
             if not no_fsid:
                 final_args += ['--fsid', self._cluster_fsid]
 
+            if self.container_init and command == 'deploy':
+                final_args += ['--container-init']
+
             final_args += args
 
             # exec
