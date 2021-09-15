@@ -1565,6 +1565,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
     if (mds->inotable->get_version() >= inotablev) {
       dout(10) << "EMetaBlob.replay inotable tablev " << inotablev
 	       << " <= table " << mds->inotable->get_version() << dendl;
+      if (allocated_ino)
+        mds->mdcache->insert_taken_inos(allocated_ino);
     } else {
       dout(10) << "EMetaBlob.replay inotable v " << inotablev
 	       << " - 1 == table " << mds->inotable->get_version()
@@ -1591,6 +1593,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
     if (mds->sessionmap.get_version() >= sessionmapv) {
       dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
 	       << " <= table " << mds->sessionmap.get_version() << dendl;
+      if (used_preallocated_ino)
+        mds->mdcache->insert_taken_inos(used_preallocated_ino);
     } else {
       dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
 	       << ", table " << mds->sessionmap.get_version()
