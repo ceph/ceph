@@ -5,6 +5,7 @@
 
 #include "LRemIoCtxImpl.h"
 #include "LRemDBCluster.h"
+#include "LRemDBStore.h"
 
 namespace librados {
 
@@ -13,9 +14,10 @@ class LRemDBRadosClient;
 class LRemDBIoCtxImpl : public LRemIoCtxImpl {
 public:
   LRemDBIoCtxImpl();
-  LRemDBIoCtxImpl(LRemDBRadosClient *client, int64_t m_pool_id,
-                   const std::string& pool_name,
-                   LRemDBCluster::PoolRef pool);
+  LRemDBIoCtxImpl(LRemDBRadosClient *client,
+                  int64_t m_pool_id,
+                  const std::string& pool_name,
+                  LRemDBCluster::PoolRef pool);
   ~LRemDBIoCtxImpl() override;
 
   LRemIoCtxImpl *clone() override;
@@ -111,6 +113,9 @@ private:
 
   LRemDBRadosClient *m_client = nullptr;
   LRemDBCluster::PoolRef m_pool;
+
+  LRemDBStore::ClusterRef m_dbc;
+  LRemDBStore::PoolRef m_pool_db;
 
   void append_clone(bufferlist& src, bufferlist* dest);
   size_t clip_io(size_t off, size_t len, size_t bl_len);

@@ -82,16 +82,18 @@ namespace LRemDBStore {
                                                                          _nspace, _oid) {}
 
     struct Meta {
-      uint64_t size;
+      uint64_t size = 0;
 
       ceph::real_time mtime;
-      uint64_t objver;
+      uint64_t objver = 0;
 
-      uint64_t snap_id;
+      uint64_t snap_id = -1;
       std::vector<uint64_t> snaps;
       interval_set<uint64_t> snap_overlap;
 
-      uint64_t epoch;
+      uint64_t epoch = 0;
+
+      void touch(uint64_t epoch);
     };
 
     int create_table() override;
@@ -101,6 +103,17 @@ namespace LRemDBStore {
 
     int read_data(uint64_t ofs, uint64_t len, bufferlist *bl);
     int write_data(uint64_t ofs, uint64_t len, const bufferlist& bl);
+
+    int write(uint64_t ofs, uint64_t len,
+              const bufferlist& bl,
+              uint64_t epoch);
+    int write(uint64_t ofs, uint64_t len,
+              const bufferlist& bl,
+              LRemDBStore::Obj::Meta& meta,
+              uint64_t epoch);
+
+    int append(const bufferlist& bl,
+               uint64_t epoch);
   };
   using ObjRef = std::shared_ptr<Obj>;
 
@@ -199,6 +212,7 @@ namespace LRemDBStore {
     int get_pool(int id, PoolRef *pool);
     int list_pools(std::map<std::string, PoolRef> *pools);
   };
+  using ClusterRef = std::shared_ptr<Cluster>;
 
 } // namespace LRemDBStore
 

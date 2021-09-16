@@ -49,6 +49,11 @@ LRemDBIoCtxImpl::LRemDBIoCtxImpl(LRemDBRadosClient *client, int64_t pool_id,
                                    LRemDBCluster::PoolRef pool)
     : LRemIoCtxImpl(client, pool_id, pool_name), m_client(client),
       m_pool(pool) {
+  auto uuid = client->cct()->_conf.get_val<uuid_d>("fsid");
+  m_dbc = std::make_shared<LRemDBStore::Cluster>(uuid.to_string());
+  m_dbc->get_pool(pool_name, &m_pool_db);
+
+#warning check all ops for m_pool_db not null
 }
 
 LRemDBIoCtxImpl::~LRemDBIoCtxImpl() {
@@ -95,10 +100,14 @@ int LRemDBIoCtxImpl::append(LRemTransactionStateRef& trans, const bufferlist &bl
   LRemDBCluster::SharedFile file;
   file = get_file_safe(trans, true, CEPH_NOSNAP, snapc, &epoch);
 
+  auto objh = m_pool_db->get_obj_handler(trans->nspace(), trans->oid());
+
   std::unique_lock l{file->lock};
-  auto off = file->data.length();
-  ensure_minimum_length(off + bl.length(), &file->data);
-  file->data.begin(off).copy_in(bl.length(), bl);
+
+  int r = objh->append(bl, epoch);
+  if (r < 0) {
+    return r;
+  }
   file->epoch = epoch;
 
   return 0;

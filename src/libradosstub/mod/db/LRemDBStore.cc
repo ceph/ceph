@@ -352,6 +352,12 @@ int LRemDBStore::Obj::create_table() {
   return 0;
 }
 
+void LRemDBStore::Obj::Meta::touch(uint64_t _epoch)
+{
+  epoch = _epoch;
+  mtime = real_clock::now();
+}
+
 int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
   try {
     auto q = dbo->statement("SELECT size, mtime, objver, snap_id, snaps, snap_overlap, epoch from ? WHERE nspace = ? AND oid = ?");
@@ -452,8 +458,12 @@ int LRemDBStore::Obj::write_data(uint64_t ofs, uint64_t len,
   ObjData od(dbo, pool_id, nspace, oid);
 
   int r = od.write(ofs, len, bl);
-
+  if (r < 0) {
+    return r;
+  }
+#if 0
   uint64_t size = ofs + len;
+#warning update epoch, mtime
   auto q = dbo->statement("INSERT INTO ?(nspace, oid, size) VALUES (?, ?, ?)"
                           " ON CONFLICT(nspace, oid) DO UPDATE SET size=?"
                           " WHERE size < ?");
@@ -468,8 +478,53 @@ int LRemDBStore::Obj::write_data(uint64_t ofs, uint64_t len,
   if (r < 0) {
     return r;
   }
+#endif
 
   return 0;
+}
+
+int LRemDBStore::Obj::write(uint64_t ofs, uint64_t len,
+                            const bufferlist& bl,
+                            uint64_t epoch) {
+
+  LRemDBStore::Obj::Meta meta;
+  int r = read_meta(&meta);
+  if (r < 0) {
+    return r;
+  }
+
+  return write(ofs, len, bl, epoch);
+}
+
+int LRemDBStore::Obj::write(uint64_t ofs, uint64_t len,
+                            const bufferlist& bl,
+                            LRemDBStore::Obj::Meta& meta,
+                            uint64_t epoch) {
+  int r = write_data(ofs, len, bl);
+  if (r < 0) {
+    return r;
+  }
+
+  uint64_t size = ofs + r;
+  if (size > meta.size) {
+    meta.size = size;
+  }
+
+  meta.touch(epoch);
+
+  return write_meta(meta);
+}
+
+int LRemDBStore::Obj::append(const bufferlist& bl,
+                             uint64_t epoch) {
+
+  LRemDBStore::Obj::Meta meta;
+  int r = read_meta(&meta);
+  if (r < 0) {
+    return r;
+  }
+
+  return write(meta.size, bl.length(), bl, epoch);
 }
 
 int LRemDBStore::ObjData::create_table() {
@@ -568,6 +623,8 @@ int LRemDBStore::ObjData::write(uint64_t ofs, uint64_t len, const bufferlist& bl
   if (len > bl.length()) {
     len = bl.length();
   }
+  uint64_t write_len = len;
+
   int start_block = ofs / block_size;
   int end_block = (ofs + len - 1) / block_size;
 
@@ -609,7 +666,7 @@ int LRemDBStore::ObjData::write(uint64_t ofs, uint64_t len, const bufferlist& bl
     ++cur_block;
   }
 
-  return 0;
+  return (int)write_len;
 }
 
 int LRemDBStore::KVTableBase::create_table() {
