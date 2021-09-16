@@ -4546,8 +4546,8 @@ static void discard_cb(void *priv, void *priv2)
 void BlueStore::handle_discard(interval_set<uint64_t>& to_release)
 {
   dout(10) << __func__ << dendl;
-  ceph_assert(shared_alloc.a);
-  shared_alloc.a->release(to_release);
+  ceph_assert(alloc);
+  alloc->release(to_release);
 }
 
 BlueStore::BlueStore(CephContext *cct, const string& path)
@@ -5568,6 +5568,7 @@ int BlueStore::_write_out_fm_meta(uint64_t target_size)
 
 int BlueStore::_create_alloc()
 {
+  ceph_assert(alloc == NULL);
   ceph_assert(shared_alloc.a == NULL);
   ceph_assert(bdev->get_size());
 
@@ -5580,21 +5581,22 @@ int BlueStore::_create_alloc()
     allocator_type = "zoned";
   }
 #endif
-  
-  shared_alloc.set(
-    Allocator::create(
-      cct, allocator_type,
-      bdev->get_size(),
-      alloc_size,
-      zone_size,
-      first_sequential_zone,
-      "block"));
 
-  if (!shared_alloc.a) {
+  alloc = Allocator::create(
+    cct, allocator_type,
+    bdev->get_size(),
+    alloc_size,
+    zone_size,
+    first_sequential_zone,
+    "block");
+  if (!alloc) {
     lderr(cct) << __func__ << " failed to create " << allocator_type << " allocator"
 	       << dendl;
     return -EINVAL;
   }
+
+  // BlueFS will share the same allocator
+  shared_alloc.set(alloc);
 
   return 0;
 }
@@ -5605,11 +5607,11 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
   if (r < 0) {
     return r;
   }
-  ceph_assert(shared_alloc.a != NULL);
+  ceph_assert(alloc != NULL);
 
 #ifdef HAVE_LIBZBD
   if (bdev->is_smr()) {
-    auto a = dynamic_cast<ZonedAllocator*>(shared_alloc.a);
+    auto a = dynamic_cast<ZonedAllocator*>(alloc);
     ceph_assert(a);
     auto f = dynamic_cast<ZonedFreelistManager*>(fm);
     ceph_assert(f);
@@ -5646,11 +5648,11 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
     dout(1) << __func__
 	    << " loaded zone pointers: "
 	    << std::hex
-	    << ", allocator type " << shared_alloc.a->get_type()
-	    << ", capacity 0x" << shared_alloc.a->get_capacity()
-	    << ", block size 0x" << shared_alloc.a->get_block_size()
-	    << ", free 0x" << shared_alloc.a->get_free()
-	    << ", fragmentation " << shared_alloc.a->get_fragmentation()
+	    << ", allocator type " << alloc->get_type()
+	    << ", capacity 0x" << alloc->get_capacity()
+	    << ", block size 0x" << alloc->get_block_size()
+	    << ", free 0x" << alloc->get_free()
+	    << ", fragmentation " << alloc->get_fragmentation()
 	    << std::dec << dendl;
 
     return 0;
@@ -5661,12 +5663,12 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
   utime_t start_time = ceph_clock_now();
   if (!fm->is_null_manager()) {
     // This is the original path - loading allocation map from RocksDB and feeding into the allocator
-    dout(5) << __func__ << "::NCB::loading allocation from FM -> shared_alloc" << dendl;
+    dout(5) << __func__ << "::NCB::loading allocation from FM -> alloc" << dendl;
     // initialize from freelist
     fm->enumerate_reset();
     uint64_t offset, length;
     while (fm->enumerate_next(db, &offset, &length)) {
-      shared_alloc.a->init_add_free(offset, length);
+      alloc->init_add_free(offset, length);
       ++num;
       bytes += length;
     }
@@ -5674,7 +5676,7 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
 
     utime_t duration = ceph_clock_now() - start_time;
     dout(5) << __func__ << "::num_entries=" << num << " free_size=" << bytes << " alloc_size=" <<
-      shared_alloc.a->get_capacity() - bytes << " time=" << duration << " seconds" << dendl;
+      alloc->get_capacity() - bytes << " time=" << duration << " seconds" << dendl;
   } else {
     // This is the new path reading the allocation map from a flat bluefs file and feeding them into the allocator
 
@@ -5684,8 +5686,8 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
       return -ENOTSUP; // Operation not supported
     }
 
-    if (restore_allocator(shared_alloc.a, &num, &bytes) == 0) {
-      dout(5) << __func__ << "::NCB::restore_allocator() completed successfully shared_alloc.a=" << shared_alloc.a << dendl;
+    if (restore_allocator(alloc, &num, &bytes) == 0) {
+      dout(5) << __func__ << "::NCB::restore_allocator() completed successfully alloc=" << alloc << dendl;
     } else {
       // This must mean that we had an unplanned shutdown and didn't manage to destage the allocator
       dout(1) << __func__ << "::NCB::restore_allocator() failed!" << dendl;
@@ -5702,11 +5704,11 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
   dout(1) << __func__
           << " loaded " << byte_u_t(bytes) << " in " << num << " extents"
           << std::hex
-          << ", allocator type " << shared_alloc.a->get_type()
-          << ", capacity 0x" << shared_alloc.a->get_capacity()
-          << ", block size 0x" << shared_alloc.a->get_block_size()
-          << ", free 0x" << shared_alloc.a->get_free()
-          << ", fragmentation " << shared_alloc.a->get_fragmentation()
+          << ", allocator type " << alloc->get_type()
+          << ", capacity 0x" << alloc->get_capacity()
+          << ", block size 0x" << alloc->get_block_size()
+          << ", free 0x" << alloc->get_free()
+          << ", fragmentation " << alloc->get_fragmentation()
           << std::dec << dendl;
 
   return 0;
@@ -5737,9 +5739,12 @@ void BlueStore::_close_alloc()
   bdev->discard_drain();
 
   ceph_assert(shared_alloc.a);
+  ceph_assert(alloc);
+  ceph_assert(alloc == shared_alloc.a);
   shared_alloc.a->shutdown();
   delete shared_alloc.a;
   shared_alloc.reset();
+  alloc = nullptr;
 }
 
 int BlueStore::_open_fsid(bool create)
@@ -6845,7 +6850,7 @@ int BlueStore::mkfs()
   }
 
   reserved = _get_ondisk_reserved();
-  shared_alloc.a->init_add_free(reserved,
+  alloc->init_add_free(reserved,
     p2align(bdev->get_size(), min_alloc_size) - reserved);
 
   r = _open_db(true);
@@ -7425,7 +7430,7 @@ int BlueStore::umount()
 
   mounted = false;
 
-  ceph_assert(shared_alloc.a);
+  ceph_assert(alloc);
 
   if (!_kv_only) {
     mempool_thread.shutdown();
@@ -7445,7 +7450,7 @@ int BlueStore::umount()
   // GBH - Vault the allocation state
   dout(5) << "NCB::BlueStore::umount->store_allocation_state_on_bluestore() " << dendl;
   if (was_mounted && fm->is_null_manager()) {
-    int ret = store_allocator(shared_alloc.a);
+    int ret = store_allocator(alloc);
     if (ret != 0) {
       derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
       _close_db_and_around(false);
@@ -8794,7 +8799,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
 #ifdef HAVE_LIBZBD
   if (bdev->is_smr()) {
-    auto a = dynamic_cast<ZonedAllocator*>(shared_alloc.a);
+    auto a = dynamic_cast<ZonedAllocator*>(alloc);
     ceph_assert(a);
     auto f = dynamic_cast<ZonedFreelistManager*>(fm);
     ceph_assert(f);
@@ -9074,19 +9079,19 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	      continue;
 	    }
 	    PExtentVector exts;
-	    dout(5) << __func__ << "::NCB::(F)shared_alloc.a=" << shared_alloc.a << ", length=" << e->length << dendl;
+	    dout(5) << __func__ << "::NCB::(F)alloc=" << alloc << ", length=" << e->length << dendl;
 	    int64_t alloc_len =
-              shared_alloc.a->allocate(e->length, min_alloc_size,
+              alloc->allocate(e->length, min_alloc_size,
 				       0, 0, &exts);
 	    if (alloc_len < 0 || alloc_len < (int64_t)e->length) {
 	      derr << __func__
 	           << " failed to allocate 0x" << std::hex << e->length
 		   << " allocated 0x " << (alloc_len < 0 ? 0 : alloc_len)
 		   << " min_alloc_size 0x" << min_alloc_size
-		   << " available 0x " << shared_alloc.a->get_free()
+		   << " available 0x " << alloc->get_free()
 		   << std::dec << dendl;
 	      if (alloc_len > 0) {
-                shared_alloc.a->release(exts);
+                alloc->release(exts);
 	      }
 	      bypass_rest = true;
 	      break;
@@ -9166,7 +9171,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 		 << "~" << it.get_len() << std::dec << dendl;
 	fm->release(it.get_start(), it.get_len(), txn);
       }
-      shared_alloc.a->release(to_release);
+      alloc->release(to_release);
       to_release.clear();
     } // if (it) {
   } //if (repair && repairer.preprocess_misreference()) {
@@ -9373,7 +9378,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	//  - verify no allocations beyond write pointer
 	//  - verify num_dead_bytes count (neither allocated nor
 	//    free space past the write pointer)
-	auto a = dynamic_cast<ZonedAllocator*>(shared_alloc.a);
+	auto a = dynamic_cast<ZonedAllocator*>(alloc);
 	auto num_zones = bdev->get_size() / zone_size;
 
 	// mark the free space past the write pointer
@@ -9579,7 +9584,7 @@ void BlueStore::inject_no_shared_blob_key()
 void BlueStore::inject_leaked(uint64_t len)
 {
   PExtentVector exts;
-  int64_t alloc_len = shared_alloc.a->allocate(len, min_alloc_size,
+  int64_t alloc_len = alloc->allocate(len, min_alloc_size,
 					   min_alloc_size * 256, 0, &exts);
 
   if (fm->is_null_manager()) {
@@ -9912,7 +9917,7 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
   buf->omap_allocated =
     db->estimate_prefix_size(prefix, string());
 
-  uint64_t bfree = shared_alloc.a->get_free();
+  uint64_t bfree = alloc->get_free();
 
   if (bluefs) {
     buf->internally_reserved = 0;
@@ -12442,7 +12447,7 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
     }
     dout(10) << __func__ << "(sync) " << txc << " " << std::hex
              << txc->released << std::dec << dendl;
-    shared_alloc.a->release(txc->released);
+    alloc->release(txc->released);
   }
 
 out:
@@ -12971,7 +12976,7 @@ void BlueStore::_kv_finalize_thread()
       _reap_collections();
 
       logger->set(l_bluestore_fragmentation,
-	  (uint64_t)(shared_alloc.a->get_fragmentation() * 1000));
+	  (uint64_t)(alloc->get_fragmentation() * 1000));
 
       log_latency("kv_final",
 	l_bluestore_kv_final_lat,
@@ -13020,7 +13025,7 @@ void BlueStore::_zoned_cleaner_thread()
   ceph_assert(!zoned_cleaner_started);
   zoned_cleaner_started = true;
   zoned_cleaner_cond.notify_all();
-  auto a = dynamic_cast<ZonedAllocator*>(shared_alloc.a);
+  auto a = dynamic_cast<ZonedAllocator*>(alloc);
   ceph_assert(a);
   auto f = dynamic_cast<ZonedFreelistManager*>(fm);
   ceph_assert(f);
@@ -14746,20 +14751,20 @@ int BlueStore::_do_alloc_write(
   PExtentVector prealloc;
   prealloc.reserve(2 * wctx->writes.size());;
   int64_t prealloc_left = 0;
-  prealloc_left = shared_alloc.a->allocate(
+  prealloc_left = alloc->allocate(
     need, min_alloc_size, need,
     0, &prealloc);
   if (prealloc_left < 0 || prealloc_left < (int64_t)need) {
-    dout(5) << __func__ << "::NCB::failed allocation of " << need << " bytes!! shared_alloc.a=" << shared_alloc.a << dendl;
+    dout(5) << __func__ << "::NCB::failed allocation of " << need << " bytes!! alloc=" << alloc << dendl;
     derr << __func__ << " failed to allocate 0x" << std::hex << need
          << " allocated 0x " << (prealloc_left < 0 ? 0 : prealloc_left)
          << " min_alloc_size 0x" << min_alloc_size
-         << " available 0x " << shared_alloc.a->get_free()
+         << " available 0x " << alloc->get_free()
          << std::dec << dendl;
     if (prealloc.size()) {
-      shared_alloc.a->release(prealloc);
+      alloc->release(prealloc);
     }
-    dout(5) << __func__ << "::NCB::(2)shared_alloc.a=" << shared_alloc.a << dendl;
+    dout(5) << __func__ << "::NCB::(2)alloc=" << alloc << dendl;
     return -ENOSPC;
   }
   _collect_allocation_stats(need, min_alloc_size, prealloc);
@@ -18234,8 +18239,8 @@ int BlueStore::read_allocation_from_drive_on_startup()
   }
 
   uint64_t num_entries = 0;
-  dout(5) << " calling copy_allocator(bitmap_allocator -> shared_alloc.a)" << dendl;  
-  copy_allocator(allocator, shared_alloc.a, &num_entries);
+  dout(5) << " calling copy_allocator(bitmap_allocator -> alloc)" << dendl;  
+  copy_allocator(allocator, alloc, &num_entries);
   delete allocator;
   utime_t duration = ceph_clock_now() - start;
   dout(5) << " <<<FINISH>>> in " << duration << " seconds, num_entries=" << num_entries << dendl;
@@ -18364,7 +18369,7 @@ int BlueStore::add_existing_bluefs_allocation(Allocator* allocator, read_alloc_s
     }
     for (auto itr = bluefs_extents.begin(); itr != bluefs_extents.end(); extent_count++, itr++) {
       //dout(5) << "BlueFS[" << extent_count << "] <" << itr.get_start() << "," << itr.get_len() << ">" << dendl;
-      allocator->init_rm_free(itr.get_start(), itr.get_len());
+      shared_alloc.a->init_rm_free(itr.get_start(), itr.get_len());
       stats.extent_count++;
     }
   }
@@ -18422,18 +18427,18 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool(bool test_store_and
   dout(5) << "\n" << " <<<FINISH>>> in " << duration << " seconds; extent_count=" << stats.extent_count << dendl;
 
 
-  dout(5) << "calling compare_allocator(shared_alloc.a) insert_count=" << stats.insert_count << dendl;
-  ret = compare_allocators(allocator, shared_alloc.a, stats.insert_count, memory_target);
+  dout(5) << "calling compare_allocator(alloc) insert_count=" << stats.insert_count << dendl;
+  ret = compare_allocators(allocator, alloc, stats.insert_count, memory_target);
   if (ret == 0) {
-    dout(5) << "SUCCESS!!! compare(allocator, shared_alloc.a)" << dendl;
+    dout(5) << "SUCCESS!!! compare(allocator, alloc)" << dendl;
   } else {
-    derr << "**** FAILURE compare(allocator, shared_alloc.a)::ret=" << ret << dendl;
+    derr << "**** FAILURE compare(allocator, alloc)::ret=" << ret << dendl;
   }
 
   if (test_store_and_restore) {
     _close_db_leave_bluefs();
-    dout(5) << "calling store_allocator(shared_alloc.a)" << dendl;
-    store_allocator(shared_alloc.a);
+    dout(5) << "calling store_allocator(alloc)" << dendl;
+    store_allocator(alloc);
     Allocator* alloc2 = create_bitmap_allocator(bdev_size);
     if (alloc2) {
       dout(5) << "bitmap-allocator=" << alloc2 << dendl;
@@ -18447,11 +18452,11 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool(bool test_store_and
 	  _close_db_and_around(false); return ret;
 	}
 	// verify that we can store and restore allocator to/from drive
-	ret = compare_allocators(alloc2, shared_alloc.a, stats.insert_count, memory_target);
+	ret = compare_allocators(alloc2, alloc, stats.insert_count, memory_target);
 	if (ret == 0) {
-	  dout(5) << "SUCCESS!!! compare(alloc2, shared_alloc.a)" << dendl;
+	  dout(5) << "SUCCESS!!! compare(alloc2, alloc)" << dendl;
 	} else {
-	  derr << "**** FAILURE compare(alloc2, shared_alloc.a)::ret=" << ret << dendl;
+	  derr << "**** FAILURE compare(alloc2, alloc)::ret=" << ret << dendl;
 	}
       } else {
 	derr << "******Failed restore_allocator******\n" << dendl;
@@ -18493,7 +18498,7 @@ Allocator* BlueStore::clone_allocator_without_bluefs(Allocator *src_allocator)
   }
 
   uint64_t num_entries = 0;
-  dout(5) << "calling copy_allocator(shared_alloc.a -> bitmap_allocator)" << dendl;  
+  dout(5) << "calling copy_allocator(alloc -> bitmap_allocator)" << dendl;  
   copy_allocator(src_allocator, allocator, &num_entries);
 
   // BlueFS stores its internal allocation outside RocksDB (FM) so we should not destage them to the allcoator-file
@@ -18598,7 +18603,7 @@ int BlueStore::reset_fm_for_restore()
 // and compare it to the base allocator passed in
 int BlueStore::verify_rocksdb_allocations(Allocator *allocator)
 {
-  dout(5) << "verify that shared_alloc content is identical to FM" << dendl;
+  dout(5) << "verify that alloc content is identical to FM" << dendl;
   // initialize from freelist
   Allocator* temp_allocator = initialize_allocator_from_freelist(fm);
   if (temp_allocator == nullptr) {
@@ -18646,7 +18651,7 @@ int BlueStore::push_allocation_to_rocksdb()
   }
 
   // start by creating a clone copy of the shared-allocator
-  unique_ptr<Allocator> allocator(clone_allocator_without_bluefs(shared_alloc.a));
+  unique_ptr<Allocator> allocator(clone_allocator_without_bluefs(alloc));
   if (!allocator) {
     return db_cleanup(-1);
   }
