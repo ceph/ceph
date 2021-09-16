@@ -30,6 +30,30 @@ Notable Changes
   etc.) in a sticky banner at the top of the page. For more details, see:
   https://docs.ceph.com/en/pacific/mgr/dashboard/#message-of-the-day-motd
 
+* Several fixes in BlueStore, including a fix for the deferred write regression,
+  which led to excessive RocksDB flushes and compactions. Previously, when
+  `bluestore_prefer_deferred_size_hdd` was equal to or more than
+  `bluestore_max_blob_size_hdd` (both set to 64K), all the data was deferred,
+  which led to increased consumption of the column family used to store
+  deferred writes in RocksDB. Now, the `bluestore_prefer_deferred_size` parameter
+  independently controls deferred writes, and only writes smaller than
+  this size use the deferred write path.
+
+* The default value of `osd_client_message_cap` has been set to 256, to provide
+  better flow control by limiting maximum number of in-flight client requests.
+
+* PGs no longer show a `active+clean+scrubbing+deep+repair` state when
+  `osd_scrub_auto_repair` is set to true, for regular deep-scrubs with no repair
+  required.
+
+* `ceph-mgr-modules-core` debian package does not recommend `ceph-mgr-rook`
+  anymore. As the latter depends on `python3-numpy` which cannot be imported in
+  different Python sub-interpreters multi-times if the version of
+  `python3-numpy` is older than 1.19. Since `apt-get` installs the `Recommends`
+  packages by default, `ceph-mgr-rook` was always installed along with
+  `ceph-mgr` debian package as an indirect dependency. If your workflow depends
+  on this behavior, you might want to install `ceph-mgr-rook` separately.
+
 Changelog
 ---------
 
