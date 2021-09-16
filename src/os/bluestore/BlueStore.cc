@@ -5561,8 +5561,27 @@ int BlueStore::_create_alloc()
     return -EINVAL;
   }
 
-  // BlueFS will share the same allocator
-  shared_alloc.set(alloc);
+#ifdef HAVE_LIBZBD
+  if (freelist_type == "zoned") {
+    Allocator *a = Allocator::create(
+      cct, cct->_conf->bluestore_allocator,
+      bdev->get_conventional_region_size(),
+      alloc_size,
+      0, 0,
+      "block");
+    if (!a) {
+      lderr(cct) << __func__ << " failed to create " << cct->_conf->bluestore_allocator
+		 << " allocator" << dendl;
+      delete alloc;
+      return -EINVAL;
+    }
+    shared_alloc.set(a);
+  } else
+#endif
+  {
+    // BlueFS will share the same allocator
+    shared_alloc.set(alloc);
+  }
 
   return 0;
 }
@@ -5611,6 +5630,12 @@ int BlueStore::_init_alloc(bool read_only)
       }
     }
 
+    // start with conventional zone "free" (bluefs may adjust this when it starts up)
+    auto reserved = _get_ondisk_reserved();
+    shared_alloc.a->init_add_free(reserved,
+				  bdev->get_conventional_region_size() - reserved);
+
+    // init sequential zone based on the device's write pointers
     a->init_from_zone_pointers(zones);
     dout(1) << __func__
 	    << " loaded zone pointers: "
@@ -5696,11 +5721,16 @@ void BlueStore::_close_alloc()
   ceph_assert(bdev);
   bdev->discard_drain();
 
-  ceph_assert(shared_alloc.a);
   ceph_assert(alloc);
-  ceph_assert(alloc == shared_alloc.a);
-  shared_alloc.a->shutdown();
-  delete shared_alloc.a;
+  alloc->shutdown();
+  delete alloc;
+
+  ceph_assert(shared_alloc.a);
+  if (alloc != shared_alloc.a) {
+    shared_alloc.a->shutdown();
+    delete shared_alloc.a;
+  }
+
   shared_alloc.reset();
   alloc = nullptr;
 }
@@ -6789,6 +6819,13 @@ int BlueStore::mkfs()
   reserved = _get_ondisk_reserved();
   alloc->init_add_free(reserved,
     p2align(bdev->get_size(), min_alloc_size) - reserved);
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr() && alloc != shared_alloc.a) {
+    shared_alloc.a->init_add_free(reserved,
+				  p2align(bdev->get_conventional_region_size(),
+					  min_alloc_size) - reserved);
+  }
+#endif
 
   r = _open_db(true);
   if (r < 0)

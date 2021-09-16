@@ -22,6 +22,4 @@ DEV=`lsscsi | grep zbc | awk '{print $7}'`
 sudo ceph_test_objectstore \
     --bluestore-block-path $DEV \
     --gtest_filter=*/2 \
-    --bluestore-block-db-create \
-    --bluestore-block-db-size 1048576000 \
     $*
