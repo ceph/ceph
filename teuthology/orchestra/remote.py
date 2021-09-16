@@ -385,7 +385,7 @@ class Remote(RemoteShell):
         while elapsed_time() < timeout:
             success = self._reconnect(timeout=socket_timeout)
             if success:
-                log.info('Successfully reconnected to host')
+                log.info(f"Successfully reconnected to host '{self.name}'")
                 break
             # Don't let time_remaining be < 0
             time_remaining = max(0, timeout - elapsed_time())
@@ -394,7 +394,7 @@ class Remote(RemoteShell):
         return success
 
     def _reconnect(self, timeout=None):
-        log.info("Trying to reconnect to host")
+        log.info(f"Trying to reconnect to host '{self.name}'")
         try:
             self.connect(timeout=timeout, context='reconnect')
             return self.is_online
