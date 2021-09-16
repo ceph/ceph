@@ -196,7 +196,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   }
 
   rocksdb::Status Close() override {
-    Flush();
+    fs->fsync(h);
 
     // mimic posix env, here.  shrug.
     size_t block_size;
