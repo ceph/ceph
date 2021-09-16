@@ -840,7 +840,7 @@ void RADOS::execute(const Object& o, std::int64_t pool, ReadOp&& _op,
 		    version_t* objver) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
-  auto flags = 0; // Should be in Op.
+  auto flags = op->op.flags;
   object_locator_t oloc;
   oloc.pool = pool;
   if (ns)
@@ -860,7 +860,7 @@ void RADOS::execute(const Object& o, std::int64_t pool, WriteOp&& _op,
 		    version_t* objver) {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
-  auto flags = 0; // Should be in Op.
+  auto flags = op->op.flags;
   object_locator_t oloc;
   oloc.pool = pool;
   if (ns)
