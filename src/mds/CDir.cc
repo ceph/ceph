@@ -2444,7 +2444,7 @@ void CDir::_omap_commit(int op_prio)
   };
 
   if (state_test(CDir::STATE_FRAGMENTING) && is_new()) {
-    assert(committed_version == 0);
+    ceph_assert(committed_version == 0);
     for (auto p = items.begin(); p != items.end(); ) {
       CDentry *dn = p->second;
       ++p;

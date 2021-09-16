@@ -12,6 +12,7 @@ import logging
 from contextlib import contextmanager
 from time import sleep
 import re
+from orchestrator import OrchResult
 
 import jsonpatch
 from urllib.parse import urljoin
@@ -22,7 +23,7 @@ from urllib3.exceptions import ProtocolError
 
 from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec, HostPlacementSpec
 from ceph.utils import datetime_now
 from ceph.deployment.drive_selection.matchers import SizeMatcher
 from mgr_module import NFS_POOL_NAME
@@ -870,6 +871,29 @@ class RookCluster(object):
             cfs.CephFilesystem, 'cephfilesystems', spec.service_id,
             _update_fs, _create_fs)
 
+    def get_matching_node(self, host: str) -> Any:
+        matching_node = None
+        for node in self.nodes.items:
+            if node.metadata.labels['kubernetes.io/hostname'] == host:
+                matching_node = node
+        return matching_node
+
+    def add_host_label(self, host: str, label: str) -> OrchResult[str]:
+        matching_node = self.get_matching_node(host)
+        if matching_node == None:
+            return OrchResult(None, RuntimeError(f"Cannot add {label} label to {host}: host not found in cluster")) 
+        matching_node.metadata.labels['ceph-label/'+ label] = ""
+        self.coreV1_api.patch_node(host, matching_node)
+        return OrchResult(f'Added {label} label to {host}')
+
+    def remove_host_label(self, host: str, label: str) -> OrchResult[str]:
+        matching_node = self.get_matching_node(host)
+        if matching_node == None:
+            return OrchResult(None, RuntimeError(f"Cannot remove {label} label from {host}: host not found in cluster")) 
+        matching_node.metadata.labels.pop('ceph-label/' + label, None)
+        self.coreV1_api.patch_node(host, matching_node)
+        return OrchResult(f'Removed {label} label from {host}')
+
     def apply_objectstore(self, spec: RGWSpec) -> str:
         assert spec.service_id is not None
 
@@ -1039,6 +1063,17 @@ class RookCluster(object):
             inventory
         )
         return self.remover.remove()
+
+    def get_hosts(self) -> List[orchestrator.HostSpec]:
+        ret = []
+        for node in self.nodes.items:
+            spec = orchestrator.HostSpec(
+                node.metadata.name, 
+                addr='/'.join([addr.address for addr in node.status.addresses]), 
+                labels=[label.split('/')[1] for label in node.metadata.labels if label.startswith('ceph-label')],
+            )
+            ret.append(spec)
+        return ret
 
     def _patch(self, crd: Type, crd_name: str, cr_name: str, func: Callable[[CrdClassT, CrdClassT], CrdClassT]) -> str:
         current_json = self.rook_api_get(
@@ -1229,3 +1264,45 @@ class RookCluster(object):
     def blink_light(self, ident_fault, on, locs):
         # type: (str, bool, List[orchestrator.DeviceLightLoc]) -> List[str]
         return [self._execute_blight_job(ident_fault, on, loc) for loc in locs]
+
+def placement_spec_to_node_selector(spec: PlacementSpec, all_hosts: List) -> ccl.NodeSelectorTermsItem:
+    all_hostnames = [hs.hostname for hs in all_hosts]
+    res = ccl.NodeSelectorTermsItem(matchExpressions=ccl.MatchExpressionsList())
+    if spec.host_pattern and spec.host_pattern != "*":
+        raise RuntimeError("The Rook orchestrator only supports a host_pattern of * for placements")
+    if spec.label:
+        res.matchExpressions.append(
+            ccl.MatchExpressionsItem(
+                key="ceph-label/" + spec.label,
+                operator="Exists"
+            )
+        )
+    if spec.hosts:
+        host_list = [h.hostname for h in spec.hosts if h.hostname in all_hostnames]
+        res.matchExpressions.append(
+            ccl.MatchExpressionsItem(
+                key="kubernetes.io/hostname",
+                operator="In",
+                values=ccl.CrdObjectList(host_list)
+            )
+        ) 
+    if spec.host_pattern == "*":
+        res.matchExpressions.append(
+            ccl.MatchExpressionsItem(
+                key="kubernetes.io/hostname",
+                operator="Exists",
+            )
+        )
+    return res
+    
+def node_selector_to_placement_spec(node_selector: ccl.NodeSelectorTermsItem) -> PlacementSpec:
+    res = PlacementSpec()
+    for expression in node_selector.matchExpressions:
+        if expression.key.startswith("ceph-label/"):
+            res.label = expression.key.split('/')[1]
+        elif expression.key == "kubernetes.io/hostname":
+            if expression.operator == "Exists":
+                res.host_pattern = "*"
+            elif expression.operator == "In": 
+                res.hosts = [HostPlacementSpec(hostname=value, network='', name='')for value in expression.values]
+    return res

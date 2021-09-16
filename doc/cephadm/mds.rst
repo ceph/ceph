@@ -41,6 +41,9 @@ The specification can then be applied using:
 See :ref:`orchestrator-cli-stateless-services` for manually deploying
 MDS daemons on the CLI.
 
+Further Reading
+===============
 
+* :ref:`ceph-file-system`
 
 

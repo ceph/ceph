@@ -6,7 +6,7 @@
 #include "seastar/core/gate.hh"
 
 #include "crimson/common/condition_variable.h"
-#include "crimson/common/log.h"
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/lba_manager.h"
@@ -33,10 +33,6 @@ class ool_record_t {
     }
     paddr_t get_ool_paddr() const {
       return ool_offset;
-    }
-    void persist_paddr() {
-      lextent->set_paddr(ool_offset);
-      ool_offset = P_ADDR_NULL;
     }
     bufferptr& get_bptr() {
       return lextent->get_bptr();
@@ -259,6 +255,8 @@ public:
   alloc_paddr_iertr::future<> alloc_ool_extents_paddr(
     Transaction& t,
     std::list<LogicalCachedExtentRef>& extents) final {
+    LOG_PREFIX(SegmentedAllocator::alloc_ool_extents_paddr);
+    DEBUGT("start", t);
     return seastar::do_with(
       std::map<Writer*, std::list<LogicalCachedExtentRef>>(),
       [this, extents=std::move(extents), &t](auto& alloc_map) {
@@ -355,11 +353,15 @@ public:
   using alloc_paddr_iertr = ExtentOolWriter::write_iertr;
   alloc_paddr_iertr::future<> delayed_alloc_or_ool_write(
     Transaction& t) {
+    LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
+    DEBUGT("start", t);
     return seastar::do_with(
       std::map<ExtentAllocator*, std::list<LogicalCachedExtentRef>>(),
       std::list<std::pair<paddr_t, LogicalCachedExtentRef>>(),
       [this, &t](auto& alloc_map, auto& inline_list) mutable {
+      LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
       auto& alloc_list = t.get_delayed_alloc_list();
+      uint64_t num_ool_extents = 0;
       for (auto& extent : alloc_list) {
         // extents may be invalidated
         if (!extent->is_valid()) {
@@ -369,16 +371,25 @@ public:
           auto old_addr = extent->get_paddr();
           cache.mark_delayed_extent_inline(t, extent);
           inline_list.emplace_back(old_addr, extent);
-          continue;
-        }
-        auto& allocator_ptr = get_allocator(extent->backend_type, extent->hint);
-        alloc_map[allocator_ptr.get()].emplace_back(extent);
+        } else {
+	  auto& allocator_ptr = get_allocator(
+	    extent->backend_type, extent->hint
+	  );
+	  alloc_map[allocator_ptr.get()].emplace_back(extent);
+	  num_ool_extents++;
+	}
       }
+      DEBUGT("{} inline extents, {} ool extents",
+        t,
+        inline_list.size(),
+        num_ool_extents);
       return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
         auto allocator = p.first;
         auto& extents = p.second;
         return allocator->alloc_ool_extents_paddr(t, extents);
       }).si_then([&inline_list, this, &t] {
+        LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
+        DEBUGT("processing {} inline extents", t, inline_list.size());
         return trans_intr::do_for_each(inline_list, [this, &t](auto& p) {
           auto old_addr = p.first;
           auto& extent = p.second;

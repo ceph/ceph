@@ -33,9 +33,6 @@ namespace ssd {
 using namespace std;
 using namespace librbd::cache::pwl;
 
-// SSD: this number can be updated later
-const unsigned long int ops_appended_together = MAX_WRITES_PER_SYNC_POINT;
-
 static bool is_valid_pool_root(const WriteLogPoolRoot& root) {
   return root.pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
          root.first_valid_entry >= DATA_RING_BUFFER_OFFSET &&
@@ -79,7 +76,7 @@ void WriteLog<I>::collect_read_extents(
   ldout(m_image_ctx.cct, 5) << dendl;
   auto write_entry = std::static_pointer_cast<WriteLogEntry>(map_entry.log_entry);
   buffer::list hit_bl;
-  hit_bl = write_entry->get_cache_bl();
+  write_entry->copy_cache_bl(&hit_bl);
   bool writesame = write_entry->is_writesame_entry();
   auto hit_extent_buf = std::make_shared<ImageExtentBuf>(
       hit_extent, hit_bl, true, read_buffer_offset, writesame);
@@ -299,8 +296,22 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
       next_log_pos = next_log_pos % this->m_log_pool_size + DATA_RING_BUFFER_OFFSET;
     }
   }
-  this->update_sync_points(missing_sync_points, sync_point_entries, later,
-                           MIN_WRITE_ALLOC_SSD_SIZE);
+  this->update_sync_points(missing_sync_points, sync_point_entries, later);
+  if (m_first_valid_entry > m_first_free_entry) {
+    m_bytes_allocated = this->m_log_pool_size - m_first_valid_entry +
+			  m_first_free_entry - DATA_RING_BUFFER_OFFSET;
+  } else {
+    m_bytes_allocated = m_first_free_entry - m_first_valid_entry;
+  }
+}
+
+// For SSD we don't calc m_bytes_allocated in this
+template <typename I>
+void WriteLog<I>::inc_allocated_cached_bytes(
+    std::shared_ptr<pwl::GenericLogEntry> log_entry) {
+  if (log_entry->is_write_entry()) {
+    this->m_bytes_cached += log_entry->write_bytes();
+  }
 }
 
 template <typename I>
@@ -623,8 +634,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     first_valid_entry = m_first_valid_entry;
     while (retiring_entries.size() < frees_per_tx && !m_log_entries.empty()) {
       GenericLogEntriesVector retiring_subentries;
-      auto entry = m_log_entries.front();
-      uint64_t control_block_pos = entry->log_entry_index;
+      uint64_t control_block_pos = m_log_entries.front()->log_entry_index;
       uint64_t data_length = 0;
       for (auto it = m_log_entries.begin(); it != m_log_entries.end(); ++it) {
         if (this->can_retire_entry(*it)) {
@@ -661,9 +671,11 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
             it != retiring_subentries.end(); it++) {
           ceph_assert(m_log_entries.front() == *it);
           m_log_entries.pop_front();
-          if (entry->is_write_entry()) {
-            auto write_entry = static_pointer_cast<WriteLogEntry>(entry);
-            this->m_blocks_to_log_entries.remove_log_entry(write_entry);
+          if ((*it)->write_bytes() > 0 || (*it)->bytes_dirty() > 0) {
+            auto gen_write_entry = static_pointer_cast<GenericWriteLogEntry>(*it);
+            if (gen_write_entry) {
+                this->m_blocks_to_log_entries.remove_log_entry(gen_write_entry);
+            }
           }
         }
 

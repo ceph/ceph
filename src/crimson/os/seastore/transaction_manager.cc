@@ -236,13 +236,15 @@ TransactionManager::submit_transaction_direct(
   Transaction &tref)
 {
   LOG_PREFIX(TransactionManager::submit_transaction_direct);
-  DEBUGT("about to prepare", tref);
+  DEBUGT("about to alloc delayed extents", tref);
 
   return epm->delayed_alloc_or_ool_write(tref)
   .handle_error_interruptible(
     crimson::ct_error::input_output_error::pass_further(),
     crimson::ct_error::assert_all("invalid error")
   ).si_then([&tref, this] {
+    LOG_PREFIX(TransactionManager::submit_transaction_direct);
+    DEBUGT("about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
   }).si_then([this, FNAME, &tref]() mutable
 	      -> submit_transaction_iertr::future<> {
@@ -322,11 +324,10 @@ TransactionManager::rewrite_logical_extent(
     *lextent,
     *nlextent);
 
-  if (need_delayed_allocation(extent->backend_type)) {
-    // hold old poffset for later mapping updating assert check
-    nlextent->set_paddr(lextent->get_paddr());
-    return rewrite_extent_iertr::now();
-  }
+  /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
+   * extents since we're going to do it again once we either do the ool write
+   * or allocate a relative inline addr.  TODO: refactor SegmentCleaner to
+   * avoid this complication. */
   return lba_manager->update_mapping(
     t,
     lextent->get_laddr(),

@@ -49,6 +49,7 @@ BtreeLBAManager::get_mappings(
       return LBABtree::iterate_repeat(
 	c,
 	btree.upper_bound_right(c, offset),
+	false,
 	[&ret, offset, length](auto &pos) {
 	  if (pos.is_end() || pos.get_key() >= (offset + length)) {
 	    return LBABtree::iterate_repeat_ret_inner(
@@ -135,6 +136,7 @@ BtreeLBAManager::alloc_extent(
   LOG_PREFIX(BtreeLBAManager::alloc_extent);
   DEBUGT("hint: {}, length: {}", t, hint, len);
   auto c = get_context(t);
+  ++LBABtree::lba_tree_inner_stats.num_alloc_extents;
   return with_btree_state<state_t>(
     c,
     hint,
@@ -142,6 +144,7 @@ BtreeLBAManager::alloc_extent(
       return LBABtree::iterate_repeat(
 	c,
 	btree.upper_bound_right(c, hint),
+	true,
 	[&state, len](auto &pos) {
 	  if (pos.is_end() || pos.get_key() >= (state.last_end + len)) {
 	    state.insert_iter = pos;
@@ -229,11 +232,12 @@ void BtreeLBAManager::complete_transaction(
 
   // ...but add_pin from parent->leaf
   std::vector<CachedExtentRef> to_link;
-  to_link.reserve(t.get_fresh_block_list().size());
-  for (auto &e: t.get_fresh_block_list()) {
+  to_link.reserve(t.get_num_fresh_blocks());
+  t.for_each_fresh_block([&](auto &e) {
     if (e->is_valid() && (is_lba_node(*e) || e->is_logical()))
       to_link.push_back(e);
-  }
+  });
+
   std::sort(
     to_link.begin(), to_link.end(),
     [](auto &l, auto &r) -> bool { return get_depth(*l) > get_depth(*r); });
@@ -282,6 +286,7 @@ BtreeLBAManager::scan_mappings_ret BtreeLBAManager::scan_mappings(
       return LBABtree::iterate_repeat(
 	c,
 	btree.upper_bound_right(c, begin),
+	false,
 	[f=std::move(f), begin, end](auto &pos) {
 	  if (pos.is_end() || pos.get_key() >= end) {
 	    return LBABtree::iterate_repeat_ret_inner(
@@ -313,6 +318,7 @@ BtreeLBAManager::scan_mapped_space_ret BtreeLBAManager::scan_mapped_space(
 	  return LBABtree::iterate_repeat(
 	    c,
 	    btree.lower_bound(c, 0, &visitor),
+	    false,
 	    [&visitor](auto &pos) {
 	      if (pos.is_end()) {
 		return LBABtree::iterate_repeat_ret_inner(
@@ -415,7 +421,31 @@ BtreeLBAManager::BtreeLBAManager(
   SegmentManager &segment_manager,
   Cache &cache)
   : segment_manager(segment_manager),
-    cache(cache) {}
+    cache(cache)
+{
+  register_metrics();
+}
+
+LBABtree::lba_tree_inner_stats_t LBABtree::lba_tree_inner_stats;
+void BtreeLBAManager::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  metrics.add_group(
+    "LBA",
+    {
+      sm::make_counter(
+        "alloc_extents",
+        LBABtree::lba_tree_inner_stats.num_alloc_extents,
+        sm::description("total number of lba alloc_extent operations")
+      ),
+      sm::make_counter(
+        "alloc_extents_iter_nexts",
+        LBABtree::lba_tree_inner_stats.num_alloc_extents_iter_nexts,
+        sm::description("total number of iterator next operations during extent allocation")
+      ),
+    }
+  );
+}
 
 BtreeLBAManager::update_refcount_ret BtreeLBAManager::update_refcount(
   Transaction &t,

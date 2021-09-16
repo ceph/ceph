@@ -83,7 +83,7 @@ PGBackend::load_metadata(const hobject_t& oid)
 	if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
 	  bufferlist bl = std::move(oiiter->second);
 	  ret->os = ObjectState(
-	    object_info_t(bl),
+	    object_info_t(bl, oid),
 	    true);
 	} else {
 	  logger().error(
@@ -151,7 +151,7 @@ PGBackend::mutate_object(
     // object_info_t
     {
       ceph::bufferlist osv;
-      encode(obc->obs.oi, osv, CEPH_FEATURES_ALL);
+      obc->obs.oi.encode_no_oid(osv, CEPH_FEATURES_ALL);
       // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
       txn.setattr(coll->get_cid(), ghobject_t{obc->obs.oi.soid}, OI_ATTR, osv);
     }

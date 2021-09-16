@@ -1523,16 +1523,17 @@ static ceph::spinlock debug_lock;
    */
   char *buffer::list::c_str()
   {
-    switch (get_num_buffers()) {
-    case 0:
-      // no buffers
-      return nullptr;
-    case 1:
-      // good, we're already contiguous.
-      break;
-    default:
+    if (const auto len = length(); len == 0) {
+      return nullptr;                         // no non-empty buffers
+    } else if (len != _buffers.front().length()) {
       rebuild();
-      break;
+    } else {
+      // there are two *main* scenarios that hit this branch:
+      //   1. bufferlist with single, non-empty buffer;
+      //   2. bufferlist with single, non-empty buffer followed by
+      //      empty buffer. splice() tries to not waste our appendable
+      //      space; to carry it an empty bptr is added at the end.
+      // we account for these and don't rebuild unnecessarily
     }
     return _buffers.front().c_str();
   }

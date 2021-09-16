@@ -623,14 +623,15 @@ void Cache::invalidate(CachedExtent &extent)
   for (auto &&i: extent.transactions) {
     if (!i.t->conflicted) {
       assert(!i.t->is_weak());
-      invalidate(*i.t, extent);
+      mark_transaction_conflicted(*i.t, extent);
     }
   }
   DEBUG("invalidate end");
   extent.state = CachedExtent::extent_state_t::INVALID;
 }
 
-void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
+void Cache::mark_transaction_conflicted(
+  Transaction& t, CachedExtent& conflicting_extent)
 {
   LOG_PREFIX(Cache::invalidate);
   assert(!t.conflicted);
@@ -653,10 +654,10 @@ void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
       efforts.retire.bytes += i->get_length();
     }
 
-    efforts.fresh.extents += t.fresh_block_list.size();
-    for (auto &i: t.fresh_block_list) {
+    efforts.fresh.extents += t.get_num_fresh_blocks();
+    t.for_each_fresh_block([&](auto &i) {
       efforts.fresh.bytes += i->get_length();
-    }
+    });
 
     for (auto &i: t.mutated_block_list) {
       if (!i->is_valid()) {
@@ -680,7 +681,7 @@ void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
   } else {
     // read transaction won't have non-read efforts
     assert(t.retired_set.empty());
-    assert(t.fresh_block_list.empty());
+    assert(t.get_num_fresh_blocks() == 0);
     assert(t.mutated_block_list.empty());
     assert(t.onode_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
@@ -703,7 +704,7 @@ void Cache::on_transaction_destruct(Transaction& t)
     }
     // read transaction won't have non-read efforts
     assert(t.retired_set.empty());
-    assert(t.fresh_block_list.empty());
+    assert(t.get_num_fresh_blocks() == 0);
     assert(t.mutated_block_list.empty());
     assert(t.onode_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
@@ -883,8 +884,8 @@ record_t Cache::prepare_record(Transaction &t)
     retire_extent(i);
   }
 
-  record.extents.reserve(t.fresh_block_list.size());
-  for (auto &i: t.fresh_block_list) {
+  record.extents.reserve(t.inline_block_list.size());
+  for (auto &i: t.inline_block_list) {
     DEBUGT("fresh block {}", t, *i);
     if (!i->is_inline()) {
       continue;
@@ -920,7 +921,8 @@ void Cache::complete_commit(
   LOG_PREFIX(Cache::complete_commit);
   DEBUGT("enter", t);
 
-  for (auto &i: t.fresh_block_list) {
+  
+  t.for_each_fresh_block([&](auto &i) {
     if (i->is_inline()) {
       i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     }
@@ -929,18 +931,17 @@ void Cache::complete_commit(
 
     if (!i->is_valid()) {
       DEBUGT("invalid {}", t, *i);
-      continue;
+    } else {
+      i->state = CachedExtent::extent_state_t::CLEAN;
+      DEBUGT("fresh {}", t, *i);
+      add_extent(i);
+      if (cleaner) {
+	cleaner->mark_space_used(
+	  i->get_paddr(),
+	  i->get_length());
+      }
     }
-
-    i->state = CachedExtent::extent_state_t::CLEAN;
-    DEBUGT("fresh {}", t, *i);
-    add_extent(i);
-    if (cleaner) {
-      cleaner->mark_space_used(
-	i->get_paddr(),
-	i->get_length());
-    }
-  }
+  });
 
   // Add new copy of mutated blocks, set_io_wait to block until written
   for (auto &i: t.mutated_block_list) {
@@ -1127,7 +1128,7 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	    ext->wait_io()
 	  ).then_interruptible([FNAME, this, ext, &t, &ret] {
 	    if (!ext->is_valid()) {
-	      invalidate(t, *ext);
+	      mark_transaction_conflicted(t, *ext);
 	      return;
 	    }
 
@@ -1170,12 +1171,18 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
   } else {
     auto ret = root;
     DEBUGT("waiting root {}", t, *ret);
-    return ret->wait_io().then([FNAME, ret, &t] {
+    return ret->wait_io().then([this, FNAME, ret, &t] {
       DEBUGT("got root read {}", t, *ret);
-      t.root = ret;
-      t.add_to_read_set(ret);
-      return get_root_iertr::make_ready_future<RootBlockRef>(
-	ret);
+      if (!ret->is_valid()) {
+	DEBUGT("root became invalid: {}", t, *ret);
+	mark_transaction_conflicted(t, *ret);
+	return get_root_iertr::make_ready_future<RootBlockRef>();
+      } else {
+	t.root = ret;
+	t.add_to_read_set(ret);
+	return get_root_iertr::make_ready_future<RootBlockRef>(
+	  ret);
+      }
     });
   }
 }

@@ -241,7 +241,7 @@ class Activate(object):
             terminal.warning('Verify OSDs are present with "ceph-volume lvm list"')
             return
         for osd_fsid, osd_id in osds.items():
-            if systemctl.osd_is_active(osd_id):
+            if not args.no_systemd and systemctl.osd_is_active(osd_id):
                 terminal.warning(
                     'OSD ID %s FSID %s process is active. Skipping activation' % (osd_id, osd_fsid)
                 )
@@ -265,6 +265,11 @@ class Activate(object):
             tags = {'ceph.osd_id': osd_id, 'ceph.osd_fsid': osd_fsid}
         elif not osd_id and osd_fsid:
             tags = {'ceph.osd_fsid': osd_fsid}
+        elif osd_id and not osd_fsid:
+            raise RuntimeError('could not activate osd.{}, please provide the '
+                               'osd_fsid too'.format(osd_id))
+        else:
+            raise RuntimeError('Please provide both osd_id and osd_fsid')
         lvs = api.get_lvs(tags=tags)
         if not lvs:
             raise RuntimeError('could not find osd.%s with osd_fsid %s' %
