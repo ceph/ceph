@@ -19,10 +19,9 @@ void C_WriteRequest<T>::setup_buffer_resources(
     uint64_t *number_lanes, uint64_t *number_log_entries,
     uint64_t *number_unpublished_reserves) {
 
-  auto image_extents_size = this->image_extents.size();
   *bytes_cached = 0;
   *bytes_allocated = 0;
-  *number_log_entries = image_extents_size;
+  *number_log_entries = this->image_extents.size();
 
   for (auto &extent : this->image_extents) {
     *bytes_cached += extent.second;
@@ -48,6 +47,7 @@ void C_WriteSameRequest<T>::setup_buffer_resources(
     uint64_t *number_lanes, uint64_t *number_log_entries,
     uint64_t *number_unpublished_reserves) {
   ceph_assert(this->image_extents.size() == 1);
+  *number_log_entries = 1;
   *bytes_dirtied = this->image_extents[0].second;
   *bytes_cached = this->bl.length();
   *bytes_allocated = round_up_to(*bytes_cached, MIN_WRITE_ALLOC_SSD_SIZE);
