@@ -623,14 +623,15 @@ void Cache::invalidate(CachedExtent &extent)
   for (auto &&i: extent.transactions) {
     if (!i.t->conflicted) {
       assert(!i.t->is_weak());
-      invalidate(*i.t, extent);
+      mark_transaction_conflicted(*i.t, extent);
     }
   }
   DEBUG("invalidate end");
   extent.state = CachedExtent::extent_state_t::INVALID;
 }
 
-void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
+void Cache::mark_transaction_conflicted(
+  Transaction& t, CachedExtent& conflicting_extent)
 {
   LOG_PREFIX(Cache::invalidate);
   assert(!t.conflicted);
@@ -1127,7 +1128,7 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	    ext->wait_io()
 	  ).then_interruptible([FNAME, this, ext, &t, &ret] {
 	    if (!ext->is_valid()) {
-	      invalidate(t, *ext);
+	      mark_transaction_conflicted(t, *ext);
 	      return;
 	    }
 

@@ -320,7 +320,7 @@ public:
 	(void)this; // silence incorrect clang warning about capture
 	if (!ref->is_valid()) {
 	  DEBUGT("got invalid extent: {}", t, ref);
-	  invalidate(t, *ref);
+	  mark_transaction_conflicted(t, *ref);
 	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
 	} else {
 	  DEBUGT(
@@ -372,7 +372,7 @@ public:
         if (!ret->is_valid()) {
           LOG_PREFIX(Cache::get_extent_by_type);
           DEBUGT("got invalid extent: {}", t, ret);
-          invalidate(t, *ret.get());
+          mark_transaction_conflicted(t, *ret.get());
           return get_extent_ertr::make_ready_future<CachedExtentRef>();
         } else {
           t.add_to_read_set(ret);
@@ -756,7 +756,8 @@ private:
   void invalidate(CachedExtent &extent);
 
   /// Mark a valid transaction as conflicted
-  void invalidate(Transaction& t, CachedExtent& conflicting_extent);
+  void mark_transaction_conflicted(
+    Transaction& t, CachedExtent& conflicting_extent);
 
   /// Introspect transaction when it is being destructed
   void on_transaction_destruct(Transaction& t);
