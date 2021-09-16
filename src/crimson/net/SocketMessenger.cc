@@ -134,7 +134,7 @@ SocketMessenger::bind(const entity_addrvec_t& addrs)
 {
   using crimson::common::local_conf;
   return seastar::do_with(int64_t{local_conf()->ms_bind_retry_count},
-                          [this, &addrs] (auto& count) {
+                          [this, addrs] (auto& count) {
     return seastar::repeat_until_value([this, &addrs, &count] {
       assert(count >= 0);
       return try_bind(addrs,
