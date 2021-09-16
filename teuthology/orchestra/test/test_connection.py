@@ -1,4 +1,4 @@
-import fudge
+from mock import patch, Mock
 
 from teuthology import config
 from teuthology.orchestra import connection
@@ -7,8 +7,26 @@ from teuthology.orchestra.test.util import assert_raises
 
 class TestConnection(object):
     def setup(self):
-        import time
-        time.sleep = lambda s: True
+        self.start_patchers()
+
+    def teardown(self):
+        self.stop_patchers()
+
+    def start_patchers(self):
+        self.patcher_sleep = patch(
+            'time.sleep',
+        )
+        self.patcher_sleep.start()
+        self.m_ssh = Mock()
+        self.patcher_ssh = patch(
+            'teuthology.orchestra.connection.paramiko.SSHClient',
+            self.m_ssh,
+        )
+        self.patcher_ssh.start()
+
+    def stop_patchers(self):
+        self.patcher_ssh.stop()
+        self.patcher_sleep.stop()
 
     def clear_config(self):
         config.config.teuthology_yaml = ''
@@ -27,80 +45,75 @@ class TestConnection(object):
         e = assert_raises(AssertionError, connection.split_user, s)
         assert str(e) == 'Bad input to split_user: {s!r}'.format(s=s)
 
-    @fudge.with_fakes
     def test_connect(self):
         self.clear_config()
         config.config.verify_host_keys = True
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHClient')
-        ssh.expects_call().with_args().returns(ssh)
-        ssh.expects('set_missing_host_key_policy')
-        ssh.expects('load_system_host_keys').with_args()
-        ssh.expects('connect').with_args(
+        m_ssh_instance = self.m_ssh.return_value = Mock();
+        m_transport = Mock()
+        m_ssh_instance.get_transport.return_value = m_transport
+        got = connection.connect(
+            'jdoe@orchestra.test.newdream.net.invalid',
+            _SSHClient=self.m_ssh,
+        )
+        self.m_ssh.assert_called_once()
+        m_ssh_instance.set_missing_host_key_policy.assert_called_once()
+        m_ssh_instance.load_system_host_keys.assert_called_once_with()
+        m_ssh_instance.connect.assert_called_once_with(
             hostname='orchestra.test.newdream.net.invalid',
             username='jdoe',
             timeout=60,
         )
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.remember_order()
-        transport.expects('set_keepalive').with_args(False)
-        got = connection.connect(
-            'jdoe@orchestra.test.newdream.net.invalid',
-            _SSHClient=ssh,
-        )
-        assert got is ssh
+        m_transport.set_keepalive.assert_called_once_with(False)
+        assert got is m_ssh_instance
 
-    @fudge.with_fakes
     def test_connect_no_verify_host_keys(self):
         self.clear_config()
         config.config.verify_host_keys = False
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHClient')
-        ssh.expects_call().with_args().returns(ssh)
-        ssh.expects('set_missing_host_key_policy')
-        ssh.expects('connect').with_args(
-            hostname='orchestra.test.newdream.net.invalid',
-            username='jdoe',
-            timeout=60,
-        )
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.remember_order()
-        transport.expects('set_keepalive').with_args(False)
+        m_ssh_instance = self.m_ssh.return_value = Mock();
+        m_transport = Mock()
+        m_ssh_instance.get_transport.return_value = m_transport
         got = connection.connect(
             'jdoe@orchestra.test.newdream.net.invalid',
-            _SSHClient=ssh,
+            _SSHClient=self.m_ssh,
         )
-        assert got is ssh
-
-    @fudge.with_fakes
-    def test_connect_override_hostkeys(self):
-        self.clear_config()
-        fudge.clear_expectations()
-        sshclient = fudge.Fake('SSHClient')
-        ssh = sshclient.expects_call().with_args().returns_fake()
-        ssh.remember_order()
-        host_keys = fudge.Fake('HostKeys')
-        host_keys.expects('add').with_args(
-            hostname='orchestra.test.newdream.net.invalid',
-            keytype='ssh-rsa',
-            key='frobnitz',
-            )
-        ssh.expects('get_host_keys').with_args().returns(host_keys)
-        ssh.expects('connect').with_args(
+        self.m_ssh.assert_called_once()
+        m_ssh_instance.set_missing_host_key_policy.assert_called_once()
+        assert not m_ssh_instance.load_system_host_keys.called
+        m_ssh_instance.connect.assert_called_once_with(
             hostname='orchestra.test.newdream.net.invalid',
             username='jdoe',
             timeout=60,
-            )
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.remember_order()
-        transport.expects('set_keepalive').with_args(False)
-        create_key = fudge.Fake('create_key')
-        create_key.expects_call().with_args('ssh-rsa',
-                                            'testkey').returns('frobnitz')
+        )
+        m_transport.set_keepalive.assert_called_once_with(False)
+        assert got is m_ssh_instance
+
+    def test_connect_override_hostkeys(self):
+        self.clear_config()
+        m_ssh_instance = self.m_ssh.return_value = Mock();
+        m_transport = Mock()
+        m_ssh_instance.get_transport.return_value = m_transport
+        m_host_keys = Mock()
+        m_ssh_instance.get_host_keys.return_value = m_host_keys
+        m_create_key = Mock()
+        m_create_key.return_value = "frobnitz"
         got = connection.connect(
             'jdoe@orchestra.test.newdream.net.invalid',
             host_key='ssh-rsa testkey',
-            _SSHClient=sshclient,
-            _create_key=create_key,
+            _SSHClient=self.m_ssh,
+            _create_key=m_create_key,
             )
-        assert got is ssh
+        self.m_ssh.assert_called_once()
+        m_ssh_instance.get_host_keys.assert_called_once()
+        m_host_keys.add.assert_called_once_with(
+            hostname='orchestra.test.newdream.net.invalid',
+            keytype='ssh-rsa',
+            key='frobnitz',
+        )
+        m_create_key.assert_called_once_with('ssh-rsa', 'testkey')
+        m_ssh_instance.connect.assert_called_once_with(
+            hostname='orchestra.test.newdream.net.invalid',
+            username='jdoe',
+            timeout=60,
+        )
+        m_transport.set_keepalive.assert_called_once_with(False)
+        assert got is m_ssh_instance
