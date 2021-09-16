@@ -45,9 +45,8 @@ is registered with Prometheus's `registry
 
     The ``scrape_interval`` of this module should always be set to match
     Prometheus' scrape interval to work properly and not cause any issues.
-    
-The Prometheus manager module is, by default, configured with a scrape interval
-of 15 seconds.  The scrape interval in the module is used for caching purposes
+
+The scrape interval in the module is used for caching purposes
 and to determine when a cache is stale.
 
 It is not recommended to use a scrape interval below 10 seconds.  It is
@@ -89,6 +88,43 @@ If you are confident that you don't require the cache, you can disable it::
     ceph config set mgr mgr/prometheus/cache false
 
 .. _prometheus-rbd-io-statistics:
+
+Ceph Health Checks
+------------------
+
+The mgr/prometheus module also tracks and maintains a history of Ceph health checks,
+exposing them to the Prometheus server as discrete metrics. This allows Prometheus
+alert rules to be configured for specific health check events.
+
+The metrics take the following form;
+
+::
+
+    # HELP ceph_health_detail healthcheck status by type (0=inactive, 1=active)
+    # TYPE ceph_health_detail gauge
+    ceph_health_detail{name="OSDMAP_FLAGS",severity="HEALTH_WARN"} 0.0
+    ceph_health_detail{name="OSD_DOWN",severity="HEALTH_WARN"} 1.0
+    ceph_health_detail{name="PG_DEGRADED",severity="HEALTH_WARN"} 1.0
+
+The health check history is made available through the following commands;
+
+::
+
+    healthcheck history ls [--format {plain|json|json-pretty}]
+    healthcheck history clear
+
+The ``ls`` command provides an overview of the health checks that the cluster has
+encountered, or since the last ``clear`` command was issued. The example below;
+
+::
+
+    [ceph: root@c8-node1 /]# ceph healthcheck history ls
+    Healthcheck Name          First Seen (UTC)      Last seen (UTC)       Count  Active
+    OSDMAP_FLAGS              2021/09/16 03:17:47   2021/09/16 22:07:40       2    No
+    OSD_DOWN                  2021/09/17 00:11:59   2021/09/17 00:11:59       1   Yes
+    PG_DEGRADED               2021/09/17 00:11:59   2021/09/17 00:11:59       1   Yes
+    3 health check(s) listed
+
 
 RBD IO statistics
 -----------------
@@ -303,8 +339,8 @@ node_targets.yml
 Notes
 =====
 
-Counters and gauges are exported; currently histograms and long-running 
-averages are not.  It's possible that Ceph's 2-D histograms could be 
+Counters and gauges are exported; currently histograms and long-running
+averages are not.  It's possible that Ceph's 2-D histograms could be
 reduced to two separate 1-D histograms, and that long-running averages
 could be exported as Prometheus' Summary type.
 
