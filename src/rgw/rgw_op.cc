@@ -664,8 +664,6 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     }
     s->object_acl = std::make_unique<RGWAccessControlPolicy>(s->cct);
 
-    s->object->set_bucket(s->bucket.get());
-      
     s->object->set_atomic(s->obj_ctx);
     if (prefetch_data) {
       s->object->set_prefetch_data(s->obj_ctx);
@@ -3638,9 +3636,6 @@ int RGWPutObj::verify_permission(optional_yield y)
       rgw_add_to_iam_environment(s->env, s3_kms_attr, kms_header->second);
     }
 
-    /* Object needs a bucket from this point */
-    s->object->set_bucket(s->bucket.get());
-
     // Add bucket tags for authorization
     auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
     if (has_s3_resource_tag)
@@ -3852,9 +3847,6 @@ void RGWPutObj::execute(optional_yield y)
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
-
-  /* Object needs a bucket from this point */
-  s->object->set_bucket(s->bucket.get());
 
   op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);
   if (op_ret < 0) {
@@ -4904,8 +4896,6 @@ void RGWDeleteObj::execute(optional_yield y)
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
-  s->object->set_bucket(s->bucket.get());
-
 
   if (!rgw::sal::Object::empty(s->object.get())) {
     uint64_t obj_size = 0;
@@ -5111,6 +5101,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
     return op_ret;
   }
 
+  /* This is the only place the bucket is set on src_object */
   s->src_object->set_bucket(src_bucket.get());
   /* get buckets info (source and dest) */
   if (s->local_source &&  source_zone.empty()) {
@@ -5225,8 +5216,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
     }
   }
 
-  dest_object = store->get_object(rgw_obj_key(dest_obj_name));
-  dest_object->set_bucket(dest_bucket.get());
+  dest_object = dest_bucket->get_object(rgw_obj_key(dest_obj_name));
   dest_object->set_atomic(s->obj_ctx);
 
   /* check dest bucket permissions */
@@ -6353,7 +6343,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
 bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUpload* parts)
 {
   // re-calculate the etag from the parts and compare to the existing object
-  s->object->set_bucket(s->bucket.get());
   int ret = s->object->get_obj_attrs(s->obj_ctx, s->yield, this);
   if (ret < 0) {
     ldpp_dout(this, 0) << __func__ << "() ERROR: get_obj_attrs() returned ret=" << ret << dendl;
@@ -7731,8 +7720,6 @@ void RGWGetObjLayout::pre_exec()
 
 void RGWGetObjLayout::execute(optional_yield y)
 {
-  /* Make sure bucket is correct */
-  s->object->set_bucket(s->bucket.get());
 }
 
 
