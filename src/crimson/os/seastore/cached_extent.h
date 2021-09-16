@@ -99,7 +99,18 @@ class CachedExtent : public boost::intrusive_ref_counter<
   // Points at current version while in state MUTATION_PENDING
   CachedExtentRef prior_instance;
 
+  bool is_marked_onode_fixing = false;
+
 public:
+  void onode_mark_fixing() {
+    ceph_assert(!is_marked_onode_fixing);
+    is_marked_onode_fixing = true;
+  }
+
+  bool onode_get_is_marked_fixing() const {
+    return is_marked_onode_fixing;
+  }
+
   /**
    *  duplicate_for_write
    *

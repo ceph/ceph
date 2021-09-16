@@ -248,6 +248,7 @@ public:
     offset = 0;
     delayed_temp_offset = 0;
     read_set.clear();
+    blocks_with_onode_fixing.clear();
     invalidate_clear_write_set();
     mutated_block_list.clear();
     delayed_alloc_list.clear();
@@ -256,6 +257,7 @@ public:
     retired_set.clear();
     onode_tree_stats = {};
     lba_tree_stats = {};
+    onode_tree_conflict_stats = {};
     to_release = NULL_SEG_ID;
     conflicted = false;
     if (!has_reset) {
@@ -285,6 +287,106 @@ public:
     return lba_tree_stats;
   }
 
+  struct onode_tree_conflict_stats_t {
+    uint64_t marked_fixing = 0;
+
+    static constexpr auto NOOP_LEVEL = std::numeric_limits<uint8_t>::max();
+    uint8_t fixing_level = NOOP_LEVEL;
+
+    uint64_t last_num_modify_when_fixing = 0;
+    uint64_t num_modify = 0;
+    uint64_t num_modify_with_fix = 0;
+
+    // account stats
+    void mark_modify() {
+      ++num_modify;
+    }
+
+    void mark_fixing(uint8_t _level) {
+      ceph_assert(num_modify != 0);
+      if (marked_fixing == 0) {
+        ceph_assert(fixing_level == NOOP_LEVEL);
+        fixing_level = _level;
+        if (last_num_modify_when_fixing != num_modify) {
+          last_num_modify_when_fixing = num_modify;
+          ++num_modify_with_fix;
+        } else {
+          // should already account num_modify_with_fix
+        }
+      } else {
+        // nested
+        ceph_assert(fixing_level <= _level);
+      }
+      ++marked_fixing;
+    }
+
+    void unmark_fixing() {
+      ceph_assert(marked_fixing != 0);
+      --marked_fixing;
+      if (marked_fixing == 0) {
+        fixing_level = NOOP_LEVEL;
+      }
+    }
+
+    bool is_fixing() const {
+      return marked_fixing != 0;
+    }
+
+    uint8_t get_fixing_level() const {
+      ceph_assert(is_fixing());
+      ceph_assert(fixing_level != NOOP_LEVEL);
+      return fixing_level;
+    }
+
+    // get stats when commit
+    uint64_t get_num_modify() const {
+      return num_modify;
+    }
+
+    uint64_t get_num_modify_with_fix() const {
+      return num_modify_with_fix;
+    }
+  };
+  void onode_mark_extent_fixing(CachedExtentRef ext) {
+    ceph_assert(ext->get_type() == extent_types_t::ONODE_BLOCK_STAGED);
+    CachedExtentRef to_mark = ext;
+    if (ext->prior_instance) {
+      to_mark = ext->prior_instance;
+    }
+    auto [iter, inserted] = blocks_with_onode_fixing.emplace(this, to_mark);
+    ceph_assert(inserted);
+  }
+  void onode_mark_modify() {
+    onode_tree_conflict_stats.mark_modify();
+  }
+  void onode_mark_fixing(uint8_t level) {
+    onode_tree_conflict_stats.mark_fixing(level);
+  }
+  void onode_unmark_fixing() {
+    onode_tree_conflict_stats.unmark_fixing();
+  }
+  bool onode_is_fixing() const {
+    return onode_tree_conflict_stats.is_fixing();
+  }
+  uint8_t onode_get_fixing_level() const {
+    return onode_tree_conflict_stats.get_fixing_level();
+  }
+  uint64_t onode_get_num_modify() const {
+    return onode_tree_conflict_stats.get_num_modify();
+  }
+  uint64_t onode_get_num_modify_with_fix() const {
+    return onode_tree_conflict_stats.get_num_modify_with_fix();
+  }
+  bool onode_is_extent_fixing(CachedExtentRef ext) {
+    ceph_assert(!ext->prior_instance);
+    auto iter = blocks_with_onode_fixing.find(ext->get_paddr());
+    if (iter != blocks_with_onode_fixing.end()) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -308,6 +410,8 @@ private:
    * invalidate *this.
    */
   read_set_t<Transaction> read_set; ///< set of extents read by paddr
+
+  read_set_t<Transaction> blocks_with_onode_fixing;
 
   /**
    * write_set
@@ -340,6 +444,8 @@ private:
 
   tree_stats_t onode_tree_stats;
   tree_stats_t lba_tree_stats;
+
+  onode_tree_conflict_stats_t onode_tree_conflict_stats;
 
   ///< if != NULL_SEG_ID, release this segment after completion
   segment_id_t to_release = NULL_SEG_ID;

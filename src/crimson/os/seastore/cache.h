@@ -700,6 +700,14 @@ private:
     uint64_t lba_tree_depth;
     counter_by_src_t<tree_efforts_t> committed_lba_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_lba_tree_efforts;
+
+    uint64_t invalidated_trans = 0;
+    uint64_t invalidated_trans_due_to_onode_fix = 0;
+    uint64_t num_committed_onode_modify = 0;
+    uint64_t num_committed_onode_modify_with_fix = 0;
+    uint64_t num_trans_committed = 0;
+    uint64_t num_trans_committed_with_onode_modify = 0;
+    uint64_t num_trans_committed_with_onode_modify_with_fix = 0;
   } stats;
 
   template <typename CounterT>

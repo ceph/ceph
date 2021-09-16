@@ -48,6 +48,11 @@ NodeExtentRef SeastoreNodeExtent::mutate(
     context_t c, DeltaRecorderURef&& _recorder)
 {
   DEBUGT("mutate {} ...", c.t, *this);
+  if (c.t.onode_is_fixing()) {
+    if (this->get_header().level >= c.t.onode_get_fixing_level()) {
+      c.t.onode_mark_extent_fixing(this);
+    }
+  }
   auto p_handle = static_cast<TransactionManagerHandle*>(&c.nm);
   auto extent = p_handle->tm.get_mutable_extent(c.t, this);
   auto ret = extent->cast<SeastoreNodeExtent>();

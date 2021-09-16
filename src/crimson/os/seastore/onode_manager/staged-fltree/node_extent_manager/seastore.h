@@ -147,6 +147,11 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
 
   retire_iertr::future<> retire_extent(
       Transaction& t, NodeExtentRef _extent) override {
+    if (t.onode_is_fixing()) {
+      if (_extent->get_header().level >= t.onode_get_fixing_level()) {
+        t.onode_mark_extent_fixing(_extent);
+      }
+    }
     LogicalCachedExtentRef extent = _extent;
     auto addr = extent->get_laddr();
     auto len = extent->get_length();

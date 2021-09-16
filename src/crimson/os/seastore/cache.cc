@@ -394,6 +394,47 @@ void Cache::register_metrics()
         ),
       }
     );
+
+    stats.invalidated_trans = 0;
+    stats.invalidated_trans_due_to_onode_fix = 0;
+    stats.num_committed_onode_modify = 0;
+    stats.num_committed_onode_modify_with_fix = 0;
+    stats.num_trans_committed = 0;
+    stats.num_trans_committed_with_onode_modify = 0;
+    stats.num_trans_committed_with_onode_modify_with_fix = 0;
+    metrics.add_group(
+      "demo",
+      {
+        sm::make_counter(
+          "invalidated_trans",
+          stats.invalidated_trans
+        ),
+        sm::make_counter(
+          "invalidated_trans_due_to_onode_fix",
+          stats.invalidated_trans_due_to_onode_fix
+        ),
+        sm::make_counter(
+          "num_committed_onode_modify",
+          stats.num_committed_onode_modify
+        ),
+        sm::make_counter(
+          "num_committed_onode_modify_with_fix",
+          stats.num_committed_onode_modify_with_fix
+        ),
+        sm::make_counter(
+          "num_trans_committed",
+          stats.num_trans_committed
+        ),
+        sm::make_counter(
+          "num_trans_committed_with_onode_modify",
+          stats.num_trans_committed_with_onode_modify
+        ),
+        sm::make_counter(
+          "num_trans_committed_with_onode_modify_with_fix",
+          stats.num_trans_committed_with_onode_modify_with_fix
+        ),
+      }
+    );
   }
 
   /**
@@ -637,6 +678,11 @@ void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
   DEBUGT("set conflict", t);
   t.conflicted = true;
 
+  ++stats.invalidated_trans;
+  if (conflicting_extent.onode_get_is_marked_fixing()) {
+    ++stats.invalidated_trans_due_to_onode_fix;
+  }
+
   auto& counter_by_extent = get_by_src(stats.trans_invalidated, t.get_src());
   auto& counter = get_by_ext(counter_by_extent, conflicting_extent.get_type());
   ++counter;
@@ -782,6 +828,19 @@ record_t Cache::prepare_record(Transaction &t)
   assert(!t.is_weak());
   assert(t.get_src() != Transaction::src_t::READ);
 
+  ++stats.num_trans_committed;
+  auto num_modify = t.onode_get_num_modify();
+  auto num_modify_with_fix = t.onode_get_num_modify_with_fix();
+  ceph_assert(num_modify >= num_modify_with_fix);
+  stats.num_committed_onode_modify += num_modify;
+  stats.num_committed_onode_modify_with_fix += num_modify_with_fix;
+  if (num_modify > 0) {
+    ++stats.num_trans_committed_with_onode_modify;
+  }
+  if (num_modify_with_fix > 0) {
+    ++stats.num_trans_committed_with_onode_modify_with_fix;
+  }
+
   if (t.get_src() == Transaction::src_t::CLEANER) {
     // CLEANER transaction won't contain any onode tree operations
     assert(t.onode_tree_stats.is_clear());
@@ -831,6 +890,9 @@ record_t Cache::prepare_record(Transaction &t)
                i->get_type()).increment(i->get_length());
 
     assert(i->prior_instance);
+    if (t.onode_is_extent_fixing(i->prior_instance)) {
+      i->prior_instance->onode_mark_fixing();
+    }
     replace_extent(i, i->prior_instance);
 
     i->prepare_write();
@@ -878,6 +940,9 @@ record_t Cache::prepare_record(Transaction &t)
   // invalidate now invalid blocks
   for (auto &i: t.retired_set) {
     DEBUGT("retiring {}", t, *i);
+    if (t.onode_is_extent_fixing(i)) {
+      i->onode_mark_fixing();
+    }
     get_by_ext(efforts.retire_by_ext,
                i->get_type()).increment(i->get_length());
     retire_extent(i);

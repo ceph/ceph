@@ -540,7 +540,11 @@ Node::try_merge_adjacent(
         !impl->has_single_value()) {
       // skip merge
       if (update_parent_index) {
-        return fix_parent_index(c, std::move(this_ref), false);
+        c.t.onode_mark_fixing(level() + 1);
+        return fix_parent_index(c, std::move(this_ref), false
+        ).si_then([c] {
+          c.t.onode_unmark_fixing();
+        });
       } else {
         parent_info().ptr->validate_child_tracked(*this);
         return eagain_iertr::now();
@@ -630,7 +634,11 @@ Node::try_merge_adjacent(
 
     // cannot merge
     if (update_parent_index) {
-      return fix_parent_index(c, std::move(*p_this_ref), false);
+      c.t.onode_mark_fixing(level() + 1);
+      return fix_parent_index(c, std::move(*p_this_ref), false
+      ).si_then([c] {
+        c.t.onode_unmark_fixing();
+      });
     } else {
       parent_info().ptr->validate_child_tracked(*this);
       return eagain_iertr::now();
@@ -660,6 +668,7 @@ template <bool FORCE_MERGE>
 eagain_ifuture<> Node::fix_parent_index(
     context_t c, Ref<Node>&& this_ref, bool check_downgrade)
 {
+  ceph_assert(c.t.onode_is_fixing());
   assert(!is_root());
   assert(this == this_ref.get());
   return parent_info().ptr->fix_index<FORCE_MERGE>(
@@ -1123,7 +1132,11 @@ eagain_ifuture<> InternalNode::apply_children_merge(
       // I'm all good but:
       // - my number of keys is reduced by 1
       // - my size may underflow, but try_merge_adjacent() is already part of fix_index()
-      return left_child->fix_parent_index<FORCE_MERGE>(c, std::move(left_child), true);
+      c.t.onode_mark_fixing(level() + 1);
+      return left_child->fix_parent_index<FORCE_MERGE>(c, std::move(left_child), true
+      ).si_then([c] {
+        c.t.onode_unmark_fixing();
+      });
     } else {
       validate_tracked_children();
       Ref<Node> this_ref = this;
@@ -1823,6 +1836,7 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
   DEBUGT("erase {}'s pos({}), get_next={} ...",
          c.t, get_name(), pos, get_next);
   ++(c.t.get_onode_tree_stats().num_erases);
+  c.t.onode_mark_modify();
 
   // get the next cursor
   return eagain_iertr::now().si_then([c, &pos, get_next, this] {
@@ -2054,6 +2068,7 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
          "history={}, mstat({}) ...",
          c.t, get_name(), key, vconf, pos, history, mstat);
   ++(c.t.get_onode_tree_stats().num_inserts);
+  c.t.onode_mark_modify();
   search_position_t insert_pos = pos;
   auto [insert_stage, insert_size] = impl->evaluate_insert(
       key, vconf, history, mstat, insert_pos);
