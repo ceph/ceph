@@ -14,6 +14,8 @@
 
 #include "SocketMessenger.h"
 
+#include <seastar/core/sleep.hh>
+
 #include <tuple>
 #include <boost/functional/hash.hpp>
 
