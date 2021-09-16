@@ -4,6 +4,7 @@ import _ from 'lodash';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { HostService } from '~/app/shared/api/host.service';
+import { OsdService } from '~/app/shared/api/osd.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
@@ -29,7 +30,8 @@ export class CreateClusterReviewComponent implements OnInit {
   constructor(
     public wizardStepsService: WizardStepsService,
     public cephServiceService: CephServiceService,
-    public hostService: HostService
+    public hostService: HostService,
+    private osdService: OsdService
   ) {}
 
   ngOnInit() {
@@ -103,23 +105,23 @@ export class CreateClusterReviewComponent implements OnInit {
       this.hostsDetails['data'] = [...this.hosts];
     });
 
-    if (this.wizardStepsService.osdDevices['data']) {
-      dataDevices = this.wizardStepsService.osdDevices['data']?.length;
-      dataDeviceCapacity = this.wizardStepsService.osdDevices['data']['capacity'];
+    if (this.osdService.osdDevices['data']) {
+      dataDevices = this.osdService.osdDevices['data']?.length;
+      dataDeviceCapacity = this.osdService.osdDevices['data']['capacity'];
     }
 
-    if (this.wizardStepsService.osdDevices['wal']) {
-      walDevices = this.wizardStepsService.osdDevices['wal']?.length;
-      walDeviceCapacity = this.wizardStepsService.osdDevices['wal']['capacity'];
+    if (this.osdService.osdDevices['wal']) {
+      walDevices = this.osdService.osdDevices['wal']?.length;
+      walDeviceCapacity = this.osdService.osdDevices['wal']['capacity'];
     }
 
-    if (this.wizardStepsService.osdDevices['db']) {
-      dbDevices = this.wizardStepsService.osdDevices['db']?.length;
-      dbDeviceCapacity = this.wizardStepsService.osdDevices['db']['capacity'];
+    if (this.osdService.osdDevices['db']) {
+      dbDevices = this.osdService.osdDevices['db']?.length;
+      dbDeviceCapacity = this.osdService.osdDevices['db']['capacity'];
     }
 
     this.totalDevices = dataDevices + walDevices + dbDevices;
-    this.wizardStepsService.osdDevices['totalDevices'] = this.totalDevices;
+    this.osdService.osdDevices['totalDevices'] = this.totalDevices;
     this.totalCapacity = dataDeviceCapacity + walDeviceCapacity + dbDeviceCapacity;
   }
 }
