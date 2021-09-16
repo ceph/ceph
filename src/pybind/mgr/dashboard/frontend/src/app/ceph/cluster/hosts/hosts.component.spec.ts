@@ -72,7 +72,6 @@ describe('HostsComponent', () => {
     showForceMaintenanceModal = new MockShowForceMaintenanceModal();
     fixture = TestBed.createComponent(HostsComponent);
     component = fixture.componentInstance;
-    component.clusterCreation = false;
     hostListSpy = spyOn(TestBed.inject(HostService), 'list');
     orchService = TestBed.inject(OrchestratorService);
   });

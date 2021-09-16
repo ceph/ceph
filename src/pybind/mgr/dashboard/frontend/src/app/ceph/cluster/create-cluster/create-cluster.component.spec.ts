@@ -92,13 +92,11 @@ describe('CreateClusterComponent', () => {
 
   it('should move to next step and show the second page', () => {
     const wizardStepServiceSpy = spyOn(wizardStepService, 'moveToNextStep').and.callThrough();
-    const hostServiceSpy = spyOn(hostService, 'list').and.callThrough();
     component.createCluster();
     fixture.detectChanges();
     component.onNextStep();
     fixture.detectChanges();
     expect(wizardStepServiceSpy).toHaveBeenCalledTimes(1);
-    expect(hostServiceSpy).toBeCalledTimes(1);
   });
 
   it('should show the button labels correctly', () => {
@@ -141,9 +139,15 @@ describe('CreateClusterComponent', () => {
 
   it('should ensure osd creation did happen when devices are selected', () => {
     const osdServiceSpy = spyOn(osdService, 'create').and.callThrough();
-    wizardStepService.osdDevices['totalDevices'] = 1;
+    osdService.osdDevices['totalDevices'] = 1;
     component.onSubmit();
     fixture.detectChanges();
     expect(osdServiceSpy).toBeCalledTimes(1);
+  });
+
+  it('should ensure host list call happened', () => {
+    const hostServiceSpy = spyOn(hostService, 'list').and.callThrough();
+    component.onSubmit();
+    expect(hostServiceSpy).toHaveBeenCalledTimes(1);
   });
 });
