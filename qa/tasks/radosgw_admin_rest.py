@@ -16,6 +16,7 @@ import boto.s3.acl
 
 import requests
 import time
+import json
 
 from boto.connection import AWSAuthConnection
 from teuthology import misc as teuthology
@@ -67,6 +68,8 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
                 return 'user', cmd[0]
         elif cmd[0] == 'usage':
             return 'usage', ''
+        elif cmd[0] == 'info':
+            return 'info', ''
         elif cmd[0] == 'zone' or cmd[0] in zone_sub_resources:
             if cmd[0] == 'zone':
                 return 'zone', ''
@@ -137,7 +140,7 @@ def task(ctx, config):
     admin_display_name = 'Ms. Admin User'
     admin_access_key = 'MH1WC2XQ1S8UISFDZC8W'
     admin_secret_key = 'dQyrTPA0s248YeN5bBv4ukvKU0kh54LWWywkrpoG'
-    admin_caps = 'users=read, write; usage=read, write; buckets=read, write; zone=read, write'
+    admin_caps = 'users=read, write; usage=read, write; buckets=read, write; zone=read, write; info=read'
 
     user1 = 'foo'
     user2 = 'fud'
@@ -719,3 +722,11 @@ def task(ctx, config):
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
     assert ret == 404
 
+    # TESTCASE 'info' 'info' 'show' 'display info' 'succeeds'
+    (ret, out) = rgwadmin_rest(admin_conn, ['info', ''])
+    assert ret == 200
+    info = out['info']
+    # currently, cluster_id is the only element in the info section
+    fsid = info['cluster_id']
+    # fsid is a uuid, but I'm not going to try to parse it
+    assert len(fsid) > 0
