@@ -176,6 +176,7 @@ public:
 
   // some helpers
   bool check_fragment_space(MDRequestRef& mdr, CDir *in);
+  bool check_dir_max_entries(MDRequestRef& mdr, CDir *in);
   bool check_access(MDRequestRef& mdr, CInode *in, unsigned mask);
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
   CDentry *prepare_stray_dentry(MDRequestRef& mdr, CInode *in);
@@ -459,6 +460,7 @@ private:
   double cap_revoke_eviction_timeout = 0;
   uint64_t max_snaps_per_dir = 100;
   unsigned delegate_inos_pct = 0;
+  uint64_t dir_max_entries = 0;
 
   DecayCounter recall_throttle;
   time last_recall_state;
