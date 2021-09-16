@@ -3,9 +3,10 @@
 
 #pragma once
 
-#include "crimson/osd/osd_operation_sequencer.h"
+#include "crimson/common/operation.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/scheduler/scheduler.h"
+#include "osd/osd_types.h"
 
 namespace crimson::osd {
 
