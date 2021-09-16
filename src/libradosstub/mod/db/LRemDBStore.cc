@@ -294,6 +294,12 @@ int LRemDBStore::Pool::init_tables() {
     return r;
   }
 
+  ObjData od_table(dbo, id);
+  r = od_table.create_table();
+  if (r < 0) {
+    return r;
+  }
+
   XAttrs xattrs_table(dbo, id);
   r = xattrs_table.create_table();
   if (r < 0) {
@@ -338,7 +344,6 @@ int LRemDBStore::Obj::create_table() {
                                                 "snaps TEXT",
                                                 "snap_overlap TEXT",
                                                 "epoch INTEGER",
-                                                "data BLOB",
                                                 "PRIMARY KEY (nspace, oid)" } ));
   if (r < 0) {
     return r;
@@ -387,7 +392,7 @@ int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
 }
 
 int LRemDBStore::Obj::write_meta(const LRemDBStore::Obj::Meta& meta) {
-  auto q = dbo->statement("INSERT INTO ? VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"); 
+  auto q = dbo->statement("REPLACE INTO ? VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"); 
 
   q.bind(1, table_name);
   q.bind(2, nspace);
@@ -408,6 +413,205 @@ int LRemDBStore::Obj::write_meta(const LRemDBStore::Obj::Meta& meta) {
 
   return 0;
 }
+
+int LRemDBStore::Obj::read_data(uint64_t ofs, uint64_t len,
+                                bufferlist *bl) {
+
+  auto q = dbo->statement("SELECT size from ? WHERE nspace = ? AND oid = ?");
+
+  q.bind(1, table_name);
+  q.bind(2, nspace);
+  q.bind(3, oid);
+
+  if (!q.executeStep()) {
+    return -ENOENT;
+  }
+
+  uint64_t size = (long long)q.getColumn(0);
+
+  if (ofs >= size) {
+    return 0;
+  }
+
+  if (ofs + len > size) {
+    len = size - ofs;
+  }
+
+  if (len == 0) {
+    len = size - ofs;
+  }
+
+  ObjData od(dbo, pool_id, nspace, oid);
+
+  return od.read(ofs, len, bl);
+}
+
+int LRemDBStore::Obj::write_data(uint64_t ofs, uint64_t len,
+                                 const bufferlist& bl) {
+
+  ObjData od(dbo, pool_id, nspace, oid);
+
+  int r = od.write(ofs, len, bl);
+
+  uint64_t size = ofs + len;
+  auto q = dbo->statement("INSERT INTO ?(nspace, oid, size) VALUES (?, ?, ?)"
+                          " ON CONFLICT(nspace, oid) DO UPDATE SET size=?"
+                          " WHERE size < ?");
+
+  q.bind(1, table_name);
+  q.bind(2, nspace);
+  q.bind(3, oid);
+  q.bind(4, (long long)size);
+  q.bind(5, (long long)size);
+
+  r = dbo->exec(q);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int LRemDBStore::ObjData::create_table() {
+  int r = dbo->create_table(table_name, join( { "nspace TEXT",
+                                                "oid TEXT",
+                                                "bid INTEGER",
+                                                "data BLOB",
+                                                "PRIMARY KEY (nspace, oid, bid)" } ));
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int LRemDBStore::ObjData::read_block(int bid, bufferlist *bl) {
+  SQLite::Statement q = dbo->statement("SELECT data from ? WHERE nspace = ? AND oid = ? AND bid == ?");
+
+  q.bind(1, table_name);
+  q.bind(2, nspace);
+  q.bind(3, oid);
+  q.bind(4, bid);
+
+  int r = dbo->exec(q);
+  if (r < 0) {
+    return r;
+  }
+
+  if (!q.executeStep()) {
+    return -ENOENT;
+  }
+
+  auto blob_col = q.getColumn(1);
+
+  const char *data = (const char *)blob_col.getBlob();
+  size_t len = blob_col.getBytes();
+
+  bufferptr bp(data, len);
+  bl->push_back(bp);
+
+  return 0;
+}
+
+int LRemDBStore::ObjData::write_block(int bid, bufferlist& bl) {
+  SQLite::Statement q = dbo->statement("REPLACE INTO ? VALUES ( ?, ?, ?, ?, ? )");
+
+  q.bind(1, table_name);
+  q.bind(2, nspace);
+  q.bind(3, bid);
+  q.bind(4, bl.c_str(), bl.length());
+
+  int r = dbo->exec(q);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int LRemDBStore::ObjData::read(uint64_t ofs, uint64_t len, bufferlist *bl) {
+  int start_block = ofs / block_size;
+  int end_block = (ofs + len - 1) / block_size;
+
+  int cur_block = start_block;
+
+  int block_ofs = ofs % block_size;
+
+  while (cur_block <= end_block) {
+    int block_len = std::min(block_size, block_ofs + (int)len);
+    bufferlist bbl;
+    int r = read_block(cur_block, &bbl);
+    if (r == -ENOENT) {
+      bl->append_zero(block_len);
+    } else if (r < 0) {
+      return r;
+    }
+
+    auto read_len = bbl.length();
+
+    auto zero_len = block_len - read_len;
+
+    bbl.splice(block_ofs, read_len - block_ofs, bl);
+
+    if (zero_len) {
+      bl->append_zero(zero_len);
+    }
+
+    block_ofs = 0;
+    ++cur_block;
+  }
+
+  return bl->length();
+}
+
+int LRemDBStore::ObjData::write(uint64_t ofs, uint64_t len, const bufferlist& bl) {
+  if (len > bl.length()) {
+    len = bl.length();
+  }
+  int start_block = ofs / block_size;
+  int end_block = (ofs + len - 1) / block_size;
+
+  int cur_block = start_block;
+
+  int block_ofs = ofs % block_size;
+
+  auto bliter = bl.cbegin();
+
+  while (cur_block <= end_block) {
+    int block_len = std::min((uint64_t)block_size, block_ofs + len);
+    bufferlist bbl;
+    int r = read_block(cur_block, &bbl);
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    }
+
+    if ((uint64_t)block_len > bbl.length()) { /* pad with zeros to match new size */
+      bbl.append_zero(block_len - bbl.length());
+    }
+
+    char *pdst = bbl.c_str();
+
+    bliter.copy(block_len, pdst + block_ofs);
+    bliter += block_ofs;
+
+    bufferptr bp(pdst, block_len);
+    bufferlist new_block;
+
+    new_block.push_back(bp);
+
+    r = write_block(cur_block, new_block);
+    if (r < 0) {
+      return r;
+    }
+
+    block_ofs = 0; /* next block starts from zero */
+    len -= block_len;
+    ++cur_block;
+  }
+
+  return 0;
+}
+
 int LRemDBStore::KVTableBase::create_table() {
   int r = dbo->create_table(table_name, join( { "nspace TEXT",
                                                 "oid TEXT",

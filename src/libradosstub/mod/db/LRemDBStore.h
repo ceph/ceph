@@ -98,8 +98,29 @@ namespace LRemDBStore {
 
     int read_meta(LRemDBStore::Obj::Meta *pmeta);
     int write_meta(const LRemDBStore::Obj::Meta& pmeta);
+
+    int read_data(uint64_t ofs, uint64_t len, bufferlist *bl);
+    int write_data(uint64_t ofs, uint64_t len, const bufferlist& bl);
   };
   using ObjRef = std::shared_ptr<Obj>;
+
+  class ObjData : public TableBase {
+    static constexpr int block_size = (512 * 1024);
+
+    int write_block(int bid, bufferlist& bl);
+    int read_block(int bid, bufferlist *bl);
+
+  public:
+    ObjData(LRemDBOpsRef& _dbo, int _pool_id) : TableBase(_dbo, _pool_id, "objdata") {}
+    ObjData(LRemDBOpsRef& _dbo, int _pool_id,
+            const std::string& _nspace, const std::string& _oid) : TableBase(_dbo, _pool_id, "objdata",
+                                                                             _nspace, _oid) {}
+    int create_table() override;
+
+    int read(uint64_t ofs, uint64_t len, bufferlist *bl);
+    int write(uint64_t ofs, uint64_t len, const bufferlist& bl);
+  };
+  using ObjDataRef = std::shared_ptr<ObjData>;
 
   class KVTableBase : public TableBase {
   public:
