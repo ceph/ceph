@@ -4654,6 +4654,8 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::Store* store,
       encoded_obj_str = req.substr(pos+1);
     }
 
+    /* dang: s->bucket is never set here, since it's created with permissions.
+     * These calls will always create an object with no bucket. */
     if (!encoded_obj_str.empty()) {
       if (s->bucket) {
 	s->object = s->bucket->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
