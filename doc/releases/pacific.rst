@@ -53,6 +53,8 @@ Notable Changes
   packages by default, `ceph-mgr-rook` was always installed along with
   `ceph-mgr` debian package as an indirect dependency. If your workflow depends
   on this behavior, you might want to install `ceph-mgr-rook` separately.
+  
+ * This is the first release built for Debian Bullseye.
 
 Changelog
 ---------
