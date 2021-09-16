@@ -1646,7 +1646,8 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t *handle,
   version_t objver;
   C_SaferCond onfinish;
 
-  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc, 0);
+  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc,
+                                                            extra_op_flags);
   *handle = linger_op->get_cookie();
   if (internal) {
     linger_op->handle = InternalWatchInfo(this, oid, ctx, ctx2);
@@ -1690,7 +1691,8 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
                                    uint32_t timeout,
                                    bool internal)
 {
-  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc, 0);
+  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc,
+                                                            extra_op_flags);
   c->io = this;
   Context *oncomplete = new C_aio_linger_Complete(c, linger_op, false);
 
@@ -1776,7 +1778,8 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
 				bufferlist *preply_bl,
 				char **preply_buf, size_t *preply_buf_len)
 {
-  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc, 0);
+  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc,
+                                                            extra_op_flags);
 
   C_SaferCond notify_finish_cond;
   linger_op->on_notify_finish =
@@ -1829,7 +1832,8 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
                                     bufferlist *preply_bl, char **preply_buf,
                                     size_t *preply_buf_len)
 {
-  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc, 0);
+  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc,
+                                                            extra_op_flags);
 
   c->io = this;
 
