@@ -8202,7 +8202,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     int r = check_pg_num(pool, p.get_pg_num(), n, &ss);
-    if (r < 0) {
+    if (r < 0 && n >= p.size) {
       return r;
     }
     p.size = n;
