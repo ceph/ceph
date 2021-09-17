@@ -9,11 +9,11 @@ describe('Create cluster page', () => {
     createCluster.navigateTo();
   });
 
-  it('should fail to create cluster', () => {
+  it('should open the wizard when Expand Cluster is clicked', () => {
     createCluster.createCluster();
   });
 
-  it('should skip to dashboard landing page', () => {
+  it('should skip to dashboard landing page when Skip is clicked', () => {
     createCluster.doSkip();
   });
 });

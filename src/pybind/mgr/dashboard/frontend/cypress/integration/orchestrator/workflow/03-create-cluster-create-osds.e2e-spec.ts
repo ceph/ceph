@@ -11,12 +11,10 @@ describe('Create cluster create osds page', () => {
     Cypress.Cookies.preserveOnce('token');
     createCluster.navigateTo();
     createCluster.createCluster();
-    cy.get('button[aria-label="Next"]').click();
+    cy.get('.nav-link').contains('Create OSDs').click();
   });
 
-  it('should check if nav-link and title contains Create OSDs', () => {
-    cy.get('.nav-link').should('contain.text', 'Create OSDs');
-
+  it('should check if title contains Create OSDs', () => {
     cy.get('.title').should('contain.text', 'Create OSDs');
   });
 
@@ -27,13 +25,16 @@ describe('Create cluster create osds page', () => {
 
       createCluster.navigateTo();
       createCluster.createCluster();
-      cy.get('button[aria-label="Next"]').click();
+      cy.get('.nav-link').contains('Create OSDs').click();
 
       createCluster.createOSD('hdd');
 
+      // Go to the Review section and Expand the cluster
+      // because the drive group spec is only stored
+      // in frontend and will be lost when refreshed
+      cy.get('.nav-link').contains('Review').click();
       cy.get('button[aria-label="Next"]').click();
-      cy.get('button[aria-label="Next"]').click();
-      cy.get('button[aria-label="Next"]').click();
+      cy.get('cd-dashboard').should('exist');
     });
   });
 });
