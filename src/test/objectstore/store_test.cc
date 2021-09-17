@@ -9627,8 +9627,13 @@ int main(int argc, char **argv) {
 
   for (auto& i : args) {
     if (i == "--smr"s) {
-      derr << "smr" << dendl;
+#if defined(HAVE_LIBZBD)
+      derr << "Adjusting tests for smr mode." << dendl;
       smr = true;
+#else
+      derr << "smr mode selected, but support not compiled in" << dendl;
+      return 1;
+#endif
     }
   }
 
