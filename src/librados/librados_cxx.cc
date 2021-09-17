@@ -2316,6 +2316,11 @@ void librados::IoCtx::unset_osdmap_full_try()
   io_ctx_impl->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
 }
 
+bool librados::IoCtx::get_pool_full_try()
+{
+  return (io_ctx_impl->extra_op_flags & CEPH_OSD_FLAG_FULL_TRY) != 0;
+}
+
 void librados::IoCtx::set_pool_full_try()
 {
   io_ctx_impl->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
