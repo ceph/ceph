@@ -145,17 +145,17 @@ virtualization providers (libvirt, KubeVirt, oVirt, OpenStack, VMware vSphere,
 GCP and AWS) and to easily deploy and customize VMs from cloud images.
 
 It allows you to setup an environment with several vms with your preferred
-configuration( memory, cpus, disks) and OS flavor.
+configuration (memory, cpus, disks) and OS flavor.
 
 main advantages:
 ----------------
-  - Is fast. Typically you can have a completely new Ceph cluster ready to debug
+  - Fast. Typically you can have a completely new Ceph cluster ready to debug
     and develop orchestrator features in less than 5 minutes.
-  - Is a "near production" lab. The lab created with kcli is very near of "real"
-    clusters in QE labs or even in production. So easy to test "real things" in
-    almost "real environment"
-  - Is safe and isolated. Do not depend of the things you have installed in your
-    machine. And the vms are isolated from your environment.
+  - "Close to production" lab. The resulting lab is close to "real" clusters
+    in QE labs or even production. It makes it easy to test "real things" in
+    an almost "real" environment.
+  - Safe and isolated. Does not depend of the things you have installed in 
+    your machine. And the vms are isolated from your environment.
   - Easy to work "dev" environment. For "not compilated" software pieces,
     for example any mgr module. It is an environment that allow you to test your
     changes interactively.
@@ -163,27 +163,24 @@ main advantages:
 Installation:
 -------------
 Complete documentation in `kcli installation <https://kcli.readthedocs.io/en/latest/#installation>`_
-but we strongly suggest to use the container image approach.
+but we suggest to use the container image approach.
 
 So things to do:
   - 1. Review `requeriments <https://kcli.readthedocs.io/en/latest/#libvirt-hypervisor-requisites>`_
-    and install/configure whatever you need to meet them.
+    and install/configure whatever is needed to meet them.
   - 2. get the kcli image and create one alias for executing the kcli command
     ::
 
         # podman pull quay.io/karmab/kcli
         # alias kcli='podman run --net host -it --rm --security-opt label=disable -v $HOME/.ssh:/root/.ssh -v $HOME/.kcli:/root/.kcli -v /var/lib/libvirt/images:/var/lib/libvirt/images -v /var/run/libvirt:/var/run/libvirt -v $PWD:/workdir -v /var/tmp:/ignitiondir quay.io/karmab/kcli'
 
-.. note:: /var/lib/libvirt/images can be customized.... be sure that you are
-   using this folder for your OS images
+.. note:: This assumes that /var/lib/libvirt/images is your default libvirt pool.... Adjust if using a different path
 
 .. note:: Once you have used your kcli tool to create and use different labs, we
-   suggest you to "save" and use your own kcli image.
-   Why?: kcli is alive and it changes (and for the moment only exists one tag ...
-   latest). Because we have more than enough with the current functionality, and
-   what we want is overall stability,
-   we suggest to store the kcli image you are using in a safe place and update
-   your kcli alias to use your own image.
+   suggest you stick to a given container tag and update your kcli alias.
+   Why? kcli uses a rolling release model and sticking to a specific
+   container tag will improve overall stability.
+   what we want is overall stability.
 
 Test your kcli installation:
 ----------------------------
@@ -191,23 +188,22 @@ See the kcli `basic usage workflow <https://kcli.readthedocs.io/en/latest/#basic
 
 Create a Ceph lab cluster
 -------------------------
-In order to make easy this task we are going to use a kcli plan.
+In order to make this task simple, we are going to use a "plan".
 
-A kcli plan is a file where you can define the different settings you want to
-have in a set of vms.
+A "plan" is a file where you can define a set of vms with different settings.
 You can define hardware parameters (cpu, memory, disks ..), operating system and
 it also allows you to automate the installation and configuration of any
 software you want to have.
 
 There is a `repository <https://github.com/karmab/kcli-plans>`_ with a collection of
 plans that can be used for different purposes. And we have predefined plans to
-install Ceph clusters using Ceph ansible or cephadm, lets create our first Ceph
+install Ceph clusters using Ceph ansible or cephadm, so let's create our first Ceph
 cluster using cephadm::
 
-# kcli2 create plan -u https://github.com/karmab/kcli-plans/blob/master/ceph/ceph_cluster.yml
+# kcli create plan -u https://github.com/karmab/kcli-plans/blob/master/ceph/ceph_cluster.yml
 
 This will create a set of three vms using the plan file pointed by the url.
-After a few minutes (depend of your laptop power), lets examine the cluster:
+After a few minutes, let's check the cluster:
 
 * Take a look to the vms created::
 
@@ -234,7 +230,7 @@ This "trick" will allow you to make changes in any orchestrator or dashboard
 module and test them intermediately. (only needed to disable/enable the mgr module)
 
 So in order to create a ceph cluster for development purposes you must use the
-same cephadm plan but with a new parameter pointing your Ceph source code folder::
+same cephadm plan but with a new parameter pointing to your Ceph source code folder::
 
   # kcli create plan -u https://github.com/karmab/kcli-plans/blob/master/ceph/ceph_cluster.yml -P ceph_dev_folder=/home/mycodefolder/ceph
 
