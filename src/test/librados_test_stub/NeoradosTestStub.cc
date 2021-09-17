@@ -222,6 +222,10 @@ void IOContext::write_snap_context(
   }
 }
 
+void IOContext::full_try(bool _full_try) {
+  // no-op
+}
+
 bool operator ==(const IOContext& lhs, const IOContext& rhs) {
   auto l = reinterpret_cast<const IOContextImpl*>(&lhs.impl);
   auto r = reinterpret_cast<const IOContextImpl*>(&rhs.impl);
