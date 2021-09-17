@@ -333,12 +333,20 @@ int ZonedFreelistManager::_read_cfg(cfg_reader_t cfg_reader)
 
 void ZonedFreelistManager::mark_zone_to_clean_free(
   uint64_t zone,
+  uint64_t write_pointer,
+  uint64_t dead,
   KeyValueDB *kvdb)
 {
   dout(10) << __func__ << " zone 0x" << std::hex << zone << std::dec << dendl;
 
   KeyValueDB::Transaction txn = kvdb->get_transaction();
-  zone_state_t zone_state;
-  write_zone_state_to_db(zone, zone_state, txn);
+
+  zone_state_t neg_zone_state;
+  neg_zone_state.num_dead_bytes = 0ll - (int64_t)dead;
+  neg_zone_state.write_pointer = 0ll - (int64_t)write_pointer;
+  write_zone_state_to_db(zone, neg_zone_state, txn);
+
+  // block here until this commits so that we don't end up starting to allocate and
+  // write to the new zone before this fully commits.
   kvdb->submit_transaction_sync(txn);
 }

@@ -213,6 +213,12 @@ int64_t ZonedAllocator::pick_zone_to_clean(float min_score, uint64_t min_saved)
   return best;
 }
 
+void ZonedAllocator::reset_zone(uint32_t zone)
+{
+  num_free += zone_states[zone].write_pointer;
+  zone_states[zone].reset();
+}
+
 bool ZonedAllocator::low_on_space(void)
 {
   std::lock_guard l(lock);
