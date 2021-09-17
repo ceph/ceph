@@ -1,7 +1,11 @@
-import { CreateClusterWizardHelper } from 'cypress/integration/cluster/create-cluster.po';
+import {
+  CreateClusterHostPageHelper,
+  CreateClusterWizardHelper
+} from 'cypress/integration/cluster/create-cluster.po';
 
 describe('Create Cluster Review page', () => {
   const createCluster = new CreateClusterWizardHelper();
+  const createClusterHostPage = new CreateClusterHostPageHelper();
 
   beforeEach(() => {
     cy.login();
@@ -9,14 +13,12 @@ describe('Create Cluster Review page', () => {
     createCluster.navigateTo();
     createCluster.createCluster();
 
-    cy.get('button[aria-label="Next"]').click();
-    cy.get('button[aria-label="Next"]').click();
-    cy.get('button[aria-label="Next"]').click();
+    cy.get('.nav-link').contains('Review').click();
   });
 
   describe('navigation link test', () => {
-    it('should check if nav-link contains Review', () => {
-      cy.get('.nav-link').should('contain.text', 'Review');
+    it('should check if active nav-link is of Review section', () => {
+      cy.get('.nav-link.active').should('contain.text', 'Review');
     });
   });
 
@@ -68,7 +70,7 @@ describe('Create Cluster Review page', () => {
     });
 
     it('should check default host name is present', () => {
-      createCluster.check_for_host();
+      createClusterHostPage.check_for_host();
     });
   });
 });

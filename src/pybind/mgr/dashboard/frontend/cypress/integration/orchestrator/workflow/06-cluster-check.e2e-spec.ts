@@ -5,6 +5,8 @@ import { ServicesPageHelper } from 'cypress/integration/cluster/services.po';
 
 describe('when cluster creation is completed', () => {
   const createCluster = new CreateClusterWizardHelper();
+  const services = new ServicesPageHelper();
+  const serviceName = 'rgw.foo';
 
   beforeEach(() => {
     cy.login();
@@ -15,24 +17,26 @@ describe('when cluster creation is completed', () => {
     createCluster.navigateTo();
     createCluster.createCluster();
 
+    cy.get('.nav-link').contains('Review').click();
     cy.get('button[aria-label="Next"]').click();
-    cy.get('button[aria-label="Next"]').click();
-    cy.get('button[aria-label="Next"]').click();
-    cy.get('button[aria-label="Next"]').click();
-
     cy.get('cd-dashboard').should('exist');
   });
 
   describe('Hosts page', () => {
     const hosts = new HostsPageHelper();
-    const hostnames = ['ceph-node-00.cephlab.com', 'ceph-node-02.cephlab.com'];
+    const hostnames = [
+      'ceph-node-00.cephlab.com',
+      'ceph-node-01.cephlab.com',
+      'ceph-node-02.cephlab.com'
+    ];
 
     beforeEach(() => {
       hosts.navigateTo();
     });
+
     it('should have removed "_no_schedule" label', () => {
-      for (let host = 0; host < hostnames.length; host++) {
-        cy.get('datatable-row-wrapper').should('not.have.text', '_no_schedule');
+      for (const hostname of hostnames) {
+        hosts.checkLabelExists(hostname, ['_no_schedule'], false);
       }
     });
 
@@ -49,6 +53,17 @@ describe('when cluster creation is completed', () => {
         hosts.getTableCount('total').should('be.gte', 0);
       });
     });
+
+    it('should check if rgw service is running', () => {
+      hosts.clickHostTab(hostnames[1], 'Daemons');
+      cy.get('cd-host-details').within(() => {
+        services.checkServiceStatus('rgw');
+      });
+    });
+
+    it('should force maintenance and exit', { retries: 1 }, () => {
+      hosts.maintenance(hostnames[1], true, true);
+    });
   });
 
   describe('OSDs page', () => {
@@ -59,19 +74,17 @@ describe('when cluster creation is completed', () => {
     });
 
     it('should check if osds are created', { retries: 1 }, () => {
-      osds.expectTableCount('total', 2);
+      osds.getTableCount('total').should('be.gte', 1);
     });
   });
 
   describe('Services page', () => {
-    const services = new ServicesPageHelper();
-
     beforeEach(() => {
       services.navigateTo();
     });
 
     it('should check if services are created', () => {
-      services.checkExist('rgw.rgw', true);
+      services.checkExist(serviceName, true);
     });
   });
 });
