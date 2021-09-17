@@ -226,6 +226,7 @@ struct CompatSet {
     o << "{c=[" << std::hex << compat.mask << "]";
     o << ",r=[" << std::hex << ro_compat.mask << "]";
     o << ",i=[" << std::hex << incompat.mask << "]}";
+    o << std::dec;
     return o;
   }
 

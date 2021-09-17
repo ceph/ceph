@@ -19,6 +19,12 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_standby_replay_damaged
+  type: bool
+  level: dev
+  default: false
+  flags:
+  - runtime
 - name: mds_numa_node
   type: int
   level: advanced
