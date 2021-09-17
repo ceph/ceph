@@ -13080,10 +13080,9 @@ void BlueStore::_zoned_cleaner_thread()
       dout(20) << __func__ << " wake" << dendl;
     } else {
       l.unlock();
+      a->set_cleaning_zone(zone_to_clean);
       _zoned_clean_zone(zone_to_clean);
-      bdev->reset_zone(zone_to_clean);
-      f->mark_zone_to_clean_free(zone_to_clean, db);
-      //a->mark_zone_to_clean_free();
+      a->clear_cleaning_zone(zone_to_clean);
       l.lock();
     }
   }
