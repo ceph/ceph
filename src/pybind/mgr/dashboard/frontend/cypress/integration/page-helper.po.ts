@@ -86,6 +86,19 @@ export abstract class PageHelper {
   }
 
   /**
+   * Helper method to navigate/click a tab inside the expanded table row.
+   * @param selector The selector of the expanded table row.
+   * @param name The name of the row which should expand.
+   * @param tabName Name of the tab to be navigated/clicked.
+   */
+  clickTab(selector: string, name: string, tabName: string) {
+    this.getExpandCollapseElement(name).click();
+    cy.get(selector).within(() => {
+      this.getTab(tabName).click();
+    });
+  }
+
+  /**
    * Helper method to select an option inside a select element.
    * This method will also expect that the option was set.
    * @param option The option text (not value) to be selected.
