@@ -937,6 +937,9 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
       ctx->write_snap_context(
         {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
     }
+    if (data_ctx.get_pool_full_try()) {
+      ctx->full_try(true);
+    }
 
     // atomically reset the data IOContext to new version
     atomic_store(&data_io_context, ctx);
