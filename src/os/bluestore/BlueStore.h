@@ -3487,6 +3487,7 @@ private:
     uint32_t collection_search       = 0;
     uint32_t pad_limit_count         = 0;
 
+    uint64_t shared_blobs_count      = 0;
     uint64_t compressed_blob_count   = 0;
     uint64_t spanning_blob_count     = 0;
     uint64_t insert_count            = 0;
@@ -3504,6 +3505,7 @@ private:
     out << "==========================================================" << std::endl;
     out << "NCB::onode_count             = " ;out.width(10);out << stats.onode_count << std::endl
 	<< "NCB::shard_count             = " ;out.width(10);out << stats.shard_count << std::endl
+	<< "NCB::shared_blobs_count      = " ;out.width(10);out << stats.shared_blobs_count << std::endl
 	<< "NCB::compressed_blob_count   = " ;out.width(10);out << stats.compressed_blob_count << std::endl
 	<< "NCB::spanning_blob_count     = " ;out.width(10);out << stats.spanning_blob_count << std::endl
 	<< "NCB::collection search       = " ;out.width(10);out << stats.collection_search << std::endl

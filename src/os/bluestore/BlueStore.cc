@@ -17127,7 +17127,6 @@ int BlueStore::copy_allocator(Allocator* src_alloc, Allocator* dest_alloc, uint6
   }
 
   uint64_t idx         = 0;
-  bool     null_extent = false;
   auto copy_entries = [&](uint64_t extent_offset, uint64_t extent_length) {
     if (extent_length > 0) {
       if (idx < *p_num_entries) {
@@ -17136,7 +17135,6 @@ int BlueStore::copy_allocator(Allocator* src_alloc, Allocator* dest_alloc, uint6
       idx++;
     }
     else {
-      null_extent = true;
       derr << "zero length extent!!! offset=" << extent_offset << ", index=" << idx << dendl;
     }
   };
@@ -17145,14 +17143,9 @@ int BlueStore::copy_allocator(Allocator* src_alloc, Allocator* dest_alloc, uint6
   dout(5) << "copy num_entries=" << idx << dendl;
   if (idx > *p_num_entries) {
     derr << "****spillover, num_entries=" << *p_num_entries << ", spillover=" << (idx - *p_num_entries) << dendl;
-    return -1;
+    ceph_assert(idx <= *p_num_entries);
   }
-
-  if (null_extent) {
-    derr << "null entries were found!" << dendl;
-    return -1;
-  }
-
+  
   *p_num_entries = idx;
 
   for (idx = 0; idx < *p_num_entries; idx++) {
@@ -17536,6 +17529,10 @@ void BlueStore::read_allocation_from_single_onode(
       stats.compressed_blob_count++;
     }
 
+    if (blob.is_shared()) {
+      stats.shared_blobs_count++;
+    }
+
     // process all physical extent in this blob
     for (auto p_extent = p_extent_vec.begin(); p_extent != p_extent_vec.end(); p_extent++) {
       auto offset = p_extent->offset;
@@ -17547,25 +17544,28 @@ void BlueStore::read_allocation_from_single_onode(
 	continue;
       }
 
-      // skip repeating extents
-      auto lcl_itr = lcl_extnt_map.find(offset);
-      if (lcl_itr != lcl_extnt_map.end()) {
-	// repeated extents must have the same length!
-
-	// --Note--
-	// This asserts triggers because of a corruption which was hidden until now
-	// It was not introduced by this PR (we merely report it now)
-	// Don't shoot me I'm only the messenger :-)
-	ceph_assert(lcl_extnt_map[offset] == length);
-	stats.skipped_repeated_extent++;
-	ceph_assert(blobs_count > 0);
+      if (!blob.is_shared()) {
+	// skip repeating extents
+	auto lcl_itr = lcl_extnt_map.find(offset);
+	// extents using shared blobs might have differnt length
+	if (lcl_itr != lcl_extnt_map.end() ) {
+	  // repeated extents must have the same length!
+	  ceph_assert(lcl_extnt_map[offset] == length);
+	  stats.skipped_repeated_extent++;
+	} else {
+	  lcl_extnt_map[offset] = length;
+	  allocator->init_rm_free(offset, length);
+	  stats.extent_count++;
+	}
       } else {
-	lcl_extnt_map[offset] = length;
+	// extents using shared blobs might have differnt length
 	allocator->init_rm_free(offset, length);
 	stats.extent_count++;
       }
-    }
-  }
+
+    } // physical-extents loop
+
+  } // logical-extents loop
 
   if (blobs_count < MAX_BLOBS_IN_ONODE) {
     stats.blobs_in_onode[blobs_count]++;
