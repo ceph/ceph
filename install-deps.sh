@@ -256,7 +256,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/libtool \
         devel/google-perftools \
         lang/cython \
-        devel/py-virtualenv \
         databases/leveldb \
         net/openldap24-client \
         archivers/snappy \
@@ -406,7 +405,7 @@ function activate_virtualenv() {
     local env_dir=$top_srcdir/install-deps-python3
 
     if ! test -d $env_dir ; then
-        virtualenv --python=python3 ${env_dir}
+        python3 -m venv ${env_dir}
         . $env_dir/bin/activate
         if ! populate_wheelhouse install ; then
             rm -rf $env_dir
