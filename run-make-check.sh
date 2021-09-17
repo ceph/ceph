@@ -102,7 +102,7 @@ function main() {
     configure "$cmake_opts" "$@"
     build tests
     echo "make check: successful build on $(git rev-parse HEAD)"
-    run
+    FOR_MAKE_CHECK=1 run
 }
 
 main "$@"
