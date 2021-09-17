@@ -79,6 +79,9 @@ public:
   uint64_t get_dead_bytes(uint32_t zone) {
     return zone_states[zone].num_dead_bytes;
   }
+  uint64_t get_live_bytes(uint32_t zone) {
+    return zone_states[zone].write_pointer - zone_states[zone].num_dead_bytes;
+  }
 
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
@@ -92,7 +95,7 @@ public:
   void dump(std::function<void(uint64_t offset,
                                uint64_t length)> notify) override;
 
-  int64_t pick_zone_to_clean(void);
+  int64_t pick_zone_to_clean(float min_score, uint64_t min_saved);
   void set_cleaning_zone(uint32_t zone) {
     cleaning_zone = zone;
   }

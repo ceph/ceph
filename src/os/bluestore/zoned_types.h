@@ -32,6 +32,10 @@ struct zone_state_t {
     return num_dead_bytes;
   }
 
+  uint64_t get_num_live_bytes() const {
+    return write_pointer - num_dead_bytes;
+  }
+
   uint64_t get_write_pointer() const {
     return write_pointer;
   }

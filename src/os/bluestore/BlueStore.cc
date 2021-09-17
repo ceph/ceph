@@ -13070,7 +13070,7 @@ void BlueStore::_zoned_cleaner_thread()
   auto f = dynamic_cast<ZonedFreelistManager*>(fm);
   ceph_assert(f);
   while (true) {
-    auto zone_to_clean = a->pick_zone_to_clean();
+    auto zone_to_clean = a->pick_zone_to_clean(.1, zone_size / 16); // FIXME
     if (zone_to_clean < 0) {
       if (zoned_cleaner_stop) {
 	break;

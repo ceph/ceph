@@ -167,25 +167,48 @@ void ZonedAllocator::init_from_zone_pointers(
 		 << dendl;
 }
 
-int64_t ZonedAllocator::pick_zone_to_clean(void)
+int64_t ZonedAllocator::pick_zone_to_clean(float min_score, uint64_t min_saved)
 {
+  std::lock_guard l(lock);
   int32_t best = -1;
-  int64_t best_score = 0;
+  float best_score = 0.0;
   for (size_t i = first_seq_zone_num; i < num_zones; ++i) {
-    int64_t score = zone_states[i].num_dead_bytes;
-    // discount by remaining space so we will tend to clean full zones
-    score -= (zone_size - zone_states[i].write_pointer) / 2;
-    if (score > 0 && (best < 0 || score > best_score)) {
+    // value (score) = benefit / cost
+    //    benefit = how much net free space we'll get (dead bytes)
+    //    cost = how many bytes we'll have to rewrite (live bytes)
+    // avoid divide by zero on a zone with no live bytes
+    float score =
+      (float)zone_states[i].num_dead_bytes /
+      (float)(zone_states[i].get_num_live_bytes() + 1);
+    if (score > 0) {
+      ldout(cct, 20) << " zone 0x" << std::hex << i
+		     << " dead 0x" << zone_states[i].num_dead_bytes
+		     << " score " << score
+		     << dendl;
+    }
+    if (zone_states[i].num_dead_bytes < min_saved) {
+      continue;
+    }
+    if (best < 0 || score > best_score) {
       best = i;
       best_score = score;
     }
   }
-  if (best >= 0) {
-    ldout(cct, 10) << " zone 0x" << std::hex << best << " with score 0x" << best_score
+  if (best_score >= min_score) {
+    ldout(cct, 10) << " zone 0x" << std::hex << best << " with score " << best_score
 		   << ": 0x" << zone_states[best].num_dead_bytes
 		   << " dead and 0x"
 		   << zone_states[best].write_pointer - zone_states[best].num_dead_bytes
 		   << " live bytes" << std::dec << dendl;
+  } else if (best > 0) {
+    ldout(cct, 10) << " zone 0x" << std::hex << best << " with score " << best_score
+		   << ": 0x" << zone_states[best].num_dead_bytes
+		   << " dead and 0x"
+		   << zone_states[best].write_pointer - zone_states[best].num_dead_bytes
+		   << " live bytes" << std::dec
+		   << " but below min_score " << min_score
+		   << dendl;
+    best = -1;
   } else {
     ldout(cct, 10) << " no zones found that are good cleaning candidates" << dendl;
   }
