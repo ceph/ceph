@@ -207,7 +207,8 @@ int LRemIoCtxImpl::list_watchers(const std::string& o,
     return -EBLOCKLISTED;
   }
 
-  return m_client->get_watch_notify()->list_watchers(m_pool_id, get_namespace(),
+  return m_client->get_watch_notify()->list_watchers(m_client,
+                                                     m_pool_id, get_namespace(),
                                                      o, out_watchers);
 }
 

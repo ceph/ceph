@@ -16,8 +16,7 @@ LRemDBCluster::File::File()
 }
 
 LRemDBCluster::File::File(const File &rhs)
-  : data(rhs.data),
-    mtime(rhs.mtime),
+  : mtime(rhs.mtime),
     objver(rhs.objver),
     snap_id(rhs.snap_id),
     exists(rhs.exists) {
@@ -25,8 +24,9 @@ LRemDBCluster::File::File(const File &rhs)
 
 LRemDBCluster::Pool::Pool() = default;
 
-LRemDBCluster::LRemDBCluster()
-  : m_next_nonce(static_cast<uint32_t>(reinterpret_cast<uint64_t>(this))) {
+LRemDBCluster::LRemDBCluster(CephContext *_cct)
+  : cct(_cct),
+    m_next_nonce(static_cast<uint32_t>(reinterpret_cast<uint64_t>(this))) {
 }
 
 LRemDBCluster::~LRemDBCluster() {
@@ -36,9 +36,47 @@ LRemRadosClient *LRemDBCluster::create_rados_client(CephContext *cct) {
   return new LRemDBRadosClient(cct, this);
 }
 
-int LRemDBCluster::register_object_handler(int64_t pool_id,
-                                            const ObjectLocator& locator,
-                                            ObjectHandler* object_handler) {
+int LRemDBCluster::register_object_handler(LRemRadosClient *client,
+                                           int64_t pool_id,
+                                           const ObjectLocator& locator,
+                                           ObjectHandler* object_handler) {
+#if 0
+  auto uuid = client->cct()->_conf.get_val<uuid_d>("fsid");
+  auto dbc = std::make_shared<LRemDBStore::Cluster>(uuid.to_string());
+
+  string pool_name;
+
+  int r = pool_reverse_lookup(pool_id, &pool_name);
+  if (r < 0) {
+    return r;
+  }
+
+  LRemDBCluster::PoolRef pool;
+  {
+    std::lock_guard locker{m_lock};
+
+    pool = get_pool(*dbc, pool_id);
+    if (!pool) {
+      return -ENOENT;
+    }
+  }
+
+  LRemDBStore::PoolRef pool_store;
+
+  r = dbc->get_pool(pool_name, &pool_store);
+  if (r < 0) {
+    return r;
+  }
+
+  auto obj = pool_store->get_obj_handler(locator.nspace, locator.name);
+  LRemDBStore::Obj::Meta meta;
+
+  r = obj->read_meta(&meta);
+  if (r < 0) {
+    return r;
+  }
+#endif
+
   std::lock_guard locker{m_lock};
   auto pool = get_cached_pool(m_lock, pool_id);
   if (pool == nullptr) {
@@ -46,10 +84,12 @@ int LRemDBCluster::register_object_handler(int64_t pool_id,
   }
 
   std::unique_lock pool_locker{pool->file_lock};
+#if 0
   auto file_it = pool->files.find(locator);
   if (file_it == pool->files.end()) {
     return -ENOENT;
   }
+#endif
 
   auto& object_handlers = pool->file_handlers[locator];
   auto it = object_handlers.find(object_handler);
@@ -59,9 +99,10 @@ int LRemDBCluster::register_object_handler(int64_t pool_id,
   return 0;
 }
 
-void LRemDBCluster::unregister_object_handler(int64_t pool_id,
-                                               const ObjectLocator& locator,
-                                               ObjectHandler* object_handler) {
+void LRemDBCluster::unregister_object_handler(LRemRadosClient *client,
+                                              int64_t pool_id,
+                                              const ObjectLocator& locator,
+                                              ObjectHandler* object_handler) {
   std::lock_guard locker{m_lock};
   auto pool = get_cached_pool(m_lock, pool_id);
   if (pool == nullptr) {
@@ -254,8 +295,8 @@ bool LRemDBCluster::is_blocklisted(uint32_t nonce) const {
   return (m_blocklist.find(nonce) != m_blocklist.end());
 }
 
-void LRemDBCluster::blocklist(uint32_t nonce) {
-  m_watch_notify.blocklist(nonce);
+void LRemDBCluster::blocklist(LRemRadosClient *rados_client, uint32_t nonce) {
+  m_watch_notify.blocklist(rados_client, nonce);
 
   std::lock_guard locker{m_lock};
   m_blocklist.insert(nonce);

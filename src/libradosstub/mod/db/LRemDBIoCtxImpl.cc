@@ -42,6 +42,11 @@ LRemDBIoCtxImpl::LRemDBIoCtxImpl() {
 
 LRemDBIoCtxImpl::LRemDBIoCtxImpl(const LRemDBIoCtxImpl& rhs)
     : LRemIoCtxImpl(rhs), m_client(rhs.m_client), m_pool(rhs.m_pool) {
+  auto uuid = m_client->cct()->_conf.get_val<uuid_d>("fsid");
+  m_dbc = std::make_shared<LRemDBStore::Cluster>(uuid.to_string());
+  m_dbc->get_pool(m_pool_name, &m_pool_db);
+
+std::cerr << __FILE__ << ":" << __LINE__ << " m_pool_db=" << (void *)m_pool_db.get() << " mpool_name=" << m_pool_name << std::endl;
 }
 
 LRemDBIoCtxImpl::LRemDBIoCtxImpl(LRemDBRadosClient *client, int64_t pool_id,
@@ -53,6 +58,7 @@ LRemDBIoCtxImpl::LRemDBIoCtxImpl(LRemDBRadosClient *client, int64_t pool_id,
   m_dbc = std::make_shared<LRemDBStore::Cluster>(uuid.to_string());
   m_dbc->get_pool(pool_name, &m_pool_db);
 
+std::cerr << __FILE__ << ":" << __LINE__ << " m_pool_db=" << (void *)m_pool_db.get() << " mpool_name=" << m_pool_name << std::endl;
 #warning check all ops for m_pool_db not null
 }
 
@@ -97,18 +103,17 @@ int LRemDBIoCtxImpl::append(LRemTransactionStateRef& trans, const bufferlist &bl
 
   uint64_t epoch;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   file = get_file_safe(trans, true, CEPH_NOSNAP, snapc, &epoch);
 
   auto objh = m_pool_db->get_obj_handler(trans->nspace(), trans->oid());
 
-  std::unique_lock l{file->lock};
+  std::unique_lock l{*file->lock};
 
   int r = objh->append(bl, epoch);
   if (r < 0) {
     return r;
   }
-  file->epoch = epoch;
 
   return 0;
 }
@@ -119,7 +124,7 @@ int LRemDBIoCtxImpl::assert_exists(const std::string &oid, uint64_t snap_id) {
   }
 
   std::shared_lock l{m_pool->file_lock};
-  LRemDBCluster::SharedFile file = get_file(oid, false, snap_id, {});
+  ObjFileRef file = get_file(oid, false, snap_id, {});
   if (file == NULL) {
     return -ENOENT;
   }
@@ -132,14 +137,14 @@ int LRemDBIoCtxImpl::assert_version(const std::string &oid, uint64_t ver) {
   }
 
   std::shared_lock l{m_pool->file_lock};
-  LRemDBCluster::SharedFile file = get_file(oid, false, CEPH_NOSNAP, {});
+  ObjFileRef file = get_file(oid, false, CEPH_NOSNAP, {});
   if (file == NULL || !file->exists) {
     return -ENOENT;
   }
-  if (ver < file->objver) {
+  if (ver < file->meta.objver) {
     return -ERANGE;
   }
-  if (ver > file->objver) {
+  if (ver > file->meta.objver) {
     return -EOVERFLOW;
   }
 
@@ -158,18 +163,26 @@ int LRemDBIoCtxImpl::create(const std::string& oid, bool exclusive,
   ldout(cct, 20) << "snapc=" << snapc << dendl;
 
   std::unique_lock l{m_pool->file_lock};
-  LRemDBCluster::SharedFile file = get_file(oid, false, CEPH_NOSNAP, {});
+  ObjFileRef file = get_file(oid, false, CEPH_NOSNAP, {});
   bool exists = (file != NULL && file->exists);
   if (exists) {
     return (exclusive ? -EEXIST : 0);
   }
 
   auto new_file = get_file(oid, true, CEPH_NOSNAP, snapc);
-  new_file->epoch = ++m_pool->epoch;
+  new_file->meta.epoch = ++m_pool->epoch;
+
+  int r = new_file->obj->write_meta(new_file->meta);
+  if (r < 0) {
+    return r;
+  }
+
   return 0;
 }
 
 int LRemDBIoCtxImpl::list_snaps(const std::string& oid, snap_set_t *out_snaps) {
+#warning implement me
+#if 0
   auto cct = m_client->cct();
   ldout(cct, 20) << dendl;
 
@@ -256,6 +269,7 @@ int LRemDBIoCtxImpl::list_snaps(const std::string& oid, snap_set_t *out_snaps) {
     }
   }
   *_dout << "]" << dendl;
+#endif
   return 0;
 
 }
@@ -272,7 +286,7 @@ int LRemDBIoCtxImpl::omap_get_vals2(const std::string& oid,
     return -EBLOCKLISTED;
   }
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
     file = get_file(oid, false, CEPH_NOSNAP, {});
@@ -283,7 +297,7 @@ int LRemDBIoCtxImpl::omap_get_vals2(const std::string& oid,
 
   out_vals->clear();
 
-  std::shared_lock l{file->lock};
+  std::shared_lock l{*file->lock};
   LRemDBCluster::FileOMaps::iterator o_it = m_pool->file_omaps.find(
     {get_namespace(), oid});
   if (o_it == m_pool->file_omaps.end()) {
@@ -330,7 +344,7 @@ int LRemDBIoCtxImpl::omap_get_vals_by_keys(const std::string& oid,
     return -EBLOCKLISTED;
   }
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
     file = get_file(oid, false, CEPH_NOSNAP, {});
@@ -341,7 +355,7 @@ int LRemDBIoCtxImpl::omap_get_vals_by_keys(const std::string& oid,
 
   vals->clear();
 
-  std::shared_lock l{file->lock};
+  std::shared_lock l{*file->lock};
   LRemDBCluster::FileOMaps::iterator o_it = m_pool->file_omaps.find(
     {get_namespace(), oid});
   if (o_it == m_pool->file_omaps.end()) {
@@ -368,7 +382,7 @@ int LRemDBIoCtxImpl::omap_rm_keys(const std::string& oid,
 
   uint64_t epoch;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
     file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
@@ -378,13 +392,13 @@ int LRemDBIoCtxImpl::omap_rm_keys(const std::string& oid,
     epoch = ++m_pool->epoch;
   }
 
-  std::unique_lock l{file->lock};
+  std::unique_lock l{*file->lock};
   for (std::set<std::string>::iterator it = keys.begin();
        it != keys.end(); ++it) {
     m_pool->file_omaps[{get_namespace(), oid}].data.erase(*it);
   }
-  file->epoch = epoch;
-  return 0;
+  file->meta.epoch = epoch;
+  return file->obj->write_meta(file->meta);
 }
 
 int LRemDBIoCtxImpl::omap_rm_range(const std::string& oid,
@@ -398,7 +412,7 @@ int LRemDBIoCtxImpl::omap_rm_range(const std::string& oid,
 
   uint64_t epoch;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
     file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
@@ -408,7 +422,7 @@ int LRemDBIoCtxImpl::omap_rm_range(const std::string& oid,
     epoch = ++m_pool->epoch;
   }
 
-  std::unique_lock l{file->lock};
+  std::unique_lock l{*file->lock};
 
   auto& omap = m_pool->file_omaps[{get_namespace(), oid}].data;
 
@@ -420,9 +434,9 @@ int LRemDBIoCtxImpl::omap_rm_range(const std::string& oid,
 
   omap.erase(start, end);
 
-  file->epoch = epoch;
+  file->modify_meta().epoch = epoch;
 
-  return 0;
+  return file->flush();
 }
 
 int LRemDBIoCtxImpl::omap_clear(const std::string& oid) {
@@ -434,7 +448,7 @@ int LRemDBIoCtxImpl::omap_clear(const std::string& oid) {
 
   uint64_t epoch;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
     file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
@@ -444,9 +458,9 @@ int LRemDBIoCtxImpl::omap_clear(const std::string& oid) {
     epoch = ++m_pool->epoch;
   }
 
-  std::unique_lock l{file->lock};
+  std::unique_lock l{*file->lock};
   m_pool->file_omaps[{get_namespace(), oid}].data.clear();
-  file->epoch = epoch;
+  file->modify_meta().epoch = epoch;
 
   return 0;
 }
@@ -461,7 +475,7 @@ int LRemDBIoCtxImpl::omap_set(const std::string& oid,
 
   uint64_t epoch;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
     file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
@@ -471,14 +485,14 @@ int LRemDBIoCtxImpl::omap_set(const std::string& oid,
     epoch = ++m_pool->epoch;
   }
 
-  std::unique_lock l{file->lock};
+  std::unique_lock l{*file->lock};
   for (std::map<std::string, bufferlist>::const_iterator it = map.begin();
       it != map.end(); ++it) {
     bufferlist bl;
     bl.append(it->second);
     m_pool->file_omaps[{get_namespace(), oid}].data[it->first] = bl;
   }
-  file->epoch = epoch;
+  file->modify_meta().epoch = epoch;
 
   return 0;
 }
@@ -493,13 +507,13 @@ int LRemDBIoCtxImpl::omap_get_header(LRemTransactionStateRef& trans,
   auto& oid = trans->oid();
   ldout(cct, 20) << ": <noargs>" << dendl;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   file = get_file_safe(trans, false, CEPH_NOSNAP, {});
   if (file == NULL) {
     return -ENOENT;
   }
 
-  std::shared_lock l{file->lock};
+  std::shared_lock l{*file->lock};
   auto iter = m_pool->file_omaps.find({get_namespace(), oid});
   if (iter == m_pool->file_omaps.end()) {
     bl->clear();
@@ -520,7 +534,7 @@ int LRemDBIoCtxImpl::omap_set_header(const std::string& oid,
 
   uint64_t epoch;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
     file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
@@ -530,9 +544,9 @@ int LRemDBIoCtxImpl::omap_set_header(const std::string& oid,
     epoch = ++m_pool->epoch;
   }
 
-  std::unique_lock l{file->lock};
+  std::unique_lock l{*file->lock};
   m_pool->file_omaps[{get_namespace(), oid}].header = bl;
-  file->epoch = epoch;
+  file->modify_meta().epoch = epoch;
 
   return 0;
 }
@@ -544,7 +558,7 @@ int LRemDBIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
     return -EBLOCKLISTED;
   }
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
     file = get_file(oid, false, snap_id, {});
@@ -553,18 +567,17 @@ int LRemDBIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
     }
   }
 
-  std::shared_lock l{file->lock};
-  if (len == 0) {
-    len = file->data.length();
+  std::shared_lock l{*file->lock};
+
+  int r = file->obj->read_data(off, len, bl);
+  if (r < 0) {
+    return r;
   }
-  len = clip_io(off, len, file->data.length());
-  if (bl != NULL && len > 0) {
-    bufferlist bit;
-    bit.substr_of(file->data, off, len);
-    append_clone(bit, bl);
-  }
+
+  len = r;
+
   if (objver != nullptr) {
-    *objver = file->objver;
+    *objver = file->meta.objver;
   }
   return len;
 }
@@ -579,38 +592,23 @@ int LRemDBIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
   auto cct = m_client->cct();
   ldout(cct, 20) << "snapc=" << snapc << dendl;
 
-  std::unique_lock l{m_pool->file_lock};
-  LRemDBCluster::SharedFile file = get_file(oid, false, CEPH_NOSNAP, snapc);
-  if (file == NULL) {
-    return -ENOENT;
-  }
-  file = get_file(oid, true, CEPH_NOSNAP, snapc);
+  ObjFileRef file;
 
+#warning check locking
   {
-    std::unique_lock l2{file->lock};
-    file->exists = false;
-  }
-
-  LRemCluster::ObjectLocator locator(get_namespace(), oid);
-  LRemDBCluster::Files::iterator it = m_pool->files.find(locator);
-  ceph_assert(it != m_pool->files.end());
-
-  if (*it->second.rbegin() == file) {
-    LRemDBCluster::ObjectHandlers object_handlers;
-    std::swap(object_handlers, m_pool->file_handlers[locator]);
-    m_pool->file_handlers.erase(locator);
-
-    for (auto object_handler : object_handlers) {
-      object_handler->handle_removed(m_client);
+    std::unique_lock l{m_pool->file_lock};
+    file = get_file(oid, false, CEPH_NOSNAP, snapc);
+    if (file == NULL) {
+      return -ENOENT;
     }
+    ++m_pool->epoch;
+    file = get_file(oid, true, CEPH_NOSNAP, snapc);
+    m_pool->file_omaps.erase({get_namespace(), oid});
   }
 
-  if (it->second.size() == 1) {
-    m_pool->files.erase(it);
-    m_pool->file_omaps.erase(locator);
-  }
-  ++m_pool->epoch;
-  return 0;
+  std::unique_lock l{*file->lock};
+
+  return file->obj->remove();
 }
 
 int LRemDBIoCtxImpl::selfmanaged_snap_create(uint64_t *snapid) {
@@ -649,9 +647,11 @@ int LRemDBIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
     return -EBLOCKLISTED;
   }
 
+#warning implement snaps
+#if 0
   std::unique_lock l{m_pool->file_lock};
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   LRemDBCluster::Files::iterator f_it = m_pool->files.find(
     {get_namespace(), oid});
   if (f_it == m_pool->files.end()) {
@@ -664,7 +664,7 @@ int LRemDBIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
   size_t versions = 0;
   for (LRemDBCluster::FileSnapshots::reverse_iterator it = snaps.rbegin();
       it != snaps.rend(); ++it) {
-    LRemDBCluster::SharedFile file = *it;
+    ObjFileRef file = *it;
     if (file->snap_id < get_snap_read()) {
       if (versions == 0) {
         // already at the snapshot version
@@ -690,6 +690,7 @@ int LRemDBIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
     ++versions;
   }
   ++m_pool->epoch;
+#endif
   return 0;
 }
 
@@ -723,7 +724,7 @@ int LRemDBIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
   }
 
   // TODO verify correctness
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
     file = get_file(oid, false, snap_id, {});
@@ -732,21 +733,20 @@ int LRemDBIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
     }
   }
 
-  std::shared_lock l{file->lock};
-  len = clip_io(off, len, file->data.length());
+  std::shared_lock l{*file->lock};
   // TODO support sparse read
+  bufferlist bl;
+  int read_len = read(oid, off, len, &bl, snap_id, nullptr);
   if (m != NULL) {
     m->clear();
-    if (len > 0) {
-      (*m)[off] = len;
+    if (read_len > 0) {
+      (*m)[off] = read_len;
     }
   }
-  if (data_bl != NULL && len > 0) {
-    bufferlist bit;
-    bit.substr_of(file->data, off, len);
-    append_clone(bit, data_bl);
+  if (data_bl != NULL && read_len > 0) {
+    data_bl->claim_append(bl);
   }
-  return len > 0 ? 1 : 0;
+  return read_len > 0 ? 1 : 0;
 }
 
 int LRemDBIoCtxImpl::stat2(LRemTransactionStateRef& trans, uint64_t *psize,
@@ -759,7 +759,7 @@ int LRemDBIoCtxImpl::stat2(LRemTransactionStateRef& trans, uint64_t *psize,
   auto& oid = trans->oid();
   ldout(cct, 20) << ": <noargs>" << dendl;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
     file = get_file(trans->oid(), false, CEPH_NOSNAP, {});
@@ -768,12 +768,12 @@ int LRemDBIoCtxImpl::stat2(LRemTransactionStateRef& trans, uint64_t *psize,
     }
   }
 
-  std::shared_lock l{file->lock};
+  std::shared_lock l{*file->lock};
   if (psize != NULL) {
-    *psize = file->data.length();
+    *psize = file->meta.size;
   }
   if (pts != NULL) {
-    *pts = file->mtime;
+    *pts = real_clock::to_timespec(file->meta.mtime);
   }
   return 0;
 }
@@ -788,16 +788,16 @@ int LRemDBIoCtxImpl::mtime2(const string& oid, const struct timespec& ts,
 
   uint64_t epoch;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
     file = get_file(oid, true, CEPH_NOSNAP, snapc);
     epoch = ++m_pool->epoch;
   }
 
-  std::unique_lock l{file->lock};
-  file->mtime = ts;
-  file->epoch = epoch;
+  std::unique_lock l{*file->lock};
+  file->modify_meta().mtime =  real_clock::from_timespec(ts);
+  file->modify_meta().epoch = epoch;
 
   return 0;
 }
@@ -815,36 +815,22 @@ int LRemDBIoCtxImpl::truncate(const std::string& oid, uint64_t size,
 
   uint64_t epoch;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
     file = get_file(oid, true, CEPH_NOSNAP, snapc);
     epoch = ++m_pool->epoch;
   }
 
-  std::unique_lock l{file->lock};
+  std::unique_lock l{*file->lock};
   bufferlist bl(size);
 
   interval_set<uint64_t> is;
-  if (file->data.length() > size) {
-    is.insert(size, file->data.length() - size);
-
-    bl.substr_of(file->data, 0, size);
-    file->data.swap(bl);
-  } else if (file->data.length() != size) {
-    if (size == 0) {
-      bl.clear();
-    } else {
-      is.insert(0, size);
-
-      bl.append_zero(size - file->data.length());
-      file->data.append(bl);
-    }
-  }
-  is.intersection_of(file->snap_overlap);
-  file->snap_overlap.subtract(is);
-  file->epoch = epoch;
-  return 0;
+  is.intersection_of(file->meta.snap_overlap);
+  file->modify_meta().epoch = epoch;
+  file->meta.snap_overlap.subtract(is);
+  file->obj->truncate(size, file->meta);
+  return file->flush();
 }
 
 int LRemDBIoCtxImpl::write(const std::string& oid, bufferlist& bl, size_t len,
@@ -860,25 +846,24 @@ int LRemDBIoCtxImpl::write(const std::string& oid, bufferlist& bl, size_t len,
                  << dendl;
   uint64_t epoch;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
     file = get_file(oid, true, CEPH_NOSNAP, snapc);
     epoch = ++m_pool->epoch;
   }
 
-  std::unique_lock l{file->lock};
+  std::unique_lock l{*file->lock};
   if (len > 0) {
     interval_set<uint64_t> is;
     is.insert(off, len);
-    is.intersection_of(file->snap_overlap);
-    file->snap_overlap.subtract(is);
+    is.intersection_of(file->meta.snap_overlap);
+    file->meta.snap_overlap.subtract(is);
   }
 
-  ensure_minimum_length(off + len, &file->data);
-  file->data.begin(off).copy_in(len, bl);
-  file->epoch = epoch;
-  return 0;
+  file->modify_meta().epoch = epoch;
+  file->obj->write(off, len, bl, file->meta);
+  return file->flush();
 }
 
 int LRemDBIoCtxImpl::write_full(const std::string& oid, bufferlist& bl,
@@ -893,7 +878,7 @@ int LRemDBIoCtxImpl::write_full(const std::string& oid, bufferlist& bl,
   ldout(cct, 20) << "length=" << bl.length() << ", snapc=" << snapc << dendl;
   uint64_t epoch;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
     file = get_file(oid, true, CEPH_NOSNAP, snapc);
@@ -903,19 +888,19 @@ int LRemDBIoCtxImpl::write_full(const std::string& oid, bufferlist& bl,
     epoch = ++m_pool->epoch;
   }
 
-  std::unique_lock l{file->lock};
+  std::unique_lock l{*file->lock};
   if (bl.length() > 0) {
     interval_set<uint64_t> is;
     is.insert(0, bl.length());
-    is.intersection_of(file->snap_overlap);
-    file->snap_overlap.subtract(is);
+    is.intersection_of(file->meta.snap_overlap);
+    file->meta.snap_overlap.subtract(is);
   }
 
-  file->data.clear();
-  ensure_minimum_length(bl.length(), &file->data);
-  file->data.begin().copy_in(bl.length(), bl);
-  file->epoch = epoch;
-  return 0;
+  file->modify_meta().epoch = epoch;
+
+  file->obj->truncate(0, file->meta);
+  file->obj->write(0, bl.length(), bl, file->meta);
+  return file->flush();
 }
 
 int LRemDBIoCtxImpl::writesame(const std::string& oid, bufferlist& bl,
@@ -933,31 +918,33 @@ int LRemDBIoCtxImpl::writesame(const std::string& oid, bufferlist& bl,
 
   uint64_t epoch;
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
     file = get_file(oid, true, CEPH_NOSNAP, snapc);
     epoch = ++m_pool->epoch;
   }
 
-  std::unique_lock l{file->lock};
+  std::unique_lock l{*file->lock};
   if (len > 0) {
     interval_set<uint64_t> is;
     is.insert(off, len);
-    is.intersection_of(file->snap_overlap);
-    file->snap_overlap.subtract(is);
+    is.intersection_of(file->meta.snap_overlap);
+    file->meta.snap_overlap.subtract(is);
   }
 
-  ensure_minimum_length(off + len, &file->data);
   while (len > 0) {
-    file->data.begin(off).copy_in(bl.length(), bl);
+    int r = file->obj->write(off, len, bl, file->meta);
+    if (r < 0) {
+      return r;
+    }
     off += bl.length();
     len -= bl.length();
   }
 
-  file->epoch = epoch;
+  file->modify_meta().epoch = epoch;
 
-  return 0;
+  return file->flush();;
 }
 
 int LRemDBIoCtxImpl::cmpext(const std::string& oid, uint64_t off,
@@ -969,7 +956,7 @@ int LRemDBIoCtxImpl::cmpext(const std::string& oid, uint64_t off,
   bufferlist read_bl;
   uint64_t len = cmp_bl.length();
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
     file = get_file(oid, false, snap_id, {});
@@ -978,13 +965,18 @@ int LRemDBIoCtxImpl::cmpext(const std::string& oid, uint64_t off,
     }
   }
 
-  std::shared_lock l{file->lock};
-  if (off >= file->data.length()) {
+  std::shared_lock l{*file->lock};
+  if (off >= file->meta.size) {
     len = 0;
-  } else if (off + len > file->data.length()) {
-    len = file->data.length() - off;
+  } else if (off + len > file->meta.size) {
+    len = file->meta.size - off;
   }
-  read_bl.substr_of(file->data, off, len);
+
+  int r = file->obj->read_data(off, len, &read_bl);
+  if (r < 0) {
+    return r;
+  }
+
   return cmpext_compare(cmp_bl, read_bl);
 }
 
@@ -995,7 +987,7 @@ int LRemDBIoCtxImpl::cmpxattr_str(const string& oid,
     return -EBLOCKLISTED;
   }
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   std::shared_lock l{m_pool->file_lock};
   LRemDBCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(
     {get_namespace(), oid});
@@ -1050,7 +1042,7 @@ int LRemDBIoCtxImpl::cmpxattr(const string& oid,
     return -EBLOCKLISTED;
   }
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   std::shared_lock l{m_pool->file_lock};
   LRemDBCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(
     {get_namespace(), oid});
@@ -1181,7 +1173,7 @@ int LRemDBIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len,
                  << dendl;
 
   bool truncate_redirect = false;
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
     file = get_file(oid, false, CEPH_NOSNAP, snapc);
@@ -1190,12 +1182,12 @@ int LRemDBIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len,
     }
     file = get_file(oid, true, CEPH_NOSNAP, snapc);
 
-    std::shared_lock l2{file->lock};
-    if (len > 0 && off + len >= file->data.length()) {
+    std::shared_lock l2{*file->lock};
+    if (len > 0 && off + len >= file->meta.size) {
       // Zero -> Truncate logic embedded in OSD
       truncate_redirect = true;
     }
-    file->epoch = ++m_pool->epoch;
+    file->modify_meta().epoch = ++m_pool->epoch;
   }
   if (truncate_redirect) {
     return truncate(oid, off, snapc);
@@ -1211,7 +1203,7 @@ int LRemDBIoCtxImpl::get_current_ver(const std::string& oid, uint64_t *ver) {
     return -EBLOCKLISTED;
   }
 
-  LRemDBCluster::SharedFile file;
+  ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
     file = get_file(oid, false, CEPH_NOSNAP, {});
@@ -1219,7 +1211,7 @@ int LRemDBIoCtxImpl::get_current_ver(const std::string& oid, uint64_t *ver) {
       return -ENOENT;
     }
 
-    *ver = file->epoch;
+    *ver = file->meta.epoch;
   }
 
   return 0;
@@ -1253,82 +1245,111 @@ void LRemDBIoCtxImpl::ensure_minimum_length(size_t len, bufferlist *bl) {
   }
 }
 
-LRemDBCluster::SharedFile LRemDBIoCtxImpl::get_file(
+LRemDBIoCtxImpl::ObjFileRef LRemDBIoCtxImpl::get_file(
     const std::string &oid, bool write, uint64_t snap_id,
     const SnapContext &snapc) {
   ceph_assert(ceph_mutex_is_locked(m_pool->file_lock) ||
 	      ceph_mutex_is_wlocked(m_pool->file_lock));
   ceph_assert(!write || ceph_mutex_is_wlocked(m_pool->file_lock));
 
+
+  auto of = make_shared<ObjFile>();
+
+  of->obj = m_pool_db->get_obj_handler(get_namespace(), oid);
+
+  int r = of->obj->read_meta(&of->meta);
+  if (r < 0 && r != -ENOENT) {
+    return ObjFileRef();
+  }
+  of->exists = (r == 0);
+
+  if (!of->exists && !write) {
+    return ObjFileRef();
+  }
+
+
+  auto& meta = of->meta;
+#if 0
   LRemDBCluster::SharedFile file;
   LRemDBCluster::Files::iterator it = m_pool->files.find(
     {get_namespace(), oid});
   if (it != m_pool->files.end()) {
     file = it->second.back();
   } else if (!write) {
-    return LRemDBCluster::SharedFile();
+    return ObjFileRef();
+  }
+#endif
+
+#warning FIXME lock
+  if (of->exists || write) {
+    of->lock = &m_pool->file_locks[{get_namespace(), oid}].lock;
   }
 
   if (write) {
     bool new_version = false;
-    if (!file || !file->exists) {
-      file = LRemDBCluster::SharedFile(new LRemDBCluster::File());
+    if (!of->exists) {
       new_version = true;
     } else {
-      if (!snapc.snaps.empty() && file->snap_id < snapc.seq) {
+      if (!snapc.snaps.empty() && meta.snap_id < snapc.seq) {
         for (std::vector<snapid_t>::const_reverse_iterator seq_it =
             snapc.snaps.rbegin();
             seq_it != snapc.snaps.rend(); ++seq_it) {
-          if (*seq_it > file->snap_id && *seq_it <= snapc.seq) {
-            file->snaps.push_back(*seq_it);
+          if (*seq_it > meta.snap_id && *seq_it <= snapc.seq) {
+            meta.snaps.push_back(*seq_it);
           }
         }
 
+#warning clone snap
+#if 0
         bufferlist prev_data = file->data;
         file = LRemDBCluster::SharedFile(
           new LRemDBCluster::File(*file));
         file->data.clear();
         append_clone(prev_data, &file->data);
         if (prev_data.length() > 0) {
-          file->snap_overlap.insert(0, prev_data.length());
+          meta.snap_overlap.insert(0, prev_data.length());
         }
+#endif
         new_version = true;
       }
     }
 
     if (new_version) {
-      file->snap_id = snapc.seq;
-      file->mtime = real_clock::to_timespec(real_clock::now());
-      m_pool->files[{get_namespace(), oid}].push_back(file);
+      meta.snap_id = snapc.seq;
+      meta.mtime = real_clock::now();
     }
 
-    file->objver++;
-    return file;
+    meta.objver++;
+    return of;
   }
 
   if (snap_id == CEPH_NOSNAP) {
-    if (!file->exists) {
+    if (!of->exists) {
+#if 0
       ceph_assert(it->second.size() > 1);
-      return LRemDBCluster::SharedFile();
+#endif
+      return ObjFileRef();
     }
-    return file;
+    return of;
   }
 
+#if 0
   LRemDBCluster::FileSnapshots &snaps = it->second;
   for (LRemDBCluster::FileSnapshots::reverse_iterator it = snaps.rbegin();
       it != snaps.rend(); ++it) {
-    LRemDBCluster::SharedFile file = *it;
-    if (file->snap_id < snap_id) {
-      if (!file->exists) {
-        return LRemDBCluster::SharedFile();
+    ObjFileRef file = *it;
+    if (meta.snap_id < snap_id) {
+      if (!of->exists) {
+        return ObjFileRef();
       }
-      return file;
+      return of;
     }
   }
-  return LRemDBCluster::SharedFile();
+#endif
+  return ObjFileRef();
 }
 
-LRemDBCluster::SharedFile LRemDBIoCtxImpl::get_file_safe(
+LRemDBIoCtxImpl::ObjFileRef LRemDBIoCtxImpl::get_file_safe(
     LRemTransactionStateRef& trans, bool write, uint64_t snap_id,
     const SnapContext &snapc,
     uint64_t *pepoch) {
@@ -1362,6 +1383,21 @@ int LRemDBIoCtxImpl::pool_op(LRemTransactionStateRef& trans,
 
   std::shared_lock l{m_pool->file_lock};
   return op(m_pool, false);
+}
+
+int LRemDBIoCtxImpl::ObjFile::flush() {
+  int r;
+
+  if (flags & ModFlags::Meta) {
+    r = obj->write_meta(meta);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  flags = 0;
+
+  return 0;
 }
 
 LRemTransactionStateRef LRemDBIoCtxImpl::init_transaction(const std::string& oid) {

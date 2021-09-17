@@ -34,7 +34,8 @@ LRemRadosClient *LRemMemCluster::create_rados_client(CephContext *cct) {
   return new LRemMemRadosClient(cct, this);
 }
 
-int LRemMemCluster::register_object_handler(int64_t pool_id,
+int LRemMemCluster::register_object_handler(LRemRadosClient *rados_client,
+                                            int64_t pool_id,
                                             const ObjectLocator& locator,
                                             ObjectHandler* object_handler) {
   std::lock_guard locker{m_lock};
@@ -57,7 +58,8 @@ int LRemMemCluster::register_object_handler(int64_t pool_id,
   return 0;
 }
 
-void LRemMemCluster::unregister_object_handler(int64_t pool_id,
+void LRemMemCluster::unregister_object_handler(LRemRadosClient *rados_client,
+                                               int64_t pool_id,
                                                const ObjectLocator& locator,
                                                ObjectHandler* object_handler) {
   std::lock_guard locker{m_lock};
@@ -173,8 +175,8 @@ bool LRemMemCluster::is_blocklisted(uint32_t nonce) const {
   return (m_blocklist.find(nonce) != m_blocklist.end());
 }
 
-void LRemMemCluster::blocklist(uint32_t nonce) {
-  m_watch_notify.blocklist(nonce);
+void LRemMemCluster::blocklist(LRemRadosClient *rados_client, uint32_t nonce) {
+  m_watch_notify.blocklist(rados_client, nonce);
 
   std::lock_guard locker{m_lock};
   m_blocklist.insert(nonce);

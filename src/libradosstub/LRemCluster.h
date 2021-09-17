@@ -42,10 +42,12 @@ public:
 
   virtual LRemRadosClient *create_rados_client(CephContext *cct) = 0;
 
-  virtual int register_object_handler(int64_t pool_id,
+  virtual int register_object_handler(LRemRadosClient *client,
+                                      int64_t pool_id,
                                       const ObjectLocator& locator,
                                       ObjectHandler* object_handler) = 0;
-  virtual void unregister_object_handler(int64_t pool_id,
+  virtual void unregister_object_handler(LRemRadosClient *client,
+                                         int64_t pool_id,
                                          const ObjectLocator& locator,
                                          ObjectHandler* object_handler) = 0;
 

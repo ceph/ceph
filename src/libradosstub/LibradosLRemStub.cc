@@ -47,7 +47,7 @@ void set_cluster(LRemClusterRef cluster_ref) {
 LRemClusterRef get_cluster() {
   auto &cluster_ref = cluster();
   if (cluster_ref.get() == nullptr) {
-    cluster_ref.reset(new librados::LRemDBCluster());
+    cluster_ref.reset(new librados::LRemDBCluster(g_ceph_context));
   }
   return cluster_ref;
 }

@@ -63,11 +63,12 @@ void LRemWatchNotify::flush(LRemRadosClient *rados_client) {
   ctx.wait();
 }
 
-int LRemWatchNotify::list_watchers(int64_t pool_id, const std::string& nspace,
+int LRemWatchNotify::list_watchers(LRemRadosClient *rados_client,
+                                   int64_t pool_id, const std::string& nspace,
                                    const std::string& o,
                                    std::list<obj_watch_t> *out_watchers) {
   std::lock_guard lock{m_lock};
-  SharedWatcher watcher = get_watcher(pool_id, nspace, o);
+  SharedWatcher watcher = get_watcher(rados_client, pool_id, nspace, o);
   if (!watcher) {
     return -ENOENT;
   }
@@ -172,7 +173,7 @@ void LRemWatchNotify::execute_watch(LRemRadosClient *rados_client,
   CephContext *cct = rados_client->cct();
 
   m_lock.lock();
-  SharedWatcher watcher = get_watcher(pool_id, nspace, o);
+  SharedWatcher watcher = get_watcher(rados_client, pool_id, nspace, o);
   if (!watcher) {
     m_lock.unlock();
     on_finish->complete(-ENOENT);
@@ -212,7 +213,7 @@ void LRemWatchNotify::execute_unwatch(LRemRadosClient *rados_client,
       WatchHandles::iterator w_it = watcher->watch_handles.find(handle);
       if (w_it != watcher->watch_handles.end()) {
         watcher->watch_handles.erase(w_it);
-        maybe_remove_watcher(watcher);
+        maybe_remove_watcher(rados_client, watcher);
         break;
       }
     }
@@ -221,6 +222,7 @@ void LRemWatchNotify::execute_unwatch(LRemRadosClient *rados_client,
 }
 
 LRemWatchNotify::SharedWatcher LRemWatchNotify::get_watcher(
+    LRemRadosClient *rados_client,
     int64_t pool_id, const std::string& nspace, const std::string& oid) {
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
@@ -229,7 +231,7 @@ LRemWatchNotify::SharedWatcher LRemWatchNotify::get_watcher(
     SharedWatcher watcher(new Watcher(pool_id, nspace, oid));
     watcher->object_handler.reset(new ObjectHandler(
       this, pool_id, nspace, oid));
-    int r = m_lrem_cluster->register_object_handler(
+    int r = m_lrem_cluster->register_object_handler(rados_client,
       pool_id, {nspace, oid}, watcher->object_handler.get());
     if (r < 0) {
       // object doesn't exist
@@ -242,7 +244,7 @@ LRemWatchNotify::SharedWatcher LRemWatchNotify::get_watcher(
   return it->second;
 }
 
-void LRemWatchNotify::maybe_remove_watcher(SharedWatcher watcher) {
+void LRemWatchNotify::maybe_remove_watcher(LRemRadosClient *client, SharedWatcher watcher) {
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   // TODO
@@ -251,7 +253,8 @@ void LRemWatchNotify::maybe_remove_watcher(SharedWatcher watcher) {
     auto& nspace = watcher->nspace;
     auto& oid = watcher->oid;
     if (watcher->object_handler) {
-      m_lrem_cluster->unregister_object_handler(pool_id, {nspace, oid},
+      m_lrem_cluster->unregister_object_handler(client,
+                                                pool_id, {nspace, oid},
                                                 watcher->object_handler.get());
       watcher->object_handler.reset();
     }
@@ -270,7 +273,7 @@ void LRemWatchNotify::execute_notify(LRemRadosClient *rados_client,
   m_lock.lock();
   uint64_t notify_id = ++m_notify_id;
 
-  SharedWatcher watcher = get_watcher(pool_id, nspace, oid);
+  SharedWatcher watcher = get_watcher(rados_client, pool_id, nspace, oid);
   if (!watcher) {
     ldout(cct, 1) << "oid=" << oid << ": not found" << dendl;
     m_lock.unlock();
@@ -327,7 +330,7 @@ void LRemWatchNotify::ack_notify(LRemRadosClient *rados_client, int64_t pool_id,
   CephContext *cct = rados_client->cct();
 
   ceph_assert(ceph_mutex_is_locked(m_lock));
-  SharedWatcher watcher = get_watcher(pool_id, nspace, oid);
+  SharedWatcher watcher = get_watcher(rados_client, pool_id, nspace, oid);
   if (!watcher) {
     ldout(cct, 1) << "oid=" << oid << ": not found" << dendl;
     return;
@@ -360,7 +363,7 @@ void LRemWatchNotify::finish_notify(LRemRadosClient *rados_client,
   ldout(cct, 20) << "oid=" << oid << ", notify_id=" << notify_id << dendl;
 
   ceph_assert(ceph_mutex_is_locked(m_lock));
-  SharedWatcher watcher = get_watcher(pool_id, nspace, oid);
+  SharedWatcher watcher = get_watcher(rados_client, pool_id, nspace, oid);
   if (!watcher) {
     ldout(cct, 1) << "oid=" << oid << ": not found" << dendl;
     return;
@@ -391,10 +394,10 @@ void LRemWatchNotify::finish_notify(LRemRadosClient *rados_client,
   notify_handle->rados_client->get_aio_finisher()->queue(
     notify_handle->on_notify, 0);
   watcher->notify_handles.erase(notify_id);
-  maybe_remove_watcher(watcher);
+  maybe_remove_watcher(rados_client, watcher);
 }
 
-void LRemWatchNotify::blocklist(uint32_t nonce) {
+void LRemWatchNotify::blocklist(LRemRadosClient *rados_client, uint32_t nonce) {
   std::lock_guard locker{m_lock};
 
   for (auto file_it = m_file_watchers.begin();
@@ -410,7 +413,7 @@ void LRemWatchNotify::blocklist(uint32_t nonce) {
     }
 
     ++file_it;
-    maybe_remove_watcher(watcher);
+    maybe_remove_watcher(rados_client, watcher);
   }
 }
 

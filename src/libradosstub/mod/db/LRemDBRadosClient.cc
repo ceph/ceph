@@ -106,7 +106,7 @@ int LRemDBRadosClient::blocklist_add(const std::string& client_address,
     return -EINVAL;
   }
 
-  m_mem_cluster->blocklist(nonce);
+  m_mem_cluster->blocklist(this, nonce);
   return 0;
 }
 

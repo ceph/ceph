@@ -70,6 +70,10 @@ public:
     return -ENOTSUP;
   }
 
+  LRemDBStore::Cluster& get_dbc() {
+    return *m_dbc;
+  }
+
 protected:
   LRemDBCluster *get_mem_cluster() {
     return m_mem_cluster;

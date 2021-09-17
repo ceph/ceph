@@ -121,13 +121,35 @@ private:
   size_t clip_io(size_t off, size_t len, size_t bl_len);
   void ensure_minimum_length(size_t len, bufferlist *bl);
 
-  LRemDBCluster::SharedFile get_file(const std::string &oid, bool write,
-                                      uint64_t snap_id,
-                                      const SnapContext &snapc);
-  LRemDBCluster::SharedFile get_file_safe(LRemTransactionStateRef& trans,
-                                           bool write, uint64_t snap_id,
-                                           const SnapContext &snapc,
-                                           uint64_t *opt_epoch = nullptr);
+  struct ObjFile {
+    bool exists{false};
+    LRemDBStore::Obj::Meta meta;
+    LRemDBStore::ObjRef obj;
+
+    ceph::shared_mutex *lock{nullptr};
+
+    uint16_t flags;
+
+    enum ModFlags {
+      Meta = 0x01,
+    };
+
+    LRemDBStore::Obj::Meta& modify_meta() {
+      flags |= (int)ModFlags::Meta;
+      return meta;
+    }
+
+    int flush();
+  };
+  using ObjFileRef = std::shared_ptr<ObjFile>;
+
+  ObjFileRef get_file(const std::string &oid, bool write,
+                      uint64_t snap_id,
+                      const SnapContext &snapc);
+  ObjFileRef get_file_safe(LRemTransactionStateRef& trans,
+                           bool write, uint64_t snap_id,
+                           const SnapContext &snapc,
+                           uint64_t *opt_epoch = nullptr);
 
   typedef boost::function<int(LRemDBCluster::PoolRef&, bool)> PoolOperation;
   int pool_op(LRemTransactionStateRef& trans,

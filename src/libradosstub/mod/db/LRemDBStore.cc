@@ -44,11 +44,16 @@ string encode_base64(const T& t)
   bufferlist bl;
   ceph::encode(t, bl);
 
-  char dst[bl.length() * 2];
+  char dst[bl.length() * 2 + 16];
   char *dend = dst + sizeof(dst);
 
-  int r = ceph_armor(dst, dend, bl.c_str(), dend);
+  char *src = bl.c_str();
+  char *send = src + bl.length();
+
+  int r = ceph_armor(dst, dend, src, send);
   assert (r >= 0);
+
+  dst[r] = '\0';
 
   return string(dst);
 }
@@ -67,7 +72,7 @@ int decode_base64(const string& s, T *t)
   if (r < 0) {
     return r;
   }
-  bufferptr bp(dst, ssize);
+  bufferptr bp(dst, r);
   bufferlist bl;
   bl.push_back(bp);
 
@@ -83,7 +88,8 @@ int decode_base64(const string& s, T *t)
 namespace librados {
 
 LRemDBOps::LRemDBOps(const string& name, int flags) {
-  db = std::make_unique<SQLite::Database>(name, flags);
+#define DB_TIMEOUT_SEC 20
+  db = std::make_unique<SQLite::Database>(name, flags, DB_TIMEOUT_SEC * 1000);
 }
 
 SQLite::Transaction LRemDBOps::new_transaction() {
@@ -127,20 +133,30 @@ int LRemDBOps::exec(SQLite::Statement& stmt)
 {
   int r;
 
-  try {
-    dout(20) << "SQL: " << stmt.getExpandedSQL() << dendl;
-    r = stmt.exec();
-    /* return code is not interesting */
-  } catch (SQLite::Exception& e) {
-    std::cerr << "exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << std::endl;
-    return -EIO;
-  }
+  bool retry;
+
+  do {
+
+    try {
+      retry = false;
+      dout(20) << "SQL: " << stmt.getExpandedSQL() << dendl;
+      r = stmt.exec();
+      /* return code is not interesting */
+    } catch (SQLite::Exception& e) {
+      dout(0) << "exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
+      if (e.getExtendedErrorCode() == 5) {
+        retry = true;
+        continue;
+      }
+      return -EIO;
+    }
+  } while (retry);
   return r;
 }
 
 LRemDBStore::Cluster::Cluster(const string& cluster_name) {
   string dbname = string("cluster-") + cluster_name + ".db3";
-  dbo = make_shared<LRemDBOps>(dbname, SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
+  dbo = make_shared<LRemDBOps>(dbname, SQLite::OPEN_NOMUTEX|SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
 }
 
 int LRemDBStore::Cluster::init() {
@@ -156,8 +172,6 @@ int LRemDBStore::Cluster::init() {
 
 int LRemDBStore::Cluster::list_pools(std::map<string, PoolRef> *pools)
 {
-//ldout(g_ceph_context, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "()" << dendl;
-
   pools->clear();
   try {
     auto q = dbo->statement("SELECT * from pools");
@@ -179,8 +193,6 @@ int LRemDBStore::Cluster::list_pools(std::map<string, PoolRef> *pools)
 }
 
 int LRemDBStore::Cluster::get_pool(const string& name, PoolRef *pool) {
-//ldout(g_ceph_context, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "()" << dendl;
-
   try {
     auto q = dbo->statement("SELECT * from pools WHERE name = ?");
 
@@ -204,8 +216,6 @@ int LRemDBStore::Cluster::get_pool(const string& name, PoolRef *pool) {
 }
 
 int LRemDBStore::Cluster::get_pool(int id, PoolRef *pool) {
-//ldout(g_ceph_context, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "()" << dendl;
-
   try {
     auto q = dbo->statement("SELECT * from pools WHERE id = ?");
 
@@ -233,16 +243,12 @@ SQLite::Transaction LRemDBStore::Cluster::new_transaction() {
 }
 
 int LRemDBStore::Cluster::create_pool(const string& name, const string& val) {
-//ldout(g_ceph_context, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "()" << dendl;
-
   PoolRef pool = make_shared<Pool>(dbo);
 
   return pool->create(name, val);
 }
 
 int LRemDBStore::Pool::create(const string& _name, const string& _val) {
-//ldout(g_ceph_context, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "()" << dendl;
-
 
   name = _name;
   value = _val;
@@ -360,11 +366,11 @@ void LRemDBStore::Obj::Meta::touch(uint64_t _epoch)
 
 int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
   try {
-    auto q = dbo->statement("SELECT size, mtime, objver, snap_id, snaps, snap_overlap, epoch from ? WHERE nspace = ? AND oid = ?");
+    auto q = dbo->statement(string("SELECT size, mtime, objver, snap_id, snaps, snap_overlap, epoch from ") + table_name +
+                            " WHERE nspace = ? AND oid = ?");
 
-    q.bind(1, table_name);
-    q.bind(2, nspace);
-    q.bind(3, oid);
+    q.bind(1, nspace);
+    q.bind(2, oid);
 
     if (q.executeStep()) {
       pmeta->size = (long long)q.getColumn(0);
@@ -398,19 +404,33 @@ int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
 }
 
 int LRemDBStore::Obj::write_meta(const LRemDBStore::Obj::Meta& meta) {
-  auto q = dbo->statement("REPLACE INTO ? VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"); 
+  auto q = dbo->statement(string("REPLACE INTO ") + table_name + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"); 
 
-  q.bind(1, table_name);
-  q.bind(2, nspace);
-  q.bind(3, oid);
+  q.bind(1, nspace);
+  q.bind(2, oid);
 
-  q.bind(4, (long long)meta.size);
-  q.bind(5, ceph::to_iso_8601(meta.mtime));
-  q.bind(6, (long long)meta.objver);
-  q.bind(7, (long long)meta.snap_id);
-  q.bind(8, encode_base64(meta.snaps));
-  q.bind(9, encode_base64(meta.snap_overlap));
-  q.bind(10, (long long)meta.epoch);
+  q.bind(3, (long long)meta.size);
+  q.bind(4, ceph::to_iso_8601(meta.mtime));
+  q.bind(5, (long long)meta.objver);
+  q.bind(6, (long long)meta.snap_id);
+  q.bind(7, encode_base64(meta.snaps));
+  q.bind(8, encode_base64(meta.snap_overlap));
+  q.bind(9, (long long)meta.epoch);
+
+  int r = dbo->exec(q);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int LRemDBStore::Obj::remove_meta() {
+  auto q = dbo->statement(string("DELETE FROM ") + table_name +
+                          " WHERE nspace = ? and oid = ?"); 
+
+  q.bind(1, nspace);
+  q.bind(2, oid);
 
   int r = dbo->exec(q);
   if (r < 0) {
@@ -423,11 +443,11 @@ int LRemDBStore::Obj::write_meta(const LRemDBStore::Obj::Meta& meta) {
 int LRemDBStore::Obj::read_data(uint64_t ofs, uint64_t len,
                                 bufferlist *bl) {
 
-  auto q = dbo->statement("SELECT size from ? WHERE nspace = ? AND oid = ?");
+  auto q = dbo->statement(string("SELECT size FROM ") + table_name +
+                          " WHERE nspace = ? AND oid = ?");
 
-  q.bind(1, table_name);
-  q.bind(2, nspace);
-  q.bind(3, oid);
+  q.bind(1, nspace);
+  q.bind(2, oid);
 
   if (!q.executeStep()) {
     return -ENOENT;
@@ -461,6 +481,8 @@ int LRemDBStore::Obj::write_data(uint64_t ofs, uint64_t len,
   if (r < 0) {
     return r;
   }
+
+  len = r;
 #if 0
   uint64_t size = ofs + len;
 #warning update epoch, mtime
@@ -480,7 +502,7 @@ int LRemDBStore::Obj::write_data(uint64_t ofs, uint64_t len,
   }
 #endif
 
-  return 0;
+  return len;
 }
 
 int LRemDBStore::Obj::write(uint64_t ofs, uint64_t len,
@@ -493,13 +515,14 @@ int LRemDBStore::Obj::write(uint64_t ofs, uint64_t len,
     return r;
   }
 
-  return write(ofs, len, bl, epoch);
+  meta.touch(epoch);
+
+  return write(ofs, len, bl, meta);
 }
 
 int LRemDBStore::Obj::write(uint64_t ofs, uint64_t len,
                             const bufferlist& bl,
-                            LRemDBStore::Obj::Meta& meta,
-                            uint64_t epoch) {
+                            LRemDBStore::Obj::Meta& meta) {
   int r = write_data(ofs, len, bl);
   if (r < 0) {
     return r;
@@ -510,7 +533,34 @@ int LRemDBStore::Obj::write(uint64_t ofs, uint64_t len,
     meta.size = size;
   }
 
-  meta.touch(epoch);
+  return 0;
+}
+
+int LRemDBStore::Obj::remove() {
+  ObjData od(dbo, pool_id, nspace, oid);
+
+  int r = od.remove();
+  if (r < 0) {
+    return r;
+  }
+
+  return remove_meta();
+}
+
+int LRemDBStore::Obj::truncate(uint64_t ofs,
+                               LRemDBStore::Obj::Meta& meta) {
+  ObjData od(dbo, pool_id, nspace, oid);
+
+  int r;
+
+  if (ofs >= meta.size) {
+    r = od.truncate(ofs);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  meta.size = ofs;
 
   return write_meta(meta);
 }
@@ -541,23 +591,23 @@ int LRemDBStore::ObjData::create_table() {
 }
 
 int LRemDBStore::ObjData::read_block(int bid, bufferlist *bl) {
-  SQLite::Statement q = dbo->statement("SELECT data from ? WHERE nspace = ? AND oid = ? AND bid == ?");
+  SQLite::Statement q = dbo->statement(string("SELECT data FROM ") + table_name +
+                                       " WHERE nspace = ? AND oid = ? AND bid == ?");
 
-  q.bind(1, table_name);
-  q.bind(2, nspace);
-  q.bind(3, oid);
-  q.bind(4, bid);
+  q.bind(1, nspace);
+  q.bind(2, oid);
+  q.bind(3, bid);
 
-  int r = dbo->exec(q);
-  if (r < 0) {
-    return r;
+  try {
+    if (!q.executeStep()) {
+      return -ENOENT;
+    }
+  } catch (SQLite::Exception& e) {
+    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
+    return -EIO;
   }
 
-  if (!q.executeStep()) {
-    return -ENOENT;
-  }
-
-  auto blob_col = q.getColumn(1);
+  auto blob_col = q.getColumn(0);
 
   const char *data = (const char *)blob_col.getBlob();
   size_t len = blob_col.getBytes();
@@ -569,12 +619,29 @@ int LRemDBStore::ObjData::read_block(int bid, bufferlist *bl) {
 }
 
 int LRemDBStore::ObjData::write_block(int bid, bufferlist& bl) {
-  SQLite::Statement q = dbo->statement("REPLACE INTO ? VALUES ( ?, ?, ?, ?, ? )");
+  SQLite::Statement q = dbo->statement(string("REPLACE INTO ") + table_name +
+                                       " VALUES ( ?, ?, ?, ? )");
 
-  q.bind(1, table_name);
-  q.bind(2, nspace);
+  q.bind(1, nspace);
+  q.bind(2, oid);
   q.bind(3, bid);
   q.bind(4, bl.c_str(), bl.length());
+
+  int r = dbo->exec(q);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int LRemDBStore::ObjData::truncate_block(int bid) {
+  SQLite::Statement q = dbo->statement(string("DELETE FROM ") + table_name +
+                                       " WHERE nspace = ? and oid = ? and bid >= ?");
+
+  q.bind(1, nspace);
+  q.bind(2, oid);
+  q.bind(3, bid);
 
   int r = dbo->exec(q);
   if (r < 0) {
@@ -667,6 +734,57 @@ int LRemDBStore::ObjData::write(uint64_t ofs, uint64_t len, const bufferlist& bl
   }
 
   return (int)write_len;
+}
+
+int LRemDBStore::ObjData::remove() {
+  SQLite::Statement q = dbo->statement(string("DELETE FROM ") + table_name +
+                                       " WHERE nspace = ? and oid = ?");
+
+  q.bind(1, nspace);
+  q.bind(2, oid);
+
+  int r = dbo->exec(q);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int LRemDBStore::ObjData::truncate(uint64_t ofs) {
+  int start_block = (ofs + block_size - 1) / block_size;
+
+  int r = truncate_block(start_block);
+  if (r < 0) {
+    return r;
+  }
+
+  if (start_block == 0) {
+    return 0;
+  }
+
+  int block_ofs = ofs % block_size;
+  if (block_ofs == 0) {
+    return 0;
+  }
+
+  int bid = start_block - 1;
+
+  bufferlist bl;
+  r = read_block(bid, &bl);
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist newbl;
+  bl.splice(0, block_ofs, &newbl);
+
+  r = write_block(bid, newbl);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
 }
 
 int LRemDBStore::KVTableBase::create_table() {

@@ -236,7 +236,7 @@ protected:
                              int flags,
                              uint64_t* objver);
 
-private:
+protected:
   struct C_AioNotify : public Context {
     LRemIoCtxImpl *io_ctx;
     AioCompletionImpl *aio_comp;

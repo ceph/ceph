@@ -67,7 +67,8 @@ public:
 
   LRemWatchNotify(LRemCluster* lrem_cluster);
 
-  int list_watchers(int64_t pool_id, const std::string& nspace,
+  int list_watchers(LRemRadosClient *rados_client,
+                    int64_t pool_id, const std::string& nspace,
                     const std::string& o, std::list<obj_watch_t> *out_watchers);
 
   void aio_flush(LRemRadosClient *rados_client, Context *on_finish);
@@ -97,7 +98,7 @@ public:
             librados::WatchCtx2 *ctx2);
   int unwatch(LRemRadosClient *rados_client, uint64_t handle);
 
-  void blocklist(uint32_t nonce);
+  void blocklist(LRemRadosClient *rados_client, uint32_t nonce);
 
 private:
   typedef std::tuple<int64_t, std::string, std::string> PoolFile;
@@ -114,9 +115,11 @@ private:
 
   FileWatchers	m_file_watchers;
 
-  SharedWatcher get_watcher(int64_t pool_id, const std::string& nspace,
+  SharedWatcher get_watcher(LRemRadosClient *rados_client,
+                            int64_t pool_id, const std::string& nspace,
                             const std::string& oid);
-  void maybe_remove_watcher(SharedWatcher shared_watcher);
+  void maybe_remove_watcher(LRemRadosClient *rados_client,
+                            SharedWatcher shared_watcher);
 
   void execute_watch(LRemRadosClient *rados_client, int64_t pool_id,
                      const std::string& nspace, const std::string& o,
