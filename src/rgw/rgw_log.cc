@@ -435,7 +435,11 @@ int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
 
   entry.op = op_name;
 
-  entry.identity_type = s->auth.identity->get_identity_type();
+  if (s->auth.identity) {
+    entry.identity_type = s->auth.identity->get_identity_type();
+  } else {
+    entry.identity_type = TYPE_NONE;
+  }
 
   if (! s->token_claims.empty()) {
     entry.token_claims = std::move(s->token_claims);
