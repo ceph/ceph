@@ -5668,11 +5668,12 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
     // for now we require a conventional zone
     ceph_assert(bdev->get_conventional_region_size());
     ceph_assert(shared_alloc.a != alloc);  // zoned allocator doesn't use conventional region
-    shared_alloc.a->init_add_free(reserved,
-				  bdev->get_conventional_region_size() - reserved);
+    shared_alloc.a->init_add_free(
+      reserved,
+      p2align(bdev->get_conventional_region_size(), min_alloc_size) - reserved);
 
     // init sequential zone based on the device's write pointers
-    a->init_from_zone_pointers(zones);
+    a->init_from_zone_pointers(std::move(zones));
     dout(1) << __func__
 	    << " loaded zone pointers: "
 	    << std::hex
@@ -8849,10 +8850,12 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     auto num_zones = bdev->get_size() / zone_size;
     for (unsigned i = first_sequential_zone; i < num_zones; ++i) {
       uint64_t p = wp[i] == (i + 1) * zone_size ? zone_size : wp[i] % zone_size;
-      if (zones[i].write_pointer > p) {
+      if (zones[i].write_pointer > p &&
+	  zones[i].num_dead_bytes < zones[i].write_pointer) {
 	derr << "fsck error: zone 0x" << std::hex << i
 	     << " bluestore write pointer 0x" << zones[i].write_pointer
 	     << " > device write pointer 0x" << p
+	     << " (with only 0x" << zones[i].num_dead_bytes << " dead bytes)"
 	     << std::dec << dendl;
 	++errors;
       }
@@ -10079,6 +10082,22 @@ BlueStore::CollectionRef BlueStore::_get_collection(const coll_t& cid)
   if (cp == coll_map.end())
     return CollectionRef();
   return cp->second;
+}
+
+BlueStore::CollectionRef BlueStore::_get_collection_by_oid(const ghobject_t& oid)
+{
+  std::shared_lock l(coll_lock);
+
+  // FIXME: we must replace this with something more efficient
+
+  for (auto& i : coll_map) {
+    spg_t spgid;
+    if (i.first.is_pg(&spgid) &&
+	i.second->contains(oid)) {
+      return i.second;
+    }
+  }
+  return CollectionRef();
 }
 
 void BlueStore::_queue_reap_collection(CollectionRef& c)
@@ -13034,14 +13053,12 @@ void BlueStore::_kv_finalize_thread()
 void BlueStore::_zoned_cleaner_start()
 {
   dout(10) << __func__ << dendl;
-  return; // temporarily disable cleaner until it actually works
   zoned_cleaner_thread.create("bstore_zcleaner");
 }
 
 void BlueStore::_zoned_cleaner_stop()
 {
   dout(10) << __func__ << dendl;
-  return; // temporarily disable cleaner until it actually works
   {
     std::unique_lock l{zoned_cleaner_lock};
     while (!zoned_cleaner_started) {
@@ -13070,7 +13087,11 @@ void BlueStore::_zoned_cleaner_thread()
   auto f = dynamic_cast<ZonedFreelistManager*>(fm);
   ceph_assert(f);
   while (true) {
-    auto zone_to_clean = a->pick_zone_to_clean(.1, zone_size / 16); // FIXME
+    // thresholds to trigger cleaning
+    // FIXME
+    float min_score = .05;                // score: bytes saved / bytes moved
+    uint64_t min_saved = zone_size / 32;  // min bytes saved to consider cleaning
+    auto zone_to_clean = a->pick_zone_to_clean(min_score, min_saved);
     if (zone_to_clean < 0) {
       if (zoned_cleaner_stop) {
 	break;
@@ -13090,11 +13111,136 @@ void BlueStore::_zoned_cleaner_thread()
   zoned_cleaner_started = false;
 }
 
-void BlueStore::_zoned_clean_zone(uint64_t zone_num)
+void BlueStore::_zoned_clean_zone(uint64_t zone)
 {
-  dout(10) << __func__ << " cleaning zone 0x" << std::hex << zone_num << std::dec << dendl;
-  // TODO: (1) copy live objects from zone_num to a new zone, (2) issue a RESET
-  // ZONE operation to the device for the corresponding zone.
+  dout(10) << __func__ << " cleaning zone 0x" << std::hex << zone << std::dec << dendl;
+  auto a = dynamic_cast<ZonedAllocator*>(alloc);
+  auto f = dynamic_cast<ZonedFreelistManager*>(fm);
+
+  KeyValueDB::Iterator it = db->get_iterator(PREFIX_ZONED_CL_INFO);
+  std::string zone_start;
+  get_zone_offset_object_key(zone, 0, ghobject_t(), &zone_start);
+  for (it->lower_bound(zone_start); it->valid(); it->next()) {
+    uint32_t z;
+    uint64_t offset;
+    ghobject_t oid;
+    string k = it->key();
+    int r = get_key_zone_offset_object(k, &z, &offset, &oid);
+    if (r < 0) {
+      derr << __func__ << " failed to decode zone ref " << pretty_binary_string(k)
+	   << dendl;
+      continue;
+    }
+    if (zone != z) {
+      dout(10) << __func__ << " reached end of zone refs" << dendl;
+      break;
+    }
+    dout(10) << __func__ << " zone 0x" << std::hex << zone << " offset 0x" << offset
+	     << std::dec << " " << oid << dendl;
+    _clean_some(oid, zone);
+  }
+
+  if (a->get_live_bytes(zone) > 0) {
+    derr << "zone 0x" << std::hex << zone << " still has 0x" << a->get_live_bytes(zone)
+	 << " live bytes" << std::dec << dendl;
+    // should we do something else here to avoid a live-lock in the event of a problem?
+    return;
+  }
+
+  // reset the device zone
+  dout(10) << __func__ << " resetting zone 0x" << std::hex << zone << std::dec << dendl;
+  bdev->reset_zone(zone);
+
+  // record that we can now write there
+  f->mark_zone_to_clean_free(zone, a->get_write_pointer(zone),
+			     a->get_dead_bytes(zone), db);
+  bdev->flush();
+
+  // then allow ourselves to start allocating there
+  dout(10) << __func__ << " done cleaning zone 0x" << std::hex << zone << std::dec
+	   << dendl;
+  a->reset_zone(zone);
+}
+
+void BlueStore::_clean_some(ghobject_t oid, uint32_t zone)
+{
+  dout(10) << __func__ << " " << oid << " from zone 0x" << std::hex << zone << std::dec
+	   << dendl;
+
+  CollectionRef cref = _get_collection_by_oid(oid);
+  Collection *c = cref.get();
+
+  // serialize io dispatch vs other transactions
+  std::lock_guard l(atomic_alloc_and_submit_lock);
+  std::unique_lock l2(c->lock);
+
+  auto o = c->get_onode(oid, false);
+  if (!o) {
+    derr << __func__ << " can't find " << oid << dendl;
+    return;
+  }
+
+  o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+  _dump_onode<30>(cct, *o);
+
+  // NOTE: This is a naive rewrite strategy.  If any blobs are
+  // shared, they will be duplicated for each object that references
+  // them.  That means any cloned/snapshotted objects will explode
+  // their utilization.  This won't matter for RGW workloads, but
+  // for RBD and CephFS it is completely unacceptable, and it's
+  // entirely reasonable to have "archival" data workloads on SMR
+  // for CephFS and (possibly/probably) RBD.
+  //
+  // At some point we need to replace this with something more
+  // sophisticated that ensures that a shared blob gets moved once
+  // and all referencing objects get updated to point to the new
+  // location.
+
+  map<uint32_t, uint32_t> to_move;
+  for (auto& e : o->extent_map.extent_map) {
+    bool touches_zone = false;
+    for (auto& be : e.blob->get_blob().get_extents()) {
+      if (be.is_valid()) {
+	uint32_t z = be.offset / zone_size;
+	if (z == zone) {
+	  touches_zone = true;
+	  break;
+	}
+      }
+    }
+    if (touches_zone) {
+      to_move[e.logical_offset] = e.length;
+    }
+  }
+  if (to_move.empty()) {
+    dout(10) << __func__ << " no references to zone 0x" << std::hex << zone
+	     << std::dec << " from " << oid << dendl;
+    return;
+  }
+
+  dout(10) << __func__ << " rewriting object extents 0x" << std::hex << to_move
+	   << std::dec << dendl;
+  OpSequencer *osr = c->osr.get();
+  TransContext *txc = _txc_create(c, osr, nullptr);
+
+  spg_t pgid;
+  if (c->cid.is_pg(&pgid)) {
+    txc->osd_pool_id = pgid.pool();
+  }
+
+  for (auto& [offset, length] : to_move) {
+    bufferlist bl;
+    int r = _do_read(c, o, offset, length, bl, 0);
+    ceph_assert(r == (int)length);
+
+    r = _do_write(txc, cref, o, offset, length, bl, 0);
+    ceph_assert(r >= 0);
+  }
+  txc->write_onode(o);
+
+  _txc_write_nodes(txc, txc->t);
+  _txc_finalize_kv(txc, txc->t);
+  _txc_state_proc(txc);
 }
 #endif
 
