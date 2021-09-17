@@ -1,36 +1,38 @@
-import { CreateClusterWizardHelper } from 'cypress/integration/cluster/create-cluster.po';
+import {
+  CreateClusterServicePageHelper,
+  CreateClusterWizardHelper
+} from 'cypress/integration/cluster/create-cluster.po';
 
 describe('Create cluster create services page', () => {
   const createCluster = new CreateClusterWizardHelper();
+  const createClusterServicePage = new CreateClusterServicePageHelper();
 
   beforeEach(() => {
     cy.login();
     Cypress.Cookies.preserveOnce('token');
     createCluster.navigateTo();
     createCluster.createCluster();
-    cy.get('button[aria-label="Next"]').click();
-    cy.get('button[aria-label="Next"]').click();
+    cy.get('.nav-link').contains('Create Services').click();
   });
 
-  it('should check if nav-link and title contains Create Services', () => {
-    cy.get('.nav-link').should('contain.text', 'Create Services');
-
+  it('should check if title contains Create Services', () => {
     cy.get('.title').should('contain.text', 'Create Services');
   });
 
   describe('when Orchestrator is available', () => {
     it('should create an rgw service', () => {
-      createCluster.addService('rgw');
+      cy.get('.btn.btn-accent').first().click({ force: true });
 
-      createCluster.checkExist('rgw.rgw', true);
+      createClusterServicePage.addService('rgw', false, '3');
+      createClusterServicePage.checkExist('rgw.foo', true);
     });
 
     it('should create and delete an ingress service', () => {
-      createCluster.addService('ingress');
+      cy.get('.btn.btn-accent').first().click({ force: true });
 
-      createCluster.checkExist('ingress.rgw.rgw', true);
-
-      createCluster.deleteService('ingress.rgw.rgw', 60000);
+      createClusterServicePage.addService('ingress');
+      createClusterServicePage.checkExist('ingress.rgw.foo', true);
+      createClusterServicePage.deleteService('ingress.rgw.foo');
     });
   });
 });
