@@ -133,6 +133,7 @@ struct IOContextImpl {
   object_locator_t oloc;
   snapid_t snap_seq = CEPH_NOSNAP;
   SnapContext snapc;
+  int extra_op_flags = 0;
 };
 
 IOContext::IOContext() {
@@ -289,6 +290,20 @@ void IOContext::write_snap_context(
     } else {
       snapc = n;
     }
+  }
+}
+
+bool IOContext::full_try() const {
+  const auto ioc = reinterpret_cast<const IOContextImpl*>(&impl);
+  return (ioc->extra_op_flags & CEPH_OSD_FLAG_FULL_TRY) != 0;
+}
+
+void IOContext::full_try(bool _full_try) {
+  auto ioc = reinterpret_cast<IOContextImpl*>(&impl);
+  if (_full_try) {
+    ioc->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
+  } else {
+    ioc->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
   }
 }
 
@@ -789,7 +804,7 @@ void RADOS::execute(const Object& o, const IOContext& _ioc, ReadOp&& _op,
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
-  auto flags = op->op.flags;
+  auto flags = op->op.flags | ioc->extra_op_flags;
 
   ZTracer::Trace trace;
   if (trace_info) {
@@ -811,7 +826,7 @@ void RADOS::execute(const Object& o, const IOContext& _ioc, WriteOp&& _op,
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
-  auto flags = op->op.flags;
+  auto flags = op->op.flags | ioc->extra_op_flags;
   ceph::real_time mtime;
   if (op->mtime)
     mtime = *op->mtime;
@@ -1098,7 +1113,8 @@ void RADOS::watch(const Object& o, const IOContext& _ioc,
 
   ObjectOperation op;
 
-  auto linger_op = impl->objecter->linger_register(*oid, ioc->oloc, 0);
+  auto linger_op = impl->objecter->linger_register(*oid, ioc->oloc,
+                                                   ioc->extra_op_flags);
   uint64_t cookie = linger_op->get_cookie();
   linger_op->handle = std::move(cb);
   op.watch(cookie, CEPH_OSD_WATCH_OP_WATCH, timeout.value_or(0s).count());
@@ -1155,7 +1171,7 @@ void RADOS::notify_ack(const Object& o,
   op.notify_ack(notify_id, cookie, bl);
 
   impl->objecter->read(*oid, ioc->oloc, std::move(op), ioc->snap_seq,
-		       nullptr, 0, std::move(c));
+		       nullptr, ioc->extra_op_flags, std::move(c));
 }
 
 void RADOS::notify_ack(const Object& o,
@@ -1196,7 +1212,7 @@ void RADOS::unwatch(uint64_t cookie, const IOContext& _ioc,
   ObjectOperation op;
   op.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   impl->objecter->mutate(linger_op->target.base_oid, ioc->oloc, std::move(op),
-			 ioc->snapc, ceph::real_clock::now(), 0,
+			 ioc->snapc, ceph::real_clock::now(), ioc->extra_op_flags,
 			 Objecter::Op::OpComp::create(
 			   get_executor(),
 			   [objecter = impl->objecter,
@@ -1301,7 +1317,8 @@ void RADOS::notify(const Object& o, const IOContext& _ioc, bufferlist&& bl,
 {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
-  auto linger_op = impl->objecter->linger_register(*oid, ioc->oloc, 0);
+  auto linger_op = impl->objecter->linger_register(*oid, ioc->oloc,
+                                                   ioc->extra_op_flags);
 
   auto cb = std::make_shared<NotifyHandler>(impl->ioctx, impl->objecter,
                                             linger_op, std::move(c));
