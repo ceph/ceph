@@ -28,6 +28,11 @@ struct zone_state_t {
     decode(num_dead_bytes, p);
   }
 
+  void reset() {
+    write_pointer = 0;
+    num_dead_bytes = 0;
+  }
+
   uint64_t get_num_dead_bytes() const {
     return num_dead_bytes;
   }

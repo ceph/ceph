@@ -2428,6 +2428,7 @@ private:
   void _dump_alloc_on_failure();
 
   CollectionRef _get_collection(const coll_t& cid);
+  CollectionRef _get_collection_by_oid(const ghobject_t& oid);
   void _queue_reap_collection(CollectionRef& c);
   void _reap_collections();
   void _update_cache_logger();
@@ -2479,6 +2480,7 @@ private:
   void _zoned_cleaner_stop();
   void _zoned_cleaner_thread();
   void _zoned_clean_zone(uint64_t zone_num);
+  void _clean_some(ghobject_t oid, uint32_t zone_num);
 #endif
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, uint64_t len);

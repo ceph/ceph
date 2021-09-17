@@ -236,8 +236,9 @@ void ZonedFreelistManager::allocate(
   uint64_t length,
   KeyValueDB::Transaction txn)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length << dendl;
   uint64_t zone_num = offset / zone_size;
+  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+	   << " zone 0x" << zone_num << std::dec << dendl;
   zone_state_t zone_state;
   zone_state.increment_write_pointer(length);
   write_zone_state_to_db(zone_num, zone_state, txn);
@@ -254,8 +255,9 @@ void ZonedFreelistManager::release(
   uint64_t length,
   KeyValueDB::Transaction txn)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length << dendl;
   uint64_t zone_num = offset / zone_size;
+  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+	   << " zone 0x" << zone_num << std::dec << dendl;
   zone_state_t zone_state;
   zone_state.increment_num_dead_bytes(length);
   write_zone_state_to_db(zone_num, zone_state, txn);
@@ -333,12 +335,46 @@ int ZonedFreelistManager::_read_cfg(cfg_reader_t cfg_reader)
 
 void ZonedFreelistManager::mark_zone_to_clean_free(
   uint64_t zone,
+  uint64_t write_pointer,
+  uint64_t dead,
   KeyValueDB *kvdb)
 {
-  dout(10) << __func__ << " zone 0x" << std::hex << zone << std::dec << dendl;
+  dout(10) << __func__ << " zone 0x" << std::hex << zone
+	   << " (dead 0x" << dead << " write pointer 0x" << write_pointer
+	   << ")" << std::dec << dendl;
 
+  if (true) {
+    string key;
+    _key_encode_u64(zone, &key);
+    KeyValueDB::Iterator it = kvdb->get_iterator(info_prefix);
+    it->lower_bound(key);
+    zone_state_t zs;
+    load_zone_state_from_db(zone, zs, it);
+    dout(20) << __func__ << " before " << zs << dendl;
+    ceph_assert(zs.num_dead_bytes == dead);
+    ceph_assert(zs.write_pointer == write_pointer);
+  }
   KeyValueDB::Transaction txn = kvdb->get_transaction();
-  zone_state_t zone_state;
-  write_zone_state_to_db(zone, zone_state, txn);
+
+  zone_state_t neg_zone_state;
+  neg_zone_state.num_dead_bytes = 0ll - (int64_t)dead;
+  neg_zone_state.write_pointer = 0ll - (int64_t)write_pointer;
+  write_zone_state_to_db(zone, neg_zone_state, txn);
+
+  // block here until this commits so that we don't end up starting to allocate and
+  // write to the new zone before this fully commits.
   kvdb->submit_transaction_sync(txn);
+
+  if (true) {
+    // read it back to verify it is really zero!
+    string key;
+    _key_encode_u64(zone, &key);
+    KeyValueDB::Iterator it = kvdb->get_iterator(info_prefix);
+    it->lower_bound(key);
+    zone_state_t zs;
+    load_zone_state_from_db(zone, zs, it);
+    dout(20) << __func__ << " read back " << zs << dendl;
+    ceph_assert(zs.num_dead_bytes == 0);
+    ceph_assert(zs.write_pointer == 0);
+  }
 }

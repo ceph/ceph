@@ -45,10 +45,11 @@ class ZonedAllocator : public Allocator {
     return zone_num * zone_size + get_write_pointer(zone_num);
   }
 
+public:
   inline uint64_t get_write_pointer(uint64_t zone_num) const {
     return zone_states[zone_num].get_write_pointer();
   }
-
+private:
   inline uint64_t get_remaining_space(uint64_t zone_num) const {
     return zone_size - get_write_pointer(zone_num);
   }
@@ -102,9 +103,10 @@ public:
   void clear_cleaning_zone(uint32_t zone) {
     cleaning_zone = -1;
   }
+  void reset_zone(uint32_t zone);
 
   void init_from_zone_pointers(
-    std::vector<zone_state_t> _zone_states);
+    std::vector<zone_state_t> &&_zone_states);
   void init_add_free(uint64_t offset, uint64_t length) override {}
   void init_rm_free(uint64_t offset, uint64_t length) override {}
 
