@@ -115,7 +115,7 @@ def start_rgw(ctx, config, clients):
         barbican_role = client_config.get('use-barbican-role', None)
         pykmip_role = client_config.get('use-pykmip-role', None)
 
-        token_path = teuthology.get_testdir(ctx) + '/vault-token'
+        token_path = '/etc/ceph/vault-root-token'
         if barbican_role is not None:
             if not hasattr(ctx, 'barbican'):
                 raise ConfigError('rgw must run after the barbican task')
@@ -134,11 +134,11 @@ def start_rgw(ctx, config, clients):
                 raise ConfigError('vault: no "root_token" specified')
             # create token on file
             ctx.rgw.vault_role = vault_role
-            ctx.cluster.only(client).run(args=['echo', '-n', ctx.vault.root_token, run.Raw('>'), token_path])
+            ctx.cluster.only(client).run(args=['sudo', 'echo', '-n', ctx.vault.root_token, run.Raw('|'), 'sudo', 'tee', token_path])
             log.info("Token file content")
             ctx.cluster.only(client).run(args=['cat', token_path])
             log.info("Restrict access to token file")
-            ctx.cluster.only(client).run(args=['chmod', '600', token_path])
+            ctx.cluster.only(client).run(args=['sudo', 'chmod', '600', token_path])
             ctx.cluster.only(client).run(args=['sudo', 'chown', 'ceph', token_path])
 
             rgw_cmd.extend([
@@ -207,7 +207,7 @@ def start_rgw(ctx, config, clients):
                                                              client=client_with_cluster),
                     ],
                 )
-            ctx.cluster.only(client).run(args=['rm', '-f', token_path])
+            ctx.cluster.only(client).run(args=['sudo', 'rm', '-f', token_path])
 
 def assign_endpoints(ctx, config, default_cert):
     role_endpoints = {}
