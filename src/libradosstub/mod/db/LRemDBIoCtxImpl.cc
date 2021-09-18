@@ -583,10 +583,19 @@ int LRemDBIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
     }
     ++m_pool->epoch;
     file = get_file(oid, true, CEPH_NOSNAP, snapc);
-    m_pool->file_omaps.erase({get_namespace(), oid});
   }
 
   std::unique_lock l{*file->lock};
+
+  int r = file->omap->clear();
+  if (r < 0) {
+    return r;
+  }
+
+  r = file->xattrs->clear();
+  if (r < 0) {
+    return r;
+  }
 
   return file->obj->remove();
 }

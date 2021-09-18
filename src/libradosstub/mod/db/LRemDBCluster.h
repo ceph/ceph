@@ -39,16 +39,6 @@ public:
     File();
     File(const File &rhs);
 
-    struct timespec mtime;
-    uint64_t objver;
-
-    uint64_t snap_id;
-    std::vector<uint64_t> snaps;
-    interval_set<uint64_t> snap_overlap;
-
-    uint64_t epoch = 0;
-
-    bool exists;
     ceph::shared_mutex lock =
       ceph::make_shared_mutex("LRemDBCluster::File::lock");
   };
@@ -78,9 +68,6 @@ public:
       ceph::make_shared_mutex("LRemDBCluster::Pool::file_lock");
     Files files;
     FileLocks file_locks;
-    FileOMaps file_omaps;
-    FileTMaps file_tmaps;
-    FileXAttrs file_xattrs;
     FileHandlers file_handlers;
   };
   using PoolRef = std::shared_ptr<Pool>;

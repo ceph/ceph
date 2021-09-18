@@ -11,15 +11,10 @@
 
 namespace librados {
 
-LRemDBCluster::File::File()
-  : objver(0), snap_id(), exists(true) {
+LRemDBCluster::File::File() {
 }
 
-LRemDBCluster::File::File(const File &rhs)
-  : mtime(rhs.mtime),
-    objver(rhs.objver),
-    snap_id(rhs.snap_id),
-    exists(rhs.exists) {
+LRemDBCluster::File::File(const File &rhs) {
 }
 
 LRemDBCluster::Pool::Pool() = default;
