@@ -174,6 +174,12 @@ int LRemDBOps::exec(SQLite::Statement& stmt)
   return r;
 }
 
+int LRemDBOps::exec_step(SQLite::Statement& stmt)
+{
+  dout(20) << "SQL: " << stmt.getExpandedSQL() << dendl;
+  return stmt.executeStep();
+}
+
 LRemDBStore::Cluster::Cluster(const string& cluster_name) {
   string dbname = string("cluster-") + cluster_name + ".db3";
   dbo = make_shared<LRemDBOps>(dbname, SQLite::OPEN_NOMUTEX|SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
@@ -196,7 +202,7 @@ int LRemDBStore::Cluster::list_pools(std::map<string, PoolRef> *pools)
   try {
     auto q = dbo->statement("SELECT * from pools");
 
-    while (q.executeStep()) {
+    while (dbo->exec_step(q)) {
       int         id      = q.getColumn(0);
       const char* name   = q.getColumn(1);
       const char* value   = q.getColumn(2);
@@ -218,7 +224,7 @@ int LRemDBStore::Cluster::get_pool(const string& name, PoolRef *pool) {
 
     q.bind(1, name);
 
-    if (q.executeStep()) {
+    if (dbo->exec_step(q)) {
       int         id      = q.getColumn(0);
       const char* name   = q.getColumn(1);
       const char* value   = q.getColumn(2);
@@ -241,7 +247,7 @@ int LRemDBStore::Cluster::get_pool(int id, PoolRef *pool) {
 
     q.bind(1, id);
 
-    if (q.executeStep()) {
+    if (dbo->exec_step(q)) {
       int         id      = q.getColumn(0);
       const char* name   = q.getColumn(1);
       const char* value   = q.getColumn(2);
@@ -297,7 +303,7 @@ int LRemDBStore::Pool::read() {
 
     q.bind(1, name);
 
-    if (q.executeStep()) {
+    if (dbo->exec_step(q)) {
       id      = q.getColumn(0);
       value   = q.getColumn(2).getString();
 
@@ -389,7 +395,7 @@ int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
     q.bind(1, nspace);
     q.bind(2, oid);
 
-    if (q.executeStep()) {
+    if (dbo->exec_step(q)) {
       pmeta->size = (long long)q.getColumn(0);
       string mtime_str = (const char *)q.getColumn(1);
       pmeta->mtime = ceph::from_iso_8601(mtime_str).value_or(ceph::real_time());
@@ -466,10 +472,14 @@ int LRemDBStore::Obj::read_data(uint64_t ofs, uint64_t len,
   q.bind(1, nspace);
   q.bind(2, oid);
 
-  if (!q.executeStep()) {
-    return -ENOENT;
+  try {
+    if (!dbo->exec_step(q)) {
+      return -ENOENT;
+    }
+  } catch (SQLite::Exception& e) {
+    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
+    return -EIO;
   }
-
   uint64_t size = (long long)q.getColumn(0);
 
   if (ofs >= size) {
@@ -609,7 +619,7 @@ int LRemDBStore::ObjData::read_block(int bid, bufferlist *bl) {
   q.bind(3, bid);
 
   try {
-    if (!q.executeStep()) {
+    if (!dbo->exec_step(q)) {
       return -ENOENT;
     }
   } catch (SQLite::Exception& e) {
@@ -796,7 +806,7 @@ int LRemDBStore::KVTableBase::create_table() {
                                                 "oid TEXT",
                                                 "key TEXT",
                                                 "data BLOB",
-                                                "PRIMARY KEY (nspace, oid)" } ));
+                                                "PRIMARY KEY (nspace, oid, key)" } ));
   if (r < 0) {
     return r;
   }
@@ -812,9 +822,10 @@ int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
                                        std::map<std::string, bufferlist> *out_vals,
                                        bool *pmore) {
   string s = string("SELECT key, data from ") + table_name +
-                    " WHERE nspace = ? AND oid = ?";
+                    " WHERE nspace = ? AND oid = ? AND key > ''";
+  string filt_val;
   if (!filter_prefix.empty()) {
-    s += " AND WHERE key LIKE '" + filter_prefix + "%'";
+    s += " AND key LIKE ?";
   }
 
   if (max_return == 0) {
@@ -830,16 +841,22 @@ int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
 
   q.bind(1, nspace);
   q.bind(2, oid);
+  if (!filter_prefix.empty()) {
+    filt_val = filter_prefix + "%";
+    q.bind(3, filt_val);
+  }
 
   try {
-    while (!q.executeStep()) {
+    while (dbo->exec_step(q)) {
       --max_return;
       if (max_return == 0) {
-        *pmore = true;
+        if (pmore) {
+          *pmore = true;
+        }
         return 0;
       }
 
-      string key = (const char *)q.getColumn(0);
+      string key = q.getColumn(0).getString();
 
       bufferlist bl;
       bl_from_blob_col(q, 1, &bl);
@@ -851,14 +868,16 @@ int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
     return -EIO;
   }
 
-  *pmore = false;
+  if (pmore) {
+    *pmore = false;
+  }
 
   return 0;
 }
 
 int LRemDBStore::KVTableBase::get_all_vals(std::map<std::string, bufferlist> *out_vals) {
   string s = string("SELECT key, data from ") + table_name +
-                    " WHERE nspace = ? AND oid = ?";
+                    " WHERE nspace = ? AND oid = ? AND key > ''";
 
   SQLite::Statement q = dbo->statement(s);
 
@@ -866,8 +885,8 @@ int LRemDBStore::KVTableBase::get_all_vals(std::map<std::string, bufferlist> *ou
   q.bind(2, oid);
 
   try {
-    while (!q.executeStep()) {
-      string key = (const char *)q.getColumn(0);
+    while (dbo->exec_step(q)) {
+      string key = q.getColumn(0).getString();
 
       bufferlist bl;
       bl_from_blob_col(q, 1, &bl);
@@ -894,8 +913,8 @@ int LRemDBStore::KVTableBase::get_vals_by_keys(const std::set<std::string>& keys
   q.bind(2, oid);
 
   try {
-    while (!q.executeStep()) {
-      string key = (const char *)q.getColumn(0);
+    while (dbo->exec_step(q)) {
+      string key = q.getColumn(0).getString();
 
       bufferlist bl;
       bl_from_blob_col(q, 1, &bl);
@@ -924,7 +943,7 @@ int LRemDBStore::KVTableBase::get_val(const std::string& key,
   q.bind(3, key);
 
   try {
-    if (!q.executeStep()) {
+    if (!dbo->exec_step(q)) {
       return -ENODATA;
     }
   } catch (SQLite::Exception& e) {

@@ -46,7 +46,6 @@ LRemDBIoCtxImpl::LRemDBIoCtxImpl(const LRemDBIoCtxImpl& rhs)
   m_dbc = std::make_shared<LRemDBStore::Cluster>(uuid.to_string());
   m_dbc->get_pool(m_pool_name, &m_pool_db);
 
-std::cerr << __FILE__ << ":" << __LINE__ << " m_pool_db=" << (void *)m_pool_db.get() << " mpool_name=" << m_pool_name << std::endl;
 }
 
 LRemDBIoCtxImpl::LRemDBIoCtxImpl(LRemDBRadosClient *client, int64_t pool_id,
@@ -58,7 +57,6 @@ LRemDBIoCtxImpl::LRemDBIoCtxImpl(LRemDBRadosClient *client, int64_t pool_id,
   m_dbc = std::make_shared<LRemDBStore::Cluster>(uuid.to_string());
   m_dbc->get_pool(pool_name, &m_pool_db);
 
-std::cerr << __FILE__ << ":" << __LINE__ << " m_pool_db=" << (void *)m_pool_db.get() << " mpool_name=" << m_pool_name << std::endl;
 #warning check all ops for m_pool_db not null
 }
 
@@ -981,7 +979,7 @@ int LRemDBIoCtxImpl::cmpxattr_str(const string& oid,
     std::shared_lock l{m_pool->file_lock};
     file = get_file(oid, false, CEPH_NOSNAP, {});
     if (file == NULL) {
-      return -ENODATA;
+      return -ENOENT;
     }
   }
 
@@ -1037,7 +1035,7 @@ int LRemDBIoCtxImpl::cmpxattr(const string& oid,
     std::shared_lock l{m_pool->file_lock};
     file = get_file(oid, false, CEPH_NOSNAP, {});
     if (file == NULL) {
-      return -ENODATA;
+      return -ENOENT;
     }
   }
 
@@ -1107,7 +1105,7 @@ int LRemDBIoCtxImpl::xattr_get(LRemTransactionStateRef& trans,
     std::shared_lock l{m_pool->file_lock};
     file = get_file(oid, false, CEPH_NOSNAP, {});
     if (file == NULL) {
-      return -ENODATA;
+      return -ENOENT;
     }
   }
 

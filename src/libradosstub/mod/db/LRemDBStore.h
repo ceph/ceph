@@ -21,6 +21,7 @@ public:
 
   int exec(const std::string& sql);
   int exec(SQLite::Statement& stmt);
+  int exec_step(SQLite::Statement& stmt);
   int create_table(const std::string& name, const std::string& defs);
 
 
