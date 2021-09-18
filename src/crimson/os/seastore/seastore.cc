@@ -159,12 +159,17 @@ SeaStore::list_objects(CollectionRef ch,
   using RetType = typename OnodeManager::list_onodes_bare_ret;
   return seastar::do_with(
       RetType(),
-      [this, start, end, limit] (auto& ret) {
-    return repeat_eagain([this, start, end, limit, &ret] {
+      [this, ch, start, end, limit] (auto& ret) {
+    return repeat_eagain([this, ch, start, end, limit, &ret] {
       return transaction_manager->with_transaction_intr(
           Transaction::src_t::READ,
-          [this, start, end, limit](auto &t) {
-        return onode_manager->list_onodes(t, start, end, limit);
+          [this, ch, start, end, limit](auto &t) {
+        return onode_manager->list_onodes(
+            t,
+            ch->get_cid().demo_get_ps(),
+            start,
+            end,
+            limit);
       }).safe_then([&ret](auto&& _ret) {
         ret = std::move(_ret);
       });
@@ -667,7 +672,9 @@ seastar::future<> SeaStore::do_transaction(
     [this](auto &ctx) {
       return with_trans_intr(*ctx.transaction, [&, this](auto &t) {
         return onode_manager->get_or_create_onodes(
-          *ctx.transaction, ctx.iter.get_objects()
+          *ctx.transaction,
+          ctx.ch->get_cid().demo_get_ps(),
+          ctx.iter.get_objects()
         ).si_then([this, &ctx](auto &&read_onodes) {
           ctx.onodes = std::move(read_onodes);
           return trans_intr::repeat(

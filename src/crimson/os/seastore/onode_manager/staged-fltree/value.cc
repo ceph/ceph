@@ -133,7 +133,7 @@ void validate_tree_config(const tree_conf_t& conf)
     //   max-ns/oid-split-overhead <= node-size
 
     auto obj = ghobject_t{shard_id_t{0}, 0, 0, "", "", 0, 0};
-    key_hobj_t key(obj);
+    key_hobj_t key({0, obj});
     auto max_str_size = conf.max_ns_size + conf.max_oid_size;
 #define _STAGE_T(NodeType) node_to_stage_t<typename NodeType::node_stage_t>
 #define NXT_T(StageType)  staged<typename StageType::next_param_t>

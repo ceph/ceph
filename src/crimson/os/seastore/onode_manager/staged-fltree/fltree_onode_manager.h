@@ -115,18 +115,22 @@ public:
 
   contains_onode_ret contains_onode(
     Transaction &trans,
+    ps_t ps,
     const ghobject_t &hoid) final;
 
   get_onode_ret get_onode(
     Transaction &trans,
+    ps_t ps,
     const ghobject_t &hoid) final;
 
   get_or_create_onode_ret get_or_create_onode(
     Transaction &trans,
+    ps_t ps,
     const ghobject_t &hoid) final;
 
   get_or_create_onodes_ret get_or_create_onodes(
     Transaction &trans,
+    ps_t ps,
     const std::vector<ghobject_t> &hoids) final;
 
   write_dirty_ret write_dirty(
@@ -139,6 +143,7 @@ public:
 
   list_onodes_ret list_onodes(
     Transaction &trans,
+    ps_t ps,
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit) final;

@@ -5,7 +5,6 @@
 
 #include <ostream>
 
-#include "common/hobject.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/os/seastore/logging.h"
 
@@ -78,7 +77,7 @@ class Btree {
     }
 
     // XXX: return key_view_t to avoid unecessary ghobject_t constructions
-    ghobject_t get_ghobj() const {
+    tree_key_t get_key() const {
       assert(!is_end());
       auto view = p_cursor->get_key_view(
           p_tree->value_builder.get_header_magic());
@@ -86,7 +85,7 @@ class Btree {
              p_tree->value_builder.get_max_ns_size());
       assert(view.oid().size() <=
              p_tree->value_builder.get_max_oid_size());
-      return view.to_ghobj();
+      return view.to_tree_key();
     }
 
     ValueImpl value() {
@@ -186,9 +185,9 @@ class Btree {
     return Cursor::make_end(this);
   }
 
-  eagain_ifuture<bool> contains(Transaction& t, const ghobject_t& obj) {
+  eagain_ifuture<bool> contains(Transaction& t, const tree_key_t& _key) {
     return seastar::do_with(
-      full_key_t<KeyT::HOBJ>(obj),
+      full_key_t<KeyT::HOBJ>(_key),
       [this, &t](auto& key) -> eagain_ifuture<bool> {
         return get_root(t).si_then([this, &t, &key](auto root) {
           // TODO: improve lower_bound()
@@ -200,9 +199,9 @@ class Btree {
     );
   }
 
-  eagain_ifuture<Cursor> find(Transaction& t, const ghobject_t& obj) {
+  eagain_ifuture<Cursor> find(Transaction& t, const tree_key_t& _key) {
     return seastar::do_with(
-      full_key_t<KeyT::HOBJ>(obj),
+      full_key_t<KeyT::HOBJ>(_key),
       [this, &t](auto& key) -> eagain_ifuture<Cursor> {
         return get_root(t).si_then([this, &t, &key](auto root) {
           // TODO: improve lower_bound()
@@ -218,9 +217,9 @@ class Btree {
     );
   }
 
-  eagain_ifuture<Cursor> lower_bound(Transaction& t, const ghobject_t& obj) {
+  eagain_ifuture<Cursor> lower_bound(Transaction& t, const tree_key_t& _key) {
     return seastar::do_with(
-      full_key_t<KeyT::HOBJ>(obj),
+      full_key_t<KeyT::HOBJ>(_key),
       [this, &t](auto& key) -> eagain_ifuture<Cursor> {
         return get_root(t).si_then([this, &t, &key](auto root) {
           return root->lower_bound(get_context(t), key);
@@ -245,26 +244,26 @@ class Btree {
   using insert_iertr = eagain_iertr::extend<
     crimson::ct_error::value_too_large>;
   insert_iertr::future<std::pair<Cursor, bool>>
-  insert(Transaction& t, const ghobject_t& obj, tree_value_config_t _vconf) {
+  insert(Transaction& t, const tree_key_t& _key, tree_value_config_t _vconf) {
     LOG_PREFIX(OTree::insert);
     if (_vconf.payload_size > value_builder.get_max_value_payload_size()) {
       ERRORT("value payload size {} too large to insert {}",
-             t, _vconf.payload_size, key_hobj_t{obj});
+             t, _vconf.payload_size, key_hobj_t{_key});
       return crimson::ct_error::value_too_large::make();
     }
-    if (obj.hobj.nspace.size() > value_builder.get_max_ns_size()) {
+    if (_key.oid.hobj.nspace.size() > value_builder.get_max_ns_size()) {
       ERRORT("namespace size {} too large to insert {}",
-             t, obj.hobj.nspace.size(), key_hobj_t{obj});
+             t, _key.oid.hobj.nspace.size(), key_hobj_t{_key});
       return crimson::ct_error::value_too_large::make();
     }
-    if (obj.hobj.oid.name.size() > value_builder.get_max_oid_size()) {
+    if (_key.oid.hobj.oid.name.size() > value_builder.get_max_oid_size()) {
       ERRORT("oid size {} too large to insert {}",
-             t, obj.hobj.oid.name.size(), key_hobj_t{obj});
+             t, _key.oid.hobj.oid.name.size(), key_hobj_t{_key});
       return crimson::ct_error::value_too_large::make();
     }
     value_config_t vconf{value_builder.get_header_magic(), _vconf.payload_size};
     return seastar::do_with(
-      full_key_t<KeyT::HOBJ>(obj),
+      full_key_t<KeyT::HOBJ>(_key),
       [this, &t, vconf](auto& key) -> eagain_ifuture<std::pair<Cursor, bool>> {
         ceph_assert(key.is_valid());
         return get_root(t).si_then([this, &t, &key, vconf](auto root) {
@@ -277,9 +276,9 @@ class Btree {
     );
   }
 
-  eagain_ifuture<std::size_t> erase(Transaction& t, const ghobject_t& obj) {
+  eagain_ifuture<std::size_t> erase(Transaction& t, const tree_key_t& _key) {
     return seastar::do_with(
-      full_key_t<KeyT::HOBJ>(obj),
+      full_key_t<KeyT::HOBJ>(_key),
       [this, &t](auto& key) -> eagain_ifuture<std::size_t> {
         return get_root(t).si_then([this, &t, &key](auto root) {
           return root->erase(get_context(t), key, std::move(root));

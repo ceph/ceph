@@ -211,11 +211,16 @@ private:
     auto begin_time = std::chrono::steady_clock::now();
     return seastar::do_with(
         oid, Ret{}, OnodeRef(), std::forward<F>(f),
-        [this, src, op_type, begin_time](auto &oid, auto &ret, auto &onode, auto &f) {
-      return repeat_eagain([&, this, src] {
+        [this, ch, src, op_type, begin_time](
+           auto &oid, auto &ret, auto &onode, auto &f) {
+      return repeat_eagain([&, this, ch, src] {
         return transaction_manager->with_transaction_intr(
-            src, [&, this](auto& t) {
-          return onode_manager->get_onode(t, oid
+            src,
+            [&, this, ch](auto& t) {
+          return onode_manager->get_onode(
+            t,
+            ch->get_cid().demo_get_ps(),
+            oid
           ).si_then([&](auto onode_ret) {
             onode = std::move(onode_ret);
             return f(t, *onode);

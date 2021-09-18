@@ -14,7 +14,7 @@
 namespace crimson::os::seastore::onode {
 
 using match_stage_t = int8_t;
-constexpr match_stage_t STAGE_LEFT = 2;   // shard/pool/crush
+constexpr match_stage_t STAGE_LEFT = 2;   // shard/pool/seed/crush
 constexpr match_stage_t STAGE_STRING = 1; // nspace/oid
 constexpr match_stage_t STAGE_RIGHT = 0;  // snap/gen
 constexpr auto STAGE_TOP = STAGE_LEFT;

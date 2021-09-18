@@ -8,7 +8,6 @@
 #include <optional>
 #include <ostream>
 
-#include "common/hobject.h"
 #include "crimson/os/seastore/onode.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fwd.h"
 
@@ -16,17 +15,20 @@ namespace crimson::os::seastore::onode {
 
 using shard_t = int8_t;
 using pool_t = int64_t;
+using seed_t = uint32_t;
 using crush_hash_t = uint32_t;
 using snap_t = uint64_t;
 using gen_t = uint64_t;
 static_assert(sizeof(shard_t) == sizeof(ghobject_t().shard_id.id));
 static_assert(sizeof(pool_t) == sizeof(ghobject_t().hobj.pool));
+static_assert(sizeof(seed_t) == sizeof(ps_t));
 static_assert(sizeof(crush_hash_t) == sizeof(ghobject_t().hobj.get_hash()));
 static_assert(sizeof(snap_t) == sizeof(ghobject_t().hobj.snap.val));
 static_assert(sizeof(gen_t) == sizeof(ghobject_t().generation));
 
 constexpr auto MAX_SHARD = std::numeric_limits<shard_t>::max();
 constexpr auto MAX_POOL = std::numeric_limits<pool_t>::max();
+constexpr auto MAX_SEED = std::numeric_limits<seed_t>::max();
 constexpr auto MAX_CRUSH = std::numeric_limits<crush_hash_t>::max();
 constexpr auto MAX_SNAP = std::numeric_limits<snap_t>::max();
 constexpr auto MAX_GEN = std::numeric_limits<gen_t>::max();
@@ -41,13 +43,17 @@ template<> struct _full_key_type<KeyT::HOBJ> { using type = key_hobj_t; };
 template <KeyT type>
 using full_key_t = typename _full_key_type<type>::type;
 
-static laddr_t get_lba_hint(shard_t shard, pool_t pool, crush_hash_t crush)
+static laddr_t get_lba_hint(shard_t shard, pool_t pool, seed_t seed, crush_hash_t crush)
 {
   if (shard == shard_id_t::NO_SHARD) {
-    return (uint64_t)(pool & 0xFF)<<56 | (uint64_t)(crush)<<24;
+    return ((uint64_t)(pool & 0xFF)<<56 |
+            (uint64_t)(seed & 0xFF)<<48 |
+            (uint64_t)(crush)<<16);
   } else {
-    return (uint64_t)(shard & 0X7F)<<56 | (uint64_t)(pool& 0xFF)<<48 |
-	   (uint64_t)(crush)<<16;
+    return ((uint64_t)(shard & 0XFF)<<56 |
+            (uint64_t)(pool & 0xFF)<<48 |
+            (uint64_t)(seed & 0xFF)<<40 |
+	    (uint64_t)(crush)<<8);
   }
 }
 
@@ -56,26 +62,30 @@ struct node_offset_packed_t {
 } __attribute__((packed));
 
 // TODO: consider alignments
-struct shard_pool_t {
-  bool operator==(const shard_pool_t& x) const {
-    return (shard == x.shard && pool == x.pool);
+struct shard_pool_seed_t {
+  bool operator==(const shard_pool_seed_t& x) const {
+    return (shard == x.shard && pool == x.pool && seed == x.seed);
   }
-  bool operator!=(const shard_pool_t& x) const { return !(*this == x); }
+  bool operator!=(const shard_pool_seed_t& x) const { return !(*this == x); }
 
   template <KeyT KT>
-  static shard_pool_t from_key(const full_key_t<KT>& key);
+  static shard_pool_seed_t from_key(const full_key_t<KT>& key);
 
   shard_t shard;
   pool_t pool;
+  seed_t seed;
 } __attribute__((packed));
-inline std::ostream& operator<<(std::ostream& os, const shard_pool_t& sp) {
-  return os << (int)sp.shard << "," << sp.pool;
+inline std::ostream& operator<<(std::ostream& os, const shard_pool_seed_t& sp) {
+  return os << (int)sp.shard << "," << sp.pool << "," << std::hex << sp.seed << std::dec;
 }
-inline MatchKindCMP compare_to(const shard_pool_t& l, const shard_pool_t& r) {
+inline MatchKindCMP compare_to(const shard_pool_seed_t& l, const shard_pool_seed_t& r) {
   auto ret = toMatchKindCMP(l.shard, r.shard);
   if (ret != MatchKindCMP::EQ)
     return ret;
-  return toMatchKindCMP(l.pool, r.pool);
+  ret = toMatchKindCMP(l.pool, r.pool);
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  return toMatchKindCMP(l.seed, r.seed);
 }
 
 struct crush_t {
@@ -88,30 +98,30 @@ struct crush_t {
   crush_hash_t crush;
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const crush_t& c) {
-  return os << c.crush;
+  return os << std::hex << c.crush << std::dec;
 }
 inline MatchKindCMP compare_to(const crush_t& l, const crush_t& r) {
   return toMatchKindCMP(l.crush, r.crush);
 }
 
-struct shard_pool_crush_t {
-  bool operator==(const shard_pool_crush_t& x) const {
-    return (shard_pool == x.shard_pool && crush == x.crush);
+struct shard_pool_seed_crush_t {
+  bool operator==(const shard_pool_seed_crush_t& x) const {
+    return (shard_pool_seed == x.shard_pool_seed && crush == x.crush);
   }
-  bool operator!=(const shard_pool_crush_t& x) const { return !(*this == x); }
+  bool operator!=(const shard_pool_seed_crush_t& x) const { return !(*this == x); }
 
   template <KeyT KT>
-  static shard_pool_crush_t from_key(const full_key_t<KT>& key);
+  static shard_pool_seed_crush_t from_key(const full_key_t<KT>& key);
 
-  shard_pool_t shard_pool;
+  shard_pool_seed_t shard_pool_seed;
   crush_t crush;
 } __attribute__((packed));
-inline std::ostream& operator<<(std::ostream& os, const shard_pool_crush_t& spc) {
-  return os << spc.shard_pool << "," << spc.crush;
+inline std::ostream& operator<<(std::ostream& os, const shard_pool_seed_crush_t& spc) {
+  return os << spc.shard_pool_seed << "," << std::hex << spc.crush << std::dec;
 }
 inline MatchKindCMP compare_to(
-    const shard_pool_crush_t& l, const shard_pool_crush_t& r) {
-  auto ret = compare_to(l.shard_pool, r.shard_pool);
+    const shard_pool_seed_crush_t& l, const shard_pool_seed_crush_t& r) {
+  auto ret = compare_to(l.shard_pool_seed, r.shard_pool_seed);
   if (ret != MatchKindCMP::EQ)
     return ret;
   return compare_to(l.crush, r.crush);
@@ -130,7 +140,7 @@ struct snap_gen_t {
   gen_t gen;
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const snap_gen_t& sg) {
-  return os << sg.snap << "," << sg.gen;
+  return os << std::hex << sg.snap << "," << sg.gen << std::dec;
 }
 inline MatchKindCMP compare_to(const snap_gen_t& l, const snap_gen_t& r) {
   auto ret = toMatchKindCMP(l.snap, r.snap);
@@ -502,16 +512,17 @@ bool is_valid_key(const full_key_t<KT>& key);
  */
 class key_hobj_t {
  public:
-  explicit key_hobj_t(const ghobject_t& _ghobj) {
-    if (_ghobj.is_max()) {
+  explicit key_hobj_t(const tree_key_t& _key) {
+    if (_key.oid.is_max()) {
       ghobj = _MAX_OID();
     } else {
       // including when _ghobj.is_min()
-      ghobj = _ghobj;
+      ghobj = _key.oid;
     }
     // I can be in the range of [_MIN_OID, _MAX_OID]
     assert(ghobj >= _MIN_OID());
     assert(ghobj <= _MAX_OID());
+    _seed = _key.ps;
   }
   /*
    * common interfaces as a full_key_t
@@ -522,11 +533,14 @@ class key_hobj_t {
   pool_t pool() const {
     return ghobj.hobj.pool;
   }
+  seed_t seed() const {
+    return _seed;
+  }
   crush_hash_t crush() const {
     return ghobj.hobj.get_hash();
   }
   laddr_t get_hint() const {
-    return get_lba_hint(shard(), pool(), crush());
+    return get_lba_hint(shard(), pool(), seed(), crush());
   }
   std::string_view nspace() const {
     // TODO(cross-node string dedup)
@@ -558,11 +572,11 @@ class key_hobj_t {
   MatchKindCMP compare_to(const full_key_t<KeyT::HOBJ>&) const;
 
   std::ostream& dump(std::ostream& os) const {
-    os << "key_hobj(" << (int)shard() << ","
-       << pool() << "," << crush() << "; "
+    os << "key_hobj(" << (int)shard() << "," << pool()
+       << "," << std::hex << seed() << "," << crush() << std::dec << "; "
        << string_view_masked_t{nspace()} << ","
        << string_view_masked_t{oid()} << "; "
-       << snap() << "," << gen() << ")";
+       << std::hex << snap() << "," << gen() << std::dec << ")";
     return os;
   }
 
@@ -575,6 +589,8 @@ class key_hobj_t {
     ceph::decode(shard, delta);
     pool_t pool;
     ceph::decode(pool, delta);
+    seed_t seed;
+    ceph::decode(seed, delta);
     crush_hash_t crush;
     ceph::decode(crush, delta);
     std::string nspace;
@@ -589,13 +605,14 @@ class key_hobj_t {
     ceph::decode(snap, delta);
     gen_t gen;
     ceph::decode(gen, delta);
-    return key_hobj_t(ghobject_t(
-        shard_id_t(shard), pool, crush, nspace, oid, snap, gen));
+    return key_hobj_t({seed, ghobject_t(shard_id_t(shard), pool, crush,
+                                        nspace, oid, snap, gen)});
   }
 
  private:
   ns_oid_view_t::Type _dedup_type = ns_oid_view_t::Type::STR;
   ghobject_t ghobj;
+  seed_t _seed;
 };
 inline std::ostream& operator<<(std::ostream& os, const key_hobj_t& key) {
   return key.dump(os);
@@ -613,16 +630,19 @@ class key_view_t {
    * common interfaces as a full_key_t
    */
   shard_t shard() const {
-    return shard_pool_packed().shard;
+    return shard_pool_seed_packed().shard;
   }
   pool_t pool() const {
-    return shard_pool_packed().pool;
+    return shard_pool_seed_packed().pool;
+  }
+  seed_t seed() const {
+    return shard_pool_seed_packed().seed;
   }
   crush_hash_t crush() const {
     return crush_packed().crush;
   }
   laddr_t get_hint() const {
-    return get_lba_hint(shard(), pool(), crush());
+    return get_lba_hint(shard(), pool(), seed(), crush());
   }
   std::string_view nspace() const {
     // TODO(cross-node string dedup)
@@ -656,8 +676,8 @@ class key_view_t {
   /**
    * key_view_t specific interfaces
    */
-  bool has_shard_pool() const {
-    return p_shard_pool != nullptr;
+  bool has_shard_pool_seed() const {
+    return p_shard_pool_seed != nullptr;
   }
   bool has_crush() const {
     return p_crush != nullptr;
@@ -669,9 +689,9 @@ class key_view_t {
     return p_snap_gen != nullptr;
   }
 
-  const shard_pool_t& shard_pool_packed() const {
-    assert(has_shard_pool());
-    return *p_shard_pool;
+  const shard_pool_seed_t& shard_pool_seed_packed() const {
+    assert(has_shard_pool_seed());
+    return *p_shard_pool_seed;
   }
   const crush_t& crush_packed() const {
     assert(has_crush());
@@ -687,15 +707,14 @@ class key_view_t {
   }
 
   size_t size_logical() const {
-    return sizeof(shard_t) + sizeof(pool_t) + sizeof(crush_hash_t) +
+    return sizeof(shard_t) + sizeof(pool_t) + sizeof(seed_t) + sizeof(crush_hash_t) +
            sizeof(snap_t) + sizeof(gen_t) + ns_oid_view().size_logical();
   }
 
-  ghobject_t to_ghobj() const {
+  tree_key_t to_tree_key() const {
     assert(is_valid_key<KeyT::VIEW>(*this));
-    return ghobject_t(
-        shard_id_t(shard()), pool(), crush(),
-        std::string(nspace()), std::string(oid()), snap(), gen());
+    return {seed(), ghobject_t(shard_id_t(shard()), pool(), crush(),
+                               std::string(nspace()), std::string(oid()), snap(), gen())};
   }
 
   void replace(const crush_t& key) { p_crush = &key; }
@@ -703,10 +722,10 @@ class key_view_t {
     assert(!has_crush());
     replace(key);
   }
-  void replace(const shard_pool_crush_t& key) { p_shard_pool = &key.shard_pool; }
-  void set(const shard_pool_crush_t& key) {
+  void replace(const shard_pool_seed_crush_t& key) { p_shard_pool_seed = &key.shard_pool_seed; }
+  void set(const shard_pool_seed_crush_t& key) {
     set(key.crush);
-    assert(!has_shard_pool());
+    assert(!has_shard_pool_seed());
     replace(key);
   }
   void replace(const ns_oid_view_t& key) { p_ns_oid = key; }
@@ -723,8 +742,8 @@ class key_view_t {
   void reset_to(const char* origin_base,
                 const char* new_base,
                 extent_len_t node_size) {
-    if (p_shard_pool != nullptr) {
-      reset_ptr(p_shard_pool, origin_base, new_base, node_size);
+    if (p_shard_pool_seed != nullptr) {
+      reset_ptr(p_shard_pool_seed, origin_base, new_base, node_size);
     }
     if (p_crush != nullptr) {
       reset_ptr(p_crush, origin_base, new_base, node_size);
@@ -739,13 +758,14 @@ class key_view_t {
 
   std::ostream& dump(std::ostream& os) const {
     os << "key_view(";
-    if (has_shard_pool()) {
-      os << (int)shard() << "," << pool() << ",";
+    if (has_shard_pool_seed()) {
+      os << (int)shard() << "," << pool()
+         << "," << std::hex << seed() << std::dec << ",";
     } else {
-      os << "X,X,";
+      os << "X,X,X,";
     }
     if (has_crush()) {
-      os << crush() << "; ";
+      os << std::hex << crush() << std::dec << "; ";
     } else {
       os << "X; ";
     }
@@ -755,7 +775,7 @@ class key_view_t {
       os << "X,X; ";
     }
     if (has_snap_gen()) {
-      os << snap() << "," << gen() << ")";
+      os << std::hex << snap() << "," << gen() << std::dec << ")";
     } else {
       os << "X,X)";
     }
@@ -763,7 +783,7 @@ class key_view_t {
   }
 
  private:
-  const shard_pool_t* p_shard_pool = nullptr;
+  const shard_pool_seed_t* p_shard_pool_seed = nullptr;
   const crush_t* p_crush = nullptr;
   std::optional<ns_oid_view_t> p_ns_oid;
   const snap_gen_t* p_snap_gen = nullptr;
@@ -773,6 +793,7 @@ template <KeyT KT>
 void encode_key(const full_key_t<KT>& key, ceph::bufferlist& bl) {
   ceph::encode(key.shard(), bl);
   ceph::encode(key.pool(), bl);
+  ceph::encode(key.seed(), bl);
   ceph::encode(key.crush(), bl);
   key.nspace_masked().encode(bl);
   key.oid_masked().encode(bl);
@@ -787,6 +808,9 @@ MatchKindCMP compare_full_key(
   if (ret != MatchKindCMP::EQ)
     return ret;
   ret = toMatchKindCMP(l.pool(), r.pool());
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  ret = toMatchKindCMP(l.seed(), r.seed());
   if (ret != MatchKindCMP::EQ)
     return ret;
   ret = toMatchKindCMP(l.crush(), r.crush());
@@ -823,8 +847,8 @@ inline MatchKindCMP key_view_t::compare_to(
 
 template <KeyT KT>
 bool is_valid_key(const full_key_t<KT>& key) {
-  return key.compare_to(key_hobj_t(ghobject_t())) == MatchKindCMP::GT &&
-         key.compare_to(key_hobj_t(ghobject_t::get_max())) == MatchKindCMP::LT;
+  return key.compare_to(key_hobj_t({0, ghobject_t()})) == MatchKindCMP::GT &&
+         key.compare_to(key_hobj_t({MAX_SEED, ghobject_t::get_max()})) == MatchKindCMP::LT;
 }
 
 inline std::ostream& operator<<(std::ostream& os, const key_view_t& key) {
@@ -832,11 +856,14 @@ inline std::ostream& operator<<(std::ostream& os, const key_view_t& key) {
 }
 
 template <KeyT Type>
-MatchKindCMP compare_to(const full_key_t<Type>& key, const shard_pool_t& target) {
+MatchKindCMP compare_to(const full_key_t<Type>& key, const shard_pool_seed_t& target) {
   auto ret = toMatchKindCMP(key.shard(), target.shard);
   if (ret != MatchKindCMP::EQ)
     return ret;
-  return toMatchKindCMP(key.pool(), target.pool);
+  ret = toMatchKindCMP(key.pool(), target.pool);
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  return toMatchKindCMP(key.seed(), target.seed);
 }
 
 template <KeyT Type>
@@ -845,8 +872,8 @@ MatchKindCMP compare_to(const full_key_t<Type>& key, const crush_t& target) {
 }
 
 template <KeyT Type>
-MatchKindCMP compare_to(const full_key_t<Type>& key, const shard_pool_crush_t& target) {
-  auto ret = compare_to<Type>(key, target.shard_pool);
+MatchKindCMP compare_to(const full_key_t<Type>& key, const shard_pool_seed_crush_t& target) {
+  auto ret = compare_to<Type>(key, target.shard_pool_seed);
   if (ret != MatchKindCMP::EQ)
     return ret;
   return compare_to<Type>(key, target.crush);
@@ -869,11 +896,11 @@ MatchKindCMP compare_to(const full_key_t<Type>& key, const snap_gen_t& target) {
 }
 
 template <KeyT KT>
-shard_pool_t shard_pool_t::from_key(const full_key_t<KT>& key) {
+shard_pool_seed_t shard_pool_seed_t::from_key(const full_key_t<KT>& key) {
   if constexpr (KT == KeyT::VIEW) {
-    return key.shard_pool_packed();
+    return key.shard_pool_seed_packed();
   } else {
-    return {key.shard(), key.pool()};
+    return {key.shard(), key.pool(), key.seed()};
   }
 }
 
@@ -887,8 +914,8 @@ crush_t crush_t::from_key(const full_key_t<KT>& key) {
 }
 
 template <KeyT KT>
-shard_pool_crush_t shard_pool_crush_t::from_key(const full_key_t<KT>& key) {
-  return {shard_pool_t::from_key<KT>(key), crush_t::from_key<KT>(key)};
+shard_pool_seed_crush_t shard_pool_seed_crush_t::from_key(const full_key_t<KT>& key) {
+  return {shard_pool_seed_t::from_key<KT>(key), crush_t::from_key<KT>(key)};
 }
 
 template <KeyT KT>

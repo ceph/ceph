@@ -68,9 +68,9 @@ inline bool matchable(field_type_t type, match_stat_t mstat) {
   /*
    * compressed prefix by field type:
    * N0: NONE
-   * N1: pool/shard
-   * N2: pool/shard crush
-   * N3: pool/shard crush ns/oid
+   * N1: pool/shard/seed
+   * N2: pool/shard/seed crush
+   * N3: pool/shard/seed crush ns/oid
    *
    * if key matches the node's compressed prefix, return true
    * else, return false
@@ -99,9 +99,9 @@ inline void assert_mstat(
     assert(compare_to<KeyT::HOBJ>(key, index.ns_oid_view()) == MatchKindCMP::LT);
     break;
    case MSTAT_LT2:
-    if (index.has_shard_pool()) {
-      assert(compare_to<KeyT::HOBJ>(key, shard_pool_crush_t{
-               index.shard_pool_packed(), index.crush_packed()}) == MatchKindCMP::LT);
+    if (index.has_shard_pool_seed()) {
+      assert(compare_to<KeyT::HOBJ>(key, shard_pool_seed_crush_t{
+               index.shard_pool_seed_packed(), index.crush_packed()}) == MatchKindCMP::LT);
     } else {
       assert(compare_to<KeyT::HOBJ>(key, index.crush_packed()) == MatchKindCMP::LT);
     }
@@ -122,9 +122,9 @@ inline void assert_mstat(
     if (!index.has_crush())
       break;
     assert(compare_to<KeyT::HOBJ>(key, index.crush_packed()) == MatchKindCMP::EQ);
-    if (!index.has_shard_pool())
+    if (!index.has_shard_pool_seed())
       break;
-    assert(compare_to<KeyT::HOBJ>(key, index.shard_pool_packed()) == MatchKindCMP::EQ);
+    assert(compare_to<KeyT::HOBJ>(key, index.shard_pool_seed_packed()) == MatchKindCMP::EQ);
    default:
     break;
   }
@@ -145,7 +145,7 @@ enum class TrimType { BEFORE, AFTER, AT };
  *
  * Multi-stage is designed to index different portions of onode keys
  * stage-by-stage. There are at most 3 stages for a node:
- * - STAGE_LEFT:   index shard-pool-crush for N0, or index crush for N1 node;
+ * - STAGE_LEFT:   index shard-pool-seed-crush for N0, or index crush for N1 node;
  * - STAGE_STRING: index ns-oid for N0/N1/N2 nodes;
  * - STAGE_RIGHT:  index snap-gen for N0/N1/N2/N3 nodes;
  *

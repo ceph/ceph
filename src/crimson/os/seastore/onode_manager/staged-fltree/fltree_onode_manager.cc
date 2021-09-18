@@ -9,19 +9,21 @@ namespace crimson::os::seastore::onode {
 
 FLTreeOnodeManager::contains_onode_ret FLTreeOnodeManager::contains_onode(
   Transaction &trans,
+  ps_t ps,
   const ghobject_t &hoid)
 {
-  return tree.contains(trans, hoid);
+  return tree.contains(trans, {ps, hoid});
 }
 
 FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
   Transaction &trans,
+  ps_t ps,
   const ghobject_t &hoid)
 {
   LOG_PREFIX(FLTreeOnodeManager::get_onode);
   return tree.find(
-    trans, hoid
-  ).si_then([this, &hoid, &trans, FNAME](auto cursor)
+    trans, {ps, hoid}
+  ).si_then([this, ps, &hoid, &trans, FNAME](auto cursor)
               -> get_onode_ret {
     if (cursor == tree.end()) {
       DEBUGT("no entry for {}", trans, hoid);
@@ -37,13 +39,15 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
 FLTreeOnodeManager::get_or_create_onode_ret
 FLTreeOnodeManager::get_or_create_onode(
   Transaction &trans,
+  ps_t ps,
   const ghobject_t &hoid)
 {
   LOG_PREFIX(FLTreeOnodeManager::get_or_create_onode);
   return tree.insert(
-    trans, hoid,
+    trans,
+    {ps, hoid},
     OnodeTree::tree_value_config_t{sizeof(onode_layout_t)}
-  ).si_then([&trans, &hoid, FNAME](auto p)
+  ).si_then([&trans, ps, hoid, FNAME](auto p)
               -> get_or_create_onode_ret {
     auto [cursor, created] = std::move(p);
     auto val = OnodeRef(new FLTreeOnode(cursor.value()));
@@ -60,16 +64,17 @@ FLTreeOnodeManager::get_or_create_onode(
 FLTreeOnodeManager::get_or_create_onodes_ret
 FLTreeOnodeManager::get_or_create_onodes(
   Transaction &trans,
+  ps_t ps,
   const std::vector<ghobject_t> &hoids)
 {
   return seastar::do_with(
     std::vector<OnodeRef>(),
-    [this, &hoids, &trans](auto &ret) {
+    [this, ps, &hoids, &trans](auto &ret) {
       ret.reserve(hoids.size());
       return trans_intr::do_for_each(
         hoids,
-        [this, &trans, &ret](auto &hoid) {
-          return get_or_create_onode(trans, hoid
+        [this, ps, &trans, &ret](auto &hoid) {
+          return get_or_create_onode(trans, ps, hoid
           ).si_then([&ret](auto &&onoderef) {
             ret.push_back(std::move(onoderef));
           });
@@ -115,33 +120,40 @@ FLTreeOnodeManager::erase_onode_ret FLTreeOnodeManager::erase_onode(
 
 FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(
   Transaction &trans,
+  ps_t ps,
   const ghobject_t& start,
   const ghobject_t& end,
   uint64_t limit)
 {
-  return tree.lower_bound(trans, start
-  ).si_then([this, &trans, end, limit] (auto&& cursor) {
-    using crimson::os::seastore::onode::full_key_t;
+  return tree.lower_bound(trans, {ps, start}
+  ).si_then([this, &trans, ps, end, limit] (auto&& cursor) {
     return seastar::do_with(
         limit,
         std::move(cursor),
         list_onodes_bare_ret(),
-        [this, &trans, end] (auto& to_list, auto& current_cursor, auto& ret) {
+        [this, &trans, ps, end] (auto& to_list, auto& current_cursor, auto& ret) {
       return trans_intr::repeat(
-          [this, &trans, end, &to_list, &current_cursor, &ret] ()
+          [this, &trans, ps, end, &to_list, &current_cursor, &ret] ()
           -> eagain_ifuture<seastar::stop_iteration> {
-        if (current_cursor.is_end() ||
-            current_cursor.get_ghobj() >= end) {
+        if (current_cursor.is_end()) {
+          std::get<1>(ret) = end;
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes);
+        }
+        auto current_key = current_cursor.get_key();
+        if (current_key.ps != ps ||
+            current_key.oid >= end) {
+          ceph_assert(current_key.ps >= ps);
           std::get<1>(ret) = end;
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         }
         if (to_list == 0) {
-          std::get<1>(ret) = current_cursor.get_ghobj();
+          std::get<1>(ret) = current_key.oid;
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         }
-        std::get<0>(ret).emplace_back(current_cursor.get_ghobj());
+        std::get<0>(ret).emplace_back(current_key.oid);
         return tree.get_next(trans, current_cursor
         ).si_then([&to_list, &current_cursor] (auto&& next_cursor) mutable {
           // we intentionally hold the current_cursor during get_next() to

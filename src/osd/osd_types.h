@@ -804,6 +804,14 @@ public:
     return 0;  // whatever.
   }
 
+  ps_t demo_get_ps() const {
+    if (type == TYPE_META) {
+      return std::numeric_limits<ps_t>::max();
+    } else {
+      return pgid.ps();
+    }
+  }
+
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<coll_t*>& o);
 };

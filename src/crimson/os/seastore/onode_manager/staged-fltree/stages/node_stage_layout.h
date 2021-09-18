@@ -77,7 +77,7 @@ struct _slot_t {
   key_t key;
   node_offset_t right_offset;
 } __attribute__((packed));
-using slot_0_t = _slot_t<shard_pool_crush_t, field_type_t::N0>;
+using slot_0_t = _slot_t<shard_pool_seed_crush_t, field_type_t::N0>;
 using slot_1_t = _slot_t<crush_t, field_type_t::N1>;
 using slot_3_t = _slot_t<snap_gen_t, field_type_t::N3>;
 

@@ -544,7 +544,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
         if (result_raw.mstat == MSTAT_LT2) {
           auto cmp = compare_to<KeyT::HOBJ>(
-              key, node_stage[result_raw.position.index].shard_pool);
+              key, node_stage[result_raw.position.index].shard_pool_seed);
           assert(cmp != MatchKindCMP::GT);
           if (cmp != MatchKindCMP::EQ) {
             result_raw.mstat = MSTAT_LT3;

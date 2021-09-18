@@ -10,8 +10,12 @@
 #include <ostream>
 #include <string>
 
+#include "common/hobject.h"
+#include "osd/osd_types.h"
+
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/cached_extent.h"
+#include "crimson/os/seastore/onode.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction.h"
 
@@ -28,6 +32,11 @@ using crimson::os::seastore::laddr_t;
 using crimson::os::seastore::L_ADDR_MIN;
 using crimson::os::seastore::L_ADDR_NULL;
 using crimson::os::seastore::extent_len_t;
+
+struct tree_key_t {
+  ps_t ps;
+  ghobject_t oid;
+};
 
 class DeltaRecorder;
 class NodeExtent;
