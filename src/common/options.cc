@@ -8775,6 +8775,14 @@ std::vector<Option> get_mds_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("mds_kill_skip_replaying_inotable", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Ceph will skip replaying the inotable when replaying the journal, and the premary MDS will crash, while the replacing MDS won't. (for testing only)"),
+
+    Option("mds_inject_skip_replaying_inotable", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Ceph will skip replaying the inotable when replaying the journal, and the premary MDS will crash, while the replacing MDS won't. (for testing only)"),
+
     Option("mds_inject_traceless_reply_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),

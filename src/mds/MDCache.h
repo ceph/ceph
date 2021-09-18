@@ -202,6 +202,9 @@ class MDCache {
   bool test_and_clear_taken_inos(inodeno_t ino) {
     return replay_taken_inos.erase(ino) != 0;
   }
+  bool is_taken_inos_empty(void) {
+    return replay_taken_inos.empty();
+  }
 
   uint64_t cache_limit_memory(void) {
     return cache_memory_limit;
