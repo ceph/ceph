@@ -155,6 +155,21 @@ namespace LRemDBStore {
     virtual ~KVTableBase() {}
 
     int create_table() override;
+
+    int get_vals(const std::string& start_after,
+                 const std::string &filter_prefix,
+                 uint64_t max_return,
+                 std::map<std::string, bufferlist> *out_vals);
+    int get_vals_by_keys(const std::set<std::string>& keys,
+                         std::map<std::string, bufferlist> *out_vals);
+    int rm_keys(const std::set<std::string>& keys);
+    int rm_range(const string& key_begin,
+                 const string& key_end);
+    int clear();
+    int set(const std::map<std::string, bufferlist>& m);
+
+    int get_header(bufferlist *bl);
+    int set_header(const bufferlist& bl);
   };
 
   class OMap : public KVTableBase {

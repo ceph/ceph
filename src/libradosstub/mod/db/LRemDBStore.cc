@@ -39,6 +39,26 @@ static inline string join(std::vector<string> v, const string& sep = ", ")
 }
 
 template <class T>
+static inline string join_quoted(const T& v, const string& sep = ", ")
+{
+  string result;
+  for (auto& s : v) {
+    if (!result.empty()) {
+      result.append(sep);
+    }
+    result += quoted(s);
+  }
+  return result;
+}
+
+string sprintf_int(const char *format, int val)
+{
+  char buf[32];
+  snprintf(buf, sizeof(buf), format, val);
+  return string(buf);
+}
+
+template <class T>
 string encode_base64(const T& t)
 {
   bufferlist bl;
@@ -334,10 +354,7 @@ LRemDBStore::OMapRef LRemDBStore::Pool::get_omap_handler(const std::string& nspa
 }
 
 void LRemDBStore::TableBase::init_table_name(const string& table_name_prefix) {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "_%d", (int)pool_id);
-
-  table_name = table_name_prefix + buf;
+  table_name = table_name_prefix + sprintf_int("_%d", (int)pool_id);
 }
 
 int LRemDBStore::Obj::create_table() {
@@ -483,24 +500,6 @@ int LRemDBStore::Obj::write_data(uint64_t ofs, uint64_t len,
   }
 
   len = r;
-#if 0
-  uint64_t size = ofs + len;
-#warning update epoch, mtime
-  auto q = dbo->statement("INSERT INTO ?(nspace, oid, size) VALUES (?, ?, ?)"
-                          " ON CONFLICT(nspace, oid) DO UPDATE SET size=?"
-                          " WHERE size < ?");
-
-  q.bind(1, table_name);
-  q.bind(2, nspace);
-  q.bind(3, oid);
-  q.bind(4, (long long)size);
-  q.bind(5, (long long)size);
-
-  r = dbo->exec(q);
-  if (r < 0) {
-    return r;
-  }
-#endif
 
   return len;
 }
@@ -590,6 +589,17 @@ int LRemDBStore::ObjData::create_table() {
   return 0;
 }
 
+void bl_from_blob_col(SQLite::Statement& q, int col_num, bufferlist *bl)
+{
+  auto blob_col = q.getColumn(col_num);
+
+  const char *data = (const char *)blob_col.getBlob();
+  size_t len = blob_col.getBytes();
+
+  bufferptr bp(data, len);
+  bl->push_back(bp);
+}
+
 int LRemDBStore::ObjData::read_block(int bid, bufferlist *bl) {
   SQLite::Statement q = dbo->statement(string("SELECT data FROM ") + table_name +
                                        " WHERE nspace = ? AND oid = ? AND bid == ?");
@@ -607,13 +617,7 @@ int LRemDBStore::ObjData::read_block(int bid, bufferlist *bl) {
     return -EIO;
   }
 
-  auto blob_col = q.getColumn(0);
-
-  const char *data = (const char *)blob_col.getBlob();
-  size_t len = blob_col.getBytes();
-
-  bufferptr bp(data, len);
-  bl->push_back(bp);
+  bl_from_blob_col(q, 0, bl);
 
   return 0;
 }
@@ -800,6 +804,177 @@ int LRemDBStore::KVTableBase::create_table() {
   return 0;
 }
 
+#define MAX_KEYS_DEFAULT 256
 
+int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
+                                       const std::string &filter_prefix,
+                                       uint64_t max_return,
+                                       std::map<std::string, bufferlist> *out_vals) {
+  string s = string("SELECT key, data from ") + table_name +
+                    " WHERE nspace = ? AND oid = ?";
+  if (!filter_prefix.empty()) {
+    s += " AND WHERE key LIKE '" + filter_prefix + "%'";
+  }
+
+  if (max_return == 0) {
+    max_return = MAX_KEYS_DEFAULT;
+  }
+  max_return = std::min((int)max_return, MAX_KEYS_DEFAULT);
+
+  s += " LIMIT " + sprintf_int("%d", (int)max_return);
+
+  SQLite::Statement q = dbo->statement(s);
+
+  q.bind(1, nspace);
+  q.bind(2, oid);
+
+  try {
+    while (!q.executeStep()) {
+      string key = (const char *)q.getColumn(0);
+
+      bufferlist bl;
+      bl_from_blob_col(q, 1, &bl);
+
+      (*out_vals)[key] = bl;
+    }
+  } catch (SQLite::Exception& e) {
+    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
+    return -EIO;
+  }
+
+  return out_vals->size();
+}
+
+int LRemDBStore::KVTableBase::get_vals_by_keys(const std::set<std::string>& keys,
+                                               std::map<std::string, bufferlist> *out_vals) {
+  string s = string("SELECT key, data from ") + table_name +
+                    " WHERE nspace = ? AND oid = ?"
+                    " AND key IN (" + join_quoted(keys) + ")'";
+
+  SQLite::Statement q = dbo->statement(s);
+
+  q.bind(1, nspace);
+  q.bind(2, oid);
+
+  try {
+    while (!q.executeStep()) {
+      string key = (const char *)q.getColumn(0);
+
+      bufferlist bl;
+      bl_from_blob_col(q, 1, &bl);
+
+      (*out_vals)[key] = bl;
+    }
+  } catch (SQLite::Exception& e) {
+    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
+    return -EIO;
+  }
+
+  return out_vals->size();
+}
+
+int LRemDBStore::KVTableBase::rm_keys(const std::set<std::string>& keys) {
+  auto q = dbo->statement(string("DELETE FROM ") + table_name +
+                          " WHERE nspace = ? and oid = ?"
+                          " AND key IN (" + join_quoted(keys) + ")'");
+
+  q.bind(1, nspace);
+  q.bind(2, oid);
+
+  int r = dbo->exec(q);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int LRemDBStore::KVTableBase::rm_range(const string& key_begin,
+                              const string& key_end) {
+  auto q = dbo->statement(string("DELETE FROM ") + table_name +
+                          " WHERE nspace = ? and oid = ?"
+                          " AND key >= ? AND key <= ?");
+
+  q.bind(1, nspace);
+  q.bind(2, oid);
+  q.bind(3, key_begin);
+  q.bind(4, key_end);
+
+  int r = dbo->exec(q);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int LRemDBStore::KVTableBase::clear() {
+  auto q = dbo->statement(string("DELETE FROM ") + table_name +
+                          " WHERE nspace = ? and oid = ?");
+  q.bind(1, nspace);
+  q.bind(2, oid);
+
+  int r = dbo->exec(q);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int LRemDBStore::KVTableBase::set(const std::map<std::string, bufferlist>& m) {
+  for (auto& iter : m) {
+    auto& key = iter.first;
+    auto bl = iter.second;
+
+    SQLite::Statement q = dbo->statement(string("REPLACE INTO ") + table_name +
+                                       " VALUES ( ?, ?, ?, ? )");
+
+    q.bind(1, nspace);
+    q.bind(2, oid);
+    q.bind(3, key);
+    q.bind(4, bl.c_str(), bl.length());
+
+    int r = dbo->exec(q);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  return m.size();
+}
+
+int LRemDBStore::KVTableBase::get_header(bufferlist *bl) {
+  std::set<string> keys;
+  keys.insert(string());
+
+  std::map<string, bufferlist> out_vals;
+
+  int r = get_vals_by_keys(keys, &out_vals);
+  if (r < 0) {
+    return r;
+  }
+
+  bl->clear();
+  if (out_vals.empty()) {
+    return 0;
+  }
+
+  auto bliter = out_vals.begin();
+  if (bliter == out_vals.end()) { /* should never happen */
+    return -EIO;
+  }
+
+  bl->claim_append(bliter->second);
+  return 0;
+}
+
+int LRemDBStore::KVTableBase::set_header(const bufferlist& bl) {
+  std::map<string, bufferlist> vals;
+
+  vals[string()] = bl;
+
+  return set(vals);
+}
 
 }
