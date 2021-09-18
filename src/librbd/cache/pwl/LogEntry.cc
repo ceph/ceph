@@ -46,10 +46,8 @@ std::ostream &operator<<(std::ostream &os,
 }
 
 bool GenericWriteLogEntry::can_writeback() const {
-  return (this->completed &&
-          (ram_entry.sequenced ||
-           (sync_point_entry &&
-            sync_point_entry->completed)));
+  return ram_entry.sequenced ||
+         (sync_point_entry && sync_point_entry->completed);
 }
 
 std::ostream& GenericWriteLogEntry::format(std::ostream &os) const {

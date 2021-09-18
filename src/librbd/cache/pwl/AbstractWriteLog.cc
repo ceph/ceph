@@ -1677,7 +1677,7 @@ Context* AbstractWriteLog<I>::construct_flush_entry(std::shared_ptr<GenericLogEn
 }
 
 template <typename I>
-void AbstractWriteLog<I>::process_writeback_dirty_entries() {
+void AbstractWriteLog<I>::process_writeback_dirty_entries(bool force) {
   CephContext *cct = m_image_ctx.cct;
   bool all_clean = false;
   int flushed = 0;
@@ -1701,8 +1701,9 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
         break;
       }
       auto candidate = m_dirty_log_entries.front();
+      ceph_assert(candidate->completed);
       bool flushable = can_flush_entry(candidate);
-      if (flushable) {
+      if (flushable || force) {
         post_unlock.add(construct_flush_entry_ctx(candidate));
         flushed++;
         m_dirty_log_entries.pop_front();

@@ -799,16 +799,19 @@ void WriteLog<I>::process_work() {
            this->m_alloc_failed_since_retire)
             ? MAX_ALLOC_PER_TRANSACTION
             : MAX_FREE_PER_TRANSACTION)) {
+          if (this->m_alloc_failed_since_retire) {
+            this->process_writeback_dirty_entries(true);
+          }
           break;
         }
         retired++;
         this->dispatch_deferred_writes();
-        this->process_writeback_dirty_entries();
+        this->process_writeback_dirty_entries(false);
       }
       ldout(m_image_ctx.cct, 10) << "Retired " << retired << " times" << dendl;
     }
     this->dispatch_deferred_writes();
-    this->process_writeback_dirty_entries();
+    this->process_writeback_dirty_entries(false);
 
     {
       std::lock_guard locker(m_lock);

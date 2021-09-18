@@ -346,7 +346,7 @@ protected:
       std::shared_ptr<pwl::GenericLogEntry> log_entry) = 0;
   Context *construct_flush_entry(
       const std::shared_ptr<pwl::GenericLogEntry> log_entry, bool invalidating);
-  void process_writeback_dirty_entries();
+  void process_writeback_dirty_entries(bool force);
   bool can_retire_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
 
   void dispatch_deferred_writes(void);

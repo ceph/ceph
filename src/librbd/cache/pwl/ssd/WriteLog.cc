@@ -589,12 +589,18 @@ void WriteLog<I>::process_work() {
                                  << ", allocated > high_water="
                                  << (m_bytes_allocated > high_water_bytes)
                                  << dendl;
-      retire_entries((this->m_shutting_down || this->m_invalidating ||
-                      m_bytes_allocated > aggressive_high_water_bytes)
-                    ? MAX_ALLOC_PER_TRANSACTION : MAX_FREE_PER_TRANSACTION);
+      // TODO: needs to retire circularly, otherwise the efficiency is very low
+      if (!retire_entries((this->m_shutting_down || this->m_invalidating ||
+                          m_bytes_allocated > aggressive_high_water_bytes) ?
+                          MAX_ALLOC_PER_TRANSACTION :
+                          MAX_FREE_PER_TRANSACTION)) {
+        if (this->m_alloc_failed_since_retire) {
+          this->process_writeback_dirty_entries(true);
+        }
+      }
     }
     this->dispatch_deferred_writes();
-    this->process_writeback_dirty_entries();
+    this->process_writeback_dirty_entries(false);
     {
       std::lock_guard locker(m_lock);
       wake_up_requested = this->m_wake_up_requested;
@@ -761,7 +767,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
         }
 
         this->dispatch_deferred_writes();
-        this->process_writeback_dirty_entries();
+        this->process_writeback_dirty_entries(false);
       });
 
     std::lock_guard locker(m_lock);
