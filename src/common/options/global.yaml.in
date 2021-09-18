@@ -5205,6 +5205,15 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluestore_fail_eio
+  type: bool
+  level: dev
+  desc: fail/crash on EIO
+  long_desc: whether bluestore osd fails on eio
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
 - name: kstore_max_ops
   type: uint
   level: advanced
