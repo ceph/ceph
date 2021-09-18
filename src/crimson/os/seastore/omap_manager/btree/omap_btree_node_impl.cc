@@ -267,7 +267,7 @@ OMapInnerNode::split_children_ret
 OMapInnerNode:: make_split_children(omap_context_t oc)
 {
   logger().debug("OMapInnerNode: {}", __func__);
-  return oc.tm.alloc_extents<OMapInnerNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE, 2)
+  return oc.tm.alloc_extents<OMapInnerNode>(oc.t, oc.hint, OMAP_BLOCK_SIZE, 2)
     .si_then([this] (auto &&ext_pair) {
       auto left = ext_pair.front();
       auto right = ext_pair.back();
@@ -295,7 +295,7 @@ OMapInnerNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
 {
   logger().debug("OMapInnerNode: {}", __func__);
   ceph_assert(_right->get_type() == TYPE);
-  return oc.tm.alloc_extents<OMapInnerNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE, 2)
+  return oc.tm.alloc_extents<OMapInnerNode>(oc.t, oc.hint, OMAP_BLOCK_SIZE, 2)
     .si_then([this, _right] (auto &&replacement_pair){
       auto replacement_left = replacement_pair.front();
       auto replacement_right = replacement_pair.back();
@@ -556,7 +556,7 @@ OMapLeafNode::split_children_ret
 OMapLeafNode::make_split_children(omap_context_t oc)
 {
   logger().debug("OMapLeafNode: {}", __func__);
-  return oc.tm.alloc_extents<OMapLeafNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE, 2)
+  return oc.tm.alloc_extents<OMapLeafNode>(oc.t, oc.hint, OMAP_BLOCK_SIZE, 2)
     .si_then([this] (auto &&ext_pair) {
       auto left = ext_pair.front();
       auto right = ext_pair.back();
@@ -585,7 +585,7 @@ OMapLeafNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
 {
   ceph_assert(_right->get_type() == TYPE);
   logger().debug("OMapLeafNode: {}",  __func__);
-  return oc.tm.alloc_extents<OMapLeafNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE, 2)
+  return oc.tm.alloc_extents<OMapLeafNode>(oc.t, oc.hint, OMAP_BLOCK_SIZE, 2)
     .si_then([this, _right] (auto &&replacement_pair) {
       auto replacement_left = replacement_pair.front();
       auto replacement_right = replacement_pair.back();
