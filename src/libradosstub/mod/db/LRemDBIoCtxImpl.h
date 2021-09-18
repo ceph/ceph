@@ -125,6 +125,7 @@ private:
     bool exists{false};
     LRemDBStore::Obj::Meta meta;
     LRemDBStore::ObjRef obj;
+    LRemDBStore::OMapRef omap;
 
     ceph::shared_mutex *lock{nullptr};
 

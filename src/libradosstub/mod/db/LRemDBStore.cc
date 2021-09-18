@@ -809,7 +809,8 @@ int LRemDBStore::KVTableBase::create_table() {
 int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
                                        const std::string &filter_prefix,
                                        uint64_t max_return,
-                                       std::map<std::string, bufferlist> *out_vals) {
+                                       std::map<std::string, bufferlist> *out_vals,
+                                       bool *pmore) {
   string s = string("SELECT key, data from ") + table_name +
                     " WHERE nspace = ? AND oid = ?";
   if (!filter_prefix.empty()) {
@@ -821,7 +822,9 @@ int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
   }
   max_return = std::min((int)max_return, MAX_KEYS_DEFAULT);
 
-  s += " LIMIT " + sprintf_int("%d", (int)max_return);
+  auto max_req = max_return + 1;
+
+  s += " LIMIT " + sprintf_int("%d", (int)max_req);
 
   SQLite::Statement q = dbo->statement(s);
 
@@ -830,6 +833,12 @@ int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
 
   try {
     while (!q.executeStep()) {
+      --max_return;
+      if (max_return == 0) {
+        *pmore = true;
+        return 0;
+      }
+
       string key = (const char *)q.getColumn(0);
 
       bufferlist bl;
@@ -842,7 +851,9 @@ int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
     return -EIO;
   }
 
-  return out_vals->size();
+  *pmore = false;
+
+  return 0;
 }
 
 int LRemDBStore::KVTableBase::get_vals_by_keys(const std::set<std::string>& keys,

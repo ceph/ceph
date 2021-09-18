@@ -298,32 +298,12 @@ int LRemDBIoCtxImpl::omap_get_vals2(const std::string& oid,
   out_vals->clear();
 
   std::shared_lock l{*file->lock};
-  LRemDBCluster::FileOMaps::iterator o_it = m_pool->file_omaps.find(
-    {get_namespace(), oid});
-  if (o_it == m_pool->file_omaps.end()) {
-    if (pmore) {
-      *pmore = false;
-    }
-    return 0;
+
+  int r = file->omap->get_vals(start_after, filter_prefix, max_return, out_vals, pmore);
+  if (r < 0) {
+    return r;
   }
 
-  auto& omap = o_it->second.data;
-  auto it = omap.begin();
-  if (!start_after.empty()) {
-    it = omap.upper_bound(start_after);
-  }
-
-  while (it != omap.end() && max_return > 0) {
-    if (filter_prefix.empty() ||
-        boost::algorithm::starts_with(it->first, filter_prefix)) {
-      (*out_vals)[it->first] = it->second;
-      --max_return;
-    }
-    ++it;
-  }
-  if (pmore) {
-    *pmore = (it != omap.end());
-  }
   return 0;
 }
 
@@ -356,17 +336,10 @@ int LRemDBIoCtxImpl::omap_get_vals_by_keys(const std::string& oid,
   vals->clear();
 
   std::shared_lock l{*file->lock};
-  LRemDBCluster::FileOMaps::iterator o_it = m_pool->file_omaps.find(
-    {get_namespace(), oid});
-  if (o_it == m_pool->file_omaps.end()) {
-    return 0;
-  }
-  auto& omap = o_it->second.data;
-  for (const auto& key : keys) {
-    auto viter = omap.find(key);
-    if (viter != omap.end()) {
-      (*vals)[key] = viter->second;
-    }
+
+  int r = file->omap->get_vals_by_keys(keys, vals);
+  if (r < 0) {
+    return r;
   }
 
   return 0;
@@ -393,12 +366,15 @@ int LRemDBIoCtxImpl::omap_rm_keys(const std::string& oid,
   }
 
   std::unique_lock l{*file->lock};
-  for (std::set<std::string>::iterator it = keys.begin();
-       it != keys.end(); ++it) {
-    m_pool->file_omaps[{get_namespace(), oid}].data.erase(*it);
+
+  int r = file->omap->rm_keys(keys);
+  if (r < 0) {
+    return r;
   }
-  file->meta.epoch = epoch;
-  return file->obj->write_meta(file->meta);
+
+  file->modify_meta().epoch = epoch;
+
+  return file->flush();
 }
 
 int LRemDBIoCtxImpl::omap_rm_range(const std::string& oid,
@@ -424,15 +400,10 @@ int LRemDBIoCtxImpl::omap_rm_range(const std::string& oid,
 
   std::unique_lock l{*file->lock};
 
-  auto& omap = m_pool->file_omaps[{get_namespace(), oid}].data;
-
-  auto start = omap.lower_bound(key_begin);
-  if (start == omap.end()) {
-    return 0;
+  int r = file->omap->rm_range(key_begin, key_end);
+  if (r < 0) {
+    return r;
   }
-  auto end = omap.lower_bound(key_end);
-
-  omap.erase(start, end);
 
   file->modify_meta().epoch = epoch;
 
@@ -459,10 +430,15 @@ int LRemDBIoCtxImpl::omap_clear(const std::string& oid) {
   }
 
   std::unique_lock l{*file->lock};
-  m_pool->file_omaps[{get_namespace(), oid}].data.clear();
+
+  int r = file->omap->clear();
+  if (r < 0) {
+    return r;
+  }
+
   file->modify_meta().epoch = epoch;
 
-  return 0;
+  return file->flush();
 }
 
 int LRemDBIoCtxImpl::omap_set(const std::string& oid,
@@ -486,15 +462,15 @@ int LRemDBIoCtxImpl::omap_set(const std::string& oid,
   }
 
   std::unique_lock l{*file->lock};
-  for (std::map<std::string, bufferlist>::const_iterator it = map.begin();
-      it != map.end(); ++it) {
-    bufferlist bl;
-    bl.append(it->second);
-    m_pool->file_omaps[{get_namespace(), oid}].data[it->first] = bl;
+
+  int r = file->omap->set(map);
+  if (r < 0) {
+    return r;
   }
+
   file->modify_meta().epoch = epoch;
 
-  return 0;
+  return file->flush();
 }
 
 int LRemDBIoCtxImpl::omap_get_header(LRemTransactionStateRef& trans,
@@ -514,11 +490,10 @@ int LRemDBIoCtxImpl::omap_get_header(LRemTransactionStateRef& trans,
   }
 
   std::shared_lock l{*file->lock};
-  auto iter = m_pool->file_omaps.find({get_namespace(), oid});
-  if (iter == m_pool->file_omaps.end()) {
-    bl->clear();
-  } else {
-    *bl = iter->second.header;
+
+  int r = file->omap->get_header(bl);
+  if (r < 0) {
+    return r;
   }
 
   return 0;
@@ -545,10 +520,15 @@ int LRemDBIoCtxImpl::omap_set_header(const std::string& oid,
   }
 
   std::unique_lock l{*file->lock};
-  m_pool->file_omaps[{get_namespace(), oid}].header = bl;
+
+  int r = file->omap->set_header(bl);
+  if (r < 0) {
+    return r;
+  }
+
   file->modify_meta().epoch = epoch;
 
-  return 0;
+  return file->flush();
 }
 
 int LRemDBIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
@@ -1256,6 +1236,7 @@ LRemDBIoCtxImpl::ObjFileRef LRemDBIoCtxImpl::get_file(
   auto of = make_shared<ObjFile>();
 
   of->obj = m_pool_db->get_obj_handler(get_namespace(), oid);
+  of->omap = m_pool_db->get_omap_handler(get_namespace(), oid);
 
   int r = of->obj->read_meta(&of->meta);
   if (r < 0 && r != -ENOENT) {

@@ -159,7 +159,8 @@ namespace LRemDBStore {
     int get_vals(const std::string& start_after,
                  const std::string &filter_prefix,
                  uint64_t max_return,
-                 std::map<std::string, bufferlist> *out_vals);
+                 std::map<std::string, bufferlist> *out_vals,
+                 bool *pmore);
     int get_vals_by_keys(const std::set<std::string>& keys,
                          std::map<std::string, bufferlist> *out_vals);
     int rm_keys(const std::set<std::string>& keys);
