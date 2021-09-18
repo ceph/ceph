@@ -856,11 +856,37 @@ int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
   return 0;
 }
 
+int LRemDBStore::KVTableBase::get_all_vals(std::map<std::string, bufferlist> *out_vals) {
+  string s = string("SELECT key, data from ") + table_name +
+                    " WHERE nspace = ? AND oid = ?";
+
+  SQLite::Statement q = dbo->statement(s);
+
+  q.bind(1, nspace);
+  q.bind(2, oid);
+
+  try {
+    while (!q.executeStep()) {
+      string key = (const char *)q.getColumn(0);
+
+      bufferlist bl;
+      bl_from_blob_col(q, 1, &bl);
+
+      (*out_vals)[key] = bl;
+    }
+  } catch (SQLite::Exception& e) {
+    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
 int LRemDBStore::KVTableBase::get_vals_by_keys(const std::set<std::string>& keys,
                                                std::map<std::string, bufferlist> *out_vals) {
   string s = string("SELECT key, data from ") + table_name +
                     " WHERE nspace = ? AND oid = ?"
-                    " AND key IN (" + join_quoted(keys) + ")'";
+                    " AND key IN (" + join_quoted(keys) + ")";
 
   SQLite::Statement q = dbo->statement(s);
 
@@ -884,10 +910,37 @@ int LRemDBStore::KVTableBase::get_vals_by_keys(const std::set<std::string>& keys
   return out_vals->size();
 }
 
+int LRemDBStore::KVTableBase::get_val(const std::string& key,
+                                      bufferlist *bl)
+{
+  string s = string("SELECT data from ") + table_name +
+                    " WHERE nspace = ? AND oid = ?"
+                    " AND key = ?";
+
+  SQLite::Statement q = dbo->statement(s);
+
+  q.bind(1, nspace);
+  q.bind(2, oid);
+  q.bind(3, key);
+
+  try {
+    if (!q.executeStep()) {
+      return -ENODATA;
+    }
+  } catch (SQLite::Exception& e) {
+    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
+    return -EIO;
+  }
+
+  bl_from_blob_col(q, 0, bl);
+
+  return 0;
+}
+
 int LRemDBStore::KVTableBase::rm_keys(const std::set<std::string>& keys) {
   auto q = dbo->statement(string("DELETE FROM ") + table_name +
                           " WHERE nspace = ? and oid = ?"
-                          " AND key IN (" + join_quoted(keys) + ")'");
+                          " AND key IN (" + join_quoted(keys) + ")");
 
   q.bind(1, nspace);
   q.bind(2, oid);

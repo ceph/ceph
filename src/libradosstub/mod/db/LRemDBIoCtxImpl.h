@@ -126,6 +126,7 @@ private:
     LRemDBStore::Obj::Meta meta;
     LRemDBStore::ObjRef obj;
     LRemDBStore::OMapRef omap;
+    LRemDBStore::XAttrsRef xattrs;
 
     ceph::shared_mutex *lock{nullptr};
 

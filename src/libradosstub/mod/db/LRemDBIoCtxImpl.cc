@@ -968,20 +968,21 @@ int LRemDBIoCtxImpl::cmpxattr_str(const string& oid,
   }
 
   ObjFileRef file;
+  {
+    std::shared_lock l{m_pool->file_lock};
+    file = get_file(oid, false, CEPH_NOSNAP, {});
+    if (file == NULL) {
+      return -ENODATA;
+    }
+  }
+
   std::shared_lock l{m_pool->file_lock};
-  LRemDBCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(
-    {get_namespace(), oid});
-  if (it == m_pool->file_xattrs.end()) {
-    return -ENODATA;
-  }
-  auto& attrset = it->second;
 
-  auto iter = attrset.find(name);
-  if (iter == attrset.end()) {
-    return -ENODATA;
+  bufferlist attr_bl;
+  int r = file->xattrs->get_val(name, &attr_bl);
+  if (r < 0) {
+    return r;
   }
-
-  auto& attr_bl = iter->second;
 
   bool cmp;
 
@@ -1023,21 +1024,23 @@ int LRemDBIoCtxImpl::cmpxattr(const string& oid,
   }
 
   ObjFileRef file;
+  {
+    std::shared_lock l{m_pool->file_lock};
+    file = get_file(oid, false, CEPH_NOSNAP, {});
+    if (file == NULL) {
+      return -ENODATA;
+    }
+  }
+
   std::shared_lock l{m_pool->file_lock};
-  LRemDBCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(
-    {get_namespace(), oid});
-  if (it == m_pool->file_xattrs.end()) {
-    return -ENODATA;
-  }
-  auto& attrset = it->second;
 
-  auto iter = attrset.find(name);
-  if (iter == attrset.end()) {
-    return -ENODATA;
+  bufferlist attr_bl;
+  int r = file->xattrs->get_val(name, &attr_bl);
+  if (r < 0) {
+    return r;
   }
 
-  auto& bl = iter->second;
-  string s = bl.to_str();
+  string s = attr_bl.to_str();
   string err;
 
   auto cct = m_client->cct();
@@ -1087,23 +1090,25 @@ int LRemDBIoCtxImpl::xattr_get(LRemTransactionStateRef& trans,
     return -EBLOCKLISTED;
   }
 
-  int r = pool_op(trans, false, [&](LRemDBCluster::PoolRef& pool, bool write) {
-    LRemDBCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(trans->locator);
-    if (it == pool->file_xattrs.end()) {
-      attrset->clear();
-      return 0;
+  auto cct = m_client->cct();
+  auto& oid = trans->oid();
+
+  ObjFileRef file;
+  {
+    std::shared_lock l{m_pool->file_lock};
+    file = get_file(oid, false, CEPH_NOSNAP, {});
+    if (file == NULL) {
+      return -ENODATA;
     }
-    *attrset = it->second;
+  }
 
-    return 0;
-  });
+  std::shared_lock l{m_pool->file_lock};
 
-  if (r < 0) {
+  int r = file->xattrs->get_all_vals(attrset);
+  if (r  < 0) {
     return r;
   }
 
-  auto cct = m_client->cct();
-  auto& oid = trans->oid();
   ldout(cct, 20) << ": -> attrset=" << *attrset << dendl;
 
   return 0;
@@ -1115,15 +1120,30 @@ int LRemDBIoCtxImpl::setxattr(LRemTransactionStateRef& trans, const char *name,
     return -EBLOCKLISTED;
   }
 
-  auto cct = m_client->cct();
   auto& oid = trans->oid();
 
-  ldout(cct, 20) << ": -> name=" << name << " bl=" << bl << dendl;
+  uint64_t epoch;
 
-  return pool_op(trans, true, [&](LRemDBCluster::PoolRef& pool, bool write) {
-    pool->file_xattrs[trans->locator][name] = bl;
-    return 0;
-  });
+  ObjFileRef file;
+  {
+    std::unique_lock l{m_pool->file_lock};
+    file = get_file(oid, true, CEPH_NOSNAP, {});
+    epoch = ++m_pool->epoch;
+  }
+
+  std::unique_lock l{*file->lock};
+
+  map<string, bufferlist> m;
+  m[name] = bl;
+
+  int r = file->xattrs->set(m);
+  if (r < 0) {
+    return r;
+  }
+
+  file->modify_meta().epoch = epoch;
+
+  return file->flush();;
 }
 
 int LRemDBIoCtxImpl::rmxattr(LRemTransactionStateRef& trans, const char *name) {
@@ -1131,15 +1151,30 @@ int LRemDBIoCtxImpl::rmxattr(LRemTransactionStateRef& trans, const char *name) {
     return -EBLOCKLISTED;
   }
 
-  auto cct = m_client->cct();
   auto& oid = trans->oid();
 
-  ldout(cct, 20) << ": -> name=" << name << dendl;
+  uint64_t epoch;
 
-  return pool_op(trans, true, [&](LRemDBCluster::PoolRef& pool, bool write) {
-    pool->file_xattrs[trans->locator].erase(name);
-    return 0;
-  });
+  ObjFileRef file;
+  {
+    std::unique_lock l{m_pool->file_lock};
+    file = get_file(oid, true, CEPH_NOSNAP, {});
+    epoch = ++m_pool->epoch;
+  }
+
+  std::unique_lock l{*file->lock};
+
+  std::set<string> keys;
+  keys.insert(name);
+
+  int r = file->xattrs->rm_keys(keys);
+  if (r < 0) {
+    return r;
+  }
+
+  file->modify_meta().epoch = epoch;
+
+  return file->flush();;
 }
 
 int LRemDBIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len,
@@ -1237,6 +1272,7 @@ LRemDBIoCtxImpl::ObjFileRef LRemDBIoCtxImpl::get_file(
 
   of->obj = m_pool_db->get_obj_handler(get_namespace(), oid);
   of->omap = m_pool_db->get_omap_handler(get_namespace(), oid);
+  of->xattrs = m_pool_db->get_xattrs_handler(get_namespace(), oid);
 
   int r = of->obj->read_meta(&of->meta);
   if (r < 0 && r != -ENOENT) {
