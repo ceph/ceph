@@ -1075,6 +1075,26 @@ options:
   default: false
   services:
   - mds
+- name: mds_kill_skip_replaying_inotable
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+  fmt_desc: Ceph will skip replaying the inotable when replaying the journal, and
+    the premary MDS will crash, while the replacing MDS won't.
+    (for testing only).
+  with_legacy: true
+- name: mds_inject_skip_replaying_inotable
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+  fmt_desc: Ceph will skip replaying the inotable when replaying the journal, and
+    the premary MDS will crash, while the replacing MDS won't.
+    (for testing only).
+  with_legacy: true
 #  percentage of MDS modify replies to skip sending the client a trace on [0-1]
 - name: mds_inject_traceless_reply_probability
   type: float
