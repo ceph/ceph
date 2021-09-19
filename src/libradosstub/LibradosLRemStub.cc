@@ -31,6 +31,7 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
+#define dout_prefix *_dout << "librados:"
 
 
 namespace librados_stub {
@@ -503,12 +504,14 @@ librados::IoCtx& librados::IoCtx::operator=(IoCtx&& rhs) noexcept
 
 int IoCtx::aio_flush() {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_flush() ctx=" << ctx << dendl;
   ctx->aio_flush();
   return 0;
 }
 
 int IoCtx::aio_flush_async(AioCompletion *c) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_flush_async() ctx=" << ctx << dendl;
   ctx->aio_flush_async(c->pc);
   return 0;
 }
@@ -516,6 +519,7 @@ int IoCtx::aio_flush_async(AioCompletion *c) {
 int IoCtx::aio_notify(const std::string& oid, AioCompletion *c, bufferlist& bl,
                       uint64_t timeout_ms, bufferlist *pbl) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_notify() ctx=" << ctx << " oid=" << oid << " c=" << c << " timeout_ms=" << timeout_ms << dendl;
   ctx->aio_notify(oid, c->pc, bl, timeout_ms, pbl);
   return 0;
 }
@@ -529,6 +533,7 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectReadOperation *op, int flags,
                        bufferlist *pbl) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_operate() (read) ctx=" << ctx << " oid=" << oid << " c=" << c << " flags=" << flags << dendl;
   LRemObjectOperationImpl *ops = reinterpret_cast<LRemObjectOperationImpl*>(op->impl);
   return ctx->aio_operate_read(oid, *ops, c->pc, flags, pbl,
                                ctx->get_snap_read(), nullptr);
@@ -543,6 +548,7 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op, int flags) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_operate() (write) ctx=" << ctx << " oid=" << oid << " c=" << c << " flags=" << flags << dendl;
   LRemObjectOperationImpl *ops = reinterpret_cast<LRemObjectOperationImpl*>(op->impl);
   return ctx->aio_operate(oid, *ops, c->pc, NULL, flags);
 }
@@ -550,6 +556,7 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_operate() (write) ctx=" << ctx << " oid=" << oid << " c=" << c << dendl;
   LRemObjectOperationImpl *ops = reinterpret_cast<LRemObjectOperationImpl*>(op->impl);
   return ctx->aio_operate(oid, *ops, c->pc, NULL, 0);
 }
@@ -559,6 +566,7 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        std::vector<snap_t>& snaps, int flags,
                        const blkin_trace_info *trace_info) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_operate() (write) ctx=" << ctx << " oid=" << oid << " c=" << c << dendl;
   LRemObjectOperationImpl *ops = reinterpret_cast<LRemObjectOperationImpl*>(op->impl);
 
   std::vector<snapid_t> snv;
@@ -587,28 +595,33 @@ int IoCtx::aio_append(const std::string& oid, librados::AioCompletion *c,
                       const bufferlist& bl, size_t len)
 {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_append() ctx=" << ctx << " oid=" << oid << " c=" << c << dendl;
   auto trans = ctx->init_transaction(oid);
   return ctx->aio_append(trans, c->pc, bl, len);
 }
 
 int IoCtx::aio_remove(const std::string& oid, AioCompletion *c) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_remove() ctx=" << ctx << " oid=" << oid << " c=" << c << dendl;
   return ctx->aio_remove(oid, c->pc);
 }
 
 int IoCtx::aio_remove(const std::string& oid, AioCompletion *c, int flags) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_remove() ctx=" << ctx << " oid=" << oid << " c=" << c << " flags=" << flags << dendl;
   return ctx->aio_remove(oid, c->pc, flags);
 }
 
 int IoCtx::aio_watch(const std::string& o, AioCompletion *c, uint64_t *handle,
                      librados::WatchCtx2 *watch_ctx) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_watch() ctx=" << ctx << " oid=" << o << " c=" << c << dendl;
   return ctx->aio_watch(o, c->pc, handle, watch_ctx);
 }
 
 int IoCtx::aio_unwatch(uint64_t handle, AioCompletion *c) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_unwatch() ctx=" << ctx << " c=" << c << " handle=" << handle << dendl;
   return ctx->aio_unwatch(handle, c->pc);
 }
 
@@ -616,7 +629,7 @@ int IoCtx::aio_exec(const std::string& oid, AioCompletion *c,
                     const char *cls, const char *method,
                     bufferlist& inbl, bufferlist *outbl) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
-  dout(20) << __func__ << "()" << dendl;
+  dout(20) << "IoCtx::aio_exec() ctx=" << ctx << " oid=" << oid << " c=" << c << " cls=" << cls << " method=" << method << dendl;
   return ctx->aio_exec(oid, c->pc, librados_stub::get_class_handler(), 
                        cls, method, inbl, outbl);
 }
@@ -629,6 +642,7 @@ config_t IoCtx::cct() {
 void IoCtx::close() {
   if (io_ctx_impl) {
     LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+    dout(20) << "IoCtx::aio_exec() ctx=" << ctx << dendl;
     ctx->put();
   }
   io_ctx_impl = NULL;
@@ -636,6 +650,7 @@ void IoCtx::close() {
 
 int IoCtx::create(const std::string& oid, bool exclusive) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::create() ctx=" << ctx << " oid=" << oid << " exclusive=" << exclusive << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::create, _1, _2, exclusive,
                      ctx->get_snap_context()));
@@ -644,14 +659,15 @@ int IoCtx::create(const std::string& oid, bool exclusive) {
 void IoCtx::dup(const IoCtx& rhs) {
   close();
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(rhs.io_ctx_impl);
+  dout(20) << "IoCtx::dup() ctx=" << ctx << dendl;
   io_ctx_impl = reinterpret_cast<IoCtxImpl*>(ctx->clone());
 }
 
 int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
                 bufferlist& inbl, bufferlist& outbl) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::exec() ctx=" << ctx << " oid=" << oid << " cls=" << cls << " method=" << method << dendl;
   auto trans = ctx->init_transaction(oid);
-  dout(20) << __func__ << "()" << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::exec, _1, _2,
                      librados_stub::get_class_handler(), cls,
@@ -703,6 +719,7 @@ int IoCtx::pool_required_alignment2(uint64_t * alignment) {
 
 int IoCtx::list_snaps(const std::string& o, snap_set_t *out_snaps) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::list_snaps() ctx=" << ctx << " oid=" << o << dendl;
   return ctx->execute_operation(
     o, std::bind(&LRemIoCtxImpl::list_snaps, _1, _2, out_snaps));
 }
@@ -710,24 +727,28 @@ int IoCtx::list_snaps(const std::string& o, snap_set_t *out_snaps) {
 int IoCtx::list_watchers(const std::string& o,
                          std::list<obj_watch_t> *out_watchers) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::list_watchers() ctx=" << ctx << " oid=" << o << dendl;
   return ctx->execute_operation(
     o, std::bind(&LRemIoCtxImpl::list_watchers, _1, _2, out_watchers));
 }
 
 int IoCtx::notify(const std::string& o, uint64_t ver, bufferlist& bl) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::notify() ctx=" << ctx << " oid=" << o << " ver=" << ver << dendl;
   return ctx->notify(o, bl, 0, NULL);
 }
 
 int IoCtx::notify2(const std::string& o, bufferlist& bl,
                    uint64_t timeout_ms, bufferlist *pbl) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::notify2() ctx=" << ctx << " oid=" << o << " timeout=" << timeout_ms << dendl;
   return ctx->notify(o, bl, timeout_ms, pbl);
 }
 
 void IoCtx::notify_ack(const std::string& o, uint64_t notify_id,
                        uint64_t handle, bufferlist& bl) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::notify_ack() ctx=" << ctx << " oid=" << o << " notify_id=" << notify_id << " handle=" << handle << dendl;
   ctx->notify_ack(o, notify_id, handle, bl);
 }
 
@@ -736,6 +757,8 @@ int IoCtx::omap_get_vals(const std::string& oid,
                          uint64_t max_return,
                          std::map<std::string, bufferlist> *out_vals) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::omap_get_vals() ctx=" << ctx << " oid=" << oid
+           << " start_after=" << start_after << " max_return=" << max_return << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::omap_get_vals, _1, _2, start_after, "",
                      max_return, out_vals));
@@ -744,12 +767,14 @@ int IoCtx::omap_get_vals_by_keys(const std::string& oid,
                                  const std::set<std::string>& keys,
                                  std::map<std::string, bufferlist> *vals) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::omap_get_vals_by_keys() ctx=" << ctx << " oid=" << oid << " keys=" << keys << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::omap_get_vals_by_keys, _1, _2, keys, vals));
 }
 int IoCtx::omap_set(const std::string& oid,
                     const std::map<std::string, bufferlist>& m) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::omap_set() ctx=" << ctx << " oid=" << oid << " m.size()=" << m.size() << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::omap_set, _1, _2, m));
 }
@@ -757,24 +782,28 @@ int IoCtx::omap_set(const std::string& oid,
 int IoCtx::omap_rm_keys(const std::string& oid,
                         const std::set<std::string>& keys) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::omap_rm_keys() ctx=" << ctx << " oid=" << oid << " keys=" << keys << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::omap_rm_keys, _1, _2, keys));
 }
 
 int IoCtx::omap_clear(const std::string& oid) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::omap_clear() ctx=" << ctx << " oid=" << oid << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::omap_clear, _1, _2));
 }
 
 int IoCtx::operate(const std::string& oid, ObjectWriteOperation *op) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::operate() (write) ctx=" << ctx << " oid=" << oid << dendl;
   LRemObjectOperationImpl *ops = reinterpret_cast<LRemObjectOperationImpl*>(op->impl);
   return ctx->operate(oid, *ops, 0);
 }
 
 int IoCtx::operate(const std::string& oid, ObjectWriteOperation *op, int flags) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::operate() (write) ctx=" << ctx << " oid=" << oid << " flags=" << flags << dendl;
   LRemObjectOperationImpl *ops = reinterpret_cast<LRemObjectOperationImpl*>(op->impl);
   return ctx->operate(oid, *ops, flags);
 }
@@ -782,12 +811,14 @@ int IoCtx::operate(const std::string& oid, ObjectWriteOperation *op, int flags) 
 int IoCtx::operate(const std::string& oid, ObjectReadOperation *op,
                    bufferlist *pbl) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::operate() (read) ctx=" << ctx << " oid=" << oid << dendl;
   LRemObjectOperationImpl *ops = reinterpret_cast<LRemObjectOperationImpl*>(op->impl);
   return ctx->operate_read(oid, *ops, pbl, 0);
 }
 int IoCtx::operate(const std::string& oid, ObjectReadOperation *op,
                    bufferlist *pbl, int flags) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::operate() (read) ctx=" << ctx << " oid=" << oid << " flags=" << flags << dendl;
   LRemObjectOperationImpl *ops = reinterpret_cast<LRemObjectOperationImpl*>(op->impl);
   return ctx->operate_read(oid, *ops, pbl, flags);
 }
@@ -795,6 +826,7 @@ int IoCtx::operate(const std::string& oid, ObjectReadOperation *op,
 int IoCtx::read(const std::string& oid, bufferlist& bl, size_t len,
                 uint64_t off) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::read() ctx=" << ctx << " oid=" << oid << " len=" << len << " off=" << off << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::read, _1, _2, len, off, &bl,
                      ctx->get_snap_read(), nullptr));
@@ -802,50 +834,59 @@ int IoCtx::read(const std::string& oid, bufferlist& bl, size_t len,
 
 int IoCtx::remove(const std::string& oid) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::remove() ctx=" << ctx << " oid=" << oid << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::remove, _1, _2, ctx->get_snap_context()));
 }
 
 int IoCtx::selfmanaged_snap_create(uint64_t *snapid) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::selfmanaged_snap_create() ctx=" << ctx << dendl;
   return ctx->selfmanaged_snap_create(snapid);
 }
 
 void IoCtx::aio_selfmanaged_snap_create(uint64_t *snapid, AioCompletion* c) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_selfmanaged_snap_create() ctx=" << ctx << " c=" << c << dendl;
   return ctx->aio_selfmanaged_snap_create(snapid, c->pc);
 }
 
 int IoCtx::selfmanaged_snap_remove(uint64_t snapid) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::selfmanaged_snap_create() ctx=" << ctx << " snapid=" << snapid << dendl;
   return ctx->selfmanaged_snap_remove(snapid);
 }
 
 void IoCtx::aio_selfmanaged_snap_remove(uint64_t snapid, AioCompletion* c) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::aio_selfmanaged_snap_create() ctx=" << ctx << " snapid=" << snapid << " c=" << c << dendl;
   ctx->aio_selfmanaged_snap_remove(snapid, c->pc);
 }
 
 int IoCtx::selfmanaged_snap_rollback(const std::string& oid,
                                      uint64_t snapid) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::selfmanaged_snap_rollback() ctx=" << ctx << " oid=" << oid << " snapid=" << snapid << dendl;
   return ctx->selfmanaged_snap_rollback(oid, snapid);
 }
 
 int IoCtx::selfmanaged_snap_set_write_ctx(snap_t seq,
                                           std::vector<snap_t>& snaps) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::selfmanaged_snap_set_write_ctx() ctx=" << ctx << " seq=" << seq << dendl;
   return ctx->selfmanaged_snap_set_write_ctx(seq, snaps);
 }
 
 void IoCtx::snap_set_read(snap_t seq) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::selfmanaged_snap_set_read() ctx=" << ctx << " seq=" << seq << dendl;
   ctx->set_snap_read(seq);
 }
 
 int IoCtx::sparse_read(const std::string& oid, std::map<uint64_t,uint64_t>& m,
                        bufferlist& bl, size_t len, uint64_t off) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::sparse_read() ctx=" << ctx << " oid=" << oid << " len=" << len << " off=" << off << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::sparse_read, _1, _2, off, len, &m, &bl,
                      ctx->get_snap_read()));
@@ -853,6 +894,7 @@ int IoCtx::sparse_read(const std::string& oid, std::map<uint64_t,uint64_t>& m,
 
 int IoCtx::stat(const std::string& oid, uint64_t *psize, time_t *pmtime) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::stat() ctx=" << ctx << " oid=" << oid << dendl;
   auto trans = ctx->init_transaction(oid);
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::stat, _1, trans, psize, pmtime));
@@ -860,6 +902,7 @@ int IoCtx::stat(const std::string& oid, uint64_t *psize, time_t *pmtime) {
 
 int IoCtx::stat2(const std::string& oid, uint64_t *psize, struct timespec *pts) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::stat2() ctx=" << ctx << " oid=" << oid << dendl;
   auto trans = ctx->init_transaction(oid);
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::stat2, _1, trans, psize, pts));
@@ -874,6 +917,7 @@ int IoCtx::tmap_update(const std::string& oid, bufferlist& cmdbl) {
 
 int IoCtx::trunc(const std::string& oid, uint64_t off) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::trunc() ctx=" << ctx << " oid=" << oid << " off=" << off << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::truncate, _1, _2, off,
                      ctx->get_snap_context()));
@@ -881,29 +925,34 @@ int IoCtx::trunc(const std::string& oid, uint64_t off) {
 
 int IoCtx::unwatch2(uint64_t handle) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::unwatch2() ctx=" << ctx << " handle=" << handle << dendl;
   return ctx->unwatch(handle);
 }
 
 int IoCtx::unwatch(const std::string& o, uint64_t handle) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::unwatch() ctx=" << ctx << " oid=" << o << " handle=" << handle << dendl;
   return ctx->unwatch(handle);
 }
 
 int IoCtx::watch(const std::string& o, uint64_t ver, uint64_t *handle,
                  librados::WatchCtx *wctx) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::watch() ctx=" << ctx << " oid=" << o << " ver=" << ver << dendl;
   return ctx->watch(o, handle, wctx, NULL);
 }
 
 int IoCtx::watch2(const std::string& o, uint64_t *handle,
                   librados::WatchCtx2 *wctx) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::watch2() ctx=" << ctx << " oid=" << o << dendl;
   return ctx->watch(o, handle, NULL, wctx);
 }
 
 int IoCtx::write(const std::string& oid, bufferlist& bl, size_t len,
                  uint64_t off) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::write() ctx=" << ctx << " oid=" << oid << " len=" << len << " off=" << off << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::write, _1, _2, bl, len, off,
                      ctx->get_snap_context()));
@@ -911,6 +960,7 @@ int IoCtx::write(const std::string& oid, bufferlist& bl, size_t len,
 
 int IoCtx::write_full(const std::string& oid, bufferlist& bl) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::write_full() ctx=" << ctx << " oid=" << oid << " bl.length()=" << bl.length() << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::write_full, _1, _2, bl,
                      ctx->get_snap_context()));
@@ -919,6 +969,7 @@ int IoCtx::write_full(const std::string& oid, bufferlist& bl) {
 int IoCtx::writesame(const std::string& oid, bufferlist& bl, size_t len,
                      uint64_t off) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::write_full() ctx=" << ctx << " oid=" << oid << " bl.length()=" << bl.length() << " len=" << len << " off=" << off << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::writesame, _1, _2, bl, len, off,
                      ctx->get_snap_context()));
@@ -926,6 +977,7 @@ int IoCtx::writesame(const std::string& oid, bufferlist& bl, size_t len,
 
 int IoCtx::cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::cmpext() ctx=" << ctx << " oid=" << oid << " off" << off << " cmp_bl.length()=" << cmp_bl.length() << dendl;
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::cmpext, _1, _2, off, cmp_bl,
                      ctx->get_snap_read()));
@@ -969,11 +1021,13 @@ int IoCtx::application_metadata_list(const std::string& app_name,
 void IoCtx::locator_set_key(const std::string& key) {
 #warning locator missing implementation
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::locator_set_key() ctx=" << ctx << " key=" << key << dendl;
   ctx->locator_set_key(key);
 }
 
 void IoCtx::set_namespace(const std::string& nspace) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::set_namespace() ctx=" << ctx << " nspace=" << nspace << dendl;
   ctx->set_namespace(nspace);
 }
 
@@ -1765,18 +1819,21 @@ bool librados::ObjectCursor::from_str(const string& s)
 int cls_cxx_create(cls_method_context_t hctx, bool exclusive) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << " exclusive=" << exclusive << dendl;
   return ctx->io_ctx_impl->create(ctx->oid, exclusive, ctx->snapc);
 }
 
 int cls_cxx_remove(cls_method_context_t hctx) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << dendl;
   return ctx->io_ctx_impl->remove(ctx->oid, ctx->io_ctx_impl->get_snap_context());
 }
 
 int cls_cxx_stat2(cls_method_context_t hctx, uint64_t *size, ceph::real_time *mtime) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << dendl;
   struct timespec ts;
   int r = ctx->io_ctx_impl->stat2(ctx->trans, size, &ts);
   if (r < 0) {
@@ -1794,6 +1851,7 @@ int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
 
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << dendl;
   librados::LRemRadosClient *rados_client =
     ctx->io_ctx_impl->get_rados_client();
 
@@ -1817,14 +1875,14 @@ int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
                      bufferlist *outbl) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
-  dout(20) << __func__ << "()" << dendl;
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << " name=" << name << dendl;
   return ctx->io_ctx_impl->getxattr(ctx->trans, name, outbl);
 }
 
 int cls_cxx_getxattrs(cls_method_context_t hctx, std::map<string, bufferlist> *attrset) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
-  dout(20) << __func__ << "()" << dendl;
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << dendl;
   return ctx->io_ctx_impl->xattr_get(ctx->trans, attrset);
 }
 
@@ -1832,6 +1890,8 @@ int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
                          uint64_t max_to_get, std::set<string> *keys, bool *more) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid
+    << " start_obj=" << start_obj << " max=" << max_to_get << dendl;
   return ctx->io_ctx_impl->omap_get_keys2(ctx->oid, start_obj, max_to_get,
                                           keys, more);
 }
@@ -1841,6 +1901,7 @@ int cls_cxx_map_get_val(cls_method_context_t hctx, const string &key,
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
 
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << " key=" << key << dendl;
   std::map<string, bufferlist> vals;
   int r = ctx->io_ctx_impl->omap_get_vals(ctx->oid, "", key, 1024, &vals);
   if (r < 0) {
@@ -1861,6 +1922,8 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
                          std::map<string, bufferlist> *vals, bool *more) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid
+    << " start_obj=" << start_obj << " filter_prefix=" << filter_prefix << " max=" << max_to_get << dendl;
   int r = ctx->io_ctx_impl->omap_get_vals2(ctx->oid, start_obj, filter_prefix,
 					  max_to_get, vals, more);
   if (r < 0) {
@@ -1875,6 +1938,7 @@ int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key) {
 
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << " key=" << key << dendl;
   return ctx->io_ctx_impl->omap_rm_keys(ctx->oid, keys);
 }
 
@@ -1883,6 +1947,8 @@ int cls_cxx_map_remove_range(cls_method_context_t hctx,
                              const std::string& key_end) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid
+    << " key_begin=" << key_begin << " key_end=" << key_end << dendl;
   return ctx->io_ctx_impl->omap_rm_range(ctx->oid, key_begin, key_end);
 }
 
@@ -1898,12 +1964,14 @@ int cls_cxx_map_set_vals(cls_method_context_t hctx,
                          const std::map<string, bufferlist> *map) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << dendl;
   return ctx->io_ctx_impl->omap_set(ctx->oid, *map);
 }
 
 int cls_cxx_map_clear(cls_method_context_t hctx) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << dendl;
   return ctx->io_ctx_impl->omap_clear(ctx->oid);
 }
 
@@ -1916,6 +1984,8 @@ int cls_cxx_read2(cls_method_context_t hctx, int ofs, int len,
                   bufferlist *outbl, uint32_t op_flags) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid
+    << " ofs=" << ofs << " len=" << len << " op_flags=" << op_flags << dendl;
   return ctx->io_ctx_impl->read(
           ctx->oid, len, ofs, outbl, ctx->snap_id, nullptr);
 }
@@ -1924,12 +1994,14 @@ int cls_cxx_setxattr(cls_method_context_t hctx, const char *name,
                      bufferlist *inbl) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << " name=" << name << dendl;
   return ctx->io_ctx_impl->setxattr(ctx->trans, name, *inbl);
 }
 
 int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << dendl;
   return ctx->io_ctx_impl->stat(ctx->trans, size, mtime);
 }
 
@@ -1942,12 +2014,15 @@ int cls_cxx_write2(cls_method_context_t hctx, int ofs, int len,
                    bufferlist *inbl, uint32_t op_flags) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid
+    << " ofs=" << ofs << " len=" << len << " op_flags=" << op_flags << dendl;
   return ctx->io_ctx_impl->write(ctx->oid, *inbl, len, ofs, ctx->snapc);
 }
 
 int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *inbl) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << dendl;
   return ctx->io_ctx_impl->write_full(ctx->oid, *inbl, ctx->snapc);
 }
 
@@ -1955,6 +2030,8 @@ int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len,
                     bufferlist *inbl) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid
+    << " ofs=" << ofs << " len=" << len << dendl;
   int r = ctx->io_ctx_impl->truncate(ctx->oid, 0, ctx->snapc);
   if (r < 0) {
     return r;
@@ -1965,12 +2042,16 @@ int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len,
 int cls_cxx_truncate(cls_method_context_t hctx, int ofs) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid
+    << " ofs=" << ofs << dendl;
   return ctx->io_ctx_impl->truncate(ctx->oid, ofs, ctx->snapc);
 }
 
 int cls_cxx_write_zero(cls_method_context_t hctx, int ofs, int len) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid
+    << " ofs=" << ofs << " len=" << len << dendl;
   return ctx->io_ctx_impl->zero(ctx->oid, len, ofs, ctx->snapc);
 }
 
@@ -1979,6 +2060,7 @@ int cls_cxx_list_watchers(cls_method_context_t hctx,
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
 
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << dendl;
   std::list<obj_watch_t> obj_watchers;
   int r = ctx->io_ctx_impl->list_watchers(ctx->oid, &obj_watchers);
   if (r < 0) {
@@ -2008,6 +2090,7 @@ uint64_t cls_get_client_features(cls_method_context_t hctx) {
 int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << dendl;
   librados::snap_set_t snapset;
   int r = ctx->io_ctx_impl->list_snaps(ctx->oid, &snapset);
   if (r < 0) {
@@ -2037,6 +2120,7 @@ int cls_log(int level, const char *format, ...) {
 
 int cls_register(const char *name, cls_handle_t *handle) {
   librados::LRemClassHandler *cls = librados_stub::get_class_handler();
+  dout(20) << __func__ << "() name=" << name << dendl;
   return cls->create(name, handle);
 }
 
@@ -2045,6 +2129,7 @@ int cls_register_cxx_method(cls_handle_t hclass, const char *method,
     cls_method_cxx_call_t class_call,
     cls_method_handle_t *handle) {
   librados::LRemClassHandler *cls = librados_stub::get_class_handler();
+  dout(20) << __func__ << "() method=" << method << " flags=" << flags << " call=" << (void *)class_call << dendl;
   return cls->create_method(hclass, method, flags, class_call, handle);
 }
 
@@ -2103,6 +2188,7 @@ int cls_cxx_chunk_write_and_set(cls_method_handle_t, int,
 int cls_cxx_map_read_header(cls_method_handle_t hctx, bufferlist *bl) {
   librados::LRemClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << dendl;
   return ctx->io_ctx_impl->omap_get_header(ctx->trans, bl);
 }
 
@@ -2111,6 +2197,7 @@ int cls_cxx_map_write_header(cls_method_context_t hctx, ceph::buffer::list *inbl
     reinterpret_cast<librados::LRemClassHandler::MethodContext*>(hctx);
   bufferlist _bl;
   bufferlist& bl = (inbl ? *inbl : _bl);
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << " bl.length()=" << bl.length() << dendl;
   return ctx->io_ctx_impl->omap_set_header(ctx->oid, bl);
 }
 
@@ -2123,6 +2210,7 @@ uint64_t cls_current_version(cls_method_context_t hctx) {
     return (uint64_t)r;
   }
 
+  dout(20) << __func__ << "() ctx=" << ctx->io_ctx_impl << " oid=" << ctx->oid << " --> ver=" << ver << dendl;
   return ver;
 }
 
