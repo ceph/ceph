@@ -153,7 +153,7 @@ int LRemDBCluster::pool_create(LRemDBStore::Cluster& dbc,
     return -EEXIST;
   }
 
-  SQLite::Transaction transaction(dbc.new_transaction());
+  LRemDBOps::Transaction transaction(dbc.new_transaction());
 
   string v;
   int r = dbc.create_pool(pool_name, v);
@@ -161,7 +161,7 @@ int LRemDBCluster::pool_create(LRemDBStore::Cluster& dbc,
     return r;
   }
 
-  transaction.commit();
+  transaction.complete_op(r);
 
   make_pool(pool_name, r);
 

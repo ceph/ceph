@@ -1424,8 +1424,17 @@ int LRemDBIoCtxImpl::ObjFile::flush() {
   return 0;
 }
 
+struct LRemDBTransactionState : public LRemTransactionState {
+  LRemDBOps::Transaction db_trans;  
+
+  LRemDBTransactionState(const LRemCluster::ObjectLocator& loc,
+                         LRemDBStore::ClusterRef dbc) : LRemTransactionState(loc),
+                                                        db_trans(dbc->new_transaction()) {}
+};
+
 LRemTransactionStateRef LRemDBIoCtxImpl::init_transaction(const std::string& oid) {
-  return make_op_transaction({get_namespace(), oid});
+  return std::shared_ptr<LRemTransactionState>(new LRemDBTransactionState({get_namespace(), oid},
+                                               m_dbc));
 }
 
 } // namespace librados

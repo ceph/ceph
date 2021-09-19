@@ -112,8 +112,8 @@ LRemDBOps::LRemDBOps(const string& name, int flags) {
   db = std::make_unique<SQLite::Database>(name, flags, DB_TIMEOUT_SEC * 1000);
 }
 
-SQLite::Transaction LRemDBOps::new_transaction() {
-  return SQLite::Transaction(*db);
+LRemDBOps::Transaction LRemDBOps::new_transaction() {
+  return Transaction(*this);
 }
 
 SQLite::Statement LRemDBOps::statement(const string& sql) {
@@ -121,8 +121,35 @@ SQLite::Statement LRemDBOps::statement(const string& sql) {
   return SQLite::Statement(*db, sql);
 }
 
-void LRemDBOps::Transaction::commit() {
-  trans.commit();
+void LRemDBOps::Transaction::complete_op(int r) {
+  if (r < 0) {
+    retcode = r;
+  }
+}
+
+#warning remove me
+map<void *, int> m;
+ceph::mutex mlock = ceph::make_mutex("LRemDBCluster::m_lock");
+
+LRemDBOps::Transaction::Transaction(LRemDBOps& dbo) {
+  std::unique_lock locker{mlock};
+  p = (void *)&dbo;
+  int count = ++m[p];
+  dout(20) << "LRemDBOps::Transaction() dbo=" << (void *)&dbo << " db=" << &dbo.get_db() << " count=" << count << dendl;
+  assert(count == 1);
+
+  trans = make_unique<SQLite::Transaction>(dbo.get_db());
+}
+
+LRemDBOps::Transaction::~Transaction() {
+  std::unique_lock locker{mlock};
+  --m[p];
+  dout(20) << "LRemDBOps::~Transaction() dbo=" << p << " count=" << m[p] << dendl;
+  if (retcode >= 0) {
+    trans->commit();
+  }
+  trans.reset();
+  dout(20) << "LRemDBOps::~Transaction() dbo=" << p << " count=" << m[p] << dendl;
 }
 
 int LRemDBOps::create_table(const string& name, const string& defs)
@@ -262,10 +289,6 @@ int LRemDBStore::Cluster::get_pool(int id, PoolRef *pool) {
   }
 
   return -ENOENT;
-}
-
-SQLite::Transaction LRemDBStore::Cluster::new_transaction() {
-  return dbo->new_transaction();
 }
 
 int LRemDBStore::Cluster::create_pool(const string& name, const string& val) {
