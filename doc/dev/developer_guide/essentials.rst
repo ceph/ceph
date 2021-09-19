@@ -20,7 +20,7 @@ Ceph      Sage Weil        liewegas
 RADOS     Neha Ojha        neha-ojha
 RGW       Yehuda Sadeh     yehudasa
 RGW       Matt Benjamin    mattbenjamin
-RBD       Jason Dillaman   dillaman
+RBD       Ilya Dryomov     dis 
 CephFS    Patrick Donnelly batrick
 Dashboard Ernesto Puerta   epuertat
 MON       Joao Luis        jecluis
