@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 //#include "common/debug.h"
 #include "include/scope_guard.h"
@@ -297,6 +298,50 @@ static int easy_readdir(const std::string& dir, std::set<std::string> *out)
   }
   closedir(h);
   return 0;
+}
+
+int get_device_num_luns(const std::string& devname, std::string *err)
+{
+  /*
+   /dev/disk/by-path/
+
+   normal device:
+    lrwxrwxrwx 1 root root   9 Sep 20 20:36 pci-0000:00:1f.2-ata-1 -> ../../sdc
+    lrwxrwxrwx 1 root root  10 Sep 20 20:36 pci-0000:00:1f.2-ata-1-part1 -> ../../sdc1
+
+   dual-actuator:
+    lrwxrwxrwx 1 root root   9 Sep 20 20:35 pci-0000:02:00.0-sas-phy6-lun-0 -> ../../sda
+    lrwxrwxrwx 1 root root  10 Sep 20 20:35 pci-0000:02:00.0-sas-phy6-lun-0-part1 -> ../../sda1
+    lrwxrwxrwx 1 root root   9 Sep 20 19:59 pci-0000:02:00.0-sas-phy6-lun-1 -> ../../sdb
+  */
+  std::set<std::string> links;
+  int r = easy_readdir("/dev/disk/by-path", &links);
+  if (r < 0) {
+    *err = "failed to list /dev/disk/by-path: "s + cpp_strerror(errno);
+    return r;
+  }
+
+  int num_luns = 0;
+  for (auto &link : links) {
+    std::vector<std::string> bits;
+    boost::split(bits, link, std::bind1st(std::equal_to<char>(), '-'));
+    if (bits.size() > 2 && bits[bits.size() - 2] == "lun") {
+      char fn[PATH_MAX];
+      char target[PATH_MAX+1];
+      snprintf(fn, sizeof(fn), "/dev/disk/by-path/%s", link.c_str());
+      int r = readlink(fn, target, sizeof(target));
+      if (r < 0 || r >= (int)sizeof(target)) {
+	continue;
+      }
+      target[r] = 0;
+      std::vector<std::string> tbits;
+      boost::split(tbits, target, std::bind1st(std::equal_to<char>(), '/'));
+      if (tbits.size() && tbits[tbits.size() - 1] == devname) {
+	++num_luns;
+      }
+    }
+  }
+  return num_luns;
 }
 
 void get_dm_parents(const std::string& dev, std::set<std::string> *ls)

@@ -21,6 +21,9 @@ extern std::string get_device_id(const std::string& devname,
 extern std::string get_device_path(const std::string& devname,
 				   std::string *err=0);
 
+extern int get_device_num_luns(const std::string& devname,
+			       std::string *err);
+
 // populate daemon metadata map with device info
 extern void get_device_metadata(
   const std::set<std::string>& devnames,
