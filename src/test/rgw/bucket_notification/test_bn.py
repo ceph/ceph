@@ -1057,10 +1057,10 @@ def test_ps_s3_notification_push_amqp_on_master():
     conn.delete_bucket(bucket_name)
 
 
-@attr('manual_testing')
+@attr('manual_test')
 def test_ps_s3_notification_push_amqp_idleness_check():
     """ test pushing amqp s3 notification and checking for connection idleness """
-    # return SkipTest("only used in manual testing")
+    return SkipTest("only used in manual testing")
     hostname = get_ip()
     conn = connection()
     zonegroup = 'default'
@@ -1131,8 +1131,6 @@ def test_ps_s3_notification_push_amqp_idleness_check():
 
     # check amqp receiver 1 for deletions
     receiver1.verify_s3_events(keys, exact_match=True, deletions=True)
-
-    os.system("netstat -nnp | grep 5672");
 
     print('waiting for 40sec for checking idleness')
     time.sleep(40)
