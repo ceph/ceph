@@ -204,21 +204,19 @@ def unlock_one(ctx, name, user, description=None):
         while proceed():
             try:
                 response = requests.put(uri, json.dumps(request))
-                break
+                if response.ok:
+                    log.info('unlocked: %s', name)
+                    return response.ok
             # Work around https://github.com/kennethreitz/requests/issues/2364
             except requests.ConnectionError as e:
                 log.warn("Saw %s while unlocking; retrying...", str(e))
-    success = response.ok
-    if success:
-        log.info('unlocked %s', name)
-    else:
-        try:
-            reason = response.json().get('message')
-        except ValueError:
-            reason = str(response.status_code)
-        log.error('failed to unlock {node}. reason: {reason}'.format(
-            node=name, reason=reason))
-    return success
+    try:
+        reason = response.json().get('message')
+    except ValueError:
+        reason = str(response.status_code)
+    log.error('failed to unlock {node}. reason: {reason}'.format(
+        node=name, reason=reason))
+    return False
 
 
 def update_lock(name, description=None, status=None, ssh_pub_key=None):
