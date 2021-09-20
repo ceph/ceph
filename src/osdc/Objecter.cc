@@ -3275,6 +3275,11 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
      m->otel_trace = jspan_context(*op->otel_trace);
   }
 
+  if (qos_svc_tracker) {
+    dmc::ReqParams rp = qos_svc_tracker->get_req_params(op->target.osd);
+    m->set_qos_req_params(rp);
+  }
+
   logger->inc(l_osdc_op_send);
   ssize_t sum = 0;
   for (unsigned i = 0; i < m->ops.size(); i++) {
@@ -5137,6 +5142,7 @@ Objecter::Objecter(CephContext *cct,
     ldout(cct, 20) << __func__ << ": read policy: balance" << dendl;
     extra_read_flags = CEPH_OSD_FLAG_BALANCE_READS;
   }
+  qos_svc_tracker = std::make_unique<dmc::ServiceTracker<int>>();
 }
 
 Objecter::~Objecter()
