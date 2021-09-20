@@ -436,9 +436,8 @@ int LRemIoCtxImpl::execute_operation(const std::string& oid,
     return -EBLOCKLISTED;
   }
 
-  auto transaction_state = init_transaction(oid);
-  LRemRadosClient::Transaction transaction(m_client, transaction_state);
-  return operation(this, transaction.get_state_ref());
+  auto transaction = init_transaction(oid);
+  return operation(this, transaction);
 }
 
 int LRemIoCtxImpl::execute_aio_operations(const std::string& oid,
@@ -452,18 +451,16 @@ int LRemIoCtxImpl::execute_aio_operations(const std::string& oid,
   if (m_client->is_blocklisted()) {
     ret = -EBLOCKLISTED;
   } else {
-    auto transaction_state = init_transaction(oid);
-    LRemRadosClient::Transaction transaction(m_client, transaction_state);
+    auto trans = init_transaction(oid);
     for (ObjectOperations::iterator it = ops->ops.begin();
          it != ops->ops.end(); ++it) {
-      auto& state = transaction.get_state_ref();
-      ret = (*it)(this, oid, pbl, snap_id, snapc, objver, state);
+      ret = (*it)(this, oid, pbl, snap_id, snapc, objver, trans);
       dout(0) << "execute_aio_operations op=" << "(): -> " << ret << dendl;
       if (ret < 0 &&
-          !(state->flags & LIBRADOS_OP_FLAG_FAILOK)) {
+          !(trans->flags & LIBRADOS_OP_FLAG_FAILOK)) {
         break;
       }
-      ++state->op_id;
+      ++trans->op_id;
     }
   }
   m_pending_ops--;

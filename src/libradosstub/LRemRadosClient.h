@@ -45,29 +45,6 @@ public:
     std::string nspace;
   };
 
-  class Transaction {
-  public:
-    Transaction(LRemRadosClient *rados_client, LRemTransactionStateRef& state)
-      : rados_client(rados_client), state(state) {
-      rados_client->transaction_start(state);
-    }
-    ~Transaction() {
-      rados_client->transaction_finish(state);
-    }
-
-    LRemTransactionState& get_state() {
-      return *state;
-    }
-
-    LRemTransactionStateRef& get_state_ref() {
-      return state;
-    }
-
-  private:
-    LRemRadosClient *rados_client;
-    LRemTransactionStateRef state;
-  };
-
   LRemRadosClient(CephContext *cct, LRemWatchNotify *watch_notify);
 
   void get();
