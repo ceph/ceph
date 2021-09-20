@@ -9,7 +9,7 @@
   $ osdmaptool --osd_pool_default_size $SIZE --pg_bits $PG_BITS --createsimple $NUM_OSDS "$OSD_MAP" > /dev/null --with-default-pool
   osdmaptool: osdmap file 'osdmap'
   $ CRUSH_MAP="crushmap"
-  $ CEPH_ARGS="--debug-crush 0" crushtool --outfn "$CRUSH_MAP" --build --num_osds $NUM_OSDS node straw 10 rack straw 10 root straw 0
+  $ CEPH_ARGS="--debug-crush 0 --osd-crush-chooseleaf-type 1" crushtool --outfn "$CRUSH_MAP" --build --num_osds $NUM_OSDS node straw 10 rack straw 10 root straw 0
   $ osdmaptool --import-crush "$CRUSH_MAP" "$OSD_MAP" > /dev/null
   osdmaptool: osdmap file 'osdmap'
   $ OUT="$TESTDIR/out"

@@ -20,7 +20,7 @@
               "id": -1,
               "name": "default",
               "type": "root",
-              "type_id": 11,
+              "type_id": 13,
               "children": [
                   -3
               ]
@@ -29,7 +29,7 @@
               "id": -3,
               "name": "localrack",
               "type": "rack",
-              "type_id": 3,
+              "type_id": 5,
               "pool_weights": {},
               "children": [
                   -2
@@ -39,7 +39,7 @@
               "id": -2,
               "name": "localhost",
               "type": "host",
-              "type_id": 1,
+              "type_id": 3,
               "pool_weights": {},
               "children": [
                   2,

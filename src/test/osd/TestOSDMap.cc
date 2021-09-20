@@ -836,7 +836,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
     crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSE_TRIES, 100, 0);
     crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
-    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSE_INDEP, 2, 1 /* host*/); 
+    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSE_INDEP, 2, 3 /* host*/); 
     crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSE_INDEP, 2, 0 /* osd */); 
     crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
     ASSERT_TRUE(step == steps);
@@ -878,15 +878,15 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
       vector<int> ec_up;
       int ec_up_primary;
       tmp.pg_to_raw_up(ec_pgid, &ec_up, &ec_up_primary);
-      ASSERT_TRUE(ec_up.size() == 4);
+      ASSERT_EQ(4, ec_up.size());
       from = *(ec_up.begin());
       ASSERT_TRUE(from >= 0);
-      auto parent = tmp.crush->get_parent_of_type(from, 1 /* host */, rno);
+      auto parent = tmp.crush->get_parent_of_type(from, 3 /* host */, rno);
       ASSERT_TRUE(parent < 0);
       // pick an osd of the same parent with *from*
       for (int i = 0; i < (int)get_num_osds(); i++) {
         if (std::find(ec_up.begin(), ec_up.end(), i) == ec_up.end()) {
-          auto p = tmp.crush->get_parent_of_type(i, 1 /* host */, rno);
+          auto p = tmp.crush->get_parent_of_type(i, 3 /* host */, rno);
           if (p == parent) {
             to = i;
             break;
@@ -1536,10 +1536,10 @@ TEST_F(OSDMapTest, BUG_42485) {
     crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
     crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSE_TRIES, 100, 0);
     crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, dc1, 0);
-    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 3 /* rack */);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 5 /* rack */);
     crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
     crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, dc2, 0);
-    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 3 /* rack */);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 5 /* rack */);
     crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
     ASSERT_TRUE(step == steps);
     auto r = crush_add_rule(crush.get_crush_map(), rule, rno);
@@ -1582,24 +1582,24 @@ TEST_F(OSDMapTest, BUG_42485) {
       ASSERT_TRUE(rep_up.size() == 4);
       from = *(rep_up.begin());
       ASSERT_TRUE(from >= 0);
-      auto dc_parent = tmp.crush->get_parent_of_type(from, 8 /* dc */, rno);
+      auto dc_parent = tmp.crush->get_parent_of_type(from, 10 /* dc */, rno);
       if (dc_parent == dc1)
         dc_parent = dc2;
       else
         dc_parent = dc1;
-      auto rack_parent = tmp.crush->get_parent_of_type(from, 3 /* rack */, rno);
+      auto rack_parent = tmp.crush->get_parent_of_type(from, 5 /* rack */, rno);
       ASSERT_TRUE(dc_parent < 0);
       ASSERT_TRUE(rack_parent < 0);
       set<int> rack_parents;
       for (auto &i: rep_up) {
         if (i == from) continue;
-        auto rack_parent = tmp.crush->get_parent_of_type(i, 3 /* rack */, rno);
+        auto rack_parent = tmp.crush->get_parent_of_type(i, 5 /* rack */, rno);
         rack_parents.insert(rack_parent);
       }
       for (int i = 0; i < (int)get_num_osds(); i++) {
         if (std::find(rep_up.begin(), rep_up.end(), i) == rep_up.end()) {
-          auto dc_p = tmp.crush->get_parent_of_type(i, 8 /* dc */, rno);
-          auto rack_p = tmp.crush->get_parent_of_type(i, 3 /* rack */, rno);
+          auto dc_p = tmp.crush->get_parent_of_type(i, 10 /* dc */, rno);
+          auto rack_p = tmp.crush->get_parent_of_type(i, 5 /* rack */, rno);
           if (dc_p == dc_parent &&
               rack_parents.find(rack_p) == rack_parents.end()) {
             to = i;
@@ -1636,18 +1636,18 @@ TEST_F(OSDMapTest, BUG_42485) {
       vector<pair<int32_t,int32_t>> new_pg_upmap_items;
       for (auto &from: from_osds) {
         int to = -1;
-        auto dc_parent = tmp.crush->get_parent_of_type(from, 8 /* dc */, rno);
+        auto dc_parent = tmp.crush->get_parent_of_type(from, 10 /* dc */, rno);
         if (dc_parent == dc1)
           dc_parent = dc2;
         else
           dc_parent = dc1;
-        auto rack_parent = tmp.crush->get_parent_of_type(from, 3 /* rack */, rno);
+        auto rack_parent = tmp.crush->get_parent_of_type(from, 5 /* rack */, rno);
         ASSERT_TRUE(dc_parent < 0);
         ASSERT_TRUE(rack_parent < 0);
         set<int> rack_parents;
         for (auto &i: rep_up) {
           if (i == from) continue;
-          auto rack_parent = tmp.crush->get_parent_of_type(i, 3 /* rack */, rno);
+          auto rack_parent = tmp.crush->get_parent_of_type(i, 5 /* rack */, rno);
           rack_parents.insert(rack_parent);
         }
         for (auto &i: new_pg_upmap_items) {
@@ -1658,8 +1658,8 @@ TEST_F(OSDMapTest, BUG_42485) {
 	}
         for (int i = 0; i < (int)get_num_osds(); i++) {
           if (std::find(rep_up.begin(), rep_up.end(), i) == rep_up.end()) {
-            auto dc_p = tmp.crush->get_parent_of_type(i, 8 /* dc */, rno);
-            auto rack_p = tmp.crush->get_parent_of_type(i, 3 /* rack */, rno);
+            auto dc_p = tmp.crush->get_parent_of_type(i, 10 /* dc */, rno);
+            auto rack_p = tmp.crush->get_parent_of_type(i, 5 /* rack */, rno);
             if (dc_p == dc_parent &&
                 rack_parents.find(rack_p) == rack_parents.end()) {
               to = i;
@@ -1763,8 +1763,8 @@ TEST_F(OSDMapTest, BUG_43124) {
     crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
     crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSE_TRIES, 100, 0);
     crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
-    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSE_FIRSTN, 4, 3 /* rack */);
-    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSELEAF_INDEP, 3, 1 /* host */);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSE_FIRSTN, 4, 5 /* rack */);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSELEAF_INDEP, 3, 3 /* host */);
     crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
     ASSERT_TRUE(step == steps);
     auto r = crush_add_rule(crush.get_crush_map(), rule, rno);
@@ -1822,12 +1822,12 @@ TEST_F(OSDMapTest, BUG_43124) {
       auto from_rack = tmp.crush->get_parent_of_type(from, 3 /* rack */, rno);
       set<int> failure_domains;
       for (auto &osd : rep_up) {
-        failure_domains.insert(tmp.crush->get_parent_of_type(osd, 1 /* host */, rno));
+        failure_domains.insert(tmp.crush->get_parent_of_type(osd, 3 /* host */, rno));
       }
       for (int i = 0; i < (int)get_num_osds(); i++) {
         if (std::find(rep_up.begin(), rep_up.end(), i) == rep_up.end()) {
-          auto to_rack = tmp.crush->get_parent_of_type(i, 3 /* rack */, rno);
-          auto to_host = tmp.crush->get_parent_of_type(i, 1 /* host */, rno);
+          auto to_rack = tmp.crush->get_parent_of_type(i, 5 /* rack */, rno);
+          auto to_host = tmp.crush->get_parent_of_type(i, 3 /* host */, rno);
           if (to_rack != from_rack && failure_domains.count(to_host) == 0) {
             to = i;
             break;

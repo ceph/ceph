@@ -4,7 +4,7 @@
   tunable straw_calc_version 1
 # build then reweight-item then tree
   $ map="$TESTDIR/foo"
-  $ crushtool --outfn "$map" --build --set-chooseleaf-vary-r 0 --set-chooseleaf-stable 0 --num_osds 25 node straw 5 rack straw 1 root straw 0 --reweight-item osd.2 99 -o "$map" --tree
+  $ CEPH_ARGS="--osd-crush-chooseleaf-type 1" crushtool --outfn "$map" --build --set-chooseleaf-vary-r 0 --set-chooseleaf-stable 0 --num_osds 25 node straw 5 rack straw 1 root straw 0 --reweight-item osd.2 99 -o "$map" --tree
   crushtool reweighting item osd.2 to 99
   ID   CLASS  WEIGHT     TYPE NAME         
   -11         123.00000  root root         

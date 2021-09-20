@@ -2390,7 +2390,7 @@ options:
   desc: default chooseleaf type for osdmaptool --create
   fmt_desc: The bucket type to use for ``chooseleaf`` in a CRUSH rule. Uses
     ordinal rank rather than name.
-  default: 1
+  default: 3
   flags:
   - cluster_create
   with_legacy: true

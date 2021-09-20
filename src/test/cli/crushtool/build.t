@@ -8,12 +8,12 @@
 #  
 # silence all messages with --debug-crush 0
 #
-  $ CEPH_ARGS="--debug-crush 0" crushtool --outfn "$map" --build --num_osds 5 node straw 2 rack straw 1 root straw 0
+  $ CEPH_ARGS="--debug-crush 0 --osd-crush-chooseleaf-type 1" crushtool --outfn "$map" --build --num_osds 5 node straw 2 rack straw 1 root straw 0
 
 #
 # display a warning if there is more than one root
 #
-  $ crushtool --outfn "$map" --build --num_osds 5 node straw 2 rack straw 1 
+  $ CEPH_ARGS="--osd-crush-chooseleaf-type 1" crushtool --outfn "$map" --build --num_osds 5 node straw 2 rack straw 1 
   The crush rules will use the root rack0 (re)
   and ignore the others.
   There are 3 roots, they can be
@@ -23,7 +23,7 @@
 #
 # crush rules are generated using the OSDMap helpers
 #
-  $ CEPH_ARGS="--debug-crush 0" crushtool --outfn "$map" --set-straw-calc-version 0 --build --num_osds 1 root straw 0 --set-chooseleaf-stable 0
+  $ CEPH_ARGS="--debug-crush 0 --osd-crush-chooseleaf-type 1" crushtool --outfn "$map" --set-straw-calc-version 0 --build --num_osds 1 root straw 0 --set-chooseleaf-stable 0
   $ crushtool -o "$map.txt" -d "$map"
   $ cat "$map.txt"
   # begin crush map
@@ -65,7 +65,7 @@
 #
 # Wrong number of arguments 
 #
-  $ crushtool --outfn "$map" --debug-crush 0 --build --num_osds 5 node straw 0
+  $ CEPH_ARGS="--osd-crush-chooseleaf-type 1" crushtool --outfn "$map" --debug-crush 0 --build --num_osds 5 node straw 0
   remaining args: [--debug-crush,0,node,straw,0]
   layers must be specified with 3-tuples of (name, buckettype, size)
   [1]

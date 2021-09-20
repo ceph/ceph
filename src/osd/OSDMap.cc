@@ -4283,18 +4283,20 @@ int OSDMap::get_erasure_code_profile_default(CephContext *cct,
 int OSDMap::_build_crush_types(CrushWrapper& crush)
 {
   crush.set_type_name(0, "osd");
-  crush.set_type_name(1, "host");
-  crush.set_type_name(2, "chassis");
-  crush.set_type_name(3, "rack");
-  crush.set_type_name(4, "row");
-  crush.set_type_name(5, "pdu");
-  crush.set_type_name(6, "pod");
-  crush.set_type_name(7, "room");
-  crush.set_type_name(8, "datacenter");
-  crush.set_type_name(9, "zone");
-  crush.set_type_name(10, "region");
-  crush.set_type_name(11, "root");
-  return 11;
+  crush.set_type_name(1, "device");
+  crush.set_type_name(2, "array");
+  crush.set_type_name(3, "host");
+  crush.set_type_name(4, "chassis");
+  crush.set_type_name(5, "rack");
+  crush.set_type_name(6, "row");
+  crush.set_type_name(7, "pdu");
+  crush.set_type_name(8, "pod");
+  crush.set_type_name(9, "room");
+  crush.set_type_name(10, "datacenter");
+  crush.set_type_name(11, "zone");
+  crush.set_type_name(12, "region");
+  crush.set_type_name(13, "root");
+  return 13;
 }
 
 int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
