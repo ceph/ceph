@@ -35,6 +35,8 @@
 
 #include <fmt/format.h>
 
+#include "dmclock/src/dmclock_client.h"
+
 #include "include/buffer.h"
 #include "include/ceph_assert.h"
 #include "include/ceph_fs.h"
@@ -1645,6 +1647,7 @@ public:
   // people sometimes depend on this.
   boost::asio::io_context::strand finish_strand{service};
   ZTracer::Endpoint trace_endpoint{"0.0.0.0", 0, "Objecter"};
+  std::unique_ptr<dmc::ServiceTracker<int>> qos_svc_tracker;
 private:
   std::unique_ptr<OSDMap> osdmap{std::make_unique<OSDMap>()};
 public:

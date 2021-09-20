@@ -3232,6 +3232,11 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
     m->set_reqid(op->reqid);
   }
 
+  if (qos_svc_tracker) {
+    dmc::ReqParams rp = qos_svc_tracker->get_req_params(op->target.osd);
+    m->set_qos_req_params(rp);
+  }
+
   logger->inc(l_osdc_op_send);
   ssize_t sum = 0;
   for (unsigned i = 0; i < m->ops.size(); i++) {
@@ -5009,6 +5014,7 @@ Objecter::Objecter(CephContext *cct,
 {
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+  qos_svc_tracker = std::make_unique<dmc::ServiceTracker<int>>();
 }
 
 Objecter::~Objecter()

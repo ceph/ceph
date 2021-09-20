@@ -399,10 +399,13 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
              << " scaled_cost: " << cost
              << dendl;
 
+    auto qos_req_params = item.get_qos_req_params();
+    dout(20) << __func__ << " qos_req_params: " << qos_req_params << dendl;
     // Add item to scheduler queue
     scheduler.add_request(
       std::move(item),
       id,
+      qos_req_params,
       cost);
   }
 
