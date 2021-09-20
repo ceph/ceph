@@ -114,9 +114,6 @@ private:
   LRemDBRadosClient *m_client = nullptr;
   LRemDBCluster::PoolRef m_pool;
 
-  LRemDBStore::ClusterRef m_dbc;
-  LRemDBStore::PoolRef m_pool_db;
-
   void append_clone(bufferlist& src, bufferlist* dest);
   size_t clip_io(size_t off, size_t len, size_t bl_len);
   void ensure_minimum_length(size_t len, bufferlist *bl);

@@ -153,7 +153,8 @@ int LRemDBCluster::pool_create(LRemDBStore::Cluster& dbc,
     return -EEXIST;
   }
 
-  LRemDBOps::Transaction transaction(dbc.new_transaction());
+  LRemDBTransactionState dbtrans(cct);
+  LRemDBOps::Transaction transaction(dbtrans.dbo->new_transaction());
 
   string v;
   int r = dbc.create_pool(pool_name, v);

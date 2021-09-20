@@ -13,6 +13,7 @@ struct LRemTransactionState {
   int flags = 0;
   bool write = false;
 
+  LRemTransactionState() : locator(string(), string()) {}
   LRemTransactionState(const LRemCluster::ObjectLocator& loc) : locator(loc) {}
 
   void set_write(bool w) {

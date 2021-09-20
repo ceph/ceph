@@ -10,14 +10,12 @@
 
 namespace librados {
 
-LRemDBRadosClient::LRemDBRadosClient(CephContext *cct,
+LRemDBRadosClient::LRemDBRadosClient(CephContext *_cct,
                                        LRemDBCluster *lrem_mem_cluster)
-  : LRemRadosClient(cct, lrem_mem_cluster->get_watch_notify()),
+  : LRemRadosClient(_cct, lrem_mem_cluster->get_watch_notify()),
     m_mem_cluster(lrem_mem_cluster) {
   m_mem_cluster->allocate_client(&m_nonce, &m_global_id);
-  auto uuid = cct->_conf.get_val<uuid_d>("fsid");
-  m_dbc = std::make_shared<LRemDBStore::Cluster>(uuid.to_string());
-  int r = m_dbc->init();
+  int r = init();
   assert( r >= 0 );
 }
 
@@ -27,15 +25,22 @@ LRemDBRadosClient::~LRemDBRadosClient() {
 
 LRemIoCtxImpl *LRemDBRadosClient::create_ioctx(int64_t pool_id,
 						const std::string &pool_name) {
+  LRemDBTransactionState trans(cct());
   return new LRemDBIoCtxImpl(this, pool_id, pool_name,
-                              m_mem_cluster->get_pool(*m_dbc, pool_name));
+                              m_mem_cluster->get_pool(*trans.dbc, pool_name));
+}
+
+int LRemDBRadosClient::init() {
+  LRemDBTransactionState trans(cct());
+  return trans.dbc->init_cluster();
 }
 
 void LRemDBRadosClient::object_list(int64_t pool_id,
  				     std::list<librados::LRemRadosClient::Object> *list) {
   list->clear();
 
-  auto pool = m_mem_cluster->get_pool(*m_dbc, pool_id);
+  LRemDBTransactionState trans(cct());
+  auto pool = m_mem_cluster->get_pool(*trans.dbc, pool_id);
   if (pool != nullptr) {
     std::shared_lock file_locker{pool->file_lock};
     for (auto &file_pair : pool->files) {
@@ -50,14 +55,16 @@ int LRemDBRadosClient::pool_create(const std::string &pool_name) {
   if (is_blocklisted()) {
     return -EBLOCKLISTED;
   }
-  return m_mem_cluster->pool_create(*m_dbc, pool_name);
+  LRemDBTransactionState trans(cct());
+  return m_mem_cluster->pool_create(*trans.dbc, pool_name);
 }
 
 int LRemDBRadosClient::pool_delete(const std::string &pool_name) {
   if (is_blocklisted()) {
     return -EBLOCKLISTED;
   }
-  return m_mem_cluster->pool_delete(*m_dbc, pool_name);
+  LRemDBTransactionState trans(cct());
+  return m_mem_cluster->pool_delete(*trans.dbc, pool_name);
 }
 
 int LRemDBRadosClient::pool_get_base_tier(int64_t pool_id, int64_t* base_tier) {

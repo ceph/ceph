@@ -3,6 +3,7 @@
 
 #include "LRemDBIoCtxImpl.h"
 #include "LRemDBRadosClient.h"
+#include "LRemDBStore.h"
 #include "common/Clock.h"
 #include "include/err.h"
 #include <functional>
@@ -42,10 +43,6 @@ LRemDBIoCtxImpl::LRemDBIoCtxImpl() {
 
 LRemDBIoCtxImpl::LRemDBIoCtxImpl(const LRemDBIoCtxImpl& rhs)
     : LRemIoCtxImpl(rhs), m_client(rhs.m_client), m_pool(rhs.m_pool) {
-  auto uuid = m_client->cct()->_conf.get_val<uuid_d>("fsid");
-  m_dbc = std::make_shared<LRemDBStore::Cluster>(uuid.to_string());
-  m_dbc->get_pool(m_pool_name, &m_pool_db);
-
 }
 
 LRemDBIoCtxImpl::LRemDBIoCtxImpl(LRemDBRadosClient *client, int64_t pool_id,
@@ -53,10 +50,6 @@ LRemDBIoCtxImpl::LRemDBIoCtxImpl(LRemDBRadosClient *client, int64_t pool_id,
                                    LRemDBCluster::PoolRef pool)
     : LRemIoCtxImpl(client, pool_id, pool_name), m_client(client),
       m_pool(pool) {
-  auto uuid = client->cct()->_conf.get_val<uuid_d>("fsid");
-  m_dbc = std::make_shared<LRemDBStore::Cluster>(uuid.to_string());
-  m_dbc->get_pool(pool_name, &m_pool_db);
-
 #warning check all ops for m_pool_db not null
 }
 
@@ -89,7 +82,7 @@ int LRemDBIoCtxImpl::aio_remove(const std::string& oid, AioCompletionImpl *c, in
   return 0;
 }
 
-int LRemDBIoCtxImpl::append(LRemTransactionStateRef& trans, const bufferlist &bl,
+int LRemDBIoCtxImpl::append(LRemTransactionStateRef& _trans, const bufferlist &bl,
                              const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
@@ -97,19 +90,27 @@ int LRemDBIoCtxImpl::append(LRemTransactionStateRef& trans, const bufferlist &bl
     return -EBLOCKLISTED;
   }
 
+  auto trans = std::static_pointer_cast<LRemDBTransactionState>(_trans);
+
   auto cct = m_client->cct();
   ldout(cct, 20) << "length=" << bl.length() << ", snapc=" << snapc << dendl;
 
   uint64_t epoch;
 
-  ObjFileRef file;
-  file = get_file_safe(trans, true, CEPH_NOSNAP, snapc, &epoch);
+  LRemDBStore::PoolRef pool_db;
+  int r = trans->dbc->get_pool(m_pool_name, &pool_db);
+  if (r < 0) {
+    return r;
+  }
 
-  auto objh = m_pool_db->get_obj_handler(trans);
+  ObjFileRef file;
+  file = get_file_safe(_trans, true, CEPH_NOSNAP, snapc, &epoch);
+
+  auto objh = pool_db->get_obj_handler();
 
   std::unique_lock l{*file->lock};
 
-  int r = objh->append(bl, epoch);
+  r = objh->append(bl, epoch);
   if (r < 0) {
     return r;
   }
@@ -1262,7 +1263,7 @@ void LRemDBIoCtxImpl::ensure_minimum_length(size_t len, bufferlist *bl) {
 }
 
 LRemDBIoCtxImpl::ObjFileRef LRemDBIoCtxImpl::get_file(
-    LRemTransactionStateRef& trans, bool write, uint64_t snap_id,
+    LRemTransactionStateRef& _trans, bool write, uint64_t snap_id,
     const SnapContext &snapc) {
   ceph_assert(ceph_mutex_is_locked(m_pool->file_lock) ||
 	      ceph_mutex_is_wlocked(m_pool->file_lock));
@@ -1271,11 +1272,19 @@ LRemDBIoCtxImpl::ObjFileRef LRemDBIoCtxImpl::get_file(
 
   auto of = make_shared<ObjFile>();
 
-  of->obj = m_pool_db->get_obj_handler(trans);
-  of->omap = m_pool_db->get_omap_handler(trans);
-  of->xattrs = m_pool_db->get_xattrs_handler(trans);
+  auto trans = std::static_pointer_cast<LRemDBTransactionState>(_trans);
 
-  int r = of->obj->read_meta(&of->meta);
+  LRemDBStore::PoolRef pool_db;
+  int r = trans->dbc->get_pool(m_pool_name, &pool_db);
+  if (r < 0) {
+    return ObjFileRef();
+  }
+
+  of->obj = pool_db->get_obj_handler();
+  of->omap = pool_db->get_omap_handler();
+  of->xattrs = pool_db->get_xattrs_handler();
+
+  r = of->obj->read_meta(&of->meta);
   if (r < 0 && r != -ENOENT) {
     return ObjFileRef();
   }
@@ -1417,17 +1426,8 @@ int LRemDBIoCtxImpl::ObjFile::flush() {
   return 0;
 }
 
-struct LRemDBTransactionState : public LRemTransactionState {
-  LRemDBOps::Transaction db_trans;  
-
-  LRemDBTransactionState(const LRemCluster::ObjectLocator& loc,
-                         LRemDBStore::ClusterRef dbc) : LRemTransactionState(loc),
-                                                        db_trans(dbc->new_transaction()) {}
-};
-
 LRemTransactionStateRef LRemDBIoCtxImpl::init_transaction(const std::string& oid) {
-  return std::shared_ptr<LRemTransactionState>(new LRemDBTransactionState({get_namespace(), oid},
-                                               m_dbc));
+  return std::shared_ptr<LRemTransactionState>(new LRemDBTransactionState(m_client->cct(), {get_namespace(), oid}));
 }
 
 } // namespace librados

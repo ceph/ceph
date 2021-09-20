@@ -107,13 +107,13 @@ int decode_base64(const string& s, T *t)
 
 namespace librados {
 
-LRemDBOps::LRemDBOps(const string& name, int flags) {
+LRemDBOps::LRemDBOps(const std::string& _name, int _flags) : name(_name), flags(_flags) {
 #define DB_TIMEOUT_SEC 20
   db = std::make_unique<SQLite::Database>(name, flags, DB_TIMEOUT_SEC * 1000);
 }
 
 LRemDBOps::Transaction LRemDBOps::new_transaction() {
-  return Transaction(*this);
+  return Transaction(*db);
 }
 
 SQLite::Statement LRemDBOps::statement(const string& sql) {
@@ -131,14 +131,13 @@ void LRemDBOps::Transaction::complete_op(int r) {
 map<void *, int> m;
 ceph::mutex mlock = ceph::make_mutex("LRemDBCluster::m_lock");
 
-LRemDBOps::Transaction::Transaction(LRemDBOps& dbo) {
+LRemDBOps::Transaction::Transaction(SQLite::Database& db) {
   std::unique_lock locker{mlock};
-  p = (void *)&dbo;
+  p = (void *)&db;
   int count = ++m[p];
-  dout(20) << "LRemDBOps::Transaction() dbo=" << (void *)&dbo << " db=" << &dbo.get_db() << " count=" << count << dendl;
   assert(count == 1);
 
-  trans = make_unique<SQLite::Transaction>(dbo.get_db());
+  trans = make_unique<SQLite::Transaction>(db);
 }
 
 LRemDBOps::Transaction::~Transaction() {
@@ -207,15 +206,36 @@ int LRemDBOps::exec_step(SQLite::Statement& stmt)
   return stmt.executeStep();
 }
 
-LRemDBStore::Cluster::Cluster(const string& cluster_name) {
-  string dbname = string("cluster-") + cluster_name + ".db3";
-  dbo = make_shared<LRemDBOps>(dbname, SQLite::OPEN_NOMUTEX|SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
+
+LRemDBTransactionState::LRemDBTransactionState(CephContext *_cct) : cct(_cct) {
+  init();
 }
 
-int LRemDBStore::Cluster::init() {
-  int r = dbo->create_table("pools", join( { "id INTEGER PRIMARY KEY",
-                                           "name TEXT UNIQUE",
-                                           "value TEXT" } ));
+LRemDBTransactionState::LRemDBTransactionState(CephContext *_cct,
+                                               const LRemCluster::ObjectLocator& loc) : LRemTransactionState(loc), cct(_cct) {
+  init();
+}
+
+void LRemDBTransactionState::init() {
+  auto uuid = cct->_conf.get_val<uuid_d>("fsid");
+  string dbname = string("cluster-") + uuid.to_string() + ".db3";
+  dbo = make_shared<LRemDBOps>(dbname, SQLite::OPEN_NOMUTEX|SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
+  dbc = std::make_shared<LRemDBStore::Cluster>(cct, this);
+}
+
+void LRemDBStore::TableBase::set_instance(LRemDBTransactionState *_trans) {
+  trans = _trans;
+  nspace = trans->nspace();
+  oid = trans->oid();
+}
+
+LRemDBStore::Cluster::Cluster(CephContext *cct,
+                              LRemDBTransactionState *_trans) : trans(_trans) {}
+
+int LRemDBStore::Cluster::init_cluster() {
+  int r = trans->dbo->create_table("pools", join( { "id INTEGER PRIMARY KEY",
+                                                    "name TEXT UNIQUE",
+                                                    "value TEXT" } ));
   if (r < 0) {
     return r;
   }
@@ -225,6 +245,7 @@ int LRemDBStore::Cluster::init() {
 
 int LRemDBStore::Cluster::list_pools(std::map<string, PoolRef> *pools)
 {
+  auto& dbo = trans->dbo;
   pools->clear();
   try {
     auto q = dbo->statement("SELECT * from pools");
@@ -234,7 +255,7 @@ int LRemDBStore::Cluster::list_pools(std::map<string, PoolRef> *pools)
       const char* name   = q.getColumn(1);
       const char* value   = q.getColumn(2);
 
-      (*pools)[name] = std::make_shared<Pool>(dbo, id, name, value);
+      (*pools)[name] = std::make_shared<Pool>(trans, id, name, value);
     }
 
   } catch (SQLite::Exception& e) {
@@ -246,6 +267,7 @@ int LRemDBStore::Cluster::list_pools(std::map<string, PoolRef> *pools)
 }
 
 int LRemDBStore::Cluster::get_pool(const string& name, PoolRef *pool) {
+  auto& dbo = trans->dbo;
   try {
     auto q = dbo->statement("SELECT * from pools WHERE name = ?");
 
@@ -256,7 +278,7 @@ int LRemDBStore::Cluster::get_pool(const string& name, PoolRef *pool) {
       const char* name   = q.getColumn(1);
       const char* value   = q.getColumn(2);
 
-      *pool = std::make_shared<Pool>(dbo, id, name, value);
+      *pool = std::make_shared<Pool>(trans, id, name, value);
       return id;
     }
 
@@ -269,6 +291,7 @@ int LRemDBStore::Cluster::get_pool(const string& name, PoolRef *pool) {
 }
 
 int LRemDBStore::Cluster::get_pool(int id, PoolRef *pool) {
+  auto& dbo = trans->dbo;
   try {
     auto q = dbo->statement("SELECT * from pools WHERE id = ?");
 
@@ -279,7 +302,7 @@ int LRemDBStore::Cluster::get_pool(int id, PoolRef *pool) {
       const char* name   = q.getColumn(1);
       const char* value   = q.getColumn(2);
 
-      *pool = std::make_shared<Pool>(dbo, id, name, value);
+      *pool = std::make_shared<Pool>(trans, id, name, value);
       return id;
     }
 
@@ -292,7 +315,7 @@ int LRemDBStore::Cluster::get_pool(int id, PoolRef *pool) {
 }
 
 int LRemDBStore::Cluster::create_pool(const string& name, const string& val) {
-  PoolRef pool = make_shared<Pool>(dbo);
+  PoolRef pool = make_shared<Pool>(trans);
 
   return pool->create(name, val);
 }
@@ -302,7 +325,7 @@ int LRemDBStore::Pool::create(const string& _name, const string& _val) {
   name = _name;
   value = _val;
 
-  int r = dbo->exec(string("INSERT INTO pools VALUES (" + join( { "NULL", ::quoted(name), ::quoted(value) } ) + ")"));
+  int r = trans->dbo->exec(string("INSERT INTO pools VALUES (" + join( { "NULL", ::quoted(name), ::quoted(value) } ) + ")"));
   if (r < 0) {
     return r;
   }
@@ -321,6 +344,7 @@ int LRemDBStore::Pool::create(const string& _name, const string& _val) {
 }
 
 int LRemDBStore::Pool::read() {
+  auto& dbo = trans->dbo;
   try {
     auto q = dbo->statement("SELECT * from pools WHERE name = ?");
 
@@ -343,25 +367,25 @@ int LRemDBStore::Pool::read() {
 }
 
 int LRemDBStore::Pool::init_tables() {
-  Obj obj_table(dbo, id);
+  Obj obj_table(trans, id);
   int r = obj_table.create_table();
   if (r < 0) {
     return r;
   }
 
-  ObjData od_table(dbo, id);
+  ObjData od_table(trans, id);
   r = od_table.create_table();
   if (r < 0) {
     return r;
   }
 
-  XAttrs xattrs_table(dbo, id);
+  XAttrs xattrs_table(trans, id);
   r = xattrs_table.create_table();
   if (r < 0) {
     return r;
   }
 
-  OMap omap_table(dbo, id);
+  OMap omap_table(trans, id);
   r = omap_table.create_table();
   if (r < 0) {
     return r;
@@ -370,16 +394,16 @@ int LRemDBStore::Pool::init_tables() {
   return 0;
 }
 
-LRemDBStore::ObjRef LRemDBStore::Pool::get_obj_handler(LRemTransactionStateRef& trans) {
-  return std::make_shared<Obj>(dbo, id, trans);
+LRemDBStore::ObjRef LRemDBStore::Pool::get_obj_handler() {
+  return std::make_shared<Obj>(trans, id);
 }
 
-LRemDBStore::XAttrsRef LRemDBStore::Pool::get_xattrs_handler(LRemTransactionStateRef& trans) {
-  return std::make_shared<XAttrs>(dbo, id, trans);
+LRemDBStore::XAttrsRef LRemDBStore::Pool::get_xattrs_handler() {
+  return std::make_shared<XAttrs>(trans, id);
 }
 
-LRemDBStore::OMapRef LRemDBStore::Pool::get_omap_handler(LRemTransactionStateRef& trans) {
-  return std::make_shared<OMap>(dbo, id, trans);
+LRemDBStore::OMapRef LRemDBStore::Pool::get_omap_handler() {
+  return std::make_shared<OMap>(trans, id);
 }
 
 void LRemDBStore::TableBase::init_table_name(const string& table_name_prefix) {
@@ -387,7 +411,8 @@ void LRemDBStore::TableBase::init_table_name(const string& table_name_prefix) {
 }
 
 int LRemDBStore::Obj::create_table() {
-  int r = dbo->create_table(table_name, join( { "nspace TEXT",
+  int r = trans->dbo->create_table(table_name, join( {
+                                                "nspace TEXT",
                                                 "oid TEXT",
                                                 "size INTEGER",
                                                 "mtime TEXT",
@@ -411,6 +436,7 @@ void LRemDBStore::Obj::Meta::touch(uint64_t _epoch)
 }
 
 int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
+  auto& dbo = trans->dbo;
   try {
     auto q = dbo->statement(string("SELECT size, mtime, objver, snap_id, snaps, snap_overlap, epoch from ") + table_name +
                             " WHERE nspace = ? AND oid = ?");
@@ -450,6 +476,7 @@ int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
 }
 
 int LRemDBStore::Obj::write_meta(const LRemDBStore::Obj::Meta& meta) {
+  auto& dbo = trans->dbo;
   auto q = dbo->statement(string("REPLACE INTO ") + table_name + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"); 
 
   q.bind(1, nspace);
@@ -472,6 +499,7 @@ int LRemDBStore::Obj::write_meta(const LRemDBStore::Obj::Meta& meta) {
 }
 
 int LRemDBStore::Obj::remove_meta() {
+  auto& dbo = trans->dbo;
   auto q = dbo->statement(string("DELETE FROM ") + table_name +
                           " WHERE nspace = ? and oid = ?"); 
 
@@ -489,6 +517,7 @@ int LRemDBStore::Obj::remove_meta() {
 int LRemDBStore::Obj::read_data(uint64_t ofs, uint64_t len,
                                 bufferlist *bl) {
 
+  auto& dbo = trans->dbo;
   auto q = dbo->statement(string("SELECT size FROM ") + table_name +
                           " WHERE nspace = ? AND oid = ?");
 
@@ -517,7 +546,7 @@ int LRemDBStore::Obj::read_data(uint64_t ofs, uint64_t len,
     len = size - ofs;
   }
 
-  ObjData od(dbo, pool_id, trans);
+  ObjData od(trans, pool_id);
 
   return od.read(ofs, len, bl);
 }
@@ -525,7 +554,7 @@ int LRemDBStore::Obj::read_data(uint64_t ofs, uint64_t len,
 int LRemDBStore::Obj::write_data(uint64_t ofs, uint64_t len,
                                  const bufferlist& bl) {
 
-  ObjData od(dbo, pool_id, trans);
+  ObjData od(trans, pool_id);
 
   int r = od.write(ofs, len, bl);
   if (r < 0) {
@@ -569,7 +598,7 @@ int LRemDBStore::Obj::write(uint64_t ofs, uint64_t len,
 }
 
 int LRemDBStore::Obj::remove() {
-  ObjData od(dbo, pool_id, trans);
+  ObjData od(trans, pool_id);
 
   int r = od.remove();
   if (r < 0) {
@@ -581,7 +610,7 @@ int LRemDBStore::Obj::remove() {
 
 int LRemDBStore::Obj::truncate(uint64_t ofs,
                                LRemDBStore::Obj::Meta& meta) {
-  ObjData od(dbo, pool_id, trans);
+  ObjData od(trans, pool_id);
 
   int r;
 
@@ -610,6 +639,7 @@ int LRemDBStore::Obj::append(const bufferlist& bl,
 }
 
 int LRemDBStore::ObjData::create_table() {
+  auto& dbo = trans->dbo;
   int r = dbo->create_table(table_name, join( { "nspace TEXT",
                                                 "oid TEXT",
                                                 "bid INTEGER",
@@ -634,6 +664,7 @@ void bl_from_blob_col(SQLite::Statement& q, int col_num, bufferlist *bl)
 }
 
 int LRemDBStore::ObjData::read_block(int bid, bufferlist *bl) {
+  auto& dbo = trans->dbo;
   SQLite::Statement q = dbo->statement(string("SELECT data FROM ") + table_name +
                                        " WHERE nspace = ? AND oid = ? AND bid == ?");
 
@@ -656,6 +687,7 @@ int LRemDBStore::ObjData::read_block(int bid, bufferlist *bl) {
 }
 
 int LRemDBStore::ObjData::write_block(int bid, bufferlist& bl) {
+  auto& dbo = trans->dbo;
   SQLite::Statement q = dbo->statement(string("REPLACE INTO ") + table_name +
                                        " VALUES ( ?, ?, ?, ? )");
 
@@ -673,6 +705,7 @@ int LRemDBStore::ObjData::write_block(int bid, bufferlist& bl) {
 }
 
 int LRemDBStore::ObjData::truncate_block(int bid) {
+  auto& dbo = trans->dbo;
   SQLite::Statement q = dbo->statement(string("DELETE FROM ") + table_name +
                                        " WHERE nspace = ? and oid = ? and bid >= ?");
 
@@ -774,6 +807,7 @@ int LRemDBStore::ObjData::write(uint64_t ofs, uint64_t len, const bufferlist& bl
 }
 
 int LRemDBStore::ObjData::remove() {
+  auto& dbo = trans->dbo;
   SQLite::Statement q = dbo->statement(string("DELETE FROM ") + table_name +
                                        " WHERE nspace = ? and oid = ?");
 
@@ -825,6 +859,7 @@ int LRemDBStore::ObjData::truncate(uint64_t ofs) {
 }
 
 int LRemDBStore::KVTableBase::create_table() {
+  auto& dbo = trans->dbo;
   int r = dbo->create_table(table_name, join( { "nspace TEXT",
                                                 "oid TEXT",
                                                 "key TEXT",
@@ -844,6 +879,7 @@ int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
                                        uint64_t max_return,
                                        std::map<std::string, bufferlist> *out_vals,
                                        bool *pmore) {
+  auto& dbo = trans->dbo;
   string s = string("SELECT key, data from ") + table_name +
                     " WHERE nspace = ? AND oid = ? AND key > ''";
   string filt_val;
@@ -902,6 +938,7 @@ int LRemDBStore::KVTableBase::get_all_vals(std::map<std::string, bufferlist> *ou
   string s = string("SELECT key, data from ") + table_name +
                     " WHERE nspace = ? AND oid = ? AND key > ''";
 
+  auto& dbo = trans->dbo;
   SQLite::Statement q = dbo->statement(s);
 
   q.bind(1, nspace);
@@ -930,6 +967,7 @@ int LRemDBStore::KVTableBase::get_vals_by_keys(const std::set<std::string>& keys
                     " WHERE nspace = ? AND oid = ?"
                     " AND key IN (" + join_quoted(keys) + ")";
 
+  auto& dbo = trans->dbo;
   SQLite::Statement q = dbo->statement(s);
 
   q.bind(1, nspace);
@@ -959,6 +997,7 @@ int LRemDBStore::KVTableBase::get_val(const std::string& key,
                     " WHERE nspace = ? AND oid = ?"
                     " AND key = ?";
 
+  auto& dbo = trans->dbo;
   SQLite::Statement q = dbo->statement(s);
 
   q.bind(1, nspace);
@@ -980,6 +1019,7 @@ int LRemDBStore::KVTableBase::get_val(const std::string& key,
 }
 
 int LRemDBStore::KVTableBase::rm_keys(const std::set<std::string>& keys) {
+  auto& dbo = trans->dbo;
   auto q = dbo->statement(string("DELETE FROM ") + table_name +
                           " WHERE nspace = ? and oid = ?"
                           " AND key IN (" + join_quoted(keys) + ")");
@@ -997,6 +1037,7 @@ int LRemDBStore::KVTableBase::rm_keys(const std::set<std::string>& keys) {
 
 int LRemDBStore::KVTableBase::rm_range(const string& key_begin,
                               const string& key_end) {
+  auto& dbo = trans->dbo;
   auto q = dbo->statement(string("DELETE FROM ") + table_name +
                           " WHERE nspace = ? and oid = ?"
                           " AND key >= ? AND key <= ?");
@@ -1015,6 +1056,7 @@ int LRemDBStore::KVTableBase::rm_range(const string& key_begin,
 }
 
 int LRemDBStore::KVTableBase::clear() {
+  auto& dbo = trans->dbo;
   auto q = dbo->statement(string("DELETE FROM ") + table_name +
                           " WHERE nspace = ? and oid = ?");
   q.bind(1, nspace);
@@ -1033,6 +1075,7 @@ int LRemDBStore::KVTableBase::set(const std::map<std::string, bufferlist>& m) {
     auto& key = iter.first;
     auto bl = iter.second;
 
+  auto& dbo = trans->dbo;
     SQLite::Statement q = dbo->statement(string("REPLACE INTO ") + table_name +
                                        " VALUES ( ?, ?, ?, ? )");
 

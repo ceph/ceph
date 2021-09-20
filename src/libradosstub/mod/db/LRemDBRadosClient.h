@@ -19,6 +19,10 @@ public:
   LRemDBRadosClient(CephContext *cct, LRemDBCluster *lrem_mem_cluster);
   ~LRemDBRadosClient() override;
 
+  int init();
+
+  LRemDBStore::ClusterRef new_dbc();
+
   LRemIoCtxImpl *create_ioctx(int64_t pool_id,
                                       const std::string &pool_name) override;
 
@@ -70,10 +74,6 @@ public:
     return -ENOTSUP;
   }
 
-  LRemDBStore::Cluster& get_dbc() {
-    return *m_dbc;
-  }
-
 protected:
   LRemDBCluster *get_mem_cluster() {
     return m_mem_cluster;
@@ -87,8 +87,6 @@ private:
   LRemDBCluster *m_mem_cluster;
   uint32_t m_nonce;
   uint64_t m_global_id;
-
-  std::shared_ptr<LRemDBStore::Cluster> m_dbc;
 };
 
 } // namespace librados
