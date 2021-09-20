@@ -13,7 +13,7 @@
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
 #define dout_prefix *_dout << "LRemDBIoCtxImpl: " << this << " " << __func__ \
-                           << ": " << oid << " "
+                           << ": " << trans->oid() << " "
 
 static void to_vector(const interval_set<uint64_t> &set,
                       std::vector<std::pair<uint64_t, uint64_t> > *vec) {
@@ -67,11 +67,12 @@ LRemIoCtxImpl *LRemDBIoCtxImpl::clone() {
   return new LRemDBIoCtxImpl(*this);
 }
 
-int LRemDBIoCtxImpl::aio_append(LRemTransactionStateRef& trans, AioCompletionImpl *c,
+int LRemDBIoCtxImpl::aio_append(const std::string& oid, AioCompletionImpl *c,
                                  const bufferlist& bl, size_t len) {
+  auto trans = init_transaction(oid);
   bufferlist newbl;
   newbl.substr_of(bl, 0, len);
-  m_client->add_aio_operation(trans->oid(), true,
+  m_client->add_aio_operation(oid, true,
                               std::bind(&LRemDBIoCtxImpl::append, this, trans,
                                         newbl,
 					get_snap_context()),
@@ -80,8 +81,9 @@ int LRemDBIoCtxImpl::aio_append(LRemTransactionStateRef& trans, AioCompletionImp
 }
 
 int LRemDBIoCtxImpl::aio_remove(const std::string& oid, AioCompletionImpl *c, int flags) {
+  auto trans = init_transaction(oid);
   m_client->add_aio_operation(oid, true,
-                              std::bind(&LRemDBIoCtxImpl::remove, this, oid,
+                              std::bind(&LRemDBIoCtxImpl::remove, this, trans,
 					get_snap_context()),
                               c);
   return 0;
@@ -96,7 +98,6 @@ int LRemDBIoCtxImpl::append(LRemTransactionStateRef& trans, const bufferlist &bl
   }
 
   auto cct = m_client->cct();
-  auto& oid = trans->oid();
   ldout(cct, 20) << "length=" << bl.length() << ", snapc=" << snapc << dendl;
 
   uint64_t epoch;
@@ -104,7 +105,7 @@ int LRemDBIoCtxImpl::append(LRemTransactionStateRef& trans, const bufferlist &bl
   ObjFileRef file;
   file = get_file_safe(trans, true, CEPH_NOSNAP, snapc, &epoch);
 
-  auto objh = m_pool_db->get_obj_handler(trans->nspace(), trans->oid());
+  auto objh = m_pool_db->get_obj_handler(trans);
 
   std::unique_lock l{*file->lock};
 
@@ -116,26 +117,26 @@ int LRemDBIoCtxImpl::append(LRemTransactionStateRef& trans, const bufferlist &bl
   return 0;
 }
 
-int LRemDBIoCtxImpl::assert_exists(const std::string &oid, uint64_t snap_id) {
+int LRemDBIoCtxImpl::assert_exists(LRemTransactionStateRef& trans, uint64_t snap_id) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
 
   std::shared_lock l{m_pool->file_lock};
-  ObjFileRef file = get_file(oid, false, snap_id, {});
+  ObjFileRef file = get_file(trans, false, snap_id, {});
   if (file == NULL) {
     return -ENOENT;
   }
   return 0;
 }
 
-int LRemDBIoCtxImpl::assert_version(const std::string &oid, uint64_t ver) {
+int LRemDBIoCtxImpl::assert_version(LRemTransactionStateRef& trans, uint64_t ver) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
 
   std::shared_lock l{m_pool->file_lock};
-  ObjFileRef file = get_file(oid, false, CEPH_NOSNAP, {});
+  ObjFileRef file = get_file(trans, false, CEPH_NOSNAP, {});
   if (file == NULL || !file->exists) {
     return -ENOENT;
   }
@@ -149,7 +150,7 @@ int LRemDBIoCtxImpl::assert_version(const std::string &oid, uint64_t ver) {
   return 0;
 }
 
-int LRemDBIoCtxImpl::create(const std::string& oid, bool exclusive,
+int LRemDBIoCtxImpl::create(LRemTransactionStateRef& trans, bool exclusive,
                              const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
@@ -161,13 +162,13 @@ int LRemDBIoCtxImpl::create(const std::string& oid, bool exclusive,
   ldout(cct, 20) << "snapc=" << snapc << dendl;
 
   std::unique_lock l{m_pool->file_lock};
-  ObjFileRef file = get_file(oid, false, CEPH_NOSNAP, {});
+  ObjFileRef file = get_file(trans, false, CEPH_NOSNAP, {});
   bool exists = (file != NULL && file->exists);
   if (exists) {
     return (exclusive ? -EEXIST : 0);
   }
 
-  auto new_file = get_file(oid, true, CEPH_NOSNAP, snapc);
+  auto new_file = get_file(trans, true, CEPH_NOSNAP, snapc);
   new_file->meta.epoch = ++m_pool->epoch;
 
   int r = new_file->obj->write_meta(new_file->meta);
@@ -178,7 +179,7 @@ int LRemDBIoCtxImpl::create(const std::string& oid, bool exclusive,
   return 0;
 }
 
-int LRemDBIoCtxImpl::list_snaps(const std::string& oid, snap_set_t *out_snaps) {
+int LRemDBIoCtxImpl::list_snaps(LRemTransactionStateRef& trans, snap_set_t *out_snaps) {
 #warning implement me
 #if 0
   auto cct = m_client->cct();
@@ -272,7 +273,7 @@ int LRemDBIoCtxImpl::list_snaps(const std::string& oid, snap_set_t *out_snaps) {
 
 }
 
-int LRemDBIoCtxImpl::omap_get_vals2(const std::string& oid,
+int LRemDBIoCtxImpl::omap_get_vals2(LRemTransactionStateRef& trans,
                                     const std::string& start_after,
                                     const std::string &filter_prefix,
                                     uint64_t max_return,
@@ -287,7 +288,7 @@ int LRemDBIoCtxImpl::omap_get_vals2(const std::string& oid,
   ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
-    file = get_file(oid, false, CEPH_NOSNAP, {});
+    file = get_file(trans, false, CEPH_NOSNAP, {});
     if (file == NULL) {
       return -ENOENT;
     }
@@ -305,15 +306,15 @@ int LRemDBIoCtxImpl::omap_get_vals2(const std::string& oid,
   return 0;
 }
 
-int LRemDBIoCtxImpl::omap_get_vals(const std::string& oid,
+int LRemDBIoCtxImpl::omap_get_vals(LRemTransactionStateRef& trans,
                                     const std::string& start_after,
                                     const std::string &filter_prefix,
                                     uint64_t max_return,
                                     std::map<std::string, bufferlist> *out_vals) {
-  return omap_get_vals2(oid, start_after, filter_prefix, max_return, out_vals, nullptr);
+  return omap_get_vals2(trans, start_after, filter_prefix, max_return, out_vals, nullptr);
 }
 
-int LRemDBIoCtxImpl::omap_get_vals_by_keys(const std::string& oid,
+int LRemDBIoCtxImpl::omap_get_vals_by_keys(LRemTransactionStateRef& trans,
                                             const std::set<std::string>& keys,
                                             std::map<std::string, bufferlist> *vals) {
   if (vals == NULL) {
@@ -325,7 +326,7 @@ int LRemDBIoCtxImpl::omap_get_vals_by_keys(const std::string& oid,
   ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
-    file = get_file(oid, false, CEPH_NOSNAP, {});
+    file = get_file(trans, false, CEPH_NOSNAP, {});
     if (file == NULL) {
       return -ENOENT;
     }
@@ -343,7 +344,7 @@ int LRemDBIoCtxImpl::omap_get_vals_by_keys(const std::string& oid,
   return 0;
 }
 
-int LRemDBIoCtxImpl::omap_rm_keys(const std::string& oid,
+int LRemDBIoCtxImpl::omap_rm_keys(LRemTransactionStateRef& trans,
                                    const std::set<std::string>& keys) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
@@ -356,7 +357,7 @@ int LRemDBIoCtxImpl::omap_rm_keys(const std::string& oid,
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
+    file = get_file(trans, true, CEPH_NOSNAP, get_snap_context());
     if (file == NULL) {
       return -ENOENT;
     }
@@ -375,7 +376,7 @@ int LRemDBIoCtxImpl::omap_rm_keys(const std::string& oid,
   return file->flush();
 }
 
-int LRemDBIoCtxImpl::omap_rm_range(const std::string& oid,
+int LRemDBIoCtxImpl::omap_rm_range(LRemTransactionStateRef& trans,
                                     const string& key_begin,
                                     const string& key_end) {
   if (get_snap_read() != CEPH_NOSNAP) {
@@ -389,7 +390,7 @@ int LRemDBIoCtxImpl::omap_rm_range(const std::string& oid,
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
+    file = get_file(trans, true, CEPH_NOSNAP, get_snap_context());
     if (file == NULL) {
       return -ENOENT;
     }
@@ -408,7 +409,7 @@ int LRemDBIoCtxImpl::omap_rm_range(const std::string& oid,
   return file->flush();
 }
 
-int LRemDBIoCtxImpl::omap_clear(const std::string& oid) {
+int LRemDBIoCtxImpl::omap_clear(LRemTransactionStateRef& trans) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
   } else if (m_client->is_blocklisted()) {
@@ -420,7 +421,7 @@ int LRemDBIoCtxImpl::omap_clear(const std::string& oid) {
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
+    file = get_file(trans, true, CEPH_NOSNAP, get_snap_context());
     if (file == NULL) {
       return -ENOENT;
     }
@@ -439,7 +440,7 @@ int LRemDBIoCtxImpl::omap_clear(const std::string& oid) {
   return file->flush();
 }
 
-int LRemDBIoCtxImpl::omap_set(const std::string& oid,
+int LRemDBIoCtxImpl::omap_set(LRemTransactionStateRef& trans,
                                const std::map<std::string, bufferlist> &map) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
@@ -452,7 +453,7 @@ int LRemDBIoCtxImpl::omap_set(const std::string& oid,
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
+    file = get_file(trans, true, CEPH_NOSNAP, get_snap_context());
     if (file == NULL) {
       return -ENOENT;
     }
@@ -478,7 +479,6 @@ int LRemDBIoCtxImpl::omap_get_header(LRemTransactionStateRef& trans,
   }
 
   auto cct = m_client->cct();
-  auto& oid = trans->oid();
   ldout(cct, 20) << ": <noargs>" << dendl;
 
   ObjFileRef file;
@@ -497,7 +497,7 @@ int LRemDBIoCtxImpl::omap_get_header(LRemTransactionStateRef& trans,
   return 0;
 }
 
-int LRemDBIoCtxImpl::omap_set_header(const std::string& oid,
+int LRemDBIoCtxImpl::omap_set_header(LRemTransactionStateRef& trans,
                                       const bufferlist& bl) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
@@ -510,7 +510,7 @@ int LRemDBIoCtxImpl::omap_set_header(const std::string& oid,
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
+    file = get_file(trans, true, CEPH_NOSNAP, get_snap_context());
     if (file == NULL) {
       return -ENOENT;
     }
@@ -529,7 +529,7 @@ int LRemDBIoCtxImpl::omap_set_header(const std::string& oid,
   return file->flush();
 }
 
-int LRemDBIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
+int LRemDBIoCtxImpl::read(LRemTransactionStateRef& trans, size_t len, uint64_t off,
                            bufferlist *bl, uint64_t snap_id,
                            uint64_t* objver) {
   if (m_client->is_blocklisted()) {
@@ -539,7 +539,7 @@ int LRemDBIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
   ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
-    file = get_file(oid, false, snap_id, {});
+    file = get_file(trans, false, snap_id, {});
     if (file == NULL) {
       return -ENOENT;
     }
@@ -560,7 +560,7 @@ int LRemDBIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
   return len;
 }
 
-int LRemDBIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
+int LRemDBIoCtxImpl::remove(LRemTransactionStateRef& trans, const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
   } else if (m_client->is_blocklisted()) {
@@ -575,12 +575,12 @@ int LRemDBIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
 #warning check locking
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, false, CEPH_NOSNAP, snapc);
+    file = get_file(trans, false, CEPH_NOSNAP, snapc);
     if (file == NULL) {
       return -ENOENT;
     }
     ++m_pool->epoch;
-    file = get_file(oid, true, CEPH_NOSNAP, snapc);
+    file = get_file(trans, true, CEPH_NOSNAP, snapc);
   }
 
   std::unique_lock l{*file->lock};
@@ -628,7 +628,7 @@ int LRemDBIoCtxImpl::selfmanaged_snap_remove(uint64_t snapid) {
   return 0;
 }
 
-int LRemDBIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
+int LRemDBIoCtxImpl::selfmanaged_snap_rollback(LRemTransactionStateRef& trans,
                                                 uint64_t snapid) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
@@ -681,7 +681,7 @@ int LRemDBIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
   return 0;
 }
 
-int LRemDBIoCtxImpl::set_alloc_hint(const std::string& oid,
+int LRemDBIoCtxImpl::set_alloc_hint(LRemTransactionStateRef& trans,
                                      uint64_t expected_object_size,
                                      uint64_t expected_write_size,
                                      uint32_t flags,
@@ -694,7 +694,7 @@ int LRemDBIoCtxImpl::set_alloc_hint(const std::string& oid,
 
   {
     std::unique_lock l{m_pool->file_lock};
-    get_file(oid, true, CEPH_NOSNAP, snapc);
+    get_file(trans, true, CEPH_NOSNAP, snapc);
   }
 
   /* this one doesn't really do anything, so not updating pool/file epoch */
@@ -702,7 +702,7 @@ int LRemDBIoCtxImpl::set_alloc_hint(const std::string& oid,
   return 0;
 }
 
-int LRemDBIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
+int LRemDBIoCtxImpl::sparse_read(LRemTransactionStateRef& trans, uint64_t off,
                                   uint64_t len,
                                   std::map<uint64_t,uint64_t> *m,
                                   bufferlist *data_bl, uint64_t snap_id) {
@@ -714,7 +714,7 @@ int LRemDBIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
   ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
-    file = get_file(oid, false, snap_id, {});
+    file = get_file(trans, false, snap_id, {});
     if (file == NULL) {
       return -ENOENT;
     }
@@ -723,7 +723,7 @@ int LRemDBIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
   std::shared_lock l{*file->lock};
   // TODO support sparse read
   bufferlist bl;
-  int read_len = read(oid, off, len, &bl, snap_id, nullptr);
+  int read_len = read(trans, off, len, &bl, snap_id, nullptr);
   if (m != NULL) {
     m->clear();
     if (read_len > 0) {
@@ -743,13 +743,12 @@ int LRemDBIoCtxImpl::stat2(LRemTransactionStateRef& trans, uint64_t *psize,
   }
 
   auto cct = m_client->cct();
-  auto& oid = trans->oid();
   ldout(cct, 20) << ": <noargs>" << dendl;
 
   ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
-    file = get_file(trans->oid(), false, CEPH_NOSNAP, {});
+    file = get_file(trans, false, CEPH_NOSNAP, {});
     if (file == NULL) {
       return -ENOENT;
     }
@@ -765,7 +764,7 @@ int LRemDBIoCtxImpl::stat2(LRemTransactionStateRef& trans, uint64_t *psize,
   return 0;
 }
 
-int LRemDBIoCtxImpl::mtime2(const string& oid, const struct timespec& ts,
+int LRemDBIoCtxImpl::mtime2(LRemTransactionStateRef& trans, const struct timespec& ts,
                              const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
@@ -778,7 +777,7 @@ int LRemDBIoCtxImpl::mtime2(const string& oid, const struct timespec& ts,
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, snapc);
+    file = get_file(trans, true, CEPH_NOSNAP, snapc);
     epoch = ++m_pool->epoch;
   }
 
@@ -789,7 +788,7 @@ int LRemDBIoCtxImpl::mtime2(const string& oid, const struct timespec& ts,
   return 0;
 }
 
-int LRemDBIoCtxImpl::truncate(const std::string& oid, uint64_t size,
+int LRemDBIoCtxImpl::truncate(LRemTransactionStateRef& trans, uint64_t size,
                                const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
@@ -805,7 +804,7 @@ int LRemDBIoCtxImpl::truncate(const std::string& oid, uint64_t size,
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, snapc);
+    file = get_file(trans, true, CEPH_NOSNAP, snapc);
     epoch = ++m_pool->epoch;
   }
 
@@ -820,7 +819,7 @@ int LRemDBIoCtxImpl::truncate(const std::string& oid, uint64_t size,
   return file->flush();
 }
 
-int LRemDBIoCtxImpl::write(const std::string& oid, bufferlist& bl, size_t len,
+int LRemDBIoCtxImpl::write(LRemTransactionStateRef& trans, bufferlist& bl, size_t len,
                             uint64_t off, const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
@@ -836,7 +835,7 @@ int LRemDBIoCtxImpl::write(const std::string& oid, bufferlist& bl, size_t len,
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, snapc);
+    file = get_file(trans, true, CEPH_NOSNAP, snapc);
     epoch = ++m_pool->epoch;
   }
 
@@ -853,7 +852,7 @@ int LRemDBIoCtxImpl::write(const std::string& oid, bufferlist& bl, size_t len,
   return file->flush();
 }
 
-int LRemDBIoCtxImpl::write_full(const std::string& oid, bufferlist& bl,
+int LRemDBIoCtxImpl::write_full(LRemTransactionStateRef& trans, bufferlist& bl,
                                  const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
@@ -868,7 +867,7 @@ int LRemDBIoCtxImpl::write_full(const std::string& oid, bufferlist& bl,
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, snapc);
+    file = get_file(trans, true, CEPH_NOSNAP, snapc);
     if (file == NULL) {
       return -ENOENT;
     }
@@ -890,7 +889,7 @@ int LRemDBIoCtxImpl::write_full(const std::string& oid, bufferlist& bl,
   return file->flush();
 }
 
-int LRemDBIoCtxImpl::writesame(const std::string& oid, bufferlist& bl,
+int LRemDBIoCtxImpl::writesame(LRemTransactionStateRef& trans, bufferlist& bl,
                                 size_t len, uint64_t off,
                                 const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
@@ -908,7 +907,7 @@ int LRemDBIoCtxImpl::writesame(const std::string& oid, bufferlist& bl,
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, snapc);
+    file = get_file(trans, true, CEPH_NOSNAP, snapc);
     epoch = ++m_pool->epoch;
   }
 
@@ -934,7 +933,7 @@ int LRemDBIoCtxImpl::writesame(const std::string& oid, bufferlist& bl,
   return file->flush();;
 }
 
-int LRemDBIoCtxImpl::cmpext(const std::string& oid, uint64_t off,
+int LRemDBIoCtxImpl::cmpext(LRemTransactionStateRef& trans, uint64_t off,
                              bufferlist& cmp_bl, uint64_t snap_id) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
@@ -946,7 +945,7 @@ int LRemDBIoCtxImpl::cmpext(const std::string& oid, uint64_t off,
   ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
-    file = get_file(oid, false, snap_id, {});
+    file = get_file(trans, false, snap_id, {});
     if (file == NULL) {
       return cmpext_compare(cmp_bl, read_bl);
     }
@@ -967,7 +966,7 @@ int LRemDBIoCtxImpl::cmpext(const std::string& oid, uint64_t off,
   return cmpext_compare(cmp_bl, read_bl);
 }
 
-int LRemDBIoCtxImpl::cmpxattr_str(const string& oid,
+int LRemDBIoCtxImpl::cmpxattr_str(LRemTransactionStateRef& trans,
                                    const char *name, uint8_t op, const bufferlist& bl)
 {
   if (m_client->is_blocklisted()) {
@@ -977,7 +976,7 @@ int LRemDBIoCtxImpl::cmpxattr_str(const string& oid,
   ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
-    file = get_file(oid, false, CEPH_NOSNAP, {});
+    file = get_file(trans, false, CEPH_NOSNAP, {});
     if (file == NULL) {
       return -ENOENT;
     }
@@ -1023,7 +1022,7 @@ int LRemDBIoCtxImpl::cmpxattr_str(const string& oid,
   return 0;
 }
 
-int LRemDBIoCtxImpl::cmpxattr(const string& oid,
+int LRemDBIoCtxImpl::cmpxattr(LRemTransactionStateRef& trans,
                                const char *name, uint8_t op, uint64_t v)
 {
   if (m_client->is_blocklisted()) {
@@ -1033,7 +1032,7 @@ int LRemDBIoCtxImpl::cmpxattr(const string& oid,
   ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
-    file = get_file(oid, false, CEPH_NOSNAP, {});
+    file = get_file(trans, false, CEPH_NOSNAP, {});
     if (file == NULL) {
       return -ENOENT;
     }
@@ -1098,12 +1097,11 @@ int LRemDBIoCtxImpl::xattr_get(LRemTransactionStateRef& trans,
   }
 
   auto cct = m_client->cct();
-  auto& oid = trans->oid();
 
   ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
-    file = get_file(oid, false, CEPH_NOSNAP, {});
+    file = get_file(trans, false, CEPH_NOSNAP, {});
     if (file == NULL) {
       return -ENOENT;
     }
@@ -1127,14 +1125,12 @@ int LRemDBIoCtxImpl::setxattr(LRemTransactionStateRef& trans, const char *name,
     return -EBLOCKLISTED;
   }
 
-  auto& oid = trans->oid();
-
   uint64_t epoch;
 
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, {});
+    file = get_file(trans, true, CEPH_NOSNAP, {});
     epoch = ++m_pool->epoch;
   }
 
@@ -1158,14 +1154,12 @@ int LRemDBIoCtxImpl::rmxattr(LRemTransactionStateRef& trans, const char *name) {
     return -EBLOCKLISTED;
   }
 
-  auto& oid = trans->oid();
-
   uint64_t epoch;
 
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, {});
+    file = get_file(trans, true, CEPH_NOSNAP, {});
     epoch = ++m_pool->epoch;
   }
 
@@ -1184,7 +1178,7 @@ int LRemDBIoCtxImpl::rmxattr(LRemTransactionStateRef& trans, const char *name) {
   return file->flush();;
 }
 
-int LRemDBIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len,
+int LRemDBIoCtxImpl::zero(LRemTransactionStateRef& trans, uint64_t off, uint64_t len,
                            const SnapContext &snapc) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
@@ -1198,11 +1192,11 @@ int LRemDBIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len,
   ObjFileRef file;
   {
     std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, false, CEPH_NOSNAP, snapc);
+    file = get_file(trans, false, CEPH_NOSNAP, snapc);
     if (!file) {
       return 0;
     }
-    file = get_file(oid, true, CEPH_NOSNAP, snapc);
+    file = get_file(trans, true, CEPH_NOSNAP, snapc);
 
     std::shared_lock l2{*file->lock};
     if (len > 0 && off + len >= file->meta.size) {
@@ -1212,15 +1206,15 @@ int LRemDBIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len,
     file->modify_meta().epoch = ++m_pool->epoch;
   }
   if (truncate_redirect) {
-    return truncate(oid, off, snapc);
+    return truncate(trans, off, snapc);
   }
 
   bufferlist bl;
   bl.append_zero(len);
-  return write(oid, bl, len, off, snapc);
+  return write(trans, bl, len, off, snapc);
 }
 
-int LRemDBIoCtxImpl::get_current_ver(const std::string& oid, uint64_t *ver) {
+int LRemDBIoCtxImpl::get_current_ver(LRemTransactionStateRef& trans, uint64_t *ver) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
@@ -1228,7 +1222,7 @@ int LRemDBIoCtxImpl::get_current_ver(const std::string& oid, uint64_t *ver) {
   ObjFileRef file;
   {
     std::shared_lock l{m_pool->file_lock};
-    file = get_file(oid, false, CEPH_NOSNAP, {});
+    file = get_file(trans, false, CEPH_NOSNAP, {});
     if (file == NULL) {
       return -ENOENT;
     }
@@ -1268,7 +1262,7 @@ void LRemDBIoCtxImpl::ensure_minimum_length(size_t len, bufferlist *bl) {
 }
 
 LRemDBIoCtxImpl::ObjFileRef LRemDBIoCtxImpl::get_file(
-    const std::string &oid, bool write, uint64_t snap_id,
+    LRemTransactionStateRef& trans, bool write, uint64_t snap_id,
     const SnapContext &snapc) {
   ceph_assert(ceph_mutex_is_locked(m_pool->file_lock) ||
 	      ceph_mutex_is_wlocked(m_pool->file_lock));
@@ -1277,9 +1271,9 @@ LRemDBIoCtxImpl::ObjFileRef LRemDBIoCtxImpl::get_file(
 
   auto of = make_shared<ObjFile>();
 
-  of->obj = m_pool_db->get_obj_handler(get_namespace(), oid);
-  of->omap = m_pool_db->get_omap_handler(get_namespace(), oid);
-  of->xattrs = m_pool_db->get_xattrs_handler(get_namespace(), oid);
+  of->obj = m_pool_db->get_obj_handler(trans);
+  of->omap = m_pool_db->get_omap_handler(trans);
+  of->xattrs = m_pool_db->get_xattrs_handler(trans);
 
   int r = of->obj->read_meta(&of->meta);
   if (r < 0 && r != -ENOENT) {
@@ -1306,7 +1300,7 @@ LRemDBIoCtxImpl::ObjFileRef LRemDBIoCtxImpl::get_file(
 
 #warning FIXME lock
   if (of->exists || write) {
-    of->lock = &m_pool->file_locks[{get_namespace(), oid}].lock;
+    of->lock = &m_pool->file_locks[trans->locator].lock;
   }
 
   if (write) {
@@ -1384,18 +1378,17 @@ LRemDBIoCtxImpl::ObjFileRef LRemDBIoCtxImpl::get_file_safe(
     if (pepoch) {
       *pepoch = epoch;
     }
-    return get_file(trans->oid(), true, snap_id, snapc);
+    return get_file(trans, true, snap_id, snapc);
   }
 
   std::shared_lock l{m_pool->file_lock};
-  return get_file(trans->oid(), false, snap_id, snapc);
+  return get_file(trans, false, snap_id, snapc);
 }
 
 int LRemDBIoCtxImpl::pool_op(LRemTransactionStateRef& trans,
                               bool write,
                               PoolOperation op) {
   auto cct = m_client->cct();
-  auto& oid = trans->oid();
   bool _write = (write | trans->write);
   ldout(cct, 20) << "pool_op() trans->write=" << trans->write << " write=" << write << " -> " << _write << dendl;
 

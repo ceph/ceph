@@ -254,19 +254,19 @@ Op::~Op() {
 void Op::assert_exists() {
   auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::LRemIoCtxImpl::assert_exists, _1, _2, _4));
+    &librados::LRemIoCtxImpl::assert_exists, _1, _7, _4));
 }
 
 void Op::assert_version(uint64_t ver) {
   auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-          &librados::LRemIoCtxImpl::assert_version, _1, _2, ver));
+          &librados::LRemIoCtxImpl::assert_version, _1, _7, ver));
 }
 
 void Op::cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) {
   auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   librados::ObjectOperationLRemImpl op = std::bind(
-    &librados::LRemIoCtxImpl::cmpext, _1, _2, off, cmp_bl, _4);
+    &librados::LRemIoCtxImpl::cmpext, _1, _7, off, cmp_bl, _4);
   if (s != nullptr) {
     op = std::bind(
       save_operation_size, std::bind(op, _1, _2, _3, _4, _5, _6, _7), s);
@@ -319,9 +319,9 @@ void Op::exec(std::string_view cls, std::string_view method,
     (librados::LRemIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
      uint64_t snap_id, const SnapContext& snapc, uint64_t*, librados::LRemTransactionStateRef& trans) mutable -> int {
       return io_ctx->exec(
-        oid, cls_handler, std::string(cls).c_str(),
+        trans, cls_handler, std::string(cls).c_str(),
         std::string(method).c_str(), inbl,
-        (out != nullptr ? out : outbl), snap_id, snapc, trans);
+        (out != nullptr ? out : outbl), snap_id, snapc);
     };
   if (ec != nullptr) {
     op = std::bind(
@@ -341,8 +341,8 @@ void Op::exec(std::string_view cls, std::string_view method,
     (librados::LRemIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
      uint64_t snap_id, const SnapContext& snapc, uint64_t*, librados::LRemTransactionStateRef& trans) mutable -> int {
       return io_ctx->exec(
-        oid, cls_handler, std::string(cls).c_str(),
-        std::string(method).c_str(), inbl, outbl, snap_id, snapc, trans);
+        trans, cls_handler, std::string(cls).c_str(),
+        std::string(method).c_str(), inbl, outbl, snap_id, snapc);
     };
   if (ec != NULL) {
     op = std::bind(
@@ -357,10 +357,10 @@ void ReadOp::read(size_t off, uint64_t len, ceph::buffer::list* out,
   librados::ObjectOperationLRemImpl op;
   if (out != nullptr) {
     op = std::bind(
-            &librados::LRemIoCtxImpl::read, _1, _2, len, off, out, _4, _6);
+            &librados::LRemIoCtxImpl::read, _1, _7, len, off, out, _4, _6);
   } else {
     op = std::bind(
-            &librados::LRemIoCtxImpl::read, _1, _2, len, off, _3, _4, _6);
+            &librados::LRemIoCtxImpl::read, _1, _7, len, off, _3, _4, _6);
   }
 
   if (ec != NULL) {
@@ -382,7 +382,7 @@ void ReadOp::sparse_read(uint64_t off, uint64_t len,
      uint64_t snap_id, const SnapContext& snapc, uint64_t*, librados::LRemTransactionStateRef& trans) mutable -> int {
       std::map<uint64_t,uint64_t> m;
       int r = io_ctx->sparse_read(
-        oid, off, len, &m, (out != nullptr ? out : outbl), snap_id);
+        trans, off, len, &m, (out != nullptr ? out : outbl), snap_id);
       if (r >= 0 && extents != nullptr) {
         extents->clear();
         extents->insert(extents->end(), m.begin(), m.end());
@@ -401,9 +401,9 @@ void ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
   librados::ObjectOperationLRemImpl op =
     [snaps]
     (librados::LRemIoCtxImpl* io_ctx, const std::string& oid, bufferlist*,
-     uint64_t, const SnapContext&, uint64_t*, librados::LRemTransactionStateRef&) mutable -> int {
+     uint64_t, const SnapContext&, uint64_t*, librados::LRemTransactionStateRef& trans) mutable -> int {
       librados::snap_set_t snap_set;
-      int r = io_ctx->list_snaps(oid, &snap_set);
+      int r = io_ctx->list_snaps(trans, &snap_set);
       if (r >= 0 && snaps != nullptr) {
         *snaps = {};
         snaps->seq = snap_set.seq;
@@ -429,44 +429,44 @@ void ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
 void WriteOp::create(bool exclusive) {
   auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::LRemIoCtxImpl::create, _1, _2, exclusive, _5));
+    &librados::LRemIoCtxImpl::create, _1, _7, exclusive, _5));
 }
 
 void WriteOp::write(uint64_t off, ceph::buffer::list&& bl) {
   auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::LRemIoCtxImpl::write, _1, _2, bl, bl.length(), off, _5));
+    &librados::LRemIoCtxImpl::write, _1, _7, bl, bl.length(), off, _5));
 }
 
 void WriteOp::write_full(ceph::buffer::list&& bl) {
   auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::LRemIoCtxImpl::write_full, _1, _2, bl, _5));
+    &librados::LRemIoCtxImpl::write_full, _1, _7, bl, _5));
 }
 
 void WriteOp::remove() {
   auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::LRemIoCtxImpl::remove, _1, _2, _5));
+    &librados::LRemIoCtxImpl::remove, _1, _7, _5));
 }
 
 void WriteOp::truncate(uint64_t off) {
   auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::LRemIoCtxImpl::truncate, _1, _2, off, _5));
+    &librados::LRemIoCtxImpl::truncate, _1, _7, off, _5));
 }
 
 void WriteOp::zero(uint64_t off, uint64_t len) {
   auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::LRemIoCtxImpl::zero, _1, _2, off, len, _5));
+    &librados::LRemIoCtxImpl::zero, _1, _7, off, len, _5));
 }
 
 void WriteOp::writesame(std::uint64_t off, std::uint64_t write_len,
                         ceph::buffer::list&& bl) {
   auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::LRemIoCtxImpl::writesame, _1, _2, bl, write_len, off, _5));
+    &librados::LRemIoCtxImpl::writesame, _1, _7, bl, write_len, off, _5));
 }
 
 void WriteOp::set_alloc_hint(uint64_t expected_object_size,

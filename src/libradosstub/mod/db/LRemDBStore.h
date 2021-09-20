@@ -7,6 +7,8 @@
 
 #include "include/interval_set.h"
 
+#include "LRemTransaction.h"
+
 namespace librados {
 
 class LRemDBOps {
@@ -54,6 +56,8 @@ namespace LRemDBStore {
 
     std::string table_name;
 
+    LRemTransactionStateRef trans;
+
     std::string nspace;
     std::string oid;
 
@@ -61,22 +65,22 @@ namespace LRemDBStore {
 
   public:
     TableBase(LRemDBOpsRef& _dbo, int _pool_id,
-                  const std::string& table_name_prefix) : dbo(_dbo), pool_id(_pool_id) {
+              const std::string& table_name_prefix) : dbo(_dbo), pool_id(_pool_id) {
       init_table_name(table_name_prefix);
     }
     TableBase(LRemDBOpsRef& _dbo, int _pool_id,
               const std::string& table_name_prefix,
-              const std::string& _nspace, const std::string& _oid) : dbo(_dbo), pool_id(_pool_id),
-                                                                     nspace(_nspace), oid(_oid) {
+              LRemTransactionStateRef& _trans) : dbo(_dbo), pool_id(_pool_id), trans(_trans) {
+      set_instance(trans);
       init_table_name(table_name_prefix);
     }
     virtual ~TableBase() {}
 
     virtual int create_table() = 0;
 
-    void set_instance(const std::string& _nspace, const std::string& _oid) {
-      nspace = _nspace;
-      oid = _oid;
+    void set_instance(LRemTransactionStateRef& trans) {
+      nspace = trans->nspace();
+      oid = trans->oid();
     }
   };
 
@@ -84,8 +88,7 @@ namespace LRemDBStore {
   public:
     Obj(LRemDBOpsRef& _dbo, int _pool_id) : TableBase(_dbo, _pool_id, "obj") {}
     Obj(LRemDBOpsRef& _dbo, int _pool_id,
-        const std::string& _nspace, const std::string& _oid) : TableBase(_dbo, _pool_id, "obj",
-                                                                         _nspace, _oid) {}
+        LRemTransactionStateRef& trans) : TableBase(_dbo, _pool_id, "obj", trans) {}
 
     struct Meta {
       uint64_t size = 0;
@@ -139,8 +142,7 @@ namespace LRemDBStore {
   public:
     ObjData(LRemDBOpsRef& _dbo, int _pool_id) : TableBase(_dbo, _pool_id, "objdata") {}
     ObjData(LRemDBOpsRef& _dbo, int _pool_id,
-            const std::string& _nspace, const std::string& _oid) : TableBase(_dbo, _pool_id, "objdata",
-                                                                             _nspace, _oid) {}
+            LRemTransactionStateRef& trans) : TableBase(_dbo, _pool_id, "objdata", trans) {}
     int create_table() override;
 
     int read(uint64_t ofs, uint64_t len, bufferlist *bl);
@@ -156,8 +158,7 @@ namespace LRemDBStore {
                 const std::string& table_name_prefix) : TableBase(_dbo, _pool_id, table_name_prefix) {}
     KVTableBase(LRemDBOpsRef& _dbo, int _pool_id,
                 const std::string& table_name_prefix,
-                const std::string& _nspace, const std::string& _oid) : TableBase(_dbo, _pool_id, table_name_prefix,
-                                                                                 _nspace, _oid) {}
+                LRemTransactionStateRef& trans) : TableBase(_dbo, _pool_id, table_name_prefix, trans) {}
     virtual ~KVTableBase() {}
 
     int create_table() override;
@@ -186,8 +187,7 @@ namespace LRemDBStore {
   public:
     OMap(LRemDBOpsRef& _dbo, int _pool_id) : KVTableBase(_dbo, _pool_id, "omap") {}
     OMap(LRemDBOpsRef& _dbo, int _pool_id,
-         const std::string& _nspace, const std::string& _oid) : KVTableBase(_dbo, _pool_id, "omap",
-                                                                            _nspace, _oid) {}
+         LRemTransactionStateRef& trans) : KVTableBase(_dbo, _pool_id, "omap", trans) {}
   };
   using OMapRef = std::shared_ptr<OMap>;
 
@@ -195,8 +195,7 @@ namespace LRemDBStore {
   public:
     XAttrs(LRemDBOpsRef& _dbo, int _pool_id) : KVTableBase(_dbo, _pool_id, "xattrs") {}
     XAttrs(LRemDBOpsRef& _dbo, int _pool_id,
-           const std::string& _nspace, const std::string& _oid) : KVTableBase(_dbo, _pool_id, "xattrs",
-                                                                              _nspace, _oid) {}
+           LRemTransactionStateRef& trans) : KVTableBase(_dbo, _pool_id, "xattrs", trans) {}
   };
   using XAttrsRef = std::shared_ptr<XAttrs>;
 
@@ -225,9 +224,9 @@ namespace LRemDBStore {
     int create(const std::string& _name, const std::string& _val);
     int read();
 
-    ObjRef get_obj_handler(const std::string& nspace, const std::string& oid);
-    XAttrsRef get_xattrs_handler(const std::string& nspace, const std::string& oid);
-    OMapRef get_omap_handler(const std::string& nspace, const std::string& oid);
+    ObjRef get_obj_handler(LRemTransactionStateRef& trans);
+    XAttrsRef get_xattrs_handler(LRemTransactionStateRef& trans);
+    OMapRef get_omap_handler(LRemTransactionStateRef& trans);
   };
   using PoolRef = std::shared_ptr<Pool>;
 

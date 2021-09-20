@@ -370,16 +370,16 @@ int LRemDBStore::Pool::init_tables() {
   return 0;
 }
 
-LRemDBStore::ObjRef LRemDBStore::Pool::get_obj_handler(const std::string& nspace, const std::string& oid) {
-  return std::make_shared<Obj>(dbo, id, nspace, oid);
+LRemDBStore::ObjRef LRemDBStore::Pool::get_obj_handler(LRemTransactionStateRef& trans) {
+  return std::make_shared<Obj>(dbo, id, trans);
 }
 
-LRemDBStore::XAttrsRef LRemDBStore::Pool::get_xattrs_handler(const std::string& nspace, const std::string& oid) {
-  return std::make_shared<XAttrs>(dbo, id, nspace, oid);
+LRemDBStore::XAttrsRef LRemDBStore::Pool::get_xattrs_handler(LRemTransactionStateRef& trans) {
+  return std::make_shared<XAttrs>(dbo, id, trans);
 }
 
-LRemDBStore::OMapRef LRemDBStore::Pool::get_omap_handler(const std::string& nspace, const std::string& oid) {
-  return std::make_shared<OMap>(dbo, id, nspace, oid);
+LRemDBStore::OMapRef LRemDBStore::Pool::get_omap_handler(LRemTransactionStateRef& trans) {
+  return std::make_shared<OMap>(dbo, id, trans);
 }
 
 void LRemDBStore::TableBase::init_table_name(const string& table_name_prefix) {
@@ -517,7 +517,7 @@ int LRemDBStore::Obj::read_data(uint64_t ofs, uint64_t len,
     len = size - ofs;
   }
 
-  ObjData od(dbo, pool_id, nspace, oid);
+  ObjData od(dbo, pool_id, trans);
 
   return od.read(ofs, len, bl);
 }
@@ -525,7 +525,7 @@ int LRemDBStore::Obj::read_data(uint64_t ofs, uint64_t len,
 int LRemDBStore::Obj::write_data(uint64_t ofs, uint64_t len,
                                  const bufferlist& bl) {
 
-  ObjData od(dbo, pool_id, nspace, oid);
+  ObjData od(dbo, pool_id, trans);
 
   int r = od.write(ofs, len, bl);
   if (r < 0) {
@@ -569,7 +569,7 @@ int LRemDBStore::Obj::write(uint64_t ofs, uint64_t len,
 }
 
 int LRemDBStore::Obj::remove() {
-  ObjData od(dbo, pool_id, nspace, oid);
+  ObjData od(dbo, pool_id, trans);
 
   int r = od.remove();
   if (r < 0) {
@@ -581,7 +581,7 @@ int LRemDBStore::Obj::remove() {
 
 int LRemDBStore::Obj::truncate(uint64_t ofs,
                                LRemDBStore::Obj::Meta& meta) {
-  ObjData od(dbo, pool_id, nspace, oid);
+  ObjData od(dbo, pool_id, trans);
 
   int r;
 

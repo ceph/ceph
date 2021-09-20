@@ -42,7 +42,7 @@ private:
 
 class LRemIoCtxImpl {
 public:
-  typedef boost::function<int(LRemIoCtxImpl *, const std::string &)> Operation;
+  typedef boost::function<int(LRemIoCtxImpl *, LRemTransactionStateRef &)> Operation;
 
 
   LRemIoCtxImpl();
@@ -100,7 +100,7 @@ public:
                                AioCompletionImpl *c, int flags,
                                bufferlist *pbl, uint64_t snap_id,
                                uint64_t* objver);
-  virtual int aio_append(LRemTransactionStateRef& trans, AioCompletionImpl *c,
+  virtual int aio_append(const std::string& oid, AioCompletionImpl *c,
                          const bufferlist& bl, size_t len)  = 0;
   virtual int aio_remove(const std::string& oid, AioCompletionImpl *c,
                          int flags = 0) = 0;
@@ -113,100 +113,99 @@ public:
                        bufferlist& inbl, bufferlist *outbl);
   virtual int append(LRemTransactionStateRef& trans, const bufferlist &bl,
                      const SnapContext &snapc) = 0;
-  virtual int assert_exists(const std::string &oid, uint64_t snap_id) = 0;
-  virtual int assert_version(const std::string &oid, uint64_t ver) = 0;
+  virtual int assert_exists(LRemTransactionStateRef& trans, uint64_t snap_id) = 0;
+  virtual int assert_version(LRemTransactionStateRef& trans, uint64_t ver) = 0;
 
-  virtual int create(const std::string& oid, bool exclusive,
+  virtual int create(LRemTransactionStateRef& trans, bool exclusive,
                      const SnapContext &snapc) = 0;
-  virtual int exec(const std::string& oid, LRemClassHandler *handler,
+  virtual int exec(LRemTransactionStateRef& trans, LRemClassHandler *handler,
                    const char *cls, const char *method,
                    bufferlist& inbl, bufferlist* outbl,
-                   uint64_t snap_id, const SnapContext &snapc,
-                   LRemTransactionStateRef& trans);
-  virtual int list_snaps(const std::string& o, snap_set_t *out_snaps) = 0;
-  virtual int list_watchers(const std::string& o,
+                   uint64_t snap_id, const SnapContext &snapc);
+  virtual int list_snaps(LRemTransactionStateRef& trans, snap_set_t *out_snaps) = 0;
+  virtual int list_watchers(LRemTransactionStateRef& trans,
                             std::list<obj_watch_t> *out_watchers);
-  virtual int notify(const std::string& o, bufferlist& bl,
+  virtual int notify(LRemTransactionStateRef& trans, bufferlist& bl,
                      uint64_t timeout_ms, bufferlist *pbl);
-  virtual void notify_ack(const std::string& o, uint64_t notify_id,
+  virtual void notify_ack(LRemTransactionStateRef& trans, uint64_t notify_id,
                           uint64_t handle, bufferlist& bl);
-  virtual int omap_get_keys2(const std::string& oid,
+  virtual int omap_get_keys2(LRemTransactionStateRef& trans,
                              const std::string& start_after,
                              uint64_t max_return,
                              std::set<std::string> *out_keys,
                              bool *pmore);
-  virtual int omap_get_vals(const std::string& oid,
+  virtual int omap_get_vals(LRemTransactionStateRef& trans,
                             const std::string& start_after,
                             const std::string &filter_prefix,
                             uint64_t max_return,
                             std::map<std::string, bufferlist> *out_vals) = 0;
-  virtual int omap_get_vals2(const std::string& oid,
+  virtual int omap_get_vals2(LRemTransactionStateRef& trans,
                             const std::string& start_after,
                             const std::string &filter_prefix,
                             uint64_t max_return,
                             std::map<std::string, bufferlist> *out_vals,
                             bool *pmore) = 0;
-  virtual int omap_get_vals_by_keys(const std::string& oid,
+  virtual int omap_get_vals_by_keys(LRemTransactionStateRef& trans,
                                     const std::set<std::string>& keys,
                                     std::map<std::string, bufferlist> *vals) = 0;
-  virtual int omap_rm_keys(const std::string& oid,
+  virtual int omap_rm_keys(LRemTransactionStateRef& trans,
                            const std::set<std::string>& keys) = 0;
-  virtual int omap_rm_range(const std::string& oid,
+  virtual int omap_rm_range(LRemTransactionStateRef& trans,
                             const string& key_begin,
                             const string& key_end) = 0;
-  virtual int omap_clear(const std::string& oid) = 0;
-  virtual int omap_set(const std::string& oid,
+  virtual int omap_clear(LRemTransactionStateRef& trans) = 0;
+  virtual int omap_set(LRemTransactionStateRef& trans,
                        const std::map<std::string, bufferlist> &map) = 0;
   virtual int omap_get_header(LRemTransactionStateRef& trs,
                               bufferlist *bl) = 0;
-  virtual int omap_set_header(const std::string& oid,
+  virtual int omap_set_header(LRemTransactionStateRef& trans,
                               const bufferlist& bl) = 0;
   virtual int operate(const std::string& oid, LRemObjectOperationImpl &ops, int flags);
   virtual int operate_read(const std::string& oid, LRemObjectOperationImpl &ops,
                            bufferlist *pbl, int flags);
-  virtual int read(const std::string& oid, size_t len, uint64_t off,
+  virtual int read(LRemTransactionStateRef& trans, size_t len, uint64_t off,
                    bufferlist *bl, uint64_t snap_id, uint64_t* objver) = 0;
-  virtual int remove(const std::string& oid, const SnapContext &snapc) = 0;
+  virtual int remove(LRemTransactionStateRef& trans, const SnapContext &snapc) = 0;
   virtual int selfmanaged_snap_create(uint64_t *snapid) = 0;
   virtual void aio_selfmanaged_snap_create(uint64_t *snapid,
                                            AioCompletionImpl *c);
   virtual int selfmanaged_snap_remove(uint64_t snapid) = 0;
   virtual void aio_selfmanaged_snap_remove(uint64_t snapid,
                                            AioCompletionImpl *c);
-  virtual int selfmanaged_snap_rollback(const std::string& oid,
+  virtual int selfmanaged_snap_rollback(LRemTransactionStateRef& trans,
                                         uint64_t snapid) = 0;
   virtual int selfmanaged_snap_set_write_ctx(snap_t seq,
                                              std::vector<snap_t>& snaps);
-  virtual int set_alloc_hint(const std::string& oid,
+  virtual int set_alloc_hint(LRemTransactionStateRef& trans,
                              uint64_t expected_object_size,
                              uint64_t expected_write_size,
                              uint32_t flags,
                              const SnapContext &snapc);
   virtual void set_snap_read(snap_t seq);
-  virtual int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
+  virtual int sparse_read(LRemTransactionStateRef& trans, uint64_t off, uint64_t len,
                           std::map<uint64_t,uint64_t> *m,
                           bufferlist *data_bl, uint64_t snap_id) = 0;
   virtual int stat(LRemTransactionStateRef& trans, uint64_t *psize, time_t *pmtime);
   virtual int stat2(LRemTransactionStateRef& trans, uint64_t *psize, struct timespec *pts) = 0;
-  virtual int mtime2(const string& oid, const struct timespec& ts,
+  virtual int mtime2(LRemTransactionStateRef& trans, const struct timespec& ts,
                      const SnapContext &snapc) = 0;
-  virtual int truncate(const std::string& oid, uint64_t size,
+  virtual int truncate(LRemTransactionStateRef& trans, uint64_t size,
                        const SnapContext &snapc) = 0;
   virtual int tmap_update(LRemTransactionStateRef& trans, bufferlist& cmdbl);
   virtual int unwatch(uint64_t handle);
-  virtual int watch(const std::string& o, uint64_t *handle,
+  virtual int watch(LRemTransactionStateRef& trans, uint64_t *handle,
                     librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2);
-  virtual int write(const std::string& oid, bufferlist& bl, size_t len,
+  virtual int write(LRemTransactionStateRef& trans, bufferlist& bl, size_t len,
                     uint64_t off, const SnapContext &snapc) = 0;
-  virtual int write_full(const std::string& oid, bufferlist& bl,
+  virtual int write_full(LRemTransactionStateRef& trans, bufferlist& bl,
                          const SnapContext &snapc) = 0;
-  virtual int writesame(const std::string& oid, bufferlist& bl, size_t len,
+  virtual int writesame(LRemTransactionStateRef& trans, bufferlist& bl, size_t len,
                         uint64_t off, const SnapContext &snapc) = 0;
-  virtual int cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl,
+  virtual int cmpext(LRemTransactionStateRef& trans, uint64_t off, bufferlist& cmp_bl,
                      uint64_t snap_id) = 0;
-  virtual int cmpxattr_str(const std::string& oid, const char *name,
+  virtual int cmpxattr_str(LRemTransactionStateRef& trans, const char *name,
                            uint8_t op, const bufferlist& bl) = 0;
-  virtual int cmpxattr(const std::string& oid, const char *name,
+  virtual int cmpxattr(LRemTransactionStateRef& trans, const char *name,
                        uint8_t op, uint64_t v) = 0;
   virtual int getxattr(LRemTransactionStateRef& trans, const char *name, bufferlist *pbl);
   virtual int xattr_get(LRemTransactionStateRef& trans,
@@ -214,10 +213,10 @@ public:
   virtual int setxattr(LRemTransactionStateRef& trans, const char *name,
                        bufferlist& bl) = 0;
   virtual int rmxattr(LRemTransactionStateRef& trans, const char *name) = 0;
-  virtual int zero(const std::string& oid, uint64_t off, uint64_t len,
+  virtual int zero(LRemTransactionStateRef& trans, uint64_t off, uint64_t len,
                    const SnapContext &snapc) = 0;
 
-  virtual int get_current_ver(const std::string& oid, uint64_t *ver) = 0;
+  virtual int get_current_ver(LRemTransactionStateRef& trans, uint64_t *ver) = 0;
   virtual int set_op_flags(LRemTransactionStateRef& trans, int flags);
 
   int execute_operation(const std::string& oid,

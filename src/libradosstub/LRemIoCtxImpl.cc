@@ -172,16 +172,15 @@ int LRemIoCtxImpl::aio_exec(const std::string& oid, AioCompletionImpl *c,
                             bufferlist& inbl, bufferlist *outbl) {
   auto trans = init_transaction(oid);
   m_client->add_aio_operation(oid, true, std::bind(
-    &LRemIoCtxImpl::exec, this, oid, handler, cls, method,
-    inbl, outbl, m_snap_seq, m_snapc, trans), c);
+    &LRemIoCtxImpl::exec, this, trans, handler, cls, method,
+    inbl, outbl, m_snap_seq, m_snapc), c);
   return 0;
 }
 
-int LRemIoCtxImpl::exec(const std::string& oid, LRemClassHandler *handler,
+int LRemIoCtxImpl::exec(LRemTransactionStateRef& trans, LRemClassHandler *handler,
                         const char *cls, const char *method,
                         bufferlist& inbl, bufferlist* outbl,
-                        uint64_t snap_id, const SnapContext &snapc,
-                        LRemTransactionStateRef& trans) {
+                        uint64_t snap_id, const SnapContext &snapc) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
@@ -193,6 +192,8 @@ int LRemIoCtxImpl::exec(const std::string& oid, LRemClassHandler *handler,
   }
   trans->set_write(write);
 
+  auto& oid = trans->oid();
+
   int r = (*call)(reinterpret_cast<cls_method_context_t>(
     handler->get_method_context(this, oid, snap_id, snapc, trans).get()), &inbl,
     outbl);
@@ -201,7 +202,7 @@ int LRemIoCtxImpl::exec(const std::string& oid, LRemClassHandler *handler,
   return r;
 }
 
-int LRemIoCtxImpl::list_watchers(const std::string& o,
+int LRemIoCtxImpl::list_watchers(LRemTransactionStateRef& trans,
                                  std::list<obj_watch_t> *out_watchers) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
@@ -209,35 +210,35 @@ int LRemIoCtxImpl::list_watchers(const std::string& o,
 
   return m_client->get_watch_notify()->list_watchers(m_client,
                                                      m_pool_id, get_namespace(),
-                                                     o, out_watchers);
+                                                     trans->oid(), out_watchers);
 }
 
-int LRemIoCtxImpl::notify(const std::string& o, bufferlist& bl,
+int LRemIoCtxImpl::notify(LRemTransactionStateRef& trans, bufferlist& bl,
                           uint64_t timeout_ms, bufferlist *pbl) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
 
   return m_client->get_watch_notify()->notify(m_client, m_pool_id,
-                                              get_namespace(), o, bl,
+                                              get_namespace(), trans->oid(), bl,
                                               timeout_ms, pbl);
 }
 
-void LRemIoCtxImpl::notify_ack(const std::string& o, uint64_t notify_id,
+void LRemIoCtxImpl::notify_ack(LRemTransactionStateRef& trans, uint64_t notify_id,
                                uint64_t handle, bufferlist& bl) {
   m_client->get_watch_notify()->notify_ack(m_client, m_pool_id, get_namespace(),
-                                           o, notify_id, handle,
+                                           trans->oid(), notify_id, handle,
                                            m_client->get_instance_id(), bl);
 }
 
-int LRemIoCtxImpl::omap_get_keys2(const std::string& oid,
+int LRemIoCtxImpl::omap_get_keys2(LRemTransactionStateRef& trans,
                                   const std::string& start_after,
                                   uint64_t max_return,
                                   std::set<std::string> *out_keys,
                                   bool *pmore) {
   out_keys->clear();
   std::map<string, bufferlist> vals;
-  int r = omap_get_vals2(oid, start_after, "", max_return,
+  int r = omap_get_vals2(trans, start_after, "", max_return,
                          &vals, pmore);
   if (r < 0) {
     return r;
@@ -308,7 +309,7 @@ int LRemIoCtxImpl::selfmanaged_snap_set_write_ctx(snap_t seq,
   return 0;
 }
 
-int LRemIoCtxImpl::set_alloc_hint(const std::string& oid,
+int LRemIoCtxImpl::set_alloc_hint(LRemTransactionStateRef& trans,
                                   uint64_t expected_object_size,
                                   uint64_t expected_write_size,
                                   uint32_t flags,
@@ -361,10 +362,9 @@ int LRemIoCtxImpl::tmap_update(LRemTransactionStateRef& trans, bufferlist& cmdbl
   bufferlist tmap_header;
   std::map<string,bufferlist> tmap;
   uint64_t size = 0;
-  auto& oid = trans->oid();
   int r = stat(trans, &size, NULL);
   if (r == -ENOENT) {
-    r = create(oid, false, m_snapc);
+    r = create(trans, false, m_snapc);
   }
   if (r < 0) {
     return r;
@@ -372,7 +372,7 @@ int LRemIoCtxImpl::tmap_update(LRemTransactionStateRef& trans, bufferlist& cmdbl
 
   if (size > 0) {
     bufferlist inbl;
-    r = read(oid, size, 0, &inbl, CEPH_NOSNAP, nullptr);
+    r = read(trans, size, 0, &inbl, CEPH_NOSNAP, nullptr);
     if (r < 0) {
       return r;
     }
@@ -406,7 +406,7 @@ int LRemIoCtxImpl::tmap_update(LRemTransactionStateRef& trans, bufferlist& cmdbl
   bufferlist out;
   encode(tmap_header, out);
   encode(tmap, out);
-  r = write_full(oid, out, m_snapc);
+  r = write_full(trans, out, m_snapc);
   return r;
 }
 
@@ -418,14 +418,14 @@ int LRemIoCtxImpl::unwatch(uint64_t handle) {
   return m_client->get_watch_notify()->unwatch(m_client, handle);
 }
 
-int LRemIoCtxImpl::watch(const std::string& o, uint64_t *handle,
+int LRemIoCtxImpl::watch(LRemTransactionStateRef& trans, uint64_t *handle,
                          librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
 
   return m_client->get_watch_notify()->watch(m_client, m_pool_id,
-                                             get_namespace(), o,
+                                             get_namespace(), trans->oid(),
                                              get_instance_id(), handle, ctx,
                                              ctx2);
 }
@@ -438,7 +438,7 @@ int LRemIoCtxImpl::execute_operation(const std::string& oid,
 
   auto transaction_state = init_transaction(oid);
   LRemRadosClient::Transaction transaction(m_client, transaction_state);
-  return operation(this, oid);
+  return operation(this, transaction.get_state_ref());
 }
 
 int LRemIoCtxImpl::execute_aio_operations(const std::string& oid,
