@@ -7,6 +7,7 @@
 #include <iosfwd>
 #include <map>
 #include <string>
+#include <mutex>
 
 #include "common/ceph_mutex.h"
 #include "include/common_fwd.h"
@@ -24,6 +25,11 @@ public:
   int init_on_startup();
 
   std::multimap<std::string,std::string> get_location() const;
+
+  void annotate(const std::string& key, const std::string& val) {
+    std::scoped_lock l(lock);
+    loc.insert(make_pair(key, val));
+  }
 
 private:
   int _parse(const std::string& s);

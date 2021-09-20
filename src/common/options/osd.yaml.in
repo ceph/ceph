@@ -655,6 +655,17 @@ options:
   default: -1
   with_legacy: true
 # Allows the "peered" state for recovery and backfill below min_size
+- name: osd_crush_detect_multilun_devices
+  type: bool
+  default: true
+  level: advanced
+  desc: detect multi-LUN devices and incorporate device id into CRUSH location
+  long_desc: Some multi-LUN devices, such as multi-actuator HDDs, present multiple LUNs
+    from the same physical device.  When this option is enabled, the OSD will detect
+    such devices on startup and, when multiple LUNs are present, incorporate the device
+    id into the CRUSH location, so that data placement can consider that multiple
+    OSDs may reside on the same device.
+  with_legacy: true
 - name: osd_allow_recovery_below_min_size
   type: bool
   level: dev

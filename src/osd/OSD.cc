@@ -4574,6 +4574,33 @@ int OSD::update_crush_location()
 		      double(1ull << 40 /* TB */)));
   }
 
+  // detect dual-actuator device
+  if (cct->_conf->osd_crush_detect_multilun_devices) {
+    set<string> devnames;
+    store->get_devices(&devnames);
+    for (auto& devname : devnames) {
+      std::string err;
+      int num_luns = get_device_num_luns(devname, &err);
+      dout(20) << __func__ << " devname " << devname << " has " << num_luns
+	       << " luns" << dendl;
+      if (num_luns < 0) {
+	dout(1) << __func__ << " failed to count luns on " << devname << dendl;
+      } else if (num_luns > 1) {
+	string devid = get_device_id(devname);
+	if (devid.size()) {
+	  dout(10) << " device " << devname << " has " << num_luns
+		   << " LUNs, adjusting crush_location for devid " << devid
+		   << dendl;
+	  cct->crush_location.annotate("device", devid);
+	  break;
+	} else {
+	  dout(1) << " device " << devname << " has " << num_luns
+		  << " LUNs, but could not generate a valid devid" << dendl;
+	}
+      }
+    }
+  }
+
   dout(10) << __func__ << " crush location is " << cct->crush_location << dendl;
 
   string cmd =
