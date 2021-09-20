@@ -84,7 +84,7 @@ Synopsis
 | **cephadm** **deploy** [-h] --name NAME --fsid FSID [--config CONFIG]
 |                        [--config-json CONFIG_JSON] [--keyring KEYRING]
 |                        [--key KEY] [--osd-fsid OSD_FSID] [--skip-firewalld]
-|                        [--tcp-ports TCP_PORTS] [--reconfig] [--allow-ptrace]
+|                        [--tcp-ports TCP_PORTS] [--reconfig]
 
 | **cephadm** **check-host** [-h] [--expect-hostname EXPECT_HOSTNAME]
 
@@ -300,7 +300,6 @@ Arguments:
 * [--skip-firewalld]          Do not configure firewalld
 * [--tcp-ports                List of tcp ports to open in the host firewall
 * [--reconfig]                Reconfigure a previously deployed daemon
-* [--allow-ptrace]            Allow SYS_PTRACE on daemon container
 
 
 enter

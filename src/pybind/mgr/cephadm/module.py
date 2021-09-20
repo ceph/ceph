@@ -245,16 +245,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='log to the "cephadm" cluster log channel"',
         ),
         Option(
-            'allow_ptrace',
-            type='bool',
-            default=False,
-            desc='allow SYS_PTRACE capability on ceph containers',
-            long_desc='The SYS_PTRACE capability is needed to attach to a '
-            'process with gdb or strace.  Enabling this options '
-            'can allow debugging daemons that encounter problems '
-            'at runtime.',
-        ),
-        Option(
             'container_init',
             type='bool',
             default=True,
@@ -423,7 +413,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
-            self.allow_ptrace = False
             self.container_init = True
             self.prometheus_alerts_path = ''
             self.migration_current: Optional[int] = None

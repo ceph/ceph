@@ -504,7 +504,7 @@ def ceph_bootstrap(ctx, config):
         # set options
         if config.get('allow_ptrace', True):
             _shell(ctx, cluster_name, bootstrap_remote,
-                   ['ceph', 'config', 'set', 'mgr', 'mgr/cephadm/allow_ptrace', 'true'])
+                   ['ceph', 'config', 'set', 'mgr', 'mgr/cephadm/container_cli_args', '--value="--cap-add=PTRACE"'])
 
         if not config.get('avoid_pacific_features', False):
             log.info('Distributing conf and client.admin keyring to all hosts + 0755')

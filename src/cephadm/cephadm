@@ -2689,7 +2689,6 @@ def get_ceph_volume_container(ctx: CephadmContext,
 def get_container(ctx: CephadmContext,
                   fsid: str, daemon_type: str, daemon_id: Union[int, str],
                   privileged: bool = False,
-                  ptrace: bool = False,
                   container_args: Optional[List[str]] = None) -> 'CephContainer':
     entrypoint: str = ''
     name: str = ''
@@ -2793,7 +2792,6 @@ def get_container(ctx: CephadmContext,
         bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
         envs=envs,
         privileged=privileged,
-        ptrace=ptrace,
         host_network=host_network,
     )
 
@@ -3438,7 +3436,6 @@ class CephContainer:
                  container_args: List[str] = [],
                  envs: Optional[List[str]] = None,
                  privileged: bool = False,
-                 ptrace: bool = False,
                  bind_mounts: Optional[List[List[str]]] = None,
                  init: Optional[bool] = None,
                  host_network: bool = True,
@@ -3455,7 +3452,6 @@ class CephContainer:
         self.container_args = container_args
         self.envs = envs
         self.privileged = privileged
-        self.ptrace = ptrace
         self.bind_mounts = bind_mounts if bind_mounts else []
         self.init = init if init else ctx.container_init
         self.host_network = host_network
@@ -3475,7 +3471,6 @@ class CephContainer:
                    container_args: List[str] = [],
                    envs: Optional[List[str]] = None,
                    privileged: bool = False,
-                   ptrace: bool = False,
                    bind_mounts: Optional[List[List[str]]] = None,
                    init: Optional[bool] = None,
                    host_network: bool = True,
@@ -3492,7 +3487,6 @@ class CephContainer:
             container_args=container_args,
             envs=envs,
             privileged=privileged,
-            ptrace=ptrace,
             bind_mounts=bind_mounts,
             init=init,
             host_network=host_network,
@@ -3571,11 +3565,11 @@ class CephContainer:
                 '--privileged',
                 # let OSD etc read block devs that haven't been chowned
                 '--group-add=disk'])
-        if self.ptrace and not self.privileged:
-            # if privileged, the SYS_PTRACE cap is already added
-            # in addition, --cap-add and --privileged are mutually
-            # exclusive since podman >= 2.0
-            cmd_args.append('--cap-add=SYS_PTRACE')
+            if '--cap-add=PTRACE' in self.container_cli_args:
+                # if privileged, the SYS_PTRACE cap is already added
+                # in addition, --cap-add and --privileged are mutually
+                # exclusive since podman >= 2.0
+                self.container_cli_args.remove('--cap-add=PTRACE')
         if self.init:
             cmd_args.append('--init')
             envs += ['-e', 'CEPH_USE_RANDOM_NONCE=1']
@@ -5306,8 +5300,7 @@ def command_deploy(ctx):
         uid, gid = extract_uid_gid(ctx)
         make_var_run(ctx, ctx.fsid, uid, gid)
 
-        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id,
-                                          ptrace=ctx.allow_ptrace)
+        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       osd_fsid=ctx.osd_fsid,
@@ -5379,8 +5372,7 @@ def command_deploy(ctx):
         if not ctx.reconfig and not redeploy:
             daemon_ports.extend(cc.ports)
         c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id,
-                                          privileged=cc.privileged,
-                                          ptrace=ctx.allow_ptrace)
+                                          privileged=cc.privileged)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c,
                       uid=cc.uid, gid=cc.gid, config=None,
                       keyring=None, reconfig=ctx.reconfig,
@@ -8452,7 +8444,7 @@ def _get_parser():
     parser_deploy.add_argument(
         '--allow-ptrace',
         action='store_true',
-        help='Allow SYS_PTRACE on daemon container')
+        help=argparse.SUPPRESS)
     parser_deploy.add_argument(
         '--container-init',
         action='store_true',

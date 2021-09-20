@@ -1102,8 +1102,6 @@ class CephadmServe:
 
                 if reconfig:
                     daemon_spec.extra_args.append('--reconfig')
-                if self.mgr.allow_ptrace:
-                    daemon_spec.extra_args.append('--allow-ptrace')
 
                 try:
                     eca = daemon_spec.extra_container_args
