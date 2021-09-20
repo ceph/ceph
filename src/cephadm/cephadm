@@ -7685,11 +7685,11 @@ def command_exporter(ctx: CephadmContext) -> None:
 ##################################
 
 
-def systemd_target_state(target_name: str, subsystem: str = 'ceph') -> bool:
+def systemd_target_state(ctx: CephadmContext, target_name: str, subsystem: str = 'ceph') -> bool:
     # TODO: UNITTEST
     return os.path.exists(
         os.path.join(
-            UNIT_DIR,
+            ctx.unit_dir,
             f'{subsystem}.target.wants',
             target_name
         )
@@ -7699,13 +7699,13 @@ def systemd_target_state(target_name: str, subsystem: str = 'ceph') -> bool:
 @infer_fsid
 def command_maintenance(ctx: CephadmContext) -> str:
     if not ctx.fsid:
-        raise Error('must pass --fsid to specify cluster')
+        raise Error('failed - must pass --fsid to specify cluster')
 
     target = f'ceph-{ctx.fsid}.target'
 
     if ctx.maintenance_action.lower() == 'enter':
         logger.info('Requested to place host into maintenance')
-        if systemd_target_state(target):
+        if systemd_target_state(ctx, target):
             _out, _err, code = call(ctx,
                                     ['systemctl', 'disable', target],
                                     verbosity=CallVerbosity.DEBUG)
@@ -7728,8 +7728,14 @@ def command_maintenance(ctx: CephadmContext) -> str:
 
     else:
         logger.info('Requested to exit maintenance state')
+        # if we've never deployed a daemon on this host there will be no systemd
+        # target to disable so attempting a disable will fail. We still need to
+        # return success here or host will be permanently stuck in maintenance mode
+        # as no daemons can be deployed so no systemd target will ever exist to disable.
+        if not os.path.exists(ctx.unit_dir + '/ceph.target'):
+            return 'skipped - systemd target not present on this host. Host removed from maintenance mode.'
         # exit maintenance request
-        if not systemd_target_state(target):
+        if not systemd_target_state(ctx, target):
             _out, _err, code = call(ctx,
                                     ['systemctl', 'enable', target],
                                     verbosity=CallVerbosity.DEBUG)

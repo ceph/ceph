@@ -901,14 +901,16 @@ class TestMaintenance:
         wants.mkdir()
         target = wants / TestMaintenance.systemd_target
         target.touch()
-        cd.UNIT_DIR = str(base)
+        ctx = cd.CephadmContext()
+        ctx.unit_dir = str(base)
 
-        assert cd.systemd_target_state(target.name)
+        assert cd.systemd_target_state(ctx, target.name)
 
     def test_systemd_target_NOTOK(self, tmp_path):
         base = tmp_path 
-        cd.UNIT_DIR = str(base)
-        assert not cd.systemd_target_state(TestMaintenance.systemd_target)
+        ctx = cd.CephadmContext()
+        ctx.unit_dir = str(base)
+        assert not cd.systemd_target_state(ctx, TestMaintenance.systemd_target)
 
     def test_parser_OK(self):
         args = cd._parse_args(['host-maintenance', 'enter'])
