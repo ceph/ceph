@@ -183,7 +183,7 @@ void RemotePoolPoller<I>::handle_mirror_peer_list(int r) {
 
   cls::rbd::MirrorPeer* matched_peer = nullptr;
   for (auto& peer : peers) {
-    if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_TX) {
+    if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
       continue;
     }
 
