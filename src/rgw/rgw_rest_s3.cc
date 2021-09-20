@@ -3239,7 +3239,6 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
 
   src_tenant_name = s->src_tenant_name;
   src_bucket_name = s->src_bucket_name;
-  src_object = s->src_object->clone();
   dest_tenant_name = s->bucket->get_tenant();
   dest_bucket_name = s->bucket->get_name();
   dest_obj_name = s->object->get_name();
@@ -3269,8 +3268,8 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
   if (source_zone.empty() &&
       (dest_tenant_name.compare(src_tenant_name) == 0) &&
       (dest_bucket_name.compare(src_bucket_name) == 0) &&
-      (dest_obj_name.compare(src_object->get_name()) == 0) &&
-      src_object->get_instance().empty() &&
+      (dest_obj_name.compare(s->src_object->get_name()) == 0) &&
+      s->src_object->get_instance().empty() &&
       (attrs_mod != rgw::sal::ATTRSMOD_REPLACE)) {
     need_to_check_storage_class = true;
   }
@@ -4655,6 +4654,8 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::Store* store,
       encoded_obj_str = req.substr(pos+1);
     }
 
+    /* dang: s->bucket is never set here, since it's created with permissions.
+     * These calls will always create an object with no bucket. */
     if (!encoded_obj_str.empty()) {
       if (s->bucket) {
 	s->object = s->bucket->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
@@ -5024,10 +5025,10 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op, optional_yiel
   /*
    * FIXME: if s->object != new_obj, drop op and create a new op to handle
    * operation. Or remove this comment if it's not applicable anymore
+   * dang: This could be problematic, since we're not actually replacing op, but
+   * we are replacing s->object.  Something might have a pointer to it.
    */
-
-  s->object = store->get_object(new_obj);
-  s->object->set_bucket(s->bucket.get());
+  s->object = s->bucket->get_object(new_obj);
 
   return 0;
 }
@@ -5056,6 +5057,9 @@ int RGWHandler_REST_S3Website::serve_errordoc(const DoutPrefixProvider *dpp, int
   getop->if_unmod = NULL;
   getop->if_match = NULL;
   getop->if_nomatch = NULL;
+  /* This is okay.  It's an error, so nothing will run after this, and it can be
+   * called by abort_early(), which can be called before s->object or s->bucket
+   * are set up. Note, it won't have bucket. */
   s->object = store->get_object(errordoc_key);
 
   ret = init_permissions(getop.get(), y);
