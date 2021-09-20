@@ -88,14 +88,20 @@ export class TelemetryComponent extends CdForm implements OnInit {
     this.configForm = this.formBuilder.group(controlsConfig);
   }
 
+  // Helper function used in createPreviewForm to display the ranges and values of `osd_perf_histograms`
+  // horizontally instead of vertically.
   private replacer(key: string, value: any) {
+    // Detect either the 'ranges' or 'values' 2D array (arr_2d), both of which
+    // need to be displayed horizontally. This will be done by converting the inner arrays
+    // of the 2D array into strings.
     if ((key === 'ranges' || key === 'values') && Array.isArray(value)) {
-      const x = [];
+      const arr_2d = [];
       for (let i = 0; i < value.length; i++) {
-        x.push(JSON.stringify(value[i]));
+        arr_2d.push(JSON.stringify(value[i]));
       }
-      return x;
+      return arr_2d;
     }
+    // Else, just return the value as is, without any formatting.
     return value;
   }
 
