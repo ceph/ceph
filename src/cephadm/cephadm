@@ -31,7 +31,7 @@ from contextlib import redirect_stdout
 import ssl
 from enum import Enum
 
-from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set
+from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set, Generator
 
 import re
 import uuid
@@ -41,7 +41,7 @@ from functools import wraps
 from glob import glob
 from io import StringIO
 from threading import Thread, RLock
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 from pathlib import Path
 
@@ -340,27 +340,131 @@ class Monitoring(object):
         :param: daemon_type Either "prometheus", "alertmanager" or "node-exporter"
         """
         assert daemon_type in ('prometheus', 'alertmanager', 'node-exporter')
-        cmd = daemon_type.replace('-', '_')
-        code = -1
-        err = ''
-        version = ''
-        if daemon_type == 'alertmanager':
-            for cmd in ['alertmanager', 'prometheus-alertmanager']:
+
+        def _fall_back() -> str:
+            cmd = daemon_type.replace('-', '_')
+            code = -1
+            err = ''
+            version = ''
+            if daemon_type == 'alertmanager':
+                for cmd in ['alertmanager', 'prometheus-alertmanager']:
+                    _, err, code = call(ctx, [
+                        ctx.container_engine.path, 'exec', container_id, cmd,
+                        '--version'
+                    ], verbosity=CallVerbosity.DEBUG)
+                    if code == 0:
+                        break
+                cmd = 'alertmanager'  # reset cmd for version extraction
+            else:
                 _, err, code = call(ctx, [
-                    ctx.container_engine.path, 'exec', container_id, cmd,
-                    '--version'
+                    ctx.container_engine.path, 'exec', container_id, cmd, '--version'
                 ], verbosity=CallVerbosity.DEBUG)
-                if code == 0:
-                    break
-            cmd = 'alertmanager'  # reset cmd for version extraction
-        else:
-            _, err, code = call(ctx, [
-                ctx.container_engine.path, 'exec', container_id, cmd, '--version'
-            ], verbosity=CallVerbosity.DEBUG)
-        if code == 0 and \
-                err.startswith('%s, version ' % cmd):
-            version = err.split(' ')[2]
-        return version
+            if code == 0 and \
+                    err.startswith('%s, version ' % cmd):
+                version = err.split(' ')[2]
+            return version
+
+        port = Monitoring.port_map[daemon_type][0]
+        url = f'http://localhost:{port}/metrics'
+
+        try:
+            response = urlopen(url, timeout=0.1)
+        except URLError:
+            return _fall_back()
+
+        response_data = response.read().decode('utf-8').split('\n')
+        version = ''
+        build_info = f"{daemon_type.replace('-', '_')}_build_info{{"
+        for line in response_data:
+            if line.startswith(build_info):
+                s = line.replace('{', '*').replace('}', '*')
+                _name, label_str, _value = s.split('*')
+                # 'branch="HEAD",goversion="go1.14.4",revision="4c6c03ebfe21009c546e4d1e9b92c371d67c021d",version="0.21.0"'
+                # ['branch=HEAD', 'goversion=go1.14.4', 'revision=4c6c03ebfe21009c546e4d1e9b92c371d67c021d', 'version=0.21.0']
+                label_pairs = label_str.replace('="', '=').replace('",', '*').rstrip('"').split('*')
+                labels = {}
+                for kv_pair in label_pairs:
+                    if '=' not in kv_pair:
+                        continue
+                    k, v = map(str.strip, kv_pair.split('='))
+                    labels[k] = v
+                # labels = dict(map(str.strip, pair.split('=')) for pair in label_pairs if '=' in pair)
+                version = labels.get('version', '')
+                logger.debug(f'{daemon_type} version determined using /metrics endpoint')
+                break
+
+        return version or _fall_back()
+
+    @staticmethod
+    def get_grafana_version(ctx: CephadmContext, container_id: str, fsid: str) -> str:
+        """return the version of grafana running on this host
+
+        Try to use the grafana servers api/health endpoint for speed, and if that fails
+        fall back to exec'ing into the container
+
+        Args:
+            ctx (CephadmContext): runtime context and args
+            container_id (str): container id
+            fsid (str): FID of the cluster
+
+        Returns:
+            str: Grafana version of the form V.R.M e.g. 7.5.5
+        """
+
+        def _fall_back() -> str:
+            """Fall back logic using a container 'exec' method
+
+            Returns:
+                str: version of grafana
+            """
+            version = ''
+            out, err, code = call(ctx,
+                                  [ctx.container_engine.path, 'exec', container_id,
+                                   'grafana-server', '-v'],
+                                  verbosity=CallVerbosity.DEBUG)
+            if not code and \
+                    out.startswith('Version '):
+                version = out.split(' ')[1]
+            return version
+
+        port = Monitoring.port_map['grafana'][0]
+        ssl_context: Optional[ssl.SSLContext] = None
+        config_file = glob(f'/var/lib/ceph/{fsid}/grafana*/etc/grafana/grafana.ini')
+        if len(config_file) > 1:
+            return _fall_back()
+
+        grafana_ini = read_config(config_file[0])
+        try:
+            protocol = grafana_ini['server']['protocol']
+        except KeyError:
+            # set to default as per defaults.ini
+            protocol = 'http'
+
+        if protocol not in ['http', 'https']:
+            return _fall_back()
+
+        if protocol == 'https':
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+
+        url = f'{protocol}://localhost:{port}/api/health'
+        try:
+            response = urlopen(url, context=ssl_context, timeout=0.1)
+        except URLError:
+            return _fall_back()
+
+        try:
+            health = json.loads(response.read())
+        except json.JSONDecodeError:
+            return _fall_back()
+
+        version = health.get('version', '')
+        if version:
+            logger.debug('grafana version determined using api/health endpoint')
+
+        return version or _fall_back()
+
 
 ##################################
 
@@ -5017,6 +5121,9 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                     ls.append(val)
             elif is_fsid(i):
                 fsid = str(i)  # convince mypy that fsid is a str here
+
+                service_map = _build_service_map(ctx, fsid)
+
                 for j in os.listdir(os.path.join(data_dir, i)):
                     if '.' in j and os.path.isdir(os.path.join(data_dir, fsid, j)):
                         name = j
@@ -5033,9 +5140,14 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         'systemd_unit': unit_name,
                     }
                     if detail:
-                        # get container id
-                        (val['enabled'], val['state'], _) = \
-                            check_unit(ctx, unit_name)
+                        if unit_name in service_map:
+                            logger.debug(f'using service map for unit state of {unit_name}')
+                            val['enabled'] = service_map[unit_name].status == 'enabled'
+                            val['state'] = service_map[unit_name].sub
+                        else:
+                            # get container id
+                            (val['enabled'], val['state'], _) = \
+                                check_unit(ctx, unit_name)
                         container_id = None
                         image_name = None
                         image_id = None
@@ -5043,7 +5155,15 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         version = None
                         start_stamp = None
 
-                        out, err, code = get_container_stats(ctx, container_path, fsid, daemon_type, daemon_id)
+                        unit_info = service_map.get(unit_name, None)
+                        if unit_info:
+                            if unit_info.container_id:
+                                logger.debug(f'using service map for initial container stats of {unit_name}')
+                                out = unit_info.get_container_stats()
+                                code = 0
+                        else:
+                            out, err, code = get_container_stats(ctx, container_path, fsid, daemon_type, daemon_id)
+
                         if not code:
                             (container_id, image_name, image_id, start,
                              version) = out.strip().split(',')
@@ -5085,14 +5205,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                         version = out.split(' ')[2]
                                         seen_versions[image_id] = version
                                 elif daemon_type == 'grafana':
-                                    out, err, code = call(ctx,
-                                                          [container_path, 'exec', container_id,
-                                                           'grafana-server', '-v'],
-                                                          verbosity=CallVerbosity.DEBUG)
-                                    if not code and \
-                                       out.startswith('Version '):
-                                        version = out.split(' ')[1]
-                                        seen_versions[image_id] = version
+                                    version = Monitoring.get_grafana_version(ctx, container_id, fsid)
+                                    seen_versions[image_id] = version
                                 elif daemon_type in ['prometheus',
                                                      'alertmanager',
                                                      'node-exporter']:
@@ -5161,6 +5275,123 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                     ls.append(val)
 
     return ls
+
+
+class ServiceInfo:
+    status: str = ''
+    load: str = ''
+    active: str = ''
+    sub: str = ''
+    image_id: str = ''
+    container_name: str = ''
+    container_id: str = ''
+    container_image: str = ''
+    container_image_id: str = ''
+    container_created: str = ''
+    version: str = ''
+
+    def update(self, **kwargs: Any) -> None:
+        """update the instance with arbitrary k=v pairs
+        """
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+    def get_container_stats(self) -> str:
+        """provide a view of the container stats compatible with get_container_stats method
+
+        Returns:
+            str: container information in a comma separated string
+        """
+        return f'{self.container_id},{self.container_image},{self.container_image_id},{self.container_created},{self.version}'
+
+    def __str__(self) -> str:
+        out = []
+        for k, v in self.__dict__.items():
+            out.append(f'{k}: {v}')
+        return '\n'.join(out)
+
+
+def _build_service_map(ctx: CephadmContext, fsid: str) -> Dict[str, ServiceInfo]:
+    """Create a service map indexed by a systemd unit name
+
+    Args:
+        ctx (CephadmContext): run time context
+        fsid (str): Cluster FSID
+
+    Returns:
+        Dict[str, ServiceInfo]: Dict providing a lookup of systemd unit -> ServiceInfo instance
+    """
+    svc_map = {}
+    st = time.time()
+    not_systemd_dirs = ['home', 'crash', 'selinux']
+    systemd_target_dir = f'/etc/systemd/system/ceph-{fsid}.target.wants'
+    # build the service map based on the contents of the var lib folder
+    # - must be a dir, and must contain one or more '.' separators
+    # use this to build the keys
+    # skip home and selinux and crash directories
+    out, err, code = call(ctx,
+                          ['systemctl', '-a', '-t', 'service', 'list-units', f'ceph-{fsid}*', '--no-pager', '--no-legend'],
+                          verbosity=CallVerbosity.DEBUG
+                          )
+    if not code:
+        for config_dir in glob(f'/var/lib/ceph/{fsid}/*'):
+            if not os.path.isdir(config_dir):
+                continue
+            if os.path.basename(config_dir) in not_systemd_dirs:
+                continue
+
+            (daemon_type, daemon_id) = os.path.basename(config_dir).split('.', 1)
+            unit_name = get_unit_name(fsid,
+                                      daemon_type,
+                                      daemon_id)
+            if os.path.islink(os.path.join(systemd_target_dir, f'{unit_name}.service')):
+                status = 'enabled'
+            else:
+                status = 'disabled'
+            svc_map[unit_name] = ServiceInfo()
+            svc_map[unit_name].update(**{'status': status})
+
+        for line in out.splitlines():
+            unit_name, load, active, sub = line.split()[:4]
+            unit_name = unit_name.replace('.service', '')
+            svc_map[unit_name].update(**{'load': load, 'active': active, 'sub': sub})
+
+        if os.path.basename(ctx.container_engine.path) == 'podman':
+            # with podman we can get more information in one hit, so let's try that
+            prefix = f'ceph-{fsid}'
+            cmd = [
+                ctx.container_engine.path,
+                'ps',
+                '--filter',
+                f'name={prefix}-*',
+                "--format='{{.Names}},{{.ID}},{{.Image}},{{.ImageID}},{{.CreatedAt}},{{.Labels.io.ceph.version}}'",
+                '--no-trunc'
+            ]
+            out, err, code = call(ctx, cmd, verbosity=CallVerbosity.DEBUG)
+            if not code:
+                # update the service map, skipping any null lines
+                for line in out.split('\n'):
+                    if not line:
+                        continue
+                    vars = line.replace("'", '').split(',')
+                    updates = {
+                        'container_id': vars[1],
+                        'container_image': vars[2],
+                        'container_image_id': vars[3],
+                        'container_created': vars[4],
+                    }
+                    updates['version'] = vars[5] if vars[5] != '<no value>' else ''
+                    unit_name = vars[0].replace(f'{prefix}-', f'{prefix}@')
+                    if unit_name in svc_map:
+                        logger.debug(f'Updated svc_map: added container runtime information to systemd unit {unit_name}')
+                        updates['container_name'] = unit_name
+                        svc_map[unit_name].update(**updates)
+                pass
+            else:
+                logger.warning(f'failed to grab all the pod states for the cluster: {err}')
+
+        logger.debug(f'service map creation time {time.time() - st}')
+    return svc_map
 
 
 def _parse_mem_usage(code: int, out: str) -> Tuple[int, Dict[str, int]]:
