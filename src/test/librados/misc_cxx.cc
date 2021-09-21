@@ -372,7 +372,7 @@ TEST_F(LibRadosMiscPP, BigAttrPP) {
     got.clear();
     bl.append(buffer::create(std::min<uint64_t>(g_conf()->osd_max_attr_size,
 						1024)));
-    char n[10];
+    char n[20];
     snprintf(n, sizeof(n), "a%d", i);
     ASSERT_EQ(0, ioctx.setxattr("foo", n, bl));
     ASSERT_EQ((int)bl.length(), ioctx.getxattr("foo", n, got));

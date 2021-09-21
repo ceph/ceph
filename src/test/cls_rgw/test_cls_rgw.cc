@@ -414,7 +414,7 @@ TEST_F(cls_rgw, index_list)
   /* insert 998 omap key starts with BI_PREFIX_CHAR,
    * so bucket list first time will get one key before 0x80 and one key after */
   for (int i = 0; i < 998; ++i) {
-    char buf[10];
+    char buf[20];
     snprintf(buf, sizeof(buf), "%c%s%d", 0x80, "1000_", i);
     entries.emplace(string{buf}, bufferlist{});
   }

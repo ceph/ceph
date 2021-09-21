@@ -1526,7 +1526,7 @@ TEST_F(TestClsRbd, metadata)
   ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
 
   pairs.clear();
-  char key[10], val[20];
+  char key[20], val[20];
   for (int i = 0; i < 1024; i++) {
     sprintf(key, "key%d", i);
     sprintf(val, "value%d", i);

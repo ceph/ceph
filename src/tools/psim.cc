@@ -55,7 +55,7 @@ int main(int argc, char **argv)
     snprintf(nspace, sizeof(nspace), "n%d", n);
   for (int f = 0; f < 5000; f++) {  // files
     for (int b = 0; b < 4; b++) {   // blocks
-      char foo[20];
+      char foo[30];
       snprintf(foo, sizeof(foo), "%d.%d", f, b);
       object_t oid(foo);
       ceph_object_layout l = osdmap.make_object_layout(oid, 0, nspace);
