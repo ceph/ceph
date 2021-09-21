@@ -42,6 +42,9 @@
 >=16.0.0
 --------
 
+* RGW: S3 bucket notification events now contain an `eTag` key instead of `etag`,
+  and eventName values no longer carry the `s3:` prefix, fixing deviations from
+  the message format observed on AWS.
 * `ceph-mgr-modules-core` debian package does not recommend `ceph-mgr-rook`
   anymore. As the latter depends on `python3-numpy` which cannot be imported in
   different Python sub-interpreters multi-times if the version of
