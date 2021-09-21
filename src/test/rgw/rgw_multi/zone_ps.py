@@ -18,8 +18,7 @@ def put_object_tagging(conn, bucket_name, key, tags):
     client = boto3.client('s3',
             endpoint_url='http://'+conn.host+':'+str(conn.port),
             aws_access_key_id=conn.aws_access_key_id,
-            aws_secret_access_key=conn.aws_secret_access_key,
-            config=Config(signature_version='s3'))
+            aws_secret_access_key=conn.aws_secret_access_key)
     return client.put_object(Body='aaaaaaaaaaa', Bucket=bucket_name, Key=key, Tagging=tags)
 
 
@@ -27,8 +26,7 @@ def get_object_tagging(conn, bucket, object_key):
     client = boto3.client('s3',
             endpoint_url='http://'+conn.host+':'+str(conn.port),
             aws_access_key_id=conn.aws_access_key_id,
-            aws_secret_access_key=conn.aws_secret_access_key,
-            config=Config(signature_version='s3'))
+            aws_secret_access_key=conn.aws_secret_access_key)
     return client.get_object_tagging(
                 Bucket=bucket, 
                 Key=object_key
@@ -156,8 +154,7 @@ def delete_all_s3_topics(zone, region):
                 aws_access_key_id=conn.aws_access_key_id,
                 aws_secret_access_key=conn.aws_secret_access_key,
                 region_name=region,
-                verify='./cert.pem',
-                config=Config(signature_version='s3'))
+                verify='./cert.pem')
 
         topics = client.list_topics()['Topics']
         for topic in topics:
@@ -206,8 +203,7 @@ class PSTopicS3:
                            aws_access_key_id=conn.aws_access_key_id,
                            aws_secret_access_key=conn.aws_secret_access_key,
                            region_name=region,
-                           verify='./cert.pem',
-                           config=Config(signature_version='s3'))
+                           verify='./cert.pem')
 
 
     def get_config(self):
@@ -335,8 +331,7 @@ class PSNotificationS3:
         self.client = boto3.client('s3',
                                    endpoint_url='http://'+conn.host+':'+str(conn.port),
                                    aws_access_key_id=conn.aws_access_key_id,
-                                   aws_secret_access_key=conn.aws_secret_access_key,
-                                   config=Config(signature_version='s3'))
+                                   aws_secret_access_key=conn.aws_secret_access_key)
 
     def send_request(self, method, parameters=None):
         """send request to radosgw"""
