@@ -1,13 +1,13 @@
 meta:
 - desc: |
-   install ceph/pacific v16.2.4
+   install ceph/pacific v16.2.6
    Overall upgrade path is - pacific-latest.point => pacific-latest
 tasks:
 - install:
-    tag: v16.2.4
+    tag: v16.2.6
     exclude_packages: ['librados3']
     extra_packages: ['librados2']
-- print: "**** done install pacific v16.2.4"
+- print: "**** done install pacific v16.2.6"
 - ceph:
 - exec:
     osd.0:
