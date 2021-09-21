@@ -8,6 +8,7 @@
 
 #include <seastar/core/future-util.hh>
 
+#include "crimson/common/utility.h"
 #include "include/ceph_assert.h"
 
 namespace crimson::interruptible {
@@ -665,6 +666,19 @@ private:
     auto safe_then(ValueFunc&& value_func) {
       return safe_then(std::forward<ValueFunc>(value_func),
                        errorator_type::pass_further{});
+    }
+
+    template <class ValueFunc,
+              class... ErrorFuncs>
+    auto safe_then_unpack(ValueFunc&& value_func,
+                          ErrorFuncs&&... error_funcs) {
+      return safe_then(
+        [value_func=std::move(value_func)] (ValueT&& tuple) mutable {
+          assert_moveable(value_func);
+          return std::apply(std::move(value_func), std::move(tuple));
+        },
+        std::forward<ErrorFuncs>(error_funcs)...
+      );
     }
 
     template <class Func>
