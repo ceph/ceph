@@ -2263,6 +2263,8 @@ Then run the following:
                 return []
             daemons = self.cache.get_daemons_by_service(spec.service_name())
             deps = [d.name() for d in daemons if d.daemon_type == 'haproxy']
+        elif daemon_type == 'iscsi':
+            deps = [self.get_mgr_ip()]
         else:
             need = {
                 'prometheus': ['mgr', 'alertmanager', 'node-exporter', 'ingress'],
