@@ -49,7 +49,7 @@ public:
   seastar::future<> mount() final;
   seastar::future<> umount() final;
 
-  seastar::future<> mkfs(uuid_d new_osd_fsid) final;
+  mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
   read_errorator::future<ceph::bufferlist> read(CollectionRef c,
                                    const ghobject_t& oid,
                                    uint64_t offset,

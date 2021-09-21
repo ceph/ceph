@@ -101,9 +101,9 @@ private:
   };
 };
 
-seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
+CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
 {
-  return read_meta("fsid").then([=](auto&& ret) {
+  return read_meta("fsid").then([=](auto&& ret) -> mkfs_ertr::future<> {
     auto& [r, fsid_str] = ret;
     if (r == -ENOENT) {
       if (new_osd_fsid.is_zero()) {
@@ -113,25 +113,28 @@ seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
       }
       return write_meta("fsid", fmt::format("{}", osd_fsid));
     } else if (r < 0) {
-      throw std::runtime_error("read_meta");
+      static const char msg[]{"read_meta"};
+      return crimson::stateful_ec{ singleton_ec<msg>() };
     } else {
       logger().info("mkfs already has fsid {}", fsid_str);
       if (!osd_fsid.parse(fsid_str.c_str())) {
-        throw std::runtime_error("failed to parse fsid");
+        static const char msg[]{"failed to parse fsid"};
+        return crimson::stateful_ec{ singleton_ec<msg>() };
       } else if (osd_fsid != new_osd_fsid) {
         logger().error("on-disk fsid {} != provided {}", osd_fsid, new_osd_fsid);
-        throw std::runtime_error("unmatched osd_fsid");
+        static const char msg[]{"unmatched osd_fsid"};
+        return crimson::stateful_ec{ singleton_ec<msg>() };
       } else {
-	return seastar::now();
+	return mkfs_ertr::now();
       }
     }
-  }).then([this]{
+  }).safe_then([this]{
     std::string fn = path + "/collections";
     ceph::bufferlist bl;
     std::set<coll_t> collections;
     ceph::encode(collections, bl);
     return crimson::write_file(std::move(bl), fn);
-  }).then([this] {
+  }).safe_then([this] {
     return write_meta("type", "memstore");
   });
 }
