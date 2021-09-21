@@ -36,7 +36,7 @@ protected:
   }
 
   virtual seastar::future<> _teardown() = 0;
-  virtual seastar::future<> _mkfs() = 0;
+  virtual FuturizedStore::mkfs_ertr::future<> _mkfs() = 0;
   virtual seastar::future<> _mount() = 0;
 
   void restart() {
@@ -153,7 +153,7 @@ protected:
     });
   }
 
-  virtual seastar::future<> _mkfs() {
+  virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
     return tm->mkfs(
     ).handle_error(
       crimson::ct_error::assert_all{"Error in teardown"}
@@ -253,7 +253,7 @@ protected:
     return seastore->mount();
   }
 
-  virtual seastar::future<> _mkfs() {
+  virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
     return seastore->mkfs(uuid_d{});
   }
 };

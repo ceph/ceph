@@ -68,7 +68,8 @@ public:
   virtual seastar::future<> mount() = 0;
   virtual seastar::future<> umount() = 0;
 
-  virtual seastar::future<> mkfs(uuid_d new_osd_fsid) = 0;
+  using mkfs_ertr = crimson::errorator<crimson::stateful_ec>;
+  virtual mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) = 0;
   virtual seastar::future<store_statfs_t> stat() const = 0;
 
   using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
