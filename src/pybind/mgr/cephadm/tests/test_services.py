@@ -42,6 +42,9 @@ class FakeMgr:
     def get_minimal_ceph_conf(self) -> str:
         return ''
 
+    def get_mgr_ip(self) -> str:
+        return '1.2.3.4'
+
 
 class TestCephadmService:
     def test_set_service_url_on_dashboard(self):
