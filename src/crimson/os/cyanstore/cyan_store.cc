@@ -82,6 +82,25 @@ seastar::future<> CyanStore::umount()
   });
 }
 
+template <const char* MsgV>
+struct singleton_ec : std::error_code {
+  singleton_ec()
+    : error_code(42, this_error_category{}) {
+  };
+private:
+  struct this_error_category : std::error_category {
+    const char* name() const noexcept final {
+      // XXX: we could concatenate with MsgV at compile-time but the burden
+      // isn't worth the benefit.
+      return "singleton_ec";
+    }
+    std::string message([[maybe_unused]] const int ev) const final {
+      assert(ev == 42);
+      return MsgV;
+    }
+  };
+};
+
 seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
 {
   return read_meta("fsid").then([=](auto&& ret) {
