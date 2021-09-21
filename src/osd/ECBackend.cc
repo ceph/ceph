@@ -582,7 +582,16 @@ void ECBackend::continue_recovery_op(
       if (op.recovery_progress.first && op.obc) {
 	/* We've got the attrs and the hinfo, might as well use them */
 	op.hinfo = get_hash_info(op.hoid);
-	ceph_assert(op.hinfo);
+	if (!op.hinfo) {
+          derr << __func__ << ": " << op.hoid << " has inconsistent hinfo"
+               << dendl;
+          ceph_assert(recovery_ops.count(op.hoid));
+          eversion_t v = recovery_ops[op.hoid].v;
+          recovery_ops.erase(op.hoid);
+          get_parent()->on_primary_error(op.hoid, v);
+          get_parent()->finish_degraded_object(op.hoid);
+          return;
+        }
 	op.xattrs = op.obc->attr_cache;
 	encode(*(op.hinfo), op.xattrs[ECUtil::get_hinfo_key()]);
       }
