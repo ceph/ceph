@@ -2587,7 +2587,11 @@ int ECBackend::be_deep_scrub(
     return 0;
   } else {
     if (!get_parent()->get_pool().allows_ecoverwrites()) {
-      ceph_assert(hinfo->has_chunk_hash());
+      if (!hinfo->has_chunk_hash()) {
+        dout(0) << "_scan_list  " << poid << " got invalid hash info" << dendl;
+        o.ec_size_mismatch = true;
+        return 0;
+      }
       if (hinfo->get_total_chunk_size() != (unsigned)pos.data_pos) {
 	dout(0) << "_scan_list  " << poid << " got incorrect size on read 0x"
 		<< std::hex << pos
