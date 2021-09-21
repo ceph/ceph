@@ -14,4 +14,4 @@ tasks:
       - ceph orch apply mds a
 - cephfs_test_runner:
     modules:
-      - tasks.cephadm_cases.test_cli
+      - tasks.cephfs.test_nfs

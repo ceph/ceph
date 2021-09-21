@@ -46,3 +46,4 @@ sensible.
     Orchestrator module <orchestrator>
     Rook module <rook>
     MDS Autoscaler module <mds_autoscaler>
+    NFS module <nfs>

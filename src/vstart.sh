@@ -572,7 +572,7 @@ prepare_conf() {
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
-    local mgr_modules="restful iostat"
+    local mgr_modules="restful iostat nfs"
     if $with_mgr_dashboard; then
         mgr_modules="dashboard $mgr_modules"
     fi
@@ -1128,7 +1128,7 @@ start_ganesha() {
     GANESHA_PORT=$(($CEPH_PORT + 4000))
     local ganesha=0
     test_user="$cluster_id"
-    pool_name="nfs-ganesha"
+    pool_name=".nfs"
     namespace=$cluster_id
     url="rados://$pool_name/$namespace/conf-nfs.$test_user"
 
@@ -1171,7 +1171,7 @@ start_ganesha() {
         }
 
         RADOS_KV {
-           pool = $pool_name;
+           pool = '$pool_name';
            namespace = $namespace;
            UserId = $test_user;
            nodeid = $name;
@@ -1189,7 +1189,7 @@ start_ganesha() {
         ip = $IP
         port = $port
         ganesha data = $ganesha_dir
-        pid file = $ganesha_dir/ganesha-$name.pid
+        pid file = $CEPH_OUT_DIR/ganesha-$name.pid
 EOF
 
         prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace add $name
@@ -1419,22 +1419,6 @@ osd pool create ec erasure ec-profile
 EOF
 fi
 
-# Ganesha Daemons
-if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
-    pseudo_path="/cephfs"
-    ceph_adm mgr module enable nfs
-    if [ "$cephadm" -gt 0 ]; then
-        cluster_id="vstart"
-        prun ceph_adm nfs cluster create $cluster_id
-        prun ceph_adm nfs export create cephfs "a" $cluster_id $pseudo_path
-        port="2049"
-    else
-        start_ganesha
-        port="<ganesha-port-num>"
-    fi
-    echo "Mount using: mount -t nfs -o port=$port $IP:$pseudo_path mountpoint"
-fi
-
 do_cache() {
     while [ -n "$*" ]; do
         p="$1"
@@ -1466,13 +1450,34 @@ EOF
 }
 do_hitsets $hitset
 
+do_rgw_create_bucket()
+{
+   # Create RGW Bucket
+   local rgw_python_file='rgw-create-bucket.py'
+   echo "import boto
+import boto.s3.connection
+
+conn = boto.connect_s3(
+        aws_access_key_id = '$s3_akey',
+        aws_secret_access_key = '$s3_skey',
+        host = '$HOSTNAME',
+        port = 80,
+        is_secure=False,
+        calling_format = boto.s3.connection.OrdinaryCallingFormat(),
+        )
+
+bucket = conn.create_bucket('nfs-bucket')
+print('created new bucket')" > "$CEPH_OUT_DIR/$rgw_python_file"
+   prun python $CEPH_OUT_DIR/$rgw_python_file
+}
+
 do_rgw_create_users()
 {
     # Create S3 user
-    local akey='0555b35654ad1656d804'
-    local skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
+    s3_akey='0555b35654ad1656d804'
+    s3_skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
     debug echo "setting up user testid"
-    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com --system -c $conf_fn > /dev/null
+    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $s3_akey --secret $s3_skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
 
     # Create S3-test users
     # See: https://github.com/ceph/s3-tests
@@ -1503,8 +1508,8 @@ do_rgw_create_users()
 
     echo ""
     echo "S3 User Info:"
-    echo "  access key:  $akey"
-    echo "  secret key:  $skey"
+    echo "  access key:  $s3_akey"
+    echo "  secret key:  $s3_skey"
     echo ""
     echo "Swift User Info:"
     echo "  account   : test"
@@ -1573,8 +1578,30 @@ if [ "$CEPH_NUM_RGW" -gt 0 ]; then
     do_rgw
 fi
 
+# Ganesha Daemons
+if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
+    pseudo_path="/cephfs"
+    if [ "$cephadm" -gt 0 ]; then
+        cluster_id="vstart"
+	port="2049"
+        prun ceph_adm nfs cluster create $cluster_id
+	if [ $CEPH_NUM_MDS -gt 0 ]; then
+            prun ceph_adm nfs export create cephfs "a" $cluster_id $pseudo_path
+	    echo "Mount using: mount -t nfs -o port=$port $IP:$pseudo_path mountpoint"
+	fi
+	if [ "$CEPH_NUM_RGW" -gt 0 ]; then
+            pseudo_path="/rgw"
+            do_rgw_create_bucket
+	    prun ceph_adm nfs export create rgw "nfs-bucket" $cluster_id $pseudo_path
+            echo "Mount using: mount -t nfs -o port=$port $IP:$pseudo_path mountpoint"
+	fi
+    else
+        start_ganesha
+	echo "Mount using: mount -t nfs -o port=<ganesha-port-num> $IP:$pseudo_path mountpoint"
+    fi
+fi
 
- docker_service(){
+docker_service(){
      local service=''
      #prefer podman
      if pgrep -f podman > /dev/null; then
@@ -1594,7 +1621,7 @@ fi
      else
          echo "cannot find docker or podman, please restart service and rerun."
      fi
- }
+}
 
 echo ""
 if [ $with_jaeger -eq 1 ]; then

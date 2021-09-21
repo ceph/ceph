@@ -907,9 +907,9 @@ Usage:
     @_cli_write_command('orch daemon add rgw')
     def _rgw_add(self,
                  svc_id: str,
+                 placement: Optional[str] = None,
                  port: Optional[int] = None,
                  ssl: bool = False,
-                 placement: Optional[str] = None,
                  inbuf: Optional[str] = None) -> HandleCommandResult:
         """Start RGW daemon(s)"""
         if inbuf:
@@ -926,8 +926,6 @@ Usage:
     @_cli_write_command('orch daemon add nfs')
     def _nfs_add(self,
                  svc_id: str,
-                 pool: str,
-                 namespace: Optional[str] = None,
                  placement: Optional[str] = None,
                  inbuf: Optional[str] = None) -> HandleCommandResult:
         """Start NFS daemon(s)"""
@@ -936,8 +934,6 @@ Usage:
 
         spec = NFSServiceSpec(
             service_id=svc_id,
-            pool=pool,
-            namespace=namespace,
             placement=PlacementSpec.from_string(placement),
         )
         return self._daemon_add_misc(spec)
@@ -981,7 +977,9 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch daemon redeploy')
-    def _daemon_action_redeploy(self, name: str, image: Optional[str] = None) -> HandleCommandResult:
+    def _daemon_action_redeploy(self,
+                                name: str,
+                                image: Optional[str] = None) -> HandleCommandResult:
         """Redeploy a daemon (with a specifc image)"""
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
@@ -1095,11 +1093,11 @@ Usage:
     @_cli_write_command('orch apply rgw')
     def _apply_rgw(self,
                    svc_id: str,
+                   placement: Optional[str] = None,
                    realm: Optional[str] = None,
                    zone: Optional[str] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
-                   placement: Optional[str] = None,
                    dry_run: bool = False,
                    format: Format = Format.plain,
                    unmanaged: bool = False,
@@ -1134,8 +1132,6 @@ Usage:
                    svc_id: str,
                    placement: Optional[str] = None,
                    format: Format = Format.plain,
-                   pool: Optional[str] = None,
-                   namespace: Optional[str] = None,
                    port: Optional[int] = None,
                    dry_run: bool = False,
                    unmanaged: bool = False,
@@ -1147,8 +1143,6 @@ Usage:
 
         spec = NFSServiceSpec(
             service_id=svc_id,
-            pool=pool,
-            namespace=namespace,
             port=port,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,

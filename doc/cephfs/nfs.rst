@@ -2,8 +2,12 @@
 NFS
 ===
 
-CephFS namespaces can be exported over NFS protocol using the
-`NFS-Ganesha NFS server <https://github.com/nfs-ganesha/nfs-ganesha/wiki>`_.
+CephFS namespaces can be exported over NFS protocol using the NFS-Ganesha NFS
+server.  This document provides information on configuring NFS-Ganesha
+clusters manually.  The simplest and preferred way of managing NFS-Ganesha
+clusters and CephFS exports is using ``ceph nfs ...`` commands. See
+:doc:`/mgr/nfs` for more details. As the deployment is done using cephadm or
+rook.
 
 Requirements
 ============
@@ -13,6 +17,10 @@ Requirements
    luminous or higher), 'nfs-ganesha' and 'nfs-ganesha-ceph' packages (latest
    ganesha v2.5 stable or higher versions)
 -  NFS-Ganesha server host connected to the Ceph public network
+
+.. note::
+   It is recommended to use 3.5 or later stable version of NFS-Ganesha
+   packages with pacific (16.2.x) or later stable version of Ceph packages.
 
 Configuring NFS-Ganesha to export CephFS
 ========================================
@@ -70,12 +78,8 @@ to get the benefit of sessions.
 Conventions for mounting NFS resources are platform-specific. The
 following conventions work on Linux and some Unix platforms:
 
-From the command line::
+.. code:: bash
 
-  mount -t nfs -o nfsvers=4.1,proto=tcp <ganesha-host-name>:<ganesha-pseudo-path> <mount-point>
+    mount -t nfs -o nfsvers=4.1,proto=tcp <ganesha-host-name>:<ganesha-pseudo-path> <mount-point>
 
-Current limitations
-===================
 
-- Per running ganesha daemon, FSAL_CEPH can only export one Ceph file system
-  although multiple directories in a Ceph file system may be exported.

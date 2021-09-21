@@ -7,7 +7,7 @@ NFS Service
 .. note:: Only the NFSv4 protocol is supported.
 
 The simplest way to manage NFS is via the ``ceph nfs cluster ...``
-commands; see :ref:`cephfs-nfs`.  This document covers how to manage the
+commands; see :ref:`mgr-nfs`.  This document covers how to manage the
 cephadm services directly, which should only be necessary for unusual NFS
 configurations.
 
@@ -59,6 +59,7 @@ The specification can then be applied by running the following command:
 
    ceph orch apply -i nfs.yaml
 
+.. _cephadm-ha-nfs:
 
 High-availability NFS
 =====================

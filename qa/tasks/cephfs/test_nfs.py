@@ -10,6 +10,7 @@ from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
+NFS_POOL_NAME = '.nfs'  # should match mgr_module.py
 
 # TODO Add test for cluster update when ganesha can be deployed on multiple ports.
 class TestNFS(MgrTestCase):
@@ -23,7 +24,6 @@ class TestNFS(MgrTestCase):
         return self._cmd("orch", *args)
 
     def _sys_cmd(self, cmd):
-        cmd[0:0] = ['sudo']
         ret = self.ctx.cluster.run(args=cmd, check_status=False, stdout=BytesIO(), stderr=BytesIO())
         stdout = ret[0].stdout
         if stdout:
@@ -44,7 +44,7 @@ class TestNFS(MgrTestCase):
          "cluster_id": self.cluster_id,
          "pseudo": self.pseudo_path,
          "access_type": "RW",
-         "squash": "no_root_squash",
+         "squash": "none",
          "security_label": True,
          "protocols": [
            4
@@ -54,21 +54,20 @@ class TestNFS(MgrTestCase):
          ],
          "fsal": {
            "name": "CEPH",
-           "user_id": "test1",
+           "user_id": "nfs.test.1",
            "fs_name": self.fs_name,
-           "sec_label_xattr": ''
          },
          "clients": []
         }
 
     def _check_nfs_server_status(self):
-        res = self._sys_cmd(['systemctl', 'status', 'nfs-server'])
+        res = self._sys_cmd(['sudo', 'systemctl', 'status', 'nfs-server'])
         if isinstance(res, bytes) and b'Active: active' in res:
             self._disable_nfs()
 
     def _disable_nfs(self):
         log.info("Disabling NFS")
-        self._sys_cmd(['systemctl', 'disable', 'nfs-server', '--now'])
+        self._sys_cmd(['sudo', 'systemctl', 'disable', 'nfs-server', '--now'])
 
     def _fetch_nfs_status(self):
         return self._orch_cmd('ps', f'--service_name={self.expected_name}')
@@ -95,10 +94,11 @@ class TestNFS(MgrTestCase):
         :param check_in: Check specified export id
         '''
         output = self._cmd('auth', 'ls')
+        client_id = f'client.nfs.{self.cluster_id}'
         if check_in:
-            self.assertIn(f'client.{self.cluster_id}{export_id}', output)
+            self.assertIn(f'{client_id}.{export_id}', output)
         else:
-            self.assertNotIn(f'client-{self.cluster_id}', output)
+            self.assertNotIn(f'{client_id}.{export_id}', output)
 
     def _test_idempotency(self, cmd_func, cmd_args):
         '''
@@ -162,7 +162,7 @@ class TestNFS(MgrTestCase):
         self._cmd(*export_cmd)
         # Check if user id for export is created
         self._check_auth_ls(export_id, check_in=True)
-        res = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'get',
+        res = self._sys_cmd(['rados', '-p', NFS_POOL_NAME, '-N', self.cluster_id, 'get',
                              f'export-{export_id}', '-'])
         # Check if export object is created
         if res == b'':
@@ -201,26 +201,26 @@ class TestNFS(MgrTestCase):
         self.sample_export['export_id'] = 2
         self.sample_export['pseudo'] = self.pseudo_path + '1'
         self.sample_export['access_type'] = 'RO'
-        self.sample_export['fsal']['user_id'] = self.cluster_id + '2'
+        self.sample_export['fsal']['user_id'] = f'{self.expected_name}.2'
         self.assertDictEqual(self.sample_export, nfs_output[1])
         # Export-3 for subvolume with r only
         self.sample_export['export_id'] = 3
         self.sample_export['path'] = sub_vol_path
         self.sample_export['pseudo'] = self.pseudo_path + '2'
-        self.sample_export['fsal']['user_id'] = self.cluster_id + '3'
+        self.sample_export['fsal']['user_id'] = f'{self.expected_name}.3'
         self.assertDictEqual(self.sample_export, nfs_output[2])
         # Export-4 for subvolume
         self.sample_export['export_id'] = 4
         self.sample_export['pseudo'] = self.pseudo_path + '3'
         self.sample_export['access_type'] = 'RW'
-        self.sample_export['fsal']['user_id'] = self.cluster_id + '4'
+        self.sample_export['fsal']['user_id'] = f'{self.expected_name}.4'
         self.assertDictEqual(self.sample_export, nfs_output[3])
 
     def _get_export(self):
         '''
         Returns export block in json format
         '''
-        return json.loads(self._nfs_cmd('export', 'get', self.cluster_id, self.pseudo_path))
+        return json.loads(self._nfs_cmd('export', 'info', self.cluster_id, self.pseudo_path))
 
     def _test_get_export(self):
         '''
@@ -234,7 +234,7 @@ class TestNFS(MgrTestCase):
         Test if export or config object are deleted successfully.
         :param conf_obj: It denotes config object needs to be checked
         '''
-        rados_obj_ls = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'ls'])
+        rados_obj_ls = self._sys_cmd(['rados', '-p', NFS_POOL_NAME, '-N', self.cluster_id, 'ls'])
 
         if b'export-' in rados_obj_ls or (conf_obj and b'conf-nfs' in rados_obj_ls):
             self.fail("Delete export failed")
@@ -255,14 +255,22 @@ class TestNFS(MgrTestCase):
         :param ip: IP of deployed nfs cluster
         :param check: It denotes if i/o testing needs to be done
         '''
-        try:
-            self.ctx.cluster.run(args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port}',
-                                       f'{ip}:{pseudo_path}', '/mnt'])
-        except CommandFailedError as e:
-            # Check if mount failed only when non existing pseudo path is passed
-            if not check and e.exitstatus == 32:
-                return
-            raise
+        tries = 3
+        while True:
+            try:
+                self.ctx.cluster.run(
+                    args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port}',
+                          f'{ip}:{pseudo_path}', '/mnt'])
+                break
+            except CommandFailedError as e:
+                if tries:
+                    tries -= 1
+                    time.sleep(2)
+                    continue
+                # Check if mount failed only when non existing pseudo path is passed
+                if not check and e.exitstatus == 32:
+                    return
+                raise
 
         self.ctx.cluster.run(args=['sudo', 'chmod', '1777', '/mnt'])
 
@@ -350,7 +358,8 @@ class TestNFS(MgrTestCase):
         # Export-3 for subvolume with r only
         self._cmd('fs', 'subvolume', 'create', self.fs_name, 'sub_vol')
         fs_path = self._cmd('fs', 'subvolume', 'getpath', self.fs_name, 'sub_vol').strip()
-        self._create_export(export_id='3', extra_cmd=[self.pseudo_path+'2', '--readonly', fs_path])
+        self._create_export(export_id='3', extra_cmd=[self.pseudo_path+'2', '--readonly',
+                                                      '--path', fs_path])
         # Export-4 for subvolume
         self._create_export(export_id='4', extra_cmd=[self.pseudo_path+'3', fs_path])
         # Check if exports gets listed
@@ -436,6 +445,7 @@ class TestNFS(MgrTestCase):
         self._test_create_cluster()
         self._create_export(export_id='1', create_fs=True, extra_cmd=[self.pseudo_path, '--readonly'])
         port, ip = self._get_port_ip_info()
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
         self._write_to_read_only_export(self.pseudo_path, port, ip)
         self._test_delete_cluster()
 
@@ -471,7 +481,7 @@ class TestNFS(MgrTestCase):
         '''
         self._test_create_cluster()
 
-        pool = 'nfs-ganesha'
+        pool = NFS_POOL_NAME
         user_id = 'test'
         fs_name = 'user_test_fs'
         pseudo_path = '/ceph'
@@ -502,7 +512,7 @@ class TestNFS(MgrTestCase):
 	        }}
         }}"""
         port, ip = self._get_port_ip_info()
-        self.ctx.cluster.run(args=['sudo', 'ceph', 'nfs', 'cluster', 'config',
+        self.ctx.cluster.run(args=['ceph', 'nfs', 'cluster', 'config',
             'set', self.cluster_id, '-i', '-'], stdin=config)
         time.sleep(30)
         res = self._sys_cmd(['rados', '-p', pool, '-N', self.cluster_id, 'get',
@@ -510,7 +520,7 @@ class TestNFS(MgrTestCase):
         self.assertEqual(config, res.decode('utf-8'))
         self._test_mnt(pseudo_path, port, ip)
         self._nfs_cmd('cluster', 'config', 'reset', self.cluster_id)
-        rados_obj_ls = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'ls'])
+        rados_obj_ls = self._sys_cmd(['rados', '-p', NFS_POOL_NAME, '-N', self.cluster_id, 'ls'])
         if b'conf-nfs' not in rados_obj_ls and b'userconf-nfs' in rados_obj_ls:
             self.fail("User config not deleted")
         time.sleep(30)
@@ -524,7 +534,7 @@ class TestNFS(MgrTestCase):
         '''
         try:
             cluster_id = 'invalidtest'
-            self.ctx.cluster.run(args=['sudo', 'ceph', 'nfs', 'cluster',
+            self.ctx.cluster.run(args=['ceph', 'nfs', 'cluster',
                 'config', 'set', self.cluster_id, '-i', '-'], stdin='testing')
             self.fail(f"User config set for non-existing cluster {cluster_id}")
         except CommandFailedError as e:
@@ -545,6 +555,29 @@ class TestNFS(MgrTestCase):
             if e.exitstatus != errno.ENOENT:
                 raise
 
+    def test_create_export_via_apply(self):
+        '''
+        Test creation of export via apply
+        '''
+        self._test_create_cluster()
+        self.ctx.cluster.run(args=['ceph', 'nfs', 'export', 'apply',
+                                   self.cluster_id, '-i', '-'],
+                             stdin=json.dumps({
+                                 "path": "/",
+                                 "pseudo": "/cephfs",
+                                 "squash": "none",
+                                 "access_type": "rw",
+                                 "protocols": [4],
+                                 "fsal": {
+                                     "name": "CEPH",
+                                     "fs_name": self.fs_name
+                                 }
+                             }))
+        port, ip = self._get_port_ip_info()
+        self._test_mnt(self.pseudo_path, port, ip)
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
+        self._test_delete_cluster()
+
     def test_update_export(self):
         '''
         Test update of exports
@@ -556,8 +589,9 @@ class TestNFS(MgrTestCase):
         new_pseudo_path = '/testing'
         export_block['pseudo'] = new_pseudo_path
         export_block['access_type'] = 'RO'
-        self.ctx.cluster.run(args=['sudo', 'ceph', 'nfs', 'export', 'update', '-i', '-'],
-                stdin=json.dumps(export_block))
+        self.ctx.cluster.run(args=['ceph', 'nfs', 'export', 'apply',
+                                   self.cluster_id, '-i', '-'],
+                             stdin=json.dumps(export_block))
         self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
         self._write_to_read_only_export(new_pseudo_path, port, ip)
         self._test_delete_cluster()
@@ -577,7 +611,8 @@ class TestNFS(MgrTestCase):
             else:
                 export_block_new[key] = value
             try:
-                self.ctx.cluster.run(args=['sudo', 'ceph', 'nfs', 'export', 'update', '-i', '-'],
+                self.ctx.cluster.run(args=['ceph', 'nfs', 'export', 'apply',
+                                           self.cluster_id, '-i', '-'],
                         stdin=json.dumps(export_block_new))
             except CommandFailedError:
                 pass
@@ -618,5 +653,6 @@ class TestNFS(MgrTestCase):
         exec_cmd_invalid('export', 'ls')
         exec_cmd_invalid('export', 'delete')
         exec_cmd_invalid('export', 'delete', 'clusterid')
-        exec_cmd_invalid('export', 'get')
-        exec_cmd_invalid('export', 'get', 'clusterid')
+        exec_cmd_invalid('export', 'info')
+        exec_cmd_invalid('export', 'info', 'clusterid')
+        exec_cmd_invalid('export', 'apply')

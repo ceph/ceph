@@ -23,6 +23,7 @@ from urllib3.exceptions import ProtocolError
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec
 from ceph.utils import datetime_now
+from mgr_module import NFS_POOL_NAME
 from mgr_util import merge_dicts
 
 from typing import Optional, TypeVar, List, Callable, Any, cast, Generic, \
@@ -41,9 +42,7 @@ from .rook_client.ceph import cephobjectstore as cos
 from .rook_client.ceph import cephcluster as ccl
 from .rook_client._helper import CrdClass
 
-
 import orchestrator
-
 
 try:
     from rook.module import RookEnv
@@ -491,7 +490,7 @@ class RookCluster(object):
                         ),
                     spec=cnfs.Spec(
                         rados=cnfs.Rados(
-                            pool=spec.pool
+                            pool=NFS_POOL_NAME,
                             ),
                         server=cnfs.Server(
                             active=count
@@ -499,8 +498,7 @@ class RookCluster(object):
                         )
                     )
 
-            if spec.namespace:
-                rook_nfsgw.spec.rados.namespace = spec.namespace
+            rook_nfsgw.spec.rados.namespace = cast(str, spec.service_id)
 
             return rook_nfsgw
 
