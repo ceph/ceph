@@ -7,9 +7,11 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/common_init.h"
+#include "common/mClockCommon.h"
 
 #include "osd/scheduler/mClockScheduler.h"
 #include "osd/scheduler/OpSchedulerItem.h"
+#include "messages/MOSDOp.h"
 
 using namespace ceph::osd::scheduler;
 
@@ -35,11 +37,15 @@ public:
   unsigned cutoff_priority;
   MonClient *monc;
   bool init_perfcounter;
+  OpTracker op_tracker;
   mClockScheduler q;
 
   uint64_t client1;
   uint64_t client2;
   uint64_t client3;
+
+  hobject_t hobj;
+  spg_t spgid;
 
   mClockSchedulerTest() :
     whoami(0),
@@ -49,6 +55,7 @@ public:
     cutoff_priority(12),
     monc(nullptr),
     init_perfcounter(true),
+    op_tracker(g_ceph_context, false, num_shards),
     q(g_ceph_context, whoami, num_shards, shard_id, is_rotational,
       cutoff_priority,
       2ms, 2ms, 1ms,
@@ -56,14 +63,42 @@ public:
     client1(1001),
     client2(9999),
     client3(100000001)
-  {}
+  {
+    pg_t pgid;
+    object_locator_t oloc;
+    hobj = hobject_t(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
+      pgid.pool(), oloc.nspace);
+    spgid = spg_t(pgid);
+  }
 
   struct MockDmclockItem : public PGOpQueueable {
     op_scheduler_class scheduler_class;
+    dmc::ReqParams rp;
+    OpTracker *optracker;
+    OpRequestRef op;
+    hobject_t hobj;
+    spg_t spgid;
+
+    MockDmclockItem(op_scheduler_class _scheduler_class, dmc::ReqParams _rp,
+      OpTracker* _optrk, hobject_t _hobj, spg_t _spgid) :
+        PGOpQueueable(spg_t()),
+        scheduler_class(_scheduler_class),
+        rp(_rp),
+        optracker(_optrk),
+        hobj(_hobj),
+        spgid(_spgid)
+    {
+      if (optracker && scheduler_class == op_scheduler_class::client) {
+          MOSDOp *m = new MOSDOp(0, 0, hobj, spgid, 0, 0, 0);
+          m->set_qos_req_params(rp);
+          op = optracker->create_request<OpRequest, MOSDOp*>(m);
+        }
+    }
 
     MockDmclockItem(op_scheduler_class _scheduler_class) :
       PGOpQueueable(spg_t()),
-      scheduler_class(_scheduler_class) {}
+      scheduler_class(_scheduler_class),
+      optracker(nullptr) {}
 
     MockDmclockItem()
       : MockDmclockItem(op_scheduler_class::background_best_effort) {}
@@ -75,6 +110,9 @@ public:
     }
 
     std::optional<OpRequestRef> maybe_get_op() const final {
+      if (optracker && scheduler_class == op_scheduler_class::client) {
+        return op;
+      }
       return std::nullopt;
     }
 
@@ -294,4 +332,39 @@ TEST_F(mClockSchedulerTest, TestSlowDequeue) {
     ASSERT_TRUE(wqi);
   }
   ASSERT_TRUE(q.empty());
+}
+
+TEST_F(mClockSchedulerTest, TestDistributedEnqueue) {
+  ASSERT_TRUE(q.empty());
+  dmc::ReqParams req_params;
+  OpSchedulerItem r1 = create_item(100, client1, op_scheduler_class::client,
+    req_params, &op_tracker, hobj, spgid);
+  OpSchedulerItem r2 = create_item(101, client2, op_scheduler_class::client,
+    req_params, &op_tracker, hobj, spgid);
+  OpSchedulerItem r3 = create_item(102, client3, op_scheduler_class::client,
+    req_params, &op_tracker, hobj, spgid);
+  OpSchedulerItem r4 = create_item(103, client1, op_scheduler_class::client,
+    dmc::ReqParams(100, 1), &op_tracker, hobj, spgid);
+  OpSchedulerItem r5 = create_item(104, client2, op_scheduler_class::client,
+    dmc::ReqParams(10, 1), &op_tracker, hobj, spgid);
+  OpSchedulerItem r6 = create_item(105, client3, op_scheduler_class::client,
+    dmc::ReqParams(30, 1), &op_tracker, hobj, spgid);
+
+  q.enqueue(std::move(r1));
+  q.enqueue(std::move(r2));
+  q.enqueue(std::move(r3));
+  q.enqueue(std::move(r4));
+  q.enqueue(std::move(r5));
+  q.enqueue(std::move(r6));
+
+  std::vector<epoch_t> expected_epochs {100, 101, 102, 104, 105, 103};
+  for(auto i = expected_epochs.begin(); i != expected_epochs.end(); ++i) {
+    ASSERT_FALSE(q.empty());
+    WorkItem work_item;
+    while (!std::get_if<OpSchedulerItem>(&work_item)) {
+      work_item = q.dequeue();
+    }
+    OpSchedulerItem r = get_item(std::move(work_item));
+    ASSERT_EQ(*i, r.get_map_epoch());
+  }
 }

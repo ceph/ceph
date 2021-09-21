@@ -3665,6 +3665,12 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   logger->tinc(l_osdc_op_latency, ceph::coarse_mono_time::clock::now() - op->stamp);
   logger->set(l_osdc_op_inflight, num_in_flight);
 
+  if (qos_svc_tracker) {
+    qos_svc_tracker->track_resp(op->target.osd,
+                                m->get_qos_resp(),
+                                m->get_qos_cost());
+  }
+
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
 
