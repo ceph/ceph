@@ -1,3 +1,5 @@
+.. _upgrade-mds-cluster:
+
 Upgrading the MDS Cluster
 =========================
 
