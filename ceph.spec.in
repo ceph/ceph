@@ -229,6 +229,7 @@ BuildRequires:	pkgconfig(udev)
 BuildRequires:	valgrind-devel
 BuildRequires:	which
 BuildRequires:	xfsprogs-devel
+BuildRequires:	xmlstarlet
 BuildRequires:	nasm
 BuildRequires:	lua-devel
 %if 0%{with seastar} || 0%{with jaeger}
