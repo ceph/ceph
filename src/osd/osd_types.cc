@@ -36,8 +36,10 @@ extern "C" {
 
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"
+#include "include/utime_fmt.h"
 #include "OSDMap.h"
 #include "osd_types.h"
+#include "osd_types_fmt.h"
 #include "os/Transaction.h"
 
 using std::list;
@@ -2856,7 +2858,8 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_bool("pin_stats_invalid", pin_stats_invalid);
   f->dump_bool("manifest_stats_invalid", manifest_stats_invalid);
   f->dump_unsigned("snaptrimq_len", snaptrimq_len);
-  f->dump_float("scrub_duration", scrub_duration);
+  f->dump_int("last_scrub_duration", last_scrub_duration);
+  f->dump_string("scrub_schedule", dump_scrub_schedule());
   stats.dump(f);
   f->open_array_section("up");
   for (auto p = up.cbegin(); p != up.cend(); ++p)
@@ -2909,6 +2912,47 @@ void pg_stat_t::dump_brief(Formatter *f) const
   f->dump_int("acting_primary", acting_primary);
 }
 
+std::string pg_stat_t::dump_scrub_schedule() const
+{
+  if (scrub_sched_status.m_is_active) {
+    return fmt::format(
+      "{}scrubbing for {}s",
+      ((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""),
+      scrub_sched_status.m_duration_seconds);
+  }
+  switch (scrub_sched_status.m_sched_status) {
+    case pg_scrub_sched_status_t::unknown:
+      // no reported scrub schedule yet
+      return "--"s;
+    case pg_scrub_sched_status_t::not_queued:
+      return "no scrub is scheduled"s;
+    case pg_scrub_sched_status_t::scheduled:
+      return fmt::format(
+        "{} {}scrub scheduled @ {}",
+        (scrub_sched_status.m_is_periodic ? "periodic" : "user requested"),
+        ((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""),
+        scrub_sched_status.m_scheduled_at);
+    case pg_scrub_sched_status_t::queued:
+      return fmt::format(
+        "queued for {}scrub",
+        ((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""));
+    default:
+      // a bug!
+      return "SCRUB STATE MISMATCH!"s;
+  }
+}
+
+bool operator==(const pg_scrubbing_status_t& l, const pg_scrubbing_status_t& r)
+{
+  return
+    l.m_sched_status == r.m_sched_status &&
+    l.m_scheduled_at == r.m_scheduled_at &&
+    l.m_duration_seconds == r.m_duration_seconds &&
+    l.m_is_active == r.m_is_active &&
+    l.m_is_deep == r.m_is_deep &&
+    l.m_is_periodic == r.m_is_periodic;
+}
+
 void pg_stat_t::encode(ceph::buffer::list &bl) const
 {
   ENCODE_START(27, 22, bl);
@@ -2959,7 +3003,13 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(manifest_stats_invalid, bl);
   encode(avail_no_missing, bl);
   encode(object_location_counts, bl);
-  encode(scrub_duration, bl);
+  encode(last_scrub_duration, bl);
+  encode(scrub_sched_status.m_scheduled_at, bl);
+  encode(scrub_sched_status.m_duration_seconds, bl);
+  encode((__u16)scrub_sched_status.m_sched_status, bl);
+  encode(scrub_sched_status.m_is_active, bl);
+  encode((scrub_sched_status.m_is_deep==scrub_level_t::deep), bl);
+  encode(scrub_sched_status.m_is_periodic, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -3035,7 +3085,18 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       decode(object_location_counts, bl);
     }
     if (struct_v >= 27) {
-      decode(scrub_duration, bl);
+      decode(last_scrub_duration, bl);
+      decode(scrub_sched_status.m_scheduled_at, bl);
+      decode(scrub_sched_status.m_duration_seconds, bl);
+      __u16 scrub_sched_as_u16;
+      decode(scrub_sched_as_u16, bl);
+      scrub_sched_status.m_sched_status = (pg_scrub_sched_status_t)(scrub_sched_as_u16);
+      decode(tmp, bl);
+      scrub_sched_status.m_is_active = tmp;
+      decode(tmp, bl);
+      scrub_sched_status.m_is_deep = tmp ? scrub_level_t::deep : scrub_level_t::shallow;
+      decode(tmp, bl);
+      scrub_sched_status.m_is_periodic = tmp;
     }
   }
   DECODE_FINISH(bl);
@@ -3069,7 +3130,7 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.last_deep_scrub = eversion_t(13, 14);
   a.last_deep_scrub_stamp = utime_t(15, 16);
   a.last_clean_scrub_stamp = utime_t(17, 18);
-  a.scrub_duration = 0.003;
+  a.last_scrub_duration = 3617;
   a.snaptrimq_len = 1048576;
   list<object_stat_collection_t*> l;
   object_stat_collection_t::generate_test_instances(l);
@@ -3144,7 +3205,8 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.manifest_stats_invalid == r.manifest_stats_invalid &&
     l.purged_snaps == r.purged_snaps &&
     l.snaptrimq_len == r.snaptrimq_len &&
-    l.scrub_duration == r.scrub_duration;
+    l.last_scrub_duration == r.last_scrub_duration &&
+    l.scrub_sched_status == r.scrub_sched_status;
 }
 
 // -- store_statfs_t --

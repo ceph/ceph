@@ -1032,7 +1032,7 @@ void PrimaryLogPG::do_command(
     f->close_section();
 
     if (is_primary() && is_active() && m_scrubber) {
-      m_scrubber->dump(f.get());
+      m_scrubber->dump_scrubber(f.get(), m_planned_scrub);
     }
 
     f->open_object_section("agent_state");
