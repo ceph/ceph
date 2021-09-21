@@ -475,6 +475,14 @@ WorkItem mClockScheduler::dequeue()
       ceph_assert(result.is_retn());
 
       auto &retn = result.get_retn();
+      std::optional<OpRequestRef> _op = retn.request->maybe_get_op();
+      if (_op.has_value()) {
+        auto req = (*_op)->get_req();
+        if (req->get_type() == CEPH_MSG_OSD_OP) {
+          (*_op)->qos_phase = retn.phase;
+          (*_op)->qos_cost = retn.cost;
+        }
+      }
       return std::move(*retn.request);
     }
   }
