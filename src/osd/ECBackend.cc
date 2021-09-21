@@ -1827,7 +1827,7 @@ void ECBackend::do_read_op(ReadOp &op)
 }
 
 ECUtil::HashInfoRef ECBackend::get_hash_info(
-  const hobject_t &hoid, bool checks, const map<string,bufferptr,less<>> *attrs)
+  const hobject_t &hoid, bool create, const map<string,bufferptr,less<>> *attrs)
 {
   dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
   ECUtil::HashInfoRef ref = unstable_hashinfo_registry.lookup(hoid);
@@ -1839,7 +1839,6 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
       ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &st);
     ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
-    // XXX: What does it mean if there is no object on disk?
     if (r >= 0) {
       dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
       bufferlist bl;
@@ -1869,7 +1868,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
 	  dout(0) << __func__ << ": Can't decode hinfo for " << hoid << dendl;
 	  return ECUtil::HashInfoRef();
         }
-	if (checks && hinfo.get_total_chunk_size() != (uint64_t)st.st_size) {
+	if (hinfo.get_total_chunk_size() != (uint64_t)st.st_size) {
 	  dout(0) << __func__ << ": Mismatch of total_chunk_size "
 			       << hinfo.get_total_chunk_size() << dendl;
 	  return ECUtil::HashInfoRef();
@@ -1877,6 +1876,10 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
       } else if (st.st_size > 0) { // If empty object and no hinfo, create it
 	return ECUtil::HashInfoRef();
       }
+    } else if (r != -ENOENT || !create) {
+      derr << __func__ << ": stat " << hoid << " failed: " << cpp_strerror(r)
+           << dendl;
+      return ECUtil::HashInfoRef();
     }
     ref = unstable_hashinfo_registry.lookup_or_create(hoid, hinfo);
   }
@@ -1891,7 +1894,7 @@ void ECBackend::start_rmw(Op *op, PGTransactionUPtr &&t)
     sinfo,
     std::move(t),
     [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref = get_hash_info(i, false);
+      ECUtil::HashInfoRef ref = get_hash_info(i, true);
       if (!ref) {
 	derr << __func__ << ": get_hash_info(" << i << ")"
 	     << " returned a null pointer and there is no "
