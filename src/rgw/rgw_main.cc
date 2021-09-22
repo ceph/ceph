@@ -446,17 +446,20 @@ int radosgw_Main(int argc, const char **argv)
     store->set_luarocks_path(luarocks_path+"/"+g_conf()->name.to_str());
   }
 #ifdef WITH_RADOSGW_LUA_PACKAGES
-  rgw::lua::packages_t failed_packages;
-  std::string output;
-  r = rgw::lua::install_packages(&dp, store, null_yield, failed_packages, output);
-  if (r < 0) {
-    dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
-  }
-  if (!output.empty()) {
-    dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
-  }
-  for (const auto& p : failed_packages) {
-    dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
+  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
+  if (rados) { /* Supported for only RadosStore */
+    rgw::lua::packages_t failed_packages;
+    std::string output;
+    r = rgw::lua::install_packages(&dp, rados, null_yield, failed_packages, output);
+    if (r < 0) {
+      dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
+    }
+    if (!output.empty()) {
+      dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
+    }
+    for (const auto& p : failed_packages) {
+      dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
+    }
   }
 #endif
 
