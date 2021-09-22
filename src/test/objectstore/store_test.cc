@@ -9225,6 +9225,41 @@ TEST_P(StoreTest, mergeRegionTest) {
   }
 }
 
+TEST_P(StoreTest, FixSMRWritePointer) {
+  if(string(GetParam()) != "bluestore")
+    return;
+  if (!smr)
+    return;
+  int r = store->umount();
+  ASSERT_EQ(0, r);
+
+  // copied from StoreTestFixture
+  std::string path = GetParam() + ".test_temp_dir"s;
+
+  std::string p = path + "/block";
+  BlockDevice* bdev = BlockDevice::create(g_ceph_context, p, nullptr, nullptr, nullptr, nullptr);
+  r = bdev->open(p);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(true, bdev->is_smr());
+
+  std::vector<uint64_t> wp = bdev->get_zones();
+  uint64_t first_seq_zone = bdev->get_conventional_region_size() / bdev->get_zone_size();
+
+  IOContext ioc(g_ceph_context, NULL, true);
+  bufferlist bl;
+  bl.append(std::string(1024 * 1024, 'x'));
+  r = bdev->aio_write(wp[first_seq_zone], bl, &ioc, false);
+  ASSERT_EQ(0, r);
+  bdev->aio_submit(&ioc);
+  ioc.aio_wait();
+  bdev->close();
+  delete bdev;
+
+  r = store->mount();
+  ASSERT_EQ(0, r);
+}
+
+
 TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsHdd) {
   if (string(GetParam()) != "bluestore")
     return;
