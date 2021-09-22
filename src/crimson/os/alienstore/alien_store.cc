@@ -39,18 +39,23 @@ class OnCommit final: public Context
 {
   const int cpuid;
   Context *oncommit;
+  seastar::alien::instance &alien;
   seastar::promise<> &alien_done;
 public:
   OnCommit(
     int id,
     seastar::promise<> &done,
     Context *oncommit,
+    seastar::alien::instance &alien,
     ceph::os::Transaction& txn)
-    : cpuid(id), oncommit(oncommit),
-      alien_done(done) {}
+    : cpuid(id),
+      oncommit(oncommit),
+      alien(alien),
+      alien_done(done) {
+  }
 
   void finish(int) final {
-    return seastar::alien::submit_to(seastar::engine().alien(), cpuid, [this] {
+    return seastar::alien::submit_to(alien, cpuid, [this] {
       if (oncommit) {
         oncommit->complete(0);
       }
@@ -425,9 +430,9 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
 	    ceph::os::Transaction::collect_all_contexts(txn);
 	  assert(tp);
 	  return tp->submit(ch->get_cid().hash_to_shard(tp->size()),
-	    [this, ch, id, crimson_wrapper, &txn, &done] {
+	    [this, ch, id, crimson_wrapper, &txn, &done, &alien=seastar::engine().alien()] {
 	    txn.register_on_commit(new OnCommit(id, done, crimson_wrapper,
-						txn));
+						alien, txn));
 	    auto c = static_cast<AlienCollection*>(ch.get());
 	    return store->queue_transaction(c->collection, std::move(txn));
 	  });
