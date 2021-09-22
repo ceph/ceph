@@ -7696,6 +7696,10 @@ def systemd_target_state(ctx: CephadmContext, target_name: str, subsystem: str =
     )
 
 
+def target_exists(ctx: CephadmContext) -> bool:
+    return os.path.exists(ctx.unit_dir + '/ceph.target')
+
+
 @infer_fsid
 def command_maintenance(ctx: CephadmContext) -> str:
     if not ctx.fsid:
@@ -7732,7 +7736,7 @@ def command_maintenance(ctx: CephadmContext) -> str:
         # target to disable so attempting a disable will fail. We still need to
         # return success here or host will be permanently stuck in maintenance mode
         # as no daemons can be deployed so no systemd target will ever exist to disable.
-        if not os.path.exists(ctx.unit_dir + '/ceph.target'):
+        if not target_exists(ctx):
             return 'skipped - systemd target not present on this host. Host removed from maintenance mode.'
         # exit maintenance request
         if not systemd_target_state(ctx, target):
