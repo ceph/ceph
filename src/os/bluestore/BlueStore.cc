@@ -5654,7 +5654,8 @@ int BlueStore::_init_alloc(bool read_only)
 	// note that the offset is imprecise, but only need to select the zone
 	f->allocate(i.first * zone_size, i.second, t);
       }
-      db->submit_transaction_sync(t);
+      int r = db->submit_transaction_sync(t);
+      ceph_assert(r == 0);
     }
 
     return 0;
