@@ -105,6 +105,10 @@ export class TelemetryComponent extends CdForm implements OnInit {
     return value;
   }
 
+  replacerTest(report: object) {
+    return JSON.stringify(report, this.replacer, 2);
+  }
+
   private createPreviewForm() {
     const controls = {
       report: JSON.stringify(this.report, this.replacer, 2),
