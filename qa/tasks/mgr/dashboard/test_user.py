@@ -412,6 +412,9 @@ class UserTest(DashboardTestCase):
         user_1 = self._get('/api/user/user1')
         self.assertStatus(200)
 
+        # Let's wait 1 s to ensure pwd expiration date is not the same
+        time.sleep(1)
+
         self.login('user1', 'mypassword10#')
         self._post('/api/user/user1/change_password', {
             'old_password': 'mypassword10#',
