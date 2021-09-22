@@ -103,6 +103,9 @@ private:
 
 CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
 {
+  static const char read_meta_errmsg[]{"read_meta"};
+  static const char parse_fsid_errmsg[]{"failed to parse fsid"};
+  static const char match_ofsid_errmsg[]{"unmatched osd_fsid"};
   return read_meta("fsid").then([=](auto&& ret) -> mkfs_ertr::future<> {
     auto& [r, fsid_str] = ret;
     if (r == -ENOENT) {
@@ -113,17 +116,14 @@ CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
       }
       return write_meta("fsid", fmt::format("{}", osd_fsid));
     } else if (r < 0) {
-      static const char msg[]{"read_meta"};
-      return crimson::stateful_ec{ singleton_ec<msg>() };
+      return crimson::stateful_ec{ singleton_ec<read_meta_errmsg>() };
     } else {
       logger().info("mkfs already has fsid {}", fsid_str);
       if (!osd_fsid.parse(fsid_str.c_str())) {
-        static const char msg[]{"failed to parse fsid"};
-        return crimson::stateful_ec{ singleton_ec<msg>() };
+        return crimson::stateful_ec{ singleton_ec<parse_fsid_errmsg>() };
       } else if (osd_fsid != new_osd_fsid) {
         logger().error("on-disk fsid {} != provided {}", osd_fsid, new_osd_fsid);
-        static const char msg[]{"unmatched osd_fsid"};
-        return crimson::stateful_ec{ singleton_ec<msg>() };
+        return crimson::stateful_ec{ singleton_ec<match_ofsid_errmsg>() };
       } else {
 	return mkfs_ertr::now();
       }
