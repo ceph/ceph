@@ -5888,6 +5888,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   parts = static_cast<RGWMultiCompleteUpload *>(parser.find_first("CompleteMultipartUpload"));
   if (!parts || parts->parts.empty()) {
+    // CompletedMultipartUpload is incorrect but some versions of some libraries use it, see PR #41700
     parts = static_cast<RGWMultiCompleteUpload *>(parser.find_first("CompletedMultipartUpload"));
   }
 

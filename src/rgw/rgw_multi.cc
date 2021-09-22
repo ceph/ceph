@@ -56,6 +56,7 @@ bool RGWMultiCompleteUpload::xml_end(const char *el) {
 
 XMLObj *RGWMultiXMLParser::alloc_obj(const char *el) {
   XMLObj *obj = NULL;
+  // CompletedMultipartUpload is incorrect but some versions of some libraries use it, see PR #41700
   if (strcmp(el, "CompleteMultipartUpload") == 0 ||
       strcmp(el, "CompletedMultipartUpload") == 0 ||
       strcmp(el, "MultipartUpload") == 0) {
