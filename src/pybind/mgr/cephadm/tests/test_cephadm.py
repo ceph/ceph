@@ -1402,10 +1402,10 @@ class TestCephadm(object):
         _get_daemon_types.return_value = ['crash']
         _hosts.return_value = [hostname, 'other_host']
         cephadm_module.inventory.add_host(HostSpec(hostname))
-        # should raise an error which will get stored in OrchResult object
-        retval = cephadm_module.enter_host_maintenance(hostname)
-        assert retval.exception_str
-        assert not retval.result_str()
+
+        with pytest.raises(OrchestratorError, match='Failed to place host1 into maintenance for cluster fsid'):
+            cephadm_module.enter_host_maintenance(hostname)
+
         assert not cephadm_module.inventory._inventory[hostname]['status']
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1433,10 +1433,10 @@ class TestCephadm(object):
         _get_daemon_types.return_value = ['crash']
         _hosts.return_value = [hostname, 'other_host']
         cephadm_module.inventory.add_host(HostSpec(hostname, status='maintenance'))
-        # should raise an error which will get stored in OrchResult object
-        retval = cephadm_module.exit_host_maintenance(hostname)
-        assert retval.exception_str
-        assert not retval.result_str()
+
+        with pytest.raises(OrchestratorError, match='Failed to exit maintenance state for host host1, cluster fsid'):
+            cephadm_module.exit_host_maintenance(hostname)
+
         assert cephadm_module.inventory._inventory[hostname]['status'] == 'maintenance'
 
     def test_stale_connections(self, cephadm_module):
