@@ -26,7 +26,6 @@ from .fixtures import (
     with_cephadm_ctx,
 )
 
-
 with mock.patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
@@ -894,6 +893,7 @@ iMN28C2bKGao5UHvdER1rGy7
 
 class TestMaintenance:
     systemd_target = "ceph.00000000-0000-0000-0000-000000c0ffee.target"
+    fsid = '0ea8cdd0-1bbf-11ec-a9c7-5254002763fa'
 
     def test_systemd_target_OK(self, tmp_path):
         base = tmp_path 
@@ -919,6 +919,54 @@ class TestMaintenance:
     def test_parser_BAD(self):
         with pytest.raises(SystemExit):
             cd._parse_args(['host-maintenance', 'wah'])
+
+    @mock.patch('cephadm.call')
+    @mock.patch('cephadm.systemd_target_state')
+    def test_enter_failure_1(self, _target_state, _call):
+        _call.return_value = '', '', 999
+        _target_state.return_value = True
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
+            ['host-maintenance', 'enter', '--fsid', TestMaintenance.fsid])
+        ctx.container_engine = mock_podman()
+        retval = cd.command_maintenance(ctx)
+        assert retval.startswith('failed')
+
+    @mock.patch('cephadm.call')
+    @mock.patch('cephadm.systemd_target_state')
+    def test_enter_failure_2(self, _target_state, _call):
+        _call.side_effect = [('', '', 0), ('', '', 999)]
+        _target_state.return_value = True
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
+            ['host-maintenance', 'enter', '--fsid', TestMaintenance.fsid])
+        ctx.container_engine = mock_podman()
+        retval = cd.command_maintenance(ctx)
+        assert retval.startswith('failed')
+
+    @mock.patch('cephadm.call')
+    @mock.patch('cephadm.systemd_target_state')
+    @mock.patch('cephadm.target_exists')
+    def test_exit_failure_1(self, _target_exists, _target_state, _call):
+        _call.return_value = '', '', 999
+        _target_state.return_value = False
+        _target_exists.return_value = True
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
+            ['host-maintenance', 'exit', '--fsid', TestMaintenance.fsid])
+        ctx.container_engine = mock_podman()
+        retval = cd.command_maintenance(ctx)
+        assert retval.startswith('failed')
+
+    @mock.patch('cephadm.call')
+    @mock.patch('cephadm.systemd_target_state')
+    @mock.patch('cephadm.target_exists')
+    def test_exit_failure_2(self, _target_exists, _target_state, _call):
+        _call.side_effect = [('', '', 0), ('', '', 999)]
+        _target_state.return_value = False
+        _target_exists.return_value = True
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
+            ['host-maintenance', 'exit', '--fsid', TestMaintenance.fsid])
+        ctx.container_engine = mock_podman()
+        retval = cd.command_maintenance(ctx)
+        assert retval.startswith('failed')
 
 
 class TestMonitoring(object):
