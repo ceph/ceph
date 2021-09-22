@@ -20,7 +20,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-class OpsLogSocket;
+class OpsLogSink;
 
 namespace rgw {
 
@@ -29,7 +29,7 @@ namespace rgw {
   class RGWLib : public DoutPrefixProvider {
     RGWFrontendConfig* fec;
     RGWLibFrontend* fe;
-    OpsLogSocket* olog;
+    OpsLogSink* olog;
     rgw::LDAPHelper* ldh{nullptr};
     RGWREST rest; // XXX needed for RGWProcessEnv
     rgw::sal::RGWRadosStore* store;

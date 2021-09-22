@@ -1405,6 +1405,7 @@ OPTION(rgw_usage_max_user_shards, OPT_INT)
 OPTION(rgw_enable_ops_log, OPT_BOOL) // enable logging every rgw operation
 OPTION(rgw_enable_usage_log, OPT_BOOL) // enable logging bandwidth usage
 OPTION(rgw_ops_log_rados, OPT_BOOL) // whether ops log should go to rados
+OPTION(rgw_ops_log_file_path, OPT_STR) // path to file where ops log can go
 OPTION(rgw_ops_log_socket_path, OPT_STR) // path to unix domain socket where ops log can go
 OPTION(rgw_ops_log_data_backlog, OPT_INT) // max data backlog for ops log
 OPTION(rgw_fcgi_socket_backlog, OPT_INT) // socket  backlog for fcgi
