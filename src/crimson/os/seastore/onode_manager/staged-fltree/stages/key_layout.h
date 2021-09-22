@@ -42,14 +42,13 @@ template<> struct _full_key_type<KeyT::HOBJ> { using type = key_hobj_t; };
 template <KeyT type>
 using full_key_t = typename _full_key_type<type>::type;
 
-static laddr_t get_lba_hint(shard_t shard, pool_t pool, crush_hash_t crush)
-{
-  if (shard == shard_id_t::NO_SHARD) {
-    return (uint64_t)(pool & 0xFF)<<56 | (uint64_t)(crush)<<24;
-  } else {
-    return (uint64_t)(shard & 0X7F)<<56 | (uint64_t)(pool& 0xFF)<<48 |
-	   (uint64_t)(crush)<<16;
-  }
+static laddr_t get_lba_hint(shard_t shard, pool_t pool, crush_hash_t crush) {
+  // FIXME: It is possible that PGs from different pools share the same prefix
+  // if the mask 0xFF is not long enough, result in unexpected transaction
+  // conflicts.
+  return ((uint64_t)(shard & 0XFF)<<56 |
+          (uint64_t)(pool  & 0xFF)<<48 |
+          (uint64_t)(crush       )<<16);
 }
 
 struct node_offset_packed_t {
