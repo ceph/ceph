@@ -10545,21 +10545,36 @@ int BlueStore::_collection_list(
   if (!c->exists)
     return -ENOENT;
 
-  auto start_time = mono_clock::now();
-  int r = 0;
   ghobject_t static_next;
   std::unique_ptr<CollectionListIterator> it;
   ghobject_t coll_range_temp_start, coll_range_temp_end;
   ghobject_t coll_range_start, coll_range_end;
-  bool set_next = false;
   ghobject_t pend;
   bool temp;
 
   if (!pnext)
     pnext = &static_next;
 
+  auto log_latency = make_scope_guard(
+    [&, start_time = mono_clock::now(), func_name = __func__] {
+    log_latency_fn(
+      func_name,
+      l_bluestore_remove_lat,
+      mono_clock::now() - start_time,
+      cct->_conf->bluestore_log_collection_list_age,
+      [&](const ceph::timespan& lat) {
+	ostringstream ostr;
+	ostr << ", lat = " << timespan_str(lat)
+	     << " cid =" << c->cid
+	     << " start " << start << " end " << end
+	     << " max " << max;
+	return ostr.str();
+      });
+  });
+
   if (start.is_max() || start.hobj.is_max()) {
-    goto out;
+    *pnext = ghobject_t::get_max();
+    return 0;
   }
   get_coll_range(c->cid, c->cnode.bits, &coll_range_temp_start,
                  &coll_range_temp_end, &coll_range_start, &coll_range_end);
@@ -10596,10 +10611,12 @@ int BlueStore::_collection_list(
     pend = temp ? coll_range_temp_end : coll_range_end;
   } else {
     if (end.hobj.is_temp()) {
-      if (temp)
+      if (temp) {
         pend = end;
-      else
-        goto out;
+      } else {
+        *pnext = ghobject_t::get_max();
+        return 0;
+      }
     } else {
       pend = temp ? coll_range_temp_end : end;
     }
@@ -10615,7 +10632,7 @@ int BlueStore::_collection_list(
 	if (end.hobj.is_temp()) {
           if (it->valid() && it->is_lt(coll_range_temp_end)) {
             *pnext = it->oid();
-            set_next = true;
+            return 0;
           }
 	  break;
 	}
@@ -10631,7 +10648,7 @@ int BlueStore::_collection_list(
       }
       if (it->valid() && it->is_lt(coll_range_end)) {
         *pnext = it->oid();
-        set_next = true;
+        return 0;
       }
       break;
     }
@@ -10639,31 +10656,13 @@ int BlueStore::_collection_list(
     if (ls->size() >= (unsigned)max) {
       dout(20) << __func__ << " reached max " << max << dendl;
       *pnext = it->oid();
-      set_next = true;
-      break;
+      return 0;
     }
     ls->push_back(it->oid());
     it->next();
   }
-out:
-  if (!set_next) {
-    *pnext = ghobject_t::get_max();
-  }
-  log_latency_fn(
-    __func__,
-    l_bluestore_clist_lat,
-    mono_clock::now() - start_time,
-    cct->_conf->bluestore_log_collection_list_age,
-    [&] (const ceph::timespan& lat) {
-      ostringstream ostr;
-      ostr << ", lat = " << timespan_str(lat)
-           << " cid =" << c->cid
-           << " start " << start << " end " << end
-           << " max " << max;
-      return ostr.str();
-    }
-  );
-  return r;
+  *pnext = ghobject_t::get_max();
+  return 0;
 }
 
 int BlueStore::omap_get(
