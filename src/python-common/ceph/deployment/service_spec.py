@@ -9,24 +9,12 @@ from typing import Optional, Dict, Any, List, Union, Callable, Iterable, Type, T
 
 import yaml
 
-from ceph.deployment.hostspec import HostSpec, SpecValidationError
+from ceph.deployment.hostspec import HostSpec, SpecValidationError, assert_valid_host
 from ceph.deployment.utils import unwrap_ipv6, valid_addr
 from ceph.utils import is_hex
 
 ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
 FuncT = TypeVar('FuncT', bound=Callable)
-
-
-def assert_valid_host(name: str) -> None:
-    p = re.compile('^[a-zA-Z0-9-]+$')
-    try:
-        assert len(name) <= 250, 'name is too long (max 250 chars)'
-        for part in name.split('.'):
-            assert len(part) > 0, '.-delimited name component must not be empty'
-            assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
-            assert p.match(part), 'name component must include only a-z, 0-9, and -'
-    except AssertionError as e:
-        raise SpecValidationError(str(e))
 
 
 def handle_type_error(method: FuncT) -> FuncT:
