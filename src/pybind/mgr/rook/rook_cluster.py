@@ -1007,18 +1007,8 @@ class RookCluster(object):
                 _update_nfs, _create_nfs)
 
     def rm_service(self, rooktype: str, service_id: str) -> str:
-
+        self.customObjects_api.delete_namespaced_custom_object(group="ceph.rook.io", version="v1", namespace="rook-ceph", plural=rooktype, name=service_id)
         objpath = "{0}/{1}".format(rooktype, service_id)
-
-        try:
-            self.rook_api_delete(objpath)
-        except ApiException as e:
-            if e.status == 404:
-                log.info("{0} service '{1}' does not exist".format(rooktype, service_id))
-                # Idempotent, succeed.
-            else:
-                raise
-
         return f'Removed {objpath}'
 
     def can_create_osd(self) -> bool:
