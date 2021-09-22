@@ -1475,6 +1475,8 @@ Then run the following:
             self.cache.prime_empty_host(spec.hostname)
         self.inventory.add_host(spec)
         self.offline_hosts_remove(spec.hostname)
+        if spec.status == 'maintenance':
+            self._set_maintenance_healthcheck()
         self.event.set()  # refresh stray health check
         self.log.info('Added host %s' % spec.hostname)
         return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
@@ -1645,7 +1647,8 @@ Then run the following:
 
         in_maintenance = self.inventory.get_host_with_state("maintenance")
         if not in_maintenance:
-            del self.health_checks["HOST_IN_MAINTENANCE"]
+            if 'HOST_IN_MAINTENANCE' in self.health_checks:
+                del self.health_checks["HOST_IN_MAINTENANCE"]
         else:
             s = "host is" if len(in_maintenance) == 1 else "hosts are"
             self.health_checks["HOST_IN_MAINTENANCE"] = {
@@ -1695,7 +1698,8 @@ Then run the following:
             _out, _err, _code = CephadmServe(self)._run_cephadm(hostname, cephadmNoImage, "host-maintenance",
                                                                 ["enter"],
                                                                 error_ok=True)
-            if _out:
+            returned_msg = _err[0].split('\n')[-1]
+            if returned_msg.startswith('failed') or returned_msg.startswith('ERROR'):
                 raise OrchestratorError(
                     f"Failed to place {hostname} into maintenance for cluster {self._cluster_fsid}")
 
@@ -1722,7 +1726,6 @@ Then run the following:
         self.inventory.save()
 
         self._set_maintenance_healthcheck()
-
         return f'Daemons for Ceph cluster {self._cluster_fsid} stopped on host {hostname}. Host {hostname} moved to maintenance mode'
 
     @handle_orch_error
@@ -1746,7 +1749,8 @@ Then run the following:
         outs, errs, _code = CephadmServe(self)._run_cephadm(hostname, cephadmNoImage, 'host-maintenance',
                                                             ['exit'],
                                                             error_ok=True)
-        if outs:
+        returned_msg = errs[0].split('\n')[-1]
+        if returned_msg.startswith('failed') or returned_msg.startswith('ERROR'):
             raise OrchestratorError(
                 f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}")
 
