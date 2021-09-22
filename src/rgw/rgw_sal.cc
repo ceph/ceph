@@ -130,3 +130,27 @@ void StoreManager::close_storage(rgw::sal::Store* store)
 
   delete store;
 }
+
+namespace rgw::sal {
+int Object::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
+{
+  if (ofs < 0) {
+    ofs += obj_size;
+    if (ofs < 0)
+      ofs = 0;
+    end = obj_size - 1;
+  } else if (end < 0) {
+    end = obj_size - 1;
+  }
+
+  if (obj_size > 0) {
+    if (ofs >= (off_t)obj_size) {
+      return -ERANGE;
+    }
+    if (end >= (off_t)obj_size) {
+      end = obj_size - 1;
+    }
+  }
+  return 0;
+}
+}

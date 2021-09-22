@@ -1,33 +1,43 @@
-# dbstore
-DBStore for Rados Gateway (RGW)
+# DBStore
+Standalone Rados Gateway (RGW) on DBStore (Experimental)
 
-## Pre-install
-fmt(-devel) and gtest(-devel) packages need to be installed
+
+## CMake Option
+Add below cmake option (enabled by default)
+
+    -DWITH_RADOSGW_DBSTORE=ON 
+
 
 ## Build
-Add below options to cmake - 
--DWITH_RADOSGW_DBSTORE=ON -DWITH_RADOSGW_LUA_PACKAGES=OFF
 
-cd build
+    cd build
+    ninja [vstart]
 
-ninja src/rgw/store/dbstore/install
 
-## Gtests
-To execute Gtest cases, from build directory
+## Running Test cluster
+Edit ceph.conf to add below option
 
-./bin/dbstore-tests
-(default logfile: rgw_dbstore_tests.log, loglevel: 20)
+    [client]
+        rgw backend store = dbstore
 
-## Execute Sample test file
+Restart vstart cluster or just RGW server
 
-./bin/dbstore-bin
-(default logfile: rgw_dbstore_bin.log, loglevel: 20)
+    [..] RGW=1 ../src/vstart.sh -d
 
-## Logging
-[To provide custom log file and change log level]
+The above configuration brings up RGW server on dbstore and creates testid user to be used for s3 operations.
 
-./dbstore-tests log_file log_level
-./dbstore-bin log_file log_level
+By default, dbstore creates .db file named 'default_ns.db' where in the data is stored.
 
-When run as RADOSGW process, logfile and loglevel are set to the
-ones provided to the radosgw cmd args.
+
+## DBStore Unit Tests
+To execute DBStore unit test cases (using Gtest framework), from build directory
+
+    ninja src/rgw/store/dbstore/install
+    ./bin/dbstore-tests [logfile] [loglevel]
+    (default logfile: rgw_dbstore_tests.log, loglevel: 20)
+
+To execute Sample test file
+
+    ./bin/dbstore-bin [logfile] [loglevel]
+    (default logfile: rgw_dbstore_bin.log, loglevel: 20)
+
