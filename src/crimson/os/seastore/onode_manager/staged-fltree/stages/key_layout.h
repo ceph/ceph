@@ -88,7 +88,7 @@ struct crush_t {
   crush_hash_t crush;
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const crush_t& c) {
-  return os << c.crush;
+  return os << "0x" << std::hex << c.crush << std::dec;
 }
 inline MatchKindCMP compare_to(const crush_t& l, const crush_t& r) {
   return toMatchKindCMP(l.crush, r.crush);
@@ -107,7 +107,7 @@ struct shard_pool_crush_t {
   crush_t crush;
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const shard_pool_crush_t& spc) {
-  return os << spc.shard_pool << "," << spc.crush;
+  return os << spc.shard_pool << ",0x" << std::hex << spc.crush << std::dec;
 }
 inline MatchKindCMP compare_to(
     const shard_pool_crush_t& l, const shard_pool_crush_t& r) {
@@ -559,7 +559,7 @@ class key_hobj_t {
 
   std::ostream& dump(std::ostream& os) const {
     os << "key_hobj(" << (int)shard() << ","
-       << pool() << "," << crush() << "; "
+       << pool() << ",0x" << std::hex << crush() << std::dec << "; "
        << string_view_masked_t{nspace()} << ","
        << string_view_masked_t{oid()} << "; "
        << snap() << "," << gen() << ")";
@@ -745,7 +745,7 @@ class key_view_t {
       os << "X,X,";
     }
     if (has_crush()) {
-      os << crush() << "; ";
+      os << "0x" << std::hex << crush() << std::dec << "; ";
     } else {
       os << "X; ";
     }
