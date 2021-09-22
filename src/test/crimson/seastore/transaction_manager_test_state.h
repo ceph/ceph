@@ -234,26 +234,26 @@ protected:
 
   SeaStoreTestState() : EphemeralTestState() {}
 
-  virtual void _init() {
+  virtual void _init() final {
     seastore = get_seastore(
       std::make_unique<TestSegmentManagerWrapper>(*segment_manager));
   }
 
-  virtual void _destroy() {
+  virtual void _destroy() final {
     seastore.reset();
   }
 
-  virtual seastar::future<> _teardown() {
+  virtual seastar::future<> _teardown() final {
     return seastore->umount().then([this] {
       seastore.reset();
     });
   }
 
-  virtual seastar::future<> _mount() {
+  virtual seastar::future<> _mount() final {
     return seastore->mount();
   }
 
-  virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
+  virtual FuturizedStore::mkfs_ertr::future<> _mkfs() final {
     return seastore->mkfs(uuid_d{});
   }
 };
