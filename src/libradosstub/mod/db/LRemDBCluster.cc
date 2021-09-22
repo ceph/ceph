@@ -148,21 +148,30 @@ int LRemDBCluster::pool_create(LRemDBStore::Cluster& dbc,
 
   std::lock_guard locker{m_lock};
 
+  LRemDBTransactionState dbtrans(cct);
+
+  int r = dbtrans.dbo->exec("PRAGMA journal_mode = wal;");
+  if (r < 0) {
+    return r;
+  }
+
+#if 0
+  LRemDBOps::Transaction transaction(dbtrans.dbo->new_transaction());
+#endif
   auto pool = get_pool(m_lock, dbc, pool_name);
   if (pool) {
     return -EEXIST;
   }
 
-  LRemDBTransactionState dbtrans(cct);
-  LRemDBOps::Transaction transaction(dbtrans.dbo->new_transaction());
-
   string v;
-  int r = dbc.create_pool(pool_name, v);
+  r = dbc.create_pool(pool_name, v);
   if (r < 0) {
     return r;
   }
-
+#if 0
   transaction.complete_op(r);
+#endif
+  dbtrans.db_trans->complete_op(r);
 
   make_pool(pool_name, r);
 

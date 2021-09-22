@@ -17,6 +17,8 @@ class LRemDBOps {
 
   std::unique_ptr<SQLite::Database> db;
 
+  std::vector<std::string> deferred_statements;
+
 public:
   LRemDBOps(const std::string& _name, int _flags);
 
@@ -26,12 +28,29 @@ public:
   int create_table(const std::string& name, const std::string& defs);
 
   SQLite::Statement statement(const std::string& sql);
+  SQLite::Statement *deferred_statement(const std::string& sql);
+
+  void queue_statement(SQLite::Statement *statement) {
+    deferred_statements.push_back(statement->getExpandedSQL());
+    delete statement;
+  }
+
+  void flush();
 
   struct Transaction {
     int retcode{0};
     std::unique_ptr<SQLite::Transaction> trans;
 
     void *p;
+
+    void commit() {
+      trans->commit();
+      trans.reset();
+    }
+
+    void abort() {
+      trans.reset();
+    }
 
     Transaction(SQLite::Database& db);
     ~Transaction();
@@ -40,6 +59,7 @@ public:
   };
 
   Transaction new_transaction();
+  Transaction *alloc_transaction();
 };
 
 using LRemDBOpsRef = std::shared_ptr<LRemDBOps>;
@@ -233,11 +253,27 @@ struct LRemDBTransactionState : public LRemTransactionState {
   LRemDBOpsRef dbo;
   LRemDBStore::ClusterRef dbc;
 
+  std::unique_ptr<LRemDBOps::Transaction> db_trans;
+
+  struct {
+    std::optional<LRemDBStore::Obj::Meta> meta;
+  } cache;
+
   LRemDBTransactionState(CephContext *_cct);
   LRemDBTransactionState(CephContext *_cct,
                          const LRemCluster::ObjectLocator& loc);
+  ~LRemDBTransactionState();
 
-  void init();
+  void init(bool start_trans);
+
+  void set_write(bool w) override;
+
+  void commit() {
+    if (db_trans) {
+      db_trans->commit();
+    }
+  }
+
 };
 
 using LRemDBTransactionStateRef = std::shared_ptr<LRemDBTransactionState>;

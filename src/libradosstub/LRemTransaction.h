@@ -15,8 +15,9 @@ struct LRemTransactionState {
 
   LRemTransactionState() : locator(string(), string()) {}
   LRemTransactionState(const LRemCluster::ObjectLocator& loc) : locator(loc) {}
+  virtual ~LRemTransactionState() {}
 
-  void set_write(bool w) {
+  virtual void set_write(bool w) {
     /* can set but not reset */
     write |= w;
   }
