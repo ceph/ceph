@@ -170,6 +170,36 @@ describe('TelemetryComponent', () => {
       expect(component).toBeTruthy();
     });
 
+    it ('should only replace the ranges and values of a JSON object', () => {
+      var report = component.replacerTest({'ranges': [[null, -1], [0, 511], [512, 1023]],
+                                           'values': [[0,0,0], [0,0,0], [0,0,0]],
+					   'other': [[0,0,0], [0,0,0], [0,0,0]]});
+      report = JSON.parse(report);
+
+      // Ensure that the outer arrays have remained untouched by replacer
+      expect(Array.isArray(report['ranges']) && Array.isArray(report['values']) && Array.isArray(report['other'])).toBeTruthy()
+
+      if (Array.isArray(report['ranges']) && Array.isArray(report['values']) && Array.isArray(report['other'])) {
+        var idx;
+
+        // Check that each range in 'ranges' was replaced by a string
+	for (idx=0; idx<report['ranges'].length; idx++) {
+		expect(typeof report['ranges'][idx] === 'string').toBeTruthy();
+        }
+
+	// Check that each value in 'values' was replaced by a string
+	for (idx=0; idx<report['values'].length; idx++) {
+                expect(typeof report['values'][idx] === 'string').toBeTruthy();
+        }
+
+	// Check that each value in 'other' has remained untouched, as it is not a value or range
+	for (idx=0; idx<report['other'].length; idx++) {
+                expect(Array.isArray(report['other'][idx])).toBeTruthy();
+        }
+
+      }
+    });
+
     it('should submit', () => {
       component.onSubmit();
       const req = httpTesting.expectOne('api/telemetry');
