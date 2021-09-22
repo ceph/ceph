@@ -92,7 +92,7 @@ class PoolTest(DashboardTestCase):
                 self.assertEqual(pool[prop], int(value),
                                  '{}: {} != {}'.format(prop, pool[prop], value))
             elif prop == 'pg_num':
-                self._check_pg_num(value, pool)
+                self._check_pg_num(pool['pool_name'], int(value))
             elif prop == 'application_metadata':
                 self.assertIsInstance(pool[prop], list)
                 self.assertEqual(value, pool[prop])
@@ -117,10 +117,7 @@ class PoolTest(DashboardTestCase):
             else:
                 self.assertEqual(pool[prop], value, '{}: {} != {}'.format(prop, pool[prop], value))
 
-        self.wait_until_equal(self._get_health_status, 'HEALTH_OK', timeout)
-
-    def _get_health_status(self):
-        return self._get('/api/health/minimal')['health']['status']
+        self.wait_for_health_clear(timeout)
 
     def _get_pool(self, pool_name):
         pool = self._get("/api/pool/" + pool_name)
@@ -128,22 +125,24 @@ class PoolTest(DashboardTestCase):
         self.assertSchemaBody(self.pool_schema)
         return pool
 
-    def _check_pg_num(self, value, pool):
+    def _check_pg_num(self, pool_name, pg_num):
         """
         If both properties have not the same value, the cluster goes into a warning state, which
         will only happen during a pg update on an existing pool. The test that does that is
         currently commented out because our QA systems can't deal with the change. Feel free to test
         it locally.
         """
-        pgp_prop = 'pg_placement_num'
-        t = 0
-        while (int(value) != pool[pgp_prop] or self._get_health_status() != 'HEALTH_OK') \
-                and t < 180:
-            time.sleep(2)
-            t += 2
-            pool = self._get_pool(pool['pool_name'])
-        for p in ['pg_num', pgp_prop]:  # Should have the same values
-            self.assertEqual(pool[p], int(value), '{}: {} != {}'.format(p, pool[p], value))
+        self.wait_until_equal(
+            lambda: self._get_pool(pool_name)['pg_placement_num'],
+            expect_val=pg_num,
+            timeout=180
+        )
+
+        pool = self._get_pool(pool_name)
+
+        for prop in ['pg_num', 'pg_placement_num']:
+            self.assertEqual(pool[prop], int(pg_num),
+                             '{}: {} != {}'.format(prop, pool[prop], pg_num))
 
     @DashboardTestCase.RunAs('test', 'test', [{'pool': ['create', 'update', 'delete']}])
     def test_read_access_permissions(self):
