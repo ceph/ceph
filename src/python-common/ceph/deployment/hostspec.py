@@ -1,9 +1,19 @@
 from collections import OrderedDict
 import errno
-try:
-    from typing import Optional, List, Any, Dict
-except ImportError:
-    pass  # just for type checking
+import re
+from typing import Optional, List, Any, Dict
+
+
+def assert_valid_host(name: str) -> None:
+    p = re.compile('^[a-zA-Z0-9-]+$')
+    try:
+        assert len(name) <= 250, 'name is too long (max 250 chars)'
+        for part in name.split('.'):
+            assert len(part) > 0, '.-delimited name component must not be empty'
+            assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
+            assert p.match(part), 'name component must include only a-z, 0-9, and -'
+    except AssertionError as e:
+        raise SpecValidationError(str(e))
 
 
 class SpecValidationError(Exception):
@@ -44,6 +54,9 @@ class HostSpec(object):
         self.status = status or ''  # type: str
 
         self.location = location
+
+    def validate(self) -> None:
+        assert_valid_host(self.hostname)
 
     def to_json(self) -> Dict[str, Any]:
         r: Dict[str, Any] = {
