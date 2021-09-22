@@ -16,12 +16,13 @@ namespace crimson::os::seastore::onode {
 
 using shard_t = int8_t;
 using pool_t = int64_t;
+// Note: this is the reversed version of the object hash
 using crush_hash_t = uint32_t;
 using snap_t = uint64_t;
 using gen_t = uint64_t;
 static_assert(sizeof(shard_t) == sizeof(ghobject_t().shard_id.id));
 static_assert(sizeof(pool_t) == sizeof(ghobject_t().hobj.pool));
-static_assert(sizeof(crush_hash_t) == sizeof(ghobject_t().hobj.get_hash()));
+static_assert(sizeof(crush_hash_t) == sizeof(ghobject_t().hobj.get_bitwise_key_u32()));
 static_assert(sizeof(snap_t) == sizeof(ghobject_t().hobj.snap.val));
 static_assert(sizeof(gen_t) == sizeof(ghobject_t().generation));
 
@@ -78,6 +79,7 @@ inline MatchKindCMP compare_to(const shard_pool_t& l, const shard_pool_t& r) {
   return toMatchKindCMP(l.pool, r.pool);
 }
 
+// Note: this is the reversed version of the object hash
 struct crush_t {
   bool operator==(const crush_t& x) const { return crush == x.crush; }
   bool operator!=(const crush_t& x) const { return !(*this == x); }
@@ -486,8 +488,10 @@ inline const ghobject_t _MIN_OID() {
  * ghobject_t::get_max() if necessary.
  */
 inline const ghobject_t _MAX_OID() {
-  return ghobject_t(shard_id_t(MAX_SHARD), MAX_POOL, MAX_CRUSH,
-                    "MAX", "MAX", MAX_SNAP, MAX_GEN);
+  auto ret = ghobject_t(shard_id_t(MAX_SHARD), MAX_POOL, MAX_CRUSH,
+                        "MAX", "MAX", MAX_SNAP, MAX_GEN);
+  assert(ret.hobj.get_hash() == ret.hobj.get_bitwise_key_u32());
+  return ret;
 }
 
 // the valid key stored in tree should be in the range of (_MIN_OID, _MAX_OID)
@@ -523,7 +527,8 @@ class key_hobj_t {
     return ghobj.hobj.pool;
   }
   crush_hash_t crush() const {
-    return ghobj.hobj.get_hash();
+    // Note: this is the reversed version of the object hash
+    return ghobj.hobj.get_bitwise_key_u32();
   }
   laddr_t get_hint() const {
     return get_lba_hint(shard(), pool(), crush());
@@ -575,6 +580,7 @@ class key_hobj_t {
     ceph::decode(shard, delta);
     pool_t pool;
     ceph::decode(pool, delta);
+    // Note: this is the reversed version of the object hash
     crush_hash_t crush;
     ceph::decode(crush, delta);
     std::string nspace;
