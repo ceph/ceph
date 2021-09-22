@@ -7,6 +7,10 @@
 #include <boost/container/flat_map.hpp>
 #include "rgw_common.h"
 #include "common/OutputDataSocket.h"
+#include <vector>
+#include <fstream>
+
+#define dout_subsys ceph_subsys_rgw
 
 class RGWRados;
 
@@ -125,26 +129,79 @@ struct rgw_log_entry {
 };
 WRITE_CLASS_ENCODER(rgw_log_entry)
 
-class OpsLogSocket : public OutputDataSocket {
+class OpsLogSink {
+public:
+  virtual int log(struct req_state* s, struct rgw_log_entry& entry) = 0;
+  virtual ~OpsLogSink() = default;
+};
+
+class OpsLogManifold: public OpsLogSink {
+  std::vector<OpsLogSink*> sinks;
+public:
+  ~OpsLogManifold() override;
+  void add_sink(OpsLogSink* sink);
+  int log(struct req_state* s, struct rgw_log_entry& entry) override;
+};
+
+class JsonOpsLogSink : public OpsLogSink {
   ceph::Formatter *formatter;
-  ceph::mutex lock = ceph::make_mutex("OpsLogSocket");
+  ceph::mutex lock = ceph::make_mutex("JsonOpsLogSink");
 
   void formatter_to_bl(bufferlist& bl);
-
 protected:
+  virtual int log_json(struct req_state* s, bufferlist& bl) = 0;
+public:
+  JsonOpsLogSink();
+  ~JsonOpsLogSink() override;
+  int log(struct req_state* s, struct rgw_log_entry& entry) override;
+};
+
+class OpsLogFile : public JsonOpsLogSink, public Thread, public DoutPrefixProvider {
+  CephContext* cct;
+  ceph::mutex log_mutex = ceph::make_mutex("OpsLogFile_log");
+  ceph::mutex flush_mutex = ceph::make_mutex("OpsLogFile_flush");
+  std::vector<bufferlist> log_buffer;
+  std::vector<bufferlist> flush_buffer;
+  std::condition_variable cond_flush;
+  std::ofstream file;
+  bool stopped;
+  uint64_t data_size;
+  uint64_t max_data_size;
+
+  void flush();
+protected:
+  int log_json(struct req_state* s, bufferlist& bl) override;
+  void *entry() override;
+public:
+  OpsLogFile(CephContext* cct, std::string& path, uint64_t max_data_size);
+  ~OpsLogFile() override;
+  CephContext *get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return dout_subsys; }
+  std::ostream& gen_prefix(std::ostream& out) const override { return out << "rgw OpsLogFile: "; }
+  void start();
+  void stop();
+};
+
+class OpsLogSocket : public OutputDataSocket, public JsonOpsLogSink {
+protected:
+  int log_json(struct req_state* s, bufferlist& bl) override;
   void init_connection(bufferlist& bl) override;
 
 public:
   OpsLogSocket(CephContext *cct, uint64_t _backlog);
-  ~OpsLogSocket() override;
+};
 
-  void log(struct rgw_log_entry& entry);
+class OpsLogRados : public OpsLogSink {
+  RGWRados* store;
+public:
+  OpsLogRados(RGWRados* store);
+  int log(struct req_state* s, struct rgw_log_entry& entry) override;
 };
 
 class RGWREST;
 
-int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
-	       const string& op_name, OpsLogSocket *olog);
+int rgw_log_op(RGWREST* const rest, struct req_state* s,
+	       const std::string& op_name, OpsLogSink* olog);
 void rgw_log_usage_init(CephContext *cct, RGWRados *store);
 void rgw_log_usage_finalize();
 void rgw_format_ops_log_entry(struct rgw_log_entry& entry,

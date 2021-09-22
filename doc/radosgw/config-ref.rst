@@ -804,6 +804,13 @@ Logging Settings
 :Default: None
 
 
+``rgw_ops_log_file_path``
+
+:Description: The file for writing operations logs.
+:Type: String
+:Default: None
+
+
 ``rgw_ops_log_data_backlog``
 
 :Description: The maximum data backlog data size for operations logs written

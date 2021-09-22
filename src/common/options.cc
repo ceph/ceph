@@ -6509,6 +6509,12 @@ std::vector<Option> get_rgw_options() {
         "RGW will send ops log data through it.")
     .add_see_also({"rgw_enable_ops_log", "rgw_ops_log_data_backlog"}),
 
+    Option("rgw_ops_log_file_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("File-system path for ops log.")
+    .set_long_description("Path to file that RGW will log ops logs to.")
+    .add_see_also({"rgw_enable_ops_log", "rgw_ops_log_data_backlog"}),
+
     Option("rgw_ops_log_data_backlog", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(5 << 20)
     .set_description("Ops log socket backlog")
@@ -6517,7 +6523,7 @@ std::vector<Option> get_rgw_options() {
         "send info through unix domain socket. When data backlog is higher than this, "
         "ops log entries will be lost. In order to avoid ops log information loss, the "
         "listener needs to clear data (by reading it) quickly enough.")
-    .add_see_also({"rgw_enable_ops_log", "rgw_ops_log_socket_path"}),
+    .add_see_also({"rgw_enable_ops_log", "rgw_ops_log_socket_path", "rgw_ops_log_file_path"}),
 
     Option("rgw_fcgi_socket_backlog", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1024)
