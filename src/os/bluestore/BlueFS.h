@@ -304,9 +304,6 @@ public:
   };
 
 private:
-  ceph::mutex log_lock = ceph::make_mutex("BlueFS::log_lock");
-  ceph::mutex dirs_lock = ceph::make_mutex("BlueFS::dirs_lock");
-  ceph::mutex dirty_lock = ceph::make_mutex("BlueFS::dirty_lock");
   PerfCounters *logger = nullptr;
 
   uint64_t max_bytes[MAX_BDEV] = {0};
