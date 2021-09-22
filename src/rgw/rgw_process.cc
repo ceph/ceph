@@ -189,7 +189,7 @@ int process_request(rgw::sal::Store* const store,
                     const std::string& frontend_prefix,
                     const rgw_auth_registry_t& auth_registry,
                     RGWRestfulIO* const client_io,
-                    OpsLogSocket* const olog,
+                    OpsLogSink* const olog,
                     optional_yield yield,
 		    rgw::dmclock::Scheduler *scheduler,
                     string* user,
@@ -356,7 +356,7 @@ done:
   }
 
   if (should_log) {
-    rgw_log_op(store, rest, s, (op ? op->name() : "unknown"), olog);
+    rgw_log_op(rest, s, (op ? op->name() : "unknown"), olog);
   }
 
   if (http_ret != nullptr) {
