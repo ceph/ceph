@@ -1,3 +1,5 @@
+.. _cephadm_deploying_new_cluster:
+
 ============================
 Deploying a new Ceph cluster
 ============================
