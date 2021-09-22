@@ -1297,7 +1297,7 @@ def placement_spec_to_node_selector(spec: PlacementSpec, all_hosts: List) -> ccl
                 values=ccl.CrdObjectList(host_list)
             )
         ) 
-    if spec.host_pattern == "*":
+    if spec.host_pattern == "*" or (not spec.label and not spec.hosts and not spec.host_pattern):
         res.matchExpressions.append(
             ccl.MatchExpressionsItem(
                 key="kubernetes.io/hostname",
