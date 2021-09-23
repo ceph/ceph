@@ -3,6 +3,7 @@ import { FormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import expand from 'brace-expansion';
 
 import { HostService } from '~/app/shared/api/host.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
@@ -23,10 +24,12 @@ export class HostFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   hostnames: string[];
+  hostnameArray: string[] = [];
   addr: string;
   status: string;
   allLabels: string[];
   pageURL: string;
+  hostPattern = false;
 
   messages = new SelectMessages({
     empty: $localize`There are no labels.`,
@@ -59,6 +62,12 @@ export class HostFormComponent extends CdForm implements OnInit {
     });
   }
 
+  // check if hostname is a single value or pattern to hide network address field
+  checkHostNameValue() {
+    const hostNames = this.hostForm.get('hostname').value;
+    hostNames.match(/[()\[\]{},]/g) ? (this.hostPattern = true) : (this.hostPattern = false);
+  }
+
   private createForm() {
     this.hostForm = new CdFormGroup({
       hostname: new FormControl('', {
@@ -77,30 +86,77 @@ export class HostFormComponent extends CdForm implements OnInit {
     });
   }
 
+  private isCommaSeparatedPattern(hostname: string) {
+    // eg. ceph-node-01.cephlab.com,ceph-node-02.cephlab.com
+    return hostname.includes(',');
+  }
+
+  private isRangeTypePattern(hostname: string) {
+    // check if it is a range expression or comma separated range expression
+    // eg. ceph-mon-[01-05].lab.com,ceph-osd-[02-08].lab.com,ceph-rgw-[01-09]
+    return hostname.includes('[') && hostname.includes(']') && !hostname.match(/(?![^(]*\)),/g);
+  }
+
+  private replaceBraces(hostname: string) {
+    // pattern to replace range [0-5] to [0..5](valid expression for brace expansion)
+    // replace any kind of brackets with curly braces
+    return hostname
+      .replace(/(?<=\d)\s*-\s*(?=\d)/g, '..')
+      .replace(/\(/g, '{')
+      .replace(/\)/g, '}')
+      .replace(/\[/g, '{')
+      .replace(/]/g, '}');
+  }
+
+  // expand hostnames in case hostname is a pattern
+  private checkHostNamePattern(hostname: string) {
+    if (this.isRangeTypePattern(hostname)) {
+      const hostnameRange = this.replaceBraces(hostname);
+      this.hostnameArray = expand(hostnameRange);
+    } else if (this.isCommaSeparatedPattern(hostname)) {
+      let hostArray = [];
+      hostArray = hostname.split(',');
+      hostArray.forEach((host: string) => {
+        if (this.isRangeTypePattern(host)) {
+          const hostnameRange = this.replaceBraces(host);
+          this.hostnameArray = this.hostnameArray.concat(expand(hostnameRange));
+        } else {
+          this.hostnameArray.push(host);
+        }
+      });
+    } else {
+      // single hostname
+      this.hostnameArray.push(hostname);
+    }
+  }
+
   submit() {
     const hostname = this.hostForm.get('hostname').value;
+    this.checkHostNamePattern(hostname);
     this.addr = this.hostForm.get('addr').value;
     this.status = this.hostForm.get('maintenance').value ? 'maintenance' : '';
     this.allLabels = this.hostForm.get('labels').value;
     if (this.pageURL !== 'hosts' && !this.allLabels.includes('_no_schedule')) {
       this.allLabels.push('_no_schedule');
     }
-    this.taskWrapper
-      .wrapTaskAroundCall({
-        task: new FinishedTask('host/' + URLVerbs.ADD, {
-          hostname: hostname
-        }),
-        call: this.hostService.create(hostname, this.addr, this.allLabels, this.status)
-      })
-      .subscribe({
-        error: () => {
-          this.hostForm.setErrors({ cdSubmitButton: true });
-        },
-        complete: () => {
-          this.pageURL === 'hosts'
-            ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
-            : this.activeModal.close();
-        }
-      });
+    this.hostnameArray.forEach((hostName: string) => {
+      this.taskWrapper
+        .wrapTaskAroundCall({
+          task: new FinishedTask('host/' + URLVerbs.ADD, {
+            hostname: hostName
+          }),
+          call: this.hostService.create(hostName, this.addr, this.allLabels, this.status)
+        })
+        .subscribe({
+          error: () => {
+            this.hostForm.setErrors({ cdSubmitButton: true });
+          },
+          complete: () => {
+            this.pageURL === 'hosts'
+              ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
+              : this.activeModal.close();
+          }
+        });
+    });
   }
 }

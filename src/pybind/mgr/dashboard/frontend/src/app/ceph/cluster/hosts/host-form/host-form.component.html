@@ -16,8 +16,17 @@
           <!-- Hostname -->
           <div class="form-group row">
             <label class="cd-col-form-label required"
-                   for="hostname"
-                   i18n>Hostname</label>
+                   for="hostname">
+            <ng-container i18n>Hostname</ng-container>
+            <cd-helper>
+              <p i18n>To add multiple hosts at once, you can enter:</p>
+              <ul>
+                <li i18n>a comma-separated list of hostnames <samp>(e.g.: example-01,example-02,example-03)</samp>,</li>
+                <li i18n>a range expression <samp>(e.g.: example-[01-03].ceph)</samp>,</li>
+                <li i18n>a comma separated range expression <samp>(e.g.: example-[01-05].lab.com,example2-[1-4].lab.com,example3-[001-006].lab.com)</samp></li>
+              </ul>
+            </cd-helper>
+            </label>
             <div class="cd-col-form-input">
               <input class="form-control"
                      type="text"
@@ -25,7 +34,8 @@
                      id="hostname"
                      name="hostname"
                      formControlName="hostname"
-                     autofocus>
+                     autofocus
+                     (keyup)="checkHostNameValue()">
               <span class="invalid-feedback"
                     *ngIf="hostForm.showError('hostname', formDir, 'required')"
                     i18n>This field is required.</span>
@@ -36,7 +46,8 @@
           </div>
 
           <!-- Address -->
-          <div class="form-group row">
+          <div class="form-group row"
+               *ngIf="!hostPattern">
             <label class="cd-col-form-label"
                    for="addr"
                    i18n>Nework address</label>
