@@ -21,6 +21,10 @@ RUN dnf -y install docker-ce && \
   dnf clean all && systemctl enable docker
 
 
+EXPOSE 8443
+
+RUN dnf install sudo which -y
+
 FROM centos-systemd-docker
 WORKDIR /root
 COPY start /usr/local/bin
