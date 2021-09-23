@@ -83,14 +83,14 @@ public:
     return bptr.length();
   }
 
-  segment_state_t get(segment_id_t offset) const {
+  segment_state_t get(device_segment_id_t offset) const {
     assert(offset < get_capacity());
     return static_cast<segment_state_t>(
       layout.template Pointer<0>(
 	bptr.c_str())[offset]);
   }
 
-  void set(segment_id_t offset, segment_state_t state) {
+  void set(device_segment_id_t offset, segment_state_t state) {
     assert(offset < get_capacity());
     layout.template Pointer<0>(bptr.c_str())[offset] =
       static_cast<uint8_t>(state);
@@ -141,7 +141,11 @@ public:
     >;
   close_ertr::future<> close();
 
-  BlockSegmentManager(const std::string &path) : device_path(path) {
+  BlockSegmentManager(
+    const std::string &path,
+    device_id_t device_id = 0)
+  : device_path(path),
+    device_id(device_id) {
     register_metrics();
   }
   ~BlockSegmentManager();
@@ -163,6 +167,10 @@ public:
   }
   segment_off_t get_segment_size() const {
     return superblock.segment_size;
+  }
+
+  device_id_t get_device_id() const final {
+    return device_id;
   }
 
   // public so tests can bypass segment interface when simpler
@@ -213,9 +221,11 @@ private:
   block_sm_superblock_t superblock;
   seastar::file device;
 
+  device_id_t device_id = 0;
+
   size_t get_offset(paddr_t addr) {
     return superblock.first_segment_offset +
-      (addr.segment * superblock.segment_size) +
+      (addr.segment.device_segment_id() * superblock.segment_size) +
       addr.offset;
   }
 
