@@ -1011,6 +1011,10 @@ class RookCluster(object):
         objpath = "{0}/{1}".format(rooktype, service_id)
         return f'Removed {objpath}'
 
+    def get_resource(self, resource_type: str) -> Iterable:
+        custom_objects: KubernetesCustomResource = KubernetesCustomResource(self.customObjects_api.list_namespaced_custom_object, group="ceph.rook.io", version="v1", namespace="rook-ceph", plural=resource_type)
+        return custom_objects.items
+
     def can_create_osd(self) -> bool:
         current_cluster = self.rook_api_get(
             "cephclusters/{0}".format(self.rook_env.cluster_name))

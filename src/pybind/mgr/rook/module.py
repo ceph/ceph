@@ -274,10 +274,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         if service_type == 'mds' or service_type is None:
             # CephFilesystems
-            all_fs = self.rook_cluster.rook_api_get(
-                "cephfilesystems/")
-            self.log.debug('CephFilesystems %s' % all_fs)
-            for fs in all_fs.get('items', []):
+            all_fs = self.rook_cluster.get_resource("cephfilesystems")
+            for fs in all_fs:
                 svc = 'mds.' + fs['metadata']['name']
                 if svc in spec:
                     continue
@@ -299,13 +297,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         if service_type == 'rgw' or service_type is None:
             # CephObjectstores
-            all_zones = self.rook_cluster.rook_api_get(
-                "cephobjectstores/")
-            self.log.debug('CephObjectstores %s' % all_zones)
-            for zone in all_zones.get('items', []):
+            all_zones = self.rook_cluster.get_resource("cephobjectstores")
+            for zone in all_zones:
                 rgw_realm = zone['metadata']['name']
                 rgw_zone = rgw_realm
-                svc = 'rgw.' + rgw_realm + '.' + rgw_zone
+                svc = 'rgw.' + rgw_realm
                 if svc in spec:
                     continue
                 active = zone['spec']['gateway']['instances'];
@@ -317,7 +313,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     port = zone['spec']['gateway']['port'] or 80
                 spec[svc] = orchestrator.ServiceDescription(
                     spec=RGWSpec(
-                        service_id=rgw_realm + '.' + rgw_zone,
+                        service_id=zone['metadata']['name'],
                         rgw_realm=rgw_realm,
                         rgw_zone=rgw_zone,
                         ssl=ssl,
@@ -331,10 +327,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         if service_type == 'nfs' or service_type is None:
             # CephNFSes
-            all_nfs = self.rook_cluster.rook_api_get(
-                "cephnfses/")
-            self.log.warning('CephNFS %s' % all_nfs)
-            for nfs in all_nfs.get('items', []):
+            all_nfs = self.rook_cluster.get_resource("cephnfses")
+            for nfs in all_nfs:
                 nfs_name = nfs['metadata']['name']
                 svc = 'nfs.' + nfs_name
                 if svc in spec:
