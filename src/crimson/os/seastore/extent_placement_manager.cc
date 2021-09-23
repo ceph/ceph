@@ -273,7 +273,9 @@ SegmentedAllocator::Writer::roll_segment(bool set_rolling) {
     });
   }
 
-  return segment_provider.get_segment().safe_then([this](auto segment) {
+  return segment_provider.get_segment(
+    segment_manager.get_device_id()
+  ).safe_then([this](auto segment) {
     return segment_manager.open(segment);
   }).safe_then([this](auto segref) {
     LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);

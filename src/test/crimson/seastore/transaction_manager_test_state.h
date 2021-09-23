@@ -76,6 +76,7 @@ auto get_transaction_manager(
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
     SegmentCleaner::config_t::get_default(),
     std::move(scanner),
+    segment_manager,
     true);
   auto journal = std::make_unique<Journal>(segment_manager, scanner_ref);
   auto cache = std::make_unique<Cache>(scanner_ref, segment_manager.get_block_size());
