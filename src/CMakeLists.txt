@@ -65,6 +65,16 @@ list(GET CEPH_RELEASE_FILE 2 CEPH_RELEASE_TYPE)
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph @ONLY)
 
+set(CEPH_FLAVOR "default")
+configure_file(
+  ${CMAKE_SOURCE_DIR}/Dockerfile.in
+  ${PROJECT_BINARY_DIR}/container/default/Dockerfile @ONLY)
+set(CEPH_FLAVOR "crimson")
+configure_file(
+  ${CMAKE_SOURCE_DIR}/Dockerfile.in
+  ${PROJECT_BINARY_DIR}/container/crimson/Dockerfile @ONLY)
+unset(CEPH_FLAVOR)
+
 # Common infrastructure
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake

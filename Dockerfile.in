@@ -1,0 +1,159 @@
+## Ceph base image (input)
+
+# NOTE: final Dockerfiles appear at container/{default,crimson}/Dockerfile
+# under the the cmake build dir.
+
+FROM centos:8
+
+LABEL maintainer="Ceph developers <dev@ceph.io>"
+LABEL ceph="True"
+LABEL CEPH_GIT_REPO="git@github.com:ceph/ceph"
+LABEL CEPH_RELEASE="@CEPH_RELEASE_NAME@"
+LABEL CEPH_GIT_COMMIT="@CEPH_GIT_VER@"
+LABEL CEPH_FLAVOR="@CEPH_FLAVOR@"
+
+# these are for pulling packages from shaman
+ENV FLAVOR @CEPH_FLAVOR@
+ENV CEPH_GIT_COMMIT @CEPH_GIT_VER@
+
+
+## Install all the things
+
+RUN \
+    echo "Installing initial packages..." && \
+    yum install -y \
+        epel-release \
+	jq \
+	dnf-plugins-core && \
+    \
+    echo "Setting up repos..." && \
+    bash -c ' \
+        # ganesha
+    	echo "[ganesha]" > /etc/yum.repos.d/ganesha.repo ; \
+    	echo "name=ganesha" >> /etc/yum.repos.d/ganesha.repo ; \
+    	echo "baseurl=https://buildlogs.centos.org/centos/\$releasever/storage/\$basearch/nfsganesha-3/" >> /etc/yum.repos.d/ganesha.repo ; \
+    	echo "gpgcheck=0" >> /etc/yum.repos.d/ganesha.repo ; \
+    	echo "enabled=1" >> /etc/yum.repos.d/ganesha.repo  ; \
+    	# iscsi
+    	curl -s -L https://shaman.ceph.com/api/repos/tcmu-runner/master/latest/centos/8/repo?arch=$(arch) -o /etc/yum.repos.d/tcmu-runner.repo ; \
+    	curl -s -L https://shaman.ceph.com/api/repos/ceph-iscsi/master/latest/centos/8/repo -o /etc/yum.repos.d/ceph-iscsi.repo \
+   	' && \
+    \
+    yum copr enable -y tchaikov/python-scikit-learn && \
+    yum copr enable -y tchaikov/python3-asyncssh && \
+    \
+    rpm --import 'https://download.ceph.com/keys/release.asc' && \
+    \
+    echo "Updating..." && \
+    yum update -y --setopt=install_weak_deps=False && \
+    \
+    echo "Installing ceph packages..." && \
+    ARCH=$(arch) && \
+    if [[ "${ARCH}" == "aarch64" ]]; then ARCH="arm64"; fi && \
+    \
+    # figure shaman repo URL
+    REPO_URL=$(curl -s "https://shaman.ceph.com/api/search/?project=ceph&distros=centos/8/${ARCH}&flavor=${FLAVOR}&sha1=${CEPH_GIT_COMMIT}" | jq -r .[0].url) && \
+    \
+    RELEASE_VER=0 && \
+    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${RELEASE_VER}.el8.noarch.rpm" && \
+    \
+    PKGS="\
+        ca-certificates \
+        e2fsprogs \
+        ceph-common  \
+        ceph-mon  \
+        ceph-osd \
+        ceph-mds \
+	cephfs-mirror \
+        rbd-mirror  \
+        ceph-mgr \
+	ceph-mgr-cephadm \
+	ceph-mgr-dashboard \
+	ceph-mgr-diskprediction-local \
+	ceph-mgr-k8sevents \
+	ceph-mgr-rook \
+	python3-saml\
+        ceph-grafana-dashboards \
+        kmod \
+        lvm2 \
+        gdisk \
+        smartmontools \
+        nvme-cli \
+        libstoragemgmt \
+        ceph-radosgw \
+	libradosstriper1 \
+        nfs-ganesha nfs-ganesha-ceph nfs-ganesha-rgw nfs-ganesha-rados-grace nfs-ganesha-rados-urls \
+        tcmu-runner \
+	ceph-iscsi \
+	python3-rtslib \
+        attr \
+	ceph-fuse \
+	rbd-nbd \
+        ceph-immutable-object-cache \
+        python3-scikit-learn \
+    	https://apache.jfrog.io/artifactory/arrow/centos/8/apache-arrow-release-latest.rpm \
+        ceph-volume" && \
+    \
+    # crimson?
+    if [[ "${OSD_FLAVOR}" == "crimson" ]]; then PKGS += " ceph-crimson-osd" ; fi && \
+    \
+    yum install -y --setopt=install_weak_deps=False --enablerepo=powertools $PKGS && \
+    \
+    echo 'Postinall cleanup...' && \
+    \
+    # Clean container, starting with record of current size (strip / from end)
+    INITIAL_SIZE="$(bash -c 'sz="$(du -sm --exclude=/proc /)" ; echo "${sz%*/}"')" && \
+    \
+    # Perform any final cleanup actions like package manager cleaning, etc.
+    ( \
+        rm -rf "/usr/bin/hyperkube /usr/bin/etcd /usr/bin/systemd-analyze /usr/share/hwdata/{iab.txt,oui.txt} /etc/profile.d/lang.sh" && \
+	yum clean all && \
+    	# Tweak some configuration files on the container system
+    	# disable sync with udev since the container can not contact udev
+	sed -i -e 's/udev_rules = 1/udev_rules = 0/' -e 's/udev_sync = 1/udev_sync = 0/' -e 's/obtain_device_list_from_udev = 1/obtain_device_list_from_udev = 0/' /etc/lvm/lvm.conf && \
+	# validate the sed command worked as expected
+	grep -sqo "udev_sync = 0" /etc/lvm/lvm.conf && \
+	grep -sqo "udev_rules = 0" /etc/lvm/lvm.conf && \
+	grep -sqo "obtain_device_list_from_udev = 0" /etc/lvm/lvm.conf && \
+    	# Clean common files like /tmp, /var/lib, etc.
+    	rm -rf \
+            /etc/{selinux,systemd,udev} \
+            /lib/{lsb,udev} \
+            /tmp/* \
+            /usr/lib{,64}/{locale,udev,dracut} \
+            /usr/share/{doc,info,locale,man} \
+            /usr/share/{bash-completion,pkgconfig/bash-completion.pc} \
+            /var/log/* \
+            /var/tmp/* && \
+    	find  / -xdev -name "*.pyc" -o -name "*.pyo" -exec rm -f {} \; && \
+    	# ceph-dencoder is only used for debugging, compressing it saves 10MB
+    	# If needed it will be decompressed
+    	# TODO: Is ceph-dencoder safe to remove as rook was trying to do?
+    	# rm -f /usr/bin/ceph-dencoder && \
+    	if [ -f /usr/bin/ceph-dencoder ]; then gzip -9 /usr/bin/ceph-dencoder; fi && \
+    	# TODO: What other ceph stuff needs removed/stripped/zipped here?
+    	# TODO: There was some overlap between this and the ceph clean? Where does it belong?
+    	#       If it's idempotent, it can *always* live here, even if it doesn't always apply
+    	# TODO: Should we even strip ceph libs at all?
+    	bash -c ' \
+	    function ifstrip () { if compgen -g "$1"; then strip -s "$1"; fi } && \
+      	    ifstrip /usr/lib{,64}/ceph/erasure-code/* && \
+      	    ifstrip /usr/lib{,64}/rados-classes/* && \
+      	    ifstrip /usr/lib{,64}/python*/{dist,site}-packages/{rados,rbd,rgw}.*.so && \
+      	    ifstrip /usr/bin/{crushtool,monmaptool,osdmaptool} \
+	' && \
+    	# Photoshop files inside a container ?
+    	rm -f /usr/lib/ceph/mgr/dashboard/static/AdminLTE-*/plugins/datatables/extensions/TableTools/images/psd/* && \
+    	# Some logfiles are not empty, there is no need to keep them
+    	find /var/log/ -type f -exec truncate -s 0 {} \; && \
+    	#
+    	# Report size savings (strip / from end)
+    	FINAL_SIZE="$(bash -c 'sz="$(du -sm --exclude=/proc /)" ; echo "${sz%*/}"')" && \
+    	REMOVED_SIZE=$((INITIAL_SIZE - FINAL_SIZE)) && \
+    	echo "Cleaning process removed ${REMOVED_SIZE}MB" && \
+    	echo "Dropped container size from ${INITIAL_SIZE}MB to ${FINAL_SIZE}MB" && \
+    	#
+    	# Verify that the packages installed haven't been accidentally cleaned
+    	rpm -q $PKGS && \
+	echo 'Packages verified successfully' \
+    )
