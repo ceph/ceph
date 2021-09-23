@@ -187,7 +187,12 @@ class HostData:
                 self.mgr.cache.update_host_devices(host, ret.devices)
 
             if up_to_date:
+                was_out_of_date = not self.mgr.cache.all_host_metadata_up_to_date()
                 self.mgr.cache.metadata_up_to_date[host] = True
+                if was_out_of_date and self.mgr.cache.all_host_metadata_up_to_date():
+                    self.mgr.log.info(
+                        'New metadata from agent has made all hosts up to date. Kicking serve loop')
+                    self.mgr._kick_serve_loop()
                 self.mgr.log.info(
                     f'Received up-to-date metadata from agent on host {host}.')
 
