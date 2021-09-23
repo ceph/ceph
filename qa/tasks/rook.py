@@ -651,15 +651,8 @@ def task(ctx, config):
             if ret.exitstatus == 0:
                 r = json.loads(ret.stdout.getvalue().decode('utf-8'))
                 for service in r:
-                    removal_name = None
-                    if service['service_type'] == 'rgw':
-                        removal_name = 'rgw.' + service['spec']['rgw_realm']
-                    elif service['service_type'] == 'mds':
-                        removal_name = service['service_name']
-                    elif service['service_type'] == 'nfs':
-                        removal_name = service['service_name']
-                    if removal_name != None:
-                        _shell(ctx, config, ['ceph', 'orch', 'rm', removal_name])
+                    if service['service_type'] in ['rgw', 'mds', 'nfs']:
+                        _shell(ctx, config, ['ceph', 'orch', 'rm', service['service_name']])
                         to_remove.append(service['service_name'])
                 with safe_while(sleep=10, tries=90, action="waiting for service removal") as proceed:
                     while proceed():
