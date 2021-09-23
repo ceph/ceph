@@ -14,7 +14,7 @@ from cherrypy.test import helper
 from mgr_module import HandleCommandResult
 from pyfakefs import fake_filesystem
 
-from .. import mgr
+from .. import DEFAULT_API_VERSION, mgr
 from ..controllers import generate_controller_routes, json_error_page
 from ..controllers._version import APIVersion
 from ..module import Module
@@ -154,7 +154,7 @@ class ControllerTestCase(helper.CPWebCase):
         if cls._request_logging:
             cherrypy.config.update({'tools.request_logging.on': False})
 
-    def _request(self, url, method, data=None, headers=None, version=DEFAULT_VERSION):
+    def _request(self, url, method, data=None, headers=None, version=DEFAULT_API_VERSION):
         if not data:
             b = None
             if version:
@@ -177,19 +177,19 @@ class ControllerTestCase(helper.CPWebCase):
             h = headers
         self.getPage(url, method=method, body=b, headers=h)
 
-    def _get(self, url, headers=None, version=DEFAULT_VERSION):
+    def _get(self, url, headers=None, version=DEFAULT_API_VERSION):
         self._request(url, 'GET', headers=headers, version=version)
 
-    def _post(self, url, data=None, version=DEFAULT_VERSION):
+    def _post(self, url, data=None, version=DEFAULT_API_VERSION):
         self._request(url, 'POST', data, version=version)
 
-    def _delete(self, url, data=None, version=DEFAULT_VERSION):
+    def _delete(self, url, data=None, version=DEFAULT_API_VERSION):
         self._request(url, 'DELETE', data, version=version)
 
-    def _put(self, url, data=None, version=DEFAULT_VERSION):
+    def _put(self, url, data=None, version=DEFAULT_API_VERSION):
         self._request(url, 'PUT', data, version=version)
 
-    def _task_request(self, method, url, data, timeout, version=DEFAULT_VERSION):
+    def _task_request(self, method, url, data, timeout, version=DEFAULT_API_VERSION):
         self._request(url, method, data, version=version)
         if self.status != '202 Accepted':
             logger.info("task finished immediately")
@@ -255,13 +255,13 @@ class ControllerTestCase(helper.CPWebCase):
             self.status = 500
         self.body = json.dumps(thread.res_task['exception'])
 
-    def _task_post(self, url, data=None, timeout=60, version=DEFAULT_VERSION):
+    def _task_post(self, url, data=None, timeout=60, version=DEFAULT_API_VERSION):
         self._task_request('POST', url, data, timeout, version=version)
 
-    def _task_delete(self, url, timeout=60, version=DEFAULT_VERSION):
+    def _task_delete(self, url, timeout=60, version=DEFAULT_API_VERSION):
         self._task_request('DELETE', url, None, timeout, version=version)
 
-    def _task_put(self, url, data=None, timeout=60, version=DEFAULT_VERSION):
+    def _task_put(self, url, data=None, timeout=60, version=DEFAULT_API_VERSION):
         self._task_request('PUT', url, data, timeout, version=version)
 
     def json_body(self):

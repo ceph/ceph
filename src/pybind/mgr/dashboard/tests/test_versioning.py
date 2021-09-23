@@ -24,6 +24,10 @@ class VTest(RESTController):
     def vmethod(self):
         return {'version': '1.0'}
 
+    @RESTController.Collection('GET', version="1.1")
+    def vmethodv1_1(self):
+        return {'version': '1.1'}
+
     @RESTController.Collection('GET', version="2.0")
     def vmethodv2(self):
         return {'version': '2.0'}
@@ -59,4 +63,14 @@ class RESTVersioningTest(ControllerTestCase, unittest.TestCase):
         ]:
             with self.subTest(version=version):
                 self._get('/test/api/vtest/vmethodv2', version=version)
+                self.assertStatus(expected_status)
+
+    def test_backward_compatibility(self):
+        for (version, expected_status) in [
+                ("1.1", 200),
+                ("1.0", 200),
+                ("2.0", 415)
+        ]:
+            with self.subTest(version=version):
+                self._get('/test/api/vtest/vmethodv1_1', version=version)
                 self.assertStatus(expected_status)
