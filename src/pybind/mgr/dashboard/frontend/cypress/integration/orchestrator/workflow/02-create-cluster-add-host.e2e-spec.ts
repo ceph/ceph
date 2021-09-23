@@ -9,7 +9,8 @@ describe('Create cluster add host page', () => {
   const hostnames = [
     'ceph-node-00.cephlab.com',
     'ceph-node-01.cephlab.com',
-    'ceph-node-02.cephlab.com'
+    'ceph-node-02.cephlab.com',
+    'ceph-node-[3-4].cephlab.com'
   ];
   const addHost = (hostname: string, exist?: boolean) => {
     cy.get('.btn.btn-accent').first().click({ force: true });
@@ -35,6 +36,7 @@ describe('Create cluster add host page', () => {
 
     addHost(hostnames[1], false);
     addHost(hostnames[2], false);
+    addHost(hostnames[3], false);
   });
 
   it('should delete a host and add it back', () => {

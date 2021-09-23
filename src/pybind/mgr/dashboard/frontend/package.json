@@ -90,6 +90,7 @@
     "@types/file-saver": "2.0.1",
     "async-mutex": "0.2.4",
     "bootstrap": "4.5.2",
+    "brace-expansion": "^2.0.1",
     "chart.js": "2.9.4",
     "detect-browser": "5.2.0",
     "file-saver": "2.0.2",

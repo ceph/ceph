@@ -23,10 +23,12 @@ export class HostFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   hostnames: string[];
+  hostnameArray: string[] = [];
   addr: string;
   status: string;
   allLabels: string[];
   pageURL: string;
+  hostPattern = false;
 
   messages = new SelectMessages({
     empty: $localize`There are no labels.`,
@@ -59,6 +61,16 @@ export class HostFormComponent extends CdForm implements OnInit {
     });
   }
 
+  // check if hostname is a single value or pattern to hide network address field
+  checkHostNameValue() {
+    const hostNames = this.hostForm.get('hostname').value;
+    if (hostNames.match(/[()\[\]{},]/g)) {
+      this.hostPattern = true;
+    } else {
+      this.hostPattern = false;
+    }
+  }
+
   private createForm() {
     this.hostForm = new CdFormGroup({
       hostname: new FormControl('', {
@@ -77,30 +89,65 @@ export class HostFormComponent extends CdForm implements OnInit {
     });
   }
 
+  // expand hostnames in case hostname is a pattern
+  checkHostNamePattern(hostname: string) {
+    const braceExpansion = require('brace-expansion');
+    if (hostname.includes('[') && hostname.includes(']') && !hostname.match(/(?![^(]*\)),/g)) {
+      const hostnameRange = hostname
+        .replace(/(?<=\d)\s*-\s*(?=\d)/g, '..')
+        .replace(/\(/g, '{')
+        .replace(/\)/g, '}')
+        .replace(/\[/g, '{')
+        .replace(/]/g, '}');
+      this.hostnameArray = braceExpansion(hostnameRange);
+    } else if (hostname.includes(',')) {
+      let hostArray = [];
+      hostArray = hostname.split(',');
+      hostArray.forEach((host: string) => {
+        if (host.includes('[') && host.includes(']')) {
+          const hostnameRange = host
+            .replace(/(?<=\d)\s*-\s*(?=\d)/g, '..')
+            .replace(/\(/g, '[')
+            .replace(/\)/g, ']')
+            .replace(/\[/g, '{')
+            .replace(/]/g, '}');
+          this.hostnameArray = this.hostnameArray.concat(braceExpansion(hostnameRange));
+        } else {
+          this.hostnameArray.push(host);
+        }
+      });
+    } else {
+      this.hostnameArray.push(hostname);
+    }
+  }
+
   submit() {
     const hostname = this.hostForm.get('hostname').value;
+    this.checkHostNamePattern(hostname);
     this.addr = this.hostForm.get('addr').value;
     this.status = this.hostForm.get('maintenance').value ? 'maintenance' : '';
     this.allLabels = this.hostForm.get('labels').value;
     if (this.pageURL !== 'hosts' && !this.allLabels.includes('_no_schedule')) {
       this.allLabels.push('_no_schedule');
     }
-    this.taskWrapper
-      .wrapTaskAroundCall({
-        task: new FinishedTask('host/' + URLVerbs.ADD, {
-          hostname: hostname
-        }),
-        call: this.hostService.create(hostname, this.addr, this.allLabels, this.status)
-      })
-      .subscribe({
-        error: () => {
-          this.hostForm.setErrors({ cdSubmitButton: true });
-        },
-        complete: () => {
-          this.pageURL === 'hosts'
-            ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
-            : this.activeModal.close();
-        }
-      });
+    this.hostnameArray.forEach((hostName: string) => {
+      this.taskWrapper
+        .wrapTaskAroundCall({
+          task: new FinishedTask('host/' + URLVerbs.ADD, {
+            hostname: hostName
+          }),
+          call: this.hostService.create(hostName, this.addr, this.allLabels, this.status)
+        })
+        .subscribe({
+          error: () => {
+            this.hostForm.setErrors({ cdSubmitButton: true });
+          },
+          complete: () => {
+            this.pageURL === 'hosts'
+              ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
+              : this.activeModal.close();
+          }
+        });
+    });
   }
 }
