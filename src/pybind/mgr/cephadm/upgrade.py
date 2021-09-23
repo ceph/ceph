@@ -356,24 +356,6 @@ class CephadmUpgrade:
         target_major: str,
         need_upgrade: List[DaemonDescription]
     ) -> bool:
-        # are any daemons running a different major version?
-        scale_down = False
-        for name, info in self.mgr.get("mds_metadata").items():
-            version = info.get("ceph_version_short")
-            major_version = None
-            if version:
-                major_version = version.split('.')[0]
-            if not major_version:
-                self.mgr.log.info('Upgrade: mds.%s version is not known, will retry' % name)
-                time.sleep(5)
-                return False
-            if int(major_version) < int(target_major):
-                scale_down = True
-
-        if not scale_down:
-            self.mgr.log.debug('Upgrade: All MDS daemons run same major version')
-            return True
-
         # scale down all filesystems to 1 MDS
         assert self.upgrade_state
         if not self.upgrade_state.fs_original_max_mds:
