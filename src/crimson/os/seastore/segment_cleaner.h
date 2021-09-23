@@ -383,7 +383,7 @@ private:
   size_t segment_size = 0;
   size_t block_size = 0;
 
-  ScannerRef scanner;
+  ExtentReaderRef scanner;
 
   SpaceTrackerIRef space_tracker;
   std::vector<segment_info_t> segments;
@@ -422,7 +422,7 @@ private:
 public:
   SegmentCleaner(
     config_t config,
-    ScannerRef&& scanner,
+    ExtentReaderRef&& scanner,
     bool detailed = false);
 
   void mount(SegmentManager &sm) {
@@ -652,7 +652,7 @@ private:
 
   // GC status helpers
   std::unique_ptr<
-    Scanner::scan_extents_cursor
+    ExtentReader::scan_extents_cursor
     > scan_cursor;
 
   /**
@@ -730,7 +730,7 @@ private:
   } gc_process;
 
   using gc_ertr = work_ertr::extend_ertr<
-    Scanner::scan_extents_ertr
+    ExtentReader::scan_extents_ertr
     >;
 
   gc_cycle_ret do_gc_cycle();

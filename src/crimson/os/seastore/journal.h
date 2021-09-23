@@ -14,7 +14,7 @@
 #include "include/denc.h"
 
 #include "crimson/common/log.h"
-#include "crimson/os/seastore/scanner.h"
+#include "crimson/os/seastore/extent_reader.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
@@ -30,7 +30,7 @@ class SegmentedAllocator;
  */
 class Journal {
 public:
-  Journal(SegmentManager &segment_manager, Scanner& scanner);
+  Journal(SegmentManager &segment_manager, ExtentReader& scanner);
 
   /**
    * Sets the SegmentProvider.
@@ -156,7 +156,7 @@ private:
   segment_off_t written_to = 0;
   segment_off_t committed_to = 0;
 
-  Scanner& scanner;
+  ExtentReader& scanner;
   WritePipeline *write_pipeline = nullptr;
 
   void reset_soft_state() {

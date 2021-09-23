@@ -127,7 +127,8 @@ seastar::future<bufferlist> TMDriver::read(
 
 void TMDriver::init()
 {
-  auto scanner = std::make_unique<Scanner>(*segment_manager);
+  auto scanner = std::make_unique<ExtentReader>();
+  scanner->add_segment_manager(segment_manager.get());
   auto& scanner_ref = *scanner.get();
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
     SegmentCleaner::config_t::get_default(),
@@ -135,7 +136,7 @@ void TMDriver::init()
     false /* detailed */);
   segment_cleaner->mount(*segment_manager);
   auto journal = std::make_unique<Journal>(*segment_manager, scanner_ref);
-  auto cache = std::make_unique<Cache>(*segment_manager);
+  auto cache = std::make_unique<Cache>(scanner_ref, segment_manager->get_block_size());
   auto lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
 
   auto epm = std::make_unique<ExtentPlacementManager>(*cache, *lba_manager);

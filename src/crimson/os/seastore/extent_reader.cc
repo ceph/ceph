@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab expandtab
 
 #include "crimson/os/seastore/segment_manager.h"
-#include "crimson/os/seastore/scanner.h"
+#include "crimson/os/seastore/extent_reader.h"
 #include "crimson/common/log.h"
 
 namespace {
@@ -13,8 +13,8 @@ namespace {
 
 namespace crimson::os::seastore {
 
-Scanner::read_segment_header_ret
-Scanner::read_segment_header(segment_id_t segment)
+ExtentReader::read_segment_header_ret
+ExtentReader::read_segment_header(segment_id_t segment)
 {
   return segment_manager.read(
     paddr_t{segment, 0},
@@ -22,7 +22,7 @@ Scanner::read_segment_header(segment_id_t segment)
   ).handle_error(
     read_segment_header_ertr::pass_further{},
     crimson::ct_error::assert_all{
-      "Invalid error in Scanner::read_segment_header"
+      "Invalid error in ExtentReader::read_segment_header"
     }
   ).safe_then([=](bufferptr bptr) -> read_segment_header_ret {
     logger().debug("segment {} bptr size {}", segment, bptr.length());
@@ -32,7 +32,7 @@ Scanner::read_segment_header(segment_id_t segment)
     bl.push_back(bptr);
 
     logger().debug(
-      "Scanner::read_segment_header: segment {} block crc {}",
+      "ExtentReader::read_segment_header: segment {} block crc {}",
       segment,
       bl.begin().crc32c(segment_manager.get_block_size(), 0));
 
@@ -41,13 +41,13 @@ Scanner::read_segment_header(segment_id_t segment)
       decode(header, bp);
     } catch (ceph::buffer::error &e) {
       logger().debug(
-	"Scanner::read_segment_header: segment {} unable to decode "
+	"ExtentReader::read_segment_header: segment {} unable to decode "
 	"header, skipping",
 	segment);
       return crimson::ct_error::enodata::make();
     }
     logger().debug(
-      "Scanner::read_segment_header: segment {} header {}",
+      "ExtentReader::read_segment_header: segment {} header {}",
       segment,
       header);
     return read_segment_header_ret(
@@ -55,7 +55,7 @@ Scanner::read_segment_header(segment_id_t segment)
       header);
   });
 }
-Scanner::scan_extents_ret Scanner::scan_extents(
+ExtentReader::scan_extents_ret ExtentReader::scan_extents(
   scan_extents_cursor &cursor,
   extent_len_t bytes_to_read)
 {
@@ -65,7 +65,7 @@ Scanner::scan_extents_ret Scanner::scan_extents(
   ).handle_error(
     scan_extents_ertr::pass_further{},
     crimson::ct_error::assert_all{
-      "Invalid error in Scanner::scan_extents"
+      "Invalid error in ExtentReader::scan_extents"
     }
   ).safe_then([bytes_to_read, extents, &cursor, this](auto segment_header) {
     auto segment_nonce = segment_header.segment_nonce;
@@ -82,7 +82,7 @@ Scanner::scan_extents_ret Scanner::scan_extents(
 	  if (!infos) {
 	    // This should be impossible, we did check the crc on the mdbuf
 	    logger().error(
-	      "Scanner::scan_extents unable to decode extents for record {}",
+	      "ExtentReader::scan_extents unable to decode extents for record {}",
 	      base);
 	    assert(infos);
 	  }
@@ -106,7 +106,7 @@ Scanner::scan_extents_ret Scanner::scan_extents(
   });
 }
 
-Scanner::scan_valid_records_ret Scanner::scan_valid_records(
+ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
   scan_valid_records_cursor &cursor,
   segment_nonce_t nonce,
   size_t budget,
@@ -125,17 +125,17 @@ Scanner::scan_valid_records_ret Scanner::scan_valid_records(
 	  return read_validate_record_metadata(cursor.offset, nonce
 	  ).safe_then([=, &cursor](auto md) {
 	    logger().debug(
-	      "Scanner::scan_valid_records: read complete {}",
+	      "ExtentReader::scan_valid_records: read complete {}",
 	      cursor.offset);
 	    if (!md) {
 	      logger().debug(
-		"Scanner::scan_valid_records: found invalid header at {}, presumably at end",
+		"ExtentReader::scan_valid_records: found invalid header at {}, presumably at end",
 		cursor.offset);
 	      cursor.last_valid_header_found = true;
 	      return scan_valid_records_ertr::now();
 	    } else {
 	      logger().debug(
-		"Scanner::scan_valid_records: valid record read at {}",
+		"ExtentReader::scan_valid_records: valid record read at {}",
 		cursor.offset);
 	      cursor.last_committed = paddr_t{
 		cursor.offset.segment,
@@ -152,7 +152,7 @@ Scanner::scan_valid_records_ret Scanner::scan_valid_records(
 	    return crimson::repeat(
 	      [=, &budget_used, &cursor, &handler] {
 		logger().debug(
-		  "Scanner::scan_valid_records: valid record read, processing queue");
+		  "ExtentReader::scan_valid_records: valid record read, processing queue");
 		if (cursor.pending_records.empty()) {
 		  /* This is only possible if the segment is empty.
 		   * A record's last_commited must be prior to its own
@@ -215,8 +215,8 @@ Scanner::scan_valid_records_ret Scanner::scan_valid_records(
     });
 }
 
-Scanner::read_validate_record_metadata_ret
-Scanner::read_validate_record_metadata(
+ExtentReader::read_validate_record_metadata_ret
+ExtentReader::read_validate_record_metadata(
   paddr_t start,
   segment_nonce_t nonce)
 {
@@ -284,7 +284,7 @@ Scanner::read_validate_record_metadata(
 }
 
 std::optional<std::vector<extent_info_t>>
-Scanner::try_decode_extent_infos(
+ExtentReader::try_decode_extent_infos(
   record_header_t header,
   const bufferlist &bl)
 {
@@ -303,8 +303,8 @@ Scanner::try_decode_extent_infos(
   return extent_infos;
 }
 
-Scanner::read_validate_data_ret
-Scanner::read_validate_data(
+ExtentReader::read_validate_data_ret
+ExtentReader::read_validate_data(
   paddr_t record_base,
   const record_header_t &header)
 {
@@ -318,7 +318,7 @@ Scanner::read_validate_data(
   });
 }
 
-bool Scanner::validate_metadata(const bufferlist &bl)
+bool ExtentReader::validate_metadata(const bufferlist &bl)
 {
   auto bliter = bl.cbegin();
   auto test_crc = bliter.crc32c(

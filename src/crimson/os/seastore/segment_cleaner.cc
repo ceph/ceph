@@ -146,7 +146,7 @@ void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
 
 SegmentCleaner::SegmentCleaner(
   config_t config,
-  ScannerRef&& scr,
+  ExtentReaderRef&& scr,
   bool detailed)
   : detailed(detailed),
     config(config),
@@ -309,7 +309,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
     }
     next.offset = 0;
     scan_cursor =
-      std::make_unique<Scanner::scan_extents_cursor>(
+      std::make_unique<ExtentReader::scan_extents_cursor>(
 	next);
     logger().debug(
       "SegmentCleaner::do_gc: starting gc on segment {}",
@@ -388,13 +388,13 @@ SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
       return scanner->read_segment_header(segment_id)
       .safe_then([&segments, segment_id, this](auto header) {
 	if (header.out_of_line) {
-	  logger().debug("Scanner::init_segments: out-of-line segment {}", segment_id);
+	  logger().debug("ExtentReader::init_segments: out-of-line segment {}", segment_id);
 	  init_mark_segment_closed(
 	    segment_id,
 	    header.journal_segment_seq,
 	    true);
 	} else {
-	  logger().debug("Scanner::init_segments: journal segment {}", segment_id);
+	  logger().debug("ExtentReader::init_segments: journal segment {}", segment_id);
 	  segments.emplace_back(std::make_pair(segment_id, std::move(header)));
 	}
 	return seastar::now();

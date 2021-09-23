@@ -11,16 +11,12 @@ namespace crimson::os::seastore {
 
 class SegmentCleaner;
 
-class Scanner {
+class ExtentReader {
 public:
-  using read_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange>;
-
-  Scanner(SegmentManager& segment_manager)
-    : segment_manager(segment_manager) {}
+  using read_ertr = SegmentManager::read_ertr;
+  ExtentReader() {
+    segment_managers.resize(max_devices, nullptr);
+  }
   using read_segment_header_ertr = crimson::errorator<
     crimson::ct_error::enoent,
     crimson::ct_error::enodata,
@@ -65,6 +61,20 @@ public:
     found_record_handler_t &handler    ///< [in] handler for records
   ); ///< @return used budget
 
+  void add_segment_manager(SegmentManager* segment_manager) {
+    assert(!segment_managers[segment_manager->get_device_id()] ||
+      segment_manager == segment_managers[segment_manager->get_device_id()]);
+    segment_managers[segment_manager->get_device_id()] = segment_manager;
+  }
+
+  read_ertr::future<> read(
+    paddr_t addr,
+    size_t len,
+    ceph::bufferptr &out) {
+    assert(segment_managers[addr.segment.device_id()]);
+    return segment_managers[addr.segment.device_id()]->read(addr, len, out);
+  }
+
 private:
   SegmentManager& segment_manager;
 
@@ -97,6 +107,6 @@ private:
 
 };
 
-using ScannerRef = std::unique_ptr<Scanner>;
+using ExtentReaderRef = std::unique_ptr<ExtentReader>;
 
 } // namespace crimson::os::seastore

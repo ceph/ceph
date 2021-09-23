@@ -50,7 +50,7 @@ segment_nonce_t generate_nonce(
     sizeof(meta.seastore_id.uuid));
 }
 
-Journal::Journal(SegmentManager &segment_manager, Scanner& scanner)
+Journal::Journal(SegmentManager &segment_manager, ExtentReader& scanner)
   : segment_manager(segment_manager), scanner(scanner) {}
 
 
@@ -306,7 +306,7 @@ Journal::replay_segment(
   logger().debug("replay_segment: starting at {}", seq);
   return seastar::do_with(
     scan_valid_records_cursor(seq.offset),
-    Scanner::found_record_handler_t(
+    ExtentReader::found_record_handler_t(
       [=, &handler](paddr_t base,
 		    const record_header_t &header,
 		    const bufferlist &mdbuf) {

@@ -74,13 +74,15 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   const segment_off_t block_size;
 
-  ScannerRef scanner;
+  ExtentReaderRef scanner;
 
   journal_test_t()
     : segment_manager(segment_manager::create_test_ephemeral()),
       block_size(segment_manager->get_block_size()),
-      scanner(std::make_unique<Scanner>(*segment_manager))
-  {}
+      scanner(new ExtentReader())
+  {
+    scanner->add_segment_manager(segment_manager.get());
+  }
 
   segment_id_t next = 0;
   get_segment_ret get_segment() final {

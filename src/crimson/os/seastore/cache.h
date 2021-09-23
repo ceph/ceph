@@ -89,7 +89,7 @@ public:
     crimson::ct_error::input_output_error>;
   using base_iertr = trans_iertr<base_ertr>;
 
-  Cache(SegmentManager &segment_manager);
+  Cache(ExtentReader &reader, segment_off_t block_size);
   ~Cache();
 
   /// Creates empty transaction by source
@@ -612,7 +612,9 @@ public:
   void dump_contents();
 
 private:
-  SegmentManager &segment_manager; ///< ref to segment_manager
+  ExtentReader &reader;	   	   ///< ref to extent reader
+  segment_off_t block_size;	   ///< block size of the segment
+                                   ///< manager holding journal records
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents;             ///< set of live extents
 
@@ -779,7 +781,7 @@ private:
     TCachedExtentRef<T>&& extent
   ) {
     extent->set_io_wait();
-    return segment_manager.read(
+    return reader.read(
       extent->get_paddr(),
       extent->get_length(),
       extent->get_bptr()
