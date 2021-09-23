@@ -2,10 +2,11 @@
 """
 High level status display commands
 """
+import enum
 
 from collections import defaultdict
 from prettytable import PrettyTable
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Any
 import errno
 import fnmatch
 import mgr_util
@@ -13,6 +14,10 @@ import json
 
 from mgr_module import CLIReadCommand, MgrModule, HandleCommandResult
 
+class Format(enum.Enum):
+    plain = 'plain'
+    json = 'json'
+    json_pretty = 'json-pretty'
 
 class Module(MgrModule):
     def get_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
@@ -279,7 +284,7 @@ class Module(MgrModule):
             return HandleCommandResult(stdout=output)
 
     @CLIReadCommand("osd status")
-    def handle_osd_status(self, bucket: Optional[str] = None) -> Tuple[int, str, str]:
+    def handle_osd_status(self, bucket: Optional[str] = None, format: Format = Format.plain) -> Tuple[int, str, str]:
         """
         Show the status of OSDs within a bucket, or all
         """
@@ -298,6 +303,8 @@ class Module(MgrModule):
         osd_table.left_padding_width = 0
         osd_table.right_padding_width = 2
         osdmap = self.get("osd_map")
+
+        json_output: List[Dict[str, Any]] = list()
 
         filter_osds = set()
         bucket_filter = None
@@ -340,14 +347,35 @@ class Module(MgrModule):
             wr_byte_rate = self.get_rate("osd", osd_id.__str__(), "osd.op_in_bytes")
             rd_ops_rate = self.get_rate("osd", osd_id.__str__(), "osd.op_r")
             rd_byte_rate = self.get_rate("osd", osd_id.__str__(), "osd.op_out_bytes")
-            osd_table.add_row([osd_id, hostname,
-                               mgr_util.format_bytes(kb_used, 5),
-                               mgr_util.format_bytes(kb_avail, 5),
-                               mgr_util.format_dimless(wr_ops_rate, 5),
-                               mgr_util.format_bytes(wr_byte_rate, 5),
-                               mgr_util.format_dimless(rd_ops_rate, 5),
-                               mgr_util.format_bytes(rd_byte_rate, 5),
-                               ','.join(osd['state']),
-                               ])
+            if format == Format.json or format == Format.json_pretty:
+                json_output.append({
+                                    "id": osd_id,
+                                    "hostname": hostname,
+                                    "used": kb_used,
+                                    "avail": kb_avail,
+                                    "wr_ops": wr_ops_rate,
+                                    "wr_data": wr_byte_rate,
+                                    "rd_ops": rd_ops_rate,
+                                    "rd_data": rd_byte_rate,
+                                    "state": ','.join(osd['state']),
+                                    })
+            else:
+                osd_table.add_row([osd_id, hostname,
+                                   mgr_util.format_bytes(kb_used, 5),
+                                   mgr_util.format_bytes(kb_avail, 5),
+                                   mgr_util.format_dimless(wr_ops_rate, 5),
+                                   mgr_util.format_bytes(wr_byte_rate, 5),
+                                   mgr_util.format_dimless(rd_ops_rate, 5),
+                                   mgr_util.format_bytes(rd_byte_rate, 5),
+                                   ','.join(osd['state']),
+                                   ])
 
-        return 0, osd_table.get_string(), ""
+        if format == Format.json:
+            return HandleCommandResult(stdout=json.dumps(json_output, sort_keys=True))
+        elif format == Format.json_pretty:
+            return HandleCommandResult(stdout=json.dumps(json_output, sort_keys=True, indent=4,
+                                                         separators=(',', ': ')))
+        elif format == Format.plain:
+            return HandleCommandResult(stdout=osd_table.get_string())
+        else:
+            raise Exception(f'unsupported format type: {format}')
