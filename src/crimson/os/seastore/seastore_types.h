@@ -36,28 +36,132 @@ struct seastore_meta_t {
   }
 };
 
+// identifies a specific physical device within seastore
+using device_id_t = uint8_t;
+// order of device_id_t
+constexpr uint16_t device_id_len = 4;
+// maximum devices supported
+constexpr uint16_t max_devices = 1 << device_id_len;
+
+// segment ids without a device id encapsulated
+using device_segment_id_t = uint32_t;
+
+struct segment_id_le_t;
+
 // Identifies segment location on disk, see SegmentManager,
-using segment_id_t = uint32_t;
+struct segment_id_t {
+private:
+  // internal segment id type of segment_id_t, basically
+  // this is a unsigned int with the top "device_id_len"
+  // bits representing the id of the device on which the
+  // segment resides
+  using internal_segment_id_t = uint32_t;
+
+  // mask for segment manager id
+  static constexpr internal_segment_id_t SM_ID_MASK =
+    0xF << (std::numeric_limits<internal_segment_id_t>::digits - device_id_len);
+  // default internal segment id
+  static constexpr internal_segment_id_t DEFAULT_INTERNAL_SEG_ID =
+    std::numeric_limits<internal_segment_id_t>::max() - 1;
+public:
+  internal_segment_id_t segment = DEFAULT_INTERNAL_SEG_ID;
+
+  segment_id_t() = default;
+  constexpr segment_id_t(device_segment_id_t segment)
+    : segment(segment) {}
+  segment_id_t(device_id_t id, device_segment_id_t segment)
+    : segment(add_device_id(segment, id)) {
+    // only lower 4 bits are effective, and we have to reserve 0x0F for
+    // special XXX_SEG_IDs
+    assert(id < 15);
+  }
+
+  [[gnu::always_inline]]
+  device_id_t device_id() const {
+    return get_device_id(segment);
+  }
+
+  [[gnu::always_inline]]
+  device_segment_id_t device_segment_id() const {
+    return strip_device_id(segment);
+  }
+
+  bool operator==(const segment_id_t& other) const {
+    return segment == other.segment;
+  }
+  bool operator!=(const segment_id_t& other) const {
+    return segment != other.segment;
+  }
+  bool operator<(const segment_id_t& other) const {
+    return segment < other.segment;
+  }
+  bool operator<=(const segment_id_t& other) const {
+    return segment <= other.segment;
+  }
+  bool operator>(const segment_id_t& other) const {
+    return segment > other.segment;
+  }
+  bool operator>=(const segment_id_t& other) const {
+    return segment >= other.segment;
+  }
+
+  DENC(segment_id_t, v, p) {
+    denc(v.segment, p);
+  }
+private:
+  inline device_id_t get_device_id(internal_segment_id_t id) const {
+    return (device_id_t)((id & SM_ID_MASK) >>
+	(std::numeric_limits<internal_segment_id_t>::digits - device_id_len));
+  }
+
+  inline internal_segment_id_t add_device_id(
+    device_segment_id_t id,
+    device_id_t sm_id) const {
+    return id + (sm_id <<
+	(std::numeric_limits<internal_segment_id_t>::digits - device_id_len));
+  }
+
+  inline device_segment_id_t strip_device_id(internal_segment_id_t id) const {
+    return id & (~SM_ID_MASK);
+  }
+
+  friend struct segment_id_le_t;
+};
+
+// ondisk type of segment_id_t
+struct __attribute((packed)) segment_id_le_t {
+  ceph_le32 segment = ceph_le32(segment_id_t::DEFAULT_INTERNAL_SEG_ID);
+
+  segment_id_le_t(const segment_id_t id) :
+    segment(ceph_le32(id.segment)) {}
+
+  operator segment_id_t() const {
+    return segment_id_t(segment);
+  }
+};
+
 constexpr segment_id_t MAX_SEG_ID =
-  std::numeric_limits<segment_id_t>::max();
+  {std::numeric_limits<device_segment_id_t>::max()};
 constexpr segment_id_t NULL_SEG_ID =
-  std::numeric_limits<segment_id_t>::max() - 1;
+  {std::numeric_limits<device_segment_id_t>::max() - 1};
 /* Used to denote relative paddr_t */
 constexpr segment_id_t RECORD_REL_SEG_ID =
-  std::numeric_limits<segment_id_t>::max() - 2;
+  {std::numeric_limits<device_segment_id_t>::max() - 2};
 constexpr segment_id_t BLOCK_REL_SEG_ID =
-  std::numeric_limits<segment_id_t>::max() - 3;
+  {std::numeric_limits<device_segment_id_t>::max() - 3};
 // for tests which generate fake paddrs
 constexpr segment_id_t FAKE_SEG_ID =
-  std::numeric_limits<segment_id_t>::max() - 4;
-
+  {std::numeric_limits<device_segment_id_t>::max() - 4};
 /* Used to denote references to notional zero filled segment, mainly
  * in denoting reserved laddr ranges for unallocated object data.
  */
 constexpr segment_id_t ZERO_SEG_ID =
-  std::numeric_limits<segment_id_t>::max() - 5;
+  {std::numeric_limits<device_segment_id_t>::max() - 5};
 constexpr segment_id_t DELAYED_TEMP_SEG_ID =
-  std::numeric_limits<segment_id_t>::max() - 6;
+  {std::numeric_limits<device_segment_id_t>::max() - 6};
+
+std::ostream &operator<<(std::ostream &out, const segment_id_t&);
+
 
 std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
 
@@ -104,6 +208,13 @@ constexpr record_delta_idx_t NULL_DELTA_IDX =
 struct paddr_t {
   segment_id_t segment = NULL_SEG_ID;
   segment_off_t offset = NULL_SEG_OFF;
+
+  paddr_t() = default;
+  paddr_t(device_id_t id, device_segment_id_t sgt, segment_off_t offset)
+    : segment(segment_id_t(id, sgt)), offset(offset) {}
+
+  constexpr paddr_t(segment_id_t segment, segment_off_t offset)
+    : segment(segment), offset(offset) {}
 
   bool is_relative() const {
     return segment == RECORD_REL_SEG_ID ||
@@ -223,14 +334,12 @@ constexpr paddr_t delayed_temp_paddr(segment_off_t off) {
 }
 
 struct __attribute((packed)) paddr_le_t {
-  ceph_le32 segment = ceph_le32(NULL_SEG_ID);
+  segment_id_le_t segment = segment_id_le_t(NULL_SEG_ID);
   ceph_les32 offset = ceph_les32(NULL_SEG_OFF);
 
   paddr_le_t() = default;
-  paddr_le_t(ceph_le32 segment, ceph_les32 offset)
-    : segment(segment), offset(offset) {}
   paddr_le_t(segment_id_t segment, segment_off_t offset)
-    : segment(ceph_le32(segment)), offset(ceph_les32(offset)) {}
+    : segment(segment), offset(ceph_les32(offset)) {}
   paddr_le_t(const paddr_t &addr) : paddr_le_t(addr.segment, addr.offset) {}
 
   operator paddr_t() const {
@@ -899,6 +1008,7 @@ struct scan_valid_records_cursor {
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_id_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::paddr_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal_seq_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::delta_info_t)
