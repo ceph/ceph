@@ -537,7 +537,7 @@ class Module(MgrModule):
                 if check.name in active_names:
                     check_data = active_healthchecks[check.name]
                     message = check_data['summary'].get('message', '')
-                    v, err = 0, 0
+                    v, err = 1, 0
 
                     if check.name == "SLOW_OPS":
                         # 42 slow ops, oldest one blocked for 12 sec, daemons [osd.0, osd.3] have
