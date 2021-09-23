@@ -7,6 +7,7 @@ declare global {
   }
 }
 
+import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 import { Permissions } from '~/app/shared/models/permissions';
 
 let auth: any;
@@ -27,7 +28,7 @@ Cypress.Commands.add('login', () => {
     cy.request({
       method: 'POST',
       url: 'api/auth',
-      headers: { Accept: 'application/vnd.ceph.api.v1.0+json' },
+      headers: { Accept: CdHelperClass.cdVersionHeader('1', '0') },
       body: { username: username, password: password }
     }).then((resp) => {
       auth = resp.body;
