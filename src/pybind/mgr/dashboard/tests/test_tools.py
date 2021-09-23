@@ -10,7 +10,7 @@ try:
 except ImportError:
     from unittest.mock import patch
 
-from .. import DEFAULT_VERSION
+from .. import DEFAULT_API_VERSION
 from ..controllers import ApiController, BaseController, Controller, Proxy, RESTController
 from ..services.exception import handle_rados_error
 from ..tools import dict_contains_path, dict_get, json_str_to_object, partial_dict
@@ -87,7 +87,7 @@ class RESTControllerTest(ControllerTestCase):
         self._get("/foo")
         self.assertStatus('200 OK')
         self.assertHeader('Content-Type',
-                          'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION))
+                          'application/vnd.ceph.api.v{}+json'.format(DEFAULT_API_VERSION))
         self.assertBody('[]')
 
     def test_fill(self):
@@ -99,18 +99,18 @@ class RESTControllerTest(ControllerTestCase):
                 self.assertJsonBody(data)
                 self.assertStatus(201)
                 self.assertHeader('Content-Type',
-                                  'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION))
+                                  'application/vnd.ceph.api.v{}+json'.format(DEFAULT_API_VERSION))
 
             self._get("/foo")
             self.assertStatus('200 OK')
             self.assertHeader('Content-Type',
-                              'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION))
+                              'application/vnd.ceph.api.v{}+json'.format(DEFAULT_API_VERSION))
             self.assertJsonBody([data] * 5)
 
             self._put('/foo/0', {'newdata': 'newdata'})
             self.assertStatus('200 OK')
             self.assertHeader('Content-Type',
-                              'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION))
+                              'application/vnd.ceph.api.v{}+json'.format(DEFAULT_API_VERSION))
             self.assertJsonBody({'newdata': 'newdata', 'key': '0'})
 
     def test_not_implemented(self):

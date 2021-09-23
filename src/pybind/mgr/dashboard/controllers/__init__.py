@@ -16,9 +16,9 @@ from urllib.parse import unquote
 # pylint: disable=wrong-import-position
 import cherrypy
 # pylint: disable=import-error
-from ceph_argparse import ArgumentFormat  # type: ignore
+from ceph_argparse import ArgumentFormat
 
-from .. import DEFAULT_VERSION
+from .. import DEFAULT_API_VERSION, APIVersion
 from ..api.doc import SchemaInput, SchemaType
 from ..exceptions import DashboardException, PermissionNotValid, ScopeNotValid
 from ..plugins import PLUGIN_MANAGER
@@ -219,7 +219,7 @@ class UiApiController(Controller):
 class Endpoint:
 
     def __init__(self, method=None, path=None, path_params=None, query_params=None,  # noqa: N802
-                 json_response=True, proxy=False, xml=False, version=DEFAULT_VERSION):
+                 json_response=True, proxy=False, xml=False, version=DEFAULT_API_VERSION):
         if method is None:
             method = 'GET'
         elif not isinstance(method, str) or \
@@ -695,7 +695,7 @@ class BaseController(object):
                          version):
         @wraps(func)
         def inner(*args, **kwargs):
-            req_version = None
+            client_version = None
             for key, value in kwargs.items():
                 if isinstance(value, str):
                     kwargs[key] = unquote(value)
@@ -705,21 +705,23 @@ class BaseController(object):
             kwargs.update(params)
 
             if version is not None:
+                server_version = APIVersion.to_tuple(version)
                 accept_header = cherrypy.request.headers.get('Accept')
-                if accept_header and accept_header.startswith('application/vnd.ceph.api.v'):
-                    req_match = re.search(r"\d\.\d", accept_header)
-                    if req_match:
-                        req_version = req_match[0]
+                req_match = APIVersion.from_string(accept_header)
+                if accept_header and req_match:
+                    client_version = req_match
                 else:
                     raise cherrypy.HTTPError(415, "Unable to find version in request header")
 
-                if req_version and req_version == version:
+                if server_version.supports(client_version):
                     ret = func(*args, **kwargs)
                 else:
                     raise cherrypy.HTTPError(415,
                                              "Incorrect version: "
                                              "{} requested but {} is expected"
-                                             "".format(req_version, version))
+                                             "".format(
+                                                 f'{client_version.major}.{client_version.minor}',
+                                                 version))
             else:
                 ret = func(*args, **kwargs)
             if isinstance(ret, bytes):
@@ -811,14 +813,14 @@ class RESTController(BaseController):
     }
 
     _method_mapping = collections.OrderedDict([
-        ('list', {'method': 'GET', 'resource': False, 'status': 200, 'version': DEFAULT_VERSION}),
-        ('create', {'method': 'POST', 'resource': False, 'status': 201, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
-        ('bulk_set', {'method': 'PUT', 'resource': False, 'status': 200, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
-        ('bulk_delete', {'method': 'DELETE', 'resource': False, 'status': 204, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
-        ('get', {'method': 'GET', 'resource': True, 'status': 200, 'version': DEFAULT_VERSION}),
-        ('delete', {'method': 'DELETE', 'resource': True, 'status': 204, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
-        ('set', {'method': 'PUT', 'resource': True, 'status': 200, 'version': DEFAULT_VERSION}),
-        ('singleton_set', {'method': 'PUT', 'resource': False, 'status': 200, 'version': DEFAULT_VERSION})  # noqa E501 #pylint: disable=line-too-long
+        ('list', {'method': 'GET', 'resource': False, 'status': 200, 'version': DEFAULT_API_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('create', {'method': 'POST', 'resource': False, 'status': 201, 'version': DEFAULT_API_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('bulk_set', {'method': 'PUT', 'resource': False, 'status': 200, 'version': DEFAULT_API_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('bulk_delete', {'method': 'DELETE', 'resource': False, 'status': 204, 'version': DEFAULT_API_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('get', {'method': 'GET', 'resource': True, 'status': 200, 'version': DEFAULT_API_VERSION}),
+        ('delete', {'method': 'DELETE', 'resource': True, 'status': 204, 'version': DEFAULT_API_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('set', {'method': 'PUT', 'resource': True, 'status': 200, 'version': DEFAULT_API_VERSION}),
+        ('singleton_set', {'method': 'PUT', 'resource': False, 'status': 200, 'version': DEFAULT_API_VERSION})  # noqa E501 #pylint: disable=line-too-long
     ])
 
     @classmethod
@@ -848,7 +850,7 @@ class RESTController(BaseController):
                 'method': None,
                 'query_params': None,
                 'path': '',
-                'version': DEFAULT_VERSION,
+                'version': DEFAULT_API_VERSION,
                 'sec_permissions': hasattr(func, '_security_permissions'),
                 'permission': None,
             }
@@ -952,7 +954,7 @@ class RESTController(BaseController):
 
     @staticmethod
     def Resource(method=None, path=None, status=None, query_params=None,  # noqa: N802
-                 version=DEFAULT_VERSION):
+                 version=DEFAULT_API_VERSION):
         if not method:
             method = 'GET'
 
@@ -971,7 +973,7 @@ class RESTController(BaseController):
         return _wrapper
 
     @staticmethod
-    def MethodMap(resource=False, status=None, version=DEFAULT_VERSION):  # noqa: N802
+    def MethodMap(resource=False, status=None, version=DEFAULT_API_VERSION):  # noqa: N802
 
         if status is None:
             status = 200
@@ -987,7 +989,7 @@ class RESTController(BaseController):
 
     @staticmethod
     def Collection(method=None, path=None, status=None, query_params=None,  # noqa: N802
-                   version=DEFAULT_VERSION):
+                   version=DEFAULT_API_VERSION):
         if not method:
             method = 'GET'
 

@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Union
 
 import cherrypy
 
-from .. import DEFAULT_VERSION, mgr
+from .. import DEFAULT_API_VERSION, mgr
 from ..api.doc import Schema, SchemaInput, SchemaType
 from . import ENDPOINT_MAP, BaseController, Controller, Endpoint
 
@@ -203,7 +203,7 @@ class Docs(BaseController):
         }
 
         if not version:
-            version = DEFAULT_VERSION
+            version = DEFAULT_API_VERSION
 
         if method.lower() == 'get':
             resp['200'] = {'description': "OK",
