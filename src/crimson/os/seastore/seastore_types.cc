@@ -31,6 +31,12 @@ std::ostream &offset_to_stream(std::ostream &out, const segment_off_t &t)
     return out << t;
 }
 
+std::ostream &operator<<(std::ostream &out, const segment_id_t& segment)
+{
+  return out << "[" << (uint64_t)segment.device_id() << ","
+    << segment.device_segment_id() << "]";
+}
+
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 {
   out << "paddr_t<";

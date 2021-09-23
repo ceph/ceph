@@ -42,7 +42,11 @@ struct cache_test_t : public seastar_test_suite_t {
 		segment_manager->get_segment_size());
     if (current.offset + (segment_off_t)bl.length() >
 	segment_manager->get_segment_size())
-      current = paddr_t{current.segment + 1, 0};
+      current = paddr_t{
+	segment_id_t(
+	  current.segment.device_id(),
+	  current.segment.device_segment_id() + 1),
+	0};
 
     auto prev = current;
     current.offset += bl.length();

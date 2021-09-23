@@ -84,9 +84,13 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   segment_id_t next = 0;
   get_segment_ret get_segment() final {
+    auto ret = next;
+    next = segment_id_t{
+      next.device_id(),
+      next.device_segment_id() + 1};
     return get_segment_ret(
       get_segment_ertr::ready_future_marker{},
-      next++);
+      ret);
   }
 
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
@@ -117,8 +121,9 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 	std::vector<std::pair<segment_id_t, segment_header_t>>(),
 	[this](auto& segments) {
 	return crimson::do_for_each(
-	  boost::make_counting_iterator(segment_id_t{0}),
-	  boost::make_counting_iterator(segment_manager->get_num_segments()),
+	  boost::make_counting_iterator(device_segment_id_t{0}),
+	  boost::make_counting_iterator(device_segment_id_t{
+	    segment_manager->get_num_segments()}),
 	  [this, &segments](auto segment_id) {
 	  return scanner->read_segment_header(segment_id)
 	  .safe_then([&segments, segment_id](auto header) {

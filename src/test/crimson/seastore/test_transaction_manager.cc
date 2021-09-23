@@ -392,7 +392,7 @@ struct transaction_manager_test_t :
 	  t,
 	  [&tracker](auto offset, auto len) {
 	    tracker->allocate(
-	      offset.segment,
+	      offset.segment.segment,
 	      offset.offset,
 	      len);
 	  });

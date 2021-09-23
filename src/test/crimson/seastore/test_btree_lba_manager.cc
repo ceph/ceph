@@ -50,9 +50,13 @@ struct btree_lba_manager_test :
 
   segment_id_t next = 0;
   get_segment_ret get_segment() final {
+    auto ret = next;
+    next = segment_id_t{
+      next.device_id(),
+      next.device_segment_id() + 1};
     return get_segment_ret(
       get_segment_ertr::ready_future_marker{},
-      next++);
+      ret);
   }
 
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
