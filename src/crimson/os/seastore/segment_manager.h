@@ -7,6 +7,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
+#include <boost/iterator/counting_iterator.hpp>
 #include <seastar/core/future.hh>
 
 #include "include/ceph_assert.h"
@@ -128,11 +129,13 @@ public:
   virtual size_t get_size() const = 0;
   virtual segment_off_t get_block_size() const = 0;
   virtual segment_off_t get_segment_size() const = 0;
-  virtual segment_id_t get_num_segments() const {
+  virtual device_segment_id_t get_num_segments() const {
     ceph_assert(get_size() % get_segment_size() == 0);
-    return ((segment_id_t)(get_size() / get_segment_size()));
+    return ((device_segment_id_t)(get_size() / get_segment_size()));
   }
   virtual const seastore_meta_t &get_meta() const = 0;
+
+  virtual device_id_t get_device_id() const = 0;
 
   virtual ~SegmentManager() {}
 };

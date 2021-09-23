@@ -192,8 +192,16 @@ protected:
 
 class TestSegmentManagerWrapper final : public SegmentManager {
   SegmentManager &sm;
+  device_id_t device_id = 0;
 public:
-  TestSegmentManagerWrapper(SegmentManager &sm) : sm(sm) {}
+  TestSegmentManagerWrapper(
+    SegmentManager &sm,
+    device_id_t device_id = 0)
+    : sm(sm), device_id(device_id) {}
+
+  device_id_t get_device_id() const {
+    return device_id;
+  }
 
   mount_ret mount() final {
     return mount_ertr::now(); // we handle this above

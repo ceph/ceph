@@ -343,8 +343,10 @@ Segment::write_ertr::future<> BlockSegment::write(
 Segment::close_ertr::future<> BlockSegmentManager::segment_close(
     segment_id_t id, segment_off_t write_pointer)
 {
+  assert(id.device_id() == superblock.device_id);
+  auto s_id = id.device_segment_id();
   assert(tracker);
-  tracker->set(id, segment_state_t::CLOSED);
+  tracker->set(s_id, segment_state_t::CLOSED);
   ++stats.closed_segments;
   int unused_bytes = get_segment_size() - write_pointer;
   assert(unused_bytes >= 0);
@@ -358,6 +360,7 @@ Segment::write_ertr::future<> BlockSegmentManager::segment_write(
   ceph::bufferlist bl,
   bool ignore_check)
 {
+  assert(addr.segment.device_id() == get_device_id());
   assert((bl.length() % superblock.block_size) == 0);
   logger().debug(
     "BlockSegmentManager::segment_write: "
@@ -394,7 +397,7 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
       device,
       superblock.tracker_offset
     ).safe_then([this] {
-      for (segment_id_t i = 0; i < tracker->get_capacity(); ++i) {
+      for (device_segment_id_t i = 0; i < tracker->get_capacity(); ++i) {
 	if (tracker->get(i) == segment_state_t::OPEN) {
 	  tracker->set(i, segment_state_t::CLOSED);
 	}
@@ -446,26 +449,29 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(seastore_meta_t meta)
 
 BlockSegmentManager::close_ertr::future<> BlockSegmentManager::close()
 {
+  metrics.clear();
   return device.close();
 }
 
 SegmentManager::open_ertr::future<SegmentRef> BlockSegmentManager::open(
   segment_id_t id)
 {
-  if (id >= get_num_segments()) {
+  assert(id.device_id() == superblock.device_id);
+  auto s_id = id.device_segment_id();
+  if (s_id >= get_num_segments()) {
     logger().error("BlockSegmentManager::open: invalid segment {}", id);
     return crimson::ct_error::invarg::make();
   }
 
-  if (tracker->get(id) != segment_state_t::EMPTY) {
+  if (tracker->get(s_id) != segment_state_t::EMPTY) {
     logger().error(
       "BlockSegmentManager::open: invalid segment {} state {}",
       id,
-      tracker->get(id));
+      tracker->get(s_id));
     return crimson::ct_error::invarg::make();
   }
 
-  tracker->set(id, segment_state_t::OPEN);
+  tracker->set(s_id, segment_state_t::OPEN);
   stats.metadata_write.increment(tracker->get_size());
   return tracker->write_out(device, superblock.tracker_offset
   ).safe_then([this, id] {
@@ -479,24 +485,26 @@ SegmentManager::open_ertr::future<SegmentRef> BlockSegmentManager::open(
 SegmentManager::release_ertr::future<> BlockSegmentManager::release(
   segment_id_t id)
 {
+  assert(id.device_id() == superblock.device_id);
+  auto s_id = id.device_segment_id();
   logger().debug("BlockSegmentManager::release: {}", id);
 
-  if (id >= get_num_segments()) {
+  if (s_id >= get_num_segments()) {
     logger().error(
       "BlockSegmentManager::release: invalid segment {}",
       id);
     return crimson::ct_error::invarg::make();
   }
 
-  if (tracker->get(id) != segment_state_t::CLOSED) {
+  if (tracker->get(s_id) != segment_state_t::CLOSED) {
     logger().error(
       "BlockSegmentManager::release: invalid segment {} state {}",
       id,
-      tracker->get(id));
+      tracker->get(s_id));
     return crimson::ct_error::invarg::make();
   }
 
-  tracker->set(id, segment_state_t::EMPTY);
+  tracker->set(s_id, segment_state_t::EMPTY);
   ++stats.released_segments;
   stats.metadata_write.increment(tracker->get_size());
   return tracker->write_out(device, superblock.tracker_offset);
@@ -507,7 +515,8 @@ SegmentManager::read_ertr::future<> BlockSegmentManager::read(
   size_t len,
   ceph::bufferptr &out)
 {
-  if (addr.segment >= get_num_segments()) {
+  assert(addr.segment.device_id() == get_device_id());
+  if (addr.segment.device_segment_id() >= get_num_segments()) {
     logger().error(
       "BlockSegmentManager::read: invalid segment {}",
       addr);
@@ -522,11 +531,11 @@ SegmentManager::read_ertr::future<> BlockSegmentManager::read(
     return crimson::ct_error::invarg::make();
   }
 
-  if (tracker->get(addr.segment) == segment_state_t::EMPTY) {
+  if (tracker->get(addr.segment.device_segment_id()) == segment_state_t::EMPTY) {
     logger().error(
       "BlockSegmentManager::read: read on invalid segment {} state {}",
       addr.segment,
-      tracker->get(addr.segment));
+      tracker->get(addr.segment.device_segment_id()));
     return crimson::ct_error::enoent::make();
   }
 

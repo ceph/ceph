@@ -56,7 +56,7 @@ class EphemeralSegmentManager final : public SegmentManager {
   std::optional<seastore_meta_t> meta;
 
   size_t get_offset(paddr_t addr) {
-    return (addr.segment * config.segment_size) + addr.offset;
+    return (addr.segment.device_segment_id() * config.segment_size) + addr.offset;
   }
 
   std::vector<segment_state_t> segment_state;
@@ -65,9 +65,18 @@ class EphemeralSegmentManager final : public SegmentManager {
 
   Segment::close_ertr::future<> segment_close(segment_id_t id);
 
+  device_id_t device_id = 0;
+
 public:
-  EphemeralSegmentManager(ephemeral_config_t config) : config(config) {}
+  EphemeralSegmentManager(
+    ephemeral_config_t config,
+    device_id_t device_id = 0)
+    : config(config), device_id(device_id) {}
   ~EphemeralSegmentManager();
+
+  device_id_t get_device_id() const {
+    return device_id;
+  }
 
   using init_ertr = crimson::errorator<
     crimson::ct_error::enospc,
