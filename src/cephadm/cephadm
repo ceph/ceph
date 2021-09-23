@@ -1294,28 +1294,28 @@ if sys.version_info < (3, 8):
 
         def __init__(self) -> None:
             self._pid_counter = itertools.count(0)
-            self._threads = {}
+            self._threads: Dict[Any, Any] = {}
 
-        def is_active(self):
+        def is_active(self) -> bool:
             return True
 
-        def close(self):
+        def close(self) -> None:
             self._join_threads()
 
-        def _join_threads(self):
+        def _join_threads(self) -> None:
             """Internal: Join all non-daemon threads"""
             threads = [thread for thread in list(self._threads.values())
                        if thread.is_alive() and not thread.daemon]
             for thread in threads:
                 thread.join()
 
-        def __enter__(self):
+        def __enter__(self) -> Any:
             return self
 
-        def __exit__(self, exc_type, exc_val, exc_tb):
+        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
             pass
 
-        def __del__(self, _warn=warnings.warn):
+        def __del__(self, _warn: Any = warnings.warn) -> None:
             threads = [thread for thread in list(self._threads.values())
                        if thread.is_alive()]
             if threads:
@@ -1323,7 +1323,7 @@ if sys.version_info < (3, 8):
                       ResourceWarning,
                       source=self)
 
-        def add_child_handler(self, pid, callback, *args):
+        def add_child_handler(self, pid: Any, callback: Any, *args: Any) -> None:
             loop = events.get_event_loop()
             thread = threading.Thread(target=self._do_waitpid,
                                       name=f'waitpid-{next(self._pid_counter)}',
@@ -1332,16 +1332,16 @@ if sys.version_info < (3, 8):
             self._threads[pid] = thread
             thread.start()
 
-        def remove_child_handler(self, pid):
+        def remove_child_handler(self, pid: Any) -> bool:
             # asyncio never calls remove_child_handler() !!!
             # The method is no-op but is implemented because
             # abstract base classe requires it
             return True
 
-        def attach_loop(self, loop):
+        def attach_loop(self, loop: Any) -> None:
             pass
 
-        def _do_waitpid(self, loop, expected_pid, callback, args):
+        def _do_waitpid(self, loop: Any, expected_pid: Any, callback: Any, args: Any) -> None:
             assert expected_pid > 0
 
             try:
@@ -7711,27 +7711,31 @@ def command_exporter(ctx: CephadmContext) -> None:
 ##################################
 
 
-def systemd_target_state(target_name: str, subsystem: str = 'ceph') -> bool:
+def systemd_target_state(ctx: CephadmContext, target_name: str, subsystem: str = 'ceph') -> bool:
     # TODO: UNITTEST
     return os.path.exists(
         os.path.join(
-            UNIT_DIR,
+            ctx.unit_dir,
             f'{subsystem}.target.wants',
             target_name
         )
     )
 
 
+def target_exists(ctx: CephadmContext) -> bool:
+    return os.path.exists(ctx.unit_dir + '/ceph.target')
+
+
 @infer_fsid
 def command_maintenance(ctx: CephadmContext) -> str:
     if not ctx.fsid:
-        raise Error('must pass --fsid to specify cluster')
+        raise Error('failed - must pass --fsid to specify cluster')
 
     target = f'ceph-{ctx.fsid}.target'
 
     if ctx.maintenance_action.lower() == 'enter':
         logger.info('Requested to place host into maintenance')
-        if systemd_target_state(target):
+        if systemd_target_state(ctx, target):
             _out, _err, code = call(ctx,
                                     ['systemctl', 'disable', target],
                                     verbosity=CallVerbosity.DEBUG)
@@ -7754,8 +7758,14 @@ def command_maintenance(ctx: CephadmContext) -> str:
 
     else:
         logger.info('Requested to exit maintenance state')
+        # if we've never deployed a daemon on this host there will be no systemd
+        # target to disable so attempting a disable will fail. We still need to
+        # return success here or host will be permanently stuck in maintenance mode
+        # as no daemons can be deployed so no systemd target will ever exist to disable.
+        if not target_exists(ctx):
+            return 'skipped - systemd target not present on this host. Host removed from maintenance mode.'
         # exit maintenance request
-        if not systemd_target_state(target):
+        if not systemd_target_state(ctx, target):
             _out, _err, code = call(ctx,
                                     ['systemctl', 'enable', target],
                                     verbosity=CallVerbosity.DEBUG)
