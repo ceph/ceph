@@ -1663,7 +1663,7 @@ int RGWLC::process(LCWorker* worker, bool once = false)
   vector<int> shard_seq = random_sequence(max_objs);
   for (auto index : shard_seq) {
     int ret = process(index, max_secs, worker, once);
-    if (ret < 0)
+    if (ret < 0 || going_down())
       return ret;
   }
 
@@ -1806,7 +1806,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     lock->unlock();
     ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
     bucket_lc_post(index, max_lock_secs, entry, ret, worker);
-  } while(1 && !once);
+  } while(!going_down() && !once);
 
   delete lock;
   return 0;
