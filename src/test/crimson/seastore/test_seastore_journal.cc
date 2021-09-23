@@ -85,7 +85,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   }
 
   segment_id_t next = 0;
-  get_segment_ret get_segment() final {
+  get_segment_ret get_segment(device_id_t id) final {
     auto ret = next;
     next = segment_id_t{
       next.device_id(),
@@ -94,6 +94,8 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
       get_segment_ertr::ready_future_marker{},
       ret);
   }
+
+  void set_segment_written_to(paddr_t addr) final {}
 
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
   void update_journal_tail_committed(journal_seq_t paddr) final {}

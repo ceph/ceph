@@ -15,6 +15,17 @@ namespace {
 
 namespace crimson::os::seastore {
 
+template <typename SegmentInfoT>
+void segment_manager_info_t<SegmentInfoT>::init_segment_infos(
+  SegmentInfoT&& segment_info)
+{
+  segment_infos.resize(num_segments, std::move(segment_info));
+  for (device_segment_id_t j = 0; j < num_segments; j++) {
+    segment_infos[j].segment = segment_id_t(device_id, j);
+    crimson::get_logger(ceph_subsys_seastore).debug("added segment: {}", segment_id_t(device_id, j));
+  }
+}
+
 bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
 {
   const auto &other = static_cast<const SpaceTrackerSimple&>(_other);
@@ -26,22 +37,24 @@ bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
   }
 
   bool all_match = true;
-  for (segment_id_t i = 0; i < live_bytes_by_segment.size(); ++i) {
-    if (other.live_bytes_by_segment[i] != live_bytes_by_segment[i]) {
+  for (auto i = live_bytes_by_segment.begin(), j = other.live_bytes_by_segment.begin();
+       i != live_bytes_by_segment.end(); ++i, ++j) {
+    assert(i->segment == j->segment);
+    if (i->live_bytes != j->live_bytes) {
       all_match = false;
       logger().debug(
 	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
 	__func__,
-	i,
-	live_bytes_by_segment[i],
-	other.live_bytes_by_segment[i]);
+	i->segment,
+	i->live_bytes,
+	j->live_bytes);
     }
   }
   return all_match;
 }
 
 int64_t SpaceTrackerDetailed::SegmentMap::allocate(
-  segment_id_t segment,
+  device_segment_id_t segment,
   segment_off_t offset,
   extent_len_t len,
   const extent_len_t block_size)
@@ -73,7 +86,7 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
 }
 
 int64_t SpaceTrackerDetailed::SegmentMap::release(
-  segment_id_t segment,
+  device_segment_id_t segment,
   segment_off_t offset,
   extent_len_t len,
   const extent_len_t block_size)
@@ -115,15 +128,17 @@ bool SpaceTrackerDetailed::equals(const SpaceTrackerI &_other) const
   }
 
   bool all_match = true;
-  for (segment_id_t i = 0; i < segment_usage.size(); ++i) {
-    if (other.segment_usage[i].get_usage() != segment_usage[i].get_usage()) {
+  for (auto i = segment_usage.begin(), j = other.segment_usage.begin();
+       i != segment_usage.end(); ++i, ++j) {
+    assert(i->segment == j->segment);
+    if (i->segment_map.get_usage() != j->segment_map.get_usage()) {
       all_match = false;
       logger().error(
 	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
 	__func__,
-	i,
-	segment_usage[i].get_usage(),
-	other.segment_usage[i].get_usage());
+	i->segment,
+	i->segment_map.get_usage(),
+	j->segment_map.get_usage());
     }
   }
   return all_match;
@@ -141,7 +156,8 @@ void SpaceTrackerDetailed::SegmentMap::dump_usage(extent_len_t block_size) const
 void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
 {
   logger().debug("SpaceTrackerDetailed::dump_usage {}", id);
-  segment_usage[id].dump_usage(block_size);
+  segment_usage[id].segment_map.dump_usage(
+    segment_usage[id.device_id()]->block_size);
 }
 
 SegmentCleaner::SegmentCleaner(
@@ -167,13 +183,33 @@ void SegmentCleaner::register_metrics()
 
 SegmentCleaner::get_segment_ret SegmentCleaner::get_segment()
 {
-  for (size_t i = 0; i < segments.size(); ++i) {
-    if (segments[i].is_empty()) {
-      mark_open(i);
-      logger().debug("{}: returning segment {}", __func__, i);
+  for (auto& segment_info : segments) {
+    if (segment_info.is_empty()) {
+      mark_open(segment_info.segment);
+      logger().debug("{}: returning segment {}", __func__, segment_info.segment);
       return get_segment_ret(
 	get_segment_ertr::ready_future_marker{},
-	i);
+	segment_info.segment);
+    }
+  }
+  assert(0 == "out of space handling todo");
+  return get_segment_ret(
+    get_segment_ertr::ready_future_marker{},
+    0);
+}
+
+SegmentCleaner::get_segment_ret SegmentCleaner::get_segment(device_id_t id)
+{
+  for (auto it = segments.find_begin(id);
+       it != segments.find_end(id);
+       it++) {
+    auto& segment_info = *it;
+     if (segment_info.is_empty()) {
+      mark_open(segment_info.segment);
+      logger().debug("{}: returning segment {}", __func__, segment_info.segment);
+      return get_segment_ret(
+	get_segment_ertr::ready_future_marker{},
+	segment_info.segment);
     }
   }
   assert(0 == "out of space handling todo");
@@ -378,15 +414,17 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 }
 
 SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
+  logger().debug("SegmentCleaner::init_segments: {} segments", segments.size());
   return seastar::do_with(
     std::vector<std::pair<segment_id_t, segment_header_t>>(),
-    [this](auto& segments) {
+    [this](auto& segment_set) {
     return crimson::do_for_each(
-      boost::make_counting_iterator(segment_id_t{0}),
-      boost::make_counting_iterator(segment_id_t{num_segments}),
-      [this, &segments](auto segment_id) {
+      segments.begin(),
+      segments.end(),
+      [this, &segment_set](auto& segment_info) {
+      auto segment_id = segment_info.segment;
       return scanner->read_segment_header(segment_id)
-      .safe_then([&segments, segment_id, this](auto header) {
+      .safe_then([&segment_set, segment_id, this](auto header) {
 	if (header.out_of_line) {
 	  logger().debug("ExtentReader::init_segments: out-of-line segment {}", segment_id);
 	  init_mark_segment_closed(
@@ -395,7 +433,7 @@ SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
 	    true);
 	} else {
 	  logger().debug("ExtentReader::init_segments: journal segment {}", segment_id);
-	  segments.emplace_back(std::make_pair(segment_id, std::move(header)));
+	  segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
 	}
 	return seastar::now();
       }).handle_error(
@@ -407,10 +445,10 @@ SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
 	}),
 	crimson::ct_error::input_output_error::pass_further{}
       );
-    }).safe_then([&segments] {
+    }).safe_then([&segment_set] {
       return seastar::make_ready_future<
 	std::vector<std::pair<segment_id_t, segment_header_t>>>(
-	  std::move(segments));
+	  std::move(segment_set));
     });
   });
 }
