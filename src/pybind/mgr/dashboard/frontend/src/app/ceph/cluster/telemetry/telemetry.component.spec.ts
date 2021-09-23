@@ -171,54 +171,101 @@ describe('TelemetryComponent', () => {
     });
 
     it('should only replace the ranges and values of a JSON object', () => {
-      let report = component.replacerTest({
-        ranges: [
-          [null, -1],
-          [0, 511],
-          [512, 1023]
-        ],
-        values: [
-          [0, 0, 0],
-          [0, 0, 0],
-          [0, 0, 0]
-        ],
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ]
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
         other: [
           [0, 0, 0],
           [0, 0, 0],
           [0, 0, 0]
         ]
       });
-      report = JSON.parse(report);
 
-      // Ensure that the outer arrays have remained untouched by replacer
       expect(
-        Array.isArray(report['ranges']) &&
-          Array.isArray(report['values']) &&
-          Array.isArray(report['other'])
-      ).toBeTruthy();
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: true
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: true
+      });
 
-      if (
-        Array.isArray(report['ranges']) &&
-        Array.isArray(report['values']) &&
-        Array.isArray(report['other'])
-      ) {
-        let idx;
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: 1
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: 1
+      });
 
-        // Check that each range in 'ranges' was replaced by a string
-        for (idx = 0; idx < report['ranges'].length; idx++) {
-          expect(typeof report['ranges'][idx] === 'string').toBeTruthy();
-        }
-
-        // Check that each value in 'values' was replaced by a string
-        for (idx = 0; idx < report['values'].length; idx++) {
-          expect(typeof report['values'][idx] === 'string').toBeTruthy();
-        }
-
-        // Check that each value in 'other' has remained untouched, as it is not a value or range
-        for (idx = 0; idx < report['other'].length; idx++) {
-          expect(Array.isArray(report['other'][idx])).toBeTruthy();
-        }
-      }
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: { value: 0 }
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: { value: 0 }
+      });
     });
 
     it('should submit', () => {
