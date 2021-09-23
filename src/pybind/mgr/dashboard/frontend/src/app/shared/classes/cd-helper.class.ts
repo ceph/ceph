@@ -21,4 +21,8 @@ export class CdHelperClass {
 
     return hasChanges;
   }
+
+  static cdVersionHeader(major_ver: string, minor_ver: string) {
+    return `application/vnd.ceph.api.v${major_ver}.${minor_ver}+json`;
+  }
 }

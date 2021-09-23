@@ -7,6 +7,7 @@ import { map, mergeMap, toArray } from 'rxjs/operators';
 
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { InventoryHost } from '~/app/ceph/cluster/inventory/inventory-host.model';
+import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 import { Daemon } from '../models/daemon.interface';
 import { CdDevice } from '../models/devices';
 import { SmartDataResponseV1 } from '../models/smart';
@@ -29,7 +30,7 @@ export class HostService {
     return this.http.post(
       this.baseURL,
       { hostname: hostname, addr: addr, labels: labels, status: status },
-      { observe: 'response', headers: { Accept: 'application/vnd.ceph.api.v0.1+json' } }
+      { observe: 'response', headers: { Accept: CdHelperClass.cdVersionHeader('0', '1') } }
     );
   }
 

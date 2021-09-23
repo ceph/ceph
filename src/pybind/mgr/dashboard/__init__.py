@@ -5,10 +5,35 @@ ceph dashboard module
 """
 
 import os
+import re
+from typing import NamedTuple
 
 import cherrypy
 
-DEFAULT_VERSION = '1.0'
+DEFAULT_API_VERSION = '1.0'
+
+
+class APIVersion(NamedTuple):
+    major: int = 1
+    minor: int = 0
+
+    @classmethod
+    def from_string(cls, version_string):
+        result = re.match(r'application/vnd\.ceph\.api\.v(\d+)\.(\d+)\+json', version_string)
+        if result:
+            return cls(*(int(s) for s in result.groups()))
+        return None
+
+    def __str__(self):
+        return f'{self.major}.{self.minor}'
+
+    def supports(self, client_version):
+        return self.major == client_version.major and client_version.minor <= self.minor
+
+    @staticmethod
+    def to_tuple(version: str):
+        return APIVersion(int(version.split('.')[0]), int(version.split('.')[1]))
+
 
 if 'COVERAGE_ENABLED' in os.environ:
     import coverage  # pylint: disable=import-error
