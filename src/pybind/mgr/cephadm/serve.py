@@ -605,6 +605,7 @@ class CephadmServe:
         # end up stuck between wanting metadata to be up to date to apply specs
         # and needing to apply the agent spec to get up to date metadata
         if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
+            self.log.info('Metadata not up to date on all hosts. Skipping non agent specs')
             try:
                 specs.append(self.mgr.spec_store['agent'].spec)
             except Exception as e:
