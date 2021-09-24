@@ -8,18 +8,6 @@ function run() {
     local dir=$1
     shift
 
-    export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
-    export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--mon-host=$CEPH_MON "
-    CEPH_ARGS+="--bluestore_block_size=2147483648 "
-    CEPH_ARGS+="--bluestore_block_db_create=true "
-    CEPH_ARGS+="--bluestore_block_db_size=1073741824 "
-    CEPH_ARGS+="--bluestore_block_wal_size=536870912 "
-    CEPH_ARGS+="--bluestore_bluefs_min=536870912 "
-    CEPH_ARGS+="--bluestore_bluefs_min_free=536870912 "
-    CEPH_ARGS+="--bluestore_block_wal_create=true "
-    CEPH_ARGS+="--bluestore_fsck_on_mount=true "
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
         setup $dir || return 1
@@ -35,6 +23,18 @@ function TEST_bluestore() {
     if [ $flimit -lt 1536 ]; then
         echo "Low open file limit ($flimit), test may fail. Increase to 1536 or higher and retry if that happens."
     fi
+    export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
+    export CEPH_ARGS
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--bluestore_block_size=2147483648 "
+    CEPH_ARGS+="--bluestore_block_db_create=true "
+    CEPH_ARGS+="--bluestore_block_db_size=1073741824 "
+    CEPH_ARGS+="--bluestore_block_wal_size=536870912 "
+    CEPH_ARGS+="--bluestore_bluefs_min=536870912 "
+    CEPH_ARGS+="--bluestore_bluefs_min_free=536870912 "
+    CEPH_ARGS+="--bluestore_block_wal_create=true "
+    CEPH_ARGS+="--bluestore_fsck_on_mount=true "
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
@@ -335,6 +335,65 @@ function TEST_bluestore() {
 
     # write some objects
     timeout 60 rados bench -p foo 30 write -b 4096 --no-cleanup #|| return 1
+
+    wait_for_clean || return 1
+}
+
+function TEST_bluestore2() {
+    local dir=$1
+
+    local flimit=$(ulimit -n)
+    if [ $flimit -lt 1536 ]; then
+        echo "Low open file limit ($flimit), test may fail. Increase to 1536 or higher and retry if that happens."
+    fi
+    export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
+    export CEPH_ARGS
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--bluestore_block_size=4294967296 "
+    CEPH_ARGS+="--bluestore_block_db_create=true "
+    CEPH_ARGS+="--bluestore_block_db_size=1073741824 "
+    CEPH_ARGS+="--bluestore_bluefs_min=536870912 "
+    CEPH_ARGS+="--bluestore_bluefs_min_free=536870912 "
+    CEPH_ARGS+="--bluestore_block_wal_create=false "
+    CEPH_ARGS+="--bluestore_fsck_on_mount=true "
+    CEPH_ARGS+="--osd_pool_default_size=1 "
+    CEPH_ARGS+="--osd_pool_default_min_size=1 "
+    CEPH_ARGS+="--bluestore_debug_enforce_settings=ssd "
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    osd_pid0=$(cat $dir/osd.0.pid)
+
+    sleep 5
+    create_pool foo 16
+
+    # write some objects
+    timeout 60 rados bench -p foo 10 write --write-omap --no-cleanup #|| return 1
+
+    #give RocksDB some time to cooldown and put files to slow level(s)
+    sleep 10
+
+    spilled_over=$( ceph tell osd.0 perf dump bluefs | jq ".bluefs.slow_used_bytes" )
+    test $spilled_over -gt 0 || return 1
+
+    while kill $osd_pid0; do sleep 1 ; done
+    ceph osd down 0
+
+    ceph-bluestore-tool --path $dir/0 \
+      --devs-source $dir/0/block.db \
+      --dev-target $dir/0/block \
+      --command bluefs-bdev-migrate || return 1
+
+    ceph-bluestore-tool --path $dir/0 \
+      --command bluefs-bdev-sizes || return 1
+
+    ceph-bluestore-tool --path $dir/0 \
+      --command fsck || return 1
+
+    activate_osd $dir 0 || return 1
+    osd_pid0=$(cat $dir/osd.0.pid)
 
     wait_for_clean || return 1
 }
