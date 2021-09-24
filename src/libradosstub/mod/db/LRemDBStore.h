@@ -17,8 +17,17 @@ class LRemDBOps {
 
   std::unique_ptr<SQLite::Database> db;
 
-  std::vector<std::string> deferred_statements;
+  struct queued_statement {
+    int count{0};
+    std::unique_ptr<SQLite::Statement> statement;
+  };
 
+  std::map<int, queued_statement> deferred_statements;
+  std::map<string, int> statement_keys;
+
+  int statement_num{0};
+
+  void queue_remove_key(const std::string& key);
 public:
   LRemDBOps(const std::string& _name, int _flags);
 
@@ -30,10 +39,11 @@ public:
   SQLite::Statement statement(const std::string& sql);
   SQLite::Statement *deferred_statement(const std::string& sql);
 
-  void queue_statement(SQLite::Statement *statement) {
-    deferred_statements.push_back(statement->getExpandedSQL());
-    delete statement;
-  }
+  void queue_statement(SQLite::Statement *statement, const std::string& key);
+  void queue_statement(SQLite::Statement *statement, std::vector<std::string>& keys);
+  void queue_statement_range(SQLite::Statement *statement,
+                             const std::string& begin,
+                             const std::string& end);
 
   void flush();
 

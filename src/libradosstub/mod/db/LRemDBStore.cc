@@ -52,11 +52,16 @@ static inline string join_quoted(const T& v, const string& sep = ", ")
   return result;
 }
 
-string sprintf_int(const char *format, int val)
+static string sprintf_int(const char *format, int val)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), format, val);
   return string(buf);
+}
+
+static string to_str(int val)
+{
+  return sprintf_int("%d", val);
 }
 
 template <class T>
@@ -137,6 +142,69 @@ void LRemDBOps::Transaction::complete_op(int r) {
   }
 }
 
+/* remove key, and drop refcount off the statement it points at,
+ * if no other key points at it then remove statement
+ */
+void LRemDBOps::queue_remove_key(const std::string& key) {
+  auto iter = statement_keys.find(key);
+  if (iter == statement_keys.end()) {
+    return;
+  }
+
+  statement_keys.erase(key);
+
+  int num = iter->second;
+
+  auto siter = deferred_statements.find(num);
+  if (siter == deferred_statements.end()) {
+    return;
+  }
+
+  auto& entry = siter->second;
+
+  --entry.count;
+  if (entry.count == 0) {
+    deferred_statements.erase(siter);
+  }
+}
+
+void LRemDBOps::queue_statement(SQLite::Statement *statement, const std::string& key) {
+  int num = statement_num++;
+
+  queue_remove_key(key);
+  statement_keys[key] = num;
+  deferred_statements[num] = {1, std::unique_ptr<SQLite::Statement>(statement)};
+}
+
+void LRemDBOps::queue_statement(SQLite::Statement *statement, std::vector<std::string>& keys) {
+  int num = statement_num++;
+
+  for (const auto& k : keys) {
+    queue_remove_key(k);
+    statement_keys[k] = num;
+  }
+
+  deferred_statements[num] = {(int)keys.size(), std::unique_ptr<SQLite::Statement>(statement)};
+}
+
+void LRemDBOps::queue_statement_range(SQLite::Statement *statement,
+                                      const std::string& begin,
+                                      const std::string& end) {
+  int num = statement_num++;
+
+  auto iter = statement_keys.lower_bound(begin);
+  if (iter != statement_keys.end()) {
+    auto eiter = statement_keys.upper_bound(end);
+
+    for (; iter != eiter; ++iter) {
+      queue_remove_key(iter->first);
+    }
+  }
+
+  /* this operation isn't indexed by key, therefore can't be removed */
+  deferred_statements[num] = {1, std::unique_ptr<SQLite::Statement>(statement)};
+}
+
 static ceph::mutex flush_lock = ceph::make_mutex("LRemDBOps::flush_lock");
 
 void LRemDBOps::flush() {
@@ -148,8 +216,9 @@ void LRemDBOps::flush() {
 
   Transaction t(*db);
 
-  for (auto& s : deferred_statements) {
-    int r = exec(s);
+  for (auto& i : deferred_statements) {
+    auto& s = i.second.statement;
+    int r = exec(*s);
     if (r < 0) {
       t.complete_op(r);
       break;
@@ -157,6 +226,7 @@ void LRemDBOps::flush() {
   }
 
   deferred_statements.clear();
+  statement_keys.clear();
 }
 
 #warning remove me
@@ -607,6 +677,7 @@ int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
     *pmeta = *trans->cache.meta;
     return 0;
   }
+
   try {
     auto q = dbo->statement(string("SELECT size, mtime, objver, snap_id, snaps, snap_overlap, epoch from ") + table_name +
                             " WHERE nspace = ? AND oid = ?");
@@ -634,6 +705,8 @@ int LRemDBStore::Obj::read_meta(LRemDBStore::Obj::Meta *pmeta) {
       }
       pmeta->epoch = (long long)q.getColumn(6);
 
+      trans->cache.meta = *pmeta;
+
       return 0;
     }
 
@@ -660,7 +733,7 @@ int LRemDBStore::Obj::write_meta(const LRemDBStore::Obj::Meta& meta) {
   q->bind(8, encode_base64(meta.snap_overlap));
   q->bind(9, (long long)meta.epoch);
 
-  dbo->queue_statement(q);
+  dbo->queue_statement(q, join({table_name, nspace, oid}, ":"));
 
   trans->cache.meta = meta;
 
@@ -675,7 +748,7 @@ int LRemDBStore::Obj::remove_meta() {
   q->bind(1, nspace);
   q->bind(2, oid);
 
-  dbo->queue_statement(q);
+  dbo->queue_statement(q, join({table_name, nspace, oid}, ":"));
 
   return 0;
 }
@@ -862,7 +935,7 @@ int LRemDBStore::ObjData::write_block(int bid, bufferlist& bl) {
   q->bind(3, bid);
   q->bind(4, bl.c_str(), bl.length());
 
-  dbo->queue_statement(q);
+  dbo->queue_statement(q, join({table_name, nspace, oid, to_str(bid)}, ":"));
 
   return 0;
 }
@@ -876,7 +949,7 @@ int LRemDBStore::ObjData::truncate_block(int bid) {
   q->bind(2, oid);
   q->bind(3, bid);
 
-  dbo->queue_statement(q);
+  dbo->queue_statement(q, join({table_name, nspace, oid, to_str(bid)}, ":"));
 
   return 0;
 }
@@ -974,7 +1047,7 @@ int LRemDBStore::ObjData::remove() {
   q->bind(1, nspace);
   q->bind(2, oid);
 
-  dbo->queue_statement(q);
+  dbo->queue_statement(q, join({table_name, nspace, oid}, ":"));
 
   return 0;
 }
@@ -1184,7 +1257,12 @@ int LRemDBStore::KVTableBase::rm_keys(const std::set<std::string>& keys) {
   q->bind(1, nspace);
   q->bind(2, oid);
 
-  dbo->queue_statement(q);
+  std::vector<string> qkeys;
+  for (auto& k : keys) {
+    qkeys.push_back(join({table_name, nspace, oid, k}, ":"));
+  }
+
+  dbo->queue_statement(q, qkeys);
 
   return 0;
 }
@@ -1201,7 +1279,10 @@ int LRemDBStore::KVTableBase::rm_range(const string& key_begin,
   q->bind(3, key_begin);
   q->bind(4, key_end);
 
-  dbo->queue_statement(q);
+  string qstart = join({table_name, nspace, oid, key_begin}, ":");
+  string qend = join({table_name, nspace, oid, key_end}, ":");
+
+  dbo->queue_statement_range(q, qstart, qend);
 
   return 0;
 }
@@ -1213,7 +1294,7 @@ int LRemDBStore::KVTableBase::clear() {
   q->bind(1, nspace);
   q->bind(2, oid);
 
-  dbo->queue_statement(q);
+  dbo->queue_statement(q, join({table_name, nspace, oid}, ":"));
 
   return 0;
 }
@@ -1232,7 +1313,7 @@ int LRemDBStore::KVTableBase::set(const std::map<std::string, bufferlist>& m) {
     q->bind(3, key);
     q->bind(4, bl.c_str(), bl.length());
 
-    dbo->queue_statement(q);
+    dbo->queue_statement(q, join({table_name, nspace, oid, key}, ":"));
   }
 
   return m.size();
