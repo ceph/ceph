@@ -185,7 +185,14 @@ seastar::future<> FSDriver::mkfs()
   ).then([this] {
     uuid_d uuid;
     uuid.generate_random();
-    return fs->mkfs(uuid);
+    return fs->mkfs(uuid).handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        crimson::get_logger(ceph_subsys_test)
+          .error("error creating empty object store in {}: ({}) {}",
+          crimson::common::local_conf().get_val<std::string>("osd_data"),
+          ec.value(), ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([this] {
     return fs->stop();
   }).then([this] {
