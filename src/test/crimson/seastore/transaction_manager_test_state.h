@@ -36,7 +36,7 @@ protected:
   }
 
   virtual seastar::future<> _teardown() = 0;
-  virtual seastar::future<> _mkfs() = 0;
+  virtual FuturizedStore::mkfs_ertr::future<> _mkfs() = 0;
   virtual seastar::future<> _mount() = 0;
 
   void restart() {
@@ -153,7 +153,7 @@ protected:
     });
   }
 
-  virtual seastar::future<> _mkfs() {
+  virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
     return tm->mkfs(
     ).handle_error(
       crimson::ct_error::assert_all{"Error in teardown"}
@@ -234,26 +234,26 @@ protected:
 
   SeaStoreTestState() : EphemeralTestState() {}
 
-  virtual void _init() {
+  virtual void _init() final {
     seastore = get_seastore(
       std::make_unique<TestSegmentManagerWrapper>(*segment_manager));
   }
 
-  virtual void _destroy() {
+  virtual void _destroy() final {
     seastore.reset();
   }
 
-  virtual seastar::future<> _teardown() {
+  virtual seastar::future<> _teardown() final {
     return seastore->umount().then([this] {
       seastore.reset();
     });
   }
 
-  virtual seastar::future<> _mount() {
+  virtual seastar::future<> _mount() final {
     return seastore->mount();
   }
 
-  virtual seastar::future<> _mkfs() {
+  virtual FuturizedStore::mkfs_ertr::future<> _mkfs() final {
     return seastore->mkfs(uuid_d{});
   }
 };
