@@ -495,8 +495,8 @@ def try_push_job_info(job_config, extra_info=None):
     job_id = job_config['job_id']
 
     if extra_info is not None:
-        job_info = extra_info.copy()
-        job_info.update(job_config)
+        job_info = job_config.copy()
+        job_info.update(extra_info)
     else:
         job_info = job_config
 
