@@ -80,10 +80,8 @@ public:
     async_refcount->put_wait(); /* wait for all pending async requests to complete */
   }
 
-  int get_stats(const rgw_user& user, const rgw_bucket& bucket, RGWStorageStats& stats, RGWQuotaInfo& quota);
+  int get_stats(const rgw_user& user, const rgw_bucket& bucket, RGWStorageStats& stats);
   void adjust_stats(const rgw_user& user, rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
-
-  virtual bool can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats& stats);
 
   void set_stats(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, RGWStorageStats& stats);
   int async_refresh(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs);
@@ -104,36 +102,6 @@ public:
 
   virtual AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket) = 0;
 };
-
-template<class T>
-bool RGWQuotaCache<T>::can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats& cached_stats)
-{
-  if (quota.max_size >= 0) {
-    if (quota.max_size_soft_threshold < 0) {
-      quota.max_size_soft_threshold = quota.max_size * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
-    }
-
-    if (cached_stats.size_rounded  >= (uint64_t)quota.max_size_soft_threshold) {
-      ldout(store->ctx(), 20) << "quota: can't use cached stats, exceeded soft threshold (size): "
-        << cached_stats.size_rounded << " >= " << quota.max_size_soft_threshold << dendl;
-      return false;
-    }
-  }
-
-  if (quota.max_objects >= 0) {
-    if (quota.max_objs_soft_threshold < 0) {
-      quota.max_objs_soft_threshold = quota.max_objects * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
-    }
-
-    if (cached_stats.num_objects >= (uint64_t)quota.max_objs_soft_threshold) {
-      ldout(store->ctx(), 20) << "quota: can't use cached stats, exceeded soft threshold (num objs): "
-        << cached_stats.num_objects << " >= " << quota.max_objs_soft_threshold << dendl;
-      return false;
-    }
-  }
-
-  return true;
-}
 
 template<class T>
 int RGWQuotaCache<T>::async_refresh(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs)
@@ -195,7 +163,7 @@ void RGWQuotaCache<T>::set_stats(const rgw_user& user, const rgw_bucket& bucket,
 }
 
 template<class T>
-int RGWQuotaCache<T>::get_stats(const rgw_user& user, const rgw_bucket& bucket, RGWStorageStats& stats, RGWQuotaInfo& quota) {
+int RGWQuotaCache<T>::get_stats(const rgw_user& user, const rgw_bucket& bucket, RGWStorageStats& stats) {
   RGWQuotaCacheStats qs;
   utime_t now = ceph_clock_now();
   if (map_find(user, bucket, qs)) {
@@ -208,8 +176,7 @@ int RGWQuotaCache<T>::get_stats(const rgw_user& user, const rgw_bucket& bucket, 
       }
     }
 
-    if (can_use_cached_stats(quota, qs.stats) && qs.expiration >
-	ceph_clock_now()) {
+    if (qs.expiration > ceph_clock_now()) {
       stats = qs.stats;
       return 0;
     }
@@ -593,13 +560,6 @@ public:
     return new UserAsyncRefreshHandler(store, this, user, bucket);
   }
 
-  bool can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats& stats) override {
-    /* in the user case, the cached stats may contain a better estimation of the totals, as
-     * the backend is only periodically getting updated.
-     */
-    return true;
-  }
-
   bool going_down() {
     return down_flag;
   }
@@ -942,8 +902,7 @@ public:
 
     if (bucket_quota.enabled) {
       RGWStorageStats bucket_stats;
-      int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats,
-                                           bucket_quota);
+      int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats);
       if (ret < 0) {
         return ret;
       }
@@ -955,7 +914,7 @@ public:
 
     if (user_quota.enabled) {
       RGWStorageStats user_stats;
-      int ret = user_stats_cache.get_stats(user, bucket, user_stats, user_quota);
+      int ret = user_stats_cache.get_stats(user, bucket, user_stats);
       if (ret < 0) {
         return ret;
       }
