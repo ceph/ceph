@@ -263,6 +263,7 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   max_caps_throttle_ratio = g_conf().get_val<double>("mds_session_max_caps_throttle_ratio");
   caps_throttle_retry_request_timeout = g_conf().get_val<double>("mds_cap_acquisition_throttle_retry_request_timeout");
   dir_max_entries = g_conf().get_val<uint64_t>("mds_dir_max_entries");
+  bal_fragment_size_max = g_conf().get_val<int64_t>("mds_bal_fragment_size_max");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
 
@@ -1262,6 +1263,11 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
     dir_max_entries = g_conf().get_val<uint64_t>("mds_dir_max_entries");
     dout(20) << __func__ << " max entries per directory changed to "
             << dir_max_entries << dendl;
+  }
+  if (changed.count("mds_bal_fragment_size_max")) {
+    bal_fragment_size_max = g_conf().get_val<int64_t>("mds_bal_fragment_size_max");
+    dout(20) << __func__ << " max fragment size changed to "
+            << bal_fragment_size_max << dendl;
   }
 }
 
@@ -3205,7 +3211,7 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
 bool Server::check_fragment_space(MDRequestRef &mdr, CDir *dir)
 {
   const auto size = dir->get_frag_size();
-  const auto max = g_conf()->mds_bal_fragment_size_max;
+  const auto max = bal_fragment_size_max;
   if (size >= max) {
     dout(10) << "fragment " << *dir << " size exceeds " << max << " (CEPHFS_ENOSPC)" << dendl;
     respond_to_request(mdr, -CEPHFS_ENOSPC);
