@@ -77,17 +77,17 @@ def parse_timedelta(delta: str) -> Optional[datetime.timedelta]:
 
     >>> parse_timedelta('foo')
 
-    >>> parse_timedelta('2d')
-    datetime.timedelta(days=2)
+    >>> parse_timedelta('2d') == datetime.timedelta(days=2)
+    True
 
-    >>> parse_timedelta("4w")
-    datetime.timedelta(days=28)
+    >>> parse_timedelta("4w") == datetime.timedelta(days=28)
+    True
 
-    >>> parse_timedelta("5s")
-    datetime.timedelta(seconds=5)
+    >>> parse_timedelta("5s") == datetime.timedelta(seconds=5)
+    True
 
-    >>> parse_timedelta("-5s")
-    datetime.timedelta(days=-1, seconds=86395)
+    >>> parse_timedelta("-5s") == datetime.timedelta(days=-1, seconds=86395)
+    True
 
     :param delta: The string to process, e.g. '2h', '10d', '30s'.
     :return: The `datetime.timedelta` object or `None` in case of
