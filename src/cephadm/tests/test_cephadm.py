@@ -940,9 +940,10 @@ class TestMaintenance:
         with pytest.raises(SystemExit):
             cd._parse_args(['host-maintenance', 'wah'])
 
+    @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
     @mock.patch('cephadm.systemd_target_state')
-    def test_enter_failure_1(self, _target_state, _call):
+    def test_enter_failure_1(self, _target_state, _call, _listdir):
         _call.return_value = '', '', 999
         _target_state.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
@@ -951,9 +952,10 @@ class TestMaintenance:
         retval = cd.command_maintenance(ctx)
         assert retval.startswith('failed')
 
+    @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
     @mock.patch('cephadm.systemd_target_state')
-    def test_enter_failure_2(self, _target_state, _call):
+    def test_enter_failure_2(self, _target_state, _call, _listdir):
         _call.side_effect = [('', '', 0), ('', '', 999)]
         _target_state.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
@@ -962,10 +964,11 @@ class TestMaintenance:
         retval = cd.command_maintenance(ctx)
         assert retval.startswith('failed')
 
+    @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
     @mock.patch('cephadm.systemd_target_state')
     @mock.patch('cephadm.target_exists')
-    def test_exit_failure_1(self, _target_exists, _target_state, _call):
+    def test_exit_failure_1(self, _target_exists, _target_state, _call, _listdir):
         _call.return_value = '', '', 999
         _target_state.return_value = False
         _target_exists.return_value = True
@@ -975,10 +978,11 @@ class TestMaintenance:
         retval = cd.command_maintenance(ctx)
         assert retval.startswith('failed')
 
+    @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
     @mock.patch('cephadm.systemd_target_state')
     @mock.patch('cephadm.target_exists')
-    def test_exit_failure_2(self, _target_exists, _target_state, _call):
+    def test_exit_failure_2(self, _target_exists, _target_state, _call, _listdir):
         _call.side_effect = [('', '', 0), ('', '', 999)]
         _target_state.return_value = False
         _target_exists.return_value = True
@@ -1534,7 +1538,8 @@ if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id
 class TestCheckHost:
 
     @mock.patch('cephadm.find_executable', return_value='foo')
-    def test_container_engine(self, find_executable):
+    @mock.patch('cephadm.check_time_sync', return_value=True)
+    def test_container_engine(self, find_executable, check_time_sync):
         ctx = cd.CephadmContext()
 
         ctx.container_engine = None
