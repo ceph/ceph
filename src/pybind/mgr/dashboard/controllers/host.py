@@ -16,9 +16,9 @@ from ..services.ceph_service import CephService
 from ..services.exception import handle_orchestrator_error
 from ..services.orchestrator import OrchClient, OrchFeature
 from ..tools import TaskManager, str_to_bool
-from . import ApiController, BaseController, ControllerDoc, Endpoint, \
-    EndpointDoc, ReadPermission, RESTController, Task, UiApiController, \
-    UpdatePermission, allow_empty_body
+from . import ApiController, APIVersion, BaseController, ControllerDoc, \
+    Endpoint, EndpointDoc, ReadPermission, RESTController, Task, \
+    UiApiController, UpdatePermission, allow_empty_body
 from .orchestrator import raise_if_no_orchestrator
 
 LIST_HOST_SCHEMA = {
@@ -293,7 +293,7 @@ class Host(RESTController):
                      'status': (str, 'Host Status')
                  },
                  responses={200: None, 204: None})
-    @RESTController.MethodMap(version='0.1')
+    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
     def create(self, hostname: str,
                addr: Optional[str] = None,
                labels: Optional[List[str]] = None,
@@ -406,7 +406,7 @@ class Host(RESTController):
                      'force': (bool, 'Force Enter Maintenance')
                  },
                  responses={200: None, 204: None})
-    @RESTController.MethodMap(version='0.1')
+    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
     def set(self, hostname: str, update_labels: bool = False,
             labels: List[str] = None, maintenance: bool = False,
             force: bool = False):

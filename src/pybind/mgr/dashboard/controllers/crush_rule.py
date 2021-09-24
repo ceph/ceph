@@ -5,7 +5,7 @@ from cherrypy import NotFound
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
-from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, \
+from . import ApiController, APIVersion, ControllerDoc, Endpoint, EndpointDoc, \
     ReadPermission, RESTController, UiApiController
 
 LIST_SCHEMA = {
@@ -21,11 +21,11 @@ LIST_SCHEMA = {
 class CrushRule(RESTController):
     @EndpointDoc("List Crush Rule Configuration",
                  responses={200: LIST_SCHEMA})
-    @RESTController.MethodMap(version='2.0')
+    @RESTController.MethodMap(version=APIVersion(2, 0))
     def list(self):
         return mgr.get('osd_map_crush')['rules']
 
-    @RESTController.MethodMap(version='2.0')
+    @RESTController.MethodMap(version=APIVersion(2, 0))
     def get(self, name):
         rules = mgr.get('osd_map_crush')['rules']
         for r in rules:
