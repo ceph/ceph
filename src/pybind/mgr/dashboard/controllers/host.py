@@ -295,7 +295,7 @@ class Host(RESTController):
                      'status': (str, 'Host Status'),
                  },
                  responses={200: None, 204: None})
-    @RESTController.MethodMap(version='0.1')
+    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
     def create(self, hostname: str,
                addr: Optional[str] = None,
                labels: Optional[List[str]] = None,
@@ -408,7 +408,7 @@ class Host(RESTController):
                      'force': (bool, 'Force Enter Maintenance')
                  },
                  responses={200: None, 204: None})
-    @RESTController.MethodMap(version='0.1')
+    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
     def set(self, hostname: str, update_labels: bool = False,
             labels: List[str] = None, maintenance: bool = False,
             force: bool = False):
