@@ -303,8 +303,81 @@ int LRemDBStore::Cluster::init_cluster() {
   return 0;
 };
 
+class PoolCache {
+public:
+  struct PoolInfo;
+private:
+  ceph::shared_mutex lock = ceph::make_shared_mutex("PoolCache::lock");
+  map<string, PoolInfo> pools_by_name;
+public:
+  PoolCache() {}
+
+  struct PoolInfo {
+    int id;
+    string name;
+    string value;
+  };
+
+  bool get_pool(const string& name, PoolInfo *info) {
+    std::shared_lock locker{lock};
+
+    auto iter = pools_by_name.find(name);
+    if (iter == pools_by_name.end()) {
+      return false;
+    }
+
+    *info = iter->second;
+    return true;
+  }
+
+  bool get_pool(int id, PoolInfo *info) {
+    std::shared_lock locker{lock};
+
+    for (auto& i : pools_by_name) {
+      if (i.second.id == id) {
+        *info = i.second;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool list_pools(map<string, PoolInfo> *pm) {
+    std::shared_lock locker{lock};
+    *pm = pools_by_name;
+    return (!pools_by_name.empty());
+  }
+
+  void set_pool(const PoolInfo& info) {
+    std::unique_lock locker{lock};
+    pools_by_name[info.name] = info;
+  }
+
+  void set_pools(map<string, PoolInfo>&& new_map) {
+    std::unique_lock locker{lock};
+    pools_by_name = std::move(new_map);
+  }
+
+  void clear() {
+    std::unique_lock locker{lock};
+    pools_by_name.clear();
+  }
+};
+
+static PoolCache pool_cache;
+
 int LRemDBStore::Cluster::list_pools(std::map<string, PoolRef> *pools)
 {
+  map<string, PoolCache::PoolInfo> m;
+
+  if (pool_cache.list_pools(&m)) {
+    for (auto& i : m) {
+      auto& e = i.second;
+      (*pools)[e.name] = std::make_shared<Pool>(trans, e.id, e.name, e.value);
+    }
+    return 0;
+  }
+
   auto& dbo = trans->dbo;
   pools->clear();
   try {
@@ -316,6 +389,7 @@ int LRemDBStore::Cluster::list_pools(std::map<string, PoolRef> *pools)
       const char* value   = q.getColumn(2);
 
       (*pools)[name] = std::make_shared<Pool>(trans, id, name, value);
+      m[name] = {id, name, value};
     }
 
   } catch (SQLite::Exception& e) {
@@ -323,10 +397,17 @@ int LRemDBStore::Cluster::list_pools(std::map<string, PoolRef> *pools)
     return -EIO;
   }
 
+  pool_cache.set_pools(std::move(m));
+
   return 0;
 }
 
 int LRemDBStore::Cluster::get_pool(const string& name, PoolRef *pool) {
+  PoolCache::PoolInfo pi;
+  if (pool_cache.get_pool(name, &pi)) {
+    *pool = std::make_shared<Pool>(trans, pi.id, pi.name, pi.value);
+    return pi.id;
+  }
   auto& dbo = trans->dbo;
   try {
     auto q = dbo->statement("SELECT * from pools WHERE name = ?");
@@ -339,6 +420,9 @@ int LRemDBStore::Cluster::get_pool(const string& name, PoolRef *pool) {
       const char* value   = q.getColumn(2);
 
       *pool = std::make_shared<Pool>(trans, id, name, value);
+
+      pool_cache.set_pool({id, name, value});
+
       return id;
     }
 
@@ -351,6 +435,11 @@ int LRemDBStore::Cluster::get_pool(const string& name, PoolRef *pool) {
 }
 
 int LRemDBStore::Cluster::get_pool(int id, PoolRef *pool) {
+  PoolCache::PoolInfo pi;
+  if (pool_cache.get_pool(id, &pi)) {
+    *pool = std::make_shared<Pool>(trans, pi.id, pi.name, pi.value);
+    return pi.id;
+  }
   auto& dbo = trans->dbo;
   try {
     auto q = dbo->statement("SELECT * from pools WHERE id = ?");
@@ -363,6 +452,9 @@ int LRemDBStore::Cluster::get_pool(int id, PoolRef *pool) {
       const char* value   = q.getColumn(2);
 
       *pool = std::make_shared<Pool>(trans, id, name, value);
+
+      pool_cache.set_pool({id, name, value});
+
       return id;
     }
 
@@ -392,6 +484,8 @@ int LRemDBStore::Pool::create(const string& _name, const string& _val) {
 
   trans->commit();
 
+  pool_cache.clear();
+
   r = read();
   if (r < 0) {
     return r;
@@ -406,6 +500,13 @@ int LRemDBStore::Pool::create(const string& _name, const string& _val) {
 }
 
 int LRemDBStore::Pool::read() {
+  PoolCache::PoolInfo pi;
+  if (pool_cache.get_pool(name, &pi)) {
+    id = pi.id;
+    value = pi.value;
+    return id;
+  }
+
   auto& dbo = trans->dbo;
   try {
     auto q = dbo->statement("SELECT * from pools WHERE name = ?");
@@ -415,6 +516,8 @@ int LRemDBStore::Pool::read() {
     if (dbo->exec_step(q)) {
       id      = q.getColumn(0);
       value   = q.getColumn(2).getString();
+
+      pool_cache.set_pool({id, name, value});
 
       return id;
     }
