@@ -88,9 +88,27 @@ export class TelemetryComponent extends CdForm implements OnInit {
     this.configForm = this.formBuilder.group(controlsConfig);
   }
 
+  private replacer(key: string, value: any) {
+    // Display the arrays of keys 'ranges' and 'values' horizontally as they take up too much space
+    // and Stringify displays it in vertical by default.
+    if ((key === 'ranges' || key === 'values') && Array.isArray(value)) {
+      const elements = [];
+      for (let i = 0; i < value.length; i++) {
+        elements.push(JSON.stringify(value[i]));
+      }
+      return elements;
+    }
+    // Else, just return the value as is, without any formatting.
+    return value;
+  }
+
+  replacerTest(report: object) {
+    return JSON.stringify(report, this.replacer, 2);
+  }
+
   private createPreviewForm() {
     const controls = {
-      report: JSON.stringify(this.report, null, 2),
+      report: JSON.stringify(this.report, this.replacer, 2),
       reportId: this.reportId,
       licenseAgrmt: [this.licenseAgrmt, Validators.requiredTrue]
     };
