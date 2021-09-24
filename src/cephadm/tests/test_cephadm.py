@@ -1534,7 +1534,8 @@ if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id
 class TestCheckHost:
 
     @mock.patch('cephadm.find_executable', return_value='foo')
-    def test_container_engine(self, find_executable):
+    @mock.patch('cephadm.check_time_sync', return_value=True)
+    def test_container_engine(self, find_executable, check_time_sync):
         ctx = cd.CephadmContext()
 
         ctx.container_engine = None
