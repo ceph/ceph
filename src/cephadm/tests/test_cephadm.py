@@ -920,9 +920,10 @@ class TestMaintenance:
         with pytest.raises(SystemExit):
             cd._parse_args(['host-maintenance', 'wah'])
 
+    @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
     @mock.patch('cephadm.systemd_target_state')
-    def test_enter_failure_1(self, _target_state, _call):
+    def test_enter_failure_1(self, _target_state, _call, _listdir):
         _call.return_value = '', '', 999
         _target_state.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
@@ -931,9 +932,10 @@ class TestMaintenance:
         retval = cd.command_maintenance(ctx)
         assert retval.startswith('failed')
 
+    @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
     @mock.patch('cephadm.systemd_target_state')
-    def test_enter_failure_2(self, _target_state, _call):
+    def test_enter_failure_2(self, _target_state, _call, _listdir):
         _call.side_effect = [('', '', 0), ('', '', 999)]
         _target_state.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
@@ -942,10 +944,11 @@ class TestMaintenance:
         retval = cd.command_maintenance(ctx)
         assert retval.startswith('failed')
 
+    @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
     @mock.patch('cephadm.systemd_target_state')
     @mock.patch('cephadm.target_exists')
-    def test_exit_failure_1(self, _target_exists, _target_state, _call):
+    def test_exit_failure_1(self, _target_exists, _target_state, _call, _listdir):
         _call.return_value = '', '', 999
         _target_state.return_value = False
         _target_exists.return_value = True
@@ -955,10 +958,11 @@ class TestMaintenance:
         retval = cd.command_maintenance(ctx)
         assert retval.startswith('failed')
 
+    @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
     @mock.patch('cephadm.systemd_target_state')
     @mock.patch('cephadm.target_exists')
-    def test_exit_failure_2(self, _target_exists, _target_state, _call):
+    def test_exit_failure_2(self, _target_exists, _target_state, _call, _listdir):
         _call.side_effect = [('', '', 0), ('', '', 999)]
         _target_state.return_value = False
         _target_exists.return_value = True
