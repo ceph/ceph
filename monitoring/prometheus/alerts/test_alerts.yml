@@ -680,13 +680,27 @@ tests:
     - series: 'node_network_mtu_bytes{device="eth4",instance="node-exporter",
       job="node-exporter"}'
       values: '9000 9000 9000 9000 9000'
+    - series: 'node_network_up{device="eth0",instance="node-exporter",
+      job="node-exporter"}'
+      values: '0 0 0 0 0'
+    - series: 'node_network_up{device="eth1",instance="node-exporter",
+      job="node-exporter"}'
+      values: '0 0 0 0 0'
+    - series: 'node_network_up{device="eth2",instance="node-exporter",
+      job="node-exporter"}'
+      values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth3",instance="node-exporter",
+      job="node-exporter"}'
+      values: '0 0 0 0 0'
+    - series: 'node_network_up{device="eth4",instance="node-exporter",
+      job="node-exporter"}'
+      values: '1 1 1 1 1'  
    promql_expr_test:
-     - expr: node_network_mtu_bytes{device!="lo"} != on() group_left()
+     - expr: node_network_mtu_bytes{device!="lo"} * (node_network_up{device!="lo"} > 0) != on() group_left()
              (quantile(0.5, node_network_mtu_bytes{device!="lo"}))
        eval_time: 1m
        exp_samples:
-         - labels: '{__name__="node_network_mtu_bytes", device="eth4",
-           instance="node-exporter", job="node-exporter"}'
+         - labels: '{device="eth4", instance="node-exporter", job="node-exporter"}'
            value: 9000
    alert_rule_test:
      - eval_time: 1m
