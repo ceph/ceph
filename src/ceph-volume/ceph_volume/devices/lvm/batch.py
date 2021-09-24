@@ -112,35 +112,55 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
         requested_size = get_size_fct(lv_format=False)
 
     ret = []
-    for dev in devices:
-        if not dev.available_lvm:
-            continue
-        # any LV present is considered a taken slot
-        occupied_slots = len(dev.lvs)
-        # this only looks at the first vg on device, unsure if there is a better
-        # way
-        dev_size = dev.vg_size[0]
-        abs_size = disk.Size(b=int(dev_size / requested_slots))
-        free_size = dev.vg_free[0]
-        relative_size = int(abs_size) / dev_size
-        if requested_size:
-            if requested_size <= abs_size:
-                abs_size = requested_size
-                relative_size = int(abs_size) / dev_size
-            else:
-                mlogger.error(
-                    '{} was requested for {}, but only {} can be fulfilled'.format(
-                        requested_size,
-                        '{}_size'.format(type_),
-                        abs_size,
-                    ))
-                exit(1)
-        while abs_size <= free_size and len(ret) < new_osds and occupied_slots < fast_slots_per_device:
-            free_size -= abs_size.b
-            occupied_slots += 1
-            ret.append((dev.path, relative_size, abs_size, requested_slots))
+    vg_device_map = group_devices_by_vg(devices)
+    for vg_devices in vg_device_map.values():
+        for dev in vg_devices:
+            if not dev.available_lvm:
+                continue
+            # any LV present is considered a taken slot
+            occupied_slots = len(dev.lvs)
+            # prior to v15.2.8, db/wal deployments were grouping multiple fast devices into single VGs - we need to
+            # multiply requested_slots (per device) by the number of devices in the VG in order to ensure that
+            # abs_size is calculated correctly from vg_size
+            slots_for_vg = len(vg_devices) * requested_slots
+            dev_size = dev.vg_size[0]
+            # this only looks at the first vg on device, unsure if there is a better
+            # way
+            abs_size = disk.Size(b=int(dev_size / slots_for_vg))
+            free_size = dev.vg_free[0]
+            relative_size = int(abs_size) / dev_size
+            if requested_size:
+                if requested_size <= abs_size:
+                    abs_size = requested_size
+                    relative_size = int(abs_size) / dev_size
+                else:
+                    mlogger.error(
+                        '{} was requested for {}, but only {} can be fulfilled'.format(
+                            requested_size,
+                            '{}_size'.format(type_),
+                            abs_size,
+                        ))
+                    exit(1)
+            while abs_size <= free_size and len(ret) < new_osds and occupied_slots < fast_slots_per_device:
+                free_size -= abs_size.b
+                occupied_slots += 1
+                ret.append((dev.path, relative_size, abs_size, requested_slots))
     return ret
 
+def group_devices_by_vg(devices):
+    result = dict()
+    result['unused_devices'] = []
+    for dev in devices:
+        if len(dev.vgs) > 0:
+            # already using assumption that a PV only belongs to single VG in other places
+            vg_name = dev.vgs[0].name
+            if vg_name in result:
+                result[vg_name].append(dev)
+            else:
+                result[vg_name] = [dev]
+        else:
+            result['unused_devices'].append(dev)
+    return result
 
 def get_lvm_fast_allocs(lvs):
     return [("{}/{}".format(d.vg_name, d.lv_name), 100.0,
