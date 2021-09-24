@@ -29,6 +29,10 @@ else
     rpm_release=0
 fi
 
+git_ver=`git rev-parse HEAD`
+flavor="default"
+release_name=`cat src/ceph_release | head -n 2 | tail -n 1`
+
 outfile="ceph-$version"
 echo "version $version"
 
@@ -164,18 +168,26 @@ bin/git-archive-all.sh --prefix ceph-$version/ \
 		       $outfile.tar
 
 # populate files with version strings
-echo "including src/.git_version, ceph.spec"
+echo "including src/.git_version, ceph.spec, Dockerfile"
 
 (git rev-parse HEAD ; echo $version) 2> /dev/null > src/.git_version
 
-for spec in ceph.spec.in; do
-    cat $spec |
+for fn in ceph.spec.in Dockerfile.in; do
+    cat $fn |
+	sed "s/@CEPH_GIT_VER@/$git_ver/g" |
+	sed "s/@CEPH_FLAVOR@/$flavor/g" |
+	sed "s/@CEPH_RELEASE_NAME@/$release_name/g" |
         sed "s/@PROJECT_VERSION@/$rpm_version/g" |
         sed "s/@RPM_RELEASE@/$rpm_release/g" |
-        sed "s/@TARBALL_BASENAME@/ceph-$version/g" > `echo $spec | sed 's/.in$//'`
+        sed "s/@TARBALL_BASENAME@/ceph-$version/g" > `echo $fn | sed 's/.in$//'`
 done
 ln -s . $outfile
-tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec
+tar cvf \
+    $outfile.version.tar \
+    $outfile/src/.git_version \
+    $outfile/ceph.spec \
+    $outfile/Dockerfile
+
 # NOTE: If you change this version number make sure the package is available
 # at the three URLs referenced below (may involve uploading to download.ceph.com)
 boost_version=1.75.0
