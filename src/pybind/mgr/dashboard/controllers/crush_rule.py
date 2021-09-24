@@ -8,7 +8,6 @@ from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
 from . import APIDoc, APIRouter, Endpoint, EndpointDoc, ReadPermission, RESTController, UIRouter
-from ._version import APIVersion
 
 LIST_SCHEMA = {
     "rule_id": (int, 'Rule ID'),
