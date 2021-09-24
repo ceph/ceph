@@ -50,6 +50,9 @@ public:
   // Print human readable brief description with relevant parameters
   virtual void print(std::ostream &out) const = 0;
 
+  // Apply config changes to the scheduler (if any)
+  virtual void update_configuration() = 0;
+
   // Destructor
   virtual ~OpScheduler() {};
 };
@@ -132,6 +135,10 @@ public:
     out << "ClassedOpQueueScheduler(queue=";
     queue.print(out);
     out << ", cutoff=" << cutoff << ")";
+  }
+
+  void update_configuration() final {
+    // no-op
   }
 
   ~ClassedOpQueueScheduler() final {};

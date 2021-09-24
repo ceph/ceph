@@ -1079,6 +1079,7 @@ struct OSDShard {
 		    std::set<std::pair<spg_t,epoch_t>> *merge_pgs);
   void register_and_wake_split_child(PG *pg);
   void unprime_split_children(spg_t parent, unsigned old_pg_num);
+  void update_scheduler_config();
 
   OSDShard(
     int id,
@@ -2062,7 +2063,15 @@ private:
   float get_osd_snap_trim_sleep();
 
   int get_recovery_max_active();
+  void maybe_override_max_osd_capacity_for_qos();
   bool maybe_override_options_for_qos();
+  int run_osd_bench_test(int64_t count,
+                         int64_t bsize,
+                         int64_t osize,
+                         int64_t onum,
+                         double *elapsed,
+                         std::ostream& ss);
+  int mon_cmd_set_config(const std::string &key, const std::string &val);
 
   void scrub_purged_snaps();
   void probe_smart(const std::string& devid, std::ostream& ss);

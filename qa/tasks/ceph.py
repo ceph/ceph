@@ -46,8 +46,8 @@ def generate_caps(type_):
     """
     defaults = dict(
         osd=dict(
-            mon='allow *',
-            mgr='allow *',
+            mon='allow profile osd',
+            mgr='allow profile osd',
             osd='allow *',
         ),
         mgr=dict(
