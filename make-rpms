@@ -1,0 +1,22 @@
+#!/bin/bash -e
+
+dist="$1"
+if [ ! -e "$dist" ]; then
+   dist=$(ls -t ceph-*.tar.bz2 | head -n 1)
+fi
+if [ ! -e "$dist" ]; then
+   echo "usage: make-rpm [<ceph-dist-tarball>]"
+   echo "  - run ./make-dist first"
+   echo "  - optionally pass tarball filename, or we'll use the latest"
+   exit 1
+fi 
+
+echo "Building from $dist"
+
+rpmdev-setuptree
+
+cp $dist ~/rpmbuild/SOURCES
+tar --strip-components=1 -C ~/rpmbuild/SPECS/ --no-anchored -xvjf \
+    ~/rpmbuild/SOURCES/$dist ceph.spec
+
+rpmbuild -ba ~/rpmbuild/SPECS/ceph.spec
