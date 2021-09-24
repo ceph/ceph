@@ -1,6 +1,7 @@
 -e../../python-common
 asyncmock
 cherrypy
+cryptography
 jsonpatch
 Jinja2
 pecan

@@ -469,11 +469,18 @@ class CephadmUpgrade:
         target_digests = self.upgrade_state.target_digests
         target_version = self.upgrade_state.target_version
 
+        if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
+            # need to wait for metadata to come in
+            self.mgr.agent_helpers._request_agent_acks(
+                set([h for h in self.mgr.cache.get_hosts() if
+                     (not self.mgr.cache.host_metadata_up_to_date(h) and h in self.mgr.cache.agent_ports and not self.mgr.cache.messaging_agent(h))]))
+            return
+
         first = False
         if not target_id or not target_version or not target_digests:
             # need to learn the container hash
             logger.info('Upgrade: First pull of %s' % target_image)
-            self.upgrade_info_str = 'Doing first pull of %s image' % (target_image)
+            self.upgrade_info_str: str = 'Doing first pull of %s image' % (target_image)
             try:
                 target_id, target_version, target_digests = CephadmServe(self.mgr)._get_container_image_info(
                     target_image)
@@ -682,6 +689,7 @@ class CephadmUpgrade:
                         'redeploy',
                         image=target_image if not d_entry[1] else None
                     )
+                    self.mgr.cache.metadata_up_to_date[d.hostname] = False
                 except Exception as e:
                     self._fail_upgrade('UPGRADE_REDEPLOY_DAEMON', {
                         'severity': 'warning',
