@@ -79,9 +79,9 @@ struct fltree_onode_manager_test_t
     TMTestState::_destroy();
   }
 
-  virtual seastar::future<> _mkfs() final {
+  virtual FuturizedStore::mkfs_ertr::future<> _mkfs() final {
     return TMTestState::_mkfs(
-    ).then([this] {
+    ).safe_then([this] {
       return tm->mount(
       ).safe_then([this] {
 	return repeat_eagain([this] {

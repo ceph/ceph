@@ -152,7 +152,13 @@ CompatSet get_osd_initial_compat_set()
 seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
 {
   return store.start().then([this, osd_uuid] {
-    return store.mkfs(osd_uuid);
+    return store.mkfs(osd_uuid).handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        logger().error("error creating empty object store in {}: ({}) {}",
+                       local_conf().get_val<std::string>("osd_data"),
+                       ec.value(), ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([this] {
     return store.mount();
   }).then([cluster_fsid, this] {

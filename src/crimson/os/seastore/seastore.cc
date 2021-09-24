@@ -108,7 +108,7 @@ seastar::future<> SeaStore::umount()
   );
 }
 
-seastar::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
+SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
 {
   return segment_manager->mkfs(
     seastore_meta_t{new_osd_fsid}
