@@ -709,6 +709,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
         'cephadm-exporter': 'cephadm-exporter',
+        'agent': 'agent'
     }
     return mapping[dtype]
 
@@ -732,6 +733,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'crash': ['crash'],
         'container': ['container'],
         'cephadm-exporter': ['cephadm-exporter'],
+        'agent': ['agent']
     }
     return mapping[stype]
 
