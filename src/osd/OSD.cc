@@ -5960,7 +5960,7 @@ void OSD::tick()
     // use a seed that is stable for each scrub interval, but varies
     // by OSD to avoid any herds.
     rng.seed(whoami + superblock.last_purged_snaps_scrub.sec());
-    double r = (rng() % 1024) / 1024;
+    double r = (rng() % 1024) / 1024.0;
     next +=
       cct->_conf->osd_scrub_min_interval *
       cct->_conf->osd_scrub_interval_randomize_ratio * r;
