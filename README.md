@@ -36,8 +36,8 @@ This project requires three separate Virtual Machines (VMs), which the team is c
 <p align="center">
 	<img src="./images/LAPTOP.png" width="35%" />
 </p>
-<p style="text-align:center;">
-	Figure 1. Three VMs should be set up in total, with one acting as a gateway and the other two running the Ceph cluster.
+<p align="center">
+	<strong>Figure 1.</strong> Three VMs should be set up in total, with one acting as a gateway and the other two running the Ceph cluster.
 </p>
 
 The team will use the current Ceph source code as a target to modify the D4N code. The D4N source code is vital to the project and has its own repository. The team’s repository for modifications, improvements, and general work is available here.
