@@ -609,7 +609,8 @@ def safe_kill(pid):
     os.kill annoyingly raises exception if process already dead.  Ignore it.
     """
     try:
-        return os.kill(pid, signal.SIGKILL)
+        return remote.run(args=f'sudo kill -{signal.SIGKILL.value} {pid}',
+                          omit_sudo=False)
     except OSError as e:
         if e.errno == errno.ESRCH:
             # Raced with process termination
@@ -1354,7 +1355,8 @@ def exec_test():
         if 'ceph-fuse' in line or 'ceph-mds' in line:
             pid = int(line.split()[0])
             log.warning("Killing stray process {0}".format(line))
-            os.kill(pid, signal.SIGKILL)
+            remote.run(args=f'sudo kill -{signal.SIGKILL.value} {pid}',
+                       omit_sudo=False)
 
     # Fire up the Ceph cluster if the user requested it
     if opt_create_cluster or opt_create_cluster_only:
