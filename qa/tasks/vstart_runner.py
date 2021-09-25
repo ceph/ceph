@@ -804,18 +804,7 @@ class LocalCephManager(CephManager):
         self.cephadm = False
         self.rook = False
         self.testdir = None
-        self.run_cluster_cmd_prefix = [CEPH_CMD]
-        # XXX: Ceph API test CI job crashes because "ceph -w" process launched
-        # by run_ceph_w() crashes when shell is set to True.
-        # See https://tracker.ceph.com/issues/49644.
-        #
-        # The 2 possible workaround this are either setting "shell" to "False"
-        # when command "ceph -w" is executed or to prepend "exec sudo" to
-        # command arguments. We are going with latter since former would make
-        # it necessary to pass "shell" parameter to run() method. This leads
-        # to incompatibility with the method teuthology.orchestra.run's run()
-        # since it doesn't accept "shell" as parameter.
-        self.run_ceph_w_prefix = ['exec', 'sudo', CEPH_CMD]
+        self.run_ceph_w_prefix = self.run_cluster_cmd_prefix = [CEPH_CMD]
 
     def find_remote(self, daemon_type, daemon_id):
         """
