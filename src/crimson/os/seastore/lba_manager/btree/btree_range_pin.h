@@ -21,7 +21,7 @@ struct lba_node_meta_t {
   bool is_parent_of(const lba_node_meta_t &other) const {
     return (depth == other.depth + 1) &&
       (begin <= other.begin) &&
-      (end >= other.end);
+      (end > other.begin);
   }
 
   std::pair<lba_node_meta_t, lba_node_meta_t> split_into(laddr_t pivot) const {
