@@ -27,7 +27,7 @@ testlog "TEST: verify rx-only direction"
 [ "$(rbd --cluster ${CLUSTER1} --pool ${POOL} mirror pool info --format xml |
 	${XMLSTARLET} sel -t -v  '//mirror/peers/peer[1]/uuid')" = "" ]
 
-create_image ${CLUSTER1} ${POOL} image1
+create_image_and_enable_mirror ${CLUSTER1} ${POOL} image1
 
 wait_for_image_replay_started ${CLUSTER2} ${POOL} image1
 write_image ${CLUSTER1} ${POOL} image1 100

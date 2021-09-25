@@ -16,7 +16,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd::mirror::RemotePollPoller: " << this << " " \
+#define dout_prefix *_dout << "rbd::mirror::RemotePoolPoller: " << this << " " \
                            << __func__ << ": "
 
 namespace rbd {
@@ -183,7 +183,7 @@ void RemotePoolPoller<I>::handle_mirror_peer_list(int r) {
 
   cls::rbd::MirrorPeer* matched_peer = nullptr;
   for (auto& peer : peers) {
-    if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_TX) {
+    if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
       continue;
     }
 
