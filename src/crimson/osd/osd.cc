@@ -100,7 +100,9 @@ OSD::OSD(int id, uint32_t nonce,
       update_stats();
     }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
-    osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
+    osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services))),
+    log_client(cluster_msgr.get(), LogClient::NO_FLAGS),
+    clog(log_client.create_channel())
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
   for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr),
@@ -117,6 +119,8 @@ OSD::OSD(int id, uint32_t nonce,
     }
   }
   logger().info("{}: nonce is {}", __func__, nonce);
+  monc->set_log_client(&log_client);
+  clog->set_log_to_monitors(true);
 }
 
 OSD::~OSD() = default;
@@ -377,6 +381,8 @@ seastar::future<> OSD::start()
     // create the admin-socket server, and the objects that register
     // to handle incoming commands
     return start_asok_admin();
+  }).then([this] {
+    return log_client.set_fsid(monc->get_fsid());
   }).then([this] {
     return start_boot();
   });

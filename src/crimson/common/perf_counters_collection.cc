@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/ceph_context.h"
 #include "perf_counters_collection.h"
 
 namespace crimson::common {
@@ -27,6 +28,13 @@ void PerfCountersCollection::dump_formatted(ceph::Formatter *f, bool schema,
 
 PerfCountersCollection::ShardedPerfCountersCollection PerfCountersCollection::sharded_perf_coll;
 
+void PerfCountersDeleter::operator()(PerfCounters* p) noexcept
+{
+  if (cct) {
+    cct->get_perfcounters_collection()->remove(p);
+  }
+  delete p;
 }
 
+}
 

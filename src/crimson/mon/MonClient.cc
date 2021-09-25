@@ -18,6 +18,7 @@
 #include "crimson/auth/KeyRing.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/log.h"
+#include "crimson/common/logclient.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Errors.h"
 #include "crimson/net/Messenger.h"
@@ -415,6 +416,7 @@ Client::Client(crimson::net::Messenger& messenger,
               CEPH_ENTITY_TYPE_MGR},
     timer{[this] { tick(); }},
     msgr{messenger},
+    log_client{nullptr},
     auth_registry{&cct},
     auth_handler{auth_handler}
 {}
@@ -457,7 +459,8 @@ void Client::tick()
 {
   gate.dispatch_in_background(__func__, *this, [this] {
     if (active_con) {
-      return seastar::when_all_succeed(active_con->get_conn()->keepalive(),
+      return seastar::when_all_succeed(wait_for_send_log(),
+                                       active_con->get_conn()->keepalive(),
                                        active_con->renew_tickets(),
                                        active_con->renew_rotating_keyring()).then_unpack([] {});
     } else {
@@ -466,6 +469,25 @@ void Client::tick()
       return authenticate();
     }
   });
+}
+
+seastar::future<> Client::wait_for_send_log() {
+  utime_t now = ceph_clock_now();
+  if (now > last_send_log + cct._conf->mon_client_log_interval) {
+    last_send_log = now;
+    return send_log(log_flushing_t::NO_FLUSH);
+  }
+  return seastar::now();
+}
+
+seastar::future<> Client::send_log(log_flushing_t flush_flag) {
+  if (log_client) {
+    if (auto lm = log_client->get_mon_log_message(flush_flag); lm) {
+      return send_message(std::move(lm));
+    }
+    more_log_pending = log_client->are_pending();
+  }
+  return seastar::now();
 }
 
 bool Client::is_hunting() const {
@@ -857,7 +879,15 @@ seastar::future<> Client::handle_mon_command_ack(Ref<MMonCommandAck> m)
 
 seastar::future<> Client::handle_log_ack(Ref<MLogAck> m)
 {
-  // XXX
+  if (log_client) {
+    return log_client->handle_log_ack(m).then([this] {
+      if (more_log_pending) {
+        return send_log(log_flushing_t::NO_FLUSH);
+      } else {
+        return seastar::now();
+      }
+    });
+  }
   return seastar::now();
 }
 

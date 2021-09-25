@@ -4,6 +4,7 @@
 #pragma once
 
 #include "common/perf_counters.h"
+#include "include/common_fwd.h"
 #include <seastar/core/sharded.hh>
 
 using crimson::common::PerfCountersCollectionImpl;
@@ -35,5 +36,14 @@ inline PerfCountersCollection& local_perf_coll() {
   return PerfCountersCollection::sharded_perf_coll.local();
 }
 
+class PerfCountersDeleter {
+  CephContext* cct;
+
+public:
+  PerfCountersDeleter() noexcept : cct(nullptr) {}
+  PerfCountersDeleter(CephContext* cct) noexcept : cct(cct) {}
+  void operator()(PerfCounters* p) noexcept;
+};
 }
+using PerfCountersRef = std::unique_ptr<crimson::common::PerfCounters, crimson::common::PerfCountersDeleter>;
 
