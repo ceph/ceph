@@ -34,9 +34,11 @@ This project requires three separate Virtual Machines (VMs), which the team is c
 - VMs Two and Three act as the Ceph cluster that the team will be modifying. Each VM will have 16 cores, 32 gigabytes of RAM, and 250 gigabyte disk, along with their own floating IP addresses. All three machines will be accessed through an OpenStack Terminal. To have machines on the OpenStack, the team requires accounts for the system, which are pending.
 
 <p align="center">
-	<img src="./images/LAPTOP.png" width="25%" />
+	<img src="./images/LAPTOP.png" width="35%" />
 </p>
-<p style="text-align: center;"><strong>Figure 1.</strong> Three VMs should be set up in total, with one acting as a gateway and the other two running the Ceph cluster.</p>
+<p style="text-align: center;">
+	<strong>Figure 1.</strong> Three VMs should be set up in total, with one acting as a gateway and the other two running the Ceph cluster.
+</p>
 
 The team will use the current Ceph source code as a target to modify the D4N code. The D4N source code is vital to the project and has its own repository. The team’s repository for modifications, improvements, and general work is available here.
 
