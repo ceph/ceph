@@ -1104,6 +1104,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r) {
       lderr(cct) << __func__ << " not in ready state!" << dendl;
       return _fault();
     }
+    recv_stamp = ceph_clock_now();
     state = THROTTLE_MESSAGE;
     return CONTINUE(throttle_message);
   } else {
@@ -1335,7 +1336,6 @@ CtPtr ProtocolV2::handle_message() {
 #if defined(WITH_EVENTTRACE)
   utime_t ltt_recv_stamp = ceph_clock_now();
 #endif
-  recv_stamp = ceph_clock_now();
 
   const size_t cur_msg_size = get_current_msg_size();
   auto msg_frame = MessageFrame::Decode(rx_segments_data);
