@@ -191,11 +191,12 @@ def rm_nonascii_chars(var):
     return var
 
 class LocalRemoteProcess(object):
-    def __init__(self, args, subproc, check_status, stdout, stderr):
+    def __init__(self, args, subproc, check_status, stdout, stderr, usr_args):
         self.args = args
         self.subproc = subproc
         self.stdout = stdout
         self.stderr = stderr
+        self.usr_args = usr_args
         # this variable is meant for instance of this class named fuse_daemon.
         # child process of the command launched with sudo must be killed,
         # since killing parent process alone has no impact on the child
@@ -226,6 +227,7 @@ class LocalRemoteProcess(object):
             # Avoid calling communicate() on a dead process because it'll
             # give you stick about std* already being closed
             if self.check_status and self.exitstatus != 0:
+                # TODO: print self.args or self.usr_args in exception msg?
                 raise CommandFailedError(self.args, self.exitstatus)
             else:
                 return
@@ -242,6 +244,7 @@ class LocalRemoteProcess(object):
             sys.stderr.write(err.decode())
 
         if self.check_status and self.exitstatus != 0:
+            # TODO: print self.args or self.usr_args in exception msg?
             raise CommandFailedError(self.args, self.exitstatus)
 
     @property
@@ -263,14 +266,14 @@ class LocalRemoteProcess(object):
     def kill(self):
         log.debug("kill ")
         if self.subproc.pid and not self.finished:
-            log.debug("kill: killing pid {0} ({1})".format(
-                self.subproc.pid, self.args))
+            log.debug(f"kill: killing pid {self.subproc.pid} "
+                      f"({self.usr_args})")
             if self.fuse_pid != -1:
                 safe_kill(self.fuse_pid)
             else:
                 safe_kill(self.subproc.pid)
         else:
-            log.debug("kill: already terminated ({0})".format(self.args))
+            log.debug(f"kill: already terminated ({self.usr_args})")
 
     @property
     def stdin(self):
@@ -433,13 +436,14 @@ sudo() {
     "$@"
 }
 """
+        # usr_args = args passed by the user/caller of this method
+        usr_args, args = args, prefix + args
         log.info('helper tools like adjust-ulimits , ceph-coverage and '
                  '"archive/coverage" were found it cmd args. they have been'
                  'omitted before execution, check vstart_runner.py for more '
                  'details.')
-        args = prefix + args
 
-        return args
+        return args, usr_args
 
     # Wrapper to keep the interface exactly same as that of
     # teuthology.remote.run.
@@ -452,7 +456,8 @@ sudo() {
     def _do_run(self, args, check_status=True, wait=True, stdout=None,
                 stderr=None, cwd=None, stdin=None, logger=None, label=None,
                 env=None, timeout=None, omit_sudo=True, shell=True):
-        args = self._perform_checks_and_adjustments(args, omit_sudo, shell)
+        args, usr_args = self._perform_checks_and_adjustments(args, omit_sudo,
+                                                              shell)
 
         subproc = subprocess.Popen(args, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE,
@@ -473,7 +478,7 @@ sudo() {
 
         proc = LocalRemoteProcess(
             args, subproc, check_status,
-            stdout, stderr
+            stdout, stderr, usr_args
         )
 
         if wait:
