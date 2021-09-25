@@ -1324,7 +1324,7 @@ bool Locker::eval(CInode *in, int mask, bool caps_imported)
     if (in->try_drop_loner()) {
       need_issue = true;
       if (in->get_wanted_loner() >= 0) {
-	dout(10) << "eval end set loner to client." << in->get_loner() << dendl;
+	dout(10) << "eval end set loner to client." << in->get_wanted_loner() << dendl;
 	bool ok = in->try_set_loner();
 	ceph_assert(ok);
 	mask = -1;
