@@ -1,6 +1,7 @@
 # Accelerating Ceph Cloud Storage with D4N
-**Team members:** Daniel Paganelli, Khai Evdaev, Mandy Yao, Samarah Uriarte
-**Mentors:** Ali Maredia, Amin Mosayyebzadeh, Mark Kogan, Matt Benjamin, Emine Ugur Kaynar
+###### **Team members:** Daniel Paganelli, Khai Evdaev, Mandy Yao, Samarah Uriarte
+###### **Mentors:** Ali Maredia, Amin Mosayyebzadeh, Mark Kogan, Matt Benjamin, Emine Ugur Kaynar
+
 ---
 ### Project Overview
 With data volumes growing exponentially, a highly scalable storage that preserves and records digital content for ongoing or future company operations is a paramount solution to any successful business. Red Hat Ceph, an open-source software that facilitates distributed object, block, and file storage, emerged as a massively scalable storage solution for modern data pipelines to store and streamline important digital information. One of the key components in Ceph is the Reliable Autonomic Distributed Object Store (RADOS), an object-based storage system that provides a self-healing and self managing storage of unstructured data for applications. As a highly available system with no single point of failure, RADOS lays as a foundation for Ceph’s important features such as Ceph Object Gateway, Ceph Block Device and Ceph File System. 
