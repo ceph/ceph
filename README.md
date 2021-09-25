@@ -1,6 +1,6 @@
 # Accelerating Ceph Cloud Storage with D4N
-###### **Team members:** Daniel Paganelli, Khai Evdaev, Mandy Yao, Samarah Uriarte
-###### **Mentors:** Ali Maredia, Amin Mosayyebzadeh, Mark Kogan, Matt Benjamin, Emine Ugur Kaynar
+##### **Team members:** Daniel Paganelli, Khai Evdaev, Mandy Yao, Samarah Uriarte
+##### **Mentors:** Ali Maredia, Amin Mosayyebzadeh, Mark Kogan, Matt Benjamin, Emine Ugur Kaynar
 
 ---
 ### Project Overview
