@@ -10059,7 +10059,7 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_snap_trim_sleep",
     "osd_snap_trim_sleep_hdd",
     "osd_snap_trim_sleep_ssd",
-    "osd_snap_trim_sleep_hybrid"
+    "osd_snap_trim_sleep_hybrid",
     "osd_scrub_sleep",
     "osd_recovery_max_active",
     "osd_recovery_max_active_hdd",
