@@ -67,7 +67,7 @@ notable differences:
 * the ``show`` command was added, which describes a specific mapping.
   This can be used for retrieving the disk path.
 * the ``service`` command was added, allowing ``rbd-wnbd`` to run as a Windows service.
-  All mappings are by default perisistent, being recreated when the service
+  All mappings are by default persistent, being recreated when the service
   stops, unless explicitly unmapped. The service disconnects the mappings
   when being stopped.
 * the ``list`` command also includes a ``status`` column.
@@ -133,7 +133,7 @@ initializes a partition::
     # The disk must be online before creating or accessing partitions.
     Set-Disk -Number $diskNumber -IsOffline $false
 
-    # Initialize the disk, partition it and create a fileystem.
+    # Initialize the disk, partition it and create a filesystem.
     Get-Disk -Number $diskNumber | `
         Initialize-Disk -PassThru | `
         New-Partition -AssignDriveLetter -UseMaximumSize | `
@@ -159,7 +159,7 @@ Hyper-V disk addressing
   up using incorrect disks after rebooting the host, which is an important
   security concern. This issue also affects iSCSI and Fibre Channel disks.
 
-There are a few possible ways of avoding this Hyper-V limitation:
+There are a few possible ways of avoiding this Hyper-V limitation:
 
 * use an NTFS/ReFS partition to store VHDX image files instead of directly
   attaching the RBD image. This may slightly impact the IO performance.
