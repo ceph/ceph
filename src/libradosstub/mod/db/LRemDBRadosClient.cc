@@ -32,7 +32,12 @@ LRemIoCtxImpl *LRemDBRadosClient::create_ioctx(int64_t pool_id,
 
 int LRemDBRadosClient::init() {
   LRemDBTransactionState trans(cct());
-  return trans.dbc->init_cluster();
+  int r = trans.dbc->init_cluster();
+  if (r < 0) {
+    return r;
+  }
+
+  return m_mem_cluster->init(*trans.dbc);
 }
 
 void LRemDBRadosClient::object_list(int64_t pool_id,
