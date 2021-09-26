@@ -168,6 +168,9 @@ public:
 			  std::pair<std::uint64_t,
 			              std::vector<std::uint64_t>>> snapc);
 
+  bool full_try() const;
+  void full_try(bool _full_try);
+
   friend std::ostream& operator <<(std::ostream& m, const IOContext& o);
   friend bool operator <(const IOContext& lhs, const IOContext& rhs);
   friend bool operator <=(const IOContext& lhs, const IOContext& rhs);
