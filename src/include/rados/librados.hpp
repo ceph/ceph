@@ -1339,6 +1339,7 @@ inline namespace v14_2_0 {
     void unset_osdmap_full_try()
       __attribute__ ((deprecated));
 
+    bool get_pool_full_try();
     void set_pool_full_try();
     void unset_pool_full_try();
 
