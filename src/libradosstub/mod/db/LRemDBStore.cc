@@ -601,6 +601,67 @@ int LRemDBStore::Pool::read() {
   return -ENOENT;
 }
 
+int LRemDBStore::Pool::list(std::optional<string> nspace,
+             const string& marker_oid,
+             int max,
+             std::list<LRemCluster::ObjectLocator> *result,
+             bool *more) {
+  auto obj = get_obj_handler();
+
+  const auto& table_name = obj->get_table_name();
+
+  auto& dbo = trans->dbo;
+
+#define MAX_LIST_DEFAULT 256
+  int limit = (max ? max : MAX_LIST_DEFAULT);
+  if (limit > MAX_LIST_DEFAULT) {
+    limit = MAX_LIST_DEFAULT;
+  }
+
+  try {
+    string s = string("SELECT nspace, oid from ") + table_name + " WHERE oid > ?";
+
+    if (nspace) {
+      s += " AND WHERE nspace == ?";
+    }
+
+    s += " LIMIT " + to_str(limit);
+
+    auto q = dbo->statement(s);
+
+    int n = 0;
+    q.bind(++n, marker_oid);
+    if (nspace) {
+      q.bind(++n, *nspace);
+    }
+
+    q.bind(++n, limit + 1);
+
+    result->clear();
+
+    int count = 0;
+    while (dbo->exec_step(q)) {
+      if (++count > limit) {
+        *more = true;
+        break;
+      }
+      string result_nspace;
+      string result_oid;
+
+      result_nspace = q.getColumn(0).getString();
+      result_oid = q.getColumn(1).getString();
+
+      result->push_back({result_nspace, result_oid});
+    }
+
+  } catch (SQLite::Exception& e) {
+    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
+    return -EIO;
+  }
+
+  return result->size();
+}
+
 int LRemDBStore::Pool::init_tables() {
   Obj obj_table(trans, id);
   int r = obj_table.create_table();

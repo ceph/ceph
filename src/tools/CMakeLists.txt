@@ -16,6 +16,15 @@ else()
 endif()
 install(TARGETS rados DESTINATION bin)
 
+add_executable(notrados ${rados_srcs})
+target_link_libraries(notrados librados_stub global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+if(WITH_LIBRADOSSTRIPER)
+  target_link_libraries(notrados radosstriper)
+else()
+  target_link_libraries(notrados cls_lock_client)
+endif()
+install(TARGETS notrados DESTINATION bin)
+
 if(NOT WIN32)
   set(neorados_srcs
       neorados.cc)

@@ -36,19 +36,33 @@ int LRemDBRadosClient::init() {
 }
 
 void LRemDBRadosClient::object_list(int64_t pool_id,
- 				     std::list<librados::LRemRadosClient::Object> *list) {
+ 				    std::list<librados::LRemRadosClient::Object> *list) {
   list->clear();
 
   LRemDBTransactionState trans(cct());
   auto pool = m_mem_cluster->get_pool(*trans.dbc, pool_id);
-  if (pool != nullptr) {
-    std::shared_lock file_locker{pool->file_lock};
-    for (auto &file_pair : pool->files) {
+
+  LRemDBStore::PoolRef pool_db;
+  int r = trans.dbc->get_pool(pool_id, &pool_db);
+  if (r < 0) {
+    return;
+  }
+
+  int max = 1000;
+  bool more;
+
+  do {
+    std::list<LRemCluster::ObjectLocator> result;
+    r = pool_db->list(std::nullopt, string(), max,
+                      &result, &more);
+
+    for (auto& loc : result) {
       Object obj;
-      obj.oid = file_pair.first.name;
+      obj.oid = loc.name;
+      obj.nspace = loc.nspace;
       list->push_back(obj);
     }
-  }
+  } while (more);
 }
 
 int LRemDBRadosClient::pool_create(const std::string &pool_name) {

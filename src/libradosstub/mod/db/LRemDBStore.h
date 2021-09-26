@@ -103,6 +103,10 @@ namespace LRemDBStore {
     virtual int create_table() = 0;
 
     void set_instance(LRemDBTransactionState *_trans);
+
+    const string& get_table_name() const {
+      return table_name;
+    }
   };
 
   class Obj : public TableBase {
@@ -233,6 +237,11 @@ namespace LRemDBStore {
 
     int create(const std::string& _name, const std::string& _val);
     int read();
+    int list(std::optional<string> nspace,
+             const string& marker_oid,
+             int max,
+             std::list<LRemCluster::ObjectLocator> *result,
+             bool *more);
 
     ObjRef get_obj_handler();
     XAttrsRef get_xattrs_handler();

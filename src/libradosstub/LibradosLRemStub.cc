@@ -458,6 +458,18 @@ int AioCompletion::AioCompletion::wait_for_complete()
   return c->wait_for_complete();
 }
 
+int AioCompletion::AioCompletion::wait_for_complete_and_cb()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->wait_for_complete_and_cb();
+}
+
+bool librados::AioCompletion::AioCompletion::is_complete()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->is_complete();
+}
+
 
 IoCtx::IoCtx() : io_ctx_impl(NULL) {
 }
@@ -625,6 +637,25 @@ int IoCtx::aio_unwatch(uint64_t handle, AioCompletion *c) {
   return ctx->aio_unwatch(handle, c->pc);
 }
 
+int IoCtx::aio_read(const std::string& oid, librados::AioCompletion *c,
+                              bufferlist *pbl, size_t len, uint64_t off) {
+  ObjectReadOperation op;
+  op.read(off, len, pbl, nullptr);
+  return aio_operate(oid, c, &op, nullptr);
+}
+
+int IoCtx::aio_write(const std::string& oid, librados::AioCompletion *c,
+                     const bufferlist& bl, size_t len, uint64_t off) {
+  bufferlist newbl(bl);
+  bufferlist wrbl;
+  newbl.splice(0, len, &wrbl);
+  ObjectWriteOperation op;
+  op.write(off, wrbl);
+  return aio_operate(oid, c, &op);
+  
+}
+
+
 int IoCtx::aio_exec(const std::string& oid, AioCompletion *c,
                     const char *cls, const char *method,
                     bufferlist& inbl, bufferlist *outbl) {
@@ -692,6 +723,26 @@ int64_t IoCtx::get_id() {
   return ctx->get_id();
 }
 
+uint32_t IoCtx::get_object_hash_position(const std::string& oid) {
+  return (uint32_t)-1;
+}
+
+uint32_t IoCtx::get_object_pg_hash_position(const std::string& oid) {
+  return (uint32_t)-1;
+}
+
+int IoCtx::get_object_hash_position2(
+    const std::string& oid, uint32_t *hash_position)
+{
+  return -1;
+}
+
+int IoCtx::get_object_pg_hash_position2(
+    const std::string& oid, uint32_t *pg_hash_position)
+{
+  return -1;
+}
+
 uint64_t IoCtx::get_last_version() {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
   return ctx->get_last_version();
@@ -722,6 +773,35 @@ int IoCtx::list_snaps(const std::string& o, snap_set_t *out_snaps) {
   return ctx->execute_operation(
     o, std::bind(&LRemIoCtxImpl::list_snaps, _1, _2, out_snaps));
 }
+
+int IoCtx::set_alloc_hint(const std::string& o,
+                          uint64_t expected_object_size,
+                          uint64_t expected_write_size) {
+  LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::set_alloc_hint() ctx=" << ctx << " oid=" << o
+    << " expected_object_size=" << expected_object_size
+    << " expected_write_size=" << expected_write_size << dendl;
+
+  return ctx->execute_operation(
+    o, std::bind(&LRemIoCtxImpl::set_alloc_hint, _1, _2, expected_object_size, expected_write_size, 0,
+                     ctx->get_snap_context()));
+}
+
+int librados::IoCtx::set_alloc_hint2(const std::string& o,
+                                     uint64_t expected_object_size,
+                                     uint64_t expected_write_size,
+                                     uint32_t flags) {
+  LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::set_alloc_hint2() ctx=" << ctx << " oid=" << o
+    << " expected_object_size=" << expected_object_size
+    << " expected_write_size=" << expected_write_size
+    << " flags=" << flags << dendl;
+
+  return ctx->execute_operation(
+    o, std::bind(&LRemIoCtxImpl::set_alloc_hint, _1, _2, expected_object_size, expected_write_size, flags,
+                     ctx->get_snap_context()));
+}
+
 
 int IoCtx::list_watchers(const std::string& o,
                          std::list<obj_watch_t> *out_watchers) {
@@ -754,6 +834,32 @@ void IoCtx::notify_ack(const std::string& o, uint64_t notify_id,
   ctx->notify_ack(trans, notify_id, handle, bl);
 }
 
+int IoCtx::omap_get_keys(const std::string& oid,
+                         const std::string& start_after,
+                         uint64_t max_return,
+                         std::set<std::string> *out_keys) {
+  LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::omap_get_keys() ctx=" << ctx << " oid=" << oid
+           << " start_after=" << start_after << " max_return=" << max_return << dendl;
+  return ctx->execute_operation(
+    oid, std::bind(&LRemIoCtxImpl::omap_get_keys2, _1, _2, start_after,
+                     max_return, out_keys, nullptr));
+}
+
+int IoCtx::omap_get_keys2(const std::string& oid,
+                          const std::string& start_after,
+                          uint64_t max_return,
+                          std::set<std::string> *out_keys,
+                          bool *pmore) {
+  LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::omap_get_keys() ctx=" << ctx << " oid=" << oid
+           << " start_after=" << start_after << " max_return=" << max_return << dendl;
+  return ctx->execute_operation(
+    oid, std::bind(&LRemIoCtxImpl::omap_get_keys2, _1, _2, start_after,
+                     max_return, out_keys, pmore));
+}
+
+
 int IoCtx::omap_get_vals(const std::string& oid,
                          const std::string& start_after,
                          uint64_t max_return,
@@ -765,6 +871,7 @@ int IoCtx::omap_get_vals(const std::string& oid,
     oid, std::bind(&LRemIoCtxImpl::omap_get_vals, _1, _2, start_after, "",
                      max_return, out_vals));
 }
+
 int IoCtx::omap_get_vals_by_keys(const std::string& oid,
                                  const std::set<std::string>& keys,
                                  std::map<std::string, bufferlist> *vals) {
@@ -773,6 +880,24 @@ int IoCtx::omap_get_vals_by_keys(const std::string& oid,
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::omap_get_vals_by_keys, _1, _2, keys, vals));
 }
+
+int IoCtx::omap_get_header(const std::string& oid,
+                        bufferlist *bl) {
+  LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::omap_get_header() ctx=" << ctx << " oid=" << oid << dendl;
+  return ctx->execute_operation(
+    oid, std::bind(&LRemIoCtxImpl::omap_get_header, _1, _2, bl));
+}
+
+int librados::IoCtx::omap_set_header(const std::string& oid,
+                                     const bufferlist& bl)
+{
+  LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::omap_set_header() ctx=" << ctx << " oid=" << oid << " bl.length=" << bl.length() << dendl;
+  return ctx->execute_operation(
+    oid, std::bind(&LRemIoCtxImpl::omap_set_header, _1, _2, bl));
+}
+
 int IoCtx::omap_set(const std::string& oid,
                     const std::map<std::string, bufferlist>& m) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
@@ -841,6 +966,14 @@ int IoCtx::remove(const std::string& oid) {
     oid, std::bind(&LRemIoCtxImpl::remove, _1, _2, ctx->get_snap_context()));
 }
 
+int IoCtx::remove(const std::string& oid, int flags) {
+#warning flags not used
+  LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::remove() ctx=" << ctx << " oid=" << oid << " flags=" << flags << dendl;
+  return ctx->execute_operation(
+    oid, std::bind(&LRemIoCtxImpl::remove, _1, _2, ctx->get_snap_context()));
+}
+
 int IoCtx::selfmanaged_snap_create(uint64_t *snapid) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
   dout(20) << "IoCtx::selfmanaged_snap_create() ctx=" << ctx << dendl;
@@ -880,6 +1013,43 @@ int IoCtx::selfmanaged_snap_set_write_ctx(snap_t seq,
   return ctx->selfmanaged_snap_set_write_ctx(seq, snaps);
 }
 
+int IoCtx::snap_create(const char *snapname) {
+#warning implement me
+  return -ENOTSUP;
+}
+
+int IoCtx::snap_lookup(const char *name, snap_t *snapid) {
+#warning not implemented
+  return -ENOTSUP;
+}
+
+
+int IoCtx::snap_get_stamp(snap_t snapid, time_t *t) {
+#warning implement me
+  return -ENOTSUP;
+}
+
+
+int IoCtx::snap_get_name(snap_t snapid, std::string *s) {
+#warning not implemented
+  return -ENOTSUP;
+}
+
+int IoCtx::snap_remove(const char *snapname) {
+#warning implement me
+  return -ENOTSUP;
+}
+
+int IoCtx::snap_list(std::vector<snap_t> *snaps) {
+#warning implement me
+  return -ENOTSUP;
+}
+
+int IoCtx::snap_rollback(const std::string& oid, const char *snapname) {
+#warning implement me
+  return -ENOTSUP;
+}
+
 void IoCtx::snap_set_read(snap_t seq) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
   dout(20) << "IoCtx::selfmanaged_snap_set_read() ctx=" << ctx << " seq=" << seq << dendl;
@@ -893,6 +1063,34 @@ int IoCtx::sparse_read(const std::string& oid, std::map<uint64_t,uint64_t>& m,
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::sparse_read, _1, _2, off, len, &m, &bl,
                      ctx->get_snap_read()));
+}
+
+int IoCtx::getxattr(const std::string& oid, const char *name, bufferlist& bl) {
+  LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::getxattr() ctx=" << ctx << " oid=" << oid << " name=" << name << dendl;
+  return ctx->execute_operation(
+    oid, std::bind(&LRemIoCtxImpl::getxattr, _1, _2, name, &bl));
+}
+
+int IoCtx::getxattrs(const std::string& oid, std::map<std::string, bufferlist>& attrset) {
+  LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::getxattrs() ctx=" << ctx << " oid=" << oid << dendl;
+  return ctx->execute_operation(
+    oid, std::bind(&LRemIoCtxImpl::xattr_get, _1, _2, &attrset));
+}
+
+int IoCtx::setxattr(const std::string& oid, const char *name, bufferlist& bl) {
+  LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::setxattrs() ctx=" << ctx << " oid=" << oid << dendl;
+  return ctx->execute_operation(
+    oid, std::bind(&LRemIoCtxImpl::setxattr, _1, _2, name, bl));
+}
+
+int IoCtx::rmxattr(const std::string& oid, const char *name) {
+  LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::rmxattrs() ctx=" << ctx << " oid=" << oid << dendl;
+  return ctx->execute_operation(
+    oid, std::bind(&LRemIoCtxImpl::rmxattr, _1, _2, name));
 }
 
 int IoCtx::stat(const std::string& oid, uint64_t *psize, time_t *pmtime) {
@@ -921,6 +1119,11 @@ int IoCtx::trunc(const std::string& oid, uint64_t off) {
   return ctx->execute_operation(
     oid, std::bind(&LRemIoCtxImpl::truncate, _1, _2, off,
                      ctx->get_snap_context()));
+}
+
+int IoCtx::mapext(const std::string& oid, uint64_t off, size_t len,
+                            std::map<uint64_t,uint64_t>& m) {
+  return -ENOTSUP;
 }
 
 int IoCtx::unwatch2(uint64_t handle) {
@@ -959,6 +1162,18 @@ int IoCtx::write(const std::string& oid, bufferlist& bl, size_t len,
     oid, std::bind(&LRemIoCtxImpl::write, _1, _2, bl, len, off,
                      ctx->get_snap_context()));
 }
+
+int librados::IoCtx::append(const std::string& oid, bufferlist& bl, size_t len) {
+  LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
+  dout(20) << "IoCtx::append() ctx=" << ctx << " oid=" << oid << " bl.length()=" << bl.length() << " len=" << len << dendl;
+  bufferlist newbl(bl);
+  bufferlist wrbl;
+  newbl.splice(0, len, &wrbl);
+  return ctx->execute_operation(
+    oid, std::bind(&LRemIoCtxImpl::append, _1, _2, wrbl,
+                     ctx->get_snap_context()));
+}
+
 
 int IoCtx::write_full(const std::string& oid, bufferlist& bl) {
   LRemIoCtxImpl *ctx = reinterpret_cast<LRemIoCtxImpl*>(io_ctx_impl);
@@ -1080,6 +1295,18 @@ librados::NObjectIterator librados::IoCtx::nobjects_begin(
 const librados::NObjectIterator& librados::IoCtx::nobjects_end() const
 {
   return NObjectIterator::__EndObjectIterator;
+}
+
+void IoCtx::set_osdmap_full_try() {
+}
+
+void IoCtx::unset_osdmap_full_try() {
+}
+
+void IoCtx::set_pool_full_try() {
+}
+
+void IoCtx::unset_pool_full_try() {
 }
 
 static int save_operation_result(int result, int *pval) {
@@ -1404,6 +1631,22 @@ void ObjectReadOperation::omap_get_vals2(const std::string &start_after,
                  out_vals, pmore, prval);
 }
 
+void ObjectReadOperation::cache_flush() {
+}
+
+void ObjectReadOperation::cache_try_flush() {
+}
+
+void ObjectReadOperation::cache_evict() {
+}
+
+void ObjectReadOperation::tier_flush() {
+}
+
+void ObjectReadOperation::tier_evict() {
+}
+
+
 void ObjectWriteOperation::append(const bufferlist &bl) {
   LRemObjectOperationImpl *o = reinterpret_cast<LRemObjectOperationImpl*>(impl);
   o->ops.push_back(std::bind(&LRemIoCtxImpl::append, _1, _7, bl, _5));
@@ -1434,6 +1677,15 @@ void ObjectWriteOperation::omap_clear() {
   o->ops.push_back(std::bind(&LRemIoCtxImpl::omap_clear, _1, _7));
 }
 
+void ObjectWriteOperation::copy_from(const std::string& src,
+                                     const IoCtx& src_ioctx,
+                                     uint64_t src_version,
+                                     uint32_t src_fadvise_flags)
+{
+#warning not implemented
+}
+
+
 void ObjectWriteOperation::remove() {
   LRemObjectOperationImpl *o = reinterpret_cast<LRemObjectOperationImpl*>(impl);
   o->ops.push_back(std::bind(&LRemIoCtxImpl::remove, _1, _7, _5));
@@ -1443,6 +1695,10 @@ void ObjectWriteOperation::selfmanaged_snap_rollback(uint64_t snapid) {
   LRemObjectOperationImpl *o = reinterpret_cast<LRemObjectOperationImpl*>(impl);
   o->ops.push_back(std::bind(&LRemIoCtxImpl::selfmanaged_snap_rollback,
 			       _1, _7, snapid));
+}
+
+void ObjectWriteOperation::snap_rollback(snap_t snapid) {
+#warning not implemented
 }
 
 void ObjectWriteOperation::set_alloc_hint(uint64_t expected_object_size,
@@ -1496,6 +1752,16 @@ void ObjectWriteOperation::zero(uint64_t off, uint64_t len) {
   o->ops.push_back(std::bind(&LRemIoCtxImpl::zero, _1, _7, off, len, _5));
 }
 
+void ObjectWriteOperation::mtime(time_t *pt) {
+  if (!pt) {
+    return;
+  }
+  struct timespec ts;
+  ts.tv_sec = *pt;
+  ts.tv_nsec = 0;
+  mtime2(&ts);
+}
+
 void ObjectWriteOperation::mtime2(struct timespec *pts) {
   if (!pts) {
     return;
@@ -1514,6 +1780,27 @@ void ObjectWriteOperation::rmxattr(const char *name) {
   o->ops.push_back(std::bind(&LRemIoCtxImpl::rmxattr, _1, _7, name));
 }
 
+void ObjectWriteOperation::set_redirect(const std::string& tgt_obj,
+                                        const IoCtx& tgt_ioctx,
+                                        uint64_t tgt_version,
+                                        int flag) {
+}
+
+void ObjectReadOperation::set_chunk(uint64_t src_offset,
+                                    uint64_t src_length,
+                                    const IoCtx& tgt_ioctx,
+                                    string tgt_oid,
+                                    uint64_t tgt_offset,
+                                    int flag) {
+}
+
+void ObjectWriteOperation::tier_promote() {
+#warning not implemented
+}
+
+void ObjectWriteOperation::unset_manifest() {
+#warning not implemented
+}
 
 Rados::Rados() : client(NULL) {
 }
@@ -1557,6 +1844,11 @@ AioCompletion *Rados::aio_create_completion(void *cb_arg,
       reinterpret_cast<void**>(&c));
   ceph_assert(r == 0);
   return new AioCompletion(c);
+}
+
+librados::AioCompletion *librados::Rados::aio_create_completion()
+{
+  return aio_create_completion(nullptr, nullptr);
 }
 
 int Rados::aio_watch_flush(AioCompletion* c) {
@@ -1761,6 +2053,65 @@ int Rados::wait_for_latest_osdmap() {
 int Rados::watch_flush() {
   LRemRadosClient *impl = reinterpret_cast<LRemRadosClient*>(client);
   return impl->watch_flush();
+}
+
+  struct PlacementGroupImpl {
+    pg_t pgid;
+  };
+
+PlacementGroup::PlacementGroup()
+    : impl{new PlacementGroupImpl} {}
+
+PlacementGroup::PlacementGroup(const PlacementGroup& pg)
+    : impl{new PlacementGroupImpl} {
+  impl->pgid = pg.impl->pgid;
+}
+
+PlacementGroup::~PlacementGroup() {}
+
+bool PlacementGroup::parse(const char* s) {
+  return false;
+}
+
+std::ostream& librados::operator<<(std::ostream& out,
+                                   const librados::PlacementGroup& pg)
+{
+  return out << pg.impl->pgid;
+}
+
+
+int Rados::get_inconsistent_pgs(int64_t pool_id,
+                                std::vector<PlacementGroup>* pgs) {
+  return -ENOTSUP;
+}
+
+int Rados::Rados::get_pool_stats(std::list<string>& v,
+                                 stats_map& result) {
+  return -ENOTSUP;
+}
+
+
+bool Rados::get_pool_is_selfmanaged_snaps_mode(const std::string& pool)
+{
+  return false;
+}
+
+int Rados::get_inconsistent_objects(const PlacementGroup& pg,
+                                    const object_id_t &start_after,
+                                    unsigned max_return,
+                                    AioCompletion *c,
+                                    std::vector<inconsistent_obj_t>* objects,
+                                    uint32_t* interval) {
+  return -ENOTSUP;
+}
+
+int Rados::get_inconsistent_snapsets(const PlacementGroup& pg,
+                                     const object_id_t &start_after,
+                                     unsigned max_return,
+                                     AioCompletion *c,
+                                     std::vector<inconsistent_snapset_t>* snapset,
+                                     uint32_t* interval) {
+  return -ENOTSUP;
 }
 
 WatchCtx::~WatchCtx() {
