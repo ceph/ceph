@@ -20,10 +20,10 @@
 #include "common/config.h"
 #include "OSD.h"
 #include "OpRequest.h"
-#include "scrubber/ScrubStore.h"
-#include "scrubber/pg_scrubber.h"
-#include "Session.h"
+#include "osd/scrubber/ScrubStore.h"
+#include "osd/scrubber/pg_scrubber.h"
 #include "osd/scheduler/OpSchedulerItem.h"
+#include "Session.h"
 
 #include "common/Timer.h"
 #include "common/perf_counters.h"
