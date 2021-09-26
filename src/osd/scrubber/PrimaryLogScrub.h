@@ -19,7 +19,7 @@
 #include "messages/MOSDScrub.h"
 #include "messages/MOSDScrubReserve.h"
 
-#include "OSD.h"
+#include "osd/OSD.h"
 #include "scrub_machine.h"
 
 class PrimaryLogPG;
