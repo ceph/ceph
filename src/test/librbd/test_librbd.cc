@@ -2089,6 +2089,35 @@ TEST_F(TestLibRBD, TestCreateLsRenameSnapPP)
   ioctx.close();
 }
 
+TEST_F(TestLibRBD, ConcurrentCreatesUnvalidatedPool)
+{
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, create_pool(true).c_str(),
+                                  &ioctx));
+
+  std::vector<std::string> names;
+  for (int i = 0; i < 4; i++) {
+    names.push_back(get_temp_image_name());
+  }
+  uint64_t size = 2 << 20;
+
+  std::vector<std::thread> threads;
+  for (const auto& name : names) {
+    threads.emplace_back([ioctx, &name, size]() {
+      int order = 0;
+      ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  for (const auto& name : names) {
+    ASSERT_EQ(0, rbd_remove(ioctx, name.c_str()));
+  }
+  rados_ioctx_destroy(ioctx);
+}
+
 TEST_F(TestLibRBD, TestIO)
 {
   rados_ioctx_t ioctx;
