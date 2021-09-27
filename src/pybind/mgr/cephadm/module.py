@@ -90,6 +90,14 @@ Host *
 
 CEPH_TYPES = set(CEPH_UPGRADE_ORDER)
 
+# Default container images -----------------------------------------------------
+DEFAULT_IMAGE = 'quay.io/ceph/ceph'
+DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.18.1'
+DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v0.18.1'
+DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.20.0'
+DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:6.7.4'
+# ------------------------------------------------------------------------------
+
 
 class CephadmCompletion(orchestrator.Completion[T]):
     def evaluate(self) -> None:
@@ -162,28 +170,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         },
         {
             'name': 'container_image_base',
-            'default': 'quay.io/ceph/ceph',
+            'default': DEFAULT_IMAGE,
             'desc': 'Container image name, without the tag',
             'runtime': True,
         },
         {
             'name': 'container_image_prometheus',
-            'default': 'docker.io/prom/prometheus:v2.18.1',
+            'default': DEFAULT_PROMETHEUS_IMAGE,
             'desc': 'Prometheus container image',
         },
         {
             'name': 'container_image_grafana',
-            'default': 'docker.io/ceph/ceph-grafana:6.7.4',
+            'default': DEFAULT_GRAFANA_IMAGE,
             'desc': 'Prometheus container image',
         },
         {
             'name': 'container_image_alertmanager',
-            'default': 'docker.io/prom/alertmanager:v0.20.0',
+            'default': DEFAULT_ALERT_MANAGER_IMAGE,
             'desc': 'Prometheus container image',
         },
         {
             'name': 'container_image_node_exporter',
-            'default': 'docker.io/prom/node-exporter:v0.18.1',
+            'default': DEFAULT_NODE_EXPORTER_IMAGE,
             'desc': 'Prometheus container image',
         },
         {
