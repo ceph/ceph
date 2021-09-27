@@ -11,6 +11,5 @@ CEPHADM Developer Documentation
    developing-cephadm
    host-maintenance
    compliance-check
-   cephadm-exporter
    Storage devices and OSDs management <./design/storage_devices_and_osds>
    scalability-notes
