@@ -2,11 +2,13 @@ import os
 
 from .group import Group
 
+
 def splitall(path):
     if path == "/":
         return ["/"]
     s = os.path.split(path)
     return splitall(s[0]) + [s[1]]
+
 
 def resolve(vol_spec, path):
     parts = splitall(path)
@@ -15,6 +17,7 @@ def resolve(vol_spec, path):
     groupname = None if parts[2] == Group.NO_GROUP_NAME else parts[2]
     subvolname = parts[3]
     return (groupname, subvolname)
+
 
 def resolve_trash(vol_spec, path):
     parts = splitall(path)
