@@ -4,14 +4,14 @@ from __future__ import absolute_import
 
 import unittest
 
-from . import DEFAULT_VERSION
+from . import DEFAULT_API_VERSION
 from .helper import DashboardTestCase
 
 
 class VersionReqTest(DashboardTestCase, unittest.TestCase):
     def test_version(self):
         for (version, expected_status) in [
-                (DEFAULT_VERSION, 200),
+                (DEFAULT_API_VERSION, 200),
                 (None, 415),
                 ("99.99", 415)
         ]:

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 import logging
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import cherrypy
 
-from .. import DEFAULT_VERSION, mgr
+from .. import mgr
 from ..api.doc import Schema, SchemaInput, SchemaType
-from . import ENDPOINT_MAP, BaseController, Controller, Endpoint
+from . import ENDPOINT_MAP, APIVersion, BaseController, Controller, Endpoint
 
 NO_DESCRIPTION_AVAILABLE = "*No description available*"
 
@@ -183,7 +183,8 @@ class Docs(BaseController):
         return schema.as_dict()
 
     @classmethod
-    def _gen_responses(cls, method, resp_object=None, version=None):
+    def _gen_responses(cls, method, resp_object=None,
+                       version: Optional[APIVersion] = None):
         resp: Dict[str, Dict[str, Union[str, Any]]] = {
             '400': {
                 "description": "Operation exception. Please check the "
@@ -203,37 +204,38 @@ class Docs(BaseController):
         }
 
         if not version:
-            version = DEFAULT_VERSION
+            version = APIVersion.DEFAULT
 
         if method.lower() == 'get':
             resp['200'] = {'description': "OK",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
+                           'content': {version.to_mime_type():
                                        {'type': 'object'}}}
         if method.lower() == 'post':
             resp['201'] = {'description': "Resource created.",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
+                           'content': {version.to_mime_type():
                                        {'type': 'object'}}}
         if method.lower() == 'put':
             resp['200'] = {'description': "Resource updated.",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
+                           'content': {version.to_mime_type():
                                        {'type': 'object'}}}
         if method.lower() == 'delete':
             resp['204'] = {'description': "Resource deleted.",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
+                           'content': {version.to_mime_type():
                                        {'type': 'object'}}}
         if method.lower() in ['post', 'put', 'delete']:
             resp['202'] = {'description': "Operation is still executing."
                                           " Please check the task queue.",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
+                           'content': {version.to_mime_type():
                                        {'type': 'object'}}}
 
         if resp_object:
             for status_code, response_body in resp_object.items():
                 if status_code in resp:
-                    resp[status_code].update({
-                        'content': {
-                            'application/vnd.ceph.api.v{}+json'.format(version): {
-                                'schema': cls._gen_schema_for_content(response_body)}}})
+                    resp[status_code].update(
+                        {'content':
+                         {version.to_mime_type():
+                          {'schema': cls._gen_schema_for_content(response_body)}
+                          }})
 
         return resp
 
@@ -285,7 +287,7 @@ class Docs(BaseController):
                 func = endpoint.func
 
                 summary = ''
-                version = ''
+                version = None
                 resp = {}
                 p_info = []
 
