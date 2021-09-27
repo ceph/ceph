@@ -131,7 +131,7 @@ class DataLogBackends final
   std::mutex m;
   RGWDataChangesLog& datalog;
 
-  DataLogBackends(librados::IoCtx& ioctx,
+  DataLogBackends(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx,
 		  std::string oid,
 		  fu2::unique_function<std::string(
 		    uint64_t, int) const>&& get_oid,

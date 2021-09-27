@@ -188,7 +188,7 @@ public:
        int shards_, log_type def, optional_yield y,
        Args&& ...args) noexcept {
     try {
-      T* lgp = new T(ioctx_, std::move(oid_),
+      T* lgp = new T(dpp, ioctx_, std::move(oid_),
 		     std::move(get_oid_),
 		     shards_, std::forward<Args>(args)...);
       std::unique_ptr<T> lg(lgp);

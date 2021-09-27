@@ -214,17 +214,17 @@ public:
 
   using logback_generations::logback_generations;
 
-  bs::error_code handle_init(entries_t e) noexcept {
+  bs::error_code handle_init(const DoutPrefix dp, entries_t e) noexcept {
     got_entries = e;
     return {};
   }
 
-  bs::error_code handle_new_gens(entries_t e) noexcept  {
+  bs::error_code handle_new_gens(const DoutPrefix dp, entries_t e) noexcept  {
     got_entries = e;
     return {};
   }
 
-  bs::error_code handle_empty_to(uint64_t new_tail) noexcept {
+  bs::error_code handle_empty_to(const DoutPrefix dp, uint64_t new_tail) noexcept {
     tail = new_tail;
     return {};
   }
