@@ -16,6 +16,7 @@ from .operations.trash import open_trashcan
 
 log = logging.getLogger(__name__)
 
+
 # helper for fetching a trash entry for a given volume
 def get_trash_entry_for_volume(fs_client, volspec, volname, running_jobs):
     log.debug("fetching trash entry for volume '{0}'".format(volname))
@@ -34,6 +35,7 @@ def get_trash_entry_for_volume(fs_client, volspec, volname, running_jobs):
         log.error("error fetching trash entry for volume '{0}' ({1})".format(volname, ve))
         return ve.errno, None
 
+    
 def subvolume_purge(fs_client, volspec, volname, trashcan, subvolume_trash_entry, should_cancel):
     groupname, subvolname = resolve_trash(volspec, subvolume_trash_entry.decode('utf-8'))
     log.debug("subvolume resolved to {0}/{1}".format(groupname, subvolname))
@@ -53,6 +55,7 @@ def subvolume_purge(fs_client, volspec, volname, trashcan, subvolume_trash_entry
         if not ve.errno == -errno.ENOENT:
             raise
 
+            
 # helper for starting a purge operation on a trash entry
 def purge_trash_entry_for_volume(fs_client, volspec, volname, purge_entry, should_cancel):
     log.debug("purging trash entry '{0}' for volume '{1}'".format(purge_entry, volname))
@@ -89,6 +92,7 @@ def purge_trash_entry_for_volume(fs_client, volspec, volname, purge_entry, shoul
     except VolumeException as ve:
         ret = ve.errno
     return ret
+
 
 class ThreadPoolPurgeQueueMixin(AsyncJobs):
     """
