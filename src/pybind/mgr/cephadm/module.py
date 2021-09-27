@@ -32,8 +32,6 @@ from cephadm.agent import CherryPyThread, CephadmAgentHelpers
 
 
 from mgr_module import MgrModule, HandleCommandResult, Option
-from mgr_util import create_self_signed_cert
-import secrets
 import orchestrator
 from orchestrator.module import to_format, Format
 
@@ -55,7 +53,6 @@ from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
-from .services.exporter import CephadmExporter, CephadmExporterConfig
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, EventStore, ClientKeyringStore, ClientKeyringSpec
 from .upgrade import CephadmUpgrade
@@ -100,18 +97,6 @@ DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:6.7.4'
 DEFAULT_HAPROXY_IMAGE = 'docker.io/library/haproxy:2.3'
 DEFAULT_KEEPALIVED_IMAGE = 'docker.io/arcts/keepalived'
 # ------------------------------------------------------------------------------
-
-
-def service_inactive(spec_name: str) -> Callable:
-    def inner(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            obj = args[0]
-            if obj.get_store(f"spec.{spec_name}") is not None:
-                return 1, "", f"Unable to change configuration of an active service {spec_name}"
-            return func(*args, **kwargs)
-        return wrapper
-    return inner
 
 
 def host_exists(hostname_position: int = 1) -> Callable:
@@ -490,7 +475,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             OSDService, NFSService, MonService, MgrService, MdsService,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
             PrometheusService, NodeExporterService, CrashService, IscsiService,
-            IngressService, CustomContainerService, CephadmExporter, CephfsMirrorService,
+            IngressService, CustomContainerService, CephfsMirrorService,
             CephadmAgent
         ]
 
@@ -635,7 +620,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         suffix = daemon_type not in [
             'mon', 'crash',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
-            'container', 'cephadm-exporter', 'agent'
+            'container', 'agent'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -1041,101 +1026,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Get extra ceph conf that is appended
         """
         return HandleCommandResult(stdout=self.extra_ceph_conf().conf)
-
-    def _set_exporter_config(self, config: Dict[str, str]) -> None:
-        self.set_store('exporter_config', json.dumps(config))
-
-    def _get_exporter_config(self) -> Dict[str, str]:
-        cfg_str = self.get_store('exporter_config')
-        return json.loads(cfg_str) if cfg_str else {}
-
-    def _set_exporter_option(self, option: str, value: Optional[str] = None) -> None:
-        kv_option = f'exporter_{option}'
-        self.set_store(kv_option, value)
-
-    def _get_exporter_option(self, option: str) -> Optional[str]:
-        kv_option = f'exporter_{option}'
-        return self.get_store(kv_option)
-
-    @orchestrator._cli_write_command(
-        prefix='cephadm generate-exporter-config')
-    @service_inactive('cephadm-exporter')
-    def _generate_exporter_config(self) -> Tuple[int, str, str]:
-        """
-        Generate default SSL crt/key and token for cephadm exporter daemons
-        """
-        self._set_exporter_defaults()
-        self.log.info('Default settings created for cephadm exporter(s)')
-        return 0, "", ""
-
-    def _set_exporter_defaults(self) -> None:
-        crt, key = self._generate_exporter_ssl()
-        token = self._generate_exporter_token()
-        self._set_exporter_config({
-            "crt": crt,
-            "key": key,
-            "token": token,
-            "port": CephadmExporterConfig.DEFAULT_PORT
-        })
-        self._set_exporter_option('enabled', 'true')
-
-    def _generate_exporter_ssl(self) -> Tuple[str, str]:
-        return create_self_signed_cert(dname={"O": "Ceph", "OU": "cephadm-exporter"})
-
-    def _generate_exporter_token(self) -> str:
-        return secrets.token_hex(32)
-
-    @orchestrator._cli_write_command(
-        prefix='cephadm clear-exporter-config')
-    @service_inactive('cephadm-exporter')
-    def _clear_exporter_config(self) -> Tuple[int, str, str]:
-        """
-        Clear the SSL configuration used by cephadm exporter daemons
-        """
-        self._clear_exporter_config_settings()
-        self.log.info('Cleared cephadm exporter configuration')
-        return 0, "", ""
-
-    def _clear_exporter_config_settings(self) -> None:
-        self.set_store('exporter_config', None)
-        self._set_exporter_option('enabled', None)
-
-    @orchestrator._cli_write_command(
-        prefix='cephadm set-exporter-config')
-    @service_inactive('cephadm-exporter')
-    def _store_exporter_config(self, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
-        """
-        Set custom cephadm-exporter configuration from a json file (-i <file>). JSON must contain crt, key, token and port
-        """
-        if not inbuf:
-            return 1, "", "JSON configuration has not been provided (-i <filename>)"
-
-        cfg = CephadmExporterConfig(self)
-        rc, reason = cfg.load_from_json(inbuf)
-        if rc:
-            return 1, "", reason
-
-        rc, reason = cfg.validate_config()
-        if rc:
-            return 1, "", reason
-
-        self._set_exporter_config({
-            "crt": cfg.crt,
-            "key": cfg.key,
-            "token": cfg.token,
-            "port": cfg.port
-        })
-        self.log.info("Loaded and verified the TLS configuration")
-        return 0, "", ""
-
-    @orchestrator._cli_read_command(
-        'cephadm get-exporter-config')
-    def _show_exporter_config(self) -> Tuple[int, str, str]:
-        """
-        Show the current cephadm-exporter configuraion (JSON)'
-        """
-        cfg = self._get_exporter_config()
-        return 0, json.dumps(cfg, indent=2), ""
 
     @orchestrator._cli_read_command('cephadm config-check ls')
     def _config_checks_list(self, format: Format = Format.plain) -> HandleCommandResult:
@@ -2436,7 +2326,6 @@ Then run the following:
                 'node-exporter': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
-                'cephadm-exporter': PlacementSpec(host_pattern='*'),
             }
             spec.placement = defaults[spec.service_type]
         elif spec.service_type in ['mon', 'mgr'] and \
@@ -2547,10 +2436,6 @@ Then run the following:
 
     @handle_orch_error
     def apply_container(self, spec: ServiceSpec) -> str:
-        return self._apply(spec)
-
-    @handle_orch_error
-    def apply_cephadm_exporter(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

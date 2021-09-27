@@ -460,7 +460,6 @@ class Orchestrator(object):
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
             'host': self.add_host,
-            'cephadm-exporter': self.apply_cephadm_exporter,
         }
 
         def merge(l: OrchResult[List[str]], r: OrchResult[str]) -> OrchResult[List[str]]:  # noqa: E741
@@ -640,10 +639,6 @@ class Orchestrator(object):
         """Update an existing AlertManager daemon(s)"""
         raise NotImplementedError()
 
-    def apply_cephadm_exporter(self, spec: ServiceSpec) -> OrchResult[str]:
-        """Update an existing cephadm exporter daemon"""
-        raise NotImplementedError()
-
     def upgrade_check(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
         raise NotImplementedError()
 
@@ -708,7 +703,6 @@ def daemon_type_to_service(dtype: str) -> str:
         'crash': 'crash',
         'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
-        'cephadm-exporter': 'cephadm-exporter',
         'agent': 'agent'
     }
     return mapping[dtype]
@@ -732,7 +726,6 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'node-exporter': ['node-exporter'],
         'crash': ['crash'],
         'container': ['container'],
-        'cephadm-exporter': ['cephadm-exporter'],
         'agent': ['agent']
     }
     return mapping[stype]

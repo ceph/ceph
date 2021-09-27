@@ -579,18 +579,6 @@ def test_dd_octopus(dd_json):
         True
     ),
 
-    (
-        # daemon_id only contains hostname
-        ServiceSpec(
-            service_type='cephadm-exporter',
-        ),
-        DaemonDescription(
-            daemon_type='cephadm-exporter',
-            daemon_id="testhost",
-            hostname="testhost",
-        ),
-        True
-    ),
 ])
 def test_daemon_description_service_name(spec: ServiceSpec,
                                          dd: DaemonDescription,

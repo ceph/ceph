@@ -1068,11 +1068,6 @@ class CephadmServe:
                     if spec.ports:
                         ports.extend(spec.ports)
 
-                if daemon_spec.daemon_type == 'cephadm-exporter':
-                    if not reconfig:
-                        assert daemon_spec.host
-                        self._deploy_cephadm_binary(daemon_spec.host)
-
                 # TCP port to open in the host firewall
                 if len(ports) > 0:
                     daemon_spec.extra_args.extend([
@@ -1231,7 +1226,7 @@ class CephadmServe:
         self.log.debug(f"_run_cephadm : command = {command}")
         self.log.debug(f"_run_cephadm : args = {args}")
 
-        bypass_image = ('cephadm-exporter', 'agent')
+        bypass_image = ('agent')
 
         assert image or entity
         # Skip the image check for daemons deployed that are not ceph containers
