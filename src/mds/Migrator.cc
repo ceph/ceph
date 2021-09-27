@@ -1969,7 +1969,7 @@ void Migrator::export_notify_abort(CDir *dir, export_state_t& stat, set<CDir*>& 
 }
 
 /*
- * this happens if hte dest failes after i send teh export data but before it is acked
+ * this happens if the dest failes after i send the export data but before it is acked
  * that is, we don't know they safely received and logged it, so we reverse our changes
  * and go on.
  */
