@@ -278,10 +278,11 @@ TransactionManager::submit_transaction_direct(
       submit_transaction_iertr::pass_further{},
       crimson::ct_error::all_same_way([](auto e) {
 	ceph_assert(0 == "Hit error submitting to journal");
-      }));
-    }).finally([&tref]() {
+      })
+    );
+  }).finally([&tref]() {
       tref.get_handle().exit();
-    });
+  });
 }
 
 TransactionManager::get_next_dirty_extents_ret
