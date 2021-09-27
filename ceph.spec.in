@@ -29,7 +29,6 @@
 %else
 %bcond_without tcmalloc
 %endif
-%bcond_with system_pmdk
 %bcond_without rbd_ssd_cache
 %ifarch x86_64
 %bcond_without rbd_rwl_cache
@@ -37,6 +36,7 @@
 %bcond_with rbd_rwl_cache
 %endif
 %if 0%{?fedora} || 0%{?rhel}
+%bcond_with system_pmdk
 %bcond_without selinux
 %if 0%{?rhel} >= 8
 %bcond_with cephfs_java
@@ -53,6 +53,7 @@
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
+%bcond_without system_pmdk
 %bcond_with amqp_endpoint
 %bcond_with cephfs_java
 %bcond_with kafka_endpoint
