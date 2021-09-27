@@ -245,6 +245,7 @@ BuildRequires:  librdkafka-devel
 BuildRequires:  %{luarocks_package_name}
 %endif
 %if 0%{with make_check}
+BuildRequires:  hostname
 BuildRequires:  jq
 BuildRequires:	libuuid-devel
 BuildRequires:	python%{python3_pkgversion}-bcrypt
