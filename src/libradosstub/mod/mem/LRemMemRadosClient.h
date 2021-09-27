@@ -40,8 +40,10 @@ public:
     return 0;
   }
 
-  void object_list(int64_t pool_id,
-                   std::list<librados::LRemRadosClient::Object> *list) override;
+  int object_list_open(int64_t pool_id,
+                       std::shared_ptr<ObjListOp> *op) override;
+  int object_list(int64_t pool_id,
+                  std::list<librados::LRemRadosClient::Object> *list) override;
 
   int service_daemon_register(const std::string& service,
                               const std::string& name,

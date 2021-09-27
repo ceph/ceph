@@ -622,10 +622,10 @@ int LRemDBStore::Pool::list(std::optional<string> nspace,
     string s = string("SELECT nspace, oid from ") + table_name + " WHERE oid > ?";
 
     if (nspace) {
-      s += " AND WHERE nspace == ?";
+      s += " AND nspace == ?";
     }
 
-    s += " LIMIT " + to_str(limit);
+    s += " LIMIT " + to_str(limit + 1);
 
     auto q = dbo->statement(s);
 
@@ -634,8 +634,6 @@ int LRemDBStore::Pool::list(std::optional<string> nspace,
     if (nspace) {
       q.bind(++n, *nspace);
     }
-
-    q.bind(++n, limit + 1);
 
     result->clear();
 

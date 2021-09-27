@@ -26,8 +26,112 @@ LRemIoCtxImpl *LRemMemRadosClient::create_ioctx(int64_t pool_id,
                               m_mem_cluster->get_pool(pool_name));
 }
 
-void LRemMemRadosClient::object_list(int64_t pool_id,
- 				     std::list<librados::LRemRadosClient::Object> *list) {
+class LRemMemObjListOp : public ObjListOp {
+  CephContext *cct;
+
+  LRemMemCluster *mem_cluster;
+  int64_t pool_id;
+
+  ObjectCursor cursor;
+  std::optional<string> nspace;
+  bufferlist filter;
+
+  uint32_t hash(const string& s) const {
+    char result[sizeof(uint32_t)];
+    const char *cs = s.c_str();
+    int len = min(s.size(), sizeof(result) - 1);
+    result[0] = (char)len;
+    memcpy(&result[1], cs, len); /* memcpy and not strcpy because s might hold null chars */
+
+    return *(uint32_t *)result;
+  }
+
+  string unhash(uint32_t h) const {
+    char *buf = (char *)&h;
+
+    int len = (int)buf[0];
+
+    return string(&buf[1], len);
+  }
+public:
+  LRemMemObjListOp(CephContext *_cct,
+                   LRemMemCluster *_mem_cluster,
+                   int64_t _pool_id) : cct(_cct),
+                                       mem_cluster(_mem_cluster),
+                                       pool_id(_pool_id) {}
+
+  int open() {
+    return 0;
+  }
+
+  uint32_t seek(const ObjectCursor& _cursor) override {
+    cursor = _cursor;
+    return get_pg_hash_position();
+  }
+
+  uint32_t seek(uint32_t pos) override {
+    cursor.from_str(unhash(pos));
+    return pos;
+  }
+
+  virtual librados::ObjectCursor get_cursor() const override {
+    return cursor;
+  }
+
+  uint32_t get_pg_hash_position() const override {
+    return hash(cursor.to_str());
+  }
+
+  void set_filter(const bufferlist& bl) override {
+    filter = bl;
+  }
+
+  void set_nspace(const string& ns) override {
+    nspace = ns;
+  }
+
+  int list_objs(int max, std::list<librados::LRemRadosClient::Object> *result, bool *more) override;
+};
+
+int LRemMemObjListOp::list_objs(int max, std::list<librados::LRemRadosClient::Object> *result, bool *more) {
+  result->clear();
+
+  auto pool = mem_cluster->get_pool(pool_id);
+  if (!pool) {
+    return -ENOENT;
+  }
+
+  std::shared_lock file_locker{pool->file_lock};
+  LRemCluster::ObjectLocator loc_cursor( nspace.value_or(string()), cursor.to_str() );
+  auto iter = pool->files.lower_bound(loc_cursor);
+  for (int i = 0;
+       i < max && iter != pool->files.end();
+       ++i, ++iter) {
+    librados::LRemRadosClient::Object obj;
+    obj.oid = iter->first.name;
+    result->push_back(obj);
+
+    cursor.from_str(obj.oid);
+  }
+
+  return 0;
+}
+
+int LRemMemRadosClient::object_list_open(int64_t pool_id,
+                                        std::shared_ptr<ObjListOp> *op) {
+  LRemMemObjListOp *_op = new LRemMemObjListOp(cct(), m_mem_cluster, pool_id);
+  int r = _op->open();
+  if (r < 0) {
+    delete _op;
+    return r;
+  }
+  *op = std::shared_ptr<ObjListOp>(_op);
+
+  return 0;
+};
+
+int LRemMemRadosClient::object_list(int64_t pool_id,
+                                    std::list<librados::LRemRadosClient::Object> *list) {
   list->clear();
 
   auto pool = m_mem_cluster->get_pool(pool_id);
@@ -39,6 +143,8 @@ void LRemMemRadosClient::object_list(int64_t pool_id,
       list->push_back(obj);
     }
   }
+
+  return 0;
 }
 
 int LRemMemRadosClient::pool_create(const std::string &pool_name) {

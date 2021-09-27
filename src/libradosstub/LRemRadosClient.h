@@ -29,6 +29,8 @@ namespace librados {
 
 class LRemIoCtxImpl;
 
+class ObjListOp;
+
 class LRemRadosClient : public md_config_obs_t {
 public:
 
@@ -70,8 +72,11 @@ public:
                           const bufferlist &inbl,
                           bufferlist *outbl, std::string *outs);
 
-  virtual void object_list(int64_t pool_id,
-			   std::list<librados::LRemRadosClient::Object> *list) = 0;
+  virtual int object_list_open(int64_t pool_id,
+                               std::shared_ptr<ObjListOp> *op) = 0;
+
+  virtual int object_list(int64_t pool_id,
+                          std::list<librados::LRemRadosClient::Object> *list) = 0;
 
   virtual int service_daemon_register(const std::string& service,
                                       const std::string& name,
@@ -149,6 +154,52 @@ private:
   Finisher *m_pool_finisher;
 
   std::unique_ptr<ceph::async::io_context_pool> m_io_context_pool;
+};
+
+class ObjListOp {
+public:
+  virtual ~ObjListOp() {}
+  virtual uint32_t seek(const ObjectCursor& cursor) = 0;
+  virtual uint32_t seek(uint32_t pos) = 0;
+  virtual librados::ObjectCursor get_cursor() const = 0;
+  virtual uint32_t get_pg_hash_position() const = 0;
+
+  virtual void set_nspace(const string& nspace) = 0;
+  virtual void set_filter(const bufferlist& bl) = 0;
+
+  virtual int list_objs(int max, std::list<librados::LRemRadosClient::Object> *result, bool *more) = 0;
+};
+
+struct ObjListCtx {
+  std::shared_ptr<ObjListOp> op;
+//  ObjectCursor cursor;
+  bool at_end{false};
+  bool more{true};
+  std::list<librados::LRemRadosClient::Object> objs;
+
+  uint32_t seek(const ObjectCursor& cursor) {
+    return op->seek(cursor);
+  }
+
+  uint32_t seek(uint32_t pos) {
+    return op->seek(pos);
+  }
+
+  uint32_t get_pg_hash_position() const {
+    return op->get_pg_hash_position();
+  }
+
+  librados::ObjectCursor get_cursor() {
+    return op->get_cursor();
+  }
+
+  void set_nspace(const string& nspace) {
+    op->set_nspace(nspace);
+  }
+
+  void set_filter(const bufferlist& bl) {
+    op->set_filter(bl);
+  }
 };
 
 } // namespace librados

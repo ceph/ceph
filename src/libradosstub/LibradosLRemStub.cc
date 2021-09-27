@@ -324,49 +324,114 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_open)(rados_ioctx_t 
     reinterpret_cast<librados::LRemIoCtxImpl*>(io);
   librados::LRemRadosClient *client = io_ctx->get_rados_client();
 
-  std::list<librados::LRemRadosClient::Object> *list =
-    new std::list<librados::LRemRadosClient::Object>();
-  
-  client->object_list(io_ctx->get_id(), list);
-  list->push_front(librados::LRemRadosClient::Object());
-  *ctx = reinterpret_cast<rados_list_ctx_t>(list);
+  librados::ObjListCtx *list_ctx = new librados::ObjListCtx();
+
+  int r = client->object_list_open(io_ctx->get_id(), &list_ctx->op);
+  if (r < 0) {
+    return r;
+  }
+  auto ns = io_ctx->get_namespace();
+  if (ns != librados::all_nspaces) {
+    list_ctx->op->set_nspace(io_ctx->get_namespace());
+  }
+  list_ctx->objs.push_front(librados::LRemRadosClient::Object());
+  *ctx = reinterpret_cast<rados_list_ctx_t>(list_ctx);
   return 0;
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_nobjects_list_open);
+
+#define RADOS_LIST_MAX_ENTRIES 256
 
 extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_next)(rados_list_ctx_t ctx,
                                         const char **entry,
                                         const char **key,
                                         const char **nspace) {
-  std::list<librados::LRemRadosClient::Object> *list =
-    reinterpret_cast<std::list<librados::LRemRadosClient::Object> *>(ctx);
-  if (!list->empty()) {
-    list->pop_front();
-  }
-  if (list->empty()) {
-    return -ENOENT;
-  }
-
-  librados::LRemRadosClient::Object &obj = list->front();
-  if (entry != NULL) {
-    *entry = obj.oid.c_str();
-  }
-  if (key != NULL) {
-    *key = obj.locator.c_str();
-  }
-  if (nspace != NULL) {
-    *nspace = obj.nspace.c_str();
-  }
-  return 0;
+  return rados_nobjects_list_next2(ctx, entry, key, nspace, nullptr, nullptr, nullptr);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_nobjects_list_next);
 
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_next2)(
+  rados_list_ctx_t ctx,
+  const char **entry,
+  const char **key,
+  const char **nspace,
+  size_t *entry_size,
+  size_t *key_size,
+  size_t *nspace_size)
+{
+  librados::ObjListCtx *list_ctx = reinterpret_cast<librados::ObjListCtx *>(ctx);
+  auto& objs = list_ctx->objs;
+
+  // if the list is non-empty, this method has been called before
+  if (!objs.empty())
+    // so let's kill the previously-returned object
+    objs.pop_front();
+
+  if (objs.empty()) {
+    if (!list_ctx->more) {
+      list_ctx->at_end = true;
+      return -ENOENT;
+    }
+    int ret = list_ctx->op->list_objs(RADOS_LIST_MAX_ENTRIES, &objs, &list_ctx->more);
+    if (ret < 0) {
+      return ret;
+    }
+    list_ctx->at_end = objs.empty();
+    if (list_ctx->at_end) {
+      return -ENOENT;
+    }
+  }
+
+  *entry = objs.front().oid.c_str();
+
+  if (key) {
+    if (objs.front().locator.size())
+      *key = objs.front().locator.c_str();
+    else
+      *key = NULL;
+  }
+  if (nspace)
+    *nspace = objs.front().nspace.c_str();
+  if (entry_size)
+    *entry_size = objs.front().oid.size();
+  if (key_size)
+    *key_size = objs.front().locator.size();
+  if (nspace_size)
+    *nspace_size = objs.front().nspace.size();
+
+  return 0;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_nobjects_list_next2);
+
+
 extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_close)(rados_list_ctx_t ctx) {
-  std::list<librados::LRemRadosClient::Object> *list =
-    reinterpret_cast<std::list<librados::LRemRadosClient::Object> *>(ctx);
-  delete list;
+  librados::ObjListCtx *list_ctx = reinterpret_cast<librados::ObjListCtx *>(ctx);
+  delete list_ctx;
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_nobjects_list_close);
+
+extern "C" uint32_t LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_seek)(
+  rados_list_ctx_t listctx,
+  uint32_t pos)
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+  uint32_t r = lh->seek(pos);
+  return r;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_nobjects_list_seek);
+
+extern "C" uint32_t LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_seek_cursor)(
+  rados_list_ctx_t listctx,
+  rados_object_list_cursor cursor)
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+
+  librados::ObjectCursor c(cursor);
+
+  uint32_t r = lh->seek(c);
+  return r;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_nobjects_list_seek_cursor);
 
 extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_pool_create)(rados_t cluster, const char *pool_name) {
   librados::LRemRadosClient *client =
@@ -2118,52 +2183,6 @@ WatchCtx::~WatchCtx() {
 }
 
 WatchCtx2::~WatchCtx2() {
-}
-
-#warning ListObjec impl
-
-const std::string& librados::ListObject::get_nspace() const
-{
-  return impl->get_nspace();
-}
-
-const std::string& librados::ListObject::get_oid() const
-{
-  return impl->get_oid();
-}
-
-const std::string& librados::ListObject::get_locator() const
-{
-  return impl->get_locator();
-}
-
-#warning ObjectCursor impl
-
-librados::ObjectCursor::ObjectCursor()
-{
-  c_cursor = (rados_object_list_cursor)new hobject_t();
-}
-
-librados::ObjectCursor::~ObjectCursor()
-{
-  hobject_t *h = (hobject_t *)c_cursor;
-  delete h;
-}
-
-string librados::ObjectCursor::to_str() const
-{
-  stringstream ss;
-  ss << *(hobject_t *)c_cursor;
-  return ss.str();
-}
-
-bool librados::ObjectCursor::from_str(const string& s)
-{
-  if (s.empty()) {
-    *(hobject_t *)c_cursor = hobject_t();
-    return true;
-  }
-  return ((hobject_t *)c_cursor)->parse(s);
 }
 
 

@@ -8,6 +8,9 @@
 #include <errno.h>
 #include <sstream>
 
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_rados
+
 namespace librados {
 
 LRemDBRadosClient::LRemDBRadosClient(CephContext *_cct,
@@ -40,8 +43,111 @@ int LRemDBRadosClient::init() {
   return m_mem_cluster->init(*trans.dbc);
 }
 
-void LRemDBRadosClient::object_list(int64_t pool_id,
- 				    std::list<librados::LRemRadosClient::Object> *list) {
+class LRemDBObjListOp : public ObjListOp {
+  CephContext *cct;
+  LRemDBTransactionState trans;
+  int64_t pool_id;
+
+  LRemDBStore::PoolRef pool_db;
+
+  ObjectCursor cursor;
+  std::optional<string> nspace;
+  bufferlist filter;
+
+  uint32_t hash(const string& s) const {
+    char result[sizeof(uint32_t)];
+    const char *cs = s.c_str();
+    int len = min(s.size(), sizeof(result) - 1);
+    result[0] = (char)len;
+    memcpy(&result[1], cs, len); /* memcpy and not strcpy because s might hold null chars */
+
+    return *(uint32_t *)result;
+  }
+
+  string unhash(uint32_t h) const {
+    char *buf = (char *)&h;
+
+    int len = (int)buf[0];
+
+    return string(&buf[1], len);
+  }
+public:
+  LRemDBObjListOp(CephContext *_cct, int64_t _pool_id) : cct(_cct), trans(_cct),
+                                                         pool_id(_pool_id) {}
+
+  int open() {
+    int r = trans.dbc->get_pool(pool_id, &pool_db);
+    if (r < 0) {
+      return r;
+    }
+    return 0;
+  }
+
+  uint32_t seek(const ObjectCursor& _cursor) override {
+    cursor = _cursor;
+    return get_pg_hash_position();
+  }
+
+  uint32_t seek(uint32_t pos) override {
+    cursor.from_str(unhash(pos));
+    return pos;
+  }
+
+  virtual librados::ObjectCursor get_cursor() const override {
+    return cursor;
+  }
+
+  uint32_t get_pg_hash_position() const override {
+    return hash(cursor.to_str());
+  }
+
+  void set_filter(const bufferlist& bl) override {
+    filter = bl;
+  }
+
+  void set_nspace(const string& ns) override {
+    nspace = ns;
+  }
+
+  int list_objs(int max, std::list<librados::LRemRadosClient::Object> *result, bool *more) override;
+};
+
+
+int LRemDBObjListOp::list_objs(int max, std::list<librados::LRemRadosClient::Object> *result, bool *more) {
+  std::list<LRemCluster::ObjectLocator> objs;
+  int r = pool_db->list(nspace, cursor.to_str(), max,
+                    &objs, more);
+  if (r < 0) {
+    return r;
+  }
+
+  for (auto& loc : objs) {
+    LRemDBRadosClient::Object obj;
+    obj.oid = loc.name;
+    obj.nspace = loc.nspace;
+    result->push_back(obj);
+
+    cursor.from_str(obj.oid);
+  }
+
+  return 0;
+}
+
+int LRemDBRadosClient::object_list_open(int64_t pool_id,
+                                        std::shared_ptr<ObjListOp> *op) {
+  LRemDBObjListOp *_op = new LRemDBObjListOp(cct(), pool_id);
+  int r = _op->open();
+  if (r < 0) {
+    delete _op;
+    return r;
+  }
+  *op = std::shared_ptr<ObjListOp>(_op);
+
+  return 0;
+};
+
+int LRemDBRadosClient::object_list(int64_t pool_id,
+                                   std::list<librados::LRemRadosClient::Object> *list) {
   list->clear();
 
   LRemDBTransactionState trans(cct());
@@ -50,7 +156,7 @@ void LRemDBRadosClient::object_list(int64_t pool_id,
   LRemDBStore::PoolRef pool_db;
   int r = trans.dbc->get_pool(pool_id, &pool_db);
   if (r < 0) {
-    return;
+    return r;
   }
 
   int max = 1000;
@@ -60,6 +166,9 @@ void LRemDBRadosClient::object_list(int64_t pool_id,
     std::list<LRemCluster::ObjectLocator> result;
     r = pool_db->list(std::nullopt, string(), max,
                       &result, &more);
+    if (r < 0) {
+      return r;
+    }
 
     for (auto& loc : result) {
       Object obj;
@@ -68,6 +177,8 @@ void LRemDBRadosClient::object_list(int64_t pool_id,
       list->push_back(obj);
     }
   } while (more);
+
+  return 0;
 }
 
 int LRemDBRadosClient::pool_create(const std::string &pool_name) {
