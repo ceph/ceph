@@ -1516,6 +1516,8 @@ options:
     at which some pools' pg_num may be shrunk in order to enable increasing the pg_num
     of others.
   default: 250
+  flags:
+  - runtime
   services:
   - mgr
   - mon
