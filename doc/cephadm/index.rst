@@ -28,6 +28,7 @@ versions of Ceph.
     adoption
     host-management
     mon
+    mgr
     osd
     rgw
     mds
