@@ -2813,7 +2813,7 @@ def deploy_daemon_units(
             f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
             ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
             tcmu_container = ceph_iscsi.get_tcmu_runner_container()
-            _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runnter container', background=True)
+            _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runner container', background=True)
 
         _write_container_cmd_to_bash(ctx, f, c, '%s.%s' % (daemon_type, str(daemon_id)))
 
