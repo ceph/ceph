@@ -614,10 +614,9 @@ void Cache::mark_transaction_conflicted(
       efforts.retire.bytes += i->get_length();
     }
 
-    efforts.fresh.extents += t.get_num_fresh_blocks();
-    t.for_each_fresh_block([&](auto &i) {
-      efforts.fresh.bytes += i->get_length();
-    });
+    auto& fresh_stats = t.get_fresh_block_stats();
+    efforts.fresh.extents += fresh_stats.num;
+    efforts.fresh.bytes += fresh_stats.bytes;
 
     for (auto &i: t.mutated_block_list) {
       if (!i->is_valid()) {
@@ -641,7 +640,7 @@ void Cache::mark_transaction_conflicted(
   } else {
     // read transaction won't have non-read efforts
     assert(t.retired_set.empty());
-    assert(t.get_num_fresh_blocks() == 0);
+    assert(t.get_fresh_block_stats().num == 0);
     assert(t.mutated_block_list.empty());
     assert(t.onode_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
@@ -664,7 +663,7 @@ void Cache::on_transaction_destruct(Transaction& t)
     }
     // read transaction won't have non-read efforts
     assert(t.retired_set.empty());
-    assert(t.get_num_fresh_blocks() == 0);
+    assert(t.get_fresh_block_stats().num == 0);
     assert(t.mutated_block_list.empty());
     assert(t.onode_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
@@ -867,6 +866,11 @@ record_t Cache::prepare_record(Transaction &t)
 	std::move(bl)
       });
   }
+
+  ceph_assert(t.get_fresh_block_stats().num ==
+              t.inline_block_list.size() +
+              t.ool_block_list.size() +
+              t.num_delayed_invalid_extents);
 
   return record;
 }
