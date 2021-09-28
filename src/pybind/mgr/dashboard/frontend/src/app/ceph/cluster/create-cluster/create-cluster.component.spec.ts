@@ -113,6 +113,13 @@ describe('CreateClusterComponent', () => {
     cancelBtnLabel = component.showCancelButtonLabel();
     expect(cancelBtnLabel).toEqual('Back');
 
+    component.onNextStep();
+    fixture.detectChanges();
+    submitBtnLabel = component.showSubmitButtonLabel();
+    expect(submitBtnLabel).toEqual('Next');
+    cancelBtnLabel = component.showCancelButtonLabel();
+    expect(cancelBtnLabel).toEqual('Back');
+
     // Last page of the wizard
     component.onNextStep();
     fixture.detectChanges();

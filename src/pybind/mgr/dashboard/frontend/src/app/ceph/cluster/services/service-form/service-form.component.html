@@ -1,12 +1,13 @@
-<div class="cd-col-form">
-  <form #frm="ngForm"
-        [formGroup]="serviceForm"
-        novalidate>
-    <div class="card">
-      <div i18n="form title|Example: Create Pool@@formTitle"
-           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+<cd-modal [pageURL]="pageURL"
+          [modalRef]="activeModal">
+  <span class="modal-title"
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
+  <ng-container class="modal-content">
+    <form #frm="ngForm"
+          [formGroup]="serviceForm"
+          novalidate>
+      <div class="modal-body">
 
-      <div class="card-body">
         <!-- Service type -->
         <div class="form-group row">
           <label class="cd-col-form-label required"
@@ -534,13 +535,13 @@
         </ng-container>
       </div>
 
-      <div class="card-footer">
+      <div class="modal-footer">
         <div class="text-right">
           <cd-form-button-panel (submitActionEvent)="onSubmit()"
                                 [form]="serviceForm"
                                 [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
         </div>
       </div>
-    </div>
-  </form>
-</div>
+    </form>
+  </ng-container>
+</cd-modal>

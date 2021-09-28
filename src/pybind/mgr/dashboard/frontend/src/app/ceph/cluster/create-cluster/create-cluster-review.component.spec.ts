@@ -6,7 +6,7 @@ import { of } from 'rxjs';
 
 import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
-import { HostService } from '~/app/shared/api/host.service';
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { CreateClusterReviewComponent } from './create-cluster-review.component';
@@ -14,8 +14,8 @@ import { CreateClusterReviewComponent } from './create-cluster-review.component'
 describe('CreateClusterReviewComponent', () => {
   let component: CreateClusterReviewComponent;
   let fixture: ComponentFixture<CreateClusterReviewComponent>;
-  let hostService: HostService;
-  let hostListSpy: jasmine.Spy;
+  let cephServiceService: CephServiceService;
+  let serviceListSpy: jasmine.Spy;
 
   configureTestBed({
     imports: [HttpClientTestingModule, SharedModule, CoreModule, CephModule]
@@ -24,8 +24,8 @@ describe('CreateClusterReviewComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(CreateClusterReviewComponent);
     component = fixture.componentInstance;
-    hostService = TestBed.inject(HostService);
-    hostListSpy = spyOn(hostService, 'list');
+    cephServiceService = TestBed.inject(CephServiceService);
+    serviceListSpy = spyOn(cephServiceService, 'list');
   });
 
   it('should create', () => {
@@ -37,25 +37,18 @@ describe('CreateClusterReviewComponent', () => {
     const payload = [
       {
         hostname: hostnames[0],
-        ceph_version: 'ceph version Development',
-        labels: ['foo', 'bar']
+        service_type: ['mgr', 'mon']
       },
       {
         hostname: hostnames[1],
-        ceph_version: 'ceph version Development',
-        labels: ['foo1', 'bar1']
+        service_type: ['mgr', 'alertmanager']
       }
     ];
-    hostListSpy.and.callFake(() => of(payload));
+    serviceListSpy.and.callFake(() => of(payload));
     fixture.detectChanges();
-    expect(hostListSpy).toHaveBeenCalled();
+    expect(serviceListSpy).toHaveBeenCalled();
 
-    expect(component.hostsCount).toBe(2);
-    expect(component.uniqueLabels.size).toBe(4);
-    const labels = ['foo', 'bar', 'foo1', 'bar1'];
-
-    labels.forEach((label) => {
-      expect(component.labelOccurrences[label]).toBe(1);
-    });
+    expect(component.serviceCount).toBe(2);
+    expect(component.uniqueServices.size).toBe(2);
   });
 });
