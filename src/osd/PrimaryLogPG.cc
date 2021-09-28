@@ -2132,12 +2132,21 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     return;
   }
   int64_t poolid = get_pgid().pool();
-  if (op->may_write()) {
-
-    const pg_pool_t *pi = get_osdmap()->get_pg_pool(poolid);
-    if (!pi) {
-      return;
+  const pg_pool_t *pi = get_osdmap()->get_pg_pool(poolid);
+  if (!pi) {
+    return;
+  }
+  if (pi->has_flag(pg_pool_t::FLAG_EIO)) {
+    // drop op on the floor; the client will handle returning EIO
+    if (m->has_flag(CEPH_OSD_FLAG_SUPPORTSPOOLEIO)) {
+      dout(10) << __func__ << " discarding op due to pool EIO flag" << dendl;
+    } else {
+      dout(10) << __func__ << " replying EIO due to pool EIO flag" << dendl;
+      osd->reply_op_error(op, -EIO);
     }
+    return;
+  }
+  if (op->may_write()) {
 
     // invalid?
     if (m->get_snapid() != CEPH_NOSNAP) {
