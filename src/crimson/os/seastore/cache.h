@@ -757,7 +757,7 @@ private:
   void replace_extent(CachedExtentRef next, CachedExtentRef prev);
 
   /// Invalidate extent and mark affected transactions
-  void invalidate(CachedExtent &extent);
+  void invalidate_extent(CachedExtent &extent);
 
   /// Mark a valid transaction as conflicted
   void mark_transaction_conflicted(
