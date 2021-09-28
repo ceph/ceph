@@ -365,13 +365,19 @@ function TEST_bluestore2() {
     sleep 5
     create_pool foo 16
 
-    # write some objects
-    timeout 60 rados bench -p foo 10 write --write-omap --no-cleanup #|| return 1
+    retry = 0
+    while [[ $retry -le 5 ]]; do
+      # write some objects
+      timeout 60 rados bench -p foo 10 write --write-omap --no-cleanup #|| return 1
 
-    #give RocksDB some time to cooldown and put files to slow level(s)
-    sleep 10
+      #give RocksDB some time to cooldown and put files to slow level(s)
+      sleep 10
 
-    spilled_over=$( ceph tell osd.0 perf dump bluefs | jq ".bluefs.slow_used_bytes" )
+      db_used=$( ceph tell osd.0 perf dump bluefs | jq ".bluefs.db_used_bytes" )
+      spilled_over=$( ceph tell osd.0 perf dump bluefs | jq ".bluefs.slow_used_bytes" )
+      ((retry+=1))
+      test $spilled_over -eq 0 || break
+    done
     test $spilled_over -gt 0 || return 1
 
     while kill $osd_pid0; do sleep 1 ; done
