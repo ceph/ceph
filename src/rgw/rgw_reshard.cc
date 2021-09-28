@@ -816,6 +816,13 @@ int RGWBucketReshard::execute(int num_shards,
   return 0;
 } // execute
 
+bool RGWBucketReshard::can_reshard(const RGWBucketInfo& bucket,
+                                   const RGWSI_Zone* zone_svc)
+{
+  return !zone_svc->need_to_log_data() ||
+      bucket.layout.logs.size() < max_bilog_history;
+}
+
 
 RGWReshard::RGWReshard(rgw::sal::RadosStore* _store, bool _verbose, ostream *_out,
                        Formatter *_formatter) :
@@ -1050,6 +1057,13 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
 
     // we cleaned up, move on to the next entry
     return 0;
+  }
+
+  if (!RGWBucketReshard::can_reshard(bucket_info, store->svc()->zone)) {
+    ldpp_dout(dpp, 1) << "Bucket " << bucket_info.bucket << " is not "
+        "eligible for resharding until peer zones finish syncing one "
+        "or more of its old log generations" << dendl;
+    return remove(dpp, entry);
   }
 
   RGWBucketReshard br(store, bucket_info, nullptr);
