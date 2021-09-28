@@ -331,7 +331,10 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
 
   dout(10) << __func__ << " max_global_id=" << max_global_id
 	   << " format_version " << format_version
+	   << ", last_rotating_ver " << last_rotating_ver
 	   << dendl;
+
+  mon.key_server.dump();
 }
 
 bool AuthMonitor::_should_increase_max_global_id()
