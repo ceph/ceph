@@ -233,6 +233,9 @@ Services
 .. py:currentmodule:: ceph.deployment.service_spec
 
 .. autoclass:: ServiceSpec
+  :members:
+  :private-members:
+  :noindex:
 
 .. py:currentmodule:: orchestrator
 
@@ -291,6 +294,7 @@ Services
 .. py:currentmodule:: ceph.deployment.service_spec
 
 .. autoclass:: RGWSpec
+  :noindex:
 
 .. py:currentmodule:: orchestrator
 

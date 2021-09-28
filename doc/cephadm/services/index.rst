@@ -99,28 +99,15 @@ deployment of services.  Here is an example of a service specification in YAML:
     unmanaged: false
     networks:
     - 192.169.142.0/24
-    ...
+    spec:
+      # Additional service specific attributes.
 
 In this example, the properties of this service specification are:
 
-* ``service_type``
-    The type of the service. Needs to be either a Ceph
-    service (``mon``, ``crash``, ``mds``, ``mgr``, ``osd`` or
-    ``rbd-mirror``), a gateway (``nfs`` or ``rgw``), part of the
-    monitoring stack (``alertmanager``, ``grafana``, ``node-exporter`` or
-    ``prometheus``) or (``container``) for custom containers.
-* ``service_id``
-    The name of the service.
-* ``placement``
-    See :ref:`orchestrator-cli-placement-spec`.
-* ``networks``: A list of network identities instructing the daemons to only bind
-    on the particular networks in that list. In case the cluster is distributed across multiple
-    networks, you can add multiple networks. See :ref:`cephadm-monitoring-networks-ports`, 
-    :ref:`cephadm-rgw-networks` and :ref:`cephadm-mgr-networks`.    
-* ``unmanaged`` If set to ``true``, the orchestrator will not deploy nor remove
-    any daemon associated with this service. Placement and all other properties
-    will be ignored. This is useful, if you do not want this service to be
-    managed temporarily. For cephadm, See :ref:`cephadm-spec-unmanaged`
+.. py:currentmodule:: ceph.deployment.service_spec
+
+.. autoclass:: ServiceSpec
+   :members:
 
 Each service type can have additional service-specific properties.
 
