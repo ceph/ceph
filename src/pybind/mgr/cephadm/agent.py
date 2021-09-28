@@ -295,6 +295,10 @@ class CephadmAgentHelpers:
             message_thread.start()
 
     def _agent_down(self, host: str) -> bool:
+        # if host is draining or drained (has _no_schedule label) there should not
+        # be an agent deployed there and therefore we should return False
+        if host not in [h.hostname for h in self.mgr._non_draining_hosts()]:
+            return False
         # if we don't have a timestamp, it's likely because of a mgr fail over.
         # just set the timestamp to now. However, if host was offline before, we
         # should not allow creating a new timestamp to cause it to be marked online

@@ -1391,6 +1391,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             )
         ]
 
+    def _non_draining_hosts(self) -> List[HostSpec]:
+        """
+        Returns all hosts that do not have _no_schedule label.
+
+        Useful for the agent who needs this specific list rather than the
+        _schedulable_hosts since the agent needs to be deployed on hosts with
+        no daemon refresh
+        """
+        return [
+            h for h in self.inventory.all_specs() if '_no_schedule' not in h.labels
+        ]
+
     def _unreachable_hosts(self) -> List[HostSpec]:
         """
         Return all hosts that are offline or in maintenance mode.
