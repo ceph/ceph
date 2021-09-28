@@ -319,13 +319,14 @@ private:
    */
   ExtentIndex write_set;
 
-  /// list of fresh blocks, holds refcounts, subset of write_set
+  /**
+   * lists of fresh blocks, holds refcounts, subset of write_set
+   */
+  /// blocks that will be committed with journal record inline
   std::list<CachedExtentRef> inline_block_list;
-
-  /// list of fresh blocks, holds refcounts, subset of write_set
+  /// blocks that will be committed with out-of-line record
   std::list<CachedExtentRef> ool_block_list;
-
-  /// extents with delayed allocation, may become inline or ool
+  /// blocks with delayed allocation, may become inline or ool above
   std::list<LogicalCachedExtentRef> delayed_alloc_list;
 
   /// list of mutated blocks, holds refcounts, subset of write_set
@@ -338,6 +339,7 @@ private:
    */
   pextent_set_t retired_set;
 
+  /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
   tree_stats_t lba_tree_stats;
 
