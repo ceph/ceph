@@ -236,6 +236,8 @@ void Server::create_logger()
                    "Request type remove snapshot latency");
   plb.add_time_avg(l_mdss_req_renamesnap_latency, "req_renamesnap_latency",
                    "Request type rename snapshot latency");
+  plb.add_time_avg(l_mdss_req_snapdiff_latency, "req_snapdiff_latency",
+    "Request type snapshot difference latency");
 
   plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
   plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request",
@@ -2057,6 +2059,9 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
   case CEPH_MDS_OP_RENAMESNAP:
     code = l_mdss_req_renamesnap_latency;
     break;
+  case CEPH_MDS_OP_READDIR_SNAPDIFF:
+    code = l_mdss_req_snapdiff_latency;
+    break;
   default: ceph_abort();
   }
   logger->tinc(code, lat);   
@@ -2661,6 +2666,9 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
     break;
   case CEPH_MDS_OP_RENAMESNAP:
     handle_client_renamesnap(mdr);
+    break;
+  case CEPH_MDS_OP_READDIR_SNAPDIFF:
+    handle_client_readdir_snapdiff(mdr);
     break;
 
   default:
@@ -4654,26 +4662,6 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 	   << dendl;
 
 
-  SnapRealm* realm = diri->find_snaprealm();
-  if (mdr->is_snapid_diff) {
-    if (!mdr->session->info.has_feature(CEPHFS_FEATURE_SNAP_DIFF)) {
-      dout(0) << "old client shouldn't cannot issue snap diff requests " << dendl;
-      respond_to_request(mdr, -CEPHFS_EOPNOTSUPP);
-      return;
-    }
-    _readdir_diff(
-      now,
-      mdr,
-      diri,
-      dir,
-      realm,
-      req_flags,
-      offset_str,
-      offset_hash);
-    return;
-  }
-
-  snapid_t snapid = mdr->snapid;
   unsigned max = req->head.args.readdir.max_entries;
   if (!max)
     max = dir->get_num_any();  // whatever, something big.
@@ -4681,6 +4669,8 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   if (!max_bytes)
     // make sure at least one item can be encoded
     max_bytes = (512 << 10) + g_conf()->mds_max_xattr_pairs_size;
+
+  SnapRealm* realm = diri->find_snaprealm();
 
   // start final blob
   bufferlist dirbl;
@@ -4694,142 +4684,169 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 
   // count bytes available.
   //  this isn't perfect, but we should capture the main variable/unbounded size items!
-  int front_bytes = dirbl.length() + sizeof(__u32) + sizeof(__u8)*2;
+  int front_bytes = dirbl.length() + sizeof(__u32) + sizeof(__u8) * 2;
   int bytes_left = max_bytes - front_bytes;
   bytes_left -= realm->get_snap_trace().length();
 
-  // build dir contents
-  bufferlist dnbl;
-  __u32 numfiles = 0;
-  bool start = !offset_hash && offset_str.empty();
-  // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
-  dentry_key_t skip_key(snapid, offset_str.c_str(), offset_hash);
-  auto it = start ? dir->begin() : dir->lower_bound(skip_key);
-  bool end = (it == dir->end());
-  for (; !end && numfiles < max; end = (it == dir->end())) {
-    CDentry *dn = it->second;
-    ++it;
+  auto finalize_cb = [&](
+    bool start, bool end, __u16 flags, __u32 numfiles, bufferlist& dnbl) {
 
-    if (dn->state_test(CDentry::STATE_PURGING))
-      continue;
+    session->touch_readdir_cap(numfiles);
 
-    bool dnp = dn->use_projected(client, mdr);
-    CDentry::linkage_t *dnl = dnp ? dn->get_projected_linkage() : dn->get_linkage();
-
-    if (dnl->is_null())
-      continue;
-
-    if (dn->last < snapid || dn->first > snapid) {
-      dout(20) << "skipping non-overlapping snap " << *dn << dendl;
-      continue;
+    if (end) {
+      flags |= CEPH_READDIR_FRAG_END;
+      if (start)
+	flags |= CEPH_READDIR_FRAG_COMPLETE; // FIXME: what purpose does this serve
     }
 
-    if (!start) {
-      dentry_key_t offset_key(dn->last, offset_str.c_str(), offset_hash);
-      if (!(offset_key < dn->key()))
-	continue;
+    // finish final blob
+    encode(numfiles, dirbl);
+    encode(flags, dirbl);
+    dirbl.claim_append(dnbl);
+
+    // yay, reply
+    dout(10) << "reply to " << *req << " readdir num=" << numfiles
+      << " bytes=" << dirbl.length()
+      << " start=" << (int)start
+      << " end=" << (int)end
+      << dendl;
+    mdr->reply_extra_bl = dirbl;
+
+    // bump popularity.  NOTE: this doesn't quite capture it.
+    mds->balancer->hit_dir(dir, META_POP_READDIR, -1, numfiles);
+
+    // reply
+    mdr->tracei = diri;
+    respond_to_request(mdr, 0);
+  };
+  if (mdr->is_snapid_diff) {
+    if (!mdr->session->info.has_feature(CEPHFS_FEATURE_SNAP_DIFF)) {
+      dout(0) << "old client shouldn't cannot issue snap diff requests " << dendl;
+      respond_to_request(mdr, -CEPHFS_EOPNOTSUPP);
+      return;
     }
 
-    CInode *in = dnl->get_inode();
+    _readdir_diff(
+      now,
+      mdr,
+      diri,
+      dir,
+      realm,
+      max,
+      bytes_left,
+      offset_str,
+      offset_hash,
+      true,
+      finalize_cb);
+  } else {
+    __u32 numfiles = 0;
+    snapid_t snapid = mdr->snapid;
 
-    if (in && in->ino() == CEPH_INO_CEPH)
-      continue;
+    // build dir contents
+    bufferlist dnbl;
+    bool start = !offset_hash && offset_str.empty();
+    // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
+    dentry_key_t skip_key(snapid, offset_str.c_str(), offset_hash);
+    auto it = start ? dir->begin() : dir->lower_bound(skip_key);
+    bool end = (it == dir->end());
+    for (; !end && numfiles < max; end = (it == dir->end())) {
+      CDentry *dn = it->second;
+      ++it;
 
-    // remote link?
-    // better for the MDS to do the work, if we think the client will stat any of these files.
-    if (dnl->is_remote() && !in) {
-      in = mdcache->get_inode(dnl->get_remote_ino());
-      if (in) {
-	dn->link_remote(dnl, in);
-      } else if (dn->state_test(CDentry::STATE_BADREMOTEINO)) {
-	dout(10) << "skipping bad remote ino on " << *dn << dendl;
+      if (dn->state_test(CDentry::STATE_PURGING))
 	continue;
-      } else {
-	// touch everything i _do_ have
-	for (auto &p : *dir) {
-	  if (!p.second->get_linkage()->is_null())
-	    mdcache->lru.lru_touch(p.second);
-        }
 
-	// already issued caps and leases, reply immediately.
-	if (dnbl.length() > 0) {
-	  mdcache->open_remote_dentry(dn, dnp, new C_MDSInternalNoop);
-	  dout(10) << " open remote dentry after caps were issued, stopping at "
-		   << dnbl.length() << " < " << bytes_left << dendl;
-	  break;
-	}
+      bool dnp = dn->use_projected(client, mdr);
+      CDentry::linkage_t *dnl = dnp ? dn->get_projected_linkage() : dn->get_linkage();
 
-	mds->locker->drop_locks(mdr.get());
-	mdr->drop_local_auth_pins();
-	mdcache->open_remote_dentry(dn, dnp, new C_MDS_RetryRequest(mdcache, mdr));
-	return;
+      if (dnl->is_null())
+	continue;
+
+      if (dn->last < snapid || dn->first > snapid) {
+	dout(20) << "skipping non-overlapping snap " << *dn << dendl;
+	continue;
       }
+
+      if (!start) {
+	dentry_key_t offset_key(dn->last, offset_str.c_str(), offset_hash);
+	if (!(offset_key < dn->key()))
+	  continue;
+      }
+
+      CInode *in = dnl->get_inode();
+
+      if (in && in->ino() == CEPH_INO_CEPH)
+	continue;
+
+      // remote link?
+      // better for the MDS to do the work, if we think the client will stat any of these files.
+      if (dnl->is_remote() && !in) {
+	in = mdcache->get_inode(dnl->get_remote_ino());
+	if (in) {
+	  dn->link_remote(dnl, in);
+	} else if (dn->state_test(CDentry::STATE_BADREMOTEINO)) {
+	  dout(10) << "skipping bad remote ino on " << *dn << dendl;
+	  continue;
+	} else {
+	  // touch everything i _do_ have
+	  for (auto &p : *dir) {
+	    if (!p.second->get_linkage()->is_null())
+	      mdcache->lru.lru_touch(p.second);
+	  }
+
+	  // already issued caps and leases, reply immediately.
+	  if (dnbl.length() > 0) {
+	    mdcache->open_remote_dentry(dn, dnp, new C_MDSInternalNoop);
+	    dout(10) << " open remote dentry after caps were issued, stopping at "
+		     << dnbl.length() << " < " << bytes_left << dendl;
+	    break;
+	  }
+
+	  mds->locker->drop_locks(mdr.get());
+	  mdr->drop_local_auth_pins();
+	  mdcache->open_remote_dentry(dn, dnp, new C_MDS_RetryRequest(mdcache, mdr));
+	  return;
+	}
+      }
+      ceph_assert(in);
+
+      if ((int)(dnbl.length() + dn->get_name().length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
+	dout(10) << " ran out of room, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
+	break;
+      }
+
+      unsigned start_len = dnbl.length();
+
+      // dentry
+      dout(12) << "including    dn " << *dn << dendl;
+      encode(dn->get_name(), dnbl);
+      int lease_mask = dnl->is_primary() ? CEPH_LEASE_PRIMARY_LINK : 0;
+      mds->locker->issue_client_lease(dn, mdr, lease_mask, now, dnbl);
+
+      // inode
+      dout(12) << "including inode in " << *in << " snap " << snapid << dendl;
+      int r = in->encode_inodestat(dnbl, mdr->session, realm, snapid, bytes_left - (int)dnbl.length());
+      if (r < 0) {
+	// chop off dn->name, lease
+	dout(10) << " ran out of room, stopping at " << start_len << " < " << bytes_left << dendl;
+	bufferlist keep;
+	keep.substr_of(dnbl, 0, start_len);
+	dnbl.swap(keep);
+	break;
+      }
+      ceph_assert(r >= 0);
+      numfiles++;
+
+      // touch dn
+      mdcache->lru.lru_touch(dn);
     }
-    ceph_assert(in);
-
-    if ((int)(dnbl.length() + dn->get_name().length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
-      dout(10) << " ran out of room, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
-      break;
+    __u16 flags = 0;
+    // client only understand END and COMPLETE flags ?
+    if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
+      flags |= CEPH_READDIR_HASH_ORDER | CEPH_READDIR_OFFSET_HASH;
     }
-    
-    unsigned start_len = dnbl.length();
-
-    // dentry
-    dout(12) << "including    dn " << *dn << dendl;
-    encode(dn->get_name(), dnbl);
-    int lease_mask = dnl->is_primary() ? CEPH_LEASE_PRIMARY_LINK : 0;
-    mds->locker->issue_client_lease(dn, mdr, lease_mask, now, dnbl);
-
-    // inode
-    dout(12) << "including inode in " << *in << " snap " << snapid << dendl;
-    int r = in->encode_inodestat(dnbl, mdr->session, realm, snapid, bytes_left - (int)dnbl.length());
-    if (r < 0) {
-      // chop off dn->name, lease
-      dout(10) << " ran out of room, stopping at " << start_len << " < " << bytes_left << dendl;
-      bufferlist keep;
-      keep.substr_of(dnbl, 0, start_len);
-      dnbl.swap(keep);
-      break;
-    }
-    ceph_assert(r >= 0);
-    numfiles++;
-
-    // touch dn
-    mdcache->lru.lru_touch(dn);
+    finalize_cb(start, end, flags, numfiles, dnbl);
   }
-  
-  session->touch_readdir_cap(numfiles);
-
-  __u16 flags = 0;
-  if (end) {
-    flags = CEPH_READDIR_FRAG_END;
-    if (start)
-      flags |= CEPH_READDIR_FRAG_COMPLETE; // FIXME: what purpose does this serve
-  }
-  // client only understand END and COMPLETE flags ?
-  if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
-    flags |= CEPH_READDIR_HASH_ORDER | CEPH_READDIR_OFFSET_HASH;
-  }
-  
-  // finish final blob
-  encode(numfiles, dirbl);
-  encode(flags, dirbl);
-  dirbl.claim_append(dnbl);
-  
-  // yay, reply
-  dout(10) << "reply to " << *req << " readdir num=" << numfiles
-	   << " bytes=" << dirbl.length()
-	   << " start=" << (int)start
-	   << " end=" << (int)end
-	   << dendl;
-  mdr->reply_extra_bl = dirbl;
-
-  // bump popularity.  NOTE: this doesn't quite capture it.
-  mds->balancer->hit_dir(dir, META_POP_READDIR, -1, numfiles);
-  
-  // reply
-  mdr->tracei = diri;
-  respond_to_request(mdr, 0);
 }
 
 
@@ -10787,6 +10804,196 @@ void Server::_renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid
   respond_to_request(mdr, 0);
 }
 
+void Server::handle_client_readdir_snapdiff(MDRequestRef& mdr)
+{
+  const cref_t<MClientRequest>& req = mdr->client_request;
+  Session* session = mds->get_session(req);
+  MutationImpl::LockOpVec lov;
+  CInode* diri = rdlock_path_pin_ref(mdr, false, true);
+  if (!diri) return;
+
+  // it's a directory, right?
+  if (!diri->is_dir()) {
+    // not a dir
+    dout(10) << "reply to " << *req << " snapdiff -CEPHFS_ENOTDIR" << dendl;
+    respond_to_request(mdr, -CEPHFS_ENOTDIR);
+    return;
+  }
+
+  auto num_caps = session->get_num_caps();
+  auto session_cap_acquisition = session->get_cap_acquisition();
+
+  if (num_caps > static_cast<uint64_t>(max_caps_per_client * max_caps_throttle_ratio) && session_cap_acquisition >= cap_acquisition_throttle) {
+    dout(20) << "snapdiff throttled. max_caps_per_client: " << max_caps_per_client << " num_caps: " << num_caps
+      << " session_cap_acquistion: " << session_cap_acquisition << " cap_acquisition_throttle: " << cap_acquisition_throttle << dendl;
+    if (logger)
+      logger->inc(l_mdss_cap_acquisition_throttle);
+
+    mds->timer.add_event_after(caps_throttle_retry_request_timeout, new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
+
+  lov.add_rdlock(&diri->filelock);
+  lov.add_rdlock(&diri->dirfragtreelock);
+
+  if (!mds->locker->acquire_locks(mdr, lov))
+    return;
+
+  if (!check_access(mdr, diri, MAY_READ))
+    return;
+
+  // which frag?
+  frag_t fg = (__u32)req->head.args.snapdiff.frag;
+  unsigned req_flags = (__u32)req->head.args.snapdiff.flags;
+  string offset_str = req->get_path2();
+
+  __u32 offset_hash = 0;
+  if (!offset_str.empty()) {
+    if (mdr->is_snapid_diff && offset_str[0] == SNAPDIFF_RM_INDICATOR) {
+      offset_str = offset_str.substr(1);
+    }
+    offset_hash = ceph_frag_value(diri->hash_dentry_name(offset_str));
+  } else {
+    offset_hash = (__u32)req->head.args.snapdiff.offset_hash;
+  }
+
+  dout(10) << " frag " << fg << " offset '" << offset_str << "'"
+    << " offset_hash " << offset_hash << " flags " << req_flags << dendl;
+
+  // does the frag exist?
+  if (diri->dirfragtree[fg.value()] != fg) {
+    frag_t newfg;
+    if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
+      if (fg.contains((unsigned)offset_hash)) {
+	newfg = diri->dirfragtree[offset_hash];
+      }
+      else {
+	// client actually wants next frag
+	newfg = diri->dirfragtree[fg.value()];
+      }
+    }
+    else {
+      offset_str.clear();
+      newfg = diri->dirfragtree[fg.value()];
+    }
+    dout(10) << " adjust frag " << fg << " -> " << newfg << " " << diri->dirfragtree << dendl;
+    fg = newfg;
+  }
+
+  CDir* dir = try_open_auth_dirfrag(diri, fg, mdr);
+  if (!dir) return;
+
+  // ok!
+  dout(10) << __func__<< " on " << *dir << dendl;
+  ceph_assert(dir->is_auth());
+
+  if (!dir->is_complete()) {
+    if (dir->is_frozen()) {
+      dout(7) << "dir is frozen " << *dir << dendl;
+      mds->locker->drop_locks(mdr.get());
+      mdr->drop_local_auth_pins();
+      dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+    // fetch
+    dout(10) << " incomplete dir contents for snapdiff on " << *dir << ", fetching" << dendl;
+    dir->fetch(new C_MDS_RetryRequest(mdcache, mdr), true);
+    return;
+  }
+
+#ifdef MDS_VERIFY_FRAGSTAT
+  dir->verify_fragstat();
+#endif
+
+  utime_t now = ceph_clock_now();
+  mdr->set_mds_stamp(now);
+
+  mdr->snapid_diff_other = (uint64_t)req->head.args.snapdiff.snap_other;
+  if (mdr->snapid_diff_other == mdr->snapid ||
+      mdr->snapid == CEPH_NOSNAP ||
+      mdr->snapid_diff_other == CEPH_NOSNAP) {
+    dout(10) << "reply to " << *req << " snapdiff -CEPHFS_EINVAL" << dendl;
+    respond_to_request(mdr, -CEPHFS_EINVAL);
+  }
+
+  dout(10) << __func__
+    << " snap " << mdr->snapid
+    << " vs. snap " << mdr->snapid_diff_other
+    << dendl;
+
+  unsigned max = req->head.args.snapdiff.max_entries;
+  if (!max)
+    max = dir->get_num_any();  // whatever, something big.
+  unsigned max_bytes = req->head.args.snapdiff.max_bytes;
+  if (!max_bytes)
+    // make sure at least one item can be encoded
+    max_bytes = (512 << 10) + g_conf()->mds_max_xattr_pairs_size;
+
+  SnapRealm* realm = diri->find_snaprealm();
+
+  // start final blob
+  bufferlist dirbl;
+  DirStat ds;
+  ds.frag = dir->get_frag();
+  ds.auth = dir->get_dir_auth().first;
+  if (dir->is_auth() && !forward_all_requests_to_auth)
+    dir->get_dist_spec(ds.dist, mds->get_nodeid());
+
+  dir->encode_dirstat(dirbl, mdr->session->info, ds);
+
+  // count bytes available.
+  //  this isn't perfect, but we should capture the main variable/unbounded size items!
+  int front_bytes = dirbl.length() + sizeof(__u32) + sizeof(__u8) * 2;
+  int bytes_left = max_bytes - front_bytes;
+  bytes_left -= realm->get_snap_trace().length();
+
+  auto finalize_cb = [&](
+    bool start, bool end, __u16 flags, __u32 numfiles, bufferlist& dnbl) {
+
+      session->touch_readdir_cap(numfiles);
+
+      if (end) {
+	flags |= CEPH_READDIR_FRAG_END;
+	if (start)
+	  flags |= CEPH_READDIR_FRAG_COMPLETE; // FIXME: what purpose does this serve
+      }
+
+      // finish final blob
+      encode(numfiles, dirbl);
+      encode(flags, dirbl);
+      dirbl.claim_append(dnbl);
+
+      // yay, reply
+      dout(10) << "reply to " << *req << " snapdiff num=" << numfiles
+	<< " bytes=" << dirbl.length()
+	<< " start=" << (int)start
+	<< " end=" << (int)end
+	<< dendl;
+      mdr->reply_extra_bl = dirbl;
+
+      // bump popularity.  NOTE: this doesn't quite capture it.
+      mds->balancer->hit_dir(dir, META_POP_READDIR, -1, numfiles);
+
+      // reply
+      std::swap(mdr->snapid, mdr->snapid_diff_other); // we want opponent snapid to be used for tracei
+      mdr->tracei = diri;
+      respond_to_request(mdr, 0);
+  };
+  _readdir_diff(
+    now,
+    mdr,
+    diri,
+    dir,
+    realm,
+    max,
+    bytes_left,
+    offset_str,
+    offset_hash,
+    false,
+    finalize_cb);
+}
+
+
 /**
  * Return true if server is in state RECONNECT and this
  * client has not yet reconnected.
@@ -10809,63 +11016,111 @@ void Server::_readdir_diff(
   CInode* diri,
   CDir* dir,
   SnapRealm* realm,
-  unsigned req_flags,
+  unsigned max_entries,
+  int bytes_left,
   const string& offset_str,
-  uint32_t offset_hash)
+  uint32_t offset_hash,
+  bool compatibility_format,
+  std::function<void (bool, bool, __u16,__u32, bufferlist&)> finalize_cb)
 {
-  const cref_t<MClientRequest>& req = mdr->client_request;
-  Session* session = mds->get_session(req);
-  client_t client = req->get_source().num();
+  // build dir contents
+  bufferlist dnbl;
+  __u32 numfiles = 0;
 
   snapid_t snapid = mdr->snapid;
   snapid_t snapid_before = mdr->snapid_diff_other;
   if (snapid < snapid_before) {
     std::swap(snapid, snapid_before);
   }
-
-  unsigned max = req->head.args.readdir.max_entries;
-  if (!max)
-    max = dir->get_num_any();  // whatever, something big.
-  unsigned max_bytes = req->head.args.readdir.max_bytes;
-  if (!max_bytes)
-    // make sure at least one item can be encoded
-    max_bytes = (512 << 10) + g_conf()->mds_max_xattr_pairs_size;
-
-  // start final blob
-  bufferlist dirbl;
-  DirStat ds;
-  ds.frag = dir->get_frag();
-  ds.auth = dir->get_dir_auth().first;
-  if (dir->is_auth() && !forward_all_requests_to_auth)
-    dir->get_dist_spec(ds.dist, mds->get_nodeid());
-
-  dir->encode_dirstat(dirbl, mdr->session->info, ds);
-
-  // count bytes available.
-  //  this isn't perfect, but we should capture the main variable/unbounded size items!
-  int front_bytes = dirbl.length() + sizeof(__u32) + sizeof(__u8) * 2;
-  int bytes_left = max_bytes - front_bytes;
-  bytes_left -= realm->get_snap_trace().length();
-
-  // build dir contents
-  bufferlist dnbl;
-  __u32 numfiles = 0;
-  bool start = !offset_hash && offset_str.empty();
+  bool from_the_beginning = !offset_hash && offset_str.empty();
   // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
   dentry_key_t skip_key(snapid_before, offset_str.c_str(), offset_hash);
-  auto it = start ? dir->begin() : dir->lower_bound(skip_key);
-  bool end = (it == dir->end());
 
+  bool end = build_snap_diff(
+    mdr,
+    dir,
+    bytes_left,
+    from_the_beginning ? nullptr : & skip_key,
+    snapid_before,
+    snapid,
+    dnbl,
+    [&](int lease_mask, CDentry* dn, CInode* in, bool exists) {
+      string name;
+      snapid_t effective_snapid;
+      if (compatibility_format) {
+	if (!exists) {
+	  name.append(1, SNAPDIFF_RM_INDICATOR);
+	}
+	effective_snapid = mdr->get_effective_snapid_diff(exists ? 1 : 0);
+      } else {
+        // provide the first snapid for removed entries and
+	// the last one for existent ones
+        auto s1 = mdr->snapid_diff_other;
+	auto s2 = mdr->snapid;
+	effective_snapid = exists ? std::max(s1, s2) : std::min(s1, s2);
+      }
+      name.append(dn->get_name());
+      if ((int)(dnbl.length() + name.length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
+	dout(10) << " ran out of room, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
+	return false;
+      }
 
-  CDentry* dn_before = nullptr;
-  CInode* in_before = nullptr;
-  int lease_mask_before = 0;
+      unsigned start_len = dnbl.length();
+      dout(10) << "inc dn " << *dn << " as " << name << dendl;
+      encode(name, dnbl);
+      mds->locker->issue_client_lease(dn, mdr, lease_mask, now, dnbl);
 
-  utime_t mtime_before;
+      // inode
+      dout(10) << "inc inode " << *in << " snap "	<< effective_snapid << dendl;
+      int r = in->encode_inodestat(dnbl, mdr->session, realm, effective_snapid, bytes_left - (int)dnbl.length());
+      if (r < 0) {
+	// chop off dn->name, lease
+	dout(10) << " ran out of room, stopping at "
+	         << start_len << " < " << bytes_left << dendl;
+	bufferlist keep;
+	keep.substr_of(dnbl, 0, start_len);
+	dnbl.swap(keep);
+	return false;
+      }
 
-  for (; !end && numfiles < max; end = (it == dir->end())) {
+      // touch dn
+      mdcache->lru.lru_touch(dn);
+      ++numfiles;
+      return true;
+    });
+
+  __u16 flags = CEPH_READDIR_SNAPDIFF;
+  finalize_cb(from_the_beginning, end, flags, numfiles, dnbl);
+}
+
+bool Server::build_snap_diff(
+  MDRequestRef& mdr,
+  CDir* dir,
+  int bytes_left,
+  dentry_key_t* skip_key,
+  snapid_t snapid_before,
+  snapid_t snapid,
+  const bufferlist& dnbl,
+  std::function<bool (int, CDentry*, CInode*, bool)> add_result_cb)
+{
+  client_t client = mdr->client_request->get_source().num();
+
+  struct EntryInfo {
+    CDentry* dn = nullptr;
+    CInode* in = nullptr;
+    int lease_mask = 0;
+    utime_t mtime;
+
+    void reset() {
+      *this = EntryInfo();
+    }
+  } before;
+
+  auto it = !skip_key ? dir->begin() : dir->lower_bound(*skip_key);
+
+  while(it != dir->end()) {
     CDentry* dn = it->second;
-    dout(20) << __func__ << " " << it->first << "->" << dn->get_name() << dendl;
+    dout(20) << __func__ << " " << it->first << "->" << *dn << dendl;
     ++it;
     if (dn->state_test(CDentry::STATE_PURGING))
       continue;
@@ -10873,22 +11128,22 @@ void Server::_readdir_diff(
     bool dnp = dn->use_projected(client, mdr);
     CDentry::linkage_t* dnl = dnp ? dn->get_projected_linkage() : dn->get_linkage();
 
-    if (dnl->is_null())
-      continue;
-
-    if (dn->last < snapid_before || dn->first > snapid) {
+    if (dnl->is_null()) {
+      dout(20) << __func__ << " linkage is null, skipping" << dendl;
       continue;
     }
 
-    if (!start) {
-      dentry_key_t offset_key(dn->last, offset_str.c_str(), offset_hash);
-      //FIXME: is greater or equal valid condition, shouldn't it be just greater?
-      if (!(offset_key < dn->key()))
+    if (dn->last < snapid_before || dn->first > snapid) {
+      dout(20) << __func__ << " not in range, skipping" << dendl;
+      continue;
+    }
+    if (skip_key) {
+      skip_key->snapid = dn->last;
+      if (!(*skip_key < dn->key()))
 	continue;
     }
 
     CInode* in = dnl->get_inode();
-
     if (in && in->ino() == CEPH_INO_CEPH)
       continue;
 
@@ -10896,7 +11151,7 @@ void Server::_readdir_diff(
     // better for the MDS to do the work, if we think the client will stat any of these files.
     if (dnl->is_remote() && !in) {
       in = mdcache->get_inode(dnl->get_remote_ino());
-      dout(20) << __func__ << " remote in: " << in << " ino " << std::hex << dnl->get_remote_ino() << std::dec << dendl;
+      dout(20) << __func__ << " remote in: " << *in << " ino " << std::hex << dnl->get_remote_ino() << std::dec << dendl;
       if (in) {
 	dn->link_remote(dnl, in);
       } else if (dn->state_test(CDentry::STATE_BADREMOTEINO)) {
@@ -10914,198 +11169,92 @@ void Server::_readdir_diff(
 	  mdcache->open_remote_dentry(dn, dnp, new C_MDSInternalNoop);
 	  dout(10) << " open remote dentry after caps were issued, stopping at "
 	    << dnbl.length() << " < " << bytes_left << dendl;
-	  break;
+	} else {
+	  mds->locker->drop_locks(mdr.get());
+	  mdr->drop_local_auth_pins();
+	  mdcache->open_remote_dentry(dn, dnp, new C_MDS_RetryRequest(mdcache, mdr));
 	}
-
-	mds->locker->drop_locks(mdr.get());
-	mdr->drop_local_auth_pins();
-
-	mdcache->open_remote_dentry(dn, dnp, new C_MDS_RetryRequest(mdcache, mdr));
-	return;
+	return false;
       }
     }
     ceph_assert(in);
     int lease_mask = dnl->is_primary() ? CEPH_LEASE_PRIMARY_LINK : 0;
 
-    auto effective_snapid = mdr->get_effective_snapid_diff();
-    std::string name;
     utime_t mtime = in->get_inode()->mtime;
 
     if (in->is_dir()) {
-      if (snapid_before < dn->first && dn->last < snapid ) {
-	  dout(20) << __func__ << " skipping inner " << dn->get_name() << " "
-	           << dn->first << "/" << dn->last << dendl;
-	  continue;
+      bool exists = true;
+      if (snapid_before < dn->first && dn->last < snapid) {
+	dout(20) << __func__ << " skipping inner " << dn->get_name() << " "
+	  << dn->first << "/" << dn->last << dendl;
+	continue;
       } else if (dn->first <= snapid_before && dn->last < snapid) {
 	// dir deleted
-	name.append(1, SNAPDIFF_RM_INDICATOR);
 	dout(20) << __func__ << " deleted dir " << dn->get_name() << " "
-	         << dn->first << "/" << dn->last << dendl;
-	effective_snapid = mdr->get_effective_snapid_diff(0); //use first snapid as a primary unconditionally
-	name.append(dn->get_name());
-      }	else {
-	//FIXME: escape starting tildas(~) if any
-	name.append(dn->get_name());
+	  << dn->first << "/" << dn->last << dendl;
+	exists = false;
+      }
+      bool r = add_result_cb(lease_mask, dn, in, exists);
+      if (!r) {
+	break;
       }
     } else {
-      name = dn->get_name();
       if (snapid_before >= dn->first && snapid <= dn->last) {
-	dout(20) << __func__ << " skipping unchanged " << name << " "
-	         << dn->first << "/" << dn->last << dendl;
+	dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
+	  << dn->first << "/" << dn->last << dendl;
 	continue;
       } else if (snapid_before < dn->first && snapid > dn->last) {
-	dout(20) << __func__ << " skipping inner modification " << name << " "
-	         << dn->first << "/" << dn->last << dendl;
+	dout(20) << __func__ << " skipping inner modification " << dn->get_name() << " "
+	  << dn->first << "/" << dn->last << dendl;
 	continue;
       }
       string_view name_before =
-        dn_before ? string_view(dn_before->get_name()) : string_view();
+        before.dn ? string_view(before.dn->get_name()) : string_view(string());
       if (snapid_before >= dn->first && snapid_before <= dn->last) {
-	if (dn_before && name != name_before) {
-	  string name(1, SNAPDIFF_RM_INDICATOR);
-	  name.append(name_before);
+	if (before.dn && dn->get_name() != name_before) {
 	  dout(20) << __func__ << " deleted file " << name_before << " "
-	           << dn_before->first << "/" << dn_before->last << dendl;
-	  effective_snapid = mdr->get_effective_snapid_diff(0); //use first snapid as a primary unconditionally
-
-	  int r = _include_into_readdir_diff(now, mdr, realm, lease_mask_before,
-	    effective_snapid, name, dn_before, in_before, bytes_left, dnbl);
-	  dn_before = nullptr;
-	  in_before = nullptr;
-	  lease_mask_before = 0;
-	  if (r < 0) {
-	    //FIXME
+	    << before.dn->first << "/" << before.dn->last << dendl;
+	  bool r = add_result_cb(before.lease_mask, before.dn, before.in, false);
+	  before.reset();
+	  if (!r) {
 	    break;
 	  }
-	  numfiles++;
 	}
-	dout(30) << __func__ << " dn_before " << name << " "
-	         << dn->first << "/" << dn->last << dendl;
-	dn_before = dn;
-	in_before = in;
-	lease_mask_before = lease_mask;
-	mtime_before = mtime;
+	dout(30) << __func__ << " dn_before " << dn->get_name() << " "
+	  << dn->first << "/" << dn->last << dendl;
+	before = EntryInfo {dn, in, lease_mask, mtime};
 	continue;
       } else {
-	if (dn_before && name == name_before) {
-	  if (mtime == mtime_before) {
-	    dout(30) << __func__ << " timestamp not changed " << name << " "
-	             << dn->first << "/" << dn->last
-	             << " " << mtime
-		     << dendl;
-	    in_before = nullptr;
-	    dn_before = nullptr;
-	    lease_mask_before = 0;
+	if (before.dn && dn->get_name() == name_before) {
+	  if (mtime == before.mtime) {
+	    dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
+	      << dn->first << "/" << dn->last
+	      << " " << mtime
+	      << dendl;
+	    before.reset();
 	    continue;
 	  } else {
-	    dn_before = nullptr;
-	    in_before = nullptr;
-	    lease_mask_before = 0;
-	    dout(30) << __func__ << " timestamp changed " << name << " "
-	             << dn->first << "/" << dn->last
-	             << " " << mtime_before << " vs. " << mtime
-	             << dendl;
+	    dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
+	      << dn->first << "/" << dn->last
+	      << " " << before.mtime << " vs. " << mtime
+	      << dendl;
+	    before.reset();
 	  }
 	}
-	dout(20) << __func__ << " new file " << name << " "
+	dout(20) << __func__ << " new file " << dn->get_name() << " "
 	  << dn->first << "/" << dn->last
 	  << dendl;
 	ceph_assert(snapid >= dn->first && snapid <= dn->last);
       }
+      if (!add_result_cb(lease_mask, dn, in, true)) {
+	break;
+      }
     }
-    int r = _include_into_readdir_diff(now, mdr, realm, lease_mask,
-      effective_snapid, name, dn, in, bytes_left, dnbl);
-    if (r < 0) {
-      //FIXME
-      break;
-    }
-    numfiles++;
   }
-  if (dn_before) {
-    string name(1, SNAPDIFF_RM_INDICATOR);
-    name.append(dn_before->get_name());
-    dout(20) << __func__ << " deleted file " << dn_before->get_name() << " "
-            << dn_before->first << "/" << dn_before->last << dendl;
-    auto effective_snapid = mdr->get_effective_snapid_diff(0); //use first snapid as a primary unconditionally
-
-    int r = _include_into_readdir_diff(now, mdr, realm, lease_mask_before,
-      effective_snapid, name, dn_before, in_before, bytes_left, dnbl);
-    dn_before = nullptr;
-    in_before = nullptr;
-    lease_mask_before = 0;
-    if (r < 0) {
-      //FIXME
-    }
-    numfiles++;
+  if (before.dn) {
+    dout(20) << __func__ << " deleted file " << before.dn->get_name() << " "
+      << before.dn->first << "/" << before.dn->last << dendl;
+    add_result_cb(before.lease_mask, before.dn, before.in, false);
   }
-
-  session->touch_readdir_cap(numfiles);
-
-  __u16 flags = CEPH_READDIR_SNAPDIFF;
-  if (end) {
-    flags |= CEPH_READDIR_FRAG_END;
-    if (start)
-      flags |= CEPH_READDIR_FRAG_COMPLETE; // FIXME: what purpose does this serve
-  }
-
-  // finish final blob
-  encode(numfiles, dirbl);
-  encode(flags, dirbl);
-  dirbl.claim_append(dnbl);
-
-  // yay, reply
-  dout(10) << "reply to " << *req << " readdir num=" << numfiles
-    << " bytes=" << dirbl.length()
-    << " start=" << (int)start
-    << " end=" << (int)end
-    << dendl;
-  mdr->reply_extra_bl = dirbl;
-
-  // bump popularity.  NOTE: this doesn't quite capture it.
-  mds->balancer->hit_dir(dir, META_POP_IRD, -1, numfiles);
-
-  // reply
-  mdr->tracei = diri;
-  respond_to_request(mdr, 0);
-}
-
-int Server::_include_into_readdir_diff(
-  utime_t now,
-  MDRequestRef& mdr,
-  SnapRealm* realm,
-  int lease_mask,
-  snapid_t snapid,
-  const std::string& name,
-  CDentry* dn,
-  CInode* in,
-  int bytes_left,
-  bufferlist& dnbl)
-{
-  if ((int)(dnbl.length() + dn->get_name().length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
-    dout(10) << " ran out of room, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
-    return -ENOSPC;
-  }
-
-  unsigned start_len = dnbl.length();
-
-  dout(10) << "including    dn " << *dn << " as " << name << dendl;
-  encode(name, dnbl);
-  mds->locker->issue_client_lease(dn, mdr, lease_mask, now, dnbl);
-
-  // inode
-  dout(10) << "including inode " << *in << " snap "
-	   << snapid << dendl;
-  int r = in->encode_inodestat(dnbl, mdr->session, realm, snapid, bytes_left - (int)dnbl.length());
-  if (r < 0) {
-    // chop off dn->name, lease
-    dout(10) << " ran out of room, stopping at " << start_len << " < " << bytes_left << dendl;
-    bufferlist keep;
-    keep.substr_of(dnbl, 0, start_len);
-    dnbl.swap(keep);
-    return r;
-  }
-
-  // touch dn
-  mdcache->lru.lru_touch(dn);
-  return 0;
+  return it == dir->end();
 }
