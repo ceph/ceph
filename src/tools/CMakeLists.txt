@@ -155,3 +155,7 @@ endif()
 add_subdirectory(immutable_object_cache)
 add_subdirectory(ceph-dencoder)
 add_subdirectory(erasure-code)
+
+if(WITH_RBD_RWL)
+  add_subdirectory(rwl-replica)
+endif()

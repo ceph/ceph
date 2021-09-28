@@ -1,0 +1,84 @@
+# -*- mode: YAML -*-
+---
+
+options:
+- name: rwl_replica_addr
+  type: str
+  level: advanced
+  desc: rwl replica will listen on the addr
+  default: 192.168.0.20:9000
+  services:
+  - rwl-replica
+  with_legacy: true
+- name: rwl_replica_path
+  type: str
+  level: advanced
+  desc: the location is that cachefile is located on
+  default: /mnt/pmem
+  services:
+  - rwl-replica
+  with_legacy: true
+- name: rwl_replica_size
+  type: size
+  level: advanced
+  desc: total cache size of one replica daemon
+  default: 10_G
+  services:
+  - rwl-replica
+  with_legacy: true
+- name: rwl_replica_copies
+  type: int
+  level: advanced
+  desc: the number of replica copy for each primary;
+  default: 1
+  services:
+  - rwl-replica
+  with_legacy: true
+- name: rwl_replica_enabled
+  type: bool
+  level: advanced
+  desc: Enable rwl replica.
+  default: false
+  services:
+  - rwl-replica
+  with_legacy: true
+- name: rwl_in_replica
+  type: bool
+  level: advanced
+  desc: This indicates whether the rwl is called by replica
+  default: false
+  services:
+  - rwl-replica
+  with_legacy: true
+- name: rwl_replica_sq_size
+  type: int
+  level: advanced
+  desc: SQ size for RDMA connection
+  default: 50
+  services:
+  - rwl-replica
+  with_legacy: true
+- name: rwl_replica_rq_size
+  type: int
+  level: advanced
+  desc: RQ size for RDMA connection
+  default: 50
+  services:
+  - rwl-replica
+  with_legacy: true
+- name: rwl_replica_cq_size
+  type: int
+  level: advanced
+  desc: CQ size for RDMA connection
+  default: 100
+  services:
+  - rwl-replica
+  with_legacy: true
+- name: rwl_replica_establish_timeout_ms
+  type: int
+  level: advanced
+  desc: Connection establishment timeout
+  default: 1000
+  services:
+  - rwl-replica
+  with_legacy: true
