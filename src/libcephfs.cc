@@ -28,6 +28,7 @@
 #include "mon/MonClient.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
+#include "include/object.h"
 #include "messages/MMonMap.h"
 #include "msg/Messenger.h"
 #include "include/ceph_assert.h"
@@ -685,6 +686,27 @@ extern "C" int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_di
   if (flags & ~CEPH_REQ_FLAG_MASK)
     return -EINVAL;
   return cmount->get_client()->readdirplus_r(reinterpret_cast<dir_result_t*>(dirp), de, stx, want, flags, out);
+}
+
+extern "C" int ceph_readdir_snapdiff(struct ceph_mount_info* cmount,
+						struct ceph_dir_result* dirp,
+					        uint64_t snap_other,
+						struct dirent* res_dirent,
+						uint64_t* res_snapid)
+{
+  if (!cmount->is_mounted()) {
+    /* Client::readdir_snapdiff also sets errno to signal errors. */
+    errno = ENOTCONN;
+    return -errno;
+  }
+  snapid_t snapid;
+  auto r = cmount->get_client()->readdir_snapdiff(reinterpret_cast<dir_result_t*>(dirp),
+    snap_other, res_dirent, &snapid);
+  if (res_snapid) {
+    // converting snapid_t to uint64_t to avoid snapid_t exposure
+    *res_snapid = snapid;
+  }
+  return r;
 }
 
 extern "C" int ceph_getdents(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,

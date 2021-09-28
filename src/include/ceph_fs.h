@@ -615,8 +615,7 @@ union ceph_mds_request_args {
 		__le32 hash;
 	} __attribute__ ((packed)) lookupino;
 	struct {
-		__le64 snapA;
-		__le64 snapB;
+		__le64 snap_other;
 		__le32 frag;                 /* which dir fragment */
 		__le32 max_entries;          /* how many dentries to grab */
 		__le32 max_bytes;

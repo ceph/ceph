@@ -1179,7 +1179,8 @@ void Client::clear_dir_complete_and_ordered(Inode *diri, bool complete)
 /*
  * insert results from readdir or lssnap into the metadata cache.
  */
-void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri) {
+void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
+                                    Inode *diri, Inode *diri_other) {
 
   auto& reply = request->reply;
   ConnectionRef con = request->reply->get_connection();
@@ -1194,18 +1195,27 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
   dir_result_t *dirp = request->dirp;
   ceph_assert(dirp);
 
-  // the extra buffer list is only set for readdir and lssnap replies
+  // the extra buffer list is only set for readdir, lssnap and
+  // readdir_snapdiff replies
   auto p = reply->get_extra_bl().cbegin();
   if (!p.end()) {
+
     // snapdir?
     if (request->head.op == CEPH_MDS_OP_LSSNAP) {
       ceph_assert(diri);
       diri = open_snapdir(diri);
     }
+    bool snapdiff = request->head.op == CEPH_MDS_OP_READDIR_SNAPDIFF;
 
     // only open dir if we're actually adding stuff to it!
     Dir *dir = diri->open_dir();
     ceph_assert(dir);
+    Dir *dir_other = nullptr;
+    if (snapdiff) {
+      ceph_assert(diri_other);
+      dir_other = diri_other->open_dir();
+      ceph_assert(dir_other);
+    }
 
     // dirstat
     DirStat dst(p, features);
@@ -1273,13 +1283,22 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 
       Inode *in = add_update_inode(&ist, request->sent_stamp, session,
 				   request->perms);
+      auto *effective_dir = dir;
+      auto *effective_diri = diri;
+
+      if (snapdiff && in->snapid != diri->snapid) {
+        ceph_assert(diri_other);
+        ceph_assert(dir_other);
+        effective_diri = diri_other;
+        effective_dir = dir_other;
+      }
       Dentry *dn;
-      if (diri->dir->dentries.count(dname)) {
-	Dentry *olddn = diri->dir->dentries[dname];
+      if (effective_dir->dentries.count(dname)) {
+	Dentry *olddn = effective_dir->dentries[dname];
 	if (olddn->inode != in) {
 	  // replace incorrect dentry
 	  unlink(olddn, true, true);  // keep dir, dentry
-	  dn = link(dir, dname, in, olddn);
+	  dn = link(effective_dir, dname, in, olddn);
 	  ceph_assert(dn == olddn);
 	} else {
 	  // keep existing dn
@@ -1288,13 +1307,13 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	}
       } else {
 	// new dn
-	dn = link(dir, dname, in, NULL);
+	dn = link(effective_dir, dname, in, NULL);
       }
       dn->alternate_name = std::move(dlease.alternate_name);
 
       update_dentry_lease(dn, &dlease, request->sent_stamp, session);
       if (hash_order) {
-	unsigned hash = ceph_frag_value(diri->hash_dentry_name(dname));
+	unsigned hash = ceph_frag_value(effective_diri->hash_dentry_name(dname));
 	if (hash != last_hash)
 	  readdir_offset = 2;
 	last_hash = hash;
@@ -1303,20 +1322,21 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	dn->offset = dir_result_t::make_fpos(fg, readdir_offset++, false);
       }
       // add to readdir cache
-      if (dirp->release_count == diri->dir_release_count &&
-	  dirp->ordered_count == diri->dir_ordered_count &&
-	  dirp->start_shared_gen == diri->shared_gen) {
-	if (dirp->cache_index == dir->readdir_cache.size()) {
+      if (!snapdiff &&
+          dirp->release_count == effective_diri->dir_release_count &&
+	  dirp->ordered_count == effective_diri->dir_ordered_count &&
+	  dirp->start_shared_gen == effective_diri->shared_gen) {
+	if (dirp->cache_index == effective_dir->readdir_cache.size()) {
 	  if (i == 0) {
 	    ceph_assert(!dirp->inode->is_complete_and_ordered());
 	    dir->readdir_cache.reserve(dirp->cache_index + numdn);
 	  }
-	  dir->readdir_cache.push_back(dn);
-	} else if (dirp->cache_index < dir->readdir_cache.size()) {
+          effective_dir->readdir_cache.push_back(dn);
+	} else if (dirp->cache_index < effective_dir->readdir_cache.size()) {
 	  if (dirp->inode->is_complete_and_ordered())
-	    ceph_assert(dir->readdir_cache[dirp->cache_index] == dn);
+	    ceph_assert(effective_dir->readdir_cache[dirp->cache_index] == dn);
 	  else
-	    dir->readdir_cache[dirp->cache_index] = dn;
+            effective_dir->readdir_cache[dirp->cache_index] = dn;
 	} else {
 	  ceph_abort_msg("unexpected readdir buffer idx");
 	}
@@ -1336,6 +1356,8 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 
     if (dir->is_empty())
       close_dir(dir);
+    if (dir_other && dir_other->is_empty())
+      close_dir(dir_other);
   }
 }
 
@@ -1495,10 +1517,14 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
   if (in) {
     if (op == CEPH_MDS_OP_READDIR ||
 	op == CEPH_MDS_OP_LSSNAP) {
-      insert_readdir_results(request, session, in);
+      insert_readdir_results(request, session, in, nullptr);
     } else if (op == CEPH_MDS_OP_LOOKUPNAME) {
       // hack: return parent inode instead
       in = diri;
+    } else if (op == CEPH_MDS_OP_READDIR_SNAPDIFF) {
+      // provide both request's inode (aka snapA) and traced one (snapB)
+      // to properly match snapdiff results
+      insert_readdir_results(request, session, request->inode(), in);
     }
 
     if (request->dentry() == NULL && in != request->inode()) {
@@ -3275,12 +3301,17 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 
     lru.lru_insert_mid(dn);    // mid or top?
 
-    ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
-		   << " dn " << dn << " (new dn)" << dendl;
+    if(in) {
+      ldout(cct, 15) << "link dir " << *dir->parent_inode << " '" << name << "' to inode " << *in
+		     << " dn " << *dn << " (new dn)" << dendl;
+    } else {
+      ldout(cct, 15) << "link dir " << *dir->parent_inode << " '" << name << "' "
+        << " dn " << *dn << " (new dn)" << dendl;
+    }
   } else {
     ceph_assert(!dn->inode);
-    ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
-		   << " dn " << dn << " (old dn)" << dendl;
+    ldout(cct, 15) << "link dir " << *dir->parent_inode << " '" << name << "' to inode " << in
+		   << " dn " << *dn << " (old dn)" << dendl;
   }
 
   if (in) {    // link to inode
@@ -8591,7 +8622,8 @@ void Client::_readdir_drop_dirp_buffer(dir_result_t *dirp)
   dirp->buffer.clear();
 }
 
-int Client::_readdir_get_frag(dir_result_t *dirp)
+int Client::_readdir_get_frag(int op, dir_result_t* dirp,
+  fill_readdir_args_cb_t fill_req_cb)
 {
   ceph_assert(dirp);
   ceph_assert(dirp->inode);
@@ -8606,33 +8638,18 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   ldout(cct, 10) << __func__ << " " << dirp << " on " << dirp->inode->ino << " fg " << fg
 		 << " offset " << hex << dirp->offset << dec << dendl;
 
-  int op = CEPH_MDS_OP_READDIR;
-  if (dirp->inode && dirp->inode->snapid == CEPH_SNAPDIR)
-    op = CEPH_MDS_OP_LSSNAP;
-
   InodeRef& diri = dirp->inode;
 
   MetaRequest *req = new MetaRequest(op);
-  filepath path;
-  diri->make_nosnap_relative_path(path);
-  req->set_filepath(path); 
-  req->set_inode(diri.get());
-  req->head.args.readdir.frag = fg;
-  req->head.args.readdir.flags = CEPH_READDIR_REPLY_BITFLAGS;
-  if (dirp->last_name.length()) {
-    req->path2.set_path(dirp->last_name);
-  } else if (dirp->hash_order()) {
-    req->head.args.readdir.offset_hash = dirp->offset_high();
-  }
-  req->dirp = dirp;
-  
+  fill_req_cb(dirp, req, diri, fg);
+
   bufferlist dirbl;
   int res = make_request(req, dirp->perms, NULL, NULL, -1, &dirbl);
   
   if (res == -CEPHFS_EAGAIN) {
     ldout(cct, 10) << __func__ << " got EAGAIN, retrying" << dendl;
     _readdir_rechoose_frag(dirp);
-    return _readdir_get_frag(dirp);
+    return _readdir_get_frag(op, dirp, fill_req_cb);
   }
 
   if (res == 0) {
@@ -8746,8 +8763,53 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
   return 0;
 }
 
-int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
-			 unsigned want, unsigned flags, bool getref)
+int Client::readdir_r_cb(dir_result_t* d,
+  add_dirent_cb_t cb,
+  void* p,
+  unsigned want,
+  unsigned flags,
+  bool getref)
+{
+  auto fill_readdir_cb = [](dir_result_t* dirp,
+			    MetaRequest* req,
+			    InodeRef& diri,
+			    frag_t fg) {
+    filepath path;
+    diri->make_nosnap_relative_path(path);
+    req->set_filepath(path);
+    req->set_inode(diri.get());
+    req->head.args.readdir.frag = fg;
+    req->head.args.readdir.flags = CEPH_READDIR_REPLY_BITFLAGS;
+    if (dirp->last_name.length()) {
+      req->path2.set_path(dirp->last_name);
+    } else if (dirp->hash_order()) {
+      req->head.args.readdir.offset_hash = dirp->offset_high();
+    }
+    req->dirp = dirp;
+  };
+  int op = CEPH_MDS_OP_READDIR;
+  if (d->inode && d->inode->snapid == CEPH_SNAPDIR)
+    op = CEPH_MDS_OP_LSSNAP;
+  return _readdir_r_cb(op,
+    d,
+    cb,
+    fill_readdir_cb,
+    p,
+    want,
+    flags,
+    getref,
+    false);
+}
+
+int Client::_readdir_r_cb(int op,
+  dir_result_t *d,
+  add_dirent_cb_t cb,
+  fill_readdir_args_cb_t fill_cb,
+  void *p,
+  unsigned want,
+  unsigned flags,
+  bool getref,
+  bool bypass_cache)
 {
   int caps = statx_to_mask(flags, want);
 
@@ -8842,7 +8904,8 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
 	   << dirp->inode->is_complete_and_ordered()
 	   << " issued " << ccap_string(dirp->inode->caps_issued())
 	   << dendl;
-  if (dirp->inode->snapid != CEPH_SNAPDIR &&
+  if (!bypass_cache &&
+      dirp->inode->snapid != CEPH_SNAPDIR &&
       dirp->inode->is_complete_and_ordered() &&
       dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
     int err = _readdir_cache_cb(dirp, cb, p, caps, getref);
@@ -8856,7 +8919,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
 
     bool check_caps = true;
     if (!dirp->is_cached()) {
-      int r = _readdir_get_frag(dirp);
+      int r = _readdir_get_frag(op, dirp, fill_cb);
       if (r)
 	return r;
       // _readdir_get_frag () may updates dirp->offset if the replied dirfrag is
@@ -8882,6 +8945,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
 	if(entry.inode->is_dir()){
           mask |= CEPH_STAT_RSTAT;
 	}
+	ldout(cct, 10) << __func__ << " inode " << *entry.inode << dendl;
 	r = _getattr(entry.inode, mask, dirp->perms);
 	if (r < 0)
 	  return r;
@@ -8901,6 +8965,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
       cl.lock();
 
       ldout(cct, 15) << " de " << de.d_name << " off " << hex << next_off - 1 << dec
+                     << "snap " << entry.inode->snapid
 		     << " = " << r << dendl;
       if (r < 0)
 	return r;
@@ -8922,7 +8987,8 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
       continue;
     }
 
-    if (diri->shared_gen == dirp->start_shared_gen &&
+    if (!bypass_cache &&
+	diri->shared_gen == dirp->start_shared_gen &&
 	diri->dir_release_count == dirp->release_count) {
       if (diri->dir_ordered_count == dirp->ordered_count) {
 	ldout(cct, 10) << " marking (I_COMPLETE|I_DIR_ORDERED) on " << *diri << dendl;
@@ -8995,7 +9061,7 @@ struct dirent *Client::readdir(dir_result_t *d)
 
   // our callback fills the dirent and sets sr.full=true on first
   // call, and returns -1 the second time around.
-  ret = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr);
+  ret = readdir_r_cb(d, _readdir_single_dirent_cb, (void*)&sr);
   if (ret < -1) {
     errno = -ret;  // this sucks.
     return (dirent *) NULL;
@@ -9028,6 +9094,68 @@ int Client::readdirplus_r(dir_result_t *d, struct dirent *de,
   return 0;
 }
 
+int Client::readdir_snapdiff(dir_result_t* d, snapid_t snap_other,
+  struct dirent* res_de, snapid_t* res_snap)
+{
+  int ret;
+  auto& de = d->de;
+  ceph_statx stx;
+  single_readdir sr;
+  sr.de = &de;
+  sr.stx = &stx;
+  sr.inode = NULL;
+  sr.full = false;
+
+  auto fill_snapdiff_cb = [&](dir_result_t* dirp,
+    MetaRequest* req,
+    InodeRef& diri,
+    frag_t fg) {
+      filepath path;
+      diri->make_nosnap_relative_path(path);
+      req->set_filepath(path);
+      req->set_inode(diri.get());
+      req->head.args.snapdiff.snap_other = snap_other;
+      req->head.args.snapdiff.frag = fg;
+      req->head.args.snapdiff.flags = CEPH_READDIR_REPLY_BITFLAGS;
+      if (dirp->last_name.length()) {
+	req->path2.set_path(dirp->last_name);
+      } else if (dirp->hash_order()) {
+	req->head.args.snapdiff.offset_hash = dirp->offset_high();
+      }
+      req->dirp = dirp;
+  };
+
+  // our callback fills the dirent and sets sr.full=true on first
+  // call, and returns -1 the second time around.
+  ret = _readdir_r_cb(CEPH_MDS_OP_READDIR_SNAPDIFF,
+    d,
+    _readdir_single_dirent_cb,
+    fill_snapdiff_cb,
+    (void*)&sr,
+    0,
+    AT_NO_ATTR_SYNC,
+    false,
+    true);
+  if (ret < -1) {
+    errno = -ret;  // this sucks.
+    return ret;
+  }
+
+  ldout(cct, 3) << __func__ << " " << ret
+    << " " << sr.de->d_name
+    << " " << stx.stx_dev
+    << dendl;
+  if (sr.full) {
+    if (res_snap) {
+      *res_snap = stx.stx_dev;
+    }
+    if (res_de) {
+      *res_de = de;
+    }
+    return 1;
+  }
+  return 0;
+}
 
 /* getdents */
 struct getdents_result {
