@@ -49,14 +49,14 @@ bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
   bool all_match = true;
   for (auto i = live_bytes_by_segment.begin(), j = other.live_bytes_by_segment.begin();
        i != live_bytes_by_segment.end(); ++i, ++j) {
-    if (i->second != j->second) {
+    if (i->second.live_bytes != j->second.live_bytes) {
       all_match = false;
       logger().debug(
 	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
 	__func__,
 	i->first,
-	i->second,
-	j->second);
+	i->second.live_bytes,
+	j->second.live_bytes);
     }
   }
   return all_match;
@@ -176,13 +176,20 @@ SegmentCleaner::SegmentCleaner(
     config(config),
     scanner(std::move(scr)),
     gc_process(*this)
-{
-  register_metrics();
-}
+{}
 
 void SegmentCleaner::register_metrics()
 {
   namespace sm = seastar::metrics;
+  stats.segment_util.buckets.resize(11);
+  for (int i = 0; i < 11; i++) {
+    stats.segment_util.buckets[i].upper_bound = ((double)(i + 1)) / 10;
+    if (!i) {
+      stats.segment_util.buckets[i].count = segments.num_segments();
+    } else {
+      stats.segment_util.buckets[i].count = 0;
+    }
+  }
   metrics.add_group("segment_cleaner", {
     sm::make_counter("segments_released", stats.segments_released,
 		     sm::description("total number of extents released by SegmentCleaner")),
@@ -205,7 +212,12 @@ void SegmentCleaner::register_metrics()
 		    [this] {
 		      return segments.get_opened_segments();
 		    },
-		    sm::description("the number of segments whose state is open"))
+		    sm::description("the number of segments whose state is open")),
+    sm::make_histogram("segment_utilization_distribution",
+		       [this]() -> seastar::metrics::histogram& {
+		         return stats.segment_util;
+		       },
+		       sm::description("utilization distribution of all segments"))
   });
 }
 
