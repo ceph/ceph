@@ -689,15 +689,15 @@ private:
     counter_by_src_t<counter_by_extent_t<uint64_t>> trans_invalidated;
     counter_by_src_t<trans_efforts_t>  invalidated_efforts_by_src;
     counter_by_src_t<query_counters_t> cache_query_by_src;
-    uint64_t read_transactions_successful;
+    uint64_t read_transactions_successful = 0;
     effort_t read_effort_successful;
-    uint64_t dirty_bytes;
+    uint64_t dirty_bytes = 0;
 
-    uint64_t onode_tree_depth;
+    uint64_t onode_tree_depth = 0;
     counter_by_src_t<tree_efforts_t> committed_onode_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_onode_tree_efforts;
 
-    uint64_t lba_tree_depth;
+    uint64_t lba_tree_depth = 0;
     counter_by_src_t<tree_efforts_t> committed_lba_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_lba_tree_efforts;
   } stats;

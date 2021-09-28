@@ -96,6 +96,8 @@ void Cache::dump_contents()
 
 void Cache::register_metrics()
 {
+  stats = {};
+
   namespace sm = seastar::metrics;
   using src_t = Transaction::src_t;
 
@@ -125,7 +127,6 @@ void Cache::register_metrics()
   /*
    * trans_created
    */
-  stats.trans_created_by_src.fill(0);
   for (auto& [src, src_label] : labels_by_src) {
     metrics.add_group(
       "cache",
@@ -143,7 +144,6 @@ void Cache::register_metrics()
   /*
    * trans_committed
    */
-  stats.trans_committed_by_src.fill(0);
   for (auto& [src, src_label] : labels_by_src) {
     if (src == src_t::READ) {
       // READ transaction won't commit
@@ -169,7 +169,6 @@ void Cache::register_metrics()
     for (auto& [ext, ext_label] : labels_by_ext) {
       auto& counter_by_extent = get_by_src(stats.trans_invalidated, src);
       auto& counter = get_by_ext(counter_by_extent, ext);
-      counter = 0;
       metrics.add_group(
         "cache",
         {
@@ -187,7 +186,6 @@ void Cache::register_metrics()
   /**
    * trans_read_successful
    */
-  stats.read_transactions_successful = 0;
   metrics.add_group(
     "cache",
     {
@@ -202,7 +200,6 @@ void Cache::register_metrics()
   /*
    * cache_query: cache_access and cache_hit
    */
-  stats.cache_query_by_src.fill({});
   for (auto& [src, src_label] : labels_by_src) {
     metrics.add_group(
       "cache",
@@ -243,7 +240,6 @@ void Cache::register_metrics()
         continue;
       }
       auto& efforts = get_by_src(stats.invalidated_efforts_by_src, src);
-      efforts = {};
       for (auto& effort_name : effort_names) {
         auto& effort = [&effort_name, &efforts]() -> effort_t& {
           if (effort_name == "READ") {
@@ -294,7 +290,6 @@ void Cache::register_metrics()
     auto read_src_label = labels_by_src.find(src_t::READ)->second;
     auto read_effort_label = effort_label("READ");
     auto& read_efforts = get_by_src(stats.invalidated_efforts_by_src, src_t::READ);
-    read_efforts = {};
     metrics.add_group(
       "cache",
       {
@@ -334,7 +329,6 @@ void Cache::register_metrics()
             return efforts.fresh_by_ext;
           }
         }();
-        effort_by_ext.fill({});
         for (auto& [ext, ext_label] : labels_by_ext) {
           auto& effort = get_by_ext(effort_by_ext, ext);
           metrics.add_group(
@@ -358,7 +352,6 @@ void Cache::register_metrics()
       } // effort_name
 
       auto& delta_by_ext = efforts.delta_bytes_by_ext;
-      delta_by_ext.fill(0);
       for (auto& [ext, ext_label] : labels_by_ext) {
         auto& value = get_by_ext(delta_by_ext, ext);
         metrics.add_group(
@@ -378,7 +371,6 @@ void Cache::register_metrics()
     /**
      * read_effort_successful
      */
-    stats.read_effort_successful = {};
     metrics.add_group(
       "cache",
       {
@@ -401,7 +393,6 @@ void Cache::register_metrics()
    *
    * Dirty extents
    */
-  stats.dirty_bytes = 0;
   metrics.add_group(
     "cache",
     {
@@ -445,7 +436,6 @@ void Cache::register_metrics()
       uint64_t& tree_depth,
       counter_by_src_t<tree_efforts_t>& committed_tree_efforts,
       counter_by_src_t<tree_efforts_t>& invalidated_tree_efforts) {
-    tree_depth = 0;
     metrics.add_group(
       "cache",
       {
@@ -457,8 +447,6 @@ void Cache::register_metrics()
         ),
       }
     );
-    committed_tree_efforts.fill({});
-    invalidated_tree_efforts.fill({});
     for (auto& [src, src_label] : labels_by_src) {
       if (src == src_t::READ) {
         // READ transaction won't contain any tree inserts and erases
