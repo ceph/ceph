@@ -38,6 +38,10 @@ typedef __le64 ceph_snapid_t;
 #define CEPH_SNAPDIR ((__u64)(-1))  /* reserved for hidden .snap dir */
 #define CEPH_NOSNAP  ((__u64)(-2))  /* "head", "live" revision */
 #define CEPH_MAXSNAP ((__u64)(-3))  /* largest valid snapid */
+#define CEPH_SNAPDIFF_ID_BITS 32    /*single snapdiff snapid significant bits*/
+#define CEPH_SNAPDIFF_ID_MASK ((1ull << CEPH_SNAPDIFF_ID_BITS) - 1)
+
+#define CEPH_IS_SNAPDIFF(snapid) (!!(snapid & CEPH_SNAPDIFF_ID_MASK))
 
 struct ceph_timespec {
 	__le32 tv_sec;

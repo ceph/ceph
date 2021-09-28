@@ -434,6 +434,27 @@ private:
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
   void flush_session(Session *session, MDSGatherBuilder& gather);
 
+  void _readdir_diff(
+    utime_t now,
+    MDRequestRef& mdr,
+    CInode* diri,
+    CDir* dir,
+    SnapRealm* realm,
+    unsigned req_flags,
+    const std::string& offset_str,
+    uint32_t offset_hash);
+  int _include_into_readdir_diff(
+    utime_t now,
+    MDRequestRef& mdr,
+    SnapRealm* realm,
+    int lease_mask,
+    snapid_t snapid,
+    const std::string& name,
+    CDentry* dn,
+    CInode* in,
+    int bytes_left,
+    bufferlist& dnbl);
+
   MDSRank *mds;
   MDCache *mdcache;
   MDLog *mdlog;

@@ -43,7 +43,8 @@ namespace ceph {
 #define CEPHFS_FEATURE_OCTOPUS          13
 #define CEPHFS_FEATURE_METRIC_COLLECT   14
 #define CEPHFS_FEATURE_ALTERNATE_NAME   15
-#define CEPHFS_FEATURE_MAX              15
+#define CEPHFS_FEATURE_SNAP_DIFF        16
+#define CEPHFS_FEATURE_MAX              16
 
 #define CEPHFS_FEATURES_ALL {		\
   0, 1, 2, 3, 4,			\
@@ -60,6 +61,7 @@ namespace ceph {
   CEPHFS_FEATURE_OCTOPUS,               \
   CEPHFS_FEATURE_METRIC_COLLECT,        \
   CEPHFS_FEATURE_ALTERNATE_NAME,        \
+  CEPHFS_FEATURE_SNAP_DIFF,             \
 }
 
 #define CEPHFS_METRIC_FEATURES_ALL {		\

@@ -389,6 +389,30 @@ struct MDRequestImpl : public MutationImpl {
   bool is_queued_for_replay() const;
   int compare_paths();
 
+  // SnapDiff binds synthetic (aka effective) snapids to returned returns.
+  // Such an id is a union of the first and last snapshots' ids. Actually -
+  // their lower 32-bits. This is necessary to get unique snapids for
+  // different SnapDiff requests's results and avoid a mess at clients.
+  // MDS should be able to retrieve the real (aka primary) object snapshot id
+  // from the effective one to access objects properly while processing
+  // subsequent requests on SnapDiff entries.
+  // For new/updated entries such a primary id is the last snapshot id, while
+  // removed ones use the first snapshot id for that.
+  // Primary snapshot id is encoded as a lower 32-bits of the effective id.
+  // And higher 32-bits keep the secondary (either first or last snapid for
+  // updated or removed entries respectively).
+  // The following function properly builds effective snapid as per above.
+  static snapid_t get_effective_snapid_diff(
+    snapid_t s1,
+    snapid_t s2,
+    bool is_removed);
+  // Build effective snapid (a union of first snap and last snap) depending 
+  // on the "remove" depth of the request.
+  // 0 - use first snapid as a primary unconditionally
+  // 1 - first snapid is primary if requested entry is a "removed" (i.e. tilda-prefixed) one.
+  // 2+ - first snapid is primary if entry and it's (N-1)-th parent(s) are "removed".
+  snapid_t get_effective_snapid_diff(size_t remove_lvl = 1) const;
+
   bool can_batch();
   bool is_batch_head() {
     return batch_op_map != nullptr;
@@ -416,6 +440,12 @@ struct MDRequestImpl : public MutationImpl {
   CInode *in[2] = {};
   CDentry *straydn = nullptr;
   snapid_t snapid = CEPH_NOSNAP;
+  // whether snap diff entry is referred by snapid above
+  bool is_snapid_diff = false;
+  // how deep we are below the first removed subdir
+  size_t removed_snapid_diff_level = 0;
+  // snapid to compare against if snapid_diff is true
+  snapid_t snapid_diff_other = CEPH_NOSNAP;
 
   CInode *tracei = nullptr;
   CDentry *tracedn = nullptr;

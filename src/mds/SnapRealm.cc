@@ -20,6 +20,8 @@
 #include <string_view>
 
 
+char SNAP_DIFF_KEYWORD[] = ".~diff=";
+
 /*
  * SnapRealm
  */
@@ -224,12 +226,65 @@ std::string_view SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
   return parent->get_snapname(snapid, atino);
 }
 
-snapid_t SnapRealm::resolve_snapname(std::string_view n, inodeno_t atino, snapid_t first, snapid_t last)
+SnapNameResolved SnapRealm::maybe_resolve_snapdiff(
+  std::string_view n,
+  snapid_t first,
+  snapid_t last)
+{
+  string_view snap1;
+  string_view snap2;
+  const size_t diff_keyword_len = sizeof(SNAP_DIFF_KEYWORD) - 1;
+  string_view v = n.substr(0, diff_keyword_len);
+  bool is_diff = false;
+  if (v.compare(SNAP_DIFF_KEYWORD) == 0) {
+    auto snap2_pos = n.find(SNAP_DIFF_KEYWORD, diff_keyword_len);
+    if (snap2_pos != string_view::npos) {
+      snap1 = n.substr(diff_keyword_len, snap2_pos - diff_keyword_len);
+
+      v = n.substr(snap2_pos, diff_keyword_len);
+      if (v.compare(SNAP_DIFF_KEYWORD) == 0) {
+	snap2 = n.substr(snap2_pos + diff_keyword_len); // the rest part
+	is_diff = true;
+      }
+    }
+  }
+  if (!is_diff) {
+    return SnapNameResolved {CEPH_NOSNAP, false, CEPH_NOSNAP};
+  }
+  snapid_t snaps[2] = {CEPH_NOSNAP, CEPH_NOSNAP};
+  size_t snap_pos = 0;
+  dout(10) << __func__ << " snap1: " << snap1 << " vs. snap2:" << snap2
+	   << dendl;
+  for (auto p = srnode.snaps.lower_bound(first); // first element >= first
+       p != srnode.snaps.end() && p->first <= last && snap_pos < 2;
+       ++p) {
+    dout(15) << " ? " << p->second << dendl;
+    if (p->second.name == snap1 || p->second.name == snap2) {
+      snaps[snap_pos++] = p->first;
+    }
+  }
+  return snap_pos == 2 ?
+    SnapNameResolved {snaps[0], true, snaps[1]} :
+    SnapNameResolved {CEPH_NOSNAP, true, CEPH_NOSNAP};
+}
+
+SnapNameResolved SnapRealm::resolve_snapname(
+  std::string_view n,
+  inodeno_t atino,
+  snapid_t first,
+  snapid_t last)
 {
   // first try me
   dout(10) << "resolve_snapname '" << n << "' in [" << first << "," << last << "]" << dendl;
 
   bool actual = (atino == inode->ino());
+  if (actual) {
+    SnapNameResolved snr = maybe_resolve_snapdiff(n, first, last);
+    if (snr.is_snapdiff) {
+      return snr;
+    }
+  }
+
   string pname;
   inodeno_t pino;
   if (n.length() && n[0] == '_') {
@@ -248,9 +303,9 @@ snapid_t SnapRealm::resolve_snapname(std::string_view n, inodeno_t atino, snapid
     //if (num && p->second.snapid == num)
     //return p->first;
     if (actual && p->second.name == n)
-	return p->first;
+      return SnapNameResolved {p->first, false, CEPH_NOSNAP};
     if (!actual && p->second.name == pname && p->second.ino == pino)
-      return p->first;
+      return SnapNameResolved {p->first, false, CEPH_NOSNAP};
   }
 
   if (!srnode.past_parent_snaps.empty()) {
@@ -267,17 +322,16 @@ snapid_t SnapRealm::resolve_snapname(std::string_view n, inodeno_t atino, snapid
       dout(15) << " ? " << *it.second << dendl;
       actual = (it.second->ino == atino);
       if (actual && it.second->name == n)
-	return it.first;
+	return SnapNameResolved {it.first, false, CEPH_NOSNAP};
       if (!actual && it.second->name == pname && it.second->ino == pino)
-	return it.first;
+	return SnapNameResolved {it.first, false, CEPH_NOSNAP};
     }
   }
 
   if (parent && srnode.current_parent_since <= last)
     return parent->resolve_snapname(n, atino, std::max(first, srnode.current_parent_since), last);
-  return 0;
+  return SnapNameResolved {CEPH_NOSNAP, false, CEPH_NOSNAP};
 }
-
 
 void SnapRealm::adjust_parent()
 {

@@ -103,4 +103,5 @@ struct sr_t {
 WRITE_CLASS_ENCODER(sr_t)
 
 class MDCache;
+#define SNAPDIFF_RM_INDICATOR '~'
 #endif

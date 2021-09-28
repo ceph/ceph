@@ -8229,20 +8229,49 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
       if (!mdr)
 	return -CEPHFS_EINVAL;
       SnapRealm *realm = cur->find_snaprealm();
-      snapid = realm->resolve_snapname(path[depth], cur->ino());
-      dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
-      if (!snapid) {
+      auto [snapid_new, is_diff, snapid_diff_other] =
+	realm->resolve_snapname(path[depth], cur->ino());
+      dout(10) << "traverse: snap " << path[depth] << " -> "
+	       << snapid_new << ", " << is_diff << ", " << snapid_diff_other
+	       << dendl;
+      if (snapid_new == CEPH_NOSNAP || (is_diff && snapid_diff_other == CEPH_NOSNAP)) {
 	if (pdnvec)
 	  pdnvec->clear();   // do not confuse likes of rdlock_path_pin_ref();
 	return -CEPHFS_ENOENT;
       }
-      mdr->snapid = snapid;
+
+      if (snapid_new) {
+	mdr->snapid = snapid_new;
+	if (is_diff) {
+	  mdr->snapid_diff_other = snapid_diff_other;
+	  if (mdr->snapid < mdr->snapid_diff_other) {
+	    std::swap(mdr->snapid, mdr->snapid_diff_other);
+	  }
+	  mdr->is_snapid_diff = is_diff;
+	  mdr->removed_snapid_diff_level = 0;
+	}
+      }
+      snapid = mdr->snapid;
       depth++;
       continue;
     }
+    string_view p = path[depth];
+    if (mdr->is_snapid_diff) {
+      dout(15) << "traverse diff: " << p << " " << mdr->removed_snapid_diff_level
+               << " " << std::hex << mdr->snapid
+               << " " << mdr->snapid_diff_other
+               << std::dec << dendl;
+      if (path[depth][0] == SNAPDIFF_RM_INDICATOR) {
+	p.remove_prefix(1);
+	if (!mdr->removed_snapid_diff_level) {
+	  snapid = mdr->snapid_diff_other;
+	}
+	++mdr->removed_snapid_diff_level;
+      }
+    }
 
     // open dir
-    frag_t fg = cur->pick_dirfrag(path[depth]);
+    frag_t fg = cur->pick_dirfrag(p);
     CDir *curdir = cur->get_dirfrag(fg);
     if (!curdir) {
       if (cur->is_auth()) {
@@ -8296,14 +8325,14 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 
     // Before doing dirfrag->dn lookup, compare with DamageTable's
     // record of which dentries were unreadable
-    if (mds->damage_table.is_dentry_damaged(curdir, path[depth], snapid)) {
+    if (mds->damage_table.is_dentry_damaged(curdir, p, snapid)) {
       dout(4) << "traverse: stopped lookup at damaged dentry "
-              << *curdir << "/" << path[depth] << " snap=" << snapid << dendl;
+              << *curdir << "/" << p << " snap=" << snapid << dendl;
       return -CEPHFS_EIO;
     }
 
     // dentry
-    CDentry *dn = curdir->lookup(path[depth], snapid);
+    CDentry *dn = curdir->lookup(p, snapid);
     if (dn) {
       if (dn->state_test(CDentry::STATE_PURGING))
 	return -CEPHFS_ENOENT;
@@ -8403,14 +8432,14 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
     ceph_assert(!dn);
 
     // MISS.  dentry doesn't exist.
-    dout(12) << "traverse: miss on dentry " << path[depth] << " in " << *curdir << dendl;
+    dout(12) << "traverse: miss on dentry " << p << " in " << *curdir << dendl;
 
     if (curdir->is_auth()) {
       // dentry is mine.
       if (curdir->is_complete() ||
 	  (snapid == CEPH_NOSNAP &&
 	   curdir->has_bloom() &&
-	   !curdir->is_in_bloom(path[depth]))) {
+	   !curdir->is_in_bloom(p))) {
         // file not found
 	if (pdnvec) {
 	  // instantiate a null dn?
@@ -8424,7 +8453,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 	    return 1;
 	  } else {
 	    // create a null dentry
-	    dn = curdir->add_null_dentry(path[depth]);
+	    dn = curdir->add_null_dentry(p);
 	    dout(20) << " added null " << *dn << dendl;
 
 	    if (rdlock_path) {
@@ -8471,7 +8500,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 	// directory isn't complete; reload
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << dendl;
         touch_inode(cur);
-        curdir->fetch(cf.build(), path[depth]);
+        curdir->fetch(cf.build(), p);
 	if (mds->logger) mds->logger->inc(l_mds_traverse_dir_fetch);
         return 1;
       }
@@ -8489,7 +8518,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
       }
 
       if ((discover)) {
-	dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
+	dout(7) << "traverse: discover from " << p << " from " << *curdir << dendl;
 	discover_path(curdir, snapid, path.postfixpath(depth), cf.build(),
 		      path_locked);
 	if (mds->logger) mds->logger->inc(l_mds_traverse_discover);
@@ -8533,9 +8562,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
   
   // success.
   if (mds->logger) mds->logger->inc(l_mds_traverse_hit);
-  dout(10) << "path_traverse finish on snapid " << snapid << dendl;
-  if (mdr) 
-    ceph_assert(mdr->snapid == snapid);
+  dout(10) << "path_traverse finish on " << *cur << " snapid " << snapid << dendl;
 
   if (flags & MDS_TRAVERSE_RDLOCK_SNAP)
     mdr->locking_state |= MutationImpl::SNAP_LOCKED;

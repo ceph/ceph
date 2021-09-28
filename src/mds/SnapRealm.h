@@ -24,6 +24,12 @@
 #include "common/snap_types.h"
 #include "MDSContext.h"
 
+struct SnapNameResolved {
+  snapid_t snapid_primary;
+  bool is_snapdiff = false;
+  snapid_t snapid_other;
+};
+
 struct SnapRealm {
 public:
   SnapRealm(MDCache *c, CInode *in);
@@ -48,7 +54,11 @@ public:
   void build_snap_trace() const;
 
   std::string_view get_snapname(snapid_t snapid, inodeno_t atino);
-  snapid_t resolve_snapname(std::string_view name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
+  SnapNameResolved resolve_snapname(
+    std::string_view name,
+    inodeno_t atino,
+    snapid_t first=0,
+    snapid_t last=CEPH_NOSNAP);
 
   const std::set<snapid_t>& get_snaps() const;
   const SnapContext& get_snap_context() const;
@@ -132,7 +142,10 @@ public:
 
 protected:
   void check_cache() const;
-
+  SnapNameResolved maybe_resolve_snapdiff(
+    std::string_view n,
+    snapid_t first,
+    snapid_t last);
 private:
   bool global;
 

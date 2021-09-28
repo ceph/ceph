@@ -444,6 +444,29 @@ int MDRequestImpl::compare_paths()
   return 0;
 }
 
+snapid_t MDRequestImpl::get_effective_snapid_diff(snapid_t s1,
+                                                  snapid_t s2,
+                                                  bool is_removed)
+{
+  if (((s1 > s2) && !is_removed) ||
+      ((s1 < s2) && is_removed)) {
+    std::swap(s1, s2);
+  }
+  snapid_t res = (s1 & CEPH_SNAPDIFF_ID_MASK) << CEPH_SNAPDIFF_ID_BITS;
+  res = res | (s2 & CEPH_SNAPDIFF_ID_MASK);
+  return res;
+}
+
+snapid_t MDRequestImpl::get_effective_snapid_diff(size_t remove_lvl) const
+{
+  snapid_t res = is_snapid_diff ?
+    get_effective_snapid_diff(snapid_diff_other,
+                              snapid,
+                              removed_snapid_diff_level >= remove_lvl) :
+    snapid;
+  return res;
+}
+
 cref_t<MClientRequest> MDRequestImpl::release_client_request()
 {
   msg_lock.lock();
