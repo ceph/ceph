@@ -388,7 +388,7 @@ private:
   SpaceTrackerIRef space_tracker;
   std::vector<segment_info_t> segments;
   size_t empty_segments;
-  int64_t used_bytes = 0;
+  uint64_t used_bytes = 0;
   bool init_complete = false;
 
   struct {
@@ -535,6 +535,7 @@ public:
     if (!init_complete)
       return;
 
+    ceph_assert(used_bytes >= len);
     used_bytes -= len;
     assert(addr.segment < segments.size());
 
