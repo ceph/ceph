@@ -1866,7 +1866,7 @@ namespace rgw {
       }
     }
     processor = get_store()->get_atomic_writer(this, state->yield, state->object->clone(),
-					 state->bucket_owner.get_id(), *state->obj_ctx,
+					 state->bucket_owner.get_id(),
 					 &state->dest_placement, 0, state->req_id);
 
     op_ret = processor->prepare(state->yield);

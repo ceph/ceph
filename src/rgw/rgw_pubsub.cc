@@ -936,28 +936,24 @@ int RGWPubSub::SubWithEvents<EventType>::remove_event(const DoutPrefixProvider *
     return ret;
   }
 
-  RGWBucketInfo bucket_info;
   string tenant;
-  ret = store->getRados()->get_bucket_info(store->svc(), tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, null_yield, nullptr);
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  ret = store->get_bucket(dpp, nullptr, tenant, sub_conf.dest.bucket_name,
+			  &bucket, null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
   }
+  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(
+						  sub_conf.dest.oid_prefix + event_id);
+  obj->set_atomic();
 
-  rgw_bucket& bucket = bucket_info.bucket;
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
 
-  RGWObjectCtx obj_ctx(store);
-  rgw_obj obj(bucket, sub_conf.dest.oid_prefix + event_id);
+  del_op->params.bucket_owner = bucket->get_info().owner;
+  del_op->params.versioning_status = bucket->get_info().versioning_status();
 
-  obj_ctx.set_atomic(obj);
-
-  RGWRados::Object del_target(store->getRados(), bucket_info, obj_ctx, obj);
-  RGWRados::Object::Delete del_op(&del_target);
-
-  del_op.params.bucket_owner = bucket_info.owner;
-  del_op.params.versioning_status = bucket_info.versioning_status();
-
-  ret = del_op.delete_obj(null_yield, dpp);
+  ret = del_op->delete_obj(dpp, null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to remove event (obj=" << obj << "): ret=" << ret << dendl;
   }

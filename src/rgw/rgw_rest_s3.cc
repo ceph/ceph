@@ -2586,7 +2586,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
 				  multipart_upload_id);
     std::unique_ptr<rgw::sal::Object> obj = upload->get_meta_obj();
     obj->set_in_extra_data(true);
-    res = obj->get_obj_attrs(s->obj_ctx, s->yield, this);
+    res = obj->get_obj_attrs(s->yield, this);
     if (res == 0) {
       std::unique_ptr<BlockCrypt> block_crypt;
       /* We are adding to existing object.
@@ -4024,7 +4024,7 @@ void RGWGetObjLayout_ObjStore_S3::send_response()
   }
 
   f.open_object_section("result");
-  s->object->dump_obj_layout(this, s->yield, &f, s->obj_ctx);
+  s->object->dump_obj_layout(this, s->yield, &f);
   f.close_section();
   rgw_flush_formatter(s, &f);
 }
@@ -4947,12 +4947,11 @@ bool RGWHandler_REST_S3Website::web_dir() const {
 
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(subdir_name));
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj->set_atomic(&obj_ctx);
-  obj->set_prefetch_data(&obj_ctx);
+  obj->set_atomic();
+  obj->set_prefetch_data();
 
   RGWObjState* state = nullptr;
-  if (obj->get_obj_state(s, &obj_ctx, &state, s->yield) < 0) {
+  if (obj->get_obj_state(s, &state, s->yield) < 0) {
     return false;
   }
   if (! state->exists) {

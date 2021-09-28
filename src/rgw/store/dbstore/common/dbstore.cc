@@ -1247,20 +1247,6 @@ int DB::Object::get_state(const DoutPrefixProvider *dpp, RGWObjState **pstate, b
   return get_obj_state(dpp, bucket_info, obj, follow_olh, pstate);
 }
 
-int DB::Object::get_manifest(const DoutPrefixProvider *dpp, RGWObjManifest **pmanifest)
-{
-  RGWObjState base_state;
-  RGWObjState *astate = &base_state;
-  int r = get_state(dpp, &astate, true);
-  if (r < 0) {
-    return r;
-  }
-
-  *pmanifest = &(*astate->manifest);
-
-  return 0;
-}
-
 int DB::Object::Read::get_attr(const DoutPrefixProvider *dpp, const char *name, bufferlist& dest)
 {
   RGWObjState base_state;

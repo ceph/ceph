@@ -241,10 +241,8 @@ namespace rgw {
     // XXX fix this
     s->cio = io;
 
-    RGWObjectCtx rados_ctx(store, s); // XXX holds std::map
-
     /* XXX and -then- stash req_state pointers everywhere they are needed */
-    ret = req->init(rgw_env, &rados_ctx, io, s);
+    ret = req->init(rgw_env, store, io, s);
     if (ret < 0) {
       ldpp_dout(op, 10) << "failed to initialize request" << dendl;
       abort_req(s, op, ret);
@@ -377,11 +375,10 @@ namespace rgw {
     struct req_state* s = req->get_state();
     RGWLibIO& io_ctx = req->get_io();
     RGWEnv& rgw_env = io_ctx.get_env();
-    RGWObjectCtx& rados_ctx = req->get_octx();
 
     rgw_env.set("HTTP_HOST", "");
 
-    int ret = req->init(rgw_env, &rados_ctx, &io_ctx, s);
+    int ret = req->init(rgw_env, store, &io_ctx, s);
     if (ret < 0) {
       ldpp_dout(op, 10) << "failed to initialize request" << dendl;
       abort_req(s, op, ret);

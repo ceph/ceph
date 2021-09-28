@@ -290,9 +290,6 @@ int process_request(rgw::sal::Store* const store,
   std::unique_ptr<rgw::sal::User> u = store->get_user(rgw_user());
   s->set_user(u);
 
-  RGWObjectCtx rados_ctx(store, s);
-  s->obj_ctx = &rados_ctx;
-
   if (ret < 0) {
     s->cio = client_io;
     abort_early(s, nullptr, ret, nullptr, yield);
