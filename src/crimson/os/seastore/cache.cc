@@ -538,7 +538,7 @@ void Cache::retire_extent(CachedExtentRef ref)
   remove_from_dirty(ref);
   ref->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
 
-  invalidate(*ref);
+  invalidate_extent(*ref);
   extents.erase(*ref);
 }
 
@@ -571,27 +571,27 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
     add_to_dirty(next);
   }
 
-  invalidate(*prev);
+  invalidate_extent(*prev);
 }
 
-void Cache::invalidate(CachedExtent &extent)
+void Cache::invalidate_extent(CachedExtent &extent)
 {
   LOG_PREFIX(Cache::invalidate);
-  DEBUG("invalidate begin -- extent {}", extent);
+  DEBUG("conflict begin -- extent {}", extent);
   for (auto &&i: extent.transactions) {
     if (!i.t->conflicted) {
       assert(!i.t->is_weak());
       mark_transaction_conflicted(*i.t, extent);
     }
   }
-  DEBUG("invalidate end");
+  DEBUG("conflict end");
   extent.state = CachedExtent::extent_state_t::INVALID;
 }
 
 void Cache::mark_transaction_conflicted(
   Transaction& t, CachedExtent& conflicting_extent)
 {
-  LOG_PREFIX(Cache::invalidate);
+  LOG_PREFIX(Cache::mark_transaction_conflicted);
   assert(!t.conflicted);
   DEBUGT("set conflict", t);
   t.conflicted = true;
@@ -847,11 +847,10 @@ record_t Cache::prepare_record(Transaction &t)
   record.extents.reserve(t.inline_block_list.size());
   for (auto &i: t.inline_block_list) {
     DEBUGT("fresh block {}", t, *i);
-    if (!i->is_inline()) {
-      continue;
-    }
     get_by_ext(efforts.fresh_by_ext,
                i->get_type()).increment(i->get_length());
+    assert(i->is_inline());
+
     bufferlist bl;
     i->prepare_write();
     bl.append(i->get_bptr());
@@ -881,7 +880,6 @@ void Cache::complete_commit(
   LOG_PREFIX(Cache::complete_commit);
   DEBUGT("enter", t);
 
-  
   t.for_each_fresh_block([&](auto &i) {
     if (i->is_inline()) {
       i->set_paddr(final_block_start.add_relative(i->get_paddr()));
