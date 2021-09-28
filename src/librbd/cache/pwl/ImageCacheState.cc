@@ -171,6 +171,11 @@ ImageCacheState<I>* ImageCacheState<I>::get_image_cache_state(
 
 template <typename I>
 bool ImageCacheState<I>::is_valid() {
+  ConfigProxy &config = m_image_ctx->config;
+  bool rwl_in_replica = config.get_val<bool>("rwl_in_replica");
+  if (this->present && rwl_in_replica) {
+    return true;
+  }
   if (this->present &&
       (host.compare(ceph_get_short_hostname()) != 0)) {
     auto cleanstring = "dirty";

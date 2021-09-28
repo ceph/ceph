@@ -20,6 +20,7 @@
 #include "librbd/cache/pwl/Request.h"
 #include "librbd/cache/pwl/rwl/Builder.h"
 #include "librbd/cache/pwl/rwl/PmemManager.h"
+#include "tools/rwl-replica/ReplicaClient.h"
 
 class Context;
 
@@ -60,6 +61,7 @@ private:
   uint64_t m_sequence_num = 0;
   unsigned m_superblock_crc_len = 0;
   struct WriteLogCacheEntry *m_pmem_log_entries = nullptr;
+  std::unique_ptr<replica::ReplicaClient> m_replica_pool{nullptr};
   Builder<This> *m_builderobj;
 
   Builder<This>* create_builder();

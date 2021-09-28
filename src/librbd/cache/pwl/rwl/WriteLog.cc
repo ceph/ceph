@@ -45,6 +45,7 @@ void WriteLog<I>::persist_pmem_superblock() {
   new_superblock = reinterpret_cast<struct WriteLogSuperblock *>(m_pool_head);
   uint32_t crc = 0;
   uint64_t flushed_sync_gen;
+  size_t offset{0};
 
   ceph_assert(ceph_mutex_is_locked_by_me(this->m_log_append_lock));
   {
@@ -54,6 +55,7 @@ void WriteLog<I>::persist_pmem_superblock() {
   if (m_sequence_num % 2) {
     new_superblock = reinterpret_cast<struct WriteLogSuperblock *>(
                      m_pool_head + SECOND_SUPERBLOCK_OFFSET);
+    offset = SECOND_SUPERBLOCK_OFFSET;
   }
   /* Don't move the flushed sync gen num backwards. */
   if (new_superblock->flushed_sync_gen < flushed_sync_gen) {
@@ -69,7 +71,15 @@ void WriteLog<I>::persist_pmem_superblock() {
       reinterpret_cast<unsigned char *>(&new_superblock->sequence_num),
       m_superblock_crc_len);
   new_superblock->crc = crc;
+
+  if (m_replica_pool) {
+    m_replica_pool->write(offset, MAX_SUPERBLOCK_LEN);
+  }
   pmem_persist(new_superblock, MAX_SUPERBLOCK_LEN);
+  if (m_replica_pool) {
+    m_replica_pool->flush();
+  }
+ 
   ++m_sequence_num;
 }
 
@@ -201,6 +211,9 @@ int WriteLog<I>::append_op_log_entries(GenericLogOperations &ops)
 
   /* Drain once for all */
   pmem_drain();
+  if (m_replica_pool) {
+    m_replica_pool->flush();
+  }
 
   /*
    * Atomically advance the log head pointer
@@ -241,6 +254,10 @@ void WriteLog<I>::flush_op_log_entries(GenericLogOperationsVector &ops)
                              << dendl;
   pmem_flush(ops.front()->get_log_entry()->cache_entry,
              ops.size() * sizeof(*(ops.front()->get_log_entry()->cache_entry)));
+  if (m_replica_pool) {
+    m_replica_pool->write((size_t)((char*)(ops.front()->get_log_entry()->cache_entry) - m_log_pool->get_head_addr()),
+                          ops.size() * sizeof(*(ops.front()->get_log_entry()->cache_entry)));
+  }
 }
 
 template <typename I>
@@ -248,6 +265,10 @@ void WriteLog<I>::remove_pool_file() {
   if (m_log_pool) {
     ldout(m_image_ctx.cct, 6) << "closing pmem pool" << dendl;
     m_log_pool->close_dev();
+    // used to replica
+    if (m_replica_pool) {
+      m_replica_pool->close();
+    }
   }
   if (m_cache_state->clean) {
       ldout(m_image_ctx.cct, 5) << "Removing empty pool file: " << this->m_log_pool_name << dendl;
@@ -270,6 +291,10 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
   int r = -EINVAL;
   struct WriteLogSuperblock *superblock;
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  bool replica_enable = cct->_conf.get_val<bool>("rwl_replica_enabled");
+  bool rwl_in_replica = cct->_conf.get_val<bool>("rwl_in_replica");
+  ldout(cct, 20) << "replica enable: " << replica_enable << dendl;
+
   if (access(this->m_log_pool_name.c_str(), F_OK) != 0) {
     if (!(m_log_pool = PmemDev::pmem_create_dev(this->m_log_pool_name.c_str(),
                                                 this->m_log_pool_size, cct))) {
@@ -281,6 +306,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       on_finish->complete(-errno);
       return false;
     }
+
     m_cache_state->present = true;
     m_cache_state->clean = true;
     m_cache_state->empty = true;
@@ -422,6 +448,29 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     load_existing_entries(later);
     m_cache_state->clean = this->m_dirty_log_entries.empty();
     m_cache_state->empty = m_log_entries.empty();
+  }
+
+  if (replica_enable && !rwl_in_replica) {
+    // used to replica
+    auto copies = cct->_conf->rwl_replica_copies;
+    std::string pool_name = m_image_ctx.md_ctx.get_pool_name();
+    m_replica_pool = std::make_unique<replica::ReplicaClient>(cct,
+                                                              m_log_pool->get_mapped_len(),
+                                                              copies,
+                                                              pool_name,
+                                                              m_image_ctx.name,
+                                                              m_image_ctx.md_ctx);
+    if (!m_replica_pool) {
+      lderr(cct) << "replica: failed to construction" << dendl;
+      on_finish->complete(-errno);
+    }
+
+    ldout(cct, 20) << "ReplicaClient: init()" << dendl;
+    if (m_replica_pool->init(m_log_pool->get_head_addr(), m_log_pool->get_mapped_len()) < 0) {
+      lderr(cct) << "replica: failed to init" << dendl;
+      on_finish->complete(-errno);
+      return false;
+    }
   }
   return true;
 
@@ -927,11 +976,17 @@ void WriteLog<I>::flush_pmem_buffer(V& ops)
     if(operation->is_writing_op()) {
       auto log_entry = static_pointer_cast<WriteLogEntry>(operation->get_log_entry());
       pmem_flush(log_entry->cache_buffer, log_entry->write_bytes());
+      if (m_replica_pool) {
+        m_replica_pool->write((size_t)(log_entry->cache_buffer - m_log_pool->get_head_addr()), log_entry->write_bytes());
+      }
     }
   }
 
   /* Drain once for all */
   pmem_drain();
+  if (m_replica_pool) {
+    m_replica_pool->flush();
+  }
 
   now = ceph_clock_now();
   for (auto &operation : ops) {
