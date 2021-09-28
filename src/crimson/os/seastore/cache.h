@@ -659,7 +659,10 @@ private:
     uint64_t mutate_delta_bytes = 0;
     effort_t retire;
     effort_t fresh;
+    effort_t fresh_ool_written;
     counter_by_extent_t<uint64_t> num_trans_invalidated;
+    uint64_t num_ool_records = 0;
+    uint64_t ool_record_overhead_bytes = 0;
   };
 
   struct commit_trans_efforts_t {
@@ -667,8 +670,13 @@ private:
     counter_by_extent_t<effort_t> mutate_by_ext;
     counter_by_extent_t<uint64_t> delta_bytes_by_ext;
     counter_by_extent_t<effort_t> retire_by_ext;
-    counter_by_extent_t<effort_t> fresh_by_ext;
-    uint64_t num_trans = 0;
+    counter_by_extent_t<effort_t> fresh_invalid_by_ext;
+    counter_by_extent_t<effort_t> fresh_inline_by_ext;
+    counter_by_extent_t<effort_t> fresh_ool_by_ext;
+    uint64_t num_trans = 0; // the number of inline records
+    uint64_t num_ool_records = 0;
+    uint64_t ool_record_overhead_bytes = 0;
+    uint64_t inline_record_overhead_bytes = 0;
   };
 
   struct success_read_trans_efforts_t {

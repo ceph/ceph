@@ -264,6 +264,7 @@ public:
     retired_set.clear();
     onode_tree_stats = {};
     lba_tree_stats = {};
+    ool_write_stats = {};
     to_release = NULL_SEG_ID;
     conflicted = false;
     if (!has_reset) {
@@ -291,6 +292,15 @@ public:
   }
   tree_stats_t& get_lba_tree_stats() {
     return lba_tree_stats;
+  }
+
+  struct ool_write_stats_t {
+    io_stat_t extents;
+    uint64_t overhead_bytes = 0;
+    uint64_t num_records = 0;
+  };
+  ool_write_stats_t& get_ool_write_stats() {
+    return ool_write_stats;
   }
 
   void increment_delayed_invalid_extents() {
@@ -356,6 +366,7 @@ private:
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
   tree_stats_t lba_tree_stats;
+  ool_write_stats_t ool_write_stats;
 
   ///< if != NULL_SEG_ID, release this segment after completion
   segment_id_t to_release = NULL_SEG_ID;

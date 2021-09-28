@@ -95,8 +95,12 @@ public:
     extent_buf_len = 0;
     base = MAX_SEG_OFF;
   }
-  uint64_t get_num_extents() {
+  uint64_t get_num_extents() const {
     return extents.size();
+  }
+  uint64_t get_raw_data_size() const {
+    assert(extents.size() == record.extents.size());
+    return record.get_raw_data_size();
   }
 private:
   std::vector<OolExtent> extents;

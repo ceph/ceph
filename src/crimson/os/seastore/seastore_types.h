@@ -4,6 +4,7 @@
 #pragma once
 
 #include <limits>
+#include <numeric>
 #include <iostream>
 
 #include "include/byteorder.h"
@@ -434,6 +435,22 @@ std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs);
 struct record_t {
   std::vector<extent_t> extents;
   std::vector<delta_info_t> deltas;
+
+  std::size_t get_raw_data_size() const {
+    auto extent_size = std::accumulate(
+        extents.begin(), extents.end(), 0,
+        [](uint64_t sum, auto& extent) {
+          return sum + extent.bl.length();
+        }
+    );
+    auto delta_size = std::accumulate(
+        deltas.begin(), deltas.end(), 0,
+        [](uint64_t sum, auto& delta) {
+          return sum + delta.bl.length();
+        }
+    );
+    return extent_size + delta_size;
+  }
 };
 
 class object_data_t {
