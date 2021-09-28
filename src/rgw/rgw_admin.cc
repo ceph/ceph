@@ -7704,6 +7704,17 @@ next:
       return ret;
     }
 
+    auto zone_svc = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone;
+    if (!RGWBucketReshard::can_reshard(bucket->get_info(), zone_svc) &&
+        !yes_i_really_mean_it) {
+      std::cerr << "Bucket '" << bucket->get_name() << "' already has too many "
+          "log generations (" << bucket->get_info().layout.logs.size() << ") "
+          "from previous reshards that peer zones haven't finished syncing. "
+          "Resharding is not recommended until the old generations sync, but "
+          "you can force a reshard with --yes-i-really-mean-it." << std::endl;
+      return -EINVAL;
+    }
+
     RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), nullptr /* no callback */);
 
 #define DEFAULT_RESHARD_MAX_ENTRIES 1000
