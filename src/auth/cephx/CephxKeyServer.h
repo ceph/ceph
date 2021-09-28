@@ -215,6 +215,8 @@ public:
   int start_server();
   void rotate_timeout(double timeout);
 
+  void dump();
+  
   int build_session_auth_info(uint32_t service_id,
 			      const AuthTicket& parent_ticket,
 			      CephXSessionAuthInfo& info);
