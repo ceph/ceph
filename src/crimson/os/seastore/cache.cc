@@ -142,62 +142,6 @@ void Cache::register_metrics()
   }
 
   /*
-   * trans_committed
-   */
-  for (auto& [src, src_label] : labels_by_src) {
-    if (src == src_t::READ) {
-      // READ transaction won't commit
-      continue;
-    }
-    metrics.add_group(
-      "cache",
-      {
-        sm::make_counter(
-          "trans_committed",
-          get_by_src(stats.trans_committed_by_src, src),
-          sm::description("total number of transaction committed"),
-          {src_label}
-        ),
-      }
-    );
-  }
-
-  /*
-   * trans_invalidated
-   */
-  for (auto& [src, src_label] : labels_by_src) {
-    for (auto& [ext, ext_label] : labels_by_ext) {
-      auto& counter_by_extent = get_by_src(stats.trans_invalidated, src);
-      auto& counter = get_by_ext(counter_by_extent, ext);
-      metrics.add_group(
-        "cache",
-        {
-          sm::make_counter(
-            "trans_invalidated",
-            counter,
-            sm::description("total number of transaction invalidated"),
-            {src_label, ext_label}
-          ),
-        }
-      );
-    }
-  }
-
-  /**
-   * trans_read_successful
-   */
-  metrics.add_group(
-    "cache",
-    {
-      sm::make_counter(
-        "trans_read_successful",
-        stats.read_transactions_successful,
-        sm::description("total number of successful read transactions")
-      ),
-    }
-  );
-
-  /*
    * cache_query: cache_access and cache_hit
    */
   for (auto& [src, src_label] : labels_by_src) {
@@ -233,13 +177,48 @@ void Cache::register_metrics()
       "FRESH"sv,
     };
 
-    // invalidated efforts (non READ)
+    // invalidated efforts
     for (auto& [src, src_label] : labels_by_src) {
+      auto& efforts = get_by_src(stats.invalidated_efforts_by_src, src);
+      for (auto& [ext, ext_label] : labels_by_ext) {
+        auto& counter = get_by_ext(efforts.num_trans_invalidated, ext);
+        metrics.add_group(
+          "cache",
+          {
+            sm::make_counter(
+              "trans_invalidated",
+              counter,
+              sm::description("total number of transaction invalidated"),
+              {src_label, ext_label}
+            ),
+          }
+        );
+      }
+
       if (src == src_t::READ) {
-        // register src_t::READ later
+        // read transaction won't have non-read efforts
+        auto read_effort_label = effort_label("READ");
+        metrics.add_group(
+          "cache",
+          {
+            sm::make_counter(
+              "invalidated_extents",
+              efforts.read.extents,
+              sm::description("extents of invalidated transactions"),
+              {src_label, read_effort_label}
+            ),
+            sm::make_counter(
+              "invalidated_extent_bytes",
+              efforts.read.bytes,
+              sm::description("extent bytes of invalidated transactions"),
+              {src_label, read_effort_label}
+            ),
+          }
+        );
         continue;
       }
-      auto& efforts = get_by_src(stats.invalidated_efforts_by_src, src);
+
+      // non READ invalidated efforts
       for (auto& effort_name : effort_names) {
         auto& effort = [&effort_name, &efforts]() -> effort_t& {
           if (effort_name == "READ") {
@@ -285,36 +264,24 @@ void Cache::register_metrics()
       );
     } // src
 
-    // invalidated efforts (READ)
-    // read transaction won't have non-read efforts
-    auto read_src_label = labels_by_src.find(src_t::READ)->second;
-    auto read_effort_label = effort_label("READ");
-    auto& read_efforts = get_by_src(stats.invalidated_efforts_by_src, src_t::READ);
-    metrics.add_group(
-      "cache",
-      {
-        sm::make_counter(
-          "invalidated_extents",
-          read_efforts.read.extents,
-          sm::description("extents of invalidated transactions"),
-          {read_src_label, read_effort_label}
-        ),
-        sm::make_counter(
-          "invalidated_extent_bytes",
-          read_efforts.read.bytes,
-          sm::description("extent bytes of invalidated transactions"),
-          {read_src_label, read_effort_label}
-        ),
-      }
-    );
-
-    // by-extent committed efforts
+    // committed efforts
     for (auto& [src, src_label] : labels_by_src) {
       if (src == src_t::READ) {
         // READ transaction won't commit
         continue;
       }
       auto& efforts = get_by_src(stats.committed_efforts_by_src, src);
+      metrics.add_group(
+        "cache",
+        {
+          sm::make_counter(
+            "trans_committed",
+            efforts.num_trans,
+            sm::description("total number of transaction committed"),
+            {src_label}
+          ),
+        }
+      );
       for (auto& effort_name : effort_names) {
         auto& effort_by_ext = [&efforts, &effort_name]()
             -> counter_by_extent_t<effort_t>& {
@@ -368,20 +335,23 @@ void Cache::register_metrics()
       } // ext
     } // src
 
-    /**
-     * read_effort_successful
-     */
+    // successful read efforts
     metrics.add_group(
       "cache",
       {
         sm::make_counter(
+          "trans_read_successful",
+          stats.success_read_efforts.num_trans,
+          sm::description("total number of successful read transactions")
+        ),
+        sm::make_counter(
           "successful_read_extents",
-          stats.read_effort_successful.extents,
+          stats.success_read_efforts.read.extents,
           sm::description("extents of successful read transactions")
         ),
         sm::make_counter(
           "successful_read_extent_bytes",
-          stats.read_effort_successful.bytes,
+          stats.success_read_efforts.read.bytes,
           sm::description("extent bytes of successful read transactions")
         ),
       }
@@ -626,16 +596,18 @@ void Cache::mark_transaction_conflicted(
   DEBUGT("set conflict", t);
   t.conflicted = true;
 
-  auto& counter_by_extent = get_by_src(stats.trans_invalidated, t.get_src());
-  auto& counter = get_by_ext(counter_by_extent, conflicting_extent.get_type());
-  ++counter;
-
   auto& efforts = get_by_src(stats.invalidated_efforts_by_src,
                              t.get_src());
+
+  auto& counter = get_by_ext(efforts.num_trans_invalidated,
+                             conflicting_extent.get_type());
+  ++counter;
+
   efforts.read.extents += t.read_set.size();
   for (auto &i: t.read_set) {
     efforts.read.bytes += i.ref->get_length();
   }
+
   if (t.get_src() != Transaction::src_t::READ) {
     efforts.retire.extents += t.retired_set.size();
     for (auto &i: t.retired_set) {
@@ -683,9 +655,9 @@ void Cache::on_transaction_destruct(Transaction& t)
       t.conflicted == false &&
       !t.is_weak()) {
     DEBUGT("read is successful", t);
-    ++stats.read_transactions_successful;
+    ++stats.success_read_efforts.num_trans;
 
-    auto& effort = stats.read_effort_successful;
+    auto& effort = stats.success_read_efforts.read;
     effort.extents += t.read_set.size();
     for (auto &i: t.read_set) {
       effort.bytes += i.ref->get_length();
@@ -788,9 +760,9 @@ record_t Cache::prepare_record(Transaction &t)
   get_by_src(stats.committed_lba_tree_efforts, t.get_src()
       ).increment(t.lba_tree_stats);
 
-  ++(get_by_src(stats.trans_committed_by_src, t.get_src()));
   auto& efforts = get_by_src(stats.committed_efforts_by_src,
                              t.get_src());
+  ++(efforts.num_trans);
 
   // Should be valid due to interruptible future
   for (auto &i: t.read_set) {
