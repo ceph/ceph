@@ -1672,7 +1672,6 @@ struct req_state : DoutPrefixProvider {
 
   Clock::duration time_elapsed() const { return Clock::now() - time; }
 
-  RGWObjectCtx *obj_ctx{nullptr};
   std::string dialect;
   std::string req_id;
   std::string trans_id;
@@ -1811,6 +1810,10 @@ struct rgw_obj {
   rgw_obj(const rgw_bucket& b, const rgw_obj_key& k) : bucket(b), key(k) {}
   rgw_obj(const rgw_bucket& b, const rgw_obj_index_key& k) : bucket(b), key(k) {}
 
+  void init(const rgw_bucket& b, const rgw_obj_key& k) {
+    bucket = b;
+    key = k;
+  }
   void init(const rgw_bucket& b, const std::string& name) {
     bucket = b;
     key.set(name);
