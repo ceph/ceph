@@ -155,7 +155,7 @@ balancing on a floating virtual IP.
 If SSL is used, then SSL must be configured and terminated by the ingress service
 and not RGW itself.
 
-.. image:: ../images/HAProxy_for_RGW.svg
+.. image:: ../../images/HAProxy_for_RGW.svg
 
 There are N hosts where the ingress service is deployed.  Each host
 has a haproxy daemon and a keepalived daemon.  A virtual IP is

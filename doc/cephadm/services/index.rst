@@ -2,10 +2,27 @@
 Service Management
 ==================
 
+A service is a group of daemons configured together. See these chapters
+for details on individual services:
+
+.. toctree::
+    :maxdepth: 1
+
+    mon
+    mgr
+    osd
+    rgw
+    mds
+    nfs
+    iscsi
+    custom-container
+    monitoring
+
 Service Status
 ==============
 
-A service is a group of daemons configured together. To see the status of one
+
+To see the status of one
 of the services running in the Ceph cluster, do the following:
 
 #. Use the command line to print a list of services. 
