@@ -100,6 +100,8 @@ public:
       offset += ref->get_length();
       inline_block_list.push_back(ref);
     }
+    ++fresh_block_stats.num;
+    fresh_block_stats.bytes += ref->get_length();
     TRACET("adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
@@ -185,8 +187,12 @@ public:
     std::for_each(inline_block_list.begin(), inline_block_list.end(), f);
   }
 
-  auto get_num_fresh_blocks() const {
-    return inline_block_list.size() + ool_block_list.size();
+  struct io_stat_t {
+    uint64_t num = 0;
+    uint64_t bytes = 0;
+  };
+  const io_stat_t& get_fresh_block_stats() const {
+    return fresh_block_stats;
   }
 
   enum class src_t : uint8_t {
@@ -250,6 +256,8 @@ public:
     read_set.clear();
     invalidate_clear_write_set();
     mutated_block_list.clear();
+    fresh_block_stats = {};
+    num_delayed_invalid_extents = 0;
     delayed_alloc_list.clear();
     inline_block_list.clear();
     ool_block_list.clear();
@@ -283,6 +291,10 @@ public:
   }
   tree_stats_t& get_lba_tree_stats() {
     return lba_tree_stats;
+  }
+
+  void increment_delayed_invalid_extents() {
+    ++num_delayed_invalid_extents;
   }
 
 private:
@@ -322,6 +334,8 @@ private:
   /**
    * lists of fresh blocks, holds refcounts, subset of write_set
    */
+  io_stat_t fresh_block_stats;
+  uint64_t num_delayed_invalid_extents = 0;
   /// blocks that will be committed with journal record inline
   std::list<CachedExtentRef> inline_block_list;
   /// blocks that will be committed with out-of-line record

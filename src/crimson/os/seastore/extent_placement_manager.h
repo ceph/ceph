@@ -365,6 +365,7 @@ public:
       for (auto& extent : alloc_list) {
         // extents may be invalidated
         if (!extent->is_valid()) {
+          t.increment_delayed_invalid_extents();
           continue;
         }
         if (should_be_inline(extent)) {
