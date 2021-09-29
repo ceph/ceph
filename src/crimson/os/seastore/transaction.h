@@ -100,6 +100,8 @@ public:
       offset += ref->get_length();
       inline_block_list.push_back(ref);
     }
+    ++fresh_block_stats.num;
+    fresh_block_stats.bytes += ref->get_length();
     TRACET("adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
@@ -185,8 +187,12 @@ public:
     std::for_each(inline_block_list.begin(), inline_block_list.end(), f);
   }
 
-  auto get_num_fresh_blocks() const {
-    return inline_block_list.size() + ool_block_list.size();
+  struct io_stat_t {
+    uint64_t num = 0;
+    uint64_t bytes = 0;
+  };
+  const io_stat_t& get_fresh_block_stats() const {
+    return fresh_block_stats;
   }
 
   enum class src_t : uint8_t {
@@ -250,12 +256,15 @@ public:
     read_set.clear();
     invalidate_clear_write_set();
     mutated_block_list.clear();
+    fresh_block_stats = {};
+    num_delayed_invalid_extents = 0;
     delayed_alloc_list.clear();
     inline_block_list.clear();
     ool_block_list.clear();
     retired_set.clear();
     onode_tree_stats = {};
     lba_tree_stats = {};
+    ool_write_stats = {};
     to_release = NULL_SEG_ID;
     conflicted = false;
     if (!has_reset) {
@@ -283,6 +292,19 @@ public:
   }
   tree_stats_t& get_lba_tree_stats() {
     return lba_tree_stats;
+  }
+
+  struct ool_write_stats_t {
+    io_stat_t extents;
+    uint64_t overhead_bytes = 0;
+    uint64_t num_records = 0;
+  };
+  ool_write_stats_t& get_ool_write_stats() {
+    return ool_write_stats;
+  }
+
+  void increment_delayed_invalid_extents() {
+    ++num_delayed_invalid_extents;
   }
 
 private:
@@ -319,13 +341,16 @@ private:
    */
   ExtentIndex write_set;
 
-  /// list of fresh blocks, holds refcounts, subset of write_set
+  /**
+   * lists of fresh blocks, holds refcounts, subset of write_set
+   */
+  io_stat_t fresh_block_stats;
+  uint64_t num_delayed_invalid_extents = 0;
+  /// blocks that will be committed with journal record inline
   std::list<CachedExtentRef> inline_block_list;
-
-  /// list of fresh blocks, holds refcounts, subset of write_set
+  /// blocks that will be committed with out-of-line record
   std::list<CachedExtentRef> ool_block_list;
-
-  /// extents with delayed allocation, may become inline or ool
+  /// blocks with delayed allocation, may become inline or ool above
   std::list<LogicalCachedExtentRef> delayed_alloc_list;
 
   /// list of mutated blocks, holds refcounts, subset of write_set
@@ -338,8 +363,10 @@ private:
    */
   pextent_set_t retired_set;
 
+  /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
   tree_stats_t lba_tree_stats;
+  ool_write_stats_t ool_write_stats;
 
   ///< if != NULL_SEG_ID, release this segment after completion
   segment_id_t to_release = NULL_SEG_ID;

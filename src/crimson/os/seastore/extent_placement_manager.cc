@@ -84,6 +84,15 @@ SegmentedAllocator::Writer::_write(
     current_segment->segment->get_segment_id(),
     record.get_base());
 
+  // account transactional ool writes before write()
+  auto& stats = t.get_ool_write_stats();
+  stats.extents.num += record.get_num_extents();
+  auto extent_bytes = record.get_raw_data_size();
+  stats.extents.bytes += extent_bytes;
+  assert(bl.length() > extent_bytes);
+  stats.overhead_bytes += (bl.length() - extent_bytes);
+  stats.num_records += 1;
+
   return trans_intr::make_interruptible(
     current_segment->segment->write(record.get_base(), bl).safe_then(
       [this, pr=std::move(pr), &t,
