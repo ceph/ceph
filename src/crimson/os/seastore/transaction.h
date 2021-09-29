@@ -189,6 +189,12 @@ public:
     return inline_block_list.size() + ool_block_list.size();
   }
 
+  size_t get_allocation_size() const {
+    size_t ret = 0;
+    for_each_fresh_block([&ret](auto &e) { ret += e->get_length(); });
+    return ret;
+  }
+
   enum class src_t : uint8_t {
     MUTATE = 0,
     READ, // including weak and non-weak read transactions
