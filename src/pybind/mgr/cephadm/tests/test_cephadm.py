@@ -899,8 +899,10 @@ spec:
             assert not r
             assert cephadm_module.health_checks.get('CEPHADM_DAEMON_PLACE_FAIL') is not None
             assert cephadm_module.health_checks['CEPHADM_DAEMON_PLACE_FAIL']['count'] == 1
-            assert 'Failed to place 1 daemon(s)' in cephadm_module.health_checks['CEPHADM_DAEMON_PLACE_FAIL']['summary']
-            assert 'Failed while placing mgr.a on test: fail' in cephadm_module.health_checks['CEPHADM_DAEMON_PLACE_FAIL']['detail']
+            assert 'Failed to place 1 daemon(s)' in cephadm_module.health_checks[
+                'CEPHADM_DAEMON_PLACE_FAIL']['summary']
+            assert 'Failed while placing mgr.a on test: fail' in cephadm_module.health_checks[
+                'CEPHADM_DAEMON_PLACE_FAIL']['detail']
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_apply_spec_fail_health_warning(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -913,7 +915,8 @@ spec:
             assert cephadm_module.apply_spec_fails
             assert cephadm_module.health_checks.get('CEPHADM_APPLY_SPEC_FAIL') is not None
             assert cephadm_module.health_checks['CEPHADM_APPLY_SPEC_FAIL']['count'] == 1
-            assert 'Failed to apply 1 service(s)' in cephadm_module.health_checks['CEPHADM_APPLY_SPEC_FAIL']['summary']
+            assert 'Failed to apply 1 service(s)' in cephadm_module.health_checks[
+                'CEPHADM_APPLY_SPEC_FAIL']['summary']
 
     @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -922,11 +925,14 @@ spec:
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
             get_foreign_ceph_option.side_effect = KeyError
-            CephadmServe(cephadm_module)._apply_service_config(ServiceSpec('mgr', placement=ps, config={'test': 'foo'}))
+            CephadmServe(cephadm_module)._apply_service_config(
+                ServiceSpec('mgr', placement=ps, config={'test': 'foo'}))
             assert cephadm_module.health_checks.get('CEPHADM_INVALID_CONFIG_OPTION') is not None
             assert cephadm_module.health_checks['CEPHADM_INVALID_CONFIG_OPTION']['count'] == 1
-            assert 'Ignoring 1 invalid config option(s)' in cephadm_module.health_checks['CEPHADM_INVALID_CONFIG_OPTION']['summary']
-            assert 'Ignoring invalid mgr config option test' in cephadm_module.health_checks['CEPHADM_INVALID_CONFIG_OPTION']['detail']
+            assert 'Ignoring 1 invalid config option(s)' in cephadm_module.health_checks[
+                'CEPHADM_INVALID_CONFIG_OPTION']['summary']
+            assert 'Ignoring invalid mgr config option test' in cephadm_module.health_checks[
+                'CEPHADM_INVALID_CONFIG_OPTION']['detail']
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())

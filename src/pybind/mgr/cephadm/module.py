@@ -729,6 +729,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if host in self.offline_hosts:
             self.offline_hosts.remove(host)
 
+    def update_failed_daemon_health_check(self) -> None:
+        self.remove_health_warning('CEPHADM_FAILED_DAEMON')
+        failed_daemons = []
+        for dd in self.cache.get_daemons():
+            if dd.status is not None and dd.status == DaemonDescriptionStatus.error:
+                failed_daemons.append('daemon %s on %s is in %s state' % (
+                    dd.name(), dd.hostname, dd.status_desc
+                ))
+        if failed_daemons:
+            self.set_health_warning('CEPHADM_FAILED_DAEMON', f'{len(failed_daemons)} failed cephadm daemon(s)', len(
+                failed_daemons), failed_daemons)
+
     @staticmethod
     def can_run() -> Tuple[bool, str]:
         if asyncssh is not None:
@@ -1503,7 +1515,8 @@ Then run the following:
             self.remove_health_warning('HOST_IN_MAINTENANCE')
         else:
             s = "host is" if len(in_maintenance) == 1 else "hosts are"
-            self.set_health_warning("HOST_IN_MAINTENANCE", f"{len(in_maintenance)} {s} in maintenance mode", 1, [f"{h} is in maintenance" for h in in_maintenance])
+            self.set_health_warning("HOST_IN_MAINTENANCE", f"{len(in_maintenance)} {s} in maintenance mode", 1, [
+                                    f"{h} is in maintenance" for h in in_maintenance])
 
     @handle_orch_error
     @host_exists()
