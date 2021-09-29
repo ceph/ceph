@@ -588,4 +588,43 @@ private:
   seastar::shared_mutex mutex;
 };
 
+/**
+ * Imposes no ordering or exclusivity at all.  Ops enter without constraint and
+ * may exit in any order.  Useful mainly for informational purposes between
+ * stages with constraints.
+ */
+class UnorderedStage : public PipelineStageI {
+  void dump_detail(ceph::Formatter *f) const final {}
+  const char *get_type_name() const final {
+    return name;
+  }
+
+  class ExitBarrier final : public PipelineExitBarrierI {
+  public:
+    ExitBarrier() = default;
+
+    seastar::future<> wait() final {
+      return seastar::now();
+    }
+
+    void exit() final {}
+
+    void cancel() final {}
+
+    ~ExitBarrier() final {}
+  };
+
+public:
+  seastar::future<PipelineExitBarrierI::Ref> enter() final {
+    return seastar::make_ready_future<PipelineExitBarrierI::Ref>(
+      new ExitBarrier);
+  }
+
+  UnorderedStage(const char *name) : name(name) {}
+
+private:
+  const char * name;
+};
+
+
 }

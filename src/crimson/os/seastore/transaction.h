@@ -182,7 +182,7 @@ public:
   }
 
   template <typename F>
-  auto for_each_fresh_block(F &&f) {
+  auto for_each_fresh_block(F &&f) const {
     std::for_each(ool_block_list.begin(), ool_block_list.end(), f);
     std::for_each(inline_block_list.begin(), inline_block_list.end(), f);
   }
@@ -193,6 +193,12 @@ public:
   };
   const io_stat_t& get_fresh_block_stats() const {
     return fresh_block_stats;
+  }
+
+  size_t get_allocation_size() const {
+    size_t ret = 0;
+    for_each_fresh_block([&ret](auto &e) { ret += e->get_length(); });
+    return ret;
   }
 
   enum class src_t : uint8_t {
