@@ -13,6 +13,11 @@ top_level = \
         os.path.dirname(
             os.path.abspath(__file__)))
 
+from unittest import mock
+with mock.patch('builtins.open', create=True):
+    from importlib.machinery import SourceFileLoader
+    cephadm_bin = SourceFileLoader('cephadm_bin', f'{top_level}/src/cephadm/cephadm').load_module()
+
 
 def parse_ceph_release():
     with open(os.path.join(top_level, 'src/ceph_release')) as f:
@@ -117,6 +122,7 @@ extensions = [
     'sphinx-prompt',
     'sphinx_autodoc_typehints',
     'sphinx_substitution_extensions',
+    'sphinxarg.ext',
     'breathe',
     'ceph_commands',
     'ceph_releases',

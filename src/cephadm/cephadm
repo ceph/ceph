@@ -7322,8 +7322,15 @@ def command_maintenance(ctx: CephadmContext) -> str:
 
 def _get_parser():
     # type: () -> argparse.ArgumentParser
+    description = """:program:`cephadm` is a command line tool to manage the local host for the cephadm orchestrator.
+
+It provides commands to investigate and modify the state of the current host.
+
+:program:`cephadm` is not required on all hosts, but useful when investigating a particular
+daemon."""
+
     parser = argparse.ArgumentParser(
-        description='Bootstrap Ceph daemons with systemd and containers.',
+        description=description,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         '--image',
@@ -7393,7 +7400,7 @@ def _get_parser():
     parser_inspect_image.set_defaults(func=command_inspect_image)
 
     parser_ls = subparsers.add_parser(
-        'ls', help='list daemon instances on this host')
+        'ls', help='List daemon instances on *this* host')
     parser_ls.set_defaults(func=command_ls)
     parser_ls.add_argument(
         '--no-detail',
@@ -7409,7 +7416,7 @@ def _get_parser():
     parser_list_networks.set_defaults(func=command_list_networks)
 
     parser_adopt = subparsers.add_parser(
-        'adopt', help='adopt daemon deployed with a different tool')
+        'adopt', help='Adopt a daemon deployed with a different deployment tool.')
     parser_adopt.set_defaults(func=command_adopt)
     parser_adopt.add_argument(
         '--name', '-n',
@@ -7449,7 +7456,7 @@ def _get_parser():
         help=argparse.SUPPRESS)
 
     parser_rm_daemon = subparsers.add_parser(
-        'rm-daemon', help='remove daemon instance')
+        'rm-daemon', help='Remove a specific daemon instance')
     parser_rm_daemon.set_defaults(func=command_rm_daemon)
     parser_rm_daemon.add_argument(
         '--name', '-n',
@@ -7470,7 +7477,7 @@ def _get_parser():
         help='delete valuable daemon data instead of making a backup')
 
     parser_rm_cluster = subparsers.add_parser(
-        'rm-cluster', help='remove all daemons for a cluster')
+        'rm-cluster', help='Remove all daemons for a cluster')
     parser_rm_cluster.set_defaults(func=command_rm_cluster)
     parser_rm_cluster.add_argument(
         '--fsid',
@@ -7490,7 +7497,7 @@ def _get_parser():
         help='zap OSD devices for this cluster')
 
     parser_run = subparsers.add_parser(
-        'run', help='run a ceph daemon, in a container, in the foreground')
+        'run', help='Run a ceph daemon, in a container, in the foreground')
     parser_run.set_defaults(func=command_run)
     parser_run.add_argument(
         '--name', '-n',
@@ -7501,8 +7508,16 @@ def _get_parser():
         required=True,
         help='cluster FSID')
 
+    shell_help = """Run an interactive shell::
+
+    cephadm shell
+
+Or one specific command inside a container::
+
+    cephadm shell -- ceph orch ls
+"""
     parser_shell = subparsers.add_parser(
-        'shell', help='run an interactive shell inside a daemon container')
+        'shell', help=shell_help)
     parser_shell.set_defaults(func=command_shell)
     parser_shell.add_argument(
         '--fsid',
@@ -7541,8 +7556,13 @@ def _get_parser():
         action='store_true',
         help='dont pass /etc/hosts through to the container')
 
+    enter_help = """Run an interactive shell inside a running daemon container::
+
+    cephadm enter --name mgr.myhost.ysubfo
+"""
+
     parser_enter = subparsers.add_parser(
-        'enter', help='run an interactive shell inside a running daemon container')
+        'enter', help=enter_help)
     parser_enter.set_defaults(func=command_enter)
     parser_enter.add_argument(
         '--fsid',
@@ -7555,8 +7575,12 @@ def _get_parser():
         'command', nargs=argparse.REMAINDER,
         help='command')
 
+    ceph_volume_help = """Run ceph-volume inside a container::
+
+    cephadm ceph-volume inventory"""
+
     parser_ceph_volume = subparsers.add_parser(
-        'ceph-volume', help='run ceph-volume inside a container')
+        'ceph-volume', help=ceph_volume_help)
     parser_ceph_volume.set_defaults(func=command_ceph_volume)
     parser_ceph_volume.add_argument(
         '--fsid',
@@ -7600,8 +7624,21 @@ def _get_parser():
         required=True,
         help='daemon name (type.id)')
 
+    logs_help = """Print journald logs for a daemon container::
+
+    cephadm logs --name mgr.myhost.ysubfo
+
+This is similar to::
+
+    journalctl -u mgr.myhost.ysubfo
+
+Can also specify additional journal arguments::
+
+    cephadm logs --name mgr.myhost.ysubfo -- -n 20 # last 20 lines
+    cephadm logs --name mgr.myhost.ysubfo -- -f # follow the log"""
+
     parser_logs = subparsers.add_parser(
-        'logs', help='print journald logs for a daemon container')
+        'logs', help=logs_help)
     parser_logs.set_defaults(func=command_logs)
     parser_logs.add_argument(
         '--fsid',
@@ -7614,8 +7651,12 @@ def _get_parser():
         'command', nargs='*',
         help='additional journalctl args')
 
+    bootstrap_help = """Bootstrap a cluster on the local host. It deploys a MON and a MGR and then also automatically
+deploys the monitoring stack on this host (see --skip-monitoring-stack) and calls
+``ceph orch host add $(hostname)`` (see --skip-ssh)."""
+
     parser_bootstrap = subparsers.add_parser(
-        'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
+        'bootstrap', help=bootstrap_help)
     parser_bootstrap.set_defaults(func=command_bootstrap)
     parser_bootstrap.add_argument(
         '--config', '-c',
@@ -7784,8 +7825,12 @@ def _get_parser():
         action='store_true',
         help='configure cluster to log to traditional log files in /var/log/ceph/$fsid')
 
+    deploy_help = """Deploy a daemon on the local host. Used by the orchestrator CLI::
+
+    cephadm shell -- ceph orch apply <type> ..."""
+
     parser_deploy = subparsers.add_parser(
-        'deploy', help='deploy a daemon')
+        'deploy', help=deploy_help)
     parser_deploy.set_defaults(func=command_deploy)
     parser_deploy.add_argument(
         '--name',
@@ -7894,8 +7939,26 @@ def _get_parser():
         default=['cephadm'],
         help='packages')
 
+    registry_login_help = """Give cephadm login information for an authenticated registry (url, username and password).
+Cephadm will attempt to log the calling host into that registry::
+
+      cephadm registry-login --registry-url [REGISTRY_URL] --registry-username [USERNAME]
+                             --registry-password [PASSWORD]
+
+Can also use a JSON file containing the login info formatted as::
+
+      {
+       "url":"REGISTRY_URL",
+       "username":"REGISTRY_USERNAME",
+       "password":"REGISTRY_PASSWORD"
+      }
+
+and turn it in with command::
+
+      cephadm registry-login --registry-json [JSON FILE]"""
+
     parser_registry_login = subparsers.add_parser(
-        'registry-login', help='log host into authenticated registry')
+        'registry-login', help=registry_login_help)
     parser_registry_login.set_defaults(func=command_registry_login)
     parser_registry_login.add_argument(
         '--registry-url',

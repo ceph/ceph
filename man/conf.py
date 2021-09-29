@@ -1,6 +1,17 @@
 import os
 import sys
 
+top_level = \
+    os.path.dirname(
+        os.path.dirname(
+            os.path.abspath(__file__)))
+            
+from unittest import mock
+with mock.patch('builtins.open', create=True):
+    from importlib.machinery import SourceFileLoader
+    cephadm_bin = SourceFileLoader('cephadm_bin', f'{top_level}/src/cephadm/cephadm').load_module()
+
+
 project = u'Ceph'
 copyright = u'2010-2014, Inktank Storage, Inc. and contributors. Licensed under Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)'
 version = 'dev'
@@ -60,6 +71,10 @@ def _get_manpages():
                 section,
                 )
 
+extensions = [
+    'sphinxarg.ext',
+    ]
+    
 man_pages = list(_get_manpages())
 # sphinx warns if no toc is found, so feed it with a random file
 # which is also rendered in this run.
