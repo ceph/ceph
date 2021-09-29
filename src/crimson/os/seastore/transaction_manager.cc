@@ -224,10 +224,15 @@ TransactionManager::submit_transaction(
   Transaction &t)
 {
   LOG_PREFIX(TransactionManager::submit_transaction);
-  DEBUGT("about to await throttle", t);
-  return trans_intr::make_interruptible(segment_cleaner->await_hard_limits()
-  ).then_interruptible([this, &t]() {
+  size_t projected_usage = t.get_allocation_size();
+  DEBUGT("waiting for projected_usage: {}", t, projected_usage);
+  return trans_intr::make_interruptible(
+    segment_cleaner->reserve_projected_usage(projected_usage)
+  ).then_interruptible([this, &t] {
     return submit_transaction_direct(t);
+  }).finally([this, FNAME, projected_usage, &t] {
+    DEBUGT("releasing projected_usage: {}", t, projected_usage);
+    segment_cleaner->release_projected_usage(projected_usage);
   });
 }
 
