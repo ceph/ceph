@@ -129,6 +129,13 @@ def respawn_in_path(lib_path, python_paths):
         sys.path.insert(0, p)
 
 
+def launch_subprocess(args, cwd=None, env=None, shell=True,
+                      executable='/bin/bash'):
+    return subprocess.Popen(args, cwd=cwd, env=env, shell=shell,
+                            executable=executable, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+
+
 # Let's use some sensible defaults
 if os.path.exists("./CMakeCache.txt") and os.path.exists("./bin"):
 
@@ -461,10 +468,7 @@ sudo() {
         args, usr_args = self._perform_checks_and_adjustments(args, omit_sudo,
                                                               shell)
 
-        subproc = subprocess.Popen(args, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE,
-                                   stdin=subprocess.PIPE, cwd=cwd, env=env,
-                                   shell=shell, executable='/bin/bash')
+        subproc = launch_subprocess(args, cwd, env, shell)
 
         if stdin:
             # Hack: writing to stdin is not deadlock-safe, but it "always" works
