@@ -354,6 +354,7 @@ Segment::write_ertr::future<> BlockSegmentManager::segment_write(
 {
   assert((bl.length() % superblock.block_size) == 0);
   logger().debug(
+    "BlockSegmentManager::segment_write: "
     "segment_write to segment {} at offset {}, physical offset {}, len {}",
     addr.segment,
     addr.offset,
