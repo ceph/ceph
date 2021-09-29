@@ -172,7 +172,8 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
     return when_all_succeed(
       store.write_meta("ceph_fsid", cluster_fsid.to_string()),
       store.write_meta("whoami", std::to_string(whoami)),
-      _write_key_meta());
+      _write_key_meta(),
+      store.write_meta("ready", "ready"));
   }).then_unpack([cluster_fsid, this] {
     fmt::print("created object store {} for osd.{} fsid {}\n",
                local_conf().get_val<std::string>("osd_data"),
