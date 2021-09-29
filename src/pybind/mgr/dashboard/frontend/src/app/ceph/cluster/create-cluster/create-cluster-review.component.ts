@@ -4,10 +4,10 @@ import _ from 'lodash';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { HostService } from '~/app/shared/api/host.service';
+import { OsdService } from '~/app/shared/api/osd.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
-import { InventoryDevice } from '../inventory/inventory-devices/inventory-device.model';
 
 @Component({
   selector: 'cd-create-cluster-review',
@@ -23,17 +23,24 @@ export class CreateClusterReviewComponent implements OnInit {
   serviceOccurrences = {};
   hostsCountPerService: object[] = [];
   uniqueServices: Set<string> = new Set();
-  filteredDevices: InventoryDevice[] = [];
-  capacity = 0;
+  totalDevices: number;
+  totalCapacity = 0;
   services: Array<CephServiceSpec> = [];
 
   constructor(
     public wizardStepsService: WizardStepsService,
     public cephServiceService: CephServiceService,
-    public hostService: HostService
+    public hostService: HostService,
+    private osdService: OsdService
   ) {}
 
   ngOnInit() {
+    let dataDevices = 0;
+    let dataDeviceCapacity = 0;
+    let walDevices = 0;
+    let walDeviceCapacity = 0;
+    let dbDevices = 0;
+    let dbDeviceCapacity = 0;
     this.hostsDetails = {
       columns: [
         {
@@ -98,7 +105,23 @@ export class CreateClusterReviewComponent implements OnInit {
       this.hostsDetails['data'] = [...this.hosts];
     });
 
-    this.filteredDevices = this.wizardStepsService.osdDevices;
-    this.capacity = this.wizardStepsService.osdCapacity;
+    if (this.osdService.osdDevices['data']) {
+      dataDevices = this.osdService.osdDevices['data']?.length;
+      dataDeviceCapacity = this.osdService.osdDevices['data']['capacity'];
+    }
+
+    if (this.osdService.osdDevices['wal']) {
+      walDevices = this.osdService.osdDevices['wal']?.length;
+      walDeviceCapacity = this.osdService.osdDevices['wal']['capacity'];
+    }
+
+    if (this.osdService.osdDevices['db']) {
+      dbDevices = this.osdService.osdDevices['db']?.length;
+      dbDeviceCapacity = this.osdService.osdDevices['db']['capacity'];
+    }
+
+    this.totalDevices = dataDevices + walDevices + dbDevices;
+    this.osdService.osdDevices['totalDevices'] = this.totalDevices;
+    this.totalCapacity = dataDeviceCapacity + walDeviceCapacity + dbDeviceCapacity;
   }
 }
