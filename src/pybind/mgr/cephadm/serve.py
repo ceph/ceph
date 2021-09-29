@@ -441,7 +441,7 @@ class CephadmServe:
 
         with_lsm = self.mgr.get_module_option('device_enhanced_scan')
         inventory_args = ['--', 'inventory',
-                          '--format=json',
+                          '--format=json-pretty',
                           '--filter-for-batch']
         if with_lsm:
             inventory_args.insert(-1, "--with-lsm")
