@@ -894,7 +894,7 @@ class RookCluster(object):
         self.coreV1_api.patch_node(host, matching_node)
         return OrchResult(f'Removed {label} label from {host}')
 
-    def apply_objectstore(self, spec: RGWSpec) -> str:
+    def apply_objectstore(self, spec: RGWSpec, num_replicas: int) -> str:
         assert spec.service_id is not None
 
         name = spec.service_id
@@ -907,7 +907,7 @@ class RookCluster(object):
             # translate . to - (fingers crossed!) instead.
             name = spec.service_id.replace('.', '-')
 
-
+        all_hosts = self.get_hosts()
         def _create_zone() -> cos.CephObjectStore:
             port = None
             secure_port = None
@@ -926,6 +926,27 @@ class RookCluster(object):
                             port=port,
                             securePort=secure_port,
                             instances=spec.placement.count or 1,
+                            placement=cos.Placement(
+                                cos.NodeAffinity(
+                                    requiredDuringSchedulingIgnoredDuringExecution=cos.RequiredDuringSchedulingIgnoredDuringExecution(
+                                        nodeSelectorTerms=cos.NodeSelectorTermsList(
+                                            [
+                                                placement_spec_to_node_selector(spec.placement, all_hosts)
+                                            ]
+                                        )
+                                    )
+                                )
+                            )
+                        ),
+                        dataPool=cos.DataPool(
+                            replicated=cos.Replicated(
+                                size=num_replicas
+                            )
+                        ),
+                        metadataPool=cos.MetadataPool(
+                            replicated=cos.Replicated(
+                                size=num_replicas
+                            )
                         )
                     )
                 )
@@ -986,19 +1007,13 @@ class RookCluster(object):
                 _update_nfs, _create_nfs)
 
     def rm_service(self, rooktype: str, service_id: str) -> str:
-
+        self.customObjects_api.delete_namespaced_custom_object(group="ceph.rook.io", version="v1", namespace="rook-ceph", plural=rooktype, name=service_id)
         objpath = "{0}/{1}".format(rooktype, service_id)
-
-        try:
-            self.rook_api_delete(objpath)
-        except ApiException as e:
-            if e.status == 404:
-                log.info("{0} service '{1}' does not exist".format(rooktype, service_id))
-                # Idempotent, succeed.
-            else:
-                raise
-
         return f'Removed {objpath}'
+
+    def get_resource(self, resource_type: str) -> Iterable:
+        custom_objects: KubernetesCustomResource = KubernetesCustomResource(self.customObjects_api.list_namespaced_custom_object, group="ceph.rook.io", version="v1", namespace="rook-ceph", plural=resource_type)
+        return custom_objects.items
 
     def can_create_osd(self) -> bool:
         current_cluster = self.rook_api_get(
@@ -1286,7 +1301,7 @@ def placement_spec_to_node_selector(spec: PlacementSpec, all_hosts: List) -> ccl
                 values=ccl.CrdObjectList(host_list)
             )
         ) 
-    if spec.host_pattern == "*":
+    if spec.host_pattern == "*" or (not spec.label and not spec.hosts and not spec.host_pattern):
         res.matchExpressions.append(
             ccl.MatchExpressionsItem(
                 key="kubernetes.io/hostname",
