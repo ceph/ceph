@@ -1439,8 +1439,9 @@ void AbstractWriteLog<I>::alloc_and_dispatch_io_req(C_BlockIORequestT *req)
       std::lock_guard locker(m_lock);
       dispatch_here = m_deferred_ios.empty();
       // Only flush req's total_bytes is the max uint64
-      if ((req->image_extents_summary.total_bytes ==
-          std::numeric_limits<uint64_t>::max())) {
+      if (req->image_extents_summary.total_bytes ==
+          std::numeric_limits<uint64_t>::max() &&
+          static_cast<C_FlushRequestT *>(req)->internal == true) {
         dispatch_here = true;
       }
     }
