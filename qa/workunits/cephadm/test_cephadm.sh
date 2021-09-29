@@ -186,8 +186,7 @@ $CEPHADM bootstrap \
       --output-pub-ssh-key $TMPDIR/ceph.pub \
       --allow-overwrite \
       --skip-mon-network \
-      --skip-monitoring-stack \
-      --with-exporter
+      --skip-monitoring-stack
 test -e $CONFIG
 test -e $KEYRING
 rm -f $ORIG_CONFIG
@@ -359,21 +358,6 @@ cond="$CEPHADM enter --fsid $FSID --name container.alertmanager.a -- test -f \
 is_available "alertmanager.yml" "$cond" 10
 cond="curl 'http://localhost:9093' | grep -q 'Alertmanager'"
 is_available "alertmanager" "$cond" 10
-
-# Fetch the token we need to access the exporter API
-token=$($CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph cephadm get-exporter-config | jq -r '.token')
-[[ ! -z "$token" ]]
-
-# check all exporter threads active
-cond="curl -k -s -H \"Authorization: Bearer $token\" \
-      https://localhost:9443/v1/metadata/health | \
-      jq -r '.tasks | select(.disks == \"active\" and .daemons == \"active\" and .host == \"active\")'"
-is_available "exporter_threads_active" "$cond" 3
-
-# check we deployed for all hosts
-$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph orch ls --service-type cephadm-exporter --format json
-host_pattern=$($CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph orch ls --service-type cephadm-exporter --format json | jq -r '.[0].placement.host_pattern')
-[[ "$host_pattern" = "*" ]]
 
 ## run
 # WRITE ME

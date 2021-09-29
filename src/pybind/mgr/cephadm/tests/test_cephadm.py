@@ -825,7 +825,6 @@ spec:
             ServiceSpec('mds', service_id='fsname'),
             RGWSpec(rgw_realm='realm', rgw_zone='zone'),
             RGWSpec(service_id="foo"),
-            ServiceSpec('cephadm-exporter'),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
@@ -1043,7 +1042,6 @@ spec:
                 envs=['SECRET=password'],
                 ports=[8080, 8443]
             ), CephadmOrchestrator.apply_container),
-            (ServiceSpec('cephadm-exporter'), CephadmOrchestrator.apply_cephadm_exporter),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))

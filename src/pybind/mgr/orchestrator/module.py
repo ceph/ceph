@@ -59,7 +59,6 @@ class ServiceType(enum.Enum):
     rgw = 'rgw'
     nfs = 'nfs'
     iscsi = 'iscsi'
-    cephadm_exporter = 'cephadm-exporter'
 
 
 class ServiceAction(enum.Enum):
