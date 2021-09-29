@@ -833,12 +833,19 @@ class IscsiServiceSpec(ServiceSpec):
 
         #: RADOS pool where ceph-iscsi config data is stored.
         self.pool = pool
+        #: list of trusted IP addresses
         self.trusted_ip_list = trusted_ip_list
+        #: ``api_port`` as defined in the ``iscsi-gateway.cfg``
         self.api_port = api_port
+        #: ``api_user`` as defined in the ``iscsi-gateway.cfg``
         self.api_user = api_user
+        #: ``api_password`` as defined in the ``iscsi-gateway.cfg``
         self.api_password = api_password
+        #: ``api_secure`` as defined in the ``iscsi-gateway.cfg``
         self.api_secure = api_secure
+        #: SSL certificate
         self.ssl_cert = ssl_cert
+        #: SSL private key
         self.ssl_key = ssl_key
 
         if not self.api_secure and self.ssl_cert and self.ssl_key:
