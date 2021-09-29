@@ -324,8 +324,14 @@ Segment::close_ertr::future<> BlockSegment::close()
 Segment::write_ertr::future<> BlockSegment::write(
   segment_off_t offset, ceph::bufferlist bl)
 {
-  if (offset < write_pointer || offset % manager.superblock.block_size != 0)
+  if (offset < write_pointer || offset % manager.superblock.block_size != 0) {
+    logger().error(
+      "BlockSegmentManager::BlockSegment::write: "
+      "invalid segment write on segment {} to offset {}",
+      id,
+      offset);
     return crimson::ct_error::invarg::make();
+  }
 
   if (offset + bl.length() > manager.superblock.segment_size)
     return crimson::ct_error::enospc::make();
@@ -354,6 +360,7 @@ Segment::write_ertr::future<> BlockSegmentManager::segment_write(
 {
   assert((bl.length() % superblock.block_size) == 0);
   logger().debug(
+    "BlockSegmentManager::segment_write: "
     "segment_write to segment {} at offset {}, physical offset {}, len {}",
     addr.segment,
     addr.offset,
