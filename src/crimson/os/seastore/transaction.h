@@ -180,7 +180,7 @@ public:
   }
 
   template <typename F>
-  auto for_each_fresh_block(F &&f) {
+  auto for_each_fresh_block(F &&f) const {
     std::for_each(ool_block_list.begin(), ool_block_list.end(), f);
     std::for_each(inline_block_list.begin(), inline_block_list.end(), f);
   }
