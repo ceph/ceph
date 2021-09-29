@@ -66,46 +66,6 @@ As noted above, D4N is already functioning on a non-upstream variant of Ceph. Si
 This project’s base goals are threefold. Our Ceph cluster must be able to access the D4N style directory to get or store keys and metadata for all data stored in cache. The second minimum goal is the implementation of full non-local cache access. That is, when the client queries to write or read data, the RGW will search its own cache. If the object is not in a local cache, the directory will be called to obtain the file’s location by searching neighboring caches and then finally, the Ceph data lake. Finally, the RGW must be able to write in the Write Back Cache to be stored.
 
 ---
-### Milestones and Timeline
-The timeline for this project is limited in precision until the team can begin a full examination of the Ceph, D3N, and D4N code and set up the VMs. However, with contributions from the team’s mentors, a general plan of the project has been developed.
-
-| Item | Time Estimation (Hr) | Comments  | 
-|---------------------------------------------|:-----------:|:---------:|
-| **Week 1 09/20/21-09/26/21** |
-| Team meetings with mentors | 3 | Mentors and students come together to discuss the project’s goals, structure, and nuances. | 
-| Project familiarization | 5 | Team spends time learning about Ceph, D3N, and D4N. | 
-| Request for environment | 1 | A requisition for three Virtual Machines on OpenStack is created. | 
-| Project proposal | 5 | Due Friday 09/24 |
-| **Week 2 09/27/21-10/03/21** |
-| Set up environment | 5 | Virtual Machines are running and have both modern Ceph and the D4N research branch installed and functioning. | 
-| Code review on D4N  | 10 | Students work with mentors to thoroughly examine the D4N code. Additional meetings with Ceph developers intended. | 
-| Start of D4N code writeup & team focus split | 5 | A draft of the D4N Code Writeup is started.
-Team splits into two smaller subteams, focused on either the D4N directory or the background rerouting integration. |
-| **Week 3 10/04/21-10/10/21** |
-| D4N code writeup finalized | 10 | Mentors and students come together to discuss the project’s goals, structure, and nuances. |
-| **Week 4 10/11/21-10/17/21** |
-| Modification of D4N code | 15 | Team’s time is dedicated to work, consisting of modifying the D4N code to function on the main Ceph branch, as well as producing and implementing testing. |
-| **Week 5 10/18/21-10/24/21** |
-| Modification of D4N code | 15 | Team’s time is dedicated to work, consisting of modifying the D4N code to function on the main Ceph branch, as well as producing and implementing testing. |
-| **Week 6 10/25/21-10/31/21** |
-| Modification of D4N code | 15 | Team’s time is dedicated to work, consisting of modifying the D4N code to function on the main Ceph branch, as well as producing and implementing testing. |
-| **Week 7 11/01/21-11/07/21** |
-| Modification of D4N code | 15 | Team’s time is dedicated to work, consisting of modifying the D4N code to function on the main Ceph branch, as well as producing and implementing testing. |
-| **Week 8 11/08/21-11/14/21** |
-| Modification of D4N code | 15 | Team’s time is dedicated to work, consisting of modifying the D4N code to function on the main Ceph branch, as well as producing and implementing testing. |
-| **Week 9 11/15/21-11/21/21** |
-| Modification of D4N code | 15 | Team’s time is dedicated to work, consisting of modifying the D4N code to function on the main Ceph branch, as well as producing and implementing testing. The bulk of the work should be completed at this time. |
-| **Week 10 11/22/21-11/28/21** |
-| Thanksgiving break |  |  |
-| **Week 11 11/29/21-12/05/21** |
-| Wrapping up code | 10 | Wrapping up any work not completed previously. Small-scale modifications should be occuring. |
-| Transitioning and documenting | 10 | Finish writing ReadMe, transitioning documents for mentors, and final report. |
-| **Week 12 12/06/21-12/12/21** |
-| Prepare final presentation | 10 | Create the presentation, practice presenting, and prepare for questions. |
-| **Week 13 12/13/21-12/15/21** |
-| Project due |  |  |
-
----
 ### Resources
 1. Batra, Aman. “D4N S3 Select Caching and the Addition of Arrow Columnar Format.” YouTube, YouTube, 7 Aug. 2021, https://www.youtube.com/watch?v=X4-s978FCtM.
 2. CS6620-S21. “CS6620-S21/D4N-s3select-Caching.” GitHub, https://github.com/CS6620-S21/D4N-S3Select-Caching.
