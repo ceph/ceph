@@ -646,4 +646,21 @@ def task(ctx, config):
             yield
 
         finally:
+            to_remove = []
+            ret = _shell(ctx, config, ['ceph', 'orch', 'ls', '-f', 'json'], stdout=BytesIO())
+            if ret.exitstatus == 0:
+                r = json.loads(ret.stdout.getvalue().decode('utf-8'))
+                for service in r:
+                    if service['service_type'] in ['rgw', 'mds', 'nfs']:
+                        _shell(ctx, config, ['ceph', 'orch', 'rm', service['service_name']])
+                        to_remove.append(service['service_name'])
+                with safe_while(sleep=10, tries=90, action="waiting for service removal") as proceed:
+                    while proceed():
+                        ret = _shell(ctx, config, ['ceph', 'orch', 'ls', '-f', 'json'], stdout=BytesIO())
+                        if ret.exitstatus == 0:
+                            r = json.loads(ret.stdout.getvalue().decode('utf-8'))
+                            still_up = [service['service_name'] for service in r]
+                            matches = set(still_up).intersection(to_remove)
+                            if not matches:
+                                break
             log.info('Tearing down rook')
