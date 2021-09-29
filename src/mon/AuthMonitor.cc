@@ -56,11 +56,12 @@ bool AuthMonitor::check_rotate()
 {
   KeyServerData::Incremental rot_inc;
   rot_inc.op = KeyServerData::AUTH_INC_SET_ROTATING;
-  if (!mon->key_server.updated_rotating(rot_inc.rotating_bl, last_rotating_ver))
-    return false;
-  dout(10) << __func__ << " updated rotating" << dendl;
-  push_cephx_inc(rot_inc);
-  return true;
+  if (mon->key_server.prepare_rotating_update(rot_inc.rotating_bl)) {
+    dout(10) << __func__ << " updating rotating" << dendl;
+    push_cephx_inc(rot_inc);
+    return true;
+  }
+  return false;
 }
 
 /*
@@ -112,16 +113,26 @@ void AuthMonitor::on_active()
 
   if (!mon->is_leader())
     return;
+
   mon->key_server.start_server();
 
-  bool increase;
-  {
-    std::lock_guard l(mon->auth_lock);
-    increase = _should_increase_max_global_id();
-  }
-  if (is_writeable() && increase) {
-    increase_max_global_id();
-    propose_pending();
+  if (is_writeable()) {
+    bool propose = false;
+    if (check_rotate()) {
+      propose = true;
+    }
+    bool increase;
+    {
+      std::lock_guard l(mon->auth_lock);
+      increase = _should_increase_max_global_id();
+    }
+    if (increase) {
+      increase_max_global_id();
+      propose = true;
+    }
+    if (propose) {
+      propose_pending();
+    }
   }
 }
 
@@ -214,7 +225,6 @@ void AuthMonitor::create_initial()
 
   // initialize rotating keys
   mon->key_server.clear_secrets();
-  last_rotating_ver = 0;
   check_rotate();
   ceph_assert(pending_auth.size() == 1);
 
@@ -331,10 +341,9 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
 
   dout(10) << __func__ << " max_global_id=" << max_global_id
 	   << " format_version " << format_version
-	   << ", last_rotating_ver " << last_rotating_ver
 	   << dendl;
 
-  mon.key_server.dump();
+  mon->key_server.dump();
 }
 
 bool AuthMonitor::_should_increase_max_global_id()

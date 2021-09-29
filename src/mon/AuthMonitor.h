@@ -96,8 +96,7 @@ public:
 
 
 private:
-  vector<Incremental> pending_auth;
-  version_t last_rotating_ver;
+  std::vector<Incremental> pending_auth;
   uint64_t max_global_id;
   uint64_t last_allocated_id;
 
@@ -185,7 +184,6 @@ private:
  public:
   AuthMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name),
-      last_rotating_ver(0),
       max_global_id(0),
       last_allocated_id(0)
   {}
