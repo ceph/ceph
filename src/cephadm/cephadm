@@ -6,6 +6,7 @@ import argparse
 import datetime
 import fcntl
 import ipaddress
+import io
 import json
 import logging
 from logging.config import dictConfig
@@ -23,11 +24,6 @@ import tempfile
 import time
 import errno
 import struct
-from socketserver import ThreadingMixIn
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import signal
-import io
-from contextlib import redirect_stdout
 import ssl
 from enum import Enum
 
@@ -37,10 +33,11 @@ import re
 import uuid
 
 from configparser import ConfigParser
+from contextlib import redirect_stdout
 from functools import wraps
 from glob import glob
 from io import StringIO
-from threading import Thread, RLock, Event
+from threading import Thread, Event
 from urllib.error import HTTPError
 from urllib.request import urlopen, Request
 from pathlib import Path
@@ -1002,7 +999,6 @@ def get_supported_daemons():
     supported_daemons.append(NFSGanesha.daemon_type)
     supported_daemons.append(CephIscsi.daemon_type)
     supported_daemons.append(CustomContainer.daemon_type)
-    supported_daemons.append(CephadmDaemon.daemon_type)
     supported_daemons.append(HAproxy.daemon_type)
     supported_daemons.append(Keepalived.daemon_type)
     supported_daemons.append(CephadmAgent.daemon_type)
@@ -2024,9 +2020,7 @@ def check_container_engine(ctx: CephadmContext) -> ContainerEngine:
 def get_unit_name(fsid, daemon_type, daemon_id=None):
     # type: (str, str, Optional[Union[int, str]]) -> str
     # accept either name or type + id
-    if daemon_type == CephadmDaemon.daemon_type and daemon_id is not None:
-        return 'ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id)
-    elif daemon_id is not None:
+    if daemon_id is not None:
         return 'ceph-%s@%s.%s' % (fsid, daemon_type, daemon_id)
     else:
         return 'ceph-%s@%s' % (fsid, daemon_type)
@@ -2689,19 +2683,7 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
             config, keyring)
 
     if not reconfig:
-        if daemon_type == CephadmDaemon.daemon_type:
-            port = next(iter(ports), None)  # get first tcp port provided or None
-
-            if ctx.config_json == '-':
-                config_js = get_parm('-')
-            else:
-                config_js = get_parm(ctx.config_json)
-            assert isinstance(config_js, dict)
-            assert isinstance(daemon_id, str)
-
-            cephadm_exporter = CephadmDaemon(ctx, fsid, daemon_id, port)
-            cephadm_exporter.deploy_daemon_unit(config_js)
-        elif daemon_type == CephadmAgent.daemon_type:
+        if daemon_type == CephadmAgent.daemon_type:
             if ctx.config_json == '-':
                 config_js = get_parm('-')
             else:
@@ -4604,27 +4586,6 @@ def command_bootstrap(ctx):
 
     cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
 
-    if ctx.with_exporter:
-        cli(['config-key', 'set', 'mgr/cephadm/exporter_enabled', 'true'])
-        if ctx.exporter_config:
-            logger.info('Applying custom cephadm exporter settings')
-            # validated within the parser, so we can just apply to the store
-            with tempfile.NamedTemporaryFile(buffering=0) as tmp:
-                tmp.write(json.dumps(ctx.exporter_config).encode('utf-8'))
-                mounts = {
-                    tmp.name: '/tmp/exporter-config.json:z'
-                }
-                cli(['cephadm', 'set-exporter-config', '-i', '/tmp/exporter-config.json'], extra_mounts=mounts)
-            logger.info('-> Use ceph orch apply cephadm-exporter to deploy')
-        else:
-            # generate a default SSL configuration for the exporter(s)
-            logger.info('Generating a default cephadm exporter configuration (self-signed)')
-            cli(['cephadm', 'generate-exporter-config'])
-        #
-        # deploy the service (commented out until the cephadm changes are in the ceph container build)
-        logger.info('Deploying cephadm exporter service with default placement...')
-        cli(['orch', 'apply', 'cephadm-exporter'])
-
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
 
@@ -4851,20 +4812,6 @@ def command_deploy(ctx):
                       uid=cc.uid, gid=cc.gid, config=None,
                       keyring=None, reconfig=ctx.reconfig,
                       ports=daemon_ports)
-
-    elif daemon_type == CephadmDaemon.daemon_type:
-        # get current user gid and uid
-        uid = os.getuid()
-        gid = os.getgid()
-        config_js = get_parm(ctx.config_json)  # type: Dict[str, str]
-        if not daemon_ports:
-            logger.info('cephadm-exporter will use default port ({})'.format(CephadmDaemon.default_port))
-            daemon_ports = [CephadmDaemon.default_port]
-
-        CephadmDaemon.validate_config(config_js)
-
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, None,
-                      uid, gid, ports=daemon_ports)
 
     elif daemon_type == CephadmAgent.daemon_type:
         # get current user gid and uid
@@ -5902,8 +5849,6 @@ def command_rm_daemon(ctx):
         os.rename(data_dir,
                   os.path.join(backup_dir, dirname))
     else:
-        if daemon_type == CephadmDaemon.daemon_type:
-            CephadmDaemon.uninstall(ctx, ctx.fsid, daemon_type, daemon_id)
         call_throws(ctx, ['rm', '-rf', data_dir])
 
 ##################################
@@ -6168,16 +6113,6 @@ class CustomValidation(argparse.Action):
         if self.dest == 'name':
             self._check_name(values)
             setattr(namespace, self.dest, values)
-        elif self.dest == 'exporter_config':
-            cfg = get_parm(values)
-            # run the class' validate method, and convert to an argparse error
-            # if problems are found
-            try:
-                CephadmDaemon.validate_config(cfg)
-            except Error as e:
-                raise argparse.ArgumentError(self,
-                                             str(e))
-            setattr(namespace, self.dest, cfg)
 
 ##################################
 
@@ -7309,679 +7244,6 @@ def command_gather_facts(ctx: CephadmContext) -> None:
 ##################################
 
 
-class CephadmCache:
-    task_types = ['disks', 'daemons', 'host', 'http_server']
-
-    def __init__(self) -> None:
-        self.started_epoch_secs = time.time()
-        self.tasks = {
-            'daemons': 'inactive',
-            'disks': 'inactive',
-            'host': 'inactive',
-            'http_server': 'inactive',
-        }
-        self.errors: list = []
-        self.disks: dict = {}
-        self.daemons: dict = {}
-        self.host: dict = {}
-        self.lock = RLock()
-
-    @property
-    def health(self) -> dict:
-        return {
-            'started_epoch_secs': self.started_epoch_secs,
-            'tasks': self.tasks,
-            'errors': self.errors,
-        }
-
-    def to_json(self) -> dict:
-        return {
-            'health': self.health,
-            'host': self.host,
-            'daemons': self.daemons,
-            'disks': self.disks,
-        }
-
-    def update_health(self, task_type: str, task_status: str, error_msg: Optional[str] = None) -> None:
-        assert task_type in CephadmCache.task_types
-        with self.lock:
-            self.tasks[task_type] = task_status
-            if error_msg:
-                self.errors.append(error_msg)
-
-    def update_task(self, task_type: str, content: dict) -> None:
-        assert task_type in CephadmCache.task_types
-        assert isinstance(content, dict)
-        with self.lock:
-            current = getattr(self, task_type)
-            for k in content:
-                current[k] = content[k]
-
-            setattr(self, task_type, current)
-
-
-class CephadmHTTPServer(ThreadingMixIn, HTTPServer):
-    allow_reuse_address = True
-    daemon_threads = True
-    cephadm_cache: CephadmCache
-    token: str
-
-
-class CephadmDaemonHandler(BaseHTTPRequestHandler):
-    server: CephadmHTTPServer
-    api_version = 'v1'
-    valid_routes = [
-        f'/{api_version}/metadata',
-        f'/{api_version}/metadata/health',
-        f'/{api_version}/metadata/disks',
-        f'/{api_version}/metadata/daemons',
-        f'/{api_version}/metadata/host',
-    ]
-
-    class Decorators:
-        @classmethod
-        def authorize(cls, f: Any) -> Any:
-            """Implement a basic token check.
-
-            The token is installed at deployment time and must be provided to
-            ensure we only respond to callers who know our token i.e. mgr
-            """
-
-            def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-                auth = self.headers.get('Authorization', None)
-                if auth != 'Bearer ' + self.server.token:
-                    self.send_error(401)
-                    return
-                f(self, *args, **kwargs)
-
-            return wrapper
-
-    def _help_page(self) -> str:
-        return """<!DOCTYPE html>
-<html>
-<head><title>cephadm metadata exporter</title></head>
-<style>
-body {{
-  font-family: sans-serif;
-  font-size: 0.8em;
-}}
-table {{
-  border-width: 0px;
-  border-spacing: 0px;
-  margin-left:20px;
-}}
-tr:hover {{
-  background: PowderBlue;
-}}
-td,th {{
-  padding: 5px;
-}}
-</style>
-<body>
-    <h1>cephadm metadata exporter {api_version}</h1>
-    <table>
-      <thead>
-        <tr><th>Endpoint</th><th>Methods</th><th>Response</th><th>Description</th></tr>
-      </thead>
-      <tr><td><a href='{api_version}/metadata'>{api_version}/metadata</a></td><td>GET</td><td>JSON</td><td>Return <b>all</b> metadata for the host</td></tr>
-      <tr><td><a href='{api_version}/metadata/daemons'>{api_version}/metadata/daemons</a></td><td>GET</td><td>JSON</td><td>Return daemon and systemd states for ceph daemons (ls)</td></tr>
-      <tr><td><a href='{api_version}/metadata/disks'>{api_version}/metadata/disks</a></td><td>GET</td><td>JSON</td><td>show disk inventory (ceph-volume)</td></tr>
-      <tr><td><a href='{api_version}/metadata/health'>{api_version}/metadata/health</a></td><td>GET</td><td>JSON</td><td>Show current health of the exporter sub-tasks</td></tr>
-      <tr><td><a href='{api_version}/metadata/host'>{api_version}/metadata/host</a></td><td>GET</td><td>JSON</td><td>Show host metadata (gather-facts)</td></tr>
-    </table>
-</body>
-</html>""".format(api_version=CephadmDaemonHandler.api_version)
-
-    def _fetch_root(self) -> None:
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html; charset=utf-8')
-        self.end_headers()
-        self.wfile.write(self._help_page().encode('utf-8'))
-
-    @Decorators.authorize
-    def do_GET(self) -> None:
-        """Handle *all* GET requests"""
-
-        if self.path == '/':
-            # provide a html response if someone hits the root url, to document the
-            # available api endpoints
-            return self._fetch_root()
-        elif self.path in CephadmDaemonHandler.valid_routes:
-            u = self.path.split('/')[-1]
-            data = json.dumps({})
-            status_code = 200
-
-            tasks = self.server.cephadm_cache.health.get('tasks', {})
-            assert tasks
-
-            # We're using the http status code to help indicate thread health
-            # - 200 (OK): request successful
-            # - 204 (No Content): access to a cache relating to a dead thread
-            # - 206 (Partial content): one or more theads are inactive
-            # - 500 (Server Error): all threads inactive
-            if u == 'metadata':
-                data = json.dumps(self.server.cephadm_cache.to_json())
-                if all([tasks[task_name] == 'inactive' for task_name in tasks if task_name != 'http_server']):
-                    # All the subtasks are dead!
-                    status_code = 500
-                elif any([tasks[task_name] == 'inactive' for task_name in tasks if task_name != 'http_server']):
-                    status_code = 206
-
-            # Individual GETs against the a tasks endpoint will also return a 503 if the corresponding thread is inactive
-            elif u == 'daemons':
-                data = json.dumps(self.server.cephadm_cache.daemons)
-                if tasks['daemons'] == 'inactive':
-                    status_code = 204
-            elif u == 'disks':
-                data = json.dumps(self.server.cephadm_cache.disks)
-                if tasks['disks'] == 'inactive':
-                    status_code = 204
-            elif u == 'host':
-                data = json.dumps(self.server.cephadm_cache.host)
-                if tasks['host'] == 'inactive':
-                    status_code = 204
-
-            # a GET against health will always return a 200, since the op is always successful
-            elif u == 'health':
-                data = json.dumps(self.server.cephadm_cache.health)
-
-            self.send_response(status_code)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(data.encode('utf-8'))
-        else:
-            # Invalid GET URL
-            bad_request_msg = 'Valid URLs are: {}'.format(', '.join(CephadmDaemonHandler.valid_routes))
-            self.send_response(404, message=bad_request_msg)  # reason
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({'message': bad_request_msg}).encode('utf-8'))
-
-    def log_message(self, format: str, *args: Any) -> None:
-        rqst = ' '.join(str(a) for a in args)
-        logger.info(f'client:{self.address_string()} [{self.log_date_time_string()}] {rqst}')
-
-
-class CephadmDaemon():
-
-    daemon_type = 'cephadm-exporter'
-    default_port = 9443
-    key_name = 'key'
-    crt_name = 'crt'
-    token_name = 'token'
-    config_requirements = [
-        key_name,
-        crt_name,
-        token_name,
-    ]
-    loop_delay = 1
-    thread_check_interval = 5
-
-    def __init__(self, ctx: CephadmContext, fsid: str, daemon_id: Optional[str] = None, port: Optional[int] = None) -> None:
-        self.ctx = ctx
-        self.fsid = fsid
-        self.daemon_id = daemon_id
-        if not port:
-            self.port = CephadmDaemon.default_port
-        else:
-            self.port = port
-        self.workers: List[Thread] = []
-        self.http_server: CephadmHTTPServer
-        self.stop = False
-        self.cephadm_cache = CephadmCache()
-        self.errors: List[str] = []
-        self.token = read_file([os.path.join(self.daemon_path, CephadmDaemon.token_name)])
-
-    @classmethod
-    def validate_config(cls, config: dict) -> None:
-        reqs = ', '.join(CephadmDaemon.config_requirements)
-        errors = []
-
-        if not config or not all([k_name in config for k_name in CephadmDaemon.config_requirements]):
-            raise Error(f'config must contain the following fields : {reqs}')
-
-        if not all([isinstance(config[k_name], str) for k_name in CephadmDaemon.config_requirements]):
-            errors.append(f'the following fields must be strings: {reqs}')
-
-        crt = config[CephadmDaemon.crt_name]
-        key = config[CephadmDaemon.key_name]
-        token = config[CephadmDaemon.token_name]
-
-        if not crt.startswith('-----BEGIN CERTIFICATE-----') or not crt.endswith('-----END CERTIFICATE-----\n'):
-            errors.append('crt field is not a valid SSL certificate')
-        if not key.startswith('-----BEGIN PRIVATE KEY-----') or not key.endswith('-----END PRIVATE KEY-----\n'):
-            errors.append('key is not a valid SSL private key')
-        if len(token) < 8:
-            errors.append("'token' must be more than 8 characters long")
-
-        if 'port' in config:
-            try:
-                p = int(config['port'])
-                if p <= 1024:
-                    raise ValueError
-            except (TypeError, ValueError):
-                errors.append('port must be an integer > 1024')
-
-        if errors:
-            raise Error('Parameter errors : {}'.format(', '.join(errors)))
-
-    @property
-    def port_active(self) -> bool:
-        return port_in_use(self.ctx, self.port)
-
-    @property
-    def can_run(self) -> bool:
-        # if port is in use
-        if self.port_active:
-            self.errors.append(f'TCP port {self.port} already in use, unable to bind')
-        if not os.path.exists(os.path.join(self.daemon_path, CephadmDaemon.key_name)):
-            self.errors.append(f"Key file '{CephadmDaemon.key_name}' is missing from {self.daemon_path}")
-        if not os.path.exists(os.path.join(self.daemon_path, CephadmDaemon.crt_name)):
-            self.errors.append(f"Certificate file '{CephadmDaemon.crt_name}' is missing from {self.daemon_path}")
-        if self.token == 'Unknown':
-            self.errors.append(f"Authentication token '{CephadmDaemon.token_name}' is missing from {self.daemon_path}")
-        return len(self.errors) == 0
-
-    @staticmethod
-    def _unit_name(fsid: str, daemon_id: str) -> str:
-        return '{}.service'.format(get_unit_name(fsid, CephadmDaemon.daemon_type, daemon_id))
-
-    @property
-    def unit_name(self) -> str:
-        assert self.daemon_id is not None
-        return CephadmDaemon._unit_name(self.fsid, self.daemon_id)
-
-    @property
-    def daemon_path(self) -> str:
-        return os.path.join(
-            self.ctx.data_dir,
-            self.fsid,
-            f'{self.daemon_type}.{self.daemon_id}'
-        )
-
-    @property
-    def binary_path(self) -> str:
-        path = os.path.realpath(__file__)
-        assert os.path.isfile(path)
-        return path
-
-    def _handle_thread_exception(self, exc: Exception, thread_type: str) -> None:
-        e_msg = f'{exc.__class__.__name__} exception: {str(exc)}'
-        thread_info = getattr(self.cephadm_cache, thread_type)
-        errors = thread_info.get('scrape_errors', [])
-        errors.append(e_msg)
-        logger.error(e_msg)
-        logger.exception(exc)
-        self.cephadm_cache.update_task(
-            thread_type,
-            {
-                'scrape_errors': errors,
-                'data': None,
-            }
-        )
-
-    def _scrape_host_facts(self, refresh_interval: int = 10) -> None:
-        ctr = 0
-        exception_encountered = False
-
-        while True:
-
-            if self.stop or exception_encountered:
-                break
-
-            if ctr >= refresh_interval:
-                ctr = 0
-                logger.debug('executing host-facts scrape')
-                errors = []
-                s_time = time.time()
-
-                try:
-                    facts = HostFacts(self.ctx)
-                except Exception as e:
-                    self._handle_thread_exception(e, 'host')
-                    exception_encountered = True
-                else:
-                    elapsed = time.time() - s_time
-                    try:
-                        data = json.loads(facts.dump())
-                    except json.decoder.JSONDecodeError:
-                        errors.append('host-facts provided invalid JSON')
-                        logger.warning(errors[-1])
-                        data = {}
-                    self.cephadm_cache.update_task(
-                        'host',
-                        {
-                            'scrape_timestamp': s_time,
-                            'scrape_duration_secs': elapsed,
-                            'scrape_errors': errors,
-                            'data': data,
-                        }
-                    )
-                    logger.debug(f'completed host-facts scrape - {elapsed}s')
-
-            time.sleep(CephadmDaemon.loop_delay)
-            ctr += CephadmDaemon.loop_delay
-        logger.info('host-facts thread stopped')
-
-    def _scrape_ceph_volume(self, refresh_interval: int = 15) -> None:
-        # we're invoking the ceph_volume command, so we need to set the args that it
-        # expects to use
-        self.ctx.command = 'inventory --format=json'.split()
-        self.ctx.fsid = self.fsid
-
-        ctr = 0
-        exception_encountered = False
-
-        while True:
-            if self.stop or exception_encountered:
-                break
-
-            if ctr >= refresh_interval:
-                ctr = 0
-                logger.debug('executing ceph-volume scrape')
-                errors = []
-                s_time = time.time()
-                stream = io.StringIO()
-                try:
-                    with redirect_stdout(stream):
-                        command_ceph_volume(self.ctx)
-                except Exception as e:
-                    self._handle_thread_exception(e, 'disks')
-                    exception_encountered = True
-                else:
-                    elapsed = time.time() - s_time
-
-                    # if the call to ceph-volume returns junk with the
-                    # json, it won't parse
-                    stdout = stream.getvalue()
-
-                    data = []
-                    if stdout:
-                        try:
-                            data = json.loads(stdout)
-                        except json.decoder.JSONDecodeError:
-                            errors.append('ceph-volume thread provided bad json data')
-                            logger.warning(errors[-1])
-                    else:
-                        errors.append('ceph-volume did not return any data')
-                        logger.warning(errors[-1])
-
-                    self.cephadm_cache.update_task(
-                        'disks',
-                        {
-                            'scrape_timestamp': s_time,
-                            'scrape_duration_secs': elapsed,
-                            'scrape_errors': errors,
-                            'data': data,
-                        }
-                    )
-
-                    logger.debug(f'completed ceph-volume scrape - {elapsed}s')
-            time.sleep(CephadmDaemon.loop_delay)
-            ctr += CephadmDaemon.loop_delay
-
-        logger.info('ceph-volume thread stopped')
-
-    def _scrape_list_daemons(self, refresh_interval: int = 20) -> None:
-        ctr = 0
-        exception_encountered = False
-        while True:
-            if self.stop or exception_encountered:
-                break
-
-            if ctr >= refresh_interval:
-                ctr = 0
-                logger.debug('executing list-daemons scrape')
-                errors = []
-                s_time = time.time()
-
-                try:
-                    # list daemons should ideally be invoked with a fsid
-                    data = list_daemons(self.ctx)
-                except Exception as e:
-                    self._handle_thread_exception(e, 'daemons')
-                    exception_encountered = True
-                else:
-                    if not isinstance(data, list):
-                        errors.append('list-daemons did not supply a list?')
-                        logger.warning(errors[-1])
-                        data = []
-                    elapsed = time.time() - s_time
-                    self.cephadm_cache.update_task(
-                        'daemons',
-                        {
-                            'scrape_timestamp': s_time,
-                            'scrape_duration_secs': elapsed,
-                            'scrape_errors': errors,
-                            'data': data,
-                        }
-                    )
-                    logger.debug(f'completed list-daemons scrape - {elapsed}s')
-
-            time.sleep(CephadmDaemon.loop_delay)
-            ctr += CephadmDaemon.loop_delay
-        logger.info('list-daemons thread stopped')
-
-    def _create_thread(self, target: Any, name: str, refresh_interval: Optional[int] = None) -> Thread:
-        if refresh_interval:
-            t = Thread(target=target, args=(refresh_interval,))
-        else:
-            t = Thread(target=target)
-        t.daemon = True
-        t.name = name
-        self.cephadm_cache.update_health(name, 'active')
-        t.start()
-
-        start_msg = f'Started {name} thread'
-        if refresh_interval:
-            logger.info(f'{start_msg}, with a refresh interval of {refresh_interval}s')
-        else:
-            logger.info(f'{start_msg}')
-        return t
-
-    def reload(self, *args: Any) -> None:
-        """reload -HUP received
-
-        This is a placeholder function only, and serves to provide the hook that could
-        be exploited later if the exporter evolves to incorporate a config file
-        """
-        logger.info('Reload request received - ignoring, no action needed')
-
-    def shutdown(self, *args: Any) -> None:
-        logger.info('Shutdown request received')
-        self.stop = True
-        self.http_server.shutdown()
-
-    def run(self) -> None:
-        logger.info(f"cephadm exporter starting for FSID '{self.fsid}'")
-        if not self.can_run:
-            logger.error('Unable to start the exporter daemon')
-            for e in self.errors:
-                logger.error(e)
-            return
-
-        # register signal handlers for running under systemd control
-        signal.signal(signal.SIGTERM, self.shutdown)
-        signal.signal(signal.SIGINT, self.shutdown)
-        signal.signal(signal.SIGHUP, self.reload)
-        logger.debug('Signal handlers attached')
-
-        host_facts = self._create_thread(self._scrape_host_facts, 'host', 5)
-        self.workers.append(host_facts)
-
-        daemons = self._create_thread(self._scrape_list_daemons, 'daemons', 20)
-        self.workers.append(daemons)
-
-        disks = self._create_thread(self._scrape_ceph_volume, 'disks', 20)
-        self.workers.append(disks)
-
-        self.http_server = CephadmHTTPServer(('0.0.0.0', self.port), CephadmDaemonHandler)  # IPv4 only
-        self.http_server.socket = ssl.wrap_socket(self.http_server.socket,
-                                                  keyfile=os.path.join(self.daemon_path, CephadmDaemon.key_name),
-                                                  certfile=os.path.join(self.daemon_path, CephadmDaemon.crt_name),
-                                                  server_side=True)
-
-        self.http_server.cephadm_cache = self.cephadm_cache
-        self.http_server.token = self.token
-        server_thread = self._create_thread(self.http_server.serve_forever, 'http_server')
-        logger.info(f'https server listening on {self.http_server.server_address[0]}:{self.http_server.server_port}')
-
-        ctr = 0
-        while server_thread.is_alive():
-            if self.stop:
-                break
-
-            if ctr >= CephadmDaemon.thread_check_interval:
-                ctr = 0
-                for worker in self.workers:
-                    if self.cephadm_cache.tasks[worker.name] == 'inactive':
-                        continue
-                    if not worker.is_alive():
-                        logger.warning(f'{worker.name} thread not running')
-                        stop_time = datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')
-                        self.cephadm_cache.update_health(worker.name, 'inactive', f'{worker.name} stopped at {stop_time}')
-
-            time.sleep(CephadmDaemon.loop_delay)
-            ctr += CephadmDaemon.loop_delay
-
-        logger.info('Main http server thread stopped')
-
-    @property
-    def unit_run(self) -> str:
-
-        return """set -e
-{py3} {bin_path} exporter --fsid {fsid} --id {daemon_id} --port {port} &""".format(
-            py3=shutil.which('python3'),
-            bin_path=self.binary_path,
-            fsid=self.fsid,
-            daemon_id=self.daemon_id,
-            port=self.port
-        )
-
-    @property
-    def unit_file(self) -> str:
-        docker = isinstance(self.ctx.container_engine, Docker)
-        return """#generated by cephadm
-[Unit]
-Description=cephadm exporter service for cluster {fsid}
-After=network-online.target{docker_after}
-Wants=network-online.target
-{docker_requires}
-
-PartOf=ceph-{fsid}.target
-Before=ceph-{fsid}.target
-
-[Service]
-Type=forking
-ExecStart=/bin/bash {daemon_path}/unit.run
-ExecReload=/bin/kill -HUP $MAINPID
-Restart=on-failure
-RestartSec=10s
-
-[Install]
-WantedBy=ceph-{fsid}.target
-""".format(fsid=self.fsid,
-           daemon_path=self.daemon_path,
-           # if docker, we depend on docker.service
-           docker_after=' docker.service' if docker else '',
-           docker_requires='Requires=docker.service\n' if docker else '')
-
-    def deploy_daemon_unit(self, config: Optional[dict] = None) -> None:
-        """deploy a specific unit file for cephadm
-
-        The normal deploy_daemon_units doesn't apply for this
-        daemon since it's not a container, so we just create a
-        simple service definition and add it to the fsid's target
-        """
-        if not config:
-            raise Error('Attempting to deploy cephadm daemon without a config')
-        assert isinstance(config, dict)
-
-        # Create the required config files in the daemons dir, with restricted permissions
-        for filename in config:
-            with open(os.open(os.path.join(self.daemon_path, filename), os.O_CREAT | os.O_WRONLY, mode=0o600), 'w') as f:
-                f.write(config[filename])
-
-        # When __file__ is <stdin> we're being invoked over asyncssh via the orchestrator, so
-        # we pick up the file from where the orchestrator placed it - otherwise we'll
-        # copy it to the binary location for this cluster
-        if not __file__ == '<stdin>':
-            try:
-                shutil.copy(__file__,
-                            self.binary_path)
-            except shutil.SameFileError:
-                pass
-
-        with open(os.path.join(self.daemon_path, 'unit.run'), 'w') as f:
-            f.write(self.unit_run)
-
-        with open(
-                os.path.join(self.ctx.unit_dir,
-                             f'{self.unit_name}.new'),
-                'w'
-        ) as f:
-            f.write(self.unit_file)
-            os.rename(
-                os.path.join(self.ctx.unit_dir, f'{self.unit_name}.new'),
-                os.path.join(self.ctx.unit_dir, self.unit_name))
-
-        call_throws(self.ctx, ['systemctl', 'daemon-reload'])
-        call(self.ctx, ['systemctl', 'stop', self.unit_name],
-             verbosity=CallVerbosity.DEBUG)
-        call(self.ctx, ['systemctl', 'reset-failed', self.unit_name],
-             verbosity=CallVerbosity.DEBUG)
-        call_throws(self.ctx, ['systemctl', 'enable', '--now', self.unit_name])
-
-    @classmethod
-    def uninstall(cls, ctx: CephadmContext, fsid: str, daemon_type: str, daemon_id: str) -> None:
-        unit_name = CephadmDaemon._unit_name(fsid, daemon_id)
-        unit_path = os.path.join(ctx.unit_dir, unit_name)
-        unit_run = os.path.join(ctx.data_dir, fsid, f'{daemon_type}.{daemon_id}', 'unit.run')
-        port = None
-        try:
-            with open(unit_run, 'r') as u:
-                contents = u.read().strip(' &')
-        except OSError:
-            logger.warning(f'Unable to access the unit.run file @ {unit_run}')
-            return
-
-        port = None
-        for line in contents.split('\n'):
-            if '--port ' in line:
-                try:
-                    port = int(line.split('--port ')[-1])
-                except ValueError:
-                    logger.warning('Unexpected format in unit.run file: port is not numeric')
-                    logger.warning('Unable to remove the systemd file and close the port')
-                    return
-                break
-
-        if port:
-            fw = Firewalld(ctx)
-            try:
-                fw.close_ports([port])
-            except RuntimeError:
-                logger.error(f'Unable to close port {port}')
-
-        stdout, stderr, rc = call(ctx, ['rm', '-f', unit_path])
-        if rc:
-            logger.error(f'Unable to remove the systemd file @ {unit_path}')
-        else:
-            logger.info(f'removed systemd unit file @ {unit_path}')
-            stdout, stderr, rc = call(ctx, ['systemctl', 'daemon-reload'])
-
-
-def command_exporter(ctx: CephadmContext) -> None:
-    exporter = CephadmDaemon(ctx, ctx.fsid, daemon_id=ctx.id, port=ctx.port)
-
-    if ctx.fsid not in os.listdir(ctx.data_dir):
-        raise Error(f"cluster fsid '{ctx.fsid}' not found in '{ctx.data_dir}'")
-
-    exporter.run()
-
-##################################
-
-
 def systemd_target_state(ctx: CephadmContext, target_name: str, subsystem: str = 'ceph') -> bool:
     # TODO: UNITTEST
     return os.path.exists(
@@ -8511,14 +7773,6 @@ def _get_parser():
         default=CONTAINER_INIT,
         help=argparse.SUPPRESS)
     parser_bootstrap.add_argument(
-        '--with-exporter',
-        action='store_true',
-        help='Automatically deploy cephadm metadata exporter to each node')
-    parser_bootstrap.add_argument(
-        '--exporter-config',
-        action=CustomValidation,
-        help=f'Exporter configuration information in JSON format (providing: {", ".join(CephadmDaemon.config_requirements)}, port information)')
-    parser_bootstrap.add_argument(
         '--cluster-network',
         help='subnet to use for cluster replication, recovery and heartbeats (in CIDR notation network/mask)')
     parser_bootstrap.add_argument(
@@ -8662,25 +7916,6 @@ def _get_parser():
     parser_gather_facts = subparsers.add_parser(
         'gather-facts', help='gather and return host related information (JSON format)')
     parser_gather_facts.set_defaults(func=command_gather_facts)
-
-    parser_exporter = subparsers.add_parser(
-        'exporter', help='Start cephadm in exporter mode (web service), providing host/daemon/disk metadata')
-    parser_exporter.add_argument(
-        '--fsid',
-        required=True,
-        type=str,
-        help='fsid of the cephadm exporter to run against')
-    parser_exporter.add_argument(
-        '--port',
-        type=int,
-        default=int(CephadmDaemon.default_port),
-        help='port number for the cephadm exporter service')
-    parser_exporter.add_argument(
-        '--id',
-        type=str,
-        default=get_hostname().split('.')[0],
-        help='daemon identifer for the exporter')
-    parser_exporter.set_defaults(func=command_exporter)
 
     parser_maintenance = subparsers.add_parser(
         'host-maintenance', help='Manage the maintenance state of a host')
