@@ -684,9 +684,10 @@ skip_upmap:
 
 	for (unsigned i=0; i<osds.size(); i++) {
 	  //cout << " rep " << i << " on " << osds[i] << std::endl;
-	  count[osds[i]]++;
+          if (osds[i] != CRUSH_ITEM_NONE)
+            count[osds[i]]++;
 	}
-	if (osds.size())
+	if (osds.size() && osds[0] != CRUSH_ITEM_NONE)
 	  first_count[osds[0]]++;
 	if (primary >= 0)
 	  primary_count[primary]++;
