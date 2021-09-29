@@ -145,6 +145,7 @@ public:
 
 private:
   seastar::future<> _write_superblock();
+  seastar::future<> _write_key_meta();
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
   seastar::future<> _send_boot();
