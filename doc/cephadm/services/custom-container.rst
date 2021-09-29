@@ -11,32 +11,33 @@ A corresponding :ref:`orchestrator-cli-service-spec` must look like:
     service_id: foo
     placement:
         ...
-    image: docker.io/library/foo:latest
-    entrypoint: /usr/bin/foo
-    uid: 1000
-    gid: 1000
-    args:
+    spec:
+      image: docker.io/library/foo:latest
+      entrypoint: /usr/bin/foo
+      uid: 1000
+      gid: 1000
+      args:
         - "--net=host"
         - "--cpus=2"
-    ports:
+      ports:
         - 8080
         - 8443
-    envs:
+      envs:
         - SECRET=mypassword
         - PORT=8080
         - PUID=1000
         - PGID=1000
-    volume_mounts:
+      volume_mounts:
         CONFIG_DIR: /etc/foo
-    bind_mounts:
-      - ['type=bind', 'source=lib/modules', 'destination=/lib/modules', 'ro=true']
-    dirs:
-      - CONFIG_DIR
-    files:
-      CONFIG_DIR/foo.conf:
-        - refresh=true
-        - username=xyz
-        - "port: 1234"
+      bind_mounts:
+        - ['type=bind', 'source=lib/modules', 'destination=/lib/modules', 'ro=true']
+      dirs:
+        - CONFIG_DIR
+      files:
+        CONFIG_DIR/foo.conf:
+          - refresh=true
+          - username=xyz
+          - "port: 1234"
 
 where the properties of a service specification are:
 
