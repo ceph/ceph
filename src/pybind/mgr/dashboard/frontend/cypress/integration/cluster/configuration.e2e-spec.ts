@@ -31,6 +31,7 @@ describe('Configuration page', () => {
 
     beforeEach(() => {
       configuration.clearTableSearchInput();
+      configuration.getTableCount('found').as('configFound');
     });
 
     after(() => {
@@ -49,14 +50,29 @@ describe('Configuration page', () => {
       );
     });
 
-    it('should show only modified configurations', () => {
-      configuration.filterTable('Modified', 'yes');
-      configuration.getTableCount('found').should('eq', 2);
-    });
-
-    it('should hide all modified configurations', () => {
+    it('should verify modified filter is applied properly', () => {
       configuration.filterTable('Modified', 'no');
-      configuration.getTableCount('found').should('gt', 1);
+      configuration.getTableCount('found').as('unmodifiedConfigs');
+
+      // Modified filter value to yes
+      configuration.filterTable('Modified', 'yes');
+      configuration.getTableCount('found').as('modifiedConfigs');
+
+      cy.get('@configFound').then((configFound) => {
+        cy.get('@unmodifiedConfigs').then((unmodifiedConfigs) => {
+          const modifiedConfigs = Number(configFound) - Number(unmodifiedConfigs);
+          configuration.getTableCount('found').should('eq', modifiedConfigs);
+        });
+      });
+
+      // Modified filter value to no
+      configuration.filterTable('Modified', 'no');
+      cy.get('@configFound').then((configFound) => {
+        cy.get('@modifiedConfigs').then((modifiedConfigs) => {
+          const unmodifiedConfigs = Number(configFound) - Number(modifiedConfigs);
+          configuration.getTableCount('found').should('eq', unmodifiedConfigs);
+        });
+      });
     });
   });
 });
