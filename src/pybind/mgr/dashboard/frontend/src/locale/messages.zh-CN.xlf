@@ -274,7 +274,7 @@
       </trans-unit>
       <trans-unit id="17137bac47e1e020d139256ded0006a671966e73" datatype="html">
         <source>Physical Disks</source>
-        <target>Physical Disks</target>
+        <target>物理磁盘</target>
       </trans-unit>
       <trans-unit id="d556ab48a65722b400e497f61737f553ee0f89e2" datatype="html">
         <source>Cluster Logs</source>
