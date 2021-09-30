@@ -941,6 +941,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     }
     err = 0;
     pending_map.strategy = strategy;
+    pending_map.last_changed = ceph_clock_now();
     propose = true;
   } else if (prefix == "mon add disallowed_leader") {
     if (!mon.get_quorum_mon_features().contains_all(
@@ -976,6 +977,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
     pending_map.disallowed_leaders.insert(name);
+    pending_map.last_changed = ceph_clock_now();
     err = 0;
     propose = true;
   } else if (prefix == "mon rm disallowed_leader") {
@@ -1007,6 +1009,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
     pending_map.disallowed_leaders.erase(name);
+    pending_map.last_changed = ceph_clock_now();
     err = 0;
     propose = true;
   } else if (prefix == "mon set_location") {
