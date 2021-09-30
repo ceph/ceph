@@ -302,6 +302,42 @@ class Module(MgrModule):
             'active_changed': sorted(list(active)),
         }
 
+    def get_mempool(self, mode: str = 'separated') -> Dict[str, dict]:
+        # Initialize result dict
+        result: Dict[str, dict] = defaultdict(lambda: defaultdict(int))
+
+        # Get list of osd ids from the metadata
+        osd_metadata = self.get('osd_metadata')
+
+        # Grab output from the "osd.x dump_mempools" command
+        for osd_id in osd_metadata:
+            cmd_dict = {
+                'prefix': 'dump_mempools',
+                'id': str(osd_id),
+                'format': 'json'
+            }
+            r, outb, outs = self.osd_command(cmd_dict)
+            if r != 0:
+                self.log.debug("Invalid command dictionary.")
+                continue
+            else:
+                try:
+                    # This is where the mempool will land.
+                    dump = json.loads(outb)
+                    if mode == 'separated':
+                        result["osd." + str(osd_id)] = dump['mempool']['by_pool']
+                    elif mode == 'aggregated':
+                        for mem_type in dump['mempool']['by_pool']:
+                            result[mem_type]['bytes'] += dump['mempool']['by_pool'][mem_type]['bytes']
+                            result[mem_type]['items'] += dump['mempool']['by_pool'][mem_type]['items']
+                    else:
+                        self.log.debug("Incorrect mode specified in get_mempool")
+                except (json.decoder.JSONDecodeError, KeyError) as e:
+                    self.log.debug("Error caught: {}".format(e))
+                    return {}
+
+        return result
+
     def get_stat_sum_per_pool(self) -> List[dict]:
         # Initialize 'result' list
         result: List[dict] = []
@@ -894,6 +930,9 @@ class Module(MgrModule):
             report['stat_sum_per_pool'] = self.get_stat_sum_per_pool()
             report['io_rate'] = self.get_io_rate()
             report['osd_perf_histograms'] = self.get_osd_histograms()
+
+            report['mempool_aggregated'] = self.get_mempool('aggregated')
+            report['mempool_separated'] = self.get_mempool('separated')
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
