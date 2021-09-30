@@ -174,7 +174,7 @@
       </trans-unit>
       <trans-unit id="3859bdca1ae89e611e214c205fccf0147b4d0f6b" datatype="html">
         <source>The value is not a valid IP address.</source>
-        <target>The value is not a valid IP address.</target>
+        <target>不是有效的IP地址。</target>
       </trans-unit>
       <trans-unit id="4025065730478477779" datatype="html">
         <source>The feature is disabled because the selected host is not managed by Orchestrator.</source>
