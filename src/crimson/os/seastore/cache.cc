@@ -975,12 +975,15 @@ record_t Cache::prepare_record(Transaction &t)
     }
 
     assert(bl.length() == i->get_length());
+    paddr_t reserve_ool_addr = i->get_reserve_ool_addr() == P_ADDR_NULL ?
+      P_ADDR_NULL : i->get_reserve_ool_addr();
     record.extents.push_back(extent_t{
 	i->get_type(),
 	i->is_logical()
 	? i->cast<LogicalCachedExtent>()->get_laddr()
 	: L_ADDR_NULL,
-	std::move(bl)
+	std::move(bl),
+	reserve_ool_addr  // indicate where this extent is locaed in RBM
       });
   }
 

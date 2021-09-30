@@ -154,6 +154,9 @@ public:
     Transaction& t,
     std::list<LogicalCachedExtentRef>&) = 0;
 
+  virtual alloc_paddr_iertr::future<> reserve_space(
+    Transaction& t,
+    LogicalCachedExtentRef extent) = 0;
   using stop_ertr = ExtentOolWriter::stop_ertr;
   virtual stop_ertr::future<> stop() = 0;
   virtual ~ExtentAllocator() {};
@@ -285,6 +288,13 @@ public:
       return writer.stop();
     });
   }
+
+  alloc_paddr_iertr::future<> reserve_space(
+    Transaction& t,
+    LogicalCachedExtentRef extent) final {
+    ceph_assert("no support");
+    return alloc_paddr_iertr::now();
+  }
 private:
   SegmentProvider& segment_provider;
   SegmentManager& segment_manager;
@@ -378,6 +388,11 @@ public:
       return writer.stop();
     });
   }
+
+  alloc_paddr_iertr::future<> reserve_space(
+    Transaction& t,
+    LogicalCachedExtentRef extent) final;
+
 private:
   RandomBlockManager& rbm;
   std::vector<Writer> writers;
@@ -473,6 +488,21 @@ public:
         auto allocator = p.first;
         auto& extents = p.second;
         return allocator->alloc_ool_extents_paddr(t, extents);
+      }).si_then([this, &t]() {
+	t.for_each_fresh_block([&](auto &i) {
+	  if (device_type_t::RANDOM_BLOCK == i->backend_type &&
+	      i->is_logical() &&
+	      i->is_inline()) {
+	    auto& allocator_ptr = get_allocator(
+	      device_type_t::RANDOM_BLOCK, i->hint
+	    );
+	    CachedExtentRef extent = i;
+	    return allocator_ptr->reserve_space(
+	      t,
+	      extent->cast<LogicalCachedExtent>());
+	  }
+	  return alloc_paddr_iertr::now();
+	});
       });
     });
   }

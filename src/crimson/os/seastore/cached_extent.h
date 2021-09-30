@@ -335,6 +335,13 @@ public:
   bool is_inline() const {
     return poffset.is_relative();
   }
+
+  void set_reserve_ool_addr(paddr_t addr) {
+    reserve_ool_addr = addr;
+  }
+  paddr_t get_reserve_ool_addr() {
+    return reserve_ool_addr;
+  }
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -408,6 +415,7 @@ private:
   }
 
   read_set_item_t<Transaction>::list transactions;
+  paddr_t reserve_ool_addr; // reserved location in RBM
 
 protected:
   CachedExtent(CachedExtent &&other) = delete;

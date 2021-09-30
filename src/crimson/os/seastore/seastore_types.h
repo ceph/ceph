@@ -1047,6 +1047,7 @@ struct extent_t {
   extent_types_t type;  ///< type of extent
   laddr_t addr;         ///< laddr of extent (L_ADDR_NULL for non-logical)
   ceph::bufferlist bl;  ///< payload, bl.length() == length, aligned
+  paddr_t reserve_ool_paddr = P_ADDR_NULL;
 };
 
 using extent_version_t = uint32_t;
@@ -1428,16 +1429,19 @@ struct extent_info_t {
   extent_types_t type = extent_types_t::NONE;
   laddr_t addr = L_ADDR_NULL;
   extent_len_t len = 0;
+  paddr_t reserve_ool_paddr = P_ADDR_NULL;
 
   extent_info_t() = default;
   extent_info_t(const extent_t &et)
-    : type(et.type), addr(et.addr), len(et.bl.length()) {}
+    : type(et.type), addr(et.addr), len(et.bl.length()),
+      reserve_ool_paddr(et.reserve_ool_paddr) {}
 
   DENC(extent_info_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.type, p);
     denc(v.addr, p);
     denc(v.len, p);
+    denc(v.reserve_ool_paddr, p);
     DENC_FINISH(p);
   }
 };

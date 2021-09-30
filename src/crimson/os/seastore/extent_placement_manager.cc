@@ -424,4 +424,23 @@ void RBAllocator::Writer::add_extent_to_write(
   record.add_extent(extent);
 }
 
+RBAllocator::alloc_paddr_iertr::future<>
+RBAllocator::reserve_space(
+  Transaction& t,
+  LogicalCachedExtentRef extent)
+{
+  auto record = ool_record_t(rbm.get_block_size());
+  auto wouldbe_length =
+    record.get_wouldbe_encoded_record_length(extent);
+  return rbm.alloc_extent(t, wouldbe_length
+  ).handle_error(
+    alloc_paddr_iertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error when writing record"}
+  ).safe_then([&extent](auto paddr) {
+    extent->set_reserve_ool_addr(paddr);
+    return alloc_paddr_iertr::now();
+  });
+}
+
 }
