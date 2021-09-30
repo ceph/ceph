@@ -1374,52 +1374,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         return image
 
-    def _schedulable_hosts(self) -> List[HostSpec]:
-        """
-        Returns all usable hosts that went through _refresh_host_daemons().
-
-        This mitigates a potential race, where new host was added *after*
-        ``_refresh_host_daemons()`` was called, but *before*
-        ``_apply_all_specs()`` was called. thus we end up with a hosts
-        where daemons might be running, but we have not yet detected them.
-        """
-        return [
-            h for h in self.inventory.all_specs()
-            if (
-                self.cache.host_had_daemon_refresh(h.hostname)
-                and '_no_schedule' not in h.labels
-            )
-        ]
-
-    def _non_draining_hosts(self) -> List[HostSpec]:
-        """
-        Returns all hosts that do not have _no_schedule label.
-
-        Useful for the agent who needs this specific list rather than the
-        _schedulable_hosts since the agent needs to be deployed on hosts with
-        no daemon refresh
-        """
-        return [
-            h for h in self.inventory.all_specs() if '_no_schedule' not in h.labels
-        ]
-
-    def _unreachable_hosts(self) -> List[HostSpec]:
-        """
-        Return all hosts that are offline or in maintenance mode.
-
-        The idea is we should not touch the daemons on these hosts (since
-        in theory the hosts are inaccessible so we CAN'T touch them) but
-        we still want to count daemons that exist on these hosts toward the
-        placement so daemons on these hosts aren't just moved elsewhere
-        """
-        return [
-            h for h in self.inventory.all_specs()
-            if (
-                h.status.lower() in ['maintenance', 'offline']
-                or h.hostname in self.offline_hosts
-            )
-        ]
-
     def _check_valid_addr(self, host: str, addr: str) -> str:
         # make sure hostname is resolvable before trying to make a connection
         try:
@@ -1823,7 +1777,7 @@ Then run the following:
                 continue
             sm[nm] = orchestrator.ServiceDescription(
                 spec=spec,
-                size=spec.placement.get_target_count(self._schedulable_hosts()),
+                size=spec.placement.get_target_count(self.cache.get_schedulable_hosts()),
                 running=0,
                 events=self.events.get_for_service(spec.service_name()),
                 created=self.spec_store.spec_created[nm],
@@ -2400,8 +2354,8 @@ Then run the following:
         svc = self.cephadm_services[spec.service_type]
         ha = HostAssignment(
             spec=spec,
-            hosts=self._schedulable_hosts(),
-            unreachable_hosts=self._unreachable_hosts(),
+            hosts=self.cache.get_schedulable_hosts(),
+            unreachable_hosts=self.cache.get_unreachable_hosts(),
             networks=self.cache.networks,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
             allow_colo=svc.allow_colo(),
@@ -2477,7 +2431,7 @@ Then run the following:
         HostAssignment(
             spec=spec,
             hosts=self.inventory.all_specs(),  # All hosts, even those without daemon refresh
-            unreachable_hosts=self._unreachable_hosts(),
+            unreachable_hosts=self.cache.get_unreachable_hosts(),
             networks=self.cache.networks,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
             allow_colo=self.cephadm_services[spec.service_type].allow_colo(),

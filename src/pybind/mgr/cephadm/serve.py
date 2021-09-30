@@ -209,8 +209,8 @@ class CephadmServe:
                 pspec = PlacementSpec.from_string(self.mgr.manage_etc_ceph_ceph_conf_hosts)
                 ha = HostAssignment(
                     spec=ServiceSpec('mon', placement=pspec),
-                    hosts=self.mgr._schedulable_hosts(),
-                    unreachable_hosts=self.mgr._unreachable_hosts(),
+                    hosts=self.mgr.cache.get_schedulable_hosts(),
+                    unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
                     daemons=[],
                     networks=self.mgr.cache.networks,
                 )
@@ -241,8 +241,8 @@ class CephadmServe:
                     keyring.encode('utf-8')).digest())
                 ha = HostAssignment(
                     spec=ServiceSpec('mon', placement=ks.placement),
-                    hosts=self.mgr._schedulable_hosts(),
-                    unreachable_hosts=self.mgr._unreachable_hosts(),
+                    hosts=self.mgr.cache.get_schedulable_hosts(),
+                    unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
                     daemons=[],
                     networks=self.mgr.cache.networks,
                 )
@@ -295,7 +295,7 @@ class CephadmServe:
                 if r is not None:
                     bad_hosts.append(r)
 
-            if not self.mgr.use_agent or host not in [h.hostname for h in self.mgr._non_draining_hosts()]:
+            if not self.mgr.use_agent or host not in [h.hostname for h in self.mgr.cache.get_non_draining_hosts()]:
                 if self.mgr.cache.host_needs_daemon_refresh(host):
                     self.log.debug('refreshing %s daemons' % host)
                     r = self._refresh_host_daemons(host)
@@ -717,8 +717,9 @@ class CephadmServe:
             rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
         ha = HostAssignment(
             spec=spec,
-            hosts=self.mgr._non_draining_hosts() if spec.service_name() == 'agent' else self.mgr._schedulable_hosts(),
-            unreachable_hosts=self.mgr._unreachable_hosts(),
+            hosts=self.mgr.cache.get_non_draining_hosts() if spec.service_name(
+            ) == 'agent' else self.mgr.cache.get_schedulable_hosts(),
+            unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
             daemons=daemons,
             networks=self.mgr.cache.networks,
             filter_new_host=(
@@ -909,7 +910,7 @@ class CephadmServe:
             if self.mgr.use_agent:
                 # can only send ack to agents if we know for sure port they bound to
                 hosts_altered = set([h for h in hosts_altered if (h in self.mgr.cache.agent_ports and h in [
-                                    h2.hostname for h2 in self.mgr._non_draining_hosts()])])
+                                    h2.hostname for h2 in self.mgr.cache.get_non_draining_hosts()])])
                 self.mgr.agent_helpers._request_agent_acks(hosts_altered, increment=True)
 
         if r is None:
