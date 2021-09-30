@@ -1042,11 +1042,88 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     }
     // TODO: validate location against any existing stretch config
     pending_map.mon_info[name].crush_loc = loc;
+    pending_map.last_changed = ceph_clock_now();
+    err = 0;
+    propose = true;
+  } else if (prefix == "mon set_new_tiebreaker") {
+    if (!pending_map.stretch_mode_enabled) {
+      err = -EINVAL;
+      ss << "Stretch mode is not enabled, so there is no tiebreaker";
+      goto reply;
+    }
+    string name;
+    if (!cmd_getval(cmdmap, "name", name)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    bool sure = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+
+    const auto &existing_tiebreaker_info_i = pending_map.mon_info.find(pending_map.tiebreaker_mon);
+    const auto &new_tiebreaker_info_i = pending_map.mon_info.find(name);
+    if (new_tiebreaker_info_i == pending_map.mon_info.end()) {
+      ss << "mon." << name << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    const auto& new_info = new_tiebreaker_info_i->second;
+    if (new_info.crush_loc.empty()) {
+      ss << "mon." << name << " does not have a location specified";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    if (!mon.osdmon()->is_readable()) {
+      dout(10) << __func__
+	       << ": waiting for osdmon readable to inspect crush barrier"
+	       << dendl;
+      mon.osdmon()->wait_for_readable(op, new Monitor::C_RetryMessage(&mon, op));
+      return false;
+    }
+    int32_t stretch_divider_id = mon.osdmon()->osdmap.stretch_mode_bucket;
+    string stretch_bucket_divider = mon.osdmon()->osdmap.crush->
+      get_type_name(stretch_divider_id);
+
+    const auto& new_loc_i = new_info.crush_loc.find(stretch_bucket_divider);
+    if (new_loc_i == new_info.crush_loc.end()) {
+      ss << "mon." << name << " has a specificed location, but not a "
+	 << stretch_bucket_divider << ", which is the stretch divider";
+      err = -EINVAL;
+      goto reply;
+    }
+    const string& new_loc = new_loc_i->second;
+    set<string> matching_mons;
+    for (const auto& mii : pending_map.mon_info) {
+      const auto& other_loc_i = mii.second.crush_loc.find(stretch_bucket_divider);
+      if (mii.first == name) {
+	continue;
+      }
+      if (other_loc_i == mii.second.crush_loc.end()) { // huh
+	continue;
+      }
+      const string& other_loc = other_loc_i->second;
+      if (other_loc == new_loc &&
+	  mii.first != existing_tiebreaker_info_i->first) {
+	matching_mons.insert(mii.first);
+      }
+    }
+    if (!matching_mons.empty()) {
+      ss << "mon." << name << " has location " << new_loc_i->second
+	 << ", which matches mons " << matching_mons << " on the "
+	 << stretch_bucket_divider << " dividing bucket for stretch mode. "
+	"Pass --yes-i-really-mean-it if you're sure you want to do this."
+	"(You really don't.)";
+      err = -EINVAL;
+      goto reply;
+    }
+    pending_map.tiebreaker_mon = name;
+    pending_map.disallowed_leaders.insert(name);
+    pending_map.last_changed = ceph_clock_now();
     err = 0;
     propose = true;
   } else if (prefix == "mon enable_stretch_mode") {
     if (!mon.osdmon()->is_writeable()) {
-      dout(1) << __func__
+      dout(10) << __func__
 	      << ":  waiting for osdmon writeable for stretch mode" << dendl;
       mon.osdmon()->wait_for_writeable(op, new Monitor::C_RetryMessage(&mon, op));
       return false;
