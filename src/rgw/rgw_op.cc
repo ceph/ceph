@@ -3923,6 +3923,10 @@ void RGWPutObj::execute(optional_yield y)
     upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(),
 					 multipart_upload_id);
     op_ret = upload->get_info(this, s->yield, s->obj_ctx, &pdest_placement);
+
+    parent_op_trace = tracing::rgw::tracer.add_span(name(), upload->get_trace());
+    parent_op_trace->SetTag(tracing::rgw::UPLOAD_ID, upload->get_upload_id());
+
     if (op_ret < 0) {
       if (op_ret != -ENOENT) {
         ldpp_dout(this, 0) << "ERROR: get_multipart_info returned " << op_ret << ": " << cpp_strerror(-op_ret) << dendl;
@@ -3967,7 +3971,6 @@ void RGWPutObj::execute(optional_yield y)
 		      << dendl;
     return;
   }
-
   if ((! copy_source.empty()) && !copy_source_range) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
     op_ret = store->get_bucket(nullptr, copy_source_bucket_info, &bucket);
@@ -3992,7 +3995,6 @@ void RGWPutObj::execute(optional_yield y)
   } else {
     lst = copy_source_range_lst;
   }
-
   fst = copy_source_range_fst;
 
   // no filters by default
@@ -6114,7 +6116,7 @@ void RGWInitMultipart::pre_exec()
 
 void RGWInitMultipart::execute(optional_yield y)
 {
-  bufferlist aclbl;
+  bufferlist aclbl, tracebl;
   rgw::sal::Attrs attrs;
 
   if (get_params(y) < 0)
@@ -6123,8 +6125,12 @@ void RGWInitMultipart::execute(optional_yield y)
   if (rgw::sal::Object::empty(s->object.get()))
     return;
 
+  tracing::encode(parent_op_trace, tracebl);
+  attrs[RGW_ATTR_TRACE] = tracebl;
+
   policy.encode(aclbl);
   attrs[RGW_ATTR_ACL] = aclbl;
+
 
   populate_with_generic_attrs(s, attrs);
 
@@ -6306,7 +6312,12 @@ void RGWCompleteMultipart::execute(optional_yield y)
 		     << " ret=" << op_ret << dendl;
     return;
   }
+
+  jspan_context trace_ctx;
+  extract_span_context(meta_obj->get_attrs(), trace_ctx);
+  parent_op_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
   
+
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(meta_obj.get(),
 				s, rgw::notify::ObjectCreatedCompleteMultipartUpload, &s->object->get_name());

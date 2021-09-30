@@ -52,6 +52,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 #include "rgw_public_access.h"
 #include "rgw_bucket_encryption.h"
+#include "rgw_tracer.h"
 
 #include "services/svc_sys_obj.h"
 #include "services/svc_tier_rados.h"
@@ -181,6 +182,7 @@ protected:
   RGWQuotaInfo user_quota;
   int op_ret;
   int do_aws4_auth_completion();
+  jspan parent_op_trace;
 
   virtual int init_quota();
 
@@ -1838,6 +1840,7 @@ public:
   RGWInitMultipart() {}
 
   void init(rgw::sal::Store* store, struct req_state *s, RGWHandler *h) override {
+    parent_op_trace = tracing::rgw::tracer.start_trace(name());
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }

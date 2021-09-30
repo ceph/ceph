@@ -17,7 +17,7 @@
 
 #include "rgw_user.h"
 #include "rgw_notify_event_type.h"
-
+#include "common/tracer.h"
 class RGWGetDataCB;
 struct RGWObjState;
 class RGWAccessListFilter;
@@ -789,7 +789,6 @@ class Object {
 class MultipartPart {
 protected:
   std::string oid;
-
 public:
   MultipartPart() = default;
   virtual ~MultipartPart() = default;
@@ -804,7 +803,7 @@ class MultipartUpload {
 protected:
   Bucket* bucket;
   std::map<uint32_t, std::unique_ptr<MultipartPart>> parts;
-
+  jspan_context trace_ctx;
 public:
   MultipartUpload(Bucket* _bucket) : bucket(_bucket) {}
   virtual ~MultipartUpload() = default;
@@ -815,6 +814,8 @@ public:
   virtual ceph::real_time& get_mtime() = 0;
 
   std::map<uint32_t, std::unique_ptr<MultipartPart>>& get_parts() { return parts; }
+
+  const jspan_context& get_trace() { return trace_ctx; }
 
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() = 0;
 

@@ -3,6 +3,8 @@
 #pragma once
 #include "common/tracer.h"
 
+#include "rgw_common.h"
+
 namespace tracing {
 namespace rgw {
 
@@ -21,6 +23,16 @@ extern thread_local tracing::Tracer tracer;
 extern tracing::Tracer tracer;
 #endif
 
+
 } // namespace rgw
 } // namespace tracing
 
+static inline void extract_span_context(rgw::sal::Attrs& attr, jspan_context& span_ctx) {
+  auto trace_iter = attr.find(RGW_ATTR_TRACE);
+  if (trace_iter != attr.end()) {
+    try {
+      auto trace_bl_iter = trace_iter->second.cbegin();
+      tracing::decode(trace_bl_iter, span_ctx);
+    } catch (buffer::error& err) {}
+  }
+}
