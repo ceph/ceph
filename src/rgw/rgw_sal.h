@@ -789,6 +789,7 @@ class Object {
 class MultipartPart {
 protected:
   std::string oid;
+
 public:
   MultipartPart() = default;
   virtual ~MultipartPart() = default;

@@ -3971,6 +3971,7 @@ void RGWPutObj::execute(optional_yield y)
 		      << dendl;
     return;
   }
+
   if ((! copy_source.empty()) && !copy_source_range) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
     op_ret = store->get_bucket(nullptr, copy_source_bucket_info, &bucket);
@@ -3995,6 +3996,7 @@ void RGWPutObj::execute(optional_yield y)
   } else {
     lst = copy_source_range_lst;
   }
+
   fst = copy_source_range_fst;
 
   // no filters by default
@@ -6131,7 +6133,6 @@ void RGWInitMultipart::execute(optional_yield y)
   policy.encode(aclbl);
   attrs[RGW_ATTR_ACL] = aclbl;
 
-
   populate_with_generic_attrs(s, attrs);
 
   /* select encryption mode */
@@ -6316,7 +6317,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
   jspan_context trace_ctx;
   extract_span_context(meta_obj->get_attrs(), trace_ctx);
   parent_op_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
-  
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(meta_obj.get(),

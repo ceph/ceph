@@ -23,7 +23,6 @@ extern thread_local tracing::Tracer tracer;
 extern tracing::Tracer tracer;
 #endif
 
-
 } // namespace rgw
 } // namespace tracing
 

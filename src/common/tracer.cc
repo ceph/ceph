@@ -123,6 +123,4 @@ void decode(bufferlist::const_iterator& bl, jspan_context& span_ctx) {
 
 } // namespace tracing
 
-
-
 #endif // HAVE_JAEGER
