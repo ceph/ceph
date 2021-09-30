@@ -92,12 +92,12 @@ class NFSCluster:
     def create_empty_rados_obj(self, cluster_id: str) -> None:
         common_conf = self._get_common_conf_obj_name(cluster_id)
         NFSRados(self.mgr, cluster_id).write_obj('', self._get_common_conf_obj_name(cluster_id))
-        log.info(f"Created empty object:{common_conf}")
+        log.info("Created empty object:%s", common_conf)
 
     def delete_config_obj(self, cluster_id: str) -> None:
         NFSRados(self.mgr, cluster_id).remove_all_obj()
-        log.info(f"Deleted {self._get_common_conf_obj_name(cluster_id)} object and all objects in "
-                 f"{cluster_id}")
+        log.info("Deleted %s object and all objects in %s",
+                 self._get_common_conf_obj_name(cluster_id), cluster_id)
 
     def create_nfs_cluster(
             self,
