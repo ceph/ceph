@@ -39,6 +39,7 @@
 
 #include "crimson/admin/osd_admin.h"
 #include "crimson/admin/pg_commands.h"
+#include "crimson/common/buffer_io.h"
 #include "crimson/common/exception.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
@@ -170,7 +171,9 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
   }).then([cluster_fsid, this] {
     return when_all_succeed(
       store.write_meta("ceph_fsid", cluster_fsid.to_string()),
-      store.write_meta("whoami", std::to_string(whoami)));
+      store.write_meta("whoami", std::to_string(whoami)),
+      _write_key_meta(),
+      store.write_meta("ready", "ready"));
   }).then_unpack([cluster_fsid, this] {
     fmt::print("created object store {} for osd.{} fsid {}\n",
                local_conf().get_val<std::string>("osd_data"),
@@ -213,6 +216,33 @@ seastar::future<> OSD::_write_superblock()
       });
     }
   });
+}
+
+// this `to_string` sits in the `crimson::osd` namespace, so we don't brake
+// the language rule on not overloading in `std::`.
+static std::string to_string(const seastar::temporary_buffer<char>& temp_buf)
+{
+  return {temp_buf.get(), temp_buf.size()};
+}
+
+seastar::future<> OSD::_write_key_meta()
+{
+
+  if (auto key = local_conf().get_val<std::string>("key"); !std::empty(key)) {
+    return store.write_meta("osd_key", key);
+  } else if (auto keyfile = local_conf().get_val<std::string>("keyfile");
+             !std::empty(keyfile)) {
+    return read_file(keyfile).then([this] (const auto& temp_buf) {
+      // it's on a truly cold path, so don't worry about memcpy.
+      return store.write_meta("osd_key", to_string(temp_buf));
+    }).handle_exception([keyfile] (auto ep) {
+      logger().error("_write_key_meta: failed to handle keyfile {}: {}",
+                     keyfile, ep);
+      ceph_abort();
+    });
+  } else {
+    return seastar::now();
+  }
 }
 
 namespace {
