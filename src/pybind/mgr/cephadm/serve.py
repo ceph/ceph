@@ -496,6 +496,7 @@ class CephadmServe:
             self.mgr.remove_health_warning(k)
         if self.mgr.warn_on_stray_hosts or self.mgr.warn_on_stray_daemons:
             ls = self.mgr.list_servers()
+            self.log.debug(ls)
             managed = self.mgr.cache.get_daemon_names()
             host_detail = []     # type: List[str]
             host_num_daemons = 0
