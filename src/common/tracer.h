@@ -5,6 +5,7 @@
 #define TRACER_H
 
 #include "acconfig.h"
+#include "include/buffer.h"
 
 #ifdef HAVE_JAEGER
 
@@ -13,6 +14,8 @@
 #include <jaegertracing/Tracer.h>
 
 typedef std::unique_ptr<opentracing::Span> jspan;
+typedef jaegertracing::SpanContext jspan_context;
+
 namespace tracing {
 
 class Tracer {
@@ -33,9 +36,12 @@ class Tracer {
   jspan start_trace(opentracing::string_view trace_name);
   // creates and returns a new span with `span_name` which parent span is `parent_span'
   jspan add_span(opentracing::string_view span_name, jspan& parent_span);
+  jspan add_span(opentracing::string_view span_name, const opentracing::SpanContext& parent_ctx);
 
 };
 
+void encode(jspan& span, ceph::buffer::list& bl);
+void decode(ceph::buffer::list::const_iterator& bl, jspan_context& span_ctx);
 
 } // namespace tracing
 
@@ -78,15 +84,20 @@ class jspan {
   operator bool() const { return false; }
 };
 
+struct jspan_context {};
+
 namespace tracing {
 
 struct Tracer {
   bool is_enabled() const { return false; }
   jspan start_trace(std::string_view) { return {}; }
   jspan add_span(std::string_view, const jspan&) { return {}; }
+  jspan add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
   void init(std::string_view service_name) {}
   void shutdown() {}
 };
+  inline void encode(jspan& span, ceph::buffer::list& bl) {}
+  inline void decode(ceph::buffer::list::const_iterator& bl, jspan_context& span_ctx) {}
 }
 
 #endif // !HAVE_JAEGER
