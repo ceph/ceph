@@ -1199,7 +1199,6 @@ int RocksDBStore::do_open(ostream &out,
   ceph_assert(default_cf != nullptr);
   
   PerfCountersBuilder plb(cct, "rocksdb", l_rocksdb_first, l_rocksdb_last);
-  plb.add_u64_counter(l_rocksdb_gets, "get", "Gets");
   plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency");
   plb.add_time_avg(l_rocksdb_submit_latency, "submit_latency", "Submit Latency");
   plb.add_time_avg(l_rocksdb_submit_sync_latency, "submit_sync_latency", "Submit Sync Latency");
@@ -1829,7 +1828,6 @@ int RocksDBStore::get(
     }
   }
   utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_rocksdb_gets);
   logger->tinc(l_rocksdb_get_latency, lat);
   return 0;
 }
@@ -1865,7 +1863,6 @@ int RocksDBStore::get(
     ceph_abort_msg(s.getState());
   }
   utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_rocksdb_gets);
   logger->tinc(l_rocksdb_get_latency, lat);
   return r;
 }
@@ -1903,7 +1900,6 @@ int RocksDBStore::get(
     ceph_abort_msg(s.getState());
   }
   utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_rocksdb_gets);
   logger->tinc(l_rocksdb_get_latency, lat);
   return r;
 }
