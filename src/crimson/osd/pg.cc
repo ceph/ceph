@@ -1153,6 +1153,8 @@ seastar::future<> PG::stop()
 {
   logger().info("PG {} {}", pgid, __func__);
   stopping = true;
+  cancel_local_background_io_reservation();
+  cancel_remote_recovery_reservation();
   check_readable_timer.cancel();
   renew_lease_timer.cancel();
   return osdmap_gate.stop().then([this] {
