@@ -741,6 +741,52 @@ class HostCache():
             r.append(host)
         return r
 
+    def get_schedulable_hosts(self) -> List[HostSpec]:
+        """
+        Returns all usable hosts that went through _refresh_host_daemons().
+
+        This mitigates a potential race, where new host was added *after*
+        ``_refresh_host_daemons()`` was called, but *before*
+        ``_apply_all_specs()`` was called. thus we end up with a hosts
+        where daemons might be running, but we have not yet detected them.
+        """
+        return [
+            h for h in self.mgr.inventory.all_specs()
+            if (
+                self.host_had_daemon_refresh(h.hostname)
+                and '_no_schedule' not in h.labels
+            )
+        ]
+
+    def get_non_draining_hosts(self) -> List[HostSpec]:
+        """
+        Returns all hosts that do not have _no_schedule label.
+
+        Useful for the agent who needs this specific list rather than the
+        schedulable_hosts since the agent needs to be deployed on hosts with
+        no daemon refresh
+        """
+        return [
+            h for h in self.mgr.inventory.all_specs() if '_no_schedule' not in h.labels
+        ]
+
+    def get_unreachable_hosts(self) -> List[HostSpec]:
+        """
+        Return all hosts that are offline or in maintenance mode.
+
+        The idea is we should not touch the daemons on these hosts (since
+        in theory the hosts are inaccessible so we CAN'T touch them) but
+        we still want to count daemons that exist on these hosts toward the
+        placement so daemons on these hosts aren't just moved elsewhere
+        """
+        return [
+            h for h in self.mgr.inventory.all_specs()
+            if (
+                h.status.lower() in ['maintenance', 'offline']
+                or h.hostname in self.mgr.offline_hosts
+            )
+        ]
+
     def get_facts(self, host: str) -> Dict[str, Any]:
         return self.facts.get(host, {})
 
@@ -953,7 +999,7 @@ class HostCache():
         return True
 
     def all_host_metadata_up_to_date(self) -> bool:
-        unreachables = [h.hostname for h in self.mgr._unreachable_hosts()]
+        unreachables = [h.hostname for h in self.get_unreachable_hosts()]
         if [h for h in self.get_hosts() if (not self.host_metadata_up_to_date(h) and h not in unreachables)]:
             # this function is primarily for telling if it's safe to try and apply a service
             # spec. Since offline/maintenance hosts aren't considered in that process anyway

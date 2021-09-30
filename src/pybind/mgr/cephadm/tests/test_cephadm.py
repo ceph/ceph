@@ -1127,11 +1127,12 @@ spec:
                         # being in offline/maint mode should disqualify hosts from being
                         # candidates for scheduling
                         candidates = [
-                            h.hostname for h in cephadm_module._schedulable_hosts()]
+                            h.hostname for h in cephadm_module.cache.get_schedulable_hosts()]
                         assert 'test2' in candidates
                         assert 'test3' in candidates
 
-                        unreachable = [h.hostname for h in cephadm_module._unreachable_hosts()]
+                        unreachable = [
+                            h.hostname for h in cephadm_module.cache.get_unreachable_hosts()]
                         assert 'test2' in unreachable
                         assert 'test3' in unreachable
 
