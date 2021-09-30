@@ -1020,9 +1020,6 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
 
-    if (!mon.osdmon()->is_readable()) {
-      mon.osdmon()->wait_for_readable(op, new Monitor::C_RetryMessage(&mon, op));
-    }
     vector<string> argvec;
     map<string, string> loc;
     cmd_getval(cmdmap, "args", argvec);
