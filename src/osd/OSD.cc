@@ -10624,7 +10624,7 @@ void OSDShard::consume_map(
   dout(10) << new_osdmap->get_epoch()
            << " (was " << (old_osdmap ? old_osdmap->get_epoch() : 0) << ")"
 	   << dendl;
-  bool queued = false;
+  int queued = 0;
 
   // check slots
   auto p = pg_slots.begin();
@@ -10651,8 +10651,7 @@ void OSDShard::consume_map(
 	dout(20) << __func__ << "  " << pgid
 		 << " pending_peering first epoch " << first
 		 << " <= " << new_osdmap->get_epoch() << ", requeueing" << dendl;
-	_wake_pg_slot(pgid, slot);
-	queued = true;
+	queued += _wake_pg_slot(pgid, slot);
       }
       ++p;
       continue;
@@ -10692,14 +10691,18 @@ void OSDShard::consume_map(
   }
   if (queued) {
     std::lock_guard l{sdata_wait_lock};
-    sdata_cond.notify_one();
+    if (queued == 1)
+      sdata_cond.notify_one();
+    else
+      sdata_cond.notify_all();
   }
 }
 
-void OSDShard::_wake_pg_slot(
+int OSDShard::_wake_pg_slot(
   spg_t pgid,
   OSDShardPGSlot *slot)
 {
+  int count = 0;
   dout(20) << __func__ << " " << pgid
 	   << " to_process " << slot->to_process
 	   << " waiting " << slot->waiting
@@ -10708,12 +10711,14 @@ void OSDShard::_wake_pg_slot(
        i != slot->to_process.rend();
        ++i) {
     scheduler->enqueue_front(std::move(*i));
+    count++;
   }
   slot->to_process.clear();
   for (auto i = slot->waiting.rbegin();
        i != slot->waiting.rend();
        ++i) {
     scheduler->enqueue_front(std::move(*i));
+    count++;
   }
   slot->waiting.clear();
   for (auto i = slot->waiting_peering.rbegin();
@@ -10724,10 +10729,12 @@ void OSDShard::_wake_pg_slot(
     // someday, if we decide this inefficiency matters
     for (auto j = i->second.rbegin(); j != i->second.rend(); ++j) {
       scheduler->enqueue_front(std::move(*j));
+      count++;
     }
   }
   slot->waiting_peering.clear();
   ++slot->requeue_seq;
+  return count;
 }
 
 void OSDShard::identify_splits_and_merges(

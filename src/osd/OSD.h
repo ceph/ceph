@@ -1094,7 +1094,7 @@ struct OSDShard {
     const OSDMapRef& osdmap,
     unsigned *pushes_to_free);
 
-  void _wake_pg_slot(spg_t pgid, OSDShardPGSlot *slot);
+  int _wake_pg_slot(spg_t pgid, OSDShardPGSlot *slot);
 
   void identify_splits_and_merges(
     const OSDMapRef& as_of_osdmap,
