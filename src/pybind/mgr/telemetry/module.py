@@ -350,18 +350,16 @@ class Module(MgrModule):
         # Initialize 'result' list
         result: List[dict] = []
 
-        # Create a list of tuples containing pool ids and their associated names
-        # that will later act as a queue, i.e.:
-        #   pool_queue = [('1', '.mgr'), ('2', 'cephfs.a.meta'), ('3', 'cephfs.a.data')]
+        # Create a list of pool ids that will later act as a queue, i.e.:
+        #   pool_queue = [1, 2, 3]
         osd_map = self.get('osd_map')
-        pool_queue: List[tuple] = []
+        pool_queue = []
         for pool in osd_map['pools']:
-            pool_queue.append((str(pool['pool']), pool['pool_name']))
+            pool_queue.append(str(pool['pool']))
 
         # Populate 'result', i.e.:
         #   {
         #       'pool_id': '1'
-        #       'pool_name': '.mgr'
         #       'stats_sum': {
         #           'num_bytes': 36,
         #           'num_bytes_hit_set_archive': 0,
@@ -371,11 +369,8 @@ class Module(MgrModule):
         #       }
         #   }
         while pool_queue:
-            # Pop a pool out of pool_queue
-            curr_pool = pool_queue.pop(0)
-
-            # Get the current pool's id and name
-            curr_pool_id, curr_pool_name = curr_pool[0], curr_pool[1]
+            # Pop the current pool id out of pool_queue
+            curr_pool_id = pool_queue.pop(0)
 
             # Initialize a dict that will hold aggregated stats for the current pool
             compiled_stats_dict: Dict[str, Any] = defaultdict(lambda: defaultdict(int))
@@ -387,7 +382,6 @@ class Module(MgrModule):
                 pool_id = pg['pgid'].split('.')[0]
                 if pool_id == curr_pool_id:
                     compiled_stats_dict['pool_id'] = int(pool_id)
-                    compiled_stats_dict['pool_name'] = curr_pool_name
                     for metric in pg['stat_sum']:
                         compiled_stats_dict['stats_sum'][metric] += pg['stat_sum'][metric]
                 else:
