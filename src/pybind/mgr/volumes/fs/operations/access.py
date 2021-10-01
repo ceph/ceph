@@ -2,15 +2,16 @@ import errno
 import json
 from typing import List
 
+
 def prepare_updated_caps_list(existing_caps, mds_cap_str, osd_cap_str, authorize=True):
-    caps_list = [] # type: List[str]
+    caps_list = []  # type: List[str]
     for k, v in existing_caps['caps'].items():
         if k == 'mds' or k == 'osd':
             continue
         elif k == 'mon':
             if not authorize and v == 'allow r':
                 continue
-        caps_list.extend((k,v))
+        caps_list.extend((k, v))
 
     if mds_cap_str:
         caps_list.extend(('mds', mds_cap_str))
@@ -29,7 +30,7 @@ def allow_access(mgr, client_entity, want_mds_cap, want_osd_cap,
         ret, out, err = mgr.mon_command({
             "prefix": "auth get-or-create",
             "entity": client_entity,
-            "caps": ['mds',  want_mds_cap, 'osd', want_osd_cap, 'mon', 'allow r'],
+            "caps": ['mds', want_mds_cap, 'osd', want_osd_cap, 'mon', 'allow r'],
             "format": "json"})
     else:
         cap = existing_caps[0]
@@ -93,6 +94,7 @@ def allow_access(mgr, client_entity, want_mds_cap, want_osd_cap,
     assert len(caps) == 1
     assert caps[0]['entity'] == client_entity
     return caps[0]['key']
+
 
 def deny_access(mgr, client_entity, want_mds_caps, want_osd_caps):
     ret, out, err = mgr.mon_command({
