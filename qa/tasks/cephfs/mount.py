@@ -566,6 +566,7 @@ class CephFSMount(object):
         raise NotImplementedError()
 
     def get_keyring_path(self):
+        # N.B.: default keyring is /etc/ceph/ceph.keyring; see ceph.py and generate_caps
         return '/etc/ceph/ceph.client.{id}.keyring'.format(id=self.client_id)
 
     def get_key_from_keyfile(self):
