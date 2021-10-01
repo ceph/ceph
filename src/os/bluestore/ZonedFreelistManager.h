@@ -36,9 +36,12 @@ class ZonedFreelistManager : public FreelistManager {
   KeyValueDB::Iterator enumerate_p;
   uint64_t enumerate_zone_num;
 
-  void write_zone_state_to_db(uint64_t zone_num,
-			      const zone_state_t &zone_state,
-			      KeyValueDB::Transaction txn);
+  void write_zone_state_delta_to_db(uint64_t zone_num,
+				    const zone_state_t &zone_state,
+				    KeyValueDB::Transaction txn);
+  void write_zone_state_reset_to_db(uint64_t zone_num,
+				    const zone_state_t &zone_state,
+				    KeyValueDB::Transaction txn);
   void load_zone_state_from_db(uint64_t zone_num,
 			       zone_state_t &zone_state,
 			       KeyValueDB::Iterator &it) const;
@@ -104,7 +107,6 @@ public:
   std::vector<zone_state_t> get_zone_states(KeyValueDB *kvdb) const;
 
   void mark_zone_to_clean_free(uint64_t zone,
-			       uint64_t write_pointer, uint64_t dead,
 			       KeyValueDB *kvdb);
 };
 
