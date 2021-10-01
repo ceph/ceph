@@ -13102,8 +13102,9 @@ void BlueStore::_zoned_cleaner_thread()
       if (zoned_cleaner_stop) {
 	break;
       }
-      dout(20) << __func__ << " sleep" << dendl;
-      zoned_cleaner_cond.wait(l);
+      auto period = ceph::make_timespan(cct->_conf->bluestore_cleaner_sleep_interval);
+      dout(20) << __func__ << " sleep for " << period << dendl;
+      zoned_cleaner_cond.wait_for(l, period);
       dout(20) << __func__ << " wake" << dendl;
     } else {
       l.unlock();
