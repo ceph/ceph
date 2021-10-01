@@ -6069,3 +6069,9 @@ options:
   - spdk
   - pmem
   - hm_smr
+- name: bluestore_cleaner_sleep_interval
+  type: float
+  level: advanced
+  desc: How long cleaner should sleep before re-checking utilization
+  default: 5
+  with_legacy: true
