@@ -519,6 +519,10 @@ class MDSRank {
 
     Context *create_async_exec_context(C_ExecAndReply *ctx);
 
+    // blacklist the provided addrs and set OSD epoch barrier
+    // with the provided epoch.
+    void apply_blacklist(const std::set<entity_addr_t> &addrs, epoch_t epoch);
+
     // Incarnation as seen in MDSMap at the point where a rank is
     // assigned.
     int incarnation = 0;

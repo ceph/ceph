@@ -1870,6 +1870,17 @@ void MDSRank::resolve_done()
   snapclient->sync(new C_MDSInternalNoop);
 }
 
+void MDSRank::apply_blacklist(const std::set<entity_addr_t> &addrs, epoch_t epoch) {
+  auto victims = server->apply_blacklist(addrs);
+  dout(4) << __func__ << ": killed " << victims << " blacklisted sessions ("
+          << addrs.size() << " blacklist entries, "
+          << sessionmap.get_sessions().size() << ")" << dendl;
+  if (victims) {
+    set_osd_epoch_barrier(epoch);
+  }
+}
+
+
 void MDSRank::reconnect_start()
 {
   dout(1) << "reconnect_start" << dendl;
@@ -1887,13 +1898,8 @@ void MDSRank::reconnect_start()
       o.get_blacklist(&blacklist);
       epoch = o.get_epoch();
   });
-  auto killed = server->apply_blacklist(blacklist);
-  dout(4) << "reconnect_start: killed " << killed << " blacklisted sessions ("
-          << blacklist.size() << " blacklist entries, "
-          << sessionmap.get_sessions().size() << ")" << dendl;
-  if (killed) {
-    set_osd_epoch_barrier(epoch);
-  }
+
+  apply_blacklist(blacklist, epoch);
 
   server->reconnect_clients(new C_MDS_VoidFn(this, &MDSRank::reconnect_done));
   finish_contexts(g_ceph_context, waiting_for_reconnect);
@@ -3317,16 +3323,16 @@ void MDSRankDispatcher::handle_osd_map()
 
   purge_queue.update_op_limit(*mdsmap);
 
-  std::set<entity_addr_t> newly_blacklisted;
-  objecter->consume_blacklist_events(&newly_blacklisted);
-  auto epoch = objecter->with_osdmap([](const OSDMap &o){return o.get_epoch();});
-  dout(4) << "handle_osd_map epoch " << epoch << ", "
-          << newly_blacklisted.size() << " new blacklist entries" << dendl;
-  auto victims = server->apply_blacklist(newly_blacklisted);
-  if (victims) {
-    set_osd_epoch_barrier(epoch);
+  // it's ok if replay state is reached via standby-replay, the
+  // reconnect state will journal blacklisted clients (journal
+  // is opened for writing in `replay_done` before moving to
+  // up:resolve).
+  if (!is_replay()) {
+    std::set<entity_addr_t> newly_blacklisted;
+    objecter->consume_blacklist_events(&newly_blacklisted);
+    auto epoch = objecter->with_osdmap([](const OSDMap &o){return o.get_epoch();});
+    apply_blacklist(newly_blacklisted, epoch);
   }
-
 
   // By default the objecter only requests OSDMap updates on use,
   // we would like to always receive the latest maps in order to
