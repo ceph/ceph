@@ -397,7 +397,7 @@ int ErasureCodeClay::repair(const set<int> &want_to_read,
 			    map<int, bufferlist> *repaired, int chunk_size)
 {
 
-  ceph_assert((want_to_read.size() == 1) && (chunks.size() == (unsigned)d));
+  ceph_assert((want_to_read.size() == 1)) && ceph_assert((chunks.size() == (unsigned)d));
 
   int repair_sub_chunk_no = get_repair_sub_chunk_count(want_to_read);
   vector<pair<int, int>> repair_sub_chunks_ind;

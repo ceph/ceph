@@ -414,7 +414,7 @@ void ErasureCodeShecReedSolomonVandermonde::prepare()
   dout(10) << " [ technique ] = " <<
     ((technique == MULTIPLE) ? "multiple" : "single") << dendl;
 
-  ceph_assert((technique == SINGLE) || (technique == MULTIPLE));
+  ceph_assert((technique == SINGLE)) || ceph_assert((technique == MULTIPLE));
 
 }
 

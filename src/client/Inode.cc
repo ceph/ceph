@@ -97,7 +97,7 @@ void Inode::make_long_path(filepath& p)
 {
   if (!dentries.empty()) {
     Dentry *dn = get_first_parent();
-    ceph_assert(dn->dir && dn->dir->parent_inode);
+    ceph_assert(dn->dir) && ceph_assert(dn->dir->parent_inode);
     dn->dir->parent_inode->make_long_path(p);
     p.push_dentry(dn->name);
   } else if (snapdir_parent) {
@@ -110,7 +110,7 @@ void Inode::make_short_path(filepath& p)
 {
   if (!dentries.empty()) {
     Dentry *dn = get_first_parent();
-    ceph_assert(dn->dir && dn->dir->parent_inode);
+    ceph_assert(dn->dir) && ceph_assert(dn->dir->parent_inode);
     p = filepath(dn->name, dn->dir->parent_inode->ino);
   } else if (snapdir_parent) {
     make_nosnap_relative_path(p);
@@ -133,7 +133,7 @@ void Inode::make_nosnap_relative_path(filepath& p)
     p.push_dentry(empty);
   } else if (!dentries.empty()) {
     Dentry *dn = get_first_parent();
-    ceph_assert(dn->dir && dn->dir->parent_inode);
+    ceph_assert(dn->dir) && ceph_assert(dn->dir->parent_inode);
     dn->dir->parent_inode->make_nosnap_relative_path(p);
     p.push_dentry(dn->name);
   } else {

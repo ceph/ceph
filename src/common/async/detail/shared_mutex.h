@@ -277,7 +277,7 @@ inline bool SharedMutexImpl::try_lock_shared()
 inline void SharedMutexImpl::unlock_shared()
 {
   std::lock_guard lock{mutex};
-  ceph_assert(state != Unlocked && state <= MaxShared);
+  ceph_assert(state != Unlocked) && ceph_assert(state <= MaxShared);
 
   if (state == 1 && !exclusive_queue.empty()) {
     // grant next exclusive lock

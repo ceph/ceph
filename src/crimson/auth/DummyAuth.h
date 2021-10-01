@@ -21,8 +21,8 @@ public:
 			 uint32_t auth_method,
 			 const std::vector<uint32_t>& preferred_modes) final {
     ceph_assert(auth_method == CEPH_AUTH_NONE);
-    ceph_assert(preferred_modes.size() &&
-                preferred_modes[0] == CEPH_CON_MODE_CRC);
+    ceph_assert(preferred_modes.size()) &&
+                ceph_assert(preferred_modes[0] == CEPH_CON_MODE_CRC);
     return CEPH_CON_MODE_CRC;
   }
 

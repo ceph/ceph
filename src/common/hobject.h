@@ -212,7 +212,7 @@ public:
   }
 
   bool is_max() const {
-    ceph_assert(!max || (*this == hobject_t(hobject_t::get_max())));
+    ceph_assert(!max) || ceph_assert((*this == hobject_t(hobject_t::get_max())));
     return max;
   }
   bool is_min() const {

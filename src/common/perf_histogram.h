@@ -74,8 +74,8 @@ class PerfHistogram : public PerfHistogramCommon {
 public:
   /// Initialize new histogram object
   PerfHistogram(std::initializer_list<axis_config_d> axes_config) {
-    ceph_assert(axes_config.size() == DIM &&
-		"Invalid number of axis configuration objects");
+    ceph_assert(axes_config.size() == DIM) &&
+		ceph_assert("Invalid number of axis configuration objects");
 
     int i = 0;
     for (const auto &ac : axes_config) {

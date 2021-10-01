@@ -389,7 +389,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       if (mdr->lock_cache) {
 	CDir *dir;
 	if (CInode *in = dynamic_cast<CInode*>(object)) {
-	  ceph_assert(!in->is_frozen_inode() && !in->is_frozen_auth_pin());
+	  ceph_assert(!in->is_frozen_inode()) && ceph_assert(!in->is_frozen_auth_pin());
 	  dir = in->get_projected_parent_dir();
 	} else if (CDentry *dn = dynamic_cast<CDentry*>(object)) {
 	  dir = dn->get_dir();
@@ -4482,8 +4482,8 @@ void Locker::handle_simple_lock(SimpleLock *lock, const cref_t<MLock> &m)
 
     // -- auth --
   case LOCK_AC_LOCKACK:
-    ceph_assert(lock->get_state() == LOCK_SYNC_LOCK ||
-	   lock->get_state() == LOCK_SYNC_EXCL);
+    ceph_assert(lock->get_state() == LOCK_SYNC_LOCK) ||
+	  ceph_assert(lock->get_state() == LOCK_SYNC_EXCL);
     ceph_assert(lock->is_gathering(from));
     lock->remove_gather(from);
     
@@ -5732,9 +5732,9 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
   switch (m->get_action()) {
     // -- replica --
   case LOCK_AC_SYNC:
-    ceph_assert(lock->get_state() == LOCK_LOCK ||
-	   lock->get_state() == LOCK_MIX ||
-	   lock->get_state() == LOCK_MIX_SYNC2);
+    ceph_assert(lock->get_state() == LOCK_LOCK) ||
+	   ceph_assert(lock->get_state() == LOCK_MIX) ||
+	   ceph_assert(lock->get_state() == LOCK_MIX_SYNC2);
     
     if (lock->get_state() == LOCK_MIX) {
       lock->set_state(LOCK_MIX_SYNC);
@@ -5786,9 +5786,9 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
     break;
     
   case LOCK_AC_MIX:
-    ceph_assert(lock->get_state() == LOCK_SYNC ||
-           lock->get_state() == LOCK_LOCK ||
-	   lock->get_state() == LOCK_SYNC_MIX2);
+    ceph_assert(lock->get_state() == LOCK_SYNC) ||
+           ceph_assert(lock->get_state() == LOCK_LOCK) ||
+	   ceph_assert(lock->get_state() == LOCK_SYNC_MIX2);
     
     if (lock->get_state() == LOCK_SYNC) {
       // MIXED
@@ -5815,13 +5815,13 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
 
     // -- auth --
   case LOCK_AC_LOCKACK:
-    ceph_assert(lock->get_state() == LOCK_SYNC_LOCK ||
-           lock->get_state() == LOCK_MIX_LOCK ||
-           lock->get_state() == LOCK_MIX_LOCK2 ||
-           lock->get_state() == LOCK_MIX_EXCL ||
-           lock->get_state() == LOCK_SYNC_EXCL ||
-           lock->get_state() == LOCK_SYNC_MIX ||
-	   lock->get_state() == LOCK_MIX_TSYN);
+    ceph_assert(lock->get_state() == LOCK_SYNC_LOCK) ||
+           ceph_assert(lock->get_state() == LOCK_MIX_LOCK) ||
+           ceph_assert(lock->get_state() == LOCK_MIX_LOCK2) ||
+           ceph_assert(lock->get_state() == LOCK_MIX_EXCL) ||
+           ceph_assert(lock->get_state() == LOCK_SYNC_EXCL) ||
+           ceph_assert(lock->get_state() == LOCK_SYNC_MIX) ||
+	   ceph_assert(lock->get_state() == LOCK_MIX_TSYN);
     ceph_assert(lock->is_gathering(from));
     lock->remove_gather(from);
     

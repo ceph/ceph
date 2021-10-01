@@ -182,8 +182,8 @@ void ImageWatcher<I>::notify_flatten(uint64_t request_id,
                                      ProgressContext &prog_ctx,
                                      Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -197,8 +197,8 @@ void ImageWatcher<I>::notify_resize(uint64_t request_id, uint64_t size,
                                     ProgressContext &prog_ctx,
                                     Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -215,8 +215,8 @@ void ImageWatcher<I>::notify_snap_create(uint64_t request_id,
                                          ProgressContext &prog_ctx,
                                          Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -232,8 +232,8 @@ void ImageWatcher<I>::notify_snap_rename(uint64_t request_id,
 				         const std::string &dst_snap_name,
 					 Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -248,8 +248,8 @@ void ImageWatcher<I>::notify_snap_remove(
     uint64_t request_id, const cls::rbd::SnapshotNamespace &snap_namespace,
     const std::string &snap_name, Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              cepht_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -264,8 +264,8 @@ void ImageWatcher<I>::notify_snap_protect(
     uint64_t request_id, const cls::rbd::SnapshotNamespace &snap_namespace,
     const std::string &snap_name, Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -280,8 +280,8 @@ void ImageWatcher<I>::notify_snap_unprotect(
     uint64_t request_id, const cls::rbd::SnapshotNamespace &snap_namespace,
     const std::string &snap_name, Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -296,8 +296,8 @@ void ImageWatcher<I>::notify_rebuild_object_map(uint64_t request_id,
                                                 ProgressContext &prog_ctx,
                                                 Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -311,8 +311,8 @@ void ImageWatcher<I>::notify_rename(uint64_t request_id,
                                     const std::string &image_name,
                                     Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -326,8 +326,8 @@ void ImageWatcher<I>::notify_update_features(uint64_t request_id,
                                              uint64_t features, bool enabled,
                                              Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -341,8 +341,8 @@ void ImageWatcher<I>::notify_migrate(uint64_t request_id,
                                      ProgressContext &prog_ctx,
                                      Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -355,8 +355,8 @@ void ImageWatcher<I>::notify_sparsify(uint64_t request_id, size_t sparse_size,
                                       ProgressContext &prog_ctx,
                                       Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -477,8 +477,8 @@ void ImageWatcher<I>::notify_metadata_set(uint64_t request_id,
                                           const std::string &value,
                                           Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -494,8 +494,8 @@ void ImageWatcher<I>::notify_metadata_remove(uint64_t request_id,
                                              const std::string &key,
                                              Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
@@ -576,8 +576,8 @@ void ImageWatcher<I>::schedule_request_lock(bool use_timer, int timer_delay) {
     // exclusive lock dynamically disabled via image refresh
     return;
   }
-  ceph_assert(m_image_ctx.exclusive_lock &&
-              !m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock) &&
+              ceph_assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   std::shared_lock watch_locker{this->m_watch_lock};
   if (this->is_registered(this->m_watch_lock)) {

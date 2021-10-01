@@ -3778,7 +3778,7 @@ static int gc_iterate_entries(cls_method_context_t hctx,
   auto iter = keys.begin();
   if (iter == keys.end()) {
     // if keys empty must not come back as truncated
-    ceph_assert(!truncated || !(*truncated));
+    ceph_assert(!truncated) || ceph_assert(!(*truncated));
     return 0;
   }
 

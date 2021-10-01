@@ -309,10 +309,10 @@ void Replay<I>::replay_op_ready(uint64_t op_tid, Context *on_resume) {
   ceph_assert(op_it != m_op_events.end());
 
   OpEvent &op_event = op_it->second;
-  ceph_assert(op_event.op_in_progress &&
-              op_event.on_op_finish_event == nullptr &&
-              op_event.on_finish_ready == nullptr &&
-              op_event.on_finish_safe == nullptr);
+  ceph_assert(op_event.op_in_progress) &&
+              ceph_assert(op_event.on_op_finish_event == nullptr) &&
+              ceph_assert(op_event.on_finish_ready == nullptr) &&
+              ceph_assert(op_event.on_finish_safe == nullptr);
 
   // resume processing replay events
   Context *on_start_ready = nullptr;
@@ -1023,17 +1023,17 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
     }
   }
 
-  ceph_assert(op_event.on_start_ready == nullptr || (r < 0 && r != -ERESTART));
+  ceph_assert(op_event.on_start_ready == nullptr) || ceph_assert((r < 0 && r != -ERESTART));
   if (op_event.on_start_ready != nullptr) {
     // blocking op event failed before it became ready
-    ceph_assert(op_event.on_finish_ready == nullptr &&
-                op_event.on_finish_safe == nullptr);
+    ceph_assert(op_event.on_finish_ready == nullptr) &&
+                ceph_assert(op_event.on_finish_safe == nullptr);
 
     op_event.on_start_ready->complete(0);
   } else {
     // event kicked off by OpFinishEvent
-    ceph_assert((op_event.on_finish_ready != nullptr &&
-                 op_event.on_finish_safe != nullptr) || shutting_down);
+    ceph_assert((op_event.on_finish_ready != nullptr) &&
+                 ceph_assert(op_event.on_finish_safe != nullptr) || shutting_down);
   }
 
   if (op_event.on_op_finish_event != nullptr) {

@@ -608,7 +608,7 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
 {
   int r;
 
-  ceph_assert(signum >= 0 && signum < 32);
+  ceph_assert(signum >= 0) && ceph_assert(signum < 32);
 
   safe_handler *h = new safe_handler;
 
@@ -639,7 +639,7 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
 
 void SignalHandler::unregister_handler(int signum, signal_handler_t handler)
 {
-  ceph_assert(signum >= 0 && signum < 32);
+  ceph_assert(signum >= 0) && ceph_assert(signum < 32);
   safe_handler *h = handlers[signum];
   ceph_assert(h);
   ceph_assert(h->handler == handler);

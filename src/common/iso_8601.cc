@@ -154,8 +154,8 @@ string to_iso_8601(const real_time t,
 		   const iso_8601_format f,
                    std::string_view date_separator,
                    std::string_view time_separator) noexcept {
-  ceph_assert(f >= iso_8601_format::Y &&
-	      f <= iso_8601_format::YMDhmsn);
+  ceph_assert(f >= iso_8601_format::Y) &&
+	      ceph_assert(f <= iso_8601_format::YMDhmsn);
   stringstream out(std::ios_base::out);
 
   auto sec = real_clock::to_time_t(t);

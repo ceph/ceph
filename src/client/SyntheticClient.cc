@@ -3239,7 +3239,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     if (filename == ".") continue;
 
     // remove leading ./
-    ceph_assert(filename[0] == '.' && filename[1] == '/');
+    ceph_assert(filename[0] == '.') && ceph_assert(filename[1] == '/');
     filename = filename.substr(2);
 
     // new leading dir?

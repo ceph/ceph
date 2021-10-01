@@ -2731,7 +2731,7 @@ int CrushWrapper::device_class_clone(
   int res = crush_add_bucket(crush, bno, copy, clone);
   if (res)
     return res;
-  ceph_assert(!bno || bno == *clone);
+  ceph_assert(!bno) || ceph_assert(bno == *clone);
 
   res = set_item_class(*clone, device_class);
   if (res < 0)

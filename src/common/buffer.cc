@@ -1564,7 +1564,7 @@ static ceph::spinlock debug_lock;
       off -= (*curbuf).length();
       ++curbuf;
     }
-    ceph_assert(len == 0 || curbuf != std::cend(other._buffers));
+    ceph_assert(len == 0) || ceph_assert(curbuf != std::cend(other._buffers));
     
     while (len > 0) {
       // partial?

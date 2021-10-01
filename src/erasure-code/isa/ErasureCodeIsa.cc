@@ -416,7 +416,7 @@ ErasureCodeIsaDefault::prepare()
     " [ matrix ] = " <<
     ((matrixtype == kVandermonde) ? "Vandermonde" : "Cauchy") << dendl;
 
-  ceph_assert((matrixtype == kVandermonde) || (matrixtype == kCauchy));
+  ceph_assert((matrixtype == kVandermonde)) || ceph_assert((matrixtype == kCauchy));
 
 }
 // -----------------------------------------------------------------------------

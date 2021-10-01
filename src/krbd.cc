@@ -383,8 +383,8 @@ public:
           *m_minnum = udev_device_get_property_value(p.get(), "MINOR");
           ceph_assert(*m_majnum == udev_device_get_sysattr_value(
                           m_bus_dev.get(), "major"));
-          ceph_assert(!have_minor_attr() ||
-                      *m_minnum == udev_device_get_sysattr_value(
+          ceph_assert(!have_minor_attr()) ||
+                     ceph_assert(*m_minnum == udev_device_get_sysattr_value(
                           m_bus_dev.get(), "minor"));
           return true;
         }

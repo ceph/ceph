@@ -394,7 +394,7 @@ class interval_set {
     if (p == m.end()) return false;
     if (p->first > i) return false;
     if (p->first+p->second <= i) return false;
-    ceph_assert(p->first <= i && p->first+p->second > i);
+    ceph_assert(p->first <= i) && ceph_assert(p->first+p->second > i);
     if (pstart)
       *pstart = p->first;
     if (plen)
@@ -406,7 +406,7 @@ class interval_set {
     if (p == m.end()) return false;
     if (p->first > start) return false;
     if (p->first+p->second <= start) return false;
-    ceph_assert(p->first <= start && p->first+p->second > start);
+    ceph_assert(p->first <= start) && ceph_assert(p->first+p->second > start);
     if (p->first+p->second < start+len) return false;
     return true;
   }

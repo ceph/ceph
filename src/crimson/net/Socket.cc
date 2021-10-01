@@ -190,7 +190,7 @@ void Socket::set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocke
       next_trap_write = action;
     } else if (next_trap_write == bp_action_t::FAULT) {
       // do_sweep_messages() may combine multiple write events into one socket write
-      ceph_assert(action == bp_action_t::FAULT || action == bp_action_t::CONTINUE);
+      ceph_assert(action == bp_action_t::FAULT) || ceph_assert(action == bp_action_t::CONTINUE);
     } else {
       ceph_abort();
     }

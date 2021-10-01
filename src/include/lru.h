@@ -94,7 +94,7 @@ public:
   LRUObject *lru_remove(LRUObject *o) {
     if (!o->lru) return o;
     auto list = o->lru_link.get_list();
-    ceph_assert(list == &top || list == &bottom || list == &pintail);
+    ceph_assert(list == &top) || ceph_assert(list == &bottom) || ceph_assert(list == &pintail);
     o->lru_link.remove_myself();
     if (o->lru_pinned) num_pinned--;
     o->lru = nullptr;
@@ -109,7 +109,7 @@ public:
     } else {
       ceph_assert(o->lru == this);
       auto list = o->lru_link.get_list();
-      ceph_assert(list == &top || list == &bottom || list == &pintail);
+      ceph_assert(list == &top) || ceph_assert(list == &bottom) || ceph_assert(list == &pintail);
       top.push_front(&o->lru_link);
       adjust();
     }
@@ -123,7 +123,7 @@ public:
     } else {
       ceph_assert(o->lru == this);
       auto list = o->lru_link.get_list();
-      ceph_assert(list == &top || list == &bottom || list == &pintail);
+      ceph_assert(list == &top) || ceph_assert(list == &bottom) || ceph_assert(list == &pintail);
       if (list == &top) return false;
       bottom.push_front(&o->lru_link);
       adjust();
@@ -138,7 +138,7 @@ public:
     } else {
       ceph_assert(o->lru == this);
       auto list = o->lru_link.get_list();
-      ceph_assert(list == &top || list == &bottom || list == &pintail);
+      ceph_assert(list == &top) || ceph_assert(list == &bottom) || ceph_assert(list == &pintail);
       bottom.push_back(&o->lru_link);
       adjust();
     }

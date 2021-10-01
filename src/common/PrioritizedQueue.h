@@ -270,7 +270,7 @@ public:
 
   bool empty() const final {
     ceph_assert(total_priority >= 0);
-    ceph_assert((total_priority == 0) || !(queue.empty()));
+    ceph_assert((total_priority == 0)) || ceph_assert(!(queue.empty()));
     return queue.empty() && high_queue.empty();
   }
 

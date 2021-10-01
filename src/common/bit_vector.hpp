@@ -109,7 +109,7 @@ public:
       uint64_t index;
       compute_index(m_offset, &index, &m_shift);
 
-      ceph_assert(index == m_index || index == m_index + 1);
+      ceph_assert(index == m_index) || ceph_assert(index == m_index + 1);
       if (index > m_index) {
         m_index = index;
         ++m_data_iterator;
@@ -341,8 +341,8 @@ template <uint8_t _b>
 void BitVector<_b>::encode_data(bufferlist& bl, uint64_t data_byte_offset,
 				uint64_t byte_length) const {
   ceph_assert(data_byte_offset % BLOCK_SIZE == 0);
-  ceph_assert(data_byte_offset + byte_length == m_data.length() ||
-              byte_length % BLOCK_SIZE == 0);
+  ceph_assert(data_byte_offset + byte_length == m_data.length()) ||
+             ceph_assert(byte_length % BLOCK_SIZE == 0);
 
   uint64_t end_offset = data_byte_offset + byte_length;
   while (data_byte_offset < end_offset) {
@@ -407,7 +407,7 @@ void BitVector<_b>::get_data_extents(uint64_t offset, uint64_t length,
                                      uint64_t *object_byte_offset,
                                      uint64_t *byte_length) const {
   // read BLOCK_SIZE-aligned chunks
-  ceph_assert(length > 0 && offset + length <= m_size);
+  ceph_assert(length > 0) && ceph_assert(offset + length <= m_size);
   uint64_t shift;
   compute_index(offset, data_byte_offset, &shift);
   *data_byte_offset -= (*data_byte_offset % BLOCK_SIZE);
@@ -537,7 +537,7 @@ void BitVector<_b>::get_data_crcs_extents(uint64_t offset, uint64_t length,
   *byte_offset += sizeof(__u32);
 
   // CRCs are computed over BLOCK_SIZE chunks
-  ceph_assert(length > 0 && offset + length <= m_size);
+  ceph_assert(length > 0) && ceph_assert(offset + length <= m_size);
   uint64_t index;
   uint64_t shift;
   compute_index(offset, &index, &shift);
