@@ -49,6 +49,13 @@ LIBRADOS_OP_FLAG_FADVISE_WILLNEED = _LIBRADOS_OP_FLAG_FADVISE_WILLNEED
 LIBRADOS_OP_FLAG_FADVISE_DONTNEED = _LIBRADOS_OP_FLAG_FADVISE_DONTNEED
 LIBRADOS_OP_FLAG_FADVISE_NOCACHE = _LIBRADOS_OP_FLAG_FADVISE_NOCACHE
 
+LIBRADOS_CMPXATTR_OP_EQ = _LIBRADOS_CMPXATTR_OP_EQ
+LIBRADOS_CMPXATTR_OP_NE = _LIBRADOS_CMPXATTR_OP_NE
+LIBRADOS_CMPXATTR_OP_GT = _LIBRADOS_CMPXATTR_OP_GT
+LIBRADOS_CMPXATTR_OP_GTE = _LIBRADOS_CMPXATTR_OP_GTE
+LIBRADOS_CMPXATTR_OP_LT = _LIBRADOS_CMPXATTR_OP_LT
+LIBRADOS_CMPXATTR_OP_LTE = _LIBRADOS_CMPXATTR_OP_LTE
+
 LIBRADOS_SNAP_HEAD = _LIBRADOS_SNAP_HEAD
 
 LIBRADOS_OPERATION_NOFLAG = _LIBRADOS_OPERATION_NOFLAG
@@ -1909,6 +1916,24 @@ cdef class WriteOp(object):
             uint64_t _offset = offset
         with nogil:
             rados_write_op_cmpext(self.write_op, _cmp_buf, _cmp_buf_len, _offset, NULL)
+
+    def omap_cmp(self, key: str, val: str, cmp_op: int = LIBRADOS_CMPXATTR_OP_EQ):
+        """
+        Ensure that an omap key value satisfies comparison
+        :param key: omap key whose associated value is evaluated for comparison
+        :param val: value to compare with
+        :param cmp_op: comparison operator, one of LIBRADOS_CMPXATTR_OP_EQ (1),
+            LIBRADOS_CMPXATTR_OP_GT (3), or LIBRADOS_CMPXATTR_OP_LT (5).
+        """
+        key_raw = cstr(key, 'key')
+        val_raw = cstr(val, 'val')
+        cdef:
+            char *_key = key_raw
+            char *_val = val_raw
+            size_t _val_len = len(val)
+            uint8_t _comparison_operator = cmp_op
+        with nogil:
+            rados_write_op_omap_cmp(self.write_op, _key, _comparison_operator, _val, _val_len, NULL)
 
 class WriteOpCtx(WriteOp, OpCtx):
     """write operation context manager"""
