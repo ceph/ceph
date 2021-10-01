@@ -35,6 +35,7 @@ int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
   RGWUserBuckets ulist;
   bool is_truncated = false;
   int ret;
+  buckets.clear();
 
   ret = store->ctl()->user->list_buckets(info.user_id, marker, end_marker, max,
 					 need_stats, &ulist, &is_truncated);
