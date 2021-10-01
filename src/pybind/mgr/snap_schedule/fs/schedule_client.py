@@ -131,7 +131,10 @@ class SnapSchedClient(CephfsClient):
     def get_schedule_db(self, fs: str) -> sqlite3.Connection:
         if fs not in self.sqlite_connections:
             poolid = self.get_metadata_pool(fs)
-            assert poolid, f'fs "{fs}" not found'
+            if poolid == false:
+                log.error(f'fs "{fs}" not found')
+                raise ValueError(f'fs "{fs}" not found')
+
             uri = f"file:///*{poolid}:/{SNAP_DB_OBJECT_NAME}.db?vfs=ceph";
             log.debug(f"using uri {uri}")
             db = sqlite3.connect(uri, check_same_thread=False, uri=True)
