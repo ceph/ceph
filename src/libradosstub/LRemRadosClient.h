@@ -75,9 +75,6 @@ public:
   virtual int object_list_open(int64_t pool_id,
                                std::shared_ptr<ObjListOp> *op) = 0;
 
-  virtual int object_list(int64_t pool_id,
-                          std::list<librados::LRemRadosClient::Object> *list) = 0;
-
   virtual int service_daemon_register(const std::string& service,
                                       const std::string& name,
                                       const std::map<std::string,std::string>& metadata) = 0;

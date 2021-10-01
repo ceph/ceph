@@ -239,6 +239,7 @@ namespace LRemDBStore {
     int read();
     int list(std::optional<string> nspace,
              const string& marker_oid,
+             std::optional<string> filter,
              int max,
              std::list<LRemCluster::ObjectLocator> *result,
              bool *more);

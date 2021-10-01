@@ -114,9 +114,14 @@ public:
 
 
 int LRemDBObjListOp::list_objs(int max, std::list<librados::LRemRadosClient::Object> *result, bool *more) {
+  std::optional<string> opt_filter;
+  if (filter.length() > 0) {
+    opt_filter = filter.to_str();
+  }
   std::list<LRemCluster::ObjectLocator> objs;
-  int r = pool_db->list(nspace, cursor.to_str(), max,
-                    &objs, more);
+  int r = pool_db->list(nspace, cursor.to_str(),
+                        filter.to_str(), max,
+                        &objs, more);
   if (r < 0) {
     return r;
   }
@@ -145,41 +150,6 @@ int LRemDBRadosClient::object_list_open(int64_t pool_id,
 
   return 0;
 };
-
-int LRemDBRadosClient::object_list(int64_t pool_id,
-                                   std::list<librados::LRemRadosClient::Object> *list) {
-  list->clear();
-
-  LRemDBTransactionState trans(cct());
-  auto pool = m_mem_cluster->get_pool(*trans.dbc, pool_id);
-
-  LRemDBStore::PoolRef pool_db;
-  int r = trans.dbc->get_pool(pool_id, &pool_db);
-  if (r < 0) {
-    return r;
-  }
-
-  int max = 1000;
-  bool more;
-
-  do {
-    std::list<LRemCluster::ObjectLocator> result;
-    r = pool_db->list(std::nullopt, string(), max,
-                      &result, &more);
-    if (r < 0) {
-      return r;
-    }
-
-    for (auto& loc : result) {
-      Object obj;
-      obj.oid = loc.name;
-      obj.nspace = loc.nspace;
-      list->push_back(obj);
-    }
-  } while (more);
-
-  return 0;
-}
 
 int LRemDBRadosClient::pool_create(const std::string &pool_name) {
   if (is_blocklisted()) {

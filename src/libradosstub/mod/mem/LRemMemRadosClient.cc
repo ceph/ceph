@@ -130,23 +130,6 @@ int LRemMemRadosClient::object_list_open(int64_t pool_id,
   return 0;
 };
 
-int LRemMemRadosClient::object_list(int64_t pool_id,
-                                    std::list<librados::LRemRadosClient::Object> *list) {
-  list->clear();
-
-  auto pool = m_mem_cluster->get_pool(pool_id);
-  if (pool != nullptr) {
-    std::shared_lock file_locker{pool->file_lock};
-    for (auto &file_pair : pool->files) {
-      Object obj;
-      obj.oid = file_pair.first.name;
-      list->push_back(obj);
-    }
-  }
-
-  return 0;
-}
-
 int LRemMemRadosClient::pool_create(const std::string &pool_name) {
   if (is_blocklisted()) {
     return -EBLOCKLISTED;

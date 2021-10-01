@@ -603,6 +603,7 @@ int LRemDBStore::Pool::read() {
 
 int LRemDBStore::Pool::list(std::optional<string> nspace,
              const string& marker_oid,
+             std::optional<string> filter,
              int max,
              std::list<LRemCluster::ObjectLocator> *result,
              bool *more) {
@@ -621,6 +622,11 @@ int LRemDBStore::Pool::list(std::optional<string> nspace,
   try {
     string s = string("SELECT nspace, oid from ") + table_name + " WHERE oid > ?";
 
+    string filter_str;
+    if (filter) {
+      s += " AND oid LIKE ?";
+    }
+
     if (nspace) {
       s += " AND nspace == ?";
     }
@@ -631,6 +637,9 @@ int LRemDBStore::Pool::list(std::optional<string> nspace,
 
     int n = 0;
     q.bind(++n, marker_oid);
+    if (filter) {
+      q.bind(++n, *filter + "%");
+    }
     if (nspace) {
       q.bind(++n, *nspace);
     }
