@@ -540,7 +540,7 @@ struct MirrorSnapshotNamespace {
   static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
     SNAPSHOT_NAMESPACE_TYPE_MIRROR;
 
-  MirrorSnapshotState state = MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
+  MirrorSnapshotState state;
   bool complete = false;
   std::set<std::string> mirror_peer_uuids;
 
@@ -552,7 +552,7 @@ struct MirrorSnapshotNamespace {
   uint64_t last_copied_object_number = 0;
   SnapSeqs snap_seqs;
 
-  MirrorSnapshotNamespace() {
+  MirrorSnapshotNamespace(): state(MIRROR_SNAPSHOT_STATE_NON_PRIMARY) {
   }
   MirrorSnapshotNamespace(MirrorSnapshotState state,
                           const std::set<std::string> &mirror_peer_uuids,
