@@ -13154,6 +13154,10 @@ void BlueStore::_zoned_clean_zone(uint64_t zone)
     return;
   }
 
+  // make sure transactions flush/drain/commit (and data is all rewritten
+  // safely elsewhere) before we blow away the cleaned zone
+  _osr_drain_all();
+
   // reset the device zone
   dout(10) << __func__ << " resetting zone 0x" << std::hex << zone << std::dec << dendl;
   bdev->reset_zone(zone);
