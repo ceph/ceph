@@ -30,9 +30,9 @@ class ZonedAllocator : public Allocator {
   // atomic_alloc_and_submit_lock will be removed.
   ceph::mutex lock = ceph::make_mutex("ZonedAllocator::lock");
 
-  std::atomic<int64_t> num_free;     ///< total bytes in freelist
   uint64_t size;
   uint64_t conventional_size, sequential_size;
+  std::atomic<int64_t> num_sequential_free;  ///< total bytes in freelist
   uint64_t block_size;
   uint64_t zone_size;
   uint64_t first_seq_zone_num;
