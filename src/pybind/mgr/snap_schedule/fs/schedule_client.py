@@ -131,7 +131,7 @@ class SnapSchedClient(CephfsClient):
     def get_schedule_db(self, fs: str) -> sqlite3.Connection:
         if fs not in self.sqlite_connections:
             poolid = self.get_metadata_pool(fs)
-            if poolid == false:
+            if not poolid:
                 log.error(f'fs "{fs}" not found')
                 raise ValueError(f'fs "{fs}" not found')
 
