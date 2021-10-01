@@ -42,12 +42,11 @@ struct ModeUpdatedPayload {
 struct ImageUpdatedPayload {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_IMAGE_UPDATED;
 
-  cls::rbd::MirrorImageState mirror_image_state =
-    cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
+  cls::rbd::MirrorImageState mirror_image_state;
   std::string image_id;
   std::string global_image_id;
 
-  ImageUpdatedPayload() {
+  ImageUpdatedPayload(): mirror_image_state(cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
   }
   ImageUpdatedPayload(cls::rbd::MirrorImageState mirror_image_state,
                       const std::string &image_id,
