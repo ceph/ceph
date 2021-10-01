@@ -3289,7 +3289,7 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     if (in->is_dir() && !in->dentries.empty()) {
       tmp_ref = in; // prevent unlink below from freeing the inode.
       Dentry *olddn = in->get_first_parent();
-      ceph_assert(olddn->dir != dir || olddn->name != name);
+      ceph_assert(olddn->dir != dir) || ceph_assert(olddn->name != name);
       Inode *old_diri = olddn->dir->parent_inode;
       clear_dir_complete_and_ordered(old_diri, true);
       unlink(olddn, true, true);  // keep dir, dentry
@@ -11274,7 +11274,7 @@ void Client::_ll_register_callbacks(struct ceph_client_callback_args *args)
 // This is deprecated, use ll_register_callbacks2() instead.
 void Client::ll_register_callbacks(struct ceph_client_callback_args *args)
 {
-  ceph_assert(!is_mounting() && !is_mounted() && !is_unmounting());
+  ceph_assert(!is_mounting()) && ceph_assert(!is_mounted()) && ceph_assert(!is_unmounting());
 
   _ll_register_callbacks(args);
 }
@@ -15344,8 +15344,8 @@ out:
 void Client::set_filer_flags(int flags)
 {
   std::scoped_lock l(client_lock);
-  ceph_assert(flags == 0 ||
-	 flags == CEPH_OSD_FLAG_LOCALIZE_READS);
+  ceph_assert(flags == 0) ||
+	 ceph_assert(flags == CEPH_OSD_FLAG_LOCALIZE_READS);
   objecter->add_global_op_flags(flags);
 }
 
