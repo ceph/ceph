@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { FormBuilder } from '@angular/forms';
+import { AbstractControlOptions, FormBuilder } from '@angular/forms';
 
 import { CdFormGroup } from './cd-form-group';
 
@@ -12,7 +12,7 @@ import { CdFormGroup } from './cd-form-group';
 export class CdFormBuilder extends FormBuilder {
   group(
     controlsConfig: { [key: string]: any },
-    extra: { [key: string]: any } | null = null
+    extra: AbstractControlOptions | null = null
   ): CdFormGroup {
     const form = super.group(controlsConfig, extra);
     return new CdFormGroup(form.controls, form.validator, form.asyncValidator);
