@@ -46,6 +46,12 @@ public:
   void reset_all_zones() override;
   void reset_zone(uint64_t zone) override;
   std::vector<uint64_t> get_zones() override;
+
+  int discard(uint64_t offset, uint64_t len) override {
+    // discard is a no-op on a zoned device
+    return 0;
+  }
+
 };
 
 #endif //CEPH_BLK_HMSMRDEVICE_H
