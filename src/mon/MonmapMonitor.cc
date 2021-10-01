@@ -720,6 +720,12 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
 
+    if (pending_map.stretch_mode_enabled &&
+	name == pending_map.tiebreaker_mon) {
+      err = -EINVAL;
+      ss << "you cannot remove stretch mode's tiebreaker monitor";
+      goto reply;
+    }
     /* At the time of writing, there is no risk of races when multiple clients
      * attempt to use the same name. The reason is simple but may not be
      * obvious.
