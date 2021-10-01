@@ -272,21 +272,22 @@ Caveats:
 
 * The device must be manually partitioned.
 
-* Tooling not implemented!
-
-* Not documented!
+* An unsupported user-contributed script that shows this process may be found at
+  https://github.com/ceph/ceph/blob/master/src/script/contrib/ceph-migrate-bluestore.bash
 
 Advantages:
 
-* Little or no data migrates over the network during the conversion.
+* Little or no data migrates over the network during the conversion, so long as
+  the `noout` or `norecover`/`norebalance` flags are set on the OSD or the cluster
+  while the process proceeds.
 
 Disadvantages:
 
-* Tooling not fully implemented.
-* Process not documented.
-* Each host must have a spare or empty device.
-* The OSD is offline during the conversion, which means new writes will
-  be written to only a subset of the OSDs.  This increases the risk of data
-  loss due to a subsequent failure.  (However, if there is a failure before
-  conversion is complete, the original FileStore OSD can be started to provide
-  access to its original data.)
+* Tooling is not fully implemented, supported, or documented.
+* Each host must have an appropriate spare or empty device for staging.
+* The OSD is offline during the conversion, which means new writes to PGs
+  with the OSD in their acting set may not be ideally redundant until the
+  subject OSD comes up and recovers. This increases the risk of data
+  loss due to an overlapping failure.  However, if another OSD fails before
+  conversion and start-up are complete, the original Filestore OSD can be
+  started to provide access to its original data.
