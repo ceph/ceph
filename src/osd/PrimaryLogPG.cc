@@ -2535,7 +2535,8 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
 	op.op == CEPH_OSD_OP_UNSET_MANIFEST ||
 	op.op == CEPH_OSD_OP_TIER_PROMOTE ||
 	op.op == CEPH_OSD_OP_TIER_FLUSH ||
-	op.op == CEPH_OSD_OP_TIER_EVICT) {
+	op.op == CEPH_OSD_OP_TIER_EVICT ||
+	op.op == CEPH_OSD_OP_ISDIRTY) {
       return cache_result_t::NOOP;
     }
   }
