@@ -6,10 +6,10 @@ from contextlib import contextmanager
 import cephfs
 
 from .template import GroupTemplate
-from ..fs_util import listdir
 from ..exception import VolumeException
 
 log = logging.getLogger(__name__)
+
 
 class Trash(GroupTemplate):
     GROUP_NAME = "_deleting"
@@ -114,6 +114,7 @@ class Trash(GroupTemplate):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+
 def create_trashcan(fs, vol_spec):
     """
     create a trash can.
@@ -127,6 +128,7 @@ def create_trashcan(fs, vol_spec):
         fs.mkdirs(trashcan.path, 0o700)
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
+
 
 @contextmanager
 def open_trashcan(fs, vol_spec):
