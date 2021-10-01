@@ -13159,8 +13159,7 @@ void BlueStore::_zoned_clean_zone(uint64_t zone)
   bdev->reset_zone(zone);
 
   // record that we can now write there
-  f->mark_zone_to_clean_free(zone, a->get_write_pointer(zone),
-			     a->get_dead_bytes(zone), db);
+  f->mark_zone_to_clean_free(zone, db);
   bdev->flush();
 
   // then allow ourselves to start allocating there

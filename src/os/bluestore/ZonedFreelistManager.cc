@@ -30,7 +30,7 @@ using ceph::bufferptr;
 using ceph::decode;
 using ceph::encode;
 
-void ZonedFreelistManager::write_zone_state_to_db(
+void ZonedFreelistManager::write_zone_state_delta_to_db(
   uint64_t zone_num,
   const zone_state_t &zone_state,
   KeyValueDB::Transaction txn)
@@ -40,6 +40,18 @@ void ZonedFreelistManager::write_zone_state_to_db(
   bufferlist bl;
   zone_state.encode(bl);
   txn->merge(info_prefix, key, bl);
+}
+
+void ZonedFreelistManager::write_zone_state_reset_to_db(
+  uint64_t zone_num,
+  const zone_state_t &zone_state,
+  KeyValueDB::Transaction txn)
+{
+  string key;
+  _key_encode_u64(zone_num, &key);
+  bufferlist bl;
+  zone_state.encode(bl);
+  txn->set(info_prefix, key, bl);
 }
 
 void ZonedFreelistManager::load_zone_state_from_db(
@@ -62,7 +74,7 @@ void ZonedFreelistManager::init_zone_states(KeyValueDB::Transaction txn)
   dout(10) << __func__ << dendl;
   for (uint64_t zone_num = 0; zone_num < num_zones; ++zone_num) {
     zone_state_t zone_state;
-    write_zone_state_to_db(zone_num, zone_state, txn);
+    write_zone_state_reset_to_db(zone_num, zone_state, txn);
   }
 }
 
@@ -243,7 +255,7 @@ void ZonedFreelistManager::allocate(
 	     << " zone 0x" << zone_num << std::dec << dendl;
     zone_state_t zone_state;
     zone_state.increment_write_pointer(this_len);
-    write_zone_state_to_db(zone_num, zone_state, txn);
+    write_zone_state_delta_to_db(zone_num, zone_state, txn);
     offset += this_len;
     length -= this_len;
   }
@@ -267,7 +279,7 @@ void ZonedFreelistManager::release(
 	     << " zone 0x" << zone_num << std::dec << dendl;
     zone_state_t zone_state;
     zone_state.increment_num_dead_bytes(this_len);
-    write_zone_state_to_db(zone_num, zone_state, txn);
+    write_zone_state_delta_to_db(zone_num, zone_state, txn);
     length -= this_len;
     offset += this_len;
   }
@@ -345,13 +357,9 @@ int ZonedFreelistManager::_read_cfg(cfg_reader_t cfg_reader)
 
 void ZonedFreelistManager::mark_zone_to_clean_free(
   uint64_t zone,
-  uint64_t write_pointer,
-  uint64_t dead,
   KeyValueDB *kvdb)
 {
-  dout(10) << __func__ << " zone 0x" << std::hex << zone
-	   << " (dead 0x" << dead << " write pointer 0x" << write_pointer
-	   << ")" << std::dec << dendl;
+  dout(10) << __func__ << " zone 0x" << std::hex << zone << std::dec << dendl;
 
   if (true) {
     string key;
@@ -361,15 +369,11 @@ void ZonedFreelistManager::mark_zone_to_clean_free(
     zone_state_t zs;
     load_zone_state_from_db(zone, zs, it);
     dout(20) << __func__ << " before " << zs << dendl;
-    ceph_assert(zs.num_dead_bytes == dead);
-    ceph_assert(zs.write_pointer == write_pointer);
   }
   KeyValueDB::Transaction txn = kvdb->get_transaction();
 
-  zone_state_t neg_zone_state;
-  neg_zone_state.num_dead_bytes = 0ll - (int64_t)dead;
-  neg_zone_state.write_pointer = 0ll - (int64_t)write_pointer;
-  write_zone_state_to_db(zone, neg_zone_state, txn);
+  zone_state_t empty_zone_state;
+  write_zone_state_reset_to_db(zone, empty_zone_state, txn);
 
   // block here until this commits so that we don't end up starting to allocate and
   // write to the new zone before this fully commits.
