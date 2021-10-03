@@ -81,7 +81,7 @@ void encode(jspan& span, bufferlist& bl) {
   }
 }
 
-void decode(bufferlist::const_iterator& bl, jspan_context& span_ctx) {
+void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl) {
   using namespace jaegertracing;
   if(bl.get_remaining() > 0){
     DECODE_START(1, bl);

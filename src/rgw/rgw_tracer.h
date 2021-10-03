@@ -31,7 +31,7 @@ static inline void extract_span_context(rgw::sal::Attrs& attr, jspan_context& sp
   if (trace_iter != attr.end()) {
     try {
       auto trace_bl_iter = trace_iter->second.cbegin();
-      tracing::decode(trace_bl_iter, span_ctx);
+      tracing::decode(span_ctx, trace_bl_iter);
     } catch (buffer::error& err) {}
   }
 }

@@ -45,7 +45,7 @@ class Tracer {
 };
 
 void encode(jspan& span, ceph::buffer::list& bl);
-void decode(ceph::buffer::list::const_iterator& bl, jspan_context& span_ctx);
+void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl);
 
 } // namespace tracing
 
@@ -101,7 +101,7 @@ struct Tracer {
   void shutdown() {}
 };
   inline void encode(jspan& span, ceph::buffer::list& bl) {}
-  inline void decode(ceph::buffer::list::const_iterator& bl, jspan_context& span_ctx) {}
+  inline void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl) {}
 }
 
 #endif // !HAVE_JAEGER
