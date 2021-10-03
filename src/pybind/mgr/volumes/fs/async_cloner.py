@@ -22,6 +22,7 @@ from .operations.template import SubvolumeOpType
 
 log = logging.getLogger(__name__)
 
+
 # helper for fetching a clone entry for a given volume
 def get_next_clone_entry(fs_client, volspec, volname, running_jobs):
     log.debug("fetching clone entry for volume '{0}'".format(volname))
@@ -40,6 +41,7 @@ def get_next_clone_entry(fs_client, volspec, volname, running_jobs):
         log.error("error fetching clone entry for volume '{0}' ({1})".format(volname, ve))
         return ve.errno, None
 
+
 @contextmanager
 def open_at_volume(fs_client, volspec, volname, groupname, subvolname, op_type):
     with open_volume(fs_client, volname) as fs_handle:
@@ -47,11 +49,13 @@ def open_at_volume(fs_client, volspec, volname, groupname, subvolname, op_type):
             with open_subvol(fs_client.mgr, fs_handle, volspec, group, subvolname, op_type) as subvolume:
                 yield subvolume
 
+
 @contextmanager
 def open_at_group(fs_client, fs_handle, volspec, groupname, subvolname, op_type):
     with open_group(fs_handle, volspec, groupname) as group:
         with open_subvol(fs_client.mgr, fs_handle, volspec, group, subvolname, op_type) as subvolume:
             yield subvolume
+
 
 @contextmanager
 def open_at_group_unique(fs_client, fs_handle, volspec, s_groupname, s_subvolname, c_subvolume, c_groupname, c_subvolname, op_type):
@@ -75,17 +79,21 @@ def open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname,
             with open_at_group(fs_client, fs_handle, volspec, s_groupname, s_subvolname, SubvolumeOpType.CLONE_SOURCE) as source_subvolume:
                 yield (clone_subvolume, source_subvolume, s_snapname)
 
+
 def get_clone_state(fs_client, volspec, volname, groupname, subvolname):
     with open_at_volume(fs_client, volspec, volname, groupname, subvolname, SubvolumeOpType.CLONE_INTERNAL) as subvolume:
         return subvolume.state
+
 
 def set_clone_state(fs_client, volspec, volname, groupname, subvolname, state):
     with open_at_volume(fs_client, volspec, volname, groupname, subvolname, SubvolumeOpType.CLONE_INTERNAL) as subvolume:
         subvolume.state = (state, True)
 
+
 def get_clone_source(clone_subvolume):
     source = clone_subvolume._get_clone_source()
     return (source['volume'], source.get('group', None), source['subvolume'], source['snapshot'])
+
 
 def get_next_state_on_error(errnum):
     if errnum == -errno.EINTR:
@@ -98,6 +106,7 @@ def get_next_state_on_error(errnum):
                                               SubvolumeStates.STATE_INPROGRESS,
                                               SubvolumeActions.ACTION_FAILED)
     return next_state
+
 
 def handle_clone_pending(fs_client, volspec, volname, index, groupname, subvolname, should_cancel):
     try:
@@ -113,6 +122,7 @@ def handle_clone_pending(fs_client, volspec, volname, index, groupname, subvolna
         raise VolumeException(oe.errno, oe.error_str)
     return (next_state, False)
 
+
 def sync_attrs(fs_handle, target_path, source_statx):
     try:
         fs_handle.lchown(target_path, source_statx["uid"], source_statx["gid"])
@@ -123,12 +133,14 @@ def sync_attrs(fs_handle, target_path, source_statx):
         log.warning("error synchronizing attrs for {0} ({1})".format(target_path, e))
         raise e
 
+
 def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
     """
     bulk copy data from source to destination -- only directories, symlinks
     and regular files are synced.
     """
     log.info("copying data from {0} to {1}".format(source_path, dst_path))
+
     def cptree(src_root_path, dst_root_path):
         log.debug("cptree: {0} -> {1}".format(src_root_path, dst_root_path))
         try:
@@ -139,13 +151,13 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                         log.debug("d={0}".format(d))
                         d_full_src = os.path.join(src_root_path, d.d_name)
                         d_full_dst = os.path.join(dst_root_path, d.d_name)
-                        stx = fs_handle.statx(d_full_src, cephfs.CEPH_STATX_MODE  |
-                                                          cephfs.CEPH_STATX_UID   |
-                                                          cephfs.CEPH_STATX_GID   |
-                                                          cephfs.CEPH_STATX_ATIME |
-                                                          cephfs.CEPH_STATX_MTIME |
-                                                          cephfs.CEPH_STATX_SIZE,
-                                                          cephfs.AT_SYMLINK_NOFOLLOW)
+                        stx = fs_handle.statx(d_full_src, cephfs.CEPH_STATX_MODE
+                                              | cephfs.CEPH_STATX_UID
+                                              | cephfs.CEPH_STATX_GID
+                                              | cephfs.CEPH_STATX_ATIME
+                                              | cephfs.CEPH_STATX_MTIME
+                                              | cephfs.CEPH_STATX_SIZE,
+                                              cephfs.AT_SYMLINK_NOFOLLOW)
                         handled = True
                         mo = stx["mode"] & ~stat.S_IFMT(stx["mode"])
                         if stat.S_ISDIR(stx["mode"]):
@@ -173,9 +185,9 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                         if handled:
                             sync_attrs(fs_handle, d_full_dst, stx)
                     d = fs_handle.readdir(dir_handle)
-                stx_root = fs_handle.statx(src_root_path, cephfs.CEPH_STATX_ATIME |
-                                                          cephfs.CEPH_STATX_MTIME,
-                                                          cephfs.AT_SYMLINK_NOFOLLOW)
+                stx_root = fs_handle.statx(src_root_path, cephfs.CEPH_STATX_ATIME
+                                           | cephfs.CEPH_STATX_MTIME,
+                                           cephfs.AT_SYMLINK_NOFOLLOW)
                 fs_handle.lutimes(dst_root_path, (time.mktime(stx_root["atime"].timetuple()),
                                                   time.mktime(stx_root["mtime"].timetuple())))
         except cephfs.Error as e:
@@ -185,12 +197,14 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
     if should_cancel():
         raise VolumeException(-errno.EINTR, "clone operation interrupted")
 
+
 def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
     with open_volume_lockless(fs_client, volname) as fs_handle:
         with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
             src_path = clone_volumes[1].snapshot_data_path(clone_volumes[2])
             dst_path = clone_volumes[0].path
             bulk_copy(fs_handle, src_path, dst_path, should_cancel)
+
 
 def handle_clone_in_progress(fs_client, volspec, volname, index, groupname, subvolname, should_cancel):
     try:
@@ -204,6 +218,7 @@ def handle_clone_in_progress(fs_client, volspec, volname, index, groupname, subv
         raise VolumeException(oe.errno, oe.error_str)
     return (next_state, False)
 
+
 def handle_clone_failed(fs_client, volspec, volname, index, groupname, subvolname, should_cancel):
     try:
         with open_volume(fs_client, volname) as fs_handle:
@@ -214,6 +229,7 @@ def handle_clone_failed(fs_client, volspec, volname, index, groupname, subvolnam
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
 
+
 def handle_clone_complete(fs_client, volspec, volname, index, groupname, subvolname, should_cancel):
     try:
         with open_volume(fs_client, volname) as fs_handle:
@@ -223,6 +239,7 @@ def handle_clone_complete(fs_client, volspec, volname, index, groupname, subvoln
     except (MetadataMgrException, VolumeException) as e:
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
+
 
 def start_clone_sm(fs_client, volspec, volname, index, groupname, subvolname, state_table, should_cancel, snapshot_clone_delay):
     finished = False
@@ -239,19 +256,20 @@ def start_clone_sm(fs_client, volspec, volname, index, groupname, subvolname, st
                 raise VolumeException(-errno.EINVAL, "invalid clone state: \"{0}\"".format(current_state))
             (next_state, finished) = handler(fs_client, volspec, volname, index, groupname, subvolname, should_cancel)
             if next_state:
-                log.debug("({0}, {1}, {2}) transition state [\"{3}\" => \"{4}\"]".format(volname, groupname, subvolname,\
+                log.debug("({0}, {1}, {2}) transition state [\"{3}\" => \"{4}\"]".format(volname, groupname, subvolname,
                                                                                          current_state, next_state))
                 set_clone_state(fs_client, volspec, volname, groupname, subvolname, next_state)
                 current_state = next_state
     except VolumeException as ve:
-        log.error("clone failed for ({0}, {1}, {2}) (current_state: {3}, reason: {4})".format(volname, groupname,\
-                                                                                             subvolname, current_state, ve))
+        log.error("clone failed for ({0}, {1}, {2}) (current_state: {3}, reason: {4})".format(volname, groupname,
+                                                                                              subvolname, current_state, ve))
+
 
 def clone(fs_client, volspec, volname, index, clone_path, state_table, should_cancel, snapshot_clone_delay):
     log.info("cloning to subvolume path: {0}".format(clone_path))
     resolved = resolve(volspec, clone_path)
 
-    groupname  = resolved[0]
+    groupname = resolved[0]
     subvolname = resolved[1]
     log.debug("resolved to [group: {0}, subvolume: {1}]".format(groupname, subvolname))
 
@@ -261,6 +279,7 @@ def clone(fs_client, volspec, volname, index, clone_path, state_table, should_ca
         log.info("finished clone: ({0}, {1}, {2})".format(volname, groupname, subvolname))
     except VolumeException as ve:
         log.error("clone failed for ({0}, {1}, {2}), reason: {3}".format(volname, groupname, subvolname, ve))
+
 
 class Cloner(AsyncJobs):
     """
@@ -272,11 +291,11 @@ class Cloner(AsyncJobs):
         self.vc = volume_client
         self.snapshot_clone_delay = snapshot_clone_delay
         self.state_table = {
-            SubvolumeStates.STATE_PENDING      : handle_clone_pending,
-            SubvolumeStates.STATE_INPROGRESS   : handle_clone_in_progress,
-            SubvolumeStates.STATE_COMPLETE     : handle_clone_complete,
-            SubvolumeStates.STATE_FAILED       : handle_clone_failed,
-            SubvolumeStates.STATE_CANCELED     : handle_clone_failed,
+            SubvolumeStates.STATE_PENDING: handle_clone_pending,
+            SubvolumeStates.STATE_INPROGRESS: handle_clone_in_progress,
+            SubvolumeStates.STATE_COMPLETE: handle_clone_complete,
+            SubvolumeStates.STATE_FAILED: handle_clone_failed,
+            SubvolumeStates.STATE_CANCELED: handle_clone_failed,
         }
         super(Cloner, self).__init__(volume_client, "cloner", tp_size)
 
@@ -332,7 +351,7 @@ class Cloner(AsyncJobs):
                         clone_job = (track_idx, clone_subvolume.base_path)
                         jobs = [j[0] for j in self.jobs[volname]]
                         with lock_timeout_log(self.lock):
-                            if SubvolumeOpSm.is_init_state(SubvolumeTypes.TYPE_CLONE, clone_state) and not clone_job in jobs:
+                            if SubvolumeOpSm.is_init_state(SubvolumeTypes.TYPE_CLONE, clone_state) and clone_job not in jobs:
                                 logging.debug("Cancelling pending job {0}".format(clone_job))
                                 # clone has not started yet -- cancel right away.
                                 self._cancel_pending_clone(fs_handle, clone_subvolume, clonename, groupname, status, track_idx)
