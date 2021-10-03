@@ -114,10 +114,10 @@ void decode(bufferlist::const_iterator& bl, jspan_context& span_ctx) {
 
       baggage[key] = value;
     }
-  TraceID trace_id(trace_id_high, trace_id_low);
-  SpanContext ctx(trace_id, span_id, parent_id, flags, baggage);
-  ctx.swap(span_ctx);
-  DECODE_FINISH(bl);
+    TraceID trace_id(trace_id_high, trace_id_low);
+    SpanContext ctx(trace_id, span_id, parent_id, flags, baggage);
+    ctx.swap(span_ctx);
+    DECODE_FINISH(bl);
   }
 }
 
