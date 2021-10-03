@@ -169,15 +169,13 @@ export class PoolFormComponent extends CdForm implements OnInit {
         }),
         erasureProfile: new FormControl(null),
         pgNum: new FormControl('', {
-          validators: [Validators.required, Validators.min(1)]
+          validators: [Validators.required]
         }),
         pgAutoscaleMode: new FormControl(null),
         ecOverwrites: new FormControl(false),
         compression: compressionForm,
         max_bytes: new FormControl(''),
-        max_objects: new FormControl(0, {
-          validators: [Validators.min(0)]
-        })
+        max_objects: new FormControl(0)
       },
       [CdValidators.custom('form', (): null => null)]
     );
@@ -667,6 +665,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       return;
     }
     if (usage) {
+      deletionBtn.animation = false;
       deletionBtn.toggle();
       this.data[dataName] = true;
       setTimeout(() => {

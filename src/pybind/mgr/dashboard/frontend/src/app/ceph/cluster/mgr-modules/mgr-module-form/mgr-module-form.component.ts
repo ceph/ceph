@@ -68,14 +68,7 @@ export class MgrModuleFormComponent extends CdForm implements OnInit {
       case 'int':
       case 'size':
       case 'secs':
-        result.push(CdValidators.number());
         result.push(Validators.required);
-        if (_.isNumber(moduleOption.min)) {
-          result.push(Validators.min(moduleOption.min));
-        }
-        if (_.isNumber(moduleOption.max)) {
-          result.push(Validators.max(moduleOption.max));
-        }
         break;
       case 'str':
         if (_.isNumber(moduleOption.min)) {
