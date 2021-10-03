@@ -36,7 +36,7 @@ class Tracer {
   jspan start_trace(opentracing::string_view trace_name);
   // creates and returns a new span with `span_name` which parent span is `parent_span'
   jspan add_span(opentracing::string_view span_name, jspan& parent_span);
-  jspan add_span(opentracing::string_view span_name, const opentracing::SpanContext& parent_ctx);
+  jspan add_span(opentracing::string_view span_name, const jspan_context& parent_ctx);
 
 };
 
