@@ -198,7 +198,8 @@
                 <input id="interval"
                        class="form-control"
                        type="number"
-                       formControlName="interval">
+                       formControlName="interval"
+                       min="8">
                 <span class="invalid-feedback"
                       *ngIf="configForm.showError('interval', formDir, 'min')"
                       i18n>The entered value is too low! It must be greater or equal to 8.</span>

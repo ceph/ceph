@@ -12,7 +12,6 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TelemetryNotificationService } from '~/app/shared/services/telemetry-notification.service';
 
@@ -119,14 +118,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
     const result = [];
     switch (option.type) {
       case 'int':
-        result.push(CdValidators.number());
         result.push(Validators.required);
-        if (_.isNumber(option.min)) {
-          result.push(Validators.min(option.min));
-        }
-        if (_.isNumber(option.max)) {
-          result.push(Validators.max(option.max));
-        }
         break;
       case 'str':
         if (_.isNumber(option.min)) {
