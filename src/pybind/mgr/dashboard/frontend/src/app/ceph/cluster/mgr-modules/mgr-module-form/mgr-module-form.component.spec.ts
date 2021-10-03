@@ -44,27 +44,11 @@ describe('MgrModuleFormComponent', () => {
       expect(result.length).toBe(1);
     });
 
-    it('should return number, required validators for types uint, int, size, secs', () => {
+    it('should return required validator for types uint, int, size, secs', () => {
       const types = ['uint', 'int', 'size', 'secs'];
       types.forEach((type) => {
         const result = component.getValidators({ type: type });
-        expect(result.length).toBe(2);
-      });
-    });
-
-    it('should return number, required, min validators for types uint, int, size, secs', () => {
-      const types = ['uint', 'int', 'size', 'secs'];
-      types.forEach((type) => {
-        const result = component.getValidators({ type: type, min: 2 });
-        expect(result.length).toBe(3);
-      });
-    });
-
-    it('should return number, required, min, max validators for types uint, int, size, secs', () => {
-      const types = ['uint', 'int', 'size', 'secs'];
-      types.forEach((type) => {
-        const result = component.getValidators({ type: type, min: 2, max: 5 });
-        expect(result.length).toBe(4);
+        expect(result.length).toBe(1);
       });
     });
 

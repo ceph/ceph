@@ -31,7 +31,9 @@ if [ $? -gt 0 ]; then
   echo -e "\nTranslations extraction has failed."
 else
   i18n_lint=`awk '/<source> |<source>$| <\/source>/,/<\/context-group>/ {printf "%-4s ", NR; print}' src/locale/messages.xlf`
-  if [ "$i18n_lint" ]; then
+
+  # Excluding the node_modules/ folder errors from the lint error
+  if [[ -n "$i18n_lint" &&  $i18n_lint != *"node_modules/"* ]]; then
     echo -e "\nThe following source translations in 'messages.xlf' need to be \
   fixed, please check the I18N suggestions on https://docs.ceph.com/en/latest/dev/developer_guide/dash-devel/#i18n:\n"
     echo "${i18n_lint}"

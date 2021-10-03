@@ -29,12 +29,12 @@
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
             "allowedCommonJsDependencies": [
+              "brace-expansion",
               "chart.js",
               "core-js",
               "file-saver",
               "lodash"
             ],
-            "aot": true,
             "i18nMissingTranslation": "ignore",
             "outputPath": "dist",
             "index": "src/index.html",
@@ -65,7 +65,13 @@
               "includePaths": [
                 "src"
               ]
-            }
+            },
+            "vendorChunk": true,
+            "extractLicenses": false,
+            "buildOptimizer": false,
+            "sourceMap": true,
+            "optimization": false,
+            "namedChunks": true
           },
           "configurations": {
             "production": {
@@ -128,7 +134,8 @@
             "zh-Hant": {
               "localize": ["zh-Hant"]
             }
-          }
+          },
+          "defaultConfiguration": ""
         },
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",

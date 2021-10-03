@@ -1,4 +1,4 @@
-import { NgbNav, NgbNavChangeEvent, NgbNavConfig } from '@ng-bootstrap/ng-bootstrap';
+import { NgbConfig, NgbNav, NgbNavChangeEvent, NgbNavConfig } from '@ng-bootstrap/ng-bootstrap';
 
 import { StatefulTabDirective } from './stateful-tab.directive';
 
@@ -9,7 +9,7 @@ describe('StatefulTabDirective', () => {
   });
 
   it('should get and select active tab', () => {
-    const nav = new NgbNav('tablist', new NgbNavConfig(), <any>null, null);
+    const nav = new NgbNav('tablist', new NgbNavConfig(new NgbConfig()), <any>null, null);
     spyOn(nav, 'select');
     const directive = new StatefulTabDirective(nav);
     directive.cdStatefulTab = 'bar';
