@@ -120,7 +120,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         ]
       ],
       hosts: [[]],
-      count: [null, [CdValidators.number(false), Validators.min(1)]],
+      count: [null, [CdValidators.number(false)]],
       unmanaged: [false],
       // iSCSI
       pool: [
@@ -133,13 +133,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         ]
       ],
       // RGW
-      rgw_frontend_port: [
-        null,
-        [CdValidators.number(false), Validators.min(1), Validators.max(65535)]
-      ],
+      rgw_frontend_port: [null, [CdValidators.number(false)]],
       // iSCSI
       trusted_ip_list: [null],
-      api_port: [null, [CdValidators.number(false), Validators.min(1), Validators.max(65535)]],
+      api_port: [null, [CdValidators.number(false)]],
       api_user: [
         null,
         [
@@ -177,8 +174,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           })
         ]
       ],
-      frontend_port: [null, [CdValidators.number(false), Validators.min(1), Validators.max(65535)]],
-      monitor_port: [null, [CdValidators.number(false), Validators.min(1), Validators.max(65535)]],
+      frontend_port: [null, [CdValidators.number(false)]],
+      monitor_port: [null, [CdValidators.number(false)]],
       virtual_interface_networks: [null],
       // RGW, Ingress & iSCSI
       ssl: [false],
