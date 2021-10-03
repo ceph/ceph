@@ -106,7 +106,7 @@ Members
 * Matthew Leonard (Bloomberg)
 * Mike Perez (Red Hat) - Ceph community manager
 * Myoungwon Oh (Samsung Electronics)
-* Paul Emmerich (croit) - General member representative
+* Martin Verges (croit) - General member representative
 * Pawel Sadowski (OVH)
 * Phil Straw (SoftIron)
 * Robin Johnson (DigitalOcean)
