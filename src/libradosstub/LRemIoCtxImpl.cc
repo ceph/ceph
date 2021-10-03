@@ -455,7 +455,7 @@ int LRemIoCtxImpl::execute_aio_operations(const std::string& oid,
     for (ObjectOperations::iterator it = ops->ops.begin();
          it != ops->ops.end(); ++it) {
       ret = (*it)(this, oid, pbl, snap_id, snapc, objver, trans);
-      dout(0) << "execute_aio_operations op=" << "(): -> " << ret << dendl;
+      dout(20) << "execute_aio_operations op=" << "(): -> " << ret << dendl;
       if (ret < 0 &&
           !(trans->flags & LIBRADOS_OP_FLAG_FAILOK)) {
         break;

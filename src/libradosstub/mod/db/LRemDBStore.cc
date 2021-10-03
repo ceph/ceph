@@ -971,6 +971,12 @@ void bl_from_blob_col(SQLite::Statement& q, int col_num, bufferlist *bl)
 }
 
 int LRemDBStore::ObjData::read_block(int bid, bufferlist *bl) {
+  auto iter = trans->data_blocks.find(bid);
+  if (iter != trans->data_blocks.end()) {
+    *bl = iter->second;
+    return 0;
+  }
+
   auto& dbo = trans->dbo;
   SQLite::Statement q = dbo->statement(string("SELECT data FROM ") + table_name +
                                        " WHERE nspace = ? AND oid = ? AND bid == ?");
@@ -990,10 +996,14 @@ int LRemDBStore::ObjData::read_block(int bid, bufferlist *bl) {
 
   bl_from_blob_col(q, 0, bl);
 
+  trans->data_blocks[bid] = *bl;
+
   return 0;
 }
 
 int LRemDBStore::ObjData::write_block(int bid, bufferlist& bl) {
+  trans->data_blocks[bid] = bl;
+
   auto& dbo = trans->dbo;
   auto q = dbo->deferred_statement(string("REPLACE INTO ") + table_name +
                                        " VALUES ( ?, ?, ?, ? )");
@@ -1035,14 +1045,18 @@ int LRemDBStore::ObjData::read(uint64_t ofs, uint64_t len, bufferlist *bl) {
     bufferlist bbl;
     int r = read_block(cur_block, &bbl);
     if (r == -ENOENT) {
-      bl->append_zero(block_len);
+      bbl.append_zero(block_len);
     } else if (r < 0) {
       return r;
     }
 
     auto read_len = bbl.length();
 
-    auto zero_len = block_len - read_len;
+    auto zero_len = 0;
+    if (block_len > read_len) {
+      zero_len = block_len - read_len;
+    }
+
 
     bbl.splice(block_ofs, read_len - block_ofs, bl);
 
@@ -1074,6 +1088,7 @@ int LRemDBStore::ObjData::write(uint64_t ofs, uint64_t len, const bufferlist& bl
 
   while (cur_block <= end_block) {
     int block_len = std::min((uint64_t)block_size, block_ofs + len);
+    auto slen = block_len - block_ofs;
     bufferlist bbl;
     int r = read_block(cur_block, &bbl);
     if (r < 0 && r != -ENOENT) {
@@ -1086,10 +1101,9 @@ int LRemDBStore::ObjData::write(uint64_t ofs, uint64_t len, const bufferlist& bl
 
     char *pdst = bbl.c_str();
 
-    bliter.copy(block_len, pdst + block_ofs);
-    bliter += block_ofs;
+    bliter.copy(slen, pdst + block_ofs);
 
-    bufferptr bp(pdst, block_len);
+    bufferptr bp(pdst, bbl.length());
     bufferlist new_block;
 
     new_block.push_back(bp);
@@ -1100,7 +1114,7 @@ int LRemDBStore::ObjData::write(uint64_t ofs, uint64_t len, const bufferlist& bl
     }
 
     block_ofs = 0; /* next block starts from zero */
-    len -= block_len;
+    len -= slen;
     ++cur_block;
   }
 
@@ -1146,7 +1160,9 @@ int LRemDBStore::ObjData::truncate(uint64_t ofs) {
   }
 
   bufferlist newbl;
-  bl.splice(0, block_ofs, &newbl);
+  if (block_ofs > 0) {
+    bl.splice(0, block_ofs, &newbl);
+  }
 
   r = write_block(bid, newbl);
   if (r < 0) {

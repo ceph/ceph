@@ -2473,6 +2473,19 @@ int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
   return 0;
 }
 
+void cls_cxx_subop_version(cls_method_context_t hctx, std::string *s)
+{
+  if (!s)
+    return;
+
+  char buf[32];
+  uint64_t ver = cls_current_version(hctx);
+  int subop_num = cls_current_subop_num(hctx);
+  snprintf(buf, sizeof(buf), "%lld.%d", (long long)ver, subop_num);
+
+  *s = buf;
+}
+
 int cls_log(int level, const char *format, ...) {
   int size = 256;
   va_list ap;

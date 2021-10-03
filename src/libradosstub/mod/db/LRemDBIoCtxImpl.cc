@@ -884,7 +884,6 @@ int LRemDBIoCtxImpl::write_full(LRemTransactionStateRef& trans, bufferlist& bl,
   }
 
   file->modify_meta().epoch = epoch;
-
   file->obj->truncate(0, file->meta);
   file->obj->write(0, bl.length(), bl, file->meta);
   return file->flush();

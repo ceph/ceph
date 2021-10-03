@@ -279,6 +279,8 @@ struct LRemDBTransactionState : public LRemTransactionState {
     std::optional<LRemDBStore::Obj::Meta> meta;
   } cache;
 
+  std::map<int, bufferlist> data_blocks;
+
   LRemDBTransactionState(CephContext *_cct);
   LRemDBTransactionState(CephContext *_cct,
                          const LRemCluster::ObjectLocator& loc);
