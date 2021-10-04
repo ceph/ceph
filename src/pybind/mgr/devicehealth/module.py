@@ -8,7 +8,7 @@ from mgr_module import MgrModule, CommandResult
 import operator
 import rados
 from threading import Event
-from datetime import datetime, timedelta, date, time
+from datetime import datetime, timedelta, date, time, timezone
 from six import iteritems
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
@@ -491,7 +491,7 @@ class Module(MgrModule):
         devs = self.get("devices")
         osds_in = {}
         osds_out = {}
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)  # e.g. '2021-09-22 13:18:45.021712+00:00'
         osdmap = self.get("osd_map")
         assert osdmap is not None
         for dev in devs['devices']:
@@ -506,7 +506,7 @@ class Module(MgrModule):
                 continue
             # life_expectancy_(min/max) is in the format of:
             # '%Y-%m-%dT%H:%M:%S.%f%z', e.g.:
-            # '2019-01-20T21:12:12.000000Z'
+            # '2019-01-20 21:12:12.000000+00:00'
             life_expectancy_max = datetime.strptime(
                 dev['life_expectancy_max'],
                 '%Y-%m-%dT%H:%M:%S.%f%z')
