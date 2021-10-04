@@ -1231,8 +1231,8 @@ COMMAND("mgr dump "
 	"mgr", "r")
 COMMAND("mgr fail name=who,type=CephString,req=false",
 	"treat the named manager daemon as failed", "mgr", "rw")
-COMMAND("mgr module ls",
-	"list active mgr modules", "mgr", "r")
+COMMAND("mgr module ls name=detail,type=CephChoices,strings=detail,req=false",
+        "list active mgr modules", "mgr", "r")
 COMMAND("mgr services",
 	"list service endpoints provided by mgr modules",
         "mgr", "r")
