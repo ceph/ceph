@@ -67,28 +67,27 @@ seastar::future<> PeeringEvent::start()
       on_pg_absent();
       handle.exit();
       return complete_rctx(pg);
-    } else {
-      logger().debug("{}: pg present", *this);
-      return with_blocking_future(handle.enter(pp(*pg).await_map)
-      ).then([this, pg] {
-	return with_blocking_future(
-	  pg->osdmap_gate.wait_for_map(evt.get_epoch_sent()));
-      }).then([this, pg](auto) {
-	return with_blocking_future(handle.enter(pp(*pg).process));
-      }).then([this, pg] {
-        // TODO: likely we should synchronize also with the pg log-based
-        // recovery.
-	return with_blocking_future(
-          handle.enter(BackfillRecovery::bp(*pg).process));
-      }).then([this, pg] {
-	pg->do_peering_event(evt, ctx);
-	handle.exit();
-	return complete_rctx(pg);
-      }).then([this, pg] {
-	return pg->get_need_up_thru() ? shard_services.send_alive(pg->get_same_interval_since())
-                               : seastar::now();
-      });
     }
+    logger().debug("{}: pg present", *this);
+    return with_blocking_future(handle.enter(pp(*pg).await_map)
+    ).then([this, pg] {
+      return with_blocking_future(
+        pg->osdmap_gate.wait_for_map(evt.get_epoch_sent()));
+    }).then([this, pg](auto) {
+      return with_blocking_future(handle.enter(pp(*pg).process));
+    }).then([this, pg] {
+      // TODO: likely we should synchronize also with the pg log-based
+      // recovery.
+      return with_blocking_future(
+        handle.enter(BackfillRecovery::bp(*pg).process));
+    }).then([this, pg] {
+      pg->do_peering_event(evt, ctx);
+      handle.exit();
+      return complete_rctx(pg);
+    }).then([this, pg] {
+      return pg->get_need_up_thru() ? shard_services.send_alive(pg->get_same_interval_since())
+                             : seastar::now();
+    });
   }).then([this] {
     return shard_services.send_pg_temp();
   }).finally([ref=std::move(ref)] {
