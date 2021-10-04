@@ -5003,41 +5003,52 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_state_prepare_lat, "state_prepare_lat",
 		 "Average prepare state latency",
 		 "sprl", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_kv_flush_lat, "kv_flush_lat",
+		 "Average kv_thread flush latency",
+		 "kfll", PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg(l_bluestore_kv_commit_lat, "kv_commit_lat",
+		 "Average kv_thread commit latency",
+		 "kcol", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_kv_sync_lat, "kv_sync_lat",
+		 "Average kv_sync thread latency",
+		 "kscl", PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg(l_bluestore_kv_final_lat, "kv_final_lat",
+		 "Average kv_finalize thread latency",
+		 "kfll", PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg(l_bluestore_state_prepare_lat, "state_prepare_lat",
+    "Average prepare state latency",
+    "sprl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_aio_wait_lat, "state_aio_wait_lat",
 		 "Average aio_wait state latency",
 		 "sawl", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_time_avg(l_bluestore_state_io_done_lat, "state_io_done_lat",
-		 "Average io_done state latency",
-		 "sidl", PerfCountersBuilder::PRIO_USEFUL);
+    "Average io_done state latency",
+    "sidl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_kv_queued_lat, "state_kv_queued_lat",
-		"Average kv_queued state latency",
-		"skql", PerfCountersBuilder::PRIO_USEFUL);
+    "Average kv_queued state latency",
+    "skql", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_kv_committing_lat, "state_kv_commiting_lat",
-		 "Average kv_commiting state latency",
-		 "skcl", PerfCountersBuilder::PRIO_USEFUL);
+    "Average kv_commiting state latency",
+    "skcl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_kv_done_lat, "state_kv_done_lat",
-		 "Average kv_done state latency",
-		 "skdl", PerfCountersBuilder::PRIO_USEFUL);
-  b.add_time_avg(l_bluestore_state_finishing_lat, "state_finishing_lat",
-		 "Average finishing state latency",
-		 "sfnl", PerfCountersBuilder::PRIO_USEFUL);
-  b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat",
-		 "Average done state latency",
-		 "sdnl", PerfCountersBuilder::PRIO_USEFUL);
+    "Average kv_done state latency",
+    "skdl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_deferred_queued_lat, "state_deferred_queued_lat",
-		 "Average deferred_queued state latency",
-		 "sdql", PerfCountersBuilder::PRIO_USEFUL);
+    "Average deferred_queued state latency",
+    "sdql", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_deferred_aio_wait_lat, "state_deferred_aio_wait_lat",
-		 "Average aio_wait state latency",
-		 "sdal", PerfCountersBuilder::PRIO_USEFUL);
+    "Average aio_wait state latency",
+    "sdal", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_deferred_cleanup_lat, "state_deferred_cleanup_lat",
-		 "Average cleanup state latency",
-		 "sdcl", PerfCountersBuilder::PRIO_USEFUL);
-  //****************************************
-
-  // Update Transaction stats
-  //****************************************
-  b.add_time_avg(l_bluestore_throttle_lat, "txc_throttle_lat",
+    "Average cleanup state latency",
+    "sdcl", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_state_finishing_lat, "state_finishing_lat",
+    "Average finishing state latency",
+    "sfnl", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat",
+    "Average done state latency",
+    "sdnl", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_throttle_lat, "throttle_lat",
 		 "Average submit throttle latency",
 		 "th_l", PerfCountersBuilder::PRIO_CRITICAL);
   b.add_time_avg(l_bluestore_submit_lat, "txc_submit_lat",
@@ -5089,6 +5100,74 @@ void BlueStore::_init_logger()
   // write op stats
   //****************************************
   b.add_u64_counter(l_bluestore_write_big, "write_big",
+    "Average read onode metadata latency",
+    "roml", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_read_wait_aio_lat, "read_wait_aio_lat",
+    "Average read latency",
+    "rwal", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_compress_lat, "compress_lat",
+    "Average compress latency",
+    "_cpl", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_decompress_lat, "decompress_lat",
+    "Average decompress latency",
+    "dcpl", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_csum_lat, "csum_lat",
+    "Average checksum latency",
+    "csml", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluestore_compress_success_count, "compress_success_count",
+    "Sum for beneficial compress ops");
+  b.add_u64_counter(l_bluestore_compress_rejected_count, "compress_rejected_count",
+    "Sum for compress ops rejected due to low net gain of space");
+  b.add_u64_counter(l_bluestore_write_pad_bytes, "write_pad_bytes",
+		    "Sum for write-op padded bytes", NULL, 0, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluestore_deferred_write_ops, "deferred_write_ops",
+		    "Sum for deferred write op");
+  b.add_u64_counter(l_bluestore_deferred_write_bytes, "deferred_write_bytes",
+		    "Sum for deferred write bytes", "def", 0, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluestore_write_penalty_read_ops, "write_penalty_read_ops",
+		    "Sum for write penalty read ops");
+  b.add_u64(l_bluestore_allocated, "bluestore_allocated",
+    "Sum for allocated bytes");
+  b.add_u64(l_bluestore_stored, "bluestore_stored",
+    "Sum for stored bytes");
+  b.add_u64(l_bluestore_compressed, "bluestore_compressed",
+    "Sum for stored compressed bytes",
+    "c", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64(l_bluestore_compressed_allocated, "bluestore_compressed_allocated",
+    "Sum for bytes allocated for compressed data",
+    "c_a", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64(l_bluestore_compressed_original, "bluestore_compressed_original",
+    "Sum for original bytes that were compressed",
+    "c_o", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64(l_bluestore_onodes, "bluestore_onodes",
+	    "Number of onodes in cache");
+  b.add_u64(l_bluestore_pinned_onodes, "bluestore_pinned_onodes",
+            "Number of pinned onodes in cache");
+  b.add_u64_counter(l_bluestore_onode_hits, "bluestore_onode_hits",
+		    "Count of onode cache lookup hits",
+		    "o_ht", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluestore_onode_misses, "bluestore_onode_misses",
+		    "Count of onode cache lookup misses",
+		    "o_ms", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluestore_onode_shard_hits, "bluestore_onode_shard_hits",
+		    "Sum for onode-shard lookups hit in the cache");
+  b.add_u64_counter(l_bluestore_onode_shard_misses,
+		    "bluestore_onode_shard_misses",
+		    "Sum for onode-shard lookups missed in the cache");
+  b.add_u64(l_bluestore_extents, "bluestore_extents",
+	    "Number of extents in cache");
+  b.add_u64(l_bluestore_blobs, "bluestore_blobs",
+	    "Number of blobs in cache");
+  b.add_u64(l_bluestore_buffers, "bluestore_buffers",
+	    "Number of buffers in cache");
+  b.add_u64(l_bluestore_buffer_bytes, "bluestore_buffer_bytes",
+	    "Number of buffer bytes in cache", NULL, 0, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluestore_buffer_hit_bytes, "bluestore_buffer_hit_bytes",
+	    "Sum for bytes of read hit in the cache", NULL, 0, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluestore_buffer_miss_bytes, "bluestore_buffer_miss_bytes",
+	    "Sum for bytes of read missed in the cache", NULL, 0, unit_t(UNIT_BYTES));
+
+  b.add_u64_counter(l_bluestore_write_big, "bluestore_write_big",
 		    "Large aligned writes into fresh blobs");
   b.add_u64_counter(l_bluestore_write_big_bytes, "write_big_bytes",
 		    "Large aligned writes into fresh blobs (bytes)",
@@ -5237,10 +5316,13 @@ void BlueStore::_init_logger()
   b.add_u64_counter(l_bluestore_gc_merged, "gc_merged",
 		    "Sum for extents that have been merged due to garbage "
 		    "collection");
-  //****************************************
-
-  // other client ops latencies
-  //****************************************
+  b.add_u64_counter(l_bluestore_read_eio, "bluestore_read_eio",
+                    "Read EIO errors propagated to high level callers");
+  b.add_u64_counter(l_bluestore_reads_with_retries, "bluestore_reads_with_retries",
+                    "Read operations that required at least one retry due to failed checksum validation",
+		    "rd_r", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64(l_bluestore_fragmentation, "bluestore_fragmentation_micros",
+            "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000");
   b.add_time_avg(l_bluestore_omap_seek_to_first_lat, "omap_seek_to_first_lat",
     "Average omap iterator seek_to_first call latency",
     "osfl", PerfCountersBuilder::PRIO_USEFUL);
