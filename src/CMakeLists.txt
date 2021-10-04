@@ -955,6 +955,10 @@ if(WITH_MGR)
   add_dependencies(vstart ceph-volume-venv-setup)
 endif()
 
+if(WITH_MGR)
+  add_dependencies(vstart cephadm)
+endif()
+
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS
     vstart
