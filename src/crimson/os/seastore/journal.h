@@ -115,13 +115,9 @@ public:
       [this, rsize, record=std::move(record), &handle]() mutable {
 	auto seq = next_journal_segment_seq - 1;
 	return write_record(
-	  rsize, std::move(record),
+	  rsize, seq, std::move(record),
 	  handle
-	).safe_then([rsize, seq](auto addr) {
-	  return std::make_pair(
-	    addr.add_offset(rsize.mdlength),
-	    journal_seq_t{seq, addr});
-	});
+	);
       });
   }
 
@@ -159,6 +155,11 @@ private:
   Scanner& scanner;
   WritePipeline *write_pipeline = nullptr;
 
+  std::list<std::tuple<segment_off_t,
+                       segment_seq_t,
+                       SegmentRef,
+                       ceph::bufferlist>> submit_queue;
+
   void reset_soft_state() {
     next_journal_segment_seq = 0;
     current_segment_nonce = 0;
@@ -176,9 +177,11 @@ private:
   /// do record write
   using write_record_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  using write_record_ret = write_record_ertr::future<paddr_t>;
+  using write_record_ret = write_record_ertr::future<
+    std::pair<paddr_t, journal_seq_t>>;
   write_record_ret write_record(
     record_size_t rsize,
+    segment_seq_t seq,
     record_t &&record,
     OrderingHandle &handle);
 

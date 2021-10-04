@@ -102,12 +102,14 @@ Journal::initialize_segment(Segment &segment)
 
 Journal::write_record_ret Journal::write_record(
   record_size_t rsize,
+  segment_seq_t seq,
   record_t &&record,
   OrderingHandle &handle)
 {
   ceph::bufferlist to_write = encode_record(
     rsize, std::move(record), segment_manager.get_block_size(),
     committed_to, current_segment_nonce);
+
   auto target = written_to;
   assert((to_write.length() % segment_manager.get_block_size()) == 0);
   written_to += to_write.length();
@@ -118,35 +120,89 @@ Journal::write_record_ret Journal::write_record(
     target);
 
   auto segment_id = current_journal_segment->get_segment_id();
-
+  submit_queue.emplace_back(std::make_tuple(target,
+                                            seq,
+                                            current_journal_segment,
+                                            std::move(to_write)));
+  auto addr = paddr_t{segment_id, target};
   // Start write under the current exclusive stage, but wait for it
   // in the device_submission concurrent stage to permit multiple
   // overlapping writes.
-  auto write_fut = current_journal_segment->write(target, to_write);
   return handle.enter(write_pipeline->device_submission
-  ).then([write_fut = std::move(write_fut)]() mutable {
-    return std::move(write_fut
-    ).handle_error(
-      write_record_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-	"Invalid error in Journal::write_record"
-      }
-    );
-  }).safe_then([this, &handle] {
+  ).then([this, &handle] {
     return handle.enter(write_pipeline->finalize);
-  }).safe_then([this, target, segment_id] {
-    logger().debug(
-      "write_record: commit target {}",
-      target);
-    if (segment_id == current_journal_segment->get_segment_id()) {
-      assert(committed_to < target);
-      committed_to = target;
+  }).then([this, rsize, seq, addr]() -> write_record_ret {
+    if (submit_queue.empty()) {
+      return write_record_ret(
+        write_record_ertr::ready_future_marker{},
+          std::make_pair(
+	    addr.add_offset(rsize.mdlength),
+	    journal_seq_t{seq, addr})
+	);
+    } else {
+      auto [first_target,
+            first_seq,
+            first_journal_segment,
+            first_write] = submit_queue.front();
+      if(first_seq > seq) {
+        return write_record_ret(
+          write_record_ertr::ready_future_marker{},
+            std::make_pair(
+              addr.add_offset(rsize.mdlength),
+              journal_seq_t{seq, addr})
+        );
+      } else {
+        std::list<std::tuple<segment_off_t,
+	                     segment_seq_t,
+			     SegmentRef,
+			     ceph::bufferlist>> write_queue;
+        write_queue.swap(submit_queue);
+        bufferlist bl;
+        auto tuple = write_queue.front();
+        auto [write_target, write_seq,  write_journal_segment, to_write] = tuple;
+        bl.append(to_write);
+        auto commit_target = write_target;
+        write_queue.pop_front();
+        while (!write_queue.empty()) {
+          auto tmp_tuple = write_queue.front();
+          auto [tmp_target, tmp_seq, tmp_journal_segment, tmp_write] = tmp_tuple;
+          if (write_journal_segment == tmp_journal_segment) {
+            bl.append(tmp_write);
+            commit_target = tmp_target;
+            write_queue.pop_front();
+          } else {
+	    logger().error("cross segments: {}->{}",
+	      write_journal_segment, tmp_journal_segment);
+	    submit_queue.splice(submit_queue.begin(), write_queue);
+            break;
+          }
+        }
+        bl.rebuild();
+        return write_journal_segment->write(write_target, bl)
+	  .handle_error(
+            write_record_ertr::pass_further{},
+            crimson::ct_error::assert_all{
+              "Invalid error in Journal::write_record"
+            }
+        ).safe_then ([this, rsize, seq, addr, commit_target,
+          write_journal_segment = write_journal_segment] {
+          logger().debug(
+            "write_record: commit target {}",
+            commit_target);
+          if (write_journal_segment->get_segment_id() ==
+            current_journal_segment->get_segment_id()) {
+            assert(committed_to < commit_target);
+            committed_to = commit_target;
+          }
+          return write_record_ret(
+            write_record_ertr::ready_future_marker{},
+            std::make_pair(
+              addr.add_offset(rsize.mdlength),
+              journal_seq_t{seq, addr})
+          );
+        });
+      }
     }
-    return write_record_ret(
-      write_record_ertr::ready_future_marker{},
-      paddr_t{
-	segment_id,
-	target});
   });
 }
 
