@@ -334,7 +334,7 @@ and development clusters can run successfully with modest hardware.
 +--------------+----------------+-----------------------------------------+
 | ``ceph-mon`` | Processor      | - 2 cores minimum                       |
 |              +----------------+-----------------------------------------+
-|              | RAM            |  24GB+ per daemon                       |
+|              | RAM            |  2-4GB+ per daemon                      |
 |              +----------------+-----------------------------------------+
 |              | Disk Space     |  60 GB per daemon                       |
 |              +----------------+-----------------------------------------+
