@@ -953,6 +953,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
 
   string prefix;
   cmd_getval(cmdmap, "prefix", prefix);
+
   int r = 0;
 
   if (prefix == "mgr stat") {
@@ -982,6 +983,9 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     }
     f->flush(rdata);
   } else if (prefix == "mgr module ls") {
+    string detail;
+    cmd_getval(cmdmap, "detail", detail);
+
     f->open_object_section("modules");
     {
       f->open_array_section("always_on_modules");
@@ -1002,9 +1006,14 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       for (auto& p : map.available_modules) {
         if (map.modules.count(p.name) == 0 &&
             map.get_always_on_modules().count(p.name) == 0) {
-          // For disabled modules, we show the full info, to
-          // give a hint about whether enabling it will work
-          p.dump(f.get());
+	  if (detail == "detail") {
+	    // For disabled modules, we show the full info if the detail
+	    // parameter is enabled, to give a hint about whether enabling it will work
+	    p.dump(f.get());
+	  } else {
+	    // Otherwise, we give a shortened summary by default
+	    f->dump_string("module", p.name);
+	  }
         }
       }
       f->close_section();

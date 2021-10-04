@@ -580,7 +580,7 @@ Subcommand ``module ls`` will list currently enabled manager modules (plugins).
 
 Usage::
 
-  ceph mgr module ls
+  ceph mgr module ls {detail}
 
 Subcommand ``module enable`` will enable a manager module.  Available modules are included in MgrMap and visible via ``mgr dump``.
 
