@@ -19,7 +19,11 @@ set(dbstore_mgr_srcs
 add_library(dbstore_lib ${dbstore_srcs})
 target_include_directories(dbstore_lib PUBLIC "${CMAKE_SOURCE_DIR}/src/fmt/include")
 target_include_directories(dbstore_lib PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
-target_link_libraries(dbstore_lib PUBLIC spawn)
+set(link_targets spawn)
+if(WITH_JAEGER)
+  list(APPEND link_targets jaeger-base)
+endif()
+target_link_libraries(dbstore_lib PUBLIC ${link_targets})
 
 set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} dbstore_lib)
 
