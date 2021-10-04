@@ -60,7 +60,7 @@ protected:
   }
 
   virtual void on_pg_absent();
-  virtual seastar::future<> complete_rctx(Ref<PG>);
+  virtual PeeringEvent::interruptible_future<> complete_rctx(Ref<PG>);
   virtual seastar::future<Ref<PG>> get_pg() = 0;
 
 public:
@@ -95,7 +95,7 @@ protected:
   crimson::net::ConnectionRef conn;
 
   void on_pg_absent() final;
-  seastar::future<> complete_rctx(Ref<PG> pg) override;
+  PeeringEvent::interruptible_future<> complete_rctx(Ref<PG> pg) override;
   seastar::future<Ref<PG>> get_pg() final;
 
 public:
