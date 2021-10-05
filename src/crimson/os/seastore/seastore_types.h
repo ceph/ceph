@@ -1077,6 +1077,11 @@ struct rbm_alloc_delta_t {
   op_types_t op;
 };
 
+paddr_t convert_blk_paddr_to_paddr(blk_paddr_t addr, size_t block_size,
+    uint32_t blocks_per_segment, device_id_t d_id);
+blk_paddr_t convert_paddr_to_blk_paddr(paddr_t addr, size_t block_size,
+	uint32_t blocks_per_segment);
+
 struct extent_info_t {
   extent_types_t type = extent_types_t::NONE;
   laddr_t addr = L_ADDR_NULL;

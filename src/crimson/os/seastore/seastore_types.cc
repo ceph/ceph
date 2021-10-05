@@ -236,5 +236,23 @@ std::string device_type_to_string(device_type_t dtype) {
     ceph_assert(0 == "impossible");
   }
 }
+paddr_t convert_blk_paddr_to_paddr(blk_paddr_t addr, size_t block_size,
+    uint32_t blocks_per_segment, device_id_t d_id)
+{
+  paddr_t paddr;
+  paddr.segment = segment_id_t {
+    d_id,
+    (uint32_t)(addr / (block_size * blocks_per_segment))
+  };
+  paddr.offset = addr % (block_size * blocks_per_segment);
+  return paddr;
+}
+
+blk_paddr_t convert_paddr_to_blk_paddr(paddr_t addr, size_t block_size,
+    uint32_t blocks_per_segment)
+{
+  return (blk_paddr_t)(addr.segment.device_segment_id() *
+	  (block_size * blocks_per_segment) + addr.offset);
+}
 
 }
