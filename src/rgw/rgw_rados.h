@@ -9,6 +9,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
+#include "include/random.h"
 #include "common/RefCountedObj.h"
 #include "common/ceph_time.h"
 #include "common/Timer.h"
@@ -355,7 +356,7 @@ class RGWRados
   int open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx&  io_ctx,
 		    bool mostly_omap);
 
-  std::atomic<int64_t> max_req_id = { 0 };
+
   ceph::mutex lock = ceph::make_mutex("rados_timer_lock");
   SafeTimer *timer;
 
@@ -506,7 +507,7 @@ public:
   }
 
   uint64_t get_new_req_id() {
-    return ++max_req_id;
+    return ceph::util::generate_random_number<uint64_t>();
   }
 
   librados::IoCtx* get_lc_pool_ctx() {
