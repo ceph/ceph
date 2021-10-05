@@ -756,6 +756,11 @@ def ceph_osds(ctx, config):
             )
             cur += 1
 
+        if cur == 0:
+            _shell(ctx, cluster_name, remote, [
+                'ceph', 'orch', 'apply', 'osd', '--all-available-devices',
+            ])
+
         yield
     finally:
         pass
