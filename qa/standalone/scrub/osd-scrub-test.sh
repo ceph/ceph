@@ -454,6 +454,43 @@ function TEST_scrub_permit_time() {
     teardown $dir || return 1
 }
 
+function TEST_pg_dump_scrub_duration() {
+    local dir=$1
+    local poolname=test
+    local OSDS=3
+    local objects=15
+
+    TESTDATA="testdata.$$"
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd || return 1
+    done
+
+    # Create a pool with a single pg
+    create_pool $poolname 1 1
+    wait_for_clean || return 1
+    poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
+
+    dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
+    for i in `seq 1 $objects`
+    do
+        rados -p $poolname put obj${i} $TESTDATA
+    done
+    rm -f $TESTDATA
+
+    local pgid="${poolid}.0"
+    pg_scrub $pgid || return 1
+
+    ceph pg $pgid query | jq '.info.stats.scrub_duration'
+    test "$(ceph pg $pgid query | jq '.info.stats.scrub_duration')" '>' "0" || return 1
+
+    teardown $dir || return 1
+}
+
 main osd-scrub-test "$@"
 
 # Local Variables:
