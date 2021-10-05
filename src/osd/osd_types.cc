@@ -2856,6 +2856,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_bool("pin_stats_invalid", pin_stats_invalid);
   f->dump_bool("manifest_stats_invalid", manifest_stats_invalid);
   f->dump_unsigned("snaptrimq_len", snaptrimq_len);
+  f->dump_float("scrub_duration", scrub_duration);
   stats.dump(f);
   f->open_array_section("up");
   for (auto p = up.cbegin(); p != up.cend(); ++p)
@@ -2910,7 +2911,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(26, 22, bl);
+  ENCODE_START(27, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -2958,6 +2959,7 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(manifest_stats_invalid, bl);
   encode(avail_no_missing, bl);
   encode(object_location_counts, bl);
+  encode(scrub_duration, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -3032,6 +3034,9 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       decode(avail_no_missing, bl);
       decode(object_location_counts, bl);
     }
+    if (struct_v >= 27) {
+      decode(scrub_duration, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -3064,6 +3069,7 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.last_deep_scrub = eversion_t(13, 14);
   a.last_deep_scrub_stamp = utime_t(15, 16);
   a.last_clean_scrub_stamp = utime_t(17, 18);
+  a.scrub_duration = 0.003;
   a.snaptrimq_len = 1048576;
   list<object_stat_collection_t*> l;
   object_stat_collection_t::generate_test_instances(l);
@@ -3137,7 +3143,8 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.pin_stats_invalid == r.pin_stats_invalid &&
     l.manifest_stats_invalid == r.manifest_stats_invalid &&
     l.purged_snaps == r.purged_snaps &&
-    l.snaptrimq_len == r.snaptrimq_len;
+    l.snaptrimq_len == r.snaptrimq_len &&
+    l.scrub_duration == r.scrub_duration;
 }
 
 // -- store_statfs_t --
