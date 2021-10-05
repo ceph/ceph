@@ -41,6 +41,11 @@ class SQLiteDB : public DB, public DBOp{
 
     int InitPrepareParams(const DoutPrefixProvider *dpp, DBOpPrepareParams &params) override { return 0; }
 
+    int beginTransaction(const DoutPrefixProvider *dpp) override;
+    int endTransaction(const DoutPrefixProvider *dpp) override;
+    int commitTransaction(const DoutPrefixProvider *dpp) override;
+    int rollbackTransaction(const DoutPrefixProvider *dpp) override;
+
     int exec(const DoutPrefixProvider *dpp, const char *schema,
         int (*callback)(void*,int,char**,char**));
     int Step(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt,
