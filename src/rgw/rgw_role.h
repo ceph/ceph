@@ -125,6 +125,8 @@ public:
   const uint64_t& get_max_session_duration() const { return max_session_duration; }
 
   void set_id(const std::string& id) { this->id = id; }
+  void set_arn(const std::string& arn) { this->arn = arn; }
+  void set_creation_date(const std::string& creation_date) { this->creation_date = creation_date; }
 
   virtual int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
   virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y);
