@@ -4,7 +4,8 @@ CEPHADM_PATH=/usr/local/sbin/cephadm
 
 dnf install which sudo -y
 
-cp /cephadm/cephadm $CEPHADM_PATH
+# link so we can debug cephadm
+ln -s -f /cephadm/cephadm $CEPHADM_PATH
 chmod +x $CEPHADM_PATH
 
 tail -f /var/log/ceph/cephadm.log 1>&2 &
@@ -14,20 +15,34 @@ if [[ -n "${SHARED_CEPH_FOLDER-}" ]]; then
     EXTRA_ARGS+=(--shared_ceph_folder "$SHARED_CEPH_FOLDER")
 fi
 
-# TODO: remove docker build image and skill pull when cephadm's dependencies
-# use which or it is removed.
-# If we use a ceph image cephadm won't skip pulling the image. If it's a
-# local image, it will fail.
-docker build -t quay.ceph.io/ceph-ci/ceph:master /cephadm/box/docker/ceph
-CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:master
+docker load < /cephadm/box/docker/ceph/image/quay.ceph.image.tar
+
+# cephadm guid error because it sometimes tries to use quay.ceph.io/ceph-ci/ceph:<none>
+# instead of master's tag
+export CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:master
+echo "export CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:master" >> ~/.bashrc
+
 if [[ -n "$CEPHADM_IMAGE" ]]; then
 	EXTRA_ARGS+=--skip-pull
 fi
 
-$CEPHADM_PATH bootstrap \
+export CEPH_SOURCE_FOLDER=/ceph
+$CEPHADM_PATH --verbose bootstrap \
   --mon-ip "$(hostname -i)" \
   --allow-fqdn-hostname \
   --initial-dashboard-password admin \
   --dashboard-password-noupdate \
-  --allow-overwrite \
+  --shared_ceph_folder /ceph \
   "${EXTRA_ARGS[@]}"
+
+# make sure vg and lvs are visible
+vgchange --refresh
+for((i=0;i<$NUM_OSDS;i++)); do
+	echo "Creating osd.${i}"
+	# create osd folder
+	$CEPHADM_PATH ceph-volume --shared_ceph_folder /ceph lvm create --bluestore --data "/dev/vg1/lv${i}" --no-systemd
+	echo "Deploying osd.${i}..."
+	# deploy osd with osd data folder
+	$CEPHADM_PATH deploy --name "osd.${i}"
+	echo "osd.${i} deployed!"
+done;

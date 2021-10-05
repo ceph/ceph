@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # SSH
 if [[ ! -f "/root/.ssh/id_rsa" ]]; then

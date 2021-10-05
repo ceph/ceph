@@ -31,7 +31,7 @@ def log_output(descriptor, message, terminal_logging, logfile_logging):
     if terminal_logging:
         getattr(terminal, descriptor)(message)
     if logfile_logging:
-        logger.info(line)
+        logger.info(line.encode('ascii', 'ignore').decode('ascii'))
 
 
 def log_descriptors(reads, process, terminal_logging):

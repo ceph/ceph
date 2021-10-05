@@ -16,6 +16,8 @@ services:
     stop_signal: RTMIN+3
     volumes:
       - "/sys/fs/cgroup:/sys/fs/cgroup:ro"
+      - ../../../:/ceph
+      - ..:/cephadm
     networks:
       - public
     mem_limit: "20g"
@@ -25,9 +27,6 @@ services:
   seed:
     extends:
       service: cephadm-host-base
-    volumes:
-      - ../../../:/ceph
-      - ..:/cephadm
     ports:
       - "3000:3000"
       - "8443:8443"
