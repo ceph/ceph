@@ -48,6 +48,15 @@ class RGWSI_Role_RADOS: public RGWSI_Role
 		 optional_yield y,
 		 const DoutPrefixProvider *dpp) override;
 
+  int create(RGWSI_MetaBackend::Context *ctx,
+	     rgw::sal::RGWRole& role,
+	     RGWObjVersionTracker * const objv_tracker,
+	     const real_time& pmtime,
+	     bool exclusive,
+	     std::map<std::string, bufferlist> * pattrs,
+	     optional_yield y,
+		 const DoutPrefixProvider *dpp) override;
+
   int store_name(RGWSI_MetaBackend::Context *ctx,
 		 const std::string& role_id,
   		 const std::string& name,
@@ -94,7 +103,7 @@ class RGWSI_Role_RADOS: public RGWSI_Role
 		const DoutPrefixProvider *dpp) override { return 0; } // TODO impl me
 
   int delete_info(RGWSI_MetaBackend::Context *ctx,
-		  const std::string& name,
+		  const rgw::sal::RGWRole& info,
 		  RGWObjVersionTracker * const objv_tracker,
 		  optional_yield y,
 		  const DoutPrefixProvider *dpp) override;
