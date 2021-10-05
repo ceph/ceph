@@ -79,7 +79,7 @@ function(build_jaeger)
     INSTALL_COMMAND ${install_cmd}
     DEPENDS ${dependencies}
     BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so
-    )
+    LOG_BUILD ON)
 
   set_library_properties_for_external_project(opentracing::libopentracing
   opentracing)
