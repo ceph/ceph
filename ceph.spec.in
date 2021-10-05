@@ -465,6 +465,7 @@ Summary:        Utility to bootstrap Ceph clusters
 BuildArch:      noarch
 Requires:       lvm2
 Requires:       python%{python3_pkgversion}
+Requires:       openssh-server
 %if 0%{?weak_deps}
 Recommends:     podman >= 2.0.2
 %endif

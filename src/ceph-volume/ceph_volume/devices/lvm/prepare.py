@@ -104,7 +104,7 @@ def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
         db = prepare_dmcrypt(key, db, 'db', tags)
 
     # create the directory
-    prepare_utils.create_osd_path(osd_id, tmpfs=True)
+    prepare_utils.create_osd_path(osd_id, tmpfs=False)
     # symlink the block
     prepare_utils.link_block(block, osd_id)
     # get the latest monmap

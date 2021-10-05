@@ -1785,7 +1785,6 @@ def default_image(func: FuncT) -> FuncT:
                 ctx.image = _get_default_image(ctx)
 
         return func(ctx)
-
     return cast(FuncT, _default_image)
 
 
@@ -2217,7 +2216,6 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
     # type: (CephadmContext, str, str, Union[int, str], int, int, Optional[str], Optional[str]) ->  None
     data_dir = make_data_dir(ctx, fsid, daemon_type, daemon_id, uid=uid, gid=gid)
     make_log_dir(ctx, fsid, uid=uid, gid=gid)
-
     if config:
         config_path = os.path.join(data_dir, 'config')
         with open(config_path, 'w') as f:
@@ -2616,6 +2614,77 @@ def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):
     raise RuntimeError('uid/gid not found')
 
 
+def validate_osd_data_dir(data_dir):
+    required_files = ['keyring', 'block', 'type', 'config']
+    current_files = os.listdir(data_dir)
+    error_msg = ''
+    for file in required_files:
+        if file not in current_files:
+            error_msg += f'File {file} not found in {data_dir}\n'
+    if error_msg:
+        raise RuntimeError(error_msg)
+
+
+def configure_osd_data_dir(ctx, fsid, daemon_id, uid, gid):
+    daemon_type = 'osd'
+    data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
+
+    # Ensure user:group is the expected
+    for f in os.listdir(data_dir):
+        os.chown(os.path.join(data_dir, f), uid, gid)
+
+    # Create minimal config
+    touch(os.path.join(data_dir, 'config'), uid, gid)
+    mounts = get_container_mounts(ctx, fsid, daemon_type, daemon_id, no_config=True)
+    mounts[data_dir] = '/var/lib/ceph/osd/ceph-%s' % daemon_id
+    mounts['/etc/ceph/ceph.conf'] = '/etc/ceph/ceph.conf:z'
+    mounts['/etc/ceph/ceph.client.admin.keyring'] = '/etc/ceph/ceph.keyring:z'
+
+    CephContainer(
+        ctx,
+        image=ctx.image,
+        entrypoint='/usr/bin/ceph',
+        args=[
+            'config', 'generate-minimal-conf',
+            '-o', '/var/lib/ceph/osd/ceph-%s/config' % daemon_id
+        ],
+        privileged=True,
+        volume_mounts=mounts
+    ).run()
+
+    # Create keyring and then import
+    key = CephContainer(
+        ctx,
+        image=ctx.image,
+        entrypoint='/usr/bin/ceph-authtool',
+        args=['--gen-print-key'],
+    ).run().strip()
+
+    keyring = ('[%s.%s]\n'
+               '\tkey = %s\n'
+               '\tcaps osd = allow *\n'
+               '\tcaps mon = allow *\n'
+               % (daemon_type, daemon_id, key))
+    with open(os.path.join(data_dir, 'keyring'), 'w+') as f:
+        os.fchmod(f.fileno(), 0o600)
+        os.fchown(f.fileno(), uid, gid)
+        f.write(keyring)
+    CephContainer(
+        ctx,
+        image=ctx.image,
+        entrypoint='/usr/bin/ceph',
+        args=[
+            'auth', 'import',
+            '-i', '/var/lib/ceph/osd/ceph-%s/keyring' % daemon_id
+        ],
+        privileged=True,
+        volume_mounts=mounts
+    ).run()
+
+    # Validate we have needed files
+    validate_osd_data_dir(data_dir)
+
+
 def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
                   config=None, keyring=None,
                   osd_fsid=None,
@@ -2681,6 +2750,9 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
             fsid, daemon_type, daemon_id,
             uid, gid,
             config, keyring)
+
+    if daemon_type == 'osd':
+        configure_osd_data_dir(ctx, fsid, daemon_id, uid, gid)
 
     if not reconfig:
         if daemon_type == CephadmAgent.daemon_type:
@@ -2793,6 +2865,14 @@ def deploy_daemon_units(
 ) -> None:
     # cmd
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
+
+    # if osd then try to read parameters if not provided
+    if daemon_type == 'osd':
+        osd_fsid_path = os.path.join(data_dir, 'fsid')
+        if 'fsid' in os.listdir(data_dir) and not osd_fsid:
+            with open(osd_fsid_path, 'r') as f:
+                osd_fsid = f.read()
+
     with open(data_dir + '/unit.run.new', 'w') as f, \
             open(data_dir + '/unit.meta.new', 'w') as metaf:
         f.write('set -e\n')
@@ -2922,7 +3002,9 @@ def deploy_daemon_units(
          verbosity=CallVerbosity.DEBUG)
     if enable:
         call_throws(ctx, ['systemctl', 'enable', unit_name])
+
     if start:
+
         clean_cgroup(ctx, fsid, unit_name)
         call_throws(ctx, ['systemctl', 'start', unit_name])
 
@@ -4705,7 +4787,9 @@ def extract_uid_gid_monitoring(ctx, daemon_type):
 
 
 @default_image
+@infer_fsid
 def command_deploy(ctx):
+    assert ctx.fsid
     # type: (CephadmContext) -> None
     daemon_type, daemon_id = ctx.name.split('.', 1)
 
@@ -4887,6 +4971,7 @@ def command_shell(ctx):
         mounts[pathify(ctx.config)] = '/etc/ceph/ceph.conf:z'
     if ctx.keyring:
         mounts[pathify(ctx.keyring)] = '/etc/ceph/ceph.keyring:z'
+
     if ctx.mount:
         for _mount in ctx.mount:
             split_src_dst = _mount.split(':')
@@ -4988,7 +5073,6 @@ def command_ceph_volume(ctx):
 
     (uid, gid) = (0, 0)  # ceph-volume runs as root
     mounts = get_container_mounts(ctx, ctx.fsid, 'osd', None)
-
     tmp_config = None
     tmp_keyring = None
 
@@ -4999,10 +5083,50 @@ def command_ceph_volume(ctx):
         tmp_config = write_tmp(config, uid, gid)
         mounts[tmp_config.name] = '/etc/ceph/ceph.conf:z'
 
+    # Ceph-volume uses the bootstrap-osd key in order to do its operations.
+    # This function retrieves the keyring so it can be provided.
+
+    def get_bootstrap_osd_keyring() -> str:
+        if not ctx.keyring and os.path.exists(SHELL_DEFAULT_KEYRING):
+            ctx.keyring = SHELL_DEFAULT_KEYRING
+        (config, keyring) = get_config_and_keyring(ctx)
+
+        mounts = get_container_mounts(ctx, ctx.fsid, 'osd', None,
+                                      no_config=True if ctx.config else False)
+        if ctx.config:
+            mounts[pathify(ctx.config)] = '/etc/ceph/ceph.conf:z'
+        if ctx.keyring:
+            mounts[pathify(ctx.keyring)] = '/etc/ceph/ceph.keyring:z'
+        c = CephContainer(
+            ctx,
+            image=ctx.image,
+            entrypoint='/usr/bin/ceph',
+            args='auth get client.bootstrap-osd'.split(),
+            volume_mounts=mounts,
+        )
+        out, err, code = call_throws(ctx, c.run_cmd())
+        if not code:
+            return out
+        else:
+            return None
+
+    if not keyring:
+        keyring = get_bootstrap_osd_keyring()
+
     if keyring:
         # tmp keyring file
         tmp_keyring = write_tmp(keyring, uid, gid)
         mounts[tmp_keyring.name] = '/var/lib/ceph/bootstrap-osd/ceph.keyring:z'
+
+    # If ceph-volume creates osd data directories which won't be persisted
+    # so we use a tmp dir for that.
+    # FIXME: probably we can use /var/lib/ceph/{fsid}?
+    tmp_osd_dir = tempfile.TemporaryDirectory()
+    # match /var/lib/ceph/osd/ dir permissions
+    os.chown(tmp_osd_dir.name, uid, gid)
+    os.chmod(tmp_osd_dir.name, 0o755)
+    # store newly created osds here
+    mounts[tmp_osd_dir.name] = '/var/lib/ceph/osd/:z'
 
     c = CephContainer(
         ctx,
@@ -5017,6 +5141,14 @@ def command_ceph_volume(ctx):
     out, err, code = call_throws(ctx, c.run_cmd())
     if not code:
         print(out)
+    else:
+        print(err)
+    # If osds were created move osd's data directories
+    for osd_folder_name in os.listdir(tmp_osd_dir.name):
+        if 'ceph-' in osd_folder_name[:5]:
+            osd_id = osd_folder_name[5:]
+            osd_data_dir = os.path.join(tmp_osd_dir.name, osd_folder_name)
+            copy_tree(ctx, [osd_data_dir], f'/var/lib/ceph/{ctx.fsid}/osd.{osd_id}', uid=uid, gid=gid)
 
 ##################################
 
@@ -7577,7 +7709,7 @@ def _get_parser():
         help='cluster FSID')
     parser_ceph_volume.add_argument(
         '--config-json',
-        help='JSON file with config and (client.bootrap-osd) key')
+        help='JSON file with config and (client.bootstrap-osd) key')
     parser_ceph_volume.add_argument(
         '--config', '-c',
         help='ceph conf file')
@@ -7587,6 +7719,10 @@ def _get_parser():
     parser_ceph_volume.add_argument(
         'command', nargs=argparse.REMAINDER,
         help='command')
+    parser_ceph_volume.add_argument(
+        '--shared_ceph_folder',
+        metavar='CEPH_SOURCE_FOLDER',
+        help='Development mode. Several folders in containers are volumes mapped to different sub-folders in the ceph source folder')
 
     parser_zap_osds = subparsers.add_parser(
         'zap-osds', help='zap all OSDs associated with a particular fsid')
@@ -7808,7 +7944,6 @@ def _get_parser():
         help='daemon name (type.id)')
     parser_deploy.add_argument(
         '--fsid',
-        required=True,
         help='cluster FSID')
     parser_deploy.add_argument(
         '--config', '-c',
