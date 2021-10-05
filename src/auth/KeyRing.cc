@@ -41,7 +41,7 @@ int KeyRing::from_ceph_context(CephContext *cct)
     if (ret < 0)
       lderr(cct) << "failed to load " << filename
 		 << ": " << cpp_strerror(ret) << dendl;
-  } else {
+  } else if (conf->key.empty() && conf->keyfile.empty()) {
     lderr(cct) << "unable to find a keyring on " << conf->keyring
 	       << ": " << cpp_strerror(ret) << dendl;
   }
