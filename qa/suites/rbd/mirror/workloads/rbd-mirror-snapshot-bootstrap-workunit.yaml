@@ -9,3 +9,5 @@ tasks:
       CEPH_ARGS: ''
       RBD_MIRROR_INSTANCES: '1'
       RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
+      MIRROR_POOL_MODE: 'image'
+      MIRROR_IMAGE_MODE: 'snapshot'
