@@ -79,7 +79,7 @@ int Credentials::generateCredentials(CephContext* cct,
     return ret;
   }
   string error;
-  auto* keyhandler = cryptohandler->get_key_handler(secret, error);
+  std::unique_ptr<CryptoKeyHandler> keyhandler(cryptohandler->get_key_handler(secret, error));
   if (! keyhandler) {
     ldout(cct, 0) << "ERROR: No Key handler found !" << dendl;
     return -EINVAL;
