@@ -4207,19 +4207,22 @@ def test_ps_s3_versioned_deletion_on_master():
 
     # create objects in the bucket
     key = bucket.new_key('foo')
-    key.set_contents_from_string('bar')
-    v1 = key.version_id
-    key.set_contents_from_string('kaboom')
-    v2 = key.version_id
+    content = str(os.urandom(512))
+    size1 = len(content)
+    key.set_contents_from_string(content)
+    ver1 = key.version_id
+    content = str(os.urandom(511))
+    size2 = len(content)
+    key.set_contents_from_string(content)
+    ver2 = key.version_id
     # create delete marker (non versioned deletion)
     delete_marker_key = bucket.delete_key(key.name)
     
     time.sleep(1)
     
     # versioned deletion
-    bucket.delete_key(key.name, version_id=v2)
-    bucket.delete_key(key.name, version_id=v1)
-    delete_marker_key.delete()
+    bucket.delete_key(key.name, version_id=ver2)
+    bucket.delete_key(key.name, version_id=ver1)
 
     print('wait for 5sec for the messages...')
     time.sleep(5)
@@ -4230,21 +4233,25 @@ def test_ps_s3_versioned_deletion_on_master():
     delete_marker_create_events = 0
     for event_list in events:
         for event in event_list['Records']:
+            size = event['s3']['object']['size']
             if event['eventName'] == 's3:ObjectRemoved:Delete':
                 delete_events += 1
+                assert size in [size1, size2]
                 assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_3']
             if event['eventName'] == 's3:ObjectRemoved:DeleteMarkerCreated':
                 delete_marker_create_events += 1
+                assert size == size2
                 assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_2']
    
-    # 3 key versions were deleted (v1, v2 and the deletion marker)
+    # 2 key versions were deleted
     # notified over the same topic via 2 notifications (1,3)
-    assert_equal(delete_events, 3*2)
+    assert_equal(delete_events, 2*2)
     # 1 deletion marker was created
     # notified over the same topic over 2 notifications (1,2)
     assert_equal(delete_marker_create_events, 1*2)
 
     # cleanup
+    delete_marker_key.delete()
     stop_amqp_receiver(receiver, task)
     s3_notification_conf.del_config()
     topic_conf.del_config()

@@ -105,6 +105,10 @@ Event Types
 | ``s3:ReducedRedundancyLostObject``           | Not applicable to Ceph                                      |
 +----------------------------------------------+-----------------+-------------------------------------------+
 
+.. note:: 
+
+   The ``s3:ObjectRemoved:DeleteMarkerCreated`` event presents information on the latest version of the object
+
 Topic Configuration
 -------------------
 In the case of bucket notifications, the topics management API will be derived from `AWS Simple Notification Service API`_. 
