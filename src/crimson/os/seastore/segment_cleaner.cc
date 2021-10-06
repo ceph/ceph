@@ -15,28 +15,17 @@ namespace {
 
 namespace crimson::os::seastore {
 
-template <typename SegmentInfoT>
-void segment_manager_info_t<SegmentInfoT>::init_segment_infos(
-  SegmentInfoT&& segment_info)
-{
-  segment_infos.resize(num_segments, std::move(segment_info));
-  for (device_segment_id_t j = 0; j < num_segments; j++) {
-    segment_infos[j].segment = segment_id_t(device_id, j);
-    crimson::get_logger(ceph_subsys_seastore).debug("added segment: {}", segment_id_t(device_id, j));
-  }
-}
-
-void segment_info_t::set_open() {
+void segment_info_set_t::segment_info_t::set_open() {
   assert(state == Segment::segment_state_t::EMPTY);
   state = Segment::segment_state_t::OPEN;
 }
 
-void segment_info_t::set_empty() {
+void segment_info_set_t::segment_info_t::set_empty() {
   assert(state == Segment::segment_state_t::CLOSED);
   state = Segment::segment_state_t::EMPTY;
 }
 
-void segment_info_t::set_closed() {
+void segment_info_set_t::segment_info_t::set_closed() {
   state = Segment::segment_state_t::CLOSED;
 }
 
@@ -195,16 +184,17 @@ void SegmentCleaner::register_metrics()
 
 SegmentCleaner::get_segment_ret SegmentCleaner::get_segment(device_id_t id)
 {
-  for (auto it = segments.find_begin(id);
-       it != segments.find_end(id);
-       it++) {
-    auto& segment_info = *it;
-     if (segment_info.is_empty()) {
-      mark_open(segment_info.segment);
-      logger().debug("{}: returning segment {}", __func__, segment_info.segment);
+  for (auto it = segments.device_begin(id);
+       it != segments.device_end(id);
+       ++it) {
+    auto id = it->first;
+    auto& segment_info = it->second;
+    if (segment_info.is_empty()) {
+      mark_open(id);
+      logger().debug("{}: returning segment {}", __func__, id);
       return get_segment_ret(
 	get_segment_ertr::ready_future_marker{},
-	segment_info.segment);
+	id);
     }
   }
   assert(0 == "out of space handling todo");
@@ -416,8 +406,8 @@ SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
     return crimson::do_for_each(
       segments.begin(),
       segments.end(),
-      [this, &segment_set](auto& segment_info) {
-	auto segment_id = segment_info.segment;
+      [this, &segment_set](auto& it) {
+	auto segment_id = it.first;
 	return scanner->read_segment_header(
 	  segment_id
 	).safe_then([&segment_set, segment_id, this](auto header) {

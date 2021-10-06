@@ -231,6 +231,11 @@ public:
     device_to_segments[device].resize(segments, init);
     total_segments += segments;
   }
+  void clear() {
+    device_to_segments.clear();
+    device_to_segments.resize(DEVICE_ID_MAX);
+    total_segments = 0;
+  }
 
   T& operator[](segment_id_t id) {
     assert(id.device_segment_id() < device_to_segments[id.device_id()].size());
