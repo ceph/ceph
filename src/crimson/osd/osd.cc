@@ -219,7 +219,9 @@ namespace {
   entity_addrvec_t pick_addresses(int what) {
     entity_addrvec_t addrs;
     crimson::common::CephContext cct;
-    if (int r = ::pick_addresses(&cct, what, &addrs, -1); r < 0) {
+    // we're interested solely in v2; crimson doesn't do v1
+    const auto flags = what | CEPH_PICK_ADDRESS_MSGR2;
+    if (int r = ::pick_addresses(&cct, flags, &addrs, -1); r < 0) {
       throw std::runtime_error("failed to pick address");
     }
     for (auto addr : addrs.v) {
