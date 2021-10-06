@@ -18,273 +18,172 @@
 
 namespace crimson::os::seastore {
 
-struct segment_info_t;
-using unavail_segment_info_set_t =
-  std::list<segment_info_t*>;
-using unavail_segment_info_iterator =
-  unavail_segment_info_set_t::iterator;
-
-// position within segment_info_set_t
-using segment_pos_t = uint64_t;
-
-template <typename SegmentInfoT>
-struct segment_manager_info_t {
-  segment_manager_info_t() = default;
-  segment_manager_info_t(
-    device_id_t device_id,
-    device_segment_id_t num_segments,
-    segment_off_t segment_size,
-    segment_off_t block_size,
-    size_t empty_segments,
-    size_t size)
-    : device_id(device_id),
-      num_segments(num_segments),
-      segment_size(segment_size),
-      block_size(block_size),
-      empty_segments(empty_segments),
-      size(size),
-      avail_bytes(segment_size * num_segments)
-  {}
-
-  void init_segment_infos(SegmentInfoT&&);
-
-  device_id_t device_id = 0;
-  device_segment_id_t num_segments = 0;
-  segment_off_t segment_size = 0;
-  segment_off_t block_size = 0;
-  size_t empty_segments = 0;
-  size_t size = 0;
-  size_t avail_bytes = 0;
-  std::vector<SegmentInfoT> segment_infos;
-};
-
-struct segment_info_t {
-  Segment::segment_state_t state = Segment::segment_state_t::EMPTY;
-
-  // Will be non-null for any segments in the current journal
-  segment_seq_t journal_segment_seq = NULL_SEG_SEQ;
-
-  segment_id_t segment;
-
-  bool out_of_line = false;
-
-  void set_open();
-  void set_empty();
-  void set_closed();
-
-  bool is_in_journal(journal_seq_t tail_committed) const {
-    return !out_of_line &&
-      journal_segment_seq != NULL_SEG_SEQ &&
-      tail_committed.segment_seq <= journal_segment_seq;
-  }
-
-  bool is_empty() const {
-    return state == Segment::segment_state_t::EMPTY;
-  }
-
-  bool is_closed() const {
-    return state == Segment::segment_state_t::CLOSED;
-  }
-
-  bool is_open() const {
-    return state == Segment::segment_state_t::OPEN;
-  }
-};
-
 class SegmentCleaner;
 
 // for keeping track of segment managers' various information,
 // like empty segments, opened segments and so on.
-template <typename SegmentInfoT>
 class segment_info_set_t {
-public:
-  template <bool is_const = false>
-  class iterator {
-  public:
-    iterator(
-      device_id_t sm_id,
-      std::conditional_t<
-	is_const,
-	const segment_info_set_t*,
-	segment_info_set_t*> segment_info_set,
-      bool end = false)
-      : sm_id(sm_id), segment_info_set(segment_info_set) {
-      auto& sm_info = segment_info_set->sm_info_vec[sm_id];
-      assert(sm_info);
-      if (end) {
-	iter = sm_info->segment_infos.end();
-      } else {
-	iter = sm_info->segment_infos.begin();
-      }
-    }
-    iterator<is_const>& operator++() {
-      iter++;
-      auto& sm_info = segment_info_set->sm_info_vec[sm_id];
-      if (iter == sm_info->segment_infos.end()) {
-	device_id_t t_sm_id = sm_id;
-	while (++t_sm_id < DEVICE_ID_MAX && !segment_info_set->sm_info_vec[t_sm_id]);
-	if (t_sm_id < DEVICE_ID_MAX) {
-	  auto& sm = segment_info_set->sm_info_vec[t_sm_id];
-	  assert(sm);
-	  iter = sm->segment_infos.begin();
-	  sm_id = t_sm_id;
-	}
-      }
-      return *this;
-    }
-    bool operator==(iterator<is_const> rit) {
-      return sm_id == rit.sm_id && iter == rit.iter;
-    }
-    bool operator!=(iterator<is_const> rit) {
-      return !(*this == rit);
-    }
-    template <bool c = is_const, std::enable_if_t<c, int> = 0>
-    const SegmentInfoT& operator*() {
-      return *iter;
-    }
-    template <bool c = is_const, std::enable_if_t<!c, int> = 0>
-    SegmentInfoT& operator*() {
-      return *iter;
-    }
-    template <bool c = is_const, std::enable_if_t<c, int> = 0>
-    const SegmentInfoT* operator->() {
-      return &(*iter);
-    }
-    template <bool c = is_const, std::enable_if_t<!c, int> = 0>
-    SegmentInfoT* operator->() {
-      return &(*iter);
-    }
-  private:
-    device_id_t sm_id = 0;
-    std::conditional_t<
-      is_const,
-      const segment_info_set_t*,
-      segment_info_set_t*> segment_info_set = nullptr;
-    std::conditional_t<
-      is_const,
-      typename std::vector<SegmentInfoT>::const_iterator,
-      typename std::vector<SegmentInfoT>::iterator> iter;
+  struct segment_manager_info_t {
+    segment_manager_info_t() = default;
+    segment_manager_info_t(
+      device_id_t device_id,
+      device_segment_id_t num_segments,
+      segment_off_t segment_size,
+      segment_off_t block_size,
+      size_t empty_segments,
+      size_t size)
+      : device_id(device_id),
+	num_segments(num_segments),
+	segment_size(segment_size),
+	block_size(block_size),
+	empty_segments(empty_segments),
+	size(size),
+	avail_bytes(segment_size * num_segments)
+    {}
+
+    device_id_t device_id = 0;
+    device_segment_id_t num_segments = 0;
+    segment_off_t segment_size = 0;
+    segment_off_t block_size = 0;
+    size_t empty_segments = 0;
+    size_t size = 0;
+    size_t avail_bytes = 0;
   };
-  SegmentInfoT& operator[](segment_id_t id) {
-    auto d_id = id.device_id();
-    auto& sm_info = sm_info_vec[d_id];
-    assert(sm_info);
-    assert(sm_info->device_id == d_id);
-    auto& segment_info = sm_info->segment_infos[id.device_segment_id()];
-    assert(segment_info.segment == id);
-    return segment_info;
+
+  struct segment_info_t {
+    Segment::segment_state_t state = Segment::segment_state_t::EMPTY;
+
+    // Will be non-null for any segments in the current journal
+    segment_seq_t journal_segment_seq = NULL_SEG_SEQ;
+
+    bool out_of_line = false;
+
+    void set_open();
+    void set_empty();
+    void set_closed();
+
+    bool is_in_journal(journal_seq_t tail_committed) const {
+      return !out_of_line &&
+	journal_segment_seq != NULL_SEG_SEQ &&
+	tail_committed.segment_seq <= journal_segment_seq;
+    }
+
+    bool is_empty() const {
+      return state == Segment::segment_state_t::EMPTY;
+    }
+
+    bool is_closed() const {
+      return state == Segment::segment_state_t::CLOSED;
+    }
+
+    bool is_open() const {
+      return state == Segment::segment_state_t::OPEN;
+    }
+  };
+public:
+  segment_info_set_t() {
+    sm_infos.resize(DEVICE_ID_MAX);
   }
-  const SegmentInfoT& operator[](segment_id_t id) const {
-    auto d_id = id.device_id();
-    auto& sm_info = sm_info_vec.at(d_id);
-    assert(sm_info);
-    assert(sm_info->device_id == d_id);
-    auto& segment_info = sm_info->segment_infos[id.device_segment_id()];
-    assert(segment_info.segment == id);
-    return segment_info;
+
+  segment_info_t& operator[](segment_id_t id) {
+    return segments[id];
   }
-  std::optional<segment_manager_info_t<SegmentInfoT>>&
+  const segment_info_t& operator[](segment_id_t id) const {
+    return segments[id];
+  }
+
+  std::optional<segment_manager_info_t> &
   operator[](device_id_t id) {
-    auto& sm_info = sm_info_vec[id];
+    auto& sm_info = sm_infos[id];
     assert(sm_info && sm_info->device_id == id);
     return sm_info;
   }
-  const std::optional<segment_manager_info_t<SegmentInfoT>>&
+  const std::optional<segment_manager_info_t> &
   operator[](device_id_t id) const {
-    auto& sm_info = sm_info_vec[id];
+    auto& sm_info = sm_infos[id];
     assert(sm_info && sm_info->device_id == id);
     return sm_info;
   }
+
   void clear() {
-    sm_info_vec.clear();
-    total_segments = 0;
+    segments.clear();
     total_bytes = 0;
     journal_segments = 0;
   }
-  void add_segment_manager(
-    SegmentManager& segment_manager,
-    SegmentInfoT&& segment_info)
+
+  void add_segment_manager(SegmentManager& segment_manager)
   {
-    if (!sm_info_vec.size()) {
-      sm_info_vec.resize(DEVICE_ID_MAX);
-    }
     device_id_t d_id = segment_manager.get_device_id();
-    sm_info_vec[segment_manager.get_device_id()] = std::make_optional<
-      segment_manager_info_t<SegmentInfoT>>(
-	d_id,
-	segment_manager.get_num_segments(),
-	segment_manager.get_segment_size(),
-	segment_manager.get_block_size(),
-	segment_manager.get_num_segments(),
-	segment_manager.get_size());
-    sm_info_vec[segment_manager.get_device_id()]->init_segment_infos(std::move(segment_info));
-    total_segments += segment_manager.get_num_segments();
+    segments.add_device(
+      d_id,
+      segment_manager.get_num_segments(),
+      segment_info_t{});
+    sm_infos[segment_manager.get_device_id()].emplace(
+      d_id,
+      segment_manager.get_num_segments(),
+      segment_manager.get_segment_size(),
+      segment_manager.get_block_size(),
+      segment_manager.get_num_segments(),
+      segment_manager.get_size());
+
     total_bytes += segment_manager.get_size();
   }
 
   device_segment_id_t size() const {
-    return total_segments;
+    return segments.size();
   }
+
   auto begin() {
-    device_id_t sm_id = 0;
-    for (; sm_id < DEVICE_ID_MAX && !sm_info_vec[sm_id]; ++sm_id);
-    return iterator<false>(sm_id, *this);
+    return segments.begin();
   }
   auto begin() const {
-    device_id_t sm_id = 0;
-    for (; sm_id < DEVICE_ID_MAX && !sm_info_vec[sm_id]; ++sm_id);
-    return iterator<true>(sm_id, *this);
+    return segments.begin();
   }
+
   auto end() {
-    auto sm_id = DEVICE_ID_MAX;
-    for (; !sm_info_vec[sm_id]; --sm_id);
-    return iterator<false>(sm_id, this, true);
+    return segments.end();
   }
   auto end() const {
-    auto sm_id = DEVICE_ID_MAX;
-    for (; !sm_info_vec[sm_id]; --sm_id);
-    return iterator<true>(sm_id, this, true);
+    return segments.end();
   }
-  auto find_begin(device_id_t id) {
-    assert(sm_info_vec[id]);
-    auto& sm_info = sm_info_vec[id];
-    return sm_info->segment_infos.begin();
+
+  auto device_begin(device_id_t id) {
+    return segments.device_begin(id);
   }
-  auto find_end(device_id_t id) {
-    assert(sm_info_vec[id]);
-    auto& sm_info = sm_info_vec[id];
-    return sm_info->segment_infos.end();
+  auto device_end(device_id_t id) {
+    return segments.device_end(id);
   }
+
   // the following methods are used for keeping track of
   // seastore disk space usage
   void segment_used(segment_id_t segment, bool full_unavail = false) {
-    auto& sm_info = sm_info_vec[segment.device_id()];
+    auto& sm_info = sm_infos[segment.device_id()];
     sm_info->empty_segments--;
     if (full_unavail)
       sm_info->avail_bytes -= sm_info->segment_size;
   }
   void segment_emptied(segment_id_t segment) {
-    auto& sm_info = sm_info_vec[segment.device_id()];
+    auto& sm_info = sm_infos[segment.device_id()];
     sm_info->empty_segments++;
     sm_info->avail_bytes += sm_info->segment_size;
   }
   void space_used(paddr_t addr, extent_len_t len) {
-    auto& sm_info = sm_info_vec[addr.segment.device_id()];
+    auto& sm_info = sm_infos[addr.segment.device_id()];
     sm_info->avail_bytes -= len;
   }
   size_t get_empty_segments(device_id_t d_id) {
-    return sm_info_vec[d_id]->empty_segments;
+    return sm_infos[d_id]->empty_segments;
   }
   size_t get_total_bytes() const {
     return total_bytes;
   }
   size_t get_available_bytes(device_id_t d_id) const {
-    auto& sm_info = sm_info_vec[d_id];
+    auto& sm_info = sm_infos[d_id];
     return sm_info->avail_bytes;
   }
   size_t get_available_bytes() const {
     size_t empty_space = 0;
-    for (auto& sm_info : sm_info_vec) {
+    for (auto& sm_info : sm_infos) {
       if (sm_info) {
 	empty_space += get_available_bytes(sm_info->device_id);
       }
@@ -301,9 +200,10 @@ public:
     return journal_segments;
   }
 private:
-  device_segment_id_t total_segments;
-  std::vector<std::optional<segment_manager_info_t<SegmentInfoT>>> sm_info_vec;
-  device_segment_id_t  journal_segments = 0;
+  std::vector<std::optional<segment_manager_info_t>> sm_infos;
+  segment_map_t<segment_info_t> segments;
+
+  device_segment_id_t journal_segments = 0;
   size_t total_bytes = 0;
 
   friend class SegmentCleaner;
@@ -676,7 +576,7 @@ private:
   ExtentReaderRef scanner;
 
   SpaceTrackerIRef space_tracker;
-  segment_info_set_t<segment_info_t> segments;
+  segment_info_set_t segments;
   uint64_t used_bytes = 0;
   bool init_complete = false;
 
@@ -748,7 +648,7 @@ public:
       if (!sm) {
 	continue;
       }
-      segments.add_segment_manager(*sm, segment_info_t{});
+      segments.add_segment_manager(*sm);
     }
   }
 
@@ -880,13 +780,14 @@ public:
     for (auto it = segments.begin();
 	 it != segments.end();
 	 ++it) {
-      const auto& segment_info = *it;
+      auto id = it->first;
+      const auto& segment_info = it->second;
       if (segment_info.is_closed() &&
 	  !segment_info.is_in_journal(journal_tail_committed) &&
-	  space_tracker->get_usage(segment_info.segment) < least_live_bytes) {
-	ret = segment_info.segment;
+	  space_tracker->get_usage(id) < least_live_bytes) {
+	ret = id;
 	seq = segment_info.journal_segment_seq;
-	least_live_bytes = space_tracker->get_usage(segment_info.segment);
+	least_live_bytes = space_tracker->get_usage(id);
       }
     }
     if (ret != NULL_SEG_ID) {
