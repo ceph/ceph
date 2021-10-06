@@ -284,6 +284,7 @@ def test_dd_octopus(dd_json):
                   'last_configured']:
             if k in j:
                 j[k] = j[k].rstrip('Z')
+        del j['daemon_name']
         return j
 
     assert dd_json == convert_to_old_style_json(
