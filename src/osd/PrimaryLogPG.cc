@@ -7417,20 +7417,14 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 
 	// The chunks already has a reference, so it is just enough to invoke truncate if necessary
-	uint64_t chunk_length = 0;
-	for (auto p : obs.oi.manifest.chunk_map) {
-	  chunk_length += p.second.length;
-	}
-	if (chunk_length == obs.oi.size) {
-	  for (auto &p : obs.oi.manifest.chunk_map) {
-	    p.second.set_flag(chunk_info_t::FLAG_MISSING);
-	  }
+	for (auto &p : obs.oi.manifest.chunk_map) {
+	  p.second.set_flag(chunk_info_t::FLAG_MISSING);
 	  // punch hole
-	  t->zero(soid, 0, oi.size);
-	  oi.clear_data_digest();
-	  ctx->delta_stats.num_wr++;
-	  ctx->cache_operation = true;
+	  t->zero(soid, p.first, p.second.length);
 	}
+	oi.clear_data_digest();
+	ctx->delta_stats.num_wr++;
+	ctx->cache_operation = true;
 	osd->logger->inc(l_osd_tier_evict);
       }
 
