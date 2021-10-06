@@ -36,20 +36,22 @@ struct btree_lba_manager_test :
 
   WritePipeline pipeline;
 
+  segment_id_t next;
+
   btree_lba_manager_test()
     : segment_manager(segment_manager::create_test_ephemeral()),
       scanner(new ExtentReader()),
       journal(*segment_manager, *scanner),
       cache(*scanner, segment_manager->get_block_size()),
       lba_manager(new BtreeLBAManager(*segment_manager, cache)),
-      block_size(segment_manager->get_block_size())
+      block_size(segment_manager->get_block_size()),
+      next(segment_manager->get_device_id(), 0)
   {
     scanner->add_segment_manager(segment_manager.get());
     journal.set_segment_provider(this);
     journal.set_write_pipeline(&pipeline);
   }
 
-  segment_id_t next = 0;
   get_segment_ret get_segment(device_id_t id) final {
     auto ret = next;
     next = segment_id_t{

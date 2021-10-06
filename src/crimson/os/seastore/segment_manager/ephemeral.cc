@@ -193,7 +193,7 @@ SegmentManager::read_ertr::future<> EphemeralSegmentManager::read(
   size_t len,
   ceph::bufferptr &out)
 {
-  if (addr.segment >= get_num_segments()) {
+  if (addr.segment.device_segment_id() >= get_num_segments()) {
     logger().error(
       "EphemeralSegmentManager::read: invalid segment {}",
       addr);
@@ -214,7 +214,7 @@ SegmentManager::read_ertr::future<> EphemeralSegmentManager::read(
   bl.push_back(out);
   logger().debug(
     "segment_read to segment {} at offset {}, physical offset {}, length {}, crc {}",
-    addr.segment,
+    addr.segment.device_segment_id(),
     addr.offset,
     get_offset(addr),
     len,

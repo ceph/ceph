@@ -518,7 +518,6 @@ public:
     segment_id_t segment,
     segment_off_t offset,
     extent_len_t len) final {
-    assert(segment < segment_usage.size());
     return segment_usage[segment].segment_map.allocate(
       segment.device_segment_id(),
       offset,
@@ -538,7 +537,6 @@ public:
   }
 
   int64_t get_usage(segment_id_t segment) const final {
-    assert(segment < segment_usage.size());
     return segment_usage[segment].segment_map.get_usage();
   }
 
