@@ -134,6 +134,10 @@ def stale_kernel_mount(remote):
             'sudo', 'find',
             '/sys/kernel/debug/ceph',
             '-mindepth', '1',
+            run.Raw('!'),
+            '-path', '/sys/kernel/debug/ceph/meta',
+            run.Raw('!'),
+            '-path', '/sys/kernel/debug/ceph/meta/client_features',
             '-type', 'd',
             run.Raw('|'),
             'read'
