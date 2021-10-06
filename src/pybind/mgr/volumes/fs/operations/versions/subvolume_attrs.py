@@ -3,10 +3,11 @@ from enum import Enum, unique
 
 from ...exception import VolumeException
 
+
 @unique
 class SubvolumeTypes(Enum):
-    TYPE_NORMAL  = "subvolume"
-    TYPE_CLONE   = "clone"
+    TYPE_NORMAL = "subvolume"
+    TYPE_CLONE = "clone"
 
     @staticmethod
     def from_value(value):
@@ -17,15 +18,16 @@ class SubvolumeTypes(Enum):
 
         raise VolumeException(-errno.EINVAL, "invalid subvolume type '{0}'".format(value))
 
+
 @unique
 class SubvolumeStates(Enum):
-    STATE_INIT          = 'init'
-    STATE_PENDING       = 'pending'
-    STATE_INPROGRESS    = 'in-progress'
-    STATE_FAILED        = 'failed'
-    STATE_COMPLETE      = 'complete'
-    STATE_CANCELED      = 'canceled'
-    STATE_RETAINED      = 'snapshot-retained'
+    STATE_INIT = 'init'
+    STATE_PENDING = 'pending'
+    STATE_INPROGRESS = 'in-progress'
+    STATE_FAILED = 'failed'
+    STATE_COMPLETE = 'complete'
+    STATE_CANCELED = 'canceled'
+    STATE_RETAINED = 'snapshot-retained'
 
     @staticmethod
     def from_value(value):
@@ -46,16 +48,18 @@ class SubvolumeStates(Enum):
 
         raise VolumeException(-errno.EINVAL, "invalid state '{0}'".format(value))
 
+
 @unique
 class SubvolumeActions(Enum):
-    ACTION_NONE         = 0
-    ACTION_SUCCESS      = 1
-    ACTION_FAILED       = 2
-    ACTION_CANCELLED    = 3
-    ACTION_RETAINED     = 4
+    ACTION_NONE = 0
+    ACTION_SUCCESS = 1
+    ACTION_FAILED = 2
+    ACTION_CANCELLED = 3
+    ACTION_RETAINED = 4
+
 
 @unique
 class SubvolumeFeatures(Enum):
-    FEATURE_SNAPSHOT_CLONE          = "snapshot-clone"
-    FEATURE_SNAPSHOT_RETENTION      = "snapshot-retention"
-    FEATURE_SNAPSHOT_AUTOPROTECT    = "snapshot-autoprotect"
+    FEATURE_SNAPSHOT_CLONE = "snapshot-clone"
+    FEATURE_SNAPSHOT_RETENTION = "snapshot-retention"
+    FEATURE_SNAPSHOT_AUTOPROTECT = "snapshot-autoprotect"
