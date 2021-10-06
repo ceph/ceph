@@ -12,17 +12,21 @@ log = logging.getLogger(__name__)
 
 goodchars = '[A-Za-z0-9-_.]'
 
+
 class VolumesInfoWrapper():
     def __init__(self, f, context):
         self.f = f
         self.context = context
+
     def __enter__(self):
         log.info("Starting {}".format(self.context))
+
     def __exit__(self, exc_type, exc_value, tb):
         if exc_type is not None:
             log.error("Failed {}:\n{}".format(self.context, "".join(traceback.format_exception(exc_type, exc_value, tb))))
         else:
             log.info("Finishing {}".format(self.context))
+
 
 def mgr_cmd_wrap(f):
     def wrap(self, inbuf, cmd):
@@ -33,6 +37,7 @@ def mgr_cmd_wrap(f):
         with VolumesInfoWrapper(f, context):
             return f(self, inbuf, cmd)
     return wrap
+
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
@@ -527,8 +532,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_pin(self, inbuf, cmd):
         return self.vc.pin_subvolume_group(vol_name=cmd['vol_name'],
-            group_name=cmd['group_name'], pin_type=cmd['pin_type'],
-            pin_setting=cmd['pin_setting'])
+                                           group_name=cmd['group_name'], pin_type=cmd['pin_type'],
+                                           pin_setting=cmd['pin_setting'])
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_snapshot_create(self, inbuf, cmd):
@@ -585,9 +590,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_pin(self, inbuf, cmd):
         return self.vc.subvolume_pin(vol_name=cmd['vol_name'],
-            sub_name=cmd['sub_name'], pin_type=cmd['pin_type'],
-            pin_setting=cmd['pin_setting'],
-            group_name=cmd.get('group_name', None))
+                                     sub_name=cmd['sub_name'], pin_type=cmd['pin_type'],
+                                     pin_setting=cmd['pin_setting'],
+                                     group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_protect(self, inbuf, cmd):
@@ -609,9 +614,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_clone_status(self, inbuf, cmd):
         return self.vc.clone_status(
-            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
+            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'], group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_clone_cancel(self, inbuf, cmd):
         return self.vc.clone_cancel(
-            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
+            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'], group_name=cmd.get('group_name', None))
