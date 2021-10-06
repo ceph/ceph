@@ -824,6 +824,7 @@ class DaemonDescription(object):
         # This is the <foo> in mds.<foo>, the ID that will appear
         # in the FSMap/ServiceMap.
         self.daemon_id: Optional[str] = daemon_id
+        self.daemon_name = self.name()
 
         # Some daemon types have a numeric rank assigned
         self.rank: Optional[int] = rank
@@ -957,6 +958,7 @@ class DaemonDescription(object):
         out['daemon_type'] = self.daemon_type
         out['daemon_id'] = self.daemon_id
         out['service_name'] = self._service_name
+        out['daemon_name'] = self.name()
         out['hostname'] = self.hostname
         out['container_id'] = self.container_id
         out['container_image_id'] = self.container_image_id
@@ -993,6 +995,7 @@ class DaemonDescription(object):
         out: Dict[str, Any] = OrderedDict()
         out['daemon_type'] = self.daemon_type
         out['daemon_id'] = self.daemon_id
+        out['daemon_name'] = self.name()
         out['hostname'] = self.hostname
         out['container_id'] = self.container_id
         out['container_image_id'] = self.container_image_id
@@ -1034,6 +1037,8 @@ class DaemonDescription(object):
                 c[k] = str_to_datetime(c[k])
         events = [OrchestratorEvent.from_json(e) for e in event_strs]
         status_int = c.pop('status', None)
+        if 'daemon_name' in c:
+            del c['daemon_name']
         status = DaemonDescriptionStatus(status_int) if status_int is not None else None
         return cls(events=events, status=status, **c)
 
