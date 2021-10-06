@@ -3210,13 +3210,16 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
  * check whether fragment has reached maximum size
  *
  */
-bool Server::check_fragment_space(MDRequestRef &mdr, CDir *in)
+bool Server::check_fragment_space(MDRequestRef &mdr, CDir *dir)
 {
-  const auto size = in->get_frag_size();
-  if (size >= g_conf()->mds_bal_fragment_size_max) {
-    dout(10) << "fragment " << *in << " size exceeds " << g_conf()->mds_bal_fragment_size_max << " (CEPHFS_ENOSPC)" << dendl;
+  const auto size = dir->get_frag_size();
+  const auto max = g_conf()->mds_bal_fragment_size_max;
+  if (size >= max) {
+    dout(10) << "fragment " << *dir << " size exceeds " << max << " (CEPHFS_ENOSPC)" << dendl;
     respond_to_request(mdr, -CEPHFS_ENOSPC);
     return false;
+  } else {
+    dout(20) << "fragment " << *dir << " size " << size << " < "  << max << dendl;
   }
 
   return true;
