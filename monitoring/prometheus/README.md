@@ -7,8 +7,8 @@ file in a place according to your Prometheus configuration (wherever the `rules`
 configuration stanza points).
 
 ### SNMP
-Ceph provides a MIB (CEPH-PROMETHEUS-ALERT-MIB.txt) to support sending prometheus
-alerts through to an SNMP management platform. The translation from prometheus
-alert to SNMP trap requires the prometheus alert to contain an OID that maps to
-a definition within the MIB. When making changes to the prometheus alert rules
+Ceph provides a MIB (CEPH-PROMETHEUS-ALERT-MIB.txt) to support sending Prometheus
+alerts through to an SNMP management platform. The translation from Prometheus
+alert to SNMP trap requires the Prometheus alert to contain an OID that maps to
+a definition within the MIB. When making changes to the Prometheus alert rules
 file, developers should include any necessary changes to the MIB.
