@@ -212,7 +212,7 @@ SegmentCleaner::get_segment_ret SegmentCleaner::get_segment(device_id_t id)
   assert(0 == "out of space handling todo");
   return get_segment_ret(
     get_segment_ertr::ready_future_marker{},
-    0);
+    ZERO_SEG_ID);
 }
 
 void SegmentCleaner::update_journal_tail_target(journal_seq_t target)

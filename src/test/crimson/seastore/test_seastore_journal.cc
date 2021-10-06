@@ -76,15 +76,17 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   ExtentReaderRef scanner;
 
+  segment_id_t next;
+
   journal_test_t()
     : segment_manager(segment_manager::create_test_ephemeral()),
       block_size(segment_manager->get_block_size()),
-      scanner(new ExtentReader())
+      scanner(new ExtentReader()),
+      next(segment_manager->get_device_id(), 0)
   {
     scanner->add_segment_manager(segment_manager.get());
   }
 
-  segment_id_t next = 0;
   get_segment_ret get_segment(device_id_t id) final {
     auto ret = next;
     next = segment_id_t{
@@ -127,10 +129,14 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 	  boost::make_counting_iterator(device_segment_id_t{
 	    segment_manager->get_num_segments()}),
 	  [this, &segments](auto segment_id) {
-	  return scanner->read_segment_header(segment_id)
+	  return scanner->read_segment_header(segment_id_t{0, segment_id})
 	  .safe_then([&segments, segment_id](auto header) {
 	    if (!header.out_of_line) {
-	      segments.emplace_back(std::make_pair(segment_id, std::move(header)));
+	      segments.emplace_back(
+		std::make_pair(
+		  segment_id_t{0, segment_id},
+		  std::move(header)
+		));
 	    }
 	    return seastar::now();
 	  }).handle_error(
