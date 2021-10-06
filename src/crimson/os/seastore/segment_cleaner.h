@@ -122,8 +122,8 @@ public:
       auto& sm_info = segment_info_set->sm_info_vec[sm_id];
       if (iter == sm_info->segment_infos.end()) {
 	device_id_t t_sm_id = sm_id;
-	while (++t_sm_id < max_devices && !segment_info_set->sm_info_vec[t_sm_id]);
-	if (t_sm_id < max_devices) {
+	while (++t_sm_id < DEVICE_ID_MAX && !segment_info_set->sm_info_vec[t_sm_id]);
+	if (t_sm_id < DEVICE_ID_MAX) {
 	  auto& sm = segment_info_set->sm_info_vec[t_sm_id];
 	  assert(sm);
 	  iter = sm->segment_infos.begin();
@@ -206,7 +206,7 @@ public:
     SegmentInfoT&& segment_info)
   {
     if (!sm_info_vec.size()) {
-      sm_info_vec.resize(max_devices);
+      sm_info_vec.resize(DEVICE_ID_MAX);
     }
     device_id_t d_id = segment_manager.get_device_id();
     sm_info_vec[segment_manager.get_device_id()] = std::make_optional<
@@ -227,33 +227,31 @@ public:
   }
   auto begin() {
     device_id_t sm_id = 0;
-    for (;sm_id < max_devices && !sm_info_vec[sm_id];
-	sm_id ++);
-    return iterator<false>(sm_id, this);
+    for (; sm_id < DEVICE_ID_MAX && !sm_info_vec[sm_id]; ++sm_id);
+    return iterator<false>(sm_id, *this);
   }
   auto begin() const {
     device_id_t sm_id = 0;
-    for (;sm_id < max_devices && !sm_info_vec[sm_id];
-	sm_id ++);
-    return iterator<true>(sm_id, this);
+    for (; sm_id < DEVICE_ID_MAX && !sm_info_vec[sm_id]; ++sm_id);
+    return iterator<true>(sm_id, *this);
   }
   auto end() {
-    device_id_t sm_id = max_devices - 1;
-    for (;!sm_info_vec[sm_id];
-	sm_id --);
+    auto sm_id = DEVICE_ID_MAX;
+    for (; !sm_info_vec[sm_id]; --sm_id);
     return iterator<false>(sm_id, this, true);
   }
   auto end() const {
-    device_id_t sm_id = max_devices - 1;
-    for (;!sm_info_vec[sm_id];
-	sm_id --);
+    auto sm_id = DEVICE_ID_MAX;
+    for (; !sm_info_vec[sm_id]; --sm_id);
     return iterator<true>(sm_id, this, true);
   }
   auto find_begin(device_id_t id) {
+    assert(sm_info_vec[id]);
     auto& sm_info = sm_info_vec[id];
     return sm_info->segment_infos.begin();
   }
   auto find_end(device_id_t id) {
+    assert(sm_info_vec[id]);
     auto& sm_info = sm_info_vec[id];
     return sm_info->segment_infos.end();
   }

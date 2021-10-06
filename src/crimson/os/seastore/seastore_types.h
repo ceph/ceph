@@ -38,10 +38,12 @@ struct seastore_meta_t {
 
 // identifies a specific physical device within seastore
 using device_id_t = uint8_t;
+
 // order of device_id_t
 constexpr uint16_t DEVICE_ID_LEN_BITS = 4;
-// maximum devices supported
-constexpr uint16_t max_devices = 1 << DEVICE_ID_LEN_BITS;
+
+// maximum number of devices supported
+constexpr uint16_t DEVICE_ID_MAX = (1 << DEVICE_ID_LEN_BITS);
 
 // segment ids without a device id encapsulated
 using device_segment_id_t = uint32_t;
@@ -94,13 +96,12 @@ public:
     return std::numeric_limits<internal_segment_id_t>::max() - 6;
   }
 
-
   segment_id_t() = default;
   segment_id_t(device_id_t id, device_segment_id_t segment)
     : segment(make_internal(segment, id)) {
     // only lower 4 bits are effective, and we have to reserve 0x0F for
     // special XXX_SEG_IDs
-    assert(id < 15);
+    assert(id < DEVICE_ID_MAX);
   }
 
   [[gnu::always_inline]]

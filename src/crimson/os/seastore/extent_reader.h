@@ -16,7 +16,7 @@ class ExtentReader {
 public:
   using read_ertr = SegmentManager::read_ertr;
   ExtentReader() {
-    segment_managers.resize(max_devices, nullptr);
+    segment_managers.resize(DEVICE_ID_MAX, nullptr);
   }
   using read_segment_header_ertr = crimson::errorator<
     crimson::ct_error::enoent,
