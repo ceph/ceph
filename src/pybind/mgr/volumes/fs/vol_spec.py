@@ -1,5 +1,3 @@
-import os
-
 class VolSpec(object):
     """
     specification of a "volume" -- base directory and various prefixes.
