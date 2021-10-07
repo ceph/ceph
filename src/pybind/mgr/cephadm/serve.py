@@ -942,8 +942,12 @@ class CephadmServe:
 
         # do daemon post actions
         for daemon_type, daemon_descs in daemons_post.items():
-            if daemon_type in self.mgr.requires_post_actions:
-                self.mgr.requires_post_actions.remove(daemon_type)
+            run_post = False
+            for d in daemon_descs:
+                if d.name() in self.mgr.requires_post_actions:
+                    self.mgr.requires_post_actions.remove(d.name())
+                    run_post = True
+            if run_post:
                 self.mgr._get_cephadm_service(daemon_type_to_service(
                     daemon_type)).daemon_check_post(daemon_descs)
 
@@ -1065,7 +1069,7 @@ class CephadmServe:
                             DaemonDescriptionStatus.running, 'starting')
                         self.mgr.cache.add_daemon(daemon_spec.host, sd)
                         if daemon_spec.daemon_type in REQUIRES_POST_ACTIONS:
-                            self.mgr.requires_post_actions.add(daemon_spec.daemon_type)
+                            self.mgr.requires_post_actions.add(daemon_spec.name())
                     self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
 
                 self.mgr.cache.update_daemon_config_deps(
