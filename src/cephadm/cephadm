@@ -4614,7 +4614,7 @@ def command_bootstrap(ctx):
                         out, err, code = call_throws(ctx, ['sudo', '-u', ctx.ssh_user, 'ssh-copy-id', '-f', '-i', ssh_key, '-o StrictHostKeyChecking=no', '%s@%s' % (ctx.ssh_user, split[1])])
 
         mounts = {}
-        mounts[pathify(ctx.apply_spec)] = '/tmp/spec.yml:z'
+        mounts[pathify(ctx.apply_spec)] = '/tmp/spec.yml:ro'
 
         out = cli(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
         logger.info(out)
