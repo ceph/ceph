@@ -1126,7 +1126,8 @@ void OpenFileTable::_prefetch_inodes()
 
   if (destroyed_inos_set.empty()) {
     for (auto& it : logseg_destroyed_inos)
-      destroyed_inos_set.insert(it.second.begin(), it.second.end());
+      destroyed_inos_set.insert(std::make_move_iterator(it.second.begin()), std::make_move_iterator(it.second.end()));
+
   }
 
   for (auto& [ino, anchor] : loaded_anchor_map) {
