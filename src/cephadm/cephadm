@@ -4638,10 +4638,12 @@ def command_shell(ctx):
             mount = pathify(split_src_dst[0])
             filename = os.path.basename(split_src_dst[0])
             if len(split_src_dst) > 1:
-                dst = split_src_dst[1] + ':z' if len(split_src_dst) == 3 else split_src_dst[1]
+                dst = split_src_dst[1]
+                if len(split_src_dst) == 3:
+                    dst = '{}:{}'.format(dst, split_src_dst[2])
                 mounts[mount] = dst
             else:
-                mounts[mount] = '/mnt/{}:z'.format(filename)
+                mounts[mount] = '/mnt/{}'.format(filename)
     if ctx.command:
         command = ctx.command
     else:
