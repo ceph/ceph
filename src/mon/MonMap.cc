@@ -38,6 +38,15 @@ using std::vector;
 using ceph::DNSResolver;
 using ceph::Formatter;
 
+#ifdef WITH_SEASTAR
+namespace {
+  seastar::logger& logger()
+  {
+    return crimson::get_logger(ceph_subsys_monc);
+  }
+}
+#endif
+
 void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
 {
   uint8_t v = 5;
@@ -778,9 +787,14 @@ seastar::future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& na
                             record.priority,
                             record.weight,
                             false);
+      }).handle_exception_type([t=record.target](const std::system_error& e) {
+        logger().debug("{}: unable to resolve name for {}: {}",
+                       "init_with_dns_srv", t, e);
       });
     });
-  }).handle_exception_type([](const std::system_error& e) {
+  }).handle_exception_type([name](const std::system_error& e) {
+    logger().debug("{}: unable to get monitor info from DNS SRV with {}: {}",
+                 "init_with_dns_srv", name, e);
     // ignore DNS failures
     return seastar::make_ready_future<>();
   });
