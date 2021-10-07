@@ -1384,6 +1384,29 @@ class TestShell(object):
             assert retval == 0
             assert ctx.keyring == 'foo'
 
+    @mock.patch('cephadm.CephContainer')
+    def test_mount_no_dst(self, m_ceph_container, cephadm_fs):
+        cmd = ['shell', '--mount', '/etc/foo']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert m_ceph_container.call_args.kwargs['volume_mounts']['/etc/foo'] == '/mnt/foo'
+
+    @mock.patch('cephadm.CephContainer')
+    def test_mount_with_dst_no_opt(self, m_ceph_container, cephadm_fs):
+        cmd = ['shell', '--mount', '/etc/foo:/opt/foo/bar']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert m_ceph_container.call_args.kwargs['volume_mounts']['/etc/foo'] == '/opt/foo/bar'
+
+    @mock.patch('cephadm.CephContainer')
+    def test_mount_with_dst_and_opt(self, m_ceph_container, cephadm_fs):
+        cmd = ['shell', '--mount', '/etc/foo:/opt/foo/bar:Z']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert m_ceph_container.call_args.kwargs['volume_mounts']['/etc/foo'] == '/opt/foo/bar:Z'
 
 class TestCephVolume(object):
 
