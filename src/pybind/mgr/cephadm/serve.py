@@ -1270,14 +1270,14 @@ class CephadmServe:
 
             try:
                 out, err, code = self.mgr.ssh.execute_command(
-                    host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
+                    host, cmd, stdin=stdin, addr=addr)
                 if code == 2:
                     ls_cmd = ['ls', self.mgr.cephadm_binary_path]
                     out_ls, err_ls, code_ls = self.mgr.ssh.execute_command(host, ls_cmd, addr=addr)
                     if code_ls == 2:
                         self._deploy_cephadm_binary(host, addr)
                         out, err, code = self.mgr.ssh.execute_command(
-                            host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
+                            host, cmd, stdin=stdin, addr=addr)
 
             except Exception as e:
                 self.mgr.ssh._reset_con(host)
@@ -1289,7 +1289,7 @@ class CephadmServe:
             try:
                 cmd = ['/usr/bin/cephadm'] + final_args
                 out, err, code = self.mgr.ssh.execute_command(
-                    host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
+                    host, cmd, stdin=stdin, addr=addr)
             except Exception as e:
                 self.mgr.ssh._reset_con(host)
                 if error_ok:
