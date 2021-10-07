@@ -77,9 +77,10 @@ def normalize_config(ctx, config):
     :param ctx: Context
     :param config: Configuration
     """
+    log.info(f'normalize config orig: {config}')
     if not config or \
             len([x for x in config.keys() if x in
-                VERSION_KEYS + ['kdb', 'flavor']]) == len(config.keys()):
+                VERSION_KEYS + ['kdb', 'flavor', 'hwe']]) == len(config.keys()):
         new_config = {}
         if not config:
             config = CONFIG_DEFAULT
@@ -99,6 +100,7 @@ def normalize_config(ctx, config):
                 # specific overrides generic
                 if name not in config:
                     new_config[name] = role_config.copy()
+    log.info(f'normalize config final: {new_config}')
     return new_config
 
 
@@ -480,7 +482,7 @@ def update_rh_kernel(remote):
             log.info("Latest version already installed on %s", remote.shortname)
 
 
-def install_and_reboot(ctx, config):
+def install_and_reboot(ctx, need_install, config):
     """
     Install and reboot the kernel.  This mostly performs remote
     installation operations.   The code does check for Arm images
@@ -490,15 +492,16 @@ def install_and_reboot(ctx, config):
     it expects kernel entries to be present under submenu entries.
 
     :param ctx: Context
+    :param need_install: map from caller
     :param config: Configuration
     """
     procs = {}
     kernel_title = ''
-    for role, src in config.items():
+    for role, src in need_install.items():
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
         if isinstance(src, str) and src.find('distro') >= 0:
             log.info('Installing distro kernel on {role}...'.format(role=role))
-            install_kernel(role_remote, version=src)
+            install_kernel(role_remote, config[role], version=src)
             continue
 
         log.info('Installing kernel {src} on {role}...'.format(src=src,
@@ -676,7 +679,7 @@ def enable_disable_kdb(ctx, config):
                 log.warn('Kernel does not support kdb')
 
 
-def wait_for_reboot(ctx, need_install, timeout, distro=False):
+def wait_for_reboot(ctx, need_install, timeout, config, distro=False):
     """
     Loop reconnecting and checking kernel versions until
     they're all correct or the timeout is exceeded.
@@ -700,7 +703,7 @@ def wait_for_reboot(ctx, need_install, timeout, distro=False):
             try:
                 if distro:
                     (remote,) = ctx.cluster.only(client).remotes.keys()
-                    assert not need_to_install_distro(remote), \
+                    assert not need_to_install_distro(remote, config[client]), \
                             'failed to install new distro kernel version within timeout'
 
                 else:
@@ -734,7 +737,7 @@ def get_version_of_running_kernel(remote):
     return current
 
 
-def need_to_install_distro(remote):
+def need_to_install_distro(remote, role_config):
     """
     Installing kernels on rpm won't setup grub/boot into them.  This installs
     the newest kernel package and checks its version and compares against
@@ -784,7 +787,7 @@ def need_to_install_distro(remote):
         newest = get_latest_image_version_rpm(remote)
 
     if package_type == 'deb':
-        newest = get_latest_image_version_deb(remote, dist_release)
+        newest = get_latest_image_version_deb(remote, dist_release, role_config)
 
     if current in newest or current.replace('-', '_') in newest:
         log.info('Newest distro kernel installed and running')
@@ -821,7 +824,7 @@ def maybe_generate_initrd_rpm(remote, path, version):
         ])
 
 
-def install_kernel(remote, path=None, version=None):
+def install_kernel(remote, role_config, path=None, version=None):
     """
     A bit of misnomer perhaps - the actual kernel package is installed
     elsewhere, this function deals with initrd and grub.  Currently the
@@ -856,7 +859,7 @@ def install_kernel(remote, path=None, version=None):
         return
 
     if package_type == 'deb':
-        newversion = get_latest_image_version_deb(remote, dist_release)
+        newversion = get_latest_image_version_deb(remote, dist_release, role_config)
         if 'ubuntu' in dist_release:
             grub2conf = teuthology.get_file(remote,
                 '/boot/grub/grub.cfg', sudo=True).decode()
@@ -1063,7 +1066,7 @@ def get_latest_image_version_rpm(remote):
     return version
 
 
-def get_latest_image_version_deb(remote, ostype):
+def get_latest_image_version_deb(remote, ostype, role_config):
     """
     Get kernel image version of the newest kernel deb package.
     Used for distro case.
@@ -1089,26 +1092,16 @@ def get_latest_image_version_deb(remote, ostype):
                 return newest
     # Ubuntu is a depend in a depend.
     if 'ubuntu' in ostype:
-        try:
-            args=['sudo', 'DEBIAN_FRONTEND=noninteractive',
-                  'apt-get', '-y', 'install', 'linux-image-current-generic']
-            install_dep_packages(remote, args)
-            remote.run(args=['dpkg', '-s', 'linux-image-current-generic'],
-                       stdout=output)
-            for line in output.getvalue().split('\n'):
-                if 'Depends:' in line:
-                    depends = line.split('Depends: ')[1]
-                    install_dep_packages(remote, args=['sudo', 'apt-get', '-y',
-                                                       'install', depends])
-            remote.run(args=['dpkg', '-s', depends], stdout=output)
-        except run.CommandFailedError:
-            # Non precise ubuntu machines (like trusty) don't have
-            # linux-image-current-generic so use linux-image-generic instead.
-            args=['sudo', 'DEBIAN_FRONTEND=noninteractive',
-                  'apt-get', '-y', 'install', 'linux-image-generic']
-            install_dep_packages(remote, args)
-            remote.run(args=['dpkg', '-s', 'linux-image-generic'],
-                       stdout=output)
+        name = 'linux-image-generic'
+        if role_config.get('hwe'):
+            name = f'linux-image-generic-hwe-{remote.os.version}'
+
+        args=['sudo', 'DEBIAN_FRONTEND=noninteractive',
+              'apt-get', '-y', 'install', name]
+        install_dep_packages(remote, args)
+        remote.run(args=['dpkg', '-s', name],
+                   stdout=output)
+
         for line in output.getvalue().split('\n'):
             if 'Depends:' in line:
                 newest = line.split('linux-image-')[1]
@@ -1260,7 +1253,7 @@ def task(ctx, config):
                 need_install[role] = path
                 need_version[role] = sha1
         elif role_config.get('sha1') == 'distro':
-            version = need_to_install_distro(role_remote)
+            version = need_to_install_distro(role_remote, role_config)
             if version:
                 need_install[role] = 'distro'
                 need_version[role] = version
@@ -1336,7 +1329,7 @@ def task(ctx, config):
     if need_install:
         install_firmware(ctx, need_install)
         download_kernel(ctx, need_install)
-        install_and_reboot(ctx, need_install)
-        wait_for_reboot(ctx, need_version, timeout)
+        install_and_reboot(ctx, need_install, config)
+        wait_for_reboot(ctx, need_version, timeout, config)
 
     enable_disable_kdb(ctx, kdb)
