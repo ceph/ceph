@@ -1989,6 +1989,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, uuid_d fsid, int whoami, str
 	   << "queue_transaction returned " << cpp_strerror(ret) << dendl;
       goto umount_store;
     }
+    ch->flush();
   }
 
   ret = write_meta(cct, store, sb.cluster_fsid, sb.osd_fsid, whoami, osdspec_affinity);
