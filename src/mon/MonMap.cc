@@ -873,24 +873,24 @@ int MonMap::init_with_monmap(const std::string& monmap, std::ostream& errout)
 }
 
 int MonMap::init_with_dns_srv(CephContext* cct,
-                              std::string srv_name,
+                              std::string name,
 			      bool for_mkfs,
                               std::ostream& errout)
 {
+  string service = name;
   string domain;
-  // check if domain is also provided and extract it from srv_name
-  size_t idx = srv_name.find("_");
-  if (idx != string::npos) {
-    domain = srv_name.substr(idx + 1);
-    srv_name = srv_name.substr(0, idx);
+  // check if domain is also provided and extract it from the service name
+  if (size_t idx = name.find("_"); idx != name.npos) {
+    service = name.substr(0, idx);
+    domain = name.substr(idx + 1);
   }
 
   map<string, DNSResolver::Record> records;
-  if (DNSResolver::get_instance()->resolve_srv_hosts(cct, srv_name,
+  if (DNSResolver::get_instance()->resolve_srv_hosts(cct, service,
         DNSResolver::SRV_Protocol::TCP, domain, &records) != 0) {
 
     errout << "unable to get monitor info from DNS SRV with service name: "
-           << "ceph-mon" << std::endl;
+           << name << std::endl;
     return -1;
   } else {
     for (auto& record : records) {
