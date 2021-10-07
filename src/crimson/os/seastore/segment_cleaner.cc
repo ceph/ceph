@@ -419,35 +419,40 @@ SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
       segments.begin(),
       segments.end(),
       [this, &segment_set](auto& segment_info) {
-      auto segment_id = segment_info.segment;
-      return scanner->read_segment_header(segment_id)
-      .safe_then([&segment_set, segment_id, this](auto header) {
-	if (header.out_of_line) {
-	  logger().debug("ExtentReader::init_segments: out-of-line segment {}", segment_id);
-	  init_mark_segment_closed(
-	    segment_id,
-	    header.journal_segment_seq,
-	    true);
-	} else {
-	  logger().debug("ExtentReader::init_segments: journal segment {}", segment_id);
-	  segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
-	}
-	return seastar::now();
-      }).handle_error(
-	crimson::ct_error::enoent::handle([](auto) {
-	  return init_segments_ertr::now();
-	}),
-	crimson::ct_error::enodata::handle([](auto) {
-	  return init_segments_ertr::now();
-	}),
-	crimson::ct_error::input_output_error::pass_further{}
-      );
-    }).safe_then([&segment_set] {
-      return seastar::make_ready_future<
-	std::vector<std::pair<segment_id_t, segment_header_t>>>(
-	  std::move(segment_set));
+	auto segment_id = segment_info.segment;
+	return scanner->read_segment_header(
+	  segment_id
+	).safe_then([&segment_set, segment_id, this](auto header) {
+	  if (header.out_of_line) {
+	    logger().debug(
+	      "ExtentReader::init_segments: out-of-line segment {}",
+	      segment_id);
+	    init_mark_segment_closed(
+	      segment_id,
+	      header.journal_segment_seq,
+	      true);
+	  } else {
+	    logger().debug(
+	      "ExtentReader::init_segments: journal segment {}",
+	      segment_id);
+	    segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
+	  }
+	  return seastar::now();
+	}).handle_error(
+	  crimson::ct_error::enoent::handle([](auto) {
+	    return init_segments_ertr::now();
+	  }),
+	  crimson::ct_error::enodata::handle([](auto) {
+	    return init_segments_ertr::now();
+	  }),
+	  crimson::ct_error::input_output_error::pass_further{}
+	);
+      }).safe_then([&segment_set] {
+	return seastar::make_ready_future<
+	  std::vector<std::pair<segment_id_t, segment_header_t>>>(
+	    std::move(segment_set));
+      });
     });
-  });
 }
 
 }
