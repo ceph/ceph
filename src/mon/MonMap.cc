@@ -38,6 +38,15 @@ using std::vector;
 using ceph::DNSResolver;
 using ceph::Formatter;
 
+#ifdef WITH_SEASTAR
+namespace {
+  seastar::logger& logger()
+  {
+    return crimson::get_logger(ceph_subsys_monc);
+  }
+}
+#endif
+
 void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
 {
   uint8_t v = 5;
@@ -726,10 +735,9 @@ void MonMap::check_health(health_check_map_t *checks) const
 
 #ifdef WITH_SEASTAR
 
-using namespace seastar;
-
 seastar::future<> MonMap::read_monmap(const std::string& monmap)
 {
+  using namespace seastar;
   return open_file_dma(monmap, open_flags::ro).then([this] (file f) {
     return f.size().then([this, f = std::move(f)](size_t s) {
       return do_with(make_file_input_stream(f), [this, s](input_stream<char>& in) {
@@ -757,7 +765,7 @@ seastar::future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& na
   return seastar::net::dns::get_srv_records(
       seastar::net::dns_resolver::srv_proto::tcp,
       service, domain).then([this](seastar::net::dns_resolver::srv_records records) {
-    return parallel_for_each(records, [this](auto record) {
+    return seastar::parallel_for_each(records, [this](auto record) {
       return seastar::net::dns::resolve_name(record.target).then(
           [record,this](seastar::net::inet_address a) {
 	// the resolved address does not contain ceph specific info like nonce
@@ -779,9 +787,14 @@ seastar::future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& na
                             record.priority,
                             record.weight,
                             false);
+      }).handle_exception_type([t=record.target](const std::system_error& e) {
+        logger().debug("{}: unable to resolve name for {}: {}",
+                       "init_with_dns_srv", t, e);
       });
     });
-  }).handle_exception_type([](const std::system_error& e) {
+  }).handle_exception_type([name](const std::system_error& e) {
+    logger().debug("{}: unable to get monitor info from DNS SRV with {}: {}",
+                 "init_with_dns_srv", name, e);
     // ignore DNS failures
     return seastar::make_ready_future<>();
   });
@@ -809,7 +822,7 @@ seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
 {
   // -m foo?
   if (maybe_init_with_mon_host(conf.get_val<std::string>("mon_host"), for_mkfs)) {
-    return make_ready_future<>();
+    return seastar::make_ready_future<>();
   }
 
   // What monitors are in the config file?
@@ -818,7 +831,7 @@ seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
     throw std::runtime_error(errout.str());
   }
   if (size() > 0) {
-    return make_ready_future<>();
+    return seastar::make_ready_future<>();
   }
   // no info found from conf options lets try use DNS SRV records
   const string srv_name = conf.get_val<std::string>("mon_dns_srv_name");
@@ -834,7 +847,7 @@ seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf
   // mon_host_override?
   if (maybe_init_with_mon_host(conf.get_val<std::string>("mon_host_override"),
                                for_mkfs)) {
-    return make_ready_future<>();
+    return seastar::make_ready_future<>();
   }
 
   // file?
