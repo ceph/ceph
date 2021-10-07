@@ -697,17 +697,21 @@ def task(ctx, config):
             check_status=True)
         assert len(rgwlog) > 0
 
-        # exempt bucket_name2 from checking as it was only used for multi-region tests
-        assert rgwlog['bucket'].find(bucket_name) == 0 or rgwlog['bucket'].find(bucket_name2) == 0
-        assert rgwlog['bucket'] != bucket_name or rgwlog['bucket_id'] == bucket_id
-        assert rgwlog['bucket_owner'] == user1 or rgwlog['bucket'] == bucket_name + '5' or rgwlog['bucket'] == bucket_name2
-        for entry in rgwlog['log_entries']:
-            log.debug('checking log entry: ', entry)
-            assert entry['bucket'] == rgwlog['bucket']
-            possible_buckets = [bucket_name + '5', bucket_name2]
-            user = entry['user']
-            assert user == user1 or user.endswith('system-user') or \
-                rgwlog['bucket'] in possible_buckets
+        # skip any entry for which there is no bucket name--e.g., list_buckets,
+        # since that is valid but cannot pass the following checks
+        entry_bucket_name = rgwlog['bucket']
+        if entry_bucket_name.strip() != "":
+            # exempt bucket_name2 from checking as it was only used for multi-region tests
+            assert rgwlog['bucket'].find(bucket_name) == 0 or rgwlog['bucket'].find(bucket_name2) == 0
+            assert rgwlog['bucket'] != bucket_name or rgwlog['bucket_id'] == bucket_id
+            assert rgwlog['bucket_owner'] == user1 or rgwlog['bucket'] == bucket_name + '5' or rgwlog['bucket'] == bucket_name2
+            for entry in rgwlog['log_entries']:
+                log.debug('checking log entry: ', entry)
+                assert entry['bucket'] == rgwlog['bucket']
+                possible_buckets = [bucket_name + '5', bucket_name2]
+                user = entry['user']
+                assert user == user1 or user.endswith('system-user') or \
+                    rgwlog['bucket'] in possible_buckets
 
         # TESTCASE 'log-rm','log','rm','delete log objects','succeeds'
         (err, out) = rgwadmin(ctx, client, ['log', 'rm', '--object', obj],
