@@ -45,6 +45,7 @@
 %endif
 %bcond_without amqp_endpoint
 %bcond_without kafka_endpoint
+%bcond_without amqp_1_endpoint
 %bcond_without lttng
 %bcond_without libradosstriper
 %bcond_without ocf
@@ -241,6 +242,9 @@ BuildRequires:  librabbitmq-devel
 %endif
 %if 0%{with kafka_endpoint}
 BuildRequires:  librdkafka-devel
+%endif
+%if 0%{with amqp_1_endpoint}
+BuildRequires:  qpid-proton-cpp-devel
 %endif
 %if 0%{with lua_packages}
 BuildRequires:  %{luarocks_package_name}
@@ -1323,6 +1327,11 @@ cmake .. \
     -DWITH_RADOSGW_KAFKA_ENDPOINT:BOOL=ON \
 %else
     -DWITH_RADOSGW_KAFKA_ENDPOINT:BOOL=OFF \
+%endif
+%if 0%{with amqp_1_endpoint}
+    -DWITH_RADOSGW_AMQP_1_ENDPOINT:BOOL=ON \
+%else
+    -DWITH_RADOSGW_AMQP_1_ENDPOINT:BOOL=OFF \
 %endif
 %if 0%{without lua_packages}
     -DWITH_RADOSGW_LUA_PACKAGES:BOOL=OFF \

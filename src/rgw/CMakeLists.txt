@@ -171,6 +171,8 @@ if(WITH_RADOSGW_DBSTORE)
 endif()
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
+if(WITH_RADOSGW_AMQP_1_ENDPOINT)
+  list(APPEND librgw_common_srcs rgw_amqp_1.cc)
 endif()
 
 add_library(rgw_common STATIC ${librgw_common_srcs})

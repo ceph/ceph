@@ -351,6 +351,9 @@
 /* Defined if libedkafka is available for rgw kafka push endpoint */
 #cmakedefine WITH_RADOSGW_KAFKA_ENDPOINT
 
+/* Defined if qpid-proton-cpp is available for rgw amqp 1.0 push endpoint */
+#cmakedefine WITH_RADOSGW_AMQP_1_ENDPOINT
+
 /* Defined if lua packages can be installed by radosgw */
 #cmakedefine WITH_RADOSGW_LUA_PACKAGES
 

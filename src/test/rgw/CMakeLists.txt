@@ -5,6 +5,16 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
   add_library(amqp_mock STATIC ${amqp_mock_src})
 endif()
 
+if(WITH_RADOSGW_AMQP_1_ENDPOINT)
+  # amqp_1 broker
+	set(amqp_1_broker_src amqp_1_broker.cc)
+	add_executable(amqp_1_broker ${amqp_1_broker_src})
+	target_link_libraries(amqp_1_broker qpid-proton-cpp)
+	add_executable(unittest_rgw_amqp_1 test_rgw_amqp_1.cc)
+	add_ceph_unittest(unittest_rgw_amqp_1)
+	target_link_libraries(unittest_rgw_amqp_1 ${rgw_libs} qpid-proton-cpp)
+endif()
+
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   # kafka stub library
   set(kafka_stub_src
