@@ -8772,7 +8772,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	    }
 
 	    bufferlist bl;
-	    IOContext ioc(cct, NULL, true); // allow EIO
+	    IOContext ioc(cct, NULL, !cct->_conf->bluestore_fail_eio);
 	    r = bdev->read(e->offset, e->length, &bl, &ioc, false);
 	    if (r < 0) {
 	      derr << __func__ << " failed to read from 0x" << std::hex << e->offset
@@ -10190,7 +10190,7 @@ int BlueStore::_do_read(
                              // measure the whole block below.
                              // The error isn't that much...
   vector<bufferlist> compressed_blob_bls;
-  IOContext ioc(cct, NULL, true); // allow EIO
+  IOContext ioc(cct, NULL, !cct->_conf->bluestore_fail_eio);
   r = _prepare_read_ioc(blobs2read, &compressed_blob_bls, &ioc);
   // we always issue aio for reading, so errors other than EIO are not allowed
   if (r < 0)
@@ -10536,7 +10536,7 @@ int BlueStore::_do_readv(
     cct->_conf->bluestore_log_op_age);
   _dump_onode<30>(cct, *o);
 
-  IOContext ioc(cct, NULL, true); // allow EIO
+  IOContext ioc(cct, NULL, !cct->_conf->bluestore_fail_eio);
   vector<std::tuple<ready_regions_t, vector<bufferlist>, blobs2read_t>> raw_results;
   raw_results.reserve(m.num_intervals());
   int i = 0;
