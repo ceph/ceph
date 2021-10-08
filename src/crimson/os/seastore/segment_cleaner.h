@@ -1380,10 +1380,4 @@ private:
 };
 using SegmentCleanerRef = std::unique_ptr<SegmentCleaner>;
 
-template struct segment_manager_info_t<segment_info_t>;
-template class segment_info_set_t<segment_info_t>;
-template struct segment_manager_info_t<SpaceTrackerDetailed::segment_tracker_t>;
-template class segment_info_set_t<SpaceTrackerDetailed::segment_tracker_t>;
-template struct segment_manager_info_t<segment_space_tracker_t>;
-template class segment_info_set_t<segment_space_tracker_t>;
 }
