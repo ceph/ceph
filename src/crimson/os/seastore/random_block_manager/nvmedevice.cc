@@ -24,16 +24,22 @@ open_ertr::future<> PosixNVMeDevice::open(
   seastar::open_flags mode) {
   return seastar::do_with(in_path, [this, mode](auto& in_path) {
     return seastar::file_stat(in_path).then([this, mode, in_path](auto stat) {
-      this->block_size = stat.block_size;
-      this->size = stat.size;
+      size = stat.size;
       return seastar::open_file_dma(in_path, mode).then([=](auto file) {
-        this->device = file;
+        device = file;
         logger().debug("open");
         // Get SSD's features from identify_controller and namespace command.
         // Do identify_controller first, and then identify_namespace.
-        return identify_controller().safe_then([this](auto id_controller_data) {
+        return identify_controller().safe_then([this, in_path, mode](
+          auto id_controller_data) {
           support_multistream = id_controller_data.oacs.support_directives;
-          return identify_namespace().safe_then([this] (auto id_namespace_data) {
+          if (support_multistream) {
+            stream_id_count = WRITE_LIFE_MAX;
+          }
+          return identify_namespace().safe_then([this, in_path, mode] (
+            auto id_namespace_data) {
+            // LBA format provides LBA size which is power of 2. LBA is the
+            // minimum size of read and write.
             block_size = (1 << id_namespace_data.lbaf0.lbads);
             data_protection_type = id_namespace_data.dps.protection_type;
             data_protection_enabled = (data_protection_type > 0);
@@ -42,13 +48,31 @@ open_ertr::future<> PosixNVMeDevice::open(
               write_granularity = block_size * (id_namespace_data.npwg + 1);
               write_alignment = block_size * (id_namespace_data.npwa + 1);
             }
-            return seastar::now();
+            return open_for_io(in_path, mode);
           });
-        });
+        }).handle_error(crimson::ct_error::input_output_error::handle([this, in_path, mode]{
+          logger().error("open: id ctrlr failed. open without ioctl");
+          return open_for_io(in_path, mode);
+        }), crimson::ct_error::pass_further_all{});
       });
-    }).handle_exception([](auto e) -> open_ertr::future<> {
-      logger().error("open: got error{}", e);
-      return crimson::ct_error::input_output_error::make();
+    });
+  });
+}
+
+open_ertr::future<> PosixNVMeDevice::open_for_io(
+  const std::string& in_path,
+  seastar::open_flags mode) {
+  io_device.resize(stream_id_count);
+  return seastar::do_for_each(io_device, [=](auto &target_device) {
+    return seastar::open_file_dma(in_path, mode).then([this](
+      auto file) {
+      io_device[stream_index_to_open] = file;
+      return io_device[stream_index_to_open].fcntl(
+        F_SET_FILE_RW_HINT,
+        (uintptr_t)&stream_index_to_open).then([this](auto ret) {
+        stream_index_to_open++;
+        return seastar::now();
+      });
     });
   });
 }
@@ -64,17 +88,22 @@ write_ertr::future<> PosixNVMeDevice::write(
   auto length = bptr.length();
 
   assert((length % block_size) == 0);
-  return device.dma_write(offset, bptr.c_str(), length).handle_exception(
+  uint16_t supported_stream = stream;
+  if (stream >= stream_id_count) {
+    supported_stream = WRITE_LIFE_NOT_SET;
+  }
+  return io_device[supported_stream].dma_write(
+    offset, bptr.c_str(), length).handle_exception(
     [](auto e) -> write_ertr::future<size_t> {
-      logger().error("write: dma_write got error{}", e);
-        return crimson::ct_error::input_output_error::make();
-    }).then([length](auto result) -> write_ertr::future<> {
-      if (result != length) {
-        logger().error("write: dma_write got error with not proper length");
-        return crimson::ct_error::input_output_error::make();
-      }
-      return write_ertr::now();
-    });
+    logger().error("write: dma_write got error{}", e);
+    return crimson::ct_error::input_output_error::make();
+  }).then([length](auto result) -> write_ertr::future<> {
+    if (result != length) {
+      logger().error("write: dma_write got error with not proper length");
+      return crimson::ct_error::input_output_error::make();
+    }
+    return write_ertr::now();
+  });
 }
 
 read_ertr::future<> PosixNVMeDevice::read(
@@ -103,7 +132,11 @@ read_ertr::future<> PosixNVMeDevice::read(
 
 seastar::future<> PosixNVMeDevice::close() {
   logger().debug(" close ");
-  return device.close();
+  return device.close().then([this]() {
+    return seastar::do_for_each(io_device, [](auto target_device) {
+      return target_device.close();
+    });
+  });
 }
 
 nvme_command_ertr::future<nvme_identify_controller_data_t>
@@ -155,7 +188,11 @@ nvme_command_ertr::future<int> PosixNVMeDevice::get_nsid() {
 
 nvme_command_ertr::future<int> PosixNVMeDevice::pass_admin(
   nvme_admin_command_t& admin_cmd) {
-  return device.ioctl(NVME_IOCTL_ADMIN_CMD, &admin_cmd);
+  return device.ioctl(NVME_IOCTL_ADMIN_CMD, &admin_cmd).handle_exception(
+    [](auto e)->nvme_command_ertr::future<int> {
+      logger().error("pass_admin: ioctl failed");
+      return crimson::ct_error::input_output_error::make();
+    });
 }
 
 nvme_command_ertr::future<int> PosixNVMeDevice::pass_through_io(

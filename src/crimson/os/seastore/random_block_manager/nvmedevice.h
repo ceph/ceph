@@ -25,6 +25,33 @@ namespace ceph {
 
 namespace crimson::os::seastore::nvme_device {
 
+// from blk/BlockDevice.h
+#if defined(__linux__)
+#if !defined(F_SET_FILE_RW_HINT)
+#define F_LINUX_SPECIFIC_BASE 1024
+#define F_SET_FILE_RW_HINT         (F_LINUX_SPECIFIC_BASE + 14)
+#endif
+// These values match Linux definition
+// https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/fcntl.h#n56
+#define  WRITE_LIFE_NOT_SET  	0 	// No hint information set
+#define  WRITE_LIFE_NONE  	1       // No hints about write life time
+#define  WRITE_LIFE_SHORT  	2       // Data written has a short life time
+#define  WRITE_LIFE_MEDIUM  	3    	// Data written has a medium life time
+#define  WRITE_LIFE_LONG  	4       // Data written has a long life time
+#define  WRITE_LIFE_EXTREME  	5     	// Data written has an extremely long life time
+#define  WRITE_LIFE_MAX  	6
+#else
+// On systems don't have WRITE_LIFE_* only use one FD
+// And all files are created equal
+#define  WRITE_LIFE_NOT_SET  	0 	// No hint information set
+#define  WRITE_LIFE_NONE  	0       // No hints about write life time
+#define  WRITE_LIFE_SHORT  	0       // Data written has a short life time
+#define  WRITE_LIFE_MEDIUM  	0    	// Data written has a medium life time
+#define  WRITE_LIFE_LONG  	0       // Data written has a long life time
+#define  WRITE_LIFE_EXTREME  	0    	// Data written has an extremely long life time
+#define  WRITE_LIFE_MAX  	1
+#endif
+
 /*
  * NVMe protocol structures (nvme_XX, identify_XX)
  *
@@ -37,22 +64,21 @@ namespace crimson::os::seastore::nvme_device {
  *
  * For more information about NVMe protocol, refer https://nvmexpress.org/
  */
-
 struct nvme_identify_command_t {
   uint32_t common_dw[10];
+
   uint32_t cns : 8;
   uint32_t reserved : 8;
-  uint32_t cntroller_id : 16;
+  uint32_t cnt_id : 16;
 
   static const uint8_t CNS_NAMESPACE = 0x00;
   static const uint8_t CNS_CONTROLLER = 0x01;
 };
 
 struct nvme_admin_command_t {
-  union
-  {
-    nvme_passthru_cmd common_cmd;
-    nvme_identify_command_t identify_cmd;
+  union {
+    nvme_passthru_cmd common;
+    nvme_identify_command_t identify;
   };
 
   static const uint8_t OPCODE_IDENTIFY = 0x06;
@@ -204,6 +230,8 @@ struct io_context_t {
 class NVMeBlockDevice {
 protected:
   uint64_t size = 0;
+
+  // LBA Size
   uint64_t block_size = 4096;
 
   uint64_t write_granularity = 4096;
@@ -268,10 +296,10 @@ public:
    * For passsing through nvme IO or Admin command to SSD
    * Caller can construct and execute its own nvme command
    */
-  virtual nvme_command_ertr::future<> pass_through_io(
-    const NVMePassThroughCommand& command) { return nvme_command_ertr::now(); }
-  virtual nvme_command_ertr::future<> pass_admin(
-    const nvme_admin_command_t& command) { return nvme_command_ertr::now(); }
+  virtual nvme_command_ertr::future<int> pass_through_io(
+    nvme_io_command_t& command) { return seastar::make_ready_future<int>(0); }
+  virtual nvme_command_ertr::future<int> pass_admin(
+    nvme_admin_command_t& command) { return seastar::make_ready_future<int>(0); }
 
   /*
    * End-to-End Data Protection
@@ -355,11 +383,18 @@ public:
 
 private:
   // identify_controller/namespace are used to get SSD internal information such
-  // as supported features, NPWG and NPWA;
+  // as supported features, NPWG and NPWA
   nvme_command_ertr::future<nvme_identify_controller_data_t> identify_controller();
   nvme_command_ertr::future<nvme_identify_namespace_data_t> identify_namespace();
   nvme_command_ertr::future<int> get_nsid();
+  open_ertr::future<> open_for_io(
+    const std::string& in_path,
+    seastar::open_flags mode);
+
   seastar::file device;
+  std::vector<seastar::file> io_device;
+  uint32_t stream_index_to_open = WRITE_LIFE_NOT_SET;
+  uint32_t stream_id_count = 1; // stream is disabled, defaultly.
 };
 
 
