@@ -198,7 +198,8 @@ ceph::bufferlist encode_record(
   return bl;
 }
 
-bool need_delayed_allocation(device_type_t type) {
+bool can_delay_allocation(device_type_t type) {
+  // Some types of device may not support delayed allocation, for example PMEM.
   return type <= RANDOM_BLOCK;
 }
 
