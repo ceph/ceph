@@ -274,7 +274,7 @@ public:
    * alloc_extent
    *
    * Allocates a new block of type T with the minimum lba range of size len
-   * greater than hint.
+   * greater than laddr_hint.
    */
   using alloc_extent_iertr = LBAManager::alloc_extent_iertr;
   template <typename T>
@@ -282,22 +282,30 @@ public:
   template <typename T>
   alloc_extent_ret<T> alloc_extent(
     Transaction &t,
-    laddr_t hint,
+    laddr_t laddr_hint,
     extent_len_t len) {
+    placement_hint_t placement_hint;
+    if constexpr (T::TYPE == extent_types_t::OBJECT_DATA_BLOCK ||
+                  T::TYPE == extent_types_t::COLL_BLOCK) {
+      placement_hint = placement_hint_t::COLD;
+    } else {
+      placement_hint = placement_hint_t::HOT;
+    }
     auto ext = epm->alloc_new_extent<T>(
       t,
-      len);
+      len,
+      placement_hint);
     return lba_manager->alloc_extent(
       t,
-      hint,
+      laddr_hint,
       len,
       ext->get_paddr()
-    ).si_then([ext=std::move(ext), len, hint, &t, this](auto &&ref) mutable {
+    ).si_then([ext=std::move(ext), len, laddr_hint, &t, this](auto &&ref) mutable {
       LOG_PREFIX(TransactionManager::alloc_extent);
       ext->set_pin(std::move(ref));
       stats.extents_allocated_total++;
       stats.extents_allocated_bytes += len;
-      DEBUGT("new extent: {}, hint: {}", t, *ext, hint);
+      DEBUGT("new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
       return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });
