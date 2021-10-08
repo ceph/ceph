@@ -182,6 +182,7 @@ BuildRequires:	selinux-policy-devel
 %endif
 BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
+BuildRequires:  libarchive
 BuildRequires:	fuse-devel
 %if 0%{with seastar} && 0%{?rhel}
 BuildRequires:	gcc-toolset-9-gcc-c++ >= 9.2.1-2.3
