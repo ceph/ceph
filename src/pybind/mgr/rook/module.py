@@ -444,9 +444,17 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def apply_rgw(self, spec):
         # type: (RGWSpec) -> str
-        num_of_osds = self.get_ceph_option('osd_pool_default_size')
-        assert type(num_of_osds) is int
-        return self.rook_cluster.apply_objectstore(spec, num_of_osds)
+        num_replicas = self.get_ceph_option('osd_pool_default_size')
+        assert type(num_replicas) is int
+        leaf_type_id = self.get_ceph_option('osd_crush_chooseleaf_type')
+        assert type(leaf_type_id) is int
+        crush = self.get('osd_map_crush')
+        leaf_type = 'host'
+        for t in crush['types']:
+            if t['type_id'] == leaf_type_id:
+                leaf_type = t['name']
+                break
+        return self.rook_cluster.apply_objectstore(spec, num_replicas, leaf_type)
 
     @handle_orch_error
     def apply_nfs(self, spec):

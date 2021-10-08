@@ -894,7 +894,7 @@ class RookCluster(object):
         self.coreV1_api.patch_node(host, matching_node)
         return OrchResult(f'Removed {label} label from {host}')
 
-    def apply_objectstore(self, spec: RGWSpec, num_replicas: int) -> str:
+    def apply_objectstore(self, spec: RGWSpec, num_replicas: int, leaf_type: str) -> str:
         assert spec.service_id is not None
 
         name = spec.service_id
@@ -939,11 +939,13 @@ class RookCluster(object):
                             )
                         ),
                         dataPool=cos.DataPool(
+                            failureDomain=leaf_type,
                             replicated=cos.Replicated(
                                 size=num_replicas
                             )
                         ),
                         metadataPool=cos.MetadataPool(
+                            failureDomain=leaf_type,
                             replicated=cos.Replicated(
                                 size=num_replicas
                             )
