@@ -97,7 +97,6 @@ class Module(MgrModule):
         return self.fs_snapshot_mirror.show_distribution(fs_name)
 
     @CLIReadCommand('fs snapshot mirror daemon status')
-    def snapshot_mirror_daemon_status(self,
-                                      fs_name: str):
+    def snapshot_mirror_daemon_status(self):
         """Get mirror daemon status"""
-        return self.fs_snapshot_mirror.daemon_status(fs_name)
+        return self.fs_snapshot_mirror.daemon_status()
