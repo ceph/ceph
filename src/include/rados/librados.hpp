@@ -246,9 +246,11 @@ inline namespace v14_2_0 {
   /**
    * These flags apply to the ObjectOperation as a whole.
    *
-   * BALANCE_READS and LOCALIZE_READS should only be used
-   * when reading from data you're certain won't change,
-   * like a snapshot, or where eventual consistency is ok.
+   * Prior to octopus BALANCE_READS and LOCALIZE_READS should only
+   * be used when reading from data you're certain won't change, like
+   * a snapshot, or where eventual consistency is ok.  Since octopus
+   * (get_min_compatible_osd() >= CEPH_RELEASE_OCTOPUS) both are safe
+   * for general use.
    *
    * ORDER_READS_WRITES will order reads the same way writes are
    * ordered (e.g., waiting for degraded objects).  In particular, it
