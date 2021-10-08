@@ -14,7 +14,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>           /* Definition of AT_* constants */
-#include <sys/stat.h>
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/param.h>
