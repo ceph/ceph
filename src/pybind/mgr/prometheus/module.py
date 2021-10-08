@@ -298,6 +298,21 @@ class Module(MgrModule):
             name='rbd_stats_pools_refresh_interval',
             type='int',
             default=300
+        ),
+        Option(
+            name='standby_behaviour',
+            type='str',
+            default='default',
+            enum_allowed=['default', 'error'],
+            runtime=True
+        ),
+        Option(
+            name='standby_error_status_code',
+            type='int',
+            default=500,
+            min=400,
+            max=599,
+            runtime=True
         )
     ]
 
@@ -1440,7 +1455,8 @@ class StandbyModule(MgrStandbyModule):
         cherrypy.config.update({
             'server.socket_host': server_addr,
             'server.socket_port': server_port,
-            'engine.autoreload.on': False
+            'engine.autoreload.on': False,
+            'request.show_tracebacks': False
         })
 
         module = self
@@ -1448,8 +1464,10 @@ class StandbyModule(MgrStandbyModule):
         class Root(object):
             @cherrypy.expose
             def index(self) -> str:
-                active_uri = module.get_active_uri()
-                return '''<!DOCTYPE html>
+                standby_behaviour = module.get_module_option('standby_behaviour')
+                if standby_behaviour == 'default':
+                    active_uri = module.get_active_uri()
+                    return '''<!DOCTYPE html>
 <html>
     <head><title>Ceph Exporter</title></head>
     <body>
@@ -1457,6 +1475,9 @@ class StandbyModule(MgrStandbyModule):
         <p><a href='{}metrics'>Metrics</a></p>
     </body>
 </html>'''.format(active_uri)
+                else:
+                    status = module.get_module_option('standby_error_status_code')
+                    raise cherrypy.HTTPError(status, message="Keep on looking")
 
             @cherrypy.expose
             def metrics(self) -> str:
