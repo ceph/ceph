@@ -37,6 +37,11 @@ open_ertr::future<> PosixNVMeDevice::open(
             block_size = (1 << id_namespace_data.lbaf0.lbads);
             data_protection_type = id_namespace_data.dps.protection_type;
             data_protection_enabled = (data_protection_type > 0);
+            if (id_namespace_data.nsfeat.opterf == 1){
+              // NPWG and NPWA is 0'based value
+              write_granularity = block_size * (id_namespace_data.npwg + 1);
+              write_alignment = block_size * (id_namespace_data.npwa + 1);
+            }
             return seastar::now();
           });
         });
@@ -99,6 +104,63 @@ read_ertr::future<> PosixNVMeDevice::read(
 seastar::future<> PosixNVMeDevice::close() {
   logger().debug(" close ");
   return device.close();
+}
+
+nvme_command_ertr::future<nvme_identify_controller_data_t>
+PosixNVMeDevice::identify_controller() {
+  return seastar::do_with(
+    nvme_admin_command_t(),
+    nvme_identify_controller_data_t(),
+    [this](auto &admin_command, auto &data) {
+    admin_command.common.opcode = nvme_admin_command_t::OPCODE_IDENTIFY;
+    admin_command.common.addr = (uint64_t)&data;
+    admin_command.common.data_len = sizeof(data);
+    admin_command.identify.cns = nvme_identify_command_t::CNS_CONTROLLER;
+
+    return pass_admin(admin_command).safe_then([&data](auto status) {
+      return seastar::make_ready_future<nvme_identify_controller_data_t>(
+        std::move(data));
+      });
+  });
+}
+
+discard_ertr::future<> PosixNVMeDevice::discard(uint64_t offset, uint64_t len) {
+  return device.discard(offset, len);
+}
+
+nvme_command_ertr::future<nvme_identify_namespace_data_t>
+PosixNVMeDevice::identify_namespace() {
+  return get_nsid().safe_then([this](auto nsid) {
+    return seastar::do_with(
+      nvme_admin_command_t(),
+      nvme_identify_namespace_data_t(),
+      [this, nsid](auto &admin_command, auto &data) {
+      admin_command.common.opcode = nvme_admin_command_t::OPCODE_IDENTIFY;
+      admin_command.common.addr = (uint64_t)&data;
+      admin_command.common.data_len = sizeof(data);
+      admin_command.common.nsid = nsid;
+      admin_command.identify.cns = nvme_identify_command_t::CNS_NAMESPACE;
+
+      return pass_admin(admin_command).safe_then([&data](auto status){
+        return seastar::make_ready_future<nvme_identify_namespace_data_t>(
+          std::move(data));
+      });
+    });
+  });
+}
+
+nvme_command_ertr::future<int> PosixNVMeDevice::get_nsid() {
+  return device.ioctl(NVME_IOCTL_ID, nullptr);
+}
+
+nvme_command_ertr::future<int> PosixNVMeDevice::pass_admin(
+  nvme_admin_command_t& admin_cmd) {
+  return device.ioctl(NVME_IOCTL_ADMIN_CMD, &admin_cmd);
+}
+
+nvme_command_ertr::future<int> PosixNVMeDevice::pass_through_io(
+  nvme_io_command_t& io_cmd) {
+  return device.ioctl(NVME_IOCTL_IO_CMD, &io_cmd);
 }
 
 open_ertr::future<> TestMemory::open(
