@@ -244,7 +244,7 @@ using objaddr_t = uint32_t;
 constexpr objaddr_t OBJ_ADDR_MAX = std::numeric_limits<objaddr_t>::max();
 constexpr objaddr_t OBJ_ADDR_NULL = OBJ_ADDR_MAX - 1;
 
-enum class ool_placement_hint_t {
+enum class placement_hint_t {
   NONE,     /// Denotes empty hint
   NUM_HINTS /// Constant for number of hints
 };
