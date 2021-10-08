@@ -252,7 +252,7 @@ public:
     Journal& journal,
     Cache& cache);
 
-  Writer &get_writer(ool_placement_hint_t hint) {
+  Writer &get_writer(placement_hint_t hint) {
     return writers[std::rand() % writers.size()];
   }
 
@@ -307,9 +307,10 @@ public:
     Transaction& t,
     extent_types_t type,
     segment_off_t length,
-    ool_placement_hint_t hint = ool_placement_hint_t::NONE) {
+    placement_hint_t hint = placement_hint_t::NONE) {
     // only logical extents should fall in this path
     assert(is_logical_type(type));
+    assert(hint < placement_hint_t::NUM_HINTS);
     auto dtype = get_allocator_type(hint);
     CachedExtentRef extent;
     // for extents that would be stored in NVDIMM/PMEM, no delayed
@@ -332,8 +333,8 @@ public:
   TCachedExtentRef<T> alloc_new_extent(
     Transaction& t,
     segment_off_t length,
-    ool_placement_hint_t hint = ool_placement_hint_t::NONE)
-  {
+    placement_hint_t hint = placement_hint_t::NONE) {
+    assert(hint < placement_hint_t::NUM_HINTS);
     auto dtype = get_allocator_type(hint);
     TCachedExtentRef<T> extent;
     if (need_delayed_allocation(dtype)) {
@@ -413,7 +414,7 @@ public:
   }
 
 private:
-  device_type_t get_allocator_type(ool_placement_hint_t hint) {
+  device_type_t get_allocator_type(placement_hint_t hint) {
     return device_type_t::SEGMENTED;
   }
 
@@ -423,7 +424,7 @@ private:
 
   ExtentAllocatorRef& get_allocator(
     device_type_t type,
-    ool_placement_hint_t hint) {
+    placement_hint_t hint) {
     auto& devices = allocators[type];
     return devices[std::rand() % devices.size()];
   }
