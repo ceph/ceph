@@ -257,7 +257,7 @@ enum device_type_t {
   NUM_TYPES
 };
 
-bool need_delayed_allocation(device_type_t type);
+bool can_delay_allocation(device_type_t type);
 
 /* Monotonically increasing identifier for the location of a
  * journal_record.
@@ -367,7 +367,7 @@ enum class extent_types_t : uint8_t {
 };
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
 
-inline bool is_logical_type(extent_types_t type) {
+constexpr bool is_logical_type(extent_types_t type) {
   switch (type) {
   case extent_types_t::ROOT:
   case extent_types_t::LADDR_INTERNAL:

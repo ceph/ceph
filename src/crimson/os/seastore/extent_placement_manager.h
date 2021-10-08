@@ -312,16 +312,9 @@ public:
     assert(is_logical_type(type));
     assert(hint < placement_hint_t::NUM_HINTS);
     auto dtype = get_allocator_type(hint);
-    CachedExtentRef extent;
-    // for extents that would be stored in NVDIMM/PMEM, no delayed
-    // allocation is needed
-    if (need_delayed_allocation(dtype)) {
-      // set a unique temperary paddr, this is necessary because
-      // transaction's write_set is indexed by paddr
-      extent = cache.alloc_new_extent_by_type(t, type, length, true);
-    } else {
-      extent = cache.alloc_new_extent_by_type(t, type, length);
-    }
+    bool delay = can_delay_allocation(dtype);
+    CachedExtentRef extent = cache.alloc_new_extent_by_type(
+        t, type, length, delay);
     extent->backend_type = dtype;
     extent->hint = hint;
     return extent;
@@ -334,16 +327,13 @@ public:
     Transaction& t,
     segment_off_t length,
     placement_hint_t hint = placement_hint_t::NONE) {
+    // only logical extents should fall in this path
+    static_assert(is_logical_type(T::TYPE));
     assert(hint < placement_hint_t::NUM_HINTS);
     auto dtype = get_allocator_type(hint);
-    TCachedExtentRef<T> extent;
-    if (need_delayed_allocation(dtype)) {
-      // set a unique temperary paddr, this is necessary because
-      // transaction's write_set is indexed by paddr
-      extent = cache.alloc_new_extent<T>(t, length, true);
-    } else {
-      extent = cache.alloc_new_extent<T>(t, length);
-    }
+    bool delay = can_delay_allocation(dtype);
+    TCachedExtentRef<T> extent = cache.alloc_new_extent<T>(
+        t, length, delay);
     extent->backend_type = dtype;
     extent->hint = hint;
     return extent;
