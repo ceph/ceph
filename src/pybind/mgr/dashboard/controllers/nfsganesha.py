@@ -14,8 +14,8 @@ from ..services.exception import DashboardException, serialize_dashboard_excepti
 from ..services.ganesha import Ganesha, GaneshaConf, NFSException
 from ..services.rgw_client import NoCredentialsException, \
     NoRgwDaemonsException, RequestException, RgwClient
-from . import ApiController, BaseController, ControllerDoc, Endpoint, \
-    EndpointDoc, ReadPermission, RESTController, Task, UiApiController
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
+    ReadPermission, RESTController, Task, UIRouter
 
 logger = logging.getLogger('controllers.ganesha')
 
@@ -86,8 +86,8 @@ def NfsTask(name, metadata, wait_for):  # noqa: N802
     return composed_decorator
 
 
-@ApiController('/nfs-ganesha', Scope.NFS_GANESHA)
-@ControllerDoc("NFS-Ganesha Management API", "NFS-Ganesha")
+@APIRouter('/nfs-ganesha', Scope.NFS_GANESHA)
+@APIDoc("NFS-Ganesha Management API", "NFS-Ganesha")
 class NFSGanesha(RESTController):
 
     @EndpointDoc("Status of NFS-Ganesha management feature",
@@ -108,8 +108,8 @@ class NFSGanesha(RESTController):
         return status
 
 
-@ApiController('/nfs-ganesha/export', Scope.NFS_GANESHA)
-@ControllerDoc(group="NFS-Ganesha")
+@APIRouter('/nfs-ganesha/export', Scope.NFS_GANESHA)
+@APIDoc(group="NFS-Ganesha")
 class NFSGaneshaExports(RESTController):
     RESOURCE_ID = "cluster_id/export_id"
 
@@ -233,8 +233,8 @@ class NFSGaneshaExports(RESTController):
             ganesha_conf.reload_daemons(export.daemons)
 
 
-@ApiController('/nfs-ganesha/daemon', Scope.NFS_GANESHA)
-@ControllerDoc(group="NFS-Ganesha")
+@APIRouter('/nfs-ganesha/daemon', Scope.NFS_GANESHA)
+@APIDoc(group="NFS-Ganesha")
 class NFSGaneshaService(RESTController):
 
     @EndpointDoc("List NFS-Ganesha daemons information",
@@ -252,7 +252,7 @@ class NFSGaneshaService(RESTController):
         return result
 
 
-@UiApiController('/nfs-ganesha', Scope.NFS_GANESHA)
+@UIRouter('/nfs-ganesha', Scope.NFS_GANESHA)
 class NFSGaneshaUi(BaseController):
     @Endpoint('GET', '/cephx/clients')
     @ReadPermission

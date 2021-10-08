@@ -6,7 +6,7 @@ from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
-from . import ApiController, ControllerDoc, EndpointDoc, RESTController
+from . import APIDoc, APIRouter, EndpointDoc, RESTController
 
 FILTER_SCHEMA = [{
     "name": (str, 'Name of the config option'),
@@ -27,8 +27,8 @@ FILTER_SCHEMA = [{
 }]
 
 
-@ApiController('/cluster_conf', Scope.CONFIG_OPT)
-@ControllerDoc("Manage Cluster Configurations", "ClusterConfiguration")
+@APIRouter('/cluster_conf', Scope.CONFIG_OPT)
+@APIDoc("Manage Cluster Configurations", "ClusterConfiguration")
 class ClusterConfiguration(RESTController):
 
     def _append_config_option_values(self, options):

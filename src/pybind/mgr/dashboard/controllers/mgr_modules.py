@@ -5,7 +5,7 @@ from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
 from ..tools import find_object_in_list, str_to_bool
-from . import ApiController, ControllerDoc, EndpointDoc, RESTController, allow_empty_body
+from . import APIDoc, APIRouter, EndpointDoc, RESTController, allow_empty_body
 
 MGR_MODULE_SCHEMA = ([{
     "name": (str, "Module Name"),
@@ -30,8 +30,8 @@ MGR_MODULE_SCHEMA = ([{
 }])
 
 
-@ApiController('/mgr/module', Scope.CONFIG_OPT)
-@ControllerDoc("Get details of MGR Module", "MgrModule")
+@APIRouter('/mgr/module', Scope.CONFIG_OPT)
+@APIDoc("Get details of MGR Module", "MgrModule")
 class MgrModules(RESTController):
     ignore_modules = ['selftest']
 

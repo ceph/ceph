@@ -15,9 +15,9 @@ from ..services.ceph_service import CephService, SendCommandError
 from ..services.exception import handle_orchestrator_error, handle_send_command_error
 from ..services.orchestrator import OrchClient, OrchFeature
 from ..tools import str_to_bool
-from . import ApiController, ControllerDoc, CreatePermission, \
-    DeletePermission, Endpoint, EndpointDoc, ReadPermission, RESTController, \
-    Task, UpdatePermission, allow_empty_body
+from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, Task, UpdatePermission, \
+    allow_empty_body
 from .orchestrator import raise_if_no_orchestrator
 
 logger = logging.getLogger('controllers.osd')
@@ -50,8 +50,8 @@ def osd_task(name, metadata, wait_for=2.0):
     return Task("osd/{}".format(name), metadata, wait_for)
 
 
-@ApiController('/osd', Scope.OSD)
-@ControllerDoc('OSD management API', 'OSD')
+@APIRouter('/osd', Scope.OSD)
+@APIDoc('OSD management API', 'OSD')
 class Osd(RESTController):
     def list(self):
         osds = self.get_osd_map()
@@ -395,8 +395,8 @@ class Osd(RESTController):
         return CephService.send_command('mon', 'device ls-by-daemon', who='osd.{}'.format(svc_id))
 
 
-@ApiController('/osd/flags', Scope.OSD)
-@ControllerDoc(group='OSD')
+@APIRouter('/osd/flags', Scope.OSD)
+@APIDoc(group='OSD')
 class OsdFlagsController(RESTController):
     @staticmethod
     def _osd_flags():

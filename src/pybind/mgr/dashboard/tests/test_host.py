@@ -6,7 +6,7 @@ from unittest import mock
 from orchestrator import HostSpec, InventoryHost
 
 from .. import mgr
-from ..controllers import APIVersion
+from ..controllers._version import APIVersion
 from ..controllers.host import Host, HostUi, get_device_osd_map, get_hosts, get_inventories
 from ..tools import NotificationQueue, TaskManager
 from . import ControllerTestCase  # pylint: disable=no-name-in-module

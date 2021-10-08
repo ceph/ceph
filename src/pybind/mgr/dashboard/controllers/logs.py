@@ -5,7 +5,7 @@ import collections
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..tools import NotificationQueue
-from . import ApiController, BaseController, ControllerDoc, Endpoint, EndpointDoc, ReadPermission
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, ReadPermission
 
 LOG_BUFFER_SIZE = 30
 
@@ -30,11 +30,11 @@ LOGS_SCHEMA = {
 }
 
 
-@ApiController('/logs', Scope.LOG)
-@ControllerDoc("Logs Management API", "Logs")
+@APIRouter('/logs', Scope.LOG)
+@APIDoc("Logs Management API", "Logs")
 class Logs(BaseController):
     def __init__(self):
-        super(Logs, self).__init__()
+        super().__init__()
         self._log_initialized = False
         self.log_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
         self.audit_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
