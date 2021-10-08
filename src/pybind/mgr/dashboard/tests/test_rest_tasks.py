@@ -7,14 +7,14 @@ try:
 except ImportError:
     import unittest.mock as mock
 
-from ..controllers import Controller, RESTController, Task
+from ..controllers import RESTController, Router, Task
 from ..controllers.task import Task as TaskController
 from ..services import progress
 from ..tools import NotificationQueue, TaskManager
 from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
-@Controller('/test/task', secure=False)
+@Router('/test/task', secure=False)
 class TaskTest(RESTController):
     sleep_time = 0.0
 

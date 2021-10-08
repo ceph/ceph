@@ -5,8 +5,7 @@ from cherrypy import NotFound
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
-from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, UiApiController
+from . import APIDoc, APIRouter, Endpoint, EndpointDoc, ReadPermission, RESTController, UIRouter
 
 LIST_CODE__SCHEMA = {
     "crush-failure-domain": (str, ''),
@@ -18,8 +17,8 @@ LIST_CODE__SCHEMA = {
 }
 
 
-@ApiController('/erasure_code_profile', Scope.POOL)
-@ControllerDoc("Erasure Code Profile Management API", "ErasureCodeProfile")
+@APIRouter('/erasure_code_profile', Scope.POOL)
+@APIDoc("Erasure Code Profile Management API", "ErasureCodeProfile")
 class ErasureCodeProfile(RESTController):
     """
     create() supports additional key-value arguments that are passed to the
@@ -46,8 +45,8 @@ class ErasureCodeProfile(RESTController):
         CephService.send_command('mon', 'osd erasure-code-profile rm', name=name)
 
 
-@UiApiController('/erasure_code_profile', Scope.POOL)
-@ControllerDoc("Dashboard UI helper function; not part of the public API", "ErasureCodeProfileUi")
+@UIRouter('/erasure_code_profile', Scope.POOL)
+@APIDoc("Dashboard UI helper function; not part of the public API", "ErasureCodeProfileUi")
 class ErasureCodeProfileUi(ErasureCodeProfile):
     @Endpoint()
     @ReadPermission

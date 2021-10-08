@@ -8,8 +8,7 @@ from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
 from ..services.auth import AuthManager, JwtManager
 from ..settings import Settings
-from . import ApiController, ControllerAuthMixin, ControllerDoc, EndpointDoc, \
-    RESTController, allow_empty_body
+from . import APIDoc, APIRouter, ControllerAuthMixin, EndpointDoc, RESTController, allow_empty_body
 
 # Python 3.8 introduced `samesite` attribute:
 # https://docs.python.org/3/library/http.cookies.html#morsel-objects
@@ -28,8 +27,8 @@ AUTH_CHECK_SCHEMA = {
 }
 
 
-@ApiController('/auth', secure=False)
-@ControllerDoc("Initiate a session with Ceph", "Auth")
+@APIRouter('/auth', secure=False)
+@APIDoc("Initiate a session with Ceph", "Auth")
 class Auth(RESTController, ControllerAuthMixin):
     """
     Provide authenticates and returns JWT token.

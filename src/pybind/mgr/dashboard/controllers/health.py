@@ -9,7 +9,7 @@ from ..services.ceph_service import CephService
 from ..services.iscsi_cli import IscsiGatewaysConfig
 from ..services.iscsi_client import IscsiClient
 from ..tools import partial_dict
-from . import ApiController, BaseController, ControllerDoc, Endpoint, EndpointDoc
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc
 from .host import get_hosts
 
 HEALTH_MINIMAL_SCHEMA = ({
@@ -274,11 +274,11 @@ class HealthData(object):
         return CephService.get_scrub_status()
 
 
-@ApiController('/health')
-@ControllerDoc("Display Detailed Cluster health Status", "Health")
+@APIRouter('/health')
+@APIDoc("Display Detailed Cluster health Status", "Health")
 class Health(BaseController):
     def __init__(self):
-        super(Health, self).__init__()
+        super().__init__()
         self.health_full = HealthData(self._has_permissions, minimal=False)
         self.health_minimal = HealthData(self._has_permissions, minimal=True)
 

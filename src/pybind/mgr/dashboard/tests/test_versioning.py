@@ -2,11 +2,13 @@
 
 import unittest
 
-from ..controllers import ApiController, APIVersion, RESTController
+from ..controllers._api_router import APIRouter
+from ..controllers._rest_controller import RESTController
+from ..controllers._version import APIVersion
 from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
-@ApiController("/vtest", secure=False)
+@APIRouter("/vtest", secure=False)
 class VTest(RESTController):
     RESOURCE_ID = "vid"
 

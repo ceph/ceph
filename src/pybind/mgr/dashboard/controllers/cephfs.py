@@ -11,8 +11,7 @@ from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
 from ..tools import ViewCache
-from . import ApiController, ControllerDoc, EndpointDoc, RESTController, \
-    UiApiController, allow_empty_body
+from . import APIDoc, APIRouter, EndpointDoc, RESTController, UIRouter, allow_empty_body
 
 GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
@@ -20,11 +19,11 @@ GET_QUOTAS_SCHEMA = {
 }
 
 
-@ApiController('/cephfs', Scope.CEPHFS)
-@ControllerDoc("Cephfs Management API", "Cephfs")
+@APIRouter('/cephfs', Scope.CEPHFS)
+@APIDoc("Cephfs Management API", "Cephfs")
 class CephFS(RESTController):
     def __init__(self):  # pragma: no cover
-        super(CephFS, self).__init__()
+        super().__init__()
 
         # Stateful instances of CephFSClients, hold cached results.  Key to
         # dict is FSCID
@@ -490,8 +489,8 @@ class CephFSClients(object):
         return CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
 
 
-@UiApiController('/cephfs', Scope.CEPHFS)
-@ControllerDoc("Dashboard UI helper function; not part of the public API", "CephFSUi")
+@UIRouter('/cephfs', Scope.CEPHFS)
+@APIDoc("Dashboard UI helper function; not part of the public API", "CephFSUi")
 class CephFsUi(CephFS):
     RESOURCE_ID = 'fs_id'
 

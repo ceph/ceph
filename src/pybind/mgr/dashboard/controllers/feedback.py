@@ -5,16 +5,16 @@ from ..model.feedback import Feedback
 from ..rest_client import RequestException
 from ..security import Scope
 from ..services import feedback
-from . import ControllerDoc, RESTController, UiApiController
+from . import APIDoc, APIRouter, RESTController
 
 
-@UiApiController('/feedback', Scope.CONFIG_OPT)
-@ControllerDoc("Feedback API", "Report")
+@APIRouter('/feedback', Scope.CONFIG_OPT)
+@APIDoc("Feedback API", "Report")
 class FeedbackController(RESTController):
     issueAPIkey = None
 
     def __init__(self):  # pragma: no cover
-        super(FeedbackController, self).__init__()
+        super().__init__()
         self.tracker_client = feedback.CephTrackerClient()
 
     def create(self, project, tracker, subject, description):
