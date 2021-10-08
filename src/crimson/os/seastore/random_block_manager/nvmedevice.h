@@ -95,6 +95,17 @@ struct dps_t {
   uint8_t reserved : 4;
 };
 
+// Namespace Features (NSFEAT)
+// Indicates features of namespace
+struct nsfeat_t {
+  uint8_t thinp : 1;
+  uint8_t nsabp : 1;
+  uint8_t dae : 1;
+  uint8_t uid_reuse : 1;
+  uint8_t opterf : 1; // Support NPWG, NPWA
+  uint8_t reserved : 3;
+};
+
 // LBA Format (LBAF)
 // Indicates LBA format (metadata size, data size, performance)
 struct lbaf_t {
@@ -107,10 +118,15 @@ struct lbaf_t {
 struct nvme_identify_namespace_data_t {
   union {
     struct {
-      uint8_t unused[28];   // [27:0]
+      uint8_t unused[24];   // [23:0]
+      nsfeat_t nsfeat;      // [24]
+      uint8_t unused2[3];   // [27:25]
       dpc_t dpc;            // [28]
       dps_t dps;            // [29]
-      uint8_t unused2[98];  // [127:30]
+      uint8_t unused3[34];  // [63:30]
+      uint16_t npwg;        // [65:64]
+      uint16_t npwa;        // [67:66]
+      uint8_t unused4[60];  // [127:68]
       lbaf_t lbaf0;         // [131:128]
     };
     uint8_t raw[4096];
@@ -239,7 +255,6 @@ public:
     bufferptr &bptr,
     uint16_t stream = 0) = 0;
 
-  // TODO
   virtual discard_ertr::future<> discard(
     uint64_t offset,
     uint64_t len) { return seastar::now(); }
@@ -326,11 +341,21 @@ public:
 
   seastar::future<> close() override;
 
-private:
-  // identify_controller/namespace are used to get SSD internal information such
-  // as supported features
+  discard_ertr::future<> discard(
+    uint64_t offset,
+    uint64_t len) override;
+
+  nvme_command_ertr::future<int> pass_admin(
+    nvme_admin_command_t& admin_cmd) override;
+  nvme_command_ertr::future<int> pass_through_io(
+    nvme_io_command_t& io_cmd) override;
+
+  bool support_multistream = false;
   uint8_t data_protection_type = 0;
 
+private:
+  // identify_controller/namespace are used to get SSD internal information such
+  // as supported features, NPWG and NPWA;
   nvme_command_ertr::future<nvme_identify_controller_data_t> identify_controller();
   nvme_command_ertr::future<nvme_identify_namespace_data_t> identify_namespace();
   nvme_command_ertr::future<int> get_nsid();
@@ -367,5 +392,4 @@ public:
   char *buf;
   size_t size;
 };
-
 }
