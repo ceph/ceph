@@ -384,6 +384,12 @@ class SpaceTrackerSimple : public SpaceTrackerI {
 public:
   SpaceTrackerSimple(std::vector<SegmentManager*> sms) {
     for (auto sm : sms) {
+      if (!sm) {
+	// sms is a vector that is indexed by device id and
+	// always has "max_device" elements, some of which
+	// may be null.
+	continue;
+      }
       live_bytes_by_segment.add_segment_manager(
 	*sm,
 	segment_space_tracker_t{});
