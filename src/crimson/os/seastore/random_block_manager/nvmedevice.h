@@ -58,7 +58,93 @@ struct nvme_admin_command_t {
   static const uint8_t OPCODE_IDENTIFY = 0x06;
 };
 
-using NVMePassThroughCommand = nvme_passthru_cmd;
+// Optional Admin Command Support (OACS)
+// Indicates optional commands are supported by SSD or not 
+struct oacs_t {
+  uint16_t unused : 5;
+  uint16_t support_directives : 1; // Support multi-stream
+  uint16_t unused2 : 10;
+};
+
+struct nvme_identify_controller_data_t {
+  union {
+    struct {
+      uint8_t unused[256];
+      oacs_t oacs;
+    };
+    uint8_t raw[4096];
+  };
+};
+
+// End-to-end Data Protection Capabilities (DPC)
+// Indicates type of E2E data protection supported by SSD
+struct dpc_t {
+  uint8_t support_type1 : 1;
+  uint8_t support_type2 : 1;
+  uint8_t support_type3 : 1;
+  uint8_t support_first_meta : 1;
+  uint8_t support_last_meta : 1;
+  uint8_t reserved : 3;
+};
+
+// End-to-end Data Protection Type Settings (DPS)
+// Indicates enabled type of E2E data protection
+struct dps_t {
+  uint8_t protection_type : 3;
+  uint8_t protection_info : 1;
+  uint8_t reserved : 4;
+};
+
+// LBA Format (LBAF)
+// Indicates LBA format (metadata size, data size, performance)
+struct lbaf_t {
+  uint32_t ms : 16;
+  uint32_t lbads : 8;
+  uint32_t rp : 2;
+  uint32_t reserved : 6;
+};
+
+struct nvme_identify_namespace_data_t {
+  union {
+    struct {
+      uint8_t unused[28];   // [27:0]
+      dpc_t dpc;            // [28]
+      dps_t dps;            // [29]
+      uint8_t unused2[98];  // [127:30]
+      lbaf_t lbaf0;         // [131:128]
+    };
+    uint8_t raw[4096];
+  };
+};
+
+struct nvme_rw_command_t {
+  uint32_t common_dw[10];
+
+  uint64_t s_lba;
+
+  uint32_t nlb : 16; // 0's based value
+  uint32_t reserved : 4;
+  uint32_t d_type : 4;
+  uint32_t reserved2 : 2;
+  uint32_t prinfo_prchk : 3;
+  uint32_t prinfo_pract : 1;
+  uint32_t fua : 1;
+  uint32_t lr : 1;
+
+  uint32_t reserved3 : 16;
+  uint32_t dspec : 16;
+
+  static const uint32_t DTYPE_STREAM = 1;
+};
+
+struct nvme_io_command_t {
+  union {
+    nvme_passthru_cmd common;
+    nvme_rw_command_t rw;
+  };
+  static const uint8_t OPCODE_WRITE = 0x01;
+  static const uint8_t OPCODE_READ = 0x01;
+};
 
 using read_ertr = crimson::errorator<
   crimson::ct_error::input_output_error,
@@ -106,6 +192,8 @@ protected:
 
   uint64_t write_granularity = 4096;
   uint64_t write_alignment = 4096;
+
+  bool data_protection_enabled = false;
 
 public:
   NVMeBlockDevice() {}
@@ -174,16 +262,11 @@ public:
    * End-to-End Data Protection
    *
    * NVMe device keeps track of data integrity similar with checksum. Client can
-   * offload checksuming to NVMe device to reduce its CPU utilization
+   * offload checksuming to NVMe device to reduce its CPU utilization. If data
+   * protection is enabled, checksum is calculated on every write and used to
+   * verify data on every read.
    */
-   virtual write_ertr::future<> protected_write(
-    uint64_t offset,
-    bufferptr &bptr,
-    uint16_t stream = 0) { return write_ertr::now(); }
-
-   virtual read_ertr::future<> protected_read(
-    uint64_t offset,
-    bufferptr &bptr) { return read_ertr::now(); }
+   bool is_data_protection_enabled() const { return data_protection_enabled; }
 
   /*
    * Data Health
@@ -243,10 +326,14 @@ public:
 
   seastar::future<> close() override;
 
-  // TODO Servicing NVMe features (multi-stream, protected write etc..) should
-  // be followed by upstreaming ioctl to seastar.
-
 private:
+  // identify_controller/namespace are used to get SSD internal information such
+  // as supported features
+  uint8_t data_protection_type = 0;
+
+  nvme_command_ertr::future<nvme_identify_controller_data_t> identify_controller();
+  nvme_command_ertr::future<nvme_identify_namespace_data_t> identify_namespace();
+  nvme_command_ertr::future<int> get_nsid();
   seastar::file device;
 };
 

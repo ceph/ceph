@@ -29,7 +29,17 @@ open_ertr::future<> PosixNVMeDevice::open(
       return seastar::open_file_dma(in_path, mode).then([=](auto file) {
         this->device = file;
         logger().debug("open");
-        return seastar::now();
+        // Get SSD's features from identify_controller and namespace command.
+        // Do identify_controller first, and then identify_namespace.
+        return identify_controller().safe_then([this](auto id_controller_data) {
+          support_multistream = id_controller_data.oacs.support_directives;
+          return identify_namespace().safe_then([this] (auto id_namespace_data) {
+            block_size = (1 << id_namespace_data.lbaf0.lbads);
+            data_protection_type = id_namespace_data.dps.protection_type;
+            data_protection_enabled = (data_protection_type > 0);
+            return seastar::now();
+          });
+        });
       });
     }).handle_exception([](auto e) -> open_ertr::future<> {
       logger().error("open: got error{}", e);
@@ -49,11 +59,10 @@ write_ertr::future<> PosixNVMeDevice::write(
   auto length = bptr.length();
 
   assert((length % block_size) == 0);
-
   return device.dma_write(offset, bptr.c_str(), length).handle_exception(
     [](auto e) -> write_ertr::future<size_t> {
       logger().error("write: dma_write got error{}", e);
-      return crimson::ct_error::input_output_error::make();
+        return crimson::ct_error::input_output_error::make();
     }).then([length](auto result) -> write_ertr::future<> {
       if (result != length) {
         logger().error("write: dma_write got error with not proper length");
