@@ -245,8 +245,10 @@ constexpr objaddr_t OBJ_ADDR_MAX = std::numeric_limits<objaddr_t>::max();
 constexpr objaddr_t OBJ_ADDR_NULL = OBJ_ADDR_MAX - 1;
 
 enum class placement_hint_t {
-  NONE,     /// Denotes empty hint
-  NUM_HINTS /// Constant for number of hints
+  HOT = 0,   // Most of the metadata
+  COLD,      // Object data
+  REWRITE,   // Cold metadata and data (probably need further splits)
+  NUM_HINTS  // Constant for number of hints
 };
 
 enum device_type_t {

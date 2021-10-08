@@ -323,7 +323,8 @@ TransactionManager::rewrite_logical_extent(
   auto nlextent = epm->alloc_new_extent_by_type(
     t,
     lextent->get_type(),
-    lextent->get_length())->cast<LogicalCachedExtent>();
+    lextent->get_length(),
+    placement_hint_t::REWRITE)->cast<LogicalCachedExtent>();
   lextent->get_bptr().copy_out(
     0,
     lextent->get_length(),
