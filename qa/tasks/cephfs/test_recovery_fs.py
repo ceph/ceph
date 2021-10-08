@@ -35,4 +35,4 @@ class TestFSRecovery(CephFSTestCase):
         self.fs.wait_for_daemons()
         # check data in file sytem is intact
         filepath = os_path_join(self.mount_a.hostfs_mntpt, 'file_on_fs_0')
-        self.assertEqual(self.mount_a.read_file(filepath), "content")
+        self.assertEqual(self.mount_a.read_file(filepath), "0")
