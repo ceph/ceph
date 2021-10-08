@@ -9,11 +9,11 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "librbd/journal/TypeTraits.h"
+#include "common/Timer.h"
 #include <string>
 
 class Context;
 class ContextWQ;
-class SafeTimer;
 
 namespace journal { class Journaler; }
 

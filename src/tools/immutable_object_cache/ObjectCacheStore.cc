@@ -23,13 +23,13 @@ namespace immutable_obj_cache {
 
 namespace {
 
-class SafeTimerSingleton : public SafeTimer {
+class SafeTimerSingleton : public CommonSafeTimer<ceph::mutex> {
 public:
   ceph::mutex lock = ceph::make_mutex
     ("ceph::immutable_object_cache::SafeTimerSingleton::lock");
 
   explicit SafeTimerSingleton(CephContext *cct)
-      : SafeTimer(cct, lock, true) {
+      : CommonSafeTimer(cct, lock, true) {
     init();
   }
   ~SafeTimerSingleton() {

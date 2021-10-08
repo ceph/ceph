@@ -8,6 +8,7 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "common/AsyncOpTracker.h"
+#include "common/Timer.h"
 #include "journal/JournalMetadata.h"
 #include "journal/ObjectPlayer.h"
 #include "journal/Types.h"
@@ -15,8 +16,6 @@
 #include <boost/none.hpp>
 #include <boost/optional.hpp>
 #include <map>
-
-class SafeTimer;
 
 namespace journal {
 

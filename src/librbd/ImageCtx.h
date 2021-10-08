@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "common/allocator.h"
+#include "common/Timer.h"
 #include "common/ceph_mutex.h"
 #include "common/config_proxy.h"
 #include "common/event_socket.h"
@@ -35,8 +36,6 @@
 
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
-
-class SafeTimer;
 
 namespace neorados {
 class IOContext;
