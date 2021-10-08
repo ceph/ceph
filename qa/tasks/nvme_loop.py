@@ -60,13 +60,20 @@ def task(ctx, config):
 
         # identify nvme_loops devices
         old_scratch_by_remote[remote] = remote.read_file('/scratch_devs')
-        p = remote.run(args=['sudo', 'nvme', 'list'], stdout=StringIO())
-        new_devs = []
-        for line in p.stdout.getvalue().splitlines():
-            dev, _, vendor = line.split()[0:3]
-            if dev.startswith('/dev/') and vendor == 'Linux':
-                new_devs.append(dev)
-        log.info(f'new_devs {new_devs}')
+
+        with contextutil.safe_while(sleep=1, tries=15) as proceed:
+            while proceed():
+                p = remote.run(args=['sudo', 'nvme', 'list'], stdout=StringIO())
+                new_devs = []
+                for line in p.stdout.getvalue().splitlines():
+                    dev, _, vendor = line.split()[0:3]
+                    if dev.startswith('/dev/') and vendor == 'Linux':
+                        new_devs.append(dev)
+                log.info(f'new_devs {new_devs}')
+                assert len(new_devs) <= len(devs)
+                if len(new_devs) == len(devs):
+                    break
+
         remote.write_file(
             path='/scratch_devs',
             data='\n'.join(new_devs) + '\n',
