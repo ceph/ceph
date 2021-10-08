@@ -328,7 +328,7 @@ public:
   device_type_t backend_type = device_type_t::NONE;
 
   /// hint for allocators
-  ool_placement_hint_t hint;
+  placement_hint_t hint = placement_hint_t::NUM_HINTS;
 
   bool is_inline() const {
     return poffset.is_relative();
