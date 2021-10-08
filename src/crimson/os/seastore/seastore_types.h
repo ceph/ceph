@@ -213,6 +213,183 @@ constexpr record_delta_idx_t NULL_DELTA_IDX =
   std::numeric_limits<record_delta_idx_t>::max();
 
 /**
+ * segment_map_t
+ *
+ * Compact templated mapping from a segment_id_t to a value type.
+ */
+template <typename T>
+class segment_map_t {
+public:
+  segment_map_t() {
+    // initializes top vector with 0 length vectors to indicate that they
+    // are not yet present
+    device_to_segments.resize(DEVICE_ID_MAX);
+  }
+  void add_device(device_id_t device, size_t segments, const T& init) {
+    assert(device < DEVICE_ID_MAX);
+    assert(device_to_segments[device].size() == 0);
+    device_to_segments[device].resize(segments, init);
+    total_segments += segments;
+  }
+
+  T& operator[](segment_id_t id) {
+    assert(id.device_segment_id() < device_to_segments[id.device_id()].size());
+    return device_to_segments[id.device_id()][id.device_segment_id()];
+  }
+  const T& operator[](segment_id_t id) const {
+    assert(id.device_segment_id() < device_to_segments[id.device_id()].size());
+    return device_to_segments[id.device_id()][id.device_segment_id()];
+  }
+
+  auto begin() {
+    return iterator<false>::lower_bound(*this, 0, 0);
+  }
+  auto begin() const {
+    return iterator<true>::lower_bound(*this, 0, 0);
+  }
+
+  auto end() {
+    return iterator<false>::end_iterator(*this);
+  }
+  auto end() const {
+    return iterator<true>::end_iterator(*this);
+  }
+
+  auto device_begin(device_id_t id) {
+    auto ret = iterator<false>::lower_bound(*this, id, 0);
+    assert(ret->first.device_id() == id);
+    return ret;
+  }
+  auto device_end(device_id_t id) {
+    return iterator<false>::lower_bound(*this, id + 1, 0);
+  }
+
+  size_t size() const {
+    return total_segments;
+  }
+
+private:
+  template <bool is_const = false>
+  class iterator {
+    /// points at set being iterated over
+    std::conditional_t<
+      is_const,
+      const segment_map_t &,
+      segment_map_t &> parent;
+
+    /// points at current device, or DEVICE_ID_MAX if is_end()
+    device_id_t device_id;
+
+    /// segment at which we are pointing, 0 if is_end()
+    device_segment_id_t device_segment_id;
+
+    /// holds referent for operator* and operator-> when !is_end()
+    std::optional<
+      std::pair<
+        const segment_id_t,
+	std::conditional_t<is_const, const T&, T&>
+	>> current;
+
+    bool is_end() const {
+      return device_id == DEVICE_ID_MAX;
+    }
+
+    void find_valid() {
+      assert(!is_end());
+      auto &device_vec = parent.device_to_segments[device_id];
+      if (device_vec.size() == 0 ||
+	  device_segment_id == device_vec.size()) {
+	while (++device_id < DEVICE_ID_MAX &&
+	       parent.device_to_segments[device_id].size() == 0);
+	device_segment_id = 0;
+      }
+      if (is_end()) {
+	current = std::nullopt;
+      } else {
+	current.emplace(
+	  segment_id_t{device_id, device_segment_id},
+	  parent.device_to_segments[device_id][device_segment_id]
+	);
+      }
+    }
+
+    iterator(
+      decltype(parent) &parent,
+      device_id_t device_id,
+      device_segment_id_t device_segment_id)
+      : parent(parent), device_id(device_id),
+	device_segment_id(device_segment_id) {}
+
+  public:
+    static iterator lower_bound(
+      decltype(parent) &parent,
+      device_id_t device_id,
+      device_segment_id_t device_segment_id) {
+      if (device_id == DEVICE_ID_MAX) {
+	return end_iterator(parent);
+      } else {
+	auto ret = iterator{parent, device_id, device_segment_id};
+	ret.find_valid();
+	return ret;
+      }
+    }
+
+    static iterator end_iterator(
+      decltype(parent) &parent) {
+      return iterator{parent, DEVICE_ID_MAX, 0};
+    }
+
+    iterator<is_const>& operator++() {
+      assert(!is_end());
+      ++device_segment_id;
+      find_valid();
+      return *this;
+    }
+
+    bool operator==(iterator<is_const> rit) {
+      return (device_id == rit.device_id &&
+	      device_segment_id == rit.device_segment_id);
+    }
+
+    bool operator!=(iterator<is_const> rit) {
+      return !(*this == rit);
+    }
+
+    template <bool c = is_const, std::enable_if_t<c, int> = 0>
+    const std::pair<const segment_id_t, const T&> *operator->() {
+      assert(!is_end());
+      return &*current;
+    }
+    template <bool c = is_const, std::enable_if_t<!c, int> = 0>
+    std::pair<const segment_id_t, T&> *operator->() {
+      assert(!is_end());
+      return &*current;
+    }
+    template <bool c = is_const, std::enable_if_t<c, int> = 0>
+    const std::pair<const segment_id_t, const T&> &operator*() {
+      assert(!is_end());
+      return *current;
+    }
+    template <bool c = is_const, std::enable_if_t<!c, int> = 0>
+    std::pair<const segment_id_t, T&> &operator*() {
+      assert(!is_end());
+      return *current;
+    }
+  };
+
+  /**
+   * device_to_segments
+   *
+   * device -> segment -> T mapping.  device_to_segments[d].size() > 0 iff
+   * device <d> has been added.
+   */
+  std::vector<std::vector<T>> device_to_segments;
+
+  /// total number of added segments
+  size_t total_segments = 0;
+};
+
+/**
  * paddr_t
  *
  * <segment, offset> offset on disk, see SegmentManager

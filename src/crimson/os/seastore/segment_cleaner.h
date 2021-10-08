@@ -365,21 +365,17 @@ public:
 };
 using SpaceTrackerIRef = std::unique_ptr<SpaceTrackerI>;
 
-struct segment_space_tracker_t {
-  segment_id_t segment = NULL_SEG_ID;
-  int64_t live_bytes = 0;
-};
-
 class SpaceTrackerSimple : public SpaceTrackerI {
   // Tracks live space for each segment
-  segment_info_set_t<segment_space_tracker_t> live_bytes_by_segment;
+  segment_map_t<int64_t> live_bytes_by_segment;
 
   int64_t update_usage(segment_id_t segment, int64_t delta) {
-    live_bytes_by_segment[segment].live_bytes += delta;
-    assert(live_bytes_by_segment[segment].live_bytes >= 0);
-    return live_bytes_by_segment[segment].live_bytes;
+    live_bytes_by_segment[segment] += delta;
+    assert(live_bytes_by_segment[segment] >= 0);
+    return live_bytes_by_segment[segment];
   }
 public:
+  SpaceTrackerSimple(const SpaceTrackerSimple &) = default;
   SpaceTrackerSimple(std::vector<SegmentManager*> sms) {
     for (auto sm : sms) {
       if (!sm) {
@@ -388,18 +384,10 @@ public:
 	// may be null.
 	continue;
       }
-      live_bytes_by_segment.add_segment_manager(
-	*sm,
-	segment_space_tracker_t{});
-    }
-  }
-  SpaceTrackerSimple(
-    const segment_info_set_t<segment_space_tracker_t>& live_bytes_by_segment)
-    : live_bytes_by_segment(live_bytes_by_segment) {
-    for (auto it = this->live_bytes_by_segment.begin();
-	it != this->live_bytes_by_segment.end();
-	++it) {
-      it->live_bytes = 0;
+      live_bytes_by_segment.add_device(
+	sm->get_device_id(),
+	sm->get_num_segments(),
+	0);
     }
   }
 
@@ -418,21 +406,21 @@ public:
   }
 
   int64_t get_usage(segment_id_t segment) const final {
-    return live_bytes_by_segment[segment].live_bytes;
+    return live_bytes_by_segment[segment];
   }
 
   void dump_usage(segment_id_t) const final {}
 
   void reset() final {
-    for (auto it = live_bytes_by_segment.begin();
-	it != live_bytes_by_segment.end();
-	++it)
-      it->live_bytes = 0;
+    for (auto &i : live_bytes_by_segment) {
+      i.second = 0;
+    }
   }
 
   SpaceTrackerIRef make_empty() const final {
-    return SpaceTrackerIRef(
-      new SpaceTrackerSimple(live_bytes_by_segment));
+    auto ret = SpaceTrackerIRef(new SpaceTrackerSimple(*this));
+    ret->reset();
+    return ret;
   }
 
   bool equals(const SpaceTrackerI &other) const;
@@ -476,20 +464,16 @@ class SpaceTrackerDetailed : public SpaceTrackerI {
       }
     }
   };
-  struct segment_tracker_t {
-    segment_tracker_t(size_t blocks)
-      : segment_map(blocks) {}
-    segment_id_t segment;
-    SegmentMap segment_map;
-  };
 
   // Tracks live space for each segment
-  segment_info_set_t<segment_tracker_t> segment_usage;
+  segment_map_t<SegmentMap> segment_usage;
+  std::vector<size_t> block_size_by_segment_manager;
 
 public:
-  SpaceTrackerDetailed(
-    std::vector<SegmentManager*> sms)
+  SpaceTrackerDetailed(const SpaceTrackerDetailed &) = default;
+  SpaceTrackerDetailed(std::vector<SegmentManager*> sms)
   {
+    block_size_by_segment_manager.resize(DEVICE_ID_MAX, 0);
     for (auto sm : sms) {
       // sms is a vector that is indexed by device id and
       // always has "max_device" elements, some of which
@@ -497,18 +481,12 @@ public:
       if (!sm) {
 	continue;
       }
-      segment_usage.add_segment_manager(
-	*sm,
-	segment_tracker_t(
+      segment_usage.add_device(
+	sm->get_device_id(),
+	sm->get_num_segments(),
+	SegmentMap(
 	  sm->get_segment_size() / sm->get_block_size()));
-    }
-  }
-  SpaceTrackerDetailed(
-    const segment_info_set_t<segment_tracker_t>& segment_usage)
-    : segment_usage(segment_usage)
-  {
-    for (auto& tracker : this->segment_usage) {
-      tracker.segment_map.reset();
+      block_size_by_segment_manager[sm->get_device_id()] = sm->get_block_size();
     }
   }
 
@@ -516,39 +494,40 @@ public:
     segment_id_t segment,
     segment_off_t offset,
     extent_len_t len) final {
-    return segment_usage[segment].segment_map.allocate(
+    return segment_usage[segment].allocate(
       segment.device_segment_id(),
       offset,
       len,
-      segment_usage[segment.device_id()]->block_size);
+      block_size_by_segment_manager[segment.device_id()]);
   }
 
   int64_t release(
     segment_id_t segment,
     segment_off_t offset,
     extent_len_t len) final {
-    return segment_usage[segment].segment_map.release(
+    return segment_usage[segment].release(
       segment.device_segment_id(),
       offset,
       len,
-      segment_usage[segment.device_id()]->block_size);
+      block_size_by_segment_manager[segment.device_id()]);
   }
 
   int64_t get_usage(segment_id_t segment) const final {
-    return segment_usage[segment].segment_map.get_usage();
+    return segment_usage[segment].get_usage();
   }
 
   void dump_usage(segment_id_t seg) const final;
 
   void reset() final {
-    for (auto &i: segment_usage)
-      i.segment_map.reset();
+    for (auto &i: segment_usage) {
+      i.second.reset();
+    }
   }
 
   SpaceTrackerIRef make_empty() const final {
-    return SpaceTrackerIRef(
-      new SpaceTrackerDetailed(
-	segment_usage));
+    auto ret = SpaceTrackerIRef(new SpaceTrackerDetailed(*this));
+    ret->reset();
+    return ret;
   }
 
   bool equals(const SpaceTrackerI &other) const;

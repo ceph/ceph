@@ -53,15 +53,14 @@ bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
   bool all_match = true;
   for (auto i = live_bytes_by_segment.begin(), j = other.live_bytes_by_segment.begin();
        i != live_bytes_by_segment.end(); ++i, ++j) {
-    assert(i->segment == j->segment);
-    if (i->live_bytes != j->live_bytes) {
+    if (i->second != j->second) {
       all_match = false;
       logger().debug(
 	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
 	__func__,
-	i->segment,
-	i->live_bytes,
-	j->live_bytes);
+	i->first,
+	i->second,
+	j->second);
     }
   }
   return all_match;
@@ -144,15 +143,14 @@ bool SpaceTrackerDetailed::equals(const SpaceTrackerI &_other) const
   bool all_match = true;
   for (auto i = segment_usage.begin(), j = other.segment_usage.begin();
        i != segment_usage.end(); ++i, ++j) {
-    assert(i->segment == j->segment);
-    if (i->segment_map.get_usage() != j->segment_map.get_usage()) {
+    if (i->second.get_usage() != j->second.get_usage()) {
       all_match = false;
       logger().error(
 	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
 	__func__,
-	i->segment,
-	i->segment_map.get_usage(),
-	j->segment_map.get_usage());
+	i->first,
+	i->second.get_usage(),
+	j->second.get_usage());
     }
   }
   return all_match;
@@ -170,8 +168,8 @@ void SpaceTrackerDetailed::SegmentMap::dump_usage(extent_len_t block_size) const
 void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
 {
   logger().debug("SpaceTrackerDetailed::dump_usage {}", id);
-  segment_usage[id].segment_map.dump_usage(
-    segment_usage[id.device_id()]->block_size);
+  segment_usage[id].dump_usage(
+    block_size_by_segment_manager[id.device_id()]);
 }
 
 SegmentCleaner::SegmentCleaner(
