@@ -31,26 +31,17 @@ Before you use cephadm to upgrade Ceph, verify that all hosts are currently onli
 
    ceph -s
 
-To upgrade (or downgrade) to a specific release, run the following command:
+To upgrade (or downgrade) to a specific version, run the following command:
 
 .. prompt:: bash #
 
-  ceph orch upgrade start --ceph-version <version>
+  ceph orch upgrade start --image <image>
 
 For example, to upgrade to v16.2.6, run the following command:
 
 .. prompt:: bash #
 
-  ceph orch upgrade start --ceph-version 15.2.1
-
-.. note::
-
-    From version v16.2.6 the Docker Hub registry is no longer used, so if you use Docker you have to point it to the image in the quay.io registry:
-
-.. prompt:: bash #
-
-  ceph orch upgrade start --image quay.io/ceph/ceph:v16.2.6
-
+  ceph orch upgrade start --image quay.io/ceph/ceph:v16.2.6  
 
 Monitoring the upgrade
 ======================
