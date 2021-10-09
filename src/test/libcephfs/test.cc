@@ -3534,4 +3534,5 @@ TEST(LibCephFS, LookupMdsPrivateInos) {
       ASSERT_EQ(-ESTALE, ceph_ll_lookup_inode(cmount, ino, &inode));
     }
   }
+  ceph_shutdown(cmount);
 }
