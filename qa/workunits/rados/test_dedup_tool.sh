@@ -162,8 +162,78 @@ function test_dedup_chunk_scrub()
   $RADOS_TOOL -p $POOL rm bar
 }
 
+function test_dedup_chunk_repair()
+{
+
+  CHUNK_POOL=dedup_chunk_pool
+  run_expect_succ "$CEPH_TOOL" osd pool create "$CHUNK_POOL" 8
+
+  echo -n "hi there" > foo
+
+  echo -n "hi there" > bar
+
+  echo -n "there" > foo-chunk
+
+  echo -n "CHUNK" > bar-chunk
+
+  $CEPH_TOOL osd pool set $POOL fingerprint_algorithm sha1 --yes-i-really-mean-it
+  $CEPH_TOOL osd pool set $POOL dedup_chunk_algorithm fastcdc --yes-i-really-mean-it
+  $CEPH_TOOL osd pool set $POOL dedup_cdc_chunk_size 4096 --yes-i-really-mean-it
+  $CEPH_TOOL osd pool set $POOL dedup_tier $CHUNK_POOL --yes-i-really-mean-it
+
+  $RADOS_TOOL -p $POOL put foo ./foo
+  $RADOS_TOOL -p $POOL put bar ./bar
+
+  $RADOS_TOOL -p $CHUNK_POOL put bar-chunk ./bar-chunk
+  $RADOS_TOOL -p $CHUNK_POOL put foo-chunk ./foo-chunk
+
+  $RADOS_TOOL ls -p $CHUNK_POOL
+  CHUNK_OID=$(echo -n "hi there" | sha1sum | awk '{print $1}')
+
+  POOL_ID=$($CEPH_TOOL osd pool ls detail | grep $POOL |  awk '{print$2}')
+
+
+  # increase ref count by two, resuling in mismatch
+  $DEDUP_TOOL --op chunk-get-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID --target-ref foo --target-ref-pool-id $POOL_ID
+  $DEDUP_TOOL --op chunk-get-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID --target-ref foo --target-ref-pool-id $POOL_ID
+  $DEDUP_TOOL --op chunk-get-ref --chunk-pool $CHUNK_POOL --object bar-chunk --target-ref bar --target-ref-pool-id $POOL_ID
+  $DEDUP_TOOL --op chunk-get-ref --chunk-pool $CHUNK_POOL --object bar-chunk --target-ref bar --target-ref-pool-id $POOL_ID
+
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID)
+  RESULT=$($DEDUP_TOOL --op chunk-scrub --chunk-pool $CHUNK_POOL | grep "Damaged object" | awk '{print$4}')
+  if [ $RESULT -ne "1" ] ; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "Chunk-scrub failed expecting damaged objects is not 1"
+  fi
+
+  $DEDUP_TOOL --op chunk-repair --chunk-pool $CHUNK_POOL --object $CHUNK_OID --target-ref foo --target-ref-pool-id $POOL_ID
+  $DEDUP_TOOL --op chunk-repair --chunk-pool $CHUNK_POOL --object bar-chunk --target-ref bar --target-ref-pool-id $POOL_ID
+
+  $DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID | grep foo
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID | grep foo | wc -l)
+  if [ -n "$RESULT" ] ; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "Scrub failed expecting bar is removed"
+  fi
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object bar-chunk | grep bar)
+  if [ -n "$RESULT" ] ; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "Scrub failed expecting bar is removed"
+  fi
+
+  $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+
+  rm -rf ./foo ./bar ./foo-chunk ./bar-chunk ./test_obj
+  $RADOS_TOOL -p $POOL rm foo
+  $RADOS_TOOL -p $POOL rm bar
+}
+
 test_dedup_ratio_fixed
 test_dedup_chunk_scrub
+test_dedup_chunk_repair
 
 $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
 
