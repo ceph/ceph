@@ -6341,6 +6341,7 @@ class YumDnf(Packager):
         'rocky': ('centos', 'el'),
         'almalinux': ('centos', 'el'),
         'fedora': ('fedora', 'fc'),
+        'mariner': ('mariner', 'cm'),
     }
 
     def __init__(self, ctx: CephadmContext,
@@ -6357,6 +6358,8 @@ class YumDnf(Packager):
         if (self.distro_code == 'fc' and self.major >= 30) or \
            (self.distro_code == 'el' and self.major >= 8):
             self.tool = 'dnf'
+        elif (self.distro_code == 'cm'):
+            self.tool = 'tdnf'
         else:
             self.tool = 'yum'
 
