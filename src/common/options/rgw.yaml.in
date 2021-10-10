@@ -406,6 +406,10 @@ options:
 - name: rgw_lc_debug_interval
   type: int
   level: dev
+  desc: Lifecycle processing interval
+  long_desc: When set to greater than 0, treat this many seconds as a day.
+    This facilitates debugging and testing of lifecycle code without lengthy
+    delays.
   default: -1
   services:
   - rgw
