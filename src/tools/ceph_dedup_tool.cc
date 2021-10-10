@@ -133,7 +133,7 @@ ceph::mutex glock = ceph::make_mutex("glock");
 
 void usage()
 {
-  cout << " usage: [--op <estimate|chunk-scrub|chunk-get-ref|chunk-put-ref|dump-chunk-refs>] [--pool <pool_name> ] " << std::endl;
+  cout << " usage: [--op <estimate|chunk-scrub|chunk-get-ref|chunk-put-ref|chunk-repair|dump-chunk-refs>] [--pool <pool_name> ] " << std::endl;
   cout << "   --object <object_name> " << std::endl;
   cout << "   --chunk-size <size> chunk-size (byte) " << std::endl;
   cout << "   --chunk-algorithm <fixed|fastcdc> " << std::endl;
@@ -767,7 +767,8 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
   }
 
   if (op_name == "chunk-get-ref" ||
-      op_name == "chunk-put-ref") {
+      op_name == "chunk-put-ref" ||
+      op_name == "chunk-repair") {
     string target_object_name;
     uint64_t pool_id;
     i = opts.find("object");
@@ -801,17 +802,83 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     }
     hobject_t oid(sobject_t(target_object_name, CEPH_NOSNAP), "", hash, pool_id, "");
 
+    auto run_op = [] (ObjectWriteOperation& op, hobject_t& oid,
+      string& object_name, IoCtx& chunk_io_ctx) -> int {
+      int ret = chunk_io_ctx.operate(object_name, &op);
+      if (ret < 0) {
+	cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
+      }
+      return ret;
+    };
+
     ObjectWriteOperation op;
     if (op_name == "chunk-get-ref") {
       cls_cas_chunk_get_ref(op, oid);
-    } else {
+      ret = run_op(op, oid, object_name, chunk_io_ctx);
+    } else if (op_name == "chunk-put-ref") {
       cls_cas_chunk_put_ref(op, oid);
-    }
-    ret = chunk_io_ctx.operate(object_name, &op);
-    if (ret < 0) {
-      cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
-    }
+      ret = run_op(op, oid, object_name, chunk_io_ctx);
+    } else if (op_name == "chunk-repair") {
+      ret = rados.ioctx_create2(pool_id, io_ctx);
+      if (ret < 0) {
+	cerr << oid << " ref " << pool_id
+	     << ": referencing pool does not exist" << std::endl;
+	return ret;
+      }
+      int chunk_ref = -1, base_ref = -1;
+      // read object on chunk pool to know how many reference the object has
+      bufferlist t;
+      ret = chunk_io_ctx.getxattr(object_name, CHUNK_REFCOUNT_ATTR, t);
+      if (ret < 0) {
+	return ret;
+      }
+      chunk_refs_t refs;
+      auto p = t.cbegin();
+      decode(refs, p);
+      if (refs.get_type() != chunk_refs_t::TYPE_BY_OBJECT) {
+	cerr << " does not supported chunk type " << std::endl;
+	return -1;
+      }
+      chunk_ref =
+	static_cast<chunk_refs_by_object_t*>(refs.r.get())->by_object.count(oid);
+      if (chunk_ref < 0) {
+	cerr << object_name << " has no reference of " << target_object_name
+	     << std::endl;
+	return chunk_ref;
+      }
+      cout << object_name << " has " << chunk_ref << " references for "
+	   << target_object_name << std::endl;
 
+      // read object on base pool to know the number of chunk object's references
+      base_ref = cls_cas_references_chunk(io_ctx, target_object_name, object_name);
+      if (base_ref < 0) {
+	if (base_ref == -ENOENT || base_ref == -ENOLINK) {
+	  base_ref = 0;
+	} else {
+	  return base_ref;
+	}
+      }
+      cout << target_object_name << " has " << base_ref << " references for "
+	   << object_name << std::endl;
+      if (chunk_ref != base_ref) {
+	if (base_ref > chunk_ref) {
+	  cerr << "error : " << target_object_name << "'s ref. < " << object_name
+	       << "' ref. " << std::endl;
+	  return -EINVAL;
+	}
+	cout << " fix dangling reference from " << chunk_ref << " to " << base_ref
+	     << std::endl;
+	while (base_ref != chunk_ref) {
+	  ObjectWriteOperation op;
+	  cls_cas_chunk_put_ref(op, oid);
+	  chunk_ref--;
+	  ret = run_op(op, oid, object_name, chunk_io_ctx);
+	  if (ret < 0) {
+	    return ret;
+	  }
+	}
+      }
+    }
     return ret;
 
   } else if (op_name == "dump-chunk-refs") {
@@ -945,12 +1012,11 @@ int main(int argc, const char **argv)
 
   if (op_name == "estimate") {
     return estimate_dedup_ratio(opts, args);
-  } else if (op_name == "chunk-scrub") {
-    return chunk_scrub_common(opts, args);
-  } else if (op_name == "chunk-get-ref" ||
-	     op_name == "chunk-put-ref") {
-    return chunk_scrub_common(opts, args);
-  } else if (op_name == "dump-chunk-refs") {
+  } else if (op_name == "chunk-scrub" ||
+	     op_name == "chunk-get-ref" ||
+	     op_name == "chunk-put-ref" ||
+	     op_name == "chunk-repair" ||
+	     op_name == "dump-chunk-refs") {
     return chunk_scrub_common(opts, args);
   } else {
     cerr << "unrecognized op " << op_name << std::endl;
