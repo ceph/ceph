@@ -101,7 +101,7 @@ public:
   virtual void setup_buffer_resources(
       uint64_t *bytes_cached, uint64_t *bytes_dirtied, uint64_t *bytes_allocated,
       uint64_t *number_lanes, uint64_t *number_log_entries,
-      uint64_t *number_unpublished_reserves) {};
+      uint64_t *number_unpublished_reserves) = 0;
 
 protected:
   utime_t m_arrived_time;
