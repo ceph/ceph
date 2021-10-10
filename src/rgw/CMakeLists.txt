@@ -165,14 +165,15 @@ endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_kafka.cc)
 endif()
+if(WITH_RADOSGW_AMQP_1_ENDPOINT)
+  list(APPEND librgw_common_srcs rgw_amqp_1.cc)
+endif()
 if(WITH_RADOSGW_DBSTORE)
   add_subdirectory(store/dbstore)
   list(APPEND librgw_common_srcs rgw_sal_dbstore.cc)
 endif()
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
-if(WITH_RADOSGW_AMQP_1_ENDPOINT)
-  list(APPEND librgw_common_srcs rgw_amqp_1.cc)
 endif()
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
@@ -226,6 +227,12 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
     PRIVATE
       RabbitMQ::RabbitMQ
       OpenSSL::SSL)
+endif()
+if(WITH_RADOSGW_AMQP_1_ENDPOINT)
+  # used by rgw_amqp_1.cc
+  target_link_libraries(rgw_common
+    PRIVATE
+      qpid-proton-cpp)
 endif()
 if(WITH_OPENLDAP)
   target_link_libraries(rgw_common

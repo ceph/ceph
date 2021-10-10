@@ -162,6 +162,7 @@ namespace rgw::amqp_1 {
     void on_sendable(proton::sender& s) override {
       auto count = messages.consume_all(std::bind(&connection_t::send, this,
         std::placeholders::_1));
+      ldout(cct, 20) << "AMQP 1.0 on_sendable sent " << count << " messages" << dendl;
     }
 
     // send a message, and keep record the tracker for later callbacks
@@ -184,12 +185,13 @@ namespace rgw::amqp_1 {
       if(it != callbacks.end()) {
         // find a callback then call it
         // TODO: to print which tracker
-        ldout(cct, 20) << "AMQP1.0, invoking callback of tracker" << dendl;
+        ldout(cct, 20) << "AMQP 1.0, invoking callback of tracker" << dendl;
+        // message << dendl;
         it->cb(status_tracker_to_rgw(rc));
         callbacks.erase(it);
       } else {
         // callback not found
-        ldout(cct, 1) << "AMQP1.0 tracker of unknown callback." << dendl;
+        ldout(cct, 1) << "AMQP 1.0 tracker of unknown callback." << dendl;
       }
     }
 
@@ -206,7 +208,7 @@ namespace rgw::amqp_1 {
     }
 
     void on_error(const proton::error_condition& e) override {
-      ldout(cct, 1) << "AMQP1.0 proton error: " << e.what() << dendl;
+      ldout(cct, 1) << "AMQP 1.0 proton error: " << e.what() << dendl;
     }
 
     void destroy(int s) {
@@ -215,7 +217,7 @@ namespace rgw::amqp_1 {
       // fire all remaining callbacks, meeting
       std::for_each(callbacks.begin(), callbacks.end(), [this](auto& cb_tag) {
         cb_tag.cb(status);
-        ldout(cct, 20) << "AMQP1.0 destroy: invoking callback with tracker" << dendl;
+        ldout(cct, 20) << "AMQP 1.0 destroy: invoking callback with tracker" << dendl;
         });
       callbacks.clear();
     }
@@ -342,6 +344,7 @@ namespace rgw::amqp_1 {
 
       int publish(connection_ptr_t& conn, const std::string& topic, const
           std::string& message) {
+        ldout(cct, 10) << "AMQP 1.0 will publish message: " << message << " to topic " << topic << dendl;
         if(!conn || !conn->is_ok()) {
           return RGW_AMQP_1_STATUS_CONNECTION_CLOSED;
         }
@@ -355,6 +358,7 @@ namespace rgw::amqp_1 {
 
       int publish_with_confirm(connection_ptr_t& conn, const std::string& topic,
           const std::string& message, reply_callback_t cb) {
+        ldout(cct, 10) << "AMQP 1.0 will publish message:" << message << dendl;
         if(!conn || !conn->is_ok()) {
           return RGW_AMQP_1_STATUS_CONNECTION_CLOSED;
         }

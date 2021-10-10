@@ -45,6 +45,9 @@
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
 #include "rgw_amqp.h"
 #endif
+#ifdef WITH_RADOSGW_AMQP_1_ENDPOINT
+#include "rgw_amqp_1.h"
+#endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 #include "rgw_kafka.h"
 #endif
@@ -432,6 +435,11 @@ int radosgw_Main(int argc, const char **argv)
         dout(1) << "ERROR: failed to initialize AMQP manager" << dendl;
     }
 #endif
+#ifdef WITH_RADOSGW_AMQP_1_ENDPOINT
+    if (!rgw::amqp_1::init(cct.get())) {
+        dout(1) << "ERROR: failed to initialize AMQP 1.0 manager" << dendl;
+    }
+#endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
     if (!rgw::kafka::init(cct.get())) {
         dout(1) << "ERROR: failed to initialize Kafka manager" << dendl;
@@ -699,6 +707,9 @@ int radosgw_Main(int argc, const char **argv)
   g_conf().remove_observer(&implicit_tenant_context);
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
   rgw::amqp::shutdown();
+#endif
+#ifdef WITH_RADOSGW_AMQP_1_ENDPOINT
+  rgw::amqp_1::shutdown();
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   rgw::kafka::shutdown();

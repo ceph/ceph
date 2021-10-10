@@ -59,6 +59,9 @@
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 #include "rgw_kafka.h"
 #endif
+#ifdef WITH_RADOSGW_AMQP_1_ENDPOINT
+#include "rgw_amqp_1.h"
+#endif
 
 #include "services/svc_zone.h"
 
@@ -633,6 +636,11 @@ namespace rgw {
       derr << "ERROR: failed to initialize Kafka manager" << dendl;
     }
 #endif
+#ifdef WITH_RADOSGW_AMQP_1_ENDPOINT
+    if (!rgw::amqp_1::init(cct.get())) {
+      derr << "ERROR: failed to initialize AMQP 1.0 manager" << dendl;
+    }
+#endif
 
     return 0;
   } /* RGWLib::init() */
@@ -667,6 +675,9 @@ namespace rgw {
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
     rgw::kafka::shutdown();
+#endif
+#ifdef WITH_RADOSGW_AMQP_1_ENDPOINT
+    rgw::amqp_1::shutdown();
 #endif
 
     rgw_perf_stop(g_ceph_context);

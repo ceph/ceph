@@ -15,6 +15,9 @@
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
 #include "rgw_amqp.h"
 #endif
+#ifdef WITH_RADOSGW_AMQP_1_ENDPOINT
+#include "rgw_amqp_1.h"
+#endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 #include "rgw_kafka.h"
 #endif
@@ -427,6 +430,130 @@ static const std::string AMQP_1_0("1-0");
 static const std::string AMQP_SCHEMA("amqp");
 #endif	// ifdef WITH_RADOSGW_AMQP_ENDPOINT
 
+#ifdef WITH_RADOSGW_AMQP_1_ENDPOINT
+class RGWPubSubAMQP_1Endpoint : public RGWPubSubEndpoint {
+  private:
+    enum class ack_level_t {
+      None,
+      Broker,
+    };
+    CephContext* const cct;
+    const std::string topic;
+		const std::string endpoint;
+    amqp_1::connection_ptr_t conn;
+    const ack_level_t ack_level;
+
+    ack_level_t get_ack_level(const RGWHTTPArgs& args) {
+      bool exists;
+      const auto& str_ack_level = args.get("amqp_1-ack-level", &exists);
+      if (!exists || str_ack_level == "broker") {
+        return ack_level_t::Broker;
+      }
+      if (str_ack_level ==  "None") {
+        return ack_level_t::None;
+      }
+      throw configuration_error("AMQP 1.0: invalid amqp_1-ack-level: " + str_ack_level);
+    }
+    public:
+    RGWPubSubAMQP_1Endpoint(const std::string& _endpoint,
+      const std::string& _topic,
+      const RGWHTTPArgs& args,
+      CephContext* _cct) :
+        cct(_cct),
+        endpoint(_endpoint),
+        topic(_topic),
+        ack_level(get_ack_level(args)),
+        conn(amqp_1::connect(endpoint)) {
+      if (!conn) {
+        throw configuration_error("AMQP 1.0: failed to create connection to: " + endpoint);
+        }
+      }
+
+	// empty since declared pure virual in RGWPubSubEndpoint
+  RGWCoroutine* send_to_completion_async(const rgw_pubsub_event& event, RGWDataSyncEnv* env) override {
+  }
+  
+  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_event& event, RGWDataSyncEnv* env) override {
+  }
+
+    class Waiter {
+      using Signature = void(boost::system::error_code);
+      using Completion = ceph::async::Completion<Signature>;
+      std::unique_ptr<Completion> completion = nullptr;
+      int ret;
+
+      mutable std::atomic<bool> done = false;
+      mutable std::mutex lock;
+      mutable std::condition_variable cond;
+
+      template <typename ExecutionContext, typename CompletionToken>
+      auto async_wait(ExecutionContext& ctx, CompletionToken&& token) {
+        boost::asio::async_completion<CompletionToken, Signature> init(token);
+        auto& handler = init.completion_handler;
+        {
+          std::unique_lock l{lock};
+          completion = Completion::create(ctx.get_executor(), std::move(handler));
+        }
+        return init.result.get();
+      }
+
+    public:
+      int wait(optional_yield y) {
+        if (done) {
+          return ret;
+        }
+        if (y) {
+    auto& io_ctx = y.get_io_context();
+          auto& yield_ctx = y.get_yield_context();
+          boost::system::error_code ec;
+          async_wait(io_ctx, yield_ctx[ec]);
+          return -ec.value();
+        }
+        std::unique_lock l(lock);
+        cond.wait(l, [this]{return (done==true);});
+        return ret;
+      }
+
+      void finish(int r) {
+        std::unique_lock l{lock};
+        ret = r;
+        done = true;
+        if (completion) {
+          boost::system::error_code ec(-ret, boost::system::system_category());
+          Completion::post(std::move(completion), ec);
+        } else {
+          cond.notify_all();
+        }
+      }
+    };
+
+    int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
+      ceph_assert(conn);
+      if (ack_level == ack_level_t::None) {
+        return amqp_1::publish(conn, topic, json_format_pubsub_event(event));
+      } else {
+        auto w = std::unique_ptr<Waiter>(new Waiter);
+        const auto rc = amqp_1::publish_with_confirm(conn,
+          topic,
+          json_format_pubsub_event(event),
+          std::bind(&Waiter::finish, w.get(), std::placeholders::_1));
+        if (rc < 0) {
+          return rc;
+        }
+        return w->wait(y);
+      }
+    }
+
+    std::string to_str() const override {
+      std::string str("AMQP(1.0) Endpoint");
+      str += "\nURI: " + endpoint;
+			str += "\nTopic: " + topic;
+			return str;
+			}
+		};
+
+static const std::string AMQP_1_SCHEMA("amqp1");
+#endif // ifdef WITH_RADOSGW_AMQP_1_ENDPOINT
 
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 class RGWPubSubKafkaEndpoint : public RGWPubSubEndpoint {
@@ -712,6 +839,10 @@ const std::string& get_schema(const std::string& endpoint) {
   } else if (schema == "amqp" || schema == "amqps") {
     return AMQP_SCHEMA;
 #endif
+#ifdef WITH_RADOSGW_AMQP_1_ENDPOINT
+  } else if (schema == "amqpone") {
+    return AMQP_1_SCHEMA;
+#endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   } else if (schema == "kafka") {
     return KAFKA_SCHEMA;
@@ -743,6 +874,10 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
       throw configuration_error("AMQP: unknown version: " + version);
       return nullptr;
     }
+#endif
+#ifdef WITH_RADOSGW_AMQP_1_ENDPOINT
+  } else if (schema == AMQP_1_SCHEMA) {
+			return Ptr(new RGWPubSubAMQP_1Endpoint(endpoint, topic, args, cct));
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   } else if (schema == KAFKA_SCHEMA) {
