@@ -42,8 +42,8 @@ StoreTool::StoreTool(const string& type,
              << cpp_strerror(r) << std::endl;
         exit(1);
       }
-      db.reset(db_ptr);
     }
+    db.reset(db_ptr);
   }
 }
 
