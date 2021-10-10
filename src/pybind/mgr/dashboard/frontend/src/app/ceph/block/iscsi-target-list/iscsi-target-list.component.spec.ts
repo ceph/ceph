@@ -8,6 +8,9 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
+import { IscsiTabsComponent } from '../iscsi-tabs/iscsi-tabs.component';
+import { IscsiTargetDetailsComponent } from '../iscsi-target-details/iscsi-target-details.component';
+import { IscsiTargetListComponent } from './iscsi-target-list.component';
 import { IscsiService } from '~/app/shared/api/iscsi.service';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -16,9 +19,6 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
-import { IscsiTabsComponent } from '../iscsi-tabs/iscsi-tabs.component';
-import { IscsiTargetDetailsComponent } from '../iscsi-target-details/iscsi-target-details.component';
-import { IscsiTargetListComponent } from './iscsi-target-list.component';
 
 describe('IscsiTargetListComponent', () => {
   let component: IscsiTargetListComponent;
@@ -125,17 +125,17 @@ describe('IscsiTargetListComponent', () => {
       switch (task.name) {
         case 'iscsi/target/create':
           task.metadata = {
-            target_iqn: target_iqn
+            target_iqn
           };
           break;
         case 'iscsi/target/delete':
           task.metadata = {
-            target_iqn: target_iqn
+            target_iqn
           };
           break;
         default:
           task.metadata = {
-            target_iqn: target_iqn
+            target_iqn
           };
           break;
       }
@@ -182,9 +182,8 @@ describe('IscsiTargetListComponent', () => {
 
     let action: CdTableAction;
 
-    const getAction = (name: string): CdTableAction => {
-      return component.tableActions.find((tableAction) => tableAction.name === name);
-    };
+    const getAction = (name: string): CdTableAction =>
+      component.tableActions.find((tableAction) => tableAction.name === name);
 
     describe('edit', () => {
       beforeEach(() => {

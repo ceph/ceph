@@ -26,17 +26,17 @@ export class TaskListService implements OnDestroy {
   ) {}
 
   /**
-   * @param {() => Observable<object>} getUpdate Method that calls the api and
+   * @param getUpdate Method that calls the api and
    * returns that without subscribing.
-   * @param {(_: any) => any[]} preProcessing Method executed before merging
+   * @param preProcessing Method executed before merging
    * Tasks with Items
-   * @param {(_: any[]) => void} setList  Method used to update array of item in the component.
-   * @param {(error: any) => void} onFetchError Method called when there were
+   * @param setList  Method used to update array of item in the component.
+   * @param onFetchError Method called when there were
    * problems while fetching data.
-   * @param {(task: ExecutingTask) => boolean} taskFilter callback used in tasks_array.filter()
-   * @param {(item, task: ExecutingTask) => boolean} itemFilter callback used in
+   * @param taskFilter callback used in tasks_array.filter()
+   * @param itemFilter callback used in
    * items_array.filter()
-   * @param {object} builders
+   * @param builders
    * object with builders for each type of task.
    * You can also use a 'default' one.
    * @memberof TaskListService

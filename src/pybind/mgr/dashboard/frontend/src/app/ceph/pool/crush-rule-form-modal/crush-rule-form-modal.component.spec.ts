@@ -6,13 +6,13 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { PoolModule } from '../pool.module';
+import { CrushRuleFormModalComponent } from './crush-rule-form-modal.component';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { CrushNode } from '~/app/shared/models/crush-node';
 import { CrushRuleConfig } from '~/app/shared/models/crush-rule';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { configureTestBed, FixtureHelper, FormHelper, Mocks } from '~/testing/unit-test-helper';
-import { PoolModule } from '../pool.module';
-import { CrushRuleFormModalComponent } from './crush-rule-form-modal.component';
 
 describe('CrushRuleFormComponent', () => {
   let component: CrushRuleFormModalComponent;
@@ -166,7 +166,7 @@ describe('CrushRuleFormComponent', () => {
   });
 
   describe('form validation', () => {
-    it(`isn't valid if name is not set`, () => {
+    it('isn\'t valid if name is not set', () => {
       expect(component.form.invalid).toBeTruthy();
       formHelper.setValue('name', 'someProfileName');
       expect(component.form.valid).toBeTruthy();
@@ -179,7 +179,7 @@ describe('CrushRuleFormComponent', () => {
       formHelper.expectErrorChange('name', null, 'required');
     });
 
-    it(`should show all default form controls`, () => {
+    it('should show all default form controls', () => {
       // name
       // root (preselected(first root))
       // failure_domain (preselected=type that is most common)

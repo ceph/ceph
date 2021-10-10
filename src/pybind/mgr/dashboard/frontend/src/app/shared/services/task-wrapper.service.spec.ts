@@ -5,13 +5,13 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { Observable } from 'rxjs';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { FinishedTask } from '../models/finished-task';
 import { SharedModule } from '../shared.module';
 import { NotificationService } from './notification.service';
 import { SummaryService } from './summary.service';
 import { TaskManagerService } from './task-manager.service';
 import { TaskWrapperService } from './task-wrapper.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('TaskWrapperService', () => {
   let service: TaskWrapperService;
@@ -39,16 +39,15 @@ describe('TaskWrapperService', () => {
         if (!status) {
           observer.error({ error: 'failed' });
         }
-        observer.next({ status: status });
+        observer.next({ status });
         observer.complete();
       });
 
-    const callWrapTaskAroundCall = (status: number, name: string) => {
-      return service.wrapTaskAroundCall({
+    const callWrapTaskAroundCall = (status: number, name: string) =>
+      service.wrapTaskAroundCall({
         task: new FinishedTask(name, { sth: 'else' }),
         call: fakeCall(status)
       });
-    };
 
     beforeEach(() => {
       passed = false;

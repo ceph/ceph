@@ -3,9 +3,9 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { SelectOption } from './select-option.model';
 import { SelectComponent } from './select.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('SelectComponent', () => {
   let component: SelectComponent;
@@ -256,7 +256,7 @@ describe('SelectComponent', () => {
     });
   });
 
-  describe('if the selection limit is reached', function () {
+  describe('if the selection limit is reached', () => {
     beforeEach(() => {
       component.selectionLimit = 2;
       component.triggerSelection(component.options[0]);

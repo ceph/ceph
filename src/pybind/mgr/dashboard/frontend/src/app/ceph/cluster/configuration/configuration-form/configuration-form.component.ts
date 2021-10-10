@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
 
+import { ConfigFormCreateRequestModel } from './configuration-form-create-request.model';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { ConfigFormModel } from '~/app/shared/components/config-option/config-option.model';
 import { ConfigOptionTypes } from '~/app/shared/components/config-option/config-option.types';
@@ -12,7 +13,6 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { ConfigFormCreateRequestModel } from './configuration-form-create-request.model';
 
 @Component({
   selector: 'cd-configuration-form',
@@ -135,7 +135,7 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
     this.availSections.forEach((section) => {
       const sectionValue = this.configForm.getValue(section);
       if (sectionValue !== null && sectionValue !== '') {
-        values.push({ section: section, value: sectionValue });
+        values.push({ section, value: sectionValue });
       }
     });
 

@@ -77,9 +77,7 @@ export class CrushmapComponent implements OnDestroy, OnInit {
       treeNodeMap[node.id] = this.generateTreeLeaf(node, treeNodeMap);
     });
 
-    const children = roots.map((id) => {
-      return treeNodeMap[id];
-    });
+    const children = roots.map((id) => treeNodeMap[id]);
 
     return children;
   }

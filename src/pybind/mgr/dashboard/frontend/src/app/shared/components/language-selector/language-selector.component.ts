@@ -2,8 +2,8 @@ import { Component, OnInit } from '@angular/core';
 
 import _ from 'lodash';
 
-import { LanguageService } from '~/app/shared/services/language.service';
 import { SupportedLanguages } from './supported-languages.enum';
+import { LanguageService } from '~/app/shared/services/language.service';
 
 @Component({
   selector: 'cd-language-selector',

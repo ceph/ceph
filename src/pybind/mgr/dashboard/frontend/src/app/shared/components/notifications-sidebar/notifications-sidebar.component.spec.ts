@@ -8,6 +8,7 @@ import { ClickOutsideModule } from 'ng-click-outside';
 import { ToastrModule } from 'ngx-toastr';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
+import { NotificationsSidebarComponent } from './notifications-sidebar.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
@@ -21,7 +22,6 @@ import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.s
 import { PrometheusNotificationService } from '~/app/shared/services/prometheus-notification.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { NotificationsSidebarComponent } from './notifications-sidebar.component';
 
 describe('NotificationsSidebarComponent', () => {
   let component: NotificationsSidebarComponent;
@@ -137,7 +137,7 @@ describe('NotificationsSidebarComponent', () => {
 
       expect(component._handleTasks).toHaveBeenCalled();
       expect(component.executingTasks.length).toBe(1);
-      expect(component.executingTasks[0].description).toBe(`Deleting RBD 'somePool/someImage'`);
+      expect(component.executingTasks[0].description).toBe('Deleting RBD \'somePool/someImage\'');
     });
   });
 

@@ -6,6 +6,8 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { forkJoin } from 'rxjs';
 
+import { IscsiTargetImageSettingsModalComponent } from '../iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component';
+import { IscsiTargetIqnSettingsModalComponent } from '../iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component';
 import { IscsiService } from '~/app/shared/api/iscsi.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
@@ -18,8 +20,6 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { IscsiTargetImageSettingsModalComponent } from '../iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component';
-import { IscsiTargetIqnSettingsModalComponent } from '../iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component';
 
 @Component({
   selector: 'cd-iscsi-target-form',
@@ -233,7 +233,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
       portals.push(id);
     });
     this.targetForm.patchValue({
-      portals: portals
+      portals
     });
 
     const disks: any[] = [];
@@ -254,7 +254,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
       this.onImageSelection({ option: { name: id, selected: true } });
     });
     this.targetForm.patchValue({
-      disks: disks
+      disks
     });
 
     _.forEach(res.clients, (client) => {
@@ -416,9 +416,10 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
         validators: [
           Validators.required,
           CdValidators.custom('notUnique', (client_iqn: string) => {
-            const flattened = this.initiators.controls.reduce(function (accumulator, currentValue) {
-              return accumulator.concat(currentValue.value.client_iqn);
-            }, []);
+            const flattened = this.initiators.controls.reduce(
+              (accumulator, currentValue) => accumulator.concat(currentValue.value.client_iqn),
+              []
+            );
 
             return flattened.indexOf(client_iqn) !== flattened.lastIndexOf(client_iqn);
           }),
@@ -536,7 +537,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
   removeInitiatorImage(initiator: any, lun_index: number, initiator_index: number, image: string) {
     const luns = initiator.getValue('luns');
     luns.splice(lun_index, 1);
-    initiator.patchValue({ luns: luns });
+    initiator.patchValue({ luns });
 
     this.imagesInitiatorSelections[initiator_index].forEach((value: Record<string, any>) => {
       if (value.name === image) {
@@ -602,7 +603,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
 
     this.initiators.controls.forEach((element, index) => {
       if (element.value.client_iqn === option.name) {
-        element.patchValue({ luns: luns });
+        element.patchValue({ luns });
         element.get('cdIsInGroup').setValue(option.selected);
 
         // Members can only be at one group at a time, so when a member is selected
@@ -681,7 +682,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
       request.disks.push({
         pool: imageSplit[0],
         image: imageSplit[1],
-        backstore: backstore,
+        backstore,
         controls: this.imagesSettings[disk][backstore],
         lun: this.imagesSettings[disk]['lun'],
         wwn: this.imagesSettings[disk]['wwn']
@@ -785,7 +786,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
   imageSettingsModal(image: string) {
     const initialState = {
       imagesSettings: this.imagesSettings,
-      image: image,
+      image,
       api_version: this.api_version,
       disk_default_controls: this.disk_default_controls,
       disk_controls_limits: this.disk_controls_limits,
@@ -800,9 +801,9 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
     const imageFeatures = image.features;
     const requiredFeatures = this.required_rbd_features[backstore];
     const unsupportedFeatures = this.unsupported_rbd_features[backstore];
-    // tslint:disable-next-line:no-bitwise
+    // eslint-disable-next-line no-bitwise
     const validRequiredFeatures = (imageFeatures & requiredFeatures) === requiredFeatures;
-    // tslint:disable-next-line:no-bitwise
+    // eslint-disable-next-line no-bitwise
     const validSupportedFeatures = (imageFeatures & unsupportedFeatures) === 0;
     return validRequiredFeatures && validSupportedFeatures;
   }

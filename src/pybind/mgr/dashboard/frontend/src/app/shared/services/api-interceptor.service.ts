@@ -12,12 +12,12 @@ import _ from 'lodash';
 import { Observable, throwError as observableThrowError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 
-import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { AuthStorageService } from './auth-storage.service';
 import { NotificationService } from './notification.service';
+import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 
 export class CdHttpErrorResponse extends HttpErrorResponse {
   preventDefault: Function;
@@ -97,9 +97,10 @@ export class ApiInterceptorService implements HttpInterceptor {
 
           /**
            * If called, it will prevent a notification for the specific status code.
-           * @param {number} status The status code to be ignored.
+           *
+           * @param status The status code to be ignored.
            */
-          resp.ignoreStatusCode = function (status: number) {
+          resp.ignoreStatusCode = function(status: number) {
             if (this.status === status) {
               this.preventDefault();
             }

@@ -11,7 +11,7 @@ export class IscsiService {
   constructor(private http: HttpClient) {}
 
   listTargets() {
-    return this.http.get(`api/iscsi/target`);
+    return this.http.get('api/iscsi/target');
   }
 
   getTarget(target_iqn: string) {
@@ -23,23 +23,23 @@ export class IscsiService {
   }
 
   status() {
-    return this.http.get(`ui-api/iscsi/status`);
+    return this.http.get('ui-api/iscsi/status');
   }
 
   settings() {
-    return this.http.get(`ui-api/iscsi/settings`);
+    return this.http.get('ui-api/iscsi/settings');
   }
 
   version() {
-    return this.http.get(`ui-api/iscsi/version`);
+    return this.http.get('ui-api/iscsi/version');
   }
 
   portals() {
-    return this.http.get(`ui-api/iscsi/portals`);
+    return this.http.get('ui-api/iscsi/portals');
   }
 
   createTarget(target: any) {
-    return this.http.post(`api/iscsi/target`, target, { observe: 'response' });
+    return this.http.post('api/iscsi/target', target, { observe: 'response' });
   }
 
   deleteTarget(target_iqn: string) {
@@ -47,14 +47,14 @@ export class IscsiService {
   }
 
   getDiscovery() {
-    return this.http.get(`api/iscsi/discoveryauth`);
+    return this.http.get('api/iscsi/discoveryauth');
   }
 
   updateDiscovery(auth: any) {
-    return this.http.put(`api/iscsi/discoveryauth`, auth);
+    return this.http.put('api/iscsi/discoveryauth', auth);
   }
 
   overview() {
-    return this.http.get(`ui-api/iscsi/overview`);
+    return this.http.get('ui-api/iscsi/overview');
   }
 }

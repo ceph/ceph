@@ -1,11 +1,11 @@
 import { Component, Inject, OnInit } from '@angular/core';
 
+import { PrometheusListHelper } from '../prometheus-list-helper';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { PrometheusRule } from '~/app/shared/models/prometheus-alerts';
 import { DurationPipe } from '~/app/shared/pipes/duration.pipe';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
-import { PrometheusListHelper } from '../prometheus-list-helper';
 
 @Component({
   selector: 'cd-rules-list',

@@ -8,6 +8,9 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { Pool } from '../pool';
+import { PoolDetailsComponent } from '../pool-details/pool-details.component';
+import { PoolListComponent } from './pool-list.component';
 import { RbdConfigurationListComponent } from '~/app/ceph/block/rbd-configuration-list/rbd-configuration-list.component';
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
@@ -22,9 +25,6 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks, Mocks } from '~/testing/unit-test-helper';
-import { Pool } from '../pool';
-import { PoolDetailsComponent } from '../pool-details/pool-details.component';
-import { PoolListComponent } from './pool-list.component';
 
 describe('PoolListComponent', () => {
   let component: PoolListComponent;
@@ -32,9 +32,11 @@ describe('PoolListComponent', () => {
   let poolService: PoolService;
   let getECPList: jasmine.Spy;
 
-  const getPoolList = (): Pool[] => {
-    return [Mocks.getPool('a', 0), Mocks.getPool('b', 1), Mocks.getPool('c', 2)];
-  };
+  const getPoolList = (): Pool[] => [
+    Mocks.getPool('a', 0),
+    Mocks.getPool('b', 1),
+    Mocks.getPool('c', 2)
+  ];
   const getECPProfiles = (): ErasureCodeProfile[] => {
     const ecpProfile = new ErasureCodeProfile();
     ecpProfile.name = 'default';

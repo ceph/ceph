@@ -40,9 +40,9 @@ export class NfsFormClientComponent implements OnInit {
   }
 
   getAccessTypeHelp(index: number) {
-    const accessTypeItem = this.nfsAccessType.find((currentAccessTypeItem) => {
-      return this.getValue(index, 'access_type') === currentAccessTypeItem.value;
-    });
+    const accessTypeItem = this.nfsAccessType.find(
+      (currentAccessTypeItem) => this.getValue(index, 'access_type') === currentAccessTypeItem.value
+    );
     return _.isObjectLike(accessTypeItem) ? accessTypeItem.help : '';
   }
 
@@ -56,7 +56,8 @@ export class NfsFormClientComponent implements OnInit {
   addClient() {
     const clients = this.form.get('clients') as FormArray;
 
-    const REGEX_IP = `(([0-9]{1,3})\\.([0-9]{1,3})\\.([0-9]{1,3})\.([0-9]{1,3})([/](\\d|[1-2]\\d|3[0-2]))?)`;
+    const REGEX_IP =
+      '(([0-9]{1,3})\\.([0-9]{1,3})\\.([0-9]{1,3}).([0-9]{1,3})([/](\\d|[1-2]\\d|3[0-2]))?)';
     const REGEX_LIST_IP = `${REGEX_IP}([ ,]{1,2}${REGEX_IP})*`;
 
     const fg = new CdFormGroup({

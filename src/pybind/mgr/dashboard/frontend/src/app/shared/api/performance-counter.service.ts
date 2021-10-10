@@ -20,10 +20,8 @@ export class PerformanceCounterService {
   }
 
   get(service_type: string, service_id: string) {
-    return this.http.get(`${this.url}/${service_type}/${service_id}`).pipe(
-      mergeMap((resp: any) => {
-        return observableOf(resp['counters']);
-      })
-    );
+    return this.http
+      .get(`${this.url}/${service_type}/${service_id}`)
+      .pipe(mergeMap((resp: any) => observableOf(resp['counters'])));
   }
 }

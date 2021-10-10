@@ -3,6 +3,9 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
+import { RbdParentModel } from '../rbd-form/rbd-parent.model';
+import { RbdTrashMoveModalComponent } from '../rbd-trash-move-modal/rbd-trash-move-modal.component';
+import { RBDImageFormat, RbdModel } from './rbd-model';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
@@ -26,9 +29,6 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { RbdParentModel } from '../rbd-form/rbd-parent.model';
-import { RbdTrashMoveModalComponent } from '../rbd-trash-move-modal/rbd-trash-move-modal.component';
-import { RBDImageFormat, RbdModel } from './rbd-model';
 
 const BASE_URL = 'block/rbd';
 
@@ -280,8 +280,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       );
     };
 
-    const taskFilter = (task: Task) => {
-      return [
+    const taskFilter = (task: Task) =>
+      [
         'rbd/clone',
         'rbd/copy',
         'rbd/create',
@@ -290,7 +290,6 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         'rbd/flatten',
         'rbd/trash/move'
       ].includes(task.name);
-    };
 
     this.taskListService.init(
       () => this.rbdService.list(),

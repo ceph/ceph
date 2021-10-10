@@ -25,7 +25,7 @@ export class RoleService {
   }
 
   create(role: RoleFormModel) {
-    return this.http.post(`api/role`, role);
+    return this.http.post('api/role', role);
   }
 
   clone(name: string, newName: string) {
@@ -39,9 +39,7 @@ export class RoleService {
   exists(name: string): Observable<boolean> {
     return this.list().pipe(
       mergeMap((roles: Array<RoleFormModel>) => {
-        const exists = roles.some((currentRole: RoleFormModel) => {
-          return currentRole.name === name;
-        });
+        const exists = roles.some((currentRole: RoleFormModel) => currentRole.name === name);
         return observableOf(exists);
       })
     );

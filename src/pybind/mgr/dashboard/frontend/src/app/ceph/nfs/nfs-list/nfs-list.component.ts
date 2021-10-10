@@ -50,13 +50,11 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   modalRef: NgbModalRef;
 
   builders = {
-    'nfs/create': (metadata: any) => {
-      return {
-        path: metadata['path'],
-        cluster_id: metadata['cluster_id'],
-        fsal: metadata['fsal']
-      };
-    }
+    'nfs/create': (metadata: any) => ({
+      path: metadata['path'],
+      cluster_id: metadata['cluster_id'],
+      fsal: metadata['fsal']
+    })
   };
 
   constructor(
@@ -212,8 +210,8 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
           task: new FinishedTask('nfs/delete', {
-            cluster_id: cluster_id,
-            export_id: export_id
+            cluster_id,
+            export_id
           }),
           call: this.nfsService.delete(cluster_id, export_id)
         })

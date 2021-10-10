@@ -1,5 +1,5 @@
-import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { PoolStats } from './pool-stat';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
 
 export class Pool {
   cache_target_full_ratio_micro: number;

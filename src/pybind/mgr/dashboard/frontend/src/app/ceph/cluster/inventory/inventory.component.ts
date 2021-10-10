@@ -2,11 +2,11 @@ import { Component, Input, NgZone, OnChanges, OnDestroy, OnInit } from '@angular
 
 import { Subscription, timer as observableTimer } from 'rxjs';
 
+import { InventoryDevice } from './inventory-devices/inventory-device.model';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
-import { InventoryDevice } from './inventory-devices/inventory-device.model';
 
 @Component({
   selector: 'cd-inventory',

@@ -7,6 +7,8 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { PrometheusTabsComponent } from '../prometheus-tabs/prometheus-tabs.component';
+import { SilenceListComponent } from './silence-list.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
@@ -15,8 +17,6 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
-import { PrometheusTabsComponent } from '../prometheus-tabs/prometheus-tabs.component';
-import { SilenceListComponent } from './silence-list.component';
 
 describe('SilenceListComponent', () => {
   let component: SilenceListComponent;
@@ -110,11 +110,9 @@ describe('SilenceListComponent', () => {
       const mockObservable = () => of([]);
       spyOn(component, 'refresh').and.callFake(mockObservable);
       spyOn(prometheusService, 'expireSilence').and.callFake(mockObservable);
-      spyOn(TestBed.inject(ModalService), 'show').and.callFake((deletionClass, config) => {
-        return {
-          componentInstance: Object.assign(new deletionClass(), config)
-        };
-      });
+      spyOn(TestBed.inject(ModalService), 'show').and.callFake((deletionClass, config) => ({
+        componentInstance: Object.assign(new deletionClass(), config)
+      }));
     });
 
     it('should expire a silence', () => {

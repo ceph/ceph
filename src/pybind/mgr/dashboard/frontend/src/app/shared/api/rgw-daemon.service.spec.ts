@@ -3,9 +3,9 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import { of } from 'rxjs';
 
+import { RgwDaemonService } from './rgw-daemon.service';
 import { RgwDaemon } from '~/app/ceph/rgw/models/rgw-daemon';
 import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
-import { RgwDaemonService } from './rgw-daemon.service';
 
 describe('RgwDaemonService', () => {
   let service: RgwDaemonService;

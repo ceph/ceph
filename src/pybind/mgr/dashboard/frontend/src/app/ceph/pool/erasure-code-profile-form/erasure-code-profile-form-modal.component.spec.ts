@@ -6,13 +6,13 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { PoolModule } from '../pool.module';
+import { ErasureCodeProfileFormModalComponent } from './erasure-code-profile-form-modal.component';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { CrushNode } from '~/app/shared/models/crush-node';
 import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { configureTestBed, FixtureHelper, FormHelper, Mocks } from '~/testing/unit-test-helper';
-import { PoolModule } from '../pool.module';
-import { ErasureCodeProfileFormModalComponent } from './erasure-code-profile-form-modal.component';
 
 describe('ErasureCodeProfileFormModalComponent', () => {
   let component: ErasureCodeProfileFormModalComponent;
@@ -106,7 +106,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
   });
 
   describe('form validation', () => {
-    it(`isn't valid if name is not set`, () => {
+    it('isn\'t valid if name is not set', () => {
       expect(component.form.invalid).toBeTruthy();
       formHelper.setValue('name', 'someProfileName');
       expect(component.form.valid).toBeTruthy();
@@ -127,7 +127,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       formHelper.expectErrorChange('m', 0, 'min');
     });
 
-    it(`should show all default form controls`, () => {
+    it('should show all default form controls', () => {
       const showDefaults = (plugin: string) => {
         formHelper.setValue('plugin', plugin);
         fixtureHelper.expectIdElementsVisible(
@@ -161,12 +161,12 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       expectTechnique('single');
     });
 
-    describe(`for 'jerasure' plugin (default)`, () => {
-      it(`requires 'm' and 'k'`, () => {
+    describe('for \'jerasure\' plugin (default)', () => {
+      it('requires \'m\' and \'k\'', () => {
         expectRequiredControls(['k', 'm']);
       });
 
-      it(`should show 'packetSize' and 'technique'`, () => {
+      it('should show \'packetSize\' and \'technique\'', () => {
         fixtureHelper.expectIdElementsVisible(['packetSize', 'technique'], true);
       });
 
@@ -185,7 +185,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         );
       });
 
-      it(`should not show any other plugin specific form control`, () => {
+      it('should not show any other plugin specific form control', () => {
         fixtureHelper.expectIdElementsVisible(
           ['c', 'l', 'crushLocality', 'd', 'scalar_mds'],
           false
@@ -201,16 +201,16 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
     });
 
-    describe(`for 'isa' plugin`, () => {
+    describe('for \'isa\' plugin', () => {
       beforeEach(() => {
         formHelper.setValue('plugin', 'isa');
       });
 
-      it(`does require 'm' and 'k'`, () => {
+      it('does require \'m\' and \'k\'', () => {
         expectRequiredControls(['k', 'm']);
       });
 
-      it(`should show 'technique'`, () => {
+      it('should show \'technique\'', () => {
         fixtureHelper.expectIdElementsVisible(['technique'], true);
       });
 
@@ -218,7 +218,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         expectTechniques(['reed_sol_van', 'cauchy'], 'reed_sol_van');
       });
 
-      it(`should not show any other plugin specific form control`, () => {
+      it('should not show any other plugin specific form control', () => {
         fixtureHelper.expectIdElementsVisible(
           ['c', 'l', 'crushLocality', 'packetSize', 'd', 'scalar_mds'],
           false
@@ -234,7 +234,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
     });
 
-    describe(`for 'lrc' plugin`, () => {
+    describe('for \'lrc\' plugin', () => {
       beforeEach(() => {
         formHelper.setValue('plugin', 'lrc');
         formHelper.expectValid('k');
@@ -242,15 +242,15 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         formHelper.expectValid('m');
       });
 
-      it(`requires 'm', 'l' and 'k'`, () => {
+      it('requires \'m\', \'l\' and \'k\'', () => {
         expectRequiredControls(['k', 'm', 'l']);
       });
 
-      it(`should show 'l' and 'crushLocality'`, () => {
+      it('should show \'l\' and \'crushLocality\'', () => {
         fixtureHelper.expectIdElementsVisible(['l', 'crushLocality'], true);
       });
 
-      it(`should not show any other plugin specific form control`, () => {
+      it('should not show any other plugin specific form control', () => {
         fixtureHelper.expectIdElementsVisible(
           ['c', 'packetSize', 'technique', 'd', 'scalar_mds'],
           false
@@ -356,7 +356,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
     });
 
-    describe(`for 'shec' plugin`, () => {
+    describe('for \'shec\' plugin', () => {
       beforeEach(() => {
         formHelper.setValue('plugin', 'shec');
         formHelper.expectValid('c');
@@ -364,11 +364,11 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         formHelper.expectValid('k');
       });
 
-      it(`does require 'm', 'c' and 'k'`, () => {
+      it('does require \'m\', \'c\' and \'k\'', () => {
         expectRequiredControls(['k', 'm', 'c']);
       });
 
-      it(`should not show any other plugin specific form control`, () => {
+      it('should not show any other plugin specific form control', () => {
         fixtureHelper.expectIdElementsVisible(
           ['l', 'crushLocality', 'packetSize', 'technique', 'd', 'scalar_mds'],
           false
@@ -396,7 +396,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
     });
 
-    describe(`for 'clay' plugin`, () => {
+    describe('for \'clay\' plugin', () => {
       beforeEach(() => {
         formHelper.setValue('plugin', 'clay');
         // Through this change d has a valid range from 4 to 7
@@ -404,12 +404,12 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         formHelper.expectValidChange('m', 5);
       });
 
-      it(`does require 'm', 'c', 'd', 'scalar_mds' and 'k'`, () => {
+      it('does require \'m\', \'c\', \'d\', \'scalar_mds\' and \'k\'', () => {
         fixtureHelper.clickElement('#d-calc-btn');
         expectRequiredControls(['k', 'm', 'd', 'scalar_mds']);
       });
 
-      it(`should not show any other plugin specific form control`, () => {
+      it('should not show any other plugin specific form control', () => {
         fixtureHelper.expectIdElementsVisible(['l', 'crushLocality', 'packetSize', 'c'], false);
       });
 
@@ -509,7 +509,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       spyOn(ecpService, 'create').and.stub();
     });
 
-    describe(`'jerasure' usage`, () => {
+    describe('\'jerasure\' usage', () => {
       beforeEach(() => {
         submittedEcp['plugin'] = 'jerasure';
         ecpChange('name', 'jerasureProfile');
@@ -522,7 +522,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         testCreation();
       });
 
-      it(`does not create with missing 'k' or invalid form`, () => {
+      it('does not create with missing \'k\' or invalid form', () => {
         ecpChange('k', 0);
         formHelper.setMultipleValues(ecp, true);
         component.onSubmit();
@@ -545,7 +545,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
     });
 
-    describe(`'isa' usage`, () => {
+    describe('\'isa\' usage', () => {
       beforeEach(() => {
         ecpChange('name', 'isaProfile');
         ecpChange('plugin', 'isa');
@@ -575,7 +575,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
     });
 
-    describe(`'lrc' usage`, () => {
+    describe('\'lrc\' usage', () => {
       beforeEach(() => {
         ecpChange('name', 'lrcProfile');
         ecpChange('plugin', 'lrc');
@@ -608,7 +608,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
     });
 
-    describe(`'shec' usage`, () => {
+    describe('\'shec\' usage', () => {
       beforeEach(() => {
         ecpChange('name', 'shecProfile');
         ecpChange('plugin', 'shec');
@@ -639,7 +639,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
     });
 
-    describe(`'clay' usage`, () => {
+    describe('\'clay\' usage', () => {
       beforeEach(() => {
         ecpChange('name', 'clayProfile');
         ecpChange('plugin', 'clay');

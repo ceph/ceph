@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 
 import { of as observableOf, throwError } from 'rxjs';
 
-import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
 import { RgwUserService } from './rgw-user.service';
+import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
 
 describe('RgwUserService', () => {
   let service: RgwUserService;

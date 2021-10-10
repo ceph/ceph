@@ -7,6 +7,7 @@ import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { of } from 'rxjs';
 
+import { SilenceMatcherModalComponent } from './silence-matcher-modal.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import {
   configureTestBed,
@@ -14,7 +15,6 @@ import {
   FormHelper,
   PrometheusHelper
 } from '~/testing/unit-test-helper';
-import { SilenceMatcherModalComponent } from './silence-matcher-modal.component';
 
 describe('SilenceMatcherModalComponent', () => {
   let component: SilenceMatcherModalComponent;
@@ -80,8 +80,8 @@ describe('SilenceMatcherModalComponent', () => {
   describe('test rule matching', () => {
     const expectMatch = (name: string, value: string, helpText: string) => {
       component.preFillControls({
-        name: name,
-        value: value,
+        name,
+        value,
         isRegex: false
       });
       expect(fixtureH.getText('#match-state')).toBe(helpText);

@@ -15,7 +15,6 @@ import {
 } from '@ng-bootstrap/ng-bootstrap';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
-import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { ConfigurationDetailsComponent } from './configuration/configuration-details/configuration-details.component';
@@ -54,6 +53,7 @@ import { ServiceDetailsComponent } from './services/service-details/service-deta
 import { ServiceFormComponent } from './services/service-form/service-form.component';
 import { ServicesComponent } from './services/services.component';
 import { TelemetryComponent } from './telemetry/telemetry.component';
+import { SharedModule } from '~/app/shared/shared.module';
 
 @NgModule({
   imports: [

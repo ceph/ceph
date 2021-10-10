@@ -1,12 +1,12 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { HealthPieComponent } from './health-pie.component';
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { HealthPieComponent } from './health-pie.component';
 
 describe('HealthPieComponent', () => {
   let component: HealthPieComponent;

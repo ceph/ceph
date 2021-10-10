@@ -1,8 +1,8 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { ScopeService } from './scope.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('ScopeService', () => {
   let service: ScopeService;

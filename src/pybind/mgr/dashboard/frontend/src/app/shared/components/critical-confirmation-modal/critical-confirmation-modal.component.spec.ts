@@ -5,12 +5,12 @@ import { NgForm, ReactiveFormsModule } from '@angular/forms';
 import { NgbActiveModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscriber, timer as observableTimer } from 'rxjs';
 
-import { DirectivesModule } from '~/app/shared/directives/directives.module';
-import { ModalService } from '~/app/shared/services/modal.service';
-import { configureTestBed, modalServiceShow } from '~/testing/unit-test-helper';
 import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
 import { LoadingPanelComponent } from '../loading-panel/loading-panel.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal.component';
+import { DirectivesModule } from '~/app/shared/directives/directives.module';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { configureTestBed, modalServiceShow } from '~/testing/unit-test-helper';
 
 @NgModule({})
 export class MockModule {}
@@ -65,14 +65,13 @@ class MockComponent {
   }
 
   fakeDelete() {
-    return (): Observable<any> => {
-      return new Observable((observer: Subscriber<any>) => {
+    return (): Observable<any> =>
+      new Observable((observer: Subscriber<any>) => {
         observableTimer(100).subscribe(() => {
           observer.next(this.finish());
           observer.complete();
         });
       });
-    };
   }
 
   fakeDeleteController() {
@@ -160,9 +159,9 @@ describe('CriticalConfirmationModalComponent', () => {
 
     describe('validate confirmation', () => {
       const testValidation = (submitted: boolean, error: string, expected: boolean) => {
-        expect(
-          component.deletionForm.showError('confirmation', <NgForm>{ submitted: submitted }, error)
-        ).toBe(expected);
+        expect(component.deletionForm.showError('confirmation', <NgForm>{ submitted }, error)).toBe(
+          expected
+        );
       };
 
       beforeEach(() => {

@@ -9,6 +9,7 @@ export class PlacementPipe implements PipeTransform {
   /**
    * Convert the placement configuration into human readable form.
    * The output is equal to the column 'PLACEMENT' in 'ceph orch ls'.
+   *
    * @param serviceSpec The service specification to process.
    * @return The placement configuration as human readable string.
    */

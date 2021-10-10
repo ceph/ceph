@@ -11,6 +11,7 @@ import {
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
 
+import { InventoryDevice } from './inventory-device.model';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
@@ -29,7 +30,6 @@ import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { InventoryDevice } from './inventory-device.model';
 
 @Component({
   selector: 'cd-inventory-devices',
@@ -156,13 +156,11 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
       }
     ];
 
-    this.columns = columns.filter((col: any) => {
-      return !this.hiddenColumns.includes(col.prop);
-    });
+    this.columns = columns.filter((col: any) => !this.hiddenColumns.includes(col.prop));
 
     // init column filters
     _.forEach(this.filterColumns, (prop) => {
-      const col = _.find(this.columns, { prop: prop });
+      const col = _.find(this.columns, { prop });
       if (col) {
         col.filterable = true;
       }

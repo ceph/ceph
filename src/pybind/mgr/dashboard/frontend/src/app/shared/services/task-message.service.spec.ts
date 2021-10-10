@@ -3,11 +3,11 @@ import { TestBed } from '@angular/core/testing';
 
 import _ from 'lodash';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { FinishedTask } from '../models/finished-task';
 import { TaskException } from '../models/task-exception';
 import { TaskMessageOperation, TaskMessageService } from './task-message.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('TaskManagerMessageService', () => {
   let service: TaskMessageService;
@@ -73,7 +73,7 @@ describe('TaskManagerMessageService', () => {
 
     const testErrorCode = (code: number, msg: string) => {
       finishedTask.exception = _.assign(new TaskException(), {
-        code: code
+        code
       });
       expect(service.getErrorMessage(finishedTask)).toBe(msg);
     };
@@ -240,7 +240,7 @@ describe('TaskManagerMessageService', () => {
           new TaskMessageOperation('Moving', 'move', 'Moved'),
           `image '${metadata.image_spec}' to trash`
         );
-        testErrorCode(2, `Could not find image.`);
+        testErrorCode(2, 'Could not find image.');
       });
 
       it('tests rbd/trash/restore messages', () => {

@@ -19,17 +19,14 @@ export class RgwUserService {
 
   /**
    * Get the list of users.
-   * @return {Observable<Object[]>}
+   *
+   * @return
    */
   list() {
     return this.enumerate().pipe(
       mergeMap((uids: string[]) => {
         if (uids.length > 0) {
-          return observableForkJoin(
-            uids.map((uid: string) => {
-              return this.get(uid);
-            })
-          );
+          return observableForkJoin(uids.map((uid: string) => this.get(uid)));
         }
         return observableOf([]);
       })
@@ -38,30 +35,31 @@ export class RgwUserService {
 
   /**
    * Get the list of usernames.
-   * @return {Observable<string[]>}
+   *
+   * @return
    */
   enumerate() {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.get(this.url, { params: params });
-    });
+    return this.rgwDaemonService.request((params: HttpParams) =>
+      this.http.get(this.url, { params })
+    );
   }
 
   enumerateEmail() {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.get(`${this.url}/get_emails`, { params: params });
-    });
+    return this.rgwDaemonService.request((params: HttpParams) =>
+      this.http.get(`${this.url}/get_emails`, { params })
+    );
   }
 
   get(uid: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.get(`${this.url}/${uid}`, { params: params });
-    });
+    return this.rgwDaemonService.request((params: HttpParams) =>
+      this.http.get(`${this.url}/${uid}`, { params })
+    );
   }
 
   getQuota(uid: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.get(`${this.url}/${uid}/quota`, { params: params });
-    });
+    return this.rgwDaemonService.request((params: HttpParams) =>
+      this.http.get(`${this.url}/${uid}/quota`, { params })
+    );
   }
 
   create(args: Record<string, any>) {
@@ -69,7 +67,7 @@ export class RgwUserService {
       _.keys(args).forEach((key) => {
         params = params.append(key, args[key]);
       });
-      return this.http.post(this.url, null, { params: params });
+      return this.http.post(this.url, null, { params });
     });
   }
 
@@ -78,7 +76,7 @@ export class RgwUserService {
       _.keys(args).forEach((key) => {
         params = params.append(key, args[key]);
       });
-      return this.http.put(`${this.url}/${uid}`, null, { params: params });
+      return this.http.put(`${this.url}/${uid}`, null, { params });
     });
   }
 
@@ -87,14 +85,14 @@ export class RgwUserService {
       _.keys(args).forEach((key) => {
         params = params.append(key, args[key]);
       });
-      return this.http.put(`${this.url}/${uid}/quota`, null, { params: params });
+      return this.http.put(`${this.url}/${uid}/quota`, null, { params });
     });
   }
 
   delete(uid: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.delete(`${this.url}/${uid}`, { params: params });
-    });
+    return this.rgwDaemonService.request((params: HttpParams) =>
+      this.http.delete(`${this.url}/${uid}`, { params })
+    );
   }
 
   createSubuser(uid: string, args: Record<string, string>) {
@@ -102,21 +100,21 @@ export class RgwUserService {
       _.keys(args).forEach((key) => {
         params = params.append(key, args[key]);
       });
-      return this.http.post(`${this.url}/${uid}/subuser`, null, { params: params });
+      return this.http.post(`${this.url}/${uid}/subuser`, null, { params });
     });
   }
 
   deleteSubuser(uid: string, subuser: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.delete(`${this.url}/${uid}/subuser/${subuser}`, { params: params });
-    });
+    return this.rgwDaemonService.request((params: HttpParams) =>
+      this.http.delete(`${this.url}/${uid}/subuser/${subuser}`, { params })
+    );
   }
 
   addCapability(uid: string, type: string, perm: string) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.append('type', type);
       params = params.append('perm', perm);
-      return this.http.post(`${this.url}/${uid}/capability`, null, { params: params });
+      return this.http.post(`${this.url}/${uid}/capability`, null, { params });
     });
   }
 
@@ -124,7 +122,7 @@ export class RgwUserService {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.append('type', type);
       params = params.append('perm', perm);
-      return this.http.delete(`${this.url}/${uid}/capability`, { params: params });
+      return this.http.delete(`${this.url}/${uid}/capability`, { params });
     });
   }
 
@@ -134,7 +132,7 @@ export class RgwUserService {
       _.keys(args).forEach((key) => {
         params = params.append(key, args[key]);
       });
-      return this.http.post(`${this.url}/${uid}/key`, null, { params: params });
+      return this.http.post(`${this.url}/${uid}/key`, null, { params });
     });
   }
 
@@ -142,14 +140,15 @@ export class RgwUserService {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.append('key_type', 's3');
       params = params.append('access_key', accessKey);
-      return this.http.delete(`${this.url}/${uid}/key`, { params: params });
+      return this.http.delete(`${this.url}/${uid}/key`, { params });
     });
   }
 
   /**
    * Check if the specified user ID exists.
-   * @param {string} uid The user ID to check.
-   * @return {Observable<boolean>}
+   *
+   * @param uid The user ID to check.
+   * @return
    */
   exists(uid: string): Observable<boolean> {
     return this.get(uid).pipe(

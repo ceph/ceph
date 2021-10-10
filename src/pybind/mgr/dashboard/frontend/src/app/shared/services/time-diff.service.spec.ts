@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { TimeDiffService } from './time-diff.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('TimeDiffService', () => {
   let service: TimeDiffService;

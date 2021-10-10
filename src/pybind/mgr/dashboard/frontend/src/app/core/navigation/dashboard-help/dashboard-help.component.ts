@@ -2,10 +2,10 @@ import { Component, OnInit } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
+import { AboutComponent } from '../about/about.component';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { DocService } from '~/app/shared/services/doc.service';
 import { ModalService } from '~/app/shared/services/modal.service';
-import { AboutComponent } from '../about/about.component';
 
 @Component({
   selector: 'cd-dashboard-help',

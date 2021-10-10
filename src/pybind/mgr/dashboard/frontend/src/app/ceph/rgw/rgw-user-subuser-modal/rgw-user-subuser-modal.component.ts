@@ -4,11 +4,11 @@ import { AbstractControl, ValidationErrors, ValidatorFn, Validators } from '@ang
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
+import { RgwUserSubuser } from '../models/rgw-user-subuser';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators, isEmptyInputValue } from '~/app/shared/forms/cd-validators';
-import { RgwUserSubuser } from '../models/rgw-user-subuser';
 
 @Component({
   selector: 'cd-rgw-user-subuser-modal',
@@ -61,9 +61,9 @@ export class RgwUserSubuserModalComponent {
       if (isEmptyInputValue(control.value)) {
         return null;
       }
-      const found = self.subusers.some((subuser) => {
-        return _.isEqual(self.getSubuserName(subuser.id), control.value);
-      });
+      const found = self.subusers.some((subuser) =>
+        _.isEqual(self.getSubuserName(subuser.id), control.value)
+      );
       return found ? { subuserIdExists: true } : null;
     };
   }
@@ -73,8 +73,9 @@ export class RgwUserSubuserModalComponent {
    * Examples:
    *   'johndoe' => 'johndoe'
    *   'janedoe:xyz' => 'xyz'
-   * @param {string} value The value to process.
-   * @returns {string} Returns the user ID.
+   *
+   * @param value The value to process.
+   * @returns Returns the user ID.
    */
   private getSubuserName(value: string) {
     if (_.isEmpty(value)) {
@@ -88,7 +89,8 @@ export class RgwUserSubuserModalComponent {
    * Set the 'editing' flag. If set to TRUE, the modal dialog is in 'Edit' mode,
    * otherwise in 'Add' mode. According to the mode the dialog and its controls
    * behave different.
-   * @param {boolean} viewing
+   *
+   * @param viewing
    */
   setEditing(editing: boolean = true) {
     this.editing = editing;
@@ -100,7 +102,7 @@ export class RgwUserSubuserModalComponent {
    */
   setValues(uid: string, subuser: string = '', permissions: string = '') {
     this.formGroup.setValue({
-      uid: uid,
+      uid,
       subuid: this.getSubuserName(subuser),
       perm: permissions,
       generate_secret: true,

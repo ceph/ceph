@@ -46,9 +46,7 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
       name: $localize`Service`,
       prop: 'services',
       filterOptions: ['mon', 'mgr', 'osd', 'mds', 'common', 'mds_client', 'rgw'],
-      filterPredicate: (row, value) => {
-        return row.services.includes(value);
-      }
+      filterPredicate: (row, value) => row.services.includes(value)
     },
     {
       name: $localize`Source`,

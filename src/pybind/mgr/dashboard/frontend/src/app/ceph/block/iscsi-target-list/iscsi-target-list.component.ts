@@ -4,6 +4,7 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
 
+import { IscsiTargetDiscoveryModalComponent } from '../iscsi-target-discovery-modal/iscsi-target-discovery-modal.component';
 import { IscsiService } from '~/app/shared/api/iscsi.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -23,7 +24,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { IscsiTargetDiscoveryModalComponent } from '../iscsi-target-discovery-modal/iscsi-target-discovery-modal.component';
 
 @Component({
   selector: 'cd-iscsi-target-list',
@@ -49,11 +49,9 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
   icons = Icons;
 
   builders = {
-    'iscsi/target/create': (metadata: object) => {
-      return {
-        target_iqn: metadata['target_iqn']
-      };
-    }
+    'iscsi/target/create': (metadata: object) => ({
+      target_iqn: metadata['target_iqn']
+    })
   };
 
   constructor(
@@ -229,7 +227,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
           task: new FinishedTask('iscsi/target/delete', {
-            target_iqn: target_iqn
+            target_iqn
           }),
           call: this.iscsiService.deleteTarget(target_iqn)
         })

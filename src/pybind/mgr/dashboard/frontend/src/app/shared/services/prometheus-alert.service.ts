@@ -40,14 +40,16 @@ export class PrometheusAlertService {
   getRules() {
     this.prometheusService.ifPrometheusConfigured(() => {
       this.prometheusService.getRules('alerting').subscribe((groups) => {
-        this.rules = groups['groups'].reduce((acc, group) => {
-          return acc.concat(
-            group.rules.map((rule) => {
-              rule.group = group.name;
-              return rule;
-            })
-          );
-        }, []);
+        this.rules = groups['groups'].reduce(
+          (acc, group) =>
+            acc.concat(
+              group.rules.map((rule) => {
+                rule.group = group.name;
+                return rule;
+              })
+            ),
+          []
+        );
       });
     });
   }
@@ -75,9 +77,7 @@ export class PrometheusAlertService {
       this.alertFormatter.convertToCustomAlerts(alerts),
       this.alertFormatter.convertToCustomAlerts(oldAlerts)
     );
-    const suppressedFiltered = _.filter(changedAlerts, (alert) => {
-      return alert.status !== 'suppressed';
-    });
+    const suppressedFiltered = _.filter(changedAlerts, (alert) => alert.status !== 'suppressed');
     const notifications = suppressedFiltered.map((alert) =>
       this.alertFormatter.convertAlertToNotification(alert)
     );

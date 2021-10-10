@@ -9,6 +9,11 @@ import { ToastrModule } from 'ngx-toastr';
 import { NEVER, of } from 'rxjs';
 import { delay } from 'rxjs/operators';
 
+import { RbdConfigurationFormComponent } from '../rbd-configuration-form/rbd-configuration-form.component';
+import { RbdImageFeature } from './rbd-feature.interface';
+import { RbdFormMode } from './rbd-form-mode.enum';
+import { RbdFormResponseModel } from './rbd-form-response.model';
+import { RbdFormComponent } from './rbd-form.component';
 import { Pool } from '~/app/ceph/pool/pool';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
@@ -16,11 +21,6 @@ import { ImageSpec } from '~/app/shared/models/image-spec';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ActivatedRouteStub } from '~/testing/activated-route-stub';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { RbdConfigurationFormComponent } from '../rbd-configuration-form/rbd-configuration-form.component';
-import { RbdImageFeature } from './rbd-feature.interface';
-import { RbdFormMode } from './rbd-form-mode.enum';
-import { RbdFormResponseModel } from './rbd-form-response.model';
-import { RbdFormComponent } from './rbd-form.component';
 
 describe('RbdFormComponent', () => {
   const urlPrefix = {
@@ -304,12 +304,12 @@ describe('RbdFormComponent', () => {
   });
 
   describe('tests for feature flags', () => {
-    let deepFlatten: any,
-      layering: any,
-      exclusiveLock: any,
-      objectMap: any,
-      journaling: any,
-      fastDiff: any;
+    let deepFlatten: any;
+    let layering: any;
+    let exclusiveLock: any;
+    let objectMap: any;
+    let journaling: any;
+    let fastDiff: any;
     const defaultFeatures = [
       // Supposed to be enabled by default
       'deep-flatten',

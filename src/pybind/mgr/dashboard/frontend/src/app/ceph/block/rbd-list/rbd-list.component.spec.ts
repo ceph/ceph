@@ -7,6 +7,12 @@ import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
+import { RbdConfigurationListComponent } from '../rbd-configuration-list/rbd-configuration-list.component';
+import { RbdDetailsComponent } from '../rbd-details/rbd-details.component';
+import { RbdSnapshotListComponent } from '../rbd-snapshot-list/rbd-snapshot-list.component';
+import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
+import { RbdListComponent } from './rbd-list.component';
+import { RbdModel } from './rbd-model';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
@@ -16,12 +22,6 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
-import { RbdConfigurationListComponent } from '../rbd-configuration-list/rbd-configuration-list.component';
-import { RbdDetailsComponent } from '../rbd-details/rbd-details.component';
-import { RbdSnapshotListComponent } from '../rbd-snapshot-list/rbd-snapshot-list.component';
-import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
-import { RbdListComponent } from './rbd-list.component';
-import { RbdModel } from './rbd-model';
 
 describe('RbdListComponent', () => {
   let fixture: ComponentFixture<RbdListComponent>;
@@ -188,7 +188,7 @@ describe('RbdListComponent', () => {
           task.metadata = {
             pool_name: 'rbd',
             namespace: null,
-            image_name: image_name
+            image_name
           };
           break;
         default:
@@ -326,7 +326,7 @@ describe('RbdListComponent', () => {
         snapshots: []
       }
     ];
-    const message = `This RBD image has an invalid name and can't be managed by ceph.`;
+    const message = 'This RBD image has an invalid name and can\'t be managed by ceph.';
     const expected = {
       edit: message,
       delete: message,
@@ -346,7 +346,7 @@ describe('RbdListComponent', () => {
       }
     ];
 
-    const message = `Action not possible for an RBD in status 'Removing'`;
+    const message = 'Action not possible for an RBD in status \'Removing\'';
     const expected = {
       edit: message,
       copy: message,

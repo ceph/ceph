@@ -37,8 +37,8 @@ export class SilenceMatcherModalComponent {
   // For typeahead usage
   valueClick = new Subject<string>();
   valueFocus = new Subject<string>();
-  search = (text$: Observable<string>) => {
-    return merge(
+  search = (text$: Observable<string>) =>
+    merge(
       text$.pipe(debounceTime(200), distinctUntilChanged()),
       this.valueFocus,
       this.valueClick.pipe(filter(() => !this.typeahead.isPopupOpen()))
@@ -50,7 +50,6 @@ export class SilenceMatcherModalComponent {
         ).slice(0, 10)
       )
     );
-  };
 
   constructor(
     private formBuilder: CdFormBuilder,

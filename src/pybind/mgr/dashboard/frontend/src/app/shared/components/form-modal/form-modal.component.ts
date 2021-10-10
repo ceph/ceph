@@ -64,9 +64,9 @@ export class FormModalComponent implements OnInit {
 
   getError(field: CdFormModalFieldConfig): string {
     const formErrors = this.formGroup.get(field.name).errors;
-    const errors = Object.keys(formErrors).map((key) => {
-      return this.getErrorMessage(key, formErrors[key], field.errors);
-    });
+    const errors = Object.keys(formErrors).map((key) =>
+      this.getErrorMessage(key, formErrors[key], field.errors)
+    );
     return errors.join('<br>');
   }
 

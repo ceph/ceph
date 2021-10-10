@@ -159,13 +159,11 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
     this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: this.selection.hasSingleSelection ? $localize`bucket` : $localize`buckets`,
       itemNames: this.selection.selected.map((bucket: any) => bucket['bid']),
-      submitActionObservable: () => {
-        return new Observable((observer: Subscriber<any>) => {
+      submitActionObservable: () =>
+        new Observable((observer: Subscriber<any>) => {
           // Delete all selected data table rows.
           observableForkJoin(
-            this.selection.selected.map((bucket: any) => {
-              return this.rgwBucketService.delete(bucket.bid);
-            })
+            this.selection.selected.map((bucket: any) => this.rgwBucketService.delete(bucket.bid))
           ).subscribe({
             error: (error) => {
               // Forward the error to the observer.
@@ -181,8 +179,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
               this.table.refreshBtn();
             }
           });
-        });
-      }
+        })
     });
   }
 }

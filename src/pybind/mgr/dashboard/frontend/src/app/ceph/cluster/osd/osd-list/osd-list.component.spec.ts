@@ -10,6 +10,8 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { EMPTY, of } from 'rxjs';
 
+import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
+import { OsdListComponent } from './osd-list.component';
 import { CephModule } from '~/app/ceph/ceph.module';
 import { PerformanceCounterModule } from '~/app/ceph/performance-counter/performance-counter.module';
 import { CoreModule } from '~/app/core/core.module';
@@ -31,8 +33,6 @@ import {
   PermissionHelper,
   TableActionHelper
 } from '~/testing/unit-test-helper';
-import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
-import { OsdListComponent } from './osd-list.component';
 
 describe('OsdListComponent', () => {
   let component: OsdListComponent;
@@ -42,12 +42,11 @@ describe('OsdListComponent', () => {
   let orchService: OrchestratorService;
 
   const fakeAuthStorageService = {
-    getPermissions: () => {
-      return new Permissions({
+    getPermissions: () =>
+      new Permissions({
         'config-opt': ['read', 'update', 'create', 'delete'],
         osd: ['read', 'update', 'create', 'delete']
-      });
-    }
+      })
   };
 
   const getTableAction = (name: string) =>

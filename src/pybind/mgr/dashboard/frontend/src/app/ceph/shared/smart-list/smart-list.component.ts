@@ -69,7 +69,7 @@ smartmontools is required to successfully retrieve data.`;
           error: smartData.error,
           smartctl_error_code: smartData.smartctl_error_code,
           smartctl_output: smartData.smartctl_output,
-          userMessage: userMessage,
+          userMessage,
           device: smartData.dev,
           identifier: smartData.nvme_vendor
         };
@@ -99,7 +99,7 @@ smartmontools is required to successfully retrieve data.`;
       ['nvme_smart_health_information_log'].includes(key)
     );
     return {
-      info: info,
+      info,
       smart: {
         nvmeData: smartData.nvme_smart_health_information_log
       },
@@ -113,7 +113,7 @@ smartmontools is required to successfully retrieve data.`;
       ['ata_smart_attributes', 'ata_smart_selective_self_test_log', 'ata_smart_data'].includes(key)
     );
     return {
-      info: info,
+      info,
       smart: {
         attributes: smartData.ata_smart_attributes,
         data: smartData.ata_smart_data

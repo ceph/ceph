@@ -3,6 +3,8 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import _ from 'lodash';
 import { mergeMap } from 'rxjs/operators';
 
+import { Pool } from '../pool';
+import { PoolStat, PoolStats } from '../pool-stat';
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
@@ -28,8 +30,6 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { Pool } from '../pool';
-import { PoolStat, PoolStats } from '../pool-stat';
 
 const BASE_URL = 'pool';
 
@@ -105,9 +105,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     if (this.permissions.configOpt.read) {
       this.configurationService.get('mon_allow_pool_delete').subscribe((data: any) => {
         if (_.has(data, 'value')) {
-          const monSection = _.find(data.value, (v) => {
-            return v.section === 'mon';
-          }) || { value: false };
+          const monSection = _.find(data.value, (v) => v.section === 'mon') || { value: false };
           this.monAllowPoolDelete = monSection.value === 'true' ? true : false;
         }
       });
@@ -146,9 +144,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         prop: 'pg_status',
         name: $localize`PG Status`,
         flexGrow: 1.2,
-        cellClass: ({ row, column, value }): any => {
-          return this.getPgStatusCellClass(row, column, value);
-        }
+        cellClass: ({ row, column, value }): any => this.getPgStatusCellClass(row, column, value)
       },
       {
         prop: 'crush_rule',

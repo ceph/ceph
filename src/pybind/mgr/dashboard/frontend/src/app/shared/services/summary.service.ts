@@ -74,9 +74,9 @@ export class SummaryService {
     }
 
     if (_.isArray(current.executing_tasks)) {
-      const exists = current.executing_tasks.find((element: any) => {
-        return element.name === task.name && _.isEqual(element.metadata, task.metadata);
-      });
+      const exists = current.executing_tasks.find(
+        (element: any) => element.name === task.name && _.isEqual(element.metadata, task.metadata)
+      );
       if (!exists) {
         current.executing_tasks.push(task);
       }

@@ -5,11 +5,11 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { ToastrModule } from 'ngx-toastr';
 
+import { OsdDevicesSelectionGroupsComponent } from './osd-devices-selection-groups.component';
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FixtureHelper, Mocks } from '~/testing/unit-test-helper';
-import { OsdDevicesSelectionGroupsComponent } from './osd-devices-selection-groups.component';
 
 describe('OsdDevicesSelectionGroupsComponent', () => {
   let component: OsdDevicesSelectionGroupsComponent;

@@ -6,6 +6,8 @@ import _ from 'lodash';
 import { forkJoin, Observable, of } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map, mergeMap } from 'rxjs/operators';
 
+import { NFSClusterType } from '../nfs-cluster-type.enum';
+import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
@@ -20,8 +22,6 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { NFSClusterType } from '../nfs-cluster-type.enum';
-import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
 
 @Component({
   selector: 'cd-nfs-form',
@@ -65,22 +65,20 @@ export class NfsFormComponent extends CdForm implements OnInit {
   daemonsSelections: SelectOption[] = [];
   daemonsMessages = new SelectMessages({ noOptions: $localize`There are no daemons available.` });
 
-  pathDataSource = (text$: Observable<string>) => {
-    return text$.pipe(
+  pathDataSource = (text$: Observable<string>) =>
+    text$.pipe(
       debounceTime(200),
       distinctUntilChanged(),
       mergeMap((token: string) => this.getPathTypeahead(token)),
       map((val: any) => val.paths)
     );
-  };
 
-  bucketDataSource = (text$: Observable<string>) => {
-    return text$.pipe(
+  bucketDataSource = (text$: Observable<string>) =>
+    text$.pipe(
       debounceTime(200),
       distinctUntilChanged(),
       mergeMap((token: string) => this.getBucketTypeahead(token))
     );
-  };
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -175,18 +173,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
       }),
       path: new FormControl(''),
       protocolNfsv3: new FormControl(false, {
-        validators: [
-          CdValidators.requiredIf({ protocolNfsv4: false }, (value: boolean) => {
-            return !value;
-          })
-        ]
+        validators: [CdValidators.requiredIf({ protocolNfsv4: false }, (value: boolean) => !value)]
       }),
       protocolNfsv4: new FormControl(true, {
-        validators: [
-          CdValidators.requiredIf({ protocolNfsv3: false }, (value: boolean) => {
-            return !value;
-          })
-        ]
+        validators: [CdValidators.requiredIf({ protocolNfsv3: false }, (value: boolean) => !value)]
       }),
       tag: new FormControl(''),
       pseudo: new FormControl('', {
@@ -202,18 +192,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
         validators: [Validators.required]
       }),
       transportUDP: new FormControl(true, {
-        validators: [
-          CdValidators.requiredIf({ transportTCP: false }, (value: boolean) => {
-            return !value;
-          })
-        ]
+        validators: [CdValidators.requiredIf({ transportTCP: false }, (value: boolean) => !value)]
       }),
       transportTCP: new FormControl(true, {
-        validators: [
-          CdValidators.requiredIf({ transportUDP: false }, (value: boolean) => {
-            return !value;
-          })
-        ]
+        validators: [CdValidators.requiredIf({ transportUDP: false }, (value: boolean) => !value)]
       }),
       clients: this.formBuilder.array([]),
       security_label: new FormControl(false),
@@ -267,7 +249,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     this.allClusters = [];
     _.forIn(clusters, (cluster, cluster_id) => {
-      this.allClusters.push({ cluster_id: cluster_id, cluster_type: cluster[0].cluster_type });
+      this.allClusters.push({ cluster_id, cluster_type: cluster[0].cluster_type });
       this.allDaemons[cluster_id] = [];
     });
 
@@ -291,9 +273,9 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
   resolveFsals(res: string[]) {
     res.forEach((fsal) => {
-      const fsalItem = this.nfsService.nfsFsal.find((currentFsalItem) => {
-        return fsal === currentFsalItem.value;
-      });
+      const fsalItem = this.nfsService.nfsFsal.find(
+        (currentFsalItem) => fsal === currentFsalItem.value
+      );
 
       if (_.isObjectLike(fsalItem)) {
         this.allFsals.push(fsalItem);
@@ -474,7 +456,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
   onClusterChange() {
     const cluster_id = this.nfsForm.getValue('cluster_id');
-    this.clusterType = _.find(this.allClusters, { cluster_id: cluster_id })?.cluster_type;
+    this.clusterType = _.find(this.allClusters, { cluster_id })?.cluster_type;
     if (this.clusterType === NFSClusterType.user) {
       this.daemonsSelections = _.map(
         this.allDaemons[cluster_id],
@@ -509,7 +491,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     const cluster_id = this.nfsForm.getValue('cluster_id');
     const daemons =
       this.nfsForm.getValue('daemons').length === 0 ? this.allDaemons[cluster_id] : [];
-    this.nfsForm.patchValue({ daemons: daemons });
+    this.nfsForm.patchValue({ daemons });
   }
 
   submitAction() {

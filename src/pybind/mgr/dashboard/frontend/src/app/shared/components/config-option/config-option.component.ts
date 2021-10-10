@@ -3,10 +3,10 @@ import { FormControl, NgForm } from '@angular/forms';
 
 import _ from 'lodash';
 
+import { ConfigOptionTypes } from './config-option.types';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { ConfigOptionTypes } from './config-option.types';
 
 @Component({
   selector: 'cd-config-option',
@@ -65,9 +65,10 @@ export class ConfigOptionComponent implements OnInit {
 
         // Set general information and value
         configOption.text = ConfigOptionComponent.optionNameToText(configOption.name);
-        configOption.value = _.find(configOption.value, (p) => {
-          return p.section === 'osd'; // TODO: Can handle any other section
-        });
+        configOption.value = _.find(
+          configOption.value,
+          (p) => p.section === 'osd' // TODO: Can handle any other section
+        );
         if (configOption.value) {
           if (configOption.additionalTypeInfo.name === 'bool') {
             formControl.setValue(configOption.value.value === 'true');
@@ -105,7 +106,7 @@ export class ConfigOptionComponent implements OnInit {
       }
     });
 
-    return this.configService.bulkCreate({ options: options });
+    return this.configService.bulkCreate({ options });
   }
 
   resetValue(optionName: string) {

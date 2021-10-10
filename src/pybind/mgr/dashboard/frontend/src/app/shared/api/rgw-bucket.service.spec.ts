@@ -1,8 +1,8 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
 import { RgwBucketService } from './rgw-bucket.service';
+import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
 
 describe('RgwBucketService', () => {
   let service: RgwBucketService;

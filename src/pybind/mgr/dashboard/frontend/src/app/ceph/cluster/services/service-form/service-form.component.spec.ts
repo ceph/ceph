@@ -8,11 +8,11 @@ import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 
+import { ServiceFormComponent } from './service-form.component';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
-import { ServiceFormComponent } from './service-form.component';
 
 describe('ServiceFormComponent', () => {
   let component: ServiceFormComponent;

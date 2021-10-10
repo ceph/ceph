@@ -144,7 +144,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       });
       disks.push({
         name: `${disk.pool}/${disk.image}`,
-        cdId: cdId,
+        cdId,
         cdIcon: cssClasses.disks.leaf
       });
     });
@@ -184,7 +184,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       }
       clients.push({
         name: client.client_iqn,
-        status: status,
+        status,
         cdId: 'client_' + client.client_iqn,
         children: luns,
         cdIcon: cssClasses.initiators.leaf
@@ -325,13 +325,11 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
         });
       } else {
         this.detailTable?.toggleColumn({ prop: 'default', isHidden: false });
-        this.data = _.map(tempData, (value, key) => {
-          return {
-            displayName: key,
-            default: undefined,
-            current: this.format(value)
-          };
-        });
+        this.data = _.map(tempData, (value, key) => ({
+          displayName: key,
+          default: undefined,
+          current: this.format(value)
+        }));
       }
     } else {
       this.data = undefined;

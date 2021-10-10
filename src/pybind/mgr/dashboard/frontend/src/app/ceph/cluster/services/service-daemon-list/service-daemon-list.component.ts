@@ -198,8 +198,8 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     return _.get(
       {
         '-1': 'badge-danger',
-        '0': 'badge-warning',
-        '1': 'badge-success'
+        0: 'badge-warning',
+        1: 'badge-success'
       },
       row.status,
       'badge-dark'

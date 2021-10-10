@@ -5,6 +5,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import _ from 'lodash';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
+import { RoleFormMode } from './role-form-mode.enum';
+import { RoleFormModel } from './role-form.model';
 import { RoleService } from '~/app/shared/api/role.service';
 import { ScopeService } from '~/app/shared/api/scope.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -14,8 +16,6 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { RoleFormMode } from './role-form-mode.enum';
-import { RoleFormModel } from './role-form.model';
 
 @Component({
   selector: 'cd-role-form',
@@ -175,15 +175,14 @@ export class RoleFormComponent extends CdForm implements OnInit {
 
   /**
    * Checks if the specified row checkbox needs to be rendered as checked.
-   * @param {string} scope The scope to be checked, e.g. 'cephfs', 'grafana',
+   *
+   * @param scope The scope to be checked, e.g. 'cephfs', 'grafana',
    *   'osd', 'pool' ...
    * @return Returns true if all permissions (read, create, update, delete)
    *   are checked for the specified scope, otherwise false.
    */
   isRowChecked(scope: string) {
-    const scope_permission = _.find(this.scopes_permissions, (o) => {
-      return o['scope'] === scope;
-    });
+    const scope_permission = _.find(this.scopes_permissions, (o) => o['scope'] === scope);
     if (_.isUndefined(scope_permission)) {
       return false;
     }
@@ -197,7 +196,8 @@ export class RoleFormComponent extends CdForm implements OnInit {
 
   /**
    * Checks if the specified header checkbox needs to be rendered as checked.
-   * @param {string} property The property/permission (read, create,
+   *
+   * @param property The property/permission (read, create,
    *   update, delete) to be checked. If 'scope' is given, all permissions
    *   are checked.
    * @return Returns true if specified property/permission is selected
@@ -208,11 +208,9 @@ export class RoleFormComponent extends CdForm implements OnInit {
     if ('scope' === property) {
       permissions = ['read', 'create', 'update', 'delete'];
     }
-    return permissions.every((permission) => {
-      return this.scopes_permissions.every((scope_permission) => {
-        return scope_permission[permission];
-      });
-    });
+    return permissions.every((permission) =>
+      this.scopes_permissions.every((scope_permission) => scope_permission[permission])
+    );
   }
 
   onClickCellCheckbox(scope: string, property: string, event: any = null) {

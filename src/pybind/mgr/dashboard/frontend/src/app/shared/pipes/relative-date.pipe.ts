@@ -31,11 +31,12 @@ moment.updateLocale('en', {
 export class RelativeDatePipe implements PipeTransform {
   /**
    * Convert a time into a human readable form, e.g. '2 minutes ago'.
-   * @param {Date | string | number} value The date to convert, should be
+   *
+   * @param value The date to convert, should be
    *   an ISO8601 string, an Unix timestamp (seconds) or Date object.
-   * @param {boolean} upperFirst Set to `true` to start the sentence
+   * @param upperFirst Set to `true` to start the sentence
    *   upper case. Defaults to `true`.
-   * @return {string} The time in human readable form or an empty string
+   * @return The time in human readable form or an empty string
    *   on failure (e.g. invalid input).
    */
   transform(value: Date | string | number, upperFirst = true): string {

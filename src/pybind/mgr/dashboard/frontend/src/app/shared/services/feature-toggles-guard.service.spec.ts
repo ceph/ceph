@@ -5,10 +5,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of as observableOf } from 'rxjs';
 
-import { DashboardNotFoundError } from '~/app/core/error/error';
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { FeatureTogglesGuardService } from './feature-toggles-guard.service';
 import { FeatureTogglesService } from './feature-toggles.service';
+import { DashboardNotFoundError } from '~/app/core/error/error';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('FeatureTogglesGuardService', () => {
   let service: FeatureTogglesGuardService;
@@ -53,7 +53,7 @@ describe('FeatureTogglesGuardService', () => {
 
     ngZone.run(() => {
       service
-        .canActivate(<ActivatedRouteSnapshot>{ routeConfig: { path: path } })
+        .canActivate(<ActivatedRouteSnapshot>{ routeConfig: { path } })
         .subscribe((val) => (result = val));
     });
     tick();

@@ -189,9 +189,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   editAction() {
     this.hostService.getLabels().subscribe((resp: string[]) => {
       const host = this.selection.first();
-      const allLabels = resp.map((label) => {
-        return { enabled: true, name: label };
-      });
+      const allLabels = resp.map((label) => ({ enabled: true, name: label }));
       this.modalService.show(FormModalComponent, {
         titleText: $localize`Edit Host: ${host.hostname}`,
         fields: [
@@ -312,7 +310,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
       actionDescription: 'delete',
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('host/delete', { hostname: hostname }),
+          task: new FinishedTask('host/delete', { hostname }),
           call: this.hostService.delete(hostname)
         })
     });

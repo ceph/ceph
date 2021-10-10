@@ -5,13 +5,13 @@ import _ from 'lodash';
 import { Observable, of as observableOf } from 'rxjs';
 import { map, mergeMap, toArray } from 'rxjs/operators';
 
-import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
-import { InventoryHost } from '~/app/ceph/cluster/inventory/inventory-host.model';
-import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 import { Daemon } from '../models/daemon.interface';
 import { CdDevice } from '../models/devices';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
+import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
+import { InventoryHost } from '~/app/ceph/cluster/inventory/inventory-host.model';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 
 @Injectable({
   providedIn: 'root'
@@ -29,7 +29,7 @@ export class HostService {
   create(hostname: string, addr: string, labels: string[], status: string) {
     return this.http.post(
       this.baseURL,
-      { hostname: hostname, addr: addr, labels: labels, status: status },
+      { hostname, addr, labels, status },
       { observe: 'response', headers: { Accept: CdHelperClass.cdVersionHeader('0', '1') } }
     );
   }
@@ -67,9 +67,9 @@ export class HostService {
       `${this.baseURL}/${hostname}`,
       {
         update_labels: updateLabels,
-        labels: labels,
-        maintenance: maintenance,
-        force: force
+        labels,
+        maintenance,
+        force
       },
       { headers: { Accept: 'application/vnd.ceph.api.v0.1+json' } }
     );
@@ -99,7 +99,7 @@ export class HostService {
   getInventory(hostname: string, refresh?: boolean): Observable<InventoryHost> {
     const params = this.getInventoryParams(refresh);
     return this.http.get<InventoryHost>(`${this.baseURL}/${hostname}/inventory`, {
-      params: params
+      params
     });
   }
 
@@ -110,7 +110,7 @@ export class HostService {
    */
   inventoryList(refresh?: boolean): Observable<InventoryHost[]> {
     const params = this.getInventoryParams(refresh);
-    return this.http.get<InventoryHost[]>(`${this.baseUIURL}/inventory`, { params: params });
+    return this.http.get<InventoryHost[]>(`${this.baseUIURL}/inventory`, { params });
   }
 
   /**
@@ -128,13 +128,13 @@ export class HostService {
     }
     return observable.pipe(
       mergeMap((hosts: InventoryHost[]) => {
-        const devices = _.flatMap(hosts, (host) => {
-          return host.devices.map((device) => {
+        const devices = _.flatMap(hosts, (host) =>
+          host.devices.map((device) => {
             device.hostname = host.name;
             device.uid = device.device_id ? device.device_id : `${device.hostname}-${device.path}`;
             return device;
-          });
-        });
+          })
+        );
         return observableOf(devices);
       })
     );

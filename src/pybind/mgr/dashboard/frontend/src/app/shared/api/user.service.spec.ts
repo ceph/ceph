@@ -1,9 +1,9 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
+import { UserService } from './user.service';
 import { UserFormModel } from '~/app/core/auth/user-form/user-form.model';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { UserService } from './user.service';
 
 describe('UserService', () => {
   let service: UserService;

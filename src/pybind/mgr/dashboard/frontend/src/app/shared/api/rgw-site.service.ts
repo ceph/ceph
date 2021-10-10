@@ -18,7 +18,7 @@ export class RgwSiteService {
       if (query) {
         params = params.append('query', query);
       }
-      return this.http.get(this.url, { params: params });
+      return this.http.get(this.url, { params });
     });
   }
 }

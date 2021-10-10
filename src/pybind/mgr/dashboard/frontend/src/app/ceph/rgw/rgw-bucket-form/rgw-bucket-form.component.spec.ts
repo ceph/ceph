@@ -8,6 +8,9 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf, throwError } from 'rxjs';
 
+import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
+import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
+import { RgwBucketFormComponent } from './rgw-bucket-form.component';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
@@ -15,9 +18,6 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
-import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
-import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
-import { RgwBucketFormComponent } from './rgw-bucket-form.component';
 
 describe('RgwBucketFormComponent', () => {
   let component: RgwBucketFormComponent;
@@ -200,7 +200,7 @@ describe('RgwBucketFormComponent', () => {
       component.submit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        `Created Object Gateway bucket 'null'`
+        'Created Object Gateway bucket \'null\''
       );
     });
 
@@ -211,7 +211,7 @@ describe('RgwBucketFormComponent', () => {
       component.submit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        `Updated Object Gateway bucket 'null'.`
+        'Updated Object Gateway bucket \'null\'.'
       );
     });
   });

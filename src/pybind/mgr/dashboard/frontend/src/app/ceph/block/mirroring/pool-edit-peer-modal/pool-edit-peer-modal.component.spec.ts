@@ -7,12 +7,12 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { PoolEditPeerModalComponent } from './pool-edit-peer-modal.component';
+import { PoolEditPeerResponseModel } from './pool-edit-peer-response.model';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
-import { PoolEditPeerModalComponent } from './pool-edit-peer-modal.component';
-import { PoolEditPeerResponseModel } from './pool-edit-peer-response.model';
 
 describe('PoolEditPeerModalComponent', () => {
   let component: PoolEditPeerModalComponent;

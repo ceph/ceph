@@ -34,10 +34,11 @@ export class CdValidators {
 
   /**
    * Validator function in order to validate IP addresses.
-   * @param {number} version determines the protocol version. It needs to be set to 4 for IPv4 and
+   *
+   * @param version determines the protocol version. It needs to be set to 4 for IPv4 and
    *   to 6 for IPv6 validation. For any other number (it's also the default case) it will return a
    *   function to validate the input string against IPv4 OR IPv6.
-   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   * @returns A validator function that returns an error map containing `pattern`
    *   if the validation check fails, otherwise `null`.
    */
   static ip(version: number = 0): ValidatorFn {
@@ -57,7 +58,8 @@ export class CdValidators {
 
   /**
    * Validator function in order to validate numbers.
-   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   *
+   * @returns A validator function that returns an error map containing `pattern`
    *   if the validation check fails, otherwise `null`.
    */
   static number(allowsNegative: boolean = true): ValidatorFn {
@@ -70,7 +72,8 @@ export class CdValidators {
 
   /**
    * Validator function in order to validate decimal numbers.
-   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   *
+   * @returns A validator function that returns an error map containing `pattern`
    *   if the validation check fails, otherwise `null`.
    */
   static decimalNumber(allowsNegative: boolean = true): ValidatorFn {
@@ -83,7 +86,8 @@ export class CdValidators {
 
   /**
    * Validator that performs SSL certificate validation.
-   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   *
+   * @returns A validator function that returns an error map containing `pattern`
    *   if the validation check fails, otherwise `null`.
    */
   static sslCert(): ValidatorFn {
@@ -94,7 +98,8 @@ export class CdValidators {
 
   /**
    * Validator that performs SSL private key validation.
-   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   *
+   * @returns A validator function that returns an error map containing `pattern`
    *   if the validation check fails, otherwise `null`.
    */
   static sslPrivKey(): ValidatorFn {
@@ -105,7 +110,8 @@ export class CdValidators {
 
   /**
    * Validator that performs SSL certificate validation of pem format.
-   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   *
+   * @returns A validator function that returns an error map containing `pattern`
    *   if the validation check fails, otherwise `null`.
    */
   static pemCert(): ValidatorFn {
@@ -117,7 +123,8 @@ export class CdValidators {
    * the specified prerequisites matches. If the prerequisites are fulfilled,
    * then the given function is executed and if it succeeds, the 'required'
    * validation error will be returned, otherwise null.
-   * @param {Object} prerequisites An object containing the prerequisites.
+   *
+   * @param prerequisites An object containing the prerequisites.
    *   To do additional checks rather than checking for equality you can
    *   use the extended prerequisite syntax:
    *     'field_name': { 'op': '<OPERATOR>', arg1: '<OPERATOR_ARGUMENT>' }
@@ -143,11 +150,11 @@ export class CdValidators {
    *   ```
    *   Only if all prerequisites are fulfilled, then the validation of the
    *   control will be triggered.
-   * @param {Function | undefined} condition The function to be executed when all
+   * @param condition The function to be executed when all
    *   prerequisites are fulfilled. If not set, then the {@link isEmptyInputValue}
    *   function will be used by default. The control's value is used as function
    *   argument. The function must return true to set the validation error.
-   * @return {ValidatorFn} Returns the validator function.
+   * @return Returns the validator function.
    */
   static requiredIf(prerequisites: object, condition?: Function | undefined): ValidatorFn {
     let isWatched = false;
@@ -211,7 +218,7 @@ export class CdValidators {
    * the individual error maps for the provided control when the given prerequisites
    * are fulfilled.
    *
-   * @param {Object} prerequisites An object containing the prerequisites as
+   * @param prerequisites An object containing the prerequisites as
    *   key/value pairs.
    *   ### Example
    *   ```typescript
@@ -220,9 +227,9 @@ export class CdValidators {
    *     'username': 'Max Mustermann'
    *   }
    *   ```
-   * @param {ValidatorFn[]} validators List of validators that should be taken
+   * @param validators List of validators that should be taken
    *   into action when the prerequisites are met.
-   * @return {ValidatorFn} Returns the validator function.
+   * @return Returns the validator function.
    */
   static composeIf(prerequisites: object, validators: ValidatorFn[]): ValidatorFn {
     let isWatched = false;
@@ -237,9 +244,9 @@ export class CdValidators {
       }
       // Check if all prerequisites are met.
       if (
-        !Object.keys(prerequisites).every((key) => {
-          return control.parent && control.parent.get(key).value === prerequisites[key];
-        })
+        !Object.keys(prerequisites).every(
+          (key) => control.parent && control.parent.get(key).value === prerequisites[key]
+        )
       ) {
         return null;
       }
@@ -250,9 +257,9 @@ export class CdValidators {
   /**
    * Custom validation by passing a name for the error and a function as error condition.
    *
-   * @param {string} error
-   * @param {Function} condition - a truthy return value will trigger the error
-   * @returns {ValidatorFn}
+   * @param error
+   * @param condition - a truthy return value will trigger the error
+   * @returns
    */
   static custom(error: string, condition: Function): ValidatorFn {
     return (control: AbstractControl): { [key: string]: any } => {
@@ -267,12 +274,12 @@ export class CdValidators {
   /**
    * Validate form control if condition is true with validators.
    *
-   * @param {AbstractControl} formControl
-   * @param {Function} condition
-   * @param {ValidatorFn[]} conditionalValidators List of validators that should only be tested
+   * @param formControl
+   * @param condition
+   * @param conditionalValidators List of validators that should only be tested
    * when the condition is met
-   * @param {ValidatorFn[]} permanentValidators List of validators that should always be tested
-   * @param {AbstractControl[]} watchControls List of controls that the condition depend on.
+   * @param permanentValidators List of validators that should always be tested
+   * @param watchControls List of controls that the condition depend on.
    * Every time one of this controls value is updated, the validation will be triggered
    */
   static validateIf(
@@ -307,9 +314,10 @@ export class CdValidators {
   /**
    * Validator that requires that both specified controls have the same value.
    * Error will be added to the `path2` control.
-   * @param {string} path1 A dot-delimited string that define the path to the control.
-   * @param {string} path2 A dot-delimited string that define the path to the control.
-   * @return {ValidatorFn} Returns a validator function that always returns `null`.
+   *
+   * @param path1 A dot-delimited string that define the path to the control.
+   * @param path2 A dot-delimited string that define the path to the control.
+   * @return Returns a validator function that always returns `null`.
    *   If the validation fails an error map with the `match` property will be set
    *   on the `path2` control.
    */
@@ -341,15 +349,16 @@ export class CdValidators {
    * Asynchronous validator that requires the control's value to be unique.
    * The validation is only executed after the specified delay. Every
    * keystroke during this delay will restart the timer.
+   *
    * @param serviceFn {existsServiceFn} The service function that is
    *   called to check whether the given value exists. It must return
    *   boolean 'true' if the given value exists, otherwise 'false'.
    * @param serviceFnThis {any} The object to be used as the 'this' object
    *   when calling the serviceFn function. Defaults to null.
-   * @param {number|Date} dueTime The delay time to wait before the
+   * @param dueTime The delay time to wait before the
    *   serviceFn call is executed. This is useful to prevent calls on
    *   every keystroke. Defaults to 500.
-   * @return {AsyncValidatorFn} Returns an asynchronous validator function
+   * @return Returns an asynchronous validator function
    *   that returns an error map with the `notUnique` property if the
    *   validation check succeeds, otherwise `null`.
    */
@@ -391,6 +400,7 @@ export class CdValidators {
 
   /**
    * Validator function for UUIDs.
+   *
    * @param required - Defines if it is mandatory to fill in the UUID
    * @return Validator function that returns an error object containing `invalidUuid` if the
    * validation failed, `null` otherwise.
@@ -452,13 +462,14 @@ export class CdValidators {
   /**
    * Asynchronous validator that checks if the password meets the password
    * policy.
+   *
    * @param userServiceThis The object to be used as the 'this' object
    *   when calling the 'validatePassword' method of the 'UserService'.
    * @param usernameFn Function to get the username that should be
    *   taken into account.
    * @param callback Callback function that is called after the validation
    *   has been done.
-   * @return {AsyncValidatorFn} Returns an asynchronous validator function
+   * @return Returns an asynchronous validator function
    *   that returns an error map with the `passwordPolicy` property if the
    *   validation check fails, otherwise `null`.
    */

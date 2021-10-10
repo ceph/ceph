@@ -8,12 +8,12 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
+import { TelemetryComponent } from './telemetry.component';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { DownloadButtonComponent } from '~/app/shared/components/download-button/download-button.component';
 import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { TelemetryComponent } from './telemetry.component';
 
 describe('TelemetryComponent', () => {
   let component: TelemetryComponent;
@@ -132,7 +132,7 @@ describe('TelemetryComponent', () => {
 
     it('should disable the Telemetry module', () => {
       const message = 'Module disabled message.';
-      const followUpFunc = function () {
+      const followUpFunc = function() {
         return 'followUp';
       };
       component.disableModule(message, followUpFunc);

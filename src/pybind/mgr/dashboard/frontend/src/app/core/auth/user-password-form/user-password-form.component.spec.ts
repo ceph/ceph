@@ -6,12 +6,12 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
+import { UserPasswordFormComponent } from './user-password-form.component';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
-import { UserPasswordFormComponent } from './user-password-form.component';
 
 describe('UserPasswordFormComponent', () => {
   let component: UserPasswordFormComponent;

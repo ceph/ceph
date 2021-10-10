@@ -5,6 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import _ from 'lodash';
 import moment from 'moment';
 
+import { SilenceMatcherModalComponent } from '../silence-matcher-modal/silence-matcher-modal.component';
 import { DashboardNotFoundError } from '~/app/core/error/error';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { ActionLabelsI18n, SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -25,7 +26,6 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheus-silence-matcher.service';
 import { TimeDiffService } from '~/app/shared/services/time-diff.service';
-import { SilenceMatcherModalComponent } from '../silence-matcher-modal/silence-matcher-modal.component';
 
 @Component({
   selector: 'cd-prometheus-form',

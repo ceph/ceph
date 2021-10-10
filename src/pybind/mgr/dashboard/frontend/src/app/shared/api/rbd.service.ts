@@ -137,12 +137,12 @@ export class RbdService {
   }
 
   listTrash() {
-    return this.http.get(`api/block/image/trash/`);
+    return this.http.get('api/block/image/trash/');
   }
 
   createNamespace(pool: string, namespace: string) {
     const request = {
-      namespace: namespace
+      namespace
     };
     return this.http.post(`api/block/pool/${pool}/namespace`, request, { observe: 'response' });
   }
@@ -160,7 +160,7 @@ export class RbdService {
   moveTrash(imageSpec: ImageSpec, delay: number) {
     return this.http.post(
       `api/block/image/${imageSpec.toStringEncoded()}/move_trash`,
-      { delay: delay },
+      { delay },
       { observe: 'response' }
     );
   }

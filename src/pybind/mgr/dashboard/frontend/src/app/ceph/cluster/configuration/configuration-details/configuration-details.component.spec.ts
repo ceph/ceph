@@ -1,9 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { ConfigurationDetailsComponent } from './configuration-details.component';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { ConfigurationDetailsComponent } from './configuration-details.component';
 
 describe('ConfigurationDetailsComponent', () => {
   let component: ConfigurationDetailsComponent;

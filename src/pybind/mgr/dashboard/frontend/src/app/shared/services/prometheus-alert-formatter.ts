@@ -26,17 +26,15 @@ export class PrometheusAlertFormatter {
     alerts: (AlertmanagerNotificationAlert | AlertmanagerAlert)[]
   ): PrometheusCustomAlert[] {
     return _.uniqWith(
-      alerts.map((alert) => {
-        return {
-          status: _.isObject(alert.status)
-            ? (alert as AlertmanagerAlert).status.state
-            : this.getPrometheusNotificationStatus(alert as AlertmanagerNotificationAlert),
-          name: alert.labels.alertname,
-          url: alert.generatorURL,
-          description: alert.annotations.description,
-          fingerprint: _.isObject(alert.status) && (alert as AlertmanagerAlert).fingerprint
-        };
-      }),
+      alerts.map((alert) => ({
+        status: _.isObject(alert.status)
+          ? (alert as AlertmanagerAlert).status.state
+          : this.getPrometheusNotificationStatus(alert as AlertmanagerNotificationAlert),
+        name: alert.labels.alertname,
+        url: alert.generatorURL,
+        description: alert.annotations.description,
+        fingerprint: _.isObject(alert.status) && (alert as AlertmanagerAlert).fingerprint
+      })),
       _.isEqual
     ) as PrometheusCustomAlert[];
   }

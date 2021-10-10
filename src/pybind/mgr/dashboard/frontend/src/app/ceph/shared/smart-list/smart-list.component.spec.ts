@@ -9,11 +9,11 @@ import _ from 'lodash';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { of } from 'rxjs';
 
+import { SmartListComponent } from './smart-list.component';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { HddSmartDataV1, NvmeSmartDataV1, SmartDataResult } from '~/app/shared/models/smart';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { SmartListComponent } from './smart-list.component';
 
 describe('OsdSmartListComponent', () => {
   let component: SmartListComponent;
@@ -36,8 +36,8 @@ describe('OsdSmartListComponent', () => {
    * @param path The path to the attribute
    * @param newValue The new value
    */
-  const patchData = (path: string, newValue: any): any => {
-    return _.reduce(
+  const patchData = (path: string, newValue: any): any =>
+    _.reduce(
       _.cloneDeep(SMART_DATA_HDD_VERSION_1_0),
       (result: object, dataObj, deviceId) => {
         result[deviceId] = _.set<any>(dataObj, path, newValue);
@@ -45,7 +45,6 @@ describe('OsdSmartListComponent', () => {
       },
       {}
     );
-  };
 
   /**
    * Initializes the component after it spied upon the `getSmartData()` method

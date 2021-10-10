@@ -152,13 +152,11 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
     this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: this.selection.hasSingleSelection ? $localize`user` : $localize`users`,
       itemNames: this.selection.selected.map((user: any) => user['uid']),
-      submitActionObservable: (): Observable<any> => {
-        return new Observable((observer: Subscriber<any>) => {
+      submitActionObservable: (): Observable<any> =>
+        new Observable((observer: Subscriber<any>) => {
           // Delete all selected data table rows.
           observableForkJoin(
-            this.selection.selected.map((user: any) => {
-              return this.rgwUserService.delete(user.uid);
-            })
+            this.selection.selected.map((user: any) => this.rgwUserService.delete(user.uid))
           ).subscribe({
             error: (error) => {
               // Forward the error to the observer.
@@ -174,8 +172,7 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
               this.table.refreshBtn();
             }
           });
-        });
-      }
+        })
     });
   }
 }

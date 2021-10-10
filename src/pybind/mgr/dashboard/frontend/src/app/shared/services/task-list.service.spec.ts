@@ -4,12 +4,12 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of } from 'rxjs';
 
-import { configureTestBed, expectItemTasks } from '~/testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { ExecutingTask } from '../models/executing-task';
 import { SummaryService } from './summary.service';
 import { TaskListService } from './task-list.service';
 import { TaskMessageService } from './task-message.service';
+import { configureTestBed, expectItemTasks } from '~/testing/unit-test-helper';
 
 describe('TaskListService', () => {
   let service: TaskListService;
@@ -21,7 +21,7 @@ describe('TaskListService', () => {
   let tasks: any[];
 
   const addItem = (name: string) => {
-    apiResp.push({ name: name });
+    apiResp.push({ name });
   };
 
   configureTestBed({

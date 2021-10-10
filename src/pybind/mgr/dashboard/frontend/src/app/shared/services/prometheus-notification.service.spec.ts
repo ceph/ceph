@@ -4,7 +4,6 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ToastrModule, ToastrService } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
-import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
 import { PrometheusService } from '../api/prometheus.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
@@ -13,6 +12,7 @@ import { SharedModule } from '../shared.module';
 import { NotificationService } from './notification.service';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
 import { PrometheusNotificationService } from './prometheus-notification.service';
+import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
 
 describe('PrometheusNotificationService', () => {
   let service: PrometheusNotificationService;

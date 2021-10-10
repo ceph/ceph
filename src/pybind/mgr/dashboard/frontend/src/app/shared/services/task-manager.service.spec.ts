@@ -3,9 +3,9 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import _ from 'lodash';
 import { BehaviorSubject } from 'rxjs';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { SummaryService } from './summary.service';
 import { TaskManagerService } from './task-manager.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 const summary: Record<string, any> = {
   executing_tasks: [],

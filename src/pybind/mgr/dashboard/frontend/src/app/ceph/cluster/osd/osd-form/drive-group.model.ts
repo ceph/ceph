@@ -31,17 +31,14 @@ export class DriveGroup {
       },
       human_readable_type: {
         name: 'rotational',
-        formatter: (value: string) => {
-          return value.toLowerCase() === 'hdd';
-        }
+        formatter: (value: string) => value.toLowerCase() === 'hdd'
       },
       'sys_api.size': {
         name: 'size',
-        formatter: (value: string) => {
-          return this.formatterService
+        formatter: (value: string) =>
+          this.formatterService
             .format_number(value, 1024, ['B', 'KB', 'MB', 'GB', 'TB', 'PB'])
-            .replace(' ', '');
-        }
+            .replace(' ', '')
       }
     };
   }

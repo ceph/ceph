@@ -1,9 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
 import { PrometheusRule } from '../models/prometheus-alerts';
 import { SharedModule } from '../shared.module';
 import { PrometheusSilenceMatcherService } from './prometheus-silence-matcher.service';
+import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
 
 describe('PrometheusSilenceMatcherService', () => {
   let service: PrometheusSilenceMatcherService;
@@ -15,8 +15,8 @@ describe('PrometheusSilenceMatcherService', () => {
   });
 
   const addMatcher = (name: string, value: any) => ({
-    name: name,
-    value: value,
+    name,
+    value,
     isRegex: false
   });
 

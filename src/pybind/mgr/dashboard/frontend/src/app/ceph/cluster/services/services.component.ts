@@ -2,6 +2,7 @@ import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
 
 import { delay } from 'rxjs/operators';
 
+import { PlacementPipe } from './placement.pipe';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -23,7 +24,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { PlacementPipe } from './placement.pipe';
 
 const BASE_URL = 'services';
 
@@ -119,9 +119,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       }
     ];
 
-    this.columns = columns.filter((col: any) => {
-      return !this.hiddenColumns.includes(col.prop);
-    });
+    this.columns = columns.filter((col: any) => !this.hiddenColumns.includes(col.prop));
 
     this.orchService.status().subscribe((status: OrchestratorStatus) => {
       this.orchStatus = status;

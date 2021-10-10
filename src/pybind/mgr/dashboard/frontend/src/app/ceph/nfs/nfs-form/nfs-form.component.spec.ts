@@ -7,13 +7,13 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
+import { NFSClusterType } from '../nfs-cluster-type.enum';
+import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
+import { NfsFormComponent } from './nfs-form.component';
 import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ActivatedRouteStub } from '~/testing/activated-route-stub';
 import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
-import { NFSClusterType } from '../nfs-cluster-type.enum';
-import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
-import { NfsFormComponent } from './nfs-form.component';
 
 describe('NfsFormComponent', () => {
   let component: NfsFormComponent;

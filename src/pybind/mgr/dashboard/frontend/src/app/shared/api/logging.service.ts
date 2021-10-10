@@ -9,9 +9,9 @@ export class LoggingService {
 
   jsError(url: string, message: string, stack: any) {
     const request = {
-      url: url,
-      message: message,
-      stack: stack
+      url,
+      message,
+      stack
     };
     return this.http.post('ui-api/logging/js-error', request);
   }

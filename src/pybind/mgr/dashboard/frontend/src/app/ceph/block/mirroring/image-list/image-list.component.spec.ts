@@ -4,10 +4,10 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { NgbNavModule, NgbProgressbarModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { SharedModule } from '~/app/shared/shared.module';
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { MirrorHealthColorPipe } from '../mirror-health-color.pipe';
 import { ImageListComponent } from './image-list.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('ImageListComponent', () => {
   let component: ImageListComponent;

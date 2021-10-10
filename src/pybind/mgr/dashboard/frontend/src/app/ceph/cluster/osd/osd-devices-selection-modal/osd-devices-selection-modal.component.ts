@@ -51,9 +51,10 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
   ngAfterViewInit() {
     // At least one filter other than hostname is required
     // Extract the name from table columns for i18n strings
-    const cols = _.filter(this.inventoryDevices.columns, (col) => {
-      return this.filterColumns.includes(col.prop) && col.prop !== 'hostname';
-    });
+    const cols = _.filter(
+      this.inventoryDevices.columns,
+      (col) => this.filterColumns.includes(col.prop) && col.prop !== 'hostname'
+    );
     // Fixes 'ExpressionChangedAfterItHasBeenCheckedError'
     setTimeout(() => {
       this.requiredFilters = _.map(cols, 'name');
@@ -73,9 +74,7 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
       this.event = undefined;
     } else {
       // at least one filter is required (except hostname)
-      const filters = event.filters.filter((filter) => {
-        return filter.prop !== 'hostname';
-      });
+      const filters = event.filters.filter((filter) => filter.prop !== 'hostname');
       this.canSubmit = !_.isEmpty(filters);
       this.filteredDevices = event.data;
       this.capacity = _.sumBy(this.filteredDevices, 'sys_api.size');

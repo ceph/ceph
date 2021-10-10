@@ -10,6 +10,8 @@ import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
+import { RbdTrashListComponent } from './rbd-trash-list.component';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
@@ -18,8 +20,6 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks } from '~/testing/unit-test-helper';
-import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
-import { RbdTrashListComponent } from './rbd-trash-list.component';
 
 describe('RbdTrashListComponent', () => {
   let component: RbdTrashListComponent;
@@ -71,7 +71,7 @@ describe('RbdTrashListComponent', () => {
 
     const addImage = (id: string) => {
       images.push({
-        id: id,
+        id,
         pool_name: 'pl'
       });
     };
@@ -117,7 +117,7 @@ describe('RbdTrashListComponent', () => {
     let images: any[];
     const addImage = (id: string) => {
       images.push({
-        id: id,
+        id,
         pool_name: 'pl',
         deferment_end_time: moment()
       });

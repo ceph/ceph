@@ -6,6 +6,12 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
+import { OsdFlagsIndivModalComponent } from '../osd-flags-indiv-modal/osd-flags-indiv-modal.component';
+import { OsdFlagsModalComponent } from '../osd-flags-modal/osd-flags-modal.component';
+import { OsdPgScrubModalComponent } from '../osd-pg-scrub-modal/osd-pg-scrub-modal.component';
+import { OsdRecvSpeedModalComponent } from '../osd-recv-speed-modal/osd-recv-speed-modal.component';
+import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
+import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.component';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -30,12 +36,6 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { OsdFlagsIndivModalComponent } from '../osd-flags-indiv-modal/osd-flags-indiv-modal.component';
-import { OsdFlagsModalComponent } from '../osd-flags-modal/osd-flags-modal.component';
-import { OsdPgScrubModalComponent } from '../osd-pg-scrub-modal/osd-pg-scrub-modal.component';
-import { OsdRecvSpeedModalComponent } from '../osd-recv-speed-modal/osd-recv-speed-modal.component';
-import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
-import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.component';
 
 const BASE_URL = 'osd';
 
@@ -183,9 +183,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
             $localize`Mark`,
             $localize`OSD lost`,
             $localize`marked lost`,
-            (ids: number[]) => {
-              return this.osdService.safeToDestroy(JSON.stringify(ids));
-            },
+            (ids: number[]) => this.osdService.safeToDestroy(JSON.stringify(ids)),
             'is_safe_to_destroy',
             this.osdService.markLost
           ),
@@ -200,9 +198,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
             $localize`Purge`,
             $localize`OSD`,
             $localize`purged`,
-            (ids: number[]) => {
-              return this.osdService.safeToDestroy(JSON.stringify(ids));
-            },
+            (ids: number[]) => this.osdService.safeToDestroy(JSON.stringify(ids)),
             'is_safe_to_destroy',
             (id: number) => {
               this.selection = new CdTableSelection();
@@ -220,9 +216,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
             $localize`destroy`,
             $localize`OSD`,
             $localize`destroyed`,
-            (ids: number[]) => {
-              return this.osdService.safeToDestroy(JSON.stringify(ids));
-            },
+            (ids: number[]) => this.osdService.safeToDestroy(JSON.stringify(ids)),
             'is_safe_to_destroy',
             (id: number) => {
               this.selection = new CdTableSelection();
@@ -468,7 +462,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
 
     const initialState = {
       selected: this.getSelectedOsdIds(),
-      deep: deep
+      deep
     };
 
     this.bsModalRef = this.modalService.show(OsdScrubModalComponent, initialState);
@@ -520,9 +514,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       $localize`delete`,
       $localize`OSD`,
       $localize`deleted`,
-      (ids: number[]) => {
-        return this.osdService.safeToDelete(JSON.stringify(ids));
-      },
+      (ids: number[]) => this.osdService.safeToDelete(JSON.stringify(ids)),
       'is_safe_to_delete',
       (id: number) => {
         this.selection = new CdTableSelection();
@@ -541,15 +533,16 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
 
   /**
    * Perform check first and display a critical confirmation modal.
-   * @param {string} actionDescription name of the action.
-   * @param {string} itemDescription the item's name that the action operates on.
-   * @param {string} templateItemDescription the action name to be displayed in modal template.
-   * @param {Function} check the function is called to check if the action is safe.
-   * @param {string} checkKey the safe indicator's key in the check response.
-   * @param {Function} action the action function.
-   * @param {boolean} taskWrapped if true, hide confirmation modal after action
-   * @param {CdFormGroup} childFormGroup additional child form group to be passed to confirmation modal
-   * @param {TemplateRef<any>} childFormGroupTemplate template for additional child form group
+   *
+   * @param actionDescription name of the action.
+   * @param itemDescription the item's name that the action operates on.
+   * @param templateItemDescription the action name to be displayed in modal template.
+   * @param check the function is called to check if the action is safe.
+   * @param checkKey the safe indicator's key in the check response.
+   * @param action the action function.
+   * @param taskWrapped if true, hide confirmation modal after action
+   * @param childFormGroup additional child form group to be passed to confirmation modal
+   * @param childFormGroupTemplate template for additional child form group
    */
   showCriticalConfirmationModal(
     actionDescription: string,
@@ -564,8 +557,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   ): void {
     check(this.getSelectedOsdIds()).subscribe((result) => {
       const modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-        actionDescription: actionDescription,
-        itemDescription: itemDescription,
+        actionDescription,
+        itemDescription,
         bodyTemplate: this.criticalConfirmationTpl,
         bodyContext: {
           safeToPerform: result[checkKey],
@@ -573,8 +566,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
           actionDescription: templateItemDescription,
           osdIds: this.getSelectedOsdIds()
         },
-        childFormGroup: childFormGroup,
-        childFormGroupTemplate: childFormGroupTemplate,
+        childFormGroup,
+        childFormGroupTemplate,
         submitAction: () => {
           const observable = observableForkJoin(
             this.getSelectedOsdIds().map((osd: any) => action.call(this.osdService, osd))

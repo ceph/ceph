@@ -2,8 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { AlertPanelComponent } from './alert-panel.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('AlertPanelComponent', () => {
   let component: AlertPanelComponent;

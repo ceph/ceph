@@ -6,10 +6,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
+import { ConfigurationFormComponent } from './configuration-form.component';
 import { ConfigFormModel } from '~/app/shared/components/config-option/config-option.model';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { ConfigurationFormComponent } from './configuration-form.component';
 
 describe('ConfigurationFormComponent', () => {
   let component: ConfigurationFormComponent;

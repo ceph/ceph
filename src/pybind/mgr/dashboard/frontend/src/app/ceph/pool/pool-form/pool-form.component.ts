@@ -6,6 +6,10 @@ import { NgbNav, NgbTooltip } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Observable, ReplaySubject, Subscription } from 'rxjs';
 
+import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule-form-modal.component';
+import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
+import { Pool } from '../pool';
+import { PoolFormData } from './pool-form-data';
 import { DashboardNotFoundError } from '~/app/core/error/error';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
@@ -33,10 +37,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule-form-modal.component';
-import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
-import { Pool } from '../pool';
-import { PoolFormData } from './pool-form-data';
 
 interface FormFieldDescription {
   externalFieldName: string;
@@ -139,14 +139,14 @@ export class PoolFormComponent extends CdForm implements OnInit {
           validators: [
             Validators.pattern(/^[.A-Za-z0-9_/-]+$/),
             Validators.required,
-            CdValidators.custom('rbdPool', () => {
-              return (
+            CdValidators.custom(
+              'rbdPool',
+              () =>
                 this.form &&
                 this.form.getValue('name').includes('/') &&
                 this.data &&
                 this.data.applications.selected.indexOf('rbd') !== -1
-              );
-            })
+            )
           ]
         }),
         poolType: new FormControl('', {
@@ -682,7 +682,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
         const deletion = deleteFn(name);
         deletion.subscribe(() => reloadFn());
         return this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(taskName, { name: name }),
+          task: new FinishedTask(taskName, { name }),
           call: deletion
         });
       }
@@ -755,10 +755,10 @@ export class PoolFormComponent extends CdForm implements OnInit {
       this.isReplicated
         ? { externalFieldName: 'size', formControlName: 'size' }
         : {
-            externalFieldName: 'erasure_code_profile',
-            formControlName: 'erasureProfile',
-            attr: 'name'
-          },
+          externalFieldName: 'erasure_code_profile',
+          formControlName: 'erasureProfile',
+          attr: 'name'
+        },
       {
         externalFieldName: 'rule_name',
         formControlName: 'crushRule',
@@ -903,7 +903,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       .subscribe({
         error: (resp) => {
           if (_.isObject(resp.error) && resp.error.code === '34') {
-            this.form.get('pgNum').setErrors({ '34': true });
+            this.form.get('pgNum').setErrors({ 34: true });
           }
           this.form.setErrors({ cdSubmitButton: true });
         },

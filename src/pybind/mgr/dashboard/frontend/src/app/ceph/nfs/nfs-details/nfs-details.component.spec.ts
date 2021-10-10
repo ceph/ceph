@@ -6,9 +6,9 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
+import { NfsDetailsComponent } from './nfs-details.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { NfsDetailsComponent } from './nfs-details.component';
 
 describe('NfsDetailsComponent', () => {
   let component: NfsDetailsComponent;

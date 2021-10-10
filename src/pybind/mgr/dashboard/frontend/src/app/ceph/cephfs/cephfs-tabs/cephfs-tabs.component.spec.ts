@@ -8,15 +8,15 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { CephfsClientsComponent } from '../cephfs-clients/cephfs-clients.component';
+import { CephfsDetailComponent } from '../cephfs-detail/cephfs-detail.component';
+import { CephfsDirectoriesComponent } from '../cephfs-directories/cephfs-directories.component';
+import { CephfsTabsComponent } from './cephfs-tabs.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
 import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { CephfsClientsComponent } from '../cephfs-clients/cephfs-clients.component';
-import { CephfsDetailComponent } from '../cephfs-detail/cephfs-detail.component';
-import { CephfsDirectoriesComponent } from '../cephfs-directories/cephfs-directories.component';
-import { CephfsTabsComponent } from './cephfs-tabs.component';
 
 describe('CephfsTabsComponent', () => {
   let component: CephfsTabsComponent;

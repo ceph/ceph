@@ -19,7 +19,7 @@ export class AuthStorageDirective {
     private authStorageService: AuthStorageService
   ) {}
 
-  @Input('cdScope') set cdScope(condition: Condition) {
+  @Input() cdScope(condition: Condition) {
     this.permissions = this.authStorageService.getPermissions();
     if (this.isAuthorized(condition)) {
       this.viewContainer.createEmbeddedView(this.templateRef);
@@ -38,9 +38,9 @@ export class AuthStorageDirective {
     } else if (_.isArray(condition)) {
       return everyOrSome(condition, (permission) => this.permissions[permission]['read']);
     } else if (_.isObject(condition)) {
-      return everyOrSome(condition, (value, key) => {
-        return everyOrSome(value, (val) => this.permissions[key][val]);
-      });
+      return everyOrSome(condition, (value, key) =>
+        everyOrSome(value, (val) => this.permissions[key][val])
+      );
     }
 
     return false;

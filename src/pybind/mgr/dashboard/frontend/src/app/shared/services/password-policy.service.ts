@@ -46,6 +46,7 @@ export class PasswordPolicyService {
 
   /**
    * Helper function to map password policy credits to a CSS class.
+   *
    * @param credits The password policy credits.
    * @return The name of the CSS class.
    */

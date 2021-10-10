@@ -1,8 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { AppComponent } from './app.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('AppComponent', () => {
   let component: AppComponent;

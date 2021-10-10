@@ -3,9 +3,9 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { AuthStorageService } from '../services/auth-storage.service';
 import { AuthService } from './auth.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('AuthService', () => {
   let service: AuthService;

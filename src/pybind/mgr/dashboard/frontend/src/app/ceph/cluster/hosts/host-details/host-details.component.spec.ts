@@ -5,13 +5,13 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
+import { HostDetailsComponent } from './host-details.component';
 import { CephModule } from '~/app/ceph/ceph.module';
 import { CephSharedModule } from '~/app/ceph/shared/ceph-shared.module';
 import { CoreModule } from '~/app/core/core.module';
 import { Permissions } from '~/app/shared/models/permissions';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, TabHelper } from '~/testing/unit-test-helper';
-import { HostDetailsComponent } from './host-details.component';
 
 describe('HostDetailsComponent', () => {
   let component: HostDetailsComponent;

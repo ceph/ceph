@@ -3,6 +3,9 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Subscription } from 'rxjs';
 
+import { BootstrapCreateModalComponent } from '../bootstrap-create-modal/bootstrap-create-modal.component';
+import { BootstrapImportModalComponent } from '../bootstrap-import-modal/bootstrap-import-modal.component';
+import { EditSiteNameModalComponent } from '../edit-site-name-modal/edit-site-name-modal.component';
 import { Pool } from '~/app/ceph/pool/pool';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -12,9 +15,6 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
-import { BootstrapCreateModalComponent } from '../bootstrap-create-modal/bootstrap-create-modal.component';
-import { BootstrapImportModalComponent } from '../bootstrap-import-modal/bootstrap-import-modal.component';
-import { EditSiteNameModalComponent } from '../edit-site-name-modal/edit-site-name-modal.component';
 
 @Component({
   selector: 'cd-mirroring',

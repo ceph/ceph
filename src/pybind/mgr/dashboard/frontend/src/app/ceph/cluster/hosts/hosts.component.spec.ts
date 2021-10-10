@@ -6,6 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { HostsComponent } from './hosts.component';
 import { CephModule } from '~/app/ceph/ceph.module';
 import { CephSharedModule } from '~/app/ceph/shared/ceph-shared.module';
 import { CoreModule } from '~/app/core/core.module';
@@ -22,7 +23,6 @@ import {
   OrchestratorHelper,
   TableActionHelper
 } from '~/testing/unit-test-helper';
-import { HostsComponent } from './hosts.component';
 
 class MockShowForceMaintenanceModal {
   showModal = false;
@@ -46,9 +46,7 @@ describe('HostsComponent', () => {
   let showForceMaintenanceModal: MockShowForceMaintenanceModal;
 
   const fakeAuthStorageService = {
-    getPermissions: () => {
-      return new Permissions({ hosts: ['read', 'update', 'create', 'delete'] });
-    }
+    getPermissions: () => new Permissions({ hosts: ['read', 'update', 'create', 'delete'] })
   };
 
   configureTestBed({
@@ -98,7 +96,7 @@ describe('HostsComponent', () => {
             id: '1'
           }
         ],
-        hostname: hostname,
+        hostname,
         ceph_version: 'ceph version Development',
         labels: ['foo', 'bar']
       }

@@ -2,9 +2,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 
+import { InfoGroupComponent } from './info-group.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { InfoGroupComponent } from './info-group.component';
 
 describe('InfoGroupComponent', () => {
   let component: InfoGroupComponent;

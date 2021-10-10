@@ -2,13 +2,13 @@ import { Component, EventEmitter, Input, OnChanges, OnInit, Output } from '@angu
 
 import _ from 'lodash';
 
+import { OsdDevicesSelectionModalComponent } from '../osd-devices-selection-modal/osd-devices-selection-modal.component';
+import { DevicesSelectionChangeEvent } from './devices-selection-change-event.interface';
+import { DevicesSelectionClearEvent } from './devices-selection-clear-event.interface';
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
 import { ModalService } from '~/app/shared/services/modal.service';
-import { OsdDevicesSelectionModalComponent } from '../osd-devices-selection-modal/osd-devices-selection-modal.component';
-import { DevicesSelectionChangeEvent } from './devices-selection-change-event.interface';
-import { DevicesSelectionClearEvent } from './devices-selection-clear-event.interface';
 
 @Component({
   selector: 'cd-osd-devices-selection-groups',
@@ -65,7 +65,7 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
       hostname: this.hostname,
       deviceType: this.name,
       devices: this.availDevices,
-      filterColumns: filterColumns
+      filterColumns
     };
     const modalRef = this.modalService.show(OsdDevicesSelectionModalComponent, initialState, {
       size: 'xl'

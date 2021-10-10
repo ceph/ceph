@@ -6,10 +6,10 @@ import { NgbDatepickerModule, NgbNavModule, NgbTimepickerModule } from '@ng-boot
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { LogsComponent } from './logs.component';
 import { LogsService } from '~/app/shared/api/logs.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { LogsComponent } from './logs.component';
 
 describe('LogsComponent', () => {
   let component: LogsComponent;

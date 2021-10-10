@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { OsdSummaryPipe } from './osd-summary.pipe';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('OsdSummaryPipe', () => {
   let pipe: OsdSummaryPipe;

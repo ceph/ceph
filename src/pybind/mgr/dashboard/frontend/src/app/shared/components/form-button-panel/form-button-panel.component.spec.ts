@@ -1,8 +1,8 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { FormButtonPanelComponent } from './form-button-panel.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('FormButtonPanelComponent', () => {
   let component: FormButtonPanelComponent;

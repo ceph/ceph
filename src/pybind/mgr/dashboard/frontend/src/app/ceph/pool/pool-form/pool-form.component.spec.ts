@@ -16,6 +16,9 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { Pool } from '../pool';
+import { PoolModule } from '../pool.module';
+import { PoolFormComponent } from './pool-form.component';
 import { DashboardNotFoundError } from '~/app/core/error/error';
 import { ErrorComponent } from '~/app/core/error/error.component';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
@@ -38,9 +41,6 @@ import {
   Mocks,
   modalServiceShow
 } from '~/testing/unit-test-helper';
-import { Pool } from '../pool';
-import { PoolModule } from '../pool.module';
-import { PoolFormComponent } from './pool-form.component';
 
 describe('PoolFormComponent', () => {
   let OSDS = 15;
@@ -765,13 +765,11 @@ describe('PoolFormComponent', () => {
     it('should select the newly created rule', () => {
       expect(form.getValue('crushRule').rule_name).toBe('rep1');
       const name = 'awesomeRule';
-      spyOn(TestBed.inject(ModalService), 'show').and.callFake(() => {
-        return {
-          componentInstance: {
-            submitAction: of({ name })
-          }
-        };
-      });
+      spyOn(TestBed.inject(ModalService), 'show').and.callFake(() => ({
+        componentInstance: {
+          submitAction: of({ name })
+        }
+      }));
       infoReturn.crush_rules_replicated.push(Mocks.getCrushRule({ id: 8, name }));
       component.addCrushRule();
       expect(form.getValue('crushRule').rule_name).toBe(name);
@@ -820,7 +818,7 @@ describe('PoolFormComponent', () => {
             task: {
               name: 'crushRule/delete',
               metadata: {
-                name: name
+                name
               }
             }
           })
@@ -907,7 +905,7 @@ describe('PoolFormComponent', () => {
 
   describe('erasure code profile', () => {
     const setSelectedEcp = (name: string) => {
-      formHelper.setValue('erasureProfile', { name: name });
+      formHelper.setValue('erasureProfile', { name });
     };
 
     beforeEach(() => {
@@ -933,13 +931,11 @@ describe('PoolFormComponent', () => {
       spyOn(ecpService, 'list').and.callFake(() => of(infoReturn.erasure_code_profiles));
       expect(form.getValue('erasureProfile').name).toBe('ecp1');
       const name = 'awesomeProfile';
-      spyOn(TestBed.inject(ModalService), 'show').and.callFake(() => {
-        return {
-          componentInstance: {
-            submitAction: of({ name })
-          }
-        };
-      });
+      spyOn(TestBed.inject(ModalService), 'show').and.callFake(() => ({
+        componentInstance: {
+          submitAction: of({ name })
+        }
+      }));
       const ecp2 = new ErasureCodeProfile();
       ecp2.name = name;
       infoReturn.erasure_code_profiles.push(ecp2);
@@ -968,7 +964,7 @@ describe('PoolFormComponent', () => {
             task: {
               name: 'ecp/delete',
               metadata: {
-                name: name
+                name
               }
             }
           })
@@ -1294,9 +1290,7 @@ describe('PoolFormComponent', () => {
       it('disabled inputs', () => {
         fixture.detectChanges();
         const disabled = ['poolType', 'crushRule', 'size', 'erasureProfile', 'ecOverwrites'];
-        disabled.forEach((controlName) => {
-          return expect(form.get(controlName).disabled).toBeTruthy();
-        });
+        disabled.forEach((controlName) => expect(form.get(controlName).disabled).toBeTruthy());
         const enabled = [
           'name',
           'pgNum',
@@ -1308,9 +1302,7 @@ describe('PoolFormComponent', () => {
           'max_bytes',
           'max_objects'
         ];
-        enabled.forEach((controlName) => {
-          return expect(form.get(controlName).enabled).toBeTruthy();
-        });
+        enabled.forEach((controlName) => expect(form.get(controlName).enabled).toBeTruthy());
       });
 
       it('should include the custom app as valid option', () => {
@@ -1361,7 +1353,7 @@ describe('PoolFormComponent', () => {
           fixture.detectChanges();
         });
 
-        it(`always provides the application metadata array with submit even if it's empty`, () => {
+        it('always provides the application metadata array with submit even if it\'s empty', () => {
           expect(form.get('mode').dirty).toBe(false);
           component.data.applications.selected = [];
           expectValidSubmit(
@@ -1374,7 +1366,7 @@ describe('PoolFormComponent', () => {
           );
         });
 
-        it(`will always provide reset value for compression options`, () => {
+        it('will always provide reset value for compression options', () => {
           formHelper.setValue('minBlobSize', '').markAsDirty();
           formHelper.setValue('maxBlobSize', '').markAsDirty();
           formHelper.setValue('ratio', '').markAsDirty();
@@ -1391,7 +1383,7 @@ describe('PoolFormComponent', () => {
           );
         });
 
-        it(`will unset mode not used anymore`, () => {
+        it('will unset mode not used anymore', () => {
           formHelper.setValue('mode', 'none').markAsDirty();
           expectValidSubmit(
             {

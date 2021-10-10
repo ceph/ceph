@@ -7,6 +7,8 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { NfsDetailsComponent } from '../nfs-details/nfs-details.component';
+import { NfsListComponent } from './nfs-list.component';
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
@@ -15,8 +17,6 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
-import { NfsDetailsComponent } from '../nfs-details/nfs-details.component';
-import { NfsListComponent } from './nfs-list.component';
 
 describe('NfsListComponent', () => {
   let component: NfsListComponent;
@@ -88,7 +88,7 @@ describe('NfsListComponent', () => {
 
     const addExport = (export_id: string) => {
       const model = {
-        export_id: export_id,
+        export_id,
         path: 'path_' + export_id,
         fsal: 'fsal_' + export_id,
         cluster_id: 'cluster_' + export_id
@@ -110,7 +110,7 @@ describe('NfsListComponent', () => {
         default:
           task.metadata = {
             cluster_id: 'cluster_' + export_id,
-            export_id: export_id
+            export_id
           };
           break;
       }

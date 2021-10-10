@@ -101,11 +101,10 @@ export class LogsComponent implements OnInit, OnDestroy {
       const localDate = this.datePipe.transform(line.stamp, 'mediumTime');
       const hour = parseInt(localDate.split(':')[0], 10);
       const minutes = parseInt(localDate.split(':')[1], 10);
-      let prio: string, y_m_d: string, timeSpan: number;
 
-      prio = filters.priority === 'All' ? line.priority : filters.priority;
-      y_m_d = filters.yearMonthDay ? filters.yearMonthDay : line.stamp;
-      timeSpan = hour * 60 + minutes;
+      const prio: string = filters.priority === 'All' ? line.priority : filters.priority;
+      const y_m_d: string = filters.yearMonthDay ? filters.yearMonthDay : line.stamp;
+      const timeSpan: number = hour * 60 + minutes;
       return (
         line.priority === prio &&
         line.message.toLowerCase().indexOf(filters.key) !== -1 &&

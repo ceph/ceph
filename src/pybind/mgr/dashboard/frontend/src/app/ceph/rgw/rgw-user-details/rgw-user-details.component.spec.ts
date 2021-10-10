@@ -4,10 +4,10 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { SharedModule } from '~/app/shared/shared.module';
-import { configureTestBed, TabHelper } from '~/testing/unit-test-helper';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserDetailsComponent } from './rgw-user-details.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, TabHelper } from '~/testing/unit-test-helper';
 
 describe('RgwUserDetailsComponent', () => {
   let component: RgwUserDetailsComponent;

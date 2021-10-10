@@ -6,8 +6,8 @@ import {
 } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdMirroringService } from './rbd-mirroring.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RbdMirroringService', () => {
   let service: RbdMirroringService;
@@ -35,11 +35,11 @@ describe('RbdMirroringService', () => {
   beforeEach(() => {
     service = TestBed.inject(RbdMirroringService);
     httpTesting = TestBed.inject(HttpTestingController);
-    getMirroringSummaryCalls = () => {
-      return httpTesting.match((request: HttpRequest<any>) => {
-        return request.url.match(/api\/block\/mirroring\/summary/) && request.method === 'GET';
-      });
-    };
+    getMirroringSummaryCalls = () =>
+      httpTesting.match(
+        (request: HttpRequest<any>) =>
+          request.url.match(/api\/block\/mirroring\/summary/) && request.method === 'GET'
+      );
     flushCalls = (call: TestRequest) => {
       if (!call.cancelled) {
         call.flush(summary);

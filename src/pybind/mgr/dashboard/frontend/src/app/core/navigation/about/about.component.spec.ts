@@ -4,11 +4,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { BehaviorSubject } from 'rxjs';
 
+import { AboutComponent } from './about.component';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { environment } from '~/environments/environment';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { AboutComponent } from './about.component';
 
 export class SummaryServiceMock {
   summaryDataSource = new BehaviorSubject({

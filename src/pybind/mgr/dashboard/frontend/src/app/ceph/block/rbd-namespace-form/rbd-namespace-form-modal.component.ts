@@ -80,8 +80,8 @@ export class RbdNamespaceFormModalComponent implements OnInit {
   }
 
   asyncValidator(): AsyncValidatorFn {
-    return (control: AbstractControl): Promise<ValidationErrors | null> => {
-      return new Promise((resolve) => {
+    return (control: AbstractControl): Promise<ValidationErrors | null> =>
+      new Promise((resolve) => {
         const poolCtrl = control.get('pool');
         const namespaceCtrl = control.get('namespace');
         this.rbdService.listNamespaces(poolCtrl.value).subscribe((namespaces: any[]) => {
@@ -94,7 +94,6 @@ export class RbdNamespaceFormModalComponent implements OnInit {
           }
         });
       });
-    };
   }
 
   ngOnInit() {
@@ -123,8 +122,8 @@ export class RbdNamespaceFormModalComponent implements OnInit {
     const finishedTask = new FinishedTask();
     finishedTask.name = 'rbd/namespace/create';
     finishedTask.metadata = {
-      pool: pool,
-      namespace: namespace
+      pool,
+      namespace
     };
     this.rbdService
       .createNamespace(pool, namespace)

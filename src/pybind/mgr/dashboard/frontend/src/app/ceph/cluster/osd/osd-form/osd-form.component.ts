@@ -4,6 +4,12 @@ import { Router } from '@angular/router';
 
 import _ from 'lodash';
 
+import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
+import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
+import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';
+import { OsdDevicesSelectionGroupsComponent } from '../osd-devices-selection-groups/osd-devices-selection-groups.component';
+import { DriveGroup } from './drive-group.model';
+import { OsdFeature } from './osd-feature.interface';
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
@@ -15,12 +21,6 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
-import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
-import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
-import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';
-import { OsdDevicesSelectionGroupsComponent } from '../osd-devices-selection-groups/osd-devices-selection-groups.component';
-import { DriveGroup } from './drive-group.model';
-import { OsdFeature } from './osd-feature.interface';
 
 @Component({
   selector: 'cd-osd-form',
@@ -79,7 +79,7 @@ export class OsdFormComponent extends CdForm implements OnInit {
         desc: $localize`Encryption`
       }
     };
-    this.featureList = _.map(this.features, (o, key) => Object.assign(o, { key: key }));
+    this.featureList = _.map(this.features, (o, key) => Object.assign(o, { key }));
     this.createForm();
   }
 
@@ -172,9 +172,9 @@ export class OsdFormComponent extends CdForm implements OnInit {
       const hostnameFilter = _.find(event.filters, { prop: 'hostname' });
       if (hostnameFilter) {
         this.hostname = hostnameFilter.value.raw;
-        this.availDevices = event.dataOut.filter((device: InventoryDevice) => {
-          return device.hostname === this.hostname;
-        });
+        this.availDevices = event.dataOut.filter(
+          (device: InventoryDevice) => device.hostname === this.hostname
+        );
         this.driveGroup.setHostPattern(this.hostname);
       } else {
         this.driveGroup.setHostPattern('*');

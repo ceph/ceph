@@ -20,9 +20,9 @@ describe('CdFormGroup', () => {
       formB = createTestForm('b', 'b');
       formC = createTestForm('c', 'c');
       form = new CdFormGroup({
-        formA: formA,
-        formB: formB,
-        formC: formC
+        formA,
+        formB,
+        formC
       });
     });
 
@@ -33,18 +33,21 @@ describe('CdFormGroup', () => {
     });
 
     it('should throw an error if element could be found', () => {
-      expect(() => form.get('d')).toThrowError(`Control 'd' could not be found!`);
-      expect(() => form.get('sth')).toThrowError(`Control 'sth' could not be found!`);
+      expect(() => form.get('d')).toThrowError('Control \'d\' could not be found!');
+      expect(() => form.get('sth')).toThrowError('Control \'sth\' could not be found!');
     });
   });
 
   describe('CdFormGroup tests', () => {
-    let x: CdFormGroup, nested: CdFormGroup, a: FormControl, c: FormGroup;
+    let x: CdFormGroup;
+    let nested: CdFormGroup;
+    let a: FormControl;
+    let c: FormGroup;
 
     beforeEach(() => {
       a = new FormControl('a');
       x = new CdFormGroup({
-        a: a
+        a
       });
       nested = new CdFormGroup({
         lev1: new CdFormGroup({
@@ -53,7 +56,7 @@ describe('CdFormGroup', () => {
       });
       c = createTestForm('c', 'c');
       form = new CdFormGroup({
-        nested: nested,
+        nested,
         cdform: x,
         b: new FormControl('b'),
         formC: c
@@ -83,8 +86,8 @@ describe('CdFormGroup', () => {
     });
 
     it('should nested throw an error if control could not be found', () => {
-      expect(() => form.get('d')).toThrowError(`Control 'd' could not be found!`);
-      expect(() => form.getValue('sth')).toThrowError(`Control 'sth' could not be found!`);
+      expect(() => form.get('d')).toThrowError('Control \'d\' could not be found!');
+      expect(() => form.getValue('sth')).toThrowError('Control \'sth\' could not be found!');
     });
   });
 

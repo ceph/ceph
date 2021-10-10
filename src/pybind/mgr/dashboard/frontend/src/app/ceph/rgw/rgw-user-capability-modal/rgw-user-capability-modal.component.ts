@@ -4,11 +4,11 @@ import { Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
+import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
+import { RgwUserCapability } from '../models/rgw-user-capability';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
-import { RgwUserCapability } from '../models/rgw-user-capability';
 
 @Component({
   selector: 'cd-rgw-user-capability-modal',
@@ -49,7 +49,8 @@ export class RgwUserCapabilityModalComponent {
    * Set the 'editing' flag. If set to TRUE, the modal dialog is in 'Edit' mode,
    * otherwise in 'Add' mode. According to the mode the dialog and its controls
    * behave different.
-   * @param {boolean} viewing
+   *
+   * @param viewing
    */
   setEditing(editing: boolean = true) {
     this.editing = editing;
@@ -61,8 +62,8 @@ export class RgwUserCapabilityModalComponent {
    */
   setValues(type: string, perm: string) {
     this.formGroup.setValue({
-      type: type,
-      perm: perm
+      type,
+      perm
     });
   }
 

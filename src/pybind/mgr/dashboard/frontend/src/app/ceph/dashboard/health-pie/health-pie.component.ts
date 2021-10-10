@@ -142,13 +142,10 @@ export class HealthPieComponent implements OnChanges, OnInit {
   ) {}
 
   ngOnInit() {
-    const getStyleTop = (tooltip: any, positionY: number) => {
-      return positionY + tooltip.caretY - tooltip.height - 10 + 'px';
-    };
+    const getStyleTop = (tooltip: any, positionY: number) =>
+      positionY + tooltip.caretY - tooltip.height - 10 + 'px';
 
-    const getStyleLeft = (tooltip: any, positionX: number) => {
-      return positionX + tooltip.caretX + 'px';
-    };
+    const getStyleLeft = (tooltip: any, positionX: number) => positionX + tooltip.caretX + 'px';
 
     const chartTooltip = new ChartTooltip(
       this.chartCanvasRef,
@@ -157,9 +154,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
       getStyleTop
     );
 
-    chartTooltip.getBody = (body: any) => {
-      return this.getChartTooltipBody(body);
-    };
+    chartTooltip.getBody = (body: any) => this.getChartTooltipBody(body);
 
     _.merge(this.chartConfig, this.config);
 
@@ -187,7 +182,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
 
   private setChartSliceBorderWidth() {
     let nonZeroValueSlices = 0;
-    _.forEach(this.chartConfig.dataset[0].data, function (slice) {
+    _.forEach(this.chartConfig.dataset[0].data, (slice) => {
       if (slice > 0) {
         nonZeroValueSlices += 1;
       }

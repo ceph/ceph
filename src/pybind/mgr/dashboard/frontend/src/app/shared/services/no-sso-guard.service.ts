@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import { CanActivate, CanActivateChild } from '@angular/router';
 
-import { DashboardUserDeniedError } from '~/app/core/error/error';
 import { AuthStorageService } from './auth-storage.service';
+import { DashboardUserDeniedError } from '~/app/core/error/error';
 
 /**
  * This service checks if a route can be activated if the user has not

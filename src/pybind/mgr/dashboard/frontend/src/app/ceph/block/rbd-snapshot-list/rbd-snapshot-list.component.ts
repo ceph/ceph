@@ -13,6 +13,9 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import moment from 'moment';
 import { of } from 'rxjs';
 
+import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
+import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';
+import { RbdSnapshotModel } from './rbd-snapshot.model';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
@@ -35,9 +38,6 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskManagerService } from '~/app/shared/services/task-manager.service';
-import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
-import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';
-import { RbdSnapshotModel } from './rbd-snapshot.model';
 
 @Component({
   selector: 'cd-rbd-snapshot-list',
@@ -160,17 +160,12 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
 
     this.tableActions = this.rbdTableActions.ordering;
 
-    const itemFilter = (entry: any, task: Task) => {
-      return entry.name === task.metadata['snapshot_name'];
-    };
+    const itemFilter = (entry: any, task: Task) => entry.name === task.metadata['snapshot_name'];
 
-    const taskFilter = (task: Task) => {
-      return (
-        ['rbd/snap/create', 'rbd/snap/delete', 'rbd/snap/edit', 'rbd/snap/rollback'].includes(
-          task.name
-        ) && this.imageSpec.toString() === task.metadata['image_spec']
-      );
-    };
+    const taskFilter = (task: Task) =>
+      ['rbd/snap/create', 'rbd/snap/delete', 'rbd/snap/edit', 'rbd/snap/rollback'].includes(
+        task.name
+      ) && this.imageSpec.toString() === task.metadata['image_spec'];
 
     this.taskListService.init(
       () => of(this.snapshots),

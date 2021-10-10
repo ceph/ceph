@@ -4,10 +4,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
+import { FormModalComponent } from './form-modal.component';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FixtureHelper, FormHelper } from '~/testing/unit-test-helper';
-import { FormModalComponent } from './form-modal.component';
 
 describe('InputModalComponent', () => {
   let component: FormModalComponent;

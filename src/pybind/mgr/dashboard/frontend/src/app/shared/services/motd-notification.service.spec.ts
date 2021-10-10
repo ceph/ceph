@@ -1,9 +1,9 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
+import { MotdNotificationService } from './motd-notification.service';
 import { Motd } from '~/app/shared/api/motd.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { MotdNotificationService } from './motd-notification.service';
 
 describe('MotdNotificationService', () => {
   let service: MotdNotificationService;

@@ -111,6 +111,7 @@ export class MgrModuleListComponent extends ListWithDetails {
 
   /**
    * Check if the table action is disabled.
+   *
    * @param state The expected module state, e.g. ``enabled`` or ``disabled``.
    * @returns If the specified state is validated to true or no selection is
    *   done, then ``true`` is returned, otherwise ``false``.

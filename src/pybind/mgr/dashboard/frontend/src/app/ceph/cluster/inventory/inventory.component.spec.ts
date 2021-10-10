@@ -7,12 +7,12 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { InventoryDevicesComponent } from './inventory-devices/inventory-devices.component';
+import { InventoryComponent } from './inventory.component';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { InventoryDevicesComponent } from './inventory-devices/inventory-devices.component';
-import { InventoryComponent } from './inventory.component';
 
 describe('InventoryComponent', () => {
   let component: InventoryComponent;

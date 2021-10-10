@@ -4,10 +4,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { of } from 'rxjs';
 
+import { MonitorComponent } from './monitor.component';
 import { MonitorService } from '~/app/shared/api/monitor.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { MonitorComponent } from './monitor.component';
 
 describe('MonitorComponent', () => {
   let component: MonitorComponent;

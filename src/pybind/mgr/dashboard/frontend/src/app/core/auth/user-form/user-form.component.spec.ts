@@ -9,6 +9,8 @@ import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { UserFormComponent } from './user-form.component';
+import { UserFormModel } from './user-form.model';
 import { RoleService } from '~/app/shared/api/role.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { UserService } from '~/app/shared/api/user.service';
@@ -21,8 +23,6 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { PasswordPolicyService } from '~/app/shared/services/password-policy.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
-import { UserFormComponent } from './user-form.component';
-import { UserFormModel } from './user-form.model';
 
 describe('UserFormComponent', () => {
   let component: UserFormComponent;

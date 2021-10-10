@@ -4,9 +4,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
+import { RgwUserSubuserModalComponent } from './rgw-user-subuser-modal.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { RgwUserSubuserModalComponent } from './rgw-user-subuser-modal.component';
 
 describe('RgwUserSubuserModalComponent', () => {
   let component: RgwUserSubuserModalComponent;

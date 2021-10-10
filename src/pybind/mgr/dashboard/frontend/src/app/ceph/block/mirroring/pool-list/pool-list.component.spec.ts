@@ -5,10 +5,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { SharedModule } from '~/app/shared/shared.module';
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { MirrorHealthColorPipe } from '../mirror-health-color.pipe';
 import { PoolListComponent } from './pool-list.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('PoolListComponent', () => {
   let component: PoolListComponent;

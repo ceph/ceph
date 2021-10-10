@@ -51,15 +51,10 @@ class TaskMessage {
 export class TaskMessageService {
   defaultMessage = this.newTaskMessage(
     new TaskMessageOperation($localize`Executing`, $localize`execute`, $localize`Executed`),
-    (metadata) => {
-      return (
-        (metadata && (Components[metadata.component] || metadata.component)) ||
-        $localize`unknown task`
-      );
-    },
-    () => {
-      return {};
-    }
+    (metadata) =>
+      (metadata && (Components[metadata.component] || metadata.component)) ||
+      $localize`unknown task`,
+    () => ({})
   );
 
   commonOperations = {
@@ -137,14 +132,14 @@ export class TaskMessageService {
       this.commonOperations.create,
       (metadata) => this.pool(metadata),
       (metadata) => ({
-        '17': $localize`Name is already used by ${this.pool(metadata)}.`
+        17: $localize`Name is already used by ${this.pool(metadata)}.`
       })
     ),
     'pool/edit': this.newTaskMessage(
       this.commonOperations.update,
       (metadata) => this.pool(metadata),
       (metadata) => ({
-        '17': $localize`Name is already used by ${this.pool(metadata)}.`
+        17: $localize`Name is already used by ${this.pool(metadata)}.`
       })
     ),
     'pool/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
@@ -155,7 +150,7 @@ export class TaskMessageService {
       this.commonOperations.create,
       (metadata) => this.ecp(metadata),
       (metadata) => ({
-        '17': $localize`Name is already used by ${this.ecp(metadata)}.`
+        17: $localize`Name is already used by ${this.ecp(metadata)}.`
       })
     ),
     'ecp/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
@@ -166,7 +161,7 @@ export class TaskMessageService {
       this.commonOperations.create,
       (metadata) => this.crushRule(metadata),
       (metadata) => ({
-        '17': $localize`Name is already used by ${this.crushRule(metadata)}.`
+        17: $localize`Name is already used by ${this.crushRule(metadata)}.`
       })
     ),
     'crushRule/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
@@ -177,33 +172,33 @@ export class TaskMessageService {
       this.commonOperations.create,
       this.rbd.create,
       (metadata) => ({
-        '17': $localize`Name is already used by ${this.rbd.create(metadata)}.`
+        17: $localize`Name is already used by ${this.rbd.create(metadata)}.`
       })
     ),
     'rbd/edit': this.newTaskMessage(this.commonOperations.update, this.rbd.default, (metadata) => ({
-      '17': $localize`Name is already used by ${this.rbd.default(metadata)}.`
+      17: $localize`Name is already used by ${this.rbd.default(metadata)}.`
     })),
     'rbd/delete': this.newTaskMessage(
       this.commonOperations.delete,
       this.rbd.default,
       (metadata) => ({
-        '16': $localize`${this.rbd.default(metadata)} is busy.`,
-        '39': $localize`${this.rbd.default(metadata)} contains snapshots.`
+        16: $localize`${this.rbd.default(metadata)} is busy.`,
+        39: $localize`${this.rbd.default(metadata)} contains snapshots.`
       })
     ),
     'rbd/clone': this.newTaskMessage(
       new TaskMessageOperation($localize`Cloning`, $localize`clone`, $localize`Cloned`),
       this.rbd.child,
       (metadata) => ({
-        '17': $localize`Name is already used by ${this.rbd.child(metadata)}.`,
-        '22': $localize`Snapshot of ${this.rbd.child(metadata)} must be protected.`
+        17: $localize`Name is already used by ${this.rbd.child(metadata)}.`,
+        22: $localize`Snapshot of ${this.rbd.child(metadata)} must be protected.`
       })
     ),
     'rbd/copy': this.newTaskMessage(
       new TaskMessageOperation($localize`Copying`, $localize`copy`, $localize`Copied`),
       this.rbd.destination,
       (metadata) => ({
-        '17': $localize`Name is already used by ${this.rbd.destination(metadata)}.`
+        17: $localize`Name is already used by ${this.rbd.destination(metadata)}.`
       })
     ),
     'rbd/flatten': this.newTaskMessage(
@@ -215,14 +210,14 @@ export class TaskMessageService {
       this.commonOperations.create,
       this.rbd.snapshot,
       (metadata) => ({
-        '17': $localize`Name is already used by ${this.rbd.snapshot(metadata)}.`
+        17: $localize`Name is already used by ${this.rbd.snapshot(metadata)}.`
       })
     ),
     'rbd/snap/edit': this.newTaskMessage(
       this.commonOperations.update,
       this.rbd.snapshot,
       (metadata) => ({
-        '16': $localize`Cannot unprotect ${this.rbd.snapshot(
+        16: $localize`Cannot unprotect ${this.rbd.snapshot(
           metadata
         )} because it contains child images.`
       })
@@ -231,7 +226,7 @@ export class TaskMessageService {
       this.commonOperations.delete,
       this.rbd.snapshot,
       (metadata) => ({
-        '16': $localize`Cannot delete ${this.rbd.snapshot(metadata)} because it's protected.`
+        16: $localize`Cannot delete ${this.rbd.snapshot(metadata)} because it's protected.`
       })
     ),
     'rbd/snap/rollback': this.newTaskMessage(

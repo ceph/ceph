@@ -5,10 +5,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
+import { MgrModuleFormComponent } from './mgr-module-form.component';
 import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { MgrModuleFormComponent } from './mgr-module-form.component';
 
 describe('MgrModuleFormComponent', () => {
   let component: MgrModuleFormComponent;
@@ -47,7 +47,7 @@ describe('MgrModuleFormComponent', () => {
     it('should return number, required validators for types uint, int, size, secs', () => {
       const types = ['uint', 'int', 'size', 'secs'];
       types.forEach((type) => {
-        const result = component.getValidators({ type: type });
+        const result = component.getValidators({ type });
         expect(result.length).toBe(2);
       });
     });
@@ -55,7 +55,7 @@ describe('MgrModuleFormComponent', () => {
     it('should return number, required, min validators for types uint, int, size, secs', () => {
       const types = ['uint', 'int', 'size', 'secs'];
       types.forEach((type) => {
-        const result = component.getValidators({ type: type, min: 2 });
+        const result = component.getValidators({ type, min: 2 });
         expect(result.length).toBe(3);
       });
     });
@@ -63,7 +63,7 @@ describe('MgrModuleFormComponent', () => {
     it('should return number, required, min, max validators for types uint, int, size, secs', () => {
       const types = ['uint', 'int', 'size', 'secs'];
       types.forEach((type) => {
-        const result = component.getValidators({ type: type, min: 2, max: 5 });
+        const result = component.getValidators({ type, min: 2, max: 5 });
         expect(result.length).toBe(4);
       });
     });

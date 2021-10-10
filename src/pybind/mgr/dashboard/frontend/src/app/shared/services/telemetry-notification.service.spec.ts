@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { TelemetryNotificationService } from './telemetry-notification.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('TelemetryNotificationService', () => {
   let service: TelemetryNotificationService;

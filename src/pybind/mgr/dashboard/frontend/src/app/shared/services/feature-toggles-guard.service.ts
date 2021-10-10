@@ -3,8 +3,8 @@ import { ActivatedRouteSnapshot, CanActivate, CanActivateChild } from '@angular/
 
 import { map } from 'rxjs/operators';
 
-import { DashboardNotFoundError } from '~/app/core/error/error';
 import { FeatureTogglesMap, FeatureTogglesService } from './feature-toggles.service';
+import { DashboardNotFoundError } from '~/app/core/error/error';
 
 @Injectable({
   providedIn: 'root'

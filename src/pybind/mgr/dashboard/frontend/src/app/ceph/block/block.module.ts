@@ -7,9 +7,6 @@ import { TreeModule } from '@circlon/angular-tree-component';
 import { NgbNavModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
-import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
-import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
-import { SharedModule } from '~/app/shared/shared.module';
 import { IscsiSettingComponent } from './iscsi-setting/iscsi-setting.component';
 import { IscsiTabsComponent } from './iscsi-tabs/iscsi-tabs.component';
 import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target-details.component';
@@ -36,6 +33,9 @@ import { RbdTrashListComponent } from './rbd-trash-list/rbd-trash-list.component
 import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal/rbd-trash-move-modal.component';
 import { RbdTrashPurgeModalComponent } from './rbd-trash-purge-modal/rbd-trash-purge-modal.component';
 import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-trash-restore-modal.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
+import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 
 @NgModule({
   imports: [

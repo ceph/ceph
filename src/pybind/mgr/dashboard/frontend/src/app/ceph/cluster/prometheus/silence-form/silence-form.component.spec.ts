@@ -10,6 +10,7 @@ import moment from 'moment';
 import { ToastrModule } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
+import { SilenceFormComponent } from './silence-form.component';
 import { DashboardNotFoundError } from '~/app/core/error/error';
 import { ErrorComponent } from '~/app/core/error/error.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
@@ -27,7 +28,6 @@ import {
   FormHelper,
   PrometheusHelper
 } from '~/testing/unit-test-helper';
-import { SilenceFormComponent } from './silence-form.component';
 
 describe('SilenceFormComponent', () => {
   // SilenceFormComponent specific
@@ -451,16 +451,14 @@ describe('SilenceFormComponent', () => {
       expectMatch(null);
 
       const modalService = TestBed.inject(ModalService);
-      spyOn(modalService, 'show').and.callFake(() => {
-        return {
-          componentInstance: {
-            preFillControls: (matcher: any) => {
-              expect(matcher).toBe(component.matchers[0]);
-            },
-            submitAction: of({ name: 'alertname', value: 'alert0', isRegex: false })
-          }
-        };
-      });
+      spyOn(modalService, 'show').and.callFake(() => ({
+        componentInstance: {
+          preFillControls: (matcher: any) => {
+            expect(matcher).toBe(component.matchers[0]);
+          },
+          submitAction: of({ name: 'alertname', value: 'alert0', isRegex: false })
+        }
+      }));
       fixtureH.clickElement('#matcher-edit-0');
 
       fixtureH.expectFormFieldToBe('#matcher-name-0', 'alertname');

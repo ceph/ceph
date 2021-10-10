@@ -7,10 +7,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { SharedModule } from '~/app/shared/shared.module';
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { ConfigurationDetailsComponent } from './configuration-details/configuration-details.component';
 import { ConfigurationComponent } from './configuration.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('ConfigurationComponent', () => {
   let component: ConfigurationComponent;

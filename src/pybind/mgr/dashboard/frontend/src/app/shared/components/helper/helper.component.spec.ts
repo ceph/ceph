@@ -2,8 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { HelperComponent } from './helper.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('HelperComponent', () => {
   let component: HelperComponent;

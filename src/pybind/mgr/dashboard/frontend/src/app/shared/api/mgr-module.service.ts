@@ -13,7 +13,8 @@ export class MgrModuleService {
 
   /**
    * Get the list of Ceph Mgr modules and their state (enabled/disabled).
-   * @return {Observable<Object[]>}
+   *
+   * @return
    */
   list(): Observable<Object[]> {
     return this.http.get<Object[]>(`${this.url}`);
@@ -21,8 +22,9 @@ export class MgrModuleService {
 
   /**
    * Get the Ceph Mgr module configuration.
-   * @param {string} module The name of the mgr module.
-   * @return {Observable<Object>}
+   *
+   * @param module The name of the mgr module.
+   * @return
    */
   getConfig(module: string): Observable<Object> {
     return this.http.get(`${this.url}/${module}`);
@@ -30,17 +32,19 @@ export class MgrModuleService {
 
   /**
    * Update the Ceph Mgr module configuration.
-   * @param {string} module The name of the mgr module.
-   * @param {object} config The configuration.
-   * @return {Observable<Object>}
+   *
+   * @param module The name of the mgr module.
+   * @param config The configuration.
+   * @return
    */
   updateConfig(module: string, config: object): Observable<Object> {
-    return this.http.put(`${this.url}/${module}`, { config: config });
+    return this.http.put(`${this.url}/${module}`, { config });
   }
 
   /**
    * Enable the Ceph Mgr module.
-   * @param {string} module The name of the mgr module.
+   *
+   * @param module The name of the mgr module.
    */
   enable(module: string) {
     return this.http.post(`${this.url}/${module}/enable`, null);
@@ -48,7 +52,8 @@ export class MgrModuleService {
 
   /**
    * Disable the Ceph Mgr module.
-   * @param {string} module The name of the mgr module.
+   *
+   * @param module The name of the mgr module.
    */
   disable(module: string) {
     return this.http.post(`${this.url}/${module}/disable`, null);
@@ -56,8 +61,9 @@ export class MgrModuleService {
 
   /**
    * Get the Ceph Mgr module options.
-   * @param {string} module The name of the mgr module.
-   * @return {Observable<Object>}
+   *
+   * @param module The name of the mgr module.
+   * @return
    */
   getOptions(module: string): Observable<Object> {
     return this.http.get(`${this.url}/${module}/options`);

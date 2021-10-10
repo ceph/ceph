@@ -5,6 +5,7 @@ import _ from 'lodash';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { of } from 'rxjs';
 
+import { ServiceDaemonListComponent } from './service-daemon-list.component';
 import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -12,7 +13,6 @@ import { HostService } from '~/app/shared/api/host.service';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { ServiceDaemonListComponent } from './service-daemon-list.component';
 
 describe('ServiceDaemonListComponent', () => {
   let component: ServiceDaemonListComponent;
@@ -96,13 +96,11 @@ describe('ServiceDaemonListComponent', () => {
     }
   ];
 
-  const getDaemonsByHostname = (hostname?: string) => {
-    return hostname ? _.filter(daemons, { hostname: hostname }) : daemons;
-  };
+  const getDaemonsByHostname = (hostname?: string) =>
+    hostname ? _.filter(daemons, { hostname }) : daemons;
 
-  const getDaemonsByServiceName = (serviceName?: string) => {
-    return serviceName ? _.filter(daemons, { daemon_type: serviceName }) : daemons;
-  };
+  const getDaemonsByServiceName = (serviceName?: string) =>
+    serviceName ? _.filter(daemons, { daemon_type: serviceName }) : daemons;
 
   configureTestBed({
     imports: [HttpClientTestingModule, CephModule, CoreModule, NgxPipeFunctionModule, SharedModule]

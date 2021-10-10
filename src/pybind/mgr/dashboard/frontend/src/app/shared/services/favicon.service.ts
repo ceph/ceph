@@ -3,9 +3,9 @@ import { Inject, Injectable, OnDestroy } from '@angular/core';
 
 import { Subscription } from 'rxjs';
 
+import { SummaryService } from './summary.service';
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { HealthColor } from '~/app/shared/enum/health-color.enum';
-import { SummaryService } from './summary.service';
 
 @Injectable()
 export class FaviconService implements OnDestroy {

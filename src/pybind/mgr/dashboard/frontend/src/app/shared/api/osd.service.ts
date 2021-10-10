@@ -99,11 +99,11 @@ export class OsdService {
   }
 
   updateFlags(flags: string[]) {
-    return this.http.put(`${this.path}/flags`, { flags: flags });
+    return this.http.put(`${this.path}/flags`, { flags });
   }
 
   updateIndividualFlags(flags: { [flag: string]: boolean }, ids: number[]) {
-    return this.http.put(`${this.path}/flags/individual`, { flags: flags, ids: ids });
+    return this.http.put(`${this.path}/flags/individual`, { flags, ids });
   }
 
   markOut(id: number) {
@@ -119,7 +119,7 @@ export class OsdService {
   }
 
   reweight(id: number, weight: number) {
-    return this.http.post(`${this.path}/${id}/reweight`, { weight: weight });
+    return this.http.post(`${this.path}/${id}/reweight`, { weight });
   }
 
   update(id: number, deviceClass: string) {
@@ -143,7 +143,7 @@ export class OsdService {
       preserve_id: preserveId ? 'true' : 'false',
       force: force ? 'true' : 'false'
     };
-    return this.http.delete(`${this.path}/${id}`, { observe: 'response', params: params });
+    return this.http.delete(`${this.path}/${id}`, { observe: 'response', params });
   }
 
   safeToDestroy(ids: string) {

@@ -53,24 +53,24 @@ export class UserPasswordFormComponent {
           null,
           [
             Validators.required,
-            CdValidators.custom('notmatch', () => {
-              return (
+            CdValidators.custom(
+              'notmatch',
+              () =>
                 this.userForm &&
                 this.userForm.getValue('newpassword') === this.userForm.getValue('oldpassword')
-              );
-            })
+            )
           ]
         ],
         newpassword: [
           null,
           [
             Validators.required,
-            CdValidators.custom('notmatch', () => {
-              return (
+            CdValidators.custom(
+              'notmatch',
+              () =>
                 this.userForm &&
                 this.userForm.getValue('oldpassword') === this.userForm.getValue('newpassword')
-              );
-            })
+            )
           ],
           [
             CdValidators.passwordPolicy(

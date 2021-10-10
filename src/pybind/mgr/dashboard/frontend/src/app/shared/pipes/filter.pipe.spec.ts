@@ -12,9 +12,7 @@ describe('FilterPipe', () => {
     const filters = [
       {
         value: 'foo',
-        applyFilter: (row: any[], val: any) => {
-          return row.indexOf(val) !== -1;
-        }
+        applyFilter: (row: any[], val: any) => row.indexOf(val) !== -1
       }
     ];
     expect(pipe.transform(value, filters)).toEqual(['foo', 'foobar']);
@@ -25,15 +23,11 @@ describe('FilterPipe', () => {
     const filters = [
       {
         value: 'foo',
-        applyFilter: (row: any[], val: any) => {
-          return row.indexOf(val) !== -1;
-        }
+        applyFilter: (row: any[], val: any) => row.indexOf(val) !== -1
       },
       {
         value: 'bar',
-        applyFilter: (row: any[], val: any) => {
-          return row.indexOf(val) !== -1;
-        }
+        applyFilter: (row: any[], val: any) => row.indexOf(val) !== -1
       }
     ];
     expect(pipe.transform(value, filters)).toEqual(['foobar']);
@@ -44,9 +38,7 @@ describe('FilterPipe', () => {
     const filters = [
       {
         value: '',
-        applyFilter: () => {
-          return false;
-        }
+        applyFilter: () => false
       }
     ];
     expect(pipe.transform(value, filters)).toEqual(['foo', 'bar', 'foobar']);

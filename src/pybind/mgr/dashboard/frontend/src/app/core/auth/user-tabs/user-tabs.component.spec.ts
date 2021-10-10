@@ -4,9 +4,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
+import { UserTabsComponent } from './user-tabs.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { UserTabsComponent } from './user-tabs.component';
 
 describe('UserTabsComponent', () => {
   let component: UserTabsComponent;

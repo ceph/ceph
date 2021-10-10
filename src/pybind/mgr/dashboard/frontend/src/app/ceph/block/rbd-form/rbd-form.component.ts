@@ -6,6 +6,14 @@ import _ from 'lodash';
 import { forkJoin, Observable, ReplaySubject } from 'rxjs';
 import { first, switchMap } from 'rxjs/operators';
 
+import { RBDImageFormat, RbdModel } from '../rbd-list/rbd-model';
+import { RbdImageFeature } from './rbd-feature.interface';
+import { RbdFormCloneRequestModel } from './rbd-form-clone-request.model';
+import { RbdFormCopyRequestModel } from './rbd-form-copy-request.model';
+import { RbdFormCreateRequestModel } from './rbd-form-create-request.model';
+import { RbdFormEditRequestModel } from './rbd-form-edit-request.model';
+import { RbdFormMode } from './rbd-form-mode.enum';
+import { RbdFormResponseModel } from './rbd-form-response.model';
 import { Pool } from '~/app/ceph/pool/pool';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
@@ -24,14 +32,6 @@ import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { RBDImageFormat, RbdModel } from '../rbd-list/rbd-model';
-import { RbdImageFeature } from './rbd-feature.interface';
-import { RbdFormCloneRequestModel } from './rbd-form-clone-request.model';
-import { RbdFormCopyRequestModel } from './rbd-form-copy-request.model';
-import { RbdFormCreateRequestModel } from './rbd-form-create-request.model';
-import { RbdFormEditRequestModel } from './rbd-form-edit-request.model';
-import { RbdFormMode } from './rbd-form-mode.enum';
-import { RbdFormResponseModel } from './rbd-form-response.model';
 
 class ExternalData {
   rbd: RbdFormResponseModel;
@@ -162,7 +162,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
   }
 
   objToArray(obj: { [key: string]: any }) {
-    return _.map(obj, (o, key) => Object.assign(o, { key: key }));
+    return _.map(obj, (o, key) => Object.assign(o, { key }));
   }
 
   createForm() {
@@ -338,9 +338,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
       dataPoolControl.setValue(null);
     }
     this.dataPools = this.allDataPools
-      ? this.allDataPools.filter((dataPool: any) => {
-          return dataPool.pool_name !== selectedPoolName;
-        })
+      ? this.allDataPools.filter((dataPool: any) => dataPool.pool_name !== selectedPoolName)
       : [];
     this.namespaces = null;
     if (selectedPoolName in this.namespacesByPoolCache) {
@@ -363,9 +361,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
   }
 
   onDataPoolChange(selectedDataPoolName: string) {
-    const newPools = this.allPools.filter((pool: Pool) => {
-      return pool.pool_name !== selectedDataPoolName;
-    });
+    const newPools = this.allPools.filter((pool: Pool) => pool.pool_name !== selectedDataPoolName);
     if (this.rbdForm.getValue('pool') === selectedDataPoolName) {
       this.rbdForm.get('pool').setValue(null);
     }

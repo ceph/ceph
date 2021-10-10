@@ -4,6 +4,8 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import moment from 'moment';
 
+import { RbdTrashPurgeModalComponent } from '../rbd-trash-purge-modal/rbd-trash-purge-modal.component';
+import { RbdTrashRestoreModalComponent } from '../rbd-trash-restore-modal/rbd-trash-restore-modal.component';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -25,8 +27,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { RbdTrashPurgeModalComponent } from '../rbd-trash-purge-modal/rbd-trash-purge-modal.component';
-import { RbdTrashRestoreModalComponent } from '../rbd-trash-restore-modal/rbd-trash-restore-modal.component';
 
 @Component({
   selector: 'cd-rbd-trash-list',
@@ -122,9 +122,8 @@ export class RbdTrashListComponent implements OnInit {
       return imageSpec.toString() === task.metadata['image_id_spec'];
     };
 
-    const taskFilter = (task: Task) => {
-      return ['rbd/trash/remove', 'rbd/trash/restore'].includes(task.name);
-    };
+    const taskFilter = (task: Task) =>
+      ['rbd/trash/remove', 'rbd/trash/restore'].includes(task.name);
 
     this.taskListService.init(
       () => this.rbdService.listTrash(),

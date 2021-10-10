@@ -4,11 +4,11 @@ import { Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
+import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
-import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 
 @Component({
   selector: 'cd-rgw-user-s3-key-modal',
@@ -50,7 +50,8 @@ export class RgwUserS3KeyModalComponent {
    * Set the 'viewing' flag. If set to TRUE, the modal dialog is in 'View' mode,
    * otherwise in 'Add' mode. According to the mode the dialog and its controls
    * behave different.
-   * @param {boolean} viewing
+   *
+   * @param viewing
    */
   setViewing(viewing: boolean = true) {
     this.viewing = viewing;
@@ -62,10 +63,10 @@ export class RgwUserS3KeyModalComponent {
    */
   setValues(user: string, access_key: string, secret_key: string) {
     this.formGroup.setValue({
-      user: user,
+      user,
       generate_key: _.isEmpty(access_key),
-      access_key: access_key,
-      secret_key: secret_key
+      access_key,
+      secret_key
     });
   }
 

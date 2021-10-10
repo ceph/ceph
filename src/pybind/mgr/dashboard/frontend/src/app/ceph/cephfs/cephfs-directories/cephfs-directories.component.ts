@@ -76,9 +76,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   loading = {};
   treeOptions: ITreeOptions = {
     useVirtualScroll: true,
-    getChildren: (node: TreeNode): Promise<any[]> => {
-      return this.updateDirectory(node.id);
-    },
+    getChildren: (node: TreeNode): Promise<any[]> => this.updateDirectory(node.id),
     actionMapping: {
       mouse: {
         click: this.selectAndShowNode.bind(this),
@@ -432,9 +430,9 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       ),
       message: nextMax.value
         ? $localize`The inherited ${this.getQuotaValueFromPathMsg(
-            nextMax.value,
-            nextMax.path
-          )} is the maximum value to be used.`
+          nextMax.value,
+          nextMax.path
+        )} is the maximum value to be used.`
         : undefined,
       fields: [this.getQuotaFormField(selection.row.name, key, value, nextMax.value)],
       submitButtonText: $localize`Save`,
@@ -495,8 +493,8 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       this.selectedDir.quotas[key] === 0
         ? this.actionLabels.SET
         : values[key] === 0
-        ? this.actionLabels.UNSET
-        : $localize`Updated`;
+          ? this.actionLabels.UNSET
+          : $localize`Updated`;
     this.cephfsService.quota(this.id, path, values).subscribe(() => {
       if (onSuccess) {
         onSuccess();

@@ -36,7 +36,7 @@ export function configureTestBed(configuration: any, entryComponents?: any) {
       // Declare entryComponents without having to add them to a module
       // This is needed since Jest doesn't yet support not declaring entryComponents
       TestBed.configureTestingModule(configuration).overrideModule(BrowserDynamicTestingModule, {
-        set: { entryComponents: entryComponents }
+        set: { entryComponents }
       });
     } else {
       TestBed.configureTestingModule(configuration);
@@ -269,9 +269,7 @@ export class FixtureHelper {
 
   getTextAll(css: string) {
     const elements = this.getElementByCssAll(css);
-    return elements.map((element) => {
-      return element ? element.nativeElement.textContent.trim() : null;
-    });
+    return elements.map((element) => (element ? element.nativeElement.textContent.trim() : null));
   }
 
   getElementByCss(css: string) {
@@ -288,7 +286,7 @@ export class FixtureHelper {
 export class PrometheusHelper {
   createSilence(id: string) {
     return {
-      id: id,
+      id,
       createdBy: `Creator of ${id}`,
       comment: `A comment for ${id}`,
       startsAt: new Date('2022-02-22T22:22:00').toISOString(),
@@ -305,11 +303,11 @@ export class PrometheusHelper {
 
   createRule(name: string, severity: string, alerts: any[]): PrometheusRule {
     return {
-      name: name,
+      name,
       labels: {
-        severity: severity
+        severity
       },
-      alerts: alerts
+      alerts
     } as PrometheusRule;
   }
 
@@ -333,7 +331,7 @@ export class PrometheusHelper {
 
   createNotificationAlert(name: string, status = 'firing'): AlertmanagerNotificationAlert {
     return {
-      status: status,
+      status,
       labels: {
         alertname: name
       },
@@ -421,8 +419,8 @@ export class Mocks {
     return { name, type, type_id, id, children, device_class };
   }
 
-  static getPool = (name: string, id: number): Pool => {
-    return _.merge(new Pool(name), {
+  static getPool = (name: string, id: number): Pool =>
+    _.merge(new Pool(name), {
       pool: id,
       type: 'replicated',
       pg_num: 256,
@@ -431,7 +429,6 @@ export class Mocks {
       pg_placement_num_target: 256,
       size: 3
     });
-  };
 
   /**
    * Create the following test crush map:
@@ -629,11 +626,12 @@ export class TabHelper {
 export class OrchestratorHelper {
   /**
    * Mock Orchestrator status.
+   *
    * @param available is the Orchestrator enabled?
    * @param features A list of enabled Orchestrator features.
    */
   static mockStatus(available: boolean, features?: OrchestratorFeature[]) {
-    const orchStatus = { available: available, description: '', features: {} };
+    const orchStatus = { available, description: '', features: {} };
     if (features) {
       features.forEach((feature: OrchestratorFeature) => {
         orchStatus.features[feature] = { available: true };
