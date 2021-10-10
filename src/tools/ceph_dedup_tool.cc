@@ -133,7 +133,17 @@ ceph::mutex glock = ceph::make_mutex("glock");
 
 void usage()
 {
-  cout << " usage: [--op <estimate|chunk-scrub|chunk-get-ref|chunk-put-ref|chunk-repair|dump-chunk-refs>] [--pool <pool_name> ] " << std::endl;
+  cout <<
+"usage: \n"
+"  ceph-dedup-tool \n"
+"    [--op estimate --pool POOL --chunk-size CHUNK_SIZE --chunk-algorithm ALGO --fingerprint-algorithm FP_ALGO] \n"
+"    [--op chunk-scrub --op chunk-scrub --chunk-pool POOL] \n"
+"    [--op chunk-get-ref --chunk-pool POOL --object OID --target-ref OID --target-ref-pool-id POOL_ID] \n"
+"    [--op chunk-put-ref --chunk-pool POOL --object OID --target-ref OID --target-ref-pool-id POOL_ID] \n"
+"    [--op chunk-repair --chunk-pool POOL --object OID --target-ref OID --target-ref-pool-id POOL_ID] \n"
+"    [--op dump-chunk-refs --chunk-pool POOL --object OID] \n"
+  << std::endl;
+  cout << "optional arguments: " << std::endl;
   cout << "   --object <object_name> " << std::endl;
   cout << "   --chunk-size <size> chunk-size (byte) " << std::endl;
   cout << "   --chunk-algorithm <fixed|fastcdc> " << std::endl;
