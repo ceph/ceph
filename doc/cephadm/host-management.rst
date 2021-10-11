@@ -233,6 +233,8 @@ You will then need to restart the mgr daemon to reload the configuration with::
 
   ceph mgr fail
 
+.. _cephadm-ssh-user:
+
 Configuring a different SSH user
 ----------------------------------
 
