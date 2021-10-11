@@ -128,14 +128,14 @@ class SSHManager:
     async def _execute_command(self,
                                host: str,
                                cmd: List[str],
-                               stdin: Optional[bytes] = None,
+                               stdin: Optional[str] = None,
                                addr: Optional[str] = None,
                                ) -> Tuple[str, str, int]:
         conn = await self._remote_connection(host, addr)
         cmd = "sudo " + " ".join(quote(x) for x in cmd)
         logger.debug(f'Running command: {cmd}')
         try:
-            r = await conn.run(cmd, input=stdin.decode() if stdin else None)
+            r = await conn.run(cmd, input=stdin)
         # handle these Exceptions otherwise you might get a weird error like TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
         except (asyncssh.ChannelOpenError, Exception) as e:
             # SSH connection closed or broken, will create new connection next call
@@ -150,7 +150,7 @@ class SSHManager:
     def execute_command(self,
                         host: str,
                         cmd: List[str],
-                        stdin: Optional[bytes] = None,
+                        stdin: Optional[str] = None,
                         addr: Optional[str] = None,
                         ) -> Tuple[str, str, int]:
         return self.mgr.event_loop.get_result(self._execute_command(host, cmd, stdin, addr))
@@ -158,7 +158,7 @@ class SSHManager:
     async def _check_execute_command(self,
                                      host: str,
                                      cmd: List[str],
-                                     stdin: Optional[bytes] = None,
+                                     stdin: Optional[str] = None,
                                      addr: Optional[str] = None,
                                      ) -> str:
         out, err, code = await self._execute_command(host, cmd, stdin, addr)
@@ -171,7 +171,7 @@ class SSHManager:
     def check_execute_command(self,
                               host: str,
                               cmd: List[str],
-                              stdin: Optional[bytes] = None,
+                              stdin: Optional[str] = None,
                               addr: Optional[str] = None,
                               ) -> str:
         return self.mgr.event_loop.get_result(self._check_execute_command(host, cmd, stdin, addr))
@@ -194,7 +194,12 @@ class SSHManager:
                 # shlex quote takes str or byte object, not int
                 await self._check_execute_command(host, ['chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
                 await self._check_execute_command(host, ['chmod', oct(mode)[2:], tmp_path], addr=addr)
-            await self._check_execute_command(host, ['tee', '-', tmp_path], stdin=content, addr=addr)
+            with NamedTemporaryFile(prefix='cephadm-write-remote-file-') as f:
+                os.fchmod(f.fileno(), 0o600)
+                f.write(content)
+                f.flush()
+                conn = await self._remote_connection(host, addr)
+                await asyncssh.scp(f.name, (conn, tmp_path))
             await self._check_execute_command(host, ['mv', tmp_path, path], addr=addr)
         except Exception as e:
             msg = f"Unable to write {host}:{path}: {e}"
