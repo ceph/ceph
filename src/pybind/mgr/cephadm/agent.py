@@ -21,7 +21,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 
-from typing import Any, Dict, Set, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, Set, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -164,6 +164,12 @@ class HostData:
 
             # update timestamp of most recent agent update
             self.mgr.cache.agent_timestamp[host] = datetime_now()
+            agents_down = []
+            for h in self.mgr.cache.get_hosts():
+                if self.mgr.agent_helpers._agent_down(h):
+                    agents_down.append(h)
+            self.mgr.agent_helpers._update_agent_down_healthcheck(agents_down)
+
             up_to_date = False
 
             int_ack = int(data['ack'])
@@ -261,6 +267,7 @@ class AgentMessageThread(threading.Thread):
                 secure_agent_socket.sendall(msg.encode('utf-8'))
                 agent_response = secure_agent_socket.recv(1024).decode()
                 self.mgr.log.info(f'Received "{agent_response}" from agent on host {self.host}')
+                self.mgr.cache.sending_agent_message[self.host] = False
                 return
             except ConnectionError as e:
                 # if it's a connection error, possibly try to connect again.
@@ -311,6 +318,24 @@ class CephadmAgentHelpers:
         if time_diff.total_seconds() > 2.5 * float(self.mgr.agent_refresh_rate):
             return True
         return False
+
+    def _update_agent_down_healthcheck(self, down_agent_hosts: List[str]) -> None:
+        if 'CEPHADM_AGENT_DOWN' in self.mgr.health_checks:
+            del self.mgr.health_checks['CEPHADM_AGENT_DOWN']
+        if down_agent_hosts:
+            detail: List[str] = []
+            for agent in down_agent_hosts:
+                detail.append((f'Cephadm agent on host {agent} has not reported in '
+                              f'{2.5 * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
+                               'down and host may be offline.'))
+            self.mgr.health_checks['CEPHADM_AGENT_DOWN'] = {
+                'severity': 'warning',
+                'summary': '%d Cephadm Agent(s) are not reporting. '
+                'Hosts may be offline' % (len(down_agent_hosts)),
+                'count': len(down_agent_hosts),
+                'detail': detail,
+            }
+            self.mgr.set_health_checks(self.mgr.health_checks)
 
     # this function probably seems very unnecessary, but it makes it considerably easier
     # to get the unit tests working. All unit tests that check which daemons were deployed
