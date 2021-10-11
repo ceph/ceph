@@ -7680,6 +7680,35 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     }
   }
 
+  if (mask & CEPH_SETATTR_SIZE) {
+    if ((uint64_t)stx->stx_size >= mdsmap->get_max_filesize()) {
+      //too big!
+      ldout(cct,10) << "unable to set size to " << stx->stx_size << ". Too large!" << dendl;
+      return -CEPHFS_EFBIG;
+    }
+
+    ldout(cct,10) << "changing size to " << stx->stx_size << dendl;
+    if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL) &&
+        !(mask & CEPH_SETATTR_KILL_SGUID) &&
+        stx->stx_size >= in->size) {
+      if (stx->stx_size > in->size) {
+        in->size = in->reported_size = stx->stx_size;
+        in->cap_dirtier_uid = perms.uid();
+        in->cap_dirtier_gid = perms.gid();
+        in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+        mask &= ~(CEPH_SETATTR_SIZE);
+        mask |= CEPH_SETATTR_MTIME;
+      } else {
+        // ignore it when size doesn't change
+        mask &= ~(CEPH_SETATTR_SIZE);
+      }
+    } else {
+      args.setattr.size = stx->stx_size;
+      inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD |
+                    CEPH_CAP_FILE_WR;
+    }
+  }
+
   if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
     if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME)) {
       if (mask & CEPH_SETATTR_MTIME)
@@ -7719,18 +7748,6 @@ force_request:
   if (mask & CEPH_SETATTR_ATIME) {
     req->head.args.setattr.atime = utime_t(stx->stx_atime);
     req->inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD |
-      CEPH_CAP_FILE_WR;
-  }
-  if (mask & CEPH_SETATTR_SIZE) {
-    if ((uint64_t)stx->stx_size < mdsmap->get_max_filesize()) {
-      req->head.args.setattr.size = stx->stx_size;
-      ldout(cct,10) << "changing size to " << stx->stx_size << dendl;
-    } else { //too big!
-      put_request(req);
-      ldout(cct,10) << "unable to set size to " << stx->stx_size << ". Too large!" << dendl;
-      return -CEPHFS_EFBIG;
-    }
-    req->inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD |
       CEPH_CAP_FILE_WR;
   }
   req->head.args.setattr.mask = mask;
