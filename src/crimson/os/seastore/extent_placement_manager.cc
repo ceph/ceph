@@ -90,7 +90,7 @@ SegmentedAllocator::Writer::_write(
   auto extent_bytes = record.get_raw_data_size();
   stats.extents.bytes += extent_bytes;
   assert(bl.length() > extent_bytes);
-  stats.overhead_bytes += (bl.length() - extent_bytes);
+  stats.header_bytes += (bl.length() - extent_bytes);
   stats.num_records += 1;
 
   return trans_intr::make_interruptible(
