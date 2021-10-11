@@ -41,13 +41,6 @@ export class HostsPageHelper extends PageHelper {
       });
   }
 
-  clickHostTab(hostname: string, tabName: string) {
-    this.getExpandCollapseElement(hostname).click();
-    cy.get('cd-host-details').within(() => {
-      this.getTab(tabName).click();
-    });
-  }
-
   add(hostname: string, exist?: boolean, maintenance?: boolean) {
     cy.get(`${this.pages.add.id}`).within(() => {
       cy.get('#hostname').type(hostname);

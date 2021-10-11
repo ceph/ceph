@@ -41,21 +41,21 @@ describe('when cluster creation is completed', () => {
     });
 
     it('should display inventory', () => {
-      hosts.clickHostTab(hostnames[1], 'Physical Disks');
+      hosts.clickTab('cd-host-details', hostnames[1], 'Physical Disks');
       cy.get('cd-host-details').within(() => {
         hosts.getTableCount('total').should('be.gte', 0);
       });
     });
 
     it('should display daemons', () => {
-      hosts.clickHostTab(hostnames[1], 'Daemons');
+      hosts.clickTab('cd-host-details', hostnames[1], 'Daemons');
       cy.get('cd-host-details').within(() => {
         hosts.getTableCount('total').should('be.gte', 0);
       });
     });
 
     it('should check if rgw service is running', () => {
-      hosts.clickHostTab(hostnames[1], 'Daemons');
+      hosts.clickTab('cd-host-details', hostnames[1], 'Daemons');
       cy.get('cd-host-details').within(() => {
         services.checkServiceStatus('rgw');
       });
