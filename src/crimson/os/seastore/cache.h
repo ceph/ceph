@@ -697,11 +697,22 @@ private:
   template <typename CounterT>
   using counter_by_src_t = std::array<CounterT, Transaction::SRC_MAX>;
 
+  struct fill_stat_t {
+    uint64_t filled_bytes = 0;
+    uint64_t total_bytes = 0;
+  };
+
+  struct record_header_fullness_t {
+    fill_stat_t inline_stats;
+    fill_stat_t ool_stats;
+  };
+
   struct {
     counter_by_src_t<uint64_t> trans_created_by_src;
     counter_by_src_t<commit_trans_efforts_t> committed_efforts_by_src;
     counter_by_src_t<invalid_trans_efforts_t> invalidated_efforts_by_src;
     counter_by_src_t<query_counters_t> cache_query_by_src;
+    counter_by_src_t<record_header_fullness_t> record_header_fullness_by_src;
     success_read_trans_efforts_t success_read_efforts;
     uint64_t dirty_bytes = 0;
 
