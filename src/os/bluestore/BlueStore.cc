@@ -18255,7 +18255,13 @@ int BlueStore::commit_to_null_manager()
 {
   dout(1) << "Set FreelistManager to NULL FM..." << dendl;
   fm->set_null_manager();
-  return write_meta("NCB_freelist_manager", "NULL_FM"); 
+  int ret = write_meta("NCB_freelist_manager", "NULL_FM");
+  if (ret == 0) {
+    // remove all objects of PREFIX_ALLOC_BITMAP from RocksDB to guarantee a clean start
+    clear_allocation_objects_from_rocksdb(db, cct, path);
+  }
+
+  return ret;
 }
 
 
