@@ -7529,6 +7529,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 			const UserPerm& perms, InodeRef *inp)
 {
   int issued = in->caps_issued();
+  union ceph_mds_request_args args;
+  bool kill_sguid = false;
+  int inode_drop = 0;
 
   ldout(cct, 10) << __func__ << " mask " << mask << " issued " <<
     ccap_string(issued) << dendl;
@@ -7542,6 +7545,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 			      perms)) {
     return -CEPHFS_EDQUOT;
   }
+
+  memset(&args, 0, sizeof(args));
 
   // make the change locally?
   if ((in->cap_dirtier_uid >= 0 && perms.uid() != in->cap_dirtier_uid) ||
@@ -7582,11 +7587,19 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
-    bool kill_sguid = mask & (CEPH_SETATTR_SIZE|CEPH_SETATTR_KILL_SGUID);
+    kill_sguid = mask & (CEPH_SETATTR_SIZE|CEPH_SETATTR_KILL_SGUID);
 
     mask &= ~CEPH_SETATTR_KILL_SGUID;
+  } else if (mask & CEPH_SETATTR_SIZE) {
+    /* If we don't have Ax, then we must ask the server to clear them on truncate */
+    mask |= CEPH_SETATTR_KILL_SGUID;
+    inode_drop |= CEPH_CAP_AUTH_SHARED;
+  }
 
-    if (mask & CEPH_SETATTR_UID) {
+  if (mask & CEPH_SETATTR_UID) {
+    ldout(cct,10) << "changing uid to " << stx->stx_uid << dendl;
+
+    if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
@@ -7594,9 +7607,19 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
       kill_sguid = true;
-      ldout(cct,10) << "changing uid to " << stx->stx_uid << dendl;
+    } else if (!in->caps_issued_mask(CEPH_CAP_AUTH_SHARED) ||
+               in->uid != stx->stx_uid) {
+      args.setattr.uid = stx->stx_uid;
+      inode_drop |= CEPH_CAP_AUTH_SHARED;
+    } else {
+      mask &= ~CEPH_SETATTR_UID;
     }
-    if (mask & CEPH_SETATTR_GID) {
+  }
+
+  if (mask & CEPH_SETATTR_GID) {
+    ldout(cct,10) << "changing gid to " << stx->stx_gid << dendl;
+
+    if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
@@ -7604,35 +7627,57 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
       kill_sguid = true;
-      ldout(cct,10) << "changing gid to " << stx->stx_gid << dendl;
+    } else if (!in->caps_issued_mask(CEPH_CAP_AUTH_SHARED) ||
+               in->gid != stx->stx_gid) {
+      args.setattr.gid = stx->stx_gid;
+      inode_drop |= CEPH_CAP_AUTH_SHARED;
+    } else {
+      mask &= ~CEPH_SETATTR_GID;
     }
+  }
 
-    if (mask & CEPH_SETATTR_MODE) {
+  if (mask & CEPH_SETATTR_MODE) {
+    ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
+
+    if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->mode = (in->mode & ~07777) | (stx->stx_mode & 07777);
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
-      ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
-    } else if (kill_sguid && S_ISREG(in->mode) && (in->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
-      /* Must squash the any setuid/setgid bits with an ownership change */
-      in->mode &= ~(S_ISUID|S_ISGID);
-      in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
+    } else if (!in->caps_issued_mask(CEPH_CAP_AUTH_SHARED) ||
+               in->mode != stx->stx_mode) {
+      args.setattr.mode = stx->stx_mode;
+      inode_drop |= CEPH_CAP_AUTH_SHARED;
+    } else {
+      mask &= ~CEPH_SETATTR_MODE;
     }
+  } else if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL) &&
+             kill_sguid && S_ISREG(in->mode) &&
+	     (in->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
+    /* Must squash the any setuid/setgid bits with an ownership change */
+    in->mode &= ~(S_ISUID|S_ISGID);
+    in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
+  }
 
-    if (mask & CEPH_SETATTR_BTIME) {
+  if (mask & CEPH_SETATTR_BTIME) {
+    ldout(cct,10) << "changing btime to " << in->btime << dendl;
+
+    if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->btime = utime_t(stx->stx_btime);
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_BTIME;
-      ldout(cct,10) << "changing btime to " << in->btime << dendl;
+    } else if (!in->caps_issued_mask(CEPH_CAP_AUTH_SHARED) ||
+               in->btime != utime_t(stx->stx_btime)) {
+      args.setattr.btime = utime_t(stx->stx_btime);
+      inode_drop |= CEPH_CAP_AUTH_SHARED;
+    } else {
+      mask &= ~CEPH_SETATTR_BTIME;
     }
-  } else if (mask & CEPH_SETATTR_SIZE) {
-    /* If we don't have Ax, then we must ask the server to clear them on truncate */
-    mask |= CEPH_SETATTR_KILL_SGUID;
   }
 
   if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
@@ -7663,28 +7708,9 @@ force_request:
   req->set_filepath(path);
   req->set_inode(in);
 
-  if (mask & CEPH_SETATTR_KILL_SGUID) {
-    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-  }
-  if (mask & CEPH_SETATTR_MODE) {
-    req->head.args.setattr.mode = stx->stx_mode;
-    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-    ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
-  }
-  if (mask & CEPH_SETATTR_UID) {
-    req->head.args.setattr.uid = stx->stx_uid;
-    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-    ldout(cct,10) << "changing uid to " << stx->stx_uid << dendl;
-  }
-  if (mask & CEPH_SETATTR_GID) {
-    req->head.args.setattr.gid = stx->stx_gid;
-    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-    ldout(cct,10) << "changing gid to " << stx->stx_gid << dendl;
-  }
-  if (mask & CEPH_SETATTR_BTIME) {
-    req->head.args.setattr.btime = utime_t(stx->stx_btime);
-    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-  }
+  req->head.args = args;
+  req->inode_drop = inode_drop;
+
   if (mask & CEPH_SETATTR_MTIME) {
     req->head.args.setattr.mtime = utime_t(stx->stx_mtime);
     req->inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD |
