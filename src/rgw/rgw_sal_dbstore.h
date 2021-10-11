@@ -18,6 +18,7 @@
 #include "rgw_sal.h"
 #include "rgw_oidc_provider.h"
 #include "rgw_role.h"
+#include "rgw_lc.h"
 
 #include "store/dbstore/common/dbstore.h"
 #include "store/dbstore/dbstore_mgr.h"
@@ -25,6 +26,35 @@
 namespace rgw { namespace sal {
 
   class DBStore;
+
+class LCDBSerializer : public LCSerializer {
+  const std::string oid;
+
+public:
+  LCDBSerializer(DBStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie) {}
+
+  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override { return 0; }
+  virtual int unlock() override {
+    return 0;
+  }
+};
+
+class DBLifecycle : public Lifecycle {
+  DBStore* store;
+
+public:
+  DBLifecycle(DBStore* _st) : store(_st) {}
+
+  virtual int get_entry(const std::string& oid, const std::string& marker, LCEntry& entry) override;
+  virtual int get_next_entry(const std::string& oid, std::string& marker, LCEntry& entry) override;
+  virtual int set_entry(const std::string& oid, const LCEntry& entry) override;
+  virtual int list_entries(const std::string& oid, const std::string& marker,
+			   uint32_t max_entries, std::vector<LCEntry>& entries) override;
+  virtual int rm_entry(const std::string& oid, const LCEntry& entry) override;
+  virtual int get_head(const std::string& oid, LCHead& head) override;
+  virtual int put_head(const std::string& oid, const LCHead& head) override;
+  virtual LCSerializer* get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie) override;
+};
 
 class DBNotification : public Notification {
 protected:
@@ -461,11 +491,22 @@ protected:
       string luarocks_path;
       DBZone zone;
       RGWSyncModuleInstanceRef sync_module;
+      RGWLC* lc;
+      CephContext *cct;
+      const DoutPrefixProvider *dpp;
+      bool use_lc_thread;
 
     public:
-      DBStore(): dbsm(nullptr), zone(this) {}
+      DBStore(): dbsm(nullptr), zone(this), cct(nullptr), dpp(nullptr),
+                 use_lc_thread(false) {}
       ~DBStore() { delete dbsm; }
 
+      DBStore& set_run_lc_thread(bool _use_lc_thread) {
+        use_lc_thread = _use_lc_thread;
+        return *this;
+      }
+
+      int initialize(CephContext *cct, const DoutPrefixProvider *dpp);
       virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
       virtual int get_user_by_access_key(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user) override;
       virtual int get_user_by_email(const DoutPrefixProvider *dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user) override;
@@ -486,7 +527,7 @@ protected:
       virtual std::unique_ptr<Completions> get_completions(void) override;
       virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, struct req_state* s, 
           rgw::notify::EventType event_type, const std::string* object_name=nullptr) override;
-      virtual RGWLC* get_rgwlc(void) override { return NULL; }
+      virtual RGWLC* get_rgwlc(void) override;
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
 
       virtual int log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;

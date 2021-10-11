@@ -612,7 +612,7 @@ out:
 int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
 {
   int ret = -1;
-  int cu, cb = -1;
+  int cu = 0, cb = 0, cq = 0;
   DBOpParams params = {};
 
   params.user_table = getUserTable();
@@ -624,7 +624,7 @@ int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
   if ((cb = createBucketTable(dpp, &params)))
     goto out;
 
-  if ((cb = createQuotaTable(dpp, &params)))
+  if ((cq = createQuotaTable(dpp, &params)))
     goto out;
 
   ret = 0;
@@ -720,6 +720,35 @@ int SQLiteDB::createObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *p
   return ret;
 }
 
+int SQLiteDB::createLCTables(const DoutPrefixProvider *dpp)
+{
+  int ret = -1;
+  string schema;
+  DBOpParams params = {};
+
+  params.lc_entry_table = getLCEntryTable();
+  params.lc_head_table = getLCHeadTable();
+  params.bucket_table = getBucketTable();
+
+  schema = CreateTableSchema("LCEntry", &params);
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"CreateLCEntryTable failed" << dendl;
+    return ret;
+  }
+  ldpp_dout(dpp, 20)<<"CreateLCEntryTable suceeded" << dendl;
+
+  schema = CreateTableSchema("LCHead", &params);
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"CreateLCHeadTable failed" << dendl;
+    (void)DeleteLCEntryTable(dpp, &params);
+  }
+  ldpp_dout(dpp, 20)<<"CreateLCHeadTable suceeded" << dendl;
+
+  return ret;
+}
+
 int SQLiteDB::DeleteUserTable(const DoutPrefixProvider *dpp, DBOpParams *params)
 {
   int ret = -1;
@@ -780,6 +809,50 @@ int SQLiteDB::DeleteObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *p
     ldpp_dout(dpp, 0)<<"DeleteObjectDataTable failed " << dendl;
 
   ldpp_dout(dpp, 20)<<"DeleteObjectDataTable suceeded " << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::DeleteQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = DeleteTableSchema(params->quota_table);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"DeleteQuotaTable failed " << dendl;
+
+  ldpp_dout(dpp, 20)<<"DeleteQuotaTable suceeded " << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::DeleteLCEntryTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = DeleteTableSchema(params->lc_entry_table);
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"DeleteLCEntryTable failed " << dendl;
+  ldpp_dout(dpp, 20)<<"DeleteLCEntryTable suceeded " << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::DeleteLCHeadTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = DeleteTableSchema(params->lc_head_table);
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"DeleteLCHeadTable failed " << dendl;
+  ldpp_dout(dpp, 20)<<"DeleteLCHeadTable suceeded " << dendl;
 
   return ret;
 }
