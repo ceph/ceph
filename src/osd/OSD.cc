@@ -4811,7 +4811,7 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
     acting_primary,
     info->history,
     info->past_intervals,
-    false,
+    true,
     rctx.transaction);
 
   pg->init_collection_pool_opts();
@@ -9344,6 +9344,8 @@ void OSD::handle_pg_query_nopg(const MQuery& q)
 
   dout(10) << " pg " << pgid << " dne" << dendl;
   pg_info_t empty(spg_t(pgid.pgid, q.query.to));
+  empty.set_last_backfill(hobject_t());
+
   ConnectionRef con = service.get_con_osd_cluster(q.from.osd, osdmap->get_epoch());
   if (con) {
     Message *m;
