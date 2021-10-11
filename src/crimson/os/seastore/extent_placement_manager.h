@@ -48,6 +48,7 @@ class ool_record_t {
 public:
   ool_record_t(size_t block_size) : block_size(block_size) {}
   record_size_t get_encoded_record_length() {
+    assert(extents.size() == record.extents.size());
     return crimson::os::seastore::get_encoded_record_length(record, block_size);
   }
   size_t get_wouldbe_encoded_record_length(LogicalCachedExtentRef& extent) {
@@ -57,9 +58,10 @@ public:
       block_size);
     return wouldbe_mdlength + extent_buf_len + extent->get_bptr().length();
   }
-  ceph::bufferlist encode(segment_id_t segment, segment_nonce_t nonce) {
+  ceph::bufferlist encode(const record_size_t& rsize,
+                          segment_id_t segment,
+                          segment_nonce_t nonce) {
     assert(extents.size() == record.extents.size());
-    auto rsize = get_encoded_record_length();
     segment_off_t extent_offset = base + rsize.mdlength;
     for (auto& extent : extents) {
       extent.set_ool_paddr(
@@ -98,10 +100,7 @@ public:
   uint64_t get_num_extents() const {
     return extents.size();
   }
-  uint64_t get_raw_data_size() const {
-    assert(extents.size() == record.extents.size());
-    return record.get_raw_data_size();
-  }
+
 private:
   std::vector<OolExtent> extents;
   record_t record;
@@ -218,7 +217,8 @@ class SegmentedAllocator : public ExtentAllocator {
 
     write_iertr::future<> _write(
       Transaction& t,
-      ool_record_t& record);
+      ool_record_t& record,
+      const record_size_t& record_size);
 
     using roll_segment_ertr = crimson::errorator<
       crimson::ct_error::input_output_error>;

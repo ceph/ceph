@@ -69,9 +69,13 @@ SegmentedAllocator::Writer::finish_write(
 SegmentedAllocator::Writer::write_iertr::future<>
 SegmentedAllocator::Writer::_write(
   Transaction& t,
-  ool_record_t& record)
+  ool_record_t& record,
+  const record_size_t& record_size)
 {
-  bufferlist bl = record.encode(current_segment->segment->get_segment_id(), 0);
+  bufferlist bl = record.encode(
+      record_size,
+      current_segment->segment->get_segment_id(),
+      0);
   seastar::promise<> pr;
   current_segment->inflight_writes.emplace_back(pr.get_future());
   LOG_PREFIX(SegmentedAllocator::Writer::_write);
@@ -87,10 +91,8 @@ SegmentedAllocator::Writer::_write(
   // account transactional ool writes before write()
   auto& stats = t.get_ool_write_stats();
   stats.extents.num += record.get_num_extents();
-  auto extent_bytes = record.get_raw_data_size();
-  stats.extents.bytes += extent_bytes;
-  assert(bl.length() > extent_bytes);
-  stats.header_bytes += (bl.length() - extent_bytes);
+  stats.extents.bytes += record_size.dlength;
+  stats.header_bytes += record_size.mdlength;
   stats.num_records += 1;
 
   return trans_intr::make_interruptible(
@@ -162,8 +164,9 @@ SegmentedAllocator::Writer::write(
                   num_extents,
                   current_segment->segment->get_segment_id(),
                   allocated_to);
+                auto rsize = record.get_encoded_record_length();
                 return (num_extents ?
-                        _write(t, record) :
+                        _write(t, record, rsize) :
                         write_iertr::now()
                 ).si_then([this]() mutable {
                   return roll_segment(false);
@@ -184,7 +187,7 @@ SegmentedAllocator::Writer::write(
               current_segment->segment->get_segment_id(),
               allocated_to);
             allocated_to += rsize.mdlength + rsize.dlength;
-            return _write(t, record);
+            return _write(t, record, rsize);
           }
         ).si_then([]()
           -> write_iertr::future<seastar::stop_iteration> {
