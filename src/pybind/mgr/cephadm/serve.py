@@ -1240,7 +1240,11 @@ class CephadmServe:
             self._registry_login(host, self.mgr.registry_url,
                                  self.mgr.registry_username, self.mgr.registry_password)
 
-        j = self._run_cephadm_json(host, '', 'pull', [], image=image_name, no_fsid=True)
+        pullargs: List[str] = []
+        if self.mgr.registry_insecure:
+            pullargs.append("--insecure")
+
+        j = self._run_cephadm_json(host, '', 'pull', pullargs, image=image_name, no_fsid=True)
 
         r = ContainerInspectInfo(
             j['image_id'],

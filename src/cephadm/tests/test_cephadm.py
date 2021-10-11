@@ -1635,6 +1635,7 @@ class TestPull:
     def test_error(self, get_image_info_from_inspect, call, sleep):
         ctx = cd.CephadmContext()
         ctx.container_engine = mock_podman()
+        ctx.insecure = False
 
         call.return_value = ('', '', 0)
         retval = cd.command_pull(ctx)
