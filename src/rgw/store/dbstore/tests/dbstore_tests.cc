@@ -1030,6 +1030,14 @@ TEST_F(DBStoreTest, InsertTestIDUser) {
   ASSERT_EQ(ret, 0);
 }
 
+TEST_F(DBStoreTest, LCTables) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+
+  ret = db->createLCTables(dpp);
+  ASSERT_EQ(ret, 0);
+}
+
 int main(int argc, char **argv)
 {
   int ret = -1;

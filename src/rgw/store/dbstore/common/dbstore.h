@@ -127,6 +127,8 @@ struct DBOpParams {
   /* Below are subject to change */
   string objectdata_table;
   string quota_table;
+  string lc_head_table;
+  string lc_entry_table;
   string obj;
 };
 
@@ -292,6 +294,8 @@ struct DBOpPrepareParams {
   /* below subject to change */
   string objectdata_table;
   string quota_table;
+  string lc_head_table;
+  string lc_entry_table;
 };
 
 struct DBOps {
@@ -543,6 +547,24 @@ class DBOp {
       Enabled Boolean ,		\
       CheckOnRaw Boolean \n);";
 
+    const string CreateLCEntryTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' ( \
+      LCIndex  TEXT NOT NULL, \
+      BucketName TEXT NOT NULL , \
+      StartTime  INTEGER , \
+      Status     INTEGER, \
+      PRIMARY KEY (LCIndex, BucketName), \
+      FOREIGN KEY (BucketName) \
+      REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
+
+    const string CreateLCHeadTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' ( \
+      LCIndex  TEXT NOT NULL, \
+      Marker TEXT, \
+      StartDate  INTEGER , \
+      PRIMARY KEY (LCIndex) \n);";
+
+
     const string DropQ = "DROP TABLE IF EXISTS '{}'";
     const string ListAllQ = "SELECT  * from '{}'";
 
@@ -569,6 +591,13 @@ class DBOp {
       if (!type.compare("Quota"))
         return fmt::format(CreateQuotaTableQ.c_str(),
             params->quota_table.c_str());
+      if (!type.compare("LCHead"))
+        return fmt::format(CreateLCHeadTableQ.c_str(),
+            params->lc_head_table.c_str());
+      if (!type.compare("LCEntry"))
+        return fmt::format(CreateLCEntryTableQ.c_str(),
+            params->lc_entry_table.c_str(),
+            params->bucket_table.c_str());
 
       ldout(params->cct, 0) << "Incorrect table type("<<type<<") specified" << dendl;
 
@@ -1139,6 +1168,8 @@ class DB {
     const string user_table;
     const string bucket_table;
     const string quota_table;
+    const string lc_head_table;
+    const string lc_entry_table;
     static map<string, class ObjectOp*> objectmap;
     pthread_mutex_t mutex; // to protect objectmap and other shared
     // objects if any. This mutex is taken
@@ -1161,6 +1192,8 @@ class DB {
     user_table(db_name+".user.table"),
     bucket_table(db_name+".bucket.table"),
     quota_table(db_name+".quota.table"),
+    lc_head_table(db_name+".lc_head.table"),
+    lc_entry_table(db_name+".lc_entry.table"),
     cct(_cct),
     dp(_cct, dout_subsys, "rgw DBStore backend: ")
   {}
@@ -1170,6 +1203,8 @@ class DB {
     user_table(db_name+".user.table"),
     bucket_table(db_name+".bucket.table"),
     quota_table(db_name+".quota.table"),
+    lc_head_table(db_name+".lc_head.table"),
+    lc_entry_table(db_name+".lc_entry.table"),
     cct(_cct),
     dp(_cct, dout_subsys, "rgw DBStore backend: ")
   {}
@@ -1180,6 +1215,8 @@ class DB {
     const string getUserTable() { return user_table; }
     const string getBucketTable() { return bucket_table; }
     const string getQuotaTable() { return quota_table; }
+    const string getLCHeadTable() { return lc_head_table; }
+    const string getLCEntryTable() { return lc_entry_table; }
     const string getObjectTable(string bucket) {
       return db_name+"."+bucket+".object.table"; }
     const string getObjectDataTable(string bucket) {
@@ -1220,6 +1257,7 @@ class DB {
     virtual int InitializeDBOps(const DoutPrefixProvider *dpp) { return 0; }
     virtual int FreeDBOps(const DoutPrefixProvider *dpp) { return 0; }
     virtual int InitPrepareParams(const DoutPrefixProvider *dpp, DBOpPrepareParams &params) = 0;
+    virtual int createLCTables(const DoutPrefixProvider *dpp) = 0;
 
     virtual int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) = 0;
     virtual int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) = 0;

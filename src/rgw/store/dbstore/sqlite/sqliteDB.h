@@ -55,10 +55,15 @@ class SQLiteDB : public DB, public DBOp{
     int createObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params);
 
+    int createLCTables(const DoutPrefixProvider *dpp) override;
+
     int DeleteBucketTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int DeleteUserTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int DeleteObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int DeleteObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int DeleteQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int DeleteLCEntryTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int DeleteLCHeadTable(const DoutPrefixProvider *dpp, DBOpParams *params);
 
     int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) override;
     int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) override;
