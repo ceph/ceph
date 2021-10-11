@@ -135,17 +135,9 @@ class CephadmServe:
 
     def _update_paused_health(self) -> None:
         if self.mgr.paused:
-            self.mgr.health_checks['CEPHADM_PAUSED'] = {
-                'severity': 'warning',
-                'summary': 'cephadm background work is paused',
-                'count': 1,
-                'detail': ["'ceph orch resume' to resume"],
-            }
-            self.mgr.set_health_checks(self.mgr.health_checks)
+            self.mgr.set_health_warning('CEPHADM_PAUSED', 'cephadm background work is paused', 1, ["'ceph orch resume' to resume"])
         else:
-            if 'CEPHADM_PAUSED' in self.mgr.health_checks:
-                del self.mgr.health_checks['CEPHADM_PAUSED']
-                self.mgr.set_health_checks(self.mgr.health_checks)
+            self.mgr.remove_health_warning('CEPHADM_PAUSED')
 
     def _autotune_host_memory(self, host: str) -> None:
         total_mem = self.mgr.cache.get_facts(host).get('memory_total_kb', 0)
@@ -385,31 +377,16 @@ class CephadmServe:
 
         self.mgr.config_checker.run_checks()
 
-        health_changed = False
         for k in [
                 'CEPHADM_HOST_CHECK_FAILED',
                 'CEPHADM_FAILED_DAEMON',
                 'CEPHADM_REFRESH_FAILED',
         ]:
-            if k in self.mgr.health_checks:
-                del self.mgr.health_checks[k]
-                health_changed = True
+            self.mgr.remove_health_warning(k)
         if bad_hosts:
-            self.mgr.health_checks['CEPHADM_HOST_CHECK_FAILED'] = {
-                'severity': 'warning',
-                'summary': '%d hosts fail cephadm check' % len(bad_hosts),
-                'count': len(bad_hosts),
-                'detail': bad_hosts,
-            }
-            health_changed = True
+            self.mgr.set_health_warning('CEPHADM_HOST_CHECK_FAILED', f'{len(bad_hosts)} hosts fail cephadm check', len(bad_hosts), bad_hosts)
         if failures:
-            self.mgr.health_checks['CEPHADM_REFRESH_FAILED'] = {
-                'severity': 'warning',
-                'summary': 'failed to probe daemons or devices',
-                'count': len(failures),
-                'detail': failures,
-            }
-            health_changed = True
+            self.mgr.set_health_warning('CEPHADM_REFRESH_FAILED', 'failed to probe daemons or devices', len(failures), failures)
         failed_daemons = []
         for dd in self.mgr.cache.get_daemons():
             if dd.status is not None and dd.status == DaemonDescriptionStatus.error:
@@ -417,15 +394,7 @@ class CephadmServe:
                     dd.name(), dd.hostname, dd.status_desc
                 ))
         if failed_daemons:
-            self.mgr.health_checks['CEPHADM_FAILED_DAEMON'] = {
-                'severity': 'warning',
-                'summary': '%d failed cephadm daemon(s)' % len(failed_daemons),
-                'count': len(failed_daemons),
-                'detail': failed_daemons,
-            }
-            health_changed = True
-        if health_changed:
-            self.mgr.set_health_checks(self.mgr.health_checks)
+            self.mgr.set_health_warning('CEPHADM_FAILED_DAEMON', f'{len(failed_daemons)} failed cephadm daemon(s)', len(failed_daemons), failed_daemons)
 
     def _check_host(self, host: str) -> Optional[str]:
         if host not in self.mgr.inventory:
@@ -533,8 +502,7 @@ class CephadmServe:
         self.log.debug('_check_for_strays')
         for k in ['CEPHADM_STRAY_HOST',
                   'CEPHADM_STRAY_DAEMON']:
-            if k in self.mgr.health_checks:
-                del self.mgr.health_checks[k]
+            self.mgr.remove_health_warning(k)
         if self.mgr.warn_on_stray_hosts or self.mgr.warn_on_stray_daemons:
             ls = self.mgr.list_servers()
             managed = self.mgr.cache.get_daemon_names()
@@ -579,23 +547,9 @@ class CephadmServe:
                         'stray host %s has %d stray daemons: %s' % (
                             host, len(missing_names), missing_names))
             if self.mgr.warn_on_stray_hosts and host_detail:
-                self.mgr.health_checks['CEPHADM_STRAY_HOST'] = {
-                    'severity': 'warning',
-                    'summary': '%d stray host(s) with %s daemon(s) '
-                    'not managed by cephadm' % (
-                        len(host_detail), host_num_daemons),
-                    'count': len(host_detail),
-                    'detail': host_detail,
-                }
+                self.mgr.set_health_warning('CEPHADM_STRAY_HOST', f'{len(host_detail)} stray host(s) with {host_num_daemons} daemon(s) not managed by cephadm', len(host_detail), host_detail)
             if self.mgr.warn_on_stray_daemons and daemon_detail:
-                self.mgr.health_checks['CEPHADM_STRAY_DAEMON'] = {
-                    'severity': 'warning',
-                    'summary': '%d stray daemon(s) not managed by cephadm' % (
-                        len(daemon_detail)),
-                    'count': len(daemon_detail),
-                    'detail': daemon_detail,
-                }
-        self.mgr.set_health_checks(self.mgr.health_checks)
+                self.mgr.set_health_warning('CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
 
     def _apply_all_services(self) -> bool:
         r = False
@@ -615,30 +569,45 @@ class CephadmServe:
         else:
             for sn, spec in self.mgr.spec_store.active_specs.items():
                 specs.append(spec)
+        for name in ['CEPHADM_APPLY_SPEC_FAIL', 'CEPHADM_DAEMON_PLACE_FAIL']:
+            self.mgr.remove_health_warning(name)
+        self.mgr.apply_spec_fails = []
         for spec in specs:
             try:
                 if self._apply_service(spec):
                     r = True
             except Exception as e:
-                self.log.exception('Failed to apply %s spec %s: %s' % (
-                    spec.service_name(), spec, e))
+                msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
+                self.log.exception(msg)
                 self.mgr.events.for_service(spec, 'ERROR', 'Failed to apply: ' + str(e))
+                self.mgr.apply_spec_fails.append((spec.service_name(), str(e)))
+                warnings = []
+                for x in self.mgr.apply_spec_fails:
+                    warnings.append(f'{x[0]}: {x[1]}')
+                self.mgr.set_health_warning('CEPHADM_APPLY_SPEC_FAIL',
+                                            f"Failed to apply {len(self.mgr.apply_spec_fails)} service(s): {','.join(x[0] for x in self.mgr.apply_spec_fails)}",
+                                            len(self.mgr.apply_spec_fails),
+                                            warnings)
 
         return r
 
     def _apply_service_config(self, spec: ServiceSpec) -> None:
         if spec.config:
             section = utils.name_to_config_section(spec.service_name())
+            for name in ['CEPHADM_INVALID_CONFIG_OPTION', 'CEPHADM_FAILED_SET_OPTION']:
+                self.mgr.remove_health_warning(name)
+            invalid_config_options = []
+            options_failed_to_set = []
             for k, v in spec.config.items():
                 try:
                     current = self.mgr.get_foreign_ceph_option(section, k)
                 except KeyError:
-                    self.log.warning(
-                        f'Ignoring invalid {spec.service_name()} config option {k}'
-                    )
+                    msg = f'Ignoring invalid {spec.service_name()} config option {k}'
+                    self.log.warning(msg)
                     self.mgr.events.for_service(
                         spec, OrchestratorEvent.ERROR, f'Invalid config option {k}'
                     )
+                    invalid_config_options.append(msg)
                     continue
                 if current != v:
                     self.log.debug(f'setting [{section}] {k} = {v}')
@@ -650,9 +619,14 @@ class CephadmServe:
                             'who': section,
                         })
                     except MonCommandFailed as e:
-                        self.log.warning(
-                            f'Failed to set {spec.service_name()} option {k}: {e}'
-                        )
+                        msg = f'Failed to set {spec.service_name()} option {k}: {e}'
+                        self.log.warning(msg)
+                        options_failed_to_set.append(msg)
+
+            if invalid_config_options:
+                self.mgr.set_health_warning('CEPHADM_INVALID_CONFIG_OPTION', f'Ignoring {len(invalid_config_options)} invalid config option(s)', len(invalid_config_options), invalid_config_options)
+            if options_failed_to_set:
+                self.mgr.set_health_warning('CEPHADM_FAILED_SET_OPTION', f'Failed to set {len(options_failed_to_set)} option(s)', len(options_failed_to_set), options_failed_to_set)
 
     def _apply_service(self, spec: ServiceSpec) -> bool:
         """
@@ -738,9 +712,17 @@ class CephadmServe:
                 'status', '').lower() not in ['maintenance', 'offline'] and d.hostname not in self.mgr.offline_hosts)]
             self.log.debug('Add %s, remove %s' % (slots_to_add, daemons_to_remove))
         except OrchestratorError as e:
-            self.log.error('Failed to apply %s spec %s: %s' % (
-                spec.service_name(), spec, e))
+            msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
+            self.log.error(msg)
             self.mgr.events.for_service(spec, 'ERROR', 'Failed to apply: ' + str(e))
+            self.mgr.apply_spec_fails.append((spec.service_name(), str(e)))
+            warnings = []
+            for x in self.mgr.apply_spec_fails:
+                warnings.append(f'{x[0]}: {x[1]}')
+            self.mgr.set_health_warning('CEPHADM_APPLY_SPEC_FAIL',
+                                        f"Failed to apply {len(self.mgr.apply_spec_fails)} service(s): {','.join(x[0] for x in self.mgr.apply_spec_fails)}",
+                                        len(self.mgr.apply_spec_fails),
+                                        warnings)
             return False
 
         r = None
@@ -816,6 +798,7 @@ class CephadmServe:
                 svc.fence_old_ranks(spec, rank_map, len(all_slots))
 
             # create daemons
+            daemon_place_fails = []
             for slot in slots_to_add:
                 # first remove daemon on conflicting port?
                 if slot.ports:
@@ -866,6 +849,7 @@ class CephadmServe:
                            f"on {slot.hostname}: {e}")
                     self.mgr.events.for_service(spec, 'ERROR', msg)
                     self.mgr.log.error(msg)
+                    daemon_place_fails.append(msg)
                     # only return "no change" if no one else has already succeeded.
                     # later successes will also change to True
                     if r is None:
@@ -881,6 +865,9 @@ class CephadmServe:
                     daemon_id=daemon_id,
                 )
                 daemons.append(sd)
+
+            if daemon_place_fails:
+                self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(daemon_place_fails), daemon_place_fails)
 
             # remove any?
             def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
