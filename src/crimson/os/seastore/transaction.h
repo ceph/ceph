@@ -302,7 +302,7 @@ public:
 
   struct ool_write_stats_t {
     io_stat_t extents;
-    uint64_t overhead_bytes = 0;
+    uint64_t header_bytes = 0;
     uint64_t num_records = 0;
   };
   ool_write_stats_t& get_ool_write_stats() {

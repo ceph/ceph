@@ -676,7 +676,7 @@ void Cache::mark_transaction_conflicted(
     efforts.fresh_ool_written.extents += ool_stats.extents.num;
     efforts.fresh_ool_written.bytes += ool_stats.extents.bytes;
     efforts.num_ool_records += ool_stats.num_records;
-    efforts.ool_record_overhead_bytes += ool_stats.overhead_bytes;
+    efforts.ool_record_overhead_bytes += ool_stats.header_bytes;
 
     if (t.get_src() == Transaction::src_t::CLEANER) {
       // CLEANER transaction won't contain any onode tree operations
@@ -940,7 +940,7 @@ record_t Cache::prepare_record(Transaction &t)
   auto& ool_stats = t.get_ool_write_stats();
   ceph_assert(ool_stats.extents.num == t.ool_block_list.size());
   efforts.num_ool_records += ool_stats.num_records;
-  efforts.ool_record_overhead_bytes += ool_stats.overhead_bytes;
+  efforts.ool_record_overhead_bytes += ool_stats.header_bytes;
   auto record_size = get_encoded_record_length(
       record, segment_manager.get_block_size());
   auto inline_overhead =
