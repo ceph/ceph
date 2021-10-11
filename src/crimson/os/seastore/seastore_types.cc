@@ -137,7 +137,7 @@ record_size_t get_encoded_record_length(
   for (const auto &i: record.extents) {
     dlength += i.bl.length();
   }
-  return record_size_t{mdlength, dlength};
+  return record_size_t{raw_mdlength, mdlength, dlength};
 }
 
 ceph::bufferlist encode_record(
@@ -172,6 +172,8 @@ ceph::bufferlist encode_record(
   for (const auto &i: record.deltas) {
     encode(i, bl);
   }
+  ceph_assert(bl.length() == rsize.raw_mdlength);
+
   if (bl.length() % block_size != 0) {
     bl.append_zero(
       block_size - (bl.length() % block_size));

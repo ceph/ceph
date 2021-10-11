@@ -92,6 +92,7 @@ SegmentedAllocator::Writer::_write(
   auto& stats = t.get_ool_write_stats();
   stats.extents.num += record.get_num_extents();
   stats.extents.bytes += record_size.dlength;
+  stats.header_raw_bytes += record_size.raw_mdlength;
   stats.header_bytes += record_size.mdlength;
   stats.num_records += 1;
 

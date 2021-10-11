@@ -836,6 +836,7 @@ struct record_header_t {
 std::ostream &operator<<(std::ostream &out, const extent_info_t &header);
 
 struct record_size_t {
+  extent_len_t raw_mdlength = 0;
   extent_len_t mdlength = 0;
   extent_len_t dlength = 0;
 };
