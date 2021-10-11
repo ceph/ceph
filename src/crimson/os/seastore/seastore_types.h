@@ -838,11 +838,6 @@ std::ostream &operator<<(std::ostream &out, const extent_info_t &header);
 struct record_size_t {
   extent_len_t mdlength = 0;
   extent_len_t dlength = 0;
-
-  record_size_t(
-    extent_len_t mdlength,
-    extent_len_t dlength)
-    : mdlength(mdlength), dlength(dlength) {}
 };
 
 extent_len_t get_encoded_record_raw_mdlength(
