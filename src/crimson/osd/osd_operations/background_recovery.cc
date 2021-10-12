@@ -111,8 +111,9 @@ PglogBasedRecovery::PglogBasedRecovery(
 PglogBasedRecovery::interruptible_future<bool>
 PglogBasedRecovery::do_recovery()
 {
-  if (pg->has_reset_since(epoch_started))
+  if (pg->has_reset_since(epoch_started)) {
     return seastar::make_ready_future<bool>(false);
+  }
   return with_blocking_future_interruptible<interruptor::condition>(
     pg->get_recovery_handler()->start_recovery_ops(
       crimson::common::local_conf()->osd_recovery_max_single_start));
