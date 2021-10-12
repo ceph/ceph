@@ -43,18 +43,18 @@ seastar::future<> InternalClientRequest::start()
     return seastar::repeat([this] {
       logger().debug("{}: in repeat", *this);
       return interruptor::with_interruption([this]() mutable {
-        return with_blocking_future_interruptible<IOInterruptCondition>(
+        return with_blocking_future_interruptible<interruptor::condition>(
           handle.enter(pp().wait_for_active)
         ).then_interruptible([this] {
-          return with_blocking_future_interruptible<IOInterruptCondition>(
+          return with_blocking_future_interruptible<interruptor::condition>(
             pg->wait_for_active_blocker.wait());
         }).then_interruptible([this] {
-          return with_blocking_future_interruptible<IOInterruptCondition>(
+          return with_blocking_future_interruptible<interruptor::condition>(
             handle.enter(pp().recover_missing)
           ).then_interruptible([this] {
             return do_recover_missing(pg, {});
           }).then_interruptible([this] {
-            return with_blocking_future_interruptible<IOInterruptCondition>(
+            return with_blocking_future_interruptible<interruptor::condition>(
               handle.enter(pp().get_obc)
             ).then_interruptible([this] () -> PG::load_obc_iertr::future<> {
               logger().debug("{}: getting obc lock", *this);
@@ -67,7 +67,7 @@ seastar::future<> InternalClientRequest::start()
                 assert(ret == 0);
                 return pg->with_locked_obc(get_target_oid(), op_info,
                   [&osd_ops, this](auto obc) {
-                  return with_blocking_future_interruptible<IOInterruptCondition>(
+                  return with_blocking_future_interruptible<interruptor::condition>(
                     handle.enter(pp().process)
                   ).then_interruptible(
                     [obc=std::move(obc), &osd_ops, this] {
