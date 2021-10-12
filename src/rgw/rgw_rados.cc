@@ -1337,8 +1337,9 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp)
 
   reshard = new RGWReshard(this->store);
 
-  /* only the master zone in the zonegroup reshards buckets */
-  run_reshard_thread = run_reshard_thread && (zonegroup.master_zone == zone.id);
+  // disable reshard thread based on zone/zonegroup support
+  run_reshard_thread = run_reshard_thread && svc.zone->can_reshard();
+
   if (run_reshard_thread)  {
     reshard->start_processor();
   }
