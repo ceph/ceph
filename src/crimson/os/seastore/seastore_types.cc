@@ -129,14 +129,15 @@ extent_len_t get_encoded_record_raw_mdlength(
 record_size_t get_encoded_record_length(
   const record_t &record,
   size_t block_size) {
-  extent_len_t metadata =
+  extent_len_t raw_mdlength =
     get_encoded_record_raw_mdlength(record, block_size);
-  extent_len_t data = 0;
+  extent_len_t mdlength =
+    p2roundup(raw_mdlength, (extent_len_t)block_size);
+  extent_len_t dlength = 0;
   for (const auto &i: record.extents) {
-    data += i.bl.length();
+    dlength += i.bl.length();
   }
-  metadata = p2roundup(metadata, (extent_len_t)block_size);
-  return record_size_t{metadata, data};
+  return record_size_t{raw_mdlength, mdlength, dlength};
 }
 
 ceph::bufferlist encode_record(
@@ -171,12 +172,13 @@ ceph::bufferlist encode_record(
   for (const auto &i: record.deltas) {
     encode(i, bl);
   }
+  ceph_assert(bl.length() == rsize.raw_mdlength);
+
   if (bl.length() % block_size != 0) {
     bl.append_zero(
       block_size - (bl.length() % block_size));
   }
   ceph_assert(bl.length() == rsize.mdlength);
-
 
   auto bliter = bl.cbegin();
   auto metadata_crc = bliter.crc32c(
