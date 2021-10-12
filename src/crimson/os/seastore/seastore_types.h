@@ -36,28 +36,156 @@ struct seastore_meta_t {
   }
 };
 
-// Identifies segment location on disk, see SegmentManager,
-using segment_id_t = uint32_t;
-constexpr segment_id_t MAX_SEG_ID =
-  std::numeric_limits<segment_id_t>::max();
-constexpr segment_id_t NULL_SEG_ID =
-  std::numeric_limits<segment_id_t>::max() - 1;
-/* Used to denote relative paddr_t */
-constexpr segment_id_t RECORD_REL_SEG_ID =
-  std::numeric_limits<segment_id_t>::max() - 2;
-constexpr segment_id_t BLOCK_REL_SEG_ID =
-  std::numeric_limits<segment_id_t>::max() - 3;
-// for tests which generate fake paddrs
-constexpr segment_id_t FAKE_SEG_ID =
-  std::numeric_limits<segment_id_t>::max() - 4;
+// identifies a specific physical device within seastore
+using device_id_t = uint8_t;
 
+// order of device_id_t
+constexpr uint16_t DEVICE_ID_LEN_BITS = 4;
+
+// maximum number of devices supported
+constexpr uint16_t DEVICE_ID_MAX = (1 << DEVICE_ID_LEN_BITS);
+
+// segment ids without a device id encapsulated
+using device_segment_id_t = uint32_t;
+
+// Identifies segment location on disk, see SegmentManager,
+struct segment_id_t {
+private:
+  // internal segment id type of segment_id_t, basically
+  // this is a unsigned int with the top "DEVICE_ID_LEN_BITS"
+  // bits representing the id of the device on which the
+  // segment resides
+  using internal_segment_id_t = uint32_t;
+
+  // mask for segment manager id
+  static constexpr internal_segment_id_t SM_ID_MASK =
+    0xF << (std::numeric_limits<internal_segment_id_t>::digits - DEVICE_ID_LEN_BITS);
+  // default internal segment id
+  static constexpr internal_segment_id_t DEFAULT_INTERNAL_SEG_ID =
+    std::numeric_limits<internal_segment_id_t>::max() - 1;
+
+  internal_segment_id_t segment = DEFAULT_INTERNAL_SEG_ID;
+
+  constexpr segment_id_t(uint32_t encoded) : segment(encoded) {}
+public:
+  constexpr static segment_id_t make_max() {
+    return std::numeric_limits<internal_segment_id_t>::max();
+  }
+  constexpr static segment_id_t make_null() {
+    return std::numeric_limits<internal_segment_id_t>::max() - 1;
+  }
+  /* Used to denote relative paddr_t */
+  constexpr static segment_id_t make_record_relative() {
+    return std::numeric_limits<internal_segment_id_t>::max() - 2;
+  }
+  constexpr static segment_id_t make_block_relative() {
+    return std::numeric_limits<internal_segment_id_t>::max() - 3;
+  }
+  // for tests which generate fake paddrs
+  constexpr static segment_id_t make_fake() {
+    return std::numeric_limits<internal_segment_id_t>::max() - 4;
+  }
+
+  /* Used to denote references to notional zero filled segment, mainly
+   * in denoting reserved laddr ranges for unallocated object data.
+   */
+  constexpr static segment_id_t make_zero() {
+    return std::numeric_limits<internal_segment_id_t>::max() - 5;
+  }
+  constexpr static segment_id_t make_delayed() {
+    return std::numeric_limits<internal_segment_id_t>::max() - 6;
+  }
+
+  segment_id_t() = default;
+  segment_id_t(device_id_t id, device_segment_id_t segment)
+    : segment(make_internal(segment, id)) {
+    // only lower 4 bits are effective, and we have to reserve 0x0F for
+    // special XXX_SEG_IDs
+    assert(id < DEVICE_ID_MAX);
+  }
+
+  [[gnu::always_inline]]
+  device_id_t device_id() const {
+    return internal_to_device(segment);
+  }
+
+  [[gnu::always_inline]]
+  device_segment_id_t device_segment_id() const {
+    return internal_to_segment(segment);
+  }
+
+  bool operator==(const segment_id_t& other) const {
+    return segment == other.segment;
+  }
+  bool operator!=(const segment_id_t& other) const {
+    return segment != other.segment;
+  }
+  bool operator<(const segment_id_t& other) const {
+    return segment < other.segment;
+  }
+  bool operator<=(const segment_id_t& other) const {
+    return segment <= other.segment;
+  }
+  bool operator>(const segment_id_t& other) const {
+    return segment > other.segment;
+  }
+  bool operator>=(const segment_id_t& other) const {
+    return segment >= other.segment;
+  }
+
+  DENC(segment_id_t, v, p) {
+    denc(v.segment, p);
+  }
+private:
+  static constexpr unsigned segment_bits = (
+    std::numeric_limits<internal_segment_id_t>::digits - DEVICE_ID_LEN_BITS
+  );
+
+  static inline device_id_t internal_to_device(internal_segment_id_t id) {
+    return (static_cast<device_id_t>(id) & SM_ID_MASK) >> segment_bits;
+  }
+
+  static inline device_segment_id_t internal_to_segment(
+    internal_segment_id_t id) {
+    return id & (~SM_ID_MASK);
+  }
+
+  static inline internal_segment_id_t make_internal(
+    device_segment_id_t id,
+    device_id_t sm_id) {
+    return static_cast<internal_segment_id_t>(id) |
+      (static_cast<internal_segment_id_t>(sm_id) << segment_bits);
+  }
+
+  friend struct segment_id_le_t;
+};
+
+// ondisk type of segment_id_t
+struct __attribute((packed)) segment_id_le_t {
+  ceph_le32 segment = ceph_le32(segment_id_t::DEFAULT_INTERNAL_SEG_ID);
+
+  segment_id_le_t(const segment_id_t id) :
+    segment(ceph_le32(id.segment)) {}
+
+  operator segment_id_t() const {
+    return segment_id_t(segment);
+  }
+};
+
+constexpr segment_id_t MAX_SEG_ID = segment_id_t::make_max();
+constexpr segment_id_t NULL_SEG_ID = segment_id_t::make_null();
+constexpr segment_id_t RECORD_REL_SEG_ID = segment_id_t::make_record_relative();
+constexpr segment_id_t BLOCK_REL_SEG_ID = segment_id_t::make_block_relative();
+// for tests which generate fake paddrs
+constexpr segment_id_t FAKE_SEG_ID = segment_id_t::make_fake();
 /* Used to denote references to notional zero filled segment, mainly
  * in denoting reserved laddr ranges for unallocated object data.
  */
-constexpr segment_id_t ZERO_SEG_ID =
-  std::numeric_limits<segment_id_t>::max() - 5;
-constexpr segment_id_t DELAYED_TEMP_SEG_ID =
-  std::numeric_limits<segment_id_t>::max() - 6;
+constexpr segment_id_t ZERO_SEG_ID = segment_id_t::make_zero();
+constexpr segment_id_t DELAYED_TEMP_SEG_ID = segment_id_t::make_delayed();
+
+std::ostream &operator<<(std::ostream &out, const segment_id_t&);
+
 
 std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
 
@@ -85,6 +213,188 @@ constexpr record_delta_idx_t NULL_DELTA_IDX =
   std::numeric_limits<record_delta_idx_t>::max();
 
 /**
+ * segment_map_t
+ *
+ * Compact templated mapping from a segment_id_t to a value type.
+ */
+template <typename T>
+class segment_map_t {
+public:
+  segment_map_t() {
+    // initializes top vector with 0 length vectors to indicate that they
+    // are not yet present
+    device_to_segments.resize(DEVICE_ID_MAX);
+  }
+  void add_device(device_id_t device, size_t segments, const T& init) {
+    assert(device < DEVICE_ID_MAX);
+    assert(device_to_segments[device].size() == 0);
+    device_to_segments[device].resize(segments, init);
+    total_segments += segments;
+  }
+  void clear() {
+    device_to_segments.clear();
+    device_to_segments.resize(DEVICE_ID_MAX);
+    total_segments = 0;
+  }
+
+  T& operator[](segment_id_t id) {
+    assert(id.device_segment_id() < device_to_segments[id.device_id()].size());
+    return device_to_segments[id.device_id()][id.device_segment_id()];
+  }
+  const T& operator[](segment_id_t id) const {
+    assert(id.device_segment_id() < device_to_segments[id.device_id()].size());
+    return device_to_segments[id.device_id()][id.device_segment_id()];
+  }
+
+  auto begin() {
+    return iterator<false>::lower_bound(*this, 0, 0);
+  }
+  auto begin() const {
+    return iterator<true>::lower_bound(*this, 0, 0);
+  }
+
+  auto end() {
+    return iterator<false>::end_iterator(*this);
+  }
+  auto end() const {
+    return iterator<true>::end_iterator(*this);
+  }
+
+  auto device_begin(device_id_t id) {
+    auto ret = iterator<false>::lower_bound(*this, id, 0);
+    assert(ret->first.device_id() == id);
+    return ret;
+  }
+  auto device_end(device_id_t id) {
+    return iterator<false>::lower_bound(*this, id + 1, 0);
+  }
+
+  size_t size() const {
+    return total_segments;
+  }
+
+private:
+  template <bool is_const = false>
+  class iterator {
+    /// points at set being iterated over
+    std::conditional_t<
+      is_const,
+      const segment_map_t &,
+      segment_map_t &> parent;
+
+    /// points at current device, or DEVICE_ID_MAX if is_end()
+    device_id_t device_id;
+
+    /// segment at which we are pointing, 0 if is_end()
+    device_segment_id_t device_segment_id;
+
+    /// holds referent for operator* and operator-> when !is_end()
+    std::optional<
+      std::pair<
+        const segment_id_t,
+	std::conditional_t<is_const, const T&, T&>
+	>> current;
+
+    bool is_end() const {
+      return device_id == DEVICE_ID_MAX;
+    }
+
+    void find_valid() {
+      assert(!is_end());
+      auto &device_vec = parent.device_to_segments[device_id];
+      if (device_vec.size() == 0 ||
+	  device_segment_id == device_vec.size()) {
+	while (++device_id < DEVICE_ID_MAX &&
+	       parent.device_to_segments[device_id].size() == 0);
+	device_segment_id = 0;
+      }
+      if (is_end()) {
+	current = std::nullopt;
+      } else {
+	current.emplace(
+	  segment_id_t{device_id, device_segment_id},
+	  parent.device_to_segments[device_id][device_segment_id]
+	);
+      }
+    }
+
+    iterator(
+      decltype(parent) &parent,
+      device_id_t device_id,
+      device_segment_id_t device_segment_id)
+      : parent(parent), device_id(device_id),
+	device_segment_id(device_segment_id) {}
+
+  public:
+    static iterator lower_bound(
+      decltype(parent) &parent,
+      device_id_t device_id,
+      device_segment_id_t device_segment_id) {
+      if (device_id == DEVICE_ID_MAX) {
+	return end_iterator(parent);
+      } else {
+	auto ret = iterator{parent, device_id, device_segment_id};
+	ret.find_valid();
+	return ret;
+      }
+    }
+
+    static iterator end_iterator(
+      decltype(parent) &parent) {
+      return iterator{parent, DEVICE_ID_MAX, 0};
+    }
+
+    iterator<is_const>& operator++() {
+      assert(!is_end());
+      ++device_segment_id;
+      find_valid();
+      return *this;
+    }
+
+    bool operator==(iterator<is_const> rit) {
+      return (device_id == rit.device_id &&
+	      device_segment_id == rit.device_segment_id);
+    }
+
+    bool operator!=(iterator<is_const> rit) {
+      return !(*this == rit);
+    }
+
+    template <bool c = is_const, std::enable_if_t<c, int> = 0>
+    const std::pair<const segment_id_t, const T&> *operator->() {
+      assert(!is_end());
+      return &*current;
+    }
+    template <bool c = is_const, std::enable_if_t<!c, int> = 0>
+    std::pair<const segment_id_t, T&> *operator->() {
+      assert(!is_end());
+      return &*current;
+    }
+    template <bool c = is_const, std::enable_if_t<c, int> = 0>
+    const std::pair<const segment_id_t, const T&> &operator*() {
+      assert(!is_end());
+      return *current;
+    }
+    template <bool c = is_const, std::enable_if_t<!c, int> = 0>
+    std::pair<const segment_id_t, T&> &operator*() {
+      assert(!is_end());
+      return *current;
+    }
+  };
+
+  /**
+   * device_to_segments
+   *
+   * device -> segment -> T mapping.  device_to_segments[d].size() > 0 iff
+   * device <d> has been added.
+   */
+  std::vector<std::vector<T>> device_to_segments;
+
+  /// total number of added segments
+  size_t total_segments = 0;
+};
+
+/**
  * paddr_t
  *
  * <segment, offset> offset on disk, see SegmentManager
@@ -104,6 +414,13 @@ constexpr record_delta_idx_t NULL_DELTA_IDX =
 struct paddr_t {
   segment_id_t segment = NULL_SEG_ID;
   segment_off_t offset = NULL_SEG_OFF;
+
+  paddr_t() = default;
+  paddr_t(device_id_t id, device_segment_id_t sgt, segment_off_t offset)
+    : segment(segment_id_t(id, sgt)), offset(offset) {}
+
+  constexpr paddr_t(segment_id_t segment, segment_off_t offset)
+    : segment(segment), offset(offset) {}
 
   bool is_relative() const {
     return segment == RECORD_REL_SEG_ID ||
@@ -201,7 +518,7 @@ struct paddr_t {
 WRITE_CMP_OPERATORS_2(paddr_t, segment, offset)
 WRITE_EQ_OPERATORS_2(paddr_t, segment, offset)
 constexpr paddr_t P_ADDR_NULL = paddr_t{};
-constexpr paddr_t P_ADDR_MIN = paddr_t{0, 0};
+constexpr paddr_t P_ADDR_MIN = paddr_t{ZERO_SEG_ID, 0};
 constexpr paddr_t P_ADDR_MAX = paddr_t{
   MAX_SEG_ID,
   MAX_SEG_OFF
@@ -223,14 +540,12 @@ constexpr paddr_t delayed_temp_paddr(segment_off_t off) {
 }
 
 struct __attribute((packed)) paddr_le_t {
-  ceph_le32 segment = ceph_le32(NULL_SEG_ID);
+  segment_id_le_t segment = segment_id_le_t(NULL_SEG_ID);
   ceph_les32 offset = ceph_les32(NULL_SEG_OFF);
 
   paddr_le_t() = default;
-  paddr_le_t(ceph_le32 segment, ceph_les32 offset)
-    : segment(segment), offset(offset) {}
   paddr_le_t(segment_id_t segment, segment_off_t offset)
-    : segment(ceph_le32(segment)), offset(ceph_les32(offset)) {}
+    : segment(segment), offset(ceph_les32(offset)) {}
   paddr_le_t(const paddr_t &addr) : paddr_le_t(addr.segment, addr.offset) {}
 
   operator paddr_t() const {
@@ -260,6 +575,8 @@ enum device_type_t {
 };
 
 bool can_delay_allocation(device_type_t type);
+device_type_t string_to_device_type(std::string type);
+std::string device_type_to_string(device_type_t type);
 
 /* Monotonically increasing identifier for the location of a
  * journal_record.
@@ -279,7 +596,7 @@ WRITE_CMP_OPERATORS_2(journal_seq_t, segment_seq, offset)
 WRITE_EQ_OPERATORS_2(journal_seq_t, segment_seq, offset)
 constexpr journal_seq_t JOURNAL_SEQ_MIN{
   0,
-  paddr_t{0, 0}
+  paddr_t{ZERO_SEG_ID, 0}
 };
 constexpr journal_seq_t JOURNAL_SEQ_MAX{
   MAX_SEG_SEQ,
@@ -895,9 +1212,47 @@ struct scan_valid_records_cursor {
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_id_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::paddr_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal_seq_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::delta_info_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::extent_info_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
+
+template<>
+struct denc_traits<crimson::os::seastore::device_type_t> {
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
+  static constexpr bool need_contiguous = false;
+
+  static void bound_encode(
+    const crimson::os::seastore::device_type_t &o,
+    size_t& p,
+    uint64_t f=0) {
+    p += sizeof(crimson::os::seastore::device_type_t);
+  }
+  template<class It>
+  static std::enable_if_t<!is_const_iterator_v<It>>
+  encode(
+    const crimson::os::seastore::device_type_t &o,
+    It& p,
+    uint64_t f=0) {
+    get_pos_add<crimson::os::seastore::device_type_t>(p) = o;
+  }
+  template<class It>
+  static std::enable_if_t<is_const_iterator_v<It>>
+  decode(
+    crimson::os::seastore::device_type_t& o,
+    It& p,
+    uint64_t f=0) {
+    o = get_pos_add<crimson::os::seastore::device_type_t>(p);
+  }
+  static void decode(
+    crimson::os::seastore::device_type_t& o,
+    ceph::buffer::list::const_iterator &p) {
+    p.copy(sizeof(crimson::os::seastore::device_type_t),
+           reinterpret_cast<char*>(&o));
+  }
+};

@@ -10,17 +10,14 @@
 namespace crimson::os::seastore {
 
 class SegmentCleaner;
+class TransactionManager;
 
-class Scanner {
+class ExtentReader {
 public:
-  using read_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange>;
-
-  Scanner(SegmentManager& segment_manager)
-    : segment_manager(segment_manager) {}
+  using read_ertr = SegmentManager::read_ertr;
+  ExtentReader() {
+    segment_managers.resize(DEVICE_ID_MAX, nullptr);
+  }
   using read_segment_header_ertr = crimson::errorator<
     crimson::ct_error::enoent,
     crimson::ct_error::enodata,
@@ -65,9 +62,26 @@ public:
     found_record_handler_t &handler    ///< [in] handler for records
   ); ///< @return used budget
 
-private:
-  SegmentManager& segment_manager;
+  void add_segment_manager(SegmentManager* segment_manager) {
+    assert(!segment_managers[segment_manager->get_device_id()] ||
+      segment_manager == segment_managers[segment_manager->get_device_id()]);
+    segment_managers[segment_manager->get_device_id()] = segment_manager;
+  }
 
+  read_ertr::future<> read(
+    paddr_t addr,
+    size_t len,
+    ceph::bufferptr &out) {
+    assert(segment_managers[addr.segment.device_id()]);
+    return segment_managers[addr.segment.device_id()]->read(addr, len, out);
+  }
+
+private:
+  std::vector<SegmentManager*> segment_managers;
+
+  std::vector<SegmentManager*>& get_segment_managers() {
+    return segment_managers;
+  }
   /// read record metadata for record starting at start
   using read_validate_record_metadata_ertr = read_ertr;
   using read_validate_record_metadata_ret =
@@ -95,8 +109,9 @@ private:
   /// validate embedded metadata checksum
   static bool validate_metadata(const bufferlist &bl);
 
+  friend class TransactionManager;
 };
 
-using ScannerRef = std::unique_ptr<Scanner>;
+using ExtentReaderRef = std::unique_ptr<ExtentReader>;
 
 } // namespace crimson::os::seastore

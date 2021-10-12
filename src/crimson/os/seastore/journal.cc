@@ -50,7 +50,7 @@ segment_nonce_t generate_nonce(
     sizeof(meta.seastore_id.uuid));
 }
 
-Journal::Journal(SegmentManager &segment_manager, Scanner& scanner)
+Journal::Journal(SegmentManager &segment_manager, ExtentReader& scanner)
   : segment_manager(segment_manager), scanner(scanner) {}
 
 
@@ -166,7 +166,7 @@ Journal::roll_journal_segment()
   return (current_journal_segment ?
 	  current_journal_segment->close() :
 	  Segment::close_ertr::now()).safe_then([this] {
-      return segment_provider->get_segment();
+      return segment_provider->get_segment(segment_manager.get_device_id());
     }).safe_then([this](auto segment) {
       return segment_manager.open(segment);
     }).safe_then([this](auto sref) {
@@ -306,7 +306,7 @@ Journal::replay_segment(
   logger().debug("replay_segment: starting at {}", seq);
   return seastar::do_with(
     scan_valid_records_cursor(seq.offset),
-    Scanner::found_record_handler_t(
+    ExtentReader::found_record_handler_t(
       [=, &handler](paddr_t base,
 		    const record_header_t &header,
 		    const bufferlist &mdbuf) {

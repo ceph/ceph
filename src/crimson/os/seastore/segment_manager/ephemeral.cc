@@ -59,10 +59,11 @@ Segment::write_ertr::future<> EphemeralSegment::write(
 
 Segment::close_ertr::future<> EphemeralSegmentManager::segment_close(segment_id_t id)
 {
-  if (segment_state[id] != segment_state_t::OPEN)
+  auto s_id = id.device_segment_id();
+  if (segment_state[s_id] != segment_state_t::OPEN)
     return crimson::ct_error::invarg::make();
 
-  segment_state[id] = segment_state_t::CLOSED;
+  segment_state[s_id] = segment_state_t::CLOSED;
   return Segment::close_ertr::now().safe_then([] {
     return seastar::sleep(std::chrono::milliseconds(1));
   });
@@ -80,7 +81,7 @@ Segment::write_ertr::future<> EphemeralSegmentManager::segment_write(
     get_offset(addr),
     bl.length(),
     bl.crc32c(1));
-  if (!ignore_check && segment_state[addr.segment] != segment_state_t::OPEN)
+  if (!ignore_check && segment_state[addr.segment.device_segment_id()] != segment_state_t::OPEN)
     return crimson::ct_error::invarg::make();
 
   bl.begin().copy(bl.length(), buffer + get_offset(addr));
@@ -145,33 +146,35 @@ void EphemeralSegmentManager::remount()
 SegmentManager::open_ertr::future<SegmentRef> EphemeralSegmentManager::open(
   segment_id_t id)
 {
-  if (id >= get_num_segments()) {
+  auto s_id = id.device_segment_id();
+  if (s_id >= get_num_segments()) {
     logger().error("EphemeralSegmentManager::open: invalid segment {}", id);
     return crimson::ct_error::invarg::make();
   }
 
-  if (segment_state[id] != segment_state_t::EMPTY) {
+  if (segment_state[s_id] != segment_state_t::EMPTY) {
     logger().error("EphemeralSegmentManager::open: segment {} not empty", id);
     return crimson::ct_error::invarg::make();
   }
 
-  segment_state[id] = segment_state_t::OPEN;
+  segment_state[s_id] = segment_state_t::OPEN;
   return open_ertr::make_ready_future<SegmentRef>(new EphemeralSegment(*this, id));
 }
 
 SegmentManager::release_ertr::future<> EphemeralSegmentManager::release(
   segment_id_t id)
 {
+  auto s_id = id.device_segment_id();
   logger().debug("EphemeralSegmentManager::release: {}", id);
 
-  if (id >= get_num_segments()) {
+  if (s_id >= get_num_segments()) {
     logger().error(
       "EphemeralSegmentManager::release: invalid segment {}",
       id);
     return crimson::ct_error::invarg::make();
   }
 
-  if (segment_state[id] != segment_state_t::CLOSED) {
+  if (segment_state[s_id] != segment_state_t::CLOSED) {
     logger().error(
       "EphemeralSegmentManager::release: segment id {} not closed",
       id);
@@ -179,7 +182,7 @@ SegmentManager::release_ertr::future<> EphemeralSegmentManager::release(
   }
 
   ::memset(buffer + get_offset({id, 0}), 0, config.segment_size);
-  segment_state[id] = segment_state_t::EMPTY;
+  segment_state[s_id] = segment_state_t::EMPTY;
   return release_ertr::now().safe_then([] {
     return seastar::sleep(std::chrono::milliseconds(1));
   });
@@ -190,7 +193,7 @@ SegmentManager::read_ertr::future<> EphemeralSegmentManager::read(
   size_t len,
   ceph::bufferptr &out)
 {
-  if (addr.segment >= get_num_segments()) {
+  if (addr.segment.device_segment_id() >= get_num_segments()) {
     logger().error(
       "EphemeralSegmentManager::read: invalid segment {}",
       addr);
@@ -211,7 +214,7 @@ SegmentManager::read_ertr::future<> EphemeralSegmentManager::read(
   bl.push_back(out);
   logger().debug(
     "segment_read to segment {} at offset {}, physical offset {}, length {}, crc {}",
-    addr.segment,
+    addr.segment.device_segment_id(),
     addr.offset,
     get_offset(addr),
     len,
