@@ -74,6 +74,14 @@ class NFSRados:
             ExportMgr._check_rados_notify(ioctx, config_obj)
             log.debug("Added %s url to %s", obj, config_obj)
 
+    def read_obj(self, obj: str) -> Optional[str]:
+        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+            ioctx.set_namespace(self.namespace)
+            try:
+                return ioctx.read(obj, 1048576).decode()
+            except ObjectNotFound:
+                return None
+
     def update_obj(self, conf_block: str, obj: str, config_obj: str) -> None:
         with self.mgr.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
