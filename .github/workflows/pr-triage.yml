@@ -2,7 +2,7 @@
 name: "Pull Request Triage"
 on: pull_request_target
 env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  MY_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 jobs:
   pr-triage:
     runs-on: ubuntu-latest
