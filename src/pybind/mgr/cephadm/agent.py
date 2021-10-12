@@ -205,7 +205,7 @@ class AgentMessageThread(threading.Thread):
     def __init__(self, host: str, port: int, data: Dict[Any, Any], mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
         self.host = host
-        self.addr = self.mgr.inventory.get_addr(host)
+        self.addr = self.mgr.inventory.get_addr(host) if host in self.mgr.inventory else host
         self.port = port
         self.data: str = json.dumps(data)
         super(AgentMessageThread, self).__init__(target=self.run)
@@ -261,6 +261,7 @@ class AgentMessageThread(threading.Thread):
                 secure_agent_socket.sendall(msg.encode('utf-8'))
                 agent_response = secure_agent_socket.recv(1024).decode()
                 self.mgr.log.info(f'Received "{agent_response}" from agent on host {self.host}')
+                self.mgr.cache.sending_agent_message[self.host] = False
                 return
             except ConnectionError as e:
                 # if it's a connection error, possibly try to connect again.
