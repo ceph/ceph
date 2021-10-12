@@ -2470,6 +2470,10 @@ Then run the following:
         return self.upgrade.upgrade_status()
 
     @handle_orch_error
+    def upgrade_ls(self, image: Optional[str], tags: bool) -> List[str]:
+        return self.upgrade.upgrade_ls(image, tags)
+
+    @handle_orch_error
     def upgrade_start(self, image: str, version: str) -> str:
         if self.inventory.get_host_with_state("maintenance"):
             raise OrchestratorError("upgrade aborted - you have host(s) in maintenance state")
