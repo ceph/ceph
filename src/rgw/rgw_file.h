@@ -2525,6 +2525,8 @@ public:
     // invoking this classes's header_init()
     (void) RGWWriteRequest::header_init();
     op = this;
+    // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+    hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   }
 
   bool only_bucket() override { return true; }
