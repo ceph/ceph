@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import logging
+
 from __future__ import absolute_import
 
 from .helper import DashboardTestCase, JList, JObj, devices_schema
@@ -88,10 +90,14 @@ class HostControllerTest(DashboardTestCase):
         self.assertSchema(data, devices_schema)
 
     def test_host_daemons(self):
+        logging.warning('test_host_daemons start')
         hosts = self._get('{}'.format(self.URL_HOST))
+        logging.warning(f'hosts {hosts}')
         hosts = [host['hostname'] for host in hosts if host['hostname'] != '']
+        logging.warning(f'hosts (2) {hosts}')
         assert hosts[0]
         data = self._get('{}/daemons'.format('{}/{}'.format(self.URL_HOST, hosts[0])))
+        logging.warning(f'data {data}')
         self.assertStatus(200)
         self.assertSchema(data, JList(JObj({
             'hostname': str,
