@@ -119,6 +119,14 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
    */
   double osd_bandwidth_cost_per_io;
 
+   /**
+    * osd_bandwidth_cost_per_io_inv
+    *
+    * Maintain a multiplicative inverse of osd_bandwidth_cost_per_io
+    * to avoid repeated divisions.
+    */
+  double osd_bandwidth_cost_per_io_inv;
+
   /**
    * osd_bandwidth_capacity_per_shard
    *
@@ -152,11 +160,16 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
       crimson::dmclock::ClientInfo(1, 1, 1)
     };
 
+    // Mutex to protect ClientRegistry operations
+    mutable ceph::mutex reg_lock = ceph::make_mutex("ClientRegistry::lock");
+
+    // Client info Maps and accessors
     crimson::dmclock::ClientInfo default_external_client_info = {1, 1, 1};
     std::map<client_profile_id_t,
-	     crimson::dmclock::ClientInfo> external_client_infos;
+             crimson::dmclock::ClientInfo> external_client_infos;
     const crimson::dmclock::ClientInfo *get_external_client(
       const client_profile_id_t &client) const;
+    mutable ceph::mutex reg_lock = ceph::make_mutex("ClientRegistry::lock");
   public:
     /**
      * update_from_config
@@ -170,6 +183,20 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
       double capacity_per_shard);
     const crimson::dmclock::ClientInfo *get_info(
       const scheduler_id_t &id) const;
+
+    void set_info(
+      const ConfigProxy &conf,
+      const bool is_rotational,
+      const scheduler_id_t &id,
+      const client_qos_params_t &qos_params,
+      const double capacity_per_shard);
+
+    void clear_info(const scheduler_id_t &id);
+
+    unsigned get_external_client_infos_size() {
+      std::lock_guard rl(reg_lock);
+      return external_client_infos.size();
+    }
   } client_registry;
 
   using mclock_queue_t = crimson::dmclock::PullPriorityQueue<
@@ -267,6 +294,10 @@ public:
     return scheduler.empty() && high_priority.empty();
   }
 
+// Get the size of the external client registry map
+  unsigned get_external_client_registry_size() {
+    return client_registry.get_external_client_infos_size();
+  }
   // Formatted output of the queue
   void dump(ceph::Formatter &f) const final;
 
