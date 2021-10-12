@@ -69,9 +69,10 @@ SegmentedAllocator::Writer::finish_write(
 SegmentedAllocator::Writer::write_iertr::future<>
 SegmentedAllocator::Writer::_write(
   Transaction& t,
-  ool_record_t& record,
-  const record_size_t& record_size)
+  ool_record_t& record)
 {
+  record_size_t record_size = record.get_encoded_record_length();
+  allocated_to += record_size.mdlength + record_size.dlength;
   bufferlist bl = record.encode(
       record_size,
       current_segment->segment->get_segment_id(),
@@ -165,9 +166,8 @@ SegmentedAllocator::Writer::write(
                   num_extents,
                   current_segment->segment->get_segment_id(),
                   allocated_to);
-                auto rsize = record.get_encoded_record_length();
                 return (num_extents ?
-                        _write(t, record, rsize) :
+                        _write(t, record) :
                         write_iertr::now()
                 ).si_then([this]() mutable {
                   return roll_segment(false);
@@ -179,7 +179,6 @@ SegmentedAllocator::Writer::write(
               add_extent_to_write(record, extent);
               it = extents.erase(it);
             }
-            record_size_t rsize = record.get_encoded_record_length();
 
             DEBUGT(
               "writing {} extents to segment {} at {}",
@@ -187,8 +186,7 @@ SegmentedAllocator::Writer::write(
               record.get_num_extents(),
               current_segment->segment->get_segment_id(),
               allocated_to);
-            allocated_to += rsize.mdlength + rsize.dlength;
-            return _write(t, record, rsize);
+            return _write(t, record);
           }
         ).si_then([]()
           -> write_iertr::future<seastar::stop_iteration> {
