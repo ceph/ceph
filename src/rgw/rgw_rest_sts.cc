@@ -611,7 +611,7 @@ void RGWSTSGetSessionToken::execute(optional_yield y)
   STS::STSService sts(s->cct, store, s->user->get_id(), s->auth.identity.get());
 
   STS::GetSessionTokenRequest req(duration, serialNumber, tokenCode);
-  const auto& [ret, creds] = sts.getSessionToken(req);
+  const auto& [ret, creds] = sts.getSessionToken(this, req);
   op_ret = std::move(ret);
   //Dump the output
   if (op_ret == 0) {
@@ -663,7 +663,7 @@ void RGWSTSAssumeRoleWithWebIdentity::execute(optional_yield y)
 
   STS::AssumeRoleWithWebIdentityRequest req(s->cct, duration, providerId, policy, roleArn,
                         roleSessionName, iss, sub, aud, s->principal_tags);
-  STS::AssumeRoleWithWebIdentityResponse response = sts.assumeRoleWithWebIdentity(req);
+  STS::AssumeRoleWithWebIdentityResponse response = sts.assumeRoleWithWebIdentity(this, req);
   op_ret = std::move(response.assumeRoleResp.retCode);
 
   //Dump the output

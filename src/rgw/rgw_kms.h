@@ -31,12 +31,10 @@ static const std::string RGW_SSE_KMS_KMIP_SE_KV = "kv";
  * TODO
  * \return
  */
-int make_actual_key_from_kms(const DoutPrefixProvider* dpp,
-                            CephContext *cct,
+int make_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
                             std::map<std::string, bufferlist>& attrs,
                             std::string& actual_key);
-int reconstitute_actual_key_from_kms(const DoutPrefixProvider* dpp,
-                            CephContext *cct,
+int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
                             std::map<std::string, bufferlist>& attrs,
                             std::string& actual_key);
 
@@ -48,7 +46,7 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider* dpp,
 class SecretEngine {
 
 public:
-  virtual int get_key(std::string_view key_id, std::string& actual_key) = 0;
+  virtual int get_key(const DoutPrefixProvider *dpp, std::string_view key_id, std::string& actual_key) = 0;
   virtual ~SecretEngine(){};
 };
 #endif
