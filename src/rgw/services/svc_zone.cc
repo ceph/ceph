@@ -271,12 +271,12 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   *zone_public_config = zone_iter->second;
   ldout(cct, 20) << "zone " << zone_params->get_name() << " found"  << dendl;
 
-  ldpp_dout(dpp, 1) << "Realm:     " << std::left << setw(20) << realm->get_name() << " (" << realm->get_id() << ")" << dendl;
-  ldpp_dout(dpp, 1) << "ZoneGroup: " << std::left << setw(20) << zonegroup->get_name() << " (" << zonegroup->get_id() << ")" << dendl;
-  ldpp_dout(dpp, 1) << "Zone:      " << std::left << setw(20) << zone_params->get_name() << " (" << zone_params->get_id() << ")" << dendl;
+  ldpp_dout(dpp, 4) << "Realm:     " << std::left << setw(20) << realm->get_name() << " (" << realm->get_id() << ")" << dendl;
+  ldpp_dout(dpp, 4) << "ZoneGroup: " << std::left << setw(20) << zonegroup->get_name() << " (" << zonegroup->get_id() << ")" << dendl;
+  ldpp_dout(dpp, 4) << "Zone:      " << std::left << setw(20) << zone_params->get_name() << " (" << zone_params->get_id() << ")" << dendl;
 
   if (init_from_period) {
-    ldpp_dout(dpp, 1) << "using period configuration: " << current_period->get_id() << ":" << current_period->get_epoch() << dendl;
+    ldpp_dout(dpp, 4) << "using period configuration: " << current_period->get_id() << ":" << current_period->get_epoch() << dendl;
     ret = init_zg_from_period(dpp, y);
     if (ret < 0) {
       return ret;
