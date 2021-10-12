@@ -1034,6 +1034,8 @@ template <typename InterruptCond>
 struct interruptor
 {
 public:
+  using condition = InterruptCond;
+
   template <typename FutureType>
   [[gnu::always_inline]]
   static interruptible_future_detail<InterruptCond, FutureType>

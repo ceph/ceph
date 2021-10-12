@@ -70,7 +70,7 @@ UrgentRecovery::do_recovery()
 {
   logger().debug("{}: {}", __func__, *this);
   if (!pg->has_reset_since(epoch_started)) {
-    return with_blocking_future_interruptible<IOInterruptCondition>(
+    return with_blocking_future_interruptible<interruptor::condition>(
       pg->get_recovery_handler()->recover_missing(soid, need)
     ).then_interruptible([] {
       return seastar::make_ready_future<bool>(false);
@@ -111,9 +111,10 @@ PglogBasedRecovery::PglogBasedRecovery(
 PglogBasedRecovery::interruptible_future<bool>
 PglogBasedRecovery::do_recovery()
 {
-  if (pg->has_reset_since(epoch_started))
+  if (pg->has_reset_since(epoch_started)) {
     return seastar::make_ready_future<bool>(false);
-  return with_blocking_future_interruptible<IOInterruptCondition>(
+  }
+  return with_blocking_future_interruptible<interruptor::condition>(
     pg->get_recovery_handler()->start_recovery_ops(
       crimson::common::local_conf()->osd_recovery_max_single_start));
 }
@@ -134,7 +135,7 @@ BackfillRecovery::do_recovery()
     return seastar::make_ready_future<bool>(false);
   }
   // TODO: limits
-  return with_blocking_future_interruptible<IOInterruptCondition>(
+  return with_blocking_future_interruptible<interruptor::condition>(
     // process_event() of our boost::statechart machine is non-reentrant.
     // with the backfill_pipeline we protect it from a second entry from
     // the implementation of BackfillListener.
