@@ -179,6 +179,14 @@ public:
     });
   }
 
+  seastar::future<> parse_env() {
+    return do_change([this](ConfigValues& values) {
+      get_config().parse_env(CEPH_ENTITY_TYPE_OSD,
+			     values,
+			     obs_mgr);
+    });
+  }
+
   seastar::future<> parse_config_files(const std::string& conf_files);
 
   using ShardedConfig = seastar::sharded<ConfigProxy>;
