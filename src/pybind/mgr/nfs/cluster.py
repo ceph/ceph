@@ -212,6 +212,16 @@ class NFSCluster:
         except Exception as e:
             return exception_handler(e, "Failed to show info for cluster")
 
+    def get_nfs_cluster_config(self, cluster_id: str) -> Tuple[int, str, str]:
+        try:
+            if cluster_id in available_clusters(self.mgr):
+                rados_obj = NFSRados(self.mgr, cluster_id)
+                conf = rados_obj.read_obj(self._get_user_conf_obj_name(cluster_id))
+                return 0, conf or "", ""
+            raise ClusterNotFound()
+        except Exception as e:
+            return exception_handler(e, f"Fetching NFS-Ganesha Config failed for {cluster_id}")
+
     def set_nfs_cluster_config(self, cluster_id: str, nfs_config: str) -> Tuple[int, str, str]:
         try:
             if cluster_id in available_clusters(self.mgr):
