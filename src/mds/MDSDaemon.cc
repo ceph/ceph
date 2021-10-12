@@ -373,14 +373,14 @@ void MDSDaemon::set_up_admin_socket()
 				     "Enumerate connected CephFS clients");
   ceph_assert(r == 0);
   r = admin_socket->register_command("session config "
-				     "name=client_id,type=CephInt,req=true "
+				     "name=client_id,type=CephString,req=true "
 				     "name=option,type=CephString,req=true "
 				     "name=value,type=CephString,req=false ",
 				     asok_hook,
 				     "Config a CephFS client session");
   ceph_assert(r == 0);
   r = admin_socket->register_command("client config "
-				     "name=client_id,type=CephInt,req=true "
+				     "name=client_id,type=CephString,req=true "
 				     "name=option,type=CephString,req=true "
 				     "name=value,type=CephString,req=false ",
 				     asok_hook,

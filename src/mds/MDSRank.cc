@@ -2612,7 +2612,12 @@ void MDSRankDispatcher::handle_asok_command(
     }
   } else if (command == "session config" ||
 	     command == "client config") {
-    int64_t client_id;
+    std::string client_id;
+    if (!cmd_getval(cmdmap, "client_id", client_id)) {
+      *css << "Invalid client_id specified";
+      r = -CEPHFS_ENOENT;
+      goto out;
+    }
     std::string option;
     std::string value;
 
@@ -2621,7 +2626,7 @@ void MDSRankDispatcher::handle_asok_command(
     bool got_value = cmd_getval(cmdmap, "value", value);
 
     std::lock_guard l(mds_lock);
-    r = config_client(client_id, !got_value, option, value, *css);
+    r = config_client(strtol(client_id.c_str(), 0, 10), !got_value, option, value, *css);
   } else if (command == "scrub start" ||
 	     command == "scrub_start") {
     if (whoami != 0) {
