@@ -196,6 +196,11 @@ void ssl::OpenSSLDigest::Restart() {
   EVP_DigestInit_ex(mpContext, mpType, NULL);
 }
 
+void ssl::OpenSSLDigest::SetFlags(int flags) {
+  EVP_MD_CTX_set_flags(mpContext, flags);
+  this->Restart();
+}
+
 void ssl::OpenSSLDigest::Update(const unsigned char *input, size_t length) {
   if (length) {
     EVP_DigestUpdate(mpContext, const_cast<void *>(reinterpret_cast<const void *>(input)), length);
