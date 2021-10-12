@@ -55,6 +55,7 @@ struct rbm_metadata_header_t {
   uint64_t flag; // reserved
   uint64_t feature;
   uint32_t blocks_per_segment; // the number of blocks in segment
+  device_id_t device_id;
   checksum_t crc;
 
   DENC(rbm_metadata_header_t, v, p) {
@@ -72,6 +73,7 @@ struct rbm_metadata_header_t {
     denc(v.flag, p);
     denc(v.feature, p);
     denc(v.blocks_per_segment, p);
+    denc(v.device_id, p);
 
     denc(v.crc, p);
     DENC_FINISH(p);
@@ -361,6 +363,9 @@ public:
 
   uint32_t get_blocks_per_segment() const final {
     return super.blocks_per_segment;
+  }
+  device_id_t get_device_id() const final {
+    return super.device_id;
   }
 
 private:

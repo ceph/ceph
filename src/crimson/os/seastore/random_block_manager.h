@@ -33,6 +33,7 @@ public:
     size_t block_size = 0;
     size_t total_size = 0;
     uint32_t blocks_per_segment = 1 << 18;
+    device_id_t device_id = 0;
     seastore_meta_t meta;
   };
   using mkfs_ertr = crimson::errorator<
@@ -95,6 +96,7 @@ public:
   virtual size_t get_block_size() const = 0;
   virtual uint64_t get_free_blocks() const = 0;
   virtual uint32_t get_blocks_per_segment() const = 0;
+  virtual device_id_t get_device_id() const = 0;
   virtual ~RandomBlockManager() {}
 };
 using RandomBlockManagerRef = std::unique_ptr<RandomBlockManager>;

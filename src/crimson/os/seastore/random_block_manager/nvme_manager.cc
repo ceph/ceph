@@ -148,6 +148,7 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
 	super.crc = 0;
 	super.feature |= RBM_BITMAP_BLOCK_CRC;
 	super.blocks_per_segment = config.blocks_per_segment;
+	super.device_id = config.device_id;
 
 	logger().debug(" super {} ", super);
 	// write super block
@@ -274,7 +275,7 @@ NVMeManager::allocate_ret NVMeManager::alloc_extent(
 	      p.first * super.block_size,
 	      super.block_size,
 	      super.blocks_per_segment,
-	      0);
+	      super.device_id);
 	    size_t len = p.second * super.block_size;
 	    alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
 	    alloc_info.op = rbm_alloc_delta_t::op_types_t::SET;
@@ -287,7 +288,7 @@ NVMeManager::allocate_ret NVMeManager::alloc_extent(
 	  alloc_extent.range_start() * super.block_size,
 	  super.block_size,
 	  super.blocks_per_segment,
-	  0);
+	  super.device_id);
 	return allocate_ret(
 	  allocate_ertr::ready_future_marker{},
 	  paddr);
@@ -308,7 +309,7 @@ void NVMeManager::add_free_extent(
     from,
     super.block_size,
     super.blocks_per_segment,
-    0);
+    super.device_id);
   rbm_alloc_delta_t alloc_info;
   alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
   alloc_info.op = rbm_alloc_delta_t::op_types_t::CLEAR;
