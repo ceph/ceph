@@ -202,7 +202,7 @@ TEST(LibRGW, GETATTR_OBJECTS) {
   }
 }
 
-TEST(LibRGW, CLEANUP) {
+TEST(LibRGW, CLEANUP1) {
   int ret = 0;
   using std::get;
 

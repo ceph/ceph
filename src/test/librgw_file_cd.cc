@@ -119,7 +119,7 @@ TEST(LibRGW, DELETE_BUCKET_MULTI) {
   }
 }
 
-TEST(LibRGW, CLEANUP) {
+TEST(LibRGW, CLEANUP3) {
   // do nothing
 }
 

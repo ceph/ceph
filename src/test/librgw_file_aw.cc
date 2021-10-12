@@ -334,7 +334,7 @@ TEST(LibRGW, DELETE_OBJECT) {
   }
 }
 
-TEST(LibRGW, CLEANUP) {
+TEST(LibRGW, CLEANUP4) {
   int ret;
   if (object_fh) {
     ret = rgw_fh_rele(fs, object_fh, RGW_FH_RELE_FLAG_NONE);
