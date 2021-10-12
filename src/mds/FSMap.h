@@ -568,7 +568,7 @@ public:
    * Assert that the FSMap, Filesystem, MDSMap, mds_info_t relations are
    * all self-consistent.
    */
-  void sanity() const;
+  void sanity(bool pending=false) const;
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
