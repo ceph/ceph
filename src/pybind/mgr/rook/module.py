@@ -284,16 +284,16 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 total_mds = active
                 if fs['spec'].get('metadataServer', {}).get('activeStandby', False):
                     total_mds = active * 2
-                    spec[svc] = orchestrator.ServiceDescription(
-                        spec=ServiceSpec(
-                            service_type='mds',
-                            service_id=fs['metadata']['name'],
-                            placement=PlacementSpec(count=active),
-                        ),
-                        size=total_mds,
-                        container_image_name=image_name,
-                        last_refresh=now,
-                    )
+                spec[svc] = orchestrator.ServiceDescription(
+                    spec=ServiceSpec(
+                        service_type='mds',
+                        service_id=fs['metadata']['name'],
+                        placement=PlacementSpec(count=active),
+                    ),
+                    size=total_mds,
+                    container_image_name=image_name,
+                    last_refresh=now,
+                )
 
         if service_type == 'rgw' or service_type is None:
             # CephObjectstores
