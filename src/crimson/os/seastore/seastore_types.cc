@@ -31,6 +31,12 @@ std::ostream &offset_to_stream(std::ostream &out, const segment_off_t &t)
     return out << t;
 }
 
+std::ostream &operator<<(std::ostream &out, const segment_id_t& segment)
+{
+  return out << "[" << (uint64_t)segment.device_id() << ","
+    << segment.device_segment_id() << "]";
+}
+
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 {
   out << "paddr_t<";
@@ -203,6 +209,32 @@ ceph::bufferlist encode_record(
 bool can_delay_allocation(device_type_t type) {
   // Some types of device may not support delayed allocation, for example PMEM.
   return type <= RANDOM_BLOCK;
+}
+
+device_type_t string_to_device_type(std::string type) {
+  if (type == "segmented") {
+    return device_type_t::SEGMENTED;
+  }
+  if (type == "random_block") {
+    return device_type_t::RANDOM_BLOCK;
+  }
+  if (type == "pmem") {
+    return device_type_t::PMEM;
+  }
+  return device_type_t::NONE;
+}
+
+std::string device_type_to_string(device_type_t dtype) {
+  switch (dtype) {
+  case device_type_t::SEGMENTED:
+    return "segmented";
+  case device_type_t::RANDOM_BLOCK:
+    return "random_block";
+  case device_type_t::PMEM:
+    return "pmem";
+  default:
+    ceph_assert(0 == "impossible");
+  }
 }
 
 }

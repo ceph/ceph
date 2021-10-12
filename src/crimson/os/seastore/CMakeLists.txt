@@ -7,7 +7,7 @@ add_library(crimson-seastore STATIC
   transaction.cc
   journal.cc
   cache.cc
-  scanner.cc
+  extent_reader.cc
   lba_manager.cc
   segment_cleaner.cc
   lba_manager/btree/btree_lba_manager.cc

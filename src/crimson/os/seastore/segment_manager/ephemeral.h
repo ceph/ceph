@@ -20,12 +20,18 @@ struct ephemeral_config_t {
   size_t size = 0;
   size_t block_size = 0;
   size_t segment_size = 0;
+  magic_t magic = 0;
+  device_type_t dtype = device_type_t::NONE;
+  device_id_t id = 0;
 };
 
 constexpr ephemeral_config_t DEFAULT_TEST_EPHEMERAL = {
   1 << 30,
   4 << 10,
-  8 << 20
+  8 << 20,
+  0xabcd,
+  device_type_t::SEGMENTED,
+  0
 };
 
 std::ostream &operator<<(std::ostream &, const ephemeral_config_t &);
@@ -56,7 +62,7 @@ class EphemeralSegmentManager final : public SegmentManager {
   std::optional<seastore_meta_t> meta;
 
   size_t get_offset(paddr_t addr) {
-    return (addr.segment * config.segment_size) + addr.offset;
+    return (addr.segment.device_segment_id() * config.segment_size) + addr.offset;
   }
 
   std::vector<segment_state_t> segment_state;
@@ -65,9 +71,21 @@ class EphemeralSegmentManager final : public SegmentManager {
 
   Segment::close_ertr::future<> segment_close(segment_id_t id);
 
+  secondary_device_set_t sec_device_set;
+
 public:
-  EphemeralSegmentManager(ephemeral_config_t config) : config(config) {}
+  EphemeralSegmentManager(
+    ephemeral_config_t config)
+    : config(config) {}
   ~EphemeralSegmentManager();
+
+  close_ertr::future<> close() final {
+    return close_ertr::now();
+  }
+
+  device_id_t get_device_id() const {
+    return config.id;
+  }
 
   using init_ertr = crimson::errorator<
     crimson::ct_error::enospc,
@@ -79,7 +97,7 @@ public:
     return mount_ertr::now();
   }
 
-  mkfs_ret mkfs(seastore_meta_t) {
+  mkfs_ret mkfs(segment_manager_config_t) {
     return mkfs_ertr::now();
   }
 
@@ -105,6 +123,18 @@ public:
   const seastore_meta_t &get_meta() const final {
     assert(meta);
     return *meta;
+  }
+
+  secondary_device_set_t& get_secondary_devices() final {
+    return sec_device_set;
+  }
+
+  device_spec_t get_device_spec() const final {
+    return {config.magic, config.dtype, config.id};
+  }
+
+  magic_t get_magic() const final {
+    return config.magic;
   }
 
   void remount();

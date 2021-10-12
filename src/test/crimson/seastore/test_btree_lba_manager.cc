@@ -27,7 +27,7 @@ using namespace crimson::os::seastore::lba_manager::btree;
 struct btree_lba_manager_test :
   public seastar_test_suite_t, SegmentProvider {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
-  ScannerRef scanner;
+  ExtentReaderRef scanner;
   Journal journal;
   Cache cache;
   BtreeLBAManagerRef lba_manager;
@@ -36,23 +36,30 @@ struct btree_lba_manager_test :
 
   WritePipeline pipeline;
 
+  segment_id_t next;
+
   btree_lba_manager_test()
     : segment_manager(segment_manager::create_test_ephemeral()),
-      scanner(new Scanner(*segment_manager)),
+      scanner(new ExtentReader()),
       journal(*segment_manager, *scanner),
-      cache(*segment_manager),
+      cache(*scanner, segment_manager->get_block_size()),
       lba_manager(new BtreeLBAManager(*segment_manager, cache)),
-      block_size(segment_manager->get_block_size())
+      block_size(segment_manager->get_block_size()),
+      next(segment_manager->get_device_id(), 0)
   {
+    scanner->add_segment_manager(segment_manager.get());
     journal.set_segment_provider(this);
     journal.set_write_pipeline(&pipeline);
   }
 
-  segment_id_t next = 0;
-  get_segment_ret get_segment() final {
+  get_segment_ret get_segment(device_id_t id) final {
+    auto ret = next;
+    next = segment_id_t{
+      next.device_id(),
+      next.device_segment_id() + 1};
     return get_segment_ret(
       get_segment_ertr::ready_future_marker{},
-      next++);
+      ret);
   }
 
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }

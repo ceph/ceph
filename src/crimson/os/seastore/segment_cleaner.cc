@@ -15,6 +15,20 @@ namespace {
 
 namespace crimson::os::seastore {
 
+void segment_info_set_t::segment_info_t::set_open() {
+  assert(state == Segment::segment_state_t::EMPTY);
+  state = Segment::segment_state_t::OPEN;
+}
+
+void segment_info_set_t::segment_info_t::set_empty() {
+  assert(state == Segment::segment_state_t::CLOSED);
+  state = Segment::segment_state_t::EMPTY;
+}
+
+void segment_info_set_t::segment_info_t::set_closed() {
+  state = Segment::segment_state_t::CLOSED;
+}
+
 bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
 {
   const auto &other = static_cast<const SpaceTrackerSimple&>(_other);
@@ -26,22 +40,23 @@ bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
   }
 
   bool all_match = true;
-  for (segment_id_t i = 0; i < live_bytes_by_segment.size(); ++i) {
-    if (other.live_bytes_by_segment[i] != live_bytes_by_segment[i]) {
+  for (auto i = live_bytes_by_segment.begin(), j = other.live_bytes_by_segment.begin();
+       i != live_bytes_by_segment.end(); ++i, ++j) {
+    if (i->second != j->second) {
       all_match = false;
       logger().debug(
 	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
 	__func__,
-	i,
-	live_bytes_by_segment[i],
-	other.live_bytes_by_segment[i]);
+	i->first,
+	i->second,
+	j->second);
     }
   }
   return all_match;
 }
 
 int64_t SpaceTrackerDetailed::SegmentMap::allocate(
-  segment_id_t segment,
+  device_segment_id_t segment,
   segment_off_t offset,
   extent_len_t len,
   const extent_len_t block_size)
@@ -73,7 +88,7 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
 }
 
 int64_t SpaceTrackerDetailed::SegmentMap::release(
-  segment_id_t segment,
+  device_segment_id_t segment,
   segment_off_t offset,
   extent_len_t len,
   const extent_len_t block_size)
@@ -115,15 +130,16 @@ bool SpaceTrackerDetailed::equals(const SpaceTrackerI &_other) const
   }
 
   bool all_match = true;
-  for (segment_id_t i = 0; i < segment_usage.size(); ++i) {
-    if (other.segment_usage[i].get_usage() != segment_usage[i].get_usage()) {
+  for (auto i = segment_usage.begin(), j = other.segment_usage.begin();
+       i != segment_usage.end(); ++i, ++j) {
+    if (i->second.get_usage() != j->second.get_usage()) {
       all_match = false;
       logger().error(
 	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
 	__func__,
-	i,
-	segment_usage[i].get_usage(),
-	other.segment_usage[i].get_usage());
+	i->first,
+	i->second.get_usage(),
+	j->second.get_usage());
     }
   }
   return all_match;
@@ -141,12 +157,13 @@ void SpaceTrackerDetailed::SegmentMap::dump_usage(extent_len_t block_size) const
 void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
 {
   logger().debug("SpaceTrackerDetailed::dump_usage {}", id);
-  segment_usage[id].dump_usage(block_size);
+  segment_usage[id].dump_usage(
+    block_size_by_segment_manager[id.device_id()]);
 }
 
 SegmentCleaner::SegmentCleaner(
   config_t config,
-  ScannerRef&& scr,
+  ExtentReaderRef&& scr,
   bool detailed)
   : detailed(detailed),
     config(config),
@@ -165,21 +182,25 @@ void SegmentCleaner::register_metrics()
   });
 }
 
-SegmentCleaner::get_segment_ret SegmentCleaner::get_segment()
+SegmentCleaner::get_segment_ret SegmentCleaner::get_segment(device_id_t id)
 {
-  for (size_t i = 0; i < segments.size(); ++i) {
-    if (segments[i].is_empty()) {
-      mark_open(i);
-      logger().debug("{}: returning segment {}", __func__, i);
+  for (auto it = segments.device_begin(id);
+       it != segments.device_end(id);
+       ++it) {
+    auto id = it->first;
+    auto& segment_info = it->second;
+    if (segment_info.is_empty()) {
+      mark_open(id);
+      logger().debug("{}: returning segment {}", __func__, id);
       return get_segment_ret(
 	get_segment_ertr::ready_future_marker{},
-	i);
+	id);
     }
   }
   assert(0 == "out of space handling todo");
   return get_segment_ret(
     get_segment_ertr::ready_future_marker{},
-    0);
+    ZERO_SEG_ID);
 }
 
 void SegmentCleaner::update_journal_tail_target(journal_seq_t target)
@@ -309,7 +330,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
     }
     next.offset = 0;
     scan_cursor =
-      std::make_unique<Scanner::scan_extents_cursor>(
+      std::make_unique<ExtentReader::scan_extents_cursor>(
 	next);
     logger().debug(
       "SegmentCleaner::do_gc: starting gc on segment {}",
@@ -378,41 +399,48 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 }
 
 SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
+  logger().debug("SegmentCleaner::init_segments: {} segments", segments.size());
   return seastar::do_with(
     std::vector<std::pair<segment_id_t, segment_header_t>>(),
-    [this](auto& segments) {
+    [this](auto& segment_set) {
     return crimson::do_for_each(
-      boost::make_counting_iterator(segment_id_t{0}),
-      boost::make_counting_iterator(segment_id_t{num_segments}),
-      [this, &segments](auto segment_id) {
-      return scanner->read_segment_header(segment_id)
-      .safe_then([&segments, segment_id, this](auto header) {
-	if (header.out_of_line) {
-	  logger().debug("Scanner::init_segments: out-of-line segment {}", segment_id);
-	  init_mark_segment_closed(
-	    segment_id,
-	    header.journal_segment_seq,
-	    true);
-	} else {
-	  logger().debug("Scanner::init_segments: journal segment {}", segment_id);
-	  segments.emplace_back(std::make_pair(segment_id, std::move(header)));
-	}
-	return seastar::now();
-      }).handle_error(
-	crimson::ct_error::enoent::handle([](auto) {
-	  return init_segments_ertr::now();
-	}),
-	crimson::ct_error::enodata::handle([](auto) {
-	  return init_segments_ertr::now();
-	}),
-	crimson::ct_error::input_output_error::pass_further{}
-      );
-    }).safe_then([&segments] {
-      return seastar::make_ready_future<
-	std::vector<std::pair<segment_id_t, segment_header_t>>>(
-	  std::move(segments));
+      segments.begin(),
+      segments.end(),
+      [this, &segment_set](auto& it) {
+	auto segment_id = it.first;
+	return scanner->read_segment_header(
+	  segment_id
+	).safe_then([&segment_set, segment_id, this](auto header) {
+	  if (header.out_of_line) {
+	    logger().debug(
+	      "ExtentReader::init_segments: out-of-line segment {}",
+	      segment_id);
+	    init_mark_segment_closed(
+	      segment_id,
+	      header.journal_segment_seq,
+	      true);
+	  } else {
+	    logger().debug(
+	      "ExtentReader::init_segments: journal segment {}",
+	      segment_id);
+	    segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
+	  }
+	  return seastar::now();
+	}).handle_error(
+	  crimson::ct_error::enoent::handle([](auto) {
+	    return init_segments_ertr::now();
+	  }),
+	  crimson::ct_error::enodata::handle([](auto) {
+	    return init_segments_ertr::now();
+	  }),
+	  crimson::ct_error::input_output_error::pass_further{}
+	);
+      }).safe_then([&segment_set] {
+	return seastar::make_ready_future<
+	  std::vector<std::pair<segment_id_t, segment_header_t>>>(
+	    std::move(segment_set));
+      });
     });
-  });
 }
 
 }

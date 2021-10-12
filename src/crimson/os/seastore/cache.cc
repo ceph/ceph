@@ -20,8 +20,11 @@ using std::string_view;
 
 namespace crimson::os::seastore {
 
-Cache::Cache(SegmentManager &segment_manager) :
-  segment_manager(segment_manager)
+Cache::Cache(
+  ExtentReader &reader,
+  segment_off_t block_size)
+  : reader(reader),
+    block_size(block_size)
 {
   register_metrics();
 }
@@ -999,7 +1002,7 @@ record_t Cache::prepare_record(Transaction &t)
   record_header_fullness.ool_stats.total_bytes += ool_stats.header_bytes;
 
   auto record_size = get_encoded_record_length(
-      record, segment_manager.get_block_size());
+      record, block_size);
   auto inline_overhead =
       record_size.mdlength + record_size.dlength - record.get_raw_data_size();
   efforts.inline_record_overhead_bytes += inline_overhead;

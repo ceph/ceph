@@ -17,13 +17,15 @@ TransactionManager::TransactionManager(
   JournalRef _journal,
   CacheRef _cache,
   LBAManagerRef _lba_manager,
-  ExtentPlacementManagerRef&& epm)
+  ExtentPlacementManagerRef&& epm,
+  ExtentReader& scanner)
   : segment_manager(_segment_manager),
     segment_cleaner(std::move(_segment_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
-    epm(std::move(epm))
+    epm(std::move(epm)),
+    scanner(scanner)
 {
   segment_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -33,7 +35,9 @@ TransactionManager::TransactionManager(
 TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 {
   LOG_PREFIX(TransactionManager::mkfs);
-  segment_cleaner->mount(segment_manager);
+  segment_cleaner->mount(
+    segment_manager.get_device_id(),
+    scanner.get_segment_managers());
   return journal->open_for_write().safe_then([this, FNAME](auto addr) {
     DEBUG("about to do_with");
     segment_cleaner->init_mkfs(addr);
@@ -64,7 +68,9 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 {
   LOG_PREFIX(TransactionManager::mount);
   cache->init();
-  segment_cleaner->mount(segment_manager);
+  segment_cleaner->mount(
+    segment_manager.get_device_id(),
+    scanner.get_segment_managers());
   return segment_cleaner->init_segments().safe_then(
     [this](auto&& segments) {
     return journal->replay(
