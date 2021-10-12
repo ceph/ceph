@@ -192,15 +192,18 @@ void mClockScheduler::ClientRegistry::update_from_config(
 const dmc::ClientInfo *mClockScheduler::ClientRegistry::get_external_client(
   const client_profile_id_t &client) const
 {
+  std::lock_guard rl(reg_lock);
   auto ret = external_client_infos.find(client);
-  if (ret == external_client_infos.end())
+  if (ret == external_client_infos.end()) {
     return &default_external_client_info;
-  else
+  } else {
     return &(ret->second);
+  }
 }
 
 const dmc::ClientInfo *mClockScheduler::ClientRegistry::get_info(
-  const scheduler_id_t &id) const {
+  const scheduler_id_t &id) const
+{
   switch (id.class_id) {
   case op_scheduler_class::immediate:
     ceph_assert(0 == "Cannot schedule immediate");
@@ -210,6 +213,77 @@ const dmc::ClientInfo *mClockScheduler::ClientRegistry::get_info(
   default:
     ceph_assert(static_cast<size_t>(id.class_id) < internal_client_infos.size());
     return &internal_client_infos[static_cast<size_t>(id.class_id)];
+  }
+}
+
+void mClockScheduler::ClientRegistry::set_info(
+  const ConfigProxy &conf,
+  const bool is_rotational,
+  const scheduler_id_t &id,
+  const client_qos_params_t &qos_params,
+  const double capacity_per_shard)
+{
+  std::lock_guard rl(reg_lock);
+  if (op_scheduler_class::client == id.class_id) {
+    auto osd_iops_capacity = [&]() {
+      if (is_rotational) {
+        return std::max<double>(1.0,
+          conf.get_val<double>("osd_mclock_max_capacity_iops_hdd"));
+      } else {
+        return std::max<double>(1.0,
+          conf.get_val<double>("osd_mclock_max_capacity_iops_ssd"));
+      }
+    };
+
+    auto get_res = [&]() {
+      if (qos_params.reservation == 0) {
+        return default_min;
+      }
+      /**
+       * Cap the maximum reservation requested by a client to the current
+       * osd_mclock_scheduler_client_res specification. This is to prevent
+       * clients from overprovisioning the OSD's bandwidth and deny
+       * reservations requested by other services on the OSD.
+       */
+      double max_allowed_res = conf.get_val<double>(
+        "osd_mclock_scheduler_client_res");
+      double res_req = std::min<double>(
+        max_allowed_res, qos_params.reservation / osd_iops_capacity());
+      // Return reservation in terms of bytes/sec
+      return res_req * capacity_per_shard;
+    };
+
+    auto get_lim = [&]() {
+      if (qos_params.limit == 0) {
+        return default_max;
+      }
+      double lim_req = std::min<double>(
+        1.0, qos_params.limit / osd_iops_capacity());
+      // Return limit in terms of bytes/sec
+      return lim_req * capacity_per_shard;
+    };
+
+    double res = get_res();
+    double lim = get_lim();
+    double wgt = double(qos_params.weight);
+    // Add/update QoS profile params for the client in the client infos map
+    auto r =
+     external_client_infos.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(id.client_profile_id),
+        std::forward_as_tuple(res, wgt, lim));
+    if (!r.second) {
+      r.first->second.update(res, wgt, lim);
+    }
+  }
+}
+
+void mClockScheduler::ClientRegistry::clear_info(const scheduler_id_t &id)
+{
+  std::lock_guard rl(reg_lock);
+  auto ret = external_client_infos.find(id.client_profile_id);
+  if (ret != external_client_infos.end()) {
+    external_client_infos.erase(ret);
   }
 }
 
@@ -457,9 +531,23 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
              << " scaled_cost: " << cost
              << dendl;
 
-    auto qos_req_params = item.get_qos_req_params();
-    dout(20) << __func__ << " qos_req_params: " << qos_req_params << dendl;
-    // Add item to scheduler queue
+    /**
+     * If this is a client Op with a non-zero qos_profile_id, it indicates that
+     * a valid QoS profile and therefore QoS based on the profile and request
+     * params must be provided to the client. Therefore, an entry is either
+     * created or updated in the external client registry.
+     */
+    const client_qos_params_t& qos_profile_params =
+      item.get_qos_profile_params();
+    dmc::ReqParams qos_req_params = item.get_qos_req_params();
+    if (qos_profile_params.qos_profile_id != 0) {
+      client_registry.set_info(cct->_conf, is_rotational, id,
+        qos_profile_params, osd_bandwidth_capacity_per_shard);
+      dout(20) << __func__ << " qos_profile_params: "
+               << qos_profile_params << dendl;
+      dout(20) << __func__ << " qos_req_params: "
+               << qos_req_params << dendl;
+    }
     scheduler.add_request(
       std::move(item),
       id,

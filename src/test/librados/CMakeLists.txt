@@ -152,9 +152,20 @@ add_executable(ceph_test_rados_api_snapshots_stats_pp
 target_link_libraries(ceph_test_rados_api_snapshots_stats_pp
   librados ${UNITTEST_LIBS} radostest-cxx)
 
+add_executable(ceph_test_rados_api_aio_qos
+  aio_qos.cc)
+target_link_libraries(ceph_test_rados_api_aio_qos
+  librados ${UNITTEST_LIBS} radostest)
+add_executable(ceph_test_rados_api_aio_qos_pp
+  aio_qos_cxx.cc)
+target_link_libraries(ceph_test_rados_api_aio_qos_pp
+  librados ${UNITTEST_LIBS} radostest-cxx)
+
 install(TARGETS
   ceph_test_rados_api_aio
+  ceph_test_rados_api_aio_qos
   ceph_test_rados_api_aio_pp
+  ceph_test_rados_api_aio_qos_pp
   ceph_test_rados_api_asio
   ceph_test_rados_api_c_read_operations
   ceph_test_rados_api_c_write_operations

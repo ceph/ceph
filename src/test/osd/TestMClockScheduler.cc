@@ -78,19 +78,22 @@ public:
     OpRequestRef op;
     hobject_t hobj;
     spg_t spgid;
+    client_qos_params_t qrp;
 
     MockDmclockItem(op_scheduler_class _scheduler_class, dmc::ReqParams _rp,
-      OpTracker* _optrk, hobject_t _hobj, spg_t _spgid) :
+      OpTracker* _optrk, hobject_t _hobj, spg_t _spgid, client_qos_params_t _qrp) :
         PGOpQueueable(spg_t()),
         scheduler_class(_scheduler_class),
         rp(_rp),
         optracker(_optrk),
         hobj(_hobj),
-        spgid(_spgid)
+        spgid(_spgid),
+        qrp(_qrp)
     {
       if (optracker && scheduler_class == op_scheduler_class::client) {
           MOSDOp *m = new MOSDOp(0, 0, hobj, spgid, 0, 0, 0);
           m->set_qos_req_params(rp);
+          m->set_qos_profile_params(qrp);
           op = optracker->create_request<OpRequest, MOSDOp*>(m);
         }
     }
@@ -122,6 +125,17 @@ public:
 
     void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final {}
   };
+
+  OpSchedulerItem dequeue_item() {
+    WorkItem work_item;
+    if (!q.empty()) {
+      while (!std::get_if<OpSchedulerItem>(&work_item)) {
+        work_item = q.dequeue();
+        std::this_thread::sleep_for(std::chrono::microseconds(1));
+      }
+    }
+    return std::move(std::get<OpSchedulerItem>(work_item));
+  }
 };
 
 template <typename... Args>
@@ -334,37 +348,220 @@ TEST_F(mClockSchedulerTest, TestSlowDequeue) {
   ASSERT_TRUE(q.empty());
 }
 
-TEST_F(mClockSchedulerTest, TestDistributedEnqueue) {
+TEST_F(mClockSchedulerTest, TestDistributedEnqueuePullWeight) {
   ASSERT_TRUE(q.empty());
-  dmc::ReqParams req_params;
-  OpSchedulerItem r1 = create_item(100, client1, op_scheduler_class::client,
-    req_params, &op_tracker, hobj, spgid);
-  OpSchedulerItem r2 = create_item(101, client2, op_scheduler_class::client,
-    req_params, &op_tracker, hobj, spgid);
-  OpSchedulerItem r3 = create_item(102, client3, op_scheduler_class::client,
-    req_params, &op_tracker, hobj, spgid);
-  OpSchedulerItem r4 = create_item(103, client1, op_scheduler_class::client,
-    dmc::ReqParams(100, 1), &op_tracker, hobj, spgid);
-  OpSchedulerItem r5 = create_item(104, client2, op_scheduler_class::client,
-    dmc::ReqParams(10, 1), &op_tracker, hobj, spgid);
-  OpSchedulerItem r6 = create_item(105, client3, op_scheduler_class::client,
-    dmc::ReqParams(30, 1), &op_tracker, hobj, spgid);
 
-  q.enqueue(std::move(r1));
-  q.enqueue(std::move(r2));
-  q.enqueue(std::move(r3));
-  q.enqueue(std::move(r4));
-  q.enqueue(std::move(r5));
-  q.enqueue(std::move(r6));
+  // Client QoS profile
+  client_qos_params_t c1_params = {0, 1, 0, 1};
+  client_qos_params_t c2_params = {0, 3, 0, 2};
+  client_qos_params_t c3_params = {0, 2, 0, 3};
+  std::map<uint64_t, client_qos_params_t> client_qos_params;
+  client_qos_params[client1] = c1_params;
+  client_qos_params[client2] = c2_params;
+  client_qos_params[client3] = c3_params;
 
+  // Client request params
+  dmc::ReqParams c1_rparams = {100, 1};
+  dmc::ReqParams c2_rparams = {10, 1};
+  dmc::ReqParams c3_rparams = {30, 1};
+  std::map<uint64_t, dmc::ReqParams> client_req_params;
+  client_req_params[client1] = c1_rparams;
+  client_req_params[client2] = c2_rparams;
+  client_req_params[client3] = c3_rparams;
+
+  // Create and enqueue requests
+  unsigned e = 100;
+  for (unsigned i = 0; i < 2; ++i) {
+    for(auto &&c: {client1, client2, client3}) {
+      q.enqueue(create_item(e++, c, op_scheduler_class::client,
+        client_req_params[c], &op_tracker, hobj, spgid, client_qos_params[c]));
+      std::this_thread::sleep_for(std::chrono::microseconds(1));
+    }
+  }
+
+  // Expected dequeue sequence based on qos and req params
   std::vector<epoch_t> expected_epochs {100, 101, 102, 104, 105, 103};
   for(auto i = expected_epochs.begin(); i != expected_epochs.end(); ++i) {
     ASSERT_FALSE(q.empty());
-    WorkItem work_item;
-    while (!std::get_if<OpSchedulerItem>(&work_item)) {
-      work_item = q.dequeue();
-    }
-    OpSchedulerItem r = get_item(std::move(work_item));
+    auto r = dequeue_item();
     ASSERT_EQ(*i, r.get_map_epoch());
+    std::optional<OpRequestRef> _op = r.maybe_get_op();
+    ASSERT_EQ((*_op)->qos_phase, dmc::PhaseType::priority);
   }
+
+  ASSERT_TRUE(q.empty());
+}
+
+TEST_F(mClockSchedulerTest, TestDistributedEnqueuePullReservation) {
+  ASSERT_TRUE(q.empty());
+
+  // Specify client reservations in IOPS
+  uint64_t c1_res = 500;
+  uint64_t c2_res = 1000;
+  uint64_t c3_res = 2000;
+  client_qos_params_t c1_params = {c1_res, 0, 0, 1};
+  client_qos_params_t c2_params = {c2_res, 0, 0, 2};
+  client_qos_params_t c3_params = {c3_res, 0, 0, 3};
+
+  // Client QoS profile
+  std::map<uint64_t, client_qos_params_t> client_qos_params;
+  client_qos_params[client1] = c1_params;
+  client_qos_params[client2] = c2_params;
+  client_qos_params[client3] = c3_params;
+
+  // Client request params
+  dmc::ReqParams c1_rparams = {20, 10};
+  dmc::ReqParams c2_rparams = {4, 3};
+  dmc::ReqParams c3_rparams = {2, 1};
+  std::map<uint64_t, dmc::ReqParams> client_req_params;
+  client_req_params[client1] = c1_rparams;
+  client_req_params[client2] = c2_rparams;
+  client_req_params[client3] = c3_rparams;
+
+  // Create and enqueue requests
+  unsigned e = 100;
+  for (unsigned i = 0; i < 2; ++i) {
+    for(auto &&c: {client1, client2, client3}) {
+      q.enqueue(create_item(e++, c, op_scheduler_class::client,
+        client_req_params[c], &op_tracker, hobj, spgid, client_qos_params[c]));
+      std::this_thread::sleep_for(std::chrono::microseconds(1));
+    }
+  }
+
+  // Expected dequeue sequence based on qos and req params
+  std::vector<epoch_t> expected_epochs {100, 101, 102, 105, 104, 103};
+  for(auto i = expected_epochs.begin(); i != expected_epochs.end(); ++i) {
+    ASSERT_FALSE(q.empty());
+    auto r = dequeue_item();
+    ASSERT_EQ(*i, r.get_map_epoch());
+    std::optional<OpRequestRef> _op = r.maybe_get_op();
+    ASSERT_EQ((*_op)->qos_phase, dmc::PhaseType::reservation);
+  }
+}
+
+TEST_F(mClockSchedulerTest, TestMultiDistributedEnqueuePullWeight) {
+  ASSERT_TRUE(q.empty());
+
+  // Client QoS profile
+  client_qos_params_t c1_params = {0, 1, 0, 1};
+  client_qos_params_t c2_params = {0, 3, 0, 2};
+  client_qos_params_t c3_params = {0, 2, 0, 3};
+  std::map<uint64_t, client_qos_params_t> client_qos_params;
+  client_qos_params[client1] = c1_params;
+  client_qos_params[client2] = c2_params;
+  client_qos_params[client3] = c3_params;
+
+  // Client request params
+  dmc::ReqParams c1_rparams = {1, 1};
+  dmc::ReqParams c2_rparams = {1, 1};
+  dmc::ReqParams c3_rparams = {1, 1};
+  std::map<uint64_t, dmc::ReqParams> client_req_params;
+  client_req_params[client1] = c1_rparams;
+  client_req_params[client2] = c2_rparams;
+  client_req_params[client3] = c3_rparams;
+
+  // Create and enqueue requests
+  unsigned e = 100;
+  for (unsigned i = 0; i < 5; ++i) {
+    for(auto &&c: {client1, client2, client3}) {
+      q.enqueue(create_item(e++, c, op_scheduler_class::client,
+        client_req_params[c], &op_tracker, hobj, spgid, client_qos_params[c]));
+    }
+  }
+
+  int c1_count = 0;
+  int c2_count = 0;
+  int c3_count = 0;
+  for (int i = 0; i < 10; ++i) {
+    ASSERT_FALSE(q.empty());
+    auto retn = dequeue_item();
+
+    if (client1 == retn.get_owner()) ++c1_count;
+    else if (client2 == retn.get_owner()) ++c2_count;
+    else if (client3 == retn.get_owner()) ++c3_count;
+    else ADD_FAILURE() << "got request from neither of two clients";
+
+    std::optional<OpRequestRef> _op = retn.maybe_get_op();
+    ASSERT_EQ((*_op)->qos_phase, dmc::PhaseType::priority);
+  }
+
+  ASSERT_EQ(c1_count, 2);
+  ASSERT_EQ(c2_count, 5);
+  ASSERT_EQ(c3_count, 3);
+
+  ASSERT_FALSE(q.empty());
+
+  while (!q.empty()) {
+    auto retn = dequeue_item();
+    std::optional<OpRequestRef> _op = retn.maybe_get_op();
+    ASSERT_EQ((*_op)->qos_phase, dmc::PhaseType::priority);
+  }
+
+  ASSERT_TRUE(q.empty());
+}
+
+TEST_F(mClockSchedulerTest, TestMultiDistributedEnqueuePullReservation) {
+  ASSERT_TRUE(q.empty());
+
+  // Specify client reservations in IOPS
+  uint64_t c1_res = 500;
+  uint64_t c2_res = 2000;
+  uint64_t c3_res = 1000;
+  client_qos_params_t c1_params = {c1_res, 0, 0, 1};
+  client_qos_params_t c2_params = {c2_res, 0, 0, 2};
+  client_qos_params_t c3_params = {c3_res, 0, 0, 3};
+
+  // Client QoS profile
+  std::map<uint64_t, client_qos_params_t> client_qos_params;
+  client_qos_params[client1] = c1_params;
+  client_qos_params[client2] = c2_params;
+  client_qos_params[client3] = c3_params;
+
+  // Client request params
+  dmc::ReqParams c1_rparams = {1, 1};
+  dmc::ReqParams c2_rparams = {1, 1};
+  dmc::ReqParams c3_rparams = {1, 1};
+  std::map<uint64_t, dmc::ReqParams> client_req_params;
+  client_req_params[client1] = c1_rparams;
+  client_req_params[client2] = c2_rparams;
+  client_req_params[client3] = c3_rparams;
+
+  // Create and enqueue requests
+  unsigned e = 100;
+  for (unsigned i = 0; i < 5; ++i) {
+    for(auto &&c: {client1, client2, client3}) {
+      q.enqueue(create_item(e++, c, op_scheduler_class::client,
+        client_req_params[c], &op_tracker, hobj, spgid, client_qos_params[c]));
+    }
+  }
+
+  int c1_count = 0;
+  int c2_count = 0;
+  int c3_count = 0;
+  for (int i = 0; i < 10; ++i) {
+    ASSERT_FALSE(q.empty());
+    auto retn = dequeue_item();
+
+    if (client1 == retn.get_owner()) ++c1_count;
+    else if (client2 == retn.get_owner()) ++c2_count;
+    else if (client3 == retn.get_owner()) ++c3_count;
+    else ADD_FAILURE() << "got request from neither of two clients";
+
+    std::optional<OpRequestRef> _op = retn.maybe_get_op();
+    ASSERT_EQ((*_op)->qos_phase, dmc::PhaseType::reservation);
+  }
+
+  ASSERT_EQ(c1_count, 2);
+  ASSERT_EQ(c2_count, 5);
+  ASSERT_EQ(c3_count, 3);
+
+  ASSERT_FALSE(q.empty());
+
+  while (!q.empty()) {
+    auto retn = dequeue_item();
+    std::optional<OpRequestRef> _op = retn.maybe_get_op();
+    ASSERT_EQ((*_op)->qos_phase, dmc::PhaseType::reservation);
+  }
+
+  ASSERT_TRUE(q.empty());
 }
