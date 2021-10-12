@@ -70,18 +70,18 @@ seastar::future<> PeeringEvent::start()
         return complete_rctx(pg);
       }
       logger().debug("{}: pg present", *this);
-      return with_blocking_future_interruptible<IOInterruptCondition>(
+      return with_blocking_future_interruptible<interruptor::condition>(
         handle.enter(pp(*pg).await_map)
       ).then_interruptible([this, pg] {
-        return with_blocking_future_interruptible<IOInterruptCondition>(
+        return with_blocking_future_interruptible<interruptor::condition>(
           pg->osdmap_gate.wait_for_map(evt.get_epoch_sent()));
       }).then_interruptible([this, pg](auto) {
-        return with_blocking_future_interruptible<IOInterruptCondition>(
+        return with_blocking_future_interruptible<interruptor::condition>(
           handle.enter(pp(*pg).process));
       }).then_interruptible([this, pg] {
         // TODO: likely we should synchronize also with the pg log-based
         // recovery.
-        return with_blocking_future_interruptible<IOInterruptCondition>(
+        return with_blocking_future_interruptible<interruptor::condition>(
           handle.enter(BackfillRecovery::bp(*pg).process));
       }).then_interruptible([this, pg] {
         pg->do_peering_event(evt, ctx);

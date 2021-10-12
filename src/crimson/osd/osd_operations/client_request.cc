@@ -104,16 +104,16 @@ seastar::future<> ClientRequest::start()
                   return interruptor::now();
               });
             }
-            return with_blocking_future_interruptible<IOInterruptCondition>(
+            return with_blocking_future_interruptible<interruptor::condition>(
               handle.enter(pp(pg).await_map)
             ).then_interruptible([this, &pg] {
-              return with_blocking_future_interruptible<IOInterruptCondition>(
+              return with_blocking_future_interruptible<interruptor::condition>(
                 pg.osdmap_gate.wait_for_map(m->get_min_epoch()));
             }).then_interruptible([this, &pg](auto map) {
-              return with_blocking_future_interruptible<IOInterruptCondition>(
+              return with_blocking_future_interruptible<interruptor::condition>(
                 handle.enter(pp(pg).wait_for_active));
             }).then_interruptible([this, &pg]() {
-              return with_blocking_future_interruptible<IOInterruptCondition>(
+              return with_blocking_future_interruptible<interruptor::condition>(
                 pg.wait_for_active_blocker.wait());
             }).then_interruptible([this, pgref=std::move(pgref)]() mutable {
               if (is_pg_op()) {
@@ -157,7 +157,7 @@ ClientRequest::process_pg_op(
 ClientRequest::interruptible_future<>
 ClientRequest::process_op(Ref<PG> &pg)
 {
-  return with_blocking_future_interruptible<IOInterruptCondition>(
+  return with_blocking_future_interruptible<interruptor::condition>(
       handle.enter(pp(*pg).recover_missing))
   .then_interruptible(
     [this, pg]() mutable {
@@ -172,14 +172,14 @@ ClientRequest::process_op(Ref<PG> &pg)
           CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
         return conn->send(std::move(reply));
       } else {
-        return with_blocking_future_interruptible<IOInterruptCondition>(
+        return with_blocking_future_interruptible<interruptor::condition>(
             handle.enter(pp(*pg).get_obc)).then_interruptible(
           [this, pg]() mutable -> PG::load_obc_iertr::future<> {
           logger().debug("{}: got obc lock", *this);
           op_info.set_from_op(&*m, *pg->get_osdmap());
           return pg->with_locked_obc(m->get_hobj(), op_info,
                                      [this, pg](auto obc) mutable {
-            return with_blocking_future_interruptible<IOInterruptCondition>(
+            return with_blocking_future_interruptible<interruptor::condition>(
               handle.enter(pp(*pg).process)
             ).then_interruptible([this, pg, obc]() mutable {
               return do_process(pg, obc);
@@ -217,13 +217,13 @@ ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
     [this, pg](auto submitted, auto all_completed) mutable {
     return submitted.then_interruptible(
       [this, pg] {
-        return with_blocking_future_interruptible<IOInterruptCondition>(
+        return with_blocking_future_interruptible<interruptor::condition>(
             handle.enter(pp(*pg).wait_repop));
     }).then_interruptible(
       [this, pg, all_completed=std::move(all_completed)]() mutable {
       return all_completed.safe_then_interruptible(
         [this, pg](MURef<MOSDOpReply> reply) {
-        return with_blocking_future_interruptible<IOInterruptCondition>(
+        return with_blocking_future_interruptible<interruptor::condition>(
             handle.enter(pp(*pg).send_reply)).then_interruptible(
               [this, reply=std::move(reply)]() mutable{
               return conn->send(std::move(reply));
