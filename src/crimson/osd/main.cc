@@ -262,6 +262,7 @@ int main(int argc, char* argv[])
             sharded_perf_coll().stop().get();
           });
           local_conf().parse_config_files(conf_file_list).get();
+          local_conf().parse_env().get();
           local_conf().parse_argv(ceph_args).get();
           if (const auto ret = pidfile_write(local_conf()->pid_file);
               ret == -EACCES || ret == -EAGAIN) {
