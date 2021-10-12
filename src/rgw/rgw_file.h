@@ -2540,6 +2540,8 @@ public:
       ret = init_from_header(get_state());
     }
     op = this;
+    // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+    hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   }
 
   bool only_bucket() override { return true; }
