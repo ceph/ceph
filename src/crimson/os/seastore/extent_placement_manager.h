@@ -217,8 +217,7 @@ class SegmentedAllocator : public ExtentAllocator {
 
     write_iertr::future<> _write(
       Transaction& t,
-      ool_record_t& record,
-      const record_size_t& record_size);
+      ool_record_t& record);
 
     using roll_segment_ertr = crimson::errorator<
       crimson::ct_error::input_output_error>;
