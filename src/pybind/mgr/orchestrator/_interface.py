@@ -647,6 +647,9 @@ class Orchestrator(object):
     def upgrade_check(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
         raise NotImplementedError()
 
+    def upgrade_ls(self, image: Optional[str], tags: bool) -> OrchResult[List[str]]:
+        raise NotImplementedError()
+
     def upgrade_start(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
         raise NotImplementedError()
 
