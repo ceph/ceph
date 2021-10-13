@@ -360,7 +360,7 @@ static bool obj_has_expired(const DoutPrefixProvider *dpp, CephContext *cct, cep
     *expire_time = mtime + make_timespan(cmp);
   }
 
-  ldpp_dout(dpp, 20) << __func__ << __func__
+  ldpp_dout(dpp, 20) << __func__
 		 << "(): mtime=" << mtime << " days=" << days
 		 << " base_time=" << base_time << " timediff=" << timediff
 		 << " cmp=" << cmp
@@ -855,13 +855,13 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 	if (ret == -ERR_NO_SUCH_UPLOAD) {
 	  ldpp_dout(wk->get_lc(), 5)
 	    << "ERROR: abort_multipart_upload failed, ret=" << ret
-	    << wq->thr_name()
+	    << ", thread:" << wq->thr_name()
 	    << ", meta:" << obj.key
 	    << dendl;
 	} else {
 	  ldpp_dout(wk->get_lc(), 0)
 	    << "ERROR: abort_multipart_upload failed, ret=" << ret
-	    << wq->thr_name()
+	    << ", thread:" << wq->thr_name()
 	    << ", meta:" << obj.key
 	    << dendl;
 	}
@@ -1407,7 +1407,7 @@ int LCOpRule::process(rgw_bucket_dir_entry& o,
     if (!cont) {
       ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key
 			 << ": no rule match, skipping "
-			 << " " << wq->thr_name() << dendl;
+			 << wq->thr_name() << dendl;
       return 0;
     }
 
@@ -1493,7 +1493,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     if (ret < 0) {
       ldpp_dout(wk->get_lc(), 20)
 	<< "ERROR: orule.process() returned ret=" << ret
-	<< wq->thr_name() 
+	<< "thread:" << wq->thr_name()
 	<< dendl;
     }
   };
