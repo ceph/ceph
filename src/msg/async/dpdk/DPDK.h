@@ -44,7 +44,6 @@
 #include "net.h"
 #include "toeplitz.h"
 
-
 struct free_deleter {
   void operator()(void* p) { ::free(p); }
 };
@@ -814,7 +813,7 @@ class DPDKDevice {
     if (ret != 0) {
       rte_exit(EXIT_FAILURE, "Cannot initialise port %u\n", _port_idx);
     }
-    string name(std::string("port") + std::to_string(port_idx));
+    std::string name(std::string("port") + std::to_string(port_idx));
     PerfCountersBuilder plb(cct, name, l_dpdk_dev_first, l_dpdk_dev_last);
 
     plb.add_u64_counter(l_dpdk_dev_rx_mcast, "dpdk_device_receive_multicast_packets", "DPDK received multicast packets");
@@ -855,7 +854,8 @@ class DPDKDevice {
   }
   const rss_key_type& rss_key() const { return _rss_key; }
   uint16_t hw_queues_count() { return _num_queues; }
-  std::unique_ptr<DPDKQueuePair> init_local_queue(CephContext *c, EventCenter *center, string hugepages, uint16_t qid) {
+  std::unique_ptr<DPDKQueuePair> init_local_queue(CephContext *c,
+      EventCenter *center, std::string hugepages, uint16_t qid) {
     std::unique_ptr<DPDKQueuePair> qp;
     qp = std::unique_ptr<DPDKQueuePair>(new DPDKQueuePair(c, center, this, qid));
     return qp;
