@@ -118,6 +118,12 @@ Adoption process
      document for instructions that describe how to import existing
      ssh keys.
 
+   .. note::
+     It is also possible to have cephadm use a non-root user to ssh
+     into cluster hosts. This user needs to have passwordless sudo access.
+     Use ``ceph cephadm set-user <user>`` and copy the ssh key to that user.
+     See :ref:`cephadm-ssh-user`
+
 #. Tell cephadm which hosts to manage:
 
    .. prompt:: bash #
