@@ -334,7 +334,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Option(
             'use_agent',
             type='bool',
-            default=True,
+            default=False,
             desc='Use cephadm agent on each host to gather and send metadata'
         ),
         Option(
