@@ -1378,13 +1378,14 @@ class DB {
           rgw_obj_key end_marker;
           string ns;
           bool enforce_ns;
-          RGWAccessListFilter *filter;
+          RGWAccessListFilter* access_list_filter;
+          RGWBucketListNameFilter force_check_filter;
           bool list_versions;
-	      bool allow_unordered;
+	  bool allow_unordered;
 
           Params() :
 	        enforce_ns(true),
-	        filter(NULL),
+	        access_list_filter(nullptr),
 	        list_versions(false),
 	        allow_unordered(false)
 	        {}
