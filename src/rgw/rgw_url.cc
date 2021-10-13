@@ -14,7 +14,7 @@ namespace {
   const std::string schema_re = "([[:alpha:]]+:\\/\\/)";
   const std::string user_pass_re = "(([^:\\s]+):([^@\\s]+)@)?";
   const std::string host_port_re = "([[:alnum:].:-]+)";
-  const std::string path_re = "(/[[:print:]]+)?";
+  const std::string path_re = "(/[[:print:]]*)?";
 }
 
 bool parse_url_authority(const std::string& url, std::string& host, std::string& user, std::string& password) {
