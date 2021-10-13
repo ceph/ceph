@@ -1874,6 +1874,15 @@ class CephManager:
         j = json.loads('\n'.join(out.split('\n')[1:]))
         return j['nodes'][0]
 
+    def get_pool_df(self, name):
+        """
+        Get the pool df stats
+        """
+        out = self.raw_cluster_cmd('df', 'detail', '--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        return next((p['stats'] for p in j['pools'] if p['name'] == name),
+                    None)
+
     def get_pgids_to_force(self, backfill):
         """
         Return the randomized list of PGs that can have their recovery/backfill forced
