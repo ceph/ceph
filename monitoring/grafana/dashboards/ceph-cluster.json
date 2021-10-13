@@ -678,7 +678,7 @@
       "type": "vonage-status-panel"
     },
     {
-      "colorMode": "Disabled",
+      "colorMode": "Panel",
       "colors": {
         "crit": "rgba(245, 54, 54, 0.9)",
         "disable": "rgba(128, 128, 128, 0.9)",
@@ -706,21 +706,36 @@
       "targets": [
         {
           "aggregation": "Last",
-          "alias": "Clients",
+          "alias": "Active",
           "decimals": 2,
           "displayAliasType": "Always",
           "displayType": "Regular",
           "displayValueWithAlias": "When Alias Displayed",
-          "expr": "ceph_mds_server_handle_client_session",
+          "expr": "count(ceph_mgr_status == 1) or vector(0)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "Clients",
+          "legendFormat": "Active",
           "refId": "A",
+          "units": "none",
+          "valueHandler": "Number Threshold"
+        },
+        {
+          "aggregation": "Last",
+          "alias": "Standby",
+          "decimals": 2,
+          "displayAliasType": "Always",
+          "displayType": "Regular",
+          "displayValueWithAlias": "When Alias Displayed",
+          "expr": "count(ceph_mgr_status == 0) or vector(0)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "Standby",
+          "refId": "B",
           "units": "none",
           "valueHandler": "Number Threshold"
         }
       ],
-      "title": "Client connections",
+      "title": "MGRs",
       "type": "vonage-status-panel"
     },
     {
