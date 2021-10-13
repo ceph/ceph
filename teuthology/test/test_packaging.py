@@ -311,7 +311,7 @@ class TestBuilderProject(object):
             pytest.skip()
 
     def _get_remote(self, arch="x86_64", system_type="deb", distro="ubuntu",
-                    codename="trusty", version="14.04"):
+                    codename="focal", version="20.04"):
         rem = Mock()
         rem.system_type = system_type
         rem.os.name = distro
@@ -342,7 +342,7 @@ class TestBuilderProject(object):
         assert expected is not None
         config = dict(
             os_type="ubuntu",
-            os_version="14.04",
+            os_version="20.04",
             sha1="sha1",
         )
         gp = self.klass("ceph", config)
@@ -353,7 +353,7 @@ class TestBuilderProject(object):
     def test_init_from_config_branch_ref(self):
         config = dict(
             os_type="ubuntu",
-            os_version="14.04",
+            os_version="20.04",
             branch='jewel',
         )
         gp = self.klass("ceph", config)
@@ -364,7 +364,7 @@ class TestBuilderProject(object):
     def test_init_from_config_tag_ref(self):
         config = dict(
             os_type="ubuntu",
-            os_version="14.04",
+            os_version="20.04",
             tag='v10.0.1',
         )
         gp = self.klass("ceph", config)
@@ -375,7 +375,7 @@ class TestBuilderProject(object):
     def test_init_from_config_tag_overrides_branch_ref(self, caplog):
         config = dict(
             os_type="ubuntu",
-            os_version="14.04",
+            os_version="20.04",
             branch='jewel',
             tag='v10.0.1',
         )
@@ -390,7 +390,7 @@ class TestBuilderProject(object):
     def test_init_from_config_branch_overrides_sha1(self, caplog):
         config = dict(
             os_type="ubuntu",
-            os_version="14.04",
+            os_version="20.04",
             branch='jewel',
             sha1='sha1',
         )
@@ -527,100 +527,6 @@ class TestBuilderProject(object):
         assert gp.dist_release == expected
 
 
-class TestGitbuilderProject(TestBuilderProject):
-    klass = packaging.GitbuilderProject
-
-    def setup(self):
-        self.p_config = patch('teuthology.packaging.config')
-        self.m_config = self.p_config.start()
-        self.m_config.baseurl_template = \
-            'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}'
-        self.m_config.gitbuilder_host = "gitbuilder.ceph.com"
-        self.p_get_config_value = \
-            patch('teuthology.packaging._get_config_value_for_remote')
-        self.m_get_config_value = self.p_get_config_value.start()
-        self.m_get_config_value.return_value = None
-        self.p_get = patch('requests.get')
-        self.m_get = self.p_get.start()
-        self.p_get_response = patch("teuthology.packaging._get_response")
-        self.m_get_response = self.p_get_response.start()
-
-    def teardown(self):
-        self.p_config.stop()
-        self.p_get_config_value.stop()
-        self.p_get.stop()
-        self.p_get_response.stop()
-
-    def test_init_from_remote_base_url(self, expected=None):
-        super(TestGitbuilderProject, self)\
-            .test_init_from_remote_base_url(
-                "http://gitbuilder.ceph.com/"
-                "ceph-deb-trusty-x86_64-basic/ref/master"
-            )
-
-    def test_init_from_remote_base_url_debian(self):
-        super(TestGitbuilderProject, self)\
-            .test_init_from_remote_base_url_debian(
-                "http://gitbuilder.ceph.com/"
-                "ceph-deb-wheezy-x86_64-basic/ref/master"
-        )
-
-    def test_init_from_config_base_url(self):
-        super(TestGitbuilderProject, self).test_init_from_config_base_url(
-            "http://gitbuilder.ceph.com/ceph-deb-trusty-x86_64-basic/sha1/sha1"
-        )
-
-    def test_get_package_version_found(self):
-        resp = Mock()
-        resp.ok = True
-        resp.text = "0.90.0"
-        self.m_get_response.return_value = resp
-        super(TestGitbuilderProject, self)\
-            .test_get_package_version_found()
-
-    def test_version_strip_v(self):
-        resp = Mock()
-        resp.ok = True
-        resp.text = "v0.90.0"
-        self.m_get_response.return_value = resp
-        super(TestGitbuilderProject, self)\
-            .test_get_package_version_found()
-
-    def test_get_package_sha1_fetched_found(self):
-        resp = Mock()
-        resp.ok = True
-        resp.text = "the_sha1"
-        self.m_get.return_value = resp
-        super(TestGitbuilderProject, self)\
-            .test_get_package_sha1_fetched_found()
-
-    def test_get_package_sha1_fetched_not_found(self):
-        resp = Mock()
-        resp.ok = False
-        self.m_get.return_value = resp
-        super(TestGitbuilderProject, self)\
-            .test_get_package_sha1_fetched_not_found()
-
-    DISTRO_MATRIX = [
-        ('rhel', '7.0', None, 'centos7'),
-        ('centos', '6.5', None, 'centos6'),
-        ('centos', '7.0', None, 'centos7'),
-        ('centos', '7.1', None, 'centos7'),
-        ('centos', '8.1', None, 'centos8'),
-        ('fedora', '20', None, 'fedora20'),
-        ('ubuntu', '14.04', 'trusty', 'trusty'),
-        ('ubuntu', '14.04', None, 'trusty'),
-        ('debian', '7.0', None, 'wheezy'),
-        ('debian', '7', None, 'wheezy'),
-        ('debian', '7.1', None, 'wheezy'),
-        ('ubuntu', '12.04', None, 'precise'),
-        ('ubuntu', '14.04', None, 'trusty'),
-        ('ubuntu', '16.04', None, 'xenial'),
-        ('ubuntu', '18.04', None, 'bionic'),
-        ('ubuntu', '20.04', None, 'focal'),
-    ]
-
-
 class TestShamanProject(TestBuilderProject):
     klass = packaging.ShamanProject
 
@@ -656,7 +562,7 @@ class TestShamanProject(TestBuilderProject):
                 .test_init_from_remote_base_url(
                     "https://shaman.ceph.com/api/search?status=ready"
                     "&project=ceph&flavor=default"
-                    "&distros=ubuntu%2F14.04%2Fx86_64&ref=master"
+                    "&distros=ubuntu%2F20.04%2Fx86_64&ref=master"
                 )
 
     def test_init_from_remote_base_url_debian(self):
@@ -690,7 +596,7 @@ class TestShamanProject(TestBuilderProject):
         ):
             super(TestShamanProject, self).test_init_from_config_base_url(
                 "https://shaman.ceph.com/api/search?status=ready&project=ceph" \
-                "&flavor=default&distros=ubuntu%2F14.04%2Fx86_64&sha1=sha1"
+                "&flavor=default&distros=ubuntu%2F20.04%2Fx86_64&sha1=sha1"
             )
 
     @patch('teuthology.packaging.ShamanProject._get_package_sha1')

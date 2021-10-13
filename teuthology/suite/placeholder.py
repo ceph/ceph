@@ -72,6 +72,7 @@ dict_templ = {
                     'debug osd': 20
                 }
             },
+            'flavor': Placeholder('flavor'),
             'log-whitelist': ['\(MDS_ALL_DOWN\)',
                               '\(MDS_UP_LESS_THAN_MAX\)'],
             'log-ignorelist': ['\(MDS_ALL_DOWN\)',
@@ -91,6 +92,7 @@ dict_templ = {
         'install': {
             'ceph': {
                 'sha1': Placeholder('ceph_hash'),
+                'flavor': Placeholder('flavor'),
             }
         },
         'workunit': {

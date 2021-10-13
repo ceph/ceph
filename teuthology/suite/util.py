@@ -26,7 +26,7 @@ from teuthology.task.install import get_flavor
 log = logging.getLogger(__name__)
 
 CONTAINER_DISTRO = 'centos/8'       # the one to check for build_complete
-CONTAINER_FLAVOR = 'basic'          # basic maps to default on shaman
+CONTAINER_FLAVOR = 'default'
 
 
 def fetch_repos(branch, test_name):
@@ -254,7 +254,7 @@ def get_branch_info(project, branch, project_owner='ceph'):
         return resp.json()
 
 
-def package_version_for_hash(hash, kernel_flavor='basic', distro='rhel',
+def package_version_for_hash(hash, flavor='default', distro='rhel',
                              distro_version='8.0', machine_type='smithi'):
     """
     Does what it says on the tin. Uses gitbuilder repos.
@@ -267,7 +267,7 @@ def package_version_for_hash(hash, kernel_flavor='basic', distro='rhel',
     bp = get_builder_project()(
         'ceph',
         dict(
-            flavor=kernel_flavor,
+            flavor=flavor,
             os_type=distro,
             os_version=distro_version,
             arch=arch,
@@ -404,14 +404,14 @@ def has_packages_for_distro(sha1, os_type, os_version, flavor,
                             package_versions=None):
     """
     Checks to see if gitbuilder has packages for the given sha1, os_type and
-    kernel_flavor.
+    flavor.
 
     See above for package_versions description.
 
     :param sha1:             The sha1 hash of the ceph version.
     :param os_type:          The distro we want to get packages for, given
                              the ceph sha1. Ex. 'ubuntu', 'rhel', etc.
-    :param kernel_flavor:    The kernel flavor
+    :param flavor:           The ceph packages shaman flavor
     :param package_versions: Use this optionally to use cached results of
                              previous calls to gitbuilder.
     :returns:                True, if packages are found. False otherwise.

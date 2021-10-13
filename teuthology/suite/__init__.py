@@ -43,8 +43,6 @@ def process_args(args):
         'ceph': 'ceph_branch',
         'sha1': 'ceph_sha1',
         'kernel': 'kernel_branch',
-        # FIXME: ceph flavor and kernel flavor are separate things
-        'flavor': 'kernel_flavor',
         '<config_yaml>': 'base_yaml_paths',
         'filter': 'filter_in',
     }

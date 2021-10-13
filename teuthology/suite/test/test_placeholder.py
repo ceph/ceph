@@ -22,6 +22,7 @@ class TestPlaceholder(object):
             suite_repo='https://example.com/ceph/suite.git',
             suite_relpath='',
             ceph_repo='https://example.com/ceph/ceph.git',
+            flavor='default'
         )
         output_dict = substitute_placeholders(dict_templ, input_dict)
         assert output_dict['suite'] == 'suite'
@@ -48,6 +49,7 @@ class TestPlaceholder(object):
             suite_repo='https://example.com/ceph/suite.git',
             suite_relpath='',
             ceph_repo='https://example.com/ceph/ceph.git',
+            flavor=None,
         )
         output_dict = substitute_placeholders(dict_templ, input_dict)
         assert 'os_type' not in output_dict

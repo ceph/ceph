@@ -53,7 +53,7 @@ def apply_overrides(ctx, config):
 def get_config_install(ctx, config):
     config = apply_overrides(ctx, config)
     log.debug('install config %s' % config)
-    return [(config.get('flavor', 'basic'),
+    return [(config.get('flavor', 'default'),
              config.get('tag', ''),
              config.get('branch', ''),
              config.get('sha1'))]
@@ -69,7 +69,7 @@ def get_config_install_upgrade(ctx, config):
         log.debug('install.upgrade config ' + str(role_config) +
                   ' and with overrides ' + str(o))
         # for install.upgrade overrides are actually defaults
-        configs.append((o.get('flavor', 'basic'),
+        configs.append((o.get('flavor', 'default'),
                         role_config.get('tag', o.get('tag', '')),
                         role_config.get('branch', o.get('branch', '')),
                         role_config.get('sha1', o.get('sha1'))))

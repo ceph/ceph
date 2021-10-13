@@ -74,7 +74,7 @@ class Run(object):
                 self.args.suite,
                 self.args.ceph_branch,
                 self.args.kernel_branch or '-',
-                self.args.kernel_flavor, worker
+                self.args.flavor, worker
             ]
         ).replace('/', ':')
 
@@ -121,6 +121,7 @@ class Run(object):
             archive_upload_key=config.archive_upload_key,
             suite_repo=config.get_ceph_qa_suite_git_url(),
             suite_relpath=self.args.suite_relpath,
+            flavor=self.args.flavor,
         )
         return self.build_base_config()
 
@@ -134,7 +135,7 @@ class Run(object):
             kernel_hash = None
         else:
             kernel_hash = util.get_gitbuilder_hash(
-                'kernel', self.args.kernel_branch, self.args.kernel_flavor,
+                'kernel', self.args.kernel_branch, 'default',
                 self.args.machine_type, self.args.distro,
                 self.args.distro_version,
             )
@@ -147,7 +148,7 @@ class Run(object):
             log.info("kernel sha1: {hash}".format(hash=kernel_hash))
             kernel_dict = dict(kernel=dict(kdb=True, sha1=kernel_hash))
             if kernel_hash != 'distro':
-                kernel_dict['kernel']['flavor'] = self.args.kernel_flavor
+                kernel_dict['kernel']['flavor'] = 'default'
         else:
             kernel_dict = dict()
         return kernel_dict
@@ -190,7 +191,7 @@ class Run(object):
             # Get the ceph package version
             try:
                 ceph_version = util.package_version_for_hash(
-                    ceph_hash, self.args.kernel_flavor, self.args.distro,
+                    ceph_hash, self.args.flavor, self.args.distro,
                     self.args.distro_version, self.args.machine_type,
                 )
             except Exception as exc:

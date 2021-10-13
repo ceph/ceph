@@ -95,17 +95,17 @@ where:
 * ``ceph``: ceph branch to be used.
 * ``kernel``: version of the kernel to be used.
 * ``email``: email address to send the results to.
-* ``flavor``: the kernel flavor to run against
+* ``flavor``: the ceph packages shaman flavor to run against
 * ``teuth``: version of teuthology to run
 * ``mtype``: machine type of the run
 * ``templates``: template file used for further modifying the suite (optional)
 
 For example, consider::
 
-     teuthology-suite -s rbd -c wip-fix -k distro -e bob.smith@foo.com -f basic -t jewel -m mira
+     teuthology-suite -s rbd -c wip-fix -k distro -e bob.smith@foo.com -f default -t jewel -m mira
 
 The above command runs the rbd suite using the wip-fix branch of ceph, the
-jewel kernel, with a 'basic' kernel flavor, and the teuthology jewel branch
+jewel kernel, with a 'default' ceph shaman build packages flavor, and the teuthology jewel branch
 will be used.  It will run on mira machines and send an email to
 bob.smith@foo.com when it's completed. For more details on
 ``teuthology-suite``, please consult the output of ``teuthology-suite --help``.

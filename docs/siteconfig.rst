@@ -90,7 +90,7 @@ Here is a sample configuration with many of the options set and documented::
     #
     # {host} is 'gitbuilder_host' from .teuthology.yaml
     # {proj} is the value of 'project' from the job yaml file or 'ceph'
-    # {flavor} is the value of 'flavor' from the job yaml file or 'basic'
+    # {flavor} is the value of 'flavor' from the job yaml file or 'default'
     # {uri} is ref/tag if 'tag' is set in the job yaml file
     #       or ref/branch if 'branch' is set in the job yaml file
     #       or sha1/sha1 if 'sha1' is set in the job yaml file

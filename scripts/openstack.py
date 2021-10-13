@@ -58,9 +58,9 @@ def get_suite_parser():
     )
     parser.add_argument(
         '-f', '--flavor',
-        help=("The kernel flavor to run against: ('basic',"
-              "'gcov', 'notcmalloc')"),
-        default='basic',
+        help=("The ceph packages shaman flavor to run with:"
+        "('default', 'crimson', 'notcmalloc', 'jaeger')"),
+        default='default',
     )
     parser.add_argument(
         '-d', '--distro',
