@@ -247,7 +247,7 @@ class DPDKWorker : public Worker {
 };
 
 class DPDKStack : public NetworkStack {
-  vector<std::function<void()> > funcs;
+  std::vector<std::function<void()> > funcs;
 
   virtual Worker* create_worker(CephContext *c, unsigned worker_id) override {
     return new DPDKWorker(c, worker_id);
