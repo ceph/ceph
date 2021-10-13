@@ -41,7 +41,7 @@ from functools import wraps
 from glob import glob
 from io import StringIO
 from threading import Thread, RLock
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 from pathlib import Path
 
@@ -57,6 +57,7 @@ DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.20.0'
 DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:6.7.4'
 DEFAULT_HAPROXY_IMAGE = 'docker.io/library/haproxy:2.3'
 DEFAULT_KEEPALIVED_IMAGE = 'docker.io/arcts/keepalived'
+DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
 DEFAULT_REGISTRY = 'docker.io'   # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 
@@ -270,9 +271,128 @@ class OSD(object):
             'kernel.pid_max = 4194304',
         ]
 
+
 ##################################
 
 
+class SNMPGateway:
+    """Defines an SNMP gateway between Prometheus and SNMP monitoring Frameworks"""
+    daemon_type = 'snmp-gateway'
+    supported_versions = ['V2c']
+    default_image = DEFAULT_SNMP_GATEWAY_IMAGE
+    env_filename = 'snmp-gateway.conf'
+
+    def __init__(self,
+                 ctx: CephadmContext,
+                 fsid: str,
+                 daemon_id: Union[int, str],
+                 config_json: Dict[str, Any],
+                 image: Optional[str] = None ) -> None:
+        self.ctx = ctx
+        self.fsid = fsid
+        self.daemon_id = daemon_id
+        self.image = image or SNMPGateway.default_image
+
+        self.uid = config_json.get('uid', 0)
+        self.gid = config_json.get('gid', 0)
+        self.ports = list([config_json.get('listen_port', 9464)])
+        self.destination = config_json.get('destination', '')
+        self.snmp_version = config_json.get('snmp_version', 'V2c')
+        self.snmp_community = config_json.get('snmp_community', 'public')
+        self.log_level = config_json.get('log_level', 'info')
+        self.snmp_v3_auth_user = config_json.get('snmp_v3_auth_user', '')
+        self.snmp_v3_auth_password = config_json.get('snmp_v3_auth_password', '')
+        self.snmp_v3_priv_password = config_json.get('snmp_v3_priv_password', '')
+
+        # TODO Add SNMP V3 parameters
+
+        self.validate()
+
+    @classmethod
+    def init(cls, ctx: CephadmContext, fsid: str,
+             daemon_id: Union[int, str]) -> 'SNMPGateway':
+        assert ctx.config_json
+        return cls(ctx, fsid, daemon_id,
+                   get_parm(ctx.config_json), ctx.image)
+
+    @staticmethod
+    def get_version(ctx: CephadmContext, fsid, daemon_id: str) -> Optional[str]:
+        """Return the version of the notifer from it's http endpoint"""
+        path = os.path.join(ctx.data_dir, fsid, f"snmp-gateway.{daemon_id}", 'unit.meta')
+        try:
+            with open(path, 'r') as env:
+                metadata = json.loads(env.read())
+        except (OSError, json.JSONDecodeError):
+            return None
+
+        ports = metadata.get('ports', [])
+        if not ports:
+            return None
+
+        try:
+            with urlopen(f"http://0.0.0.0:{ports[0]}/") as r:
+                html = r.read().decode('utf-8').split('\n')
+        except (HTTPError, URLError):
+            return None
+
+        for h in html:
+            stripped = h.strip()
+            if stripped.startswith(('<pre>', '<PRE>')) and \
+               stripped.endswith(('</pre>', '</PRE>')):
+                # <pre>(version=1.2.1, branch=HEAD, revision=7...
+                return stripped.split(',')[0].split('version=')[1]
+
+        return None
+
+    def get_daemon_args(self):
+
+        args = [
+            f'--web.listen-address=:{self.ports[0]}',
+            f'--snmp.destination={self.destination}',
+            f'--snmp.version={self.snmp_version}',
+            f'--log.level={self.log_level}',
+            '--snmp.trap-description-template=/etc/snmp_notifier/description-template.tpl'
+        ]
+
+        return args
+
+    @property
+    def data_dir(self) -> str:
+        return os.path.join(self.ctx.data_dir, self.ctx.fsid, f"{self.daemon_type}.{self.daemon_id}")
+
+    @property
+    def conf_file_path(self) -> str:
+        return os.path.join(self.data_dir, self.env_filename)
+
+    def create_daemon_conf(self):
+        """Creates the environment file holding 'secrets' passed to the snmp-notifier daemon"""
+        with open(os.open(self.conf_file_path, os.O_CREAT | os.O_WRONLY, 0o600), 'w') as f:
+            f.write(f"PORT={self.ports[0]}\n")
+            if self.snmp_version == 'V2c':
+                f.write(f"SNMP_NOTIFIER_COMMUNITY={self.snmp_community}\n")
+            else:
+                # add snmp v3 settings here
+                pass
+
+    def validate(self):
+        """Validate the settings
+
+        Raises:
+            Error: if the fsid doesn't look like an fsid
+            Error: if the snmp version is not supported
+            Error: destination IP and port address missing
+        """
+        if not is_fsid(self.fsid):
+            raise Error(f'not a valid fsid: {self.fsid}')
+
+        if self.snmp_version not in SNMPGateway.supported_versions:
+            raise Error(f'not a valid snmp version: {self.fsid}')
+
+        if not self.destination:
+            raise Error('config is missing destination attribute(<ip>:<port>) of the target SNMP listener')
+
+
+##################################
 class Monitoring(object):
     """Define the configs for the monitoring containers"""
 
@@ -1004,6 +1124,7 @@ def get_supported_daemons():
     supported_daemons.append(CephadmDaemon.daemon_type)
     supported_daemons.append(HAproxy.daemon_type)
     supported_daemons.append(Keepalived.daemon_type)
+    supported_daemons.append(SNMPGateway.daemon_type)
     assert len(supported_daemons) == len(set(supported_daemons))
     return supported_daemons
 
@@ -1782,6 +1903,8 @@ def default_image(func: FuncT) -> FuncT:
                     ctx.image = HAproxy.default_image
                 if type_ == 'keepalived':
                     ctx.image = Keepalived.default_image
+                if type_ == SNMPGateway.daemon_type:
+                    ctx.image = SNMPGateway.default_image
             if not ctx.image:
                 ctx.image = os.environ.get('CEPHADM_IMAGE')
             if not ctx.image:
@@ -2188,6 +2311,9 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, fsid, daemon_id)
         r.extend(cc.get_daemon_args())
+    elif daemon_type == SNMPGateway.daemon_type:
+        sc = SNMPGateway.init(ctx, fsid, daemon_id)
+        r.extend(sc.get_daemon_args())
 
     return r
 
@@ -2277,6 +2403,10 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, fsid, daemon_id)
         cc.create_daemon_dirs(data_dir, uid, gid)
+
+    elif daemon_type == SNMPGateway.daemon_type:
+        sg = SNMPGateway.init(ctx, fsid, daemon_id)
+        sg.create_daemon_conf()
 
 
 def get_parm(option):
@@ -2567,6 +2697,11 @@ def get_container(ctx: CephadmContext,
         ceph_args = ['-n', name]
     elif daemon_type in Ceph.daemons:
         ceph_args = ['-n', name, '-f']
+    elif daemon_type == SNMPGateway.daemon_type:
+        sg = SNMPGateway.init(ctx, fsid, daemon_id)
+        container_args.append(
+            f"--env-file={sg.conf_file_path}"
+        )
 
     # if using podman, set -d, --conmon-pidfile & --cidfile flags
     # so service can have Type=Forking
@@ -4688,6 +4823,13 @@ def command_deploy(ctx):
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, None,
                       uid, gid, ports=daemon_ports)
 
+    elif daemon_type == SNMPGateway.daemon_type:
+        sc = SNMPGateway.init(ctx, ctx.fsid, daemon_id)
+        c = get_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c,
+                      sc.uid, sc.gid,
+                      ports=sc.ports)
+
     else:
         raise Error('daemon type {} not implemented in command_deploy function'
                     .format(daemon_type))
@@ -5211,6 +5353,9 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                     # everything, we do not know which command
                                     # to execute to get the version.
                                     pass
+                                elif daemon_type == SNMPGateway.daemon_type:
+                                    version = SNMPGateway.get_version(ctx, fsid, daemon_id)
+                                    seen_versions[image_id] = version
                                 else:
                                     logger.warning('version for unknown daemon type %s' % daemon_type)
                         else:
