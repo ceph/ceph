@@ -308,7 +308,7 @@ static int fill_in_one_address(
 							interfaces,
 							numa_node);
   if (!found) {
-    std::string ip_type = "";
+    std::string_view ip_type;
     if ((ipv & CEPH_PICK_ADDRESS_IPV4) && (ipv & CEPH_PICK_ADDRESS_IPV6)) {
       ip_type = "IPv4 or IPv6";
     } else if (ipv & CEPH_PICK_ADDRESS_IPV4) {
