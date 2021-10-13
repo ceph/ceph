@@ -110,6 +110,7 @@ static RGWObjCategory main_category = RGWObjCategory::Main;
 #define RGW_USAGE_OBJ_PREFIX "usage."
 
 
+// returns true on success, false on failure
 static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
                                   const rgw_placement_rule& head_placement_rule,
                                   const rgw_obj& obj, rgw_pool *pool)
@@ -1866,7 +1867,8 @@ int RGWRados::Bucket::List::list_objects_ordered(
 					   &truncated,
 					   &cls_filtered,
 					   &cur_marker,
-                                           y);
+                                           y,
+					   params.force_check_filter);
     if (r < 0) {
       return r;
     }
@@ -1918,8 +1920,8 @@ int RGWRados::Bucket::List::list_objects_ordered(
 	next_marker = index_key;
       }
 
-      if (params.filter &&
-	  ! params.filter->filter(obj.name, index_key.name)) {
+      if (params.access_list_filter &&
+	  ! params.access_list_filter->filter(obj.name, index_key.name)) {
         continue;
       }
 
@@ -2168,12 +2170,15 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
 	continue;
       }
 
-      if (params.filter && !params.filter->filter(obj.name, index_key.name))
+      if (params.access_list_filter &&
+	  !params.access_list_filter->filter(obj.name, index_key.name)) {
         continue;
+      }
 
       if (params.prefix.size() &&
-	  (0 != obj.name.compare(0, params.prefix.size(), params.prefix)))
+	  (0 != obj.name.compare(0, params.prefix.size(), params.prefix))) {
         continue;
+      }
 
       if (count >= max) {
         truncated = true;
@@ -2329,6 +2334,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
   return -ENOENT;
 }
 
+// returns true on success, false on failure
 bool RGWRados::get_obj_data_pool(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_pool *pool)
 {
   return rgw_get_obj_data_pool(svc.zone->get_zonegroup(), svc.zone->get_zone_params(), placement_rule, obj, pool);
@@ -8377,7 +8383,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
 				      bool* cls_filtered,
 				      rgw_obj_index_key *last_entry,
                                       optional_yield y,
-				      check_filter_t force_check_filter)
+				      RGWBucketListNameFilter force_check_filter)
 {
   /* expansion_factor allows the number of entries to read to grow
    * exponentially; this is used when earlier reads are producing too
@@ -8670,7 +8676,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 					bool *is_truncated,
 					rgw_obj_index_key *last_entry,
                                         optional_yield y,
-					check_filter_t force_check_filter) {
+					RGWBucketListNameFilter force_check_filter) {
   ldpp_dout(dpp, 10) << __func__ << " " << bucket_info.bucket <<
     " start_after=\"" << start_after <<
     "\", prefix=\"" << prefix <<
@@ -9049,12 +9055,16 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   list_state.meta.category = main_category;
   list_state.meta.etag = etag;
   list_state.meta.content_type = content_type;
-  if (astate->obj_tag.length() > 0)
+
+  if (astate->obj_tag.length() > 0) {
     list_state.tag = astate->obj_tag.c_str();
+  }
+
   list_state.meta.owner = owner.get_id().to_str();
   list_state.meta.owner_display_name = owner.get_display_name();
 
   list_state.exists = true;
+
   cls_rgw_encode_suggestion(CEPH_RGW_UPDATE | suggest_flag, list_state, suggested_updates);
   return 0;
 }

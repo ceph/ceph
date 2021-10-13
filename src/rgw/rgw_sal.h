@@ -38,6 +38,10 @@ class RGWSyncModuleInstance;
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
 class RGWCompressionInfo;
 
+
+using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
+
+
 namespace rgw {
   class Aio;
   namespace IAM { struct Policy; }
@@ -378,7 +382,8 @@ class Bucket {
       rgw_obj_key end_marker;
       std::string ns;
       bool enforce_ns{true};
-      RGWAccessListFilter* filter{nullptr};
+      RGWAccessListFilter* access_list_filter{nullptr};
+      RGWBucketListNameFilter force_check_filter;
       bool list_versions{false};
       bool allow_unordered{false};
       int shard_id{RGW_NO_SHARD};

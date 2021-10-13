@@ -736,7 +736,8 @@ int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
   list_op.params.end_marker = params.end_marker;
   list_op.params.ns = params.ns;
   list_op.params.enforce_ns = params.enforce_ns;
-  list_op.params.filter = params.filter;
+  list_op.params.access_list_filter = params.access_list_filter;
+  list_op.params.force_check_filter = params.force_check_filter;
   list_op.params.list_versions = params.list_versions;
   list_op.params.allow_unordered = params.allow_unordered;
 
@@ -766,7 +767,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
   params.delim = delim;
   params.marker = marker;
   params.ns = RGW_OBJ_NS_MULTIPART;
-  params.filter = &mp_filter;
+  params.access_list_filter = &mp_filter;
 
   int ret = list(dpp, params, max_uploads, results, null_yield);
 
