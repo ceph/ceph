@@ -95,8 +95,10 @@ struct oacs_t {
 struct nvme_identify_controller_data_t {
   union {
     struct {
-      uint8_t unused[256];
-      oacs_t oacs;
+      uint8_t unused[256];  // [255:0]
+      oacs_t oacs;          // [257:256]
+      uint8_t unused2[270]; // [527:258]
+      uint16_t awupf;       // [529:528]
     };
     uint8_t raw[4096];
   };
@@ -236,6 +238,7 @@ protected:
 
   uint64_t write_granularity = 4096;
   uint64_t write_alignment = 4096;
+  uint32_t atomic_write_unit = 4096;
 
   bool data_protection_enabled = false;
 
@@ -260,12 +263,17 @@ public:
    * size for write in byte. Caller should request every write IO sized multiple
    * times of PWG and aligned starting address by PWA. Available only if NVMe
    * Device supports NVMe protocol 1.4 or later versions.
+   * atomic_write_unit : The maximum size of write whose atomicity is guranteed
+   * by SSD even on power failure. The write equal to or smaller than 
+   * atomic_write_unit does not require fsync().
    */
   uint64_t get_size() const { return size; }
   uint64_t get_block_size() const { return block_size; }
 
   uint64_t get_preffered_write_granularity() const { return write_granularity; }
   uint64_t get_preffered_write_alignment() const { return write_alignment; }
+
+  uint64_t get_atomic_write_unit() const { return atomic_write_unit; }
 
   virtual read_ertr::future<> read(
     uint64_t offset,
@@ -395,6 +403,7 @@ private:
   std::vector<seastar::file> io_device;
   uint32_t stream_index_to_open = WRITE_LIFE_NOT_SET;
   uint32_t stream_id_count = 1; // stream is disabled, defaultly.
+  uint32_t awupf = 0;
 };
 
 
