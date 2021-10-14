@@ -1,8 +1,7 @@
 #!/bin/bash
 
 function clean_vg() {
-  # sudo lvm lvremove -y "/dev/vg1/lv${i}"
-  sudo lvm vgremove -y vg1
+  sudo lvm vgremove -f -y vg1
   sudo rm loop-images/*
 }
 
