@@ -1,5 +1,5 @@
 from fcntl import fcntl, F_GETFL, F_SETFL
-from os import O_NONBLOCK, read
+from os import O_NONBLOCK, read, path
 import subprocess
 from select import select
 from ceph_volume import terminal
@@ -8,7 +8,15 @@ from ceph_volume.util import as_bytes
 import logging
 
 logger = logging.getLogger(__name__)
-
+host_rootfs = '/rootfs'
+run_host_cmd = [
+        'nsenter',
+        '--root={}'.format(host_rootfs),
+        '--mount={}/proc/1/ns/mnt'.format(host_rootfs),
+        '--ipc={}/proc/1/ns/ipc'.format(host_rootfs),
+        '--net={}/proc/1/ns/net'.format(host_rootfs),
+        '--uts={}/proc/1/ns/uts'.format(host_rootfs)
+]
 
 def which(executable):
     """
@@ -103,7 +111,7 @@ def obfuscate(command_, on=None):
     return "Running command: %s" % ' '.join(command)
 
 
-def run(command, **kw):
+def run(command, run_on_host=False, **kw):
     """
     A real-time-logging implementation of a remote subprocess.Popen call where
     a command is just executed on the remote end and no other handling is done.
@@ -114,6 +122,8 @@ def run(command, **kw):
     """
     executable = which(command.pop(0))
     command.insert(0, executable)
+    if run_on_host and path.isdir(host_rootfs):
+        command = run_host_cmd + command
     stop_on_error = kw.pop('stop_on_error', True)
     command_msg = obfuscate(command, kw.pop('obfuscate', None))
     fail_msg = kw.pop('fail_msg', None)
@@ -157,7 +167,7 @@ def run(command, **kw):
             logger.warning(msg)
 
 
-def call(command, **kw):
+def call(command, run_on_host=False, **kw):
     """
     Similar to ``subprocess.Popen`` with the following changes:
 
@@ -182,6 +192,8 @@ def call(command, **kw):
     """
     executable = which(command.pop(0))
     command.insert(0, executable)
+    if run_on_host and path.isdir(host_rootfs):
+        command = run_host_cmd + command
     terminal_verbose = kw.pop('terminal_verbose', False)
     logfile_verbose = kw.pop('logfile_verbose', True)
     verbose_on_failure = kw.pop('verbose_on_failure', True)
