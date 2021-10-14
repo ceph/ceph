@@ -603,10 +603,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 else:
                     refreshed = nice_delta(now, s.last_refresh, ' ago')
 
+                if s.spec.service_type == 'osd':
+                    running = str(s.running)
+                else:
+                    running = '{}/{}'.format(s.running, s.size)
+
                 table.add_row((
                     s.spec.service_name(),
                     s.get_port_summary(),
-                    '%d/%d' % (s.running, s.size),
+                    running,
                     refreshed,
                     nice_delta(now, s.created),
                     pl,
