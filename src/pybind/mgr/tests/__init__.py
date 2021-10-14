@@ -213,9 +213,14 @@ if 'UNITTEST' in os.environ:
                     return msg
                 return '[errno {0}] {1}'.format(self.errno, msg)
 
+        class MockObjectNotFound(Exception):
+            pass
 
         sys.modules.update({
-            'rados': mock.MagicMock(Error=MockRadosError, OSError=MockRadosError),
+            'rados': mock.MagicMock(
+                Error=MockRadosError,
+                OSError=MockRadosError,
+                ObjectNotFound=MockObjectNotFound),
             'rbd': mock.Mock(),
             'cephfs': mock.Mock(),
         })
