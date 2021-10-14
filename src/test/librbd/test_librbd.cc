@@ -2165,6 +2165,7 @@ static void remove_full_try(rados_ioctx_t ioctx, const std::string& image_name,
 
 TEST_F(TestLibRBD, RemoveFullTry)
 {
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
   REQUIRE(!is_librados_test_stub(_rados));
 
   rados_ioctx_t ioctx;
@@ -2189,6 +2190,7 @@ TEST_F(TestLibRBD, RemoveFullTry)
 TEST_F(TestLibRBD, RemoveFullTryDataPool)
 {
   REQUIRE_FORMAT_V2();
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
   REQUIRE(!is_librados_test_stub(_rados));
 
   rados_ioctx_t ioctx;
