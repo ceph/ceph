@@ -1395,10 +1395,10 @@ Traceback (most recent call last):
 
             assert _run_cephadm.mock_calls == [
                 mock.call('test', 'osd', 'ceph-volume',
-                          ['--', 'inventory', '--format=json', '--filter-for-batch'], image='',
+                          ['--', 'inventory', '--format=json-pretty', '--filter-for-batch'], image='',
                           no_fsid=False),
                 mock.call('test', 'osd', 'ceph-volume',
-                          ['--', 'inventory', '--format=json'], image='',
+                          ['--', 'inventory', '--format=json-pretty'], image='',
                           no_fsid=False),
             ]
 
