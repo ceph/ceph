@@ -50,6 +50,7 @@
 #include "common/perf_counters.h"
 #include "include/compat.h"
 #include "osd/OSDMap.h"
+#include "fscrypt.h"
 
 #include <errno.h>
 
@@ -5082,7 +5083,15 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
 
   bool truncating_smaller = false;
   if (mask & CEPH_SETATTR_SIZE) {
-    truncating_smaller = req->head.args.setattr.size < old_size;
+    if (req->get_data().length() >
+        sizeof(struct ceph_fscrypt_last_block_header) + fscrypt_last_block_max_size) {
+      dout(10) << __func__ << ": the last block size is too large" << dendl;
+      respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+
+    truncating_smaller = req->head.args.setattr.size < old_size ||
+	(req->head.args.setattr.size == old_size && req->get_data().length());
     if (truncating_smaller && pip->is_truncating()) {
       dout(10) << " waiting for pending truncate from " << pip->truncate_from
 	       << " to " << pip->truncate_size << " to complete on " << *cur << dendl;
@@ -5090,6 +5099,32 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
       mdr->drop_local_auth_pins();
       cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
       return;
+    }
+
+    if (truncating_smaller && req->get_data().length()) {
+      struct ceph_fscrypt_last_block_header header;
+      memset(&header, 0, sizeof(header));
+      auto bl = req->get_data().cbegin();
+      DECODE_START(1, bl);
+      decode(header.change_attr, bl);
+      DECODE_FINISH(bl);
+
+      dout(20) << __func__ << " mdr->retry:" << mdr->retry
+               << " header.change_attr: " << header.change_attr
+               << " header.file_offset: " << header.file_offset
+               << " header.block_size: " << header.block_size
+               << dendl;
+
+      if (header.change_attr != pip->change_attr) {
+        dout(5) << __func__ << ": header.change_attr:" << header.change_attr
+                << " != current change_attr:" << pip->change_attr
+                << ", let client retry it!" << dendl;
+        // flush the journal to make sure the clients will get the lasted
+        // change_attr as possible for the next retry
+        mds->mdlog->flush();
+        respond_to_request(mdr, -CEPHFS_EAGAIN);
+        return;
+      }
     }
   }
 
@@ -5125,7 +5160,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
     pi.inode->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
   if (mask & CEPH_SETATTR_SIZE) {
     if (truncating_smaller) {
-      pi.inode->truncate(old_size, req->head.args.setattr.size);
+      pi.inode->truncate(old_size, req->head.args.setattr.size, req->get_data());
       le->metablob.add_truncate_start(cur->ino());
     } else {
       pi.inode->size = req->head.args.setattr.size;
