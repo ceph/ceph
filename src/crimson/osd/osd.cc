@@ -341,7 +341,7 @@ seastar::future<> OSD::start()
 	  return cluster_msgr->start(dispatchers);
         }, crimson::net::Messenger::bind_ertr::all_same_way(
             [] (const std::error_code& e) {
-          logger().error("cluster messenger bind(): address range is unavailable.");
+          logger().error("cluster messenger bind(): {}", e);
           ceph_abort();
         })),
       public_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC))
@@ -349,7 +349,7 @@ seastar::future<> OSD::start()
 	  return public_msgr->start(dispatchers);
         }, crimson::net::Messenger::bind_ertr::all_same_way(
             [] (const std::error_code& e) {
-          logger().error("public messenger bind(): address range is unavailable.");
+          logger().error("public messenger bind(): {}", e);
           ceph_abort();
         })));
   }).then_unpack([this] {

@@ -77,7 +77,7 @@ Heartbeat::start_messenger(crimson::net::Messenger& msgr,
     return msgr.start({this});
   }, crimson::net::Messenger::bind_ertr::all_same_way(
       [] (const std::error_code& e) {
-    logger().error("heartbeat messenger bind(): address range is unavailable.");
+    logger().error("heartbeat messenger bind(): {}", e);
     ceph_abort();
   }));
 }
