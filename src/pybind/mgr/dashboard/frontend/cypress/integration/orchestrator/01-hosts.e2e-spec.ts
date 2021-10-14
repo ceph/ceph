@@ -22,11 +22,11 @@ describe('Hosts page', () => {
     });
 
     it('should drain and delete a host and then add it back', function () {
-      const host = Cypress._.last(this.hosts)['name'];
+      const hostname = Cypress._.last(this.hosts)['name'];
 
       // should drain the host first before deleting
-      hosts.editLabels(host, ['_no_schedule'], true);
-      hosts.clickHostTab(host, 'Daemons');
+      hosts.editLabels(hostname, ['_no_schedule'], true);
+      hosts.clickTab('cd-host-details', hostname, 'Daemons');
       cy.get('cd-host-details').within(() => {
         // draining will take some time to complete.
         // since we don't know how many daemons will be
@@ -35,12 +35,12 @@ describe('Hosts page', () => {
         cy.wait(15000);
         hosts.getTableCount('total').should('be.eq', 0);
       });
-      hosts.delete(host);
+      hosts.delete(hostname);
 
       // add it back
       hosts.navigateTo('add');
-      hosts.add(host);
-      hosts.checkExist(host, true);
+      hosts.add(hostname);
+      hosts.checkExist(hostname, true);
     });
 
     it('should display inventory', function () {
