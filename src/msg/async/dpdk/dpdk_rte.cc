@@ -92,7 +92,7 @@ namespace dpdk {
     t = std::thread([&]() {
       // TODO: Inherit these from the app parameters - "opts"
       std::vector<std::vector<char>> args {
-          string2vector(string("ceph")),
+          string2vector("ceph"),
           string2vector("-c"), string2vector(c->_conf.get_val<std::string>("ms_dpdk_coremask")),
           string2vector("-n"), string2vector(c->_conf->ms_dpdk_memory_channel),
       };

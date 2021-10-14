@@ -222,7 +222,7 @@ void tcp<InetTraits>::respond_with_reset(tcp_hdr* rth, ipaddr local_ip, ipaddr f
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 template<typename InetTraits>
-ostream& tcp<InetTraits>::tcb::_prefix(std::ostream *_dout) {
+std::ostream& tcp<InetTraits>::tcb::_prefix(std::ostream *_dout) {
   return *_dout << "tcp " << _local_ip << ":" << _local_port << " -> " << _foreign_ip << ":" << _foreign_port
                 << " tcb(" << this << " fd=" << fd << " s=" << _state << ").";
 }
