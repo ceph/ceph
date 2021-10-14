@@ -176,8 +176,10 @@ class RoundTripTestBase : public ::testing::TestWithParam<
                               std::tuple<round_trip_instance_t, mode_t>> {
 protected:
   RoundTripTestBase()
-      : m_tx_frame_asm(&m_tx_crypto, std::get<1>(GetParam()).is_rev1, &m_tx_comp),
-        m_rx_frame_asm(&m_rx_crypto, std::get<1>(GetParam()).is_rev1, &m_rx_comp),
+      : m_tx_frame_asm(&m_tx_crypto, std::get<1>(GetParam()).is_rev1, true,
+                                                 &m_tx_comp),
+        m_rx_frame_asm(&m_rx_crypto, std::get<1>(GetParam()).is_rev1, true,
+                                                 &m_rx_comp),
         m_header(make_bufferlist(std::get<0>(GetParam()).header_len, 'H')),
         m_front(make_bufferlist(std::get<0>(GetParam()).front_len, 'F')),
         m_middle(make_bufferlist(std::get<0>(GetParam()).middle_len, 'M')),
