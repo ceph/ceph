@@ -140,7 +140,15 @@ Then apply this yaml document:
   ceph orch apply -i myrgw.yaml
 
 Note the value of ``rgw_frontend_ssl_certificate`` is a literal string as
-indicated by a ``|`` character preserving newline characters. 
+indicated by a ``|`` character preserving newline characters.
+
+Service specification
+---------------------
+
+.. py:currentmodule:: ceph.deployment.service_spec
+
+.. autoclass:: RGWSpec
+   :members:
 
 .. _orchestrator-haproxy-service-spec:
 
