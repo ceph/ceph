@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 set -euxo pipefail
-CEPHADM_PATH=/usr/local/sbin/cephadm
-
-dnf install which sudo -y
 
 # link so we can debug cephadm
 ln -s -f /cephadm/cephadm $CEPHADM_PATH

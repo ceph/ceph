@@ -9,7 +9,11 @@ function print_usage() {
 	echo "options:"
 	echo "    --hosts n: number of hosts to add"
 	echo "    --osds n: number of osds to add"
-	echo "    --update-image: create/update ceph image"
+	echo "    --update-ceph-image: create/update ceph image"
+	echo "    --update-box-image: create/update cephadm box image"
+	echo "    --skip-create-loop: skip creating loopback device"
+	echo "    -l | --list-hosts: list available cephad-box hosts/seed"
+	echo "    -h | --help: this help :)"
 }
 
 function docker-ips() {
@@ -18,15 +22,18 @@ function docker-ips() {
 
 while [ $# -ge 1 ]; do
 case $1 in
-    --help)
+    -h | --help)
 	print_usage
 	exit
 	;;
-    --list-hosts) # TODO remove when ceph-ci updated
+    -l | --list-hosts) # TODO remove when ceph-ci updated
     docker-ips | grep box
 	exit
         ;;
-    --update-image) # TODO remove when ceph-ci updated
+    --update-box-image)
+	docker build -t cephadm-box -f Dockerfile .
+        ;;
+    --update-ceph-image) # TODO remove when ceph-ci updated
 	source ./get_ceph_image.sh
         ;;
     --hosts)
@@ -53,12 +60,17 @@ then
 	exit
 fi
 
-if [[ SKIP_LOOP -eq 0 ]]
+if [[ $OSDS -eq 0 ]]
 then
-	source setup_loop.sh
+	SKIP_LOOP=1
 fi
 
-create_loops $OSDS
+if [[ $SKIP_LOOP -eq 0 ]]
+then
+	source setup_loop.sh
+	create_loops $OSDS
+fi
+
 
 # loops should be created before starting docker-compose or else docker could
 # not find lvs
@@ -66,6 +78,18 @@ docker-compose down
 docker-compose up --scale hosts=$HOSTS -d
 sleep 3
 
-# setup ssh in hosts
-docker-compose exec hosts /cephadm/box/setup_ssh.sh
+IPS=$(docker-ips | grep "box_hosts" | awk '{ print $1 }')
+echo "IPS: "
+echo $IPS
+
+sudo sysctl net.ipv4.conf.all.forwarding=1
+sudo iptables -P FORWARD ACCEPT
+
+for ((i=1;i<=$HOSTS;i++))
+do
+	docker-compose exec --index=$i hosts /cephadm/box/setup_ssh.sh run-sshd
+done
+
 docker-compose exec -e NUM_OSDS=${OSDS} seed /cephadm/box/start
+
+docker-compose exec -e HOST_IPS="${IPS}" seed /cephadm/box/setup_ssh.sh copy-cluster-ssh-key

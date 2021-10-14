@@ -2615,6 +2615,7 @@ def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):
 
 
 def validate_osd_data_dir(data_dir):
+    # type: (str) -> None
     required_files = ['keyring', 'block', 'type', 'config']
     current_files = os.listdir(data_dir)
     error_msg = ''
@@ -2626,6 +2627,7 @@ def validate_osd_data_dir(data_dir):
 
 
 def configure_osd_data_dir(ctx, fsid, daemon_id, uid, gid):
+    # type: (CephadmContext, str, Union[int, str], int, int) -> None
     daemon_type = 'osd'
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
 
@@ -4789,8 +4791,8 @@ def extract_uid_gid_monitoring(ctx, daemon_type):
 @default_image
 @infer_fsid
 def command_deploy(ctx):
-    assert ctx.fsid
     # type: (CephadmContext) -> None
+    assert ctx.fsid
     daemon_type, daemon_id = ctx.name.split('.', 1)
 
     lock = FileLock(ctx, ctx.fsid)
@@ -5086,7 +5088,7 @@ def command_ceph_volume(ctx):
     # Ceph-volume uses the bootstrap-osd key in order to do its operations.
     # This function retrieves the keyring so it can be provided.
 
-    def get_bootstrap_osd_keyring() -> str:
+    def get_bootstrap_osd_keyring() -> Optional[str]:
         if not ctx.keyring and os.path.exists(SHELL_DEFAULT_KEYRING):
             ctx.keyring = SHELL_DEFAULT_KEYRING
         (config, keyring) = get_config_and_keyring(ctx)
@@ -5121,34 +5123,34 @@ def command_ceph_volume(ctx):
     # If ceph-volume creates osd data directories which won't be persisted
     # so we use a tmp dir for that.
     # FIXME: probably we can use /var/lib/ceph/{fsid}?
-    tmp_osd_dir = tempfile.TemporaryDirectory()
-    # match /var/lib/ceph/osd/ dir permissions
-    os.chown(tmp_osd_dir.name, uid, gid)
-    os.chmod(tmp_osd_dir.name, 0o755)
-    # store newly created osds here
-    mounts[tmp_osd_dir.name] = '/var/lib/ceph/osd/:z'
+    with tempfile.TemporaryDirectory() as tmp_osd_dir:
+        # match /var/lib/ceph/osd/ dir permissions
+        os.chown(tmp_osd_dir, uid, gid)
+        os.chmod(tmp_osd_dir, 0o755)
+        # store newly created osds here
+        mounts[tmp_osd_dir] = '/var/lib/ceph/osd/:z'
 
-    c = CephContainer(
-        ctx,
-        image=ctx.image,
-        entrypoint='/usr/sbin/ceph-volume',
-        envs=ctx.env,
-        args=ctx.command,
-        privileged=True,
-        volume_mounts=mounts,
-    )
+        c = CephContainer(
+            ctx,
+            image=ctx.image,
+            entrypoint='/usr/sbin/ceph-volume',
+            envs=ctx.env,
+            args=ctx.command,
+            privileged=True,
+            volume_mounts=mounts,
+        )
 
-    out, err, code = call_throws(ctx, c.run_cmd())
-    if not code:
-        print(out)
-    else:
-        print(err)
-    # If osds were created move osd's data directories
-    for osd_folder_name in os.listdir(tmp_osd_dir.name):
-        if 'ceph-' in osd_folder_name[:5]:
-            osd_id = osd_folder_name[5:]
-            osd_data_dir = os.path.join(tmp_osd_dir.name, osd_folder_name)
-            copy_tree(ctx, [osd_data_dir], f'/var/lib/ceph/{ctx.fsid}/osd.{osd_id}', uid=uid, gid=gid)
+        out, err, code = call_throws(ctx, c.run_cmd())
+        if not code:
+            print(out)
+        else:
+            print(err)
+        # If osds were created move osd's data directories
+        for osd_folder_name in os.listdir(tmp_osd_dir):
+            if 'ceph-' in osd_folder_name[:5]:
+                osd_id = osd_folder_name[5:]
+                osd_data_dir = os.path.join(tmp_osd_dir, osd_folder_name)
+                copy_tree(ctx, [osd_data_dir], f'/var/lib/ceph/{ctx.fsid}/osd.{osd_id}', uid=uid, gid=gid)
 
 ##################################
 

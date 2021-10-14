@@ -5,6 +5,11 @@ from select import select
 from ceph_volume import terminal
 from ceph_volume.util import as_bytes
 
+import locale
+
+if locale.getpreferredencoding().upper() != 'UTF-8':
+    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,7 +36,7 @@ def log_output(descriptor, message, terminal_logging, logfile_logging):
     if terminal_logging:
         getattr(terminal, descriptor)(message)
     if logfile_logging:
-        logger.info(line.encode('ascii', 'ignore').decode('ascii'))
+        logger.info(line)
 
 
 def log_descriptors(reads, process, terminal_logging):
