@@ -191,7 +191,6 @@ private:
 
   /* Use m_blockguard_lock for the following 3 things */
   bool m_barrier_in_progress = false;
-  BlockGuardCell *m_barrier_cell = nullptr;
 
   bool m_wake_up_enabled = true;
 

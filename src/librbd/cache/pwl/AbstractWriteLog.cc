@@ -910,8 +910,6 @@ void AbstractWriteLog<I>::discard(uint64_t offset, uint64_t length,
  * due to uncertainty in the IO submission workq (multiple WQ threads
  * may allow out-of-order submission).
  *
- * This flush operation will not wait for writes deferred for overlap
- * in the block guard.
  */
 template <typename I>
 void AbstractWriteLog<I>::flush(io::FlushSource flush_source, Context *on_finish) {
@@ -1133,15 +1131,17 @@ BlockGuardCell* AbstractWriteLog<I>::detain_guarded_request_barrier_helper(
     req.guard_ctx->state.queued = true;
     m_awaiting_barrier.push_back(req);
   } else {
-    bool barrier = req.guard_ctx->state.barrier;
-    if (barrier) {
+    if (req.guard_ctx->state.barrier) {
       m_barrier_in_progress = true;
       req.guard_ctx->state.current_barrier = true;
-    }
-    cell = detain_guarded_request_helper(req);
-    if (barrier) {
-      /* Only non-null if the barrier acquires the guard now */
-      m_barrier_cell = cell;
+      if (m_write_log_guard.empty()) {
+	cell = detain_guarded_request_helper(req);
+      } else if (!req.guard_ctx->state.queued) {
+	ceph_assert(m_awaiting_barrier.empty());
+	m_awaiting_barrier.push_back(req);
+      }
+    } else {
+      cell = detain_guarded_request_helper(req);
     }
   }
 
@@ -1189,18 +1189,12 @@ void AbstractWriteLog<I>::release_guarded_request(BlockGuardCell *released_cell)
       req.guard_ctx->state.detained = true;
       BlockGuardCell *detained_cell = detain_guarded_request_helper(req);
       if (detained_cell) {
-        if (req.guard_ctx->state.current_barrier) {
-          /* The current barrier is acquiring the block guard, so now we know its cell */
-          m_barrier_cell = detained_cell;
-          /* detained_cell could be == released_cell here */
-          ldout(cct, 20) << "current barrier cell=" << detained_cell << " req=" << req << dendl;
-        }
-        req.guard_ctx->cell = detained_cell;
+	req.guard_ctx->cell = detained_cell;
         m_work_queue.queue(req.guard_ctx);
       }
     }
 
-    if (m_barrier_in_progress && (released_cell == m_barrier_cell)) {
+    if (m_barrier_in_progress && (m_write_log_guard.empty())) {
       ldout(cct, 20) << "current barrier released cell=" << released_cell << dendl;
       /* The released cell is the current barrier request */
       m_barrier_in_progress = false;
@@ -1213,7 +1207,9 @@ void AbstractWriteLog<I>::release_guarded_request(BlockGuardCell *released_cell)
         if (detained_cell) {
           req.guard_ctx->cell = detained_cell;
           m_work_queue.queue(req.guard_ctx);
-        }
+        } else if (req.guard_ctx->state.barrier) {
+	  break;
+	}
         m_awaiting_barrier.pop_front();
       }
     }

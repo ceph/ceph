@@ -125,6 +125,13 @@ public:
     m_free_detained_block_extents.push_back(detained_block_extent);
   }
 
+  /**
+   * Whether has io.
+   */
+  bool empty() {
+    std::lock_guard locker{m_lock};
+    return m_detained_block_extents.empty();
+  }
 private:
   struct DetainedBlockExtent : public boost::intrusive::list_base_hook<>,
                                public boost::intrusive::set_base_hook<> {
