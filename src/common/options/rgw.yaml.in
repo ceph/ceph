@@ -62,9 +62,11 @@ options:
   desc: Set RGW max chunk size
   long_desc: The chunk size is the size of RADOS I/O requests that RGW sends when
     accessing data objects. RGW read and write operations will never request more than
-    this amount in a single request. This also defines the RGW object head size, as
+    this amount in a single request. This also defines the RGW head object size, as
     head operations need to be atomic, and anything larger than this would require
-    more than a single operation.
+    more than a single operation. When RGW objects are written to the default
+    storage class, up to this amount of payload data will be stored alongside
+    metadata in the head object.
   default: 4_M
   services:
   - rgw
@@ -2119,7 +2121,7 @@ options:
   type: size
   level: advanced
   desc: Minimum S3 multipart-upload part size
-  long_desc: When doing a multipart upload, each part (other than the last part) should
+  long_desc: When doing a multipart upload, each part (other than the last part) must
     be at least this size.
   default: 5_M
   services:
