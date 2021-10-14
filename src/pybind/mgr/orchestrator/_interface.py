@@ -376,6 +376,12 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def get_facts(self, hostname: Optional[str] = None) -> OrchResult[List[Dict[str, Any]]]:
+        """
+        Return hosts metadata(gather_facts).
+        """
+        raise NotImplementedError()
+
     def add_host_label(self, host: str, label: str) -> OrchResult[str]:
         """
         Add a host label

@@ -39,6 +39,7 @@ tasks:
         - tasks.mgr.dashboard.test_auth
         - tasks.mgr.dashboard.test_cephfs
         - tasks.mgr.dashboard.test_cluster_configuration
+        - tasks.mgr.dashboard.test_cluster
         - tasks.mgr.dashboard.test_crush_rule
         - tasks.mgr.dashboard.test_erasure_code_profile
         - tasks.mgr.dashboard.test_ganesha

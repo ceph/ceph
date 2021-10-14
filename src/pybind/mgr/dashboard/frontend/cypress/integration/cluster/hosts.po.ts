@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 const pages = {
   index: { url: '#/hosts', id: 'cd-hosts' },
-  create: { url: '#/hosts/create', id: 'cd-host-form' }
+  add: { url: '#/hosts/(modal:add)', id: 'cd-host-form' }
 };
 
 export class HostsPageHelper extends PageHelper {
@@ -41,33 +41,23 @@ export class HostsPageHelper extends PageHelper {
       });
   }
 
-  @PageHelper.restrictTo(pages.index.url)
-  clickHostTab(hostname: string, tabName: string) {
-    this.getExpandCollapseElement(hostname).click();
-    cy.get('cd-host-details').within(() => {
-      this.getTab(tabName).click();
-    });
-  }
-
-  @PageHelper.restrictTo(pages.create.url)
   add(hostname: string, exist?: boolean, maintenance?: boolean) {
-    cy.get(`${this.pages.create.id}`).within(() => {
+    cy.get(`${this.pages.add.id}`).within(() => {
       cy.get('#hostname').type(hostname);
       if (maintenance) {
         cy.get('label[for=maintenance]').click();
       }
+      if (exist) {
+        cy.get('#hostname').should('have.class', 'ng-invalid');
+      }
       cy.get('cd-submit-button').click();
     });
-    if (exist) {
-      cy.get('#hostname').should('have.class', 'ng-invalid');
-    } else {
-      // back to host list
-      cy.get(`${this.pages.index.id}`);
-    }
+    // back to host list
+    cy.get(`${this.pages.index.id}`);
   }
 
-  @PageHelper.restrictTo(pages.index.url)
   checkExist(hostname: string, exist: boolean) {
+    this.clearTableSearchInput();
     this.getTableCell(this.columnIndex.hostname, hostname).should(($elements) => {
       const hosts = $elements.map((_, el) => el.textContent).get();
       if (exist) {
@@ -78,13 +68,11 @@ export class HostsPageHelper extends PageHelper {
     });
   }
 
-  @PageHelper.restrictTo(pages.index.url)
   delete(hostname: string) {
-    super.delete(hostname, this.columnIndex.hostname);
+    super.delete(hostname, this.columnIndex.hostname, 'hosts');
   }
 
   // Add or remove labels on a host, then verify labels in the table
-  @PageHelper.restrictTo(pages.index.url)
   editLabels(hostname: string, labels: string[], add: boolean) {
     this.getTableCell(this.columnIndex.hostname, hostname).click();
     this.clickActionButton('edit');
@@ -104,7 +92,10 @@ export class HostsPageHelper extends PageHelper {
       }
     }
     cy.get('cd-modal cd-submit-button').click();
+    this.checkLabelExists(hostname, labels, add);
+  }
 
+  checkLabelExists(hostname: string, labels: string[], add: boolean) {
     // Verify labels are added or removed from Labels column
     // First find row with hostname, then find labels in the row
     this.getTableCell(this.columnIndex.hostname, hostname)

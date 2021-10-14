@@ -114,10 +114,8 @@ export class TaskMessageService {
 
   messages = {
     // Host tasks
-    'host/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.host(metadata)
-    ),
-    'host/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+    'host/add': this.newTaskMessage(this.commonOperations.add, (metadata) => this.host(metadata)),
+    'host/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.host(metadata)
     ),
     'host/identify_device': this.newTaskMessage(

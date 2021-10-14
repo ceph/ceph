@@ -5,7 +5,8 @@ import { ActivatedRouteSnapshot, CanActivate, CanActivateChild, Router } from '@
 import { of as observableOf } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
-import { Icons } from '../enum/icons.enum';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
 
 /**
  * This service checks if a route can be activated by executing a
@@ -39,7 +40,11 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
   // TODO: Hotfix - remove ALLOWLIST'ing when a generic ErrorComponent is implemented
   static readonly ALLOWLIST: string[] = ['501'];
 
-  constructor(private http: HttpClient, private router: Router) {}
+  constructor(
+    private http: HttpClient,
+    private router: Router,
+    private mgrModuleService: MgrModuleService
+  ) {}
 
   canActivate(route: ActivatedRouteSnapshot) {
     return this.doCheck(route);
@@ -54,9 +59,15 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
       return observableOf(true);
     }
     const config = route.data['moduleStatusGuardConfig'];
+    let backendCheck = false;
+    if (config.backend) {
+      this.mgrModuleService.getConfig('orchestrator').subscribe((resp) => {
+        backendCheck = config.backend === resp['orchestrator'];
+      });
+    }
     return this.http.get(`api/${config.apiPath}/status`).pipe(
       map((resp: any) => {
-        if (!resp.available) {
+        if (!resp.available && !backendCheck) {
           this.router.navigate([config.redirectTo || ''], {
             state: {
               header: config.header,
