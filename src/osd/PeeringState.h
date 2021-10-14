@@ -1631,13 +1631,15 @@ public:
     const pg_info_t &auth_info,
     std::vector<int> *want,
     std::set<pg_shard_t> *async_recovery,
-    const OSDMapRef osdmap) const;
+    const OSDMapRef osdmap,
+    const uint64_t async_recovery_min_cost) const;
   void choose_async_recovery_replicated(
     const std::map<pg_shard_t, pg_info_t> &all_info,
     const pg_info_t &auth_info,
     std::vector<int> *want,
     std::set<pg_shard_t> *async_recovery,
-    const OSDMapRef osdmap) const;
+    const OSDMapRef osdmap,
+    const uint64_t async_recovery_min_cost) const;
 
   bool recoverable(const std::vector<int> &want) const;
   bool choose_acting(pg_shard_t &auth_log_shard,

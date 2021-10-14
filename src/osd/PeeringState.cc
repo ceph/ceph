@@ -2152,7 +2152,8 @@ void PeeringState::choose_async_recovery_ec(
   const pg_info_t &auth_info,
   vector<int> *want,
   set<pg_shard_t> *async_recovery,
-  const OSDMapRef osdmap) const
+  const OSDMapRef osdmap,
+  const uint64_t async_recovery_min_cost) const
 {
   set<pair<int, pg_shard_t> > candidates_by_cost;
   for (uint8_t i = 0; i < want->size(); ++i) {
@@ -2185,8 +2186,7 @@ void PeeringState::choose_async_recovery_ec(
     if (auth_version > candidate_version) {
       approx_missing_objects += auth_version - candidate_version;
     }
-    if (static_cast<uint64_t>(approx_missing_objects) >
-       cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+    if (static_cast<uint64_t>(approx_missing_objects) > async_recovery_min_cost) {
       candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
@@ -2214,7 +2214,8 @@ void PeeringState::choose_async_recovery_replicated(
   const pg_info_t &auth_info,
   vector<int> *want,
   set<pg_shard_t> *async_recovery,
-  const OSDMapRef osdmap) const
+  const OSDMapRef osdmap,
+  const uint64_t async_recovery_min_cost) const
 {
   set<pair<int, pg_shard_t> > candidates_by_cost;
   for (auto osd_num : *want) {
@@ -2241,8 +2242,7 @@ void PeeringState::choose_async_recovery_replicated(
     } else {
       approx_missing_objects += candidate_version - auth_version;
     }
-    if (static_cast<uint64_t>(approx_missing_objects)  >
-       cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+    if (static_cast<uint64_t>(approx_missing_objects)  > async_recovery_min_cost) {
       candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
@@ -2296,6 +2296,8 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
 				 bool request_pg_temp_change_only)
 {
   map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
+  info.set_last_async_recovery_min_cost(
+    cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost"));
   all_info[pg_whoami] = info;
 
   if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
@@ -2391,16 +2393,25 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
     return false;
   }
 
+  uint64_t async_recovery_min_cost = info.get_last_async_recovery_min_cost();
+  for (auto p = all_info.begin(); p != all_info.end(); p++) {
+    if (async_recovery_min_cost > p->second.last_async_recovery_min_cost)
+      async_recovery_min_cost = p->second.last_async_recovery_min_cost;
+  }
+
+  psdout(10) << __func__ << " async recovery min cost: " << async_recovery_min_cost
+             << dendl;
+
   set<pg_shard_t> want_async_recovery;
   if (HAVE_FEATURE(get_osdmap()->get_up_osd_features(), SERVER_MIMIC)) {
     if (pool.info.is_erasure()) {
       choose_async_recovery_ec(
 	all_info, auth_log_shard->second, &want, &want_async_recovery,
-	get_osdmap());
+	get_osdmap(), async_recovery_min_cost);
     } else {
       choose_async_recovery_replicated(
 	all_info, auth_log_shard->second, &want, &want_async_recovery,
-	get_osdmap());
+	get_osdmap(), async_recovery_min_cost);
     }
   }
   while (want.size() > pool.info.size) {
@@ -3086,6 +3097,8 @@ void PeeringState::fulfill_info(
   ceph_assert(query.type == pg_query_t::INFO);
 
   // info
+  info.set_last_async_recovery_min_cost(
+    cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost"));
   psdout(10) << "sending info" << dendl;
   notify_info = make_pair(from, info);
 }

@@ -2965,6 +2965,8 @@ struct pg_info_t {
   pg_history_t history;
   pg_hit_set_history_t hit_set;
 
+  uint64_t last_async_recovery_min_cost;
+
   friend bool operator==(const pg_info_t& l, const pg_info_t& r) {
     return
       l.pgid == r.pgid &&
@@ -2985,7 +2987,8 @@ struct pg_info_t {
     : last_epoch_started(0),
       last_interval_started(0),
       last_user_version(0),
-      last_backfill(hobject_t::get_max())
+      last_backfill(hobject_t::get_max()),
+      last_async_recovery_min_cost(0)
   { }
   // cppcheck-suppress noExplicitConstructor
   pg_info_t(spg_t p)
@@ -2993,7 +2996,8 @@ struct pg_info_t {
       last_epoch_started(0),
       last_interval_started(0),
       last_user_version(0),
-      last_backfill(hobject_t::get_max())
+      last_backfill(hobject_t::get_max()),
+      last_async_recovery_min_cost(0)
   { }
   
   void set_last_backfill(hobject_t pos) {
@@ -3005,6 +3009,11 @@ struct pg_info_t {
 
   bool has_missing() const { return last_complete != last_update; }
   bool is_incomplete() const { return !last_backfill.is_max(); }
+
+  void set_last_async_recovery_min_cost (uint64_t cur_async_recovery_min_cost) {
+    last_async_recovery_min_cost = cur_async_recovery_min_cost;
+  }
+  uint64_t get_last_async_recovery_min_cost() const { return last_async_recovery_min_cost; }
 
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
@@ -3031,6 +3040,7 @@ inline std::ostream& operator<<(std::ostream& out, const pg_info_t& pgi)
   //out << " c " << pgi.epoch_created;
   out << " local-lis/les=" << pgi.last_interval_started
       << "/" << pgi.last_epoch_started;
+  out << " local-larmc=" << pgi.last_async_recovery_min_cost;
   out << " n=" << pgi.stats.stats.sum.num_objects;
   out << " " << pgi.history
       << ")";
