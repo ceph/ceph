@@ -96,6 +96,8 @@ class SocketConnection : public Connection {
     return policy.lossy;
   }
 
+  seastar::socket_address get_local_address() const;
+
   friend class Protocol;
   friend class ProtocolV1;
   friend class ProtocolV2;

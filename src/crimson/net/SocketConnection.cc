@@ -131,6 +131,10 @@ seastar::shard_id SocketConnection::shard_id() const {
   return messenger.shard_id();
 }
 
+seastar::socket_address SocketConnection::get_local_address() const {
+  return protocol->socket->get_local_address();
+}
+
 void SocketConnection::print(ostream& out) const {
     messenger.print(out);
     if (!protocol->socket) {
