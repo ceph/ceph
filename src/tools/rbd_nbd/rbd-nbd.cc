@@ -128,7 +128,7 @@ struct Config {
     std::string spec = poolname + "/";
 
     if (!nsname.empty()) {
-      spec += "/" + nsname;
+      spec += nsname + "/";
     }
     spec += imgname;
 
