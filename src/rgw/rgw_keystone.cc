@@ -38,6 +38,8 @@ void rgw_get_token_id(const string& token, string& token_id)
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
 
   MD5 hash;
+  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   hash.Update((const unsigned char *)token.c_str(), token.size());
   hash.Final(m);
 
