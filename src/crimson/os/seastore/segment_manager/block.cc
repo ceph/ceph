@@ -245,12 +245,14 @@ using open_device_ret =
   >;
 static
 open_device_ret open_device(
-  const std::string &path,
-  seastar::open_flags mode)
+  const std::string &path)
 {
   return seastar::file_stat(path, seastar::follow_symlink::yes
-  ).then([mode, &path](auto stat) mutable {
-    return seastar::open_file_dma(path, mode).then([=](auto file) {
+  ).then([&path](auto stat) mutable {
+    return seastar::open_file_dma(
+      path,
+      seastar::open_flags::rw | seastar::open_flags::dsync
+    ).then([=](auto file) {
       logger().error(
 	"open_device: open successful, size {}",
 	stat.size
@@ -389,7 +391,7 @@ BlockSegmentManager::~BlockSegmentManager()
 BlockSegmentManager::mount_ret BlockSegmentManager::mount()
 {
   return open_device(
-    device_path, seastar::open_flags::rw
+    device_path
   ).safe_then([=](auto p) {
     device = std::move(p.first);
     auto sd = p.second;
@@ -440,7 +442,7 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
       }
 
       return maybe_create.safe_then([this] {
-	return open_device(device_path, seastar::open_flags::rw);
+	return open_device(device_path);
       }).safe_then([&, sm_config](auto p) {
 	device = p.first;
 	stat = p.second;
