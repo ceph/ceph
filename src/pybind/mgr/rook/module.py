@@ -342,7 +342,19 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     size=active,
                     last_refresh=now,
                 )
-
+        if service_type == 'osd' or service_type is None:
+            # OSDs
+            all_osds = self.rook_cluster.get_osds()
+            svc = 'osd'
+            spec[svc] = orchestrator.ServiceDescription(
+                spec=DriveGroupSpec(
+                    service_type='osd',
+                    placement=PlacementSpec(count=len(all_osds), hosts=[osd.metadata.labels['topology-location-host'] for osd in all_osds]),
+                ),
+                size=len(all_osds),
+                last_refresh=now,
+            running= sum(osd.status.phase == 'Running' for osd in all_osds)
+            )
         for dd in self._list_daemons():
             if dd.service_name() not in spec:
                 continue

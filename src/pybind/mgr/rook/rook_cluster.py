@@ -704,6 +704,10 @@ class RookCluster(object):
         self.fetcher.fetch()
         return self.fetcher.devices()
         
+    def get_osds(self) -> List:
+        osd_pods: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_pod, namespace='rook-ceph', label_selector='app=rook-ceph-osd')
+        return list(osd_pods.items)
+        
     def get_nfs_conf_url(self, nfs_cluster: str, instance: str) -> Optional[str]:
         #
         # Fetch cephnfs object for "nfs_cluster" and then return a rados://
