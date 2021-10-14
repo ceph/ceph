@@ -1413,8 +1413,6 @@ def call(ctx: CephadmContext,
         prefix += ': '
     timeout = timeout or ctx.timeout
 
-    logger.debug('Running command: %s' % ' '.join(command))
-
     async def tee(reader: asyncio.StreamReader) -> str:
         collected = StringIO()
         async for line in reader:
