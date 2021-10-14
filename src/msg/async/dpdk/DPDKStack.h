@@ -247,15 +247,16 @@ class DPDKWorker : public Worker {
 };
 
 class DPDKStack : public NetworkStack {
-  vector<std::function<void()> > funcs;
+  std::vector<std::function<void()> > funcs;
 
   virtual Worker* create_worker(CephContext *c, unsigned worker_id) override {
     return new DPDKWorker(c, worker_id);
   }
 
  public:
-  explicit DPDKStack(CephContext *cct): NetworkStack(cct)
-  {}
+  explicit DPDKStack(CephContext *cct): NetworkStack(cct) {
+    funcs.reserve(cct->_conf->ms_async_op_threads);
+  }
   virtual bool support_local_listen_table() const override { return true; }
 
   virtual void spawn_worker(std::function<void ()> &&func) override;
