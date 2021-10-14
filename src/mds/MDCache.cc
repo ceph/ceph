@@ -63,6 +63,7 @@
 #include "events/ESessions.h"
 
 #include "InoTable.h"
+#include "fscrypt.h"
 
 #include "common/Timer.h"
 
@@ -6415,6 +6416,22 @@ void MDCache::truncate_inode(CInode *in, LogSegment *ls)
   _truncate_inode(in, ls);
 }
 
+struct C_IO_MDC_TruncateWriteFinish : public MDCacheIOContext {
+  CInode *in;
+  LogSegment *ls;
+  uint32_t block_size;
+  C_IO_MDC_TruncateWriteFinish(MDCache *c, CInode *i, LogSegment *l, uint32_t bs) :
+    MDCacheIOContext(c, false), in(i), ls(l), block_size(bs) {
+  }
+  void finish(int r) override {
+    ceph_assert(r == 0 || r == -CEPHFS_ENOENT);
+    mdcache->truncate_inode_write_finish(in, ls, block_size);
+  }
+  void print(ostream& out) const override {
+    out << "file_truncate_write(" << in->ino() << ")";
+  }
+};
+
 struct C_IO_MDC_TruncateFinish : public MDCacheIOContext {
   CInode *in;
   LogSegment *ls;
@@ -6434,13 +6451,16 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 {
   const auto& pi = in->get_inode();
   dout(10) << "_truncate_inode "
-	   << pi->truncate_from << " -> " << pi->truncate_size
-	   << " on " << *in << dendl;
+           << pi->truncate_from << " -> " << pi->truncate_size
+           << " fscrypt last block length is " << pi->fscrypt_last_block.length()
+           << " on " << *in << dendl;
 
   ceph_assert(pi->is_truncating());
   ceph_assert(pi->truncate_size < (1ULL << 63));
   ceph_assert(pi->truncate_from < (1ULL << 63));
-  ceph_assert(pi->truncate_size < pi->truncate_from);
+  ceph_assert(pi->truncate_size < pi->truncate_from ||
+              (pi->truncate_size == pi->truncate_from &&
+	       pi->fscrypt_last_block.length()));
 
 
   SnapRealm *realm = in->find_snaprealm();
@@ -6454,13 +6474,62 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
     snapc = &nullsnap;
     ceph_assert(in->last == CEPH_NOSNAP);
   }
-  dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in << dendl;
+  dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in
+           << " fscrypt_last_block length is " << pi->fscrypt_last_block.length()
+           << dendl;
   auto layout = pi->layout;
-  filer.truncate(in->ino(), &layout, *snapc,
-		 pi->truncate_size, pi->truncate_from-pi->truncate_size,
-		 pi->truncate_seq, ceph::real_time::min(), 0,
-		 new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in, ls),
-				  mds->finisher));
+  struct ceph_fscrypt_last_block_header header;
+  memset(&header, 0, sizeof(header));
+  bufferlist data;
+  if (pi->fscrypt_last_block.length()) {
+    auto bl = pi->fscrypt_last_block.cbegin();
+    DECODE_START(1, bl);
+    decode(header.change_attr, bl);
+    decode(header.file_offset, bl);
+    decode(header.block_size, bl);
+
+    /*
+     * The block_size will be in unit of KB, so if the last block is not
+     * located in a file hole, the struct_len should be larger than the
+     * header.block_size.
+     */
+    if (struct_len > header.block_size) {
+      bl.copy(header.block_size, data);
+    }
+    DECODE_FINISH(bl);
+  }
+
+  if (data.length()) {
+    dout(10) << "_truncate_inode write on inode " << *in << " change_attr: "
+             << header.change_attr << " offset: " << header.file_offset << " blen: "
+	     << header.block_size << dendl;
+    filer.write(in->ino(), &layout, *snapc, header.file_offset, header.block_size,
+                data, ceph::real_time::min(), 0,
+                new C_OnFinisher(new C_IO_MDC_TruncateWriteFinish(this, in, ls,
+                                                                  header.block_size),
+                                 mds->finisher));
+  } else { // located in file hole.
+    uint64_t length = pi->truncate_from - pi->truncate_size;
+
+    /*
+     * When the fscrypt is enabled the truncate_from and truncate_size
+     * possibly equal and both are aligned up to header.block_size. In
+     * this case we will always request a larger length to make sure the
+     * OSD won't miss truncating the last object.
+     */
+    if (pi->fscrypt_last_block.length()) {
+      dout(10) << "_truncate_inode truncate on inode " << *in << " hits a hole!" << dendl;
+      length += header.block_size;
+    }
+    ceph_assert(length);
+
+    dout(10) << "_truncate_inode truncate on inode " << *in << dendl;
+    filer.truncate(in->ino(), &layout, *snapc, pi->truncate_size, length,
+                   pi->truncate_seq, ceph::real_time::min(), 0,
+                   new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in, ls),
+                                    mds->finisher));
+  }
+
 }
 
 struct C_MDC_TruncateLogged : public MDCacheLogContext {
@@ -6472,6 +6541,50 @@ struct C_MDC_TruncateLogged : public MDCacheLogContext {
     mdcache->truncate_inode_logged(in, mut);
   }
 };
+
+void MDCache::truncate_inode_write_finish(CInode *in, LogSegment *ls,
+                                          uint32_t block_size)
+{
+  const auto& pi = in->get_inode();
+  dout(10) << "_truncate_inode_write "
+	   << pi->truncate_from << " -> " << pi->truncate_size
+	   << " on " << *in << dendl;
+
+  ceph_assert(pi->is_truncating());
+  ceph_assert(pi->truncate_size < (1ULL << 63));
+  ceph_assert(pi->truncate_from < (1ULL << 63));
+  ceph_assert(pi->truncate_size < pi->truncate_from ||
+              (pi->truncate_size == pi->truncate_from &&
+	       pi->fscrypt_last_block.length()));
+
+
+  SnapRealm *realm = in->find_snaprealm();
+  SnapContext nullsnap;
+  const SnapContext *snapc;
+  if (realm) {
+    dout(10) << " realm " << *realm << dendl;
+    snapc = &realm->get_snap_context();
+  } else {
+    dout(10) << " NO realm, using null context" << dendl;
+    snapc = &nullsnap;
+    ceph_assert(in->last == CEPH_NOSNAP);
+  }
+  dout(10) << "_truncate_inode_write  snapc " << snapc << " on " << *in
+           << " fscrypt_last_block length is " << pi->fscrypt_last_block.length()
+           << dendl;
+  auto layout = pi->layout;
+  /*
+   * When the fscrypt is enabled the truncate_from and truncate_size
+   * possibly equal and both are aligned up to header.block_size. In
+   * this case we will always request a larger length to make sure the
+   * OSD won't miss truncating the last object.
+   */
+  uint64_t length = pi->truncate_from - pi->truncate_size + block_size;
+  filer.truncate(in->ino(), &layout, *snapc, pi->truncate_size, length,
+                 pi->truncate_seq, ceph::real_time::min(), 0,
+                 new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in, ls),
+                                  mds->finisher));
+}
 
 void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
 {
@@ -6489,6 +6602,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   pi.inode->version = in->pre_dirty();
   pi.inode->truncate_from = 0;
   pi.inode->truncate_pending--;
+  pi.inode->fscrypt_last_block = bufferlist();
 
   EUpdate *le = new EUpdate(mds->mdlog, "truncate finish");
   mds->mdlog->start_entry(le);
