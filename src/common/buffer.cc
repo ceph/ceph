@@ -2030,6 +2030,34 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
 }
 #endif
 
+buffer::list::iov_vec_t buffer::list::prepare_iovs()
+{
+  iov_vec_t iovs;
+  size_t iovs_i = 0;
+  size_t index = 0;
+  uint64_t off = 0;
+  iovs.resize(_num / IOV_MAX + 1);
+  iovs[iovs_i].second.resize(
+    std::min(_num - IOV_MAX * iovs_i, (size_t)IOV_MAX));
+  iovs[iovs_i].first.first = off;
+  iovs[iovs_i].first.second = 0;
+  for (auto& bp : _buffers) {
+    if (index == IOV_MAX) {
+      iovs_i++;
+      index = 0;
+      iovs[iovs_i].first.first = off;
+      iovs[iovs_i].first.second = 0;
+      iovs[iovs_i].second.resize(
+	std::min(_num - IOV_MAX * iovs_i, (size_t)IOV_MAX));
+    }
+    iovs[iovs_i].second[index].iov_base = (void*)bp.c_str();
+    iovs[iovs_i].second[index++].iov_len = bp.length();
+    off += bp.length();
+    iovs[iovs_i].first.second += bp.length();
+  }
+  return iovs;
+}
+
 __u32 buffer::list::crc32c(__u32 crc) const
 {
   int cache_misses = 0;
