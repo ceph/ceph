@@ -249,12 +249,12 @@ void DPDKStack::spawn_worker(std::function<void ()> &&func)
   //
   funcs.push_back(std::move(func));
   int r = 0;
-  r = dpdk::eal::init(cct);
+  r = eal.start();
   if (r < 0) {
-    lderr(cct) << __func__ << " init dpdk rte failed, r=" << r << dendl;
+    lderr(cct) << __func__ << " start dpdk rte failed, r=" << r << dendl;
     ceph_abort();
   }
-  // if dpdk::eal::init already called by NVMEDevice, we will select 1..n
+  // if eal.start already called by NVMEDevice, we will select 1..n
   // cores
   unsigned nr_worker = funcs.size();
   ceph_assert(rte_lcore_count() >= nr_worker);
@@ -265,7 +265,7 @@ void DPDKStack::spawn_worker(std::function<void ()> &&func)
     }
   }
   void *adapted_func = static_cast<void*>(&funcs.back());
-  dpdk::eal::execute_on_master([adapted_func, core_id, this]() {
+  eal.execute_on_master([adapted_func, core_id, this]() {
     int r = rte_eal_remote_launch(dpdk_thread_adaptor, adapted_func, core_id);
     if (r < 0) {
       lderr(cct) << __func__ << " remote launch failed, r=" << r << dendl;
@@ -276,7 +276,9 @@ void DPDKStack::spawn_worker(std::function<void ()> &&func)
 
 void DPDKStack::join_worker(unsigned i)
 {
-  dpdk::eal::execute_on_master([&]() {
+  eal.execute_on_master([&]() {
     rte_eal_wait_lcore(i+1);
   });
+  if (i+1 == get_num_worker())
+    eal.stop();
 }
