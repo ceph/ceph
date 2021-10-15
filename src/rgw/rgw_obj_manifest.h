@@ -563,6 +563,7 @@ struct RGWObjState {
   bufferlist olh_tag;
   uint64_t pg_ver{false};
   uint32_t zone_short_id{0};
+  bool compressed{false};
 
   /* important! don't forget to update copy constructor */
 
