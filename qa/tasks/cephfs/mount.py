@@ -14,7 +14,8 @@ from IPy import IP
 from teuthology.contextutil import safe_while
 from teuthology.misc import get_file, write_file
 from teuthology.orchestra import run
-from teuthology.orchestra.run import CommandFailedError, ConnectionLostError, Raw
+from teuthology.orchestra.run import Raw
+from teuthology.exceptions import CommandFailedError, ConnectionLostError
 
 from tasks.cephfs.filesystem import Filesystem
 
