@@ -1196,6 +1196,40 @@ struct error_code;
 	++n;
       }
     }
+
+    // vector<pair<offset, length>, iov>
+    using iov_vec_t =
+      std::vector<std::pair<std::pair<uint64_t, uint64_t>, std::vector<iovec>>>;
+
+    iov_vec_t prepare_iovs()
+    {
+      iov_vec_t iovs;
+      size_t iovs_i = 0;
+      size_t index = 0;
+      uint64_t off = 0;
+      iovs.resize(_num / IOV_MAX + 1);
+      iovs[iovs_i].second.resize(
+	std::min(_num - IOV_MAX * iovs_i, (size_t)IOV_MAX));
+      iovs[iovs_i].first.first = off;
+      iovs[iovs_i].first.second = 0;
+      for (auto& bp : _buffers) {
+	if (index == IOV_MAX) {
+	  iovs_i++;
+	  index = 0;
+	  iovs[iovs_i].first.first = off;
+	  iovs[iovs_i].first.second = 0;
+	  iovs[iovs_i].second.resize(
+	    std::min(_num - IOV_MAX * iovs_i, (size_t)IOV_MAX));
+	}
+	iovs[iovs_i].second[index].iov_base = (void*)bp.c_str();
+	iovs[iovs_i].second[index++].iov_len = bp.length();
+	off += bp.length();
+	iovs[iovs_i].first.second += bp.length();
+      }
+
+      return iovs;
+    }
+
     uint32_t crc32c(uint32_t crc) const;
     void invalidate_crc();
 
