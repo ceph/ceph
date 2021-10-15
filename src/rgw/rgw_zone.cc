@@ -1009,7 +1009,7 @@ int RGWPeriod::init(const DoutPrefixProvider *dpp,
     RGWRealm realm(realm_id, realm_name);
     int ret = realm.init(dpp, cct, sysobj_svc, y);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "RGWPeriod::init failed to init realm " << realm_name  << " id " << realm_id << " : " <<
+      ldpp_dout(dpp, 4) << "RGWPeriod::init failed to init realm " << realm_name << " id " << realm_id << " : " <<
 	cpp_strerror(-ret) << dendl;
       return ret;
     }
