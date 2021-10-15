@@ -169,13 +169,14 @@ Where the force flag when entering maintenance allows the user to bypass warning
 
 See also :ref:`cephadm-fqdn`
 
-Host Specification
-==================
+Creating many hosts at once
+===========================
 
 Many hosts can be added at once using
-``ceph orch apply -i`` by submitting a multi-document YAML file::
+``ceph orch apply -i`` by submitting a multi-document YAML file:
 
-    ---
+.. code-block:: yaml
+
     service_type: host
     hostname: node-00
     addr: 192.168.0.10
@@ -196,6 +197,26 @@ Many hosts can be added at once using
 This can be combined with service specifications (below) to create a cluster spec
 file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec``
 also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior to adding them.
+
+Setting the initial CRUSH location of host
+==========================================
+
+Hosts can contain a ``location`` identifier which will instruct cephadm to 
+create a new CRUSH host located in the specified hierachy.
+
+.. code-block:: yaml
+
+    service_type: host
+    hostname: node-00
+    addr: 192.168.0.10
+    location:
+      rack: rack1
+
+.. note:: 
+
+  The ``location`` attribute will be only affect the initial CRUSH location. Subsequent
+  changes of the ``location`` property will be ignored. Also, removing a host will no remove
+  any CRUSH buckets.
 
 SSH Configuration
 =================
