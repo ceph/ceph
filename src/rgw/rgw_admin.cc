@@ -6211,10 +6211,9 @@ int main(int argc, const char **argv)
                                         OPT::USER_SUSPEND, OPT::SUBUSER_CREATE,
                                         OPT::SUBUSER_MODIFY, OPT::SUBUSER_RM,
                                         OPT::BUCKET_LINK, OPT::BUCKET_UNLINK,
-                                        OPT::BUCKET_RESHARD, OPT::BUCKET_RM,
+                                        OPT::BUCKET_RM,
                                         OPT::BUCKET_CHOWN, OPT::METADATA_PUT,
-                                        OPT::METADATA_RM, OPT::RESHARD_CANCEL,
-                                        OPT::RESHARD_ADD, OPT::MFA_CREATE,
+                                        OPT::METADATA_RM, OPT::MFA_CREATE,
                                         OPT::MFA_REMOVE, OPT::MFA_RESYNC,
                                         OPT::CAPS_ADD, OPT::CAPS_RM};
 
