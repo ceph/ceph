@@ -10,7 +10,7 @@ from tempfile import mkstemp as tempfile_mkstemp
 import math
 from time import sleep
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 

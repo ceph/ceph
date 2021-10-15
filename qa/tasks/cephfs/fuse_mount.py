@@ -8,7 +8,7 @@ from textwrap import dedent
 from teuthology.contextutil import MaxWhileTries
 from teuthology.contextutil import safe_while
 from teuthology.orchestra import run
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from tasks.ceph_manager import get_valgrind_args
 from tasks.cephfs.mount import CephFSMount
 

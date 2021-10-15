@@ -6,7 +6,7 @@ import re
 from io import StringIO
 from textwrap import dedent
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
 from teuthology.contextutil import MaxWhileTries
 

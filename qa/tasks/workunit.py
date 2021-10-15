@@ -12,7 +12,7 @@ from tasks.util.workunit import get_refspec_after_overrides
 
 from teuthology import misc
 from teuthology.config import config as teuth_config
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from teuthology.parallel import parallel
 from teuthology.orchestra import run
 
