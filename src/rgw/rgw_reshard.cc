@@ -890,18 +890,17 @@ int RGWReshard::list(const DoutPrefixProvider *dpp, int logshard_num, string& ma
 
   int ret = cls_rgw_reshard_list(store->getRados()->reshard_pool_ctx, logshard_oid, marker, max, entries, is_truncated);
 
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << " " 
-    << "marker=" << marker << " " << cpp_strerror(ret) << dendl;
-    if (ret == -ENOENT) {
-      *is_truncated = false;
-      ret = 0;
-    } else {
-      if (ret == -EACCES) {
-        ldpp_dout(dpp, -1) << "access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
-                          << ". Fix the pool access permissions of your client" << dendl;
-      }
-    } 
+  if (ret == -ENOENT) {
+    // these shard objects aren't created until we actually write something to
+    // them, so treat ENOENT as a successful empty listing
+    *is_truncated = false;
+    ret = 0;
+  } else if (ret == -EACCES) {
+    ldpp_dout(dpp, -1) << "ERROR: access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
+                      << ". Fix the pool access permissions of your client" << dendl;
+  } else if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to list reshard log entries, oid="
+        << logshard_oid << " marker=" << marker << " " << cpp_strerror(ret) << dendl;
   }
 
   return ret;
