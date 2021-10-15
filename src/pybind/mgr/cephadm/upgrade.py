@@ -2,7 +2,7 @@ import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Optional, Dict, List, Tuple
+from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any
 
 import orchestrator
 from cephadm.registry import Registry
@@ -183,15 +183,18 @@ class CephadmUpgrade:
 
         return None
 
-    def upgrade_ls(self, image: Optional[str], tags: bool) -> List[str]:
-        if image:
-            reg_name, image = image.split('/', 1)
-        else:
-            reg_name, image = self.mgr.container_image_base.split('/', 1)
-        self.mgr.log.info(f'reg_name {reg_name} image {image}')
+    def upgrade_ls(self, image: Optional[str], tags: bool) -> Dict:
+        if not image:
+            image = self.mgr.container_image_base
+        reg_name, bare_image = image.split('/', 1)
         reg = Registry(reg_name)
         versions = []
-        ls = reg.get_tags(image)
+        r: Dict[Any, Any] = {
+            "image": image,
+            "registry": reg_name,
+            "bare_image": bare_image,
+        }
+        ls = reg.get_tags(bare_image)
         if not tags:
             for t in ls:
                 if t[0] != 'v':
@@ -202,14 +205,14 @@ class CephadmUpgrade:
                 if '-' in v[2]:
                     continue
                 versions.append('.'.join(v))
-            ls = sorted(
+            r["versions"] = sorted(
                 versions,
                 key=lambda k: list(map(int, k.split('.'))),
                 reverse=True
             )
         else:
-            ls = sorted(ls)
-        return ls
+            r["tags"] = sorted(ls)
+        return r
 
     def upgrade_start(self, image: str, version: str) -> str:
         if self.mgr.mode != 'root':
