@@ -35,6 +35,10 @@
 /doc/dev/cephadm                                @ceph/orchestrators
 /doc/man/8/cephadm.rst                          @ceph/orchestrators
 
+/qa/suites/orch/rook                            @ceph/rook
+/src/pybind/mgr/rook                            @ceph/rook
+/doc/mgr/rook.rst                               @ceph/rook
+
 #ceph-volume
 /src/ceph-volume                                @ceph/ceph-volume
 /doc/ceph-volume                                @ceph/ceph-volume
