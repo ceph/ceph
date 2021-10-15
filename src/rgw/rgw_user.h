@@ -121,6 +121,7 @@ struct RGWUserAdminOpState {
   std::string id; // access key
   std::string key; // secret key
   int32_t key_type{-1};
+  bool access_key_exist = false;
 
   std::set<std::string> mfa_ids;
 
@@ -254,6 +255,10 @@ struct RGWUserAdminOpState {
     type_specified = true;
   }
 
+  void set_access_key_exist() {
+    access_key_exist = true;
+  }
+
   void set_suspension(__u8 is_suspended) {
     suspended = is_suspended;
     suspension_op = true;
@@ -372,6 +377,7 @@ struct RGWUserAdminOpState {
   void set_generate_subuser(bool flag) { gen_subuser = flag; }
   __u8 get_suspension_status() { return suspended; }
   int32_t get_key_type() {return key_type; }
+  bool get_access_key_exist() {return access_key_exist; }
   uint32_t get_subuser_perm() { return perm_mask; }
   int32_t get_max_buckets() { return max_buckets; }
   uint32_t get_op_mask() { return op_mask; }
