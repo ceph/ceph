@@ -217,6 +217,11 @@ int BlkDev::discard(int64_t offset, int64_t len) const
   return ioctl(fd, BLKDISCARD, range);
 }
 
+int BlkDev::get_optimal_io_size() const
+{
+	return get_int_property("queue/optimal_io_size");
+}
+
 bool BlkDev::is_rotational() const
 {
   return get_int_property("queue/rotational") > 0;
