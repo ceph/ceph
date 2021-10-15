@@ -2611,7 +2611,7 @@ Then run the following:
         return self.upgrade.upgrade_status()
 
     @handle_orch_error
-    def upgrade_ls(self, image: Optional[str], tags: bool) -> List[str]:
+    def upgrade_ls(self, image: Optional[str], tags: bool) -> Dict[Any, Any]:
         return self.upgrade.upgrade_ls(image, tags)
 
     @handle_orch_error
