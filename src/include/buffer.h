@@ -1197,10 +1197,12 @@ struct error_code;
       }
     }
 
-    // vector<pair<offset, length>, iov>
-    using iov_vec_t =
-      std::vector<std::pair<std::pair<uint64_t, uint64_t>, std::vector<iovec>>>;
-
+    struct iovec_t {
+      uint64_t offset;
+      uint64_t length;
+      std::vector<iovec> iov;
+    };
+    using iov_vec_t = std::vector<iovec_t>;
     iov_vec_t prepare_iovs();
 
     uint32_t crc32c(uint32_t crc) const;

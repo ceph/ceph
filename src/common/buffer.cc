@@ -2037,23 +2037,23 @@ buffer::list::iov_vec_t buffer::list::prepare_iovs()
   size_t index = 0;
   uint64_t off = 0;
   iovs.resize(_num / IOV_MAX + 1);
-  iovs[iovs_i].second.resize(
+  iovs[iovs_i].iov.resize(
     std::min(_num - IOV_MAX * iovs_i, (size_t)IOV_MAX));
-  iovs[iovs_i].first.first = off;
-  iovs[iovs_i].first.second = 0;
+  iovs[iovs_i].offset = off;
+  iovs[iovs_i].length = 0;
   for (auto& bp : _buffers) {
     if (index == IOV_MAX) {
       iovs_i++;
       index = 0;
-      iovs[iovs_i].first.first = off;
-      iovs[iovs_i].first.second = 0;
-      iovs[iovs_i].second.resize(
+      iovs[iovs_i].offset = off;
+      iovs[iovs_i].length = 0;
+      iovs[iovs_i].iov.resize(
 	std::min(_num - IOV_MAX * iovs_i, (size_t)IOV_MAX));
     }
-    iovs[iovs_i].second[index].iov_base = (void*)bp.c_str();
-    iovs[iovs_i].second[index++].iov_len = bp.length();
+    iovs[iovs_i].iov[index].iov_base = (void*)bp.c_str();
+    iovs[iovs_i].iov[index++].iov_len = bp.length();
     off += bp.length();
-    iovs[iovs_i].first.second += bp.length();
+    iovs[iovs_i].length += bp.length();
   }
   return iovs;
 }
