@@ -25,7 +25,6 @@
 #include "HealthMonitor.h"
 
 #include "common/TextTable.h"
-#include "common/cmdparse.h"
 #include "include/stringify.h"
 
 #include "MgrMonitor.h"
@@ -955,7 +954,6 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
 
   string prefix;
   cmd_getval(cmdmap, "prefix", prefix);
-
   int r = 0;
 
   if (prefix == "mgr stat") {
@@ -991,12 +989,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     }
     f->flush(rdata);
   } else if (prefix == "mgr module ls") {
-    string detail;
-    cmd_getval(cmdmap, "detail", detail);
-    if (f || (detail == "detail")) {
-      if (!f) {
-        f.reset(Formatter::create(format, "json-pretty", "json-pretty"));
-      }
+    if (f) {
       f->open_object_section("modules");
       {
         f->open_array_section("always_on_modules");
@@ -1017,14 +1010,9 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
         for (auto& p : map.available_modules) {
           if (map.modules.count(p.name) == 0 &&
             map.get_always_on_modules().count(p.name) == 0) {
-            if (detail == "detail") {
-              // For disabled modules, we show the full info if the detail
-              // parameter is enabled, to give a hint about whether enabling it will work
-              p.dump(f.get());
-            } else {
-              // Otherwise, we give a shortened summary by default
-              f->dump_string("module", p.name);
-            }
+            // For disabled modules, we show the full info if the detail
+            // parameter is enabled, to give a hint about whether enabling it will work
+            p.dump(f.get());
           }
         }
         f->close_section();
