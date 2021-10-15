@@ -16,7 +16,8 @@ log = logging.getLogger(__name__)
 
 
 UMOUNT_TIMEOUT = 300
-
+# internal metadata directory
+DEBUGFS_META_DIR = 'meta'
 
 class KernelMount(CephFSMount):
     def __init__(self, ctx, test_dir, client_id, client_remote,
@@ -200,6 +201,8 @@ class KernelMount(CephFSMount):
                 def get_id_to_dir():
                     result = {}
                     for dir in glob.glob("/sys/kernel/debug/ceph/*"):
+                        if os.path.basename(dir) == DEBUGFS_META_DIR:
+                            continue
                         mds_sessions_lines = open(os.path.join(dir, "mds_sessions")).readlines()
                         global_id = mds_sessions_lines[0].split()[1].strip('"')
                         client_id = mds_sessions_lines[1].split()[1].strip('"')
