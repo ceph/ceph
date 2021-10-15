@@ -76,6 +76,18 @@ static int process_completed(const AioResultList& completed, RawObjSet *written)
   return error.value_or(0);
 }
 
+void RadosWriter::add_write_hint(librados::ObjectWriteOperation& op) {
+  const rgw_obj obj = head_obj->get_obj();
+  const RGWObjState *obj_state = obj_ctx.get_state(obj);
+  const bool compressed = obj_state->compressed;
+  uint32_t alloc_hint_flags = 0;
+  if (compressed) {
+    alloc_hint_flags |= librados::ALLOC_HINT_FLAG_INCOMPRESSIBLE;
+  }
+
+  op.set_alloc_hint2(0, 0, alloc_hint_flags);
+}
+
 int RadosWriter::set_stripe_obj(const rgw_raw_obj& raw_obj)
 {
   stripe_obj = store->svc()->rados->obj(raw_obj);
@@ -90,6 +102,7 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
     return 0;
   }
   librados::ObjectWriteOperation op;
+  add_write_hint(op);
   if (offset == 0) {
     op.write_full(data);
   } else {
@@ -106,6 +119,7 @@ int RadosWriter::write_exclusive(const bufferlist& data)
 
   librados::ObjectWriteOperation op;
   op.create(true); // exclusive create
+  add_write_hint(op);
   op.write_full(data);
 
   constexpr uint64_t id = 0; // unused
