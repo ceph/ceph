@@ -120,7 +120,6 @@ def normalize_and_apply_overrides(ctx, config, overrides):
     if 'timeout' in config:
         timeout = config.pop('timeout')
     config = normalize_config(ctx, config)
-    log.debug('normalized config %s' % config)
 
     if 'timeout' in overrides:
         timeout = overrides.pop('timeout')
