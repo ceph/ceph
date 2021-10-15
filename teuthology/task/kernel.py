@@ -518,7 +518,7 @@ def install_and_reboot(ctx, need_install, config):
                     '--replacepkgs',
                     remote_pkg_path(role_remote),
                 ])
-            install_kernel(role_remote, remote_pkg_path(role_remote))
+            install_kernel(role_remote, config[role], path=remote_pkg_path(role_remote))
             continue
 
         # TODO: Refactor this into install_kernel() so that it handles all
