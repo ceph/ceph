@@ -127,6 +127,19 @@ namespace dpdk {
         args.push_back(string2vector("--no-huge"));
       }
 
+      std::optional<std::string> port_list;
+      if (!c->_conf->ms_dpdk_port_list.empty()) {
+	port_list.emplace(c->_conf->ms_dpdk_port_list);
+      }
+      if (port_list) {
+	char *port = strtok(const_cast<char *>(port_list->c_str()), ",");
+	while(port) {
+	  args.push_back(string2vector("--pci-whitelist"));
+	  args.push_back(string2vector(port));
+	  port = strtok(NULL, ",");
+	}
+      }
+
       std::string rte_file_prefix;
       rte_file_prefix = "rte_";
       rte_file_prefix += c->_conf->name.to_str();
