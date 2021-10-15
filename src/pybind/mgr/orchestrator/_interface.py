@@ -124,6 +124,7 @@ def handle_orch_error(f: Callable[..., T]) -> Callable[..., 'OrchResult[T]']:
         try:
             return OrchResult(f(*args, **kwargs))
         except Exception as e:
+            logger.exception(e)
             return OrchResult(None, exception=e)
 
     return cast(Callable[..., OrchResult[T]], wrapper)
