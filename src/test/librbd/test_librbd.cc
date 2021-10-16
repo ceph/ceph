@@ -2145,7 +2145,8 @@ static void remove_full_try(rados_ioctx_t ioctx, const std::string& image_name,
   ssize_t ret;
   for (off = 0; off < size; off += len) {
     ret = rbd_write_zeroes(image, off, len,
-                           RBD_WRITE_ZEROES_FLAG_THICK_PROVISION, 0);
+                           RBD_WRITE_ZEROES_FLAG_THICK_PROVISION,
+                           LIBRADOS_OP_FLAG_FADVISE_FUA);
     if (ret < 0) {
       break;
     }
