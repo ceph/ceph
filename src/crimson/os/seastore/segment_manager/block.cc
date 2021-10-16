@@ -70,9 +70,9 @@ static write_ertr::future<> do_writev(
     return write_ertr::parallel_for_each(
       iovs,
       [&device, offset](auto& p) mutable {
-      auto off = offset + p.first.first;
-      auto len = p.first.second;
-      auto& iov = p.second;
+      auto off = offset + p.offset;
+      auto len = p.length;
+      auto& iov = p.iov;
       logger().debug("do_writev: dma_write to {}, length {}", off, len);
       return device.dma_write(off, std::move(iov))
       .handle_exception([](auto e) -> write_ertr::future<size_t> {
