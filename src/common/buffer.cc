@@ -2030,7 +2030,7 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
 }
 #endif
 
-buffer::list::iov_vec_t buffer::list::prepare_iovs()
+buffer::list::iov_vec_t buffer::list::prepare_iovs() const
 {
   size_t index = 0;
   uint64_t off = 0;
