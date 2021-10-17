@@ -922,7 +922,8 @@ private:
   std::string sql_result;
   struct req_state *s;//TODO will be replace by callback
   uint32_t header_size;
-  std::unique_ptr<boost::crc_32_type> crc32;
+  // the parameters are according to CRC-32 algorithm and its aligned with AWS-cli checksum
+  boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true> crc32;
   RGWOp *m_rgwop;
   std::string m_buff_header;
   uint64_t total_bytes_returned;
@@ -955,6 +956,7 @@ private:
   const char *END_PAYLOAD_LINE= "\n</Payload></Records></Payload>";
   const char *header_name_str[5] =  {":event-type", ":content-type", ":message-type",":error-code",":error-message"};
   const char *header_value_str[10] = {"Records", "application/octet-stream", "event", "Cont", "Progress", "End", "text/xml", "Stats", "s3select-engine-error","error"};
+  static constexpr size_t header_crc_size = 12;
 
   void push_header(const char * header_name,const char* header_value);
 
@@ -963,10 +965,7 @@ private:
 public:
   //12 positions for header-crc
   aws_response_handler(struct req_state *ps,RGWOp *rgwop) : sql_result("012345678901"), s(ps),m_rgwop(rgwop),total_bytes_returned{0},processed_size{0}
-  {
-    // the parameters are according to CRC-32 algorithm and its aligned with AWS-cli checksum
-    crc32 = std::unique_ptr<boost::crc_32_type>(new boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true>);
-  }
+  { }
 
   std::string &get_sql_result();
 

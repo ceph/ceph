@@ -6269,14 +6269,14 @@ int aws_response_handler::create_message(u_int32_t header_len)
   push_encode_int(total_byte_len, 0);
   push_encode_int(header_len, 4);
 
-  crc32->reset();
-  *crc32 = std::for_each(sql_result.data(), sql_result.data() + 8, *crc32); //crc for starting 8 bytes
-  preload_crc = (*crc32)();
+  crc32.reset();
+  crc32 = std::for_each(sql_result.data(), sql_result.data() + 8, crc32); //crc for starting 8 bytes
+  preload_crc = crc32();
   push_encode_int(preload_crc, 8);
 
-  crc32->reset();
-  *crc32 = std::for_each(sql_result.begin(), sql_result.end(), *crc32); //crc for payload + checksum
-  message_crc = (*crc32)();
+  crc32.reset();
+  crc32 = std::for_each(sql_result.begin(), sql_result.end(), crc32); //crc for payload + checksum
+  message_crc = crc32();
 
   u_int32_t x = htonl(message_crc);
   sql_result.append(reinterpret_cast<char *>(&x), sizeof(x));
@@ -6286,7 +6286,7 @@ int aws_response_handler::create_message(u_int32_t header_len)
 
 void aws_response_handler::init_response()
 { //12 positions for header-crc
-  sql_result = "012345678901";
+  sql_result.resize(header_crc_size,'\0');
 }
 
 void aws_response_handler::init_success_response()
@@ -6299,7 +6299,7 @@ void aws_response_handler::init_success_response()
 
 void aws_response_handler::send_continuation_response()
 {
-  sql_result = "012345678901";
+  sql_result.resize(header_crc_size,'\0');
   m_buff_header.clear();
   header_size = create_header_continuation();
   sql_result.append(m_buff_header.c_str(), header_size);
@@ -6310,7 +6310,7 @@ void aws_response_handler::send_continuation_response()
 
 void aws_response_handler::init_progress_response()
 {
-  sql_result = "012345678901";
+  sql_result.resize(header_crc_size,'\0');
   m_buff_header.clear();
   header_size = create_header_progress();
   sql_result.append(m_buff_header.c_str(), header_size);
@@ -6318,7 +6318,7 @@ void aws_response_handler::init_progress_response()
 
 void aws_response_handler::init_stats_response()
 {
-  sql_result = "012345678901";
+  sql_result.resize(header_crc_size,'\0');
   m_buff_header.clear();
   header_size = create_header_stats();
   sql_result.append(m_buff_header.c_str(), header_size);
@@ -6326,7 +6326,7 @@ void aws_response_handler::init_stats_response()
 
 void aws_response_handler::init_end_response()
 {
-  sql_result = "012345678901";
+  sql_result.resize(header_crc_size,'\0');
   m_buff_header.clear();
   header_size = create_header_end();
   sql_result.append(m_buff_header.c_str(), header_size);
@@ -6566,6 +6566,9 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   extract_by_tag("QuoteCharacter", m_quot);
   extract_by_tag("RecordDelimiter", m_row_delimiter);
   if (m_row_delimiter.size()==0) {
+    m_row_delimiter='\n';
+  }else if(m_row_delimiter.compare("&#10;") == 0)
+  {//presto change
     m_row_delimiter='\n';
   }
 
