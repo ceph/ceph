@@ -57,6 +57,8 @@ void get_str_vec(const string& str, vector<string>& str_vec)
 vector<string> get_str_vec(const string& str, const char *delims)
 {
   vector<string> result;
-  get_str_vec(str, delims, result);
+  for_each_substr(str, delims, [&result] (auto token) {
+      result.emplace_back(token.begin(), token.end());
+    });
   return result;
 }
