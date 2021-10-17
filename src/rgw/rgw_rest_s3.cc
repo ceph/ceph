@@ -6483,11 +6483,11 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
     m_s3_csv_object = std::unique_ptr<s3selectEngine::csv_object>(new s3selectEngine::csv_object(s3select_syntax.get(), csv));
   }
 
-  m_aws_response_handler.get()->init_response();
+  m_aws_response_handler->init_response();
 
   if (s3select_syntax->get_error_description().empty() == false)
   { //error-flow (syntax-error)
-    m_aws_response_handler.get()->send_error_response(s3select_syntax_error,
+    m_aws_response_handler->send_error_response(s3select_syntax_error,
                                                       s3select_syntax->get_error_description().c_str(),
                                                       s3select_resource_id);
 
@@ -6499,16 +6499,16 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
     if (input == nullptr) {
       input = "";
     }
-    m_aws_response_handler.get()->init_success_response();
+    m_aws_response_handler->init_success_response();
     length_before_processing = (m_aws_response_handler->get_sql_result()).size();
 
     //query is correct(syntax), processing is starting.
-    status = m_s3_csv_object->run_s3select_on_stream(m_aws_response_handler.get()->get_sql_result(), input, input_length, s->obj_size);
+    status = m_s3_csv_object->run_s3select_on_stream(m_aws_response_handler->get_sql_result(), input, input_length, s->obj_size);
     length_post_processing = (m_aws_response_handler->get_sql_result()).size();
-    m_aws_response_handler.get()->set_total_bytes_returned(length_post_processing-length_before_processing);
+    m_aws_response_handler->set_total_bytes_returned(length_post_processing-length_before_processing);
     if (status < 0)
     { //error flow(processing-time)
-      m_aws_response_handler.get()->send_error_response(s3select_processTime_error,
+      m_aws_response_handler->send_error_response(s3select_processTime_error,
                                                         m_s3_csv_object->get_error_description().c_str(),
                                                         s3select_resource_id);
 
@@ -6531,14 +6531,14 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
   }
   
   if (length_post_processing-length_before_processing != 0) {
-    m_aws_response_handler.get()->send_success_response();
+    m_aws_response_handler->send_success_response();
   } else {
-    m_aws_response_handler.get()->send_continuation_response();
+    m_aws_response_handler->send_continuation_response();
   }
   
   if (enable_progress == true) {
-    m_aws_response_handler.get()->init_progress_response();
-    m_aws_response_handler.get()->send_progress_response();
+    m_aws_response_handler->init_progress_response();
+    m_aws_response_handler->send_progress_response();
   }
 
   return status;
@@ -6602,7 +6602,7 @@ int RGWSelectObj_ObjStore_S3::extract_by_tag(std::string tag_name, std::string& 
 int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_t len)
 {
   int status=0;
-  if (m_aws_response_handler.get() == nullptr) {
+  if (m_aws_response_handler == nullptr) {
     m_aws_response_handler = std::make_unique<aws_response_handler>(s,this);
   }
   
@@ -6629,7 +6629,7 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
       continue; 
     }
     
-    m_aws_response_handler.get()->set_processed_size(it.length());
+    m_aws_response_handler->set_processed_size(it.length());
 
     status = run_s3select(m_sql_query.c_str(), &(it)[0], it.length());
     if(status<0) {
@@ -6639,11 +6639,11 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
   }
   }
 
-  if (m_aws_response_handler.get()->get_processed_size() == s->obj_size) {
+  if (m_aws_response_handler->get_processed_size() == s->obj_size) {
     if (status >=0) {
-    m_aws_response_handler.get()->init_stats_response();
-    m_aws_response_handler.get()->send_stats_response();
-    m_aws_response_handler.get()->init_end_response();
+    m_aws_response_handler->init_stats_response();
+    m_aws_response_handler->send_stats_response();
+    m_aws_response_handler->init_end_response();
     }
   }
   return status;
