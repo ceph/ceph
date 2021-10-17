@@ -674,31 +674,8 @@ void Monitor::handle_conf_change(const ConfigProxy& conf,
 
 void Monitor::update_log_clients()
 {
-  map<string,string> log_to_monitors;
-  map<string,string> log_to_syslog;
-  map<string,string> log_channel;
-  map<string,string> log_prio;
-  map<string,string> log_to_graylog;
-  map<string,string> log_to_graylog_host;
-  map<string,string> log_to_graylog_port;
-  uuid_d fsid;
-  string host;
-
-  if (parse_log_client_options(g_ceph_context, log_to_monitors, log_to_syslog,
-			       log_channel, log_prio, log_to_graylog,
-			       log_to_graylog_host, log_to_graylog_port,
-			       fsid, host))
-    return;
-
-  clog->update_config(log_to_monitors, log_to_syslog,
-		      log_channel, log_prio, log_to_graylog,
-		      log_to_graylog_host, log_to_graylog_port,
-		      fsid, host);
-
-  audit_clog->update_config(log_to_monitors, log_to_syslog,
-			    log_channel, log_prio, log_to_graylog,
-			    log_to_graylog_host, log_to_graylog_port,
-			    fsid, host);
+  clog->parse_client_options(g_ceph_context);
+  audit_clog->parse_client_options(g_ceph_context);
 }
 
 int Monitor::sanitize_options()
@@ -6643,7 +6620,7 @@ void Monitor::do_stretch_mode_election_work()
   dout(20) << "prior dead_mon_buckets: " << old_dead_buckets
 	   << "; down_mon_buckets: " << down_mon_buckets
 	   << "; up_mon_buckets: " << up_mon_buckets << dendl;
-  for (auto di : down_mon_buckets) {
+  for (const auto& di : down_mon_buckets) {
     if (!up_mon_buckets.count(di.first)) {
       dead_mon_buckets[di.first] = di.second;
     }
