@@ -789,6 +789,13 @@ std::string IoCtx::get_namespace() const {
   return ctx->get_namespace();
 }
 
+void IoCtx::set_pool_full_try() {
+}
+
+bool IoCtx::get_pool_full_try() {
+  return false;
+}
+
 static int save_operation_result(int result, int *pval) {
   if (pval != NULL) {
     *pval = result;
