@@ -414,7 +414,7 @@ class Migrate(object):
         target_lv = api.get_lv_by_fullname(self.args.target)
         if not target_lv:
             mlogger.error(
-                'Target path "{}" is not a Logical Volume'.formaat(
+                'Target path "{}" is not a Logical Volume'.format(
                     self.args.target))
             raise SystemExit(
                 'Unable to migrate to : {}'.format(self.args.target))
