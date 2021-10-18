@@ -2,6 +2,7 @@ import errno
 import logging
 import os
 from typing import List, Any, Tuple, Dict, Optional, cast
+from urllib.parse import urlparse
 
 from mgr_module import HandleCommandResult
 
@@ -32,7 +33,8 @@ class GrafanaService(CephadmService):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
             port = dd.ports[0] if dd.ports else 9095
-            prom_services.append(addr + ':' + str(port))
+            prom_services.append(build_url(scheme='http', host=addr, port=port))
+
             deps.append(dd.name())
         grafana_data_sources = self.mgr.template.render(
             'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services})
