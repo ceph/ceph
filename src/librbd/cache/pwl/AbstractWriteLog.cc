@@ -1458,7 +1458,6 @@ void AbstractWriteLog<I>::alloc_and_dispatch_io_req(C_BlockIORequestT *req)
         m_deferred_ios.push_back(req);
       }
       ldout(m_image_ctx.cct, 20) << "deferred IOs: " << m_deferred_ios.size() << dendl;
-      dispatch_deferred_writes();
     }
   }
 }
