@@ -39,8 +39,6 @@ set(librgw_common_srcs
   services/svc_quota.cc
   services/svc_sync_modules.cc
   services/svc_rados.cc
-  services/svc_role.cc
-  services/svc_role_rados.cc
   services/svc_sys_obj.cc
   services/svc_sys_obj_cache.cc
   services/svc_sys_obj_core.cc
