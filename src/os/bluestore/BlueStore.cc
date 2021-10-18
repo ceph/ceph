@@ -17365,7 +17365,7 @@ int calc_allocator_image_trailer_size()
 }
 
 //-----------------------------------------------------------------------------------
-int BlueStore::restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes)
+int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes)
 {
   utime_t start_time = ceph_clock_now();
   BlueFS::FileReader *p_temp_handle = nullptr;
@@ -17516,6 +17516,31 @@ int BlueStore::restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *
   *num   = extent_count;
   *bytes = read_alloc_size;
   return 0;
+}
+
+//-----------------------------------------------------------------------------------
+int BlueStore::restore_allocator(Allocator* dest_allocator, uint64_t *num, uint64_t *bytes)
+{
+  utime_t    start = ceph_clock_now();
+  Allocator *temp_allocator = create_bitmap_allocator(bdev->get_size());
+  if (temp_allocator == nullptr) {
+    derr << "****failed create_bitmap_allocator()" << dendl;
+    return -1;
+  }
+
+  int ret = __restore_allocator(temp_allocator, num, bytes);
+  if (ret != 0) {
+    delete temp_allocator;
+    return ret;
+  }
+
+  uint64_t num_entries = 0;
+  dout(5) << " calling copy_allocator(bitmap_allocator -> shared_alloc.a)" << dendl;  
+  copy_allocator(temp_allocator, dest_allocator, &num_entries);
+  delete temp_allocator;
+  utime_t duration = ceph_clock_now() - start;
+  dout(5) << " <<<FINISH>>> in " << duration << " seconds, num_entries=" << num_entries << dendl;
+  return ret;
 }
 
 //-------------------------------------------------------------------------
