@@ -139,15 +139,15 @@ namespace cohort {
 	for (int ix = 0; ix < n_lanes; ++ix,
 	       lane_ix = next_evict_lane()) {
 	  Lane& lane = qlane[lane_ix];
-	  lane.lock.lock();
+	  std::unique_lock lane_lock{lane.lock};
 	  /* if object at LRU has refcnt==1, it may be reclaimable */
 	  Object* o = &(lane.q.back());
 	  if (can_reclaim(o)) {
 	    ++(o->lru_refcnt);
 	    o->lru_flags |= FLAG_EVICTING;
-	    lane.lock.unlock();
+	    lane_lock.unlock();
 	    if (o->reclaim(newobj_fac)) {
-	      lane.lock.lock();
+	      lane_lock.lock();
 	      --(o->lru_refcnt);
 	      /* assertions that o state has not changed across
 	       * relock */
@@ -156,16 +156,13 @@ namespace cohort {
 	      Object::Queue::iterator it =
 		Object::Queue::s_iterator_to(*o);
 	      lane.q.erase(it);
-	      lane.lock.unlock();
 	      return o;
 	    } else {
-	      // XXX can't make unreachable (means what?)
 	      --(o->lru_refcnt);
 	      o->lru_flags &= ~FLAG_EVICTING;
 	      /* unlock in next block */
 	    }
 	  } /* can_reclaim(o) */
-	  lane.lock.unlock();
 	} /* each lane */
 	return nullptr;
       } /* evict_block */
