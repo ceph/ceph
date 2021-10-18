@@ -22,5 +22,5 @@ receivers:
 - name: 'ceph-dashboard'
   webhook_configs:
 {% for url in dashboard_urls %}
-  - url: '{{ url }}api/prometheus_receiver'
+  - url: '{{ url }}/api/prometheus_receiver'
 {% endfor %}
