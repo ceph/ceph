@@ -17,10 +17,10 @@ This project intends to build a functioning prototype of Ceph with an improved c
 ### Goals
 The goal of this project is to incorporate D4N, an upgrade to the D3N caching architecture, in Ceph’s RADOS gateway (RGW), integrate it into the upstream open source repositories and make it available to the greater Ceph community. More specifically, this project aims to expand D4N to a global stage and synchronize D4N agents or servers into a single entity which will make the hybrid model accessible. Through a collaboration between researchers at BU, NEU and Red Hat, D4N with modified RGW servers can be distributed around the datacenter, allowing data to be cached in solid state storage (SSDs) near computer clusters to reduce load on the data center network and improve performance. This project attempts but not limited to the following:
 
-1. Make D4N start up in vstart.sh.
+1. Make D4N start up in vstart.sh, which is also the orchestration system in the developer workflow that is being followed.
 2. Work with Red Hat and the research team to select components of D4N and rebase them on master.
 3. Developing a set of unit tests for each of those components. 
-4. Develop documentation and run reviews for new introduced APIs.
+4. Develop documentation and run reviews for newly introduced APIs.
 5. Performance testing for different synchronization mechanisms.
 6. Develop testing methodology to raise race conditions of complex distributed systems, e.g., write back while the object is being deleted - develop new interfaces to make race conditions deterministic.
 7. Integrate testing into Teuthology.
@@ -42,7 +42,9 @@ This project requires three separate Virtual Machines (VMs), which the team is c
 	<strong>Figure 1.</strong> Three VMs should be set up in total, with one acting as a gateway and the other two running the Ceph cluster.
 </p>
 
-The team will use the current Ceph source code as a target to modify the D4N code. The D4N source code is vital to the project and has its own repository. The team’s repository for modifications, improvements, and general work is available here.
+SSDs are not necessary because wesystem performance and development is not being tested. Instead, the local hard disk will be used to emulate the SSD and play with the network. More simply, a large file is mounted like a block device so the OSD emulates it like a hard drive and the process is automatic after the Ceph build repository is cloned and the Ceph cluster is created.
+
+Furthermore, the team will use the current Ceph source code as a target to modify the D4N code. The D4N source code is vital to the project and has its own repository. The team’s repository for modifications, improvements, and general work is available here.
 
 ---
 ### Business Value
