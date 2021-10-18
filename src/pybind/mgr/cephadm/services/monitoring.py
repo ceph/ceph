@@ -132,8 +132,9 @@ class AlertmanagerService(CephadmService):
         url = mgr_map.get('services', {}).get('dashboard', None)
         if url:
             dashboard_urls.append(url)
-            proto = url.split('/')[0]
-            port = url.split('/')[2].split(':')[1]
+            p_result = urlparse(url)
+            proto = p_result.scheme
+            port = p_result.port
         # scan all mgrs to generate deps and to get standbys too.
         # assume that they are all on the same port as the active mgr.
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
@@ -146,8 +147,7 @@ class AlertmanagerService(CephadmService):
                 continue
             assert dd.hostname is not None
             addr = self.mgr.inventory.get_addr(dd.hostname)
-            dashboard_urls.append('%s//%s:%s/' % (proto, addr.split(':')[0],
-                                                  port))
+            dashboard_urls.append(build_url(scheme=proto, host=addr, port=port))
 
         context = {
             'dashboard_urls': dashboard_urls,
@@ -156,12 +156,12 @@ class AlertmanagerService(CephadmService):
         yml = self.mgr.template.render('services/alertmanager/alertmanager.yml.j2', context)
 
         peers = []
-        port = '9094'
+        port = 9094
         for dd in self.mgr.cache.get_daemons_by_service('alertmanager'):
             assert dd.hostname is not None
             deps.append(dd.name())
             addr = self.mgr.inventory.get_addr(dd.hostname)
-            peers.append(addr.split(':')[0] + ':' + port)
+            peers.append(build_url(host=addr, port=port).lstrip('/'))
         return {
             "files": {
                 "alertmanager.yml": yml
@@ -181,7 +181,7 @@ class AlertmanagerService(CephadmService):
         assert dd.hostname is not None
         addr = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
-        service_url = 'http://{}:{}'.format(addr, port)
+        service_url = build_url(scheme='http', host=addr, port=port)
         self._set_service_url_on_dashboard(
             'AlertManager',
             'dashboard get-alertmanager-api-host',
