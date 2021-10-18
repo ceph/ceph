@@ -7,11 +7,11 @@
 ### Project Overview
 With data volumes growing exponentially, a highly scalable storage that preserves and records digital content for ongoing or future company operations is a paramount solution to any successful business. Red Hat Ceph, an open-source software that facilitates distributed object, block, and file storage, emerged as a massively scalable storage solution for modern data pipelines to store and streamline important digital information.
 
-To access stored data in Ceph, one can achieve this in three ways: radosgw (RGW), librados, and RADOS block device (RBD). With RGW gateway, data can be accessed using HTTP Internet protocol. Radosgw daemon provides interfaces compatible with Amazon S3 and OpenStack Swift. On the other hand, librados provides a native interface which allows utilization of librados software libraries through APIs in programming languages such as C/C++, Python, and others. Lastly, RBD works in a way that requires a lower level integration using virtual systems like KVM/QEMU or block storage through kernel modules. 
+To access stored data in Ceph, one can achieve this in three ways, which the first two being most relevant to this project: radosgw (RGW), librados, and RADOS block device (RBD). With RGW, data can be accessed using HTTP. Radosgw daemon provides interfaces compatible with Amazon S3 and OpenStack Swift. On the other hand, librados provides a native interface which allows utilization of librados software libraries through APIs in programming languages such as C/C++, Python, and others.
 
 The current version of Ceph is paired with Datacenter-Data-Delivery Network (D3N), a multi-layer cache infrastructure for data centers. Its goal is to speed up performance of big data analytics by caching commonly accessed data on computing clusters connected to a larger data lake.
 
-This project intends to build a functioning prototype of Ceph with an improved caching system: D4N. Compared to D3N, D4N introduces a Write Back cache and a Distributed Directory that allows the program to have an accurate and efficient method of locating cached data on both a cluster’s local cache or on nearby caches based on locality. D4N functions on an old research branch of Ceph, and this project is an attempt to create a Ceph Cluster with the beneficial functionality of D4N incorporated into the modern code base. The team will incorporate blocks of D4N code, primarily the directory functionality, into D3N and modify the functions, classes, and pathways to properly implement the directory.
+This project intends to build a functioning prototype of Ceph with an improved caching system: D4N. Compared to D3N, D4N introduces a Write Back cache and a Distributed Directory that allows the program to have an accurate and efficient method of locating cached data on both a cluster’s local cache or on nearby caches based on locality. D4N functions on an old research branch of Ceph, and this project is an attempt to create a Ceph Cluster with the beneficial functionality of D4N incorporated into the modern code base. The team will upstream blocks of D4N code, primarily the directory functionality, into D3N and modify the functions, classes, and pathways to properly implement the directory.
 
 ---
 ### Goals
@@ -27,6 +27,8 @@ The goal of this project is to incorporate D4N, an upgrade to the D3N caching ar
 
 ---
 ### Requirements
+Virtual Machines will be used rather than containers because the latter require more overhead. Additionally, using containers creates unnecessary complications in comparison to the more optimal environment that VMs offer for the purpose of this project. Finally, deploying this system on an OCT is possible but difficult to set up. Working on a VM is analogous to working on a regular host, resulting in this final environment setup.
+
 This project requires three separate Virtual Machines (VMs), which the team is currently requesting from OpenStack and the Mass Open Cloud. These machines have the following specifications:
 
 - VM One serves as a gateway and is less powerful than its fellow computers. It will run with 4 cores, 8 gigabytes of RAM, and a 64 gigabyte disk.
