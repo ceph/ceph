@@ -66,11 +66,12 @@ int64_t ZonedAllocator::allocate(
   ldout(cct, 10) << " trying to allocate 0x"
 		 << std::hex << want_size << std::dec << dendl;
 
-  // FIXME: start search at last zone we successfully allocated from, so we
-  // avoid re-checking full zones so much
-
+  uint64_t left = num_zones - first_seq_zone_num;
   uint64_t zone_num = starting_zone_num;
-  for ( ; zone_num < num_zones; ++zone_num) {
+  for ( ; left > 0; ++zone_num, --left) {
+    if (zone_num == num_zones) {
+      zone_num = first_seq_zone_num;
+    }
     if (zone_num == cleaning_zone) {
       ldout(cct, 10) << " skipping zone 0x" << std::hex << zone_num
 		     << " because we are cleaning it" << std::dec << dendl;
@@ -88,7 +89,7 @@ int64_t ZonedAllocator::allocate(
     break;
   }
 
-  if (zone_num == num_zones) {
+  if (left == 0) {
     ldout(cct, 10) << " failed to allocate" << dendl;
     return -ENOSPC;
   }
@@ -160,8 +161,6 @@ void ZonedAllocator::init_from_zone_pointers(
   for (size_t i = first_seq_zone_num; i < num_zones; ++i) {
     num_sequential_free += zone_size - (zone_states[i].write_pointer % zone_size);
   }
-  uint64_t conventional_size = first_seq_zone_num * zone_size;
-  uint64_t sequential_size = size - conventional_size;
   ldout(cct, 10) << "free 0x" << std::hex << num_sequential_free
 		 << " / 0x" << sequential_size << std::dec
 		 << dendl;

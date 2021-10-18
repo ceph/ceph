@@ -81,6 +81,7 @@ public:
     return zone_states[zone].num_dead_bytes;
   }
   uint64_t get_live_bytes(uint32_t zone) {
+    std::scoped_lock l(lock);
     return zone_states[zone].write_pointer - zone_states[zone].num_dead_bytes;
   }
 
