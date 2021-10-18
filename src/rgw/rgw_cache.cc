@@ -13,6 +13,7 @@ int ObjectCache::get(const DoutPrefixProvider *dpp, const string& name, ObjectCa
 {
 
   std::shared_lock rl{lock};
+  std::unique_lock wl{lock, std::defer_lock}; // may be promoted to write lock
   if (!enabled) {
     return -ENOENT;
   }
@@ -29,7 +30,7 @@ int ObjectCache::get(const DoutPrefixProvider *dpp, const string& name, ObjectCa
        (ceph::coarse_mono_clock::now() - iter->second.info.time_added) > expiry) {
     ldpp_dout(dpp, 10) << "cache get: name=" << name << " : expiry miss" << dendl;
     rl.unlock();
-    std::unique_lock wl{lock};  // write lock for insertion
+    wl.lock(); // write lock for expiration
     // check that wasn't already removed by other thread
     iter = cache_map.find(name);
     if (iter != cache_map.end()) {
@@ -50,7 +51,7 @@ int ObjectCache::get(const DoutPrefixProvider *dpp, const string& name, ObjectCa
     ldpp_dout(dpp, 20) << "cache get: touching lru, lru_counter=" << lru_counter
                    << " promotion_ts=" << entry->lru_promotion_ts << dendl;
     rl.unlock();
-    std::unique_lock wl{lock};  // write lock for insertion
+    wl.lock(); // write lock for touch_lru()
     /* need to redo this because entry might have dropped off the cache */
     iter = cache_map.find(name);
     if (iter == cache_map.end()) {
