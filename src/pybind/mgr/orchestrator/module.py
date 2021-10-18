@@ -1332,6 +1332,16 @@ Usage:
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_cli_read_command('orch upgrade ls')
+    def _upgrade_ls(self,
+                    image: Optional[str] = None,
+                    tags: bool = False) -> HandleCommandResult:
+        """Check for available versions (or tags) we can upgrade to"""
+        completion = self.upgrade_ls(image, tags)
+        r = raise_if_exception(completion)
+        out = json.dumps(r, indent=4)
+        return HandleCommandResult(stdout=out)
+
     @_cli_write_command('orch upgrade status')
     def _upgrade_status(self) -> HandleCommandResult:
         """Check service versions vs available and target containers"""
