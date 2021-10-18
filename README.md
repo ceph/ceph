@@ -27,7 +27,7 @@ The goal of this project is to incorporate D4N, an upgrade to the D3N caching ar
 
 ---
 ### Requirements
-Virtual Machines will be used rather than containers because the latter require more overhead. Additionally, using containers creates unnecessary complications in comparison to the more optimal environment that VMs offer for the purpose of this project. Finally, deploying this system on an OCT is possible but difficult to set up. Working on a VM is analogous to working on a regular host, resulting in this final environment setup.
+Virtual Machines will be used rather than containers because the latter require more overhead. Additionally, employing containers creates unnecessary complications in comparison to the more optimal environment that VMs offer for the purpose of this project. Finally, deploying this system on an OCT is possible but difficult to set up. Working on a VM is analogous to working on a regular host, resulting in this final environment setup.
 
 This project requires three separate Virtual Machines (VMs), which the team is currently requesting from OpenStack and the Mass Open Cloud. These machines have the following specifications:
 
