@@ -204,6 +204,15 @@ Example use cases include:
 
          # ceph auth get-or-create client.<user_id> mon 'allow r' osd 'allow rw pool=.nfs namespace=<nfs_cluster_name>, allow rw tag cephfs data=<fs_name>' mds 'allow rw path=<export_path>'
 
+View Customized NFS Ganesha Configuration
+-----------------------------------------
+
+.. code:: bash
+
+    $ ceph nfs cluster config get <cluster_id>
+
+This will output the user defined configuration (if any).
+
 Reset NFS Ganesha Configuration
 -------------------------------
 
