@@ -139,6 +139,20 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
+    @CLICommand('rgw realm remove zone-creds', perm='rw')
+    def _cmd_rgw_realm_rm_zone_creds(self,
+                                 realm_name: Optional[str] = None,
+                                 realm_token : Optional[str] = None):
+        """Create credentials for new zone creation"""
+
+        try:
+            retval, out, err = RGWAM(self.env).realm_rm_zone_creds(realm_name, realm_token)
+        except RGWAMException as e:
+            self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
+            return (e.retcode, e.message, e.stderr)
+
+        return HandleCommandResult(retval=retval, stdout=out, stderr=err)
+
     @CLICommand('rgw zone create', perm='rw')
     def _cmd_rgw_zone_create(self,
                              realm_token : Optional[str] = None,
