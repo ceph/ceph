@@ -76,7 +76,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Cloud Platforms
 	Cloud Stacks
 		Third party cloud provisioning platforms such as OpenStack, CloudStack,
-		OpenNebula, ProxMox, etc.
+		OpenNebula, Proxmox VE, etc.
 
 	Object Storage Device
 	OSD
