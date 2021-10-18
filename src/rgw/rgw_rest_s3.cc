@@ -6474,6 +6474,29 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
       enable_progress = false;
     }
 
+    if (output_row_delimiter.size()) {
+      csv.output_row_delimiter = *output_row_delimiter.c_str();
+    }
+
+    if (output_column_delimiter.size()) {
+      csv.output_column_delimiter = *output_column_delimiter.c_str();
+    }
+
+    if (output_quot.size()) {
+      csv.output_quot_char = *output_quot.c_str();
+    }
+
+    if (output_escape_char.size()) {
+      csv.output_escape_char = *output_escape_char.c_str();
+    }
+
+    if(output_quote_fields.compare("ALWAYS") == 0) {
+      csv.quote_fields_always = true;
+    }
+    else if(output_quote_fields.compare("ASNEEDED") == 0) {
+      csv.quote_fields_asneeded = true;
+    }
+
     if(m_header_info.compare("IGNORE")==0) {
       csv.ignore_header_info=true;
     }
@@ -6546,6 +6569,8 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
 
 int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
 {
+  std::string input_tag{"InputSerialization"};
+  std::string output_tag{"OutputSerialization"};
 
   if(chunk_number !=0) {
     return 0;
@@ -6561,43 +6586,61 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   }
 
   //AWS cli s3select parameters
-  extract_by_tag("Expression", sql_query);
-  extract_by_tag("FieldDelimiter", m_column_delimiter);
-  extract_by_tag("QuoteCharacter", m_quot);
-  extract_by_tag("RecordDelimiter", m_row_delimiter);
+  extract_by_tag(m_s3select_query, "Expression", sql_query);
+  extract_by_tag(m_s3select_query, "Enabled", m_enable_progress);
+  
+  size_t _qi = m_s3select_query.find("<" + input_tag + ">", 0);
+  size_t _qe = m_s3select_query.find("</" + input_tag + ">", _qi);
+  m_s3select_input = m_s3select_query.substr(_qi + input_tag.size() + 2, _qe - (_qi + input_tag.size() + 2));
+
+  extract_by_tag(m_s3select_input,"FieldDelimiter", m_column_delimiter);
+  extract_by_tag(m_s3select_input, "QuoteCharacter", m_quot);
+  extract_by_tag(m_s3select_input, "RecordDelimiter", m_row_delimiter);
+  extract_by_tag(m_s3select_input, "FileHeaderInfo", m_header_info);
+
   if (m_row_delimiter.size()==0) {
     m_row_delimiter='\n';
-  }else if(m_row_delimiter.compare("&#10;") == 0)
+  }
+  else if(m_row_delimiter.compare("&#10;") == 0)
   {//presto change
     m_row_delimiter='\n';
   }
 
-  extract_by_tag("QuoteEscapeCharacter", m_escape_char);
-  extract_by_tag("CompressionType", m_compression_type);
-  extract_by_tag("Enabled", m_enable_progress);
+  extract_by_tag(m_s3select_input, "QuoteEscapeCharacter", m_escape_char);
+  extract_by_tag(m_s3select_input, "CompressionType", m_compression_type);
+
+  size_t _qo = m_s3select_query.find("<" + output_tag + ">", 0);
+  size_t _qs = m_s3select_query.find("</" + output_tag + ">", _qi);
+  m_s3select_output = m_s3select_query.substr(_qo + output_tag.size() + 2, _qs - (_qo + output_tag.size() + 2));
+  
+  extract_by_tag(m_s3select_output, "FieldDelimiter", output_column_delimiter);
+  extract_by_tag(m_s3select_output, "QuoteCharacter", output_quot);
+  extract_by_tag(m_s3select_output, "QuoteEscapeCharacter", output_escape_char);
+  extract_by_tag(m_s3select_output, "QuoteFields", output_quote_fields);
+  extract_by_tag(m_s3select_output, "RecordDelimiter", output_row_delimiter);
+
   if (m_compression_type.length()>0 && m_compression_type.compare("NONE") != 0) {
     ldpp_dout(this, 10) << "RGW supports currently only NONE option for compression type" << dendl;
     return -1;
   }
 
-  extract_by_tag("FileHeaderInfo", m_header_info);
-
   return 0;
 }
 
-int RGWSelectObj_ObjStore_S3::extract_by_tag(std::string tag_name, std::string& result)
+int RGWSelectObj_ObjStore_S3::extract_by_tag(std::string input, std::string tag_name, std::string& result)
 {
   result = "";
-  size_t _qs = m_s3select_query.find("<" + tag_name + ">", 0) + tag_name.size() + 2;
+  size_t _qs = input.find("<" + tag_name + ">", 0);
+  size_t qs_input = _qs + tag_name.size() + 2;
   if (_qs == std::string::npos) {
     return -1;
   }
-  size_t _qe = m_s3select_query.find("</" + tag_name + ">", _qs);
+  size_t _qe = input.find("</" + tag_name + ">", qs_input);
   if (_qe == std::string::npos) {
     return -1;
   }
 
-  result = m_s3select_query.substr(_qs, _qe - _qs);
+  result = input.substr(qs_input, _qe - qs_input);
 
   return 0;
 }

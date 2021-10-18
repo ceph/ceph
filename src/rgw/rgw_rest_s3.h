@@ -1021,6 +1021,8 @@ class RGWSelectObj_ObjStore_S3 : public RGWGetObj_ObjStore_S3
 private:
   std::unique_ptr<s3selectEngine::s3select> s3select_syntax;
   std::string m_s3select_query;
+  std::string m_s3select_input;
+  std::string m_s3select_output;
   std::unique_ptr<s3selectEngine::csv_object> m_s3_csv_object;
   std::string m_column_delimiter;
   std::string m_quot;
@@ -1030,6 +1032,12 @@ private:
   std::string m_header_info;
   std::string m_sql_query;
   std::string m_enable_progress;
+  std::string output_column_delimiter;
+  std::string output_quot;
+  std::string output_escape_char;
+  std::string output_quote_fields;
+  std::string output_row_delimiter;
+
   std::unique_ptr<aws_response_handler> m_aws_response_handler;
   bool enable_progress;
 
@@ -1047,7 +1055,7 @@ private:
 
   int run_s3select(const char* query, const char* input, size_t input_length);
 
-  int extract_by_tag(std::string tag_name, std::string& result);
+  int extract_by_tag(std::string input, std::string tag_name, std::string& result);
 
   void convert_escape_seq(std::string& esc);
 
