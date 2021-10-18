@@ -7280,6 +7280,8 @@ int BlueStore::umount()
     int ret = store_allocator(shared_alloc.a);
     if (ret != 0) {
       derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
+      _close_db_and_around(false);
+      // should we run fsck ???
       return ret;
     }
     dout(5) << __func__ << "::NCB::store_allocator() completed successfully" << dendl;
@@ -18312,7 +18314,11 @@ int BlueStore::commit_to_real_manager()
   dout(5) << "Set FreelistManager to Real FM..." << dendl;
   ceph_assert(!fm->is_null_manager());
   freelist_type = "bitmap";
-  return commit_freelist_type(db, freelist_type, cct, path);
+  int ret = commit_freelist_type(db, freelist_type, cct, path);
+  if (ret == 0) {
+
+  }
+  return ret;
 }
 
 //================================================================================================================
