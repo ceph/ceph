@@ -7,6 +7,7 @@ function clean_vg() {
 
 
 function create_loops() {
+	mkdir -p loop-images
 	clean_vg
 
 	NUM_OSDS=$1
@@ -34,7 +35,6 @@ function create_loops() {
 	mknod $avail_loop b 7 $num_loops
 	sudo umount $avail_loop
 	sudo losetup -d $avail_loop
-	mkdir -p loop-images
 	# sudo fallocate -l 10G "loop-images/disk${loop_name}.img"
 	sudo dd if=/dev/zero of="loop-images/disk${loop_name}.img" bs=1G count=$SIZE
 	sudo losetup $avail_loop "loop-images/disk${loop_name}.img"
