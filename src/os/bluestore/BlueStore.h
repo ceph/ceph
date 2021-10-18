@@ -1608,8 +1608,8 @@ public:
     // to that zone do not generate additional refs.  This is a bit imprecise but
     // is sufficient to generate reasonably sequential reads when doing zone
     // cleaning with less metadata than a ref for every extent.
-    std::map<OnodeRef, std::map<uint32_t, uint64_t>> new_zone_offset_refs;
-    std::map<OnodeRef, std::map<uint32_t, uint64_t>> old_zone_offset_refs;
+    std::map<std::pair<OnodeRef, uint32_t>, uint64_t> new_zone_offset_refs;
+    std::map<std::pair<OnodeRef, uint32_t>, uint64_t> old_zone_offset_refs;
 #endif
     
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
@@ -1687,10 +1687,10 @@ public:
 #ifdef HAVE_LIBZBD
     void note_write_zone_offset(OnodeRef& o, uint32_t zone, uint64_t offset) {
       o->onode.zone_offset_refs[zone] = offset;
-      new_zone_offset_refs[o][zone] = offset;
+      new_zone_offset_refs[std::make_pair(o, zone)] = offset;
     }
     void note_release_zone_offset(OnodeRef& o, uint32_t zone, uint64_t offset) {
-      old_zone_offset_refs[o][zone] = offset;
+      old_zone_offset_refs[std::make_pair(o, zone)] = offset;
       o->onode.zone_offset_refs.erase(zone);
     }
 #endif
