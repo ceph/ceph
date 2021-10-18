@@ -37,6 +37,8 @@
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
 #include "services/svc_sys_obj.h"
+#include "services/svc_meta.h"
+#include "services/svc_meta_be_sobj.h"
 #include "services/svc_zone.h"
 #include "services/svc_tier_rados.h"
 #include "services/svc_quota.h"
@@ -3324,7 +3326,6 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
   }
   return ret;
 }
-
 
 } // namespace rgw::sal
 

@@ -15,7 +15,6 @@
 
 class RGWCtl;
 class RGWRados;
-class RGWRoleMetadataHandler;
 class RGWSI_Role;
 class RGWSI_MetaBackend_Handler;
 class RGWRoleCtl;
@@ -48,12 +47,12 @@ protected:
   std::multimap<std::string,std::string> tags;
 
 public:
-  virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
-  virtual int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) { return 0; }
-  virtual int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) { return 0; }
-  virtual int read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y);
-  virtual int read_name(const DoutPrefixProvider *dpp, optional_yield y);
-  virtual int read_info(const DoutPrefixProvider *dpp, optional_yield y);
+  virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y) = 0;
+  virtual int read_name(const DoutPrefixProvider *dpp, optional_yield y) = 0;
+  virtual int read_info(const DoutPrefixProvider *dpp, optional_yield y) = 0;
   bool validate_input(const DoutPrefixProvider* dpp);
   void extract_name_tenant(const std::string& str);
 
@@ -125,11 +124,12 @@ public:
   const uint64_t& get_max_session_duration() const { return max_session_duration; }
 
   void set_id(const std::string& id) { this->id = id; }
+  //TODO: Remove the following two
   void set_arn(const std::string& arn) { this->arn = arn; }
   void set_creation_date(const std::string& creation_date) { this->creation_date = creation_date; }
 
-  virtual int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
-  virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y);
+  virtual int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) = 0;
   int get(const DoutPrefixProvider *dpp, optional_yield y);
   int get_by_id(const DoutPrefixProvider *dpp, optional_yield y);
   int update(const DoutPrefixProvider *dpp, optional_yield y);
@@ -149,10 +149,9 @@ public:
   static const std::string& get_path_oid_prefix();
 };
 WRITE_CLASS_ENCODER(RGWRole)
-} } // namespace rgw::sal
 
 struct RGWRoleCompleteInfo {
-  rgw::sal::RGWRole info;
+  RGWRole* info;
   std::map<std::string, bufferlist> attrs;
   bool has_attrs;
 
@@ -176,17 +175,27 @@ public:
     return rci;
   }
 };
-//class RGWMetadataObject;
 
 class RGWRoleMetadataHandler: public RGWMetadataHandler_GenericMetaBE
 {
-
 public:
   struct Svc {
-    RGWSI_Role *role{nullptr};
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_Meta *meta{nullptr};
+    RGWSI_MetaBackend *meta_be{nullptr};
+    RGWSI_SysObj *sysobj{nullptr};
   } svc;
 
-  RGWRoleMetadataHandler(RGWSI_Role *role_svc);
+  void init(RGWSI_Zone *_zone_svc,
+	    RGWSI_Meta *_meta_svc,
+	    RGWSI_MetaBackend *_meta_be_svc,
+	    RGWSI_SysObj *_sysobj_svc);
+
+  RGWSI_MetaBackend_Handler * get_be_handler();
+
+  int do_start(optional_yield y, const DoutPrefixProvider *dpp);
+
+  RGWRoleMetadataHandler(CephContext *cct, Store* store);
 
   std::string get_type() final { return "roles";  }
 
@@ -214,158 +223,12 @@ public:
        const DoutPrefixProvider *dpp,
 	     RGWMDLogSyncType type,
        bool from_remote_zone) override;
+
+private:
+  RGWSI_MetaBackend_Handler *be_handler;
+  std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
+  std::unique_ptr<Store> store;
 };
+} } // namespace rgw::sal
 
-/// Defines control classes that call the low level service layer that handles
-/// storage, svc classes implement the low level object operations. Ctl classes
-/// can span over multiple service classes, for eg. User Ctl classes need to
-/// update the user indices when buckets are added/removed RoleCtl classes may
-/// need to update the RGW Account class that a role has been added deleted
-/// under an account.
-class RGWRoleCtl {
-  struct Svc {
-    RGWSI_Role *role {nullptr};
-  } svc;
-  RGWRoleMetadataHandler *rmhandler;
-  RGWSI_MetaBackend_Handler *be_handler{nullptr};
-public:
-  RGWRoleCtl(RGWSI_Role *_role_svc,
-	     RGWRoleMetadataHandler *_rmhandler) {
-    svc.role = _role_svc;
-    rmhandler = _rmhandler;
-    be_handler = _rmhandler->get_be_handler();
-  }
-
-  struct PutParams {
-    ceph::real_time mtime;
-    bool exclusive {false};
-    RGWObjVersionTracker *objv_tracker {nullptr};
-    std::map<std::string, bufferlist> *attrs {nullptr};
-
-    PutParams() {}
-
-    PutParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-      objv_tracker = _objv_tracker;
-      return *this;
-    }
-
-    PutParams& set_mtime(const ceph::real_time& _mtime) {
-      mtime = _mtime;
-      return *this;
-    }
-
-    PutParams& set_exclusive(bool _exclusive) {
-      exclusive = _exclusive;
-      return *this;
-    }
-
-    PutParams& set_attrs(std::map<std::string, bufferlist> *_attrs) {
-      attrs = _attrs;
-      return *this;
-    }
-  };
-
-  struct GetParams {
-    ceph::real_time *mtime{nullptr};
-    std::map<std::string, bufferlist> *attrs{nullptr};
-    RGWObjVersionTracker *objv_tracker {nullptr};
-
-    GetParams() {}
-
-    GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-      objv_tracker = _objv_tracker;
-      return *this;
-    }
-
-    GetParams& set_mtime(ceph::real_time *_mtime) {
-      mtime = _mtime;
-      return *this;
-    }
-
-    GetParams& set_attrs(std::map<std::string, bufferlist> *_attrs) {
-      attrs = _attrs;
-      return *this;
-    }
-  };
-
-  struct RemoveParams {
-    RGWObjVersionTracker *objv_tracker{nullptr};
-
-    RemoveParams() {}
-
-    RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
-      objv_tracker = _objv_tracker;
-      return *this;
-    }
-  };
-
-
-  int create(rgw::sal::RGWRole& role,
-	     optional_yield y,
-       const DoutPrefixProvider *dpp,
-	     const PutParams& params = {});
-
-  int store_info(const rgw::sal::RGWRole& role,
-		 optional_yield y,
-     const DoutPrefixProvider *dpp,
-		 const PutParams& params = {});
-
-  // The methods for store name & store path are currently unused and only
-  // useful for a potential rename name/path functionality in the future as
-  // create role would automatically create these for most uses
-  int store_name(const std::string& role_id,
-		 const std::string& name,
-		 const std::string& tenant,
-		 optional_yield y,
-     const DoutPrefixProvider *dpp,
-		 const PutParams& params = {});
-
-  int store_path(const std::string& role_id,
-		 const std::string& path,
-		 const std::string& tenant,
-		 optional_yield y,
-     const DoutPrefixProvider *dpp,
-		 const PutParams& params = {});
-
-  int read_info(const std::string& role_id,
-					optional_yield y,
-          const DoutPrefixProvider *dpp,
-          rgw::sal::RGWRole* role,
-					const GetParams& params = {});
-
-  std::pair<int, std::string> read_name(const std::string& name,
-				   const std::string& tenant,
-				   optional_yield y,
-           const DoutPrefixProvider *dpp,
-				   const GetParams& params = {});
-
-  int delete_role(const rgw::sal::RGWRole& role,
-		  optional_yield y,
-      const DoutPrefixProvider *dpp,
-		  const RemoveParams& params = {});
-
-  int delete_info(const std::string& role_id,
-		  optional_yield y,
-      const DoutPrefixProvider *dpp,
-		  const RemoveParams& params = {});
-
-  int delete_name(const std::string& name,
-		  const std::string& tenant,
-		  optional_yield y,
-      const DoutPrefixProvider *dpp,
-		  const RemoveParams& params = {});
-
-  int delete_path(const std::string& role_id,
-		  const std::string& path,
-		  const std::string& tenant,
-		  optional_yield y,
-      const DoutPrefixProvider *dpp,
-		  const RemoveParams& params = {});
-
-  int list_roles_by_path_prefix(const std::string& path_prefix,
-                                const std::string& tenant,
-                                std::vector<rgw::sal::RGWRole>& roles,
-                                optional_yield y,
-                                const DoutPrefixProvider *dpp);
-};
 #endif /* CEPH_RGW_ROLE_H */

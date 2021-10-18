@@ -22,6 +22,8 @@
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_role.h"
+#include "services/svc_meta_be_sobj.h"
+#include "services/svc_meta.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -33,86 +35,6 @@ const string RGWRole::role_name_oid_prefix = "role_names.";
 const string RGWRole::role_oid_prefix = "roles.";
 const string RGWRole::role_path_oid_prefix = "role_paths.";
 const string RGWRole::role_arn_prefix = "arn:aws:iam::";
-
-int RGWRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
-{
-  RGWObjVersionTracker objv_tracker;
-  return role_ctl->store_info(*this,
-			      y,
-            dpp,
-			      RGWRoleCtl::PutParams().
-			      set_exclusive(exclusive).
-			      set_objv_tracker(&objv_tracker));
-}
-
-// Creation time
-auto generate_ctime() {
-  real_clock::time_point t = real_clock::now();
-
-  struct timeval tv;
-  real_clock::to_timeval(t, tv);
-
-  char buf[30];
-  struct tm result;
-  gmtime_r(&tv.tv_sec, &result);
-  strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
-  sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
-  string ct;
-  ct.assign(buf, strlen(buf));
-  return ct;
-}
-
-
-int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
-{
-  if (!validate_input(dpp)) {
-    ldpp_dout(dpp, 0) << "ERROR: invalid input " << dendl;
-    return -EINVAL;
-  }
-
-  uuid_d new_role_id;
-  new_role_id.generate_random();
-
-  id = new_role_id.to_string();
-  arn = role_arn_prefix + tenant + ":role" + path + name;
-  creation_date = generate_ctime();
-
-
-  RGWObjVersionTracker objv_tracker;
-  return role_ctl->create(*this, y, dpp,
-			  RGWRoleCtl::PutParams().
-			  set_exclusive(exclusive).
-			  set_objv_tracker(&objv_tracker));
-}
-
-int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
-{
-
-  int ret = read_name(dpp, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ret = read_info(dpp, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  if (! perm_policy_map.empty()) {
-    return -ERR_DELETE_CONFLICT;
-  }
-
-  RGWObjVersionTracker ot;
-  ret = role_ctl->delete_role(*this, y, dpp,
-			      RGWRoleCtl::RemoveParams().
-			      set_objv_tracker(&ot));
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: deleting role: "<< id
-		  << cpp_strerror(-ret) << dendl;
-  }
-
-  return ret;
-}
 
 int RGWRole::get(const DoutPrefixProvider *dpp, optional_yield y)
 {
@@ -225,54 +147,6 @@ void RGWRole::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("AssumeRolePolicyDocument", trust_policy, obj);
 }
 
-int RGWRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y)
-{
-  int ret;
-  RGWObjVersionTracker ot;
-  std::tie(ret, role_id) = role_ctl->read_name(role_name, tenant, y, dpp,
-					       RGWRoleCtl::GetParams().
-					       set_objv_tracker(&ot));
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed reading role id with params"
-		 << role_name << ", " << tenant << ":"
-		 << cpp_strerror(ret) << dendl;
-  }
-
-  return ret;
-}
-
-int RGWRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
-{
-
-  RGWObjVersionTracker ot;
-  auto ret = role_ctl->read_info(id, y, dpp, this,
-					  RGWRoleCtl::GetParams().
-					  set_objv_tracker(&ot));
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed reading role info from pool: "
-                  ": " << id << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
-int RGWRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  RGWObjVersionTracker ot;
-  auto [ret, _id] = role_ctl->read_name(name, tenant, y, dpp,
-					RGWRoleCtl::GetParams().
-					set_objv_tracker(&ot));
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed reading role name from pool: "
-                  << name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  id = _id;
-  return 0;
-}
-
 bool RGWRole::validate_input(const DoutPrefixProvider* dpp)
 {
   if (name.length() > MAX_ROLE_NAME_LEN) {
@@ -359,203 +233,89 @@ const string& RGWRole::get_path_oid_prefix()
 {
   return role_path_oid_prefix;
 }
-} } // namespace rgw::sal
 
-int RGWRoleCtl::create(rgw::sal::RGWRole& role,
-		       optional_yield y,
-           const DoutPrefixProvider *dpp,
-		       const PutParams& params)
+class RGWSI_Role_Module : public RGWSI_MBSObj_Handler_Module {
+  RGWRoleMetadataHandler::Svc& svc;
+  const std::string prefix;
+public:
+  RGWSI_Role_Module(RGWRoleMetadataHandler::Svc& _svc): RGWSI_MBSObj_Handler_Module("roles"),
+                                                  svc(_svc),
+                                                  prefix(rgw::sal::RGWRole::get_info_oid_prefix()) {}
+
+  void get_pool_and_oid(const std::string& key,
+                        rgw_pool *pool,
+                        std::string *oid) override
+  {
+    if (pool) {
+      *pool = svc.zone->get_zone_params().roles_pool;
+    }
+
+    if (oid) {
+      *oid = key_to_oid(key);
+    }
+  }
+
+  bool is_valid_oid(const std::string& oid) override {
+    return boost::algorithm::starts_with(oid, prefix);
+  }
+
+  std::string key_to_oid(const std::string& key) override {
+    return prefix + key;
+  }
+
+  // This is called after `is_valid_oid` and is assumed to be a valid oid
+  std::string oid_to_key(const std::string& oid) override {
+    return oid.substr(prefix.size());
+  }
+
+  const std::string& get_oid_prefix() {
+    return prefix;
+  }
+};
+
+RGWSI_MetaBackend_Handler* RGWRoleMetadataHandler::get_be_handler()
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.role->create(op->ctx(),
-			    role,
-			    params.objv_tracker,
-			    params.mtime,
-			    params.exclusive,
-			    params.attrs,
-			    y,
-          dpp);
-  });
+  return be_handler;
 }
 
-int RGWRoleCtl::store_info(const rgw::sal::RGWRole& role,
-			   optional_yield y,
-         const DoutPrefixProvider *dpp,
-			   const PutParams& params)
+void RGWRoleMetadataHandler::init(RGWSI_Zone *_zone_svc,
+                                  RGWSI_Meta *_meta_svc,
+                                  RGWSI_MetaBackend *_meta_be_svc,
+                                  RGWSI_SysObj *_sysobj_svc)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.role->store_info(op->ctx(),
-				role,
-				params.objv_tracker,
-				params.mtime,
-				params.exclusive,
-				params.attrs,
-				y, dpp);
-  });
+  svc.zone = _zone_svc;
+  svc.meta = _meta_svc;
+  svc.meta_be = _meta_be_svc;
+  svc.sysobj = _sysobj_svc;
 }
 
-int RGWRoleCtl::store_name(const std::string& role_id,
-			   const std::string& name,
-			   const std::string& tenant,
-			   optional_yield y,
-         const DoutPrefixProvider *dpp,
-			   const PutParams& params)
+int RGWRoleMetadataHandler::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.role->store_name(op->ctx(),
-				role_id,
-				name,
-				tenant,
-				params.objv_tracker,
-				params.mtime,
-				params.exclusive,
-				y, dpp);
-  });
-}
 
-int RGWRoleCtl::store_path(const std::string& role_id,
-			   const std::string& path,
-			   const std::string& tenant,
-			   optional_yield y,
-         const DoutPrefixProvider *dpp,
-			   const PutParams& params)
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.role->store_path(op->ctx(),
-				role_id,
-				path,
-				tenant,
-				params.objv_tracker,
-				params.mtime,
-				params.exclusive,
-				y, dpp);
-  });
-}
+  int r = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ,
+                                      &be_handler);
+  if (r < 0) {
+    //ldout(ctx(), 0) << "ERROR: failed to create be_handler for Roles: r="
+    //                << r <<dendl;
+    return r;
+  }
 
-int
-RGWRoleCtl::read_info(const std::string& role_id,
-		      optional_yield y,
-          const DoutPrefixProvider *dpp,
-          rgw::sal::RGWRole* info,
-		      const GetParams& params)
-{
-  int ret = be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.role->read_info(op->ctx(),
-			       role_id,
-			       info,
-			       params.objv_tracker,
-			       params.mtime,
-			       params.attrs,
-			       y, dpp);
-  });
-  return ret;
-}
-
-std::pair<int, std::string>
-RGWRoleCtl::read_name(const std::string& name,
-		      const std::string& tenant,
-		      optional_yield y,
-          const DoutPrefixProvider *dpp,
-		      const GetParams& params)
-{
-  std::string role_id;
-  int ret = be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.role->read_name(op->ctx(),
-			       name,
-			       tenant,
-			       role_id,
-			       params.objv_tracker,
-			       params.mtime,
-			       y, dpp);
-  });
-  return make_pair(ret, role_id);
-}
-
-int RGWRoleCtl::delete_role(const rgw::sal::RGWRole& info,
-			    optional_yield y,
-          const DoutPrefixProvider *dpp,
-			    const RemoveParams& params)
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.role->delete_role(op->ctx(),
-				 info,
-				 params.objv_tracker,
-				 y, dpp);
-  });
+  auto module = new RGWSI_Role_Module(svc);
+  RGWSI_MetaBackend_Handler_SObj* bh= static_cast<RGWSI_MetaBackend_Handler_SObj *>(be_handler);
+  be_module.reset(module);
+  bh->set_module(module);
   return 0;
 }
 
-int RGWRoleCtl::delete_info(const std::string& role_id,
-			    optional_yield y,
-          const DoutPrefixProvider *dpp,
-			    const RemoveParams& params)
+RGWRoleMetadataHandler::RGWRoleMetadataHandler(CephContext *cct, Store* store)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.role->delete_info(op->ctx(),
-				 role_id,
-				 params.objv_tracker,
-				 y, dpp);
-  });
-  return 0;
-}
-
-int RGWRoleCtl::delete_name(const std::string& name,
-			    const std::string& tenant,
-			    optional_yield y,
-          const DoutPrefixProvider *dpp,
-			    const RemoveParams& params)
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.role->delete_name(op->ctx(),
-				 name,
-				 tenant,
-				 params.objv_tracker,
-				 y, dpp);
-  });
-}
-
-int RGWRoleCtl::delete_path(const std::string& role_id,
-			    const std::string& path,
-			    const std::string& tenant,
-			    optional_yield y,
-          const DoutPrefixProvider *dpp,
-			    const RemoveParams& params)
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.role->delete_path(op->ctx(),
-				 role_id,
-				 path,
-				 tenant,
-				 params.objv_tracker,
-				 y, dpp);
-  });
-}
-
-int RGWRoleCtl::list_roles_by_path_prefix(const std::string& path_prefix,
-					  const std::string& tenant,
-					  std::vector<rgw::sal::RGWRole>& roles,
-					  optional_yield y,
-            const DoutPrefixProvider *dpp)
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.role->list_roles_by_path_prefix(op->ctx(),
-					       path_prefix,
-					       tenant,
-					       roles,
-					       y,
-                 dpp);
-  });
-}
-
-RGWRoleMetadataHandler::RGWRoleMetadataHandler(RGWSI_Role *role_svc)
-{
-  base_init(role_svc->ctx(), role_svc->get_be_handler());
-  svc.role = role_svc;
+  base_init(cct, get_be_handler());
+  store = store;
 }
 
 void RGWRoleCompleteInfo::dump(ceph::Formatter *f) const
 {
-  info.dump(f);
+  info->dump(f);
   if (has_attrs) {
     encode_json("attrs", attrs, f);
   }
@@ -563,7 +323,7 @@ void RGWRoleCompleteInfo::dump(ceph::Formatter *f) const
 
 void RGWRoleCompleteInfo::decode_json(JSONObj *obj)
 {
-  decode_json_obj(info, obj);
+  decode_json_obj(*info, obj);
   has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
 }
 
@@ -593,6 +353,7 @@ int RGWRoleMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
   RGWObjVersionTracker objv_tracker;
   real_time mtime;
 
+#if 0
   int ret = svc.role->read_info(op->ctx(),
                                 entry,
                                 &rci.info,
@@ -601,7 +362,9 @@ int RGWRoleMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
                                 &rci.attrs,
                                 y,
                                 dpp);
-
+#endif
+  rci.info = store->get_role(entry).get();
+  int ret = rci.info->read_info(dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -619,14 +382,21 @@ int RGWRoleMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
                                       optional_yield y,
                                       const DoutPrefixProvider *dpp)
 {
-  rgw::sal::RGWRole info;
-  real_time _mtime;
+#if 0
   int ret = svc.role->read_info(op->ctx(), entry, &info, &objv_tracker,
 				&_mtime, nullptr, y, dpp);
   if (ret < 0) {
     return ret == -ENOENT ? 0 : ret;
   }
   return svc.role->delete_role(op->ctx(), info, &objv_tracker, y, dpp);
+#endif
+  std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(entry);
+  int ret = role->read_info(dpp, y);
+  if (ret < 0) {
+    return ret == -ENOENT? 0 : ret;
+  }
+
+  return role->delete_obj(dpp, y);
 }
 
 class RGWMetadataHandlerPut_Role : public RGWMetadataHandlerPut_SObj
@@ -651,8 +421,8 @@ public:
     auto& rci = mdo->get_rci();
     auto mtime = mdo->get_mtime();
     map<std::string, bufferlist> *pattrs = rci.has_attrs ? &rci.attrs : nullptr;
-
-    int ret = rhandler->svc.role->create(op->ctx(),
+#if 0
+    int ret = rhandler->role->create(op->ctx(),
 					 rci.info,
 					 &objv_tracker,
 					 mtime,
@@ -661,6 +431,9 @@ public:
 					 y,
            dpp);
 
+    return ret < 0 ? ret : STATUS_APPLIED;
+#endif
+    int ret = rci.info->create(dpp, true, y);
     return ret < 0 ? ret : STATUS_APPLIED;
   }
 };
@@ -677,3 +450,5 @@ int RGWRoleMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
   RGWMetadataHandlerPut_Role put_op(this, op , entry, obj, objv_tracker, y, type, from_remote_zone);
   return do_put_operate(&put_op, dpp);
 }
+
+} } // namespace rgw::sal
