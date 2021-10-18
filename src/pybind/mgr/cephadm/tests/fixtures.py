@@ -98,6 +98,14 @@ def with_cephadm_module(module_options=None, store=None):
                 'modified': datetime_to_str(datetime_now()),
                 'fsid': 'foobar',
             })
+        if '_ceph_get/mgr_map' not in store:
+            m.mock_store_set('_ceph_get', 'mgr_map', {
+                'services': {
+                    'dashboard': 'http://[::1]:8080',
+                    'prometheus': 'http://[::1]:8081'
+                },
+                'modules': ['dashboard', 'prometheus'],
+            })
         for k, v in store.items():
             m._ceph_set_store(k, v)
 
@@ -116,7 +124,7 @@ def wait(m, c):
 
 
 @contextmanager
-def with_host(m: CephadmOrchestrator, name, addr='1.2.3.4', refresh_hosts=True):
+def with_host(m: CephadmOrchestrator, name, addr='1::4', refresh_hosts=True):
     # type: (CephadmOrchestrator, str) -> None
     with mock.patch("cephadm.utils.resolve_ip", return_value=addr):
         wait(m, m.add_host(HostSpec(hostname=name)))
