@@ -67,7 +67,8 @@ As noted above, D4N is already functioning on a non-upstream variant of Ceph. Si
 ---
 ### Acceptance Criteria
 The project's base goal is to implement the directory functionality from the D4N research code into our upstream Ceph cluster without signifigantly altering the existing upstream abstractions. We consider our most absolute basic goal to be implenting a 'get' function in D3N that utilizes the directory to find data stored across our Ceph network. Upon getting a get request from the client, the RGW should be able to first search its own local cache, and then query the directory in order to find if the object in remote caches, before finally searching the backend data storage.
-	Accomplishing this goal will lead into the next set of objectives for the team, which is to implement read and write functionality using the D4N style directory. Implementing these two additional features with the get function is what we consider to be full completion of the project. Overall, the limited scope of our project is due to our intended goal of producing a foundation for later teams to fully integrate D4N into the upstream code. Producing solid, testable code with good practices in mind is more important than implementing as many portions of D4N as possible.
+
+Accomplishing this goal will lead into the next set of objectives for the team, which is to implement read and write functionality using the D4N style directory. Implementing these two additional features with the get function is what we consider to be full completion of the project. Overall, the limited scope of our project is due to our intended goal of producing a foundation for later teams to fully integrate D4N into the upstream code. Producing solid, testable code with good practices in mind is more important than implementing as many portions of D4N as possible.
 
 ---
 ### Resources
