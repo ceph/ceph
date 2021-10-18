@@ -327,6 +327,38 @@ class UserOp:
 
         return RGWAdminJSONCmd(ze).run(params)
 
+    def info(self, zone : EntityKey, zg : EntityKey, uid = None, access_key = None):
+        ze = ZoneEnv(self.env, zone = zone, zg = zg)
+
+        params = [ 'user',
+                   'info' ]
+
+        opt_arg(params, '--uid', uid )
+        opt_arg(params, '--access-key', access_key)
+
+        return RGWAdminJSONCmd(ze).run(params)
+
+    def rm(self, zone : EntityKey, zg : EntityKey, uid = None, access_key = None):
+        ze = ZoneEnv(self.env, zone = zone, zg = zg)
+
+        params = [ 'user',
+                   'rm' ]
+
+        opt_arg(params, '--uid', uid )
+        opt_arg(params, '--access-key', access_key)
+
+        return RGWAdminCmd(ze).run(params)
+
+    def rm_key(self, zone : EntityKey, zg : EntityKey, access_key = None):
+        ze = ZoneEnv(self.env, zone = zone, zg = zg)
+
+        params = [ 'key',
+                   'remove' ]
+
+        opt_arg(params, '--access-key', access_key)
+
+        return RGWAdminCmd(ze).run(params)
+
 class RGWAM:
     def __init__(self, env):
         self.env = env
@@ -494,6 +526,78 @@ class RGWAM:
 
         realm_token_b = realm_token.to_json().encode('utf-8')
         return (0, 'Realm Token: %s' % base64.b64encode(realm_token_b).decode('utf-8'), '')
+
+    def realm_rm_zone_creds(self, realm_name, realm_token_b64):
+        if not realm_token_b64:
+            print('missing realm token')
+            return False
+
+        realm_token_b = base64.b64decode(realm_token_b64)
+        realm_token_s = realm_token_b.decode('utf-8')
+
+        realm_token = json.loads(realm_token_s)
+
+        access_key = realm_token['access_key']
+
+        try:
+            period_info = self.period_op().get(EntityName(realm_name))
+        except RGWAMException as e:
+            raise RGWAMException('failed to fetch period info', e)
+
+        period = RGWPeriod(period_info)
+
+        master_zg = EntityID(period.master_zonegroup)
+        master_zone = EntityID(period.master_zone)
+
+        logging.info('Period: ' + period.id)
+        logging.info('Master zone: ' + period.master_zone)
+
+        try:
+            zone_info = self.zone_op().get(zone = master_zone)
+        except RGWAMException as e:
+            raise RGWAMException('failed to access master zone', e)
+
+        zone_name = zone_info['name']
+        zone_id = zone_info['id']
+
+        if period.master_zone != zone_id:
+            return (-errno.EINVAL, '', 'Command needs to run on master zone')
+
+        try:
+            user_info = self.user_op().info(master_zone, master_zg, access_key = access_key)
+        except RGWAMException as e:
+            raise RGWAMException('failed to create system user', e)
+
+        user = RGWUser(user_info)
+
+        only_key = True
+
+        for k in user.keys:
+            if k.access_key != access_key:
+                only_key = False
+                break
+
+        success_message = ''
+
+        if only_key:
+            # the only key this user has is the one defined in the token
+            # can remove the user completely
+
+            try:
+                self.user_op().rm(master_zone, master_zg, uid = user.uid)
+            except RGWAMException as e:
+                raise RGWAMException('failed removing user ' + user,uid, e)
+
+            success_message = 'Removed uid ' + user.uid
+        else:
+            try:
+                self.user_op().rm_key(master_zone, master_zg, access_key = access_key)
+            except RGWAMException as e:
+                raise RGWAMException('failed removing access key ' + access_key + '(uid = ' + user.uid + ')', e)
+
+            success_message = 'Removed access key ' + access_key + '(uid = ' + user.uid + ')'
+
+        return (0, success_message, '')
 
     def zone_create(self, realm_token_b64, zonegroup_name = None, zone_name = None, endpoints = None, start_radosgw = True):
         if not realm_token_b64:
