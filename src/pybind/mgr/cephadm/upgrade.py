@@ -2,9 +2,10 @@ import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Optional, Dict, List, Tuple
+from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any
 
 import orchestrator
+from cephadm.registry import Registry
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, MONITORING_STACK_TYPES
@@ -181,6 +182,37 @@ class CephadmUpgrade:
             return f'require_osd_release ({osd_min_name} or {osd_min}) < target {major} - 2; first complete an upgrade to an earlier release'
 
         return None
+
+    def upgrade_ls(self, image: Optional[str], tags: bool) -> Dict:
+        if not image:
+            image = self.mgr.container_image_base
+        reg_name, bare_image = image.split('/', 1)
+        reg = Registry(reg_name)
+        versions = []
+        r: Dict[Any, Any] = {
+            "image": image,
+            "registry": reg_name,
+            "bare_image": bare_image,
+        }
+        ls = reg.get_tags(bare_image)
+        if not tags:
+            for t in ls:
+                if t[0] != 'v':
+                    continue
+                v = t[1:].split('.')
+                if len(v) != 3:
+                    continue
+                if '-' in v[2]:
+                    continue
+                versions.append('.'.join(v))
+            r["versions"] = sorted(
+                versions,
+                key=lambda k: list(map(int, k.split('.'))),
+                reverse=True
+            )
+        else:
+            r["tags"] = sorted(ls)
+        return r
 
     def upgrade_start(self, image: str, version: str) -> str:
         if self.mgr.mode != 'root':
