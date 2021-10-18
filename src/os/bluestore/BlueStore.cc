@@ -13109,7 +13109,7 @@ void BlueStore::_zoned_cleaner_thread()
     } else {
       l.unlock();
       a->set_cleaning_zone(zone_to_clean);
-      _zoned_clean_zone(zone_to_clean);
+      _zoned_clean_zone(zone_to_clean, a, f);
       a->clear_cleaning_zone(zone_to_clean);
       l.lock();
     }
@@ -13118,11 +13118,13 @@ void BlueStore::_zoned_cleaner_thread()
   zoned_cleaner_started = false;
 }
 
-void BlueStore::_zoned_clean_zone(uint64_t zone)
+void BlueStore::_zoned_clean_zone(
+  uint64_t zone,
+  ZonedAllocator *a,
+  ZonedFreelistManager *f
+  )
 {
   dout(10) << __func__ << " cleaning zone 0x" << std::hex << zone << std::dec << dendl;
-  auto a = dynamic_cast<ZonedAllocator*>(alloc);
-  auto f = dynamic_cast<ZonedFreelistManager*>(fm);
 
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_ZONED_CL_INFO);
   std::string zone_start;
