@@ -71,7 +71,12 @@ SegmentedAllocator::Writer::_write(
   Transaction& t,
   ool_record_t& record)
 {
-  bufferlist bl = record.encode(current_segment->segment->get_segment_id(), 0);
+  record_size_t record_size = record.get_encoded_record_length();
+  allocated_to += record_size.mdlength + record_size.dlength;
+  bufferlist bl = record.encode(
+      record_size,
+      current_segment->segment->get_segment_id(),
+      0);
   seastar::promise<> pr;
   current_segment->inflight_writes.emplace_back(pr.get_future());
   LOG_PREFIX(SegmentedAllocator::Writer::_write);
@@ -87,10 +92,9 @@ SegmentedAllocator::Writer::_write(
   // account transactional ool writes before write()
   auto& stats = t.get_ool_write_stats();
   stats.extents.num += record.get_num_extents();
-  auto extent_bytes = record.get_raw_data_size();
-  stats.extents.bytes += extent_bytes;
-  assert(bl.length() > extent_bytes);
-  stats.overhead_bytes += (bl.length() - extent_bytes);
+  stats.extents.bytes += record_size.dlength;
+  stats.header_raw_bytes += record_size.raw_mdlength;
+  stats.header_bytes += record_size.mdlength;
   stats.num_records += 1;
 
   return trans_intr::make_interruptible(
@@ -175,7 +179,6 @@ SegmentedAllocator::Writer::write(
               add_extent_to_write(record, extent);
               it = extents.erase(it);
             }
-            record_size_t rsize = record.get_encoded_record_length();
 
             DEBUGT(
               "writing {} extents to segment {} at {}",
@@ -183,7 +186,6 @@ SegmentedAllocator::Writer::write(
               record.get_num_extents(),
               current_segment->segment->get_segment_id(),
               allocated_to);
-            allocated_to += rsize.mdlength + rsize.dlength;
             return _write(t, record);
           }
         ).si_then([]()
@@ -273,7 +275,9 @@ SegmentedAllocator::Writer::roll_segment(bool set_rolling) {
     });
   }
 
-  return segment_provider.get_segment().safe_then([this](auto segment) {
+  return segment_provider.get_segment(
+    segment_manager.get_device_id()
+  ).safe_then([this](auto segment) {
     return segment_manager.open(segment);
   }).safe_then([this](auto segref) {
     LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);

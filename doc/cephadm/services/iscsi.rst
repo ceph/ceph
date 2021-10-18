@@ -44,7 +44,6 @@ For example:
       trusted_ip_list: "IP_ADDRESS_1,IP_ADDRESS_2,IP_ADDRESS_3,..."
       api_user: API_USERNAME
       api_password: API_PASSWORD
-      api_secure: true
       ssl_cert: |
         -----BEGIN CERTIFICATE-----
         MIIDtTCCAp2gAwIBAgIYMC4xNzc1NDQxNjEzMzc2MjMyXzxvQ7EcMA0GCSqGSIb3
@@ -58,6 +57,11 @@ For example:
         [...]
         -----END PRIVATE KEY-----
 
+.. py:currentmodule:: ceph.deployment.service_spec
+
+.. autoclass:: IscsiServiceSpec
+   :members:
+
 
 The specification can then be applied using:
 
@@ -68,7 +72,16 @@ The specification can then be applied using:
 
 See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
 
+See also: :ref:`orchestrator-cli-service-spec`.
+
+Configuring iSCSI client
+========================
+
+The containerized iscsi service can be used from any host by
+:ref:`configuring-the-iscsi-initiators`, which will use TCP/IP to send SCSI
+commands to the iSCSI target (gateway).
+
 Further Reading
 ===============
 
-* RBD: :ref:`ceph-iscsi`
+* Ceph iSCSI Overview: :ref:`ceph-iscsi`

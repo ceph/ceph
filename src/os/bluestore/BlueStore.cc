@@ -4884,38 +4884,49 @@ void BlueStore::_init_logger()
                         l_bluestore_first, l_bluestore_last);
   b.add_time_avg(l_bluestore_kv_flush_lat, "kv_flush_lat",
 		 "Average kv_thread flush latency",
-		 "fl_l", PerfCountersBuilder::PRIO_INTERESTING);
+		 "kfll", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_time_avg(l_bluestore_kv_commit_lat, "kv_commit_lat",
-		 "Average kv_thread commit latency");
+		 "Average kv_thread commit latency",
+		 "kcol", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_kv_sync_lat, "kv_sync_lat",
 		 "Average kv_sync thread latency",
-		 "ks_l", PerfCountersBuilder::PRIO_INTERESTING);
+		 "kscl", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_time_avg(l_bluestore_kv_final_lat, "kv_final_lat",
 		 "Average kv_finalize thread latency",
-		 "kf_l", PerfCountersBuilder::PRIO_INTERESTING);
+		 "kfll", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_time_avg(l_bluestore_state_prepare_lat, "state_prepare_lat",
-    "Average prepare state latency");
+    "Average prepare state latency",
+    "sprl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_aio_wait_lat, "state_aio_wait_lat",
 		 "Average aio_wait state latency",
-		 "io_l", PerfCountersBuilder::PRIO_INTERESTING);
+		 "sawl", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_time_avg(l_bluestore_state_io_done_lat, "state_io_done_lat",
-    "Average io_done state latency");
+    "Average io_done state latency",
+    "sidl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_kv_queued_lat, "state_kv_queued_lat",
-    "Average kv_queued state latency");
+    "Average kv_queued state latency",
+    "skql", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_kv_committing_lat, "state_kv_commiting_lat",
-    "Average kv_commiting state latency");
+    "Average kv_commiting state latency",
+    "skcl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_kv_done_lat, "state_kv_done_lat",
-    "Average kv_done state latency");
+    "Average kv_done state latency",
+    "skdl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_deferred_queued_lat, "state_deferred_queued_lat",
-    "Average deferred_queued state latency");
+    "Average deferred_queued state latency",
+    "sdql", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_deferred_aio_wait_lat, "state_deferred_aio_wait_lat",
-    "Average aio_wait state latency");
+    "Average aio_wait state latency",
+    "sdal", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_deferred_cleanup_lat, "state_deferred_cleanup_lat",
-    "Average cleanup state latency");
+    "Average cleanup state latency",
+    "sdcl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_finishing_lat, "state_finishing_lat",
-    "Average finishing state latency");
+    "Average finishing state latency",
+    "sfnl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat",
-    "Average done state latency");
+    "Average done state latency",
+    "sdnl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_throttle_lat, "throttle_lat",
 		 "Average submit throttle latency",
 		 "th_l", PerfCountersBuilder::PRIO_CRITICAL);
@@ -4929,15 +4940,20 @@ void BlueStore::_init_logger()
 		 "Average read latency",
 		 "r_l", PerfCountersBuilder::PRIO_CRITICAL);
   b.add_time_avg(l_bluestore_read_onode_meta_lat, "read_onode_meta_lat",
-    "Average read onode metadata latency");
+    "Average read onode metadata latency",
+    "roml", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_read_wait_aio_lat, "read_wait_aio_lat",
-    "Average read latency");
+    "Average read latency",
+    "rwal", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_compress_lat, "compress_lat",
-    "Average compress latency");
+    "Average compress latency",
+    "_cpl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_decompress_lat, "decompress_lat",
-    "Average decompress latency");
+    "Average decompress latency",
+    "dcpl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_csum_lat, "csum_lat",
-    "Average checksum latency");
+    "Average checksum latency",
+    "csml", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_bluestore_compress_success_count, "compress_success_count",
     "Sum for beneficial compress ops");
   b.add_u64_counter(l_bluestore_compress_rejected_count, "compress_rejected_count",
@@ -4968,9 +4984,11 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_pinned_onodes, "bluestore_pinned_onodes",
             "Number of pinned onodes in cache");
   b.add_u64_counter(l_bluestore_onode_hits, "bluestore_onode_hits",
-		    "Sum for onode-lookups hit in the cache");
+		    "Count of onode cache lookup hits",
+		    "o_ht", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_bluestore_onode_misses, "bluestore_onode_misses",
-		    "Sum for onode-lookups missed in the cache");
+		    "Count of onode cache lookup misses",
+		    "o_ms", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_bluestore_onode_shard_hits, "bluestore_onode_shard_hits",
 		    "Sum for onode-shard lookups hit in the cache");
   b.add_u64_counter(l_bluestore_onode_shard_misses,
@@ -5031,25 +5049,34 @@ void BlueStore::_init_logger()
   b.add_u64_counter(l_bluestore_read_eio, "bluestore_read_eio",
                     "Read EIO errors propagated to high level callers");
   b.add_u64_counter(l_bluestore_reads_with_retries, "bluestore_reads_with_retries",
-                    "Read operations that required at least one retry due to failed checksum validation");
+                    "Read operations that required at least one retry due to failed checksum validation",
+		    "rd_r", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluestore_fragmentation, "bluestore_fragmentation_micros",
             "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000");
   b.add_time_avg(l_bluestore_omap_seek_to_first_lat, "omap_seek_to_first_lat",
-    "Average omap iterator seek_to_first call latency");
+    "Average omap iterator seek_to_first call latency",
+    "osfl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_omap_upper_bound_lat, "omap_upper_bound_lat",
-    "Average omap iterator upper_bound call latency");
+    "Average omap iterator upper_bound call latency",
+    "oubl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_omap_lower_bound_lat, "omap_lower_bound_lat",
-    "Average omap iterator lower_bound call latency");
+    "Average omap iterator lower_bound call latency",
+    "olbl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_omap_next_lat, "omap_next_lat",
-    "Average omap iterator next call latency");
+    "Average omap iterator next call latency",
+    "onxl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_omap_get_keys_lat, "omap_get_keys_lat",
-    "Average omap get_keys call latency");
+    "Average omap get_keys call latency",
+    "ogkl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_omap_get_values_lat, "omap_get_values_lat",
-    "Average omap get_values call latency");
+    "Average omap get_values call latency",
+    "ogvl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_clist_lat, "clist_lat",
-    "Average collection listing latency");
+    "Average collection listing latency",
+    "cl_l", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_remove_lat, "remove_lat",
-    "Average removal latency");
+    "Average removal latency",
+    "rm_l", PerfCountersBuilder::PRIO_USEFUL);
 
   // Resulting size axis configuration for op histograms, values are in bytes
   PerfHistogramCommon::axis_config_d alloc_hist_x_axis_config{
@@ -13654,7 +13681,7 @@ void BlueStore::_do_write_small(
 				    end_offs - offset + head_pad + tail_pad);
 	}
 	if (head_pad &&
-	    o->extent_map.has_any_lextents(offset - head_pad, chunk_size)) {
+	    o->extent_map.has_any_lextents(offset - head_pad, head_pad)) {
 	  head_pad = 0;
 	}
 	if (tail_pad && o->extent_map.has_any_lextents(end_offs, tail_pad)) {

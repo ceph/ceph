@@ -20,8 +20,11 @@ using std::string_view;
 
 namespace crimson::os::seastore {
 
-Cache::Cache(SegmentManager &segment_manager) :
-  segment_manager(segment_manager)
+Cache::Cache(
+  ExtentReader &reader,
+  segment_off_t block_size)
+  : reader(reader),
+    block_size(block_size)
 {
   register_metrics();
 }
@@ -404,6 +407,52 @@ void Cache::register_metrics()
   }
 
   /**
+   * Record header fullness
+   */
+  auto record_type_label = sm::label("record_type");
+  using namespace std::literals::string_view_literals;
+  const string_view record_type_names[] = {
+    "INLINE"sv,
+    "OOL"sv,
+  };
+  for (auto& [src, src_label] : labels_by_src) {
+    if (src == src_t::READ) {
+      // READ transaction won't commit
+      continue;
+    }
+    auto& record_header_fullness = get_by_src(
+        stats.record_header_fullness_by_src, src);
+    for (auto& record_type_name : record_type_names) {
+      auto& fill_stat = [&record_type_name,
+                         &record_header_fullness]() -> fill_stat_t& {
+        if (record_type_name == "INLINE") {
+          return record_header_fullness.inline_stats;
+        } else {
+          assert(record_type_name == "OOL");
+          return record_header_fullness.ool_stats;
+        }
+      }();
+      metrics.add_group(
+        "cache",
+        {
+          sm::make_counter(
+            "record_header_filled_bytes",
+            fill_stat.filled_bytes,
+            sm::description("filled bytes of record header"),
+            {src_label, record_type_label(record_type_name)}
+          ),
+          sm::make_counter(
+            "record_header_total_bytes",
+            fill_stat.total_bytes,
+            sm::description("total bytes of record header"),
+            {src_label, record_type_label(record_type_name)}
+          ),
+        }
+      );
+    }
+  }
+
+  /**
    * Cached extents (including placeholders)
    *
    * Dirty extents
@@ -676,7 +725,12 @@ void Cache::mark_transaction_conflicted(
     efforts.fresh_ool_written.extents += ool_stats.extents.num;
     efforts.fresh_ool_written.bytes += ool_stats.extents.bytes;
     efforts.num_ool_records += ool_stats.num_records;
-    efforts.ool_record_overhead_bytes += ool_stats.overhead_bytes;
+    efforts.ool_record_overhead_bytes += ool_stats.header_bytes;
+
+    auto& record_header_fullness = get_by_src(
+        stats.record_header_fullness_by_src, t.get_src());
+    record_header_fullness.ool_stats.filled_bytes += ool_stats.header_raw_bytes;
+    record_header_fullness.ool_stats.total_bytes += ool_stats.header_bytes;
 
     if (t.get_src() == Transaction::src_t::CLEANER) {
       // CLEANER transaction won't contain any onode tree operations
@@ -940,12 +994,21 @@ record_t Cache::prepare_record(Transaction &t)
   auto& ool_stats = t.get_ool_write_stats();
   ceph_assert(ool_stats.extents.num == t.ool_block_list.size());
   efforts.num_ool_records += ool_stats.num_records;
-  efforts.ool_record_overhead_bytes += ool_stats.overhead_bytes;
+  efforts.ool_record_overhead_bytes += ool_stats.header_bytes;
+
+  auto& record_header_fullness = get_by_src(
+      stats.record_header_fullness_by_src, t.get_src());
+  record_header_fullness.ool_stats.filled_bytes += ool_stats.header_raw_bytes;
+  record_header_fullness.ool_stats.total_bytes += ool_stats.header_bytes;
+
   auto record_size = get_encoded_record_length(
-      record, segment_manager.get_block_size());
+      record, block_size);
   auto inline_overhead =
       record_size.mdlength + record_size.dlength - record.get_raw_data_size();
   efforts.inline_record_overhead_bytes += inline_overhead;
+  record_header_fullness.inline_stats.filled_bytes += record_size.raw_mdlength;
+  record_header_fullness.inline_stats.total_bytes += record_size.mdlength;
+
   return record;
 }
 

@@ -6,7 +6,7 @@ Exercise the MDS's auto repair functions
 import logging
 import time
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 

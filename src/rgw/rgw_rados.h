@@ -9,6 +9,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
+#include "include/random.h"
 #include "common/RefCountedObj.h"
 #include "common/ceph_time.h"
 #include "common/Timer.h"
@@ -203,6 +204,7 @@ public:
 
   RGWObjState *get_state(const rgw_obj& obj);
 
+  void set_compressed(const rgw_obj& obj);
   void set_atomic(rgw_obj& obj);
   void set_prefetch_data(const rgw_obj& obj);
   void invalidate(const rgw_obj& obj);
@@ -355,7 +357,7 @@ class RGWRados
   int open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx&  io_ctx,
 		    bool mostly_omap);
 
-  std::atomic<int64_t> max_req_id = { 0 };
+
   ceph::mutex lock = ceph::make_mutex("rados_timer_lock");
   SafeTimer *timer;
 
@@ -506,7 +508,7 @@ public:
   }
 
   uint64_t get_new_req_id() {
-    return ++max_req_id;
+    return ceph::util::generate_random_number<uint64_t>();
   }
 
   librados::IoCtx* get_lc_pool_ctx() {
@@ -1316,6 +1318,10 @@ public:
   void set_prefetch_data(void *ctx, const rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
     rctx->set_prefetch_data(obj);
+  }
+  void set_compressed(void *ctx, const rgw_obj& obj) {
+    RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
+    rctx->set_compressed(obj);
   }
   int decode_policy(const DoutPrefixProvider *dpp, bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, int shard_id, std::string *bucket_ver, std::string *master_ver,

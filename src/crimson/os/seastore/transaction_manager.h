@@ -71,7 +71,8 @@ public:
     JournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
-    ExtentPlacementManagerRef&& epm);
+    ExtentPlacementManagerRef&& epm,
+    ExtentReader& scanner);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -499,17 +500,35 @@ public:
     return segment_cleaner->stat();
   }
 
+  void add_segment_manager(SegmentManager* sm) {
+    LOG_PREFIX(TransactionManager::add_segment_manager);
+    DEBUG("adding segment manager {}", sm->get_device_id());
+    scanner.add_segment_manager(sm);
+    epm->add_allocator(
+      device_type_t::SEGMENTED,
+      std::make_unique<SegmentedAllocator>(
+	*segment_cleaner,
+	*sm,
+	*lba_manager,
+	*journal,
+	*cache));
+  }
+
   ~TransactionManager();
 
 private:
   friend class Transaction;
 
+  // although there might be multiple devices backing seastore,
+  // only one of them are supposed to hold the journal. This
+  // segment manager is that device
   SegmentManager &segment_manager;
   SegmentCleanerRef segment_cleaner;
   CacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
   ExtentPlacementManagerRef epm;
+  ExtentReader& scanner;
 
   WritePipeline write_pipeline;
 

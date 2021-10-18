@@ -342,7 +342,19 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     size=active,
                     last_refresh=now,
                 )
-
+        if service_type == 'osd' or service_type is None:
+            # OSDs
+            all_osds = self.rook_cluster.get_osds()
+            svc = 'osd'
+            spec[svc] = orchestrator.ServiceDescription(
+                spec=DriveGroupSpec(
+                    service_type='osd',
+                    placement=PlacementSpec(count=len(all_osds), hosts=[osd.metadata.labels['topology-location-host'] for osd in all_osds]),
+                ),
+                size=len(all_osds),
+                last_refresh=now,
+            running= sum(osd.status.phase == 'Running' for osd in all_osds)
+            )
         for dd in self._list_daemons():
             if dd.service_name() not in spec:
                 continue
@@ -416,6 +428,20 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return result
 
+    def _get_pool_params(self) -> Tuple[int, str]:
+        num_replicas = self.get_ceph_option('osd_pool_default_size')
+        assert type(num_replicas) is int
+
+        leaf_type_id = self.get_ceph_option('osd_crush_chooseleaf_type')
+        assert type(leaf_type_id) is int
+        crush = self.get('osd_map_crush')
+        leaf_type = 'host'
+        for t in crush['types']:
+            if t['type_id'] == leaf_type_id:
+                leaf_type = t['name']
+                break
+        return num_replicas, leaf_type
+
     @handle_orch_error
     def remove_service(self, service_name: str) -> str:
         service_type, service_name = service_name.split('.', 1)
@@ -439,21 +465,13 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def apply_mds(self, spec):
         # type: (ServiceSpec) -> str
-        return self.rook_cluster.apply_filesystem(spec)
+        num_replicas, leaf_type = self._get_pool_params()
+        return self.rook_cluster.apply_filesystem(spec, num_replicas, leaf_type)
 
     @handle_orch_error
     def apply_rgw(self, spec):
         # type: (RGWSpec) -> str
-        num_replicas = self.get_ceph_option('osd_pool_default_size')
-        assert type(num_replicas) is int
-        leaf_type_id = self.get_ceph_option('osd_crush_chooseleaf_type')
-        assert type(leaf_type_id) is int
-        crush = self.get('osd_map_crush')
-        leaf_type = 'host'
-        for t in crush['types']:
-            if t['type_id'] == leaf_type_id:
-                leaf_type = t['name']
-                break
+        num_replicas, leaf_type = self._get_pool_params()
         return self.rook_cluster.apply_objectstore(spec, num_replicas, leaf_type)
 
     @handle_orch_error

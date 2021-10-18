@@ -1,0 +1,5 @@
+tasks:
+- cephadm.shell:
+    host.a:
+      - ceph fs dump
+- fs.post_upgrade_checks:

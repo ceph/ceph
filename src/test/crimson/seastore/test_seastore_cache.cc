@@ -21,13 +21,18 @@ namespace {
 
 struct cache_test_t : public seastar_test_suite_t {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
+  ExtentReaderRef reader;
   Cache cache;
-  paddr_t current{0, 0};
+  paddr_t current;
   journal_seq_t seq;
 
   cache_test_t()
     : segment_manager(segment_manager::create_test_ephemeral()),
-      cache(*segment_manager) {}
+      reader(new ExtentReader()),
+      cache(*reader, segment_manager->get_block_size()),
+      current(segment_id_t(segment_manager->get_device_id(), 0), 0) {
+    reader->add_segment_manager(segment_manager.get());
+  }
 
   seastar::future<paddr_t> submit_transaction(
     TransactionRef t) {
@@ -42,7 +47,11 @@ struct cache_test_t : public seastar_test_suite_t {
 		segment_manager->get_segment_size());
     if (current.offset + (segment_off_t)bl.length() >
 	segment_manager->get_segment_size())
-      current = paddr_t{current.segment + 1, 0};
+      current = paddr_t{
+	segment_id_t(
+	  current.segment.device_id(),
+	  current.segment.device_segment_id() + 1),
+	0};
 
     auto prev = current;
     current.offset += bl.length();

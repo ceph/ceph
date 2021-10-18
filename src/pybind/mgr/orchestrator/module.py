@@ -603,10 +603,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 else:
                     refreshed = nice_delta(now, s.last_refresh, ' ago')
 
+                if s.spec.service_type == 'osd':
+                    running = str(s.running)
+                else:
+                    running = '{}/{}'.format(s.running, s.size)
+
                 table.add_row((
                     s.spec.service_name(),
                     s.get_port_summary(),
-                    '%d/%d' % (s.running, s.size),
+                    running,
                     refreshed,
                     nice_delta(now, s.created),
                     pl,
@@ -857,7 +862,7 @@ Usage:
             table.right_padding_width = 2
             for osd in sorted(report, key=lambda o: o.osd_id):
                 table.add_row([osd.osd_id, osd.hostname, osd.drain_status_human(),
-                               osd.get_pg_count(), osd.replace, osd.replace, osd.drain_started_at])
+                               osd.get_pg_count(), osd.replace, osd.force, osd.drain_started_at])
             out = table.get_string()
 
         return HandleCommandResult(stdout=out)

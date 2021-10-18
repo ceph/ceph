@@ -205,7 +205,7 @@ int RadosUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, u
 
 int RadosUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-    return store->ctl()->user->get_info_by_uid(dpp, info.user_id, &info, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker));
+    return store->ctl()->user->get_info_by_uid(dpp, info.user_id, &info, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker).set_attrs(&attrs));
 }
 
 int RadosUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info)
@@ -1571,6 +1571,11 @@ int RadosObject::copy_obj_data(RGWObjectCtx& rctx, Bucket* dest_bucket,
 					  dest_bucket->get_info().placement_rule, read_op,
 					  obj_size - 1, dest_obj, NULL, mtime, attrset, 0,
 					  real_time(), NULL, dpp, y);
+}
+
+void RadosObject::set_compressed(RGWObjectCtx* rctx) {
+  rgw_obj obj = get_obj();
+  store->getRados()->set_compressed(rctx, obj);
 }
 
 void RadosObject::set_atomic(RGWObjectCtx* rctx) const

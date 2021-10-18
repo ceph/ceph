@@ -14,7 +14,8 @@ from IPy import IP
 from teuthology.contextutil import safe_while
 from teuthology.misc import get_file, write_file
 from teuthology.orchestra import run
-from teuthology.orchestra.run import CommandFailedError, ConnectionLostError, Raw
+from teuthology.orchestra.run import Raw
+from teuthology.exceptions import CommandFailedError, ConnectionLostError
 
 from tasks.cephfs.filesystem import Filesystem
 
@@ -55,6 +56,8 @@ class CephFSMount(object):
             self.hostfs_mntpt = os.path.join(self.test_dir, f'mnt.{self.client_id}')
         self.cephfs_name = cephfs_name
         self.cephfs_mntpt = cephfs_mntpt
+
+        self.cluster_name = 'ceph' # TODO: use config['cluster']
 
         self.fs = None
 
@@ -124,8 +127,7 @@ class CephFSMount(object):
         self._netns_name = name
 
     def assert_that_ceph_fs_exists(self):
-        output = self.client_remote.run(args='ceph fs ls', stdout=StringIO()).\
-            stdout.getvalue()
+        output = self.ctx.managers[self.cluster_name].raw_cluster_cmd("fs", "ls")
         if self.cephfs_name:
             assert self.cephfs_name in output, \
                 'expected ceph fs is not present on the cluster'
@@ -565,6 +567,7 @@ class CephFSMount(object):
         raise NotImplementedError()
 
     def get_keyring_path(self):
+        # N.B.: default keyring is /etc/ceph/ceph.keyring; see ceph.py and generate_caps
         return '/etc/ceph/ceph.client.{id}.keyring'.format(id=self.client_id)
 
     def get_key_from_keyfile(self):

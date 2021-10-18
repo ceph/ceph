@@ -233,6 +233,7 @@ RGWObjState::RGWObjState(const RGWObjState& rhs) : obj (rhs.obj) {
   is_olh = rhs.is_olh;
   objv_tracker = rhs.objv_tracker;
   pg_ver = rhs.pg_ver;
+  compressed = rhs.compressed;
 }
 
 RGWObjState *RGWObjectCtx::get_state(const rgw_obj& obj) {
@@ -251,6 +252,12 @@ RGWObjState *RGWObjectCtx::get_state(const rgw_obj& obj) {
     lock.unlock();
   }
   return result;
+}
+
+void RGWObjectCtx::set_compressed(const rgw_obj& obj) {
+  std::unique_lock wl{lock};
+  assert (!obj.empty());
+  objs_state[obj].compressed = true;
 }
 
 void RGWObjectCtx::set_atomic(rgw_obj& obj) {
@@ -272,13 +279,15 @@ void RGWObjectCtx::invalidate(const rgw_obj& obj) {
   }
   bool is_atomic = iter->second.is_atomic;
   bool prefetch_data = iter->second.prefetch_data;
+  bool compressed = iter->second.compressed;
 
   objs_state.erase(iter);
 
-  if (is_atomic || prefetch_data) {
+  if (is_atomic || prefetch_data || compressed) {
     auto& state = objs_state[obj];
     state.is_atomic = is_atomic;
     state.prefetch_data = prefetch_data;
+    state.compressed = compressed;
   }
 }
 
@@ -3090,6 +3099,10 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     /* if we want to overwrite the data, we also want to overwrite the
        xattrs, so just remove the object */
     op.write_full(*meta.data);
+    if (state->compressed) {
+      uint32_t alloc_hint_flags = librados::ALLOC_HINT_FLAG_INCOMPRESSIBLE;
+      op.set_alloc_hint2(0, 0, alloc_hint_flags);
+    }
   }
 
   string etag;

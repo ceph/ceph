@@ -337,6 +337,7 @@ protected:
       virtual int set_acl(const RGWAccessControlPolicy& acl) override { acls = acl; return 0; }
       virtual void set_atomic(RGWObjectCtx* rctx) const override;
       virtual void set_prefetch_data(RGWObjectCtx* rctx) override;
+      virtual void set_compressed(RGWObjectCtx* rctx) override;
 
       virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, RGWObjState **state, optional_yield y, bool follow_olh = true) override;
       virtual int set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, Attrs* setattrs, Attrs* delattrs, optional_yield y, rgw_obj* target_obj = NULL) override;

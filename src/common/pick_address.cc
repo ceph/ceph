@@ -294,13 +294,12 @@ void pick_addresses(CephContext *cct, int needs)
 }
 #endif	// !WITH_SEASTAR
 
-static int fill_in_one_address(
+static std::optional<entity_addr_t> get_one_address(
   CephContext *cct,
   const struct ifaddrs *ifa,
   unsigned ipv,
   const string &networks,
   const string &interfaces,
-  entity_addrvec_t *addrs,
   int numa_node = -1)
 {
   const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, ipv,
@@ -308,7 +307,7 @@ static int fill_in_one_address(
 							interfaces,
 							numa_node);
   if (!found) {
-    std::string ip_type = "";
+    std::string_view ip_type;
     if ((ipv & CEPH_PICK_ADDRESS_IPV4) && (ipv & CEPH_PICK_ADDRESS_IPV6)) {
       ip_type = "IPv4 or IPv6";
     } else if (ipv & CEPH_PICK_ADDRESS_IPV4) {
@@ -318,7 +317,7 @@ static int fill_in_one_address(
     }
     lderr(cct) << "unable to find any " << ip_type << " address in networks '"
                << networks << "' interfaces '" << interfaces << "'" << dendl;
-    return -1;
+    return {};
   }
 
   char buf[INET6_ADDRSTRLEN];
@@ -334,16 +333,15 @@ static int fill_in_one_address(
 		    NI_NUMERICHOST);
   if (err != 0) {
     lderr(cct) << "unable to convert chosen address to string: " << gai_strerror(err) << dendl;
-    return -1;
+    return {};
   }
 
   entity_addr_t addr;
-  bool r = addr.parse(buf);
-  if (!r) {
-    return -1;
+  if (addr.parse(buf)) {
+    return addr;
+  } else {
+    return {};
   }
-  addrs->v.push_back(addr);
-  return 0;
 }
 
 int pick_addresses(
@@ -417,31 +415,19 @@ int pick_addresses(
   }
   if (addr.is_blank_ip() &&
       !networks.empty()) {
-    int ipv4_r = !(ipv & CEPH_PICK_ADDRESS_IPV4) ? 0 : -1;
-    int ipv6_r = !(ipv & CEPH_PICK_ADDRESS_IPV6) ? 0 : -1;
     // note: pass in ipv to filter the matching addresses
-    if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
-	(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
-      ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
-				   networks, interfaces,
-				   addrs,
-				   preferred_numa_node);
-    }
-    if (ipv & CEPH_PICK_ADDRESS_IPV6) {
-      ipv6_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV6,
-				   networks, interfaces,
-				   addrs,
-				   preferred_numa_node);
-    }
-    if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
-	!(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
-      ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
-				   networks, interfaces,
-				   addrs,
-				   preferred_numa_node);
-    }
-    if (ipv4_r < 0 || ipv6_r < 0) {
-      return -1;
+    for (auto pick_mask :  {CEPH_PICK_ADDRESS_IPV4, CEPH_PICK_ADDRESS_IPV6}) {
+      if (ipv & pick_mask) {
+        auto ip_addr = get_one_address(cct, ifa, pick_mask,
+                                       networks, interfaces,
+                                       preferred_numa_node);
+        if (ip_addr) {
+          addrs->v.push_back(*ip_addr);
+        } else {
+          // picked but not found
+          return -1;
+        }
+      }
     }
   }
 
@@ -450,21 +436,22 @@ int pick_addresses(
   // ipv4 and/or ipv6?
   if (addrs->v.empty()) {
     addr.set_type(entity_addr_t::TYPE_MSGR2);
-    if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
-	(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
-      addr.set_family(AF_INET);
-      addrs->v.push_back(addr);
-    }
-    if (ipv & CEPH_PICK_ADDRESS_IPV6) {
-      addr.set_family(AF_INET6);
-      addrs->v.push_back(addr);
-    }
-    if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
-	!(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
-      addr.set_family(AF_INET);
-      addrs->v.push_back(addr);
+    for (auto pick_mask : {CEPH_PICK_ADDRESS_IPV4, CEPH_PICK_ADDRESS_IPV6}) {
+      if (ipv & pick_mask) {
+        addr.set_family(pick_mask == CEPH_PICK_ADDRESS_IPV4 ? AF_INET : AF_INET6);
+        addrs->v.push_back(addr);
+      }
     }
   }
+
+  std::sort(addrs->v.begin(), addrs->v.end(),
+	    [flags] (entity_addr_t& lhs, entity_addr_t& rhs) {
+	      if (flags & CEPH_PICK_ADDRESS_PREFER_IPV4) {
+		return lhs.is_ipv4() && rhs.is_ipv6();
+	      } else {
+		return lhs.is_ipv6() && rhs.is_ipv4();
+	      }
+	    });
 
   // msgr2 or legacy or both?
   if (msgrv == (CEPH_PICK_ADDRESS_MSGR1 | CEPH_PICK_ADDRESS_MSGR2)) {

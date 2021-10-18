@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 const pages = {
   index: { url: '#/services', id: 'cd-services' },
-  create: { url: '#/services/create', id: 'cd-service-form' }
+  create: { url: '#/services/(modal:create)', id: 'cd-service-form' }
 };
 
 export class ServicesPageHelper extends PageHelper {
@@ -30,7 +30,6 @@ export class ServicesPageHelper extends PageHelper {
     return this.selectOption('service_type', serviceType);
   }
 
-  @PageHelper.restrictTo(pages.index.url)
   clickServiceTab(serviceName: string, tabName: string) {
     this.getExpandCollapseElement(serviceName).click();
     cy.get('cd-service-details').within(() => {
@@ -38,7 +37,6 @@ export class ServicesPageHelper extends PageHelper {
     });
   }
 
-  @PageHelper.restrictTo(pages.create.url)
   addService(serviceType: string, exist?: boolean, count = '1') {
     cy.get(`${this.pages.create.id}`).within(() => {
       this.selectServiceType(serviceType);
@@ -73,7 +71,6 @@ export class ServicesPageHelper extends PageHelper {
       });
   }
 
-  @PageHelper.restrictTo(pages.index.url)
   checkExist(serviceName: string, exist: boolean) {
     this.getTableCell(this.columnIndex.service_name, serviceName).should(($elements) => {
       const services = $elements.map((_, el) => el.textContent).get();
@@ -85,7 +82,6 @@ export class ServicesPageHelper extends PageHelper {
     });
   }
 
-  @PageHelper.restrictTo(pages.index.url)
   deleteService(serviceName: string) {
     const getRow = this.getTableCell.bind(this, this.columnIndex.service_name);
     getRow(serviceName).click();

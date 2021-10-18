@@ -17,23 +17,35 @@ describe('Hosts page', () => {
 
     it('should not add an exsiting host', function () {
       const hostname = Cypress._.sample(this.hosts).name;
-      hosts.navigateTo('create');
+      hosts.navigateTo('add');
       hosts.add(hostname, true);
     });
 
-    it('should delete a host and add it back', function () {
-      const host = Cypress._.last(this.hosts)['name'];
-      hosts.delete(host);
+    it('should drain and delete a host and then add it back', function () {
+      const hostname = Cypress._.last(this.hosts)['name'];
+
+      // should drain the host first before deleting
+      hosts.editLabels(hostname, ['_no_schedule'], true);
+      hosts.clickTab('cd-host-details', hostname, 'Daemons');
+      cy.get('cd-host-details').within(() => {
+        // draining will take some time to complete.
+        // since we don't know how many daemons will be
+        // running in this host in future putting the wait
+        // to 15s
+        cy.wait(15000);
+        hosts.getTableCount('total').should('be.eq', 0);
+      });
+      hosts.delete(hostname);
 
       // add it back
-      hosts.navigateTo('create');
-      hosts.add(host);
-      hosts.checkExist(host, true);
+      hosts.navigateTo('add');
+      hosts.add(hostname);
+      hosts.checkExist(hostname, true);
     });
 
     it('should display inventory', function () {
       for (const host of this.hosts) {
-        hosts.clickHostTab(host.name, 'Physical Disks');
+        hosts.clickTab('cd-host-details', host.name, 'Physical Disks');
         cy.get('cd-host-details').within(() => {
           hosts.getTableCount('total').should('be.gte', 0);
         });
@@ -42,7 +54,7 @@ describe('Hosts page', () => {
 
     it('should display daemons', function () {
       for (const host of this.hosts) {
-        hosts.clickHostTab(host.name, 'Daemons');
+        hosts.clickTab('cd-host-details', host.name, 'Daemons');
         cy.get('cd-host-details').within(() => {
           hosts.getTableCount('total').should('be.gte', 0);
         });
