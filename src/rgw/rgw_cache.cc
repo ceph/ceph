@@ -13,7 +13,7 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
 {
 
   std::shared_lock rl{lock};
-  std::unique_lock wl{lock, std::defer_lock};
+  std::unique_lock wl{lock, std::defer_lock}; // may be promoted to write lock
   if (!enabled) {
     return -ENOENT;
   }
