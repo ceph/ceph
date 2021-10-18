@@ -74,7 +74,14 @@ See :ref:`orchestrator-cli-placement-spec` for details of the placement specific
 
 See also: :ref:`orchestrator-cli-service-spec`.
 
+Configuring iSCSI client
+========================
+
+The containerized iscsi service can be used from any host by
+:ref:`configuring-the-iscsi-initiators`, which will use TCP/IP to send SCSI
+commands to the iSCSI target (gateway).
+
 Further Reading
 ===============
 
-* RBD: :ref:`ceph-iscsi`
+* Ceph iSCSI Overview: :ref:`ceph-iscsi`
