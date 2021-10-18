@@ -3,6 +3,7 @@
 OSDS=1
 HOSTS=0
 SKIP_LOOP=0
+SKIP_BOOTSTRAP=0
 
 function print_usage() {
 	echo "./bootstrap.sh [OPTIONS]"
@@ -12,12 +13,13 @@ function print_usage() {
 	echo "    --update-ceph-image: create/update ceph image"
 	echo "    --update-box-image: create/update cephadm box image"
 	echo "    --skip-create-loop: skip creating loopback device"
+	echo "    --skip-bootstrap: skip deploying the containers"
 	echo "    -l | --list-hosts: list available cephad-box hosts/seed"
 	echo "    -h | --help: this help :)"
 }
 
 function docker-ips() {
-	docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} %tab% {{.Name}}' $(docker ps -aq) | sed 's#%tab%#\t#g' | sed 's#/##g' | sort -t . -k 1,1n -k 2,2n -k 3,3n -k 4,4n
+	docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} %tab% {{.Name}} %tab% {{.Config.Hostname}}' $(docker ps -aq) | sed 's#%tab%#\t#g' | sed 's#/##g' | sort -t . -k 1,1n -k 2,2n -k 3,3n -k 4,4n
 }
 
 while [ $# -ge 1 ]; do
@@ -27,13 +29,16 @@ case $1 in
 	exit
 	;;
     -l | --list-hosts) # TODO remove when ceph-ci updated
-    docker-ips | grep box
+	echo -e "IP\t\tName\t\t Hostname"
+	docker-ips | grep box
 	exit
         ;;
     --update-box-image)
+	echo Updating box image
 	docker build -t cephadm-box -f Dockerfile .
         ;;
     --update-ceph-image) # TODO remove when ceph-ci updated
+	echo Updating ceph image
 	source ./get_ceph_image.sh
         ;;
     --hosts)
@@ -47,7 +52,12 @@ case $1 in
 	shift
         ;;
     --skip-create-loop)
+	echo Skiping loop creation
         SKIP_LOOP=1
+        ;;
+    --skip-bootstrap)
+	echo Skiping bootstrap of containers
+        SKIP_BOOTSTRAP=1
         ;;
 esac
 shift
@@ -72,24 +82,27 @@ then
 fi
 
 
-# loops should be created before starting docker-compose or else docker could
-# not find lvs
-docker-compose down
-docker-compose up --scale hosts=$HOSTS -d
-sleep 3
+if [[ $SKIP_BOOTSTRAP -eq 0 ]]
+then
+	# loops should be created before starting docker-compose or else docker could
+	# not find lvs
+	docker-compose down
+	docker-compose up --scale hosts=$HOSTS -d
+	sleep 3
 
-IPS=$(docker-ips | grep "box_hosts" | awk '{ print $1 }')
-echo "IPS: "
-echo $IPS
+	IPS=$(docker-ips | grep "box_hosts" | awk '{ print $1 }')
+	echo "IPS: "
+	echo $IPS
 
-sudo sysctl net.ipv4.conf.all.forwarding=1
-sudo iptables -P FORWARD ACCEPT
+	sudo sysctl net.ipv4.conf.all.forwarding=1
+	sudo iptables -P FORWARD ACCEPT
 
-for ((i=1;i<=$HOSTS;i++))
-do
-	docker-compose exec --index=$i hosts /cephadm/box/setup_ssh.sh run-sshd
-done
+	for ((i=1;i<=$HOSTS;i++))
+	do
+		docker-compose exec --index=$i hosts /cephadm/box/setup_ssh.sh run-sshd
+	done
 
-docker-compose exec -e NUM_OSDS=${OSDS} seed /cephadm/box/start
+	docker-compose exec -e NUM_OSDS=${OSDS} seed /cephadm/box/start
 
-docker-compose exec -e HOST_IPS="${IPS}" seed /cephadm/box/setup_ssh.sh copy-cluster-ssh-key
+	docker-compose exec -e HOST_IPS="${IPS}" seed /cephadm/box/setup_ssh.sh copy-cluster-ssh-key
+fi
