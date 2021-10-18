@@ -3547,6 +3547,7 @@ private:
   int  copy_allocator(Allocator* src_alloc, Allocator *dest_alloc, uint64_t* p_num_entries);
   int  store_allocator(Allocator* allocator);
   int  invalidate_allocation_file_on_bluefs();
+  int  __restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
   int  restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
   int  read_allocation_from_drive_on_startup();
   int  reconstruct_allocations(Allocator* allocator, read_alloc_stats_t &stats);
