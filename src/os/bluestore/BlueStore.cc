@@ -12309,26 +12309,22 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 #ifdef HAVE_LIBZBD
   if (bdev->is_smr()) {
     for (auto& i : txc->old_zone_offset_refs) {
-      for (auto& j : i.second) {
-	dout(20) << __func__ << " rm ref zone 0x" << std::hex << j.first
-		 << " offset 0x" << j.second << std::dec
-		 << " -> " << i.first->oid << dendl;
-	string key;
-	get_zone_offset_object_key(j.first, j.second, i.first->oid, &key);
-	txc->t->rmkey(PREFIX_ZONED_CL_INFO, key);
-      }
+      dout(20) << __func__ << " rm ref zone 0x" << std::hex << i.first.second
+	       << " offset 0x" << i.second << std::dec
+	       << " -> " << i.first.first->oid << dendl;
+      string key;
+      get_zone_offset_object_key(i.first.second, i.second, i.first.first->oid, &key);
+      txc->t->rmkey(PREFIX_ZONED_CL_INFO, key);
     }
     for (auto& i : txc->new_zone_offset_refs) {
-      for (auto& j : i.second) {
-	// (zone, offset) -> oid
-	dout(20) << __func__ << " add ref zone 0x" << std::hex << j.first
-		 << " offset 0x" << j.second << std::dec
-		 << " -> " << i.first->oid << dendl;
-	string key;
-	get_zone_offset_object_key(j.first, j.second, i.first->oid, &key);
-	bufferlist v;
-	txc->t->set(PREFIX_ZONED_CL_INFO, key, v);
-      }
+      // (zone, offset) -> oid
+      dout(20) << __func__ << " add ref zone 0x" << std::hex << i.first.second
+	       << " offset 0x" << i.second << std::dec
+	       << " -> " << i.first.first->oid << dendl;
+      string key;
+      get_zone_offset_object_key(i.first.second, i.second, i.first.first->oid, &key);
+      bufferlist v;
+      txc->t->set(PREFIX_ZONED_CL_INFO, key, v);
     }
   }
 #endif
