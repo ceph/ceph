@@ -903,6 +903,7 @@ public:
           std::string max_session_duration,
           std::multimap<std::string,std::string> tags) : RGWRole(name, tenant, path, trust_policy, max_session_duration, tags), store(_store) {}
   RadosRole(RadosStore* _store, std::string id) : RGWRole(id), store(_store) {}
+  RadosRole(RadosStore* _store) : store(_store) {}
   ~RadosRole() = default;
 
   virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) override;
@@ -914,7 +915,6 @@ public:
   virtual int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) override;
   virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) override;
 };
-
-} } // namespace rgw::sal
+}} // namespace rgw::sal
 
 WRITE_CLASS_ENCODER(rgw::sal::RadosOIDCProvider)

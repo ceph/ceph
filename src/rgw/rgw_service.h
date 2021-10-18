@@ -12,6 +12,7 @@
 #include "common/async/yield_context.h"
 
 #include "rgw/rgw_common.h"
+//#include "rgw/rgw_sal_rados.h"
 
 struct RGWServices_Def;
 
@@ -65,8 +66,8 @@ class RGWSI_MetaBackend_OTP;
 class RGWSI_Notify;
 class RGWSI_OTP;
 class RGWSI_RADOS;
-class RGWSI_Role;
-class RGWSI_Role_RADOS;
+//class RGWSI_Role;
+//class RGWSI_Role_RADOS;
 class RGWSI_Zone;
 class RGWSI_ZoneUtils;
 class RGWSI_Quota;
@@ -77,6 +78,7 @@ class RGWSI_SysObj_Cache;
 class RGWSI_User;
 class RGWSI_User_RADOS;
 class RGWDataChangesLog;
+class RGWRole;
 
 struct RGWServices_Def
 {
@@ -106,7 +108,7 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_SysObj_Cache> sysobj_cache;
   std::unique_ptr<RGWSI_User_RADOS> user_rados;
   std::unique_ptr<RGWDataChangesLog> datalog_rados;
-  std::unique_ptr<RGWSI_Role_RADOS> role_rados;
+  //std::unique_ptr<rgw::sal::RadosRole> role_rados;
 
   RGWServices_Def();
   ~RGWServices_Def();
@@ -149,7 +151,7 @@ struct RGWServices
   RGWSI_SysObj_Cache *cache{nullptr};
   RGWSI_SysObj_Core *core{nullptr};
   RGWSI_User *user{nullptr};
-  RGWSI_Role *role{nullptr};
+  RGWRole *role{nullptr};
 
   int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
 
@@ -170,7 +172,7 @@ class RGWMetadataHandler;
 class RGWUserCtl;
 class RGWBucketCtl;
 class RGWOTPCtl;
-class RGWRoleCtl;
+//class RGWRoleCtl;
 
 struct RGWCtlDef {
   struct _meta {
@@ -188,12 +190,12 @@ struct RGWCtlDef {
   std::unique_ptr<RGWUserCtl> user;
   std::unique_ptr<RGWBucketCtl> bucket;
   std::unique_ptr<RGWOTPCtl> otp;
-  std::unique_ptr<RGWRoleCtl> role;
+  //std::unique_ptr<RGWRoleCtl> role;
 
   RGWCtlDef();
   ~RGWCtlDef();
 
-  int init(RGWServices& svc, const DoutPrefixProvider *dpp);
+  int init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixProvider *dpp);
 };
 
 struct RGWCtl {
@@ -215,9 +217,9 @@ struct RGWCtl {
   RGWUserCtl *user{nullptr};
   RGWBucketCtl *bucket{nullptr};
   RGWOTPCtl *otp{nullptr};
-  RGWRoleCtl *role{nullptr};
+  //RGWRoleCtl *role{nullptr};
 
-  int init(RGWServices *_svc, const DoutPrefixProvider *dpp);
+  int init(RGWServices *_svc, rgw::sal::Store* store, const DoutPrefixProvider *dpp);
 };
 
 #endif

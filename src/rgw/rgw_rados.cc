@@ -1374,7 +1374,7 @@ int RGWRados::init_svc(bool raw, const DoutPrefixProvider *dpp)
 
 int RGWRados::init_ctl(const DoutPrefixProvider *dpp)
 {
-  return ctl.init(&svc, dpp);
+  return ctl.init(&svc, store, dpp);
 }
 
 /** 
