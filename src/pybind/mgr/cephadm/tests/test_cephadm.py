@@ -86,19 +86,19 @@ class TestCephadm(object):
     def test_host(self, cephadm_module):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
         with with_host(cephadm_module, 'test'):
-            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1.2.3.4')]
+            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1::4')]
 
             # Be careful with backward compatibility when changing things here:
             assert json.loads(cephadm_module.get_store('inventory')) == \
-                {"test": {"hostname": "test", "addr": "1.2.3.4", "labels": [], "status": ""}}
+                {"test": {"hostname": "test", "addr": "1::4", "labels": [], "status": ""}}
 
             with with_host(cephadm_module, 'second', '1.2.3.5'):
                 assert wait(cephadm_module, cephadm_module.get_hosts()) == [
-                    HostSpec('test', '1.2.3.4'),
+                    HostSpec('test', '1::4'),
                     HostSpec('second', '1.2.3.5')
                 ]
 
-            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1.2.3.4')]
+            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1::4')]
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
@@ -422,7 +422,7 @@ spec:
                 with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
                     CephadmServe(cephadm_module)._check_daemons()
                     _mon_cmd.assert_any_call(
-                        {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://1.2.3.4:3000'},
+                        {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://[1::4]:3000'},
                         None)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
@@ -927,7 +927,7 @@ spec:
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("subprocess.run", None)
     @mock.patch("cephadm.module.CephadmOrchestrator.rados", mock.MagicMock())
-    @mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1.2.3.4')
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1::4')
     def test_iscsi(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
@@ -1136,12 +1136,12 @@ spec:
             assert "Host 'test' not found" in err
 
             out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-            assert out == HostSpec('test', '1.2.3.4', status='Offline').to_json()
+            assert out == HostSpec('test', '1::4', status='Offline').to_json()
 
             _get_connection.side_effect = None
             assert CephadmServe(cephadm_module)._check_host('test') is None
             out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-            assert out == HostSpec('test', '1.2.3.4').to_json()
+            assert out == HostSpec('test', '1::4').to_json()
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_dont_touch_offline_or_maintenance_host_daemons(self, cephadm_module):
