@@ -2641,6 +2641,8 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     // schedule DB update for dirty shards
     string key;
     for (auto& it : encoded_shards) {
+      dout(20) << __func__ << "  encoding key for shard 0x" << std::hex
+	       << it.shard->shard_info->offset << std::dec << dendl;
       it.shard->dirty = false;
       it.shard->shard_info->bytes = it.bl.length();
       generate_extent_shard_key_and_apply(
