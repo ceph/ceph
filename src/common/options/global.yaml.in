@@ -3180,7 +3180,7 @@ options:
   type: bool
   level: dev
   default: false
-  with_legacy: truen
+  with_legacy: true
 - name: osd_debug_pretend_recovery_active
   type: bool
   level: dev
