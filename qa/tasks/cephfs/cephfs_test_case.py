@@ -66,7 +66,6 @@ class CephFSTestCase(CephTestCase):
     # their special needs.  If not met, tests will be skipped.
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 1
-    REQUIRE_KCLIENT_REMOTE = False
     REQUIRE_ONE_CLIENT_REMOTE = False
 
     # Whether to create the default filesystem during setUp

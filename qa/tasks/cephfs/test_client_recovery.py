@@ -25,7 +25,6 @@ MDS_RESTART_GRACE = 60
 
 
 class TestClientNetworkRecovery(CephFSTestCase):
-    REQUIRE_KCLIENT_REMOTE = True
     REQUIRE_ONE_CLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
 
@@ -85,7 +84,6 @@ class TestClientNetworkRecovery(CephFSTestCase):
 
 
 class TestClientRecovery(CephFSTestCase):
-    REQUIRE_KCLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
 
     LOAD_SETTINGS = ["mds_reconnect_timeout", "ms_max_backoff"]
