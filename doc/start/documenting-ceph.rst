@@ -510,9 +510,8 @@ Pull`_ approach.
 Notify Us
 ---------
 
-After you make a pull request, please email ceph-docs@redhat.com.
-
-
+In case The PR did not got a review within in a resonable timeframe, please get in touch
+with the corresponding component lead of the :ref:`clt`.
 
 Documentation Style Guide
 =========================
