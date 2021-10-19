@@ -65,7 +65,9 @@ public:
     return seastar::now();
   }
   virtual seastar::future<> stop() = 0;
-  virtual seastar::future<> mount() = 0;
+
+  using mount_ertr = crimson::errorator<crimson::stateful_ec>;
+  virtual mount_ertr::future<> mount() = 0;
   virtual seastar::future<> umount() = 0;
 
   using mkfs_ertr = crimson::errorator<crimson::stateful_ec>;

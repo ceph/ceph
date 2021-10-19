@@ -50,7 +50,7 @@ public:
   ~SeaStore();
     
   seastar::future<> stop() final;
-  seastar::future<> mount() final;
+  mount_ertr::future<> mount() final;
   seastar::future<> umount() final;
 
   mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;

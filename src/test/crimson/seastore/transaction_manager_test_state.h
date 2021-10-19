@@ -37,14 +37,14 @@ protected:
 
   virtual seastar::future<> _teardown() = 0;
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() = 0;
-  virtual seastar::future<> _mount() = 0;
+  virtual FuturizedStore::mount_ertr::future<> _mount() = 0;
 
   void restart() {
     _teardown().get0();
     destroy();
     static_cast<segment_manager::EphemeralSegmentManager*>(&*segment_manager)->remount();
     init();
-    _mount().get0();
+    _mount().handle_error(crimson::ct_error::assert_all{}).get0();
   }
 
   seastar::future<> tm_setup() {
@@ -145,7 +145,7 @@ protected:
     );
   }
 
-  virtual seastar::future<> _mount() {
+  virtual FuturizedStore::mount_ertr::future<> _mount() {
     return tm->mount(
     ).handle_error(
       crimson::ct_error::assert_all{"Error in mount"}
@@ -276,7 +276,7 @@ protected:
     });
   }
 
-  virtual seastar::future<> _mount() final {
+  virtual FuturizedStore::mount_ertr::future<> _mount() final {
     return seastore->mount();
   }
 
