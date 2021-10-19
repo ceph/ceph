@@ -1,5 +1,5 @@
 rule_files:
-  - ceph_default_alerts.yml
+  - ../alerts/ceph_default_alerts.yml
 evaluation_interval: 5m
 tests:
  # health error
@@ -351,7 +351,7 @@ tests:
            severity: warning
            type: ceph_default
          exp_annotations:
-           documentation: https://docs.ceph.com/en/latest/rados/troubleshooting/troubleshooting-osd/#flapping-osds
+           documentation: https://docs.ceph.com/en/latest/rados/troubleshooting/troubleshooting-osd#flapping-osds
            description: >
               OSD osd.0 on ceph was
               marked down and back up at 20.1 times once a minute for 5 minutes.
@@ -795,7 +795,7 @@ tests:
            severity: warning
            type: ceph_default
          exp_annotations:
-           documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#slow-ops
+           documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#slow-ops
            description: >
              1 OSD requests are taking too long to process
              (osd_op_complaint_time exceeded)
@@ -873,7 +873,7 @@ tests:
           severity: warning
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/cephadm/operations/#cephadm-paused
+          documentation: https://docs.ceph.com/en/latest/cephadm/operations#cephadm-paused
           description: >
             Cluster management has been paused manually. This will prevent the
             orchestrator from service management and reconciliation. If this is
@@ -900,7 +900,7 @@ tests:
           severity: critical
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/cephfs/health-messages/#cephfs-health-messages
+          documentation: https://docs.ceph.com/en/latest/cephfs/health-messages#cephfs-health-messages
           description: >
             The filesystems metadata has been corrupted. Data access
             may be blocked.
@@ -928,7 +928,7 @@ tests:
           severity: critical
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/cephfs/health-messages/#cephfs-health-messages
+          documentation: https://docs.ceph.com/en/latest/cephfs/health-messages#cephfs-health-messages
           description: >
             The filesystem has switched to READ ONLY due to an unexpected
             write error, when writing to the metadata pool
@@ -988,7 +988,7 @@ tests:
           severity: critical
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#recent-mgr-module-crash
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#recent-mgr-module-crash
           description: >
             One or more mgr modules have crashed and are yet to be acknowledged by the administrator. A
             crashed module may impact functionality within the cluster. Use the 'ceph crash' commands to
@@ -1017,7 +1017,7 @@ tests:
           severity: critical
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#mon-disk-crit
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#mon-disk-crit
           description: |
             The free space available to a monitor's store is critically low (<5% by default).
             You should increase the space available to the monitor(s). The
@@ -1046,7 +1046,7 @@ tests:
           severity: warning
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#mon-disk-low
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#mon-disk-low
           description: |
             The space available to a monitor's store is approaching full (>70% is the default).
             You should increase the space available to the monitor store. The
@@ -1073,7 +1073,7 @@ tests:
           severity: warning
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#mon-clock-skew
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#mon-clock-skew
           description: |
             The ceph monitors rely on a consistent time reference to maintain
             quorum and cluster consistency. This event indicates that at least
@@ -1117,7 +1117,7 @@ tests:
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.3.1
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#mon-down
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#mon-down
           description: |
             Quorum requires a majority of monitors (x 2) to be active
             Without quorum the cluster will become inoperable, affecting all connected clients and services.
@@ -1163,7 +1163,7 @@ tests:
           severity: warning
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#mon-down
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#mon-down
           description: |
             You have 1 monitor down.
             Quorum is still intact, but the loss of further monitors will make your cluster inoperable.
@@ -1192,7 +1192,7 @@ tests:
           severity: warning
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#id2
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#id2
           description: |
             The device health module has determined that one or more devices will fail
             soon. To review the device states use 'ceph device ls'. To show a specific
@@ -1221,7 +1221,7 @@ tests:
           severity: critical
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#device-health-toomany
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#device-health-toomany
           description: |
             The device health module has determined that the number of devices predicted to
             fail can not be remediated automatically, since it would take too many osd's out of
@@ -1248,7 +1248,7 @@ tests:
           severity: warning
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#device-health-in-use
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#device-health-in-use
           description: |
             The device health module has determined that one or more devices will fail
             soon, but the normal process of relocating the data on the device to other
@@ -1355,7 +1355,7 @@ tests:
           severity: warning
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#bluestore-disk-size-mismatch
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#bluestore-disk-size-mismatch
           description: |
             One or more OSDs have an internal inconsistency between the size of the physical device and it's metadata.
             This could lead to the OSD(s) crashing in future. You should redeploy the effected OSDs.
@@ -1380,7 +1380,7 @@ tests:
           severity: warning
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#bluestore-spurious-read-errors
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#bluestore-spurious-read-errors
           description: >
             An OSD has encountered read errors, but the OSD has recovered by retrying
             the reads. This may indicate an issue with the Hardware or Kernel.
@@ -1418,7 +1418,7 @@ tests:
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.4.2
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#osd-down
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#osd-down
           description: |
             1 OSD down for over 5mins.
 
@@ -1446,7 +1446,7 @@ tests:
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.15.1.2.4.3
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#osd-nearfull
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#osd-nearfull
           description: |
             One or more OSDs have reached their NEARFULL threshold
 
@@ -1473,7 +1473,7 @@ tests:
           severity: warning
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#osd-backfillfull
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#osd-backfillfull
           description: |
             An OSD has reached it's BACKFILL FULL threshold. This will prevent rebalance operations
             completing for some pools. Check the current capacity utilisation with 'ceph df'
@@ -1500,7 +1500,7 @@ tests:
           severity: warning
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#osd-too-many-repairs
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#osd-too-many-repairs
           description: |
             Reads from an OSD have used a secondary PG to return data to the client, indicating
             a potential failing disk.
@@ -1552,7 +1552,7 @@ tests:
           severity: critical
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#pool-full
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pool-full
           description: |
             A pool has reached it's MAX quota, or the OSDs supporting the pool
             have reached their FULL threshold. Until this is resolved, writes to
@@ -1616,7 +1616,7 @@ tests:
           severity: warning
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#pg-not-scrubbed
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-not-scrubbed
           description: |
             One or more PGs have not been scrubbed recently. The scrub process is a data integrity
             feature, protectng against bit-rot. It checks that objects and their metadata (size and
@@ -1646,7 +1646,7 @@ tests:
           severity: critical
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#pg-recovery-full
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-recovery-full
           description: >
             Data redundancy may be reduced, or is at risk, since one or more OSDs are at or above their
             'full' threshold. Add more capacity to the cluster, or delete unwanted data.
@@ -1671,7 +1671,7 @@ tests:
           severity: critical
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#pg-backfill-full
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-backfill-full
           description: >
             Data redundancy may be at risk due to lack of free space within the cluster. One or more OSDs
             have breached their 'backfillfull' threshold. Add more capacity, or delete unwanted data.
@@ -1704,7 +1704,7 @@ tests:
           severity: critical
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#pg-availability
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-availability
           description: >
             Data availability is reduced impacting the clusters abilty to service I/O to some data. One or
             more placement groups (PGs) are in a state that blocks IO.
@@ -1729,7 +1729,7 @@ tests:
           severity: warning
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#pg-not-deep-scrubbed
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-not-deep-scrubbed
           description: |
             One or more PGs have not been deep scrubbed recently. Deep scrub is a data integrity
             feature, protectng against bit-rot. It compares the contents of objects and their
@@ -1799,7 +1799,7 @@ tests:
           severity: critical
           type: ceph_default
         exp_annotations:
-          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#object-unfound
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#object-unfound
           description: |
             A version of a RADOS object can not be found, even though all OSDs are up. I/O
             requests for this object from clients will block (hang). Resolving this issue may
