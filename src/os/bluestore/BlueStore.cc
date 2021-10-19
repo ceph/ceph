@@ -18316,7 +18316,12 @@ int BlueStore::commit_to_real_manager()
   freelist_type = "bitmap";
   int ret = commit_freelist_type(db, freelist_type, cct, path);
   if (ret == 0) {
-
+    //remove the allocation_file
+    invalidate_allocation_file_on_bluefs();
+    dout(5) << "Remove Allocation File" << dendl;
+    ret = bluefs->unlink(allocator_dir, allocator_file);
+    bluefs->sync_metadata(false);
+    dout(1) << "Remove Allocation File ret_code=" << ret << dendl;
   }
   return ret;
 }
