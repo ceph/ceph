@@ -14,6 +14,15 @@ users update to this release.
 Notable Changes
 ---------------
 
+* The default value of `osd_client_message_cap` has been set to 256, to provide
+  better flow control by limiting maximum number of in-flight client requests.
+
+* A new ceph-erasure-code-tool has been added to help manually recover an
+  object from a damaged PG.
+
+Changelog
+---------
+
 * auth,mon: don't log "unable to find a keyring" error when key is given (`pr#43312 <https://github.com/ceph/ceph/pull/43312>`_, Ilya Dryomov)
 * ceph-monstore-tool: use a large enough paxos/{first,last}_committed (`issue#38219 <http://tracker.ceph.com/issues/38219>`_, `pr#43263 <https://github.com/ceph/ceph/pull/43263>`_, Kefu Chai)
 * ceph-volume/tests: retry when destroying osd (`pr#42547 <https://github.com/ceph/ceph/pull/42547>`_, Guillaume Abrioux)
