@@ -5,6 +5,7 @@ import _ from 'lodash';
 import { of as observableOf } from 'rxjs';
 import { catchError, mapTo } from 'rxjs/operators';
 
+import { ApiClient } from '~/app/shared/api/api-client';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { cdEncode } from '~/app/shared/decorators/cd-encode';
 
@@ -12,19 +13,27 @@ import { cdEncode } from '~/app/shared/decorators/cd-encode';
 @Injectable({
   providedIn: 'root'
 })
-export class RgwBucketService {
+export class RgwBucketService extends ApiClient {
   private url = 'api/rgw/bucket';
 
-  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {}
+  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {
+    super();
+  }
 
   /**
    * Get the list of buckets.
    * @return Observable<Object[]>
    */
-  list() {
+  list(stats: boolean = false, uid: string = '') {
     return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.append('stats', 'true');
-      return this.http.get(this.url, { params: params });
+      params = params.append('stats', stats.toString());
+      if (uid) {
+        params = params.append('uid', uid);
+      }
+      return this.http.get(this.url, {
+        headers: { Accept: this.getVersionHeaderValue(1, 1) },
+        params: params
+      });
     });
   }
 

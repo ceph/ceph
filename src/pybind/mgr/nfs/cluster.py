@@ -198,7 +198,6 @@ class NFSCluster:
 
     def show_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Tuple[int, str, str]:
         try:
-            cluster_ls = []
             info_res = {}
             if cluster_id:
                 cluster_ls = [cluster_id]

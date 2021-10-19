@@ -45,7 +45,7 @@ describe('Logs page', () => {
       pools.navigateTo('create');
       pools.create(poolname, 8);
       pools.navigateTo();
-      pools.exist(poolname, true);
+      pools.existTableCell(poolname, true);
       logs.checkAuditForPoolFunction(poolname, 'create', hour, minute);
     });
 

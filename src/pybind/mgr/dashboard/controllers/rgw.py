@@ -14,9 +14,10 @@ from ..services.rgw_client import NoRgwDaemonsException, RgwClient
 from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
     ReadPermission, RESTController, allow_empty_body
+from ._version import APIVersion
 
 try:
-    from typing import Any, List, Optional
+    from typing import Any, Dict, List, Optional, Union
 except ImportError:  # pragma: no cover
     pass  # Just for type checking
 
@@ -100,6 +101,7 @@ class RgwDaemon(RESTController):
                     'service_map_id': service['id'],
                     'version': metadata['ceph_version'],
                     'server_hostname': hostname,
+                    'realm_name': metadata['realm_name'],
                     'zonegroup_name': metadata['zonegroup_name'],
                     'zone_name': metadata['zone_name'],
                     'default': instance.daemon.name == metadata['id']
@@ -157,6 +159,8 @@ class RgwSite(RgwRESTController):
             return RgwClient.admin_instance(daemon_name=daemon_name).get_placement_targets()
         if query == 'realms':
             return RgwClient.admin_instance(daemon_name=daemon_name).get_realms()
+        if query == 'default-realm':
+            return RgwClient.admin_instance(daemon_name=daemon_name).get_default_realm()
 
         # @TODO: for multisite: by default, retrieve cluster topology/map.
         raise DashboardException(http_status_code=501, component='rgw', msg='Not Implemented')
@@ -231,9 +235,12 @@ class RgwBucket(RgwRESTController):
             bucket_name = '{}:{}'.format(tenant, bucket_name)
         return bucket_name
 
-    def list(self, stats=False, daemon_name=None):
-        # type: (bool, Optional[str]) -> List[Any]
-        query_params = '?stats' if str_to_bool(stats) else ''
+    @RESTController.MethodMap(version=APIVersion(1, 1))  # type: ignore
+    def list(self, stats: bool = False, daemon_name: Optional[str] = None,
+             uid: Optional[str] = None) -> List[Union[str, Dict[str, Any]]]:
+        query_params = f'?stats={str_to_bool(stats)}'
+        if uid and uid.strip():
+            query_params = f'{query_params}&uid={uid.strip()}'
         result = self.proxy(daemon_name, 'GET', 'bucket{}'.format(query_params))
 
         if stats:
