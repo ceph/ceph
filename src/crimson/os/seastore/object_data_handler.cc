@@ -74,6 +74,10 @@ ObjectDataHandler::write_ret do_removals(
   return trans_intr::do_for_each(
     pins,
     [ctx](auto &pin) {
+      LOG_PREFIX(do_removals);
+      DEBUGT("decreasing ref: {}",
+	     ctx.t,
+	     pin->get_laddr());
       return ctx.tm.dec_ref(
 	ctx.t,
 	pin->get_laddr()
@@ -95,10 +99,15 @@ ObjectDataHandler::write_ret do_insertions(
   return trans_intr::do_for_each(
     to_write,
     [ctx](auto &region) {
+      LOG_PREFIX(do_insertions);
       if (region.to_write) {
 	assert_aligned(region.addr);
 	assert_aligned(region.len);
 	ceph_assert(region.len == region.to_write->length());
+	DEBUGT("allocating extent: {}~{}",
+	       ctx.t,
+	       region.addr,
+	       region.len);
 	return ctx.tm.alloc_extent<ObjectDataBlock>(
 	  ctx.t,
 	  region.addr,
@@ -118,12 +127,23 @@ ObjectDataHandler::write_ret do_insertions(
 	  return ObjectDataHandler::write_iertr::now();
 	});
       } else {
+	DEBUGT("reserving: {}~{}",
+	       ctx.t,
+	       region.addr,
+	       region.len);
 	return ctx.tm.reserve_region(
 	  ctx.t,
 	  region.addr,
 	  region.len
 	).si_then([&region](auto pin) {
 	  ceph_assert(pin->get_length() == region.len);
+	  if (pin->get_laddr() != region.addr) {
+	    logger().debug(
+	      "object_data_handler::do_insertions"
+	      "inconsistent laddr: pin: {} region {}",
+	      pin->get_laddr(),
+	      region.addr);
+	  }
 	  ceph_assert(pin->get_laddr() == region.addr);
 	  return ObjectDataHandler::write_iertr::now();
 	});
@@ -240,11 +260,20 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   object_data_t &object_data,
   extent_len_t size)
 {
+  LOG_PREFIX(ObjectDataHandler::prepare_data_reservation);
   ceph_assert(size <= MAX_OBJECT_SIZE);
   if (!object_data.is_null()) {
     ceph_assert(object_data.get_reserved_data_len() == MAX_OBJECT_SIZE);
+    DEBUGT("non null object_data: {}~{}",
+           ctx.t,
+           object_data.get_reserved_data_base(),
+           object_data.get_reserved_data_len());
     return write_iertr::now();
   } else {
+    DEBUGT("reserving: {}~{}",
+           ctx.t,
+           ctx.onode.get_hint(),
+           MAX_OBJECT_SIZE);
     return ctx.tm.reserve_region(
       ctx.t,
       ctx.onode.get_hint(),
@@ -269,6 +298,11 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
     lba_pin_list_t(),
     extent_to_write_list_t(),
     [ctx, size, &object_data](auto &pins, auto &to_write) {
+      LOG_PREFIX(ObjectDataHandler::trim_data_reservation);
+      DEBUGT("object_data: {}~{}",
+	     ctx.t,
+	     object_data.get_reserved_data_base(),
+	     object_data.get_reserved_data_len());
       return ctx.tm.get_pins(
 	ctx.t,
 	object_data.get_reserved_data_base() + size,
@@ -348,6 +382,11 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
     std::move(_pins),
     extent_to_write_list_t(),
     [ctx](laddr_t &offset, auto &bl, auto &pins, auto &to_write) {
+      LOG_PREFIX(ObjectDataHandler::overwrite);
+      DEBUGT("overwrite: {}~{}",
+	     ctx.t,
+	     offset,
+	     bl.length());
       ceph_assert(pins.size() >= 1);
       auto pin_begin = pins.front()->get_laddr();
       ceph_assert(pin_begin <= offset);
@@ -406,6 +445,14 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
   return with_object_data(
     ctx,
     [this, ctx, offset, &bl](auto &object_data) {
+      LOG_PREFIX(ObjectDataHandler::write);
+      DEBUGT("writing to {}~{}, object_data: {}~{}, is_null {}",
+             ctx.t,
+             offset,
+	     bl.length(),
+	     object_data.get_reserved_data_base(),
+	     object_data.get_reserved_data_len(),
+             object_data.is_null());
       return prepare_data_reservation(
 	ctx,
 	object_data,
@@ -435,6 +482,11 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
       return with_object_data(
 	ctx,
 	[ctx, obj_offset, len, &ret](const auto &object_data) {
+	  LOG_PREFIX(ObjectDataHandler::read);
+	  DEBUGT("reading {}~{}",
+		 ctx.t,
+		 object_data.get_reserved_data_base(),
+		 object_data.get_reserved_data_len());
 	  /* Assumption: callers ensure that onode size is <= reserved
 	   * size and that len is adjusted here prior to call */
 	  ceph_assert(!object_data.is_null());
@@ -507,6 +559,12 @@ ObjectDataHandler::truncate_ret ObjectDataHandler::truncate(
   return with_object_data(
     ctx,
     [this, ctx, offset](auto &object_data) {
+      LOG_PREFIX(ObjectDataHandler::truncate);
+      DEBUGT("truncating {}~{} offset: {}",
+	     ctx.t,
+	     object_data.get_reserved_data_base(),
+	     object_data.get_reserved_data_len(),
+	     offset);
       if (offset < object_data.get_reserved_data_len()) {
 	return trim_data_reservation(ctx, object_data, offset);
       } else if (offset > object_data.get_reserved_data_len()) {
@@ -526,6 +584,11 @@ ObjectDataHandler::clear_ret ObjectDataHandler::clear(
   return with_object_data(
     ctx,
     [this, ctx](auto &object_data) {
+      LOG_PREFIX(ObjectDataHandler::clear);
+      DEBUGT("clearing: {}~{}",
+	     ctx.t,
+	     object_data.get_reserved_data_base(),
+	     object_data.get_reserved_data_len());
       return trim_data_reservation(ctx, object_data, 0);
     });
 }
