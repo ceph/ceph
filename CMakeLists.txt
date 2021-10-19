@@ -668,6 +668,7 @@ option(WITH_SYSTEMD "build with systemd support" ON)
 add_subdirectory(src)
 
 add_subdirectory(qa)
+add_subdirectory(monitoring)
 
 add_subdirectory(doc)
 if(WITH_MANPAGE)
