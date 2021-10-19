@@ -126,15 +126,19 @@ seastar::future<> AlienStore::stop()
 
 AlienStore::~AlienStore() = default;
 
-seastar::future<> AlienStore::mount()
+AlienStore::mount_ertr::future<> AlienStore::mount()
 {
   logger().debug("{}", __func__);
   assert(tp);
   return tp->submit([this] {
     return store->mount();
-  }).then([] (int r) {
-    assert(r == 0);
-    return seastar::now();
+  }).then([] (const int r) -> mount_ertr::future<> {
+    if (r != 0) {
+      return crimson::stateful_ec{
+        std::error_code(-r, std::generic_category()) };
+    } else {
+      return mount_ertr::now();
+    }
   });
 }
 

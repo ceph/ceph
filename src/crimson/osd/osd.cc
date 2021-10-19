@@ -161,7 +161,13 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
         std::exit(EXIT_FAILURE);
       }));
   }).then([this] {
-    return store.mount();
+    return store.mount().handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        logger().error("error mounting object store in {}: ({}) {}",
+                       local_conf().get_val<std::string>("osd_data"),
+                       ec.value(), ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([cluster_fsid, this] {
     superblock.cluster_fsid = cluster_fsid;
     superblock.osd_fsid = store.get_fsid();
@@ -295,7 +301,13 @@ seastar::future<> OSD::start()
   startup_time = ceph::mono_clock::now();
 
   return store.start().then([this] {
-    return store.mount();
+    return store.mount().handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        logger().error("error mounting object store in {}: ({}) {}",
+                       local_conf().get_val<std::string>("osd_data"),
+                       ec.value(), ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([this] {
     return store.open_collection(coll_t::meta());
   }).then([this](auto ch) {

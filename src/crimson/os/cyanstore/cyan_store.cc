@@ -53,13 +53,14 @@ private:
   };
 };
 
-seastar::future<> CyanStore::mount()
+CyanStore::mount_ertr::future<> CyanStore::mount()
 {
+  static const char read_file_errmsg[]{"read_file"};
   ceph::bufferlist bl;
   std::string fn = path + "/collections";
   std::string err;
   if (int r = bl.read_file(fn.c_str(), &err); r < 0) {
-    throw std::runtime_error("read_file");
+    return crimson::stateful_ec{ singleton_ec<read_file_errmsg>() };
   }
 
   std::set<coll_t> collections;
@@ -70,7 +71,7 @@ seastar::future<> CyanStore::mount()
     std::string fn = fmt::format("{}/{}", path, coll);
     ceph::bufferlist cbl;
     if (int r = cbl.read_file(fn.c_str(), &err); r < 0) {
-      throw std::runtime_error("read_file");
+      return crimson::stateful_ec{ singleton_ec<read_file_errmsg>() };
     }
     boost::intrusive_ptr<Collection> c{new Collection{coll}};
     auto p = cbl.cbegin();
@@ -78,7 +79,7 @@ seastar::future<> CyanStore::mount()
     coll_map[coll] = c;
     used_bytes += c->used_bytes();
   }
-  return seastar::now();
+  return mount_ertr::now();
 }
 
 seastar::future<> CyanStore::umount()
