@@ -1036,7 +1036,6 @@ class CephadmAgent(CephService):
             self.mgr.inventory.get_addr(daemon_spec.host))
         config = {
             'agent.json': json.dumps(cfg),
-            'cephadm': self.mgr._cephadm,
             'keyring': daemon_spec.keyring,
             'root_cert.pem': self.mgr.cherrypy_thread.ssl_certs.get_root_cert(),
             'listener.crt': listener_cert,
