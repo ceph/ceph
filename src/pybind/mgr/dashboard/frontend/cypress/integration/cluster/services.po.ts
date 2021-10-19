@@ -40,15 +40,24 @@ export class ServicesPageHelper extends PageHelper {
   addService(serviceType: string, exist?: boolean, count = '1') {
     cy.get(`${this.pages.create.id}`).within(() => {
       this.selectServiceType(serviceType);
-      if (serviceType === 'rgw') {
-        cy.get('#service_id').type('foo');
-        cy.get('#count').type(count);
-      } else if (serviceType === 'ingress') {
-        this.selectOption('backend_service', 'rgw.foo');
-        cy.get('#service_id').should('have.value', 'rgw.foo');
-        cy.get('#virtual_ip').type('192.168.20.1/24');
-        cy.get('#frontend_port').type('8081');
-        cy.get('#monitor_port').type('8082');
+      switch (serviceType) {
+        case 'rgw':
+          cy.get('#service_id').type('foo');
+          cy.get('#count').type(count);
+          break;
+
+        case 'ingress':
+          this.selectOption('backend_service', 'rgw.foo');
+          cy.get('#service_id').should('have.value', 'rgw.foo');
+          cy.get('#virtual_ip').type('192.168.20.1/24');
+          cy.get('#frontend_port').type('8081');
+          cy.get('#monitor_port').type('8082');
+          break;
+
+        case 'nfs':
+          cy.get('#service_id').type('testnfs');
+          cy.get('#count').type(count);
+          break;
       }
 
       cy.get('cd-submit-button').click();

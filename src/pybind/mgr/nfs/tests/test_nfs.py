@@ -1,7 +1,7 @@
 # flake8: noqa
 import json
 import pytest
-from typing import Optional, Tuple, Iterator, List, Any, Dict
+from typing import Optional, Tuple, Iterator, List, Any
 
 from contextlib import contextmanager
 from unittest import mock
@@ -343,9 +343,9 @@ NFS_CORE_PARAM {
         assert export.protocols == [4, 3]
         assert set(export.transports) == {"TCP", "UDP"}
         assert export.fsal.name == "RGW"
-        # assert export.fsal.rgw_user_id == "testuser"  # probably correct value
-        # assert export.fsal.access_key == "access_key"  # probably correct value
-        # assert export.fsal.secret_key == "secret_key"  # probably correct value
+        assert export.fsal.user_id == "nfs.foo.bucket"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 0
         assert export.cluster_id == 'foo'
 
@@ -493,7 +493,9 @@ NFS_CORE_PARAM {
             'clients': [],
             'fsal': {
                 'name': 'RGW',
-                'rgw_user_id': 'rgw.foo.bucket'
+                'user_id': 'rgw.foo.bucket',
+                'access_key_id': 'the_access_key',
+                'secret_access_key': 'the_secret_key'
             }
         })
 
@@ -505,9 +507,9 @@ NFS_CORE_PARAM {
         assert set(export.protocols) == {4, 3}
         assert set(export.transports) == {"TCP", "UDP"}
         assert export.fsal.name == "RGW"
-#        assert export.fsal.rgw_user_id == "testuser"
-#        assert export.fsal.access_key is None
-#        assert export.fsal.secret_key is None
+        assert export.fsal.user_id == "rgw.foo.bucket"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 0
         assert export.cluster_id == self.cluster_id
 

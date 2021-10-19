@@ -1,4 +1,4 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, ContentChild, Input, OnInit, TemplateRef } from '@angular/core';
 import { FormArray, FormControl, NgForm, Validators } from '@angular/forms';
 
 import _ from 'lodash';
@@ -18,6 +18,8 @@ export class NfsFormClientComponent implements OnInit {
 
   @Input()
   clients: any[];
+
+  @ContentChild('squashHelper', { static: true }) squashHelperTpl: TemplateRef<any>;
 
   nfsSquash: any[] = this.nfsService.nfsSquash;
   nfsAccessType: any[] = this.nfsService.nfsAccessType;
