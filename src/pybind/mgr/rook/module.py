@@ -299,9 +299,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             # CephObjectstores
             all_zones = self.rook_cluster.get_resource("cephobjectstores")
             for zone in all_zones:
-                rgw_realm = zone['metadata']['name']
-                rgw_zone = rgw_realm
-                svc = 'rgw.' + rgw_realm
+                svc = 'rgw.' + zone['metadata']['name']
                 if svc in spec:
                     continue
                 active = zone['spec']['gateway']['instances'];
@@ -311,10 +309,10 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 else:
                     ssl = False
                     port = zone['spec']['gateway']['port'] or 80
+                rgw_zone = zone['spec'].get('zone', {}).get('name') or None
                 spec[svc] = orchestrator.ServiceDescription(
                     spec=RGWSpec(
                         service_id=zone['metadata']['name'],
-                        rgw_realm=rgw_realm,
                         rgw_zone=rgw_zone,
                         ssl=ssl,
                         rgw_frontend_port=port,
