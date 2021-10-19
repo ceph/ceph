@@ -1188,39 +1188,39 @@ namespace rgw::sal {
   int DBLifecycle::get_entry(const std::string& oid, const std::string& marker,
 			      LCEntry& entry)
   {
-    return 0;
+    return store->getDB()->get_entry(oid, marker, entry);
   }
 
   int DBLifecycle::get_next_entry(const std::string& oid, std::string& marker,
 				   LCEntry& entry)
   {
-    return 0;
+    return store->getDB()->get_next_entry(oid, marker, entry);
   }
 
   int DBLifecycle::set_entry(const std::string& oid, const LCEntry& entry)
   {
-    return 0;
+    return store->getDB()->set_entry(oid, entry);
   }
 
   int DBLifecycle::list_entries(const std::string& oid, const std::string& marker,
   				 uint32_t max_entries, vector<LCEntry>& entries)
   {
-    return 0;
+    return store->getDB()->list_entries(oid, marker, max_entries, entries);
   }
 
   int DBLifecycle::rm_entry(const std::string& oid, const LCEntry& entry)
   {
-    return 0;
+    return store->getDB()->rm_entry(oid, entry);
   }
 
   int DBLifecycle::get_head(const std::string& oid, LCHead& head)
   {
-    return 0;
+    return store->getDB()->get_head(oid, head);
   }
 
   int DBLifecycle::put_head(const std::string& oid, const LCHead& head)
   {
-    return 0;
+    return store->getDB()->put_head(oid, head);
   }
 
   LCSerializer* DBLifecycle::get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie)
