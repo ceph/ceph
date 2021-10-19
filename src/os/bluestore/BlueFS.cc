@@ -2511,16 +2511,16 @@ void BlueFS::_compact_log_async_LD_NF_D() //also locks FW for new_writer
   new_log_writer = _create_writer(new_log);
 
   new_log_writer->append(bl);
-  new_log->lock.lock();
   new_log_writer->lock.lock();
+  new_log->lock.lock();
   // 3. flush
   r = _flush_special(new_log_writer);
   ceph_assert(r == 0);
 
   // 4. wait
   _flush_bdev(new_log_writer);
-  new_log_writer->lock.unlock();
   new_log->lock.unlock();
+  new_log_writer->lock.unlock();
   // 5. update our log fnode
   // discard first old_log_jump_to extents
 
@@ -3268,9 +3268,9 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)
 
 int BlueFS::fsync(FileWriter *h)
 {
-  std::unique_lock hl(h->lock);
   uint64_t old_dirty_seq = 0;
   {
+    std::unique_lock hl(h->lock);
     dout(10) << __func__ << " " << h << " " << h->file->fnode << dendl;
     int r = _flush_F(h, true);
     if (r < 0)

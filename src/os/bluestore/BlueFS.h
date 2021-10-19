@@ -698,13 +698,13 @@ public:
  * Column represents last lock taken.
  * Row represents next lock taken.
  *
- *     <        | L | D | N | F | W
+ *     >        | W | L | D | N | F
  * -------------|---|---|---|---|---
- * log        L |     <   <         
- * dirty      D |                   
- * nodes      N |             <     
- * File       F |                  
- * FileWriter W | <   <       <      
+ * FileWriter W |   | > | > |   | >
+ * log        L |       | > | > | >
+ * dirty      D |           |   | >
+ * nodes      N |               | >
+ * File       F |
  * 
  * Claim: Deadlock is possible IFF graph contains cycles.
  */
