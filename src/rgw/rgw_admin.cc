@@ -1145,12 +1145,7 @@ static int init_bucket(rgw::sal::User* user,
 		       const string& bucket_id,
                        std::unique_ptr<rgw::sal::Bucket>* bucket)
 {
-  rgw_bucket b;
-  b.tenant = tenant_name;
-  b.name = bucket_name;
-  if (!bucket_id.empty()) {
-    b.bucket_id = bucket_name + ":" + bucket_id;
-  }
+  rgw_bucket b{tenant_name, bucket_name, bucket_id};
   return init_bucket(user, b, bucket);
 }
 
