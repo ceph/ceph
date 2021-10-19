@@ -3924,7 +3924,7 @@ void RGWPutObj::execute(optional_yield y)
   rgw_placement_rule *pdest_placement = &s->dest_placement;
 
   if (multipart) {
-    s->trace->SetTag(tracing::rgw::UPLOAD_ID, multipart_upload_id);
+    s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, multipart_upload_id);
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(),
 					 multipart_upload_id);
@@ -6158,7 +6158,7 @@ void RGWInitMultipart::execute(optional_yield y)
   if (op_ret == 0) {
     upload_id = upload->get_upload_id();
   }
-  s->trace->SetTag(tracing::rgw::UPLOAD_ID, upload_id);
+  s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
 
 }
 
@@ -6280,7 +6280,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(), upload_id);
 
-  s->trace->SetTag(tracing::rgw::UPLOAD_ID, upload_id);
+  s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
 
   RGWCompressionInfo cs_info;
   bool compressed = false;

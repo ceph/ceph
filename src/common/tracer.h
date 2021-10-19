@@ -1,55 +1,45 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef TRACER_H
-#define TRACER_H
+#pragma once
 
 #include "acconfig.h"
 
 #ifdef HAVE_JAEGER
 
-#define SIGNED_RIGHT_SHIFT_IS 1
-#define ARITHMETIC_RIGHT_SHIFT 1
-#include <jaegertracing/Tracer.h>
+#include "opentelemetry/trace/provider.h"
+#include "opentelemetry/exporters/jaeger/jaeger_exporter.h"
+#include "opentelemetry/sdk/trace/simple_processor.h"
+#include "opentelemetry/sdk/trace/tracer_provider.h"
 
-typedef std::unique_ptr<opentracing::Span> jspan;
+using jspan = opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span>;
+
 namespace tracing {
 
 class Tracer {
  private:
-  const static std::shared_ptr<opentracing::Tracer> noop_tracer;
-  std::shared_ptr<opentracing::Tracer> open_tracer;
+  const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer;
+  opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer;
 
  public:
   Tracer() = default;
-  Tracer(opentracing::string_view service_name);
+  Tracer(opentelemetry::nostd::string_view service_name);
 
-  void init(opentracing::string_view service_name);
+  void init(opentelemetry::nostd::string_view service_name);
   void shutdown();
 
   bool is_enabled() const;
   // creates and returns a new span with `trace_name`
   // this span represents a trace, since it has no parent.
-  jspan start_trace(opentracing::string_view trace_name);
+  jspan start_trace(opentelemetry::nostd::string_view trace_name);
   // creates and returns a new span with `span_name` which parent span is `parent_span'
-  jspan add_span(opentracing::string_view span_name, jspan& parent_span);
+  jspan add_span(opentelemetry::nostd::string_view span_name, jspan& parent_span);
 
 };
 
 
 } // namespace tracing
 
-namespace jaeger_configuration {
-
-inline const jaegertracing::samplers::Config const_sampler("const", 1, "", 0, jaegertracing::samplers::Config::defaultSamplingRefreshInterval());
-
-inline const jaegertracing::reporters::Config reporter_default_config(jaegertracing::reporters::Config::kDefaultQueueSize, jaegertracing::reporters::Config::defaultBufferFlushInterval(), true, jaegertracing::reporters::Config::kDefaultLocalAgentHostPort, "");
-
-inline const jaegertracing::propagation::HeadersConfig headers_config("", "", "", "");
-
-inline const jaegertracing::baggage::RestrictionsConfig baggage_config(false, "", std::chrono::steady_clock::duration());
-
-}
 
 #else  // !HAVE_JAEGER
 
@@ -62,8 +52,8 @@ class Value {
 
 struct span_stub {
   template <typename T>
-  void SetTag(std::string_view key, const T& value) const noexcept {}
-  void Log(std::initializer_list<std::pair<std::string_view, Value>> fields) {}
+  void SetAttribute(std::string_view key, const T& value) const noexcept {}
+  void AddEvent(std::string_view, std::initializer_list<std::pair<std::string_view, Value>> fields) {}
 };
 
 class jspan {
@@ -90,5 +80,3 @@ struct Tracer {
 }
 
 #endif // !HAVE_JAEGER
-
-#endif // TRACER_H

@@ -9,37 +9,44 @@
 
 namespace tracing {
 
-const std::shared_ptr<opentracing::Tracer> Tracer::noop_tracer = opentracing::MakeNoopTracer();
+const opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> Tracer::noop_tracer = opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("no-op", OPENTELEMETRY_SDK_VERSION);
 
-Tracer::Tracer(opentracing::string_view service_name) {
+Tracer::Tracer(opentelemetry::nostd::string_view service_name) {
   init(service_name);
 }
 
-void Tracer::init(opentracing::string_view service_name) {
-  if (!open_tracer) {
-    using namespace jaeger_configuration;
-    const jaegertracing::Config conf(false, const_sampler, reporter_default_config, headers_config, baggage_config, service_name, std::vector<jaegertracing::Tag>());
-    open_tracer = jaegertracing::Tracer::make(conf);
+void Tracer::init(opentelemetry::nostd::string_view service_name) {
+  if (!tracer) {
+    const opentelemetry::exporter::jaeger::JaegerExporterOptions opts;
+    auto jaeger_exporter  = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new opentelemetry::exporter::jaeger::JaegerExporter(opts));
+    auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(new opentelemetry::sdk::trace::SimpleSpanProcessor(std::move(jaeger_exporter)));
+    const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
+    const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
+    tracer = provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
   }
 }
 
 void Tracer::shutdown() {
-  open_tracer.reset();
+  if (tracer) {
+    tracer->CloseWithMicroseconds(1);
+  }
 }
 
-jspan Tracer::start_trace(opentracing::string_view trace_name) {
+jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name) {
   if (is_enabled()) {
-    return open_tracer->StartSpan(trace_name);
+    return tracer->StartSpan(trace_name);
   }
   return noop_tracer->StartSpan(trace_name);
 }
 
-jspan Tracer::add_span(opentracing::string_view span_name, jspan& parent_span) {
-  if (is_enabled()) {
-    if (parent_span) {
-      return open_tracer->StartSpan(span_name, { opentracing::ChildOf(&parent_span->context()) });
+jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, jspan& parent_span) {
+  if (is_enabled() && parent_span) {
+    const auto parent_ctx = parent_span->GetContext();
+    if (parent_ctx.IsValid()) {
+      opentelemetry::trace::StartSpanOptions span_opts;
+      span_opts.parent = parent_ctx;
+      return tracer->StartSpan(span_name, span_opts);
     }
-    return open_tracer->StartSpan(span_name);
   }
   return noop_tracer->StartSpan(span_name);
 }
@@ -47,6 +54,7 @@ jspan Tracer::add_span(opentracing::string_view span_name, jspan& parent_span) {
 bool Tracer::is_enabled() const {
   return g_ceph_context->_conf->jaeger_tracing_enable;
 }
+
 } // namespace tracing
 
 #endif // HAVE_JAEGER

@@ -25,7 +25,7 @@ BASIC ARCHITECTURE AND TERMINOLOGY
 
 read more about jaeger tracing:.
 
-  https://medium.com/opentracing/take-opentracing-for-a-hotrod-ride-f6e3141f7941
+  https://www.jaegertracing.io/docs/
 
 
 JAEGER DEPLOYMENT

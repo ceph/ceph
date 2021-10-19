@@ -9639,7 +9639,7 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
   op->osd_trace.keyval("cost", cost);
 
   auto enqueue_span = tracing::osd::tracer.add_span(__func__, op->osd_parent_span);
-  enqueue_span->Log({
+  enqueue_span->AddEvent(__func__, {
     {"priority", priority},
     {"cost", cost},
     {"epoch", epoch},
