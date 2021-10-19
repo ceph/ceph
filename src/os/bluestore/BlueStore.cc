@@ -13536,10 +13536,6 @@ int BlueStore::queue_transactions(
   OpSequencer *osr = c->osr.get();
   dout(10) << __func__ << " ch " << c << " " << c->cid << dendl;
 
-  // prepare
-  TransContext *txc = _txc_create(static_cast<Collection*>(ch.get()), osr,
-				  &on_commit, op);
-
   // With HM-SMR drives (and ZNS SSDs) we want the I/O allocation and I/O
   // submission to happen atomically because if I/O submission happens in a
   // different order than I/O allocation, we end up issuing non-sequential
@@ -13549,6 +13545,11 @@ int BlueStore::queue_transactions(
   if (bdev->is_smr()) {
     atomic_alloc_and_submit_lock.lock();
   }
+
+  // prepare
+  TransContext *txc = _txc_create(static_cast<Collection*>(ch.get()), osr,
+				  &on_commit, op);
+
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
     txc->bytes += (*p).get_num_bytes();
     _txc_add_transaction(txc, &(*p));
