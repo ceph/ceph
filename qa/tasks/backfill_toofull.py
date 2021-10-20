@@ -139,10 +139,22 @@ def task(ctx, config):
     # data, so if the osd backfill reservation incorrectly calculates "toofull"
     # the test will detect this (fail).
     #
+    # Note, we need to operate with "uncompressed" bytes because currently
+    # osd backfill reservation does not take compression into account.
+    #
     # We also need to update nearfull ratio to prevent "full ratio(s) out of order".
 
-    backfillfull = min(used_kb + primary_used_kb, total_kb * 0.9) / total_kb
-    nearfull_min = max(used_kb, primary_used_kb) / total_kb
+    pdf = manager.get_pool_df(pool)
+    log.debug("pool %s df: %s" % (pool, df))
+    assert pdf
+    compress_ratio = 1.0 * pdf['compress_under_bytes'] / pdf['compress_bytes_used'] \
+        if pdf['compress_bytes_used'] > 0 else 1.0
+    log.debug("compress_ratio: %s" % compress_ratio)
+
+    backfillfull = (used_kb + primary_used_kb) * compress_ratio / total_kb
+    assert backfillfull < 0.9
+    nearfull_min = max(used_kb, primary_used_kb) * compress_ratio / total_kb
+    assert nearfull_min < backfillfull
     delta = backfillfull - nearfull_min
     nearfull = nearfull_min + delta * 0.1
     backfillfull = nearfull_min + delta * 0.2
