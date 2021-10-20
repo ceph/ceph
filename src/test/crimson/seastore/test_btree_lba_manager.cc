@@ -24,13 +24,13 @@ using namespace crimson::os::seastore;
 using namespace crimson::os::seastore::lba_manager;
 using namespace crimson::os::seastore::lba_manager::btree;
 
-struct btree_lba_manager_test :
+struct btree_test_base :
   public seastar_test_suite_t, SegmentProvider {
+
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   ExtentReaderRef scanner;
   Journal journal;
   Cache cache;
-  BtreeLBAManagerRef lba_manager;
 
   const size_t block_size;
 
@@ -38,12 +38,11 @@ struct btree_lba_manager_test :
 
   segment_id_t next;
 
-  btree_lba_manager_test()
+  btree_test_base()
     : segment_manager(segment_manager::create_test_ephemeral()),
       scanner(new ExtentReader()),
       journal(*segment_manager, *scanner),
       cache(*scanner, segment_manager->get_block_size()),
-      lba_manager(new BtreeLBAManager(*segment_manager, cache)),
       block_size(segment_manager->get_block_size()),
       next(segment_manager->get_device_id(), 0)
   {
@@ -65,6 +64,7 @@ struct btree_lba_manager_test :
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
   void update_journal_tail_committed(journal_seq_t committed) final {}
 
+  virtual void complete_commit(Transaction &t) {}
   seastar::future<> submit_transaction(TransactionRef t)
   {
     auto record = cache.prepare_record(*t);
@@ -72,10 +72,11 @@ struct btree_lba_manager_test :
       [this, t=std::move(t)](auto p) mutable {
 	auto [addr, seq] = p;
 	cache.complete_commit(*t, addr, seq);
-	lba_manager->complete_transaction(*t);
+	complete_commit(*t);
       }).handle_error(crimson::ct_error::assert_all{});
   }
 
+  virtual LBAManager::mkfs_ret test_structure_setup(Transaction &t) = 0;
   seastar::future<> set_up_fut() final {
     return segment_manager->init(
     ).safe_then([this] {
@@ -88,7 +89,7 @@ struct btree_lba_manager_test :
 	    cache.init();
 	    return cache.mkfs(t
 	    ).si_then([this, &t] {
-	      return lba_manager->mkfs(t);
+	      return test_structure_setup(t);
 	    });
 	  }).safe_then([this, &ref_t] {
 	    return submit_transaction(std::move(ref_t));
@@ -111,7 +112,21 @@ struct btree_lba_manager_test :
       })
     );
   }
+};
 
+struct btree_lba_manager_test : btree_test_base {
+  BtreeLBAManagerRef lba_manager;
+
+  btree_lba_manager_test()
+    : lba_manager(new BtreeLBAManager(*segment_manager, cache)) {}
+
+  void complete_commit(Transaction &t) final {
+    lba_manager->complete_transaction(t);
+  }
+
+  LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
+    return lba_manager->mkfs(t);
+  }
 
   struct test_extent_t {
     paddr_t addr;
