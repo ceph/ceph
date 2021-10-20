@@ -1670,7 +1670,7 @@ if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
 	if [ "$CEPH_NUM_RGW" -gt 0 ]; then
             pseudo_path="/rgw"
             do_rgw_create_bucket
-	    prun ceph_adm nfs export create rgw "nfs-bucket" $cluster_id $pseudo_path
+	    prun ceph_adm nfs export create rgw --cluster-id $cluster_id --pseudo-path $pseudo_path --bucket "nfs-bucket"
             echo "Mount using: mount -t nfs -o port=$port $IP:$pseudo_path mountpoint"
 	fi
     else
