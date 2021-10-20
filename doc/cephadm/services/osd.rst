@@ -437,11 +437,12 @@ Create a file called (for example) ``osd_spec.yml``:
 .. code-block:: yaml
 
     service_type: osd
-    service_id: default_drive_group  <- name of the drive_group (name can be custom)
+    service_id: default_drive_group  # custom name of the osd spec
     placement:
-      host_pattern: '*'              <- which hosts to target, currently only supports globs
-    data_devices:                    <- the type of devices you are applying specs to
-      all: true                      <- a filter, check below for a full list
+      host_pattern: '*'              # which hosts to target
+    spec:
+      data_devices:                  # the type of devices you are applying specs to
+        all: true                    # a filter, check below for a full list
 
 This means :
 
@@ -621,9 +622,10 @@ This example would deploy all OSDs with encryption enabled.
     service_id: example_osd_spec
     placement:
       host_pattern: '*'
-    data_devices:
-      all: true
-    encrypted: true
+    spec:
+      data_devices:
+        all: true
+      encrypted: true
 
 See a full list in the DriveGroupSpecs
 
@@ -661,10 +663,11 @@ This is a common setup and can be described quite easily:
     service_id: osd_spec_default
     placement:
       host_pattern: '*'
-    data_devices:
-      model: HDD-123-foo <- note that HDD-123 would also be valid
-    db_devices:
-      model: MC-55-44-XZ <- same here, MC-55-44 is valid
+    spec:
+      data_devices:
+        model: HDD-123-foo <- note that HDD-123 would also be valid
+      db_devices:
+        model: MC-55-44-XZ <- same here, MC-55-44 is valid
 
 However, we can improve it by reducing the filters on core properties of the drives:
 
@@ -674,10 +677,11 @@ However, we can improve it by reducing the filters on core properties of the dri
     service_id: osd_spec_default
     placement:
       host_pattern: '*'
-    data_devices:
-      rotational: 1
-    db_devices:
-      rotational: 0
+    spec:
+      data_devices:
+        rotational: 1
+      db_devices:
+        rotational: 0
 
 Now, we enforce all rotating devices to be declared as 'data devices' and all non-rotating devices will be used as shared_devices (wal, db)
 
@@ -689,10 +693,11 @@ If you know that drives with more than 2TB will always be the slower data device
     service_id: osd_spec_default
     placement:
       host_pattern: '*'
-    data_devices:
-      size: '2TB:'
-    db_devices:
-      size: ':2TB'
+    spec:
+      data_devices:
+        size: '2TB:'
+      db_devices:
+        size: ':2TB'
 
 Note: All of the above DriveGroups are equally valid. Which of those you want to use depends on taste and on how much you expect your node layout to change.
 
@@ -731,20 +736,22 @@ This can be described with two layouts.
     service_id: osd_spec_hdd
     placement:
       host_pattern: '*'
-    data_devices:
-      rotational: 0
-    db_devices:
-      model: MC-55-44-XZ
-      limit: 2 (db_slots is actually to be favoured here, but it's not implemented yet)
+    spec:
+      data_devices:
+        rotational: 0
+      db_devices:
+        model: MC-55-44-XZ
+        limit: 2 (db_slots is actually to be favoured here, but it's not implemented yet)
     ---
     service_type: osd
     service_id: osd_spec_ssd
     placement:
       host_pattern: '*'
-    data_devices:
-      model: MC-55-44-XZ
-    db_devices:
-      vendor: VendorC
+    spec:
+      data_devices:
+        model: MC-55-44-XZ
+      db_devices:
+        vendor: VendorC
 
 This would create the desired layout by using all HDDs as data_devices with two SSD assigned as dedicated db/wal devices.
 The remaining SSDs(8) will be data_devices that have the 'VendorC' NVMEs assigned as dedicated db/wal devices.
@@ -789,19 +796,21 @@ You can use the 'host_pattern' key in the layout to target certain nodes. Salt t
     service_id: osd_spec_node_one_to_five
     placement:
       host_pattern: 'node[1-5]'
-    data_devices:
-      rotational: 1
-    db_devices:
-      rotational: 0
+    spec:
+      data_devices:
+        rotational: 1
+      db_devices:
+        rotational: 0
     ---
     service_type: osd
     service_id: osd_spec_six_to_ten
     placement:
       host_pattern: 'node[6-10]'
-    data_devices:
-      model: MC-55-44-XZ
-    db_devices:
-      model: SSD-123-foo
+    spec:
+      data_devices:
+        model: MC-55-44-XZ
+      db_devices:
+        model: SSD-123-foo
 
 This applies different OSD specs to different hosts depending on the `host_pattern` key.
 
@@ -837,12 +846,13 @@ The OSD spec for this case would look like the following (using the `model` filt
     service_id: osd_spec_default
     placement:
       host_pattern: '*'
-    data_devices:
-      model: MC-55-44-XZ
-    db_devices:
-      model: SSD-123-foo
-    wal_devices:
-      model: NVME-QQQQ-987
+    spec:
+      data_devices:
+        model: MC-55-44-XZ
+      db_devices:
+        model: SSD-123-foo
+      wal_devices:
+        model: NVME-QQQQ-987
 
 
 It is also possible to specify directly device paths in specific hosts like the following:
@@ -855,14 +865,15 @@ It is also possible to specify directly device paths in specific hosts like the 
       hosts:
         - Node01
         - Node02
-    data_devices:
-      paths:
+    spec:
+      data_devices:
+        paths:
         - /dev/sdb
-    db_devices:
-      paths:
+      db_devices:
+        paths:
         - /dev/sdc
-    wal_devices:
-      paths:
+      wal_devices:
+        paths:
         - /dev/sdd
 
 
