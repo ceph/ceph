@@ -558,7 +558,7 @@ class Module(MgrModule):
             crashlist.append(c)
         return crashlist
 
-    def gather_perf_counters(self) -> Dict[str, dict]:
+    def gather_perf_counters(self, mode: str = 'separated') -> Dict[str, dict]:
         # Extract perf counter data with get_all_perf_counters(), a method
         # from mgr/mgr_module.py. This method returns a nested dictionary that
         # looks a lot like perf schema, except with some additional fields.
@@ -581,12 +581,17 @@ class Module(MgrModule):
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(
             lambda: defaultdict(lambda: defaultdict(int))))
 
-        # Condense metrics among like daemons (i.e. 'osd' = 'osd.0' +
-        # 'osd.1' + 'osd.2'), and update the 'result' dict.
         for daemon in all_perf_counters:
-            daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
-            for collection in all_perf_counters[daemon]:
 
+            # Calculate num combined daemon types if in aggregated mode
+            if mode == 'aggregated':
+                daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
+                if 'num_combined_daemons' not in result[daemon_type]:
+                    result[daemon_type]['num_combined_daemons'] = 1
+                else:
+                    result[daemon_type]['num_combined_daemons'] += 1
+
+            for collection in all_perf_counters[daemon]:
                 # Split the collection to avoid redundancy in final report; i.e.:
                 #   bluestore.kv_flush_lat, bluestore.kv_final_lat --> 
                 #   bluestore: kv_flush_lat, kv_final_lat
@@ -603,26 +608,39 @@ class Module(MgrModule):
                 if (daemon == "") or (col_0 == "") or (col_1 == ""):
                     self.log.debug("Instance of an empty key: {}{}".format(daemon, collection))
 
-                # Not every rgw daemon has the same schema. Specifically, each rgw daemon
-                # has a uniquely-named collection that starts off identically (i.e.
-                # "objecter-0x...") then diverges (i.e. "...55f4e778e140.op_rmw").
-                # This bit of code combines these unique counters all under one rgw instance.
-                # Without this check, the schema would remain separeted out in the final report.
-                if col_0[0:11] == "objecter-0x":
-                    col_0 = "objecter-0x"
-
-                # Check that the value can be incremented. In some cases,
-                # the files are of type 'pair' (real-integer-pair, integer-integer pair).
-                # In those cases, the value is a dictionary, and not a number.
-                #   i.e. throttle-msgr_dispatch_throttler-hbserver["wait"]
-                if isinstance(all_perf_counters[daemon][collection]['value'], numbers.Number):
-                    result[daemon_type][col_0][col_1]['value'] += \
+                if mode == 'separated':
+                    # Add value to result
+                    result[daemon][col_0][col_1]['value'] = \
                             all_perf_counters[daemon][collection]['value']
-                
-                # Check that 'count' exists, as not all counters have a count field. 
-                if 'count' in all_perf_counters[daemon][collection]:
-                    result[daemon_type][col_0][col_1]['count'] += \
-                            all_perf_counters[daemon][collection]['count']
+
+                    # Check that 'count' exists, as not all counters have a count field.
+                    if 'count' in all_perf_counters[daemon][collection]:
+                        result[daemon][col_0][col_1]['count'] = \
+                                all_perf_counters[daemon][collection]['count']
+                elif mode == 'aggregated':
+                    # Not every rgw daemon has the same schema. Specifically, each rgw daemon
+                    # has a uniquely-named collection that starts off identically (i.e.
+                    # "objecter-0x...") then diverges (i.e. "...55f4e778e140.op_rmw").
+                    # This bit of code combines these unique counters all under one rgw instance.
+                    # Without this check, the schema would remain separeted out in the final report.
+                    if col_0[0:11] == "objecter-0x":
+                        col_0 = "objecter-0x"
+
+                    # Check that the value can be incremented. In some cases,
+                    # the files are of type 'pair' (real-integer-pair, integer-integer pair).
+                    # In those cases, the value is a dictionary, and not a number.
+                    #   i.e. throttle-msgr_dispatch_throttler-hbserver["wait"]
+                    if isinstance(all_perf_counters[daemon][collection]['value'], numbers.Number):
+                        result[daemon_type][col_0][col_1]['value'] += \
+                                all_perf_counters[daemon][collection]['value']
+
+                    # Check that 'count' exists, as not all counters have a count field.
+                    if 'count' in all_perf_counters[daemon][collection]:
+                        result[daemon_type][col_0][col_1]['count'] += \
+                                all_perf_counters[daemon][collection]['count']
+                else:
+                    self.log.error('Incorrect mode specified in gather_perf_counters: {}'.format(mode))
+                    return {}
 
         return result
 
@@ -952,7 +970,9 @@ class Module(MgrModule):
             report['crashes'] = self.gather_crashinfo()
 
         if 'perf' in channels:
-            report['perf_counters'] = self.gather_perf_counters()
+            report['perf_counters_aggregated'] = self.gather_perf_counters('aggregated')
+            report['perf_counters_separated'] = self.gather_perf_counters('separated')
+
             report['stat_sum_per_pool'] = self.get_stat_sum_per_pool()
             report['io_rate'] = self.get_io_rate()
             report['osd_perf_histograms'] = self.get_osd_histograms()
