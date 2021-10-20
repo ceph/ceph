@@ -1,11 +1,9 @@
 # This module builds Jaeger after it's dependencies are installed and discovered
-# opentracing: is built using cmake/modules/Buildopentracing.cmake
+# opentelemetry: is built using cmake/modules/BuildOpentelemetry.cmake
 # Thrift: found using cmake/modules/Findthrift.cmake (not by default)
 # yaml-cpp, nlhomann-json: are installed locally and then discovered using
 # Find<package>.cmake
 # Boost Libraries: uses ceph build boost cmake/modules/BuildBoost.cmake
-
-include(BuildOpenTracing)
 
 # will do all linking and path setting
 function(set_library_properties_for_external_project _target _lib)
@@ -41,7 +39,7 @@ function(build_jaeger)
 			-DCMAKE_PREFIX_PATH="${CMAKE_BINARY_DIR}/external;${CMAKE_BINARY_DIR}/boost"
 			-DCMAKE_INSTALL_RPATH=${CMAKE_BINARY_DIR}/external
 			-DCMAKE_INSTALL_RPATH_USE_LINK_PATH=TRUE
-			-DOpenTracing_DIR=${CMAKE_SOURCE_DIR}/src/jaegertracing/opentracing-cpp
+			-DOpentelemetry_DIR=${CMAKE_SOURCE_DIR}/src/jaegertracing/opentelemetry-cpp
 			-Dnlohmann_json_DIR=/usr/lib
 			-DCMAKE_FIND_ROOT_PATH=${CMAKE_BINARY_DIR}/external
 			-DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/external
@@ -49,15 +47,16 @@ function(build_jaeger)
 			-DBoost_INCLUDE_DIRS=${CMAKE_BINARY_DIR}/boost/include
 			-DBOOST_ROOT=${CMAKE_BINARY_DIR}/boost
 			-Dthrift_HOME=${CMAKE_BINARY_DIR}/external
-			-DOpenTracing_HOME=${CMAKE_BINARY_DIR}/external)
+			-DOpentelemetry_HOME=${CMAKE_BINARY_DIR}/external)
 
   # build these libraries along with jaeger
-  set(dependencies opentracing)
+  set(dependencies opentelemetry-cpp)
   if(NOT WITH_SYSTEM_BOOST)
     list(APPEND dependencies Boost)
   endif()
-  include(BuildOpenTracing)
-  build_opentracing()
+
+  include(BuildOpentelemetry)
+  build_opentelemetry()
 
   if(CMAKE_MAKE_PROGRAM MATCHES "make")
     # try to inherit command line arguments passed by parent "make" job
@@ -81,8 +80,6 @@ function(build_jaeger)
     BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so
     LOG_BUILD ON)
 
-  set_library_properties_for_external_project(opentracing::libopentracing
-  opentracing)
   set_library_properties_for_external_project(jaegertracing::libjaegertracing
   jaegertracing)
 endfunction()
