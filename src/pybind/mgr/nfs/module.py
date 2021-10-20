@@ -27,9 +27,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @CLICommand('nfs export create cephfs', perm='rw')
     def _cmd_nfs_export_create_cephfs(
             self,
-            fsname: str,
             cluster_id: str,
             pseudo_path: str,
+            fsname: str,
             path: Optional[str] = '/',
             readonly: Optional[bool] = False,
             client_addr: Optional[List[str]] = None,
