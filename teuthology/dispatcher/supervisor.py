@@ -188,6 +188,7 @@ def unlock_targets(job_config):
                 "Was going to unlock %s but it was locked by another job: %s",
                 name, description
             )
+            continue
         locked.append(name)
     if not locked:
         return
