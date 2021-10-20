@@ -165,27 +165,33 @@ Mirroring Status
 
 CephFS mirroring module provides `mirror daemon status` interface to check mirror daemon status::
 
-  $ ceph fs snapshot mirror daemon status <fs_name>
-  "14135": {
-    "1": {
-      "name": "a",
-      "directory_count": 0,
-      "peers": {
-        "ae3f22e6-1c72-4a81-8d5d-eebca3bfd29d": {
-          "remote": {
-            "client_name": "client.mirror_remote",
-            "cluster_name": "site-remote",
-            "fs_name": "backup_fs"
-          },
-          "stats": {
-            "failure_count": 0,
-            "recovery_count": 0
+  $ ceph fs snapshot mirror daemon status
+  [
+    {
+      "daemon_id": 284167,
+      "filesystems": [
+        {
+          "filesystem_id": 1,
+          "name": "a",
+          "directory_count": 1,
+          "peers": [
+            {
+              "uuid": "02117353-8cd1-44db-976b-eb20609aa160",
+              "remote": {
+                "client_name": "client.mirror_remote",
+                "cluster_name": "ceph",
+                "fs_name": "backup_fs"
+              },
+              "stats": {
+                "failure_count": 1,
+                "recovery_count": 0
+              }
             }
-          }
+          ]
         }
-      }
+      ]
     }
-  }
+  ]
 
 An entry per mirror daemon instance is displayed along with information such as configured
 peers and basic stats. For more detailed stats, use the admin socket interface as detailed
@@ -300,6 +306,19 @@ synchronization.
 
 When mirroring is disabled, the respective `fs mirror status` command for the file system
 will not show up in command help.
+
+Configuration Options
+---------------------
+
+.. confval:: cephfs_mirror_max_concurrent_directory_syncs
+.. confval:: cephfs_mirror_action_update_interval
+.. confval:: cephfs_mirror_restart_mirror_on_blocklist_interval
+.. confval:: cephfs_mirror_max_snapshot_sync_per_cycle
+.. confval:: cephfs_mirror_directory_scan_interval
+.. confval:: cephfs_mirror_max_consecutive_failures_per_directory
+.. confval:: cephfs_mirror_retry_failed_directories_interval
+.. confval:: cephfs_mirror_restart_mirror_on_failure_interval
+.. confval:: cephfs_mirror_mount_timeout
 
 Re-adding Peers
 ---------------

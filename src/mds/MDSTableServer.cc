@@ -24,6 +24,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".tableserver(" << get_mdstable_name(table) << ") "
 
+using namespace std;
+
 void MDSTableServer::handle_request(const cref_t<MMDSTableRequest> &req)
 {
   ceph_assert(req->op >= 0);

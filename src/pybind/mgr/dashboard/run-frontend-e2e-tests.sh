@@ -8,10 +8,10 @@ start_ceph() {
     MGR=2 RGW=1 ../src/vstart.sh -n -d
     sleep 10
 
+    set -x
+
     # Create an Object Gateway User
     ./bin/radosgw-admin user create --uid=dev --display-name=Developer --system
-    # Set the user-id
-    ./bin/ceph dashboard set-rgw-api-user-id dev
     # Obtain and set access and secret key for the previously created user. $() is safer than backticks `..`
     RGW_ACCESS_KEY_FILE="/tmp/rgw-user-access-key.txt"
     printf "$(./bin/radosgw-admin user info --uid=dev | jq -r .keys[0].access_key)" > "${RGW_ACCESS_KEY_FILE}"
@@ -23,6 +23,8 @@ start_ceph() {
     ./bin/ceph dashboard set-rgw-api-ssl-verify False
 
     CYPRESS_BASE_URL=$(./bin/ceph mgr services | jq -r .dashboard)
+
+    set +x
 }
 
 stop() {
@@ -83,7 +85,7 @@ DASH_DIR=`pwd`
 cd ../../../../${BUILD_DIR}
 FULL_PATH_BUILD_DIR=`pwd`
 
-[[ "$(command -v npm)" == '' ]] && . ${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/node-env/bin/activate
+[[ "$(command -v npm)" == '' ]] && . ${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/frontend/node-env/bin/activate
 
 : ${CYPRESS_CACHE_FOLDER:="${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/cypress"}
 

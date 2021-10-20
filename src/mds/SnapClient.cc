@@ -26,6 +26,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".snapclient "
 
+using namespace std;
+
 void SnapClient::resend_queries()
 {
   if (!waiting_for_version.empty() || (!synced && sync_reqid > 0)) {

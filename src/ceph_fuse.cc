@@ -47,6 +47,8 @@
 
 #define dout_context g_ceph_context
 
+using namespace std;
+
 ceph::async::io_context_pool icp;
 
 static void fuse_usage()
@@ -90,8 +92,7 @@ void usage()
 int main(int argc, const char **argv, const char *envp[]) {
   int filer_flags = 0;
   //cerr << "ceph-fuse starting " << myrank << "/" << world << std::endl;
-  std::vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);

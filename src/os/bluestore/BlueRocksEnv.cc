@@ -7,6 +7,8 @@
 #include "kv/RocksDBStore.h"
 #include "string.h"
 
+using std::string_view;
+
 namespace {
 
 rocksdb::Status err_to_status(int r)
@@ -219,7 +221,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   }
 
   rocksdb::Status Close() override {
-    fs->flush(h, true);
+    fs->fsync(h);
 
     // mimic posix env, here.  shrug.
     size_t block_size;
@@ -412,6 +414,7 @@ rocksdb::Status BlueRocksEnv::ReuseWritableFile(
   if (r < 0)
     return err_to_status(r);
   result->reset(new BlueRocksWritableFile(fs, h));
+  fs->sync_metadata(false);
   return rocksdb::Status::OK();
 }
 
@@ -452,6 +455,7 @@ rocksdb::Status BlueRocksEnv::DeleteFile(const std::string& fname)
   int r = fs->unlink(dir, file);
   if (r < 0)
     return err_to_status(r);
+  fs->sync_metadata(false);
   return rocksdb::Status::OK();
 }
 
@@ -512,6 +516,7 @@ rocksdb::Status BlueRocksEnv::RenameFile(
   int r = fs->rename(old_dir, old_file, new_dir, new_file);
   if (r < 0)
     return err_to_status(r);
+  fs->sync_metadata(false);
   return rocksdb::Status::OK();
 }
 

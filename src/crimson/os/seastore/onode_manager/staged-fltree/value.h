@@ -16,15 +16,21 @@ namespace crimson::os::seastore::onode {
 // value size up to 64 KiB
 using value_size_t = uint16_t;
 enum class value_magic_t : uint8_t {
-  TEST = 0x52,
-  ONODE,
+  ONODE = 0x52,
+  TEST_UNBOUND,
+  TEST_BOUNDED,
+  TEST_EXTENDED,
 };
 inline std::ostream& operator<<(std::ostream& os, const value_magic_t& magic) {
   switch (magic) {
-  case value_magic_t::TEST:
-    return os << "TEST";
   case value_magic_t::ONODE:
     return os << "ONODE";
+  case value_magic_t::TEST_UNBOUND:
+    return os << "TEST_UNBOUND";
+  case value_magic_t::TEST_BOUNDED:
+    return os << "TEST_BOUNDED";
+  case value_magic_t::TEST_EXTENDED:
+    return os << "TEST_EXTENDED";
   default:
     return os << "UNKNOWN(" << magic << ")";
   }
@@ -147,6 +153,21 @@ class ValueDeltaRecorder {
   ceph::bufferlist& encoded;
 };
 
+/**
+ * tree_conf_t
+ *
+ * Hard limits and compile-time configurations.
+ */
+struct tree_conf_t {
+  value_magic_t value_magic;
+  string_size_t max_ns_size;
+  string_size_t max_oid_size;
+  value_size_t max_value_payload_size;
+  extent_len_t internal_node_size;
+  extent_len_t leaf_node_size;
+  bool do_split_check = true;
+};
+
 class tree_cursor_t;
 /**
  * Value
@@ -162,25 +183,25 @@ class tree_cursor_t;
  */
 class Value {
  public:
-  using ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange,
-    crimson::ct_error::eagain>;
-  template <class ValueT=void>
-  using future = ertr::future<ValueT>;
-
   virtual ~Value();
   Value(const Value&) = default;
   Value(Value&&) = default;
   Value& operator=(const Value&) = delete;
   Value& operator=(Value&&) = delete;
 
+  /// Returns whether the Value is still tracked in tree.
+  bool is_tracked() const;
+
+  /// Invalidate the Value before submitting transaction.
+  void invalidate();
+
   /// Returns the value payload size.
   value_size_t get_payload_size() const {
+    assert(is_tracked());
     return read_value_header()->payload_size;
   }
+
+  laddr_t get_hint() const;
 
   bool operator==(const Value& v) const { return p_cursor == v.p_cursor; }
   bool operator!=(const Value& v) const { return !(*this == v); }
@@ -189,15 +210,16 @@ class Value {
   Value(NodeExtentManager&, const ValueBuilder&, Ref<tree_cursor_t>&);
 
   /// Extends the payload size.
-  future<> extend(Transaction&, value_size_t extend_size);
+  eagain_ifuture<> extend(Transaction&, value_size_t extend_size);
 
   /// Trim and shrink the payload.
-  future<> trim(Transaction&, value_size_t trim_size);
+  eagain_ifuture<> trim(Transaction&, value_size_t trim_size);
 
   /// Get the permission to mutate the payload with the optional value recorder.
   template <typename PayloadT, typename ValueDeltaRecorderT>
   std::pair<NodeExtentMutable&, ValueDeltaRecorderT*>
   prepare_mutate_payload(Transaction& t) {
+    assert(is_tracked());
     assert(sizeof(PayloadT) <= get_payload_size());
 
     auto value_mutable = do_prepare_mutate_payload(t);
@@ -211,6 +233,7 @@ class Value {
   /// Get the latest payload pointer for read.
   template <typename PayloadT>
   const PayloadT* read_payload() const {
+    assert(is_tracked());
     // see Value documentation
     static_assert(alignof(PayloadT) == 1);
     assert(sizeof(PayloadT) <= get_payload_size());
@@ -219,7 +242,9 @@ class Value {
 
  private:
   const value_header_t* read_value_header() const;
-  context_t get_context(Transaction& t) { return {nm, vb, t}; }
+  context_t get_context(Transaction& t) {
+    return {nm, vb, t};
+  }
 
   std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
   do_prepare_mutate_payload(Transaction&);
@@ -227,6 +252,9 @@ class Value {
   NodeExtentManager& nm;
   const ValueBuilder& vb;
   Ref<tree_cursor_t> p_cursor;
+
+  template <typename ValueImpl>
+  friend class Btree;
 };
 
 /**
@@ -237,6 +265,11 @@ class Value {
  */
 struct ValueBuilder {
   virtual value_magic_t get_header_magic() const = 0;
+  virtual string_size_t get_max_ns_size() const = 0;
+  virtual string_size_t get_max_oid_size() const = 0;
+  virtual value_size_t get_max_value_payload_size() const = 0;
+  virtual extent_len_t get_internal_node_size() const = 0;
+  virtual extent_len_t get_leaf_node_size() const = 0;
   virtual std::unique_ptr<ValueDeltaRecorder>
   build_value_recorder(ceph::bufferlist&) const = 0;
 };
@@ -248,8 +281,27 @@ struct ValueBuilder {
  */
 template <typename ValueImpl>
 struct ValueBuilderImpl final : public ValueBuilder {
+  ValueBuilderImpl() {
+    validate_tree_config(ValueImpl::TREE_CONF);
+  }
+
   value_magic_t get_header_magic() const {
-    return ValueImpl::HEADER_MAGIC;
+    return ValueImpl::TREE_CONF.value_magic;
+  }
+  string_size_t get_max_ns_size() const override {
+    return ValueImpl::TREE_CONF.max_ns_size;
+  }
+  string_size_t get_max_oid_size() const override {
+    return ValueImpl::TREE_CONF.max_oid_size;
+  }
+  value_size_t get_max_value_payload_size() const override {
+    return ValueImpl::TREE_CONF.max_value_payload_size;
+  }
+  extent_len_t get_internal_node_size() const override {
+    return ValueImpl::TREE_CONF.internal_node_size;
+  }
+  extent_len_t get_leaf_node_size() const override {
+    return ValueImpl::TREE_CONF.leaf_node_size;
   }
 
   std::unique_ptr<ValueDeltaRecorder>
@@ -267,6 +319,8 @@ struct ValueBuilderImpl final : public ValueBuilder {
     return ValueImpl(nm, vb, p_cursor);
   }
 };
+
+void validate_tree_config(const tree_conf_t& conf);
 
 /**
  * Get the value recorder by type (the magic value) when the ValueBuilder is

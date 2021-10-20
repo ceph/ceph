@@ -26,6 +26,7 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--osd-mclock-profile=high_recovery_ops "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -548,7 +549,7 @@ function TEST_ec_backfill_unfound() {
 
     sleep 15
 
-    for tmp in $(seq 1 100); do
+    for tmp in $(seq 1 240); do
       state=$(get_state 2.0)
       echo $state | grep backfill_unfound
       if [ "$?" = "0" ]; then

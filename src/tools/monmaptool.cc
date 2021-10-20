@@ -20,6 +20,15 @@
 #include "include/str_list.h"
 #include "mon/MonMap.h"
 
+using std::cerr;
+using std::cout;
+using std::list;
+using std::map;
+using std::ostream;
+using std::set;
+using std::string;
+using std::string_view;
+using std::vector;
 
 void usage()
 {
@@ -173,8 +182,7 @@ bool handle_features(list<feature_op_t>& lst, MonMap &m)
 
 int main(int argc, const char **argv)
 {
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);

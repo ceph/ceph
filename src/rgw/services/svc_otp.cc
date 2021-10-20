@@ -10,6 +10,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 class RGW_MB_Handler_Module_OTP : public RGWSI_MBSObj_Handler_Module {
   RGWSI_Zone *zone_svc;
   string prefix;
@@ -119,7 +121,8 @@ int RGWSI_OTP::read_all(RGWSI_OTP_BE_Ctx& ctx,
                   dpp);
 }
 
-int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
+int RGWSI_OTP::store_all(const DoutPrefixProvider *dpp, 
+                         RGWSI_OTP_BE_Ctx& ctx,
                          const string& key,
                          const otp_devices_list_t& devices,
                          real_time mtime,
@@ -130,7 +133,7 @@ int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
   params.mtime = mtime;
   params.devices = devices;
 
-  int ret = svc.meta_be->put_entry(ctx.get(), key, params, objv_tracker, y);
+  int ret = svc.meta_be->put_entry(dpp, ctx.get(), key, params, objv_tracker, y);
   if (ret < 0) {
     return ret;
   }
@@ -138,14 +141,15 @@ int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
+int RGWSI_OTP::store_all(const DoutPrefixProvider *dpp, 
+                         RGWSI_OTP_BE_Ctx& ctx,
                          const rgw_user& uid,
                          const otp_devices_list_t& devices,
                          real_time mtime,
                          RGWObjVersionTracker *objv_tracker,
                          optional_yield y)
 {
-  return store_all(ctx,
+  return store_all(dpp, ctx,
                    uid.to_str(),
                    devices,
                    mtime,
@@ -153,14 +157,15 @@ int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
                    y);
 }
 
-int RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
+int RGWSI_OTP::remove_all(const DoutPrefixProvider *dpp, 
+                          RGWSI_OTP_BE_Ctx& ctx,
                           const string& key,
                           RGWObjVersionTracker *objv_tracker,
                           optional_yield y)
 {
   RGWSI_MBOTP_RemoveParams params;
 
-  int ret = svc.meta_be->remove_entry(ctx.get(), key, params, objv_tracker, y);
+  int ret = svc.meta_be->remove_entry(dpp, ctx.get(), key, params, objv_tracker, y);
   if (ret < 0) {
     return ret;
   }
@@ -168,12 +173,13 @@ int RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
+int RGWSI_OTP::remove_all(const DoutPrefixProvider *dpp, 
+                          RGWSI_OTP_BE_Ctx& ctx,
                           const rgw_user& uid,
                           RGWObjVersionTracker *objv_tracker,
                           optional_yield y)
 {
-  return remove_all(ctx,
+  return remove_all(dpp,ctx,
                     uid.to_str(),
                     objv_tracker,
                     y);

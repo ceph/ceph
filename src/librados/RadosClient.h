@@ -86,11 +86,11 @@ private:
   rados_log_callback_t log_cb{nullptr};
   rados_log_callback2_t log_cb2{nullptr};
   void *log_cb_arg{nullptr};
-  string log_watch;
+  std::string log_watch;
 
   bool service_daemon = false;
-  string daemon_name, service_name;
-  map<string,string> daemon_metadata;
+  std::string daemon_name, service_name;
+  std::map<std::string,std::string> daemon_metadata;
   ceph::timespan rados_mon_op_timeout{};
 
   int wait_for_osdmap();
@@ -127,51 +127,51 @@ public:
   int pool_get_name(uint64_t pool_id, std::string *name,
 		    bool wait_latest_map = false);
 
-  int pool_list(std::list<std::pair<int64_t, string> >& ls);
-  int get_pool_stats(std::list<string>& ls, map<string,::pool_stat_t> *result,
+  int pool_list(std::list<std::pair<int64_t, std::string> >& ls);
+  int get_pool_stats(std::list<std::string>& ls, std::map<std::string,::pool_stat_t> *result,
     bool *per_pool);
   int get_fs_stats(ceph_statfs& result);
   bool get_pool_is_selfmanaged_snaps_mode(const std::string& pool);
 
   /*
   -1 was set as the default value and monitor will pickup the right crush rule with below order:
-    a) osd pool default crush replicated ruleset
-    b) the first ruleset in crush ruleset
+    a) osd pool default crush replicated rule
+    b) the first rule
     c) error out if no value find
   */
-  int pool_create(string& name, int16_t crush_rule=-1);
-  int pool_create_async(string& name, PoolAsyncCompletionImpl *c,
+  int pool_create(std::string& name, int16_t crush_rule=-1);
+  int pool_create_async(std::string& name, PoolAsyncCompletionImpl *c,
 			int16_t crush_rule=-1);
   int pool_get_base_tier(int64_t pool_id, int64_t* base_tier);
   int pool_delete(const char *name);
 
   int pool_delete_async(const char *name, PoolAsyncCompletionImpl *c);
 
-  int blocklist_add(const string& client_address, uint32_t expire_seconds);
+  int blocklist_add(const std::string& client_address, uint32_t expire_seconds);
 
-  int mon_command(const vector<string>& cmd, const bufferlist &inbl,
-	          bufferlist *outbl, string *outs);
-  void mon_command_async(const vector<string>& cmd, const bufferlist &inbl,
-                         bufferlist *outbl, string *outs, Context *on_finish);
+  int mon_command(const std::vector<std::string>& cmd, const bufferlist &inbl,
+	          bufferlist *outbl, std::string *outs);
+  void mon_command_async(const std::vector<std::string>& cmd, const bufferlist &inbl,
+                         bufferlist *outbl, std::string *outs, Context *on_finish);
   int mon_command(int rank,
-		  const vector<string>& cmd, const bufferlist &inbl,
-	          bufferlist *outbl, string *outs);
-  int mon_command(string name,
-		  const vector<string>& cmd, const bufferlist &inbl,
-	          bufferlist *outbl, string *outs);
-  int mgr_command(const vector<string>& cmd, const bufferlist &inbl,
-	          bufferlist *outbl, string *outs);
+		  const std::vector<std::string>& cmd, const bufferlist &inbl,
+	          bufferlist *outbl, std::string *outs);
+  int mon_command(std::string name,
+		  const std::vector<std::string>& cmd, const bufferlist &inbl,
+	          bufferlist *outbl, std::string *outs);
+  int mgr_command(const std::vector<std::string>& cmd, const bufferlist &inbl,
+	          bufferlist *outbl, std::string *outs);
   int mgr_command(
-    const string& name,
-    const vector<string>& cmd, const bufferlist &inbl,
-    bufferlist *outbl, string *outs);
-  int osd_command(int osd, vector<string>& cmd, const bufferlist& inbl,
-                  bufferlist *poutbl, string *prs);
-  int pg_command(pg_t pgid, vector<string>& cmd, const bufferlist& inbl,
-	         bufferlist *poutbl, string *prs);
+    const std::string& name,
+    const std::vector<std::string>& cmd, const bufferlist &inbl,
+    bufferlist *outbl, std::string *outs);
+  int osd_command(int osd, std::vector<std::string>& cmd, const bufferlist& inbl,
+                  bufferlist *poutbl, std::string *prs);
+  int pg_command(pg_t pgid, std::vector<std::string>& cmd, const bufferlist& inbl,
+	         bufferlist *poutbl, std::string *prs);
 
   void handle_log(MLog *m);
-  int monitor_log(const string& level, rados_log_callback_t cb,
+  int monitor_log(const std::string& level, rados_log_callback_t cb,
 		  rados_log_callback2_t cb2, void *arg);
 
   void get();

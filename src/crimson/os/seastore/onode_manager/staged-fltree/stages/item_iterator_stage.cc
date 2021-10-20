@@ -56,17 +56,17 @@ void ITER_T::update_size(
 {
   node_offset_t offset = iter.get_back_offset();
   int new_size = change + offset;
-  assert(new_size > 0 && new_size < NODE_BLOCK_SIZE);
+  assert(new_size > 0 && new_size < (int)mut.get_length());
   mut.copy_in_absolute(
       (void*)iter.get_item_range().p_end, node_offset_t(new_size));
 }
 
 template <node_type_t NODE_TYPE>
-node_offset_t ITER_T::trim_until(NodeExtentMutable&, const ITER_T& iter)
+node_offset_t ITER_T::trim_until(NodeExtentMutable& mut, const ITER_T& iter)
 {
   assert(iter.index() != 0);
   size_t ret = iter.p_end() - iter.p_items_start;
-  assert(ret < NODE_BLOCK_SIZE);
+  assert(ret < mut.get_length());
   return ret;
 }
 
@@ -75,11 +75,24 @@ node_offset_t ITER_T::trim_at(
     NodeExtentMutable& mut, const ITER_T& iter, node_offset_t trimmed)
 {
   size_t trim_size = iter.p_start() - iter.p_items_start + trimmed;
-  assert(trim_size < NODE_BLOCK_SIZE);
+  assert(trim_size < mut.get_length());
   assert(iter.get_back_offset() > trimmed);
   node_offset_t new_offset = iter.get_back_offset() - trimmed;
   mut.copy_in_absolute((void*)iter.item_range.p_end, new_offset);
   return trim_size;
+}
+
+template <node_type_t NODE_TYPE>
+node_offset_t ITER_T::erase(
+    NodeExtentMutable& mut, const ITER_T& iter, const char* p_left_bound)
+{
+  node_offset_t erase_size = iter.p_end() - iter.p_start();
+  const char* p_shift_start = p_left_bound;
+  assert(p_left_bound <= iter.p_start());
+  extent_len_t shift_len = iter.p_start() - p_left_bound;
+  int shift_off = erase_size;
+  mut.shift_absolute(p_shift_start, shift_len, shift_off);
+  return erase_size;
 }
 
 #define ITER_TEMPLATE(NT) template class ITER_INST(NT)
@@ -87,6 +100,22 @@ ITER_TEMPLATE(node_type_t::LEAF);
 ITER_TEMPLATE(node_type_t::INTERNAL);
 
 #define APPEND_T ITER_T::Appender<KT>
+
+template <node_type_t NODE_TYPE>
+template <KeyT KT>
+APPEND_T::Appender(NodeExtentMutable* p_mut,
+                   const item_iterator_t& iter,
+                   bool open) : p_mut{p_mut}
+{
+  assert(!iter.has_next());
+  if (open) {
+    p_append = const_cast<char*>(iter.get_key().p_start());
+    p_offset_while_open = const_cast<char*>(iter.item_range.p_end);
+  } else {
+    // XXX: this doesn't need to advance the iter to last
+    p_append = const_cast<char*>(iter.p_items_start);
+  }
+}
 
 template <node_type_t NODE_TYPE>
 template <KeyT KT>

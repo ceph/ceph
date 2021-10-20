@@ -29,8 +29,9 @@
 
 #include <errno.h>
 #include <sys/stat.h>
-#include <vector>
 #include <map>
+#include <memory>
+#include <vector>
 
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__sun) || defined(_WIN32)
 #include <sys/statvfs.h>
@@ -77,11 +78,18 @@ public:
    * @param journal path (or other descriptor) for journal (optional)
    * @param flags which filestores should check if applicable
    */
-  static ObjectStore *create(CephContext *cct,
-			     const std::string& type,
-			     const std::string& data,
-			     const std::string& journal,
-			     osflagbits_t flags = 0);
+#ifndef WITH_SEASTAR
+  static std::unique_ptr<ObjectStore> create(
+    CephContext *cct,
+    const std::string& type,
+    const std::string& data,
+    const std::string& journal,
+    osflagbits_t flags = 0);
+#endif
+  static std::unique_ptr<ObjectStore> create(
+    CephContext *cct,
+    const std::string& type,
+    const std::string& data);
 
   /**
    * probe a block device to learn the uuid of the owning OSD
@@ -415,7 +423,7 @@ public:
    */
 
   /**
-   * exists -- Test for existance of object
+   * exists -- Test for existence of object
    *
    * @param cid collection for object
    * @param oid oid of object
@@ -599,7 +607,7 @@ public:
    * @returns 0 on success, negative error code on failure.
    */
   virtual int getattrs(CollectionHandle &c, const ghobject_t& oid,
-		       std::map<std::string,ceph::buffer::ptr>& aset) = 0;
+		       std::map<std::string,ceph::buffer::ptr, std::less<>>& aset) = 0;
 
   /**
    * getattrs -- get all of the xattrs of an object
@@ -610,8 +618,8 @@ public:
    * @returns 0 on success, negative error code on failure.
    */
   int getattrs(CollectionHandle &c, const ghobject_t& oid,
-	       std::map<std::string,ceph::buffer::list>& aset) {
-    std::map<std::string,ceph::buffer::ptr> bmap;
+	       std::map<std::string,ceph::buffer::list,std::less<>>& aset) {
+    std::map<std::string,ceph::buffer::ptr,std::less<>> bmap;
     int r = getattrs(c, oid, bmap);
     for (auto i = bmap.begin(); i != bmap.end(); ++i) {
       aset[i->first].append(i->second);

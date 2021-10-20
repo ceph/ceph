@@ -59,7 +59,11 @@
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << name << ' '
+
+using std::string;
+using std::vector;
 using TOPNSPC::common::cmd_getval;
+
 // cons/des
 MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc,
 		     boost::asio::io_context& ioctx) :
@@ -180,6 +184,7 @@ void MDSDaemon::asok_command(
 	heapcmd_vec.push_back(value);
       }
       ceph_heap_profiler_handle_command(heapcmd_vec, ss);
+      r = 0;
     }
   } else if (command == "cpu_profiler") {
     string arg;
@@ -187,6 +192,7 @@ void MDSDaemon::asok_command(
     vector<string> argvec;
     get_str_vec(arg, argvec);
     cpu_profiler_handle_command(argvec, ss);
+    r = 0;
   } else {
     if (mds_rank == NULL) {
       dout(1) << "Can't run that command on an inactive MDS!" << dendl;
@@ -309,7 +315,9 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "migrate a subtree to named MDS");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump cache name=path,type=CephString,req=false",
+  r = admin_socket->register_command("dump cache "
+				     "name=path,type=CephString,req=false "
+				     "name=timeout,type=CephInt,range=0,req=false",
                                      asok_hook,
                                      "dump metadata cache (optionally to a file)");
   ceph_assert(r == 0);
@@ -370,23 +378,23 @@ void MDSDaemon::set_up_admin_socket()
 				     "name=value,type=CephString,req=false ",
 				     asok_hook,
 				     "Config a CephFS client session");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("client config "
 				     "name=client_id,type=CephInt,req=true "
 				     "name=option,type=CephString,req=true "
 				     "name=value,type=CephString,req=false ",
 				     asok_hook,
 				     "Config a CephFS client session");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("damage ls",
 				     asok_hook,
 				     "List detected metadata damage");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("damage rm "
 				     "name=damage_id,type=CephInt",
 				     asok_hook,
 				     "Remove a damage table entry");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("osdmap barrier name=target_epoch,type=CephInt",
 				     asok_hook,
 				     "Wait until the MDS has this OSD map epoch");
@@ -757,7 +765,7 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 
     // Did I previously not hold a rank?  Initialize!
     if (mds_rank == NULL) {
-      mds_rank = new MDSRankDispatcher(whoami, m->map_fs_name, mds_lock, clog,
+      mds_rank = new MDSRankDispatcher(whoami, mds_lock, clog,
           timer, beacon, mdsmap, messenger, monc, &mgrc,
           new LambdaContext([this](int r){respawn();}),
           new LambdaContext([this](int r){suicide();}),

@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import errno
 import unittest
@@ -69,7 +68,7 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
         )
         self.assertEqual(r, -errno.EINVAL)
         self.assertEqual(out, '')
-        self.assertEqual(err, ERROR_MSG_EMPTY_INPUT_FILE)
+        self.assertIn(ERROR_MSG_EMPTY_INPUT_FILE, err)
 
     def test_set_secret(self):
         r, out, err = handle_option_command(

@@ -31,89 +31,101 @@ protected:
     rados_svc = _rados_svc;
     zone_svc = _zone_svc;
   }
-  int get_rados_obj(RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
+  int get_rados_obj(const DoutPrefixProvider *dpp, RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
 
-  virtual int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-                       map<string, bufferlist> *attrs, bufferlist *first_chunk,
+  virtual int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize,
+                       real_time *pmtime, uint64_t *epoch,
+                       std::map<std::string, bufferlist> *attrs, bufferlist *first_chunk,
                        RGWObjVersionTracker *objv_tracker,
                        optional_yield y);
 
-  virtual int read(RGWSysObjectCtxBase& obj_ctx,
+  virtual int read(const DoutPrefixProvider *dpp,
+                   RGWSysObjectCtxBase& obj_ctx,
                    RGWSI_SysObj_Obj_GetObjState& read_state,
                    RGWObjVersionTracker *objv_tracker,
                    const rgw_raw_obj& obj,
                    bufferlist *bl, off_t ofs, off_t end,
-                   map<string, bufferlist> *attrs,
+                   std::map<std::string, bufferlist> *attrs,
 		   bool raw_attrs,
                    rgw_cache_entry_info *cache_info,
                    boost::optional<obj_version>,
                    optional_yield y);
 
-  virtual int remove(RGWSysObjectCtxBase& obj_ctx,
+  virtual int remove(const DoutPrefixProvider *dpp, 
+                     RGWSysObjectCtxBase& obj_ctx,
                      RGWObjVersionTracker *objv_tracker,
                      const rgw_raw_obj& obj,
                      optional_yield y);
 
-  virtual int write(const rgw_raw_obj& obj,
+  virtual int write(const DoutPrefixProvider *dpp, 
+                    const rgw_raw_obj& obj,
                     real_time *pmtime,
-                    map<std::string, bufferlist>& attrs,
+                    std::map<std::string, bufferlist>& attrs,
                     bool exclusive,
                     const bufferlist& data,
                     RGWObjVersionTracker *objv_tracker,
                     real_time set_mtime,
                     optional_yield y);
 
-  virtual int write_data(const rgw_raw_obj& obj,
+  virtual int write_data(const DoutPrefixProvider *dpp, 
+                         const rgw_raw_obj& obj,
                          const bufferlist& bl,
                          bool exclusive,
                          RGWObjVersionTracker *objv_tracker,
                          optional_yield y);
 
-  virtual int get_attr(const rgw_raw_obj& obj, const char *name, bufferlist *dest,
+  virtual int get_attr(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
+                       const char *name, bufferlist *dest,
                        optional_yield y);
 
-  virtual int set_attrs(const rgw_raw_obj& obj,
-                        map<string, bufferlist>& attrs,
-                        map<string, bufferlist> *rmattrs,
+  virtual int set_attrs(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
+                        std::map<std::string, bufferlist>& attrs,
+                        std::map<std::string, bufferlist> *rmattrs,
                         RGWObjVersionTracker *objv_tracker,
                         optional_yield y);
 
-  virtual int omap_get_all(const rgw_raw_obj& obj, std::map<string, bufferlist> *m,
+  virtual int omap_get_all(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, std::map<std::string, bufferlist> *m,
                            optional_yield y);
-  virtual int omap_get_vals(const rgw_raw_obj& obj,
-                            const string& marker,
+  virtual int omap_get_vals(const DoutPrefixProvider *dpp, 
+                            const rgw_raw_obj& obj,
+                            const std::string& marker,
                             uint64_t count,
-                            std::map<string, bufferlist> *m,
+                            std::map<std::string, bufferlist> *m,
                             bool *pmore,
                             optional_yield y);
-  virtual int omap_set(const rgw_raw_obj& obj, const std::string& key,
+  virtual int omap_set(const DoutPrefixProvider *dpp, 
+                       const rgw_raw_obj& obj, const std::string& key,
                        bufferlist& bl, bool must_exist,
                        optional_yield y);
-  virtual int omap_set(const rgw_raw_obj& obj,
-                       const map<std::string, bufferlist>& m, bool must_exist,
+  virtual int omap_set(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
+                       const std::map<std::string, bufferlist>& m, bool must_exist,
                        optional_yield y);
-  virtual int omap_del(const rgw_raw_obj& obj, const std::string& key,
+  virtual int omap_del(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const std::string& key,
                        optional_yield y);
 
-  virtual int notify(const rgw_raw_obj& obj, bufferlist& bl,
+  virtual int notify(const DoutPrefixProvider *dpp, 
+                     const rgw_raw_obj& obj, bufferlist& bl,
                      uint64_t timeout_ms, bufferlist *pbl,
                      optional_yield y);
 
-  virtual int pool_list_prefixed_objs(const rgw_pool& pool,
-                                      const string& prefix,
-                                      std::function<void(const string&)> cb);
+  virtual int pool_list_prefixed_objs(const DoutPrefixProvider *dpp,
+                                      const rgw_pool& pool,
+                                      const std::string& prefix,
+                                      std::function<void(const std::string&)> cb);
 
-  virtual int pool_list_objects_init(const rgw_pool& pool,
+  virtual int pool_list_objects_init(const DoutPrefixProvider *dpp,
+                                     const rgw_pool& pool,
                                      const std::string& marker,
                                      const std::string& prefix,
                                      RGWSI_SysObj::Pool::ListCtx *ctx);
-  virtual int pool_list_objects_next(RGWSI_SysObj::Pool::ListCtx& ctx,
+  virtual int pool_list_objects_next(const DoutPrefixProvider *dpp,
+                                     RGWSI_SysObj::Pool::ListCtx& ctx,
                                      int max,
-                                     vector<string> *oids,
+                                     std::vector<std::string> *oids,
                                      bool *is_truncated);
 
   virtual int pool_list_objects_get_marker(RGWSI_SysObj::Pool::ListCtx& _ctx,
-                                           string *marker);
+                                           std::string *marker);
 
   /* wrappers */
   int get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
@@ -130,7 +142,7 @@ protected:
   int stat(RGWSysObjectCtxBase& obj_ctx,
            RGWSI_SysObj_Obj_GetObjState& state,
            const rgw_raw_obj& obj,
-           map<string, bufferlist> *attrs,
+           std::map<std::string, bufferlist> *attrs,
 	   bool raw_attrs,
            real_time *lastmod,
            uint64_t *obj_size,

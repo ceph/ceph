@@ -27,7 +27,7 @@ private:
   bool dm_expiration{false};
 public:
   LCExpiration_S3() {}
-  LCExpiration_S3(string _days, string _date, bool _dm_expiration) : LCExpiration(_days, _date), dm_expiration(_dm_expiration) {}
+  LCExpiration_S3(std::string _days, std::string _date, bool _dm_expiration) : LCExpiration(_days, _date), dm_expiration(_dm_expiration) {}
 
   void dump_xml(Formatter *f) const;
   void decode_xml(XMLObj *obj);

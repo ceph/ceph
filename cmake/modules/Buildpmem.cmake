@@ -9,7 +9,7 @@ function(build_pmem)
     set(source_dir_args
       SOURCE_DIR ${CMAKE_BINARY_DIR}/src/pmdk
       GIT_REPOSITORY https://github.com/ceph/pmdk.git
-      GIT_TAG "1.7"
+      GIT_TAG "1.10"
       GIT_SHALLOW TRUE
       GIT_CONFIG advice.detachedHead=false)
   endif()
@@ -44,10 +44,11 @@ function(build_pmem)
   add_library(pmem::pmem STATIC IMPORTED GLOBAL)
   add_dependencies(pmem::pmem pmdk_ext)
   file(MAKE_DIRECTORY ${PMDK_INCLUDE})
+  find_package(Threads)
   set_target_properties(pmem::pmem PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${PMDK_INCLUDE}
     IMPORTED_LOCATION "${PMDK_LIB}/libpmem.a"
-    INTERFACE_LINK_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
+    INTERFACE_LINK_LIBRARIES Threads::Threads)
 
   # libpmemobj
   add_library(pmem::pmemobj STATIC IMPORTED GLOBAL)

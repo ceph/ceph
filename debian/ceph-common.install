@@ -15,6 +15,7 @@ usr/bin/ceph-syn
 usr/bin/cephfs-data-scan
 usr/bin/cephfs-journal-tool
 usr/bin/cephfs-table-tool
+usr/bin/crushdiff
 usr/bin/rados
 usr/bin/radosgw-admin
 usr/bin/rbd
@@ -32,6 +33,7 @@ usr/share/man/man8/ceph-rbdnamer.8
 usr/share/man/man8/ceph-syn.8
 usr/share/man/man8/ceph-post-file.8
 usr/share/man/man8/ceph.8
+usr/share/man/man8/crushdiff.8
 usr/share/man/man8/mount.ceph.8
 usr/share/man/man8/rados.8
 usr/share/man/man8/radosgw-admin.8

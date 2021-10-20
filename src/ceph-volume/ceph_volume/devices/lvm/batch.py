@@ -53,7 +53,7 @@ def get_physical_osds(devices, args):
     data_slots = args.osds_per_device
     if args.data_slots:
         data_slots = max(args.data_slots, args.osds_per_device)
-    rel_data_size = 1.0 / data_slots
+    rel_data_size = args.data_allocate_fraction / data_slots
     mlogger.debug('relative data size: {}'.format(rel_data_size))
     ret = []
     for dev in devices:
@@ -106,7 +106,7 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
         requested_slots = fast_slots_per_device
 
     requested_size = getattr(args, '{}_size'.format(type_), 0)
-    if requested_size == 0:
+    if not requested_size or requested_size == 0:
         # no size argument was specified, check ceph.conf
         get_size_fct = getattr(prepare, 'get_{}_size'.format(type_))
         requested_size = get_size_fct(lv_format=False)
@@ -126,6 +126,7 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
         if requested_size:
             if requested_size <= abs_size:
                 abs_size = requested_size
+                relative_size = int(abs_size) / dev_size
             else:
                 mlogger.error(
                     '{} was requested for {}, but only {} can be fulfilled'.format(
@@ -270,6 +271,12 @@ class Batch(object):
                   'will stay unoccupied'),
         )
         parser.add_argument(
+            '--data-allocate-fraction',
+            type=arg_validators.ValidFraction(),
+            help='Fraction to allocate from data device (0,1.0]',
+            default=1.0
+        )
+        parser.add_argument(
             '--block-db-size',
             type=disk.Size.parse,
             help='Set (or override) the "bluestore_block_db_size" value, in bytes'
@@ -318,6 +325,7 @@ class Batch(object):
             nargs='*',
             default=[],
             help='Reuse existing OSD ids',
+            type=common.valid_osd_id
         )
         self.args = parser.parse_args(argv)
         self.parser = parser
@@ -511,10 +519,11 @@ class Batch(object):
         # fill up uneven distributions across fast devices: 5 osds and 2 fast
         # devices? create 3 slots on each device rather then deploying
         # heterogeneous osds
-        if (requested_osds - len(lvm_devs)) % len(phys_devs):
-            fast_slots_per_device = int((requested_osds - len(lvm_devs)) / len(phys_devs)) + 1
+        slot_divider = max(1, len(phys_devs))
+        if (requested_osds - len(lvm_devs)) % slot_divider:
+            fast_slots_per_device = int((requested_osds - len(lvm_devs)) / slot_divider) + 1
         else:
-            fast_slots_per_device = int((requested_osds - len(lvm_devs)) / len(phys_devs))
+            fast_slots_per_device = int((requested_osds - len(lvm_devs)) / slot_divider)
 
 
         ret.extend(get_physical_fast_allocs(phys_devs,

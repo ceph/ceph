@@ -47,9 +47,15 @@
 #define CEPH_MONC_PROTOCOL   15 /* server/client */
 
 
-#define CEPH_INO_ROOT   1
-#define CEPH_INO_CEPH   2       /* hidden .ceph dir */
-#define CEPH_INO_LOST_AND_FOUND 4	/* reserved ino for use in recovery */
+#define CEPH_INO_ROOT             1
+/*
+ * hidden .ceph dir, which is no longer created but
+ * recognised in existing filesystems so that we
+ * don't try to fragment it.
+ */
+#define CEPH_INO_CEPH             2
+#define CEPH_INO_GLOBAL_SNAPREALM 3
+#define CEPH_INO_LOST_AND_FOUND   4 /* reserved ino for use in recovery */
 
 /* arbitrary limit on max # of monitors (cluster of 3 is typical) */
 #define CEPH_MAX_MON   31
@@ -71,7 +77,7 @@ struct ceph_file_layout {
 
 	/* object -> pg layout */
 	__le32 fl_unused;       /* unused; used to be preferred primary for pg (-1 for none) */
-	__le32 fl_pg_pool;      /* namespace, crush ruleset, rep level */
+	__le32 fl_pg_pool;      /* namespace, crush rule, rep level */
 } __attribute__ ((packed));
 
 #define CEPH_MIN_STRIPE_UNIT 65536

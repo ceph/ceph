@@ -47,24 +47,23 @@ from IPy import IP
 import unittest
 import platform
 import logging
-import shlex
 
 from unittest import suite, loader
 
-from teuthology.orchestra.run import Raw, quote
+from teuthology.orchestra.run import Raw, quote, PIPE
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import Remote
 from teuthology.config import config as teuth_config
 from teuthology.contextutil import safe_while
 from teuthology.contextutil import MaxWhileTries
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 try:
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 except:
     pass
 
-def init_log():
+def init_log(log_level=logging.INFO):
     global log
     if log is not None:
         del log
@@ -79,7 +78,7 @@ def init_log():
         datefmt='%Y-%m-%dT%H:%M:%S')
     handler.setFormatter(formatter)
     log.addHandler(handler)
-    log.setLevel(logging.INFO)
+    log.setLevel(log_level)
 
 log = None
 init_log()
@@ -465,6 +464,8 @@ class LocalRemote(object):
             # as long as the input buffer is "small"
             if isinstance(stdin, str):
                 subproc.stdin.write(stdin.encode())
+            elif stdin == subprocess.PIPE or stdin == PIPE:
+                pass
             else:
                 subproc.stdin.write(stdin)
 
@@ -532,13 +533,11 @@ class LocalDaemon(object):
             if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
                 log.debug("Found ps line for daemon: {0}".format(line))
                 return int(line.split()[0])
-        if opt_log_ps_output:
-            log.debug("No match for {0} {1}: {2}".format(
-                self.daemon_type, self.daemon_id, ps_txt))
-        else:
-            log.debug("No match for {0} {1}".format(self.daemon_type,
-                     self.daemon_id))
-            return None
+        if not opt_log_ps_output:
+            ps_txt = '(omitted)'
+        log.debug("No match for {0} {1}: {2}".format(
+            self.daemon_type, self.daemon_id, ps_txt))
+        return None
 
     def wait(self, timeout):
         waited = 0
@@ -554,6 +553,8 @@ class LocalDaemon(object):
             return
 
         pid = self._get_pid()
+        if pid is None:
+            return
         log.debug("Killing PID {0} for {1}.{2}".format(pid, self.daemon_type, self.daemon_id))
         os.kill(pid, signal.SIGTERM)
 
@@ -659,12 +660,16 @@ class LocalCephFSMount():
         path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
-    def _run_python(self, pyscript, py_version='python'):
+    def _run_python(self, pyscript, py_version='python', sudo=False):
         """
         Override this to remove the daemon-helper prefix that is used otherwise
         to make the process killable.
         """
-        return self.client_remote.run(args=[py_version, '-c', pyscript],
+        args = []
+        if sudo:
+            args.append('sudo')
+        args += [py_version, '-c', pyscript]
+        return self.client_remote.run(args=args,
                                       wait=False, stdout=StringIO())
 
     def setup_netns(self):
@@ -784,59 +789,30 @@ class LocalCephManager(CephManager):
         # methods to work though.
         self.pools = {}
 
+        # NOTE: These variables are being overriden here so that parent class
+        # can pick it up.
+        self.cephadm = False
+        self.rook = False
+        self.testdir = None
+        self.run_cluster_cmd_prefix = [CEPH_CMD]
+        # XXX: Ceph API test CI job crashes because "ceph -w" process launched
+        # by run_ceph_w() crashes when shell is set to True.
+        # See https://tracker.ceph.com/issues/49644.
+        #
+        # The 2 possible workaround this are either setting "shell" to "False"
+        # when command "ceph -w" is executed or to prepend "exec sudo" to
+        # command arguments. We are going with latter since former would make
+        # it necessary to pass "shell" parameter to run() method. This leads
+        # to incompatibility with the method teuthology.orchestra.run's run()
+        # since it doesn't accept "shell" as parameter.
+        self.run_ceph_w_prefix = ['exec', 'sudo', CEPH_CMD]
+
     def find_remote(self, daemon_type, daemon_id):
         """
         daemon_type like 'mds', 'osd'
         daemon_id like 'a', '0'
         """
         return LocalRemote()
-
-    # XXX: For reason behind setting "shell" to False, see
-    # https://tracker.ceph.com/issues/49644.
-    def run_ceph_w(self, watch_channel=None, shell=False):
-        """
-        :param watch_channel: Specifies the channel to be watched.
-                              This can be 'cluster', 'audit', ...
-        :type watch_channel: str
-        """
-        args = [CEPH_CMD, "-w"]
-        if watch_channel is not None:
-            args.append("--watch-channel")
-            args.append(watch_channel)
-        proc = self.controller.run(args=args, wait=False, stdout=StringIO(),
-                                   shell=shell)
-        return proc
-
-    def run_cluster_cmd(self, **kwargs):
-        """
-        Run a Ceph command and the object representing the process for the
-        command.
-
-        Accepts arguments same as teuthology.orchestra.remote.run().
-        """
-        if isinstance(kwargs['args'], str):
-            kwargs['args'] = shlex.split(kwargs['args'])
-        kwargs['args'] = [CEPH_CMD] + list(kwargs['args'])
-        return self.controller.run(**kwargs)
-
-    def raw_cluster_cmd(self, *args, **kwargs) -> str:
-        """
-        args like ["osd", "dump"}
-        return stdout string
-        """
-        if kwargs.get('args') is None and args:
-            kwargs['args'] = args
-        kwargs['stdout'] = kwargs.pop('stdout', StringIO())
-        return self.run_cluster_cmd(**kwargs).stdout.getvalue()
-
-    def raw_cluster_cmd_result(self, *args, **kwargs):
-        """
-        like raw_cluster_cmd but don't check status, just return rc
-        """
-        if kwargs.get('args') is None and args:
-            kwargs['args'] = args
-        kwargs['check_status'] = False
-        return self.run_cluster_cmd(**kwargs).exitstatus
 
     def admin_socket(self, daemon_type, daemon_id, command, check_status=True,
                      timeout=None, stdout=None):
@@ -1011,6 +987,12 @@ class LocalCluster(object):
     def only(self, requested):
         return self.__class__(rolename=requested)
 
+    def run(self, *args, **kwargs):
+        r = []
+        for remote in self.remotes.keys():
+            r.append(remote.run(*args, **kwargs))
+        return r
+
 
 class LocalContext(object):
     def __init__(self):
@@ -1107,23 +1089,20 @@ class LogRotate():
 def teardown_cluster():
     log.info('\ntearing down the cluster...')
     remote.run(args=[os.path.join(SRC_PREFIX, "stop.sh")], timeout=60)
+    log.info('\nceph cluster torn down')
     remote.run(args=['rm', '-rf', './dev', './out'])
 
 
 def clear_old_log():
-    from os import stat
-
     try:
-        stat(logpath)
-    # would need an update when making this py3 compatible. Use FileNotFound
-    # instead.
-    except OSError:
+        os.stat(logpath)
+    except FileNotFoundError:
         return
     else:
         os.remove(logpath)
         with open(logpath, 'w') as logfile:
             logfile.write('')
-        init_log()
+        init_log(log.level)
         log.debug('logging in a fresh file now...')
 
 
@@ -1393,9 +1372,11 @@ def exec_test():
         if opt_verbose:
             args.append("-d")
 
+        log.info('\nrunning vstart.sh now...')
         # usually, i get vstart.sh running completely in less than 100
         # seconds.
         remote.run(args=args, env=vstart_env, timeout=(3 * 60))
+        log.info('\nvstart.sh finished running')
 
         # Wait for OSD to come up so that subsequent injectargs etc will
         # definitely succeed

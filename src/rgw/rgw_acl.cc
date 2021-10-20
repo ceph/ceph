@@ -15,6 +15,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 bool operator==(const ACLPermission& lhs, const ACLPermission& rhs) {
   return lhs.flags == rhs.flags;
 }
@@ -134,26 +136,28 @@ uint32_t RGWAccessControlList::get_perm(const DoutPrefixProvider* dpp,
   return perm_mask & auth_identity.get_perms_from_aclspec(dpp, acl_user_map);
 }
 
-uint32_t RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group,
+uint32_t RGWAccessControlList::get_group_perm(const DoutPrefixProvider *dpp, 
+                                              ACLGroupTypeEnum group,
                                               const uint32_t perm_mask) const
 {
-  ldout(cct, 5) << "Searching permissions for group=" << (int)group
+  ldpp_dout(dpp, 5) << "Searching permissions for group=" << (int)group
                 << " mask=" << perm_mask << dendl;
 
   const auto iter = acl_group_map.find((uint32_t)group);
   if (iter != acl_group_map.end()) {
-    ldout(cct, 5) << "Found permission: " << iter->second << dendl;
+    ldpp_dout(dpp, 5) << "Found permission: " << iter->second << dendl;
     return iter->second & perm_mask;
   }
-  ldout(cct, 5) << "Permissions for group not found" << dendl;
+  ldpp_dout(dpp, 5) << "Permissions for group not found" << dendl;
   return 0;
 }
 
-uint32_t RGWAccessControlList::get_referer_perm(const uint32_t current_perm,
+uint32_t RGWAccessControlList::get_referer_perm(const DoutPrefixProvider *dpp,
+                                                const uint32_t current_perm,
                                                 const std::string http_referer,
                                                 const uint32_t perm_mask)
 {
-  ldout(cct, 5) << "Searching permissions for referer=" << http_referer
+  ldpp_dout(dpp, 5) << "Searching permissions for referer=" << http_referer
                 << " mask=" << perm_mask << dendl;
 
   /* This function is basically a transformation from current perm to
@@ -167,7 +171,7 @@ uint32_t RGWAccessControlList::get_referer_perm(const uint32_t current_perm,
     }
   }
 
-  ldout(cct, 5) << "Found referer permission=" << referer_perm << dendl;
+  ldpp_dout(dpp, 5) << "Found referer permission=" << referer_perm << dendl;
   return referer_perm & perm_mask;
 }
 
@@ -192,17 +196,17 @@ uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
 
   /* should we continue looking up? */
   if (!ignore_public_acls && ((perm & perm_mask) != perm_mask)) {
-    perm |= acl.get_group_perm(ACL_GROUP_ALL_USERS, perm_mask);
+    perm |= acl.get_group_perm(dpp, ACL_GROUP_ALL_USERS, perm_mask);
 
     if (false == auth_identity.is_owner_of(rgw_user(RGW_USER_ANON_ID))) {
       /* this is not the anonymous user */
-      perm |= acl.get_group_perm(ACL_GROUP_AUTHENTICATED_USERS, perm_mask);
+      perm |= acl.get_group_perm(dpp, ACL_GROUP_AUTHENTICATED_USERS, perm_mask);
     }
   }
 
   /* Should we continue looking up even deeper? */
   if (nullptr != http_referer && (perm & perm_mask) != perm_mask) {
-    perm = acl.get_referer_perm(perm, http_referer, perm_mask);
+    perm = acl.get_referer_perm(dpp, perm, http_referer, perm_mask);
   }
 
   ldpp_dout(dpp, 5) << "-- Getting permissions done for identity=" << auth_identity
@@ -246,14 +250,14 @@ bool RGWAccessControlPolicy::verify_permission(const DoutPrefixProvider* dpp,
 }
 
 
-bool RGWAccessControlPolicy::is_public() const
+bool RGWAccessControlPolicy::is_public(const DoutPrefixProvider *dpp) const
 {
 
   static constexpr auto public_groups = {ACL_GROUP_ALL_USERS,
 					 ACL_GROUP_AUTHENTICATED_USERS};
   return std::any_of(public_groups.begin(), public_groups.end(),
-                         [&](ACLGroupTypeEnum g) {
-                           auto p = acl.get_group_perm(g, RGW_PERM_FULL_CONTROL);
+                         [&, dpp](ACLGroupTypeEnum g) {
+                           auto p = acl.get_group_perm(dpp, g, RGW_PERM_FULL_CONTROL);
                            return (p != RGW_PERM_NONE) && (p != RGW_PERM_INVALID);
                          }
                          );

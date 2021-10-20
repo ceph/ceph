@@ -24,6 +24,8 @@
 #include "common/config_proxy.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 TEST(ErasureCodeClay, sanity_check_k)
 {
   ErasureCodeClay clay(g_conf().get_val<std::string>("erasure_code_dir"));
@@ -543,18 +545,18 @@ TEST(ErasureCodeClay, create_rule)
     profile["k"] = "2";
     profile["m"] = "2";
     EXPECT_EQ(0, clay.init(profile, &cerr));
-    int ruleset = clay.create_rule("myrule", *c, &ss);
-    EXPECT_EQ(0, ruleset);
+    int ruleid = clay.create_rule("myrule", *c, &ss);
+    EXPECT_EQ(0, ruleid);
     EXPECT_EQ(-EEXIST, clay.create_rule("myrule", *c, &ss));
     //
-    // the minimum that is expected from the created ruleset is to
+    // the minimum that is expected from the created rule is to
     // successfully map get_chunk_count() devices from the crushmap,
     // at least once.
     //
     vector<__u32> weight(c->get_max_devices(), 0x10000);
     vector<int> out;
     int x = 0;
-    c->do_rule(ruleset, x, out,   clay.get_chunk_count(), weight, 0);
+    c->do_rule(ruleid, x, out,   clay.get_chunk_count(), weight, 0);
     ASSERT_EQ(out.size(), clay.get_chunk_count());
     for (unsigned i=0; i<out.size(); ++i)
       ASSERT_NE(CRUSH_ITEM_NONE, out[i]);

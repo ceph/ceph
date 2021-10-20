@@ -37,6 +37,7 @@ WRITE_RAW_ENCODER(unsigned char)
 #undef dout_prefix
 #define dout_prefix *_dout << __func__ << ": "
 
+using namespace std;
 
 void MetaTool::meta_op::release()
 {

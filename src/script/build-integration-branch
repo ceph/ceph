@@ -94,7 +94,7 @@ for pr in prs:
     pr_ref = pr['head']['ref']
     print(f'--- pr {pr_number} --- pulling {pr_url} branch {pr_ref}')
     while True:
-        r = call(['git', 'pull', '--no-edit', pr_url, pr_ref])
+        r = call(['git', 'pull', '--no-ff', '--no-edit', pr_url, pr_ref])
         if r == 0:
             break
         elif r == 1:
@@ -109,4 +109,4 @@ for pr in prs:
 
 print('--- done. these PRs were included:')
 print('\n'.join(prtext).encode('ascii', errors='ignore').decode())
-print('--- perhaps you want to: make && ctest -j12 && git push ci %s' % branch)
+print('--- perhaps you want to: ./run-make-check.sh && git push ci %s' % branch)

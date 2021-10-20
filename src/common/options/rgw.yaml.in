@@ -61,10 +61,12 @@ options:
   level: advanced
   desc: Set RGW max chunk size
   long_desc: The chunk size is the size of RADOS I/O requests that RGW sends when
-    accessing data objects. RGW read and write operation will never request more than
-    this amount in a single request. This also defines the rgw object head size, as
+    accessing data objects. RGW read and write operations will never request more than
+    this amount in a single request. This also defines the RGW head object size, as
     head operations need to be atomic, and anything larger than this would require
-    more than a single operation.
+    more than a single operation. When RGW objects are written to the default
+    storage class, up to this amount of payload data will be stored alongside
+    metadata in the head object.
   default: 4_M
   services:
   - rgw
@@ -74,9 +76,9 @@ options:
   level: advanced
   desc: The minimum RADOS write window size (in bytes).
   long_desc: The window size determines the total concurrent RADOS writes of a single
-    rgw object. When writing an object RGW will send multiple chunks to RADOS. The
-    total size of the writes does not exceed the window size. The window size can
-    be automatically in order to better utilize the pipe.
+    RGW object. When writing an object RGW will send multiple chunks to RADOS. The
+    total size of the writes does not exceed the window size. The window size may
+    be adjusted dynamically in order to better utilize the pipe.
   default: 16_M
   services:
   - rgw
@@ -154,6 +156,12 @@ options:
     value overrides bucket_index_max_shards stored in the zone. Setting this value
     in the zone is preferred, because it applies globally to all radosgw daemons running
     in the zone.
+  fmt_desc: Represents the number of shards for the bucket index object,
+    a value of zero indicates there is no sharding. It is not
+    recommended to set a value too large (e.g. thousand) as it
+    increases the cost for bucket listing.
+    This variable should be set in the client or global sections
+    so that it is automatically applied to radosgw-admin commands.
   default: 0
   services:
   - rgw
@@ -221,8 +229,8 @@ options:
   type: str
   level: advanced
   desc: Alternative location for RGW configuration.
-  long_desc: 'If this is set, the different Ceph system configurables (such as the
-    keyring file will be located in the path that is specified here. '
+  long_desc: If this is set, the different Ceph system configurables (such as the keyring file will be located in the path that is specified here.
+  fmt_desc: Sets the location of the data files for Ceph RADOS Gateway.
   default: /var/lib/ceph/radosgw/$cluster-$id
   services:
   - rgw
@@ -233,6 +241,13 @@ options:
   type: str
   level: advanced
   desc: A list of set of RESTful APIs that rgw handles.
+  fmt_desc: |
+    Enables the specified APIs.
+
+      .. note:: Enabling the ``s3`` API is a requirement for
+                any ``radosgw`` instance that is meant to
+                participate in a `multi-site <../multisite>`_
+                configuration.
   default: s3, s3website, swift, swift_auth, admin, sts, iam, notifications
   services:
   - rgw
@@ -245,6 +260,7 @@ options:
     requests. Metadata entries can be user info, bucket info, and bucket instance
     info. If not found in the cache, entries will be fetched from the backing RADOS
     store.
+  fmt_desc: Whether the Ceph Object Gateway cache is enabled.
   default: true
   services:
   - rgw
@@ -256,40 +272,12 @@ options:
   level: advanced
   desc: Max number of items in RGW metadata cache.
   long_desc: When full, the RGW metadata cache evicts least recently used entries.
+  fmt_desc: The number of entries in the Ceph Object Gateway cache.
   default: 10000
   services:
   - rgw
   see_also:
   - rgw_cache_enabled
-  with_legacy: true
-- name: rgw_socket_path
-  type: str
-  level: advanced
-  desc: RGW FastCGI socket path (for FastCGI over Unix domain sockets).
-  services:
-  - rgw
-  see_also:
-  - rgw_fcgi_socket_backlog
-  with_legacy: true
-- name: rgw_host
-  type: str
-  level: advanced
-  desc: RGW FastCGI host name (for FastCGI over TCP)
-  services:
-  - rgw
-  see_also:
-  - rgw_port
-  - rgw_fcgi_socket_backlog
-  with_legacy: true
-- name: rgw_port
-  type: str
-  level: basic
-  desc: RGW FastCGI port number (for FastCGI over TCP)
-  services:
-  - rgw
-  see_also:
-  - rgw_host
-  - rgw_fcgi_socket_backlog
   with_legacy: true
 - name: rgw_dns_name
   type: str
@@ -297,6 +285,7 @@ options:
   desc: The host name that RGW uses.
   long_desc: This is Needed for virtual hosting of buckets to work properly, unless
     configured via zonegroup configuration.
+  fmt_desc: The DNS name of the served domain. See also the ``hostnames`` setting within regions.
   services:
   - rgw
   with_legacy: true
@@ -333,6 +322,8 @@ options:
   desc: Multiple content length headers compatibility
   long_desc: Try to handle requests with abiguous multiple content length headers
     (Content-Length, Http-Content-Length).
+  fmt_desc: Enable compatibility handling of FCGI requests with both ``CONTENT_LENGTH``
+    and ``HTTP_CONTENT_LENGTH`` set.
   default: false
   services:
   - rgw
@@ -376,6 +367,9 @@ options:
   desc: Number of LCWorker tasks that will be run in parallel
   long_desc: Number of LCWorker tasks that will run in parallel--used to permit >1
     bucket/index shards to be processed simultaneously
+  fmt_desc: This option specifies the number of lifecycle worker threads
+    to run in parallel, thereby processing bucket and index
+    shards simultaneously.
   default: 3
   services:
   - rgw
@@ -386,6 +380,8 @@ options:
   desc: Number of workpool threads per LCWorker
   long_desc: Number of threads in per-LCWorker workpools--used to accelerate per-bucket
     processing
+  fmt_desc: This option specifies the number of threads in each lifecycle
+    workers work pool. This option can help accelerate processing each bucket.
   default: 3
   services:
   - rgw
@@ -412,6 +408,10 @@ options:
 - name: rgw_lc_debug_interval
   type: int
   level: dev
+  desc: Lifecycle processing interval
+  long_desc: When set to greater than 0, treat this many seconds as a day.
+    This facilitates debugging and testing of lifecycle code without lengthy
+    delays.
   default: -1
   services:
   - rgw
@@ -429,12 +429,16 @@ options:
 - name: rgw_script_uri
   type: str
   level: dev
+  fmt_desc: The alternative value for the ``SCRIPT_URI`` if not set
+    in the request.
   services:
   - rgw
   with_legacy: true
 - name: rgw_request_uri
   type: str
   level: dev
+  fmt_desc: The alternative value for the ``REQUEST_URI`` if not set
+    in the request.
   services:
   - rgw
   with_legacy: true
@@ -454,6 +458,7 @@ options:
   desc: Swift-auth storage URL
   long_desc: Used in conjunction with rgw internal swift authentication. This affects
     the X-Storage-Url response header value.
+  fmt_desc: The URL for the Ceph Object Gateway Swift API.
   services:
   - rgw
   see_also:
@@ -464,6 +469,31 @@ options:
   level: advanced
   desc: Swift URL prefix
   long_desc: The URL path prefix for swift requests.
+  fmt_desc: |
+    The URL prefix for the Swift API, to distinguish it from
+    the S3 API endpoint. The default is ``swift``, which
+    makes the Swift API available at the URL
+    ``http://host:port/swift/v1`` (or
+    ``http://host:port/swift/v1/AUTH_%(tenant_id)s`` if
+    ``rgw swift account in url`` is enabled).
+
+    For compatibility, setting this configuration variable
+    to the empty string causes the default ``swift`` to be
+    used; if you do want an empty prefix, set this option to
+    ``/``.
+
+    .. warning:: If you set this option to ``/``, you must
+                 disable the S3 API by modifying ``rgw
+                 enable apis`` to exclude ``s3``. It is not
+                 possible to operate radosgw with ``rgw
+                 swift url prefix = /`` and simultaneously
+                 support both the S3 and Swift APIs. If you
+                 do need to support both APIs without
+                 prefixes, deploy multiple radosgw instances
+                 to listen on different hosts (or ports)
+                 instead, enabling some for S3 and some for
+                 Swift.
+  example: /swift-testing
   default: swift
   services:
   - rgw
@@ -482,6 +512,7 @@ options:
   level: advanced
   desc: Swift auth URL prefix
   long_desc: URL path prefix for internal swift auth requests.
+  fmt_desc: The entry point for a Swift auth URL.
   default: auth
   services:
   - rgw
@@ -503,6 +534,27 @@ options:
   level: advanced
   desc: Swift account encoded in URL
   long_desc: Whether the swift account is encoded in the uri path (AUTH_<account>).
+  fmt_desc: |
+    Whether or not the Swift account name should be included
+    in the Swift API URL.
+    If set to ``false`` (the default), then the Swift API
+    will listen on a URL formed like
+    ``http://host:port/<rgw_swift_url_prefix>/v1``, and the
+    account name (commonly a Keystone project UUID if
+    radosgw is configured with `Keystone integration
+    <../keystone>`_) will be inferred from request
+    headers.
+    If set to ``true``, the Swift API URL will be
+    ``http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<account_name>``
+    (or
+    ``http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<keystone_project_id>``)
+    instead, and the Keystone ``object-store`` endpoint must
+    accordingly be configured to include the
+    ``AUTH_%(tenant_id)s`` suffix.
+    You **must** set this option to ``true`` (and update the
+    Keystone service catalog) if you want radosgw to support
+    publicly-readable containers and `temporary URLs
+    <../swift/tempurl>`_.
   default: false
   services:
   - rgw
@@ -531,6 +583,15 @@ options:
   level: advanced
   desc: 'DEPRECATED: The admin token (shared secret) that is used for the Keystone
     requests.'
+  fmt_desc: The Keystone admin token (shared secret). In Ceph RGW
+    authentication with the admin token has priority over
+    authentication with the admin credentials
+    (``rgw_keystone_admin_user``, ``rgw_keystone_admin_password``,
+    ``rgw_keystone_admin_tenant``, ``rgw_keystone_admin_project``,
+    ``rgw_keystone_admin_domain``). The Keystone admin token
+    has been deprecated, but can be used to integrate with
+    older environments.  It is preferred to instead configure
+    ``rgw_keystone_admin_token_path`` to avoid exposing the token.
   services:
   - rgw
   with_legacy: true
@@ -539,6 +600,15 @@ options:
   level: advanced
   desc: Path to a file containing the admin token (shared secret) that is used for
     the Keystone requests.
+  fmt_desc: Path to a file containing the Keystone admin token
+    (shared secret).  In Ceph RadosGW authentication with
+    the admin token has priority over authentication with
+    the admin credentials
+    (``rgw_keystone_admin_user``, ``rgw_keystone_admin_password``,
+    ``rgw_keystone_admin_tenant``, ``rgw_keystone_admin_project``,
+    ``rgw_keystone_admin_domain``).
+    The Keystone admin token has been deprecated, but can be
+    used to integrate with older environments.
   services:
   - rgw
   with_legacy: true
@@ -546,6 +616,8 @@ options:
   type: str
   level: advanced
   desc: Keystone admin user.
+  fmt_desc: The name of OpenStack user with admin privilege for Keystone
+    authentication (Service User) when using OpenStack Identity API v2
   services:
   - rgw
   with_legacy: true
@@ -553,6 +625,9 @@ options:
   type: str
   level: advanced
   desc: 'DEPRECATED: Keystone admin password.'
+  fmt_desc: The password for OpenStack admin user when using OpenStack
+    Identity API v2.  It is preferred to instead configure
+    ``rgw_keystone_admin_password_path`` to avoid exposing the token.
   services:
   - rgw
   with_legacy: true
@@ -560,6 +635,8 @@ options:
   type: str
   level: advanced
   desc: Path to a file containing the Keystone admin password.
+  fmt_desc: Path to a file containing the password for OpenStack
+    admin user when using OpenStack Identity API v2.
   services:
   - rgw
   with_legacy: true
@@ -567,6 +644,8 @@ options:
   type: str
   level: advanced
   desc: Keystone admin user tenant.
+  fmt_desc: The name of OpenStack tenant with admin privilege (Service Tenant) when
+    using OpenStack Identity API v2
   services:
   - rgw
   with_legacy: true
@@ -574,6 +653,9 @@ options:
   type: str
   level: advanced
   desc: Keystone admin user project (for Keystone v3).
+  fmt_desc: The name of OpenStack project with admin privilege when using
+    OpenStack Identity API v3. If left unspecified, value of
+    ``rgw keystone admin tenant`` will be used instead.
   services:
   - rgw
   with_legacy: true
@@ -581,6 +663,8 @@ options:
   type: str
   level: advanced
   desc: Keystone admin user domain (for Keystone v3).
+  fmt_desc: The name of OpenStack domain with admin privilege when using
+    OpenStack Identity API v3.
   services:
   - rgw
   with_legacy: true
@@ -588,6 +672,8 @@ options:
   type: str
   level: advanced
   desc: Keystone user to access barbican secrets.
+  fmt_desc: The name of the OpenStack user with access to the `Barbican`_
+    secrets used for `Encryption`_.
   services:
   - rgw
   with_legacy: true
@@ -595,6 +681,7 @@ options:
   type: str
   level: advanced
   desc: Keystone password for barbican user.
+  fmt_desc: The password associated with the `Barbican`_ user.
   services:
   - rgw
   with_legacy: true
@@ -602,6 +689,8 @@ options:
   type: str
   level: advanced
   desc: Keystone barbican user tenant (Keystone v2.0).
+  fmt_desc: The name of the OpenStack tenant associated with the `Barbican`_
+    user when using OpenStack Identity API v2.
   services:
   - rgw
   with_legacy: true
@@ -609,6 +698,8 @@ options:
   type: str
   level: advanced
   desc: Keystone barbican user project (Keystone v3).
+  fmt_desc: The name of the OpenStack project associated with the `Barbican`_
+    user when using OpenStack Identity API v3.
   services:
   - rgw
   with_legacy: true
@@ -616,6 +707,8 @@ options:
   type: str
   level: advanced
   desc: Keystone barbican user domain.
+  fmt_desc: The name of the OpenStack domain associated with the `Barbican`_
+    user when using OpenStack Identity API v3.
   services:
   - rgw
   with_legacy: true
@@ -623,6 +716,8 @@ options:
   type: int
   level: advanced
   desc: Version of Keystone API to use (2 or 3).
+  fmt_desc: The version (2 or 3) of OpenStack Identity API that should be
+    used for communication with the Keystone server.
   default: 2
   services:
   - rgw
@@ -631,6 +726,7 @@ options:
   type: str
   level: advanced
   desc: Only users with one of these roles will be served when doing Keystone authentication.
+  fmt_desc: The roles required to serve requests.
   default: Member, admin
   services:
   - rgw
@@ -648,6 +744,7 @@ options:
   desc: Keystone token cache size
   long_desc: Max number of Keystone tokens that will be cached. Token that is not
     cached requires RGW to access the Keystone server when authenticating.
+  fmt_desc: The maximum number of entries in each Keystone token cache.
   default: 10000
   services:
   - rgw
@@ -656,6 +753,7 @@ options:
   type: bool
   level: advanced
   desc: Should RGW verify the Keystone server SSL certificate.
+  fmt_desc: Verify SSL certificates while making token requests to keystone.
   default: true
   services:
   - rgw
@@ -704,6 +802,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_jaeger_enable
+  type: bool
+  level: advanced
+  desc: should RGW use jaeger tracing system
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_s3_auth_use_keystone
   type: bool
   level: advanced
@@ -728,6 +834,7 @@ options:
   type: str
   level: advanced
   desc: URL to barbican server.
+  fmt_desc: The URL for the Barbican server.
   services:
   - rgw
   with_legacy: true
@@ -821,6 +928,7 @@ options:
   type: str
   level: advanced
   desc: Path prefix to be used for accessing RGW RESTful admin API.
+  fmt_desc: The entry point for an admin request URL.
   default: admin
   services:
   - rgw
@@ -831,6 +939,7 @@ options:
   desc: RGW enforce swift acls
   long_desc: Should RGW enforce special Swift-only ACLs. Swift has a special ACL that
     gives permission to access all objects in a container.
+  fmt_desc: Enforces the Swift Access Control List (ACL) settings.
   default: true
   services:
   - rgw
@@ -839,6 +948,7 @@ options:
   type: int
   level: advanced
   desc: Expiration time (in seconds) for token generated through RGW Swift auth.
+  fmt_desc: The time in seconds for expiring a Swift token.
   default: 1_day
   services:
   - rgw
@@ -849,6 +959,7 @@ options:
   desc: RGW support of 100-continue
   long_desc: Should RGW explicitly send 100 (continue) responses. This is mainly relevant
     when using FastCGI, as some FastCGI modules do not fully support this feature.
+  fmt_desc: Enable ``100-continue`` if it is operational.
   default: true
   services:
   - rgw
@@ -872,6 +983,9 @@ options:
     not at the originator's address. Therefore it is sometimes possible to have the
     proxy add the originator's address in a separate HTTP header, which will allow
     RGW to log it correctly.
+  fmt_desc: The remote address parameter. For example, the HTTP field
+    containing the remote address, or the ``X-Forwarded-For``
+    address if a reverse proxy is operational.
   default: REMOTE_ADDR
   services:
   - rgw
@@ -882,6 +996,7 @@ options:
   type: int
   level: dev
   desc: Timeout for async rados coroutine operations.
+  fmt_desc: The timeout in seconds for open threads.
   default: 10_min
   services:
   - rgw
@@ -890,6 +1005,8 @@ options:
   type: int
   level: dev
   default: 0
+  fmt_desc: The time ``timeout`` in seconds before a Ceph Object Gateway
+    process dies. Disabled if set to ``0``.
   services:
   - rgw
   with_legacy: true
@@ -901,6 +1018,7 @@ options:
     when using either the civetweb, or the fastcgi frontends. The higher this number
     is, RGW will be able to deal with more concurrent requests at the cost of more
     resource utilization.
+  fmt_desc: The size of the thread pool.
   default: 512
   services:
   - rgw
@@ -914,6 +1032,8 @@ options:
     info that is being sent when metadata is modified (such as user or bucket information).
     A higher number of control objects allows better concurrency of these messages,
     at the cost of more resource utilization.
+  fmt_desc: The number of notification objects used for cache synchronization
+    between different ``rgw`` instances.
   default: 8
   services:
   - rgw
@@ -925,6 +1045,7 @@ options:
   long_desc: RGW can send requests to other RGW servers (e.g., in multi-site sync
     work). This configurable selects whether RGW should verify the certificate for
     the remote peer and host.
+  fmt_desc: Verify SSL certificates while making requests.
   default: true
   services:
   - rgw
@@ -1064,12 +1185,25 @@ options:
   type: str
   level: advanced
   desc: Zone name
+  fmt_desc: The name of the zone for the gateway instance. If no zone is
+    set, a cluster-wide default can be configured with the command
+    ``radosgw-admin zone default``.
   services:
   - rgw
   see_also:
   - rgw_zonegroup
   - rgw_realm
   with_legacy: true
+- name: rgw_zone_id
+  type: str
+  level: advanced
+  desc: Zone ID
+  services:
+  - rgw
+  see_also:
+  - rgw_zone
+  - rgw_zonegroup
+  - rgw_realm
 - name: rgw_zone_root_pool
   type: str
   level: advanced
@@ -1129,12 +1263,25 @@ options:
   type: str
   level: advanced
   desc: Zonegroup name
+  fmt_desc: The name of the zonegroup for the gateway instance. If no
+    zonegroup is set, a cluster-wide default can be configured with
+    the command ``radosgw-admin zonegroup default``.
   services:
   - rgw
   see_also:
   - rgw_zone
   - rgw_realm
   with_legacy: true
+- name: rgw_zonegroup_id
+  type: str
+  level: advanced
+  desc: Zonegroup ID
+  services:
+  - rgw
+  see_also:
+  - rgw_zone
+  - rgw_zonegroup
+  - rgw_realm
 - name: rgw_zonegroup_root_pool
   type: str
   level: advanced
@@ -1159,9 +1306,17 @@ options:
 - name: rgw_realm
   type: str
   level: advanced
+  fmt_desc: The name of the realm for the gateway instance. If no realm is
+    set, a cluster-wide default can be configured with the command
+    ``radosgw-admin realm default``.
   services:
   - rgw
   with_legacy: true
+- name: rgw_realm_id
+  type: str
+  level: advanced
+  services:
+  - rgw
 - name: rgw_realm_root_pool
   type: str
   level: advanced
@@ -1210,6 +1365,8 @@ options:
   long_desc: This config option applies to the ops log. When this option is set, the
     ops log will log operations that are sent to non existing buckets. These operations
     inherently fail, and do not correspond to a specific user.
+  fmt_desc: Enables Ceph Object Gateway to log a request for a non-existent
+    bucket.
   default: false
   services:
   - rgw
@@ -1223,6 +1380,8 @@ options:
   desc: Ops log object name format
   long_desc: Defines the format of the RADOS objects names that ops log uses to store
     ops log data
+  fmt_desc: The logging format for an object name. See ma npage
+    :manpage:`date` for details about format specifiers.
   default: '%Y-%m-%d-%H-%i-%n'
   services:
   - rgw
@@ -1235,6 +1394,8 @@ options:
   desc: Should ops log object name based on UTC
   long_desc: If set, the names of the RADOS objects that hold the ops log data will
     be based on UTC time zone. If not set, it will use the local time zone.
+  fmt_desc: Whether a logged object name includes a UTC time.
+    If ``false``, it uses the local time.
   default: false
   services:
   - rgw
@@ -1248,6 +1409,7 @@ options:
   desc: Number of shards for usage log.
   long_desc: The number of RADOS objects that RGW will use in order to store the usage
     log data.
+  fmt_desc: The maximum number of shards for usage logging.
   default: 32
   services:
   - rgw
@@ -1259,6 +1421,8 @@ options:
   level: advanced
   desc: Number of shards for single user in usage log
   long_desc: The number of shards that a single user will span over in the usage log.
+  fmt_desc: The maximum number of shards used for a single user's
+    usage logging.
   default: 1
   services:
   - rgw
@@ -1271,6 +1435,7 @@ options:
   type: bool
   level: advanced
   desc: Enable ops log
+  fmt_desc: Enable logging for each successful Ceph Object Gateway operation.
   default: false
   services:
   - rgw
@@ -1284,7 +1449,7 @@ options:
 - name: rgw_enable_usage_log
   type: bool
   level: advanced
-  desc: Enable usage log
+  desc: Enable the usage log
   default: false
   services:
   - rgw
@@ -1297,6 +1462,8 @@ options:
   level: advanced
   desc: Use RADOS for ops log
   long_desc: If set, RGW will store ops log information in RADOS.
+  fmt_desc: Whether the operations log should be written to the
+    Ceph Storage Cluster backend.
   default: true
   services:
   - rgw
@@ -1310,6 +1477,7 @@ options:
   desc: Unix domain socket path for ops log.
   long_desc: Path to unix domain socket that RGW will listen for connection on. When
     connected, RGW will send ops log data through it.
+  fmt_desc: The Unix domain socket for writing operations logs.
   services:
   - rgw
   see_also:
@@ -1325,26 +1493,14 @@ options:
     to send info through unix domain socket. When data backlog is higher than this,
     ops log entries will be lost. In order to avoid ops log information loss, the
     listener needs to clear data (by reading it) quickly enough.
+  fmt_desc: The maximum data backlog data size for operations logs written
+    to a Unix domain socket.
   default: 5_M
   services:
   - rgw
   see_also:
   - rgw_enable_ops_log
   - rgw_ops_log_socket_path
-  with_legacy: true
-# socket  backlog for fcgi
-- name: rgw_fcgi_socket_backlog
-  type: int
-  level: advanced
-  desc: FastCGI socket connection backlog
-  long_desc: 'Size of FastCGI connection backlog. This reflects the maximum number
-    of new connection requests that RGW can handle concurrently without dropping any. '
-  default: 1024
-  services:
-  - rgw
-  see_also:
-  - rgw_host
-  - rgw_socket_path
   with_legacy: true
 - name: rgw_usage_log_flush_threshold
   type: int
@@ -1354,6 +1510,8 @@ options:
     before it will be flushed to the backend. Note that the usage log is periodically
     flushed, even if number of entries does not reach this threshold. A usage log
     entry corresponds to one or more operations on a single bucket.i
+  fmt_desc: The number of dirty merged entries in the usage log before
+    flushing synchronously.
   default: 1024
   services:
   - rgw
@@ -1368,6 +1526,7 @@ options:
   long_desc: The number of seconds between consecutive usage log flushes. The usage
     log will also flush itself to the backend if the number of pending entries reaches
     a certain threshold.
+  fmt_desc: Flush pending usage log data every ``n`` seconds.
   default: 30
   services:
   - rgw
@@ -1382,6 +1541,8 @@ options:
   long_desc: The time length (in seconds) that RGW will allow for its initialization.
     RGW process will give up and quit if initialization is not complete after this
     amount of time.
+  fmt_desc: The number of seconds before Ceph Object Gateway gives up on
+    initialization.
   default: 5_min
   services:
   - rgw
@@ -1393,6 +1554,8 @@ options:
   long_desc: The mime types file is needed in Swift when uploading an object. If object's
     content type is not specified, RGW will use data from this file to assign a content
     type to the object.
+  fmt_desc: The path and location of the MIME-types file. Used for Swift
+    auto-detection of object types.
   default: /etc/mime.types
   services:
   - rgw
@@ -1403,6 +1566,9 @@ options:
   desc: Number of shards for garbage collector data
   long_desc: The number of garbage collector data shards, is the number of RADOS objects
     that RGW will use to store the garbage collection information on.
+  fmt_desc: The maximum number of objects that may be handled by
+    garbage collection in one garbage collection processing cycle.
+    Please do not change this value after the first deployment.
   default: 32
   services:
   - rgw
@@ -1421,6 +1587,8 @@ options:
     purging a deleted object's data. RGW will not remove object immediately, as object
     could still have readers. A mechanism exists to increase the object's expiration
     time when it's being read. The recommended value of its lower limit is 30 minutes
+  fmt_desc: The minimum wait time before a deleted object may be removed
+    and handled by garbage collection processing.
   default: 2_hr
   services:
   - rgw
@@ -1441,6 +1609,8 @@ options:
     seconds) that RGW is allowed to hold that lease. In the case where RGW goes down
     uncleanly, this is the amount of time where processing of that data shard will
     be blocked.
+  fmt_desc: The maximum time between the beginning of two consecutive garbage
+    collection processing cycles.
   default: 1_hr
   services:
   - rgw
@@ -1457,6 +1627,7 @@ options:
   long_desc: The amount of time between the start of consecutive runs of the garbage
     collector threads. If garbage collector runs takes more than this period, it will
     not wait before running again.
+  fmt_desc: The cycle time for garbage collection processing.
   default: 1_hr
   services:
   - rgw
@@ -1530,6 +1701,7 @@ options:
   desc: HTTP return code override for object creation
   long_desc: If not zero, this is the HTTP return code that will be returned on a
     successful S3 object creation.
+  fmt_desc: The alternate success status response for ``create-obj``.
   default: 0
   services:
   - rgw
@@ -1550,6 +1722,8 @@ options:
     that was sent to a host in another domain. If a CNAME record is configured for
     that domain it will use it instead. This gives user to have the ability of creating
     a unique domain of their own to point at data in their bucket.
+  fmt_desc: Whether ``rgw`` should use DNS CNAME record of the request
+    hostname field (if hostname is not equal to ``rgw dns name``).
   default: false
   services:
   - rgw
@@ -1561,6 +1735,8 @@ options:
   long_desc: The size of an object stripe for RGW objects. This is the maximum size
     a backing RADOS object will have. RGW objects that are larger than this will span
     over multiple objects.
+  fmt_desc: The size of an object stripe for Ceph Object Gateway objects.
+    See `Architecture`_ for details on striping.
   default: 4_M
   services:
   - rgw
@@ -1573,8 +1749,14 @@ options:
   long_desc: Add new set of attributes that could be set on an object. These extra
     attributes can be set through HTTP header fields when putting the objects. If
     set, these attributes will return as HTTP fields when doing GET/HEAD on the object.
+  fmt_desc: Add new set of attributes that could be set on an entity
+    (user, bucket or object). These extra attributes can be set
+    through HTTP header fields when putting the entity or modifying
+    it using POST method. If set, these attributes will return as
+    HTTP  fields when doing GET/HEAD on the entity.
   services:
   - rgw
+  example: content_foo, content_bar, x-foo-bar
   with_legacy: true
 - name: rgw_exit_timeout_secs
   type: int
@@ -1599,6 +1781,8 @@ options:
   level: advanced
   desc: RGW object read chunk size
   long_desc: The maximum request size of a single object read operation sent to RADOS
+  fmt_desc: The maximum request size of a single get operation sent to the
+    Ceph Storage Cluster.
   default: 4_M
   services:
   - rgw
@@ -1608,6 +1792,7 @@ options:
   level: advanced
   desc: RGW enable relaxed S3 bucket names
   long_desc: RGW enable relaxed S3 bucket name rules for US region buckets.
+  fmt_desc: Enables relaxed S3 bucket names rules for US region buckets.
   default: false
   services:
   - rgw
@@ -1629,6 +1814,8 @@ options:
   long_desc: When RGW fetches lists of user's buckets from the backend, this is the
     max number of entries it will try to retrieve in a single operation. Note that
     the backend may choose to return a smaller number of entries.
+  fmt_desc: The maximum number of buckets to retrieve in a single operation
+    when listing user buckets.
   default: 1000
   services:
   - rgw
@@ -1640,6 +1827,7 @@ options:
   long_desc: The number of shards the RGW metadata log entries will reside in. This
     affects the metadata sync parallelism as a shard can only be processed by a single
     RGW at a time
+  fmt_desc: The maximum number of shards for the metadata log.
   default: 64
   services:
   - rgw
@@ -1659,6 +1847,7 @@ options:
   type: int
   level: dev
   default: 1000
+  fmt_desc: The timeout in milliseconds for certain ``curl`` calls.
   services:
   - rgw
   with_legacy: true
@@ -1686,7 +1875,8 @@ options:
   type: bool
   level: advanced
   desc: Send progress report through copy operation
-  long_desc: 'If true, RGW will send progress information when copy operation is executed. '
+  long_desc: If true, RGW will send progress information when copy operation is executed.
+  fmt_desc: Enables output of object progress during long copy operations.
   default: true
   services:
   - rgw
@@ -1695,6 +1885,7 @@ options:
   type: size
   level: advanced
   desc: Send copy-object progress info after these many bytes
+  fmt_desc: The minimum bytes between copy progress output.
   default: 1_M
   services:
   - rgw
@@ -1729,6 +1920,7 @@ options:
   long_desc: The data log keeps information about buckets that have objectst that
     were modified within a specific timeframe. The sync process then knows which buckets
     are needed to be scanned for data sync.
+  fmt_desc: The data log entries window in seconds.
   default: 30
   services:
   - rgw
@@ -1739,6 +1931,7 @@ options:
   desc: Max size of pending changes in data log
   long_desc: RGW will trigger update to the data log if the number of pending entries
     reached this number.
+  fmt_dsec: The number of in-memory entries to hold for the data changes log.
   default: 1000
   services:
   - rgw
@@ -1750,6 +1943,8 @@ options:
   long_desc: The number of shards the RGW data log entries will reside in. This affects
     the data sync parallelism as a shard can only be processed by a single RGW at
     a time.
+  fmt_desc: The number of shards (objects) on which to keep the
+    data changes log.
   default: 128
   services:
   - rgw
@@ -1758,6 +1953,7 @@ options:
   type: str
   level: dev
   default: data_log
+  fmt_desc: The object name prefix for the data log.
   services:
   - rgw
   with_legacy: true
@@ -1766,19 +1962,10 @@ options:
   level: advanced
   desc: Bucket quota stats cache TTL
   long_desc: Length of time for bucket stats to be cached within RGW instance.
+  fmt_desc: The amount of time in seconds cached quota information is
+    trusted.  After this timeout, the quota information will be
+    re-fetched from the cluster.
   default: 10_min
-  services:
-  - rgw
-  with_legacy: true
-- name: rgw_bucket_quota_soft_threshold
-  type: float
-  level: basic
-  desc: RGW quota soft threshold
-  long_desc: Threshold from which RGW doesn't rely on cached info for quota decisions.
-    This is done for higher accuracy of the quota mechanism at cost of performance,
-    when getting close to the quota limit. The value configured here is the ratio
-    between the data usage to the max usage as specified by the quota.
-  default: 0.95
   services:
   - rgw
   with_legacy: true
@@ -1797,6 +1984,10 @@ options:
   desc: Default quota for max objects in a bucket
   long_desc: The default quota configuration for max number of objects in a bucket.
     A negative number means 'unlimited'.
+  fmt_desc: Default max number of objects per bucket. Set on new users,
+    if no other quota is specified. Has no effect on existing users.
+    This variable should be set in the client or global sections
+    so that it is automatically applied to radosgw-admin commands.
   default: -1
   services:
   - rgw
@@ -1807,6 +1998,8 @@ options:
   desc: Default quota for total size in a bucket
   long_desc: The default quota configuration for total size of objects in a bucket.
     A negative number means 'unlimited'.
+  fmt_desc: Default max capacity per bucket, in bytes. Set on new users,
+    if no other quota is specified. Has no effect on existing users.
   default: -1
   services:
   - rgw
@@ -1828,6 +2021,11 @@ options:
   long_desc: A comma delimited list of frontends configuration. Each configuration
     contains the type of the frontend followed by an optional space delimited set
     of key=value config parameters.
+  fmt_desc: Configures the HTTP frontend(s). The configuration for multiple
+    frontends can be provided in a comma-delimited list. Each frontend
+    configuration may include a list of options separated by spaces,
+    where each option is in the form "key=value" or "key". See
+    `HTTP Frontends`_ for more on supported options.
   default: beast port=7480
   services:
   - rgw
@@ -1840,11 +2038,28 @@ options:
   default: beast ssl_certificate=config://rgw/cert/$realm/$zone.crt ssl_private_key=config://rgw/cert/$realm/$zone.key
   services:
   - rgw
+- name: rgw_beast_enable_async
+  type: bool
+  level: dev
+  desc: Enable async request processing under beast using coroutines
+  long_desc: When enabled, the beast frontend will process requests using
+    coroutines, allowing the concurrent processing of several requests on the
+    same thread. When disabled, the number of concurrent requests will be
+    limited by the thread count, but debugging and tracing the synchronous
+    calls can be easier.
+  default: true
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_user_quota_bucket_sync_interval
   type: int
   level: advanced
   desc: User quota bucket sync interval
   long_desc: Time period for accumulating modified buckets before syncing these stats.
+  fmt_desc: The amount of time in seconds bucket quota information is
+    accumulated before syncing to the cluster.  During this time,
+    other RGW instances will not see the changes in bucket quota
+    stats from operations on this instance.
   default: 3_min
   services:
   - rgw
@@ -1855,6 +2070,10 @@ options:
   desc: User quota sync interval
   long_desc: Time period for accumulating modified buckets before syncing entire user
     stats.
+  fmt_desc: The amount of time in seconds user quota information is
+    accumulated before syncing to the cluster.  During this time,
+    other RGW instances will not see the changes in user quota stats
+    from operations on this instance.
   default: 1_day
   services:
   - rgw
@@ -1883,6 +2102,9 @@ options:
   desc: User quota max objects
   long_desc: The default quota configuration for total number of objects for a single
     user. A negative number means 'unlimited'.
+  fmt_desc: Default max number of objects for a user. This includes all
+    objects in all buckets owned by the user. Set on new users,
+    if no other quota is specified. Has no effect on existing users.
   default: -1
   services:
   - rgw
@@ -1893,6 +2115,8 @@ options:
   desc: User quota max size
   long_desc: The default quota configuration for total size of objects for a single
     user. A negative number means 'unlimited'.
+  fmt_desc: The value for user max size quota in bytes set on new users,
+    if no other quota is specified.  Has no effect on existing users.
   default: -1
   services:
   - rgw
@@ -1901,7 +2125,7 @@ options:
   type: size
   level: advanced
   desc: Minimum S3 multipart-upload part size
-  long_desc: When doing a multipart upload, each part (other than the last part) should
+  long_desc: When doing a multipart upload, each part (other than the last part) must
     be at least this size.
   default: 5_M
   services:
@@ -1997,6 +2221,10 @@ options:
   desc: List of HTTP headers to log
   long_desc: A comma delimited list of HTTP headers to log when seen, ignores case
     (e.g., http_x_forwarded_for).
+  fmt_desc: Comma-delimited list of HTTP headers to include with ops
+    log entries.  Header names are case insensitive, and use
+    the full header name with words separated by underscores.
+  example: http_x_forwarded_for, http_x_special_k
   services:
   - rgw
   with_legacy: true
@@ -2026,6 +2254,8 @@ options:
   type: bool
   level: advanced
   desc: Should run sync thread
+  fmt_desc: If there are other zones in the realm to sync from, spawn threads
+    to handle the sync of data and metadata.
   default: true
   services:
   - rgw
@@ -2176,6 +2406,19 @@ options:
   type: bool
   level: advanced
   desc: Enable Swift versioning
+  fmt_desc: |
+    Enables the Object Versioning of OpenStack Object Storage API.
+    This allows clients to put the ``X-Versions-Location`` attribute
+    on containers that should be versioned. The attribute specifies
+    the name of container storing archived versions. It must be owned
+    by the same user that the versioned container due to access
+    control verification - ACLs are NOT taken into consideration.
+    Those containers cannot be versioned by the S3 object versioning
+    mechanism.
+
+    A slightly different attribute, ``X-History-Location``, which is also understood by
+    `OpenStack Swift <https://docs.openstack.org/swift/latest/api/object_versioning.html>`_
+    for handling ``DELETE`` operations, is currently not supported.
   default: false
   services:
   - rgw
@@ -2257,6 +2500,14 @@ options:
     server side encryption. (Never enable this setting if you do not have a trusted
     proxy in front of radosgw, or else malicious users will be able to set these headers
     in any request.)
+  fmt_desc: When a proxy in front of radosgw is used for ssl termination, radosgw
+    does not know whether incoming http connections are secure. Enable
+    this option to trust the ``Forwarded`` and ``X-Forwarded-Proto`` headers
+    sent by the proxy when determining whether the connection is secure.
+    This is required for some features, such as server side encryption.
+    (Never enable this setting if you do not have a trusted proxy in front of
+    radosgw, or else malicious users will be able to set these headers in
+    any request.)
   default: false
   services:
   - rgw
@@ -2283,6 +2534,9 @@ options:
   level: advanced
   desc: Where the SSE-KMS encryption keys are stored. Supported KMS systems are OpenStack
     Barbican ('barbican', the default) and HashiCorp Vault ('vault').
+  fmt_desc: Where the SSE-KMS encryption keys are stored. Supported KMS
+    systems are OpenStack Barbican (``barbican``, the default) and
+    HashiCorp Vault (``vault``).
   default: barbican
   services:
   - rgw
@@ -2304,6 +2558,8 @@ options:
   type: str
   level: advanced
   desc: Type of authentication method to be used with Vault.
+  fmt_desc: Type of authentication method to be used. The only method
+    currently supported is ``token``.
   default: token
   services:
   - rgw
@@ -2331,6 +2587,7 @@ options:
   type: str
   level: advanced
   desc: Vault server base address.
+  fmt_desc: Vault server base address, e.g. ``http://vaultserver:8200``.
   services:
   - rgw
   see_also:
@@ -2344,6 +2601,8 @@ options:
   level: advanced
   desc: Vault secret URL prefix, which can be used to restrict access to a particular
     subset of the Vault secret space.
+  fmt_desc: The Vault secret URL prefix, which can be used to restrict access
+    to a particular subset of the secret space, e.g. ``/v1/secret/data``.
   services:
   - rgw
   see_also:
@@ -2356,6 +2615,9 @@ options:
   type: str
   level: advanced
   desc: Vault Secret Engine to be used to retrieve encryption keys.
+  fmt_desc: |
+    Vault Secret Engine to be used to retrieve encryption keys: choose
+    between kv-v2, transit.
   default: transit
   services:
   - rgw
@@ -2369,6 +2631,8 @@ options:
   type: str
   level: advanced
   desc: Vault Namespace to be used to select your tenant
+  fmt_desc: If set, Vault Namespace provides tenant isolation for teams and individuals
+    on the same Vault Enterprise instance, e.g. ``acme/tenant1``
   services:
   - rgw
   see_also:
@@ -2743,6 +3007,16 @@ options:
   level: advanced
   desc: Set the type of dmclock scheduler, defaults to throttler Other valid values
     are dmclock which is experimental
+  fmt_desc: |
+    The RGW scheduler to use. Valid values are ``throttler` and
+    ``dmclock``. Currently defaults to ``throttler`` which throttles Beast
+    frontend requests. ``dmclock` is *experimental* and requires the
+    ``dmclock`` to be included in the ``experimental_feature_enabled``
+    configuration option.
+
+    The options below tune the experimental dmclock scheduler. For
+    additional reading on dmclock, see :ref:`dmclock-qos`. `op_class` for the flags below is
+    one of ``admin``, ``auth``, ``metadata``, or ``data``.
   default: throttler
   services:
   - rgw
@@ -2879,6 +3153,90 @@ options:
   enum_values:
   - fifo
   - omap
+- name: rgw_d3n_l1_local_datacache_enabled
+  type: bool
+  level: advanced
+  desc: Enable datacenter-scale dataset delivery local cache
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d3n_l1_datacache_persistent_path
+  type: str
+  level: advanced
+  desc: path for the directory for storing the local cache objects data
+  default: /tmp/rgw_datacache/
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d3n_l1_datacache_size
+  type: size
+  level: advanced
+  desc: datacache maximum size on disk in bytes
+  default: 1_G
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d3n_l1_evict_cache_on_start
+  type: bool
+  level: advanced
+  desc: clear the content of the persistent data cache directory on start
+  default: true
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d3n_l1_fadvise
+  type: int
+  level: advanced
+  desc: posix_fadvise() flag for access pattern of cache files
+  long_desc: for example to bypass the page-cache -
+    POSIX_FADV_DONTNEED=4
+  default: 4
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d3n_l1_eviction_policy
+  type: str
+  level: advanced
+  desc: select the d3n cache eviction policy
+  default: lru
+  services:
+  - rgw
+  enum_values:
+  - lru
+  - random
+  with_legacy: true
+- name: rgw_d3n_libaio_aio_threads
+  type: int
+  level: advanced
+  desc: specifies the maximum number of worker threads that may be used by libaio
+  default: 20
+  services:
+  - rgw
+  see_also:
+  - rgw_thread_pool_size
+  with_legacy: true
+- name: rgw_d3n_libaio_aio_num
+  type: int
+  level: advanced
+  desc: specifies the maximum number of simultaneous I/O requests that libaio expects to enqueue
+  default: 64
+  services:
+  - rgw
+  see_also:
+  - rgw_thread_pool_size
+  with_legacy: true
+- name: rgw_backend_store
+  type: str
+  level: advanced
+  desc: experimental Option to set backend store type
+  long_desc: defaults to rados. Other valid values are dbstore(experimental).
+  default: rados
+  services:
+  - rgw
+  enum_values:
+  - rados
+  - dbstore
 - name: rgw_luarocks_location
   type: str
   level: advanced

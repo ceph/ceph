@@ -3,13 +3,7 @@
 
 #include "ObjectCacheStore.h"
 #include "Utils.h"
-#if __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_immutable_obj_cache
@@ -17,19 +11,20 @@ namespace fs = std::experimental::filesystem;
 #define dout_prefix *_dout << "ceph::cache::ObjectCacheStore: " << this << " " \
                            << __func__ << ": "
 
+namespace fs = std::filesystem;
 
 namespace ceph {
 namespace immutable_obj_cache {
 
 namespace {
 
-class SafeTimerSingleton : public SafeTimer {
+class SafeTimerSingleton : public CommonSafeTimer<ceph::mutex> {
 public:
   ceph::mutex lock = ceph::make_mutex
     ("ceph::immutable_object_cache::SafeTimerSingleton::lock");
 
   explicit SafeTimerSingleton(CephContext *cct)
-      : SafeTimer(cct, lock, true) {
+      : CommonSafeTimer(cct, lock, true) {
     init();
   }
   ~SafeTimerSingleton() {

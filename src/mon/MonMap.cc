@@ -4,6 +4,7 @@
 #include "MonMap.h"
 
 #include <algorithm>
+#include <sstream>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -29,12 +30,22 @@
 using std::list;
 using std::map;
 using std::ostream;
+using std::ostringstream;
 using std::set;
 using std::string;
 using std::vector;
 
 using ceph::DNSResolver;
 using ceph::Formatter;
+
+#ifdef WITH_SEASTAR
+namespace {
+  seastar::logger& logger()
+  {
+    return crimson::get_logger(ceph_subsys_monc);
+  }
+}
+#endif
 
 void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
 {
@@ -369,7 +380,9 @@ void MonMap::print(ostream& out) const
   out << "min_mon_release " << to_integer<unsigned>(min_mon_release)
       << " (" << min_mon_release << ")\n";
   out << "election_strategy: " << strategy << "\n";
-  if (disallowed_leaders.size()) {
+  if (stretch_mode_enabled) {
+    out << "stretch_mode_enabled " << stretch_mode_enabled << "\n";
+    out << "tiebreaker_mon " << tiebreaker_mon << "\n";
     out << "disallowed_leaders " << disallowed_leaders << "\n";
   }
   unsigned i = 0;
@@ -395,6 +408,7 @@ void MonMap::dump(Formatter *f) const
   f->dump_int ("election_strategy", strategy);
   f->dump_stream("disallowed_leaders: ") << disallowed_leaders;
   f->dump_bool("stretch_mode", stretch_mode_enabled);
+  f->dump_string("tiebreaker_mon", tiebreaker_mon);
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");
@@ -724,10 +738,9 @@ void MonMap::check_health(health_check_map_t *checks) const
 
 #ifdef WITH_SEASTAR
 
-using namespace seastar;
-
 seastar::future<> MonMap::read_monmap(const std::string& monmap)
 {
+  using namespace seastar;
   return open_file_dma(monmap, open_flags::ro).then([this] (file f) {
     return f.size().then([this, f = std::move(f)](size_t s) {
       return do_with(make_file_input_stream(f), [this, s](input_stream<char>& in) {
@@ -755,7 +768,7 @@ seastar::future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& na
   return seastar::net::dns::get_srv_records(
       seastar::net::dns_resolver::srv_proto::tcp,
       service, domain).then([this](seastar::net::dns_resolver::srv_records records) {
-    return parallel_for_each(records, [this](auto record) {
+    return seastar::parallel_for_each(records, [this](auto record) {
       return seastar::net::dns::resolve_name(record.target).then(
           [record,this](seastar::net::inet_address a) {
 	// the resolved address does not contain ceph specific info like nonce
@@ -777,29 +790,42 @@ seastar::future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& na
                             record.priority,
                             record.weight,
                             false);
+      }).handle_exception_type([t=record.target](const std::system_error& e) {
+        logger().debug("{}: unable to resolve name for {}: {}",
+                       "init_with_dns_srv", t, e);
       });
     });
-  }).handle_exception_type([](const std::system_error& e) {
+  }).handle_exception_type([name](const std::system_error& e) {
+    logger().debug("{}: unable to get monitor info from DNS SRV with {}: {}",
+                 "init_with_dns_srv", name, e);
     // ignore DNS failures
     return seastar::make_ready_future<>();
   });
+}
+
+bool MonMap::maybe_init_with_mon_host(const std::string& mon_host,
+                                      const bool for_mkfs)
+{
+  if (!mon_host.empty()) {
+    if (auto ret = init_with_ips(mon_host, for_mkfs, "noname-"); ret == 0) {
+      return true;
+    }
+    // TODO: resolve_addrs() is a blocking call
+    if (auto ret = init_with_hosts(mon_host, for_mkfs, "noname-"); ret == 0) {
+      return true;
+    } else {
+      throw std::runtime_error(cpp_strerror(ret));
+    }
+  }
+  return false;
 }
 
 seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
 				       bool for_mkfs)
 {
   // -m foo?
-  if (const auto mon_host = conf.get_val<std::string>("mon_host");
-      !mon_host.empty()) {
-    if (auto ret = init_with_ips(mon_host, for_mkfs, "noname-"); ret == 0) {
-      return make_ready_future<>();
-    }
-    // TODO: resolve_addrs() is a blocking call
-    if (auto ret = init_with_hosts(mon_host, for_mkfs, "noname-"); ret == 0) {
-      return make_ready_future<>();
-    } else {
-      throw std::runtime_error(cpp_strerror(ret));
-    }
+  if (maybe_init_with_mon_host(conf.get_val<std::string>("mon_host"), for_mkfs)) {
+    return seastar::make_ready_future<>();
   }
 
   // What monitors are in the config file?
@@ -808,7 +834,7 @@ seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
     throw std::runtime_error(errout.str());
   }
   if (size() > 0) {
-    return make_ready_future<>();
+    return seastar::make_ready_future<>();
   }
   // no info found from conf options lets try use DNS SRV records
   const string srv_name = conf.get_val<std::string>("mon_dns_srv_name");
@@ -821,6 +847,12 @@ seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
 
 seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs)
 {
+  // mon_host_override?
+  if (maybe_init_with_mon_host(conf.get_val<std::string>("mon_host_override"),
+                               for_mkfs)) {
+    return seastar::make_ready_future<>();
+  }
+
   // file?
   if (const auto monmap = conf.get_val<std::string>("monmap");
       !monmap.empty()) {

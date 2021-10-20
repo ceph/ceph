@@ -222,7 +222,7 @@ def update_relations(r, issue, dry_run):
         other = r.issue.create(project_id=issue['project']['id'],
                                tracker_id=backport_tracker_id,
                                subject=subject,
-                               priority='Normal',
+                               priority_id=issue['priority']['id'],
                                target_version=None,
                                custom_fields=[{
                                    "id": release_id,

@@ -7,7 +7,7 @@ SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
 cd $CEPH_ROOT/src/pybind/mgr/dashboard/frontend
 [ -z "$BUILD_DIR" ] && BUILD_DIR=build
 if [ `uname` != "FreeBSD" ]; then
-  .  $CEPH_ROOT/${BUILD_DIR}/src/pybind/mgr/dashboard/node-env/bin/activate
+  .  $CEPH_ROOT/${BUILD_DIR}/src/pybind/mgr/dashboard/frontend/node-env/bin/activate
 fi
 
 # Build

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <boost/optional.hpp>
+#include <optional>
 
 #include "mon/PaxosService.h"
 
@@ -14,16 +14,16 @@ extern const std::string KV_PREFIX;
 class KVMonitor : public PaxosService
 {
   version_t version = 0;
-  std::map<std::string,boost::optional<ceph::buffer::list>> pending;
+  std::map<std::string,std::optional<ceph::buffer::list>> pending;
 
-  bool _have_prefix(const string &prefix);
+  bool _have_prefix(const std::string &prefix);
 
 public:
   KVMonitor(Monitor &m, Paxos &p, const std::string& service_name);
 
   void init() override;
 
-  void get_store_prefixes(set<string>& s) const override;
+  void get_store_prefixes(std::set<std::string>& s) const override;
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
@@ -64,6 +64,6 @@ public:
     pending[key] = v;
   }
   void enqueue_rm(const std::string& key) {
-    pending[key] = boost::none;
+    pending[key].reset();
   }
 };

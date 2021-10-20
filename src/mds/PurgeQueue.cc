@@ -23,6 +23,9 @@
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, rank) << __func__ << ": "
+
+using namespace std;
+
 static ostream& _prefix(std::ostream *_dout, mds_rank_t rank) {
   return *_dout << "mds." << rank << ".purge_queue ";
 }
@@ -594,8 +597,8 @@ void PurgeQueue::_execute_item(
 
   in_flight[expire_to] = item;
   logger->set(l_pq_executing, in_flight.size());
-  files_high_water = std::max(files_high_water,
-                              static_cast<uint64_t>(in_flight.size()));
+  files_high_water = std::max<uint64_t>(files_high_water,
+                              in_flight.size());
   logger->set(l_pq_executing_high_water, files_high_water);
   auto ops = _calculate_ops(item);
   ops_in_flight += ops;
@@ -662,8 +665,8 @@ void PurgeQueue::_execute_item(
     logger->set(l_pq_executing_ops_high_water, ops_high_water);
     in_flight.erase(expire_to);
     logger->set(l_pq_executing, in_flight.size());
-    files_high_water = std::max(files_high_water,
-                                static_cast<uint64_t>(in_flight.size()));
+    files_high_water = std::max<uint64_t>(files_high_water,
+                                in_flight.size());
     logger->set(l_pq_executing_high_water, files_high_water);
     return;
   }
@@ -716,8 +719,8 @@ void PurgeQueue::_execute_item_complete(
 
   in_flight.erase(iter);
   logger->set(l_pq_executing, in_flight.size());
-  files_high_water = std::max(files_high_water,
-                              static_cast<uint64_t>(in_flight.size()));
+  files_high_water = std::max<uint64_t>(files_high_water,
+                              in_flight.size());
   logger->set(l_pq_executing_high_water, files_high_water);
   dout(10) << "in_flight.size() now " << in_flight.size() << dendl;
 

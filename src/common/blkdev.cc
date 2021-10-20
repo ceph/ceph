@@ -429,6 +429,14 @@ std::string _decode_model_enc(const std::string& in)
     v.erase(found + 1);
   }
   std::replace(v.begin(), v.end(), ' ', '_');
+
+  // remove "__", which seems to come up on by ubuntu box for some reason.
+  while (true) {
+    auto p = v.find("__");
+    if (p == std::string::npos) break;
+    v.replace(p, 2, "_");
+  }
+
   return v;
 }
 

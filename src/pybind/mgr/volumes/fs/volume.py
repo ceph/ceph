@@ -51,7 +51,7 @@ class VolumeClient(CephfsClient["Module"]):
         super().__init__(mgr)
         # volume specification
         self.volspec = VolSpec(mgr.rados.conf_get('client_snapdir'))
-        self.cloner = Cloner(self, self.mgr.max_concurrent_clones)
+        self.cloner = Cloner(self, self.mgr.max_concurrent_clones, self.mgr.snapshot_clone_delay)
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
         # on startup, queue purge job for available volumes to kickstart
         # purge for leftover subvolume entries in trash. note that, if the
@@ -73,7 +73,7 @@ class VolumeClient(CephfsClient["Module"]):
         # stop purge threads
         self.purge_queue.shutdown()
         # last, delete all libcephfs handles from connection pool
-        self.connection_pool.del_all_handles()
+        self.connection_pool.del_all_connections()
 
     def cluster_log(self, msg, lvl=None):
         """
@@ -122,7 +122,7 @@ class VolumeClient(CephfsClient["Module"]):
         if not metadata_pool:
             return -errno.ENOENT, "", "volume {0} doesn't exist".format(volname)
         self.purge_queue.cancel_jobs(volname)
-        self.connection_pool.del_fs_handle(volname, wait=True)
+        self.connection_pool.del_connections(volname, wait=True)
         return delete_volume(self.mgr, volname, metadata_pool, data_pools)
 
     def list_fs_volumes(self):
@@ -204,7 +204,7 @@ class VolumeClient(CephfsClient["Module"]):
                     # the purge threads on dump.
                     self.purge_queue.queue_job(volname)
         except VolumeException as ve:
-            if ve.errno == -errno.EAGAIN:
+            if ve.errno == -errno.EAGAIN and not force:
                 ve = VolumeException(ve.errno, ve.error_str + " (use --force to override)")
                 ret = self.volume_exception_to_retval(ve)
             elif not (ve.errno == -errno.ENOENT and force):

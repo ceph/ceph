@@ -43,13 +43,13 @@ struct RGWUID
 {
   rgw_user user_id;
   void encode(bufferlist& bl) const {
-    string s;
+    std::string s;
     user_id.to_str(s);
     using ceph::encode;
     encode(s, bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    string s;
+    std::string s;
     using ceph::decode;
     decode(s, bl);
     user_id.from_str(s);
@@ -60,7 +60,7 @@ WRITE_CLASS_ENCODER(RGWUID)
 extern int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw::sal::User* user, optional_yield y);
 extern int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
   rgw::sal::Store* store, rgw::sal::User* user,
-  map<string, cls_user_bucket_entry>& buckets_usage_map, optional_yield y);
+  std::map<std::string, cls_user_bucket_entry>& buckets_usage_map, optional_yield y);
 
 /**
  * Get the anonymous (ie, unauthenticated) user info.
@@ -70,7 +70,7 @@ extern void rgw_get_anon_user(RGWUserInfo& info);
 extern void rgw_perm_to_str(uint32_t mask, char *buf, int len);
 extern uint32_t rgw_str_to_perm(const char *str);
 
-extern int rgw_validate_tenant_name(const string& t);
+extern int rgw_validate_tenant_name(const std::string& t);
 
 enum ObjectKeyType {
   KEY_TYPE_SWIFT,
@@ -111,7 +111,7 @@ struct RGWUserAdminOpState {
   std::string caps;
   RGWObjVersionTracker objv;
   uint32_t op_mask{0};
-  map<int, string> temp_url_keys;
+  std::map<int, std::string> temp_url_keys;
 
   // subuser attributes
   std::string subuser;
@@ -121,8 +121,9 @@ struct RGWUserAdminOpState {
   std::string id; // access key
   std::string key; // secret key
   int32_t key_type{-1};
+  bool access_key_exist = false;
 
-  std::set<string> mfa_ids;
+  std::set<std::string> mfa_ids;
 
   // operation attributes
   bool existing_user{false};
@@ -174,7 +175,7 @@ struct RGWUserAdminOpState {
   rgw_placement_rule default_placement; // user default placement
   bool default_placement_specified{false};
 
-  list<string> placement_tags;  // user default placement_tags
+  std::list<std::string> placement_tags;  // user default placement_tags
   bool placement_tags_specified{false};
 
   void set_access_key(const std::string& access_key) {
@@ -244,7 +245,7 @@ struct RGWUserAdminOpState {
     op_mask_specified = true;
   }
 
-  void set_temp_url_key(const string& key, int index) {
+  void set_temp_url_key(const std::string& key, int index) {
     temp_url_keys[index] = key;
     temp_url_key_specified = true;
   }
@@ -252,6 +253,10 @@ struct RGWUserAdminOpState {
   void set_key_type(int32_t type) {
     key_type = type;
     type_specified = true;
+  }
+
+  void set_access_key_exist() {
+    access_key_exist = true;
   }
 
   void set_suspension(__u8 is_suspended) {
@@ -326,7 +331,7 @@ struct RGWUserAdminOpState {
     user_quota_specified = true;
   }
 
-  void set_mfa_ids(const std::set<string>& ids) {
+  void set_mfa_ids(const std::set<std::string>& ids) {
     mfa_ids = ids;
     mfa_ids_specified = true;
   }
@@ -336,7 +341,7 @@ struct RGWUserAdminOpState {
     default_placement_specified = true;
   }
 
-  void set_placement_tags(const list<string>& _tags) {
+  void set_placement_tags(const std::list<std::string>& _tags) {
     placement_tags = _tags;
     placement_tags_specified = true;
   }
@@ -372,12 +377,13 @@ struct RGWUserAdminOpState {
   void set_generate_subuser(bool flag) { gen_subuser = flag; }
   __u8 get_suspension_status() { return suspended; }
   int32_t get_key_type() {return key_type; }
+  bool get_access_key_exist() {return access_key_exist; }
   uint32_t get_subuser_perm() { return perm_mask; }
   int32_t get_max_buckets() { return max_buckets; }
   uint32_t get_op_mask() { return op_mask; }
   RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
   RGWQuotaInfo& get_user_quota() { return user_quota; }
-  set<string>& get_mfa_ids() { return mfa_ids; }
+  std::set<std::string>& get_mfa_ids() { return mfa_ids; }
 
   rgw::sal::User* get_user() { return user.get(); }
   const rgw_user& get_user_id();
@@ -389,13 +395,13 @@ struct RGWUserAdminOpState {
   std::string get_display_name() { return display_name; }
   rgw_user& get_new_uid() { return new_user_id; }
   bool get_overwrite_new_user() const { return overwrite_new_user; }
-  map<int, std::string>& get_temp_url_keys() { return temp_url_keys; }
+  std::map<int, std::string>& get_temp_url_keys() { return temp_url_keys; }
 
   RGWUserInfo&  get_user_info();
 
-  map<std::string, RGWAccessKey>* get_swift_keys();
-  map<std::string, RGWAccessKey>* get_access_keys();
-  map<std::string, RGWSubUser>* get_subusers();
+  std::map<std::string, RGWAccessKey>* get_swift_keys();
+  std::map<std::string, RGWAccessKey>* get_access_keys();
+  std::map<std::string, RGWSubUser>* get_subusers();
 
   RGWUserCaps* get_caps_obj();
 
@@ -416,8 +422,8 @@ class RGWAccessKeyPool
   rgw_user user_id;
   rgw::sal::Store* store{nullptr};
 
-  map<std::string, RGWAccessKey> *swift_keys{nullptr};
-  map<std::string, RGWAccessKey> *access_keys{nullptr};
+  std::map<std::string, RGWAccessKey> *swift_keys{nullptr};
+  std::map<std::string, RGWAccessKey> *access_keys{nullptr};
 
   // we don't want to allow keys for the anonymous user or a null user
   bool keys_allowed{false};
@@ -470,7 +476,7 @@ class RGWSubUserPool
   rgw::sal::Store* store{nullptr};
   bool subusers_allowed{false};
 
-  map<string, RGWSubUser> *subuser_map{nullptr};
+  std::map<std::string, RGWSubUser> *subuser_map{nullptr};
 
 private:
   int check_op(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
@@ -589,7 +595,7 @@ public:
   int info (RGWUserInfo& fetched_info, std::string *err_msg = NULL);
 
   /* list the existing users */
-  int list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+  int list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
   friend class RGWAccessKeyPool;
   friend class RGWSubUserPool;
@@ -601,7 +607,7 @@ public:
 class RGWUserAdminOp_User
 {
 public:
-  static int list(rgw::sal::Store* store,
+  static int list(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
   static int info(const DoutPrefixProvider *dpp,
@@ -670,7 +676,7 @@ public:
 
 struct RGWUserCompleteInfo {
   RGWUserInfo info;
-  map<string, bufferlist> attrs;
+  std::map<std::string, bufferlist> attrs;
   bool has_attrs{false};
 
   void dump(Formatter * const f) const {
@@ -736,7 +742,7 @@ public:
     RGWObjVersionTracker *objv_tracker{nullptr};
     ceph::real_time *mtime{nullptr};
     rgw_cache_entry_info *cache_info{nullptr};
-    map<string, bufferlist> *attrs{nullptr};
+    std::map<std::string, bufferlist> *attrs{nullptr};
 
     GetParams() {}
 
@@ -755,7 +761,7 @@ public:
       return *this;
     }
 
-    GetParams& set_attrs(map<string, bufferlist> *_attrs) {
+    GetParams& set_attrs(std::map<std::string, bufferlist> *_attrs) {
       attrs = _attrs;
       return *this;
     }
@@ -766,7 +772,7 @@ public:
     RGWObjVersionTracker *objv_tracker{nullptr};
     ceph::real_time mtime;
     bool exclusive{false};
-    map<string, bufferlist> *attrs{nullptr};
+    std::map<std::string, bufferlist> *attrs{nullptr};
 
     PutParams() {}
 
@@ -790,7 +796,7 @@ public:
       return *this;
     }
 
-    PutParams& set_attrs(map<string, bufferlist> *_attrs) {
+    PutParams& set_attrs(std::map<std::string, bufferlist> *_attrs) {
       attrs = _attrs;
       return *this;
     }
@@ -811,18 +817,18 @@ public:
                       const rgw_user& uid, RGWUserInfo *info,
                       optional_yield y, const GetParams& params = {});
   int get_info_by_email(const DoutPrefixProvider *dpp, 
-                        const string& email, RGWUserInfo *info,
+                        const std::string& email, RGWUserInfo *info,
                         optional_yield y, const GetParams& params = {});
   int get_info_by_swift(const DoutPrefixProvider *dpp, 
-                        const string& swift_name, RGWUserInfo *info,
+                        const std::string& swift_name, RGWUserInfo *info,
                         optional_yield y, const GetParams& params = {});
   int get_info_by_access_key(const DoutPrefixProvider *dpp, 
-                             const string& access_key, RGWUserInfo *info,
+                             const std::string& access_key, RGWUserInfo *info,
                              optional_yield y, const GetParams& params = {});
 
   int get_attrs_by_uid(const DoutPrefixProvider *dpp, 
                        const rgw_user& user_id,
-                       map<string, bufferlist> *attrs,
+                       std::map<std::string, bufferlist> *attrs,
                        optional_yield y,
                        RGWObjVersionTracker *objv_tracker = nullptr);
 
@@ -833,16 +839,18 @@ public:
                   const RGWUserInfo& info, optional_yield y,
                   const RemoveParams& params = {});
 
-  int add_bucket(const rgw_user& user,
+  int add_bucket(const DoutPrefixProvider *dpp, 
+                 const rgw_user& user,
                  const rgw_bucket& bucket,
                  ceph::real_time creation_time,
 		 optional_yield y);
-  int remove_bucket(const rgw_user& user,
+  int remove_bucket(const DoutPrefixProvider *dpp, 
+                    const rgw_user& user,
                     const rgw_bucket& bucket, optional_yield y);
   int list_buckets(const DoutPrefixProvider *dpp, 
                    const rgw_user& user,
-                   const string& marker,
-                   const string& end_marker,
+                   const std::string& marker,
+                   const std::string& end_marker,
                    uint64_t max,
                    bool need_stats,
                    RGWUserBuckets *buckets,
@@ -850,16 +858,18 @@ public:
 		   optional_yield y,
                    uint64_t default_max = 1000);
 
-  int flush_bucket_stats(const rgw_user& user,
+  int flush_bucket_stats(const DoutPrefixProvider *dpp, 
+                         const rgw_user& user,
                          const RGWBucketEnt& ent,
 			 optional_yield y);
-  int complete_flush_stats(const rgw_user& user, optional_yield y);
-  int reset_stats(const rgw_user& user, optional_yield y);
-  int read_stats(const rgw_user& user, RGWStorageStats *stats,
+  int complete_flush_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y);
+  int reset_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y);
+  int read_stats(const DoutPrefixProvider *dpp, 
+                 const rgw_user& user, RGWStorageStats *stats,
 		 optional_yield y,
 		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
-  int read_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx);
+  int read_stats_async(const DoutPrefixProvider *dpp, const rgw_user& user, RGWGetUserStats_CB *ctx);
 };
 
 class RGWUserMetaHandlerAllocator {

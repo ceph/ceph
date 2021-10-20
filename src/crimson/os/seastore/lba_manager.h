@@ -28,11 +28,10 @@ namespace crimson::os::seastore {
  */
 class LBAManager {
 public:
-  using base_ertr = Cache::get_extent_ertr;
+  using base_iertr = Cache::base_iertr;
 
-  using mkfs_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using mkfs_ret = mkfs_ertr::future<>;
+  using mkfs_iertr = base_iertr;
+  using mkfs_ret = mkfs_iertr::future<>;
   virtual mkfs_ret mkfs(
     Transaction &t
   ) = 0;
@@ -42,34 +41,32 @@ public:
    *
    * Future will not resolve until all pins have resolved (set_paddr called)
    */
-  using get_mapping_ertr = base_ertr;
-  using get_mapping_ret = get_mapping_ertr::future<lba_pin_list_t>;
-  virtual get_mapping_ret get_mapping(
+  using get_mappings_iertr = base_iertr;
+  using get_mappings_ret = get_mappings_iertr::future<lba_pin_list_t>;
+  virtual get_mappings_ret get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) = 0;
 
   /**
-   * Fetches mappings for laddr_t in range [offset, offset + len)
+   * Fetches mappings for a list of laddr_t in range [offset, offset + len)
    *
-   * Future will not result until all pins have resolved (set_paddr called)
+   * Future will not resolve until all pins have resolved (set_paddr called)
    */
-  using get_mappings_ertr = base_ertr;
-  using get_mappings_ret = get_mapping_ertr::future<lba_pin_list_t>;
   virtual get_mappings_ret get_mappings(
     Transaction &t,
     laddr_list_t &&extent_lisk) = 0;
 
   /**
-   * Finds unmapped laddr extent of len len
+   * Fetches the mapping for laddr_t
+   *
+   * Future will not resolve until the pin has resolved (set_paddr called)
    */
-  using find_hole_ertr = base_ertr;
-  using find_hole_ret = find_hole_ertr::future<
-    std::pair<laddr_t, extent_len_t>
-    >;
-  virtual find_hole_ret find_hole(
+  using get_mapping_iertr = base_iertr::extend<
+    crimson::ct_error::enoent>;
+  using get_mapping_ret = get_mapping_iertr::future<LBAPinRef>;
+  virtual get_mapping_ret get_mapping(
     Transaction &t,
-    laddr_t hint,
-    extent_len_t) = 0;
+    laddr_t offset) = 0;
 
   /**
    * Allocates a new mapping referenced by LBARef
@@ -78,35 +75,22 @@ public:
    * This mapping will block from transaction submission until set_paddr
    * is called on the LBAPin.
    */
-  using alloc_extent_ertr = base_ertr;
-  using alloc_extent_ret = alloc_extent_ertr::future<LBAPinRef>;
+  using alloc_extent_iertr = base_iertr;
+  using alloc_extent_ret = alloc_extent_iertr::future<LBAPinRef>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
     paddr_t addr) = 0;
 
-  /**
-   * Creates a new absolute mapping.
-   *
-   * off~len must be unreferenced
-   */
-  using set_extent_ertr = base_ertr::extend<
-    crimson::ct_error::invarg>;
-  using set_extent_ret = set_extent_ertr::future<LBAPinRef>;
-  virtual set_extent_ret set_extent(
-    Transaction &t,
-    laddr_t off, extent_len_t len, paddr_t addr) = 0;
-
-
   struct ref_update_result_t {
     unsigned refcount = 0;
     paddr_t addr;
     extent_len_t length = 0;
   };
-  using ref_ertr = base_ertr::extend<
+  using ref_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
-  using ref_ret = ref_ertr::future<ref_update_result_t>;
+  using ref_ret = ref_iertr::future<ref_update_result_t>;
 
   /**
    * Decrements ref count on extent
@@ -126,9 +110,7 @@ public:
     Transaction &t,
     laddr_t addr) = 0;
 
-  using complete_transaction_ertr = base_ertr;
-  using complete_transaction_ret = complete_transaction_ertr::future<>;
-  virtual complete_transaction_ret complete_transaction(
+  virtual void complete_transaction(
     Transaction &t) = 0;
 
   /**
@@ -137,8 +119,8 @@ public:
    * LogicalCachedExtent's and may also read in any dependent
    * structures, etc.
    */
-  using init_cached_extent_ertr = base_ertr;
-  using init_cached_extent_ret = init_cached_extent_ertr::future<>;
+  using init_cached_extent_iertr = base_iertr;
+  using init_cached_extent_ret = init_cached_extent_iertr::future<>;
   virtual init_cached_extent_ret init_cached_extent(
     Transaction &t,
     CachedExtentRef e) = 0;
@@ -146,8 +128,8 @@ public:
   /**
    * Calls f for each mapping in [begin, end)
    */
-  using scan_mappings_ertr = base_ertr;
-  using scan_mappings_ret = scan_mappings_ertr::future<>;
+  using scan_mappings_iertr = base_iertr;
+  using scan_mappings_ret = scan_mappings_iertr::future<>;
   using scan_mappings_func_t = std::function<
     void(laddr_t, paddr_t, extent_len_t)>;
   virtual scan_mappings_ret scan_mappings(
@@ -157,11 +139,11 @@ public:
     scan_mappings_func_t &&f) = 0;
 
   /**
-   * Calls f for each mapped space usage in [begin, end)
+   * Calls f for each mapped space usage
    */
-  using scan_mapped_space_ertr = base_ertr::extend_ertr<
+  using scan_mapped_space_iertr = base_iertr::extend_ertr<
     SegmentManager::read_ertr>;
-  using scan_mapped_space_ret = scan_mapped_space_ertr::future<>;
+  using scan_mapped_space_ret = scan_mapped_space_iertr::future<>;
   using scan_mapped_space_func_t = std::function<
     void(paddr_t, extent_len_t)>;
   virtual scan_mapped_space_ret scan_mapped_space(
@@ -173,12 +155,24 @@ public:
    *
    * rewrite extent into passed transaction
    */
-  using rewrite_extent_ertr = base_ertr;
-  using rewrite_extent_ret = rewrite_extent_ertr::future<>;
+  using rewrite_extent_iertr = base_iertr;
+  using rewrite_extent_ret = rewrite_extent_iertr::future<>;
   virtual rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent) = 0;
 
+  /**
+   * delayed_update_mapping
+   *
+   * update lba mapping for delayed allocated extents
+   */
+  using update_le_mapping_iertr = base_iertr;
+  using update_le_mapping_ret = base_iertr::future<>;
+  virtual update_le_mapping_ret update_mapping(
+    Transaction& t,
+    laddr_t laddr,
+    paddr_t prev_addr,
+    paddr_t paddr) = 0;
   /**
    * get_physical_extent_if_live
    *
@@ -188,9 +182,9 @@ public:
    *
    * Returns a null CachedExtentRef if extent is not live.
    */
-  using get_physical_extent_if_live_ertr = base_ertr;
+  using get_physical_extent_if_live_iertr = base_iertr;
   using get_physical_extent_if_live_ret =
-    get_physical_extent_if_live_ertr::future<CachedExtentRef>;
+    get_physical_extent_if_live_iertr::future<CachedExtentRef>;
   virtual get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
     extent_types_t type,

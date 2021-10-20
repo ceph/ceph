@@ -3,6 +3,7 @@ import ipaddress
 import logging
 import re
 
+from teuthology import misc as teuthology
 from teuthology.config import config as teuth_config
 
 log = logging.getLogger(__name__)
@@ -32,6 +33,39 @@ def echo(ctx, config):
     """
     for remote in ctx.cluster.remotes.keys():
         log.info(subst_vip(ctx, config))
+
+
+def exec(ctx, config):
+    """
+    This is similar to the standard 'exec' task, but does the VIP substitutions.
+    """
+    assert isinstance(config, dict), "task exec got invalid config"
+
+    testdir = teuthology.get_testdir(ctx)
+
+    if 'all-roles' in config and len(config) == 1:
+        a = config['all-roles']
+        roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles if not id_.startswith('host.'))
+    elif 'all-hosts' in config and len(config) == 1:
+        a = config['all-hosts']
+        roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles if id_.startswith('host.'))
+
+    for role, ls in config.items():
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        log.info('Running commands on role %s host %s', role, remote.name)
+        for c in ls:
+            c.replace('$TESTDIR', testdir)
+            remote.run(
+                args=[
+                    'sudo',
+                    'TESTDIR={tdir}'.format(tdir=testdir),
+                    'bash',
+                    '-ex',
+                    '-c',
+                    subst_vip(ctx, c)],
+                )
 
 
 def map_vips(mip, count):

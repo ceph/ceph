@@ -2,12 +2,14 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_etag_verifier.h"
+#include "rgw_obj_manifest.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw::putobj {
 
-int create_etag_verifier(CephContext* cct, DataProcessor* filter,
+int create_etag_verifier(const DoutPrefixProvider *dpp, 
+                         CephContext* cct, rgw::sal::DataProcessor* filter,
                          const bufferlist& manifest_bl,
                          const std::optional<RGWCompressionInfo>& compression,
                          etag_verifier_ptr& verifier)
@@ -18,14 +20,14 @@ int create_etag_verifier(CephContext* cct, DataProcessor* filter,
     auto miter = manifest_bl.cbegin();
     decode(manifest, miter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: couldn't decode manifest" << dendl;
     return -EIO;
   }
 
   RGWObjManifestRule rule;
   bool found = manifest.get_rule(0, &rule);
   if (!found) {
-    lderr(cct) << "ERROR: manifest->get_rule() could not find rule" << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: manifest->get_rule() could not find rule" << dendl;
     return -EIO;
   }
 
@@ -43,11 +45,11 @@ int create_etag_verifier(CephContext* cct, DataProcessor* filter,
    * MPU part. These part ETags then become the input for the MPU object
    * Etag.
    */
-  for (auto mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
+  for (auto mi = manifest.obj_begin(dpp); mi != manifest.obj_end(dpp); ++mi) {
     if (cur_part_ofs == mi.get_part_ofs())
       continue;
     cur_part_ofs = mi.get_part_ofs();
-    ldout(cct, 20) << "MPU Part offset:" << cur_part_ofs << dendl;
+    ldpp_dout(dpp, 20) << "MPU Part offset:" << cur_part_ofs << dendl;
     part_ofs.push_back(cur_part_ofs);
   }
 
@@ -64,12 +66,12 @@ int create_etag_verifier(CephContext* cct, DataProcessor* filter,
       };
       block = std::lower_bound(block, blocks.end(), ofs, less);
       if (block == blocks.end() || block->new_ofs != ofs) {
-        ldout(cct, 4) << "no match for compressed offset " << ofs
+        ldpp_dout(dpp, 4) << "no match for compressed offset " << ofs
             << ", disabling etag verification" << dendl;
         return -EIO;
       }
       ofs = block->old_ofs;
-      ldout(cct, 20) << "MPU Part uncompressed offset:" << ofs << dendl;
+      ldpp_dout(dpp, 20) << "MPU Part uncompressed offset:" << ofs << dendl;
     }
   }
 

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "onode.h"
@@ -10,8 +10,8 @@ std::ostream& operator<<(std::ostream &out, const Onode &rhs)
 {
   auto &layout = rhs.get_layout();
   return out << "Onode("
-	     << "size=" << static_cast<uint32_t>(layout.size)
-	     << ")";
+             << "size=" << static_cast<uint32_t>(layout.size)
+             << ")";
 }
 
 }

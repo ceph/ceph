@@ -123,6 +123,14 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
     }
   }
 
+  if (store.exists("mon_sync", "temp_newer_monmap")) {
+    dout(10) << __func__ << " found temp_newer_monmap" << dendl;
+    int err = store.get("mon_sync", "temp_newer_monmap", bl);
+    ceph_assert(err == 0);
+    ceph_assert(bl.length() > 0);
+    return 0;
+  }
+
   if (store.exists("mkfs", "monmap")) {
     dout(10) << __func__ << " found mkfs monmap" << dendl;
     int err = store.get("mkfs", "monmap", bl);
@@ -252,8 +260,7 @@ int main(int argc, const char **argv)
   bool yes_really = false;
   std::string osdmapfn, inject_monmap, extract_monmap, crush_loc;
 
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
@@ -610,7 +617,6 @@ int main(int argc, const char **argv)
 
   // set up signal handlers, now that we've daemonized/forked.
   init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
 
   MonitorDBStore *store = new MonitorDBStore(g_conf()->mon_data);
 
@@ -905,6 +911,7 @@ int main(int argc, const char **argv)
 
   register_async_signal_handler_oneshot(SIGINT, handle_mon_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mon_signal);
+  register_async_signal_handler(SIGHUP, handle_mon_signal);
 
   if (g_conf()->inject_early_sigterm)
     kill(getpid(), SIGTERM);
@@ -914,7 +921,7 @@ int main(int argc, const char **argv)
 
   store->close();
 
-  unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGHUP, handle_mon_signal);
   unregister_async_signal_handler(SIGINT, handle_mon_signal);
   unregister_async_signal_handler(SIGTERM, handle_mon_signal);
   shutdown_async_signal_handler();

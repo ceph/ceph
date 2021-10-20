@@ -45,7 +45,7 @@ class NVMEDevice : public BlockDevice {
    * target for CONTROLLER IDENTIFY command during initialization
    */
   SharedDriverData *driver;
-  string name;
+  std::string name;
 
  public:
   SharedDriverData *get_driver() { return driver; }
@@ -76,9 +76,9 @@ class NVMEDevice : public BlockDevice {
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len) override;
-  int open(const string& path) override;
+  int open(const std::string& path) override;
   void close() override;
-  int collect_metadata(const string& prefix, map<string,string> *pm) const override;
+  int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const override;
 };
 
 #endif

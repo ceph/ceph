@@ -51,6 +51,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << ino() << ") "
 
+using namespace std;
+
 void CInodeCommitOperation::update(ObjectOperation &op, inode_backtrace_t &bt) {
   using ceph::encode;
 
@@ -1149,7 +1151,7 @@ void CInode::store(MDSContext *fin)
   m.write_full(bl);
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mdcache->mds->get_metadata_pool());
 
   Context *newfin =
     new C_OnFinisher(new C_IO_Inode_Stored(this, get_version(), fin),
@@ -1224,7 +1226,7 @@ void CInode::fetch(MDSContext *fin)
   C_GatherBuilder gather(g_ceph_context, new C_OnFinisher(c, mdcache->mds->finisher));
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mdcache->mds->get_metadata_pool());
 
   // Old on-disk format: inode stored in xattr of a dirfrag
   ObjectOperation rd;
@@ -4131,6 +4133,7 @@ void CInode::encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap)
   m->mtime = i->mtime;
   m->atime = i->atime;
   m->ctime = i->ctime;
+  m->btime = i->btime;
   m->change_attr = i->change_attr;
   m->time_warp_seq = i->time_warp_seq;
   m->nfiles = i->dirstat.nfiles;
@@ -5188,7 +5191,7 @@ void CInode::scrub_finished() {
 int64_t CInode::get_backtrace_pool() const
 {
   if (is_dir()) {
-    return mdcache->mds->mdsmap->get_metadata_pool();
+    return mdcache->mds->get_metadata_pool();
   } else {
     // Files are required to have an explicit layout that specifies
     // a pool

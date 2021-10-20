@@ -40,9 +40,37 @@ healed itself).
 When the cluster is healthy, the balancer will throttle its changes
 such that the percentage of PGs that are misplaced (i.e., that need to
 be moved) is below a threshold of (by default) 5%.  The
-``max_misplaced`` threshold can be adjusted with::
+``target_max_misplaced_ratio`` threshold can be adjusted with::
 
-  ceph config set mgr mgr/balancer/max_misplaced .07   # 7%
+  ceph config set mgr target_max_misplaced_ratio .07   # 7%
+
+Set the number of seconds to sleep in between runs of the automatic balancer::
+
+  ceph config set mgr mgr/balancer/sleep_interval 60
+
+Set the time of day to begin automatic balancing in HHMM format::
+
+  ceph config set mgr mgr/balancer/begin_time 0000
+
+Set the time of day to finish automatic balancing in HHMM format::
+
+  ceph config set mgr mgr/balancer/end_time 2400
+
+Restrict automatic balancing to this day of the week or later. 
+Uses the same conventions as crontab, 0 or 7 is Sunday, 1 is Monday, and so on::
+
+  ceph config set mgr mgr/balancer/begin_weekday 0
+
+Restrict automatic balancing to this day of the week or earlier. 
+Uses the same conventions as crontab, 0 or 7 is Sunday, 1 is Monday, and so on::
+
+  ceph config set mgr mgr/balancer/end_weekday 7
+
+Pool IDs to which the automatic balancing will be limited. 
+The default for this is an empty string, meaning all pools will be balanced. 
+The numeric pool IDs can be gotten with the :command:`ceph osd pool ls detail` command::
+
+  ceph config set mgr mgr/balancer/pool_ids 1,2,3
 
 
 Modes
@@ -136,3 +164,4 @@ The quality of the distribution that would result after executing a plan can be 
 Assuming the plan is expected to improve the distribution (i.e., it has a lower score than the current cluster state), the user can execute that plan with::
 
   ceph balancer execute <plan-name>
+

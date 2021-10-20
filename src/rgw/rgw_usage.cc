@@ -9,7 +9,7 @@
 #include "rgw_formats.h"
 #include "rgw_sal.h"
 
-
+using namespace std;
 
 static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool> *categories)
 {
@@ -58,13 +58,13 @@ int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
 
   while (is_truncated) {
     if (bucket) {
-      ret = bucket->read_usage(start_epoch, end_epoch, max_entries, &is_truncated,
+      ret = bucket->read_usage(dpp, start_epoch, end_epoch, max_entries, &is_truncated,
 			       usage_iter, usage);
     } else if (user) {
-      ret = user->read_usage(start_epoch, end_epoch, max_entries, &is_truncated,
+      ret = user->read_usage(dpp, start_epoch, end_epoch, max_entries, &is_truncated,
 			     usage_iter, usage);
     } else {
-      ret = store->read_all_usage(start_epoch, end_epoch, max_entries, &is_truncated,
+      ret = store->read_all_usage(dpp, start_epoch, end_epoch, max_entries, &is_truncated,
 				  usage_iter, usage);
     }
 
@@ -157,15 +157,15 @@ int RGWUsage::trim(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
 		   uint64_t start_epoch, uint64_t end_epoch)
 {
   if (bucket) {
-    return bucket->trim_usage(start_epoch, end_epoch);
+    return bucket->trim_usage(dpp, start_epoch, end_epoch);
   } else if (user) {
-    return user->trim_usage(start_epoch, end_epoch);
+    return user->trim_usage(dpp, start_epoch, end_epoch);
   } else {
-    return store->trim_all_usage(start_epoch, end_epoch);
+    return store->trim_all_usage(dpp, start_epoch, end_epoch);
   }
 }
 
-int RGWUsage::clear(rgw::sal::Store* store)
+int RGWUsage::clear(const DoutPrefixProvider *dpp, rgw::sal::Store* store)
 {
-  return store->clear_usage();
+  return store->clear_usage(dpp);
 }

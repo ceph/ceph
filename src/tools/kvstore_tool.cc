@@ -12,6 +12,8 @@
 #include "kv/KeyValueDB.h"
 #include "kv/KeyValueHistogram.h"
 
+using namespace std;
+
 StoreTool::StoreTool(const string& type,
 		     const string& path,
 		     bool to_repair,
@@ -40,8 +42,8 @@ StoreTool::StoreTool(const string& type,
              << cpp_strerror(r) << std::endl;
         exit(1);
       }
-      db.reset(db_ptr);
     }
+    db.reset(db_ptr);
   }
 }
 

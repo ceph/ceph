@@ -7,6 +7,8 @@ import { map, mergeMap, toArray } from 'rxjs/operators';
 
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { InventoryHost } from '~/app/ceph/cluster/inventory/inventory-host.model';
+import { ApiClient } from '~/app/shared/api/api-client';
+import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 import { Daemon } from '../models/daemon.interface';
 import { CdDevice } from '../models/devices';
 import { SmartDataResponseV1 } from '../models/smart';
@@ -15,18 +17,27 @@ import { DeviceService } from '../services/device.service';
 @Injectable({
   providedIn: 'root'
 })
-export class HostService {
+export class HostService extends ApiClient {
   baseURL = 'api/host';
   baseUIURL = 'ui-api/host';
 
-  constructor(private http: HttpClient, private deviceService: DeviceService) {}
-
-  list(): Observable<object[]> {
-    return this.http.get<object[]>(this.baseURL);
+  constructor(private http: HttpClient, private deviceService: DeviceService) {
+    super();
   }
 
-  create(hostname: string) {
-    return this.http.post(this.baseURL, { hostname: hostname }, { observe: 'response' });
+  list(facts: string): Observable<object[]> {
+    return this.http.get<object[]>(this.baseURL, {
+      headers: { Accept: 'application/vnd.ceph.api.v1.1+json' },
+      params: { facts: facts }
+    });
+  }
+
+  create(hostname: string, addr: string, labels: string[], status: string) {
+    return this.http.post(
+      this.baseURL,
+      { hostname: hostname, addr: addr, labels: labels, status: status },
+      { observe: 'response', headers: { Accept: CdHelperClass.cdVersionHeader('0', '1') } }
+    );
   }
 
   delete(hostname: string) {
@@ -58,12 +69,16 @@ export class HostService {
     maintenance = false,
     force = false
   ) {
-    return this.http.put(`${this.baseURL}/${hostname}`, {
-      update_labels: updateLabels,
-      labels: labels,
-      maintenance: maintenance,
-      force: force
-    });
+    return this.http.put(
+      `${this.baseURL}/${hostname}`,
+      {
+        update_labels: updateLabels,
+        labels: labels,
+        maintenance: maintenance,
+        force: force
+      },
+      { headers: { Accept: this.getVersionHeaderValue(0, 1) } }
+    );
   }
 
   identifyDevice(hostname: string, device: string, duration: number) {

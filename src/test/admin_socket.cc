@@ -24,6 +24,8 @@
 #include <string>
 #include <sys/un.h>
 
+using namespace std;
+
 class AdminSocketTest
 {
 public:

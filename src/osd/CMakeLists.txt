@@ -11,9 +11,6 @@ endif()
 
 set(osd_srcs
   OSD.cc
-  pg_scrubber.cc
-  scrub_machine.cc
-  PrimaryLogScrub.cc
   Watch.cc
   ClassHandler.cc
   PG.cc
@@ -24,10 +21,14 @@ set(osd_srcs
   ECTransaction.cc
   PGBackend.cc
   OSDCap.cc
+  scrubber/pg_scrubber.cc
+  scrubber/osd_scrub_sched.cc
+  scrubber/PrimaryLogScrub.cc
+  scrubber/scrub_machine.cc
+  scrubber/ScrubStore.cc
   Watch.cc
   Session.cc
   SnapMapper.cc
-  ScrubStore.cc
   osd_types.cc
   ECUtil.cc
   ExtentCache.cc
@@ -50,7 +51,7 @@ endif()
 add_library(osd STATIC ${osd_srcs})
 target_link_libraries(osd
   PUBLIC dmclock::dmclock Boost::MPL
-  PRIVATE os heap_profiler cpu_profiler ${CMAKE_DL_LIBS})
+  PRIVATE os heap_profiler cpu_profiler fmt::fmt ${CMAKE_DL_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)
 endif()

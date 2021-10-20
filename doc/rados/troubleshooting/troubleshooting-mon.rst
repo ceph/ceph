@@ -1,3 +1,5 @@
+.. _rados-troubleshooting-mon:
+
 =================================
  Troubleshooting Monitors
 =================================
@@ -433,6 +435,8 @@ If there are any survivors, we can always :ref:`replace <adding-and-removing-mon
 new one. After booting up, the new joiner will sync up with a healthy
 peer, and once it is fully sync'ed, it will be able to serve the clients.
 
+.. _mon-store-recovery-using-osds:
+
 Recovery using OSDs
 -------------------
 
@@ -441,7 +445,9 @@ deploy at least three (and preferably five) monitors in a Ceph cluster, the chan
 failure is rare. But unplanned power-downs in a data center with improperly
 configured disk/fs settings could fail the underlying file system, and hence
 kill all the monitors. In this case, we can recover the monitor store with the
-information stored in OSDs.::
+information stored in OSDs.
+
+.. code-block:: bash
 
   ms=/root/mon-store
   mkdir $ms

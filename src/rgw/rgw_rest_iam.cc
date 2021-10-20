@@ -16,10 +16,12 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 void RGWHandler_REST_IAM::rgw_iam_parse_input()
 {
   if (post_body.size() > 0) {
-    ldout(s->cct, 10) << "Content of POST: " << post_body << dendl;
+    ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
 
     if (post_body.find("Action") != string::npos) {
       boost::char_separator<char> sep("&");
@@ -77,6 +79,12 @@ RGWOp *RGWHandler_REST_IAM::op_post()
       return new RGWGetOIDCProvider;
     if (action.compare("DeleteOpenIDConnectProvider") == 0)
       return new RGWDeleteOIDCProvider;
+    if (action.compare("TagRole") == 0)
+      return new RGWTagRole;
+    if (action.compare("ListRoleTags") == 0)
+      return new RGWListRoleTags;
+    if (action.compare("UntagRole") == 0)
+      return new RGWUntagRole;
   }
 
   return nullptr;
@@ -89,7 +97,7 @@ int RGWHandler_REST_IAM::init(rgw::sal::Store* store,
   s->dialect = "iam";
 
   if (int ret = RGWHandler_REST_IAM::init_from_header(s, RGW_FORMAT_XML, true); ret < 0) {
-    ldout(s->cct, 10) << "init_from_header returned err=" << ret <<  dendl;
+    ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
     return ret;
   }
 

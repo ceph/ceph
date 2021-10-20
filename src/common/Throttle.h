@@ -150,7 +150,6 @@ public:
  * delay = e + (r - h)((m - e)/(1 - h))
  */
 class BackoffThrottle {
-  CephContext *cct;
   const std::string name;
   PerfCountersRef logger;
 

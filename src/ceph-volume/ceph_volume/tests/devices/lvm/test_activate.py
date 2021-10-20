@@ -58,6 +58,18 @@ class TestActivate(object):
         with pytest.raises(RuntimeError):
             activate.Activate([]).activate(args)
 
+    def test_osd_id_no_osd_fsid(self, is_root):
+        args = Args(osd_id=42, osd_fsid=None)
+        with pytest.raises(RuntimeError) as result:
+            activate.Activate([]).activate(args)
+        assert result.value.args[0] == 'could not activate osd.42, please provide the osd_fsid too'
+
+    def test_no_osd_id_no_osd_fsid(self, is_root):
+        args = Args(osd_id=None, osd_fsid=None)
+        with pytest.raises(RuntimeError) as result:
+            activate.Activate([]).activate(args)
+        assert result.value.args[0] == 'Please provide both osd_id and osd_fsid'
+
     def test_filestore_no_systemd(self, is_root, monkeypatch, capture):
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         fake_enable = Capture()
@@ -345,10 +357,22 @@ class TestActivateAll(object):
         assert 'a8789a96ce8b process is active. Skipping activation' in err
         assert 'b8218eaa1634 process is active. Skipping activation' in err
 
-    def test_detects_osds_to_activate(self, is_root, capture, monkeypatch):
+    def test_detects_osds_to_activate_systemd(self, is_root, capture, monkeypatch):
         monkeypatch.setattr('ceph_volume.devices.lvm.activate.direct_report', lambda: direct_report)
         monkeypatch.setattr('ceph_volume.devices.lvm.activate.systemctl.osd_is_active', lambda x: False)
         args = ['--all']
+        activation = activate.Activate(args)
+        activation.activate = capture
+        activation.main()
+        calls = sorted(capture.calls, key=lambda x: x['kwargs']['osd_id'])
+        assert calls[0]['kwargs']['osd_id'] == '0'
+        assert calls[0]['kwargs']['osd_fsid'] == '957d22b7-24ce-466a-9883-b8218eaa1634'
+        assert calls[1]['kwargs']['osd_id'] == '1'
+        assert calls[1]['kwargs']['osd_fsid'] == 'd0f3e4ad-e52a-4520-afc0-a8789a96ce8b'
+
+    def test_detects_osds_to_activate_no_systemd(self, is_root, capture, monkeypatch):
+        monkeypatch.setattr('ceph_volume.devices.lvm.activate.direct_report', lambda: direct_report)
+        args = ['--all', '--no-systemd']
         activation = activate.Activate(args)
         activation.activate = capture
         activation.main()

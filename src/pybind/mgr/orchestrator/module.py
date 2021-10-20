@@ -14,7 +14,7 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.utils import datetime_now
 
-from mgr_util import to_pretty_timedelta, format_dimless
+from mgr_util import to_pretty_timedelta, format_dimless, format_bytes
 from mgr_module import MgrModule, HandleCommandResult, Option
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
@@ -30,6 +30,12 @@ def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: s
         return to_pretty_timedelta(now - t) + suffix
     else:
         return '-'
+
+
+def nice_bytes(v: Optional[int]) -> str:
+    if not v:
+        return '-'
+    return format_bytes(v, 5)
 
 
 class Format(enum.Enum):
@@ -53,7 +59,6 @@ class ServiceType(enum.Enum):
     rgw = 'rgw'
     nfs = 'nfs'
     iscsi = 'iscsi'
-    cephadm_exporter = 'cephadm-exporter'
 
 
 class ServiceAction(enum.Enum):
@@ -323,7 +328,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return cast(str, self.get_module_option("orchestrator"))
 
     @_cli_write_command('orch host add')
-    def _add_host(self, hostname: str, addr: Optional[str] = None, labels: Optional[List[str]] = None, maintenance: Optional[bool] = False) -> HandleCommandResult:
+    def _add_host(self,
+                  hostname: str,
+                  addr: Optional[str] = None,
+                  labels: Optional[List[str]] = None,
+                  maintenance: Optional[bool] = False) -> HandleCommandResult:
         """Add a host"""
         _status = 'maintenance' if maintenance else ''
 
@@ -336,9 +345,16 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return self._apply_misc([s], False, Format.plain)
 
     @_cli_write_command('orch host rm')
-    def _remove_host(self, hostname: str) -> HandleCommandResult:
+    def _remove_host(self, hostname: str, force: bool = False, offline: bool = False) -> HandleCommandResult:
         """Remove a host"""
-        completion = self.remove_host(hostname)
+        completion = self.remove_host(hostname, force, offline)
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command('orch host drain')
+    def _drain_host(self, hostname: str) -> HandleCommandResult:
+        """drain all daemons from a host"""
+        completion = self.drain_host(hostname)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
@@ -445,27 +461,27 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 "On": "On",
                 "Off": "Off",
                 True: "Yes",
-                False: "No",
+                False: "",
             }
 
             out = []
             if wide:
                 table = PrettyTable(
-                    ['Hostname', 'Path', 'Type', 'Transport', 'RPM', 'Vendor', 'Model',
-                     'Serial', 'Size', 'Health', 'Ident', 'Fault', 'Available',
-                     'Reject Reasons'],
+                    ['HOST', 'PATH', 'TYPE', 'TRANSPORT', 'RPM', 'DEVICE ID', 'SIZE',
+                     'HEALTH', 'IDENT', 'FAULT',
+                     'AVAILABLE', 'REJECT REASONS'],
                     border=False)
             else:
                 table = PrettyTable(
-                    ['Hostname', 'Path', 'Type', 'Serial', 'Size',
-                     'Health', 'Ident', 'Fault', 'Available'],
+                    ['HOST', 'PATH', 'TYPE', 'DEVICE ID', 'SIZE',
+                     'AVAILABLE', 'REJECT REASONS'],
                     border=False)
             table.align = 'l'
             table._align['SIZE'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for host_ in sorted(inv_hosts, key=lambda h: h.name):  # type: InventoryHost
-                for d in host_.devices.devices:  # type: Device
+                for d in sorted(host_.devices.devices, key=lambda d: d.path):  # type: Device
 
                     led_ident = 'N/A'
                     led_fail = 'N/A'
@@ -473,24 +489,17 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                         led_ident = d.lsm_data['ledSupport']['IDENTstatus']
                         led_fail = d.lsm_data['ledSupport']['FAILstatus']
 
-                    if d.device_id is not None:
-                        fallback_serial = d.device_id.split('_')[-1]
-                    else:
-                        fallback_serial = ""
-
                     if wide:
                         table.add_row(
                             (
                                 host_.name,
                                 d.path,
                                 d.human_readable_type,
-                                d.lsm_data.get('transport', 'Unknown'),
-                                d.lsm_data.get('rpm', 'Unknown'),
-                                d.sys_api.get('vendor') or 'N/A',
-                                d.sys_api.get('model') or 'N/A',
-                                d.lsm_data.get('serialNum', fallback_serial),
+                                d.lsm_data.get('transport', ''),
+                                d.lsm_data.get('rpm', ''),
+                                d.device_id,
                                 format_dimless(d.sys_api.get('size', 0), 5),
-                                d.lsm_data.get('health', 'Unknown'),
+                                d.lsm_data.get('health', ''),
                                 display_map[led_ident],
                                 display_map[led_fail],
                                 display_map[d.available],
@@ -503,12 +512,10 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                                 host_.name,
                                 d.path,
                                 d.human_readable_type,
-                                d.lsm_data.get('serialNum', fallback_serial),
+                                d.device_id,
                                 format_dimless(d.sys_api.get('size', 0), 5),
-                                d.lsm_data.get('health', 'Unknown'),
-                                display_map[led_ident],
-                                display_map[led_fail],
-                                display_map[d.available]
+                                display_map[d.available],
+                                ', '.join(d.rejected_reasons)
                             )
                         )
             out.append(table.get_string())
@@ -587,10 +594,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 else:
                     refreshed = nice_delta(now, s.last_refresh, ' ago')
 
+                if s.spec.service_type == 'osd':
+                    running = str(s.running)
+                else:
+                    running = '{}/{}'.format(s.running, s.size)
+
                 table.add_row((
                     s.spec.service_name(),
                     s.get_port_summary(),
-                    '%d/%d' % (s.running, s.size),
+                    running,
                     refreshed,
                     nice_delta(now, s.created),
                     pl,
@@ -601,6 +613,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     @_cli_read_command('orch ps')
     def _list_daemons(self,
                       hostname: Optional[str] = None,
+                      _end_positional_: int = 0,
                       service_name: Optional[str] = None,
                       daemon_type: Optional[str] = None,
                       daemon_id: Optional[str] = None,
@@ -632,9 +645,14 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             table = PrettyTable(
                 ['NAME', 'HOST', 'PORTS',
                  'STATUS', 'REFRESHED', 'AGE',
+                 'MEM USE', 'MEM LIM',
                  'VERSION', 'IMAGE ID', 'CONTAINER ID'],
                 border=False)
             table.align = 'l'
+            table._align['REFRESHED'] = 'r'
+            table._align['AGE'] = 'r'
+            table._align['MEM USE'] = 'r'
+            table._align['MEM LIM'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for s in sorted(daemons, key=lambda s: s.name()):
@@ -657,6 +675,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     status,
                     nice_delta(now, s.last_refresh, ' ago'),
                     nice_delta(now, s.created),
+                    nice_bytes(s.memory_usage),
+                    nice_bytes(s.memory_request),
                     ukn(s.version),
                     ukn(s.container_image_id)[0:12],
                     ukn(s.container_id)))
@@ -797,24 +817,24 @@ Usage:
 
     @_cli_write_command('orch osd rm')
     def _osd_rm_start(self,
-                      svc_id: List[str],
+                      osd_id: List[str],
                       replace: bool = False,
                       force: bool = False) -> HandleCommandResult:
-        """Remove OSD services"""
-        completion = self.remove_osds(svc_id, replace=replace, force=force)
+        """Remove OSD daemons"""
+        completion = self.remove_osds(osd_id, replace=replace, force=force)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch osd rm stop')
-    def _osd_rm_stop(self, svc_id: List[str]) -> HandleCommandResult:
-        """Remove OSD services"""
-        completion = self.stop_remove_osds(svc_id)
+    def _osd_rm_stop(self, osd_id: List[str]) -> HandleCommandResult:
+        """Cancel ongoing OSD removal operation"""
+        completion = self.stop_remove_osds(osd_id)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch osd rm status')
     def _osd_rm_status(self, format: Format = Format.plain) -> HandleCommandResult:
-        """status of OSD removal operation"""
+        """Status of OSD removal operation"""
         completion = self.remove_osds_status()
         raise_if_exception(completion)
         report = completion.result
@@ -833,7 +853,7 @@ Usage:
             table.right_padding_width = 2
             for osd in sorted(report, key=lambda o: o.osd_id):
                 table.add_row([osd.osd_id, osd.hostname, osd.drain_status_human(),
-                               osd.get_pg_count(), osd.replace, osd.replace, osd.drain_started_at])
+                               osd.get_pg_count(), osd.replace, osd.force, osd.drain_started_at])
             out = table.get_string()
 
         return HandleCommandResult(stdout=out)
@@ -883,9 +903,10 @@ Usage:
     @_cli_write_command('orch daemon add rgw')
     def _rgw_add(self,
                  svc_id: str,
+                 placement: Optional[str] = None,
+                 _end_positional_: int = 0,
                  port: Optional[int] = None,
                  ssl: bool = False,
-                 placement: Optional[str] = None,
                  inbuf: Optional[str] = None) -> HandleCommandResult:
         """Start RGW daemon(s)"""
         if inbuf:
@@ -902,8 +923,6 @@ Usage:
     @_cli_write_command('orch daemon add nfs')
     def _nfs_add(self,
                  svc_id: str,
-                 pool: str,
-                 namespace: Optional[str] = None,
                  placement: Optional[str] = None,
                  inbuf: Optional[str] = None) -> HandleCommandResult:
         """Start NFS daemon(s)"""
@@ -912,8 +931,6 @@ Usage:
 
         spec = NFSServiceSpec(
             service_id=svc_id,
-            pool=pool,
-            namespace=namespace,
             placement=PlacementSpec.from_string(placement),
         )
         return self._daemon_add_misc(spec)
@@ -957,7 +974,9 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch daemon redeploy')
-    def _daemon_action_redeploy(self, name: str, image: Optional[str] = None) -> HandleCommandResult:
+    def _daemon_action_redeploy(self,
+                                name: str,
+                                image: Optional[str] = None) -> HandleCommandResult:
         """Redeploy a daemon (with a specifc image)"""
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
@@ -1071,11 +1090,12 @@ Usage:
     @_cli_write_command('orch apply rgw')
     def _apply_rgw(self,
                    svc_id: str,
+                   placement: Optional[str] = None,
+                   _end_positional_: int = 0,
                    realm: Optional[str] = None,
                    zone: Optional[str] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
-                   placement: Optional[str] = None,
                    dry_run: bool = False,
                    format: Format = Format.plain,
                    unmanaged: bool = False,
@@ -1108,10 +1128,9 @@ Usage:
     @_cli_write_command('orch apply nfs')
     def _apply_nfs(self,
                    svc_id: str,
-                   pool: str,
-                   namespace: Optional[str] = None,
                    placement: Optional[str] = None,
                    format: Format = Format.plain,
+                   port: Optional[int] = None,
                    dry_run: bool = False,
                    unmanaged: bool = False,
                    no_overwrite: bool = False,
@@ -1122,8 +1141,7 @@ Usage:
 
         spec = NFSServiceSpec(
             service_id=svc_id,
-            pool=pool,
-            namespace=namespace,
+            port=port,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             preview_only=dry_run
@@ -1222,9 +1240,7 @@ Usage:
     @_cli_write_command('orch cancel')
     def _cancel(self) -> HandleCommandResult:
         """
-        cancels ongoing operations
-
-        ProgressReferences might get stuck. Let's unstuck them.
+        Cancel ongoing background operations
         """
         self.cancel_completions()
         return HandleCommandResult()
@@ -1307,6 +1323,16 @@ Usage:
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_cli_read_command('orch upgrade ls')
+    def _upgrade_ls(self,
+                    image: Optional[str] = None,
+                    tags: bool = False) -> HandleCommandResult:
+        """Check for available versions (or tags) we can upgrade to"""
+        completion = self.upgrade_ls(image, tags)
+        r = raise_if_exception(completion)
+        out = json.dumps(r, indent=4)
+        return HandleCommandResult(stdout=out)
+
     @_cli_write_command('orch upgrade status')
     def _upgrade_status(self) -> HandleCommandResult:
         """Check service versions vs available and target containers"""
@@ -1325,6 +1351,7 @@ Usage:
     @_cli_write_command('orch upgrade start')
     def _upgrade_start(self,
                        image: Optional[str] = None,
+                       _end_positional_: int = 0,
                        ceph_version: Optional[str] = None) -> HandleCommandResult:
         """Initiate upgrade"""
         self._upgrade_check_image_name(image, ceph_version)

@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "crimson/common/log.h"
+#include "crimson/os/seastore/logging.h"
+
 #include "node_extent_manager.h"
 #include "node_delta_recorder.h"
 #include "node_layout_replayable.h"
@@ -76,12 +77,23 @@ class DeltaRecorderT final: public DeltaRecorder {
   void encode_update_child_addr(
       const laddr_t new_addr,
       const laddr_packed_t* p_addr,
-      const char* p_node_start) {
+      const char* p_node_start,
+      extent_len_t node_size) {
     ceph::encode(node_delta_op_t::UPDATE_CHILD_ADDR, encoded);
     ceph::encode(new_addr, encoded);
     int node_offset = reinterpret_cast<const char*>(p_addr) - p_node_start;
-    assert(node_offset > 0 && node_offset <= NODE_BLOCK_SIZE);
+    assert(node_offset > 0 && node_offset < (int)node_size);
     ceph::encode(static_cast<node_offset_t>(node_offset), encoded);
+  }
+
+  void encode_erase(
+      const position_t& erase_pos) {
+    ceph::encode(node_delta_op_t::ERASE, encoded);
+    erase_pos.encode(encoded);
+  }
+
+  void encode_make_tail() {
+    ceph::encode(node_delta_op_t::MAKE_TAIL, encoded);
   }
 
   static DeltaRecorderURef create_for_encode(const ValueBuilder& v_builder) {
@@ -98,16 +110,18 @@ class DeltaRecorderT final: public DeltaRecorder {
   node_type_t node_type() const override { return NODE_TYPE; }
   field_type_t field_type() const override { return FIELD_TYPE; }
   void apply_delta(ceph::bufferlist::const_iterator& delta,
-                   NodeExtentMutable& node,
-                   laddr_t node_laddr) override {
+                   NodeExtentMutable& mut,
+                   const NodeExtent& node) override {
+    LOG_PREFIX(OTree::Extent::Replay);
     assert(is_empty());
-    node_stage_t stage(reinterpret_cast<const FieldType*>(node.get_read()));
+    node_stage_t stage(reinterpret_cast<const FieldType*>(mut.get_read()),
+                       mut.get_length());
     node_delta_op_t op;
     try {
       ceph::decode(op, delta);
       switch (op) {
       case node_delta_op_t::INSERT: {
-        logger().debug("OTree::Extent::Replay: decoding INSERT ...");
+        DEBUG("decoding INSERT ...");
         auto key = key_hobj_t::decode(delta);
         auto value = decode_value(delta);
         auto insert_pos = position_t::decode(delta);
@@ -115,23 +129,25 @@ class DeltaRecorderT final: public DeltaRecorder {
         ceph::decode(insert_stage, delta);
         node_offset_t insert_size;
         ceph::decode(insert_size, delta);
-        logger().debug("OTree::Extent::Replay: apply {}, {}, "
-                       "insert_pos({}), insert_stage={}, insert_size={}B ...",
-                       key, value, insert_pos, insert_stage, insert_size);
+        DEBUG("apply {}, {}, insert_pos({}), insert_stage={}, "
+              "insert_size={}B ...",
+              key, value, insert_pos, insert_stage, insert_size);
         layout_t::template insert<KeyT::HOBJ>(
-          node, stage, key, value, insert_pos, insert_stage, insert_size);
+          mut, stage, key, value, insert_pos, insert_stage, insert_size);
         break;
       }
       case node_delta_op_t::SPLIT: {
-        logger().debug("OTree::Extent::Replay: decoding SPLIT ...");
-        auto split_at = StagedIterator::decode(stage.p_start(), delta);
-        logger().debug("OTree::Extent::Replay: apply split_at={} ...", split_at);
-        layout_t::split(node, stage, split_at);
+        DEBUG("decoding SPLIT ...");
+        auto split_at = StagedIterator::decode(
+            mut.get_read(), mut.get_length(), delta);
+        DEBUG("apply split_at={} ...", split_at);
+        layout_t::split(mut, stage, split_at);
         break;
       }
       case node_delta_op_t::SPLIT_INSERT: {
-        logger().debug("OTree::Extent::Replay: decoding SPLIT_INSERT ...");
-        auto split_at = StagedIterator::decode(stage.p_start(), delta);
+        DEBUG("decoding SPLIT_INSERT ...");
+        auto split_at = StagedIterator::decode(
+            mut.get_read(), mut.get_length(), delta);
         auto key = key_hobj_t::decode(delta);
         auto value = decode_value(delta);
         auto insert_pos = position_t::decode(delta);
@@ -139,49 +155,60 @@ class DeltaRecorderT final: public DeltaRecorder {
         ceph::decode(insert_stage, delta);
         node_offset_t insert_size;
         ceph::decode(insert_size, delta);
-        logger().debug("OTree::Extent::Replay: apply split_at={}, {}, {}, "
-                       "insert_pos({}), insert_stage={}, insert_size={}B ...",
-                       split_at, key, value, insert_pos, insert_stage, insert_size);
+        DEBUG("apply split_at={}, {}, {}, insert_pos({}), insert_stage={}, "
+              "insert_size={}B ...",
+              split_at, key, value, insert_pos, insert_stage, insert_size);
         layout_t::template split_insert<KeyT::HOBJ>(
-          node, stage, split_at, key, value, insert_pos, insert_stage, insert_size);
+          mut, stage, split_at, key, value, insert_pos, insert_stage, insert_size);
         break;
       }
       case node_delta_op_t::UPDATE_CHILD_ADDR: {
-        logger().debug("OTree::Extent::Replay: decoding UPDATE_CHILD_ADDR ...");
+        DEBUG("decoding UPDATE_CHILD_ADDR ...");
         laddr_t new_addr;
         ceph::decode(new_addr, delta);
         node_offset_t update_offset;
         ceph::decode(update_offset, delta);
         auto p_addr = reinterpret_cast<laddr_packed_t*>(
-            node.get_write() + update_offset);
-        logger().debug("OTree::Extent::Replay: apply {:#x} to offset {:#x} ...",
-                       new_addr, update_offset);
-        layout_t::update_child_addr(node, new_addr, p_addr);
+            mut.get_write() + update_offset);
+        DEBUG("apply {:#x} to offset {:#x} ...",
+              new_addr, update_offset);
+        layout_t::update_child_addr(mut, new_addr, p_addr);
+        break;
+      }
+      case node_delta_op_t::ERASE: {
+        DEBUG("decoding ERASE ...");
+        auto erase_pos = position_t::decode(delta);
+        DEBUG("apply erase_pos({}) ...", erase_pos);
+        layout_t::erase(mut, stage, erase_pos);
+        break;
+      }
+      case node_delta_op_t::MAKE_TAIL: {
+        DEBUG("decoded MAKE_TAIL, apply ...");
+        layout_t::make_tail(mut, stage);
         break;
       }
       case node_delta_op_t::SUBOP_UPDATE_VALUE: {
-        logger().debug("OTree::Extent::Replay: decoding SUBOP_UPDATE_VALUE ...");
+        DEBUG("decoding SUBOP_UPDATE_VALUE ...");
         node_offset_t value_header_offset;
         ceph::decode(value_header_offset, delta);
-        auto p_header = node.get_read() + value_header_offset;
+        auto p_header = mut.get_read() + value_header_offset;
         auto p_header_ = reinterpret_cast<const value_header_t*>(p_header);
-        logger().debug("OTree::Extent::Replay: update {} at {:#x} ...",
-                       *p_header_, value_header_offset);
-        auto payload_mut = p_header_->get_payload_mutable(node);
-        auto value_addr = node_laddr + payload_mut.get_node_offset();
+        DEBUG("update {} at {:#x} ...", *p_header_, value_header_offset);
+        auto payload_mut = p_header_->get_payload_mutable(mut);
+        auto value_addr = node.get_laddr() + payload_mut.get_node_offset();
         get_value_replayer(p_header_->magic)->apply_value_delta(
             delta, payload_mut, value_addr);
         break;
       }
       default:
-        logger().error("OTree::Extent::Replay: got unknown op {} when replay {:#x}",
-                       op, node_laddr);
-        ceph_abort();
+        ERROR("got unknown op {} when replay {}",
+              op, node);
+        ceph_abort("fatal error");
       }
     } catch (buffer::error& e) {
-      logger().error("OTree::Extent::Replay: got decode error {} when replay {:#x}",
-                     e, node_laddr);
-      ceph_abort();
+      ERROR("got decode error {} when replay {}",
+            e, node);
+      ceph_abort("fatal error");
     }
   }
 
@@ -231,10 +258,6 @@ class DeltaRecorderT final: public DeltaRecorder {
     }
   }
 
-  static seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
-  }
-
   std::unique_ptr<ValueDeltaRecorder> value_replayer;
 };
 
@@ -244,6 +267,8 @@ class DeltaRecorderT final: public DeltaRecorder {
  * This component is responsible to reference and mutate the underlying
  * NodeExtent, record mutation parameters when needed, and apply the recorded
  * modifications for a specific node layout.
+ *
+ * For possible internal states, see node_types.h.
  */
 template <typename FieldType, node_type_t NODE_TYPE>
 class NodeExtentAccessorT {
@@ -259,31 +284,37 @@ class NodeExtentAccessorT {
 
   NodeExtentAccessorT(NodeExtentRef extent)
       : extent{extent},
-        node_stage{reinterpret_cast<const FieldType*>(extent->get_read())} {
-    if (no_recording()) {
+        node_stage{reinterpret_cast<const FieldType*>(extent->get_read()),
+                   extent->get_length()} {
+    assert(is_valid_node_size(extent->get_length()));
+    if (extent->is_initial_pending()) {
+      state = nextent_state_t::FRESH;
       mut.emplace(extent->get_mutable());
       assert(extent->get_recorder() == nullptr);
       recorder = nullptr;
-    } else if (needs_recording()) {
+    } else if (extent->is_mutation_pending()) {
+      state = nextent_state_t::MUTATION_PENDING;
       mut.emplace(extent->get_mutable());
       auto p_recorder = extent->get_recorder();
       assert(p_recorder != nullptr);
       assert(p_recorder->node_type() == NODE_TYPE);
       assert(p_recorder->field_type() == FIELD_TYPE);
       recorder = static_cast<recorder_t*>(p_recorder);
-    } else if (needs_mutate()) {
+    } else if (!extent->is_pending() && extent->is_valid()) {
+      state = nextent_state_t::READ_ONLY;
       // mut is empty
       assert(extent->get_recorder() == nullptr ||
              extent->get_recorder()->is_empty());
       recorder = nullptr;
     } else {
+      // extent is invalid or retired
       ceph_abort("impossible path");
     }
 #ifndef NDEBUG
     auto ref_recorder = recorder_t::create_for_replay();
     test_recorder = static_cast<recorder_t*>(ref_recorder.get());
     test_extent = TestReplayExtent::create(
-        extent->get_length(), std::move(ref_recorder));
+        get_length(), std::move(ref_recorder));
 #endif
   }
   ~NodeExtentAccessorT() = default;
@@ -294,26 +325,43 @@ class NodeExtentAccessorT {
 
   const node_stage_t& read() const { return node_stage; }
   laddr_t get_laddr() const { return extent->get_laddr(); }
-  bool is_duplicate() const {
-    // we cannot rely on whether the extent state is MUTATION_PENDING because
-    // we may access the extent (internally) after it becomes DIRTY after
-    // transaction submission.
-    return recorder != nullptr;
+  extent_len_t get_length() const {
+    auto len = extent->get_length();
+    assert(is_valid_node_size(len));
+    return len;
+  }
+  nextent_state_t get_state() const {
+    assert(!is_retired());
+    // we cannot rely on the underlying extent state because
+    // FRESH/MUTATION_PENDING can become DIRTY after transaction submission.
+    return state;
+  }
+
+  bool is_retired() const {
+    if (extent) {
+      return false;
+    } else {
+      return true;
+    }
   }
 
   // must be called before any mutate attempes.
   // for the safety of mixed read and mutate, call before read.
   void prepare_mutate(context_t c) {
-    if (needs_mutate()) {
+    assert(!is_retired());
+    if (state == nextent_state_t::READ_ONLY) {
+      assert(!extent->is_pending());
       auto ref_recorder = recorder_t::create_for_encode(c.vb);
       recorder = static_cast<recorder_t*>(ref_recorder.get());
       extent = extent->mutate(c, std::move(ref_recorder));
-      assert(needs_recording());
-      node_stage = node_stage_t(
-          reinterpret_cast<const FieldType*>(extent->get_read()));
+      state = nextent_state_t::MUTATION_PENDING;
+      assert(extent->is_mutation_pending());
+      node_stage = node_stage_t(reinterpret_cast<const FieldType*>(extent->get_read()),
+                                get_length());
       assert(recorder == static_cast<recorder_t*>(extent->get_recorder()));
       mut.emplace(extent->get_mutable());
     }
+    assert(extent->is_pending());
   }
 
   template <KeyT KT>
@@ -323,8 +371,9 @@ class NodeExtentAccessorT {
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
-    assert(!needs_mutate());
-    if (needs_recording()) {
+    assert(extent->is_pending());
+    assert(state != nextent_state_t::READ_ONLY);
+    if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->template encode_insert<KT>(
           key, value, insert_pos, insert_stage, insert_size);
     }
@@ -343,13 +392,14 @@ class NodeExtentAccessorT {
   }
 
   void split_replayable(StagedIterator& split_at) {
-    assert(!needs_mutate());
-    if (needs_recording()) {
+    assert(extent->is_pending());
+    assert(state != nextent_state_t::READ_ONLY);
+    if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->encode_split(split_at, read().p_start());
     }
 #ifndef NDEBUG
     test_extent->prepare_replay(extent);
-    test_recorder->template encode_split(split_at, read().p_start());
+    test_recorder->encode_split(split_at, read().p_start());
 #endif
     layout_t::split(*mut, read(), split_at);
 #ifndef NDEBUG
@@ -365,8 +415,9 @@ class NodeExtentAccessorT {
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
-    assert(!needs_mutate());
-    if (needs_recording()) {
+    assert(extent->is_pending());
+    assert(state != nextent_state_t::READ_ONLY);
+    if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->template encode_split_insert<KT>(
           split_at, key, value, insert_pos, insert_stage, insert_size,
           read().p_start());
@@ -388,13 +439,16 @@ class NodeExtentAccessorT {
 
   void update_child_addr_replayable(
       const laddr_t new_addr, laddr_packed_t* p_addr) {
-    assert(!needs_mutate());
-    if (needs_recording()) {
-      recorder->encode_update_child_addr(new_addr, p_addr, read().p_start());
+    assert(extent->is_pending());
+    assert(state != nextent_state_t::READ_ONLY);
+    if (state == nextent_state_t::MUTATION_PENDING) {
+      recorder->encode_update_child_addr(
+          new_addr, p_addr, read().p_start(), get_length());
     }
 #ifndef NDEBUG
     test_extent->prepare_replay(extent);
-    test_recorder->encode_update_child_addr(new_addr, p_addr, read().p_start());
+    test_recorder->encode_update_child_addr(
+        new_addr, p_addr, read().p_start(), get_length());
 #endif
     layout_t::update_child_addr(*mut, new_addr, p_addr);
 #ifndef NDEBUG
@@ -402,11 +456,45 @@ class NodeExtentAccessorT {
 #endif
   }
 
+  std::tuple<match_stage_t, position_t> erase_replayable(const position_t& pos) {
+    assert(extent->is_pending());
+    assert(state != nextent_state_t::READ_ONLY);
+    if (state == nextent_state_t::MUTATION_PENDING) {
+      recorder->encode_erase(pos);
+    }
+#ifndef NDEBUG
+    test_extent->prepare_replay(extent);
+    test_recorder->encode_erase(pos);
+#endif
+    auto ret = layout_t::erase(*mut, read(), pos);
+#ifndef NDEBUG
+    test_extent->replay_and_verify(extent);
+#endif
+    return ret;
+  }
+
+  position_t make_tail_replayable() {
+    assert(extent->is_pending());
+    assert(state != nextent_state_t::READ_ONLY);
+    if (state == nextent_state_t::MUTATION_PENDING) {
+      recorder->encode_make_tail();
+    }
+#ifndef NDEBUG
+    test_extent->prepare_replay(extent);
+    test_recorder->encode_make_tail();
+#endif
+    auto ret = layout_t::make_tail(*mut, read());
+#ifndef NDEBUG
+    test_extent->replay_and_verify(extent);
+#endif
+    return ret;
+  }
+
   std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
   prepare_mutate_value_payload(context_t c) {
     prepare_mutate(c);
     ValueDeltaRecorder* p_value_recorder = nullptr;
-    if (needs_recording()) {
+    if (state == nextent_state_t::MUTATION_PENDING) {
       p_value_recorder = recorder->get_value_recorder();
     }
     return {*mut, p_value_recorder};
@@ -414,30 +502,99 @@ class NodeExtentAccessorT {
 
   void test_copy_to(NodeExtentMutable& to) const {
     assert(extent->get_length() == to.get_length());
-    std::memcpy(to.get_write(), extent->get_read(), extent->get_length());
+    std::memcpy(to.get_write(), extent->get_read(), get_length());
+  }
+
+  eagain_ifuture<NodeExtentMutable> rebuild(context_t c, laddr_t hint) {
+    LOG_PREFIX(OTree::Extent::rebuild);
+    assert(!is_retired());
+    if (state == nextent_state_t::FRESH) {
+      assert(extent->is_initial_pending());
+      // already fresh and no need to record
+      return eagain_iertr::make_ready_future<NodeExtentMutable>(*mut);
+    }
+    assert(!extent->is_initial_pending());
+    auto alloc_size = get_length();
+    return c.nm.alloc_extent(c.t, hint, alloc_size
+    ).handle_error_interruptible(
+      eagain_iertr::pass_further{},
+      crimson::ct_error::input_output_error::handle(
+          [FNAME, c, alloc_size, l_to_discard = extent->get_laddr()] {
+        ERRORT("EIO during allocate -- node_size={}, to_discard={:x}",
+               c.t, alloc_size, l_to_discard);
+        ceph_abort("fatal error");
+      })
+    ).si_then([this, c, FNAME] (auto fresh_extent) {
+      DEBUGT("update addr from {:#x} to {:#x} ...",
+             c.t, extent->get_laddr(), fresh_extent->get_laddr());
+      assert(fresh_extent);
+      assert(fresh_extent->is_initial_pending());
+      assert(fresh_extent->get_recorder() == nullptr);
+      assert(get_length() == fresh_extent->get_length());
+      auto fresh_mut = fresh_extent->get_mutable();
+      std::memcpy(fresh_mut.get_write(), extent->get_read(), get_length());
+      NodeExtentRef to_discard = extent;
+
+      extent = fresh_extent;
+      node_stage = node_stage_t(reinterpret_cast<const FieldType*>(extent->get_read()),
+                                get_length());
+      state = nextent_state_t::FRESH;
+      mut.emplace(fresh_mut);
+      recorder = nullptr;
+
+      return c.nm.retire_extent(c.t, to_discard
+      ).handle_error_interruptible(
+        eagain_iertr::pass_further{},
+        crimson::ct_error::input_output_error::handle(
+            [FNAME, c, l_to_discard = to_discard->get_laddr(),
+             l_fresh = fresh_extent->get_laddr()] {
+          ERRORT("EIO during retire -- to_disgard={:x}, fresh={:x}",
+                 c.t, l_to_discard, l_fresh);
+          ceph_abort("fatal error");
+        }),
+        crimson::ct_error::enoent::handle(
+            [FNAME, c, l_to_discard = to_discard->get_laddr(),
+             l_fresh = fresh_extent->get_laddr()] {
+          ERRORT("ENOENT during retire -- to_disgard={:x}, fresh={:x}",
+                 c.t, l_to_discard, l_fresh);
+          ceph_abort("fatal error");
+        })
+      );
+    }).si_then([this, c] {
+      assert(!c.t.is_conflicted());
+      return *mut;
+    });
+  }
+
+  eagain_ifuture<> retire(context_t c) {
+    LOG_PREFIX(OTree::Extent::retire);
+    assert(!is_retired());
+    auto addr = extent->get_laddr();
+    return c.nm.retire_extent(c.t, std::move(extent)
+    ).handle_error_interruptible(
+      eagain_iertr::pass_further{},
+      crimson::ct_error::input_output_error::handle(
+          [FNAME, c, addr] {
+        ERRORT("EIO -- addr={:x}", c.t, addr);
+        ceph_abort("fatal error");
+      }),
+      crimson::ct_error::enoent::handle(
+          [FNAME, c, addr] {
+        ERRORT("ENOENT -- addr={:x}", c.t, addr);
+        ceph_abort("fatal error");
+      })
+#ifndef NDEBUG
+    ).si_then([c] {
+      assert(!c.t.is_conflicted());
+    }
+#endif
+    );
   }
 
  private:
-  /**
-   * Possible states with CachedExtent::extent_state_t:
-   *   INITIAL_WRITE_PENDING -- can mutate, no recording
-   *   MUTATION_PENDING      -- can mutate, needs recording
-   *   CLEAN/DIRTY           -- pending mutate
-   *   INVALID               -- impossible
-   */
-  bool no_recording() const {
-    return extent->is_initial_pending();
-  }
-  bool needs_recording() const {
-    return extent->is_mutation_pending();
-  }
-  bool needs_mutate() const {
-    assert(extent->is_valid());
-    return !extent->is_pending();
-  }
-
   NodeExtentRef extent;
   node_stage_t node_stage;
+  nextent_state_t state;
   std::optional<NodeExtentMutable> mut;
   // owned by extent
   recorder_t* recorder;

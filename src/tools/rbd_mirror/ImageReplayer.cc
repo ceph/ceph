@@ -36,8 +36,6 @@
 #define dout_prefix *_dout << "rbd::mirror::" << *this << " " \
                            << __func__ << ": "
 
-extern PerfCounters *g_perf_counters;
-
 namespace rbd {
 namespace mirror {
 

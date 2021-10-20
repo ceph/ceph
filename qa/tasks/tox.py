@@ -29,14 +29,14 @@ def task(ctx, config):
     log.info('Deploying tox from pip...')
     for (client, _) in config.items():
         # yup, we have to deploy tox first. The packaged one, available
-	# on Sepia's Ubuntu machines, is outdated for Keystone/Tempest.
+        # on Sepia's Ubuntu machines, is outdated for Keystone/Tempest.
         tvdir = get_toxvenv_dir(ctx)
-        ctx.cluster.only(client).run(args=[ 'virtualenv', '-p', 'python3', tvdir ])
-        ctx.cluster.only(client).run(args=
-            [   'source', '{tvdir}/bin/activate'.format(tvdir=tvdir),
-                run.Raw('&&'),
-                'pip', 'install', 'tox==3.15.0'
-            ])
+        ctx.cluster.only(client).run(args=['python3', '-m', 'venv', tvdir])
+        ctx.cluster.only(client).run(args=[
+            'source', '{tvdir}/bin/activate'.format(tvdir=tvdir),
+            run.Raw('&&'),
+            'pip', 'install', 'tox==3.15.0'
+        ])
 
     # export the path Keystone and Tempest
     ctx.tox = argparse.Namespace()

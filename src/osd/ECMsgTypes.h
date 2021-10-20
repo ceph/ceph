@@ -119,7 +119,7 @@ struct ECSubReadReply {
   pg_shard_t from;
   ceph_tid_t tid;
   std::map<hobject_t, std::list<std::pair<uint64_t, ceph::buffer::list> >> buffers_read;
-  std::map<hobject_t, std::map<std::string, ceph::buffer::list>> attrs_read;
+  std::map<hobject_t, std::map<std::string, ceph::buffer::list, std::less<>>> attrs_read;
   std::map<hobject_t, int> errors;
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);

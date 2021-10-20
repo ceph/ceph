@@ -341,7 +341,7 @@ TEST_F(TestMockMigrationHttpClient, OpenInvalidUrl) {
 
 TEST_F(TestMockMigrationHttpClient, OpenResolveFail) {
   MockTestImageCtx mock_test_image_ctx(*m_image_ctx);
-  MockHttpClient http_client(&mock_test_image_ctx, "http://invalid.ceph.com");
+  MockHttpClient http_client(&mock_test_image_ctx, "http://foo.example");
 
   C_SaferCond ctx;
   http_client.open(&ctx);

@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <stdexcept>
+#include <optional>
 #include <ostream>
 #include <boost/variant.hpp>
 #include "include/ceph_assert.h"	// boost clobbers this
@@ -48,8 +49,10 @@ std::string cmd_vartype_stringify(const cmd_vartype& v);
 
 struct bad_cmd_get : public std::exception {
   std::string desc;
-  bad_cmd_get(const std::string& f, const cmdmap_t& cmdmap) {
-    desc = "bad or missing field '" + f + "'";
+  bad_cmd_get(std::string_view f, const cmdmap_t& cmdmap) {
+    desc += "bad or missing field '";
+    desc += f;
+    desc += "'";
   }
   const char *what() const throw() override {
     return desc.c_str();
@@ -57,48 +60,62 @@ struct bad_cmd_get : public std::exception {
 };
 
 bool cmd_getval(const cmdmap_t& cmdmap,
-		const std::string& k, bool& val);
+		std::string_view k, bool& val);
+
+bool cmd_getval_compat_cephbool(
+  const cmdmap_t& cmdmap,
+  const std::string& k, bool& val);
 
 template <typename T>
 bool cmd_getval(const cmdmap_t& cmdmap,
-		const std::string& k, T& val)
+		std::string_view k, T& val)
 {
-  if (cmdmap.count(k)) {
-    try {
-      val = boost::get<T>(cmdmap.find(k)->second);
-      return true;
-    } catch (boost::bad_get&) {
-      throw bad_cmd_get(k, cmdmap);
-    }
+  auto found = cmdmap.find(k);
+  if (found == cmdmap.end()) {
+    return false;
   }
-  return false;
+  try {
+    val = boost::get<T>(found->second);
+    return true;
+  } catch (boost::bad_get&) {
+    throw bad_cmd_get(k, cmdmap);
+  }
+}
+
+template <typename T>
+std::optional<T> cmd_getval(const cmdmap_t& cmdmap,
+			    std::string_view k)
+{
+  T ret;
+  if (const bool found = cmd_getval(cmdmap, k, ret); found) {
+    return std::make_optional(std::move(ret));
+  } else {
+    return std::nullopt;
+  }
 }
 
 // with default
 
-template <typename T>
-bool cmd_getval(
-  const cmdmap_t& cmdmap, const std::string& k,
-  T& val, const T& defval)
+template <typename T, typename V>
+T cmd_getval_or(const cmdmap_t& cmdmap, std::string_view k,
+		const V& defval)
 {
-  if (cmdmap.count(k)) {
-    try {
-      val = boost::get<T>(cmdmap.find(k)->second);
-      return true;
-    } catch (boost::bad_get&) {
-      throw bad_cmd_get(k, cmdmap);
-    }
-  } else {
-    val = defval;
-    return true;
+  auto found = cmdmap.find(k);
+  if (found == cmdmap.end()) {
+    return T(defval);
+  }
+  try {
+    return boost::get<T>(cmdmap.find(k)->second);
+  } catch (boost::bad_get&) {
+    throw bad_cmd_get(k, cmdmap);
   }
 }
 
 template <typename T>
 void
-cmd_putval(CephContext *cct, cmdmap_t& cmdmap, const std::string& k, const T& val)
+cmd_putval(CephContext *cct, cmdmap_t& cmdmap, std::string_view k, const T& val)
 {
-  cmdmap[k] = val;
+  cmdmap.insert_or_assign(std::string{k}, val);
 }
 
 bool validate_cmd(CephContext* cct,

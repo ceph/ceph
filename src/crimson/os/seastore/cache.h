@@ -8,6 +8,8 @@
 #include "seastar/core/shared_future.hh"
 
 #include "include/buffer.h"
+
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -52,7 +54,7 @@ namespace crimson::os::seastore {
  *    succcessful, the user may construct a record and submit the
  *    transaction to the journal.
  * 3) completion: once the transaction is durable, the user must call
- *    Cache::complete_transaction() with the block offset to complete
+ *    Cache::complete_commit() with the block offset to complete
  *    the transaction.
  *
  * Internally, in phase 1, the fields in Transaction are filled in.
@@ -84,34 +86,60 @@ namespace crimson::os::seastore {
 class Cache {
 public:
   using base_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::eagain>;
+    crimson::ct_error::input_output_error>;
+  using base_iertr = trans_iertr<base_ertr>;
 
-  Cache(SegmentManager &segment_manager);
+  Cache(ExtentReader &reader, segment_off_t block_size);
   ~Cache();
 
-  retired_extent_gate_t retired_extent_gate;
+  /// Creates empty transaction by source
+  TransactionRef create_transaction(
+      Transaction::src_t src) {
+    LOG_PREFIX(Cache::create_transaction);
 
-  /// Creates empty transaction
-  TransactionRef create_transaction() {
+    ++(get_by_src(stats.trans_created_by_src, src));
+
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
       false,
-      last_commit
+      src,
+      last_commit,
+      [this](Transaction& t) {
+        return on_transaction_destruct(t);
+      }
     );
-    retired_extent_gate.add_token(ret->retired_gate_token);
+    DEBUGT("created source={}", *ret, src);
     return ret;
   }
 
-  /// Creates empty weak transaction
-  TransactionRef create_weak_transaction() {
+  /// Creates empty weak transaction by source
+  TransactionRef create_weak_transaction(
+      Transaction::src_t src) {
+    LOG_PREFIX(Cache::create_weak_transaction);
+
+    ++(get_by_src(stats.trans_created_by_src, src));
+
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
       true,
-      last_commit
+      src,
+      last_commit,
+      [this](Transaction& t) {
+        return on_transaction_destruct(t);
+      }
     );
-    retired_extent_gate.add_token(ret->retired_gate_token);
+    DEBUGT("created source={}", *ret, src);
     return ret;
+  }
+
+  /// Resets transaction preserving
+  void reset_transaction_preserve_handle(Transaction &t) {
+    LOG_PREFIX(Cache::reset_transaction_preserve_handle);
+    if (t.did_reset()) {
+      ++(get_by_src(stats.trans_created_by_src, t.get_src()));
+    }
+    t.reset_preserve_handle(last_commit);
+    DEBUGT("reset", t);
   }
 
   /**
@@ -131,9 +159,9 @@ public:
   }
 
   /// Declare paddr retired in t
-  using retire_extent_ertr = base_ertr;
-  using retire_extent_ret = retire_extent_ertr::future<>;
-  retire_extent_ret retire_extent(
+  using retire_extent_iertr = base_iertr;
+  using retire_extent_ret = base_iertr::future<>;
+  retire_extent_ret retire_extent_addr(
     Transaction &t, paddr_t addr, extent_len_t length);
 
   /**
@@ -141,8 +169,8 @@ public:
    *
    * returns ref to current root or t.root if modified in t
    */
-  using get_root_ertr = base_ertr;
-  using get_root_ret = get_root_ertr::future<RootBlockRef>;
+  using get_root_iertr = base_iertr;
+  using get_root_ret = get_root_iertr::future<RootBlockRef>;
   get_root_ret get_root(Transaction &t);
 
   /**
@@ -162,53 +190,51 @@ public:
    * - extent_set if already in cache
    * - disk
    */
+  using src_ext_t = std::pair<Transaction::src_t, extent_types_t>;
   using get_extent_ertr = base_ertr;
   template <typename T>
   using get_extent_ret = get_extent_ertr::future<TCachedExtentRef<T>>;
   template <typename T>
   get_extent_ret<T> get_extent(
-    paddr_t offset,       ///< [in] starting addr
-    segment_off_t length  ///< [in] length
+    paddr_t offset,                ///< [in] starting addr
+    segment_off_t length,          ///< [in] length
+    const src_ext_t* p_metric_key  ///< [in] cache query metric key
   ) {
-    if (auto iter = extents.find_offset(offset);
-	       iter != extents.end()) {
-      auto ret = TCachedExtentRef<T>(static_cast<T*>(&*iter));
+    auto cached = query_cache(offset, p_metric_key);
+    if (!cached) {
+      auto ret = CachedExtent::make_cached_extent_ref<T>(
+        alloc_cache_buf(length));
+      ret->set_paddr(offset);
+      ret->state = CachedExtent::extent_state_t::CLEAN;
+      add_extent(ret);
+      return read_extent<T>(std::move(ret));
+    }
+
+    // extent PRESENT in cache
+    if (cached->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
+      auto ret = CachedExtent::make_cached_extent_ref<T>(
+        alloc_cache_buf(length));
+      ret->set_paddr(offset);
+      ret->state = CachedExtent::extent_state_t::CLEAN;
+      extents.replace(*ret, *cached);
+
+      // replace placeholder in transactions
+      while (!cached->transactions.empty()) {
+        auto t = cached->transactions.begin()->t;
+        t->replace_placeholder(*cached, *ret);
+      }
+
+      cached->state = CachedExtent::extent_state_t::INVALID;
+      return read_extent<T>(std::move(ret));
+    } else {
+      auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
       return ret->wait_io(
       ).then([ret=std::move(ret)]() mutable -> get_extent_ret<T> {
-	if (!ret->is_retired()) {
-	  return get_extent_ret<T>(
-	    get_extent_ertr::ready_future_marker{},
-	    std::move(ret));
-	} else {
-	  return crimson::ct_error::eagain::make();
-	}
+        // ret may be invalid, caller must check
+        return get_extent_ret<T>(
+          get_extent_ertr::ready_future_marker{},
+          std::move(ret));
       });
-    } else {
-      auto ref = CachedExtent::make_cached_extent_ref<T>(
-	alloc_cache_buf(length));
-      ref->set_io_wait();
-      ref->set_paddr(offset);
-      ref->state = CachedExtent::extent_state_t::CLEAN;
-      add_extent(ref);
-
-      return segment_manager.read(
-	offset,
-	length,
-	ref->get_bptr()).safe_then(
-	  [ref=std::move(ref)]() mutable {
-	    /* TODO: crc should be checked against LBA manager */
-	    ref->last_committed_crc = ref->get_crc32c();
-
-	    ref->on_clean_read();
-	    ref->complete_io();
-	    return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
-	      std::move(ref));
-	  },
-	  get_extent_ertr::pass_further{},
-	  crimson::ct_error::assert_all{
-	    "Cache::get_extent: invalid error"
-	  }
-	);
     }
   }
 
@@ -217,19 +243,47 @@ public:
    *
    * Returns extent at offset if in cache
    */
-  seastar::future<CachedExtentRef> get_extent_if_cached(
+  using get_extent_if_cached_iertr = base_iertr;
+  using get_extent_if_cached_ret =
+    get_extent_if_cached_iertr::future<CachedExtentRef>;
+  get_extent_if_cached_ret get_extent_if_cached(
     Transaction &t,
-    paddr_t offset) {
-    return seastar::do_with(
-      CachedExtentRef(),
-      [this, &t, offset](auto &ret) {
-	auto status = query_cache_for_extent(t, offset, &ret);
-	auto wait = seastar::now();
-	if (status == Transaction::get_extent_ret::PRESENT) {
-	  wait = ret->wait_io();
-	}
-	return wait.then([ret] { return std::move(ret); });
-      });
+    paddr_t offset,
+    extent_types_t type) {
+    CachedExtentRef ret;
+    LOG_PREFIX(Cache::get_extent_if_cached);
+    auto result = t.get_extent(offset, &ret);
+    if (result != Transaction::get_extent_ret::ABSENT) {
+      // including get_extent_ret::RETIRED
+      DEBUGT(
+	"Found extent at offset {} on transaction: {}",
+	t, offset, *ret);
+      return get_extent_if_cached_iertr::make_ready_future<
+        CachedExtentRef>(ret);
+    }
+
+    // get_extent_ret::ABSENT from transaction
+    auto metric_key = std::make_pair(t.get_src(), type);
+    ret = query_cache(offset, &metric_key);
+    if (!ret ||
+        // retired_placeholder is not really cached yet
+        ret->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
+      DEBUGT(
+	"No extent at offset {}, retired_placeholder: {}",
+	t, offset, !!ret);
+      return get_extent_if_cached_iertr::make_ready_future<
+        CachedExtentRef>();
+    }
+
+    // present in cache and is not a retired_placeholder
+    DEBUGT(
+      "Found extent at offset {} in cache: {}",
+      t, offset, *ret);
+    t.add_to_read_set(ret);
+    return ret->wait_io().then([ret] {
+      return get_extent_if_cached_iertr::make_ready_future<
+        CachedExtentRef>(ret);
+    });
   }
 
   /**
@@ -242,27 +296,44 @@ public:
    *
    * t *must not* have retired offset
    */
+  using get_extent_iertr = base_iertr;
   template <typename T>
-  get_extent_ertr::future<TCachedExtentRef<T>> get_extent(
-    Transaction &t,       ///< [in,out] current transaction
-    paddr_t offset,       ///< [in] starting addr
-    segment_off_t length  ///< [in] length
-  ) {
+  get_extent_iertr::future<TCachedExtentRef<T>> get_extent(
+    Transaction &t,
+    paddr_t offset,
+    segment_off_t length) {
     CachedExtentRef ret;
+    LOG_PREFIX(Cache::get_extent);
     auto result = t.get_extent(offset, &ret);
     if (result != Transaction::get_extent_ret::ABSENT) {
       assert(result != Transaction::get_extent_ret::RETIRED);
-      return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
+      DEBUGT(
+	"Found extent at offset {} on transaction: {}",
+	t, offset, *ret);
+      return seastar::make_ready_future<TCachedExtentRef<T>>(
 	ret->cast<T>());
     } else {
-      return get_extent<T>(offset, length).safe_then(
-	[&t](auto ref) mutable {
+      auto metric_key = std::make_pair(t.get_src(), T::TYPE);
+      return trans_intr::make_interruptible(
+	get_extent<T>(offset, length, &metric_key)
+      ).si_then([this, FNAME, offset, &t](auto ref) {
+	(void)this; // silence incorrect clang warning about capture
+	if (!ref->is_valid()) {
+	  DEBUGT("got invalid extent: {}", t, ref);
+	  mark_transaction_conflicted(t, *ref);
+	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
+	} else {
+	  DEBUGT(
+	    "Found extent at offset {} in cache: {}",
+	    t, offset, *ref);
 	  t.add_to_read_set(ref);
-	  return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
+	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	    std::move(ref));
-	});
+	}
+      });
     }
   }
+
 
   /**
    * get_extent_by_type
@@ -271,79 +342,76 @@ public:
    * and read in the extent at location offset~length.
    */
   get_extent_ertr::future<CachedExtentRef> get_extent_by_type(
-    extent_types_t type,  ///< [in] type tag
-    paddr_t offset,       ///< [in] starting addr
-    laddr_t laddr,        ///< [in] logical address if logical
-    segment_off_t length  ///< [in] length
+    extent_types_t type,             ///< [in] type tag
+    paddr_t offset,                  ///< [in] starting addr
+    laddr_t laddr,                   ///< [in] logical address if logical
+    segment_off_t length,            ///< [in] length
+    const Transaction::src_t* p_src  ///< [in] src tag for cache query metric
   );
 
-  get_extent_ertr::future<CachedExtentRef> get_extent_by_type(
+  using get_extent_by_type_iertr = get_extent_iertr;
+  using get_extent_by_type_ret = get_extent_by_type_iertr::future<
+    CachedExtentRef>;
+  get_extent_by_type_ret get_extent_by_type(
     Transaction &t,
     extent_types_t type,
     paddr_t offset,
     laddr_t laddr,
     segment_off_t length) {
     CachedExtentRef ret;
-    auto status = query_cache_for_extent(t, offset, &ret);
+    auto status = t.get_extent(offset, &ret);
     if (status == Transaction::get_extent_ret::RETIRED) {
-      return get_extent_ertr::make_ready_future<CachedExtentRef>();
+      return seastar::make_ready_future<CachedExtentRef>();
     } else if (status == Transaction::get_extent_ret::PRESENT) {
-      return get_extent_ertr::make_ready_future<CachedExtentRef>(ret);
+      return seastar::make_ready_future<CachedExtentRef>(ret);
     } else {
-      return get_extent_by_type(type, offset, laddr, length
-      ).safe_then([=, &t](CachedExtentRef ret) {
-	t.add_to_read_set(ret);
-	return get_extent_ertr::make_ready_future<CachedExtentRef>(
-	  std::move(ret));
+      auto src = t.get_src();
+      return trans_intr::make_interruptible(
+	get_extent_by_type(type, offset, laddr, length, &src)
+      ).si_then([=, &t](CachedExtentRef ret) {
+        if (!ret->is_valid()) {
+          LOG_PREFIX(Cache::get_extent_by_type);
+          DEBUGT("got invalid extent: {}", t, ret);
+          mark_transaction_conflicted(t, *ret.get());
+          return get_extent_ertr::make_ready_future<CachedExtentRef>();
+        } else {
+          t.add_to_read_set(ret);
+          return get_extent_ertr::make_ready_future<CachedExtentRef>(
+            std::move(ret));
+        }
       });
     }
   }
 
   /**
-   * get_extents
-   *
-   * returns refs to extents in extents from:
-   * - t if modified by t
-   * - extent_set if already in cache
-   * - disk
-   */
-  template<typename T>
-  get_extent_ertr::future<t_pextent_list_t<T>> get_extents(
-    Transaction &t,        ///< [in, out] current transaction
-    paddr_list_t &&extents ///< [in] extent list for lookup
-  ) {
-    auto retref = std::make_unique<t_pextent_list_t<T>>();
-    auto &ret = *retref;
-    auto ext = std::make_unique<paddr_list_t>(std::move(extents));
-    return crimson::do_for_each(
-      ext->begin(),
-      ext->end(),
-      [this, &t, &ret](auto &p) {
-	auto &[offset, len] = p;
-	return get_extent(t, offset, len).safe_then([&ret](auto cext) {
-	  ret.push_back(std::move(cext));
-	});
-      }).safe_then([retref=std::move(retref), ext=std::move(ext)]() mutable {
-	return get_extent_ertr::make_ready_future<t_pextent_list_t<T>>(
-	  std::move(*retref));
-      });
-  }
-
-  /**
    * alloc_new_extent
    *
-   * Allocates a fresh extent.  addr will be relative until commit.
+   * Allocates a fresh extent. if delayed is true, addr will be alloc'd later
    */
   template <typename T>
   TCachedExtentRef<T> alloc_new_extent(
-    Transaction &t,      ///< [in, out] current transaction
-    segment_off_t length ///< [in] length
+    Transaction &t,       ///< [in, out] current transaction
+    segment_off_t length, ///< [in] length
+    bool delayed = false  ///< [in] whether the paddr allocation of extent is delayed
   ) {
     auto ret = CachedExtent::make_cached_extent_ref<T>(
       alloc_cache_buf(length));
-    t.add_fresh_extent(ret);
+    t.add_fresh_extent(ret, delayed);
     ret->state = CachedExtent::extent_state_t::INITIAL_WRITE_PENDING;
     return ret;
+  }
+
+  void mark_delayed_extent_inline(
+    Transaction& t,
+    LogicalCachedExtentRef& ref) {
+    t.mark_delayed_extent_inline(ref);
+  }
+
+  void mark_delayed_extent_ool(
+    Transaction& t,
+    LogicalCachedExtentRef& ref,
+    paddr_t final_addr) {
+    t.mark_delayed_extent_ool(ref, final_addr);
   }
 
   /**
@@ -354,7 +422,8 @@ public:
   CachedExtentRef alloc_new_extent_by_type(
     Transaction &t,       ///< [in, out] current transaction
     extent_types_t type,  ///< [in] type tag
-    segment_off_t length  ///< [in] length
+    segment_off_t length, ///< [in] length
+    bool delayed = false  ///< [in] whether delay addr allocation
     );
 
   /**
@@ -375,14 +444,11 @@ public:
   );
 
   /**
-   * try_construct_record
+   * prepare_record
    *
-   * First checks for conflicts.  If a racing write has mutated/retired
-   * an extent mutated by this transaction, nullopt will be returned.
-   *
-   * Otherwise, a record will be returned valid for use with Journal.
+   * Construct the record for Journal from transaction.
    */
-  std::optional<record_t> try_construct_record(
+  record_t prepare_record(
     Transaction &t ///< [in, out] current transaction
   );
 
@@ -411,9 +477,8 @@ public:
    * Alloc initial root node and add to t.  The intention is for other
    * components to use t to adjust the resulting root ref prior to commit.
    */
-  using mkfs_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  mkfs_ertr::future<> mkfs(Transaction &t);
+  using mkfs_iertr = base_iertr;
+  mkfs_iertr::future<> mkfs(Transaction &t);
 
   /**
    * close
@@ -446,14 +511,16 @@ public:
    * after replay to allow lba_manager (or w/e) to read in any ancestor
    * blocks.
    */
-  using init_cached_extents_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using init_cached_extents_ret = replay_delta_ertr::future<>;
+  using init_cached_extents_iertr = base_iertr;
+  using init_cached_extents_ret = init_cached_extents_iertr::future<>;
   template <typename F>
   init_cached_extents_ret init_cached_extents(
     Transaction &t,
     F &&f)
   {
+    // journal replay should has been finished at this point,
+    // Cache::root should have been inserted to the dirty list
+    assert(root->is_dirty());
     std::vector<CachedExtentRef> dirty;
     for (auto &e : extents) {
       dirty.push_back(CachedExtentRef(&e));
@@ -462,11 +529,11 @@ public:
       std::forward<F>(f),
       std::move(dirty),
       [&t](auto &f, auto &refs) mutable {
-	return crimson::do_for_each(
+	return trans_intr::do_for_each(
 	  refs,
 	  [&t, &f](auto &e) { return f(t, e); });
-      }).handle_error(
-	init_cached_extents_ertr::pass_further{},
+      }).handle_error_interruptible(
+	init_cached_extents_iertr::pass_further{},
 	crimson::ct_error::assert_all{
 	  "Invalid error in Cache::init_cached_extents"
 	}
@@ -487,6 +554,7 @@ public:
 	return t.root;
       } else {
 	t.add_to_read_set(extent);
+	t.root = extent->cast<RootBlock>();
 	return extent;
       }
     } else {
@@ -512,11 +580,17 @@ public:
     return out;
   }
 
-  /// returns extents with get_dirty_from() < seq
-  using get_next_dirty_extents_ertr = crimson::errorator<>;
-  using get_next_dirty_extents_ret = get_next_dirty_extents_ertr::future<
+  /**
+   * get_next_dirty_extents
+   *
+   * Returns extents with get_dirty_from() < seq and adds to read set of
+   * t.
+   */
+  using get_next_dirty_extents_iertr = base_iertr;
+  using get_next_dirty_extents_ret = get_next_dirty_extents_iertr::future<
     std::vector<CachedExtentRef>>;
   get_next_dirty_extents_ret get_next_dirty_extents(
+    Transaction &t,
     journal_seq_t seq,
     size_t max_bytes);
 
@@ -534,8 +608,13 @@ public:
     }
   }
 
+  /// Dump live extents
+  void dump_contents();
+
 private:
-  SegmentManager &segment_manager; ///< ref to segment_manager
+  ExtentReader &reader;	   	   ///< ref to extent reader
+  segment_off_t block_size;	   ///< block size of the segment
+                                   ///< manager holding journal records
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents;             ///< set of live extents
 
@@ -547,6 +626,126 @@ private:
    * holds refs to dirty extents.  Ordered by CachedExtent::get_dirty_from().
    */
   CachedExtent::list dirty;
+
+  struct query_counters_t {
+    uint64_t access = 0;
+    uint64_t hit = 0;
+  };
+
+  /**
+   * effort_t
+   *
+   * Count the number of extents involved in the effort and the total bytes of
+   * them.
+   *
+   * Each effort_t represents the effort of a set of extents involved in the
+   * transaction, classified by read, mutate, retire and allocate behaviors,
+   * see XXX_trans_efforts_t.
+   */
+  struct effort_t {
+    uint64_t extents = 0;
+    uint64_t bytes = 0;
+
+    void increment(uint64_t extent_len) {
+      ++extents;
+      bytes += extent_len;
+    }
+  };
+
+  template <typename CounterT>
+  using counter_by_extent_t = std::array<CounterT, EXTENT_TYPES_MAX>;
+
+  struct invalid_trans_efforts_t {
+    effort_t read;
+    effort_t mutate;
+    uint64_t mutate_delta_bytes = 0;
+    effort_t retire;
+    effort_t fresh;
+    effort_t fresh_ool_written;
+    counter_by_extent_t<uint64_t> num_trans_invalidated;
+    uint64_t num_ool_records = 0;
+    uint64_t ool_record_overhead_bytes = 0;
+  };
+
+  struct commit_trans_efforts_t {
+    counter_by_extent_t<effort_t> read_by_ext;
+    counter_by_extent_t<effort_t> mutate_by_ext;
+    counter_by_extent_t<uint64_t> delta_bytes_by_ext;
+    counter_by_extent_t<effort_t> retire_by_ext;
+    counter_by_extent_t<effort_t> fresh_invalid_by_ext;
+    counter_by_extent_t<effort_t> fresh_inline_by_ext;
+    counter_by_extent_t<effort_t> fresh_ool_by_ext;
+    uint64_t num_trans = 0; // the number of inline records
+    uint64_t num_ool_records = 0;
+    uint64_t ool_record_overhead_bytes = 0;
+    uint64_t inline_record_overhead_bytes = 0;
+  };
+
+  struct success_read_trans_efforts_t {
+    effort_t read;
+    uint64_t num_trans = 0;
+  };
+
+  struct tree_efforts_t {
+    uint64_t num_inserts = 0;
+    uint64_t num_erases = 0;
+
+    void increment(const Transaction::tree_stats_t& incremental) {
+      num_inserts += incremental.num_inserts;
+      num_erases += incremental.num_erases;
+    }
+  };
+
+  template <typename CounterT>
+  using counter_by_src_t = std::array<CounterT, Transaction::SRC_MAX>;
+
+  struct fill_stat_t {
+    uint64_t filled_bytes = 0;
+    uint64_t total_bytes = 0;
+  };
+
+  struct record_header_fullness_t {
+    fill_stat_t inline_stats;
+    fill_stat_t ool_stats;
+  };
+
+  struct {
+    counter_by_src_t<uint64_t> trans_created_by_src;
+    counter_by_src_t<commit_trans_efforts_t> committed_efforts_by_src;
+    counter_by_src_t<invalid_trans_efforts_t> invalidated_efforts_by_src;
+    counter_by_src_t<query_counters_t> cache_query_by_src;
+    counter_by_src_t<record_header_fullness_t> record_header_fullness_by_src;
+    success_read_trans_efforts_t success_read_efforts;
+    uint64_t dirty_bytes = 0;
+
+    uint64_t onode_tree_depth = 0;
+    counter_by_src_t<tree_efforts_t> committed_onode_tree_efforts;
+    counter_by_src_t<tree_efforts_t> invalidated_onode_tree_efforts;
+
+    uint64_t lba_tree_depth = 0;
+    counter_by_src_t<tree_efforts_t> committed_lba_tree_efforts;
+    counter_by_src_t<tree_efforts_t> invalidated_lba_tree_efforts;
+  } stats;
+
+  template <typename CounterT>
+  CounterT& get_by_src(
+      counter_by_src_t<CounterT>& counters_by_src,
+      Transaction::src_t src) {
+    assert(static_cast<std::size_t>(src) < counters_by_src.size());
+    return counters_by_src[static_cast<std::size_t>(src)];
+  }
+
+  template <typename CounterT>
+  CounterT& get_by_ext(
+      counter_by_extent_t<CounterT>& counters_by_ext,
+      extent_types_t ext) {
+    auto index = static_cast<uint8_t>(ext);
+    assert(index < EXTENT_TYPES_MAX);
+    return counters_by_ext[index];
+  }
+
+  seastar::metrics::metric_group metrics;
+  void register_metrics();
 
   /// alloc buffer for cached extent
   bufferptr alloc_cache_buf(size_t size) {
@@ -572,34 +771,67 @@ private:
   /// Remove extent from extents handling dirty and refcounting
   void remove_extent(CachedExtentRef ref);
 
-  /// Retire extent, move reference to retired_extent_gate
+  /// Retire extent
   void retire_extent(CachedExtentRef ref);
 
   /// Replace prev with next
   void replace_extent(CachedExtentRef next, CachedExtentRef prev);
 
-  Transaction::get_extent_ret query_cache_for_extent(
-    paddr_t offset,
-    CachedExtentRef *out) {
-    if (auto iter = extents.find_offset(offset);
-	iter != extents.end()) {
-      if (out)
-	*out = &*iter;
-      return Transaction::get_extent_ret::PRESENT;
-    } else {
-      return Transaction::get_extent_ret::ABSENT;
-    }
+  /// Invalidate extent and mark affected transactions
+  void invalidate_extent(CachedExtent &extent);
+
+  /// Mark a valid transaction as conflicted
+  void mark_transaction_conflicted(
+    Transaction& t, CachedExtent& conflicting_extent);
+
+  /// Introspect transaction when it is being destructed
+  void on_transaction_destruct(Transaction& t);
+
+  template <typename T>
+  get_extent_ret<T> read_extent(
+    TCachedExtentRef<T>&& extent
+  ) {
+    extent->set_io_wait();
+    return reader.read(
+      extent->get_paddr(),
+      extent->get_length(),
+      extent->get_bptr()
+    ).safe_then(
+      [extent=std::move(extent)]() mutable {
+        /* TODO: crc should be checked against LBA manager */
+        extent->last_committed_crc = extent->get_crc32c();
+
+        extent->on_clean_read();
+        extent->complete_io();
+        return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
+          std::move(extent));
+      },
+      get_extent_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+        "Cache::get_extent: invalid error"
+      }
+    );
   }
 
-  Transaction::get_extent_ret query_cache_for_extent(
-    Transaction &t,
-    paddr_t offset,
-    CachedExtentRef *out) {
-    auto result = t.get_extent(offset, out);
-    if (result != Transaction::get_extent_ret::ABSENT) {
-      return result;
+  // Extents in cache may contain placeholders
+  CachedExtentRef query_cache(
+      paddr_t offset,
+      const src_ext_t* p_metric_key) {
+    query_counters_t* p_counters = nullptr;
+    if (p_metric_key) {
+      p_counters = &get_by_src(stats.cache_query_by_src, p_metric_key->first);
+      ++p_counters->access;
+    }
+    if (auto iter = extents.find_offset(offset);
+        iter != extents.end()) {
+      if (p_metric_key &&
+          // retired_placeholder is not really cached yet
+          iter->get_type() != extent_types_t::RETIRED_PLACEHOLDER) {
+        ++p_counters->hit;
+      }
+      return CachedExtentRef(&*iter);
     } else {
-      return query_cache_for_extent(offset, out);
+      return CachedExtentRef();
     }
   }
 

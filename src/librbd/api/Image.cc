@@ -32,6 +32,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::api::Image: " << __func__ << ": "
 
+using std::map;
+using std::string;
 using librados::snap_t;
 
 namespace librbd {
@@ -309,14 +311,15 @@ int Image<I>::list_descendants(
     std::vector<librbd::linked_image_spec_t> *images) {
   ImageCtx *ictx = new librbd::ImageCtx("", image_id, nullptr,
                                         io_ctx, true);
+  CephContext *cct = ictx->cct;
   int r = ictx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT);
   if (r < 0) {
     if (r == -ENOENT) {
       return 0;
     }
-    lderr(ictx->cct) << "failed to open descendant " << image_id
-                     << " from pool " << io_ctx.get_pool_name() << ":"
-                     << cpp_strerror(r) << dendl;
+    lderr(cct) << "failed to open descendant " << image_id
+               << " from pool " << io_ctx.get_pool_name() << ":"
+               << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -324,9 +327,9 @@ int Image<I>::list_descendants(
 
   int r1 = ictx->state->close();
   if (r1 < 0) {
-    lderr(ictx->cct) << "error when closing descendant " << image_id
-                     << " from pool " << io_ctx.get_pool_name() << ":"
-                     << cpp_strerror(r) << dendl;
+    lderr(cct) << "error when closing descendant " << image_id
+               << " from pool " << io_ctx.get_pool_name() << ":"
+               << cpp_strerror(r1) << dendl;
   }
 
   return r;

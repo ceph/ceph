@@ -38,6 +38,8 @@
 
 #define PLACEHOLDER ""
 
+using std::list;
+using std::string;
 
 typedef struct {
   PyObject_HEAD
@@ -486,7 +488,7 @@ ceph_set_module_option(BaseMgrModule *self, PyObject *args)
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
-  boost::optional<string> val;
+  std::optional<string> val;
   if (value) {
     val = value;
   }
@@ -529,7 +531,7 @@ ceph_store_set(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "sz:ceph_store_set", &key, &value)) {
     return nullptr;
   }
-  boost::optional<string> val;
+  std::optional<string> val;
   if (value) {
     val = value;
   }
@@ -597,6 +599,12 @@ static PyObject *
 ceph_get_version(BaseMgrModule *self, PyObject *args)
 {
   return PyUnicode_FromString(pretty_version_to_str().c_str());
+}
+
+static PyObject *
+ceph_get_ceph_conf_path(BaseMgrModule *self, PyObject *args)
+{
+  return PyUnicode_FromString(g_conf().get_conf_path().c_str());
 }
 
 static PyObject *
@@ -1406,6 +1414,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_get_mgr_id", (PyCFunction)ceph_get_mgr_id, METH_NOARGS,
    "Get the name of the Mgr daemon where we are running"},
+
+  {"_ceph_get_ceph_conf_path", (PyCFunction)ceph_get_ceph_conf_path, METH_NOARGS,
+   "Get path to ceph.conf"},
 
   {"_ceph_get_option", (PyCFunction)ceph_option_get, METH_VARARGS,
    "Get a native configuration option value"},

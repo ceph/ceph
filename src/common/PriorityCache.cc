@@ -73,8 +73,7 @@ namespace PriorityCache
       reserve_extra(reserve_extra),
       name(name.empty() ? "prioritycache" : name)
   {
-    PerfCountersBuilder b(cct, name,
-                          MallocStats::M_FIRST, MallocStats::M_LAST);
+    PerfCountersBuilder b(cct, this->name, MallocStats::M_FIRST, MallocStats::M_LAST);
 
     b.add_u64(MallocStats::M_TARGET_BYTES, "target_bytes",
               "target process memory usage in bytes", "t",
@@ -85,7 +84,7 @@ namespace PriorityCache
               PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
 
     b.add_u64(MallocStats::M_UNMAPPED_BYTES, "unmapped_bytes",
-              "unmapped bytes that the kernel has yet to reclaimed", "u",
+              "unmapped bytes that the kernel has yet to reclaim", "u",
               PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
 
     b.add_u64(MallocStats::M_HEAP_BYTES, "heap_bytes",
@@ -176,59 +175,59 @@ namespace PriorityCache
 
     b.add_u64(cur_index + Priority::PRI0, "pri0_bytes",
               "bytes allocated to pri0", "p0",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Priority::PRI1, "pri1_bytes",
               "bytes allocated to pri1", "p1",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Priority::PRI2, "pri2_bytes",
               "bytes allocated to pri2", "p2",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Priority::PRI3, "pri3_bytes",
               "bytes allocated to pri3", "p3",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Priority::PRI4, "pri4_bytes",
               "bytes allocated to pri4", "p4",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Priority::PRI5, "pri5_bytes",
               "bytes allocated to pri5", "p5",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Priority::PRI6, "pri6_bytes",
               "bytes allocated to pri6", "p6",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Priority::PRI7, "pri7_bytes",
               "bytes allocated to pri7", "p7",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Priority::PRI8, "pri8_bytes",
               "bytes allocated to pri8", "p8",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Priority::PRI9, "pri9_bytes",
               "bytes allocated to pri9", "p9",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Priority::PRI10, "pri10_bytes",
               "bytes allocated to pri10", "p10",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Priority::PRI11, "pri11_bytes",
               "bytes allocated to pri11", "p11",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Extra::E_RESERVED, "reserved_bytes",
               "bytes reserved for future growth.", "r",
-              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     b.add_u64(cur_index + Extra::E_COMMITTED, "committed_bytes",
               "total bytes committed,", "c",
-              PerfCountersBuilder::PRIO_CRITICAL, unit_t(UNIT_BYTES));
+              PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
 
     for (int i = 0; i < Extra::E_LAST+1; i++) {
       indexes[name][i] = cur_index + i;

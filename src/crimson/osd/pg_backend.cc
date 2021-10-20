@@ -3,6 +3,7 @@
 
 #include "pg_backend.h"
 
+#include <charconv>
 #include <optional>
 #include <boost/range/adaptor/filtered.hpp>
 #include <boost/range/adaptor/transformed.hpp>
@@ -31,6 +32,9 @@ namespace {
   }
 }
 
+using std::runtime_error;
+using std::string;
+using std::string_view;
 using crimson::common::local_conf;
 
 std::unique_ptr<PGBackend>
@@ -77,10 +81,9 @@ PGBackend::load_metadata(const hobject_t& oid)
       [oid](auto &&attrs) -> load_metadata_ertr::future<loaded_object_md_t::ref>{
 	loaded_object_md_t::ref ret(new loaded_object_md_t());
 	if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
-	  bufferlist bl;
-	  bl.push_back(std::move(oiiter->second));
+	  bufferlist bl = std::move(oiiter->second);
 	  ret->os = ObjectState(
-	    object_info_t(bl),
+	    object_info_t(bl, oid),
 	    true);
 	} else {
 	  logger().error(
@@ -91,8 +94,7 @@ PGBackend::load_metadata(const hobject_t& oid)
 	
 	if (oid.is_head()) {
 	  if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
-	    bufferlist bl;
-	    bl.push_back(std::move(ssiter->second));
+	    bufferlist bl = std::move(ssiter->second);
 	    ret->ss = SnapSet(bl);
 	  } else {
 	    /* TODO: add support for writing out snapsets
@@ -121,7 +123,7 @@ PGBackend::load_metadata(const hobject_t& oid)
       }));
 }
 
-PGBackend::interruptible_future<crimson::osd::acked_peers_t>
+PGBackend::rep_op_fut_t
 PGBackend::mutate_object(
   std::set<pg_shard_t> pg_shards,
   crimson::osd::ObjectContextRef &&obc,
@@ -138,19 +140,18 @@ PGBackend::mutate_object(
     obc->obs.oi.prior_version = ctx->obs->oi.version;
 #endif
 
-    auto& m = osd_op_p.req;
     obc->obs.oi.prior_version = obc->obs.oi.version;
     obc->obs.oi.version = osd_op_p.at_version;
     if (osd_op_p.user_at_version > obc->obs.oi.user_version)
       obc->obs.oi.user_version = osd_op_p.user_at_version;
-    obc->obs.oi.last_reqid = m->get_reqid();
-    obc->obs.oi.mtime = m->get_mtime();
+    obc->obs.oi.last_reqid = osd_op_p.req_id;
+    obc->obs.oi.mtime = osd_op_p.mtime;
     obc->obs.oi.local_mtime = ceph_clock_now();
 
     // object_info_t
     {
       ceph::bufferlist osv;
-      encode(obc->obs.oi, osv, CEPH_FEATURES_ALL);
+      obc->obs.oi.encode_no_oid(osv, CEPH_FEATURES_ALL);
       // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
       txn.setattr(coll->get_cid(), ghobject_t{obc->obs.oi.soid}, OI_ATTR, osv);
     }
@@ -793,17 +794,14 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
   }
   logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
   return getxattr(os.oi.soid, name).safe_then_interruptible(
-    [&osd_op] (ceph::bufferptr val) {
-    osd_op.outdata.clear();
-    osd_op.outdata.push_back(std::move(val));
+    [&osd_op] (ceph::bufferlist&& val) {
+    osd_op.outdata = std::move(val);
     osd_op.op.xattr.value_len = osd_op.outdata.length();
     return get_attr_errorator::now();
-    //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
   });
-  //ctx->delta_stats.num_rd++;
 }
 
-PGBackend::get_attr_ierrorator::future<ceph::bufferptr>
+PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
 PGBackend::getxattr(
   const hobject_t& soid,
   std::string_view key) const
@@ -834,6 +832,99 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
     }
     ceph::encode(user_xattrs, osd_op.outdata);
     return get_attr_errorator::now();
+  });
+}
+
+namespace {
+
+template<typename U, typename V>
+int do_cmp_xattr(int op, const U& lhs, const V& rhs)
+{
+  switch (op) {
+  case CEPH_OSD_CMPXATTR_OP_EQ:
+    return lhs == rhs;
+  case CEPH_OSD_CMPXATTR_OP_NE:
+    return lhs != rhs;
+  case CEPH_OSD_CMPXATTR_OP_GT:
+    return lhs > rhs;
+  case CEPH_OSD_CMPXATTR_OP_GTE:
+    return lhs >= rhs;
+  case CEPH_OSD_CMPXATTR_OP_LT:
+    return lhs < rhs;
+  case CEPH_OSD_CMPXATTR_OP_LTE:
+    return lhs <= rhs;
+  default:
+    return -EINVAL;
+  }
+}
+
+} // anonymous namespace
+
+static int do_xattr_cmp_u64(int op, uint64_t lhs, bufferlist& rhs_xattr)
+{
+  uint64_t rhs;
+
+  if (rhs_xattr.length() > 0) {
+    const char* first = rhs_xattr.c_str();
+    if (auto [p, ec] = std::from_chars(first, first + rhs_xattr.length(), rhs);
+	ec != std::errc()) {
+      return -EINVAL;
+    }
+  } else {
+    rhs = 0;
+  }
+  logger().debug("do_xattr_cmp_u64 '{}' vs '{}' op {}", lhs, rhs, op);
+  return do_cmp_xattr(op, lhs, rhs);
+}
+
+PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
+  const ObjectState& os,
+  OSDOp& osd_op) const
+{
+  std::string name{"_"};
+  auto bp = osd_op.indata.cbegin();
+  bp.copy(osd_op.op.xattr.name_len, name);
+ 
+  logger().debug("cmpxattr on obj={} for attr={}", os.oi.soid, name);
+  return getxattr(os.oi.soid, name).safe_then_interruptible(
+    [&osd_op] (auto &&xattr) {
+    int result = 0;
+    auto bp = osd_op.indata.cbegin();
+    bp += osd_op.op.xattr.name_len;
+
+    switch (osd_op.op.xattr.cmp_mode) {
+    case CEPH_OSD_CMPXATTR_MODE_STRING:
+      {
+        string lhs;
+        bp.copy(osd_op.op.xattr.value_len, lhs);
+        string_view rhs(xattr.c_str(), xattr.length());
+        result = do_cmp_xattr(osd_op.op.xattr.cmp_op, lhs, rhs);
+        logger().debug("cmpxattr lhs={}, rhs={}", lhs, rhs);
+      }
+    break;
+    case CEPH_OSD_CMPXATTR_MODE_U64:
+      {
+        uint64_t lhs;
+        try {
+          decode(lhs, bp);
+	} catch (ceph::buffer::error& e) {
+          logger().info("cmp_xattr: buffer error expection");
+          result = -EINVAL;
+          break;
+	}
+        result = do_xattr_cmp_u64(osd_op.op.xattr.cmp_op, lhs, xattr);
+      }
+    break;
+    default:
+      logger().info("bad cmp mode {}", osd_op.op.xattr.cmp_mode);
+      result = -EINVAL;
+    }
+    if (result == 0) {
+      logger().info("cmp_xattr: comparison returned false");
+      osd_op.rval = -ECANCELED;
+    } else {
+      osd_op.rval = result;
+    }
   });
 }
 

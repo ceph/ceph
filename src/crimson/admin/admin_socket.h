@@ -89,8 +89,6 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
   AdminSocket(AdminSocket&&) = delete;
   AdminSocket& operator=(AdminSocket&&) = delete;
 
-  using hook_server_tag = const void*;
-
   /**
    *  create the async Seastar thread that handles asok commands arriving
    *  over the socket.
@@ -114,12 +112,12 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
    * A note regarding the help text: if empty, command will not be
    * included in 'help' output.
    */
-  seastar::future<> register_command(std::unique_ptr<AdminSocketHook>&& hook);
+  void register_command(std::unique_ptr<AdminSocketHook>&& hook);
 
   /**
    * Registering the APIs that are served directly by the admin_socket server.
    */
-  seastar::future<> register_admin_commands();
+  void register_admin_commands();
   /**
    * handle a command message by replying an MCommandReply with the same tid
    *
@@ -173,16 +171,10 @@ private:
   std::variant<parsed_command_t, tell_result_t>
   parse_cmd(const std::vector<std::string>& cmd);
 
-  /**
-   *  The servers table is protected by a rw-lock, to be acquired exclusively
-   *  only when registering or removing a server.
-   *  The lock is locked-shared when executing any hook.
-   */
-  mutable seastar::shared_mutex servers_tbl_rwlock;
   using hooks_t = std::map<std::string_view, std::unique_ptr<AdminSocketHook>>;
   hooks_t hooks;
 
- public:
+public:
   /**
    * iterator support
    */
@@ -192,10 +184,6 @@ private:
   hooks_t::const_iterator end() const {
     return hooks.cend();
   }
-
-  friend class AdminSocketTest;
-  friend class HelpHook;
-  friend class GetdescsHook;
 };
 
 }  // namespace crimson::admin

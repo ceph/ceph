@@ -92,6 +92,9 @@ inline bool operator!=(const uuid_d& l, const uuid_d& r) {
 inline bool operator<(const uuid_d& l, const uuid_d& r) {
   return l.to_string() < r.to_string();
 }
+inline bool operator>(const uuid_d& l, const uuid_d& r) {
+  return l.to_string() > r.to_string();
+}
 
 
 #endif

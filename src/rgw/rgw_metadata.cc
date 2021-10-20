@@ -27,6 +27,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 const std::string RGWMetadataLogHistory::oid = "meta.history";
 
 void LogStatusDump::dump(Formatter *f) const {
@@ -104,7 +106,7 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
 }
 
 
-int RGWMetadataLog::add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl) {
+int RGWMetadataLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl) {
   if (!svc.zone->need_to_log_metadata())
     return 0;
 
@@ -114,7 +116,7 @@ int RGWMetadataLog::add_entry(const string& hash_key, const string& section, con
   rgw_shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
   mark_modified(shard_id);
   real_time now = real_clock::now();
-  return svc.cls->timelog.add(oid, now, section, key, bl, null_yield);
+  return svc.cls->timelog.add(dpp, oid, now, section, key, bl, null_yield);
 }
 
 int RGWMetadataLog::get_shard_id(const string& hash_key, int *shard_id)
@@ -125,13 +127,13 @@ int RGWMetadataLog::get_shard_id(const string& hash_key, int *shard_id)
   return 0;
 }
 
-int RGWMetadataLog::store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
+int RGWMetadataLog::store_entries_in_shard(const DoutPrefixProvider *dpp, list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
 {
   string oid;
 
   mark_modified(shard_id);
   rgw_shard_name(prefix, shard_id, oid);
-  return svc.cls->timelog.add(oid, entries, completion, false, null_yield);
+  return svc.cls->timelog.add(dpp, oid, entries, completion, false, null_yield);
 }
 
 void RGWMetadataLog::init_list_entries(int shard_id, const real_time& from_time, const real_time& end_time, 
@@ -154,7 +156,7 @@ void RGWMetadataLog::complete_list_entries(void *handle) {
   delete ctx;
 }
 
-int RGWMetadataLog::list_entries(void *handle,
+int RGWMetadataLog::list_entries(const DoutPrefixProvider *dpp, void *handle,
 				 int max_entries,
 				 list<cls_log_entry>& entries,
 				 string *last_marker,
@@ -167,7 +169,7 @@ int RGWMetadataLog::list_entries(void *handle,
   }
 
   std::string next_marker;
-  int ret = svc.cls->timelog.list(ctx->cur_oid, ctx->from_time, ctx->end_time,
+  int ret = svc.cls->timelog.list(dpp, ctx->cur_oid, ctx->from_time, ctx->end_time,
                                   max_entries, entries, ctx->marker,
                                   &next_marker, truncated, null_yield);
   if ((ret < 0) && (ret != -ENOENT))
@@ -184,14 +186,14 @@ int RGWMetadataLog::list_entries(void *handle,
   return 0;
 }
 
-int RGWMetadataLog::get_info(int shard_id, RGWMetadataLogInfo *info)
+int RGWMetadataLog::get_info(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfo *info)
 {
   string oid;
   get_shard_oid(shard_id, oid);
 
   cls_log_header header;
 
-  int ret = svc.cls->timelog.info(oid, &header, null_yield);
+  int ret = svc.cls->timelog.info(dpp, oid, &header, null_yield);
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
 
@@ -220,40 +222,40 @@ RGWMetadataLogInfoCompletion::~RGWMetadataLogInfoCompletion()
   completion->release();
 }
 
-int RGWMetadataLog::get_info_async(int shard_id, RGWMetadataLogInfoCompletion *completion)
+int RGWMetadataLog::get_info_async(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfoCompletion *completion)
 {
   string oid;
   get_shard_oid(shard_id, oid);
 
   completion->get(); // hold a ref until the completion fires
 
-  return svc.cls->timelog.info_async(completion->get_io_obj(), oid,
+  return svc.cls->timelog.info_async(dpp, completion->get_io_obj(), oid,
                                      &completion->get_header(),
                                      completion->get_completion());
 }
 
-int RGWMetadataLog::trim(int shard_id, const real_time& from_time, const real_time& end_time,
+int RGWMetadataLog::trim(const DoutPrefixProvider *dpp, int shard_id, const real_time& from_time, const real_time& end_time,
                          const string& start_marker, const string& end_marker)
 {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return svc.cls->timelog.trim(oid, from_time, end_time, start_marker,
+  return svc.cls->timelog.trim(dpp, oid, from_time, end_time, start_marker,
                                end_marker, nullptr, null_yield);
 }
   
-int RGWMetadataLog::lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {
+int RGWMetadataLog::lock_exclusive(const DoutPrefixProvider *dpp, int shard_id, timespan duration, string& zone_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return svc.cls->lock.lock_exclusive(svc.zone->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
+  return svc.cls->lock.lock_exclusive(dpp, svc.zone->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
 }
 
-int RGWMetadataLog::unlock(int shard_id, string& zone_id, string& owner_id) {
+int RGWMetadataLog::unlock(const DoutPrefixProvider *dpp, int shard_id, string& zone_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return svc.cls->lock.unlock(svc.zone->get_zone_params().log_pool, oid, zone_id, owner_id);
+  return svc.cls->lock.unlock(dpp, svc.zone->get_zone_params().log_pool, oid, zone_id, owner_id);
 }
 
 void RGWMetadataLog::mark_modified(int shard_id)
@@ -329,7 +331,7 @@ public:
     return -ENOTSUP;
   }
 
-  int list_keys_init(const string& marker, void **phandle) override {
+  int list_keys_init(const DoutPrefixProvider *dpp, const string& marker, void **phandle) override {
     iter_data *data = new iter_data;
     list<string> sections;
     mgr->get_sections(sections);
@@ -342,7 +344,7 @@ public:
 
     return 0;
   }
-  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) override  {
+  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, list<string>& keys, bool *truncated) override  {
     iter_data *data = static_cast<iter_data *>(handle);
     for (int i = 0; i < max && data->iter != data->sections.end(); ++i, ++(data->iter)) {
       keys.push_back(*data->iter);
@@ -435,7 +437,7 @@ int RGWMetadataHandlerPut_SObj::put_pre(const DoutPrefixProvider *dpp)
 
 int RGWMetadataHandlerPut_SObj::put(const DoutPrefixProvider *dpp)
 {
-  int ret = put_check();
+  int ret = put_check(dpp);
   if (ret != 0) {
     return ret;
   }
@@ -525,11 +527,11 @@ int RGWMetadataHandler_GenericMetaBE::get_shard_id(const string& entry, int *sha
   });
 }
 
-int RGWMetadataHandler_GenericMetaBE::list_keys_init(const string& marker, void **phandle)
+int RGWMetadataHandler_GenericMetaBE::list_keys_init(const DoutPrefixProvider *dpp, const string& marker, void **phandle)
 {
   auto op = std::make_unique<RGWSI_MetaBackend_Handler::Op_ManagedCtx>(be_handler);
 
-  int ret = op->list_init(marker);
+  int ret = op->list_init(dpp, marker);
   if (ret < 0) {
     return ret;
   }
@@ -539,11 +541,11 @@ int RGWMetadataHandler_GenericMetaBE::list_keys_init(const string& marker, void 
   return 0;
 }
 
-int RGWMetadataHandler_GenericMetaBE::list_keys_next(void *handle, int max, list<string>& keys, bool *truncated)
+int RGWMetadataHandler_GenericMetaBE::list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, list<string>& keys, bool *truncated)
 {
   auto op = static_cast<RGWSI_MetaBackend_Handler::Op_ManagedCtx *>(handle);
 
-  int ret = op->list_next(max, &keys, truncated);
+  int ret = op->list_next(dpp, max, &keys, truncated);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
@@ -771,12 +773,12 @@ struct list_keys_handle {
   RGWMetadataHandler *handler;
 };
 
-int RGWMetadataManager::list_keys_init(const string& section, void **handle)
+int RGWMetadataManager::list_keys_init(const DoutPrefixProvider *dpp, const string& section, void **handle)
 {
-  return list_keys_init(section, string(), handle);
+  return list_keys_init(dpp, section, string(), handle);
 }
 
-int RGWMetadataManager::list_keys_init(const string& section,
+int RGWMetadataManager::list_keys_init(const DoutPrefixProvider *dpp, const string& section,
                                        const string& marker, void **handle)
 {
   string entry;
@@ -791,7 +793,7 @@ int RGWMetadataManager::list_keys_init(const string& section,
 
   list_keys_handle *h = new list_keys_handle;
   h->handler = handler;
-  ret = handler->list_keys_init(marker, &h->handle);
+  ret = handler->list_keys_init(dpp, marker, &h->handle);
   if (ret < 0) {
     delete h;
     return ret;
@@ -802,13 +804,13 @@ int RGWMetadataManager::list_keys_init(const string& section,
   return 0;
 }
 
-int RGWMetadataManager::list_keys_next(void *handle, int max, list<string>& keys, bool *truncated)
+int RGWMetadataManager::list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, list<string>& keys, bool *truncated)
 {
   list_keys_handle *h = static_cast<list_keys_handle *>(handle);
 
   RGWMetadataHandler *handler = h->handler;
 
-  return handler->list_keys_next(h->handle, max, keys, truncated);
+  return handler->list_keys_next(dpp, h->handle, max, keys, truncated);
 }
 
 void RGWMetadataManager::list_keys_complete(void *handle)

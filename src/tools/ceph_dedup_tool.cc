@@ -49,6 +49,8 @@
 #include "global/signal_handler.h"
 #include "common/CDC.h"
 
+using namespace std;
+
 struct EstimateResult {
   std::unique_ptr<CDC> cdc;
 
@@ -147,7 +149,7 @@ void usage()
 template <typename I, typename T>
 static int rados_sistrtoll(I &i, T *val) {
   std::string err;
-  *val = strict_iecstrtoll(i->second.c_str(), &err);
+  *val = strict_iecstrtoll(i->second, &err);
   if (err != "") {
     cerr << "Invalid value for " << i->first << ": " << err << std::endl;
     return -EINVAL;
@@ -874,8 +876,7 @@ out:
 
 int main(int argc, const char **argv)
 {
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);

@@ -41,8 +41,6 @@
   rule data {
   \tid 0 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take cluster0 (esc)
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)
@@ -50,8 +48,6 @@
   rule metadata {
   \tid 1 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take cluster0 (esc)
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)
@@ -59,8 +55,6 @@
   rule rbd {
   \tid 2 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take cluster0 (esc)
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)

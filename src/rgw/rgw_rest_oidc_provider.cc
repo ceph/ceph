@@ -20,6 +20,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 int RGWRestOIDCProvider::verify_permission(optional_yield y)
 {
   if (s->auth.identity->is_anonymous()) {
@@ -28,7 +30,7 @@ int RGWRestOIDCProvider::verify_permission(optional_yield y)
 
   provider_arn = s->info.args.get("OpenIDConnectProviderArn");
   if (provider_arn.empty()) {
-    ldout(s->cct, 20) << "ERROR: Provider ARN is empty"<< dendl;
+    ldpp_dout(this, 20) << "ERROR: Provider ARN is empty"<< dendl;
     return -EINVAL;
   }
 
@@ -107,7 +109,7 @@ int RGWCreateOIDCProvider::get_params()
   }
 
   if (provider_url.empty() || thumbprints.empty()) {
-    ldout(s->cct, 20) << "ERROR: one of url or thumbprints is empty" << dendl;
+    ldpp_dout(this, 20) << "ERROR: one of url or thumbprints is empty" << dendl;
     return -EINVAL;
   }
 
@@ -146,7 +148,7 @@ void RGWDeleteOIDCProvider::execute(optional_yield y)
   std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = store->get_oidc_provider();
   provider->set_arn(provider_arn);
   provider->set_tenant(s->user->get_tenant());
-  op_ret = provider->delete_obj(this, y);
+  op_ret = provider->delete_obj(s, y);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;

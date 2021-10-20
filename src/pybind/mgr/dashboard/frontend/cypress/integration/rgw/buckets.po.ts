@@ -19,8 +19,12 @@ export class BucketsPageHelper extends PageHelper {
     return this.selectOption('placement-target', placementTarget);
   }
 
+  private selectLockMode(lockMode: string) {
+    return this.selectOption('lock_mode', lockMode);
+  }
+
   @PageHelper.restrictTo(pages.create.url)
-  create(name: string, owner: string, placementTarget: string) {
+  create(name: string, owner: string, placementTarget: string, isLocking = false) {
     // Enter in bucket name
     cy.get('#bid').type(name);
 
@@ -32,6 +36,14 @@ export class BucketsPageHelper extends PageHelper {
     this.selectPlacementTarget(placementTarget);
     cy.get('#placement-target').should('have.class', 'ng-valid');
 
+    if (isLocking) {
+      cy.get('#lock_enabled').click({ force: true });
+      // Select lock mode:
+      this.selectLockMode('Compliance');
+      cy.get('#lock_mode').should('have.class', 'ng-valid');
+      cy.get('#lock_retention_period_days').type('3');
+    }
+
     // Click the create button and wait for bucket to be made
     cy.contains('button', 'Create Bucket').click();
 
@@ -39,12 +51,32 @@ export class BucketsPageHelper extends PageHelper {
   }
 
   @PageHelper.restrictTo(pages.index.url)
-  edit(name: string, new_owner: string) {
+  edit(name: string, new_owner: string, isLocking = false) {
     this.navigateEdit(name);
 
     cy.get('input[name=placement-target]').should('have.value', 'default-placement');
     this.selectOwner(new_owner);
 
+    // If object locking is enabled versioning shouldn't be visible
+    if (isLocking) {
+      cy.get('input[id=versioning]').should('be.disabled');
+      cy.contains('button', 'Edit Bucket').click();
+
+      // wait to be back on buckets page with table visible and click
+      this.getExpandCollapseElement(name).click();
+
+      // check its details table for edited owner field
+      cy.get('.table.table-striped.table-bordered')
+        .first()
+        .should('contains.text', new_owner)
+        .as('bucketDataTable');
+
+      // Check versioning enabled:
+      cy.get('@bucketDataTable').find('tr').its(2).find('td').last().should('have.text', new_owner);
+      cy.get('@bucketDataTable').find('tr').its(11).find('td').last().as('versioningValueCell');
+
+      return cy.get('@versioningValueCell').should('have.text', this.versioningStateEnabled);
+    }
     // Enable versioning
     cy.get('input[id=versioning]').should('not.be.checked');
     cy.get('label[for=versioning]').click();
@@ -96,7 +128,10 @@ export class BucketsPageHelper extends PageHelper {
       .and('have.class', 'ng-invalid');
 
     // Check that error message was printed under name input field
-    cy.get('#bid + .invalid-feedback').should('have.text', 'The value is not valid.');
+    cy.get('#bid + .invalid-feedback').should(
+      'have.text',
+      'Bucket names must be 3 to 63 characters long.'
+    );
 
     // Test invalid owner input
     // select some valid option. The owner drop down error message will not appear unless a valid user was selected at

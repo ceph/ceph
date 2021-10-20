@@ -57,11 +57,36 @@ To add a package to the allowlist:
   # radosgw-admin script-package add --package={package name} [--allow-compilation]
 
 
+To add a specific version of a package to the allowlist:
+
+::
+
+  # radosgw-admin script-package add --package='{package name} {package version}' [--allow-compilation]
+
+
+* When adding a diffrent version of a package which already exists in the list, the newly
+  added version will override the existing one.
+
+* When adding a package without a version specified, the latest version of the package
+  will be added.
+
+
 To remove a package from the allowlist:
 
 ::
 
   # radosgw-admin script-package rm --package={package name}
+
+
+To remove a specific version of a package from the allowlist:
+
+::
+
+  # radosgw-admin script-package rm --package='{package name} {package version}'
+
+
+* When removing a package without a version specified, any existing versions of the
+  package will be removed.
 
 
 To print the list of packages in the allowlist:
@@ -256,6 +281,12 @@ Request Fields
 | ``Request.TransactionId``                          | string   | transaction Id                                               | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Tags``                                   | table    | object tags map                                              | yes      | no        | no       |
++----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
+| ``Request.User``                                   | table    | user that triggered the request                              | no       | no        | no       |
++----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
+| ``Request.User.Tenant``                            | string   | triggering user tenant                                       | no       | no        | no       |
++----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
+| ``Request.User.Id``                                | string   | triggering user id                                           | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 
 Request Functions

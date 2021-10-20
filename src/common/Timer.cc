@@ -24,18 +24,19 @@ using std::pair;
 
 using ceph::operator <<;
 
-class SafeTimerThread : public Thread {
-  SafeTimer *parent;
+template <class Mutex>
+class CommonSafeTimerThread : public Thread {
+  CommonSafeTimer<Mutex> *parent;
 public:
-  explicit SafeTimerThread(SafeTimer *s) : parent(s) {}
+  explicit CommonSafeTimerThread(CommonSafeTimer<Mutex> *s) : parent(s) {}
   void *entry() override {
     parent->timer_thread();
     return NULL;
   }
 };
 
-
-SafeTimer::SafeTimer(CephContext *cct_, ceph::mutex &l, bool safe_callbacks)
+template <class Mutex>
+CommonSafeTimer<Mutex>::CommonSafeTimer(CephContext *cct_, Mutex &l, bool safe_callbacks)
   : cct(cct_), lock(l),
     safe_callbacks(safe_callbacks),
     thread(NULL),
@@ -43,19 +44,22 @@ SafeTimer::SafeTimer(CephContext *cct_, ceph::mutex &l, bool safe_callbacks)
 {
 }
 
-SafeTimer::~SafeTimer()
+template <class Mutex>
+CommonSafeTimer<Mutex>::~CommonSafeTimer()
 {
   ceph_assert(thread == NULL);
 }
 
-void SafeTimer::init()
+template <class Mutex>
+void CommonSafeTimer<Mutex>::init()
 {
   ldout(cct,10) << "init" << dendl;
-  thread = new SafeTimerThread(this);
+  thread = new CommonSafeTimerThread<Mutex>(this);
   thread->create("safe_timer");
 }
 
-void SafeTimer::shutdown()
+template <class Mutex>
+void CommonSafeTimer<Mutex>::shutdown()
 {
   ldout(cct,10) << "shutdown" << dendl;
   if (thread) {
@@ -71,7 +75,8 @@ void SafeTimer::shutdown()
   }
 }
 
-void SafeTimer::timer_thread()
+template <class Mutex>
+void CommonSafeTimer<Mutex>::timer_thread()
 {
   std::unique_lock l{lock};
   ldout(cct,10) << "timer_thread starting" << dendl;
@@ -115,12 +120,14 @@ void SafeTimer::timer_thread()
   ldout(cct,10) << "timer_thread exiting" << dendl;
 }
 
-Context* SafeTimer::add_event_after(double seconds, Context *callback)
+template <class Mutex>
+Context* CommonSafeTimer<Mutex>::add_event_after(double seconds, Context *callback)
 {
   return add_event_after(ceph::make_timespan(seconds), callback);
 }
 
-Context* SafeTimer::add_event_after(ceph::timespan duration, Context *callback)
+template <class Mutex>
+Context* CommonSafeTimer<Mutex>::add_event_after(ceph::timespan duration, Context *callback)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
 
@@ -128,7 +135,8 @@ Context* SafeTimer::add_event_after(ceph::timespan duration, Context *callback)
   return add_event_at(when, callback);
 }
 
-Context* SafeTimer::add_event_at(SafeTimer::clock_t::time_point when, Context *callback)
+template <class Mutex>
+Context* CommonSafeTimer<Mutex>::add_event_at(CommonSafeTimer<Mutex>::clock_t::time_point when, Context *callback)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ldout(cct,10) << __func__ << " " << when << " -> " << callback << dendl;
@@ -153,7 +161,8 @@ Context* SafeTimer::add_event_at(SafeTimer::clock_t::time_point when, Context *c
   return callback;
 }
 
-Context* SafeTimer::add_event_at(ceph::real_clock::time_point when, Context *callback)
+template <class Mutex>
+Context* CommonSafeTimer<Mutex>::add_event_at(ceph::real_clock::time_point when, Context *callback)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   // convert from real_clock to mono_clock
@@ -165,7 +174,8 @@ Context* SafeTimer::add_event_at(ceph::real_clock::time_point when, Context *cal
   return add_event_at(mono_atime, callback);
 }
 
-bool SafeTimer::cancel_event(Context *callback)
+template <class Mutex>
+bool CommonSafeTimer<Mutex>::cancel_event(Context *callback)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   
@@ -183,7 +193,8 @@ bool SafeTimer::cancel_event(Context *callback)
   return true;
 }
 
-void SafeTimer::cancel_all_events()
+template <class Mutex>
+void CommonSafeTimer<Mutex>::cancel_all_events()
 {
   ldout(cct,10) << "cancel_all_events" << dendl;
   ceph_assert(ceph_mutex_is_locked(lock));
@@ -197,7 +208,8 @@ void SafeTimer::cancel_all_events()
   }
 }
 
-void SafeTimer::dump(const char *caller) const
+template <class Mutex>
+void CommonSafeTimer<Mutex>::dump(const char *caller) const
 {
   if (!caller)
     caller = "";
@@ -208,3 +220,6 @@ void SafeTimer::dump(const char *caller) const
        ++s)
     ldout(cct,10) << " " << s->first << "->" << s->second << dendl;
 }
+
+template class CommonSafeTimer<ceph::mutex>;
+template class CommonSafeTimer<ceph::fair_mutex>;

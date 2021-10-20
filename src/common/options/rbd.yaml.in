@@ -57,7 +57,7 @@ options:
   - runtime
   validator: |
     [](std::string *value, std::string *error_message) {
-      stringstream ss;
+      std::stringstream ss;
       uint64_t features = librbd::rbd_features_from_string(*value, &ss);
       // Leave this in integer form to avoid breaking Cinder.  Someday
       // we would like to present this in string form instead...
@@ -100,6 +100,7 @@ options:
   type: bool
   level: advanced
   desc: whether to enable caching (writeback unless rbd_cache_max_dirty is 0)
+  fmt_desc: Enable caching for RADOS Block Device (RBD).
   default: true
   services:
   - rbd
@@ -107,6 +108,7 @@ options:
   type: str
   level: advanced
   desc: cache policy for handling writes.
+  fmt_desc: Select the caching policy for librbd.
   default: writearound
   services:
   - rbd
@@ -119,6 +121,11 @@ options:
   level: advanced
   desc: whether to make writeback caching writethrough until flush is called, to be
     sure the user of librbd will send flushes so that writeback is safe
+  fmt_desc: Start out in ``writethrough`` mode, and switch to ``writeback``
+    after the first flush request is received. Enabling is a
+    conservative but safe strategy in case VMs running on RBD volumes
+    are too old to send flushes, like the ``virtio`` driver in Linux
+    kernels older than 2.6.32.
   default: true
   services:
   - rbd
@@ -126,28 +133,40 @@ options:
   type: size
   level: advanced
   desc: cache size in bytes
+  fmt_desc: The per-volume RBD client cache size in bytes.
   default: 32_M
+  policies: write-back and write-through
   services:
   - rbd
 - name: rbd_cache_max_dirty
   type: size
   level: advanced
   desc: dirty limit in bytes - set to 0 for write-through caching
+  fmt_desc: The ``dirty`` limit in bytes at which the cache triggers write-back.
+    If ``0``, uses write-through caching.
   default: 24_M
+  constraint: Must be less than ``rbd_cache_size``.
+  policies: write-around and write-back
   services:
   - rbd
 - name: rbd_cache_target_dirty
   type: size
   level: advanced
   desc: target dirty limit in bytes
+  fmt_desc: The ``dirty target`` before the cache begins writing data to the data
+    storage. Does not block writes to the cache.
   default: 16_M
+  constraint: Must be less than ``rbd_cache_max_dirty``.
+  policies: write-back
   services:
   - rbd
 - name: rbd_cache_max_dirty_age
   type: float
   level: advanced
   desc: seconds in cache before writeback starts
+  fmt_desc: The number of seconds dirty data is in the cache before writeback starts.
   default: 1
+  policies: write-back
   services:
   - rbd
 - name: rbd_cache_max_dirty_object
@@ -187,6 +206,8 @@ options:
   default: false
   services:
   - rbd
+  see_also:
+  - rbd_read_from_replica_policy
 - name: rbd_localize_snap_reads
   type: bool
   level: advanced
@@ -194,6 +215,8 @@ options:
   default: false
   services:
   - rbd
+  see_also:
+  - rbd_read_from_replica_policy
 - name: rbd_balance_parent_reads
   type: bool
   level: advanced
@@ -201,6 +224,8 @@ options:
   default: false
   services:
   - rbd
+  see_also:
+  - rbd_read_from_replica_policy
 - name: rbd_localize_parent_reads
   type: bool
   level: advanced
@@ -208,6 +233,8 @@ options:
   default: false
   services:
   - rbd
+  see_also:
+  - rbd_read_from_replica_policy
 - name: rbd_sparse_read_threshold_bytes
   type: size
   level: advanced
@@ -230,6 +257,7 @@ options:
   type: size
   level: advanced
   desc: set to 0 to disable readahead
+  fmt_desc: Maximum size of a read-ahead request.  If zero, read-ahead is disabled.
   default: 512_K
   services:
   - rbd
@@ -237,6 +265,10 @@ options:
   type: size
   level: advanced
   desc: how many bytes are read in total before readahead is disabled
+  fmt_desc: After this many bytes have been read from an RBD image, read-ahead
+    is disabled for that image until it is closed.  This allows the
+    guest OS to take over read-ahead once it is booted.  If zero,
+    read-ahead stays enabled.
   default: 50_M
   services:
   - rbd
@@ -286,7 +318,7 @@ options:
   max: 32_M
   validator: |
     [](std::string *value, std::string *error_message) {
-      uint64_t f = strict_si_cast<uint64_t>(value->c_str(), error_message);
+      uint64_t f = strict_si_cast<uint64_t>(*value, error_message);
       if (!error_message->empty()) {
         return -EINVAL;
       } else if (!isp2(f)) {
@@ -307,6 +339,11 @@ options:
   type: str
   level: basic
   desc: Compression hint to send to the OSDs during writes
+  fmt_desc: Hint to send to the OSDs on write operations. If set to
+    ``compressible`` and the OSD ``bluestore_compression_mode``
+    setting is ``passive``, the OSD will attempt to compress data.
+    If set to ``incompressible`` and the OSD compression setting
+    is ``aggressive``, the OSD will not attempt to compress data.
   default: none
   services:
   - rbd
@@ -320,6 +357,17 @@ options:
   type: str
   level: basic
   desc: Read replica policy send to the OSDS during reads
+  fmt_desc: |
+    Policy for determining which OSD will receive read operations.
+    If set to ``default``, each PG's primary OSD will always be used
+    for read operations. If set to ``balance``, read operations will
+    be sent to a randomly selected OSD within the replica set. If set
+    to ``localize``, read operations will be sent to the closest OSD
+    as determined by the CRUSH map. Unlike ``rbd_balance_snap_reads``
+    and ``rbd_localize_snap_reads`` or ``rbd_balance_parent_reads`` and
+    ``rbd_localize_parent_reads``, it affects all read operations, not
+    just snap or parent. Note: this feature requires the cluster to
+    be configured with a minimum compatible OSD release of Octopus.
   default: default
   services:
   - rbd
@@ -710,7 +758,7 @@ options:
   - runtime
   validator: |
     [](std::string *value, std::string *error_message) {
-        ostringstream ss;
+        std::ostringstream ss;
         uint64_t exclude_ops = librbd::io::rbd_io_operations_from_string(*value, &ss);
         // Leave this in integer form to avoid breaking Cinder.  Someday
         // we would like to present this in string form instead...

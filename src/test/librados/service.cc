@@ -14,6 +14,7 @@
 #include "gtest/gtest.h"
 #include "test/unit.cc"
 
+using namespace std;
 using namespace librados;
 
 TEST(LibRadosService, RegisterEarly) {
@@ -120,7 +121,7 @@ TEST(LibRadosService, StatusFormat) {
     });
   }
 
-  int retry = 5;
+  int retry = 60; // mon thrashing may make this take a long time
   while (retry) {
     rados_t cluster;
 
@@ -163,7 +164,6 @@ TEST(LibRadosService, StatusFormat) {
     sleep(2);
     retry--;
   }
-  ASSERT_NE(0, retry);
 
   {
     std::scoped_lock<std::mutex> l(lock);
@@ -173,6 +173,7 @@ TEST(LibRadosService, StatusFormat) {
   for (int i = 0; i < nthreads; ++i)
     threads[i].join();
 
+  ASSERT_NE(0, retry);
   ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rold), 0);
 }
 

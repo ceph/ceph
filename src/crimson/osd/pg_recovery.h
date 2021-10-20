@@ -66,7 +66,7 @@ private:
     const object_stat_sum_t& stat_diff,
     bool is_delete);
   void on_failed_recover(
-    const set<pg_shard_t>& from,
+    const std::set<pg_shard_t>& from,
     const hobject_t& soid,
     const eversion_t& v);
   void on_peer_recover(
@@ -89,7 +89,7 @@ private:
   // backfill begin
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;
   std::map<pg_shard_t,
-           ceph::ref_t<MOSDPGBackfillRemove>> backfill_drop_requests;
+           MURef<MOSDPGBackfillRemove>> backfill_drop_requests;
 
   template <class EventT>
   void start_backfill_recovery(

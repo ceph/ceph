@@ -1,5 +1,6 @@
 set(common_options_srcs build_options.cc)
 set(legacy_options_headers)
+set(options_yamls)
 
 # to mimic the behavior of file(CONFIGURE ...)
 file(GENERATE OUTPUT configure_file.cmake
@@ -21,15 +22,18 @@ function(file_configure input_file output_file)
     VERBATIM)
 endfunction()
 
-function(add_options name yaml_in_file)
+function(add_options name)
+  set(yaml_in_file ${CMAKE_CURRENT_SOURCE_DIR}/${name}.yaml.in)
   set(yaml_file ${CMAKE_CURRENT_BINARY_DIR}/${name}.yaml)
   file_configure("${yaml_in_file}"
     "${yaml_file}" @ONLY)
+  list(APPEND options_yamls ${yaml_file})
+  set(options_yamls ${options_yamls} PARENT_SCOPE)
   set(cc_file "${name}_options.cc")
   set(h_file "${PROJECT_BINARY_DIR}/include/${name}_legacy_options.h")
   add_custom_command(PRE_BUILD
     OUTPUT ${cc_file} ${h_file}
-    COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/y2c.py
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/y2c.py
       --input ${yaml_file}
       --output ${cc_file}
       --legacy ${h_file}
@@ -78,19 +82,30 @@ if(WITH_MGR)
   endif()
 endif()
 
+add_options(global)
+add_options(cephfs-mirror)
+add_options(crimson)
+add_options(mgr)
+add_options(mds)
+add_options(mds-client)
+add_options(mon)
+add_options(osd)
+add_options(rbd)
+add_options(rbd-mirror)
+add_options(immutable-object-cache)
+
 # if set to empty string, system default luarocks package location (if exist) will be used
 set(rgw_luarocks_location "")
 if(WITH_RADOSGW_LUA_PACKAGES)
   set(rgw_luarocks_location "/tmp/luarocks")
 endif()
-
-file(GLOB yaml_in_srcs "*.yaml.in")
-foreach(fn ${yaml_in_srcs})
-  get_filename_component(name ${fn} NAME_WE)
-  add_options(${name} ${fn})
-endforeach()
+add_options(rgw)
 
 add_library(common-options-objs OBJECT
   ${common_options_srcs})
 add_custom_target(legacy-option-headers
   DEPENDS ${legacy_options_headers})
+
+include(AddCephTest)
+add_ceph_test(validate-options
+  ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/validate-options.py ${options_yamls})

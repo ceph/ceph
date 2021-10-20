@@ -22,6 +22,8 @@
 
 #define DEFAULT_NUM_SHARDS 64
 
+using namespace std;
+
 static string obj_fingerprint(const string& oid, const char *force_ns = NULL)
 {
   ssize_t pos = oid.find('_');
@@ -146,10 +148,10 @@ int RGWOrphanStore::list_jobs(map <string,RGWOrphanSearchState>& job_list)
   return 0;
 }
 
-int RGWOrphanStore::init()
+int RGWOrphanStore::init(const DoutPrefixProvider *dpp)
 {
   const rgw_pool& log_pool = store->get_zone()->get_params().log_pool;
-  int r = rgw_init_ioctx(static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_rados_handle(), log_pool, ioctx);
+  int r = rgw_init_ioctx(dpp, static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_rados_handle(), log_pool, ioctx);
   if (r < 0) {
     cerr << "ERROR: failed to open log pool (" << log_pool << " ret=" << r << std::endl;
     return r;
@@ -158,18 +160,18 @@ int RGWOrphanStore::init()
   return 0;
 }
 
-int RGWOrphanStore::store_entries(const string& oid, const map<string, bufferlist>& entries)
+int RGWOrphanStore::store_entries(const DoutPrefixProvider *dpp, const string& oid, const map<string, bufferlist>& entries)
 {
   librados::ObjectWriteOperation op;
   op.omap_set(entries);
   cout << "storing " << entries.size() << " entries at " << oid << std::endl;
-  ldout(store->ctx(), 20) << "storing " << entries.size() << " entries at " << oid << ": " << dendl;
+  ldpp_dout(dpp, 20) << "storing " << entries.size() << " entries at " << oid << ": " << dendl;
   for (map<string, bufferlist>::const_iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-    ldout(store->ctx(), 20) << " > " << iter->first << dendl;
+    ldpp_dout(dpp, 20) << " > " << iter->first << dendl;
   }
-  int ret = rgw_rados_operate(ioctx, oid, &op, null_yield);
+  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, null_yield);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: " << __func__ << "(" << oid << ") returned ret=" << ret << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: " << __func__ << "(" << oid << ") returned ret=" << ret << dendl;
   }
   
   return 0;
@@ -188,9 +190,9 @@ int RGWOrphanStore::read_entries(const string& oid, const string& marker, map<st
   return 0;
 }
 
-int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info, bool _detailed_mode)
+int RGWOrphanSearch::init(const DoutPrefixProvider *dpp, const string& job_name, RGWOrphanSearchInfo *info, bool _detailed_mode)
 {
-  int r = orphan_store.init();
+  int r = orphan_store.init(dpp);
   if (r < 0) {
     return r;
   }
@@ -204,7 +206,7 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info, boo
   RGWOrphanSearchState state;
   r = orphan_store.read_job(job_name, state);
   if (r < 0 && r != -ENOENT) {
-    lderr(store->ctx()) << "ERROR: failed to read state ret=" << r << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: failed to read state ret=" << r << dendl;
     return r;
   }
 
@@ -220,11 +222,11 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info, boo
 
     r = save_state();
     if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed to write state ret=" << r << dendl;
+      ldpp_dout(dpp, -1) << "ERROR: failed to write state ret=" << r << dendl;
       return r;
     }
   } else {
-      lderr(store->ctx()) << "ERROR: job not found" << dendl;
+      ldpp_dout(dpp, -1) << "ERROR: job not found" << dendl;
       return r;
   }
 
@@ -246,7 +248,7 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info, boo
   return 0;
 }
 
-int RGWOrphanSearch::log_oids(map<int, string>& log_shards, map<int, list<string> >& oids)
+int RGWOrphanSearch::log_oids(const DoutPrefixProvider *dpp, map<int, string>& log_shards, map<int, list<string> >& oids)
 {
   map<int, list<string> >::iterator miter = oids.begin();
 
@@ -273,11 +275,11 @@ int RGWOrphanSearch::log_oids(map<int, string>& log_shards, map<int, list<string
        map<string, bufferlist> entries;
 #define MAX_OMAP_SET_ENTRIES 100
        for (int j = 0; cur != end && j != MAX_OMAP_SET_ENTRIES; ++cur, ++j) {
-         ldout(store->ctx(), 20) << "adding obj: " << *cur << dendl;
+         ldpp_dout(dpp, 20) << "adding obj: " << *cur << dendl;
          entries[*cur] = bufferlist();
        }
 
-       int ret = orphan_store.store_entries(cur_info.oid, entries);
+       int ret = orphan_store.store_entries(dpp, cur_info.oid, entries);
        if (ret < 0) {
          return ret;
        }
@@ -291,13 +293,13 @@ int RGWOrphanSearch::log_oids(map<int, string>& log_shards, map<int, list<string
   return 0;
 }
 
-int RGWOrphanSearch::build_all_oids_index()
+int RGWOrphanSearch::build_all_oids_index(const DoutPrefixProvider *dpp)
 {
   librados::IoCtx ioctx;
 
-  int ret = rgw_init_ioctx(static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_rados_handle(), search_info.pool, ioctx);
+  int ret = rgw_init_ioctx(dpp, static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_rados_handle(), search_info.pool, ioctx);
   if (ret < 0) {
-    lderr(store->ctx()) << __func__ << ": rgw_init_ioctx() returned ret=" << ret << dendl;
+    ldpp_dout(dpp, -1) << __func__ << ": rgw_init_ioctx() returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -351,7 +353,7 @@ int RGWOrphanSearch::build_all_oids_index()
     ++total;
     if (++count >= COUNT_BEFORE_FLUSH) {
       ldout(store->ctx(), 1) << "iterated through " << total << " objects" << dendl;
-      ret = log_oids(all_objs_index, oids);
+      ret = log_oids(dpp, all_objs_index, oids);
       if (ret < 0) {
         cerr << __func__ << ": ERROR: log_oids() returned ret=" << ret << std::endl;
         return ret;
@@ -360,7 +362,7 @@ int RGWOrphanSearch::build_all_oids_index()
       oids.clear();
     }
   }
-  ret = log_oids(all_objs_index, oids);
+  ret = log_oids(dpp, all_objs_index, oids);
   if (ret < 0) {
     cerr << __func__ << ": ERROR: log_oids() returned ret=" << ret << std::endl;
     return ret;
@@ -369,14 +371,14 @@ int RGWOrphanSearch::build_all_oids_index()
   return 0;
 }
 
-int RGWOrphanSearch::build_buckets_instance_index()
+int RGWOrphanSearch::build_buckets_instance_index(const DoutPrefixProvider *dpp)
 {
   void *handle;
   int max = 1000;
   string section = "bucket.instance";
-  int ret = store->meta_list_keys_init(section, string(), &handle);
+  int ret = store->meta_list_keys_init(dpp, section, string(), &handle);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: can't get key: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: can't get key: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -391,22 +393,22 @@ int RGWOrphanSearch::build_buckets_instance_index()
 
   do {
     list<string> keys;
-    ret = store->meta_list_keys_next(handle, max, keys, &truncated);
+    ret = store->meta_list_keys_next(dpp, handle, max, keys, &truncated);
     if (ret < 0) {
-      lderr(store->ctx()) << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << dendl;
+      ldpp_dout(dpp, -1) << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << dendl;
       return ret;
     }
 
     for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
       ++total;
-      ldout(store->ctx(), 10) << "bucket_instance=" << *iter << " total=" << total << dendl;
+      ldpp_dout(dpp, 10) << "bucket_instance=" << *iter << " total=" << total << dendl;
       int shard = orphan_shard(*iter);
       instances[shard].push_back(*iter);
 
       if (++count >= COUNT_BEFORE_FLUSH) {
-        ret = log_oids(buckets_instance_index, instances);
+        ret = log_oids(dpp, buckets_instance_index, instances);
         if (ret < 0) {
-          lderr(store->ctx()) << __func__ << ": ERROR: log_oids() returned ret=" << ret << dendl;
+          ldpp_dout(dpp, -1) << __func__ << ": ERROR: log_oids() returned ret=" << ret << dendl;
           return ret;
         }
         count = 0;
@@ -418,21 +420,21 @@ int RGWOrphanSearch::build_buckets_instance_index()
 
   store->meta_list_keys_complete(handle);
 
-  ret = log_oids(buckets_instance_index, instances);
+  ret = log_oids(dpp, buckets_instance_index, instances);
   if (ret < 0) {
-    lderr(store->ctx()) << __func__ << ": ERROR: log_oids() returned ret=" << ret << dendl;
+    ldpp_dout(dpp, -1) << __func__ << ": ERROR: log_oids() returned ret=" << ret << dendl;
     return ret;
   }
 
   return 0;
 }
 
-int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, rgw::sal::Object::StatOp::Result& result)
+int RGWOrphanSearch::handle_stat_result(const DoutPrefixProvider *dpp, map<int, list<string> >& oids, RGWRados::Object::Stat::Result& result)
 {
   set<string> obj_oids;
-  rgw::sal::Bucket* bucket = result.obj->get_bucket();
+  rgw_bucket& bucket = result.obj.bucket;
   if (!result.manifest) { /* a very very old object, or part of a multipart upload during upload */
-    const string loc = bucket->get_bucket_id() + "_" + result.obj->get_oid();
+    const string loc = bucket.bucket_id + "_" + result.obj.get_oid();
     obj_oids.insert(obj_fingerprint(loc));
 
     /*
@@ -445,20 +447,20 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, rgw::sal:
 
     if (!detailed_mode &&
         manifest.get_obj_size() <= manifest.get_head_size()) {
-      ldout(store->ctx(), 5) << "skipping object as it fits in a head" << dendl;
+      ldpp_dout(dpp, 5) << "skipping object as it fits in a head" << dendl;
       return 0;
     }
 
     RGWObjManifest::obj_iterator miter;
-    for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
-      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store);
+    for (miter = manifest.obj_begin(dpp); miter != manifest.obj_end(dpp); ++miter) {
+      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(static_cast<rgw::sal::RadosStore*>(store));
       string s = loc.oid;
       obj_oids.insert(obj_fingerprint(s));
     }
   }
 
   for (set<string>::iterator iter = obj_oids.begin(); iter != obj_oids.end(); ++iter) {
-    ldout(store->ctx(), 20) << __func__ << ": oid for obj=" << result.obj << ": " << *iter << dendl;
+    ldpp_dout(dpp, 20) << __func__ << ": oid for obj=" << result.obj << ": " << *iter << dendl;
 
     int shard = orphan_shard(*iter);
     oids[shard].push_back(*iter);
@@ -467,20 +469,20 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, rgw::sal:
   return 0;
 }
 
-int RGWOrphanSearch::pop_and_handle_stat_op(map<int, list<string> >& oids, std::deque<std::unique_ptr<rgw::sal::Object::StatOp>>& ops)
+int RGWOrphanSearch::pop_and_handle_stat_op(const DoutPrefixProvider *dpp, map<int, list<string> >& oids, std::deque<RGWRados::Object::Stat>& ops)
 {
-  rgw::sal::Object::StatOp* front_op = ops.front().get();
+  RGWRados::Object::Stat& front_op = ops.front();
 
-  int ret = front_op->wait();
+  int ret = front_op.wait(dpp);
   if (ret < 0) {
     if (ret != -ENOENT) {
-      lderr(store->ctx()) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
+      ldpp_dout(dpp, -1) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
     }
     goto done;
   }
-  ret = handle_stat_result(oids, front_op->result);
+  ret = handle_stat_result(dpp, oids, front_op.result);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: handle_stat_response() returned error: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: handle_stat_response() returned error: " << cpp_strerror(-ret) << dendl;
   }
 done:
   ops.pop_front();
@@ -539,25 +541,29 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
   }
 
   ldpp_dout(dpp, 10) << "building linked oids for bucket instance: " << bucket_instance_id << dendl;
-  rgw::sal::Bucket::ListParams params;
-  rgw::sal::Bucket::ListResults results;
+  RGWRados::Bucket target(store->getRados(), cur_bucket->get_info());
+  RGWRados::Bucket::List list_op(&target);
 
   string marker;
-  params.marker = rgw_obj_key(marker);
-  params.list_versions = true;
-  params.enforce_ns = false;
+  list_op.params.marker = rgw_obj_key(marker);
+  list_op.params.list_versions = true;
+  list_op.params.enforce_ns = false;
 
-  std::deque<std::unique_ptr<rgw::sal::Object>> objs;
-  std::deque<std::unique_ptr<rgw::sal::Object::StatOp>> stat_ops;
+  bool truncated;
+
+  deque<RGWRados::Object::Stat> stat_ops;
 
   do {
-    ret = bucket->list(dpp, params, max_list_bucket_entries, results, null_yield);
+    vector<rgw_bucket_dir_entry> result;
+
+    ret = list_op.list_objects(dpp, max_list_bucket_entries,
+                               &result, nullptr, &truncated, null_yield);
     if (ret < 0) {
       cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
 
-    for (vector<rgw_bucket_dir_entry>::iterator iter = results.objs.begin(); iter != results.objs.end(); ++iter) {
+    for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
       rgw_bucket_dir_entry& entry = *iter;
       if (entry.key.instance.empty()) {
         ldpp_dout(dpp, 20) << "obj entry: " << entry.key.name << dendl;
@@ -574,29 +580,28 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
         continue;
       }
 
-      std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(entry.key);
-      std::unique_ptr<rgw::sal::Object::StatOp> stat_op = obj->get_stat_op(&obj_ctx);
-      rgw::sal::Object::StatOp* op = stat_op.get();
+      rgw_obj obj(cur_bucket->get_key(), entry.key);
 
-      objs.push_back(std::move(obj));
-      stat_ops.push_back(std::move(stat_op));
+      RGWRados::Object op_target(store->getRados(), cur_bucket->get_info(), obj_ctx, obj);
 
+      stat_ops.push_back(RGWRados::Object::Stat(&op_target));
+      RGWRados::Object::Stat& op = stat_ops.back();
 
-      ret = op->stat_async();
+      ret = op.stat_async(dpp);
       if (ret < 0) {
-        lderr(store->ctx()) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
+        ldpp_dout(dpp, -1) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
         return ret;
       }
       if (stat_ops.size() >= max_concurrent_ios) {
-        ret = pop_and_handle_stat_op(oids, stat_ops);
+        ret = pop_and_handle_stat_op(dpp, oids, stat_ops);
         if (ret < 0) {
           if (ret != -ENOENT) {
-            lderr(store->ctx()) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
+            ldpp_dout(dpp, -1) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
           }
         }
       }
       if (oids.size() >= COUNT_BEFORE_FLUSH) {
-        ret = log_oids(linked_objs_index, oids);
+        ret = log_oids(dpp, linked_objs_index, oids);
         if (ret < 0) {
           cerr << __func__ << ": ERROR: log_oids() returned ret=" << ret << std::endl;
           return ret;
@@ -604,13 +609,13 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
         oids.clear();
       }
     }
-  } while (results.is_truncated);
+  } while (truncated);
 
   while (!stat_ops.empty()) {
-    ret = pop_and_handle_stat_op(oids, stat_ops);
+    ret = pop_and_handle_stat_op(dpp, oids, stat_ops);
     if (ret < 0) {
       if (ret != -ENOENT) {
-        lderr(store->ctx()) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
+        ldpp_dout(dpp, -1) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
       }
     }
   }
@@ -637,7 +642,7 @@ int RGWOrphanSearch::build_linked_oids_index(const DoutPrefixProvider *dpp)
       }
 
       if (ret < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: read_entries() oid=" << oid << " returned ret=" << ret << dendl;
+        ldpp_dout(dpp, -1) << __func__ << ": ERROR: read_entries() oid=" << oid << " returned ret=" << ret << dendl;
         return ret;
       }
 
@@ -646,10 +651,10 @@ int RGWOrphanSearch::build_linked_oids_index(const DoutPrefixProvider *dpp)
       }
 
       for (map<string, bufferlist>::iterator eiter = entries.begin(); eiter != entries.end(); ++eiter) {
-        ldout(store->ctx(), 20) << " indexed entry: " << eiter->first << dendl;
+        ldpp_dout(dpp, 20) << " indexed entry: " << eiter->first << dendl;
         ret = build_linked_oids_for_bucket(dpp, eiter->first, oids);
         if (ret < 0) {
-          lderr(store->ctx()) << __func__ << ": ERROR: build_linked_oids_for_bucket() indexed entry=" << eiter->first
+          ldpp_dout(dpp, -1) << __func__ << ": ERROR: build_linked_oids_for_bucket() indexed entry=" << eiter->first
                               << " returned ret=" << ret << dendl;
           return ret;
         }
@@ -662,7 +667,7 @@ int RGWOrphanSearch::build_linked_oids_index(const DoutPrefixProvider *dpp)
     search_stage.marker.clear();
   }
 
-  int ret = log_oids(linked_objs_index, oids);
+  int ret = log_oids(dpp, linked_objs_index, oids);
   if (ret < 0) {
     cerr << __func__ << ": ERROR: log_oids() returned ret=" << ret << std::endl;
     return ret;
@@ -727,7 +732,7 @@ int OMAPReader::get_next(string *key, bufferlist *pbl, bool *done)
   return get_next(key, pbl, done);
 }
 
-int RGWOrphanSearch::compare_oid_indexes()
+int RGWOrphanSearch::compare_oid_indexes(const DoutPrefixProvider *dpp)
 {
   ceph_assert(linked_objs_index.size() == all_objs_index.size());
 
@@ -735,9 +740,9 @@ int RGWOrphanSearch::compare_oid_indexes()
 
   librados::IoCtx data_ioctx;
 
-  int ret = rgw_init_ioctx(static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_rados_handle(), search_info.pool, data_ioctx);
+  int ret = rgw_init_ioctx(dpp, static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_rados_handle(), search_info.pool, data_ioctx);
   if (ret < 0) {
-    lderr(store->ctx()) << __func__ << ": rgw_init_ioctx() returned ret=" << ret << dendl;
+    ldpp_dout(dpp, -1) << __func__ << ": rgw_init_ioctx() returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -776,7 +781,7 @@ int RGWOrphanSearch::compare_oid_indexes()
       }
 
       if (cur_linked == key_fp) {
-        ldout(store->ctx(), 20) << "linked: " << key << dendl;
+        ldpp_dout(dpp, 20) << "linked: " << key << dendl;
         continue;
       }
 
@@ -784,15 +789,15 @@ int RGWOrphanSearch::compare_oid_indexes()
       r = data_ioctx.stat(key, NULL, &mtime);
       if (r < 0) {
         if (r != -ENOENT) {
-          lderr(store->ctx()) << "ERROR: ioctx.stat(" << key << ") returned ret=" << r << dendl;
+          ldpp_dout(dpp, -1) << "ERROR: ioctx.stat(" << key << ") returned ret=" << r << dendl;
         }
         continue;
       }
       if (stale_secs && (uint64_t)mtime >= time_threshold) {
-        ldout(store->ctx(), 20) << "skipping: " << key << " (mtime=" << mtime << " threshold=" << time_threshold << ")" << dendl;
+        ldpp_dout(dpp, 20) << "skipping: " << key << " (mtime=" << mtime << " threshold=" << time_threshold << ")" << dendl;
         continue;
       }
-      ldout(store->ctx(), 20) << "leaked: " << key << dendl;
+      ldpp_dout(dpp, 20) << "leaked: " << key << dendl;
       cout << "leaked: " << key << std::endl;
     } while (!done);
   }
@@ -811,63 +816,63 @@ int RGWOrphanSearch::run(const DoutPrefixProvider *dpp)
       search_stage = RGWOrphanSearchStage(ORPHAN_SEARCH_STAGE_LSPOOL);
       r = save_state();
       if (r < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: failed to save state, ret=" << r << dendl;
+        ldpp_dout(dpp, -1) << __func__ << ": ERROR: failed to save state, ret=" << r << dendl;
         return r;
       }
       // fall through
     case ORPHAN_SEARCH_STAGE_LSPOOL:
       ldpp_dout(dpp, 0) << __func__ << "(): building index of all objects in pool" << dendl;
-      r = build_all_oids_index();
+      r = build_all_oids_index(dpp);
       if (r < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
+        ldpp_dout(dpp, -1) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
         return r;
       }
 
       search_stage = RGWOrphanSearchStage(ORPHAN_SEARCH_STAGE_LSBUCKETS);
       r = save_state();
       if (r < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: failed to save state, ret=" << r << dendl;
+        ldpp_dout(dpp, -1) << __func__ << ": ERROR: failed to save state, ret=" << r << dendl;
         return r;
       }
       // fall through
 
     case ORPHAN_SEARCH_STAGE_LSBUCKETS:
       ldpp_dout(dpp, 0) << __func__ << "(): building index of all bucket indexes" << dendl;
-      r = build_buckets_instance_index();
+      r = build_buckets_instance_index(dpp);
       if (r < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
+        ldpp_dout(dpp, -1) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
         return r;
       }
 
       search_stage = RGWOrphanSearchStage(ORPHAN_SEARCH_STAGE_ITERATE_BI);
       r = save_state();
       if (r < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: failed to save state, ret=" << r << dendl;
+        ldpp_dout(dpp, -1) << __func__ << ": ERROR: failed to save state, ret=" << r << dendl;
         return r;
       }
       // fall through
 
 
     case ORPHAN_SEARCH_STAGE_ITERATE_BI:
-      ldout(store->ctx(), 0) << __func__ << "(): building index of all linked objects" << dendl;
+      ldpp_dout(dpp, 0) << __func__ << "(): building index of all linked objects" << dendl;
       r = build_linked_oids_index(dpp);
       if (r < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
+        ldpp_dout(dpp, -1) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
         return r;
       }
 
       search_stage = RGWOrphanSearchStage(ORPHAN_SEARCH_STAGE_COMPARE);
       r = save_state();
       if (r < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: failed to save state, ret=" << r << dendl;
+        ldpp_dout(dpp, -1) << __func__ << ": ERROR: failed to save state, ret=" << r << dendl;
         return r;
       }
       // fall through
 
     case ORPHAN_SEARCH_STAGE_COMPARE:
-      r = compare_oid_indexes();
+      r = compare_oid_indexes(dpp);
       if (r < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
+        ldpp_dout(dpp, -1) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
         return r;
       }
 
@@ -920,35 +925,36 @@ int RGWOrphanSearch::finish()
 }
 
 
-int RGWRadosList::handle_stat_result(rgw::sal::Object::StatOp::Result& result,
+int RGWRadosList::handle_stat_result(const DoutPrefixProvider *dpp,
+				     RGWRados::Object::Stat::Result& result,
 				     std::string& bucket_name,
 				     rgw_obj_key& obj_key,
                                      std::set<string>& obj_oids)
 {
   obj_oids.clear();
 
-  rgw::sal::Bucket* bucket = result.obj->get_bucket();
+  rgw_bucket& bucket = result.obj.bucket;
 
-  ldout(store->ctx(), 20) << "RGWRadosList::" << __func__ <<
+  ldpp_dout(dpp, 20) << "RGWRadosList::" << __func__ <<
     " bucket=" << bucket <<
-    ", has_manifest=" << !!result.manifest <<
+    ", has_manifest=" << result.manifest.has_value() <<
     dendl;
 
   // iterator to store result of dlo/slo attribute find
-  auto attr_it = result.obj->get_attrs().end();
-  const std::string oid = bucket->get_marker() + "_" + result.obj->get_oid();
-  ldout(store->ctx(), 20) << "radoslist processing object=\"" <<
+  decltype(result.attrs)::iterator attr_it = result.attrs.end();
+  const std::string oid = bucket.marker + "_" + result.obj.get_oid();
+  ldpp_dout(dpp, 20) << "radoslist processing object=\"" <<
       oid << "\"" << dendl;
   if (visited_oids.find(oid) != visited_oids.end()) {
     // apparently we hit a loop; don't continue with this oid
-    ldout(store->ctx(), 15) <<
+    ldpp_dout(dpp, 15) <<
       "radoslist stopped loop at already visited object=\"" <<
       oid << "\"" << dendl;
     return 0;
   }
 
-  bucket_name = bucket->get_name();
-  obj_key = result.obj->get_key();
+  bucket_name = bucket.name;
+  obj_key = result.obj.key;
 
   if (!result.manifest) {
     /* a very very old object, or part of a multipart upload during upload */
@@ -959,13 +965,13 @@ int RGWRadosList::handle_stat_result(rgw::sal::Object::StatOp::Result& result,
      * object; we'll process them in
      * RGWRadosList::do_incomplete_multipart
      */
-  } else if ((attr_it = result.obj->get_attrs().find(RGW_ATTR_USER_MANIFEST)) !=
-	     result.obj->get_attrs().end()) {
+  } else if ((attr_it = result.attrs.find(RGW_ATTR_USER_MANIFEST)) !=
+	     result.attrs.end()) {
     // *** handle DLO object ***
 
     obj_oids.insert(oid);
     visited_oids.insert(oid); // prevent dlo loops
-    ldout(store->ctx(), 15) << "radoslist added to visited list DLO=\"" <<
+    ldpp_dout(dpp, 15) << "radoslist added to visited list DLO=\"" <<
       oid << "\"" << dendl;
 
     char* prefix_path_c = attr_it->second.c_str();
@@ -980,16 +986,16 @@ int RGWRadosList::handle_stat_result(rgw::sal::Object::StatOp::Result& result,
     const std::string prefix = prefix_path.substr(sep_pos + 1);
 
     add_bucket_prefix(bucket_name, prefix);
-    ldout(store->ctx(), 25) << "radoslist DLO oid=\"" << oid <<
+    ldpp_dout(dpp, 25) << "radoslist DLO oid=\"" << oid <<
       "\" added bucket=\"" << bucket_name << "\" prefix=\"" <<
       prefix << "\" to process list" << dendl;
-  } else if ((attr_it = result.obj->get_attrs().find(RGW_ATTR_SLO_MANIFEST)) !=
-	     result.obj->get_attrs().end()) {
+  } else if ((attr_it = result.attrs.find(RGW_ATTR_USER_MANIFEST)) !=
+	     result.attrs.end()) {
     // *** handle SLO object ***
 
     obj_oids.insert(oid);
     visited_oids.insert(oid); // prevent slo loops
-    ldout(store->ctx(), 15) << "radoslist added to visited list SLO=\"" <<
+    ldpp_dout(dpp, 15) << "radoslist added to visited list SLO=\"" <<
       oid << "\"" << dendl;
 
     RGWSLOInfo slo_info;
@@ -997,7 +1003,7 @@ int RGWRadosList::handle_stat_result(rgw::sal::Object::StatOp::Result& result,
     try {
       ::decode(slo_info, bliter);
     } catch (buffer::error& err) {
-      ldout(store->ctx(), 0) <<
+      ldpp_dout(dpp, 0) <<
 	"ERROR: failed to decode slo manifest for " << oid << dendl;
       return -EIO;
     }
@@ -1018,7 +1024,7 @@ int RGWRadosList::handle_stat_result(rgw::sal::Object::StatOp::Result& result,
 
       const rgw_obj_key obj_key(obj_name);
       add_bucket_filter(bucket_name, obj_key);
-      ldout(store->ctx(), 25) << "radoslist SLO oid=\"" << oid <<
+      ldpp_dout(dpp, 25) << "radoslist SLO oid=\"" << oid <<
 	"\" added bucket=\"" << bucket_name << "\" obj_key=\"" <<
 	obj_key << "\" to process list" << dendl;
     }
@@ -1029,15 +1035,15 @@ int RGWRadosList::handle_stat_result(rgw::sal::Object::StatOp::Result& result,
     // manifest AND empty objects have no manifest, but they're
     // realized as empty rados objects
     if (0 == manifest.get_max_head_size() ||
-	manifest.obj_begin() == manifest.obj_end()) {
+	manifest.obj_begin(dpp) == manifest.obj_end(dpp)) {
       obj_oids.insert(oid);
       // first_insert = true;
     }
 
     RGWObjManifest::obj_iterator miter;
-    for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
+    for (miter = manifest.obj_begin(dpp); miter != manifest.obj_end(dpp); ++miter) {
       const rgw_raw_obj& loc =
-	miter.get_location().get_raw_obj(store);
+	miter.get_location().get_raw_obj(static_cast<rgw::sal::RadosStore*>(store));
       string s = loc.oid;
       obj_oids.insert(s);
     }
@@ -1047,26 +1053,27 @@ int RGWRadosList::handle_stat_result(rgw::sal::Object::StatOp::Result& result,
 } // RGWRadosList::handle_stat_result
 
 int RGWRadosList::pop_and_handle_stat_op(
+  const DoutPrefixProvider *dpp,
   RGWObjectCtx& obj_ctx,
-  std::deque<std::unique_ptr<rgw::sal::Object::StatOp>>& ops)
+  std::deque<RGWRados::Object::Stat>& ops)
 {
   std::string bucket_name;
   rgw_obj_key obj_key;
   std::set<std::string> obj_oids;
-  std::unique_ptr<rgw::sal::Object::StatOp> front_op = std::move(ops.front());
+  RGWRados::Object::Stat& front_op = ops.front();
 
-  int ret = front_op->wait();
+  int ret = front_op.wait(dpp);
   if (ret < 0) {
     if (ret != -ENOENT) {
-      lderr(store->ctx()) << "ERROR: stat_async() returned error: " <<
+      ldpp_dout(dpp, -1) << "ERROR: stat_async() returned error: " <<
 	cpp_strerror(-ret) << dendl;
     }
     goto done;
   }
 
-  ret = handle_stat_result(front_op->result, bucket_name, obj_key, obj_oids);
+  ret = handle_stat_result(dpp, front_op.result, bucket_name, obj_key, obj_oids);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: handle_stat_result() returned error: " <<
+    ldpp_dout(dpp, -1) << "ERROR: handle_stat_result() returned error: " <<
       cpp_strerror(-ret) << dendl;
   }
 
@@ -1086,7 +1093,7 @@ done:
 
   // invalidate object context for this object to avoid memory leak
   // (see pr https://github.com/ceph/ceph/pull/30174)
-  obj_ctx.invalidate(front_op->result.obj->get_obj());
+  obj_ctx.invalidate(front_op.result.obj);
 
   ops.pop_front();
   return ret;
@@ -1163,10 +1170,15 @@ int RGWRadosList::process_bucket(
     ", prefix=" << prefix <<
     ", entries_filter.size=" << entries_filter.size() << dendl;
 
-  rgw_bucket b;
-  rgw_bucket_parse_bucket_key(store->ctx(), bucket_instance_id, &b, nullptr);
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = store->get_bucket(dpp, nullptr, b, &bucket, null_yield);
+  RGWBucketInfo bucket_info;
+  RGWSysObjectCtx sys_obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  int ret = store->getRados()->get_bucket_instance_info(sys_obj_ctx,
+							bucket_instance_id,
+							bucket_info,
+							nullptr,
+							nullptr,
+							null_yield,
+                                                        dpp);
   if (ret < 0) {
     if (ret == -ENOENT) {
       // probably raced with bucket removal
@@ -1178,25 +1190,28 @@ int RGWRadosList::process_bucket(
     return ret;
   }
 
-  rgw::sal::Bucket::ListParams params;
-  rgw::sal::Bucket::ListResults results;
+  RGWRados::Bucket target(store->getRados(), bucket_info);
+  RGWRados::Bucket::List list_op(&target);
 
   std::string marker;
-  params.marker = rgw_obj_key(marker);
-  params.list_versions = true;
-  params.enforce_ns = false;
-  params.allow_unordered = false;
-  params.prefix = prefix;
+  list_op.params.marker = rgw_obj_key(marker);
+  list_op.params.list_versions = true;
+  list_op.params.enforce_ns = false;
+  list_op.params.allow_unordered = false;
+  list_op.params.prefix = prefix;
 
-  std::deque<std::unique_ptr<rgw::sal::Object>> objs;
-  std::deque<std::unique_ptr<rgw::sal::Object::StatOp>> stat_ops;
+  bool truncated;
+
+  std::deque<RGWRados::Object::Stat> stat_ops;
   std::string prev_versioned_key_name = "";
 
   RGWObjectCtx obj_ctx(store);
 
   do {
+    std::vector<rgw_bucket_dir_entry> result;
     constexpr int64_t LIST_OBJS_MAX_ENTRIES = 100;
-    ret = bucket->list(dpp, params, LIST_OBJS_MAX_ENTRIES, results, null_yield);
+    ret = list_op.list_objects(dpp, LIST_OBJS_MAX_ENTRIES, &result,
+			       NULL, &truncated, null_yield);
     if (ret == -ENOENT) {
       // race with bucket delete?
       ret = 0;
@@ -1207,8 +1222,8 @@ int RGWRadosList::process_bucket(
       return ret;
     }
 
-    for (std::vector<rgw_bucket_dir_entry>::iterator iter = results.objs.begin();
-	 iter != results.objs.end();
+    for (std::vector<rgw_bucket_dir_entry>::iterator iter = result.begin();
+	 iter != result.end();
 	 ++iter) {
       rgw_bucket_dir_entry& entry = *iter;
 
@@ -1234,25 +1249,25 @@ int RGWRadosList::process_bucket(
 	[&](const rgw_obj_key& key) -> int {
 	  int ret;
 
-	  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(key);
-	  std::unique_ptr<rgw::sal::Object::StatOp> stat_op = obj->get_stat_op(&obj_ctx);
-	  rgw::sal::Object::StatOp* op = stat_op.get();
+	  rgw_obj obj(bucket_info.bucket, key);
+	  RGWRados::Object op_target(store->getRados(), bucket_info,
+				     obj_ctx, obj);
 
-	  objs.push_back(std::move(obj));
-	  stat_ops.push_back(std::move(stat_op));
+	  stat_ops.push_back(RGWRados::Object::Stat(&op_target));
+	  RGWRados::Object::Stat& op = stat_ops.back();
 
-	  ret = op->stat_async();
+	  ret = op.stat_async(dpp);
 	  if (ret < 0) {
-	    lderr(store->ctx()) << "ERROR: stat_async() returned error: " <<
+	    ldpp_dout(dpp, -1) << "ERROR: stat_async() returned error: " <<
 	      cpp_strerror(-ret) << dendl;
 	    return ret;
 	  }
 
 	  if (stat_ops.size() >= max_concurrent_ios) {
-	    ret = pop_and_handle_stat_op(obj_ctx, stat_ops);
+	    ret = pop_and_handle_stat_op(dpp, obj_ctx, stat_ops);
 	    if (ret < 0) {
 	      if (ret != -ENOENT) {
-		lderr(store->ctx()) <<
+		ldpp_dout(dpp, -1) <<
 		  "ERROR: pop_and_handle_stat_op() returned error: " <<
 		  cpp_strerror(-ret) << dendl;
 	      }
@@ -1288,13 +1303,13 @@ int RGWRadosList::process_bucket(
 	return ret;
       }
     } // for iter loop
-  } while (results.is_truncated);
+  } while (truncated);
 
   while (!stat_ops.empty()) {
-    ret = pop_and_handle_stat_op(obj_ctx, stat_ops);
+    ret = pop_and_handle_stat_op(dpp, obj_ctx, stat_ops);
     if (ret < 0) {
       if (ret != -ENOENT) {
-        lderr(store->ctx()) << "ERROR: stat_async() returned error: " <<
+        ldpp_dout(dpp, -1) << "ERROR: stat_async() returned error: " <<
 	  cpp_strerror(-ret) << dendl;
       }
     }
@@ -1309,9 +1324,9 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp)
   int ret;
   void* handle = nullptr;
 
-  ret = store->meta_list_keys_init("bucket", string(), &handle);
+  ret = store->meta_list_keys_init(dpp, "bucket", string(), &handle);
   if (ret < 0) {
-    lderr(store->ctx()) << "RGWRadosList::" << __func__ <<
+    ldpp_dout(dpp, -1) << "RGWRadosList::" << __func__ <<
       " ERROR: list_keys_init returned " <<
       cpp_strerror(-ret) << dendl;
     return ret;
@@ -1322,7 +1337,7 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp)
 
   do {
     std::list<std::string> buckets;
-    ret = store->meta_list_keys_next(handle, max_keys, buckets, &truncated);
+    ret = store->meta_list_keys_next(dpp, handle, max_keys, buckets, &truncated);
 
     for (std::string& bucket_id : buckets) {
       ret = run(dpp, bucket_id);
@@ -1431,7 +1446,7 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp, const std::string& start_bu
 
   ret = do_incomplete_multipart(dpp, bucket.get());
   if (ret < 0) {
-    lderr(store->ctx()) << "RGWRadosList::" << __func__ <<
+    ldpp_dout(dpp, -1) << "RGWRadosList::" << __func__ <<
       ": ERROR: do_incomplete_multipart returned ret=" << ret << dendl;
     return ret;
   }
@@ -1447,21 +1462,15 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 {
   constexpr int max_uploads = 1000;
   constexpr int max_parts = 1000;
-  static const std::string mp_ns = RGW_OBJ_NS_MULTIPART;
-  static MultipartMetaFilter mp_filter;
-
+  std::string marker;
+  vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+  bool is_truncated;
   int ret;
 
-  rgw::sal::Bucket::ListParams params;
-  rgw::sal::Bucket::ListResults results;
-
-  params.ns = mp_ns;
-  params.filter = &mp_filter;
-  // use empty string for initial params.marker
   // use empty strings for params.{prefix,delim}
 
   do {
-    ret = bucket->list(dpp, params, max_uploads, results, null_yield);
+    ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated);
     if (ret == -ENOENT) {
       // could bucket have been removed while this is running?
       ldpp_dout(dpp, 5) << "RGWRadosList::" << __func__ <<
@@ -1474,61 +1483,43 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
       return ret;
     }
 
-    if (!results.objs.empty()) {
-      std::vector<RGWMultipartUploadEntry> uploads;
-      RGWMultipartUploadEntry entry;
-      for (const rgw_bucket_dir_entry& obj : results.objs) {
-	const rgw_obj_key& key = obj.key;
-	if (!entry.mp.from_meta(key.name)) {
-	  // we only want the meta objects, so skip all the components
-	  continue;
-	}
-	entry.obj = obj;
-	uploads.push_back(entry);
-	ldpp_dout(dpp, 20) << "RGWRadosList::" << __func__ <<
-	  " processing incomplete multipart entry " <<
-	  entry << dendl;
-      }
-
+    if (!uploads.empty()) {
       // now process the uploads vector
       for (const auto& upload : uploads) {
-	const RGWMPObj& mp = upload.mp;
 	int parts_marker = 0;
 	bool is_parts_truncated = false;
 
 	do { // while (is_parts_truncated);
-	  std::map<uint32_t, RGWUploadPartInfo> parts;
-	  ret = list_multipart_parts(bucket, store->ctx(),
-				     mp.get_upload_id(), mp.get_meta(),
-				     max_parts, parts_marker,
-				     parts, &parts_marker,
-				     &is_parts_truncated);
+	  ret = upload->list_parts(dpp, store->ctx(), max_parts, parts_marker,
+				   &parts_marker, &is_parts_truncated);
 	  if (ret == -ENOENT) {
 	    ldpp_dout(dpp, 5) <<  "RGWRadosList::" << __func__ <<
 	      ": WARNING: list_multipart_parts returned ret=-ENOENT "
-	      "for " << mp.get_upload_id() << ", moving on" << dendl;
+	      "for " << upload->get_upload_id() << ", moving on" << dendl;
 	    break;
 	  } else if (ret < 0) {
-	    lderr(store->ctx()) << "RGWRadosList::" << __func__ <<
+	    ldpp_dout(dpp, -1) << "RGWRadosList::" << __func__ <<
 	      ": ERROR: list_multipart_parts returned ret=" << ret <<
 	      dendl;
 	    return ret;
 	  }
 
-	  for (auto& p : parts) {
-	    RGWObjManifest& manifest = p.second.manifest;
-	    for (auto obj_it = manifest.obj_begin();
-		 obj_it != manifest.obj_end();
+	  for (auto& p : upload->get_parts()) {
+	    rgw::sal::RadosMultipartPart* part =
+	      dynamic_cast<rgw::sal::RadosMultipartPart*>(p.second.get());
+	    RGWObjManifest& manifest = part->get_manifest();
+	    for (auto obj_it = manifest.obj_begin(dpp);
+		 obj_it != manifest.obj_end(dpp);
 		 ++obj_it) {
 	      const rgw_raw_obj& loc =
-		obj_it.get_location().get_raw_obj(store);
+		obj_it.get_location().get_raw_obj(static_cast<rgw::sal::RadosStore*>(store));
 	      std::cout << loc.oid << std::endl;
 	    } // for (auto obj_it
 	  } // for (auto& p
 	} while (is_parts_truncated);
       } // for (const auto& upload
     } // if objs not empty
-  } while (results.is_truncated);
+  } while (is_truncated);
 
   return 0;
 } // RGWRadosList::do_incomplete_multipart

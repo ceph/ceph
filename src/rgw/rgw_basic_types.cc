@@ -11,6 +11,7 @@
 #include "rgw_xml.h"
 #include "common/ceph_json.h"
 
+using std::ostream;
 using std::string;
 using std::stringstream;
 

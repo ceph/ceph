@@ -43,6 +43,15 @@ integration with `Barbican`_, `Vault`_, and `KMIP`_ are implemented.
 See `OpenStack Barbican Integration`_, `HashiCorp Vault Integration`_,
 and `KMIP Integration`_.
 
+Bucket Encryption APIs
+======================
+
+Bucket Encryption APIs to support server-side encryption with Amazon
+S3-managed keys (SSE-S3) or AWS KMS customer master keys (SSE-KMS). 
+SSE-KMS implementation via BucketEncryption APIs is not supported yet.
+
+See `PutBucketEncryption`_, `GetBucketEncryption`_, `DeleteBucketEncryption`_
+
 Automatic Encryption (for testing only)
 =======================================
 
@@ -63,6 +72,9 @@ The configuration expects a base64-encoded 256 bit key. For example::
 .. _Barbican: https://wiki.openstack.org/wiki/Barbican
 .. _Vault: https://www.vaultproject.io/docs/
 .. _KMIP: http://www.oasis-open.org/committees/kmip/
+.. _PutBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html
+.. _GetBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html
+.. _DeleteBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketEncryption.html
 .. _OpenStack Barbican Integration: ../barbican
 .. _HashiCorp Vault Integration: ../vault
 .. _KMIP Integration: ../kmip

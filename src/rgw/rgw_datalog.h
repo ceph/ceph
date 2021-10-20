@@ -113,7 +113,7 @@ struct RGWDataChangesLogInfo {
 
 struct RGWDataChangesLogMarker {
   int shard = 0;
-  std::optional<std::string> marker;
+  std::string marker;
 
   RGWDataChangesLogMarker() = default;
 };
@@ -146,12 +146,12 @@ public:
     --i;
     return i->second;
   }
-  int list(int shard, int max_entries,
+  int list(const DoutPrefixProvider *dpp, int shard, int max_entries,
 	   std::vector<rgw_data_change_log_entry>& entries,
-	   std::optional<std::string_view> marker,
+	   std::string_view marker,
 	   std::string* out_marker, bool* truncated);
-  int trim_entries(int shard_id, std::string_view marker);
-  void trim_entries(int shard_id, std::string_view marker,
+  int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker);
+  void trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker,
 		    librados::AioCompletion* c);
   void set_zero(RGWDataChangesBE* be) {
     emplace(0, be);
@@ -161,7 +161,7 @@ public:
   bs::error_code handle_new_gens(entries_t e) noexcept override;
   bs::error_code handle_empty_to(uint64_t new_tail) noexcept override;
 
-  int trim_generations(std::optional<uint64_t>& through);
+  int trim_generations(const DoutPrefixProvider *dpp, std::optional<uint64_t>& through);
 };
 
 class RGWDataChangesLog {
@@ -175,10 +175,10 @@ class RGWDataChangesLog {
   const int num_shards;
   std::string get_prefix() {
     auto prefix = cct->_conf->rgw_data_log_obj_prefix;
-    return prefix.empty() ? prefix : "data_log"s;
+    return prefix.empty() ? prefix : "data_log";
   }
   std::string metadata_log_oid() {
-    return get_prefix() + "generations_metadata"s;
+    return get_prefix() + "generations_metadata";
   }
   std::string prefix;
 
@@ -218,30 +218,30 @@ class RGWDataChangesLog {
   int choose_oid(const rgw_bucket_shard& bs);
   bool going_down() const;
   bool filter_bucket(const DoutPrefixProvider *dpp, const rgw_bucket& bucket, optional_yield y) const;
-  int renew_entries();
+  int renew_entries(const DoutPrefixProvider *dpp);
 
 public:
 
   RGWDataChangesLog(CephContext* cct);
   ~RGWDataChangesLog();
 
-  int start(const RGWZone* _zone, const RGWZoneParams& zoneparams,
+  int start(const DoutPrefixProvider *dpp, const RGWZone* _zone, const RGWZoneParams& zoneparams,
 	    librados::Rados* lr);
 
   int add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
-  int list_entries(int shard, int max_entries,
+  int list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
-		   std::optional<std::string_view> marker,
+		   std::string_view marker,
 		   std::string* out_marker, bool* truncated);
-  int trim_entries(int shard_id, std::string_view marker);
-  int trim_entries(int shard_id, std::string_view marker,
+  int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker);
+  int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker,
 		   librados::AioCompletion* c); // :(
-  int get_info(int shard_id, RGWDataChangesLogInfo *info);
+  int get_info(const DoutPrefixProvider *dpp, int shard_id, RGWDataChangesLogInfo *info);
 
   using LogMarker = RGWDataChangesLogMarker;
 
-  int list_entries(int max_entries,
+  int list_entries(const DoutPrefixProvider *dpp, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   LogMarker& marker, bool* ptruncated);
 
@@ -266,8 +266,8 @@ public:
   std::string get_oid(uint64_t gen_id, int shard_id) const;
 
 
-  int change_format(log_type type, optional_yield y);
-  int trim_generations(std::optional<uint64_t>& through);
+  int change_format(const DoutPrefixProvider *dpp, log_type type, optional_yield y);
+  int trim_generations(const DoutPrefixProvider *dpp, std::optional<uint64_t>& through);
 };
 
 class RGWDataChangesBE : public boost::intrusive_ref_counter<RGWDataChangesBE> {
@@ -296,21 +296,21 @@ public:
 		       const std::string& key,
 		       ceph::buffer::list&& entry,
 		       entries& out) = 0;
-  virtual int push(int index, entries&& items) = 0;
-  virtual int push(int index, ceph::real_time now,
+  virtual int push(const DoutPrefixProvider *dpp, int index, entries&& items) = 0;
+  virtual int push(const DoutPrefixProvider *dpp, int index, ceph::real_time now,
 		   const std::string& key,
 		   ceph::buffer::list&& bl) = 0;
-  virtual int list(int shard, int max_entries,
+  virtual int list(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   std::optional<std::string_view> marker,
 		   std::string* out_marker, bool* truncated) = 0;
-  virtual int get_info(int index, RGWDataChangesLogInfo *info) = 0;
-  virtual int trim(int index, std::string_view marker) = 0;
-  virtual int trim(int index, std::string_view marker,
+  virtual int get_info(const DoutPrefixProvider *dpp, int index, RGWDataChangesLogInfo *info) = 0;
+  virtual int trim(const DoutPrefixProvider *dpp, int index, std::string_view marker) = 0;
+  virtual int trim(const DoutPrefixProvider *dpp, int index, std::string_view marker,
 		   librados::AioCompletion* c) = 0;
   virtual std::string_view max_marker() const = 0;
   // 1 on empty, 0 on non-empty, negative on error.
-  virtual int is_empty() = 0;
+  virtual int is_empty(const DoutPrefixProvider *dpp) = 0;
 };
 
 

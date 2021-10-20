@@ -121,6 +121,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   else()
     string(APPEND CMAKE_EXE_LINKER_FLAGS " -rdynamic")
   endif()
+  string(APPEND CMAKE_CXX_FLAGS_DEBUG " -Og")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wstrict-null-sentinel>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-new-ttp-matching>)
@@ -128,12 +129,13 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   # CMAKE_POSITION_INDEPENDENT_CODE is TRUE.
   if(EXE_LINKER_USE_PIE)
     if (NOT WITH_OSD_INSTRUMENT_FUNCTIONS AND NOT HAVE_SEASTAR)
-      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+      string(APPEND CMAKE_EXE_LINKER_FLAGS " -pie")
     endif()
   endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_EXPORTS_C_FLAG}")
   string(APPEND CMAKE_LINKER_FLAGS " -rdynamic -export-dynamic ${CMAKE_EXE_EXPORTS_C_FLAG}")
+  string(APPEND CMAKE_CXX_FLAGS_DEBUG " -g")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-inconsistent-missing-override>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-mismatched-tags>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-private-field>)
@@ -156,12 +158,8 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
-if(NOT CMAKE_BUILD_TYPE)
-  if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
-    set(default_build_type "Debug")
-  else()
-    set(default_build_type "RelWithDebInfo")
-  endif()
+if(NOT CMAKE_BUILD_TYPE AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  set(default_build_type "Debug")
   set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
       STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
 endif()
@@ -324,12 +322,17 @@ add_subdirectory(json_spirit)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
+option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
 find_package(fmt 6.0.0 QUIET)
 if(fmt_FOUND)
   include_directories(SYSTEM "${fmt_INCLUDE_DIR}")
 else()
   message(STATUS "Could not find fmt, will build it")
+  set(old_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+  set(BUILD_SHARED_LIBS FALSE)
   add_subdirectory(fmt)
+  set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
+  unset(old_BUILD_SHARED_LIBS)
   include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
 endif()
 
@@ -380,6 +383,11 @@ if(WITH_SEASTAR)
   add_subdirectory(crimson)
 endif()
 
+include(CheckTypeSize)
+set(CMAKE_EXTRA_INCLUDE_FILES "sys/time.h")
+CHECK_TYPE_SIZE(suseconds_t SUSECONDS_T)
+unset(CMAKE_EXTRA_INCLUDE_FILES)
+
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
@@ -417,41 +425,36 @@ endif()
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
+target_compile_definitions(common-objs PRIVATE
+  $<TARGET_PROPERTY:fmt::fmt,INTERFACE_COMPILE_DEFINITIONS>)
 add_dependencies(common-objs legacy-option-headers)
 
 if(WITH_JAEGER)
-  find_package(yaml-cpp 0.6.0)
-  if(NOT yaml-cpp_FOUND)
-    set(jaeger_libs ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so
-		    ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so.0.6
-		    ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so.0.6.2)
-    #customize libjaeger.install
-    execute_process(COMMAND bash -c "sed -i 's/#//' debian/libjaeger.install"
-		    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-    execute_process(COMMAND bash -c "grep -q 'yaml-cpp' debian/libjaeger.install || echo 'usr/lib/libyaml-cpp.so.*' >> debian/libjaeger.install"
-		    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-  endif()
-  include(IncludeJaeger)
+  find_package(thrift 0.13.0 REQUIRED)
+  find_package(yaml-cpp 0.6.0 REQUIRED)
+  include(BuildJaeger)
+  list(APPEND jaeger_base
+  opentracing::libopentracing
+  jaegertracing::libjaegertracing)
+
+  build_jaeger()
+
+  include_directories(${CMAKE_BINARY_DIR}/external/include)
+  # for testing jaeger build
+  add_custom_target(jaeger_base DEPENDS ${jaeger_base})
   add_library(jaeger-base INTERFACE)
-  add_dependencies(common-objs
-  yaml-cpp::yaml-cpp
-  opentracing::libopentracing
-  thrift::libthrift
-  jaegertracing::libjaegertracing)
+  add_dependencies(common-objs ${jaeger_base})
   target_link_libraries(jaeger-base INTERFACE
-  yaml-cpp::yaml-cpp
-  opentracing::libopentracing
-  thrift::libthrift
-  jaegertracing::libjaegertracing)
-  include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
-  #with CMake 3.12+ the following can be replaced by:
-  #target_link_libraries(common-objs jaeger-base)
-   list(APPEND jaeger_libs
+    yaml-cpp::yaml-cpp
+    opentracing::libopentracing
+    thrift::libthrift
+    jaegertracing::libjaegertracing)
+
+  list(APPEND jaeger_libs
     ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0
     ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0.6.1
     ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1
-    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1.6.0
-    ${CMAKE_BINARY_DIR}/external/lib/libthrift.so.0.13.0)
+    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1.6.0)
   install(FILES ${jaeger_libs}
     DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
@@ -534,7 +537,7 @@ if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
     if(WITH_RBD_RWL)
       list(APPEND pmem_COMPONENTS pmemobj)
     endif()
-    find_package(pmem 1.7 REQUIRED COMPONENTS ${pmem_COMPONENTS})
+    find_package(pmem 1.10 REQUIRED COMPONENTS ${pmem_COMPONENTS})
   else()
     include(Buildpmem)
     build_pmem()
@@ -543,9 +546,11 @@ endif()
 
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common ${ceph_common_deps})
+add_dependencies(common legacy-option-headers)
 
 add_library(ceph-common SHARED ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})
+add_dependencies(ceph-common legacy-option-headers)
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 2
@@ -584,7 +589,8 @@ endif(${WITH_LTTNG})
 
 add_subdirectory(global)
 
-if(NOT WIN32)
+# RGW also support Lua scripting
+if(WITH_CEPHFS OR WITH_RADOSGW)
   find_package(Lua 5.3 REQUIRED)
 endif()
 
@@ -609,7 +615,9 @@ if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
 
-add_subdirectory(mgr)
+if(WITH_MGR)
+  add_subdirectory(mgr)
+endif()
 
 set(librados_config_srcs
   librados-config.cc)
@@ -872,31 +880,7 @@ endif(WITH_KVS)
 
 if(WITH_RADOSGW)
   add_subdirectory(libkmip)
-
-  set(civetweb_common_files civetweb/src/civetweb.c)
-  add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
-  target_include_directories(civetweb_common_objs SYSTEM PRIVATE
-	"${CMAKE_SOURCE_DIR}/src/civetweb/include")
-  set_property(TARGET civetweb_common_objs
-    APPEND PROPERTY COMPILE_DEFINITIONS USE_IPV6=1)
-  if (LIBSSL_SONAME)
-    set_property(TARGET civetweb_common_objs
-      APPEND PROPERTY COMPILE_DEFINITIONS SSL_LIB="${LIBSSL_SONAME}")
-    set_property(TARGET civetweb_common_objs
-      APPEND PROPERTY COMPILE_DEFINITIONS CRYPTO_LIB="${LIBCRYPTO_SONAME}")
-  endif()
-
-  if (OPENSSL_FOUND)
-    # Use cmake to determine openssl version, a TODO is to make
-    # civetweb itself do this based on openssl_api_compat strings
-    if (NOT (OPENSSL_VERSION VERSION_LESS "1.1"))
-      message(STATUS "Setting civetweb to use OPENSSL >= 1.1")
-      set_property(TARGET civetweb_common_objs
-        APPEND PROPERTY COMPILE_DEFINITIONS OPENSSL_API_1_1=1)
-    endif()
-  endif(OPENSSL_FOUND)
   add_subdirectory(rgw)
-
 endif(WITH_RADOSGW)
 
 install(FILES
@@ -909,7 +893,6 @@ configure_file(
   ${CMAKE_BINARY_DIR}/include/acconfig.h
 )
 
-if(NOT WIN32)
 # Everything you need to spin up a cluster with vstart.sh
 add_custom_target(vstart-base DEPENDS
     ceph-osd
@@ -918,14 +901,20 @@ add_custom_target(vstart-base DEPENDS
     ceph-conf
     monmaptool
     crushtool
-    rados
+    rados)
+if(NOT WIN32)
+  # WIN32 port does not build python bindings
+  # TODO: introduce an option for enabling python binding
+  add_dependencies(vstart-base
     cython_rados)
+endif()
+
 if (WITH_MGR)
   add_dependencies(vstart-base ceph-mgr)
 endif()
 
 add_custom_target(vstart DEPENDS vstart-base)
-if(WITH_RBD)
+if(WITH_RBD AND NOT WIN32)
   add_dependencies(vstart cython_rbd)
 endif()
 if (WITH_CEPHFS)
@@ -946,7 +935,6 @@ endif()
 if(WITH_MGR)
   add_dependencies(vstart ceph-volume-venv-setup)
 endif()
-endif(NOT WIN32)
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS

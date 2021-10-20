@@ -47,6 +47,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << sn << ") "
 
+using namespace std;
+
 static constexpr uint16_t data_buffer_default_num = 1024;
 
 static constexpr uint32_t data_buffer_size = 8192;

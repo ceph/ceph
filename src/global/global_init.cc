@@ -12,14 +12,7 @@
  *
  */
 
-#if __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-#elif __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
-
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
 #include "common/code_environment.h"
@@ -49,6 +42,8 @@ namespace fs = std::experimental::filesystem;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
+
+namespace fs = std::filesystem;
 
 using std::cerr;
 using std::string;
@@ -220,7 +215,7 @@ global_init(const std::map<std::string,std::string> *defaults,
     g_ceph_context->_log->set_flush_on_exit();
 
   // drop privileges?
-  ostringstream priv_ss;
+  std::ostringstream priv_ss;
 
   #ifndef _WIN32
   // consider --setuser root a no-op, even if we're not root

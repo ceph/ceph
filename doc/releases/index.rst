@@ -59,10 +59,18 @@ Release timeline
 
 
 .. _Pacific: pacific
+.. _16.2.6: pacific#v16-2-6-pacific
+.. _16.2.5: pacific#v16-2-5-pacific
+.. _16.2.4: pacific#v16-2-4-pacific
+.. _16.2.3: pacific#v16-2-3-pacific
+.. _16.2.2: pacific#v16-2-2-pacific
 .. _16.2.1: pacific#v16-2-1-pacific
 .. _16.2.0: pacific#v16-2-0-pacific
 
 .. _Octopus: octopus
+.. _15.2.14: octopus#v15-2-14-octopus
+.. _15.2.13: octopus#v15-2-13-octopus
+.. _15.2.12: octopus#v15-2-12-octopus
 .. _15.2.11: octopus#v15-2-11-octopus
 .. _15.2.10: octopus#v15-2-10-octopus
 .. _15.2.9: octopus#v15-2-9-octopus
@@ -77,6 +85,8 @@ Release timeline
 .. _15.2.0: octopus#v15-2-0-octopus
 
 .. _Nautilus: nautilus
+.. _14.2.22: nautilus#v14-2-22-nautilus
+.. _14.2.21: nautilus#v14-2-21-nautilus
 .. _14.2.20: nautilus#v14-2-20-nautilus
 .. _14.2.19: nautilus#v14-2-19-nautilus
 .. _14.2.18: nautilus#v14-2-18-nautilus

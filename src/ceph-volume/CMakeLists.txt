@@ -13,7 +13,7 @@ set(CEPH_VOLUME_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/ceph-volume-virtualenv)
 
 add_custom_command(
   OUTPUT ${CEPH_VOLUME_VIRTUALENV}/bin/python
-  COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${Python_EXECUTABLE} ${CEPH_VOLUME_VIRTUALENV}
+  COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${Python3_EXECUTABLE} ${CEPH_VOLUME_VIRTUALENV}
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/ceph-volume
   COMMENT "ceph-volume venv is being created")
 

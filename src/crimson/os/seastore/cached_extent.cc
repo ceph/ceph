@@ -7,7 +7,7 @@
 
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_seastore);
   }
 }
 
@@ -46,8 +46,6 @@ std::ostream &operator<<(std::ostream &out, CachedExtent::extent_state_t state)
     return out << "CLEAN";
   case CachedExtent::extent_state_t::DIRTY:
     return out << "DIRTY";
-  case CachedExtent::extent_state_t::RETIRED:
-    return out << "RETIRED";
   case CachedExtent::extent_state_t::INVALID:
     return out << "INVALID";
   default:
@@ -63,6 +61,7 @@ std::ostream &operator<<(std::ostream &out, const CachedExtent &ext)
 CachedExtent::~CachedExtent()
 {
   if (parent_index) {
+    assert(is_linked());
     parent_index->erase(*this);
   }
 }

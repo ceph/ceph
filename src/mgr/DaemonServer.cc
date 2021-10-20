@@ -45,7 +45,16 @@
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
+
 using namespace TOPNSPC::common;
+
+using std::list;
+using std::ostringstream;
+using std::string;
+using std::stringstream;
+using std::vector;
+using std::unique_ptr;
+
 namespace {
   template <typename Map>
   bool map_compare(Map const &lhs, Map const &rhs) {
@@ -1046,7 +1055,7 @@ bool DaemonServer::_handle_command(
     if (boost::algorithm::ends_with(prefix, "_json")) {
       format = "json";
     } else {
-      cmd_getval(cmdctx->cmdmap, "format", format, string("plain"));
+      format = cmd_getval_or<string>(cmdctx->cmdmap, "format", "plain");
     }
     f.reset(Formatter::create(format));
   }
@@ -1064,7 +1073,7 @@ bool DaemonServer::_handle_command(
 
     auto dump_cmd = [&cmdnum, &f, m](const MonCommand &mc){
       ostringstream secname;
-      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+      secname << "cmd" << std::setfill('0') << std::setw(3) << cmdnum;
       dump_cmddesc_to_json(&f, m->get_connection()->get_features(),
                            secname.str(), mc.cmdstring, mc.helpstring,
                            mc.module, mc.req_perms, 0);
@@ -1408,8 +1417,7 @@ bool DaemonServer::_handle_command(
     bool dry_run =
       prefix == "osd test-reweight-by-pg" ||
       prefix == "osd test-reweight-by-utilization";
-    int64_t oload;
-    cmd_getval(cmdctx->cmdmap, "oload", oload, int64_t(120));
+    int64_t oload = cmd_getval_or<int64_t>(cmdctx->cmdmap, "oload", 120);
     set<int64_t> pools;
     vector<string> poolnames;
     cmd_getval(cmdctx->cmdmap, "pools", poolnames);
@@ -1443,7 +1451,7 @@ bool DaemonServer::_handle_command(
       return true;
     }
     bool no_increasing = false;
-    cmd_getval(cmdctx->cmdmap, "no_increasing", no_increasing);
+    cmd_getval_compat_cephbool(cmdctx->cmdmap, "no_increasing", no_increasing);
     string out_str;
     mempool::osdmap::map<int32_t, uint32_t> new_weights;
     r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap &osdmap, const PGMap& pgmap) {
@@ -2817,7 +2825,7 @@ void DaemonServer::adjust_pgs()
 	    // single adjustment that's more than half of the
 	    // max_misplaced, to somewhat limit the magnitude of
 	    // our potential error here.
-	    int next;
+	    unsigned next;
 	    static constexpr unsigned MAX_NUM_OBJECTS_PER_PG_FOR_LEAP = 1;
 	    pool_stat_t s = pg_map.get_pg_pool_sum_stat(i.first);
 	    if (aggro ||
@@ -2832,8 +2840,12 @@ void DaemonServer::adjust_pgs()
 				 max_misplaced / 2.0);
 	      unsigned estmax = std::max<unsigned>(
 		(double)p.get_pg_num() * room, 1u);
+	      unsigned next_min = 0;
+	      if (p.get_pgp_num() > estmax) {
+	        next_min = p.get_pgp_num() - estmax;
+	      }
 	      next = std::clamp(target,
-				p.get_pgp_num() - estmax,
+				next_min,
 				p.get_pgp_num() + estmax);
 	      dout(20) << " room " << room << " estmax " << estmax
 		       << " delta " << (target-p.get_pgp_num())
@@ -2856,11 +2868,13 @@ void DaemonServer::adjust_pgs()
 		}
 	      }
 	    }
-	    dout(10) << "pool " << i.first
-		     << " pgp_num_target " << p.get_pgp_num_target()
-		     << " pgp_num " << p.get_pgp_num()
-		     << " -> " << next << dendl;
-	    pgp_num_to_set[osdmap.get_pool_name(i.first)] = next;
+	    if (next != p.get_pgp_num()) {
+	      dout(10) << "pool " << i.first
+		       << " pgp_num_target " << p.get_pgp_num_target()
+		       << " pgp_num " << p.get_pgp_num()
+		       << " -> " << next << dendl;
+	      pgp_num_to_set[osdmap.get_pool_name(i.first)] = next;
+	    }
 	  }
 	}
 	if (left == 0) {

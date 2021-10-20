@@ -48,12 +48,13 @@
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 #include "rgw_kafka.h"
 #endif
-#if defined(WITH_RADOSGW_BEAST_FRONTEND)
 #include "rgw_asio_frontend.h"
-#endif /* WITH_RADOSGW_BEAST_FRONTEND */
 #include "rgw_dmclock_scheduler_ctx.h"
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 #include "rgw_lua.h"
+#endif
+#ifdef WITH_RADOSGW_DBSTORE
+#include "rgw_sal_dbstore.h"
 #endif
 
 #include "services/svc_zone.h"
@@ -63,6 +64,8 @@
 #endif
 
 #define dout_subsys ceph_subsys_rgw
+
+using namespace std;
 
 namespace {
 TracepointProvider::Traits rgw_op_tracepoint_traits("librgw_op_tp.so",
@@ -110,9 +113,6 @@ static void signal_fd_finalize()
 static void handle_sigterm(int signum)
 {
   dout(1) << __func__ << dendl;
-#if defined(WITH_RADOSGW_FCGI_FRONTEND)
-  FCGX_ShutdownPending();
-#endif
 
   // send a signal to make fcgi's accept(2) wake up.  unfortunately the
   // initial signal often isn't sufficient because we race with accept's
@@ -195,11 +195,13 @@ int radosgw_Main(int argc, const char **argv)
   map<string,string> defaults = {
     { "debug_rgw", "1/5" },
     { "keyring", "$rgw_data/keyring" },
-    { "objecter_inflight_ops", "24576" }
+    { "objecter_inflight_ops", "24576" },
+    // require a secure mon connection by default
+    { "ms_mon_client_mode", "secure" },
+    { "auth_client_required", "cephx" }
   };
 
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
@@ -225,12 +227,12 @@ int radosgw_Main(int argc, const char **argv)
   multimap<string, RGWFrontendConfig *> fe_map;
   list<RGWFrontendConfig *> configs;
   if (frontends.empty()) {
-    frontends.push_back("civetweb");
+    frontends.push_back("beast");
   }
   for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
     string& f = *iter;
 
-    if (f.find("civetweb") != string::npos || f.find("beast") != string::npos) {
+    if (f.find("beast") != string::npos) {
       if (f.find("port") != string::npos) {
         // check for the most common ws problems
         if ((f.find("port=") == string::npos) ||
@@ -316,7 +318,8 @@ int radosgw_Main(int argc, const char **argv)
   TracepointProvider::initialize<rgw_rados_tracepoint_traits>(g_ceph_context);
   TracepointProvider::initialize<rgw_op_tracepoint_traits>(g_ceph_context);
 
-  int r = rgw_tools_init(g_ceph_context);
+  const DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
+  int r = rgw_tools_init(&dp, g_ceph_context);
   if (r < 0) {
     derr << "ERROR: unable to initialize rgw tools" << dendl;
     return -r;
@@ -327,14 +330,37 @@ int radosgw_Main(int argc, const char **argv)
   rgw_http_client_init(g_ceph_context);
   rgw_kmip_client_init(*new RGWKMIPManagerImpl(g_ceph_context));
   
-#if defined(WITH_RADOSGW_FCGI_FRONTEND)
-  FCGX_Init();
+  lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_local_datacache_enabled=" << cct->_conf->rgw_d3n_l1_local_datacache_enabled << dendl;
+  if (cct->_conf->rgw_d3n_l1_local_datacache_enabled) {
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_datacache_persistent_path='" << cct->_conf->rgw_d3n_l1_datacache_persistent_path << "'" << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_datacache_size=" << cct->_conf->rgw_d3n_l1_datacache_size << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_evict_cache_on_start=" << cct->_conf->rgw_d3n_l1_evict_cache_on_start << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_fadvise=" << cct->_conf->rgw_d3n_l1_fadvise << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_eviction_policy=" << cct->_conf->rgw_d3n_l1_eviction_policy << dendl;
+  }
+  bool rgw_d3n_datacache_enabled = cct->_conf->rgw_d3n_l1_local_datacache_enabled;
+  if (rgw_d3n_datacache_enabled && (cct->_conf->rgw_max_chunk_size != cct->_conf->rgw_obj_stripe_size)) {
+    lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires that the chunk_size equals stripe_size)" << dendl;
+    rgw_d3n_datacache_enabled = false;
+  }
+  if (rgw_d3n_datacache_enabled && !cct->_conf->rgw_beast_enable_async) {
+    lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires yield context - rgw_beast_enable_async=true)" << dendl;
+    rgw_d3n_datacache_enabled = false;
+  }
+  lsubdout(cct, rgw, 1) << "D3N datacache enabled: " << rgw_d3n_datacache_enabled << dendl;
+
+  std::string rgw_store = (!rgw_d3n_datacache_enabled) ? "rados" : "d3n";
+
+  const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+#ifdef WITH_RADOSGW_DBSTORE
+  if (config_store == "dbstore") {
+    rgw_store = "dbstore";
+  }
 #endif
 
-  const DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
-				 "rados",
+				 rgw_store,
 				 g_conf()->rgw_enable_gc_threads,
 				 g_conf()->rgw_enable_lc_threads,
 				 g_conf()->rgw_enable_quota_threads,
@@ -420,17 +446,20 @@ int radosgw_Main(int argc, const char **argv)
     store->set_luarocks_path(luarocks_path+"/"+g_conf()->name.to_str());
   }
 #ifdef WITH_RADOSGW_LUA_PACKAGES
-  rgw::lua::packages_t failed_packages;
-  std::string output;
-  r = rgw::lua::install_packages(store, null_yield, failed_packages, output);
-  if (r < 0) {
-    dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
-  }
-  if (!output.empty()) {
-    dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
-  }
-  for (const auto& p : failed_packages) {
-    dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
+  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
+  if (rados) { /* Supported for only RadosStore */
+    rgw::lua::packages_t failed_packages;
+    std::string output;
+    r = rgw::lua::install_packages(&dp, rados, null_yield, failed_packages, output);
+    if (r < 0) {
+      dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
+    }
+    if (!output.empty()) {
+      dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
+    }
+    for (const auto& p : failed_packages) {
+      dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
+    }
   }
 #endif
 
@@ -559,17 +588,7 @@ int radosgw_Main(int argc, const char **argv)
 
     RGWFrontend *fe = NULL;
 
-    if (framework == "civetweb" || framework == "mongoose") {
-      framework = "civetweb";
-      std::string uri_prefix;
-      config->get_val("prefix", "", &uri_prefix);
-
-      RGWProcessEnv env = { store, &rest, olog, 0, uri_prefix, auth_registry };
-      //TODO: move all of scheduler initializations to frontends?
-
-      fe = new RGWCivetWebFrontend(env, config, sched_ctx);
-    }
-    else if (framework == "loadgen") {
+    if (framework == "loadgen") {
       int port;
       config->get_val("port", 80, &port);
       std::string uri_prefix;
@@ -579,7 +598,6 @@ int radosgw_Main(int argc, const char **argv)
 
       fe = new RGWLoadGenFrontend(env, config);
     }
-#if defined(WITH_RADOSGW_BEAST_FRONTEND)
     else if (framework == "beast") {
       int port;
       config->get_val("port", 80, &port);
@@ -588,17 +606,6 @@ int radosgw_Main(int argc, const char **argv)
       RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry };
       fe = new RGWAsioFrontend(env, config, sched_ctx);
     }
-#endif /* WITH_RADOSGW_BEAST_FRONTEND */
-#if defined(WITH_RADOSGW_FCGI_FRONTEND)
-    else if (framework == "fastcgi" || framework == "fcgi") {
-      framework = "fastcgi";
-      std::string uri_prefix;
-      config->get_val("prefix", "", &uri_prefix);
-      RGWProcessEnv fcgi_pe = { store, &rest, olog, 0, uri_prefix, auth_registry };
-
-      fe = new RGWFCGXFrontend(fcgi_pe, config);
-    }
-#endif /* WITH_RADOSGW_FCGI_FRONTEND */
 
     service_map_meta["frontend_type#" + stringify(fe_count)] = framework;
     service_map_meta["frontend_config#" + stringify(fe_count)] = config->get_config();
@@ -623,7 +630,7 @@ int radosgw_Main(int argc, const char **argv)
     fes.push_back(fe);
   }
 
-  r = store->register_to_service_map("rgw", service_map_meta);
+  r = store->register_to_service_map(&dp, "rgw", service_map_meta);
   if (r < 0) {
     derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 
@@ -632,12 +639,12 @@ int radosgw_Main(int argc, const char **argv)
 
 
   // add a watcher to respond to realm configuration changes
-  RGWPeriodPusher pusher(store, null_yield);
+  RGWPeriodPusher pusher(&dp, store, null_yield);
   RGWFrontendPauser pauser(fes, implicit_tenant_context, &pusher);
   auto reloader = std::make_unique<RGWRealmReloader>(store,
 						     service_map_meta, &pauser);
 
-  RGWRealmWatcher realm_watcher(g_ceph_context, store->get_zone()->get_realm());
+  RGWRealmWatcher realm_watcher(&dp, g_ceph_context, store->get_zone()->get_realm());
   realm_watcher.add_watcher(RGWRealmNotify::Reload, *reloader);
   realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
 

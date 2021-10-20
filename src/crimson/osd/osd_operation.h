@@ -3,9 +3,10 @@
 
 #pragma once
 
-#include "crimson/osd/osd_operation_sequencer.h"
+#include "crimson/common/operation.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/scheduler/scheduler.h"
+#include "osd/osd_types.h"
 
 namespace crimson::osd {
 
@@ -18,6 +19,7 @@ enum class OperationTypeCode {
   replicated_request,
   background_recovery,
   background_recovery_sub,
+  internal_client_request,
   last_op
 };
 
@@ -30,6 +32,7 @@ static constexpr const char* const OP_NAMES[] = {
   "replicated_request",
   "background_recovery",
   "background_recovery_sub",
+  "internal_client_request",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:
@@ -37,9 +40,7 @@ static_assert(
   (sizeof(OP_NAMES)/sizeof(OP_NAMES[0])) ==
   static_cast<int>(OperationTypeCode::last_op));
 
-template <typename T>
-class OperationT : public Operation {
-public:
+struct InterruptibleOperation : Operation {
   template <typename ValuesT = void>
   using interruptible_future =
     ::crimson::interruptible::interruptible_future<
@@ -47,6 +48,11 @@ public:
   using interruptor =
     ::crimson::interruptible::interruptor<
       ::crimson::osd::IOInterruptCondition>;
+};
+
+template <typename T>
+class OperationT : public InterruptibleOperation {
+public:
   static constexpr const char *type_name = OP_NAMES[static_cast<int>(T::type)];
   using IRef = boost::intrusive_ptr<T>;
 

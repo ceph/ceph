@@ -14,7 +14,7 @@
 int rgw_compression_info_from_attr(const bufferlist& attr,
                                    bool& need_decompress,
                                    RGWCompressionInfo& cs_info);
-int rgw_compression_info_from_attrset(const map<string, bufferlist>& attrs,
+int rgw_compression_info_from_attrset(const std::map<std::string, bufferlist>& attrs,
                                       bool& need_decompress,
                                       RGWCompressionInfo& cs_info);
 
@@ -24,7 +24,7 @@ class RGWGetObj_Decompress : public RGWGetObj_Filter
   CompressorRef compressor;
   RGWCompressionInfo* cs_info;
   bool partial_content;
-  vector<compression_block>::iterator first_block, last_block;
+  std::vector<compression_block>::iterator first_block, last_block;
   off_t q_ofs, q_len;
   uint64_t cur_ofs;
   bufferlist waiting;
@@ -49,13 +49,13 @@ class RGWPutObj_Compress : public rgw::putobj::Pipe
   std::vector<compression_block> blocks;
 public:
   RGWPutObj_Compress(CephContext* cct_, CompressorRef compressor,
-                     rgw::putobj::DataProcessor *next)
+                     rgw::sal::DataProcessor *next)
     : Pipe(next), cct(cct_), compressor(compressor) {}
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
 
   bool is_compressed() { return compressed; }
-  vector<compression_block>& get_compression_blocks() { return blocks; }
+  std::vector<compression_block>& get_compression_blocks() { return blocks; }
   boost::optional<int32_t> get_compressor_message() { return compressor_message; }
 
 }; /* RGWPutObj_Compress */

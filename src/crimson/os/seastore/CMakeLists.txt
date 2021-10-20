@@ -4,13 +4,16 @@ add_library(crimson-seastore STATIC
   segment_manager/ephemeral.cc
   segment_manager/block.cc
   transaction_manager.cc
+  transaction.cc
   journal.cc
   cache.cc
+  extent_reader.cc
   lba_manager.cc
   segment_cleaner.cc
   lba_manager/btree/btree_lba_manager.cc
-  lba_manager/btree/lba_btree_node_impl.cc
   lba_manager/btree/btree_range_pin.cc
+  lba_manager/btree/lba_btree.cc
+  lba_manager/btree/lba_btree_node.cc
   omap_manager.cc
   omap_manager/btree/btree_omap_manager.cc
   omap_manager/btree/omap_btree_node_impl.cc
@@ -30,8 +33,11 @@ add_library(crimson-seastore STATIC
   collection_manager.cc
   collection_manager/flat_collection_manager.cc
   collection_manager/collection_flat_node.cc
+  extent_placement_manager.cc
   object_data_handler.cc
   seastore.cc
+  random_block_manager/nvme_manager.cc
+  random_block_manager/nvmedevice.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)

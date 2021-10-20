@@ -15,6 +15,7 @@
 #include <string>
 #include <stdexcept>
 
+using namespace std;
 using namespace librados;
 
 typedef RadosTestNSCleanup LibRadosList;
@@ -480,8 +481,12 @@ TEST_F(LibRadosList, EnumerateObjectsSplit) {
 
   // Ensure a non-power-of-two PG count to avoid only
   // touching the easy path.
-  ASSERT_TRUE(set_pg_num(&s_cluster, pool_name, 11).empty());
-  ASSERT_TRUE(set_pgp_num(&s_cluster, pool_name, 11).empty());
+  if (auto error = set_pg_num(&s_cluster, pool_name, 11); !error.empty()) {
+    GTEST_FAIL() << error;
+  }
+  if (auto error = set_pgp_num(&s_cluster, pool_name, 11); !error.empty()) {
+    GTEST_FAIL() << error;
+  }
 
   rados_object_list_cursor begin = rados_object_list_begin(ioctx);
   rados_object_list_cursor end = rados_object_list_end(ioctx);

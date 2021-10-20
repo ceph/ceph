@@ -6,6 +6,7 @@ import argparse
 import datetime
 import fcntl
 import ipaddress
+import io
 import json
 import logging
 from logging.config import dictConfig
@@ -23,36 +24,36 @@ import tempfile
 import time
 import errno
 import struct
-from socketserver import ThreadingMixIn
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import signal
-import io
-from contextlib import redirect_stdout
 import ssl
 from enum import Enum
 
-from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO
+from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set
 
 import re
 import uuid
 
 from configparser import ConfigParser
+from contextlib import redirect_stdout
 from functools import wraps
 from glob import glob
 from io import StringIO
-from threading import Thread, RLock
+from threading import Thread, Event
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.request import urlopen, Request
 from pathlib import Path
+
+FuncT = TypeVar('FuncT', bound=Callable)
 
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:master'
 DEFAULT_IMAGE_IS_MASTER = True
 DEFAULT_IMAGE_RELEASE = 'quincy'
-DEFAULT_PROMETHEUS_IMAGE = 'docker.io/prom/prometheus:v2.18.1'
-DEFAULT_NODE_EXPORTER_IMAGE = 'docker.io/prom/node-exporter:v0.18.1'
-DEFAULT_GRAFANA_IMAGE = 'docker.io/ceph/ceph-grafana:6.7.4'
-DEFAULT_ALERT_MANAGER_IMAGE = 'docker.io/prom/alertmanager:v0.20.0'
+DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.18.1'
+DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v0.18.1'
+DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.20.0'
+DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:6.7.4'
+DEFAULT_HAPROXY_IMAGE = 'docker.io/library/haproxy:2.3'
+DEFAULT_KEEPALIVED_IMAGE = 'docker.io/arcts/keepalived'
 DEFAULT_REGISTRY = 'docker.io'   # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 
@@ -61,6 +62,7 @@ DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
 LOCK_DIR = '/run/cephadm'
 LOGROTATE_DIR = '/etc/logrotate.d'
+SYSCTL_DIR = '/usr/lib/sysctl.d'
 UNIT_DIR = '/etc/systemd/system'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
@@ -103,12 +105,13 @@ cached_stdin = None
 
 class BaseConfig:
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.image: str = ''
         self.docker: bool = False
         self.data_dir: str = DATA_DIR
         self.log_dir: str = LOG_DIR
         self.logrotate_dir: str = LOGROTATE_DIR
+        self.sysctl_dir: str = SYSCTL_DIR
         self.unit_dir: str = UNIT_DIR
         self.verbose: bool = False
         self.timeout: Optional[int] = DEFAULT_TIMEOUT
@@ -116,11 +119,12 @@ class BaseConfig:
         self.env: List[str] = []
         self.memory_request: Optional[int] = None
         self.memory_limit: Optional[int] = None
+        self.log_to_journald: Optional[bool] = None
 
         self.container_init: bool = CONTAINER_INIT
         self.container_engine: Optional[ContainerEngine] = None
 
-    def set_from_args(self, args: argparse.Namespace):
+    def set_from_args(self, args: argparse.Namespace) -> None:
         argdict: Dict[str, Any] = vars(args)
         for k, v in argdict.items():
             if hasattr(self, k):
@@ -129,7 +133,7 @@ class BaseConfig:
 
 class CephadmContext:
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.__dict__['_args'] = None
         self.__dict__['_conf'] = BaseConfig()
 
@@ -161,30 +165,38 @@ class CephadmContext:
 
 
 class ContainerEngine:
-    def __init__(self):
+    def __init__(self) -> None:
         self.path = find_program(self.EXE)
 
+    @classmethod
     @property
-    def EXE(self) -> str:
+    def EXE(cls) -> str:
         raise NotImplementedError()
+
+    def __str__(self) -> str:
+        return f'{self.EXE} ({self.path})'
 
 
 class Podman(ContainerEngine):
     EXE = 'podman'
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
-        self._version = None
+        self._version: Optional[Tuple[int, ...]] = None
 
     @property
-    def version(self):
+    def version(self) -> Tuple[int, ...]:
         if self._version is None:
             raise RuntimeError('Please call `get_version` first')
         return self._version
 
-    def get_version(self, ctx: CephadmContext):
+    def get_version(self, ctx: CephadmContext) -> None:
         out, _, _ = call_throws(ctx, [self.path, 'version', '--format', '{{.Client.Version}}'])
         self._version = _parse_podman_version(out)
+
+    def __str__(self) -> str:
+        version = '.'.join(map(str, self.version))
+        return f'{self.EXE} ({self.path}) version {version}'
 
 
 class Docker(ContainerEngine):
@@ -200,7 +212,7 @@ logging_config = {
     'disable_existing_loggers': True,
     'formatters': {
         'cephadm': {
-            'format': '%(asctime)s %(levelname)s %(message)s'
+            'format': '%(asctime)s %(thread)x %(levelname)s %(message)s'
         },
     },
     'handlers': {
@@ -210,11 +222,9 @@ logging_config = {
         },
         'log_file': {
             'level': 'DEBUG',
-            'class': 'logging.handlers.RotatingFileHandler',
+            'class': 'logging.handlers.WatchedFileHandler',
             'formatter': 'cephadm',
             'filename': '%s/cephadm.log' % LOG_DIR,
-            'maxBytes': 1024000,
-            'backupCount': 1,
         }
     },
     'loggers': {
@@ -249,6 +259,18 @@ class Ceph(object):
 ##################################
 
 
+class OSD(object):
+    @staticmethod
+    def get_sysctl_settings() -> List[str]:
+        return [
+            '# allow a large number of OSDs',
+            'fs.aio-max-nr = 1048576',
+            'kernel.pid_max = 4194304',
+        ]
+
+##################################
+
+
 class Monitoring(object):
     """Define the configs for the monitoring containers"""
 
@@ -267,7 +289,6 @@ class Monitoring(object):
             'args': [
                 '--config.file=/etc/prometheus/prometheus.yml',
                 '--storage.tsdb.path=/prometheus',
-                '--web.listen-address=:{}'.format(port_map['prometheus'][0]),
             ],
             'config-json-files': [
                 'prometheus.yml',
@@ -298,7 +319,6 @@ class Monitoring(object):
             'cpus': '2',
             'memory': '2GB',
             'args': [
-                '--web.listen-address=:{}'.format(port_map['alertmanager'][0]),
                 '--cluster.listen-address=:{}'.format(port_map['alertmanager'][1]),
             ],
             'config-json-files': [
@@ -349,7 +369,7 @@ def populate_files(config_dir, config_files, uid, gid):
         config_file = os.path.join(config_dir, fname)
         config_content = dict_get_join(config_files, fname)
         logger.info('Write file: %s' % (config_file))
-        with open(config_file, 'w') as f:
+        with open(config_file, 'w', encoding='utf-8') as f:
             os.fchown(f.fileno(), uid, gid)
             os.fchmod(f.fileno(), 0o600)
             f.write(config_content)
@@ -491,36 +511,6 @@ class NFSGanesha(object):
                 os.fchown(f.fileno(), uid, gid)
                 f.write(self.rgw.get('keyring', ''))
 
-    def get_rados_grace_container(self, action):
-        # type: (str) -> CephContainer
-        """Container for a ganesha action on the grace db"""
-        entrypoint = '/usr/bin/ganesha-rados-grace'
-
-        assert self.pool
-        args = ['--pool', self.pool]
-        if self.namespace:
-            args += ['--ns', self.namespace]
-        if self.userid:
-            args += ['--userid', self.userid]
-        args += [action, self.get_daemon_name()]
-
-        data_dir = get_data_dir(self.fsid, self.ctx.data_dir,
-                                self.daemon_type, self.daemon_id)
-        volume_mounts = self.get_container_mounts(data_dir)
-        envs = self.get_container_envs()
-
-        logger.info('Creating RADOS grace for action: %s' % action)
-        c = CephContainer(
-            self.ctx,
-            image=self.image,
-            entrypoint=entrypoint,
-            args=args,
-            volume_mounts=volume_mounts,
-            cname=self.get_container_name(desc='grace-%s' % action),
-            envs=envs
-        )
-        return c
-
 ##################################
 
 
@@ -564,7 +554,7 @@ class CephIscsi(object):
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
         mounts[os.path.join(data_dir, 'iscsi-gateway.cfg')] = '/etc/ceph/iscsi-gateway.cfg:z'
         mounts[os.path.join(data_dir, 'configfs')] = '/sys/kernel/config'
-        mounts[log_dir] = '/var/log/rbd-target-api:z'
+        mounts[log_dir] = '/var/log:z'
         mounts['/dev'] = '/dev'
         return mounts
 
@@ -659,7 +649,7 @@ class HAproxy(object):
     """Defines an HAproxy container"""
     daemon_type = 'haproxy'
     required_files = ['haproxy.cfg']
-    default_image = 'haproxy'
+    default_image = DEFAULT_HAPROXY_IMAGE
 
     def __init__(self,
                  ctx: CephadmContext,
@@ -722,7 +712,7 @@ class HAproxy(object):
             cname = '%s-%s' % (cname, desc)
         return cname
 
-    def extract_uid_gid_haproxy(self):
+    def extract_uid_gid_haproxy(self) -> Tuple[int, int]:
         # better directory for this?
         return extract_uid_gid(self.ctx, file_path='/var/lib')
 
@@ -732,6 +722,13 @@ class HAproxy(object):
         mounts[os.path.join(data_dir, 'haproxy')] = '/var/lib/haproxy'
         return mounts
 
+    @staticmethod
+    def get_sysctl_settings() -> List[str]:
+        return [
+            '# IP forwarding',
+            'net.ipv4.ip_forward = 1',
+        ]
+
 ##################################
 
 
@@ -739,7 +736,7 @@ class Keepalived(object):
     """Defines an Keepalived container"""
     daemon_type = 'keepalived'
     required_files = ['keepalived.conf']
-    default_image = 'arcts/keepalived'
+    default_image = DEFAULT_KEEPALIVED_IMAGE
 
     def __init__(self,
                  ctx: CephadmContext,
@@ -811,14 +808,14 @@ class Keepalived(object):
         return envs
 
     @staticmethod
-    def get_prestart():
-        return (
-            '# keepalived needs IP forwarding and non-local bind\n'
-            'sysctl net.ipv4.ip_forward=1\n'
-            'sysctl net.ipv4.ip_nonlocal_bind=1\n'
-        )
+    def get_sysctl_settings() -> List[str]:
+        return [
+            '# IP forwarding and non-local bind',
+            'net.ipv4.ip_forward = 1',
+            'net.ipv4.ip_nonlocal_bind = 1',
+        ]
 
-    def extract_uid_gid_keepalived(self):
+    def extract_uid_gid_keepalived(self) -> Tuple[int, int]:
         # better directory for this?
         return extract_uid_gid(self.ctx, file_path='/var/lib')
 
@@ -1002,9 +999,9 @@ def get_supported_daemons():
     supported_daemons.append(NFSGanesha.daemon_type)
     supported_daemons.append(CephIscsi.daemon_type)
     supported_daemons.append(CustomContainer.daemon_type)
-    supported_daemons.append(CephadmDaemon.daemon_type)
     supported_daemons.append(HAproxy.daemon_type)
     supported_daemons.append(Keepalived.daemon_type)
+    supported_daemons.append(CephadmAgent.daemon_type)
     assert len(supported_daemons) == len(set(supported_daemons))
     return supported_daemons
 
@@ -1020,13 +1017,15 @@ def attempt_bind(ctx, s, address, port):
     try:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((address, port))
-    except (socket.error, OSError) as e:  # py2 and py3
+    except OSError as e:
         if e.errno == errno.EADDRINUSE:
             msg = 'Cannot bind to IP %s port %d: %s' % (address, port, e)
             logger.warning(msg)
             raise PortOccupiedError(msg)
         else:
-            raise e
+            raise Error(e)
+    except Exception as e:
+        raise Error(e)
     finally:
         s.close()
 
@@ -1081,34 +1080,34 @@ class Timeout(TimeoutError):
     seconds.
     """
 
-    def __init__(self, lock_file):
+    def __init__(self, lock_file: str) -> None:
         """
         """
         #: The path of the file lock.
         self.lock_file = lock_file
         return None
 
-    def __str__(self):
+    def __str__(self) -> str:
         temp = "The file lock '{}' could not be acquired."\
                .format(self.lock_file)
         return temp
 
 
 class _Acquire_ReturnProxy(object):
-    def __init__(self, lock):
+    def __init__(self, lock: 'FileLock') -> None:
         self.lock = lock
         return None
 
-    def __enter__(self):
+    def __enter__(self) -> 'FileLock':
         return self.lock
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         self.lock.release()
         return None
 
 
 class FileLock(object):
-    def __init__(self, ctx: CephadmContext, name, timeout=-1):
+    def __init__(self, ctx: CephadmContext, name: str, timeout: int = -1) -> None:
         if not os.path.exists(LOCK_DIR):
             os.mkdir(LOCK_DIR, 0o700)
         self._lock_file = os.path.join(LOCK_DIR, name + '.lock')
@@ -1127,10 +1126,10 @@ class FileLock(object):
         return None
 
     @property
-    def is_locked(self):
+    def is_locked(self) -> bool:
         return self._lock_file_fd is not None
 
-    def acquire(self, timeout=None, poll_intervall=0.05):
+    def acquire(self, timeout: Optional[int] = None, poll_intervall: float = 0.05) -> _Acquire_ReturnProxy:
         """
         Acquires the file lock or fails with a :exc:`Timeout` error.
         .. code-block:: python
@@ -1190,14 +1189,14 @@ class FileLock(object):
                         lock_id, lock_filename, poll_intervall
                     )
                     time.sleep(poll_intervall)
-        except:  # noqa
+        except Exception:
             # Something did go wrong, so decrement the counter.
             self._lock_counter = max(0, self._lock_counter - 1)
 
             raise
         return _Acquire_ReturnProxy(lock=self)
 
-    def release(self, force=False):
+    def release(self, force: bool = False) -> None:
         """
         Releases the file lock.
         Please note, that the lock is only completly released, if the lock
@@ -1211,29 +1210,32 @@ class FileLock(object):
             self._lock_counter -= 1
 
             if self._lock_counter == 0 or force:
-                lock_id = id(self)
-                lock_filename = self._lock_file
+                # lock_id = id(self)
+                # lock_filename = self._lock_file
 
-                logger.debug('Releasing lock %s on %s', lock_id, lock_filename)
+                # Can't log in shutdown:
+                #  File "/usr/lib64/python3.9/logging/__init__.py", line 1175, in _open
+                #    NameError: name 'open' is not defined
+                # logger.debug('Releasing lock %s on %s', lock_id, lock_filename)
                 self._release()
                 self._lock_counter = 0
-                logger.debug('Lock %s released on %s', lock_id, lock_filename)
+                # logger.debug('Lock %s released on %s', lock_id, lock_filename)
 
         return None
 
-    def __enter__(self):
+    def __enter__(self) -> 'FileLock':
         self.acquire()
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         self.release()
         return None
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.release(force=True)
         return None
 
-    def _acquire(self):
+    def _acquire(self) -> None:
         open_mode = os.O_RDWR | os.O_CREAT | os.O_TRUNC
         fd = os.open(self._lock_file, open_mode)
 
@@ -1245,7 +1247,7 @@ class FileLock(object):
             self._lock_file_fd = fd
         return None
 
-    def _release(self):
+    def _release(self) -> None:
         # Do not remove the lockfile:
         #
         #   https://github.com/benediktschmitt/py-filelock/issues/31
@@ -1287,30 +1289,30 @@ if sys.version_info < (3, 8):
         on amount of spawn processes.
         """
 
-        def __init__(self):
+        def __init__(self) -> None:
             self._pid_counter = itertools.count(0)
-            self._threads = {}
+            self._threads: Dict[Any, Any] = {}
 
-        def is_active(self):
+        def is_active(self) -> bool:
             return True
 
-        def close(self):
+        def close(self) -> None:
             self._join_threads()
 
-        def _join_threads(self):
+        def _join_threads(self) -> None:
             """Internal: Join all non-daemon threads"""
             threads = [thread for thread in list(self._threads.values())
                        if thread.is_alive() and not thread.daemon]
             for thread in threads:
                 thread.join()
 
-        def __enter__(self):
+        def __enter__(self) -> Any:
             return self
 
-        def __exit__(self, exc_type, exc_val, exc_tb):
+        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
             pass
 
-        def __del__(self, _warn=warnings.warn):
+        def __del__(self, _warn: Any = warnings.warn) -> None:
             threads = [thread for thread in list(self._threads.values())
                        if thread.is_alive()]
             if threads:
@@ -1318,7 +1320,7 @@ if sys.version_info < (3, 8):
                       ResourceWarning,
                       source=self)
 
-        def add_child_handler(self, pid, callback, *args):
+        def add_child_handler(self, pid: Any, callback: Any, *args: Any) -> None:
             loop = events.get_event_loop()
             thread = threading.Thread(target=self._do_waitpid,
                                       name=f'waitpid-{next(self._pid_counter)}',
@@ -1327,16 +1329,16 @@ if sys.version_info < (3, 8):
             self._threads[pid] = thread
             thread.start()
 
-        def remove_child_handler(self, pid):
+        def remove_child_handler(self, pid: Any) -> bool:
             # asyncio never calls remove_child_handler() !!!
             # The method is no-op but is implemented because
             # abstract base classe requires it
             return True
 
-        def attach_loop(self, loop):
+        def attach_loop(self, loop: Any) -> None:
             pass
 
-        def _do_waitpid(self, loop, expected_pid, callback, args):
+        def _do_waitpid(self, loop: Any, expected_pid: Any, callback: Any, args: Any) -> None:
             assert expected_pid > 0
 
             try:
@@ -1395,7 +1397,7 @@ def call(ctx: CephadmContext,
          desc: Optional[str] = None,
          verbosity: CallVerbosity = CallVerbosity.VERBOSE_ON_FAILURE,
          timeout: Optional[int] = DEFAULT_TIMEOUT,
-         **kwargs) -> Tuple[str, str, int]:
+         **kwargs: Any) -> Tuple[str, str, int]:
     """
     Wrap subprocess.Popen to
 
@@ -1428,7 +1430,8 @@ def call(ctx: CephadmContext,
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE)
+            stderr=asyncio.subprocess.PIPE,
+            env=os.environ.copy())
         assert process.stdout
         assert process.stderr
         try:
@@ -1458,7 +1461,7 @@ def call_throws(
         desc: Optional[str] = None,
         verbosity: CallVerbosity = CallVerbosity.VERBOSE_ON_FAILURE,
         timeout: Optional[int] = DEFAULT_TIMEOUT,
-        **kwargs) -> Tuple[str, str, int]:
+        **kwargs: Any) -> Tuple[str, str, int]:
     out, err, ret = call(ctx, command, desc, verbosity, timeout, **kwargs)
     if ret:
         raise RuntimeError('Failed command: %s' % ' '.join(command))
@@ -1477,11 +1480,21 @@ def call_timeout(ctx, command, timeout):
         raise TimeoutExpired(msg)
 
     try:
-        return subprocess.call(command, timeout=timeout)
+        return subprocess.call(command, timeout=timeout, env=os.environ.copy())
     except subprocess.TimeoutExpired:
         raise_timeout(command, timeout)
 
 ##################################
+
+
+def json_loads_retry(cli_func: Callable[[], str]) -> Any:
+    for sleep_secs in [1, 4, 4]:
+        try:
+            return json.loads(cli_func())
+        except json.JSONDecodeError:
+            logger.debug('Invalid JSON. Retrying in %s seconds...' % sleep_secs)
+            time.sleep(sleep_secs)
+    return json.loads(cli_func())
 
 
 def is_available(ctx, what, func):
@@ -1579,7 +1592,7 @@ def try_convert_datetime(s):
 
 def _parse_podman_version(version_str):
     # type: (str) -> Tuple[int, ...]
-    def to_int(val, org_e=None):
+    def to_int(val: str, org_e: Optional[Exception] = None) -> int:
         if not val and org_e:
             raise org_e
         try:
@@ -1643,17 +1656,33 @@ def is_fsid(s):
     return True
 
 
-def infer_fsid(func):
+def validate_fsid(func: FuncT) -> FuncT:
+    @wraps(func)
+    def _validate_fsid(ctx: CephadmContext) -> Any:
+        if 'fsid' in ctx and ctx.fsid:
+            if not is_fsid(ctx.fsid):
+                raise Error('not an fsid: %s' % ctx.fsid)
+        return func(ctx)
+    return cast(FuncT, _validate_fsid)
+
+
+def infer_fsid(func: FuncT) -> FuncT:
     """
     If we only find a single fsid in /var/lib/ceph/*, use that
     """
+    @infer_config
     @wraps(func)
-    def _infer_fsid(ctx: CephadmContext):
-        if ctx.fsid:
+    def _infer_fsid(ctx: CephadmContext) -> Any:
+        if 'fsid' in ctx and ctx.fsid:
             logger.debug('Using specified fsid: %s' % ctx.fsid)
             return func(ctx)
 
-        fsids_set = set()
+        fsids = set()
+
+        cp = read_config(ctx.config)
+        if cp.has_option('global', 'fsid'):
+            fsids.add(cp.get('global', 'fsid'))
+
         daemon_list = list_daemons(ctx, detail=False)
         for daemon in daemon_list:
             if not is_fsid(daemon['fsid']):
@@ -1661,11 +1690,11 @@ def infer_fsid(func):
                 continue
             elif 'name' not in ctx or not ctx.name:
                 # ctx.name not specified
-                fsids_set.add(daemon['fsid'])
+                fsids.add(daemon['fsid'])
             elif daemon['name'] == ctx.name:
                 # ctx.name is a match
-                fsids_set.add(daemon['fsid'])
-        fsids = sorted(fsids_set)
+                fsids.add(daemon['fsid'])
+        fsids = sorted(fsids)
 
         if not fsids:
             # some commands do not always require an fsid
@@ -1677,42 +1706,40 @@ def infer_fsid(func):
             raise Error('Cannot infer an fsid, one must be specified: %s' % fsids)
         return func(ctx)
 
-    return _infer_fsid
+    return cast(FuncT, _infer_fsid)
 
 
-def infer_config(func):
+def infer_config(func: FuncT) -> FuncT:
     """
     If we find a MON daemon, use the config from that container
     """
     @wraps(func)
-    def _infer_config(ctx: CephadmContext):
+    def _infer_config(ctx: CephadmContext) -> Any:
+        ctx.config = ctx.config if 'config' in ctx else None
         if ctx.config:
             logger.debug('Using specified config: %s' % ctx.config)
             return func(ctx)
-        config = None
-        if ctx.fsid:
-            name = ctx.name
+        if 'fsid' in ctx and ctx.fsid:
+            name = ctx.name if 'name' in ctx else None
             if not name:
                 daemon_list = list_daemons(ctx, detail=False)
                 for daemon in daemon_list:
-                    if daemon['name'].startswith('mon.'):
+                    if daemon.get('name', '').startswith('mon.'):
                         name = daemon['name']
                         break
             if name:
-                config = '/var/lib/ceph/{}/{}/config'.format(ctx.fsid,
-                                                             name)
-        if config:
-            logger.info('Inferring config %s' % config)
-            ctx.config = config
+                ctx.config = f'/var/lib/ceph/{ctx.fsid}/{name}/config'
+        if ctx.config:
+            logger.info('Inferring config %s' % ctx.config)
         elif os.path.exists(SHELL_DEFAULT_CONF):
             logger.debug('Using default config: %s' % SHELL_DEFAULT_CONF)
             ctx.config = SHELL_DEFAULT_CONF
         return func(ctx)
 
-    return _infer_config
+    return cast(FuncT, _infer_config)
 
 
-def _get_default_image(ctx: CephadmContext):
+def _get_default_image(ctx: CephadmContext) -> str:
     if DEFAULT_IMAGE_IS_MASTER:
         warn = """This is a development version of cephadm.
 For information regarding the latest stable release:
@@ -1723,12 +1750,12 @@ For information regarding the latest stable release:
     return DEFAULT_IMAGE
 
 
-def infer_image(func):
+def infer_image(func: FuncT) -> FuncT:
     """
     Use the most recent ceph image
     """
     @wraps(func)
-    def _infer_image(ctx: CephadmContext):
+    def _infer_image(ctx: CephadmContext) -> Any:
         if not ctx.image:
             ctx.image = os.environ.get('CEPHADM_IMAGE')
         if not ctx.image:
@@ -1737,12 +1764,12 @@ def infer_image(func):
             ctx.image = _get_default_image(ctx)
         return func(ctx)
 
-    return _infer_image
+    return cast(FuncT, _infer_image)
 
 
-def default_image(func):
+def default_image(func: FuncT) -> FuncT:
     @wraps(func)
-    def _default_image(ctx: CephadmContext):
+    def _default_image(ctx: CephadmContext) -> Any:
         if not ctx.image:
             if 'name' in ctx and ctx.name:
                 type_ = ctx.name.split('.', 1)[0]
@@ -1759,10 +1786,10 @@ def default_image(func):
 
         return func(ctx)
 
-    return _default_image
+    return cast(FuncT, _default_image)
 
 
-def get_last_local_ceph_image(ctx: CephadmContext, container_path: str):
+def get_last_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional[str]:
     """
     :return: The most recent local ceph image (already pulled)
     """
@@ -1921,7 +1948,7 @@ def move_files(ctx, src, dst, uid=None, gid=None):
 
 
 # copied from distutils
-def find_executable(executable, path=None):
+def find_executable(executable: str, path: Optional[str] = None) -> Optional[str]:
     """Tries to find 'executable' in the directories listed in 'path'.
     A string listing directories separated by 'os.pathsep'; defaults to
     os.environ['PATH'].  Returns the complete filename or None if not found.
@@ -1965,7 +1992,7 @@ def find_program(filename):
     return name
 
 
-def find_container_engine(ctx: CephadmContext):
+def find_container_engine(ctx: CephadmContext) -> Optional[ContainerEngine]:
     if ctx.docker:
         return Docker()
     else:
@@ -1977,29 +2004,29 @@ def find_container_engine(ctx: CephadmContext):
     return None
 
 
-def check_container_engine(ctx):
-    # type: (CephadmContext) -> None
+def check_container_engine(ctx: CephadmContext) -> ContainerEngine:
     engine = ctx.container_engine
     if not isinstance(engine, CONTAINER_PREFERENCE):
-        raise Error('Unable to locate any of %s' % [i.EXE for i in CONTAINER_PREFERENCE])
+        # See https://github.com/python/mypy/issues/8993
+        exes: List[str] = [i.EXE for i in CONTAINER_PREFERENCE]  # type: ignore
+        raise Error('No container engine binary found ({}). Try run `apt/dnf/yum/zypper install <container engine>`'.format(' or '.join(exes)))
     elif isinstance(engine, Podman):
         engine.get_version(ctx)
         if engine.version < MIN_PODMAN_VERSION:
             raise Error('podman version %d.%d.%d or later is required' % MIN_PODMAN_VERSION)
+    return engine
 
 
 def get_unit_name(fsid, daemon_type, daemon_id=None):
     # type: (str, str, Optional[Union[int, str]]) -> str
     # accept either name or type + id
-    if daemon_type == CephadmDaemon.daemon_type and daemon_id is not None:
-        return 'ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id)
-    elif daemon_id is not None:
+    if daemon_id is not None:
         return 'ceph-%s@%s.%s' % (fsid, daemon_type, daemon_id)
     else:
         return 'ceph-%s@%s' % (fsid, daemon_type)
 
 
-def get_unit_name_by_daemon_name(ctx: CephadmContext, fsid, name):
+def get_unit_name_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -> str:
     daemon = get_daemon_description(ctx, fsid, name)
     try:
         return daemon['systemd_unit']
@@ -2060,11 +2087,22 @@ def check_units(ctx, units, enabler=None):
     return False
 
 
-def is_container_running(ctx: CephadmContext, name: str) -> bool:
-    out, err, ret = call_throws(ctx, [
-        ctx.container_engine.path, 'ps',
-        '--format', '{{.Names}}'])
-    return name in out
+def is_container_running(ctx: CephadmContext, c: 'CephContainer') -> bool:
+    if ctx.name.split('.', 1)[0] in ['agent', 'cephadm-exporter']:
+        # these are non-containerized daemon types
+        return False
+    return bool(get_running_container_name(ctx, c))
+
+
+def get_running_container_name(ctx: CephadmContext, c: 'CephContainer') -> Optional[str]:
+    for name in [c.cname, c.old_cname]:
+        out, err, ret = call(ctx, [
+            ctx.container_engine.path, 'container', 'inspect',
+            '--format', '{{.State.Status}}', name
+        ])
+        if out.strip() == 'running':
+            return name
+    return None
 
 
 def get_legacy_config_fsid(cluster, legacy_dir=None):
@@ -2101,6 +2139,13 @@ def get_legacy_daemon_fsid(ctx, cluster,
     return fsid
 
 
+def should_log_to_journald(ctx: CephadmContext) -> bool:
+    if ctx.log_to_journald is not None:
+        return ctx.log_to_journald
+    return isinstance(ctx.container_engine, Podman) and \
+        ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION
+
+
 def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
     # type: (CephadmContext, str, str, Union[int, str]) -> List[str]
     r = list()  # type: List[str]
@@ -2110,17 +2155,43 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
             '--setuser', 'ceph',
             '--setgroup', 'ceph',
             '--default-log-to-file=false',
-            '--default-log-to-stderr=true',
-            '--default-log-stderr-prefix=debug ',
         ]
+        log_to_journald = should_log_to_journald(ctx)
+        if log_to_journald:
+            r += [
+                '--default-log-to-journald=true',
+                '--default-log-to-stderr=false',
+            ]
+        else:
+            r += [
+                '--default-log-to-stderr=true',
+                '--default-log-stderr-prefix=debug ',
+            ]
         if daemon_type == 'mon':
             r += [
                 '--default-mon-cluster-log-to-file=false',
-                '--default-mon-cluster-log-to-stderr=true',
             ]
+            if log_to_journald:
+                r += [
+                    '--default-mon-cluster-log-to-journald=true',
+                    '--default-mon-cluster-log-to-stderr=false',
+                ]
+            else:
+                r += ['--default-mon-cluster-log-to-stderr=true']
     elif daemon_type in Monitoring.components:
         metadata = Monitoring.components[daemon_type]
         r += metadata.get('args', list())
+        # set ip and port to bind to for nodeexporter,alertmanager,prometheus
+        if daemon_type != 'grafana':
+            ip = ''
+            port = Monitoring.port_map[daemon_type][0]
+            if 'meta_json' in ctx and ctx.meta_json:
+                meta = json.loads(ctx.meta_json) or {}
+                if 'ip' in meta and meta['ip']:
+                    ip = meta['ip']
+                if 'ports' in meta and meta['ports']:
+                    port = meta['ports'][0]
+            r += [f'--web.listen-address={ip}:{port}']
         if daemon_type == 'alertmanager':
             config = get_parm(ctx.config_json)
             peers = config.get('peers', list())  # type: ignore
@@ -2162,8 +2233,9 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             f.write(keyring)
 
     if daemon_type in Monitoring.components.keys():
-        config_json: Dict[str, Any] = get_parm(ctx.config_json)
-        required_files = Monitoring.components[daemon_type].get('config-json-files', list())
+        config_json: Dict[str, Any] = dict()
+        if 'config_json' in ctx:
+            config_json = get_parm(ctx.config_json)
 
         # Set up directories specific to the monitoring component
         config_dir = ''
@@ -2192,10 +2264,14 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             makedirs(os.path.join(data_dir_root, config_dir, 'data'), uid, gid, 0o755)
 
         # populate the config directory for the component from the config-json
-        for fname in required_files:
-            if 'files' in config_json:  # type: ignore
+        if 'files' in config_json:
+            for fname in config_json['files']:
                 content = dict_get_join(config_json['files'], fname)
-                with open(os.path.join(data_dir_root, config_dir, fname), 'w') as f:
+                if os.path.isabs(fname):
+                    fpath = os.path.join(data_dir_root, fname.lstrip(os.path.sep))
+                else:
+                    fpath = os.path.join(data_dir_root, config_dir, fname)
+                with open(fpath, 'w', encoding='utf-8') as f:
                     os.fchown(f.fileno(), uid, gid)
                     os.fchmod(f.fileno(), 0o600)
                     f.write(content)
@@ -2267,8 +2343,8 @@ def get_config_and_keyring(ctx):
         try:
             with open(ctx.config, 'r') as f:
                 config = f.read()
-        except FileNotFoundError:
-            raise Error('config file: %s does not exist' % ctx.config)
+        except FileNotFoundError as e:
+            raise Error(e)
 
     if 'key' in ctx and ctx.key:
         keyring = '[%s]\n\tkey = %s\n' % (ctx.name, ctx.key)
@@ -2276,8 +2352,8 @@ def get_config_and_keyring(ctx):
         try:
             with open(ctx.keyring, 'r') as f:
                 keyring = f.read()
-        except FileNotFoundError:
-            raise Error('keyring file: %s does not exist' % ctx.keyring)
+        except FileNotFoundError as e:
+            raise Error(e)
 
     return config, keyring
 
@@ -2312,6 +2388,9 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             crash_dir = '/var/lib/ceph/%s/crash' % fsid
             if os.path.exists(crash_dir):
                 mounts[crash_dir] = '/var/lib/ceph/crash:z'
+            if daemon_type != 'crash' and should_log_to_journald(ctx):
+                journald_sock_dir = '/run/systemd/journal'
+                mounts[journald_sock_dir] = journald_sock_dir
 
     if daemon_type in Ceph.daemons and daemon_id:
         data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
@@ -2327,25 +2406,27 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             # these do not search for their keyrings in a data directory
             mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.%s.%s.keyring' % (daemon_type, daemon_id)
 
-    if daemon_type in ['mon', 'osd']:
+    if daemon_type in ['mon', 'osd', 'clusterless-ceph-volume']:
         mounts['/dev'] = '/dev'  # FIXME: narrow this down?
         mounts['/run/udev'] = '/run/udev'
-    if daemon_type == 'osd':
+    if daemon_type in ['osd', 'clusterless-ceph-volume']:
         mounts['/sys'] = '/sys'  # for numa.cc, pick_address, cgroups, ...
+        mounts['/run/lvm'] = '/run/lvm'
+        mounts['/run/lock/lvm'] = '/run/lock/lvm'
+    if daemon_type == 'osd':
         # selinux-policy in the container may not match the host.
         if HostFacts(ctx).selinux_enabled:
             selinux_folder = '/var/lib/ceph/%s/selinux' % fsid
             if not os.path.exists(selinux_folder):
                 os.makedirs(selinux_folder, mode=0o755)
             mounts[selinux_folder] = '/sys/fs/selinux:ro'
-        mounts['/run/lvm'] = '/run/lvm'
-        mounts['/run/lock/lvm'] = '/run/lock/lvm'
 
     try:
         if ctx.shared_ceph_folder:  # make easy manager modules/ceph-volume development
             ceph_folder = pathify(ctx.shared_ceph_folder)
             if os.path.exists(ceph_folder):
                 mounts[ceph_folder + '/src/ceph-volume/ceph_volume'] = '/usr/lib/python3.6/site-packages/ceph_volume'
+                mounts[ceph_folder + '/src/cephadm/cephadm'] = '/usr/sbin/cephadm'
                 mounts[ceph_folder + '/src/pybind/mgr'] = '/usr/share/ceph/mgr'
                 mounts[ceph_folder + '/src/python-common/ceph'] = '/usr/lib/python3.6/site-packages/ceph'
                 mounts[ceph_folder + '/monitoring/grafana/dashboards'] = '/etc/grafana/dashboards/ceph-dashboard'
@@ -2416,6 +2497,8 @@ def get_container(ctx: CephadmContext,
     envs: List[str] = []
     host_network: bool = True
 
+    if daemon_type in Ceph.daemons:
+        envs.append('TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728')
     if container_args is None:
         container_args = []
     if daemon_type in ['mon', 'osd']:
@@ -2444,6 +2527,7 @@ def get_container(ctx: CephadmContext,
         envs.extend(NFSGanesha.get_container_envs())
     elif daemon_type == HAproxy.daemon_type:
         name = '%s.%s' % (daemon_type, daemon_id)
+        container_args.extend(['--user=root'])  # haproxy 2.4 defaults to a different user
     elif daemon_type == Keepalived.daemon_type:
         name = '%s.%s' % (daemon_type, daemon_id)
         envs.extend(Keepalived.get_container_envs())
@@ -2489,15 +2573,16 @@ def get_container(ctx: CephadmContext,
         if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION:
             container_args.append('--cgroups=split')
 
-    return CephContainer(
+    return CephContainer.for_daemon(
         ctx,
-        image=ctx.image,
+        fsid=fsid,
+        daemon_type=daemon_type,
+        daemon_id=str(daemon_id),
         entrypoint=entrypoint,
         args=ceph_args + get_daemon_args(ctx, fsid, daemon_type, daemon_id),
         container_args=container_args,
         volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
         bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
-        cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
         envs=envs,
         privileged=privileged,
         ptrace=ptrace,
@@ -2598,17 +2683,15 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
             config, keyring)
 
     if not reconfig:
-        if daemon_type == CephadmDaemon.daemon_type:
-            port = next(iter(ports), None)  # get first tcp port provided or None
-
+        if daemon_type == CephadmAgent.daemon_type:
             if ctx.config_json == '-':
                 config_js = get_parm('-')
             else:
                 config_js = get_parm(ctx.config_json)
             assert isinstance(config_js, dict)
 
-            cephadm_exporter = CephadmDaemon(ctx, fsid, daemon_id, port)
-            cephadm_exporter.deploy_daemon_unit(config_js)
+            cephadm_agent = CephadmAgent(ctx, fsid, daemon_id)
+            cephadm_agent.deploy_daemon_unit(config_js)
         else:
             if c:
                 deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id,
@@ -2651,6 +2734,7 @@ def _write_container_cmd_to_bash(ctx, file_obj, container, comment=None, backgro
         # unit file, makes it easier to read and grok.
         file_obj.write('# ' + comment + '\n')
     # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
+    file_obj.write('! ' + ' '.join(container.rm_cmd(old_cname=True)) + ' 2> /dev/null\n')
     file_obj.write('! ' + ' '.join(container.rm_cmd()) + ' 2> /dev/null\n')
     # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
     if isinstance(ctx.container_engine, Podman):
@@ -2658,11 +2742,40 @@ def _write_container_cmd_to_bash(ctx, file_obj, container, comment=None, backgro
             '! '
             + ' '.join([shlex.quote(a) for a in container.rm_cmd(storage=True)])
             + ' 2> /dev/null\n')
+        file_obj.write(
+            '! '
+            + ' '.join([shlex.quote(a) for a in container.rm_cmd(old_cname=True, storage=True)])
+            + ' 2> /dev/null\n')
 
     # container run command
     file_obj.write(
         ' '.join([shlex.quote(a) for a in container.run_cmd()])
         + (' &' if background else '') + '\n')
+
+
+def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str) -> None:
+    # systemd may fail to cleanup cgroups from previous stopped unit, which will cause next "systemctl start" to fail.
+    # see https://tracker.ceph.com/issues/50998
+
+    CGROUPV2_PATH = Path('/sys/fs/cgroup')
+    if not (CGROUPV2_PATH / 'system.slice').exists():
+        # Only unified cgroup is affected, skip if not the case
+        return
+
+    slice_name = 'system-ceph\\x2d{}.slice'.format(fsid.replace('-', '\\x2d'))
+    cg_path = CGROUPV2_PATH / 'system.slice' / slice_name / f'{unit_name}.service'
+    if not cg_path.exists():
+        return
+
+    def cg_trim(path: Path) -> None:
+        for p in path.iterdir():
+            if p.is_dir():
+                cg_trim(p)
+        path.rmdir()
+    try:
+        cg_trim(cg_path)
+    except OSError:
+        logger.warning(f'Failed to trim old cgroups {cg_path}')
 
 
 def deploy_daemon_units(
@@ -2681,7 +2794,7 @@ def deploy_daemon_units(
     # cmd
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     with open(data_dir + '/unit.run.new', 'w') as f, \
-         open(data_dir + '/unit.meta.new', 'w') as metaf:
+            open(data_dir + '/unit.meta.new', 'w') as metaf:
         f.write('set -e\n')
 
         if daemon_type in Ceph.daemons:
@@ -2717,18 +2830,11 @@ def deploy_daemon_units(
                     memory_limit=ctx.memory_limit,
                 )
                 _write_container_cmd_to_bash(ctx, f, prestart, 'LVM OSDs use ceph-volume lvm activate')
-        elif daemon_type == NFSGanesha.daemon_type:
-            # add nfs to the rados grace db
-            nfs_ganesha = NFSGanesha.init(ctx, fsid, daemon_id)
-            prestart = nfs_ganesha.get_rados_grace_container('add')
-            _write_container_cmd_to_bash(ctx, f, prestart, 'add daemon to rados grace')
         elif daemon_type == CephIscsi.daemon_type:
             f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
             ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
             tcmu_container = ceph_iscsi.get_tcmu_runner_container()
-            _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runnter container', background=True)
-        elif daemon_type == Keepalived.daemon_type:
-            f.write(Keepalived.get_prestart())
+            _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runner container', background=True)
 
         _write_container_cmd_to_bash(ctx, f, c, '%s.%s' % (daemon_type, str(daemon_id)))
 
@@ -2770,11 +2876,6 @@ def deploy_daemon_units(
                                                     daemon_id),
             )
             _write_container_cmd_to_bash(ctx, f, poststop, 'deactivate osd')
-        elif daemon_type == NFSGanesha.daemon_type:
-            # remove nfs from the rados grace db
-            nfs_ganesha = NFSGanesha.init(ctx, fsid, daemon_id)
-            poststop = nfs_ganesha.get_rados_grace_container('remove')
-            _write_container_cmd_to_bash(ctx, f, poststop, 'remove daemon from rados grace')
         elif daemon_type == CephIscsi.daemon_type:
             # make sure we also stop the tcmu container
             ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
@@ -2785,12 +2886,24 @@ def deploy_daemon_units(
         os.rename(data_dir + '/unit.poststop.new',
                   data_dir + '/unit.poststop')
 
+    # post-stop command(s)
+    with open(data_dir + '/unit.stop.new', 'w') as f:
+        f.write('! ' + ' '.join(c.stop_cmd()) + '\n')
+        f.write('! ' + ' '.join(c.stop_cmd(old_cname=True)) + '\n')
+
+        os.fchmod(f.fileno(), 0o600)
+        os.rename(data_dir + '/unit.stop.new',
+                  data_dir + '/unit.stop')
+
     if c:
         with open(data_dir + '/unit.image.new', 'w') as f:
             f.write(c.image + '\n')
             os.fchmod(f.fileno(), 0o600)
             os.rename(data_dir + '/unit.image.new',
                       data_dir + '/unit.image')
+
+    # sysctl
+    install_sysctl(ctx, fsid, daemon_type)
 
     # systemd
     install_base_units(ctx, fsid)
@@ -2810,6 +2923,7 @@ def deploy_daemon_units(
     if enable:
         call_throws(ctx, ['systemctl', 'enable', unit_name])
     if start:
+        clean_cgroup(ctx, fsid, unit_name)
         call_throws(ctx, ['systemctl', 'start', unit_name])
 
 
@@ -2922,16 +3036,39 @@ class Firewalld(object):
 def update_firewalld(ctx, daemon_type):
     # type: (CephadmContext, str) -> None
     firewall = Firewalld(ctx)
-
     firewall.enable_service_for(daemon_type)
-
-    fw_ports = []
-
-    if daemon_type in Monitoring.port_map.keys():
-        fw_ports.extend(Monitoring.port_map[daemon_type])  # prometheus etc
-
-    firewall.open_ports(fw_ports)
     firewall.apply_rules()
+
+
+def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
+    """
+    Set up sysctl settings
+    """
+    def _write(conf: Path, lines: List[str]) -> None:
+        lines = [
+            '# created by cephadm',
+            '',
+            *lines,
+            '',
+        ]
+        with open(conf, 'w') as f:
+            f.write('\n'.join(lines))
+
+    conf = Path(ctx.sysctl_dir).joinpath(f'90-ceph-{fsid}-{daemon_type}.conf')
+    lines: Optional[List] = None
+
+    if daemon_type == 'osd':
+        lines = OSD.get_sysctl_settings()
+    elif daemon_type == 'haproxy':
+        lines = HAproxy.get_sysctl_settings()
+    elif daemon_type == 'keepalived':
+        lines = Keepalived.get_sysctl_settings()
+
+    # apply the sysctl settings
+    if lines:
+        Path(ctx.sysctl_dir).mkdir(mode=0o755, exist_ok=True)
+        _write(conf, lines)
+        call_throws(ctx, ['sysctl', '--system'])
 
 
 def install_base_units(ctx, fsid):
@@ -3036,7 +3173,7 @@ LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/environment
 ExecStart=/bin/bash {data_dir}/{fsid}/%i/unit.run
-ExecStop=-{container_path} stop ceph-{fsid}-%i
+ExecStop=-/bin/bash -c '{container_path} stop ceph-{fsid}-%i ; bash {data_dir}/{fsid}/%i/unit.stop'
 ExecStopPost=-/bin/bash {data_dir}/{fsid}/%i/unit.poststop
 KillMode=none
 Restart=on-failure
@@ -3084,7 +3221,7 @@ class CephContainer:
         self.entrypoint = entrypoint
         self.args = args
         self.volume_mounts = volume_mounts
-        self.cname = cname
+        self._cname = cname
         self.container_args = container_args
         self.envs = envs
         self.privileged = privileged
@@ -3095,19 +3232,86 @@ class CephContainer:
         self.memory_request = memory_request
         self.memory_limit = memory_limit
 
+    @classmethod
+    def for_daemon(cls,
+                   ctx: CephadmContext,
+                   fsid: str,
+                   daemon_type: str,
+                   daemon_id: str,
+                   entrypoint: str,
+                   args: List[str] = [],
+                   volume_mounts: Dict[str, str] = {},
+                   container_args: List[str] = [],
+                   envs: Optional[List[str]] = None,
+                   privileged: bool = False,
+                   ptrace: bool = False,
+                   bind_mounts: Optional[List[List[str]]] = None,
+                   init: Optional[bool] = None,
+                   host_network: bool = True,
+                   memory_request: Optional[str] = None,
+                   memory_limit: Optional[str] = None,
+                   ) -> 'CephContainer':
+        return cls(
+            ctx,
+            image=ctx.image,
+            entrypoint=entrypoint,
+            args=args,
+            volume_mounts=volume_mounts,
+            cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
+            container_args=container_args,
+            envs=envs,
+            privileged=privileged,
+            ptrace=ptrace,
+            bind_mounts=bind_mounts,
+            init=init,
+            host_network=host_network,
+            memory_request=memory_request,
+            memory_limit=memory_limit,
+        )
+
+    @property
+    def cname(self) -> str:
+        """
+        podman adds the current container name to the /etc/hosts
+        file. Turns out, python's `socket.getfqdn()` differs from
+        `hostname -f`, when we have the container names containing
+        dots in it.:
+
+        # podman run --name foo.bar.baz.com ceph/ceph /bin/bash
+        [root@sebastians-laptop /]# cat /etc/hosts
+        127.0.0.1   localhost
+        ::1         localhost
+        127.0.1.1   sebastians-laptop foo.bar.baz.com
+        [root@sebastians-laptop /]# hostname -f
+        sebastians-laptop
+        [root@sebastians-laptop /]# python3 -c 'import socket; print(socket.getfqdn())'
+        foo.bar.baz.com
+
+        Fascinatingly, this doesn't happen when using dashes.
+        """
+        return self._cname.replace('.', '-')
+
+    @cname.setter
+    def cname(self, val: str) -> None:
+        self._cname = val
+
+    @property
+    def old_cname(self) -> str:
+        return self._cname
+
     def run_cmd(self) -> List[str]:
         cmd_args: List[str] = [
             str(self.ctx.container_engine.path),
             'run',
             '--rm',
             '--ipc=host',
+            # some containers (ahem, haproxy) override this, but we want a fast
+            # shutdown always (and, more importantly, a successful exit even if we
+            # fall back to SIGKILL).
+            '--stop-signal=SIGTERM',
         ]
 
         if isinstance(self.ctx.container_engine, Podman):
-            # podman adds the container *name* to /etc/hosts (for 127.0.1.1)
-            # by default, which makes python's socket.getfqdn() return that
-            # instead of a valid hostname.
-            cmd_args.append('--no-hosts')
             if os.path.exists('/etc/ceph/podman-auth.json'):
                 cmd_args.append('--authfile=/etc/ceph/podman-auth.json')
 
@@ -3174,6 +3378,8 @@ class CephContainer:
 
         if self.host_network:
             cmd_args.append('--net=host')
+        if self.ctx.no_hosts:
+            cmd_args.append('--no-hosts')
         if self.privileged:
             cmd_args.extend([
                 '--privileged',
@@ -3200,6 +3406,9 @@ class CephContainer:
 
     def exec_cmd(self, cmd):
         # type: (List[str]) -> List[str]
+        cname = get_running_container_name(self.ctx, self)
+        if not cname:
+            raise Error('unable to find container "{}"'.format(self.cname))
         return [
             str(self.ctx.container_engine.path),
             'exec',
@@ -3207,22 +3416,23 @@ class CephContainer:
             self.cname,
         ] + cmd
 
-    def rm_cmd(self, storage=False):
-        # type: (bool) -> List[str]
+    def rm_cmd(self, old_cname: bool = False, storage: bool = False) -> List[str]:
         ret = [
             str(self.ctx.container_engine.path),
             'rm', '-f',
         ]
         if storage:
             ret.append('--storage')
-        ret.append(self.cname)
+        if old_cname:
+            ret.append(self.old_cname)
+        else:
+            ret.append(self.cname)
         return ret
 
-    def stop_cmd(self):
-        # type () -> List[str]
+    def stop_cmd(self, old_cname: bool = False) -> List[str]:
         ret = [
             str(self.ctx.container_engine.path),
-            'stop', self.cname,
+            'stop', self.old_cname if old_cname else self.cname,
         ]
         return ret
 
@@ -3231,6 +3441,270 @@ class CephContainer:
         out, _, _ = call_throws(self.ctx, self.run_cmd(),
                                 desc=self.entrypoint, timeout=timeout)
         return out
+
+
+#####################################
+
+class MgrListener(Thread):
+    def __init__(self, agent: 'CephadmAgent') -> None:
+        self.agent = agent
+        self.stop = False
+        super(MgrListener, self).__init__(target=self.run)
+
+    def run(self) -> None:
+        listenSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listenSocket.bind(('0.0.0.0', int(self.agent.listener_port)))
+        listenSocket.settimeout(60)
+        listenSocket.listen(1)
+        ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        ssl_ctx.load_cert_chain(self.agent.listener_cert_path, self.agent.listener_key_path)
+        ssl_ctx.load_verify_locations(self.agent.ca_path)
+        secureListenSocket = ssl_ctx.wrap_socket(listenSocket, server_side=True)
+        while not self.stop:
+            try:
+                try:
+                    conn, _ = secureListenSocket.accept()
+                except socket.timeout:
+                    continue
+                try:
+                    length: int = int(conn.recv(10).decode())
+                except Exception as e:
+                    err_str = f'Failed to extract length of payload from message: {e}'
+                    conn.send(err_str.encode())
+                    logger.error(err_str)
+                while True:
+                    payload = conn.recv(length).decode()
+                    if not payload:
+                        break
+                    try:
+                        data: Dict[Any, Any] = json.loads(payload)
+                        self.handle_json_payload(data)
+                    except Exception as e:
+                        err_str = f'Failed to extract json payload from message: {e}'
+                        conn.send(err_str.encode())
+                        logger.error(err_str)
+                    else:
+                        conn.send(b'ACK')
+                        self.agent.wakeup()
+                        logger.debug(f'Got mgr message {data}')
+            except Exception as e:
+                logger.error(f'Mgr Listener encountered exception: {e}')
+
+    def shutdown(self) -> None:
+        self.stop = True
+
+    def handle_json_payload(self, data: Dict[Any, Any]) -> None:
+        self.agent.ack = int(data['counter'])
+
+
+class CephadmAgent():
+
+    daemon_type = 'agent'
+    default_port = 8498
+    loop_interval = 30
+    stop = False
+
+    required_files = ['agent.json', 'keyring']
+
+    def __init__(self, ctx: CephadmContext, fsid: str, daemon_id: Union[int, str] = ''):
+        self.ctx = ctx
+        self.fsid = fsid
+        self.daemon_id = daemon_id
+        self.target_ip = ''
+        self.target_port = ''
+        self.host = ''
+        self.daemon_dir = os.path.join(ctx.data_dir, self.fsid, f'{self.daemon_type}.{self.daemon_id}')
+        self.config_path = os.path.join(self.daemon_dir, 'agent.json')
+        self.keyring_path = os.path.join(self.daemon_dir, 'keyring')
+        self.ca_path = os.path.join(self.daemon_dir, 'root_cert.pem')
+        self.listener_cert_path = os.path.join(self.daemon_dir, 'listener.crt')
+        self.listener_key_path = os.path.join(self.daemon_dir, 'listener.key')
+        self.listener_port = ''
+        self.ack = -1
+        self.event = Event()
+        self.mgr_listener = MgrListener(self)
+        self.device_enhanced_scan = False
+        self.recent_iteration_run_times: List[float] = [0.0, 0.0, 0.0]
+        self.recent_iteration_index: int = 0
+
+    def deploy_daemon_unit(self, config: Dict[str, str] = {}) -> None:
+        if not config:
+            raise Error('Agent needs a config')
+        assert isinstance(config, dict)
+
+        # Create the required config files in the daemons dir, with restricted permissions
+        for filename in config:
+            with open(os.path.join(self.daemon_dir, filename), 'w') as f:
+                f.write(config[filename])
+
+        with open(os.path.join(self.daemon_dir, 'unit.run'), 'w') as f:
+            f.write(self.unit_run())
+
+        unit_file_path = os.path.join(self.ctx.unit_dir, self.unit_name())
+        with open(unit_file_path + '.new', 'w') as f:
+            f.write(self.unit_file())
+            os.rename(unit_file_path + '.new', unit_file_path)
+
+        call_throws(self.ctx, ['systemctl', 'daemon-reload'])
+        call(self.ctx, ['systemctl', 'stop', self.unit_name()],
+             verbosity=CallVerbosity.DEBUG)
+        call(self.ctx, ['systemctl', 'reset-failed', self.unit_name()],
+             verbosity=CallVerbosity.DEBUG)
+        call_throws(self.ctx, ['systemctl', 'enable', '--now', self.unit_name()])
+
+    def unit_name(self) -> str:
+        return '{}.service'.format(get_unit_name(self.fsid, self.daemon_type, self.daemon_id))
+
+    def unit_run(self) -> str:
+        py3 = shutil.which('python3')
+        binary_path = os.path.realpath(sys.argv[0])
+        return ('set -e\n' + f'{py3} {binary_path} agent --fsid {self.fsid} --daemon-id {self.daemon_id} &\n')
+
+    def unit_file(self) -> str:
+        return """#generated by cephadm
+[Unit]
+Description=cephadm agent for cluster {fsid}
+
+PartOf=ceph-{fsid}.target
+Before=ceph-{fsid}.target
+
+[Service]
+Type=forking
+ExecStart=/bin/bash {data_dir}/unit.run
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=ceph-{fsid}.target
+""".format(
+            fsid=self.fsid,
+            data_dir=self.daemon_dir
+        )
+
+    def shutdown(self) -> None:
+        self.stop = True
+        if self.mgr_listener.is_alive():
+            self.mgr_listener.shutdown()
+
+    def wakeup(self) -> None:
+        self.event.set()
+
+    def run(self) -> None:
+        try:
+            with open(self.config_path, 'r') as f:
+                config = json.load(f)
+                self.target_ip = config['target_ip']
+                self.target_port = config['target_port']
+                self.loop_interval = int(config['refresh_period'])
+                starting_port = int(config['listener_port'])
+                self.host = config['host']
+                use_lsm = config['device_enhanced_scan']
+        except Exception as e:
+            self.shutdown()
+            raise Error(f'Failed to get agent target ip and port from config: {e}')
+
+        try:
+            with open(self.keyring_path, 'r') as f:
+                self.keyring = f.read()
+        except Exception as e:
+            self.shutdown()
+            raise Error(f'Failed to get agent keyring: {e}')
+
+        assert self.target_ip and self.target_port
+
+        self.device_enhanced_scan = False
+        if use_lsm.lower() == 'true':
+            self.device_enhanced_scan = True
+
+        try:
+            for _ in range(1001):
+                if not port_in_use(self.ctx, starting_port):
+                    self.listener_port = str(starting_port)
+                    break
+                starting_port += 1
+            if not self.listener_port:
+                raise Error(f'All 1000 ports starting at {str(starting_port - 1001)} taken.')
+        except Exception as e:
+            raise Error(f'Failed to pick port for agent to listen on: {e}')
+
+        if not self.mgr_listener.is_alive():
+            self.mgr_listener.start()
+
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = True
+        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        ssl_ctx.load_verify_locations(self.ca_path)
+
+        while not self.stop:
+            start_time = time.monotonic()
+            ack = self.ack
+            try:
+                volume = self._ceph_volume(self.device_enhanced_scan)
+            except Exception as e:
+                logger.error(f'Failed to get ceph-volume metadata: {e}')
+                volume = ''
+
+            # part of the networks info is returned as a set which is not JSON
+            # serializable. The set must be converted to a list
+            networks = list_networks(self.ctx)
+            networks_list = {}
+            for key in networks.keys():
+                for k, v in networks[key].items():
+                    networks_list[key] = {k: list(v)}
+
+            data = json.dumps({'host': self.host,
+                              'ls': list_daemons(self.ctx),
+                               'networks': networks_list,
+                               'facts': HostFacts(self.ctx).dump(),
+                               'volume': volume,
+                               'ack': str(ack),
+                               'keyring': self.keyring,
+                               'port': self.listener_port})
+            data = data.encode('ascii')
+
+            url = f'https://{self.target_ip}:{self.target_port}/data'
+            try:
+                req = Request(url, data, {'Content-Type': 'application/json'})
+                urlopen(req, context=ssl_ctx)
+            except Exception as e:
+                logger.error(f'Failed to send metadata to mgr: {e}')
+
+            end_time = time.monotonic()
+            run_time = datetime.timedelta(seconds=(end_time - start_time))
+            self.recent_iteration_run_times[self.recent_iteration_index] = run_time.total_seconds()
+            self.recent_iteration_index = (self.recent_iteration_index + 1) % 3
+            run_time_average = sum(self.recent_iteration_run_times, 0.0) / len([t for t in self.recent_iteration_run_times if t])
+
+            self.event.wait(max(self.loop_interval - int(run_time_average), 0))
+            self.event.clear()
+
+    def _ceph_volume(self, enhanced: bool = False) -> str:
+        self.ctx.command = 'inventory --format=json'.split()
+        if enhanced:
+            self.ctx.command.append('--with-lsm')
+        self.ctx.fsid = self.fsid
+
+        stream = io.StringIO()
+        with redirect_stdout(stream):
+            command_ceph_volume(self.ctx)
+
+        stdout = stream.getvalue()
+
+        if stdout:
+            return stdout
+        else:
+            raise Exception('ceph-volume returned empty value')
+
+
+def command_agent(ctx: CephadmContext) -> None:
+    agent = CephadmAgent(ctx, ctx.fsid, ctx.daemon_id)
+
+    if not os.path.isdir(agent.daemon_dir):
+        raise Error(f'Agent daemon directory {agent.daemon_dir} does not exist. Perhaps agent was never deployed?')
+
+    agent.run()
+
 
 ##################################
 
@@ -3276,12 +3750,12 @@ def _pull_image(ctx, image):
             return
 
         if not any(pattern in err for pattern in ignorelist):
-            raise RuntimeError('Failed command: %s' % cmd_str)
+            raise Error('Failed command: %s' % cmd_str)
 
         logger.info('`%s` failed transiently. Retrying. waiting %s seconds...' % (cmd_str, sleep_secs))
         time.sleep(sleep_secs)
 
-    raise RuntimeError('Failed command: %s: maximum retries reached' % cmd_str)
+    raise Error('Failed command: %s: maximum retries reached' % cmd_str)
 
 ##################################
 
@@ -3304,7 +3778,7 @@ def command_inspect_image(ctx):
     return 0
 
 
-def normalize_image_digest(digest):
+def normalize_image_digest(digest: str) -> str:
     # normal case:
     #   ceph/ceph -> docker.io/ceph/ceph
     # edge cases that shouldn't ever come up:
@@ -3313,7 +3787,7 @@ def normalize_image_digest(digest):
     #   quay.ceph.io/ceph/ceph -> ceph
     #   docker.io/ubuntu -> no change
     bits = digest.split('/')
-    if '.' not in bits[0] or len(bits) < 3:
+    if '.' not in bits[0] and len(bits) < 3:
         digest = DEFAULT_REGISTRY + '/' + digest
     return digest
 
@@ -3327,7 +3801,7 @@ def get_image_info_from_inspect(out, image):
         'image_id': normalize_container_id(image_id)
     }  # type: Dict[str, Union[str,List[str]]]
     if digests:
-        r['repo_digests'] = list(map(normalize_image_digest, digests[1:-1].split(' ')))
+        r['repo_digests'] = list(map(normalize_image_digest, digests[1: -1].split(' ')))
     return r
 
 ##################################
@@ -3363,7 +3837,7 @@ def check_subnet(subnets: str) -> Tuple[int, List[int], str]:
 def unwrap_ipv6(address):
     # type: (str) -> str
     if address.startswith('[') and address.endswith(']'):
-        return address[1:-1]
+        return address[1: -1]
     return address
 
 
@@ -3405,7 +3879,8 @@ def prepare_mon_addresses(
             ctx.mon_ip = wrap_ipv6(ctx.mon_ip)
         hasport = r.findall(ctx.mon_ip)
         if hasport:
-            port = int(hasport[0])
+            port_str = hasport[0]
+            port = int(port_str)
             if port == 6789:
                 addr_arg = '[v1:%s]' % ctx.mon_ip
             elif port == 3300:
@@ -3414,7 +3889,7 @@ def prepare_mon_addresses(
                 logger.warning('Using msgr2 protocol for unrecognized port %d' %
                                port)
                 addr_arg = '[v2:%s]' % ctx.mon_ip
-            base_ip = ctx.mon_ip[0:-(len(str(port))) - 1]
+            base_ip = ctx.mon_ip[0:-(len(port_str)) - 1]
             check_ip_port(ctx, base_ip, port)
         else:
             base_ip = ctx.mon_ip
@@ -3427,15 +3902,16 @@ def prepare_mon_addresses(
             raise Error('--mon-addrv value %s must use square backets' %
                         addr_arg)
         ipv6 = addr_arg.count('[') > 1
-        for addr in addr_arg[1:-1].split(','):
+        for addr in addr_arg[1: -1].split(','):
             hasport = r.findall(addr)
             if not hasport:
                 raise Error('--mon-addrv value %s must include port number' %
                             addr_arg)
-            port = int(hasport[0])
+            port_str = hasport[0]
+            port = int(port_str)
             # strip off v1: or v2: prefix
-            addr = re.sub(r'^\w+:', '', addr)
-            base_ip = addr[0:-(len(str(port))) - 1]
+            addr = re.sub(r'^v\d+:', '', addr)
+            base_ip = addr[0:-(len(port_str)) - 1]
             check_ip_port(ctx, base_ip, port)
     else:
         raise Error('must specify --mon-ip or --mon-addrv')
@@ -3445,19 +3921,21 @@ def prepare_mon_addresses(
     if not ctx.skip_mon_network:
         # make sure IP is configured locally, and then figure out the
         # CIDR network
+        errmsg = f'Cannot infer CIDR network for mon IP `{base_ip}`'
         for net, ifaces in list_networks(ctx).items():
             ips: List[str] = []
             for iface, ls in ifaces.items():
                 ips.extend(ls)
-            if ipaddress.ip_address(unwrap_ipv6(base_ip)) in \
-                    [ipaddress.ip_address(ip) for ip in ips]:
-                mon_network = net
-                logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
-                                                                 mon_network))
-                break
+            try:
+                if ipaddress.ip_address(unwrap_ipv6(base_ip)) in \
+                        [ipaddress.ip_address(ip) for ip in ips]:
+                    mon_network = net
+                    logger.info(f'Mon IP `{base_ip}` is in CIDR network `{mon_network}`')
+                    break
+            except ValueError as e:
+                logger.warning(f'{errmsg}: {e}')
         if not mon_network:
-            raise Error('Failed to infer CIDR network for mon ip %s; pass '
-                        '--skip-mon-network to configure it later' % base_ip)
+            raise Error(f'{errmsg}: pass --skip-mon-network to configure it later')
 
     return (addr_arg, ipv6, mon_network)
 
@@ -3572,7 +4050,7 @@ def prepare_create_mon(
     fsid: str, mon_id: str,
     bootstrap_keyring_path: str,
     monmap_path: str
-):
+) -> Tuple[str, str]:
     logger.info('Creating mon...')
     create_daemon_dirs(ctx, fsid, 'mon', mon_id, uid, gid)
     mon_dir = get_data_dir(fsid, ctx.data_dir, 'mon', mon_id)
@@ -3615,7 +4093,7 @@ def wait_for_mon(
     ctx: CephadmContext,
     mon_id: str, mon_dir: str,
     admin_keyring_path: str, config_path: str
-):
+) -> None:
     logger.info('Waiting for mon to start...')
     c = CephContainer(
         ctx,
@@ -3738,7 +4216,7 @@ def prepare_ssh(
     try:
         args = ['orch', 'host', 'add', host]
         if ctx.mon_ip:
-            args.append(ctx.mon_ip)
+            args.append(unwrap_ipv6(ctx.mon_ip))
         cli(args)
     except RuntimeError as e:
         raise Error('Failed to add host <%s>: %s' % (host, e))
@@ -3756,8 +4234,6 @@ def prepare_ssh(
         cli(['orch', 'apply', 'crash'])
 
     if not ctx.skip_monitoring_stack:
-        logger.info('Enabling mgr prometheus module...')
-        cli(['mgr', 'module', 'enable', 'prometheus'])
         for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
             logger.info('Deploying %s service with default placement...' % t)
             cli(['orch', 'apply', t])
@@ -3870,6 +4346,13 @@ def prepare_bootstrap_config(
                 and not cp.has_option('mgr', 'mgr standby modules')
         ):
             cp.set('mgr', 'mgr_standby_modules', 'false')
+    if ctx.log_to_file:
+        cp.set('global', 'log_to_file', 'true')
+        cp.set('global', 'log_to_stderr', 'false')
+        cp.set('global', 'log_to_journald', 'false')
+        cp.set('global', 'mon_cluster_log_to_file', 'true')
+        cp.set('global', 'mon_cluster_log_to_stderr', 'false')
+        cp.set('global', 'mon_cluster_log_to_journald', 'false')
 
     cpf = StringIO()
     cp.write(cpf)
@@ -3963,6 +4446,8 @@ def command_bootstrap(ctx):
             except PermissionError:
                 raise Error(f'Unable to create {dirname} due to permissions failure. Retry with root, or sudo or preallocate the directory.')
 
+    (user_conf, _) = get_config_and_keyring(ctx)
+
     if not ctx.skip_prepare_host:
         command_prepare_host(ctx)
     else:
@@ -3970,12 +4455,15 @@ def command_bootstrap(ctx):
 
     # initial vars
     fsid = ctx.fsid or make_fsid()
+    if not is_fsid(fsid):
+        raise Error('not an fsid: %s' % fsid)
+    logger.info('Cluster fsid: %s' % fsid)
+
     hostname = get_hostname()
     if '.' in hostname and not ctx.allow_fqdn_hostname:
         raise Error('hostname is a fully qualified domain name (%s); either fix (e.g., "sudo hostname %s" or similar) or pass --allow-fqdn-hostname' % (hostname, hostname.split('.')[0]))
     mon_id = ctx.mon_id or hostname
     mgr_id = ctx.mgr_id or generate_service_id()
-    logger.info('Cluster fsid: %s' % fsid)
 
     lock = FileLock(ctx, fsid)
     lock.acquire()
@@ -3990,26 +4478,25 @@ def command_bootstrap(ctx):
 
     image_ver = CephContainer(ctx, ctx.image, 'ceph', ['--version']).run().strip()
     logger.info(f'Ceph version: {image_ver}')
-    image_release = image_ver.split()[4]
-    if (
-        not ctx.allow_mismatched_release
-        and image_release not in [DEFAULT_IMAGE_RELEASE, LATEST_STABLE_RELEASE]
-    ):
-        raise Error(
-            f'Container release {image_release} != cephadm release {DEFAULT_IMAGE_RELEASE}; please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
-        )
+
+    if not ctx.allow_mismatched_release:
+        image_release = image_ver.split()[4]
+        if image_release not in \
+                [DEFAULT_IMAGE_RELEASE, LATEST_STABLE_RELEASE]:
+            raise Error(
+                f'Container release {image_release} != cephadm release {DEFAULT_IMAGE_RELEASE};'
+                ' please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
+            )
 
     logger.info('Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid(ctx)
 
     # create some initial keys
-    (mon_key, mgr_key, admin_key, bootstrap_keyring, admin_keyring) = \
-        create_initial_keys(ctx, uid, gid, mgr_id)
+    (mon_key, mgr_key, admin_key, bootstrap_keyring, admin_keyring) = create_initial_keys(ctx, uid, gid, mgr_id)
 
     monmap = create_initial_monmap(ctx, uid, gid, fsid, mon_id, addr_arg)
-    (mon_dir, log_dir) = \
-        prepare_create_mon(ctx, uid, gid, fsid, mon_id,
-                           bootstrap_keyring.name, monmap.name)
+    (mon_dir, log_dir) = prepare_create_mon(ctx, uid, gid, fsid, mon_id,
+                                            bootstrap_keyring.name, monmap.name)
 
     with open(mon_dir + '/config', 'w') as f:
         os.fchown(f.fileno(), uid, gid)
@@ -4057,17 +4544,21 @@ def command_bootstrap(ctx):
     # create mgr
     create_mgr(ctx, uid, gid, fsid, mgr_id, mgr_key, config, cli)
 
-    def json_loads_retry(cli_func):
-        for sleep_secs in [1, 4, 4]:
-            try:
-                return json.loads(cli_func())
-            except json.JSONDecodeError:
-                logger.debug('Invalid JSON. Retrying in %s seconds...' % sleep_secs)
-                time.sleep(sleep_secs)
-        return json.loads(cli_func())
+    if user_conf:
+        # user given config settings were already assimilated earlier
+        # but if the given settings contained any attributes in
+        # the mgr (e.g. mgr/cephadm/container_image_prometheus)
+        # they don't seem to be stored if there isn't a mgr yet.
+        # Since re-assimilating the same conf settings should be
+        # idempotent we can just do it again here.
+        with tempfile.NamedTemporaryFile(buffering=0) as tmp:
+            tmp.write(user_conf.encode('utf-8'))
+            cli(['config', 'assimilate-conf',
+                 '-i', '/var/lib/ceph/user.conf'],
+                {tmp.name: '/var/lib/ceph/user.conf:z'})
 
     # wait for mgr to restart (after enabling a module)
-    def wait_for_mgr_restart():
+    def wait_for_mgr_restart() -> None:
         # first get latest mgrmap epoch from the mon.  try newer 'mgr
         # stat' command first, then fall back to 'mgr dump' if
         # necessary
@@ -4104,29 +4595,16 @@ def command_bootstrap(ctx):
 
     cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
 
-    if ctx.with_exporter:
-        cli(['config-key', 'set', 'mgr/cephadm/exporter_enabled', 'true'])
-        if ctx.exporter_config:
-            logger.info('Applying custom cephadm exporter settings')
-            # validated within the parser, so we can just apply to the store
-            with tempfile.NamedTemporaryFile(buffering=0) as tmp:
-                tmp.write(json.dumps(ctx.exporter_config).encode('utf-8'))
-                mounts = {
-                    tmp.name: '/tmp/exporter-config.json:z'
-                }
-                cli(['cephadm', 'set-exporter-config', '-i', '/tmp/exporter-config.json'], extra_mounts=mounts)
-            logger.info('-> Use ceph orch apply cephadm-exporter to deploy')
-        else:
-            # generate a default SSL configuration for the exporter(s)
-            logger.info('Generating a default cephadm exporter configuration (self-signed)')
-            cli(['cephadm', 'generate-exporter-config'])
-        #
-        # deploy the service (commented out until the cephadm changes are in the ceph container build)
-        logger.info('Deploying cephadm exporter service with default placement...')
-        cli(['orch', 'apply', 'cephadm-exporter'])
-
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
+
+    if ctx.output_config == '/etc/ceph/ceph.conf' and not ctx.skip_admin_label:
+        logger.info('Enabling client.admin keyring and conf on hosts with "admin" label')
+        try:
+            cli(['orch', 'client-keyring', 'set', 'client.admin', 'label:_admin'])
+            cli(['orch', 'host', 'label', 'add', get_hostname(), '_admin'])
+        except Exception:
+            logger.info('Unable to set up "admin" label; assuming older version of Ceph')
 
     if ctx.apply_spec:
         logger.info('Applying %s to cluster' % ctx.apply_spec)
@@ -4145,7 +4623,7 @@ def command_bootstrap(ctx):
                         out, err, code = call_throws(ctx, ['sudo', '-u', ctx.ssh_user, 'ssh-copy-id', '-f', '-i', ssh_key, '-o StrictHostKeyChecking=no', '%s@%s' % (ctx.ssh_user, split[1])])
 
         mounts = {}
-        mounts[pathify(ctx.apply_spec)] = '/tmp/spec.yml:z'
+        mounts[pathify(ctx.apply_spec)] = '/tmp/spec.yml:ro'
 
         out = cli(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
         logger.info(out)
@@ -4166,7 +4644,7 @@ def command_bootstrap(ctx):
 ##################################
 
 
-def command_registry_login(ctx: CephadmContext):
+def command_registry_login(ctx: CephadmContext) -> int:
     if ctx.registry_json:
         logger.info('Pulling custom registry login info from %s.' % ctx.registry_json)
         d = get_parm(ctx.registry_json)
@@ -4192,7 +4670,7 @@ def command_registry_login(ctx: CephadmContext):
     return 0
 
 
-def registry_login(ctx: CephadmContext, url, username, password):
+def registry_login(ctx: CephadmContext, url: Optional[str], username: Optional[str], password: Optional[str]) -> None:
     logger.info('Logging into custom registry.')
     try:
         engine = ctx.container_engine
@@ -4239,9 +4717,8 @@ def command_deploy(ctx):
 
     redeploy = False
     unit_name = get_unit_name(ctx.fsid, daemon_type, daemon_id)
-    container_name = 'ceph-%s-%s.%s' % (ctx.fsid, daemon_type, daemon_id)
     (_, state, _) = check_unit(ctx, unit_name)
-    if state == 'running' or is_container_running(ctx, container_name):
+    if state == 'running' or is_container_running(ctx, CephContainer.for_daemon(ctx, ctx.fsid, daemon_type, daemon_id, 'bash')):
         redeploy = True
 
     if ctx.reconfig:
@@ -4276,9 +4753,6 @@ def command_deploy(ctx):
     elif daemon_type in Monitoring.components:
         # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
         # Default Checks
-        if not ctx.reconfig and not redeploy:
-            daemon_ports.extend(Monitoring.port_map[daemon_type])
-
         # make sure provided config-json is sufficient
         config = get_parm(ctx.config_json)  # type: ignore
         required_files = Monitoring.components[daemon_type].get('config-json-files', list())
@@ -4299,8 +4773,8 @@ def command_deploy(ctx):
                       ports=daemon_ports)
 
     elif daemon_type == NFSGanesha.daemon_type:
-        if not ctx.reconfig and not redeploy:
-            daemon_ports.extend(NFSGanesha.port_map.values())
+        if not ctx.reconfig and not redeploy and not daemon_ports:
+            daemon_ports = list(NFSGanesha.port_map.values())
 
         config, keyring = get_config_and_keyring(ctx)
         # TODO: extract ganesha uid/gid (997, 994) ?
@@ -4348,17 +4822,10 @@ def command_deploy(ctx):
                       keyring=None, reconfig=ctx.reconfig,
                       ports=daemon_ports)
 
-    elif daemon_type == CephadmDaemon.daemon_type:
+    elif daemon_type == CephadmAgent.daemon_type:
         # get current user gid and uid
         uid = os.getuid()
         gid = os.getgid()
-        config_js = get_parm(ctx.config_json)  # type: Dict[str, str]
-        if not daemon_ports:
-            logger.info('cephadm-exporter will use default port ({})'.format(CephadmDaemon.default_port))
-            daemon_ports = [CephadmDaemon.default_port]
-
-        CephadmDaemon.validate_config(config_js)
-
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, None,
                       uid, gid, ports=daemon_ports)
 
@@ -4380,24 +4847,16 @@ def command_run(ctx):
 ##################################
 
 
-def fsid_conf_mismatch(ctx):
-    # type: (CephadmContext) -> bool
-    (config, _) = get_config_and_keyring(ctx)
-    if config:
-        for c in config.split('\n'):
-            if 'fsid = ' in c.strip():
-                if 'fsid = ' + ctx.fsid != c.strip():
-                    return True
-    return False
-
-
 @infer_fsid
 @infer_config
 @infer_image
+@validate_fsid
 def command_shell(ctx):
     # type: (CephadmContext) -> int
-    if fsid_conf_mismatch(ctx):
-        raise Error('fsid does not match ceph conf')
+    cp = read_config(ctx.config)
+    if cp.has_option('global', 'fsid') and \
+       cp.get('global', 'fsid') != ctx.fsid:
+        raise Error('fsid does not match ceph.conf')
 
     if ctx.fsid:
         make_log_dir(ctx, ctx.fsid)
@@ -4434,10 +4893,12 @@ def command_shell(ctx):
             mount = pathify(split_src_dst[0])
             filename = os.path.basename(split_src_dst[0])
             if len(split_src_dst) > 1:
-                dst = split_src_dst[1] + ':z' if len(split_src_dst) == 3 else split_src_dst[1]
+                dst = split_src_dst[1]
+                if len(split_src_dst) == 3:
+                    dst = '{}:{}'.format(dst, split_src_dst[2])
                 mounts[mount] = dst
             else:
-                mounts[mount] = '/mnt/{}:z'.format(filename)
+                mounts[mount] = '/mnt/{}'.format(filename)
     if ctx.command:
         command = ctx.command
     else:
@@ -4458,6 +4919,10 @@ def command_shell(ctx):
                             shutil.copyfile(os.path.join('/etc/skel', f),
                                             os.path.join(home, f))
             mounts[home] = '/root'
+
+    for i in ctx.volume:
+        a, b = i.split(':', 1)
+        mounts[a] = b
 
     c = CephContainer(
         ctx,
@@ -4507,8 +4972,14 @@ def command_enter(ctx):
 
 @infer_fsid
 @infer_image
+@validate_fsid
 def command_ceph_volume(ctx):
     # type: (CephadmContext) -> None
+    cp = read_config(ctx.config)
+    if cp.has_option('global', 'fsid') and \
+       cp.get('global', 'fsid') != ctx.fsid:
+        raise Error('fsid does not match ceph.conf')
+
     if ctx.fsid:
         make_log_dir(ctx, ctx.fsid)
 
@@ -4542,8 +5013,8 @@ def command_ceph_volume(ctx):
         privileged=True,
         volume_mounts=mounts,
     )
-    verbosity = CallVerbosity.VERBOSE if ctx.log_output else CallVerbosity.VERBOSE_ON_FAILURE
-    out, err, code = call_throws(ctx, c.run_cmd(), verbosity=verbosity)
+
+    out, err, code = call_throws(ctx, c.run_cmd())
     if not code:
         print(out)
 
@@ -4585,13 +5056,13 @@ def command_logs(ctx):
     # call this directly, without our wrapper, so that we get an unmolested
     # stdout with logger prefixing.
     logger.debug('Running command: %s' % ' '.join(cmd))
-    subprocess.call(cmd)  # type: ignore
+    subprocess.call(cmd, env=os.environ.copy())  # type: ignore
 
 ##################################
 
 
 def list_networks(ctx):
-    # type: (CephadmContext) -> Dict[str,Dict[str,List[str]]]
+    # type: (CephadmContext) -> Dict[str,Dict[str, Set[str]]]
 
     # sadly, 18.04's iproute2 4.15.0-2ubun doesn't support the -j flag,
     # so we'll need to use a regex to parse 'ip' command output.
@@ -4599,13 +5070,12 @@ def list_networks(ctx):
     # out, _, _ = call_throws(['ip', '-j', 'route', 'ls'])
     # j = json.loads(out)
     # for x in j:
-
     res = _list_ipv4_networks(ctx)
     res.update(_list_ipv6_networks(ctx))
     return res
 
 
-def _list_ipv4_networks(ctx: CephadmContext):
+def _list_ipv4_networks(ctx: CephadmContext) -> Dict[str, Dict[str, Set[str]]]:
     execstr: Optional[str] = find_executable('ip')
     if not execstr:
         raise FileNotFoundError("unable to find 'ip' command")
@@ -4613,8 +5083,8 @@ def _list_ipv4_networks(ctx: CephadmContext):
     return _parse_ipv4_route(out)
 
 
-def _parse_ipv4_route(out):
-    r = {}  # type: Dict[str,Dict[str,List[str]]]
+def _parse_ipv4_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
+    r = {}  # type: Dict[str, Dict[str, Set[str]]]
     p = re.compile(r'^(\S+) dev (\S+) (.*)scope link (.*)src (\S+)')
     for line in out.splitlines():
         m = p.findall(line)
@@ -4626,12 +5096,12 @@ def _parse_ipv4_route(out):
         if net not in r:
             r[net] = {}
         if iface not in r[net]:
-            r[net][iface] = []
-        r[net][iface].append(ip)
+            r[net][iface] = set()
+        r[net][iface].add(ip)
     return r
 
 
-def _list_ipv6_networks(ctx: CephadmContext):
+def _list_ipv6_networks(ctx: CephadmContext) -> Dict[str, Dict[str, Set[str]]]:
     execstr: Optional[str] = find_executable('ip')
     if not execstr:
         raise FileNotFoundError("unable to find 'ip' command")
@@ -4640,8 +5110,8 @@ def _list_ipv6_networks(ctx: CephadmContext):
     return _parse_ipv6_route(routes, ips)
 
 
-def _parse_ipv6_route(routes, ips):
-    r = {}  # type: Dict[str,Dict[str,List[str]]]
+def _parse_ipv6_route(routes: str, ips: str) -> Dict[str, Dict[str, Set[str]]]:
+    r = {}  # type: Dict[str, Dict[str, Set[str]]]
     route_p = re.compile(r'^(\S+) dev (\S+) proto (\S+) metric (\S+) .*pref (\S+)$')
     ip_p = re.compile(r'^\s+inet6 (\S+)/(.*)scope (.*)$')
     iface_p = re.compile(r'^(\d+): (\S+): (.*)$')
@@ -4656,7 +5126,7 @@ def _parse_ipv6_route(routes, ips):
         if net not in r:
             r[net] = {}
         if iface not in r[net]:
-            r[net][iface] = []
+            r[net][iface] = set()
 
     iface = None
     for line in ips.splitlines():
@@ -4673,7 +5143,7 @@ def _parse_ipv6_route(routes, ips):
                if ipaddress.ip_address(ip) in ipaddress.ip_network(n)]
         if net:
             assert(iface)
-            r[net[0]][iface].append(ip)
+            r[net[0]][iface].add(ip)
 
     return r
 
@@ -4681,7 +5151,11 @@ def _parse_ipv6_route(routes, ips):
 def command_list_networks(ctx):
     # type: (CephadmContext) -> None
     r = list_networks(ctx)
-    print(json.dumps(r, indent=4))
+
+    def serialize_sets(obj: Any) -> Any:
+        return list(obj) if isinstance(obj, set) else obj
+
+    print(json.dumps(r, indent=4, default=serialize_sets))
 
 ##################################
 
@@ -4737,14 +5211,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
         [container_path, 'stats', '--format', '{{.ID}},{{.MemUsage}}', '--no-stream'],
         verbosity=CallVerbosity.DEBUG
     )
-    seen_memusage_cid_len = 0
-    if not code:
-        for line in out.splitlines():
-            (cid, usage) = line.split(',')
-            (used, limit) = usage.split(' / ')
-            seen_memusage[cid] = with_units_to_int(used)
-            if not seen_memusage_cid_len:
-                seen_memusage_cid_len = len(cid)
+    seen_memusage_cid_len, seen_memusage = _parse_mem_usage(code, out)
 
     # /var/lib/ceph
     if os.path.exists(data_dir):
@@ -4766,8 +5233,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         'systemd_unit': legacy_unit_name,
                     }
                     if detail:
-                        (val['enabled'], val['state'], _) = \
-                            check_unit(ctx, legacy_unit_name)
+                        (val['enabled'], val['state'], _) = check_unit(ctx, legacy_unit_name)
                         if not host_version:
                             try:
                                 out, err, code = call(ctx,
@@ -4798,8 +5264,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                     }
                     if detail:
                         # get container id
-                        (val['enabled'], val['state'], _) = \
-                            check_unit(ctx, unit_name)
+                        (val['enabled'], val['state'], _) = check_unit(ctx, unit_name)
                         container_id = None
                         image_name = None
                         image_id = None
@@ -4807,12 +5272,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         version = None
                         start_stamp = None
 
-                        cmd = [
-                            container_path, 'inspect',
-                            '--format', '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
-                            'ceph-%s-%s' % (fsid, j)
-                        ]
-                        out, err, code = call(ctx, cmd, verbosity=CallVerbosity.DEBUG)
+                        out, err, code = get_container_stats(ctx, container_path, fsid, daemon_type, daemon_id)
                         if not code:
                             (container_id, image_name, image_id, start,
                              version) = out.strip().split(',')
@@ -4831,7 +5291,9 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                     ],
                                     verbosity=CallVerbosity.DEBUG)
                                 if not code:
-                                    image_digests = out.strip()[1:-1].split(' ')
+                                    image_digests = list(set(map(
+                                        normalize_image_digest,
+                                        out.strip()[1:-1].split(' '))))
                                     seen_digests[image_id] = image_digests
 
                             # identify software version inside the container (if we can)
@@ -4930,6 +5392,24 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
     return ls
 
 
+def _parse_mem_usage(code: int, out: str) -> Tuple[int, Dict[str, int]]:
+    # keep track of memory usage we've seen
+    seen_memusage = {}  # type: Dict[str, int]
+    seen_memusage_cid_len = 0
+    if not code:
+        for line in out.splitlines():
+            (cid, usage) = line.split(',')
+            (used, limit) = usage.split(' / ')
+            try:
+                seen_memusage[cid] = with_units_to_int(used)
+                if not seen_memusage_cid_len:
+                    seen_memusage_cid_len = len(cid)
+            except ValueError:
+                logger.info('unable to parse memory usage line\n>{}'.format(line))
+                pass
+    return seen_memusage_cid_len, seen_memusage
+
+
 def get_daemon_description(ctx, fsid, name, detail=False, legacy_dir=None):
     # type: (CephadmContext, str, str, bool, Optional[str]) -> Dict[str, str]
 
@@ -4940,6 +5420,21 @@ def get_daemon_description(ctx, fsid, name, detail=False, legacy_dir=None):
             continue
         return d
     raise Error('Daemon not found: {}. See `cephadm ls`'.format(name))
+
+
+def get_container_stats(ctx: CephadmContext, container_path: str, fsid: str, daemon_type: str, daemon_id: str) -> Tuple[str, str, int]:
+    c = CephContainer.for_daemon(ctx, fsid, daemon_type, daemon_id, 'bash')
+    out, err, code = '', '', -1
+    for name in (c.cname, c.old_cname):
+        cmd = [
+            container_path, 'inspect',
+            '--format', '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
+            name
+        ]
+        out, err, code = call(ctx, cmd, verbosity=CallVerbosity.DEBUG)
+        if not code:
+            break
+    return out, err, code
 
 ##################################
 
@@ -5365,9 +5860,69 @@ def command_rm_daemon(ctx):
         os.rename(data_dir,
                   os.path.join(backup_dir, dirname))
     else:
-        if daemon_type == CephadmDaemon.daemon_type:
-            CephadmDaemon.uninstall(ctx, ctx.fsid, daemon_type, daemon_id)
         call_throws(ctx, ['rm', '-rf', data_dir])
+
+##################################
+
+
+def _zap(ctx: CephadmContext, what: str) -> None:
+    mounts = get_container_mounts(ctx, ctx.fsid, 'clusterless-ceph-volume', None)
+    c = CephContainer(
+        ctx,
+        image=ctx.image,
+        entrypoint='/usr/sbin/ceph-volume',
+        envs=ctx.env,
+        args=['lvm', 'zap', '--destroy', what],
+        privileged=True,
+        volume_mounts=mounts,
+    )
+    logger.info(f'Zapping {what}...')
+    out, err, code = call_throws(ctx, c.run_cmd())
+
+
+@infer_image
+def _zap_osds(ctx: CephadmContext) -> None:
+    # assume fsid lock already held
+
+    # list
+    mounts = get_container_mounts(ctx, ctx.fsid, 'clusterless-ceph-volume', None)
+    c = CephContainer(
+        ctx,
+        image=ctx.image,
+        entrypoint='/usr/sbin/ceph-volume',
+        envs=ctx.env,
+        args=['inventory', '--format', 'json'],
+        privileged=True,
+        volume_mounts=mounts,
+    )
+    out, err, code = call_throws(ctx, c.run_cmd())
+    if code:
+        raise Error('failed to list osd inventory')
+    try:
+        ls = json.loads(out)
+    except ValueError as e:
+        raise Error(f'Invalid JSON in ceph-volume inventory: {e}')
+
+    for i in ls:
+        matches = [lv.get('cluster_fsid') == ctx.fsid for lv in i.get('lvs', [])]
+        if any(matches) and all(matches):
+            _zap(ctx, i.get('path'))
+        elif any(matches):
+            lv_names = [lv['name'] for lv in i.get('lvs', [])]
+            # TODO: we need to map the lv_names back to device paths (the vg
+            # id isn't part of the output here!)
+            logger.warning(f'Not zapping LVs (not implemented): {lv_names}')
+
+
+def command_zap_osds(ctx: CephadmContext) -> None:
+    if not ctx.force:
+        raise Error('must pass --force to proceed: '
+                    'this command may destroy precious data!')
+
+    lock = FileLock(ctx, ctx.fsid)
+    lock.acquire()
+
+    _zap_osds(ctx)
 
 ##################################
 
@@ -5404,15 +5959,19 @@ def command_rm_cluster(ctx):
         call(ctx, ['systemctl', 'disable', unit_name],
              verbosity=CallVerbosity.DEBUG)
 
-    slice_name = 'system-%s.slice' % (('ceph-%s' % ctx.fsid).replace('-', '\\x2d'))
+    slice_name = 'system-ceph\\x2d{}.slice'.format(ctx.fsid.replace('-', '\\x2d'))
     call(ctx, ['systemctl', 'stop', slice_name],
          verbosity=CallVerbosity.DEBUG)
 
+    # osds?
+    if ctx.zap_osds:
+        _zap_osds(ctx)
+
     # rm units
-    call_throws(ctx, ['rm', '-f', ctx.unit_dir +  # noqa: W504
-                      '/ceph-%s@.service' % ctx.fsid])
-    call_throws(ctx, ['rm', '-f', ctx.unit_dir +  # noqa: W504
-                      '/ceph-%s.target' % ctx.fsid])
+    call_throws(ctx, ['rm', '-f', ctx.unit_dir
+                      + '/ceph-%s@.service' % ctx.fsid])
+    call_throws(ctx, ['rm', '-f', ctx.unit_dir
+                      + '/ceph-%s.target' % ctx.fsid])
     call_throws(ctx, ['rm', '-rf',
                       ctx.unit_dir + '/ceph-%s.target.wants' % ctx.fsid])
     # rm data
@@ -5421,11 +5980,20 @@ def command_rm_cluster(ctx):
     if not ctx.keep_logs:
         # rm logs
         call_throws(ctx, ['rm', '-rf', ctx.log_dir + '/' + ctx.fsid])
-        call_throws(ctx, ['rm', '-rf', ctx.log_dir +  # noqa: W504
-                          '/*.wants/ceph-%s@*' % ctx.fsid])
+        call_throws(ctx, ['rm', '-rf', ctx.log_dir
+                          + '/*.wants/ceph-%s@*' % ctx.fsid])
 
     # rm logrotate config
     call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
+
+    # rm cephadm logrotate config if last cluster on host
+    if not os.listdir(ctx.data_dir):
+        call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/cephadm'])
+
+    # rm sysctl settings
+    sysctl_dir = Path(ctx.sysctl_dir)
+    for p in sysctl_dir.glob(f'90-ceph-{ctx.fsid}-*.conf'):
+        p.unlink()
 
     # clean up config, keyring, and pub key files
     files = ['/etc/ceph/ceph.conf', '/etc/ceph/ceph.pub', '/etc/ceph/ceph.client.admin.keyring']
@@ -5440,6 +6008,7 @@ def command_rm_cluster(ctx):
                 if os.path.exists(files[n]):
                     os.remove(files[n])
 
+
 ##################################
 
 
@@ -5452,6 +6021,7 @@ def check_time_sync(ctx, enabler=None):
         'ntpd.service',  # el7 (at least)
         'ntp.service',  # 18.04 (at least)
         'ntpsec.service',  # 20.04 (at least) / buster
+        'openntpd.service',  # ubuntu / debian
     ]
     if not check_units(ctx, units, enabler):
         logger.warning('No time sync service is running; checked for %s' % units)
@@ -5460,14 +6030,12 @@ def check_time_sync(ctx, enabler=None):
 
 
 def command_check_host(ctx: CephadmContext) -> None:
-    container_path = ctx.container_engine.path
-
     errors = []
     commands = ['systemctl', 'lvcreate']
 
     try:
-        check_container_engine(ctx)
-        logger.info('podman|docker (%s) is present' % container_path)
+        engine = check_container_engine(ctx)
+        logger.info(f'{engine} is present')
     except Error as e:
         errors.append(str(e))
 
@@ -5537,7 +6105,7 @@ def command_prepare_host(ctx: CephadmContext) -> None:
 
 class CustomValidation(argparse.Action):
 
-    def _check_name(self, values):
+    def _check_name(self, values: str) -> None:
         try:
             (daemon_type, daemon_id) = values.split('.', 1)
         except ValueError:
@@ -5550,20 +6118,12 @@ class CustomValidation(argparse.Action):
                                          'name must declare the type of daemon e.g. '
                                          '{}'.format(', '.join(daemons)))
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Union[str, Sequence[Any], None],
+                 option_string: Optional[str] = None) -> None:
+        assert isinstance(values, str)
         if self.dest == 'name':
             self._check_name(values)
             setattr(namespace, self.dest, values)
-        elif self.dest == 'exporter_config':
-            cfg = get_parm(values)
-            # run the class' validate method, and convert to an argparse error
-            # if problems are found
-            try:
-                CephadmDaemon.validate_config(cfg)
-            except Error as e:
-                raise argparse.ArgumentError(self,
-                                             str(e))
-            setattr(namespace, self.dest, cfg)
 
 ##################################
 
@@ -5592,7 +6152,8 @@ def get_distro():
 
 class Packager(object):
     def __init__(self, ctx: CephadmContext,
-                 stable=None, version=None, branch=None, commit=None):
+                 stable: Optional[str] = None, version: Optional[str] = None,
+                 branch: Optional[str] = None, commit: Optional[str] = None):
         assert \
             (stable and not version and not branch and not commit) or \
             (not stable and version and not branch and not commit) or \
@@ -5604,13 +6165,19 @@ class Packager(object):
         self.branch = branch
         self.commit = commit
 
-    def add_repo(self):
+    def add_repo(self) -> None:
         raise NotImplementedError
 
-    def rm_repo(self):
+    def rm_repo(self) -> None:
         raise NotImplementedError
 
-    def query_shaman(self, distro, distro_version, branch, commit):
+    def install(self, ls: List[str]) -> None:
+        raise NotImplementedError
+
+    def install_podman(self) -> None:
+        raise NotImplementedError
+
+    def query_shaman(self, distro: str, distro_version: Any, branch: Optional[str], commit: Optional[str]) -> str:
         # query shaman
         logger.info('Fetching repo metadata from shaman and chacra...')
         shaman_url = 'https://shaman.ceph.com/api/repos/ceph/{branch}/{sha1}/{distro}/{distro_version}/repo/?arch={arch}'.format(
@@ -5634,15 +6201,15 @@ class Packager(object):
             raise Error('%s, failed to fetch %s' % (err, chacra_url))
         return chacra_response.read().decode('utf-8')
 
-    def repo_gpgkey(self):
+    def repo_gpgkey(self) -> Tuple[str, str]:
         if self.ctx.gpg_url:
             return self.ctx.gpg_url
         if self.stable or self.version:
-            return 'https://download.ceph.com/keys/release.asc', 'release'
+            return 'https://download.ceph.com/keys/release.gpg', 'release'
         else:
-            return 'https://download.ceph.com/keys/autobuild.asc', 'autobuild'
+            return 'https://download.ceph.com/keys/autobuild.gpg', 'autobuild'
 
-    def enable_service(self, service):
+    def enable_service(self, service: str) -> None:
         """
         Start and enable the service (typically using systemd).
         """
@@ -5656,19 +6223,20 @@ class Apt(Packager):
     }
 
     def __init__(self, ctx: CephadmContext,
-                 stable, version, branch, commit,
-                 distro, distro_version, distro_codename):
+                 stable: Optional[str], version: Optional[str], branch: Optional[str], commit: Optional[str],
+                 distro: Optional[str], distro_version: Optional[str], distro_codename: Optional[str]) -> None:
         super(Apt, self).__init__(ctx, stable=stable, version=version,
                                   branch=branch, commit=commit)
+        assert distro
         self.ctx = ctx
         self.distro = self.DISTRO_NAMES[distro]
         self.distro_codename = distro_codename
         self.distro_version = distro_version
 
-    def repo_path(self):
+    def repo_path(self) -> str:
         return '/etc/apt/sources.list.d/ceph.list'
 
-    def add_repo(self):
+    def add_repo(self) -> None:
 
         url, name = self.repo_gpgkey()
         logger.info('Installing repo GPG key from %s...' % url)
@@ -5678,8 +6246,8 @@ class Apt(Packager):
             logger.error('failed to fetch GPG repo key from %s: %s' % (
                 url, err))
             raise Error('failed to fetch GPG key')
-        key = response.read().decode('utf-8')
-        with open('/etc/apt/trusted.gpg.d/ceph.%s.gpg' % name, 'w') as f:
+        key = response.read()
+        with open('/etc/apt/trusted.gpg.d/ceph.%s.gpg' % name, 'wb') as f:
             f.write(key)
 
         if self.version:
@@ -5696,7 +6264,9 @@ class Apt(Packager):
         with open(self.repo_path(), 'w') as f:
             f.write(content)
 
-    def rm_repo(self):
+        self.update()
+
+    def rm_repo(self) -> None:
         for name in ['autobuild', 'release']:
             p = '/etc/apt/trusted.gpg.d/ceph.%s.gpg' % name
             if os.path.exists(p):
@@ -5709,15 +6279,19 @@ class Apt(Packager):
         if self.distro == 'ubuntu':
             self.rm_kubic_repo()
 
-    def install(self, ls):
+    def install(self, ls: List[str]) -> None:
         logger.info('Installing packages %s...' % ls)
         call_throws(self.ctx, ['apt-get', 'install', '-y'] + ls)
 
-    def install_podman(self):
+    def update(self) -> None:
+        logger.info('Updating package list...')
+        call_throws(self.ctx, ['apt-get', 'update'])
+
+    def install_podman(self) -> None:
         if self.distro == 'ubuntu':
             logger.info('Setting up repo for podman...')
             self.add_kubic_repo()
-            call_throws(self.ctx, ['apt-get', 'update'])
+            self.update()
 
         logger.info('Attempting podman install...')
         try:
@@ -5726,20 +6300,20 @@ class Apt(Packager):
             logger.info('Podman did not work.  Falling back to docker...')
             self.install(['docker.io'])
 
-    def kubic_repo_url(self):
+    def kubic_repo_url(self) -> str:
         return 'https://download.opensuse.org/repositories/devel:/kubic:/' \
                'libcontainers:/stable/xUbuntu_%s/' % self.distro_version
 
-    def kubic_repo_path(self):
+    def kubic_repo_path(self) -> str:
         return '/etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list'
 
-    def kubric_repo_gpgkey_url(self):
+    def kubric_repo_gpgkey_url(self) -> str:
         return '%s/Release.key' % self.kubic_repo_url()
 
-    def kubric_repo_gpgkey_path(self):
+    def kubric_repo_gpgkey_path(self) -> str:
         return '/etc/apt/trusted.gpg.d/kubic.release.gpg'
 
-    def add_kubic_repo(self):
+    def add_kubic_repo(self) -> None:
         url = self.kubric_repo_gpgkey_url()
         logger.info('Installing repo GPG key from %s...' % url)
         try:
@@ -5758,7 +6332,7 @@ class Apt(Packager):
         with open(self.kubic_repo_path(), 'w') as f:
             f.write(content)
 
-    def rm_kubic_repo(self):
+    def rm_kubic_repo(self) -> None:
         keyring = self.kubric_repo_gpgkey_path()
         if os.path.exists(keyring):
             logger.info('Removing repo GPG key %s...' % keyring)
@@ -5775,14 +6349,19 @@ class YumDnf(Packager):
         'centos': ('centos', 'el'),
         'rhel': ('centos', 'el'),
         'scientific': ('centos', 'el'),
+        'rocky': ('centos', 'el'),
+        'almalinux': ('centos', 'el'),
         'fedora': ('fedora', 'fc'),
+        'mariner': ('mariner', 'cm'),
     }
 
     def __init__(self, ctx: CephadmContext,
-                 stable, version, branch, commit,
-                 distro, distro_version):
+                 stable: Optional[str], version: Optional[str], branch: Optional[str], commit: Optional[str],
+                 distro: Optional[str], distro_version: Optional[str]) -> None:
         super(YumDnf, self).__init__(ctx, stable=stable, version=version,
                                      branch=branch, commit=commit)
+        assert distro
+        assert distro_version
         self.ctx = ctx
         self.major = int(distro_version.split('.')[0])
         self.distro_normalized = self.DISTRO_NAMES[distro][0]
@@ -5790,10 +6369,12 @@ class YumDnf(Packager):
         if (self.distro_code == 'fc' and self.major >= 30) or \
            (self.distro_code == 'el' and self.major >= 8):
             self.tool = 'dnf'
+        elif (self.distro_code == 'cm'):
+            self.tool = 'tdnf'
         else:
             self.tool = 'yum'
 
-    def custom_repo(self, **kw):
+    def custom_repo(self, **kw: Any) -> str:
         """
         Repo files need special care in that a whole line should not be present
         if there is no value for it. Because we were using `format()` we could
@@ -5849,10 +6430,10 @@ class YumDnf(Packager):
 
         return '\n'.join(lines)
 
-    def repo_path(self):
+    def repo_path(self) -> str:
         return '/etc/yum.repos.d/ceph.repo'
 
-    def repo_baseurl(self):
+    def repo_baseurl(self) -> str:
         assert self.stable or self.version
         if self.version:
             return '%s/rpm-%s/%s' % (self.ctx.repo_url, self.version,
@@ -5861,7 +6442,14 @@ class YumDnf(Packager):
             return '%s/rpm-%s/%s' % (self.ctx.repo_url, self.stable,
                                      self.distro_code)
 
-    def add_repo(self):
+    def add_repo(self) -> None:
+        if self.distro_code.startswith('fc'):
+            raise Error('Ceph team does not build Fedora specific packages and therefore cannot add repos for this distro')
+        if self.distro_code == 'el7':
+            if self.stable and self.stable >= 'pacific':
+                raise Error('Ceph does not support pacific or later for this version of this linux distro and therefore cannot add a repo for it')
+            if self.version and self.version.split('.')[0] >= '16':
+                raise Error('Ceph does not support 16.y.z or later for this version of this linux distro and therefore cannot add a repo for it')
         if self.stable or self.version:
             content = ''
             for n, t in {
@@ -5890,15 +6478,15 @@ class YumDnf(Packager):
             logger.info('Enabling EPEL...')
             call_throws(self.ctx, [self.tool, 'install', '-y', 'epel-release'])
 
-    def rm_repo(self):
+    def rm_repo(self) -> None:
         if os.path.exists(self.repo_path()):
             os.unlink(self.repo_path())
 
-    def install(self, ls):
+    def install(self, ls: List[str]) -> None:
         logger.info('Installing packages %s...' % ls)
         call_throws(self.ctx, [self.tool, 'install', '-y'] + ls)
 
-    def install_podman(self):
+    def install_podman(self) -> None:
         self.install(['podman'])
 
 
@@ -5910,10 +6498,11 @@ class Zypper(Packager):
     ]
 
     def __init__(self, ctx: CephadmContext,
-                 stable, version, branch, commit,
-                 distro, distro_version):
+                 stable: Optional[str], version: Optional[str], branch: Optional[str], commit: Optional[str],
+                 distro: Optional[str], distro_version: Optional[str]) -> None:
         super(Zypper, self).__init__(ctx, stable=stable, version=version,
                                      branch=branch, commit=commit)
+        assert distro is not None
         self.ctx = ctx
         self.tool = 'zypper'
         self.distro = 'opensuse'
@@ -5921,7 +6510,7 @@ class Zypper(Packager):
         if 'tumbleweed' not in distro and distro_version is not None:
             self.distro_version = distro_version
 
-    def custom_repo(self, **kw):
+    def custom_repo(self, **kw: Any) -> str:
         """
         See YumDnf for format explanation.
         """
@@ -5950,10 +6539,10 @@ class Zypper(Packager):
 
         return '\n'.join(lines)
 
-    def repo_path(self):
+    def repo_path(self) -> str:
         return '/etc/zypp/repos.d/ceph.repo'
 
-    def repo_baseurl(self):
+    def repo_baseurl(self) -> str:
         assert self.stable or self.version
         if self.version:
             return '%s/rpm-%s/%s' % (self.ctx.repo_url,
@@ -5962,7 +6551,7 @@ class Zypper(Packager):
             return '%s/rpm-%s/%s' % (self.ctx.repo_url,
                                      self.stable, self.distro)
 
-    def add_repo(self):
+    def add_repo(self) -> None:
         if self.stable or self.version:
             content = ''
             for n, t in {
@@ -5987,20 +6576,21 @@ class Zypper(Packager):
         with open(self.repo_path(), 'w') as f:
             f.write(content)
 
-    def rm_repo(self):
+    def rm_repo(self) -> None:
         if os.path.exists(self.repo_path()):
             os.unlink(self.repo_path())
 
-    def install(self, ls):
+    def install(self, ls: List[str]) -> None:
         logger.info('Installing packages %s...' % ls)
         call_throws(self.ctx, [self.tool, 'in', '-y'] + ls)
 
-    def install_podman(self):
+    def install_podman(self) -> None:
         self.install(['podman'])
 
 
 def create_packager(ctx: CephadmContext,
-                    stable=None, version=None, branch=None, commit=None):
+                    stable: Optional[str] = None, version: Optional[str] = None,
+                    branch: Optional[str] = None, commit: Optional[str] = None) -> Packager:
     distro, distro_version, distro_codename = get_distro()
     if distro in YumDnf.DISTRO_NAMES:
         return YumDnf(ctx, stable=stable, version=version,
@@ -6018,7 +6608,7 @@ def create_packager(ctx: CephadmContext,
     raise Error('Distro %s version %s not supported' % (distro, distro_version))
 
 
-def command_add_repo(ctx: CephadmContext):
+def command_add_repo(ctx: CephadmContext) -> None:
     if ctx.version and ctx.release:
         raise Error('you can specify either --release or --version but not both')
     if not ctx.version and not ctx.release and not ctx.dev and not ctx.dev_commit:
@@ -6028,20 +6618,24 @@ def command_add_repo(ctx: CephadmContext):
             (x, y, z) = ctx.version.split('.')
         except Exception:
             raise Error('version must be in the form x.y.z (e.g., 15.2.0)')
+    if ctx.release:
+        # Pacific =/= pacific in this case, set to undercase to avoid confision
+        ctx.release = ctx.release.lower()
 
     pkg = create_packager(ctx, stable=ctx.release,
                           version=ctx.version,
                           branch=ctx.dev,
                           commit=ctx.dev_commit)
     pkg.add_repo()
+    logger.info('Completed adding repo.')
 
 
-def command_rm_repo(ctx: CephadmContext):
+def command_rm_repo(ctx: CephadmContext) -> None:
     pkg = create_packager(ctx)
     pkg.rm_repo()
 
 
-def command_install(ctx: CephadmContext):
+def command_install(ctx: CephadmContext) -> None:
     pkg = create_packager(ctx)
     pkg.install(ctx.packages)
 
@@ -6050,7 +6644,7 @@ def command_install(ctx: CephadmContext):
 
 def get_ipv4_address(ifname):
     # type: (str) -> str
-    def _extract(sock, offset):
+    def _extract(sock: socket.socket, offset: int) -> str:
         return socket.inet_ntop(
             socket.AF_INET,
             fcntl.ioctl(
@@ -6147,7 +6741,6 @@ def read_file(path_list, file_name=''):
 class HostFacts():
     _dmi_path_list = ['/sys/class/dmi/id']
     _nic_path_list = ['/sys/class/net']
-    _selinux_path_list = ['/etc/selinux/config']
     _apparmor_path_list = ['/etc/apparmor']
     _disk_vendor_workarounds = {
         '0x1af4': 'Virtio Block Device'
@@ -6504,23 +7097,30 @@ class HostFacts():
         # type: () -> Dict[str, str]
         """Determine the security features enabled in the kernel - SELinux, AppArmor"""
         def _fetch_selinux() -> Dict[str, str]:
-            """Read the selinux config file to determine state"""
+            """Get the selinux status"""
             security = {}
-            for selinux_path in HostFacts._selinux_path_list:
-                if os.path.exists(selinux_path):
-                    selinux_config = read_file([selinux_path]).splitlines()
-                    security['type'] = 'SELinux'
-                    for line in selinux_config:
-                        if line.strip().startswith('#'):
-                            continue
-                        k, v = line.split('=')
-                        security[k] = v
-                    if security['SELINUX'].lower() == 'disabled':
-                        security['description'] = 'SELinux: Disabled'
-                    else:
-                        security['description'] = 'SELinux: Enabled({}, {})'.format(security['SELINUX'], security['SELINUXTYPE'])
-                    return security
-            return {}
+            try:
+                out, err, code = call(self.ctx, ['sestatus'],
+                                      verbosity=CallVerbosity.DEBUG)
+                security['type'] = 'SELinux'
+                status, mode, policy = '', '', ''
+                for line in out.split('\n'):
+                    if line.startswith('SELinux status:'):
+                        k, v = line.split(':')
+                        status = v.strip()
+                    elif line.startswith('Current mode:'):
+                        k, v = line.split(':')
+                        mode = v.strip()
+                    elif line.startswith('Loaded policy name:'):
+                        k, v = line.split(':')
+                        policy = v.strip()
+                if status == 'disabled':
+                    security['description'] = 'SELinux: Disabled'
+                else:
+                    security['description'] = 'SELinux: Enabled({}, {})'.format(mode, policy)
+            except Exception as e:
+                logger.info('unable to get selinux status: %s' % e)
+            return security
 
         def _fetch_apparmor() -> Dict[str, str]:
             """Read the apparmor profiles directly, returning an overview of AppArmor status"""
@@ -6573,7 +7173,7 @@ class HostFacts():
         }
 
     @property
-    def selinux_enabled(self):
+    def selinux_enabled(self) -> bool:
         return (self.kernel_security['type'] == 'SELinux') and \
                (self.kernel_security['description'] != 'SELinux: Disabled')
 
@@ -6594,6 +7194,48 @@ class HostFacts():
 
         return k_param
 
+    @staticmethod
+    def _process_net_data(tcp_file: str, protocol: str = 'tcp') -> List[int]:
+        listening_ports = []
+        # Connections state documentation
+        # tcp - https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/net/tcp_states.h
+        # udp - uses 07 (TCP_CLOSE or UNCONN, since udp is stateless. test with netcat -ul <port>)
+        listening_state = {
+            'tcp': '0A',
+            'udp': '07'
+        }
+
+        if protocol not in listening_state.keys():
+            return []
+
+        if os.path.exists(tcp_file):
+            with open(tcp_file) as f:
+                tcp_data = f.readlines()[1:]
+
+            for con in tcp_data:
+                con_info = con.strip().split()
+                if con_info[3] == listening_state[protocol]:
+                    local_port = int(con_info[1].split(':')[1], 16)
+                    listening_ports.append(local_port)
+
+        return listening_ports
+
+    @property
+    def tcp_ports_used(self) -> List[int]:
+        return HostFacts._process_net_data('/proc/net/tcp')
+
+    @property
+    def tcp6_ports_used(self) -> List[int]:
+        return HostFacts._process_net_data('/proc/net/tcp6')
+
+    @property
+    def udp_ports_used(self) -> List[int]:
+        return HostFacts._process_net_data('/proc/net/udp', 'udp')
+
+    @property
+    def udp6_ports_used(self) -> List[int]:
+        return HostFacts._process_net_data('/proc/net/udp6', 'udp')
+
     def dump(self):
         # type: () -> str
         """Return the attributes of this HostFacts object as json"""
@@ -6607,714 +7249,40 @@ class HostFacts():
 ##################################
 
 
-def command_gather_facts(ctx: CephadmContext):
+def command_gather_facts(ctx: CephadmContext) -> None:
     """gather_facts is intended to provide host releated metadata to the caller"""
     host = HostFacts(ctx)
     print(host.dump())
 
-##################################
-
-
-def command_verify_prereqs(ctx: CephadmContext):
-    if ctx.service_type == 'haproxy' or ctx.service_type == 'keepalived':
-        out, err, code = call(
-            ctx, ['sysctl', '-n', 'net.ipv4.ip_nonlocal_bind']
-        )
-        if out.strip() != '1':
-            raise Error('net.ipv4.ip_nonlocal_bind not set to 1')
 
 ##################################
 
 
-class CephadmCache:
-    task_types = ['disks', 'daemons', 'host', 'http_server']
-
-    def __init__(self):
-        self.started_epoch_secs = time.time()
-        self.tasks = {
-            'daemons': 'inactive',
-            'disks': 'inactive',
-            'host': 'inactive',
-            'http_server': 'inactive',
-        }
-        self.errors = []
-        self.disks = {}
-        self.daemons = {}
-        self.host = {}
-        self.lock = RLock()
-
-    @property
-    def health(self):
-        return {
-            'started_epoch_secs': self.started_epoch_secs,
-            'tasks': self.tasks,
-            'errors': self.errors,
-        }
-
-    def to_json(self):
-        return {
-            'health': self.health,
-            'host': self.host,
-            'daemons': self.daemons,
-            'disks': self.disks,
-        }
-
-    def update_health(self, task_type, task_status, error_msg=None):
-        assert task_type in CephadmCache.task_types
-        with self.lock:
-            self.tasks[task_type] = task_status
-            if error_msg:
-                self.errors.append(error_msg)
-
-    def update_task(self, task_type, content):
-        assert task_type in CephadmCache.task_types
-        assert isinstance(content, dict)
-        with self.lock:
-            current = getattr(self, task_type)
-            for k in content:
-                current[k] = content[k]
-
-            setattr(self, task_type, current)
-
-
-class CephadmHTTPServer(ThreadingMixIn, HTTPServer):
-    allow_reuse_address = True
-    daemon_threads = True
-    cephadm_cache: CephadmCache
-    token: str
-
-
-class CephadmDaemonHandler(BaseHTTPRequestHandler):
-    server: CephadmHTTPServer
-    api_version = 'v1'
-    valid_routes = [
-        f'/{api_version}/metadata',
-        f'/{api_version}/metadata/health',
-        f'/{api_version}/metadata/disks',
-        f'/{api_version}/metadata/daemons',
-        f'/{api_version}/metadata/host',
-    ]
-
-    class Decorators:
-        @classmethod
-        def authorize(cls, f):
-            """Implement a basic token check.
-
-            The token is installed at deployment time and must be provided to
-            ensure we only respond to callers who know our token i.e. mgr
-            """
-            def wrapper(self, *args, **kwargs):
-                auth = self.headers.get('Authorization', None)
-                if auth != 'Bearer ' + self.server.token:
-                    self.send_error(401)
-                    return
-                f(self, *args, **kwargs)
-            return wrapper
-
-    def _help_page(self):
-        return """<!DOCTYPE html>
-<html>
-<head><title>cephadm metadata exporter</title></head>
-<style>
-body {{
-  font-family: sans-serif;
-  font-size: 0.8em;
-}}
-table {{
-  border-width: 0px;
-  border-spacing: 0px;
-  margin-left:20px;
-}}
-tr:hover {{
-  background: PowderBlue;
-}}
-td,th {{
-  padding: 5px;
-}}
-</style>
-<body>
-    <h1>cephadm metadata exporter {api_version}</h1>
-    <table>
-      <thead>
-        <tr><th>Endpoint</th><th>Methods</th><th>Response</th><th>Description</th></tr>
-      </thead>
-      <tr><td><a href='{api_version}/metadata'>{api_version}/metadata</a></td><td>GET</td><td>JSON</td><td>Return <b>all</b> metadata for the host</td></tr>
-      <tr><td><a href='{api_version}/metadata/daemons'>{api_version}/metadata/daemons</a></td><td>GET</td><td>JSON</td><td>Return daemon and systemd states for ceph daemons (ls)</td></tr>
-      <tr><td><a href='{api_version}/metadata/disks'>{api_version}/metadata/disks</a></td><td>GET</td><td>JSON</td><td>show disk inventory (ceph-volume)</td></tr>
-      <tr><td><a href='{api_version}/metadata/health'>{api_version}/metadata/health</a></td><td>GET</td><td>JSON</td><td>Show current health of the exporter sub-tasks</td></tr>
-      <tr><td><a href='{api_version}/metadata/host'>{api_version}/metadata/host</a></td><td>GET</td><td>JSON</td><td>Show host metadata (gather-facts)</td></tr>
-    </table>
-</body>
-</html>""".format(api_version=CephadmDaemonHandler.api_version)
-
-    def _fetch_root(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html; charset=utf-8')
-        self.end_headers()
-        self.wfile.write(self._help_page().encode('utf-8'))
-
-    @Decorators.authorize
-    def do_GET(self):
-        """Handle *all* GET requests"""
-
-        if self.path == '/':
-            # provide a html response if someone hits the root url, to document the
-            # available api endpoints
-            return self._fetch_root()
-        elif self.path in CephadmDaemonHandler.valid_routes:
-            u = self.path.split('/')[-1]
-            data = json.dumps({})
-            status_code = 200
-
-            tasks = self.server.cephadm_cache.health.get('tasks', {})
-            assert tasks
-
-            # We're using the http status code to help indicate thread health
-            # - 200 (OK): request successful
-            # - 204 (No Content): access to a cache relating to a dead thread
-            # - 206 (Partial content): one or more theads are inactive
-            # - 500 (Server Error): all threads inactive
-            if u == 'metadata':
-                data = json.dumps(self.server.cephadm_cache.to_json())
-                if all([tasks[task_name] == 'inactive' for task_name in tasks if task_name != 'http_server']):
-                    # All the subtasks are dead!
-                    status_code = 500
-                elif any([tasks[task_name] == 'inactive' for task_name in tasks if task_name != 'http_server']):
-                    status_code = 206
-
-            # Individual GETs against the a tasks endpoint will also return a 503 if the corresponding thread is inactive
-            elif u == 'daemons':
-                data = json.dumps(self.server.cephadm_cache.daemons)
-                if tasks['daemons'] == 'inactive':
-                    status_code = 204
-            elif u == 'disks':
-                data = json.dumps(self.server.cephadm_cache.disks)
-                if tasks['disks'] == 'inactive':
-                    status_code = 204
-            elif u == 'host':
-                data = json.dumps(self.server.cephadm_cache.host)
-                if tasks['host'] == 'inactive':
-                    status_code = 204
-
-            # a GET against health will always return a 200, since the op is always successful
-            elif u == 'health':
-                data = json.dumps(self.server.cephadm_cache.health)
-
-            self.send_response(status_code)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(data.encode('utf-8'))
-        else:
-            # Invalid GET URL
-            bad_request_msg = 'Valid URLs are: {}'.format(', '.join(CephadmDaemonHandler.valid_routes))
-            self.send_response(404, message=bad_request_msg)  # reason
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({'message': bad_request_msg}).encode('utf-8'))
-
-    def log_message(self, format, *args):
-        rqst = ' '.join(str(a) for a in args)
-        logger.info(f'client:{self.address_string()} [{self.log_date_time_string()}] {rqst}')
-
-
-class CephadmDaemon():
-
-    daemon_type = 'cephadm-exporter'
-    default_port = 9443
-    key_name = 'key'
-    crt_name = 'crt'
-    token_name = 'token'
-    config_requirements = [
-        key_name,
-        crt_name,
-        token_name,
-    ]
-    loop_delay = 1
-    thread_check_interval = 5
-
-    def __init__(self, ctx: CephadmContext, fsid, daemon_id=None, port=None):
-        self.ctx = ctx
-        self.fsid = fsid
-        self.daemon_id = daemon_id
-        if not port:
-            self.port = CephadmDaemon.default_port
-        else:
-            self.port = port
-        self.workers: List[Thread] = []
-        self.http_server: CephadmHTTPServer
-        self.stop = False
-        self.cephadm_cache = CephadmCache()
-        self.errors: List[str] = []
-        self.token = read_file([os.path.join(self.daemon_path, CephadmDaemon.token_name)])
-
-    @classmethod
-    def validate_config(cls, config):
-        reqs = ', '.join(CephadmDaemon.config_requirements)
-        errors = []
-
-        if not config or not all([k_name in config for k_name in CephadmDaemon.config_requirements]):
-            raise Error(f'config must contain the following fields : {reqs}')
-
-        if not all([isinstance(config[k_name], str) for k_name in CephadmDaemon.config_requirements]):
-            errors.append(f'the following fields must be strings: {reqs}')
-
-        crt = config[CephadmDaemon.crt_name]
-        key = config[CephadmDaemon.key_name]
-        token = config[CephadmDaemon.token_name]
-
-        if not crt.startswith('-----BEGIN CERTIFICATE-----') or not crt.endswith('-----END CERTIFICATE-----\n'):
-            errors.append('crt field is not a valid SSL certificate')
-        if not key.startswith('-----BEGIN PRIVATE KEY-----') or not key.endswith('-----END PRIVATE KEY-----\n'):
-            errors.append('key is not a valid SSL private key')
-        if len(token) < 8:
-            errors.append("'token' must be more than 8 characters long")
-
-        if 'port' in config:
-            try:
-                p = int(config['port'])
-                if p <= 1024:
-                    raise ValueError
-            except (TypeError, ValueError):
-                errors.append('port must be an integer > 1024')
-
-        if errors:
-            raise Error('Parameter errors : {}'.format(', '.join(errors)))
-
-    @property
-    def port_active(self):
-        return port_in_use(self.ctx, self.port)
-
-    @property
-    def can_run(self):
-        # if port is in use
-        if self.port_active:
-            self.errors.append(f'TCP port {self.port} already in use, unable to bind')
-        if not os.path.exists(os.path.join(self.daemon_path, CephadmDaemon.key_name)):
-            self.errors.append(f"Key file '{CephadmDaemon.key_name}' is missing from {self.daemon_path}")
-        if not os.path.exists(os.path.join(self.daemon_path, CephadmDaemon.crt_name)):
-            self.errors.append(f"Certificate file '{CephadmDaemon.crt_name}' is missing from {self.daemon_path}")
-        if self.token == 'Unknown':
-            self.errors.append(f"Authentication token '{CephadmDaemon.token_name}' is missing from {self.daemon_path}")
-        return len(self.errors) == 0
-
-    @staticmethod
-    def _unit_name(fsid, daemon_id):
-        return '{}.service'.format(get_unit_name(fsid, CephadmDaemon.daemon_type, daemon_id))
-
-    @property
-    def unit_name(self):
-        return CephadmDaemon._unit_name(self.fsid, self.daemon_id)
-
-    @property
-    def daemon_path(self):
-        return os.path.join(
-            self.ctx.data_dir,
-            self.fsid,
-            f'{self.daemon_type}.{self.daemon_id}'
-        )
-
-    @property
-    def binary_path(self):
-        path = os.path.realpath(__file__)
-        assert os.path.isfile(path)
-        return path
-
-    def _handle_thread_exception(self, exc, thread_type):
-        e_msg = f'{exc.__class__.__name__} exception: {str(exc)}'
-        thread_info = getattr(self.cephadm_cache, thread_type)
-        errors = thread_info.get('scrape_errors', [])
-        errors.append(e_msg)
-        logger.error(e_msg)
-        logger.exception(exc)
-        self.cephadm_cache.update_task(
-            thread_type,
-            {
-                'scrape_errors': errors,
-                'data': None,
-            }
-        )
-
-    def _scrape_host_facts(self, refresh_interval=10):
-        ctr = 0
-        exception_encountered = False
-
-        while True:
-
-            if self.stop or exception_encountered:
-                break
-
-            if ctr >= refresh_interval:
-                ctr = 0
-                logger.debug('executing host-facts scrape')
-                errors = []
-                s_time = time.time()
-
-                try:
-                    facts = HostFacts(self.ctx)
-                except Exception as e:
-                    self._handle_thread_exception(e, 'host')
-                    exception_encountered = True
-                else:
-                    elapsed = time.time() - s_time
-                    try:
-                        data = json.loads(facts.dump())
-                    except json.decoder.JSONDecodeError:
-                        errors.append('host-facts provided invalid JSON')
-                        logger.warning(errors[-1])
-                        data = {}
-                    self.cephadm_cache.update_task(
-                        'host',
-                        {
-                            'scrape_timestamp': s_time,
-                            'scrape_duration_secs': elapsed,
-                            'scrape_errors': errors,
-                            'data': data,
-                        }
-                    )
-                    logger.debug(f'completed host-facts scrape - {elapsed}s')
-
-            time.sleep(CephadmDaemon.loop_delay)
-            ctr += CephadmDaemon.loop_delay
-        logger.info('host-facts thread stopped')
-
-    def _scrape_ceph_volume(self, refresh_interval=15):
-        # we're invoking the ceph_volume command, so we need to set the args that it
-        # expects to use
-        self.ctx.command = 'inventory --format=json'.split()
-        self.ctx.fsid = self.fsid
-        self.ctx.log_output = False
-
-        ctr = 0
-        exception_encountered = False
-
-        while True:
-            if self.stop or exception_encountered:
-                break
-
-            if ctr >= refresh_interval:
-                ctr = 0
-                logger.debug('executing ceph-volume scrape')
-                errors = []
-                s_time = time.time()
-                stream = io.StringIO()
-                try:
-                    with redirect_stdout(stream):
-                        command_ceph_volume(self.ctx)
-                except Exception as e:
-                    self._handle_thread_exception(e, 'disks')
-                    exception_encountered = True
-                else:
-                    elapsed = time.time() - s_time
-
-                    # if the call to ceph-volume returns junk with the
-                    # json, it won't parse
-                    stdout = stream.getvalue()
-
-                    data = []
-                    if stdout:
-                        try:
-                            data = json.loads(stdout)
-                        except json.decoder.JSONDecodeError:
-                            errors.append('ceph-volume thread provided bad json data')
-                            logger.warning(errors[-1])
-                    else:
-                        errors.append('ceph-volume did not return any data')
-                        logger.warning(errors[-1])
-
-                    self.cephadm_cache.update_task(
-                        'disks',
-                        {
-                            'scrape_timestamp': s_time,
-                            'scrape_duration_secs': elapsed,
-                            'scrape_errors': errors,
-                            'data': data,
-                        }
-                    )
-
-                    logger.debug(f'completed ceph-volume scrape - {elapsed}s')
-            time.sleep(CephadmDaemon.loop_delay)
-            ctr += CephadmDaemon.loop_delay
-
-        logger.info('ceph-volume thread stopped')
-
-    def _scrape_list_daemons(self, refresh_interval=20):
-        ctr = 0
-        exception_encountered = False
-        while True:
-            if self.stop or exception_encountered:
-                break
-
-            if ctr >= refresh_interval:
-                ctr = 0
-                logger.debug('executing list-daemons scrape')
-                errors = []
-                s_time = time.time()
-
-                try:
-                    # list daemons should ideally be invoked with a fsid
-                    data = list_daemons(self.ctx)
-                except Exception as e:
-                    self._handle_thread_exception(e, 'daemons')
-                    exception_encountered = True
-                else:
-                    if not isinstance(data, list):
-                        errors.append('list-daemons did not supply a list?')
-                        logger.warning(errors[-1])
-                        data = []
-                    elapsed = time.time() - s_time
-                    self.cephadm_cache.update_task(
-                        'daemons',
-                        {
-                            'scrape_timestamp': s_time,
-                            'scrape_duration_secs': elapsed,
-                            'scrape_errors': errors,
-                            'data': data,
-                        }
-                    )
-                    logger.debug(f'completed list-daemons scrape - {elapsed}s')
-
-            time.sleep(CephadmDaemon.loop_delay)
-            ctr += CephadmDaemon.loop_delay
-        logger.info('list-daemons thread stopped')
-
-    def _create_thread(self, target, name, refresh_interval=None):
-        if refresh_interval:
-            t = Thread(target=target, args=(refresh_interval,))
-        else:
-            t = Thread(target=target)
-        t.daemon = True
-        t.name = name
-        self.cephadm_cache.update_health(name, 'active')
-        t.start()
-
-        start_msg = f'Started {name} thread'
-        if refresh_interval:
-            logger.info(f'{start_msg}, with a refresh interval of {refresh_interval}s')
-        else:
-            logger.info(f'{start_msg}')
-        return t
-
-    def reload(self, *args):
-        """reload -HUP received
-
-        This is a placeholder function only, and serves to provide the hook that could
-        be exploited later if the exporter evolves to incorporate a config file
-        """
-        logger.info('Reload request received - ignoring, no action needed')
-
-    def shutdown(self, *args):
-        logger.info('Shutdown request received')
-        self.stop = True
-        self.http_server.shutdown()
-
-    def run(self):
-        logger.info(f"cephadm exporter starting for FSID '{self.fsid}'")
-        if not self.can_run:
-            logger.error('Unable to start the exporter daemon')
-            for e in self.errors:
-                logger.error(e)
-            return
-
-        # register signal handlers for running under systemd control
-        signal.signal(signal.SIGTERM, self.shutdown)
-        signal.signal(signal.SIGINT, self.shutdown)
-        signal.signal(signal.SIGHUP, self.reload)
-        logger.debug('Signal handlers attached')
-
-        host_facts = self._create_thread(self._scrape_host_facts, 'host', 5)
-        self.workers.append(host_facts)
-
-        daemons = self._create_thread(self._scrape_list_daemons, 'daemons', 20)
-        self.workers.append(daemons)
-
-        disks = self._create_thread(self._scrape_ceph_volume, 'disks', 20)
-        self.workers.append(disks)
-
-        self.http_server = CephadmHTTPServer(('0.0.0.0', self.port), CephadmDaemonHandler)  # IPv4 only
-        self.http_server.socket = ssl.wrap_socket(self.http_server.socket,
-                                                  keyfile=os.path.join(self.daemon_path, CephadmDaemon.key_name),
-                                                  certfile=os.path.join(self.daemon_path, CephadmDaemon.crt_name),
-                                                  server_side=True)
-
-        self.http_server.cephadm_cache = self.cephadm_cache
-        self.http_server.token = self.token
-        server_thread = self._create_thread(self.http_server.serve_forever, 'http_server')
-        logger.info(f'https server listening on {self.http_server.server_address[0]}:{self.http_server.server_port}')
-
-        ctr = 0
-        while server_thread.is_alive():
-            if self.stop:
-                break
-
-            if ctr >= CephadmDaemon.thread_check_interval:
-                ctr = 0
-                for worker in self.workers:
-                    if self.cephadm_cache.tasks[worker.name] == 'inactive':
-                        continue
-                    if not worker.is_alive():
-                        logger.warning(f'{worker.name} thread not running')
-                        stop_time = datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')
-                        self.cephadm_cache.update_health(worker.name, 'inactive', f'{worker.name} stopped at {stop_time}')
-
-            time.sleep(CephadmDaemon.loop_delay)
-            ctr += CephadmDaemon.loop_delay
-
-        logger.info('Main http server thread stopped')
-
-    @property
-    def unit_run(self):
-
-        return """set -e
-{py3} {bin_path} exporter --fsid {fsid} --id {daemon_id} --port {port} &""".format(
-            py3=shutil.which('python3'),
-            bin_path=self.binary_path,
-            fsid=self.fsid,
-            daemon_id=self.daemon_id,
-            port=self.port
-        )
-
-    @property
-    def unit_file(self):
-        docker = isinstance(self.ctx.container_engine, Docker)
-        return """#generated by cephadm
-[Unit]
-Description=cephadm exporter service for cluster {fsid}
-After=network-online.target{docker_after}
-Wants=network-online.target
-{docker_requires}
-
-PartOf=ceph-{fsid}.target
-Before=ceph-{fsid}.target
-
-[Service]
-Type=forking
-ExecStart=/bin/bash {daemon_path}/unit.run
-ExecReload=/bin/kill -HUP $MAINPID
-Restart=on-failure
-RestartSec=10s
-
-[Install]
-WantedBy=ceph-{fsid}.target
-""".format(fsid=self.fsid,
-           daemon_path=self.daemon_path,
-           # if docker, we depend on docker.service
-           docker_after=' docker.service' if docker else '',
-           docker_requires='Requires=docker.service\n' if docker else '')
-
-    def deploy_daemon_unit(self, config=None):
-        """deploy a specific unit file for cephadm
-
-        The normal deploy_daemon_units doesn't apply for this
-        daemon since it's not a container, so we just create a
-        simple service definition and add it to the fsid's target
-        """
-        if not config:
-            raise Error('Attempting to deploy cephadm daemon without a config')
-        assert isinstance(config, dict)
-
-        # Create the required config files in the daemons dir, with restricted permissions
-        for filename in config:
-            with open(os.open(os.path.join(self.daemon_path, filename), os.O_CREAT | os.O_WRONLY, mode=0o600), 'w') as f:
-                f.write(config[filename])
-
-        # When __file__ is <stdin> we're being invoked over remoto via the orchestrator, so
-        # we pick up the file from where the orchestrator placed it - otherwise we'll
-        # copy it to the binary location for this cluster
-        if not __file__ == '<stdin>':
-            shutil.copy(__file__,
-                        self.binary_path)
-
-        with open(os.path.join(self.daemon_path, 'unit.run'), 'w') as f:
-            f.write(self.unit_run)
-
-        with open(
-                os.path.join(self.ctx.unit_dir,
-                             f'{self.unit_name}.new'),
-                'w'
-        ) as f:
-            f.write(self.unit_file)
-            os.rename(
-                os.path.join(self.ctx.unit_dir, f'{self.unit_name}.new'),
-                os.path.join(self.ctx.unit_dir, self.unit_name))
-
-        call_throws(self.ctx, ['systemctl', 'daemon-reload'])
-        call(self.ctx, ['systemctl', 'stop', self.unit_name],
-             verbosity=CallVerbosity.DEBUG)
-        call(self.ctx, ['systemctl', 'reset-failed', self.unit_name],
-             verbosity=CallVerbosity.DEBUG)
-        call_throws(self.ctx, ['systemctl', 'enable', '--now', self.unit_name])
-
-    @classmethod
-    def uninstall(cls, ctx: CephadmContext, fsid, daemon_type, daemon_id):
-        unit_name = CephadmDaemon._unit_name(fsid, daemon_id)
-        unit_path = os.path.join(ctx.unit_dir, unit_name)
-        unit_run = os.path.join(ctx.data_dir, fsid, f'{daemon_type}.{daemon_id}', 'unit.run')
-        port = None
-        try:
-            with open(unit_run, 'r') as u:
-                contents = u.read().strip(' &')
-        except OSError:
-            logger.warning(f'Unable to access the unit.run file @ {unit_run}')
-            return
-
-        port = None
-        for line in contents.split('\n'):
-            if '--port ' in line:
-                try:
-                    port = int(line.split('--port ')[-1])
-                except ValueError:
-                    logger.warning('Unexpected format in unit.run file: port is not numeric')
-                    logger.warning('Unable to remove the systemd file and close the port')
-                    return
-                break
-
-        if port:
-            fw = Firewalld(ctx)
-            try:
-                fw.close_ports([port])
-            except RuntimeError:
-                logger.error(f'Unable to close port {port}')
-
-        stdout, stderr, rc = call(ctx, ['rm', '-f', unit_path])
-        if rc:
-            logger.error(f'Unable to remove the systemd file @ {unit_path}')
-        else:
-            logger.info(f'removed systemd unit file @ {unit_path}')
-            stdout, stderr, rc = call(ctx, ['systemctl', 'daemon-reload'])
-
-
-def command_exporter(ctx: CephadmContext):
-    exporter = CephadmDaemon(ctx, ctx.fsid, daemon_id=ctx.id, port=ctx.port)
-
-    if ctx.fsid not in os.listdir(ctx.data_dir):
-        raise Error(f"cluster fsid '{ctx.fsid}' not found in '{ctx.data_dir}'")
-
-    exporter.run()
-
-##################################
-
-
-def systemd_target_state(target_name: str, subsystem: str = 'ceph') -> bool:
+def systemd_target_state(ctx: CephadmContext, target_name: str, subsystem: str = 'ceph') -> bool:
     # TODO: UNITTEST
     return os.path.exists(
         os.path.join(
-            UNIT_DIR,
+            ctx.unit_dir,
             f'{subsystem}.target.wants',
             target_name
         )
     )
 
 
+def target_exists(ctx: CephadmContext) -> bool:
+    return os.path.exists(ctx.unit_dir + '/ceph.target')
+
+
 @infer_fsid
-def command_maintenance(ctx: CephadmContext):
+def command_maintenance(ctx: CephadmContext) -> str:
     if not ctx.fsid:
-        raise Error('must pass --fsid to specify cluster')
+        raise Error('failed - must pass --fsid to specify cluster')
 
     target = f'ceph-{ctx.fsid}.target'
 
     if ctx.maintenance_action.lower() == 'enter':
         logger.info('Requested to place host into maintenance')
-        if systemd_target_state(target):
+        if systemd_target_state(ctx, target):
             _out, _err, code = call(ctx,
                                     ['systemctl', 'disable', target],
                                     verbosity=CallVerbosity.DEBUG)
@@ -7337,8 +7305,14 @@ def command_maintenance(ctx: CephadmContext):
 
     else:
         logger.info('Requested to exit maintenance state')
+        # if we've never deployed a daemon on this host there will be no systemd
+        # target to disable so attempting a disable will fail. We still need to
+        # return success here or host will be permanently stuck in maintenance mode
+        # as no daemons can be deployed so no systemd target will ever exist to disable.
+        if not target_exists(ctx):
+            return 'skipped - systemd target not present on this host. Host removed from maintenance mode.'
         # exit maintenance request
-        if not systemd_target_state(target):
+        if not systemd_target_state(ctx, target):
             _out, _err, code = call(ctx,
                                     ['systemctl', 'enable', target],
                                     verbosity=CallVerbosity.DEBUG)
@@ -7355,6 +7329,7 @@ def command_maintenance(ctx: CephadmContext):
                     return 'failed - unable to start the target'
                 else:
                     return f'success - systemd target {target} enabled and started'
+        return f'success - systemd target {target} enabled and started'
 
 ##################################
 
@@ -7384,6 +7359,10 @@ def _get_parser():
         '--logrotate-dir',
         default=LOGROTATE_DIR,
         help='location of logrotate configuration files')
+    parser.add_argument(
+        '--sysctl-dir',
+        default=SYSCTL_DIR,
+        help='location of sysctl configuration files')
     parser.add_argument(
         '--unit-dir',
         default=UNIT_DIR,
@@ -7519,6 +7498,10 @@ def _get_parser():
         '--keep-logs',
         action='store_true',
         help='do not remove log files')
+    parser_rm_cluster.add_argument(
+        '--zap-osds',
+        action='store_true',
+        help='zap OSD devices for this cluster')
 
     parser_run = subparsers.add_parser(
         'run', help='run a ceph daemon, in a container, in the foreground')
@@ -7560,8 +7543,17 @@ def _get_parser():
         default=[],
         help='set environment variable')
     parser_shell.add_argument(
+        '--volume', '-v',
+        action='append',
+        default=[],
+        help='set environment variable')
+    parser_shell.add_argument(
         'command', nargs=argparse.REMAINDER,
         help='command (optional)')
+    parser_shell.add_argument(
+        '--no-hosts',
+        action='store_true',
+        help='dont pass /etc/hosts through to the container')
 
     parser_enter = subparsers.add_parser(
         'enter', help='run an interactive shell inside a running daemon container')
@@ -7593,13 +7585,20 @@ def _get_parser():
         '--keyring', '-k',
         help='ceph.keyring to pass through to the container')
     parser_ceph_volume.add_argument(
-        '--log-output',
-        action='store_true',
-        default=True,
-        help='suppress ceph volume output from the log')
-    parser_ceph_volume.add_argument(
         'command', nargs=argparse.REMAINDER,
         help='command')
+
+    parser_zap_osds = subparsers.add_parser(
+        'zap-osds', help='zap all OSDs associated with a particular fsid')
+    parser_zap_osds.set_defaults(func=command_zap_osds)
+    parser_zap_osds.add_argument(
+        '--fsid',
+        required=True,
+        help='cluster FSID')
+    parser_zap_osds.add_argument(
+        '--force',
+        action='store_true',
+        help='proceed, even though this may destroy valuable data')
 
     parser_unit = subparsers.add_parser(
         'unit', help="operate on the daemon's systemd unit")
@@ -7666,6 +7665,10 @@ def _get_parser():
         '--output-pub-ssh-key',
         help="location to write the cluster's public SSH key")
     parser_bootstrap.add_argument(
+        '--skip-admin-label',
+        action='store_true',
+        help='do not create admin label for ceph.conf and client.admin keyring distribution')
+    parser_bootstrap.add_argument(
         '--skip-ssh',
         action='store_true',
         help='skip setup of ssh key on local host')
@@ -7706,7 +7709,6 @@ def _get_parser():
         '--ssh-user',
         default='root',
         help='set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users')
-
     parser_bootstrap.add_argument(
         '--skip-mon-network',
         action='store_true',
@@ -7762,7 +7764,6 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--apply-spec',
         help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')
-
     parser_bootstrap.add_argument(
         '--shared_ceph_folder',
         metavar='CEPH_SOURCE_FOLDER',
@@ -7786,20 +7787,16 @@ def _get_parser():
         default=CONTAINER_INIT,
         help=argparse.SUPPRESS)
     parser_bootstrap.add_argument(
-        '--with-exporter',
-        action='store_true',
-        help='Automatically deploy cephadm metadata exporter to each node')
-    parser_bootstrap.add_argument(
-        '--exporter-config',
-        action=CustomValidation,
-        help=f'Exporter configuration information in JSON format (providing: {", ".join(CephadmDaemon.config_requirements)}, port information)')
-    parser_bootstrap.add_argument(
         '--cluster-network',
         help='subnet to use for cluster replication, recovery and heartbeats (in CIDR notation network/mask)')
     parser_bootstrap.add_argument(
         '--single-host-defaults',
         action='store_true',
         help='adjust configuration defaults to suit a single-host cluster')
+    parser_bootstrap.add_argument(
+        '--log-to-file',
+        action='store_true',
+        help='configure cluster to log to traditional log files in /var/log/ceph/$fsid')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
@@ -7934,25 +7931,6 @@ def _get_parser():
         'gather-facts', help='gather and return host related information (JSON format)')
     parser_gather_facts.set_defaults(func=command_gather_facts)
 
-    parser_exporter = subparsers.add_parser(
-        'exporter', help='Start cephadm in exporter mode (web service), providing host/daemon/disk metadata')
-    parser_exporter.add_argument(
-        '--fsid',
-        required=True,
-        type=str,
-        help='fsid of the cephadm exporter to run against')
-    parser_exporter.add_argument(
-        '--port',
-        type=int,
-        default=int(CephadmDaemon.default_port),
-        help='port number for the cephadm exporter service')
-    parser_exporter.add_argument(
-        '--id',
-        type=str,
-        default=get_hostname().split('.')[0],
-        help='daemon identifer for the exporter')
-    parser_exporter.set_defaults(func=command_exporter)
-
     parser_maintenance = subparsers.add_parser(
         'host-maintenance', help='Manage the maintenance state of a host')
     parser_maintenance.add_argument(
@@ -7965,19 +7943,21 @@ def _get_parser():
         help='Maintenance action - enter maintenance, or exit maintenance')
     parser_maintenance.set_defaults(func=command_maintenance)
 
-    parser_verify_prereqs = subparsers.add_parser(
-        'verify-prereqs',
-        help='verify system prerequisites for a given service are met on this host')
-    parser_verify_prereqs.set_defaults(func=command_verify_prereqs)
-    parser_verify_prereqs.add_argument(
-        '--daemon-type',
+    parser_agent = subparsers.add_parser(
+        'agent', help='start cephadm agent')
+    parser_agent.set_defaults(func=command_agent)
+    parser_agent.add_argument(
+        '--fsid',
         required=True,
-        help='service type of service to whose prereqs will be checked')
+        help='cluster FSID')
+    parser_agent.add_argument(
+        '--daemon-id',
+        help='daemon id for agent')
 
     return parser
 
 
-def _parse_args(av):
+def _parse_args(av: List[str]) -> argparse.Namespace:
     parser = _get_parser()
 
     args = parser.parse_args(av)
@@ -7998,18 +7978,15 @@ def _parse_args(av):
     return args
 
 
-def cephadm_init_ctx(args: List[str]) -> Optional[CephadmContext]:
-
+def cephadm_init_ctx(args: List[str]) -> CephadmContext:
     ctx = CephadmContext()
     ctx.set_args(_parse_args(args))
     return ctx
 
 
-def cephadm_init(args: List[str]) -> Optional[CephadmContext]:
-
+def cephadm_init(args: List[str]) -> CephadmContext:
     global logger
     ctx = cephadm_init_ctx(args)
-    assert ctx is not None
 
     # Logger configuration
     if not os.path.exists(LOG_DIR):
@@ -8017,19 +7994,27 @@ def cephadm_init(args: List[str]) -> Optional[CephadmContext]:
     dictConfig(logging_config)
     logger = logging.getLogger()
 
+    if not os.path.exists(ctx.logrotate_dir + '/cephadm'):
+        with open(ctx.logrotate_dir + '/cephadm', 'w') as f:
+            f.write("""# created by cephadm
+/var/log/ceph/cephadm.log {
+    rotate 7
+    daily
+    compress
+    missingok
+    notifempty
+}
+""")
+
     if ctx.verbose:
         for handler in logger.handlers:
             if handler.name == 'console':
                 handler.setLevel(logging.DEBUG)
-
-    if not ctx.has_function():
-        sys.stderr.write('No command specified; pass -h or --help for usage\n')
-        return None
-
+    logger.debug('%s\ncephadm %s' % ('-' * 80, args))
     return ctx
 
 
-def main():
+def main() -> None:
 
     # root?
     if os.geteuid() != 0:
@@ -8040,14 +8025,21 @@ def main():
     av = sys.argv[1:]
 
     ctx = cephadm_init(av)
-    if not ctx:  # error, exit
+    if not ctx.has_function():
+        sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
 
     try:
         # podman or docker?
         ctx.container_engine = find_container_engine(ctx)
         if ctx.func not in \
-                [command_check_host, command_prepare_host, command_add_repo]:
+                [
+                    command_check_host,
+                    command_prepare_host,
+                    command_add_repo,
+                    command_rm_repo,
+                    command_install
+                ]:
             check_container_engine(ctx)
         # command handler
         r = ctx.func(ctx)

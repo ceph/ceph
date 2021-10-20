@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import cherrypy
 
@@ -16,10 +15,10 @@ from .. import mgr
 from ..exceptions import UserDoesNotExist
 from ..services.auth import JwtManager
 from ..tools import prepare_url_prefix
-from . import BaseController, Controller, ControllerAuthMixin, Endpoint, allow_empty_body
+from . import BaseController, ControllerAuthMixin, Endpoint, Router, allow_empty_body
 
 
-@Controller('/auth/saml2', secure=False)
+@Router('/auth/saml2', secure=False)
 class Saml2(BaseController, ControllerAuthMixin):
 
     @staticmethod

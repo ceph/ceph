@@ -173,7 +173,7 @@ public:
 
   MDSRank *mds;
   // replay state
-  std::map<inodeno_t, set<inodeno_t>> pending_exports;
+  std::map<inodeno_t, std::set<inodeno_t>> pending_exports;
 
 protected:
   struct PendingEvent {
@@ -276,15 +276,15 @@ protected:
 
   // -- segments --
   std::map<uint64_t,LogSegment*> segments;
-  set<LogSegment*> expiring_segments;
-  set<LogSegment*> expired_segments;
+  std::set<LogSegment*> expiring_segments;
+  std::set<LogSegment*> expired_segments;
   std::size_t pre_segments_size = 0;            // the num of segments when the mds finished replay-journal, to calc the num of segments growing
   uint64_t event_seq = 0;
   int expiring_events = 0;
   int expired_events = 0;
 
   int64_t mdsmap_up_features = 0;
-  std::map<uint64_t,list<PendingEvent> > pending_events; // log segment -> event list
+  std::map<uint64_t,std::list<PendingEvent> > pending_events; // log segment -> event list
   ceph::mutex submit_mutex = ceph::make_mutex("MDLog::submit_mutex");
   ceph::condition_variable submit_cond;
 

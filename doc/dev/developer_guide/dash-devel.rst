@@ -396,8 +396,9 @@ do a full scale e2e run.
 It will verify if everything needed is installed, start a new vstart cluster
 and run the full test suite.
 
-Start all frontend E2E tests by running::
+Start all frontend E2E tests with::
 
+  $ cd src/pybind/mgr/dashboard
   $ ./run-frontend-e2e-tests.sh
 
 Report:
@@ -422,6 +423,50 @@ Remote:
 Note:
   When using docker, as your device, you might need to run the script with sudo
   permissions.
+
+run-cephadm-e2e-tests.sh
+.........................
+
+``run-cephadm-e2e-tests.sh`` runs a subset of E2E tests to verify that the Dashboard and cephadm as
+Orchestrator backend behave correctly.
+
+Prerequisites: you need to install `KCLI
+<https://kcli.readthedocs.io/en/latest/>`_ and Node.js in your local machine.
+
+Configure KCLI plan requirements::
+
+  $ sudo chown -R $(id -un) /var/lib/libvirt/images
+  $ mkdir -p /var/lib/libvirt/images/ceph-dashboard
+  $ kcli create pool -p /var/lib/libvirt/images/ceph-dashboard ceph-dashboard
+  $ kcli create network -c 192.168.100.0/24 ceph-dashboard
+
+Note:
+  This script is aimed to be run as jenkins job so the cleanup is triggered only in a jenkins
+  environment. In local, the user will shutdown the cluster when desired (i.e. after debugging).
+
+Start E2E tests by running::
+
+  $ cd <your/ceph/repo/dir>
+  $ sudo chown -R $(id -un) src/pybind/mgr/dashboard/frontend/{dist,node_modules,src/environments}
+  $ ./src/pybind/mgr/dashboard/ci/cephadm/run-cephadm-e2e-tests.sh
+
+You can also start a cluster in development mode (so the frontend build starts in watch mode and you
+only have to reload the page for the changes to be reflected) by running::
+
+  $ ./src/pybind/mgr/dashboard/ci/cephadm/start-cluster.sh --dev-mode
+
+Note:
+  Add ``--expanded`` if you need a cluster ready to deploy services (one with enough monitor
+  daemons spread across different hosts and enough OSDs).
+
+Test your changes by running:
+
+  $ ./src/pybind/mgr/dashboard/ci/cephadm/run-cephadm-e2e-tests.sh
+
+Shutdown the cluster by running:
+
+  $ kcli delete plan -y ceph
+  $ # In development mode, also kill the npm build watch process (e.g., pkill -f "ng build")
 
 Other running options
 .....................
@@ -602,6 +647,57 @@ the message. For example, ``it('edits the test image' () => ...)`` vs.
 grammatical sense with ``it()`` as the prefix whereas the second message does
 not. ``it()`` should describe what the individual test is doing and what it
 expects to happen.
+
+
+Visual Regression Testing
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For visual regression testing, we use `Applitools Eyes <https://applitools.com/products-eyes/>`_
+an AI powered automated  visual regression testing tool.
+Applitools integrates with our existing Cypress E2E tests.
+The tests currently are located at: ``ceph/src/pybind/mgr/dashboard/frontend/cypress/integration/visualTests`` and
+follow the naming convention: ``<component-name>.vrt-spec.ts``.
+
+Running Visual Regression Tests Locally
+.......................................
+
+To run the tests locally, you'll need an Applitools API key, if you don't have one, you can sign up
+for a free account. After obtaining the API key, export it as an environment variable: ``APPLITOOLS_API_KEY``.
+
+Now you can run the tests like normal cypress E2E tests, using either ``npx cypress open`` or in headless mode by running ``npx cypress run``.
+
+Capturing Screenshots
+.....................
+
+Baseline screenshots are the screenshots against which checkpoint screenshots
+(or the screenshots from your feature branch) will be tested.
+
+To capture baseline screenshots, you can run the tests against the master branch,
+and then switch to your feature branch and run the tests again to capture checkpoint screenshots.
+
+Now to see your screenshots, login to applitools.com and on the landing page you'll be greeted with
+applitools eyes test runner, where you can see all your screenshots. And if there's any visual regression or difference (diff) between your baseline and checkpoint screenshots, they'll be highlighted with a mask over the diff.
+
+Writing More Visual Regression Tests
+....................................
+
+Please refer to `Applitools's official cypress sdk documentation <https://github.com/applitools/eyes.sdk.javascript1/tree/master/packages/eyes-cypress>`_ to write more tests.
+
+Visual Regression Tests In Jenkins
+..................................
+
+Currently, all visual regression tests are being run under `ceph dashboard tests <https://jenkins.ceph.com/job/ceph-dashboard-pull-requests>`_ GitHub check in the Jenkins job.
+
+Accepting or Rejecting Differences
+..................................
+
+Currently, only the ceph dashboard team has read and write access to the applitools test runner. If any differences are reported by the tests, and you want to accept them and update the baseline screenshots, or if the differences are due to a genuine regression you can fail them. To perform the above actions, please follow `this <https://applitools.com/docs/topics/test-manager/pages/page-test-results/tm-accepting-and-rejecting-steps.html>`_ guide.
+
+Debugging Regressions
+.....................
+
+If you're running the tests locally and regressions are reported, you can take advantage of `Applitools's Root Cause Analysis feature <https://applitools.com/docs/topics/test-manager/viewers/root-cause-analysis.html>`_ to find the cause of the regression.
+
 
 Differences between Frontend Unit Tests and End-to-End (E2E) Tests / FAQ
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1013,6 +1109,31 @@ To create a transifex api token visit `<https://www.transifex.com/user/settings/
 After the command ran successfully, build the UI and check if everything is
 working as expected. You also might want to run the frontend tests.
 
+Add a new release resource to transifex
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In order to organize the translations, we create a
+`transifex resource <https://www.transifex.com/ceph/ceph-dashboard/content/>`_
+for every Ceph release. This means, once a new version has been released, the
+``src/pybind/mgr/dashboard/frontend/i18n.config.json`` needs to be updated on
+the release branch.
+
+Please replace::
+
+"resource": "Master:master"
+
+by::
+
+"resource": "<Release-name>:<release-name>"
+
+E.g. the resource definition for the pacific release::
+
+"resource": "Pacific:pacific"
+
+Note:
+  The first part of the resource definition (before the colon) needs to be
+  written with a capital letter.
+
 Suggestions
 ~~~~~~~~~~~
 
@@ -1104,7 +1225,7 @@ Unit tests based on tox
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 We included a ``tox`` configuration file that will run the unit tests under
-Python 2 or 3, as well as linting tools to guarantee the uniformity of code.
+Python 3, as well as linting tools to guarantee the uniformity of code.
 
 You need to install ``tox`` and ``coverage`` before running it. To install the
 packages in your system, either install it via your operating system's package
@@ -1118,9 +1239,6 @@ Alternatively, you can use Python's native package installation method::
 
 To run the tests, run ``src/script/run_tox.sh`` in the dashboard directory (where
 ``tox.ini`` is located)::
-
-  ## Run Python 2+3 tests+lint commands:
-  $ ../../../script/run_tox.sh --tox-env py27,py3,lint,check
 
   ## Run Python 3 tests+lint commands:
   $ ../../../script/run_tox.sh --tox-env py3,lint,check
@@ -1466,6 +1584,25 @@ same applies to other request types:
 | DELETE       | Yes        | delete         | 204         |
 +--------------+------------+----------------+-------------+
 
+To use a custom endpoint for the above listed methods, you can
+use ``@RESTController.MethodMap``
+
+.. code-block:: python
+
+  import cherrypy
+  from ..tools import ApiController, RESTController
+
+    @RESTController.MethodMap(version='0.1')
+    def create(self):
+      return {"msg": "Hello"}
+
+This decorator supports three parameters to customize the
+endpoint:
+
+* ``resource"``: resource id.
+* ``status=200``: set the HTTP status response code
+* ``version``: version
+
 How to use a custom API endpoint in a RESTController?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1494,7 +1631,7 @@ used. To use a custom endpoint inside a restricted ``RESTController`` use
     def some_post_endpoint(self, **data):
       return {"msg": data}
 
-Both decorators also support four parameters to customize the
+Both decorators also support five parameters to customize the
 endpoint:
 
 * ``method="GET"``: the HTTP method allowed to access this endpoint.
@@ -1503,6 +1640,7 @@ endpoint:
 * ``status=200``: set the HTTP status response code
 * ``query_params=[]``: list of method parameter names that correspond to URL
   query parameters.
+* ``version``: version
 
 How to restrict access to a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1612,6 +1750,58 @@ load the controllers that we want to test. In the above example we are only
 loading the ``Ping`` controller. We can also disable authentication of a
 controller at this stage, as depicted in the example.
 
+How to update or create new dashboards in grafana?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+We are using ``jsonnet`` and ``grafonnet-lib`` to write code for the grafana dashboards.
+All the dashboards are written inside ``grafana_dashboards.jsonnet`` file in the
+monitoring/grafana/dashboards/jsonnet directory.
+
+We generate the dashboard json files directly from this jsonnet file by running this
+command in the grafana/dashboards directory:
+``jsonnet -m . jsonnet/grafana_dashboards.jsonnet``.
+(For the above command to succeed we need ``jsonnet`` package installed and ``grafonnet-lib``
+directory cloned in our machine. Please refer -
+``https://grafana.github.io/grafonnet-lib/getting-started/`` in case you have some trouble.)
+
+To update an existing grafana dashboard or to create a new one, we need to update
+the ``grafana_dashboards.jsonnet`` file and generate the new/updated json files using the
+above mentioned command. For people who are not familiar with grafonnet or jsonnet implementation
+can follow this doc - ``https://grafana.github.io/grafonnet-lib/``.
+
+Example grafana dashboard in jsonnet format:
+
+To specify the grafana dashboard properties such as title, uid etc we can create a local function -
+
+::
+
+    local dashboardSchema(title, uid, time_from, refresh, schemaVersion, tags,timezone, timepicker)
+
+To add a graph panel we can spcify the graph schema in a local function such as -
+
+::
+
+    local graphPanelSchema(title, nullPointMode, stack, formatY1, formatY2, labelY1, labelY2, min, fill, datasource)
+
+and then use these functions inside the dashboard definition like -
+
+::
+
+    {
+        radosgw-sync-overview.json: //json file name to be generated
+
+        dashboardSchema(
+          'RGW Sync Overview', 'rgw-sync-overview', 'now-1h', '15s', .., .., ..
+        )
+
+        .addPanels([
+          graphPanelSchema(
+            'Replication (throughput) from Source Zone', 'Bps', null, .., .., ..)
+        ])
+    }
+
+The valid grafonnet-lib attributes can be found here - ``https://grafana.github.io/grafonnet-lib/api-docs/``.
+
 
 How to listen for manager notifications in a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1629,8 +1819,6 @@ The example below represents a controller that implements a very simple live
 log viewer page:
 
 .. code-block:: python
-
-  from __future__ import absolute_import
 
   import collections
 
@@ -2022,7 +2210,6 @@ updates its progress:
 
 .. code-block:: python
 
-  from __future__ import absolute_import
   import random
   import time
   import cherrypy

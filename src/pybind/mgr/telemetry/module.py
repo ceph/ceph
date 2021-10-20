@@ -4,6 +4,8 @@ Telemetry module for ceph-mgr
 Collect statistics from Ceph cluster and send this back to the Ceph project
 when user has opted-in
 """
+import logging
+import numbers
 import enum
 import errno
 import hashlib
@@ -20,7 +22,7 @@ from typing import cast, Any, DefaultDict, Dict, List, Optional, Tuple, TypeVar,
 from mgr_module import CLICommand, CLIReadCommand, MgrModule, Option, OptionValue, ServiceInfoT
 
 
-ALL_CHANNELS = ['basic', 'ident', 'crash', 'device']
+ALL_CHANNELS = ['basic', 'ident', 'crash', 'device', 'perf']
 
 LICENSE = 'sharing-1-0'
 LICENSE_NAME = 'Community Data License Agreement - Sharing - Version 1.0'
@@ -59,7 +61,6 @@ REVISION = 3
 #   - rbd pool and image count, and rbd mirror mode (pool-level)
 #   - rgw daemons, zones, zonegroups; which rgw frontends
 #   - crush map stats
-
 
 class Module(MgrModule):
     metadata_keys = [
@@ -122,6 +123,10 @@ class Module(MgrModule):
                default=True,
                desc=('Share device health metrics '
                      '(e.g., SMART data, minus potentially identifying info like serial numbers)')),
+        Option(name='channel_perf',
+               type='bool',
+               default=False,
+               desc='Share perf counter metrics summed across the whole cluster'),
     ]
 
     @property
@@ -149,6 +154,7 @@ class Module(MgrModule):
             self.channel_ident = False
             self.channel_crash = True
             self.channel_device = True
+            self.channel_perf = False
 
     def config_notify(self) -> None:
         for opt in self.MODULE_OPTIONS:
@@ -296,18 +302,174 @@ class Module(MgrModule):
             'active_changed': sorted(list(active)),
         }
 
+    def get_stat_sum_per_pool(self) -> List[dict]:
+        # Initialize 'result' list
+        result: List[dict] = []
+
+        # Create a list of pool ids that will later act as a queue, i.e.:
+        #   pool_queue = [1, 2, 3]
+        osd_map = self.get('osd_map')
+        pool_queue = []
+        for pool in osd_map['pools']:
+            pool_queue.append(str(pool['pool']))
+
+        # Populate 'result', i.e.:
+        #   {
+        #       'pool_id': '1'
+        #       'stats_sum': {
+        #           'num_bytes': 36,
+        #           'num_bytes_hit_set_archive': 0,
+        #           ...
+        #           'num_write_kb': 0
+        #           }
+        #       }
+        #   }
+        while pool_queue:
+            # Pop the current pool id out of pool_queue
+            curr_pool_id = pool_queue.pop(0)
+
+            # Initialize a dict that will hold aggregated stats for the current pool
+            compiled_stats_dict: Dict[str, Any] = defaultdict(lambda: defaultdict(int))
+
+            # Find out which pgs belong to the current pool and add up
+            # their stats
+            pg_dump = self.get('pg_dump')
+            for pg in pg_dump['pg_stats']:
+                pool_id = pg['pgid'].split('.')[0]
+                if pool_id == curr_pool_id:
+                    compiled_stats_dict['pool_id'] = int(pool_id)
+                    for metric in pg['stat_sum']:
+                        compiled_stats_dict['stats_sum'][metric] += pg['stat_sum'][metric]
+                else:
+                    continue
+            # 'compiled_stats_dict' now holds all stats pertaining to
+            # the current pool. Adding it to the list of results.
+            result.append(compiled_stats_dict)
+
+        return result
+
+    def get_osd_histograms(self) -> List[Dict[str, dict]]:
+        # Initialize result dict
+        result: Dict[str, dict] = defaultdict(lambda: defaultdict(
+                                              lambda: defaultdict(
+                                              lambda: defaultdict(
+                                              lambda: defaultdict(
+                                              lambda: defaultdict(int))))))
+
+        # Get list of osd ids from the metadata
+        osd_metadata = self.get('osd_metadata')
+        
+        # Grab output from the "osd.x perf histogram dump" command
+        for osd_id in osd_metadata:
+            cmd_dict = {
+                'prefix': 'perf histogram dump',
+                'id': str(osd_id),
+                'format': 'json'
+            }
+            r, outb, outs = self.osd_command(cmd_dict)
+            # Check for invalid calls
+            if r != 0:
+                self.log.debug("Invalid command dictionary.")
+                continue
+            else:
+                try:
+                    # This is where the histograms will land if there are any.
+                    dump = json.loads(outb)
+
+                    for histogram in dump['osd']:
+                        # Log axis information. There are two axes, each represented
+                        # as a dictionary. Both dictionaries are contained inside a
+                        # list called 'axes'.
+                        axes = []
+                        for axis in dump['osd'][histogram]['axes']:
+
+                            # This is the dict that contains information for an individual
+                            # axis. It will be appended to the 'axes' list at the end.
+                            axis_dict: Dict[str, Any] = defaultdict()
+
+                            # Collecting information for buckets, min, name, etc.
+                            axis_dict['buckets'] = axis['buckets']
+                            axis_dict['min'] = axis['min']
+                            axis_dict['name'] = axis['name']
+                            axis_dict['quant_size'] = axis['quant_size']
+                            axis_dict['scale_type'] = axis['scale_type']
+
+                            # Collecting ranges; placing them in lists to
+                            # improve readability later on.
+                            ranges = []
+                            for _range in axis['ranges']:
+                                _max, _min = None, None
+                                if 'max' in _range:
+                                    _max = _range['max']
+                                if 'min' in _range:
+                                    _min = _range['min']
+                                ranges.append([_min, _max])
+                            axis_dict['ranges'] = ranges
+
+                            # Now that 'axis_dict' contains all the appropriate
+                            # information for the current axis, append it to the 'axes' list.
+                            # There will end up being two axes in the 'axes' list, since the
+                            # histograms are 2D.
+                            axes.append(axis_dict)
+
+                        # Add the 'axes' list, containing both axes, to result.
+                        # At this point, you will see that the name of the key is the string
+                        # form of our axes list (str(axes)). This is there so that histograms
+                        # with different axis configs will not be combined.
+                        # The key names are modified into something more readable ('config_x')
+                        # down below.
+                        result[str(axes)][histogram]['axes'] = axes
+
+                        # Collect current values and make sure they are in
+                        # integer form.
+                        values = []
+                        for value_list in dump['osd'][histogram]['values']:
+                            values.append([int(v) for v in value_list])
+
+                        # Aggregate values. If 'values' have already been initialized,
+                        # we can safely add.
+                        if 'values' in result[str(axes)][histogram]:
+                            for i in range (0, len(values)):
+                                for j in range (0, len(values[i])):
+                                    values[i][j] += result[str(axes)][histogram]['values'][i][j]
+
+                        # Add the values to result.
+                        result[str(axes)][histogram]['values'] = values
+
+                        # Update num_combined_osds
+                        if 'num_combined_osds' not in result[str(axes)][histogram]:
+                            result[str(axes)][histogram]['num_combined_osds'] = 1
+                        else:
+                            result[str(axes)][histogram]['num_combined_osds'] += 1
+
+                # Sometimes, json errors occur if you give it an empty string.
+                # I am also putting in a catch for a KeyError since it could
+                # happen where the code is assuming that a key exists in the
+                # schema when it doesn't. In either case, we'll handle that
+                # by returning an empty dict.
+                except (json.decoder.JSONDecodeError, KeyError) as e:
+                    self.log.debug("Error caught: {}".format(e))
+                    return list()
+
+        return list(result.values())
+
+    def get_io_rate(self) -> dict:
+        return self.get('io_rate')
+
     def gather_crashinfo(self) -> List[Dict[str, str]]:
         crashlist: List[Dict[str, str]] = list()
         errno, crashids, err = self.remote('crash', 'ls')
         if errno:
             return crashlist
         for crashid in crashids.split():
-            cmd = {'id': crashid}
-            errno, crashinfo, err = self.remote('crash', 'do_info', cmd, '')
+            errno, crashinfo, err = self.remote('crash', 'do_info', crashid)
             if errno:
                 continue
             c = json.loads(crashinfo)
+
+            # redact hostname
             del c['utsname_hostname']
+
             # entity_name might have more than one '.', beware
             (etype, eid) = c.get('entity_name', '').split('.', 1)
             m = hashlib.sha1()
@@ -316,8 +478,82 @@ class Module(MgrModule):
             m.update(eid.encode('utf-8'))
             m.update(self.salt.encode('utf-8'))
             c['entity_name'] = etype + '.' + m.hexdigest()
+
+            # redact final line of python tracebacks, as the exception
+            # payload may contain identifying information
+            if 'mgr_module' in c:
+                c['backtrace'][-1] = '<redacted>'
+
             crashlist.append(c)
         return crashlist
+
+    def gather_perf_counters(self) -> Dict[str, dict]:
+        # Extract perf counter data with get_all_perf_counters(), a method
+        # from mgr/mgr_module.py. This method returns a nested dictionary that
+        # looks a lot like perf schema, except with some additional fields.
+        #
+        # Example of output, a snapshot of a mon daemon:
+        #   "mon.b": {
+        #       "bluestore.kv_flush_lat": {
+        #           "count": 2431,
+        #           "description": "Average kv_thread flush latency",
+        #           "nick": "fl_l",
+        #           "priority": 8,
+        #           "type": 5,
+        #           "units": 1,
+        #           "value": 88814109
+        #       },
+        #   },
+        all_perf_counters = self.get_all_perf_counters()
+
+        # Initialize 'result' dict
+        result: Dict[str, dict] = defaultdict(lambda: defaultdict(
+            lambda: defaultdict(lambda: defaultdict(int))))
+
+        # Condense metrics among like daemons (i.e. 'osd' = 'osd.0' +
+        # 'osd.1' + 'osd.2'), and update the 'result' dict.
+        for daemon in all_perf_counters:
+            daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
+            for collection in all_perf_counters[daemon]:
+
+                # Split the collection to avoid redundancy in final report; i.e.:
+                #   bluestore.kv_flush_lat, bluestore.kv_final_lat --> 
+                #   bluestore: kv_flush_lat, kv_final_lat
+                col_0, col_1 = collection.split('.')
+
+                # Debug log for empty keys. This initially was a problem for prioritycache
+                # perf counters, where the col_0 was empty for certain mon counters:
+                #
+                # "mon.a": {                  instead of    "mon.a": {
+                #      "": {                                     "prioritycache": {
+                #        "cache_bytes": {...},                          "cache_bytes": {...},
+                #
+                # This log is here to detect any future instances of a similar issue.
+                if (daemon == "") or (col_0 == "") or (col_1 == ""):
+                    self.log.debug("Instance of an empty key: {}{}".format(daemon, collection))
+
+                # Not every rgw daemon has the same schema. Specifically, each rgw daemon
+                # has a uniquely-named collection that starts off identically (i.e.
+                # "objecter-0x...") then diverges (i.e. "...55f4e778e140.op_rmw").
+                # This bit of code combines these unique counters all under one rgw instance.
+                # Without this check, the schema would remain separeted out in the final report.
+                if col_0[0:11] == "objecter-0x":
+                    col_0 = "objecter-0x"
+
+                # Check that the value can be incremented. In some cases,
+                # the files are of type 'pair' (real-integer-pair, integer-integer pair).
+                # In those cases, the value is a dictionary, and not a number.
+                #   i.e. throttle-msgr_dispatch_throttler-hbserver["wait"]
+                if isinstance(all_perf_counters[daemon][collection]['value'], numbers.Number):
+                    result[daemon_type][col_0][col_1]['value'] += \
+                            all_perf_counters[daemon][collection]['value']
+                
+                # Check that 'count' exists, as not all counters have a count field. 
+                if 'count' in all_perf_counters[daemon][collection]:
+                    result[daemon_type][col_0][col_1]['count'] += \
+                            all_perf_counters[daemon][collection]['count']
+
+        return result
 
     def get_active_channels(self) -> List[str]:
         r = []
@@ -329,6 +565,8 @@ class Module(MgrModule):
             r.append('device')
         if self.channel_ident:
             r.append('ident')
+        if self.channel_perf:
+            r.append('perf')
         return r
 
     def gather_device_report(self) -> Dict[str, Dict[str, Dict[str, str]]]:
@@ -401,7 +639,7 @@ class Module(MgrModule):
         if not channels:
             channels = self.get_active_channels()
         report = {
-            'leaderboard': False,
+            'leaderboard': self.leaderboard,
             'report_version': 1,
             'report_timestamp': datetime.utcnow().isoformat(),
             'report_id': self.report_id,
@@ -411,8 +649,6 @@ class Module(MgrModule):
         }
 
         if 'ident' in channels:
-            if self.leaderboard:
-                report['leaderboard'] = True
             for option in ['description', 'contact', 'organization']:
                 report[option] = getattr(self, option)
 
@@ -647,6 +883,12 @@ class Module(MgrModule):
         if 'crash' in channels:
             report['crashes'] = self.gather_crashinfo()
 
+        if 'perf' in channels:
+            report['perf_counters'] = self.gather_perf_counters()
+            report['stat_sum_per_pool'] = self.get_stat_sum_per_pool()
+            report['io_rate'] = self.get_io_rate()
+            report['osd_perf_histograms'] = self.get_osd_histograms()
+
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
 
@@ -769,6 +1011,27 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         Show report of all channels
         '''
         report = self.get_report(channels=channels)
+
+        # Formatting the perf histograms so they are human-readable. This will change the
+        # ranges and values, which are currently in list form, into strings so that
+        # they are displayed horizontally instead of vertically.
+        try:
+            for config in report['osd_perf_histograms']:
+                for histogram in config:
+                    # Adjust ranges by converting lists into strings
+                    for axis in config[histogram]['axes']:
+                        for i in range(0, len(axis['ranges'])):
+                            axis['ranges'][i] = str(axis['ranges'][i])
+                    # Adjust values by converting lists into strings
+                    for i in range(0, len(config[histogram]['values'])):
+                        config[histogram]['values'][i] = str(config[histogram]['values'][i])
+        except KeyError:
+            # If the perf channel is not enabled, there should be a KeyError since
+            # 'osd_perf_histograms' would not be present in the report. In that case,
+            # the show function should pass as usual without trying to format the
+            # histograms.
+            pass
+
         report = json.dumps(report, indent=4, sort_keys=True)
         if self.channel_device:
             report += '''

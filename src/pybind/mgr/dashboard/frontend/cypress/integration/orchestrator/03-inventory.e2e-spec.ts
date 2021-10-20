@@ -1,6 +1,6 @@
 import { InventoryPageHelper } from '../cluster/inventory.po';
 
-describe('Inventory page', () => {
+describe('Physical Disks page', () => {
   const inventory = new InventoryPageHelper();
 
   beforeEach(() => {

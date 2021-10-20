@@ -6,8 +6,8 @@
 #include "rgw_sal_rados.h"
 #include "rgw_lua.h"
 #ifdef WITH_RADOSGW_LUA_PACKAGES
+#include <filesystem>
 #include <boost/process.hpp>
-#include <boost/filesystem.hpp>
 #include "rgw_lua_version.h"
 #endif
 
@@ -90,8 +90,8 @@ const std::string PACKAGE_LIST_OBJECT_NAME = "lua_package_allowlist";
 
 namespace bp = boost::process;
 
-int add_package(rgw::sal::Store* store, optional_yield y, const std::string& package_name, bool allow_compilation) {
-  // verify that luarocks can load this oackage
+int add_package(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, optional_yield y, const std::string& package_name, bool allow_compilation) {
+  // verify that luarocks can load this package
   const auto p = bp::search_path("luarocks");
   if (p.empty()) {
     return -ECHILD;
@@ -118,12 +118,19 @@ int add_package(rgw::sal::Store* store, optional_yield y, const std::string& pac
     return -EINVAL;
   }
   
+  //replace previous versions of the package
+  const std::string package_name_no_version = package_name.substr(0, package_name.find(" "));
+  ret = remove_package(dpp, store, y, package_name_no_version);
+  if (ret < 0) {
+    return ret;
+  }
+
   // add package to list
   const bufferlist empty_bl;
   std::map<std::string, bufferlist> new_package{{package_name, empty_bl}};
   librados::ObjectWriteOperation op;
   op.omap_set(new_package);
-  ret = rgw_rados_operate(*(static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_lc_pool_ctx()),
+  ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
       PACKAGE_LIST_OBJECT_NAME, &op, y);
 
   if (ret < 0) {
@@ -132,20 +139,40 @@ int add_package(rgw::sal::Store* store, optional_yield y, const std::string& pac
   return 0;
 }
 
-int remove_package(rgw::sal::Store* store, optional_yield y, const std::string& package_name) {
+int remove_package(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, optional_yield y, const std::string& package_name) {
   librados::ObjectWriteOperation op;
-  op.omap_rm_keys(std::set<std::string>({package_name}));
-  const auto ret = rgw_rados_operate(*(static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_lc_pool_ctx()),
-    PACKAGE_LIST_OBJECT_NAME, &op, y);
-
-  if (ret < 0) {
+  size_t pos = package_name.find(" ");
+  if (pos != package_name.npos) {
+    // remove specfic version of the the package
+    op.omap_rm_keys(std::set<std::string>({package_name}));
+    auto ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+        PACKAGE_LIST_OBJECT_NAME, &op, y);
+    if (ret < 0) {
+        return ret;
+    }
+    return 0;
+  }
+  // otherwise, remove any existing versions of the package
+  packages_t packages;
+  auto ret = list_packages(dpp, store, y, packages);
+  if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
-
+  for(const auto& package : packages) {
+    const std::string package_no_version = package.substr(0, package.find(" "));
+    if (package_no_version.compare(package_name) == 0) {
+        op.omap_rm_keys(std::set<std::string>({package}));
+        ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+            PACKAGE_LIST_OBJECT_NAME, &op, y);
+        if (ret < 0) {
+            return ret;
+        }
+    }
+  }
   return 0;
 }
 
-int list_packages(rgw::sal::Store* store, optional_yield y, packages_t& packages) {
+int list_packages(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, optional_yield y, packages_t& packages) {
   constexpr auto max_chunk = 1024U;
   std::string start_after;
   bool more = true;
@@ -154,7 +181,7 @@ int list_packages(rgw::sal::Store* store, optional_yield y, packages_t& packages
     librados::ObjectReadOperation op;
     packages_t packages_chunk;
     op.omap_get_keys2(start_after, max_chunk, &packages_chunk, &more, &rval);
-    const auto ret = rgw_rados_operate(*(static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_lc_pool_ctx()),
+    const auto ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
       PACKAGE_LIST_OBJECT_NAME, &op, nullptr, y);
   
     if (ret < 0) {
@@ -167,12 +194,13 @@ int list_packages(rgw::sal::Store* store, optional_yield y, packages_t& packages
   return 0;
 }
 
-int install_packages(rgw::sal::Store* store, optional_yield y, packages_t& failed_packages, std::string& output) {
+int install_packages(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, optional_yield y, packages_t& failed_packages, std::string& output) {
   // luarocks directory cleanup
-  boost::system::error_code ec;
+  std::error_code ec;
   const auto& luarocks_path = store->get_luarocks_path();
-  boost::filesystem::remove_all(luarocks_path, ec);
-  if (ec.value() != 0 && ec.value() != ENOENT) {
+  if (std::filesystem::remove_all(luarocks_path, ec)
+      == static_cast<std::uintmax_t>(-1) &&
+      ec != std::errc::no_such_file_or_directory) {
     output.append("failed to clear luarock directory: ");
     output.append(ec.message());
     output.append("\n");
@@ -180,7 +208,7 @@ int install_packages(rgw::sal::Store* store, optional_yield y, packages_t& faile
   }
 
   packages_t packages;
-  auto ret = list_packages(store, y, packages);
+  auto ret = list_packages(dpp, store, y, packages);
   if (ret == -ENOENT) {
     // allowlist is empty 
     return 0;
@@ -197,13 +225,11 @@ int install_packages(rgw::sal::Store* store, optional_yield y, packages_t& faile
   // the lua rocks install dir will be created by luarocks the first time it is called
   for (const auto& package : packages) {
     bp::ipstream is;
-    bp::child c(p, "install", "--lua-version", CEPH_LUA_VERSION, "--tree", luarocks_path, "--deps-mode", "one", package, 
-        bp::std_in.close(),
-        (bp::std_err & bp::std_out) > is);
+    const auto cmd = p.string() + " install --lua-version " + CEPH_LUA_VERSION + " --tree " + luarocks_path + " --deps-mode one " + package;
+    bp::child c(cmd, bp::std_in.close(), (bp::std_err & bp::std_out) > is);
 
     // once package reload is supported, code should yield when reading output
-    std::string line = "CMD: luarocks install --lua-version " + std::string(CEPH_LUA_VERSION) + std::string(" --tree ") + 
-      luarocks_path + " --deps-mode one " + package;
+    std::string line = std::string("CMD: ") + cmd;
 
     do {
       if (!line.empty()) {

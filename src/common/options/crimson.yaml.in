@@ -23,3 +23,25 @@ options:
   type: str
   level: advanced
   desc: CPU cores on which alienstore threads will run
+- name: seastore_segment_size
+  type: size
+  desc: Segment size to use for SegmentManager
+  level: advanced
+  default: 64_M
+- name: seastore_device_size
+  type: size
+  desc: Total size to use for SegmentManager block file if created
+  level: dev
+  default: 100_G
+- name: seastore_block_create
+  type: bool
+  level: dev
+  desc: Create SegmentManager file if it doesn't exist
+  default: true
+  see_also:
+  - seastore_device_size
+- name: seastore_init_rewrite_segments_num_per_device
+  type: uint
+  level: dev
+  desc: Initial number of segments for rewriting extents per device
+  default: 6

@@ -10,12 +10,12 @@
 #include <ostream>
 #include "kv/KeyValueDB.h"
 #include "bluestore_types.h"
-#include "zoned_types.h"
 
 class FreelistManager {
+  bool         null_manager = false;
 public:
   CephContext* cct;
-  FreelistManager(CephContext* cct) : cct(cct) {}
+  explicit FreelistManager(CephContext* cct) : cct(cct) {}
   virtual ~FreelistManager() {}
 
   static FreelistManager *create(
@@ -50,10 +50,13 @@ public:
   virtual uint64_t get_alloc_size() const = 0;
 
   virtual void get_meta(uint64_t target_size,
-    std::vector<std::pair<string, string>>*) const = 0;
+  std::vector<std::pair<std::string, std::string>>*) const = 0;
 
-  virtual std::vector<zone_state_t> get_zone_states(KeyValueDB *kvdb) const {
-    return {};
+  void set_null_manager() {
+    null_manager = true;
+  }
+  bool is_null_manager() {
+    return null_manager;
   }
 };
 

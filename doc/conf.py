@@ -121,11 +121,15 @@ extensions = [
     'ceph_commands',
     'ceph_releases',
     'ceph_confval',
-    'sphinxcontrib.openapi'
+    'sphinxcontrib.openapi',
+    'sphinxcontrib.seqdiag',
     ]
 
 ditaa = shutil.which("ditaa")
 if ditaa is not None:
+    # in case we don't have binfmt_misc enabled or jar is not registered
+    ditaa_args = ['-jar', ditaa]
+    ditaa = 'java'
     extensions += ['sphinxcontrib.ditaa']
 else:
     extensions += ['plantweb.directive']
@@ -227,10 +231,16 @@ for c in pybinds:
 openapi_logger = sphinx.util.logging.getLogger('sphinxcontrib.openapi.openapi30')
 openapi_logger.setLevel(logging.WARNING)
 
+# seqdiag
+seqdiag_antialias = True
+seqdiag_html_image_format = 'SVG'
+
 # ceph_confval
 ceph_confval_imports = glob.glob(os.path.join(top_level,
                                               'src/common/options',
                                               '*.yaml.in'))
+ceph_confval_mgr_module_path = 'src/pybind/mgr'
+ceph_confval_mgr_python_path = 'src/pybind'
 
 # handles edit-on-github and old version warning display
 def setup(app):

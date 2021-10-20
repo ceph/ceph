@@ -1,15 +1,20 @@
+import errno
 import json
+import logging
+import time
 import uuid
 from io import StringIO
 from os.path import join as os_path_join
 
-from teuthology.orchestra.run import CommandFailedError, Raw
+from teuthology.orchestra.run import Raw
+from teuthology.exceptions import CommandFailedError
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.filesystem import FileLayout, FSMissing
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.caps_helper import CapsHelper
 
+log = logging.getLogger(__name__)
 
 class TestAdminCommands(CephFSTestCase):
     """
@@ -19,28 +24,25 @@ class TestAdminCommands(CephFSTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 1
 
-    def test_fsnames_can_only_by_goodchars(self):
-        n = 'test_fsnames_can_only_by_goodchars'
-        metapoolname, datapoolname = n+'-testmetapool', n+'-testdatapool'
-        badname = n+'badname@#'
+    def check_pool_application_metadata_key_value(self, pool, app, key, value):
+        output = self.fs.mon_manager.raw_cluster_cmd(
+            'osd', 'pool', 'application', 'get', pool, app, key)
+        self.assertEqual(str(output.strip()), value)
 
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                            n+metapoolname)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                            n+datapoolname)
+    def setup_ec_pools(self, n, metadata=True, overwrites=True):
+        if metadata:
+            self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', n+"-meta", "8")
+        cmd = ['osd', 'erasure-code-profile', 'set', n+"-profile", "m=2", "k=2", "crush-failure-domain=osd"]
+        self.fs.mon_manager.raw_cluster_cmd(*cmd)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', n+"-data", "8", "erasure", n+"-profile")
+        if overwrites:
+            self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
-        # test that fsname not with "goodchars" fails
-        args = ['fs', 'new', badname, metapoolname, datapoolname]
-        proc = self.fs.mon_manager.run_cluster_cmd(args=args,stderr=StringIO(),
-                                                   check_status=False)
-        self.assertIn('invalid chars', proc.stderr.getvalue().lower())
 
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', metapoolname,
-                                            metapoolname,
-                                            '--yes-i-really-really-mean-it-not-faking')
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', datapoolname,
-                                            datapoolname,
-                                            '--yes-i-really-really-mean-it-not-faking')
+class TestFsStatus(TestAdminCommands):
+    """
+    Test "ceph fs status subcommand.
+    """
 
     def test_fs_status(self):
         """
@@ -56,19 +58,11 @@ class TestAdminCommands(CephFSTestCase):
         mdsmap = json.loads(self.fs.mon_manager.raw_cluster_cmd("fs", "status", "--format=json"))["mdsmap"]
         self.assertEqual(mdsmap[0]["state"], "active")
 
-    def _setup_ec_pools(self, n, metadata=True, overwrites=True):
-        if metadata:
-            self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', n+"-meta", "8")
-        cmd = ['osd', 'erasure-code-profile', 'set', n+"-profile", "m=2", "k=2", "crush-failure-domain=osd"]
-        self.fs.mon_manager.raw_cluster_cmd(*cmd)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', n+"-data", "8", "erasure", n+"-profile")
-        if overwrites:
-            self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
-    def _check_pool_application_metadata_key_value(self, pool, app, key, value):
-        output = self.fs.mon_manager.raw_cluster_cmd(
-            'osd', 'pool', 'application', 'get', pool, app, key)
-        self.assertEqual(str(output.strip()), value)
+class TestAddDataPool(TestAdminCommands):
+    """
+    Test "ceph fs add_data_pool" subcommand.
+    """
 
     def test_add_data_pool_root(self):
         """
@@ -84,11 +78,12 @@ class TestAdminCommands(CephFSTestCase):
         """
         pool_name = "foo"
         mon_cmd = self.fs.mon_manager.raw_cluster_cmd
-        mon_cmd('osd', 'pool', 'create', pool_name, str(self.fs.pgs_per_fs_pool))
+        mon_cmd('osd', 'pool', 'create', pool_name, '--pg_num_min',
+                str(self.fs.pg_num_min))
         # Check whether https://tracker.ceph.com/issues/43061 is fixed
         mon_cmd('osd', 'pool', 'application', 'enable', pool_name, 'cephfs')
         self.fs.add_data_pool(pool_name, create=False)
-        self._check_pool_application_metadata_key_value(
+        self.check_pool_application_metadata_key_value(
             pool_name, 'cephfs', 'data', self.fs.name)
 
     def test_add_data_pool_subdir(self):
@@ -114,8 +109,38 @@ class TestAdminCommands(CephFSTestCase):
         """
 
         n = "test_add_data_pool_ec"
-        self._setup_ec_pools(n, metadata=False)
+        self.setup_ec_pools(n, metadata=False)
         self.fs.add_data_pool(n+"-data", create=False)
+
+
+class TestFsNew(TestAdminCommands):
+    """
+    Test "ceph fs new" subcommand.
+    """
+    MDSS_REQUIRED = 3
+
+    def test_fsnames_can_only_by_goodchars(self):
+        n = 'test_fsnames_can_only_by_goodchars'
+        metapoolname, datapoolname = n+'-testmetapool', n+'-testdatapool'
+        badname = n+'badname@#'
+
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
+                                            n+metapoolname)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
+                                            n+datapoolname)
+
+        # test that fsname not with "goodchars" fails
+        args = ['fs', 'new', badname, metapoolname, datapoolname]
+        proc = self.fs.mon_manager.run_cluster_cmd(args=args,stderr=StringIO(),
+                                                   check_status=False)
+        self.assertIn('invalid chars', proc.stderr.getvalue().lower())
+
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', metapoolname,
+                                            metapoolname,
+                                            '--yes-i-really-really-mean-it-not-faking')
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', datapoolname,
+                                            datapoolname,
+                                            '--yes-i-really-really-mean-it-not-faking')
 
     def test_new_default_ec(self):
         """
@@ -125,7 +150,7 @@ class TestAdminCommands(CephFSTestCase):
         self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec"
-        self._setup_ec_pools(n)
+        self.setup_ec_pools(n)
         try:
             self.fs.mon_manager.raw_cluster_cmd('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
@@ -144,7 +169,7 @@ class TestAdminCommands(CephFSTestCase):
         self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec_force"
-        self._setup_ec_pools(n)
+        self.setup_ec_pools(n)
         self.fs.mon_manager.raw_cluster_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
 
     def test_new_default_ec_no_overwrite(self):
@@ -155,7 +180,7 @@ class TestAdminCommands(CephFSTestCase):
         self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec_no_overwrite"
-        self._setup_ec_pools(n, overwrites=False)
+        self.setup_ec_pools(n, overwrites=False)
         try:
             self.fs.mon_manager.raw_cluster_cmd('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
@@ -187,12 +212,314 @@ class TestAdminCommands(CephFSTestCase):
         pool_names = [fs_name+'-'+key for key in keys]
         mon_cmd = self.fs.mon_manager.raw_cluster_cmd
         for p in pool_names:
-            mon_cmd('osd', 'pool', 'create', p, str(self.fs.pgs_per_fs_pool))
+            mon_cmd('osd', 'pool', 'create', p, '--pg_num_min', str(self.fs.pg_num_min))
             mon_cmd('osd', 'pool', 'application', 'enable', p, 'cephfs')
         mon_cmd('fs', 'new', fs_name, pool_names[0], pool_names[1])
         for i in range(2):
-            self._check_pool_application_metadata_key_value(
+            self.check_pool_application_metadata_key_value(
                 pool_names[i], 'cephfs', keys[i], fs_name)
+
+    def test_fs_new_with_specific_id(self):
+        """
+        That a file system can be created with a specific ID.
+        """
+        fs_name = "test_fs_specific_id"
+        fscid = 100
+        keys = ['metadata', 'data']
+        pool_names = [fs_name+'-'+key for key in keys]
+        for p in pool_names:
+            self.run_cluster_cmd(f'osd pool create {p}')
+        self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
+        self.fs.status().get_fsmap(fscid)
+        for i in range(2):
+            self.check_pool_application_metadata_key_value(pool_names[i], 'cephfs', keys[i], fs_name)
+
+    def test_fs_new_with_specific_id_idempotency(self):
+        """
+        That command to create file system with specific ID is idempotent.
+        """
+        fs_name = "test_fs_specific_id"
+        fscid = 100
+        keys = ['metadata', 'data']
+        pool_names = [fs_name+'-'+key for key in keys]
+        for p in pool_names:
+            self.run_cluster_cmd(f'osd pool create {p}')
+        self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
+        self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
+        self.fs.status().get_fsmap(fscid)
+
+    def test_fs_new_with_specific_id_fails_without_force_flag(self):
+        """
+        That command to create file system with specific ID fails without '--force' flag.
+        """
+        fs_name = "test_fs_specific_id"
+        fscid = 100
+        keys = ['metadata', 'data']
+        pool_names = [fs_name+'-'+key for key in keys]
+        for p in pool_names:
+            self.run_cluster_cmd(f'osd pool create {p}')
+        try:
+            self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid}')
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
+                "invalid error code on creating a file system with specifc ID without --force flag")
+        else:
+            self.fail("expected creating file system with specific ID without '--force' flag to fail")
+
+    def test_fs_new_with_specific_id_fails_already_in_use(self):
+        """
+        That creating file system with ID already in use fails.
+        """
+        fs_name = "test_fs_specific_id"
+        # file system ID already in use
+        fscid =  self.fs.status().map['filesystems'][0]['id']
+        keys = ['metadata', 'data']
+        pool_names = [fs_name+'-'+key for key in keys]
+        for p in pool_names:
+            self.run_cluster_cmd(f'osd pool create {p}')
+        try:
+            self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
+                "invalid error code on creating a file system with specifc ID that is already in use")
+        else:
+            self.fail("expected creating file system with ID already in use to fail")
+
+
+class TestRenameCommand(TestAdminCommands):
+    """
+    Tests for rename command.
+    """
+
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 2
+
+    def test_fs_rename(self):
+        """
+        That the file system can be renamed, and the application metadata set on its pools are as expected.
+        """
+        # Renaming the file system breaks this mount as the client uses
+        # file system specific authorization. The client cannot read
+        # or write even if the client's cephx ID caps are updated to access
+        # the new file system name without the client being unmounted and
+        # re-mounted.
+        self.mount_a.umount_wait(require_clean=True)
+        orig_fs_name = self.fs.name
+        new_fs_name = 'new_cephfs'
+        client_id = 'test_new_cephfs'
+
+        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+
+        # authorize a cephx ID access to the renamed file system.
+        # use the ID to write to the file system.
+        self.fs.name = new_fs_name
+        keyring = self.fs.authorize(client_id, ('/', 'rw'))
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/',
+                             cephfs_name=self.fs.name)
+        filedata, filename = 'some data on fs', 'file_on_fs'
+        filepath = os_path_join(self.mount_a.hostfs_mntpt, filename)
+        self.mount_a.write_file(filepath, filedata)
+        self.check_pool_application_metadata_key_value(
+            self.fs.get_data_pool_name(), 'cephfs', 'data', new_fs_name)
+        self.check_pool_application_metadata_key_value(
+            self.fs.get_metadata_pool_name(), 'cephfs', 'metadata', new_fs_name)
+
+        # cleanup
+        self.mount_a.umount_wait()
+        self.run_cluster_cmd(f'auth rm client.{client_id}')
+
+    def test_fs_rename_idempotency(self):
+        """
+        That the file system rename operation is idempotent.
+        """
+        # Renaming the file system breaks this mount as the client uses
+        # file system specific authorization.
+        self.mount_a.umount_wait(require_clean=True)
+        orig_fs_name = self.fs.name
+        new_fs_name = 'new_cephfs'
+
+        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+
+        # original file system name does not appear in `fs ls` command
+        self.assertFalse(self.fs.exists())
+        self.fs.name = new_fs_name
+        self.assertTrue(self.fs.exists())
+
+    def test_fs_rename_fs_new_fails_with_old_fsname_existing_pools(self):
+        """
+        That after renaming a file system, creating a file system with
+        old name and existing FS pools fails.
+        """
+        # Renaming the file system breaks this mount as the client uses
+        # file system specific authorization.
+        self.mount_a.umount_wait(require_clean=True)
+        orig_fs_name = self.fs.name
+        new_fs_name = 'new_cephfs'
+        data_pool = self.fs.get_data_pool_name()
+        metadata_pool = self.fs.get_metadata_pool_name()
+        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+
+        try:
+            self.run_cluster_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool}")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
+                "invalid error code on creating a new file system with old "
+                "name and existing pools.")
+        else:
+            self.fail("expected creating new file system with old name and "
+                      "existing pools to fail.")
+
+        try:
+            self.run_cluster_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool} --force")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EEXIST,
+                "invalid error code on creating a new file system with old "
+                "name, existing pools and --force flag.")
+        else:
+            self.fail("expected creating new file system with old name, "
+                      "existing pools, and --force flag to fail.")
+
+        try:
+            self.run_cluster_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool} "
+                                 "--allow-dangerous-metadata-overlay")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
+                "invalid error code on creating a new file system with old name, "
+                "existing pools and --allow-dangerous-metadata-overlay flag.")
+        else:
+            self.fail("expected creating new file system with old name, "
+                      "existing pools, and --allow-dangerous-metadata-overlay flag to fail.")
+
+    def test_fs_rename_fails_without_yes_i_really_mean_it_flag(self):
+        """
+        That renaming a file system without '--yes-i-really-mean-it' flag fails.
+        """
+        try:
+            self.run_cluster_cmd(f"fs rename {self.fs.name} new_fs")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM,
+                "invalid error code on renaming a file system without the  "
+                "'--yes-i-really-mean-it' flag")
+        else:
+            self.fail("expected renaming of file system without the "
+                      "'--yes-i-really-mean-it' flag to fail ")
+
+    def test_fs_rename_fails_for_non_existent_fs(self):
+        """
+        That renaming a non-existent file system fails.
+        """
+        try:
+            self.run_cluster_cmd("fs rename non_existent_fs new_fs --yes-i-really-mean-it")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENOENT, "invalid error code on renaming a non-existent fs")
+        else:
+            self.fail("expected renaming of a non-existent file system to fail")
+
+    def test_fs_rename_fails_new_name_already_in_use(self):
+        """
+        That renaming a file system fails if the new name refers to an existing file system.
+        """
+        self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
+
+        try:
+            self.run_cluster_cmd(f"fs rename {self.fs.name} {self.fs2.name} --yes-i-really-mean-it")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
+                             "invalid error code on renaming to a fs name that is already in use")
+        else:
+            self.fail("expected renaming to a new file system name that is already in use to fail.")
+
+    def test_fs_rename_fails_with_mirroring_enabled(self):
+        """
+        That renaming a file system fails if mirroring is enabled on it.
+        """
+        orig_fs_name = self.fs.name
+        new_fs_name = 'new_cephfs'
+
+        self.run_cluster_cmd(f'fs mirror enable {orig_fs_name}')
+        try:
+            self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM, "invalid error code on renaming a mirrored file system")
+        else:
+            self.fail("expected renaming of a mirrored file system to fail")
+        self.run_cluster_cmd(f'fs mirror disable {orig_fs_name}')
+
+
+class TestDump(CephFSTestCase):
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 1
+
+    def test_fs_dump_epoch(self):
+        """
+        That dumping a specific epoch works.
+        """
+
+        status1 = self.fs.status()
+        status2 = self.fs.status(epoch=status1["epoch"]-1)
+        self.assertEqual(status1["epoch"], status2["epoch"]+1)
+
+    def test_fsmap_trim(self):
+        """
+        That the fsmap is trimmed normally.
+        """
+
+        paxos_service_trim_min = 25
+        self.config_set('mon', 'paxos_service_trim_min', paxos_service_trim_min)
+        mon_max_mdsmap_epochs = 20
+        self.config_set('mon', 'mon_max_mdsmap_epochs', mon_max_mdsmap_epochs)
+
+        status = self.fs.status()
+        epoch = status["epoch"]
+
+        # for N mutations
+        mutations = paxos_service_trim_min + mon_max_mdsmap_epochs
+        b = False
+        for i in range(mutations):
+            self.fs.set_joinable(b)
+            b = not b
+
+        time.sleep(10) # for tick/compaction
+
+        try:
+            self.fs.status(epoch=epoch)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT, "invalid error code when trying to fetch FSMap that was trimmed")
+        else:
+            self.fail("trimming did not occur as expected")
+
+    def test_fsmap_force_trim(self):
+        """
+        That the fsmap is trimmed forcefully.
+        """
+
+        status = self.fs.status()
+        epoch = status["epoch"]
+
+        paxos_service_trim_min = 1
+        self.config_set('mon', 'paxos_service_trim_min', paxos_service_trim_min)
+        mon_mds_force_trim_to = epoch+1
+        self.config_set('mon', 'mon_mds_force_trim_to', mon_mds_force_trim_to)
+
+        # force a new fsmap
+        self.fs.set_joinable(False)
+        time.sleep(10) # for tick/compaction
+
+        status = self.fs.status()
+        log.debug(f"new epoch is {status['epoch']}")
+        self.fs.status(epoch=epoch+1) # epoch+1 is not trimmed, may not == status["epoch"]
+
+        try:
+            self.fs.status(epoch=epoch)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT, "invalid error code when trying to fetch FSMap that was trimmed")
+        else:
+            self.fail("trimming did not occur as expected")
+
 
 class TestRequiredClientFeatures(CephFSTestCase):
     CLIENTS_REQUIRED = 0
@@ -265,6 +592,141 @@ class TestRequiredClientFeatures(CephFSTestCase):
         p = self.fs.required_client_features('rm', '1', stderr=StringIO())
         self.assertIn("removed feature 'reserved' from required_client_features", p.stderr.getvalue())
 
+class TestCompatCommands(CephFSTestCase):
+    """
+    """
+
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 3
+
+    def test_add_compat(self):
+        """
+        Test adding a compat.
+        """
+
+        self.fs.fail()
+        self.fs.add_compat(63, 'placeholder')
+        mdsmap = self.fs.get_mds_map()
+        self.assertIn("feature_63", mdsmap['compat']['compat'])
+
+    def test_add_incompat(self):
+        """
+        Test adding an incompat.
+        """
+
+        self.fs.fail()
+        self.fs.add_incompat(63, 'placeholder')
+        mdsmap = self.fs.get_mds_map()
+        log.info(f"{mdsmap}")
+        self.assertIn("feature_63", mdsmap['compat']['incompat'])
+
+    def test_rm_compat(self):
+        """
+        Test removing a compat.
+        """
+
+        self.fs.fail()
+        self.fs.add_compat(63, 'placeholder')
+        self.fs.rm_compat(63)
+        mdsmap = self.fs.get_mds_map()
+        self.assertNotIn("feature_63", mdsmap['compat']['compat'])
+
+    def test_rm_incompat(self):
+        """
+        Test removing an incompat.
+        """
+
+        self.fs.fail()
+        self.fs.add_incompat(63, 'placeholder')
+        self.fs.rm_incompat(63)
+        mdsmap = self.fs.get_mds_map()
+        self.assertNotIn("feature_63", mdsmap['compat']['incompat'])
+
+    def test_standby_compat(self):
+        """
+        That adding a compat does not prevent standbys from joining.
+        """
+
+        self.fs.fail()
+        self.fs.add_compat(63, "placeholder")
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+        mdsmap = self.fs.get_mds_map()
+        self.assertIn("feature_63", mdsmap['compat']['compat'])
+
+    def test_standby_incompat_reject(self):
+        """
+        That adding an incompat feature prevents incompatible daemons from joining.
+        """
+
+        self.fs.fail()
+        self.fs.add_incompat(63, "placeholder")
+        self.fs.set_joinable()
+        try:
+            self.fs.wait_for_daemons(timeout=60)
+        except RuntimeError as e:
+            if "Timed out waiting for MDS daemons to become healthy" in str(e):
+                pass
+            else:
+                raise
+        else:
+            self.fail()
+
+    def test_standby_incompat_upgrade(self):
+        """
+        That an MDS can upgrade the compat of a fs.
+        """
+
+        self.fs.fail()
+        self.fs.rm_incompat(1)
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+        mdsmap = self.fs.get_mds_map()
+        self.assertIn("feature_1", mdsmap['compat']['incompat'])
+
+    def test_standby_replay_not_upgradeable(self):
+        """
+        That the mons will not upgrade the MDSMap compat if standby-replay is
+        enabled.
+        """
+
+        self.fs.fail()
+        self.fs.rm_incompat(1)
+        self.fs.set_allow_standby_replay(True)
+        self.fs.set_joinable()
+        try:
+            self.fs.wait_for_daemons(timeout=60)
+        except RuntimeError as e:
+            if "Timed out waiting for MDS daemons to become healthy" in str(e):
+                pass
+            else:
+                raise
+        else:
+            self.fail()
+
+    def test_standby_incompat_reject_multifs(self):
+        """
+        Like test_standby_incompat_reject but with a second fs.
+        """
+
+        fs2 = self.mds_cluster.newfs(name="cephfs2", create=True)
+        fs2.fail()
+        fs2.add_incompat(63, 'placeholder')
+        fs2.set_joinable()
+        try:
+            fs2.wait_for_daemons(timeout=60)
+        except RuntimeError as e:
+            if "Timed out waiting for MDS daemons to become healthy" in str(e):
+                pass
+            else:
+                raise
+        else:
+            self.fail()
+        # did self.fs lose MDS or standbys suicide?
+        self.fs.wait_for_daemons()
+        mdsmap = fs2.get_mds_map()
+        self.assertIn("feature_63", mdsmap['compat']['incompat'])
+
 class TestConfigCommands(CephFSTestCase):
     """
     Test that daemons and clients respond to the otherwise rarely-used
@@ -309,6 +771,11 @@ class TestConfigCommands(CephFSTestCase):
         self.fs.mds_asok(['config', 'set', test_key, test_val])
         out = self.fs.mds_asok(['config', 'get', test_key])
         self.assertEqual(out[test_key], test_val)
+
+    def test_mds_dump_cache_asok(self):
+        cache_file = "cache_file"
+        timeout = "1"
+        self.fs.rank_asok(['dump', 'cache', cache_file, timeout])
 
     def test_mds_config_tell(self):
         test_key = "mds_max_purge_ops"
@@ -440,7 +907,7 @@ class TestMirroringCommands(CephFSTestCase):
         self._verify_mirroring(self.fs.name, "disabled")
 
 
-class TestSubCmdFsAuthorize(CapsHelper):
+class TestFsAuthorize(CapsHelper):
     client_id = 'testuser'
     client_name = 'client.' + client_id
 
@@ -577,6 +1044,7 @@ class TestSubCmdFsAuthorize(CapsHelper):
         mounts = (self.mount_a, )
 
         return filepaths, filedata, mounts, keyring
+
 
 class TestAdminCommandIdempotency(CephFSTestCase):
     """

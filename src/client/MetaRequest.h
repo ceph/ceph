@@ -37,7 +37,7 @@ public:
   int dentry_drop, dentry_unless;
   int old_dentry_drop, old_dentry_unless;
   int other_inode_drop, other_inode_unless;
-  vector<MClientRequest::Release> cap_releases;
+  std::vector<MClientRequest::Release> cap_releases;
 
   int regetattr_mask;          // getattr mask if i need to re-stat after a traceless reply
  
@@ -67,7 +67,7 @@ public:
 
   ceph::condition_variable *caller_cond;          // who to take up
   ceph::condition_variable *dispatch_cond;        // who to kick back
-  list<ceph::condition_variable*> waitfor_safe;
+  std::list<ceph::condition_variable*> waitfor_safe;
 
   InodeRef target;
   UserPerm perms;

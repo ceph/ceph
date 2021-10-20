@@ -385,7 +385,7 @@ pushed or pulled using the pubsub sync module. For example:
            "eventSource":"ceph:s3",
            "awsRegion":"us-east-1",
            "eventTime":"2019-11-22T13:47:35.124724Z",
-           "eventName":"s3:ObjectCreated:Put",
+           "eventName":"ObjectCreated:Put",
            "userIdentity":{
                "principalId":"tester"
            },
@@ -424,7 +424,7 @@ pushed or pulled using the pubsub sync module. For example:
 
 - awsRegion: zonegroup
 - eventTime: timestamp indicating when the event was triggered
-- eventName: for list of supported events see: `S3 Notification Compatibility`_
+- eventName: for list of supported events see: `S3 Notification Compatibility`_. Note that the eventName values do not start with the `s3:` prefix.
 - userIdentity.principalId: user that triggered the change
 - requestParameters.sourceIPAddress: not supported
 - responseElements.x-amz-request-id: request ID of the original change
@@ -437,7 +437,9 @@ pushed or pulled using the pubsub sync module. For example:
 - s3.object.key: object key
 - s3.object.size: object size
 - s3.object.eTag: object etag
-- s3.object.version: object version in case of versioned bucket
+- s3.object.versionId: object version in case of versioned bucket. 
+  When doing a copy, it would include the version of the target object. 
+  When creating a delete marker, it would include the version of the delete marker.
 - s3.object.sequencer: monotonically increasing identifier of the change per object (hexadecimal format)
 - s3.object.metadata: any metadata set on the object sent as: ``x-amz-meta-`` (an extension to the S3 notification API)
 - s3.object.tags: any tags set on the object (an extension to the S3 notification API)

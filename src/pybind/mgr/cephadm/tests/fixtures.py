@@ -1,12 +1,15 @@
 import fnmatch
+import asyncio
+import sys
+from tempfile import NamedTemporaryFile
 from contextlib import contextmanager
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.utils import datetime_to_str, datetime_now
-from cephadm.serve import CephadmServe
+from cephadm.serve import CephadmServe, cephadmNoImage
 
 try:
-    from typing import Any, Iterator, List
+    from typing import Any, Iterator, List, Callable, Dict
 except ImportError:
     pass
 
@@ -20,7 +23,9 @@ def get_ceph_option(_, key):
 
 
 def _run_cephadm(ret):
-    def foo(*args, **kwargs):
+    def foo(s, host, entity, cmd, e, **kwargs):
+        if cmd == 'gather-facts':
+            return '{}', '', 0
         return [ret], '', 0
     return foo
 
@@ -29,6 +34,41 @@ def match_glob(val, pat):
     ok = fnmatch.fnmatchcase(val, pat)
     if not ok:
         assert pat in val
+
+
+class MockEventLoopThread:
+    def get_result(self, coro):
+        if sys.version_info >= (3, 7):
+            return asyncio.run(coro)
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
+
+
+def receive_agent_metadata(m: CephadmOrchestrator, host: str, ops: List[str] = None) -> None:
+    to_update: Dict[str, Callable[[str, Any], None]] = {
+        'ls': m._process_ls_output,
+        'gather-facts': m.cache.update_host_facts,
+        'list-networks': m.cache.update_host_networks,
+    }
+    if ops:
+        for op in ops:
+            out = CephadmServe(m)._run_cephadm_json(host, cephadmNoImage, op, [])
+            to_update[op](host, out)
+    m.cache.last_daemon_update[host] = datetime_now()
+    m.cache.last_facts_update[host] = datetime_now()
+    m.cache.last_network_update[host] = datetime_now()
+    m.cache.metadata_up_to_date[host] = True
+
+
+def receive_agent_metadata_all_hosts(m: CephadmOrchestrator) -> None:
+    for host in m.cache.get_hosts():
+        receive_agent_metadata(m, host)
 
 
 @contextmanager
@@ -41,7 +81,11 @@ def with_cephadm_module(module_options=None, store=None):
             mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
             mock.patch("cephadm.services.osd.OSDService.get_osdspec_affinity", return_value='test_spec'), \
-            mock.patch("cephadm.module.CephadmOrchestrator.remote"):
+            mock.patch("cephadm.module.CephadmOrchestrator.remote"), \
+            mock.patch("cephadm.agent.CephadmAgentHelpers._request_agent_acks"), \
+            mock.patch("cephadm.agent.CephadmAgentHelpers._apply_agent", return_value=False), \
+            mock.patch("cephadm.agent.CephadmAgentHelpers._agent_down", return_value=False), \
+            mock.patch('cephadm.agent.CherryPyThread.run'):
 
         m = CephadmOrchestrator.__new__(CephadmOrchestrator)
         if module_options is not None:
@@ -59,6 +103,10 @@ def with_cephadm_module(module_options=None, store=None):
 
         m.__init__('cephadm', 0, 0)
         m._cluster_fsid = "fsid"
+
+        m.event_loop = MockEventLoopThread()
+        m.tkey = NamedTemporaryFile(prefix='test-cephadm-identity-')
+
         yield m
 
 
@@ -68,13 +116,15 @@ def wait(m, c):
 
 
 @contextmanager
-def with_host(m: CephadmOrchestrator, name, refresh_hosts=True):
+def with_host(m: CephadmOrchestrator, name, addr='1.2.3.4', refresh_hosts=True):
     # type: (CephadmOrchestrator, str) -> None
-    wait(m, m.add_host(HostSpec(hostname=name)))
-    if refresh_hosts:
-        CephadmServe(m)._refresh_hosts_and_daemons()
-    yield
-    wait(m, m.remove_host(name))
+    with mock.patch("cephadm.utils.resolve_ip", return_value=addr):
+        wait(m, m.add_host(HostSpec(hostname=name)))
+        if refresh_hosts:
+            CephadmServe(m)._refresh_hosts_and_daemons()
+            receive_agent_metadata(m, name)
+        yield
+        wait(m, m.remove_host(name))
 
 
 def assert_rm_service(cephadm: CephadmOrchestrator, srv_name):

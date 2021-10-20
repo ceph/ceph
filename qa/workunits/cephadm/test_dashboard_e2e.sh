@@ -68,16 +68,12 @@ npm ci --unsafe-perm
 npx cypress verify
 npx cypress info
 
-# Remove device_health_metrics pool
-# Low pg count causes OSD removal failure.
-ceph device monitoring off
-ceph tell mon.\* injectargs '--mon-allow-pool-delete=true'
-ceph osd pool rm device_health_metrics device_health_metrics --yes-i-really-really-mean-it
-
-# Take `orch device ls` as ground truth.
+# Take `orch device ls` and `orch ps` as ground truth.
 ceph orch device ls --refresh
+ceph orch ps --refresh
 sleep 10  # the previous call is asynchronous
 ceph orch device ls --format=json | tee cypress/fixtures/orchestrator/inventory.json
+ceph orch ps --format=json | tee cypress/fixtures/orchestrator/services.json
 
 DASHBOARD_ADMIN_SECRET_FILE="/tmp/dashboard-admin-secret.txt"
 printf 'admin' > "${DASHBOARD_ADMIN_SECRET_FILE}"

@@ -553,4 +553,10 @@ ceph::ref_t<T> make_message(Args&&... args) {
 }
 }
 
+namespace crimson {
+template<class T, typename... Args>
+MURef<T> make_message(Args&&... args) {
+  return {new T(std::forward<Args>(args)...), TOPNSPC::common::UniquePtrDeleter{}};
+}
+}
 #endif

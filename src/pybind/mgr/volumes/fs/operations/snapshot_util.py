@@ -5,6 +5,7 @@ import cephfs
 
 from ..exception import VolumeException
 
+
 def mksnap(fs, snappath):
     """
     Create a snapshot, or do nothing if it already exists.
@@ -17,6 +18,7 @@ def mksnap(fs, snappath):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
 
+        
 def rmsnap(fs, snappath):
     """
     Remove a snapshot

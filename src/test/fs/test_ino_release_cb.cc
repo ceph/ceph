@@ -7,6 +7,8 @@
 #define MAX_CEPH_FILES	1000
 #define DIRNAME		"ino_release_cb"
 
+using namespace std;
+
 static std::atomic<bool> cb_done = false;
 
 static void cb(void *hdl, vinodeno_t vino)
@@ -57,7 +59,8 @@ int main(int argc, char *argv[])
 
 	struct ceph_client_callback_args args = { 0 };
 	args.ino_release_cb = cb;
-	ceph_ll_register_callbacks(cmount, &args);
+	ret = ceph_ll_register_callbacks2(cmount, &args);
+	assert(ret == 0);
 
 	ret = ceph_mount(cmount, NULL);
 	assert(ret >= 0);

@@ -17,6 +17,7 @@
 #include <map>
 #include <set>
 
+using namespace std;
 using namespace librados;
 
 librados::Rados rados;

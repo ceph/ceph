@@ -46,7 +46,7 @@ describe('OsdSummaryPipe', () => {
     ]);
   });
 
-  it('transforms having 3 osd with 2 up, 1 in, 1 down, 1 out', () => {
+  it('transforms having 3 osd with 2 up, 1 in, 1 down, 2 out', () => {
     const value = {
       osds: [
         { up: 1, in: 1 },
@@ -72,18 +72,18 @@ describe('OsdSummaryPipe', () => {
         class: 'card-text-line-break'
       },
       {
-        content: '1 down, 1 out',
+        content: '1 down, 2 out',
         class: 'card-text-error'
       }
     ]);
   });
 
-  it('transforms having 3 osd with 2 up, 2 in, 1 down, 0 out', () => {
+  it('transforms having 3 osd with 2 up, 3 in, 1 down, 0 out', () => {
     const value = {
       osds: [
         { up: 1, in: 1 },
         { up: 1, in: 1 },
-        { up: 0, in: 0 }
+        { up: 0, in: 1 }
       ]
     };
     expect(pipe.transform(value)).toEqual([
@@ -96,7 +96,7 @@ describe('OsdSummaryPipe', () => {
         class: 'card-text-line-break'
       },
       {
-        content: '2 up, 2 in',
+        content: '2 up, 3 in',
         class: ''
       },
       {
@@ -137,6 +137,39 @@ describe('OsdSummaryPipe', () => {
       },
       {
         content: '1 out',
+        class: 'card-text-error'
+      }
+    ]);
+  });
+
+  it('transforms having 4 osd with 3 up, 2 in, 1 down, another 2 out', () => {
+    const value = {
+      osds: [
+        { up: 1, in: 1 },
+        { up: 1, in: 0 },
+        { up: 1, in: 0 },
+        { up: 0, in: 1 }
+      ]
+    };
+    expect(pipe.transform(value)).toEqual([
+      {
+        content: '4 total',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '3 up, 2 in',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '1 down, 2 out',
         class: 'card-text-error'
       }
     ]);

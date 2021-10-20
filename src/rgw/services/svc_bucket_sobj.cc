@@ -19,6 +19,8 @@
 
 #define RGW_BUCKET_INSTANCE_MD_PREFIX ".bucket.meta."
 
+using namespace std;
+
 class RGWSI_Bucket_SObj_Module : public RGWSI_MBSObj_Handler_Module {
   RGWSI_Bucket_SObj::Svc& svc;
 
@@ -324,7 +326,7 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   }
 
   /* chain to only bucket instance and *not* bucket entrypoint */
-  if (!binfo_cache->put(svc.cache, cache_key, &e, {&ci})) {
+  if (!binfo_cache->put(dpp, svc.cache, cache_key, &e, {&ci})) {
     ldpp_dout(dpp, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
   }
 
@@ -400,7 +402,7 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
     if (!found_version ||
         (refresh_version &&
          e->info.objv_tracker.read_version.compare(&(*refresh_version)))) {
-      lderr(cct) << "WARNING: The bucket info cache is inconsistent. This is "
+      ldpp_dout(dpp, -1) << "WARNING: The bucket info cache is inconsistent. This is "
         << "a failure that should be debugged. I am a nice machine, "
         << "so I will try to recover." << dendl;
       binfo_cache->invalidate(cache_key);
@@ -469,7 +471,7 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
     *pattrs = e.attrs;
 
   /* chain to both bucket entry point and bucket instance */
-  if (!binfo_cache->put(svc.cache, cache_key, &e, {&entry_cache_info, &cache_info})) {
+  if (!binfo_cache->put(dpp, svc.cache, cache_key, &e, {&entry_cache_info, &cache_info})) {
     ldpp_dout(dpp, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
   }
 
@@ -537,7 +539,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   int ret = svc.meta_be->put(ctx.get(), key, params, &info.objv_tracker, y, dpp);
 
   if (ret >= 0) {
-    int r = svc.bucket_sync->handle_bi_update(info,
+    int r = svc.bucket_sync->handle_bi_update(dpp, info,
                                               orig_info.value_or(nullptr),
                                               y);
     if (r < 0) {
@@ -546,7 +548,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   } else if (ret == -EEXIST) {
     /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
      * bucket operation on this specific bucket (e.g., being synced from the master), but
-     * since bucket instace meta object is unique for this specific bucket instace, we don't
+     * since bucket instance meta object is unique for this specific bucket instance, we don't
      * need to return an error.
      * A scenario where we'd get -EEXIST here, is in a multi-zone config, we're not on the
      * master, creating a bucket, sending bucket creation to the master, we create the bucket
@@ -570,14 +572,14 @@ int RGWSI_Bucket_SObj::remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                    const DoutPrefixProvider *dpp)
 {
   RGWSI_MBSObj_RemoveParams params;
-  int ret = svc.meta_be->remove_entry(ctx.get(), key, params, objv_tracker, y);
+  int ret = svc.meta_be->remove_entry(dpp, ctx.get(), key, params, objv_tracker, y);
 
   if (ret < 0 &&
       ret != -ENOENT) {
     return ret;
   }
 
-  int r = svc.bucket_sync->handle_bi_removal(info, y);
+  int r = svc.bucket_sync->handle_bi_removal(dpp, info, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to update bucket instance sync index: r=" << r << dendl;
     /* returning success as index is just keeping hints, so will keep extra hints,
@@ -599,7 +601,7 @@ int RGWSI_Bucket_SObj::read_bucket_stats(const RGWBucketInfo& bucket_info,
 
   vector<rgw_bucket_dir_header> headers;
 
-  int r = svc.bi->read_stats(bucket_info, ent, y);
+  int r = svc.bi->read_stats(dpp, bucket_info, ent, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): read_stats returned r=" << r << dendl;
     return r;

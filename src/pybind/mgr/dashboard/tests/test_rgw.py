@@ -71,18 +71,20 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
         RgwStub.get_settings()
         mgr.list_servers.return_value = [{
             'hostname': 'host1',
-            'services': [{'id': 'daemon1', 'type': 'rgw'}, {'id': 'daemon2', 'type': 'rgw'}]
+            'services': [{'id': '4832', 'type': 'rgw'}, {'id': '5356', 'type': 'rgw'}]
         }]
         mgr.get_metadata.side_effect = [
             {
                 'ceph_version': 'ceph version master (dev)',
                 'id': 'daemon1',
+                'realm_name': 'realm1',
                 'zonegroup_name': 'zg1',
                 'zone_name': 'zone1'
             },
             {
                 'ceph_version': 'ceph version master (dev)',
                 'id': 'daemon2',
+                'realm_name': 'realm2',
                 'zonegroup_name': 'zg2',
                 'zone_name': 'zone2'
             }]
@@ -90,15 +92,19 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
         self.assertStatus(200)
         self.assertJsonBody([{
             'id': 'daemon1',
+            'service_map_id': '4832',
             'version': 'ceph version master (dev)',
             'server_hostname': 'host1',
+            'realm_name': 'realm1',
             'zonegroup_name': 'zg1',
             'zone_name': 'zone1', 'default': True
         },
             {
             'id': 'daemon2',
+            'service_map_id': '5356',
             'version': 'ceph version master (dev)',
             'server_hostname': 'host1',
+            'realm_name': 'realm2',
             'zonegroup_name': 'zg2',
             'zone_name': 'zone2',
             'default': False

@@ -1,11 +1,16 @@
 #include <gtest/gtest.h>
 #include "common/ceph_context.h"
 #include "rgw/rgw_common.h"
+#include "rgw/rgw_auth.h"
 #include "rgw/rgw_process.h"
 #include "rgw/rgw_sal_rados.h"
 #include "rgw/rgw_lua_request.h"
 
+using namespace std;
 using namespace rgw;
+using boost::container::flat_set;
+using rgw::auth::Identity;
+using rgw::auth::Principal;
 
 class CctCleaner {
   CephContext* cct;
@@ -17,6 +22,47 @@ public:
 #else
     cct->put(); 
 #endif
+  }
+};
+
+class FakeIdentity : public Identity {
+public:
+  FakeIdentity() = default;
+
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
+    return 0;
+  };
+
+  bool is_admin_of(const rgw_user& uid) const override {
+    return false;
+  }
+
+  bool is_owner_of(const rgw_user& uid) const override {
+    return false;
+  }
+
+  virtual uint32_t get_perm_mask() const override {
+    return 0;
+  }
+
+  uint32_t get_identity_type() const override {
+    return TYPE_RGW;
+  }
+
+  string get_acct_name() const override {
+    return "";
+  }
+
+  string get_subuser() const override {
+    return "";
+  }
+
+  void to_str(std::ostream& out) const override {
+    return;
+  }
+
+  bool is_identity(const flat_set<Principal>& ids) const override {
+    return false;
   }
 };
 
@@ -34,39 +80,39 @@ public:
     return nullptr;
   }
 
-  virtual int read_attrs(const DoutPrefixProvider *dpp, optional_yield y, sal::Attrs* uattrs, RGWObjVersionTracker* tracker) override {
+  virtual int read_attrs(const DoutPrefixProvider *dpp, optional_yield y) override {
     return 0;
   }
 
-  virtual int read_stats(optional_yield y, RGWStorageStats* stats, ceph::real_time *last_stats_sync, ceph::real_time *last_stats_update) override {
+  virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y, RGWStorageStats* stats, ceph::real_time *last_stats_sync, ceph::real_time *last_stats_update) override {
     return 0;
   }
 
-  virtual int read_stats_async(RGWGetUserStats_CB *cb) override {
+  virtual int read_stats_async(const DoutPrefixProvider *dpp, RGWGetUserStats_CB *cb) override {
     return 0;
   }
 
-  virtual int complete_flush_stats(optional_yield y) override {
+  virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) override {
     return 0;
   }
 
-  virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries, bool *is_truncated, RGWUsageIter& usage_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage) override {
+  virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries, bool *is_truncated, RGWUsageIter& usage_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage) override {
     return 0;
   }
 
-  virtual int trim_usage(uint64_t start_epoch, uint64_t end_epoch) override {
+  virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override {
     return 0;
   }
 
-  virtual int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) override {
+  virtual int load_user(const DoutPrefixProvider *dpp, optional_yield y) override {
     return 0;
   }
 
-  virtual int store_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::PutParams& params) override {
+  virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info) override {
     return 0;
   }
 
-  virtual int remove_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::RemoveParams& params) override {
+  virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override {
     return 0;
   }
 
@@ -329,10 +375,9 @@ TEST(TestRGWLua, Environment)
   )";
 
   DEFINE_REQ_STATE;
-  s.env[""] = "world";
-  s.env[""] = "bar";
-  s.env["goodbye"] = "cruel world";
-  s.env["ka"] = "boom";
+  s.env.emplace("", "bar");
+  s.env.emplace("goodbye", "cruel world");
+  s.env.emplace("ka", "boom");
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
   ASSERT_EQ(rc, 0);
@@ -448,6 +493,26 @@ TEST(TestRGWLua, Acl)
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
   ASSERT_EQ(rc, 0);
 }
+
+TEST(TestRGWLua, User)
+{
+  const std::string script = R"(
+    assert(Request.User)
+    assert(Request.User.Id == "myid")
+    assert(Request.User.Tenant == "mytenant")
+  )";
+
+  DEFINE_REQ_STATE;
+
+  rgw_user u;
+  u.tenant = "mytenant";
+  u.id = "myid";
+  s.user.reset(new sal::RadosUser(nullptr, u));
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  ASSERT_EQ(rc, 0);
+}
+
 
 TEST(TestRGWLua, UseFunction)
 {
@@ -598,6 +663,9 @@ TEST(TestRGWLua, OpsLog)
   TestAccounter ac;
   s.cio = &ac; 
 	s.cct->_conf->rgw_ops_log_rados	= false;
+
+  s.auth.identity = std::unique_ptr<rgw::auth::Identity>(
+                        new FakeIdentity());
 
   auto rc = lua::request::execute(store.get(), nullptr, olog.get(), &s, "put_obj", script);
   EXPECT_EQ(rc, 0);

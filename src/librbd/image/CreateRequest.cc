@@ -283,8 +283,7 @@ void CreateRequest<I>::validate_data_pool() {
 
   auto ctx = create_context_callback<
     CreateRequest<I>, &CreateRequest<I>::handle_validate_data_pool>(this);
-  auto req = ValidatePoolRequest<I>::create(m_data_io_ctx, m_op_work_queue,
-                                            ctx);
+  auto req = ValidatePoolRequest<I>::create(m_data_io_ctx, ctx);
   req->send();
 }
 
@@ -432,7 +431,7 @@ void CreateRequest<I>::create_image() {
   ldout(m_cct, 15) << dendl;
   ceph_assert(m_data_pool.empty() || m_data_pool_id != -1);
 
-  ostringstream oss;
+  std::ostringstream oss;
   oss << RBD_DATA_PREFIX;
   if (m_data_pool_id != -1) {
     oss << stringify(m_io_ctx.get_id()) << ".";

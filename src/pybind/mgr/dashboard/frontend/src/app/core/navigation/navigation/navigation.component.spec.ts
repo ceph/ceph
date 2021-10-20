@@ -1,3 +1,4 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
@@ -51,7 +52,7 @@ describe('NavigationComponent', () => {
 
   configureTestBed({
     declarations: [NavigationComponent],
-    imports: [MockModule(NavigationModule)],
+    imports: [HttpClientTestingModule, MockModule(NavigationModule)],
     providers: [
       {
         provide: AuthStorageService,

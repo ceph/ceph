@@ -161,6 +161,9 @@ systemctl status docker > /dev/null && ( $CEPHADM --docker version | grep 'ceph 
 $CEPHADM shell --fsid $FSID -- ceph -v | grep 'ceph version'
 $CEPHADM shell --fsid $FSID -e FOO=BAR -- printenv | grep FOO=BAR
 
+# test stdin
+echo foo | $CEPHADM shell -- cat | grep -q foo
+
 ## bootstrap
 ORIG_CONFIG=`mktemp -p $TMPDIR`
 CONFIG=`mktemp -p $TMPDIR`
@@ -183,8 +186,7 @@ $CEPHADM bootstrap \
       --output-pub-ssh-key $TMPDIR/ceph.pub \
       --allow-overwrite \
       --skip-mon-network \
-      --skip-monitoring-stack \
-      --with-exporter
+      --skip-monitoring-stack
 test -e $CONFIG
 test -e $KEYRING
 rm -f $ORIG_CONFIG
@@ -357,21 +359,6 @@ is_available "alertmanager.yml" "$cond" 10
 cond="curl 'http://localhost:9093' | grep -q 'Alertmanager'"
 is_available "alertmanager" "$cond" 10
 
-# Fetch the token we need to access the exporter API
-token=$($CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph cephadm get-exporter-config | jq -r '.token')
-[[ ! -z "$token" ]]
-
-# check all exporter threads active
-cond="curl -k -s -H \"Authorization: Bearer $token\" \
-      https://localhost:9443/v1/metadata/health | \
-      jq -r '.tasks | select(.disks == \"active\" and .daemons == \"active\" and .host == \"active\")'"
-is_available "exporter_threads_active" "$cond" 3
-
-# check we deployed for all hosts
-$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph orch ls --service-type cephadm-exporter --format json
-host_pattern=$($CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph orch ls --service-type cephadm-exporter --format json | jq -r '.[0].placement.host_pattern')
-[[ "$host_pattern" = "*" ]]
-
 ## run
 # WRITE ME
 
@@ -415,8 +402,11 @@ expect_false $CEPHADM rm-daemon --fsid $FSID --name mon.a
 # mgr does not
 $CEPHADM rm-daemon --fsid $FSID --name mgr.x
 
+expect_false $CEPHADM zap-osds --fsid $FSID
+$CEPHADM zap-osds --fsid $FSID --force
+
 ## rm-cluster
-expect_false $CEPHADM rm-cluster --fsid $FSID
-$CEPHADM rm-cluster --fsid $FSID --force
+expect_false $CEPHADM rm-cluster --fsid $FSID --zap-osds
+$CEPHADM rm-cluster --fsid $FSID --force --zap-osds
 
 echo PASS

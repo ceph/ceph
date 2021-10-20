@@ -24,6 +24,8 @@
 
 #include "include/denc.h"
 
+using namespace std;
+
 // test helpers
 
 template<typename T>

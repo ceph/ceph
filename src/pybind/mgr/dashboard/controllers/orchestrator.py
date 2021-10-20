@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 from functools import wraps
 
 from ..exceptions import DashboardException
 from ..services.orchestrator import OrchClient
-from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, ReadPermission, RESTController
+from . import APIDoc, APIRouter, Endpoint, EndpointDoc, ReadPermission, RESTController
 
 STATUS_SCHEMA = {
     "available": (bool, "Orchestrator status"),
@@ -36,8 +35,8 @@ def raise_if_no_orchestrator(features=None):
     return inner
 
 
-@ApiController('/orchestrator')
-@ControllerDoc("Orchestrator Management API", "Orchestrator")
+@APIRouter('/orchestrator')
+@APIDoc("Orchestrator Management API", "Orchestrator")
 class Orchestrator(RESTController):
 
     @Endpoint()

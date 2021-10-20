@@ -5,7 +5,6 @@ import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { TableStatus } from '~/app/shared/classes/table-status';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -42,7 +41,6 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[] = [];
   buckets: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
-  tableStatus = new TableStatus();
   staleTimeout: number;
 
   constructor(
@@ -53,9 +51,9 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
     private modalService: ModalService,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n,
-    private ngZone: NgZone
+    protected ngZone: NgZone
   ) {
-    super();
+    super(ngZone);
   }
 
   ngOnInit() {
@@ -120,46 +118,29 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
     this.tableActions = [addAction, editAction, deleteAction];
-    this.timeConditionReached();
+    this.setTableRefreshTimeout();
   }
 
   transformBucketData() {
     _.forEach(this.buckets, (bucketKey) => {
-      const usageList = bucketKey['usage'];
       const maxBucketSize = bucketKey['bucket_quota']['max_size'];
       const maxBucketObjects = bucketKey['bucket_quota']['max_objects'];
-      let totalBucketSize = 0;
-      let numOfObjects = 0;
-      _.forEach(usageList, (usageKey) => {
-        totalBucketSize = totalBucketSize + usageKey.size_actual;
-        numOfObjects = numOfObjects + usageKey.num_objects;
-      });
-      bucketKey['bucket_size'] = totalBucketSize;
-      bucketKey['num_objects'] = numOfObjects;
-      bucketKey['size_usage'] = maxBucketSize > 0 ? totalBucketSize / maxBucketSize : undefined;
+      bucketKey['bucket_size'] = 0;
+      bucketKey['num_objects'] = 0;
+      if (!_.isEmpty(bucketKey['usage'])) {
+        bucketKey['bucket_size'] = bucketKey['usage']['rgw.main']['size_actual'];
+        bucketKey['num_objects'] = bucketKey['usage']['rgw.main']['num_objects'];
+      }
+      bucketKey['size_usage'] =
+        maxBucketSize > 0 ? bucketKey['bucket_size'] / maxBucketSize : undefined;
       bucketKey['object_usage'] =
-        maxBucketObjects > 0 ? numOfObjects / maxBucketObjects : undefined;
-    });
-  }
-
-  timeConditionReached() {
-    clearTimeout(this.staleTimeout);
-    this.ngZone.runOutsideAngular(() => {
-      this.staleTimeout = window.setTimeout(() => {
-        this.ngZone.run(() => {
-          this.tableStatus = new TableStatus(
-            'warning',
-            $localize`The bucket list data might be stale. If needed, you can manually reload it.`
-          );
-        });
-      }, 10000);
+        maxBucketObjects > 0 ? bucketKey['num_objects'] / maxBucketObjects : undefined;
     });
   }
 
   getBucketList(context: CdTableFetchDataContext) {
-    this.tableStatus = new TableStatus();
-    this.timeConditionReached();
-    this.rgwBucketService.list().subscribe(
+    this.setTableRefreshTimeout();
+    this.rgwBucketService.list(true).subscribe(
       (resp: object[]) => {
         this.buckets = resp;
         this.transformBucketData();

@@ -26,16 +26,17 @@ struct coll_info_t {
 /// Interface for maintaining set of collections
 class CollectionManager {
 public:
-  using base_ertr = TransactionManager::read_extent_ertr;
+  using base_iertr = TransactionManager::read_extent_iertr;
+
     /// Initialize collection manager instance for an empty store
-  using mkfs_ertr = TransactionManager::alloc_extent_ertr;
-  using mkfs_ret = mkfs_ertr::future<coll_root_t>;
+  using mkfs_iertr = TransactionManager::alloc_extent_iertr;
+  using mkfs_ret = mkfs_iertr::future<coll_root_t>;
   virtual mkfs_ret mkfs(
     Transaction &t) = 0;
 
   /// Create collection
-  using create_ertr = base_ertr;
-  using create_ret = create_ertr::future<>;
+  using create_iertr = base_iertr;
+  using create_ret = create_iertr::future<>;
   virtual create_ret create(
     coll_root_t &root,
     Transaction &t,
@@ -44,24 +45,24 @@ public:
   ) = 0;
 
   /// List collections with info
-  using list_ertr = base_ertr;
+  using list_iertr = base_iertr;
   using list_ret_bare = std::vector<std::pair<coll_t, coll_info_t>>;
-  using list_ret = list_ertr::future<list_ret_bare>;
+  using list_ret = list_iertr::future<list_ret_bare>;
   virtual list_ret list(
     const coll_root_t &root,
     Transaction &t) = 0;
 
   /// Remove cid
-  using remove_ertr = base_ertr;
-  using remove_ret = remove_ertr::future<>;
+  using remove_iertr = base_iertr;
+  using remove_ret = remove_iertr::future<>;
   virtual remove_ret remove(
     const coll_root_t &coll_root,
     Transaction &t,
     coll_t cid) = 0;
 
   /// Update info for cid
-  using update_ertr = base_ertr;
-  using update_ret = base_ertr::future<>;
+  using update_iertr = base_iertr;
+  using update_ret = base_iertr::future<>;
   virtual update_ret update(
     const coll_root_t &coll_root,
     Transaction &t,

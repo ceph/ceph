@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <boost/optional.hpp>
+#include <optional>
 
 #include "ConfigMap.h"
 #include "mon/PaxosService.h"
@@ -14,9 +14,9 @@ class ConfigMonitor : public PaxosService
 {
   version_t version = 0;
   ConfigMap config_map;
-  std::map<std::string,boost::optional<ceph::buffer::list>> pending;
+  std::map<std::string,std::optional<ceph::buffer::list>> pending;
   std::string pending_description;
-  std::map<std::string,boost::optional<ceph::buffer::list>> pending_cleanup;
+  std::map<std::string,std::optional<ceph::buffer::list>> pending_cleanup;
 
   std::map<std::string,ceph::buffer::list> current;
 

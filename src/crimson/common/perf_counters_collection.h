@@ -22,7 +22,9 @@ public:
   PerfCountersCollection();
   ~PerfCountersCollection();
   PerfCountersCollectionImpl* get_perf_collection();
-
+  void dump_formatted(ceph::Formatter *f, bool schema,
+                      const std::string &logger = "",
+                      const std::string &counter = "");
 };
 
 inline PerfCountersCollection::ShardedPerfCountersCollection& sharded_perf_coll(){

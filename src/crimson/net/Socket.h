@@ -160,6 +160,11 @@ class Socket
   friend class FixedCPUServerSocket;
 };
 
+using listen_ertr = crimson::errorator<
+  crimson::ct_error::address_in_use, // The address is already bound
+  crimson::ct_error::address_not_available // https://techoverflow.net/2021/08/06/how-i-fixed-python-oserror-errno-99-cannot-assign-requested-address/
+  >;
+
 class FixedCPUServerSocket
     : public seastar::peering_sharded_service<FixedCPUServerSocket> {
   const seastar::shard_id cpu;
@@ -179,7 +184,6 @@ class FixedCPUServerSocket
   seastar::future<> reset() {
     return container().invoke_on_all([] (auto& ss) {
       assert(ss.shutdown_gate.is_closed());
-      ss.shutdown_gate = seastar::gate();
       ss.addr = entity_addr_t();
       ss.listener.reset();
     });
@@ -197,9 +201,6 @@ public:
   FixedCPUServerSocket(const FixedCPUServerSocket&) = delete;
   FixedCPUServerSocket& operator=(const FixedCPUServerSocket&) = delete;
 
-  using listen_ertr = crimson::errorator<
-    crimson::ct_error::address_in_use // The address is already bound
-    >;
   listen_ertr::future<> listen(entity_addr_t addr);
 
   // fn_accept should be a nothrow function of type

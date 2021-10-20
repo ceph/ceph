@@ -65,13 +65,13 @@ class RGWErrorRepoWriteCR : public RGWSimpleCoroutine {
       key(key), timestamp(timestamp)
   {}
 
-  int send_request() override {
+  int send_request(const DoutPrefixProvider *dpp) override {
     librados::ObjectWriteOperation op;
     int r = rgw_error_repo_write(op, key, timestamp);
     if (r < 0) {
       return r;
     }
-    r = obj.open();
+    r = obj.open(dpp);
     if (r < 0) {
       return r;
     }
@@ -108,13 +108,13 @@ class RGWErrorRepoRemoveCR : public RGWSimpleCoroutine {
       key(key), timestamp(timestamp)
   {}
 
-  int send_request() override {
+  int send_request(const DoutPrefixProvider *dpp) override {
     librados::ObjectWriteOperation op;
     int r = rgw_error_repo_remove(op, key, timestamp);
     if (r < 0) {
       return r;
     }
-    r = obj.open();
+    r = obj.open(dpp);
     if (r < 0) {
       return r;
     }

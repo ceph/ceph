@@ -1,10 +1,13 @@
 
-from mgr_module import MgrModule, CommandResult, CLICommand, Option
+from mgr_module import MgrModule, CommandResult, HandleCommandResult, CLICommand, Option
 import enum
 import json
 import random
 import sys
 import threading
+from code import InteractiveInterpreter
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -60,6 +63,7 @@ class Module(MgrModule):
         self._event = threading.Event()
         self._workload: Optional[Workload] = None
         self._health: Dict[str, Dict[str, Any]] = {}
+        self._repl = InteractiveInterpreter(dict(mgr=self))
 
     @CLICommand('mgr self-test python-version', perm='r')
     def python_version(self) -> Tuple[int, str, str]:
@@ -249,7 +253,7 @@ class Module(MgrModule):
 
         servers = self.list_servers()
         for server in servers:
-            self.get_server(server['hostname'])
+            self.get_server(server['hostname'])  # type: ignore
 
         osdmap = self.get('osd_map')
         for o in osdmap['osds']:
@@ -463,6 +467,31 @@ class Module(MgrModule):
 
         self._event.clear()
         self.log.info("Ended command_spam workload...")
+
+    @CLICommand('mgr self-test eval')
+    def eval(self,
+             s: Optional[str] = None,
+             inbuf: Optional[str] = None) -> HandleCommandResult:
+        '''
+        eval given source
+        '''
+        source = s or inbuf
+        if source is None:
+            return HandleCommandResult(-1, '', 'source is not specified')
+
+        err = StringIO()
+        out = StringIO()
+        with redirect_stderr(err), redirect_stdout(out):
+            needs_more = self._repl.runsource(source)
+            if needs_more:
+                retval = 2
+                stdout = ''
+                stderr = ''
+            else:
+                retval = 0
+                stdout = out.getvalue()
+                stderr = err.getvalue()
+            return HandleCommandResult(retval, stdout, stderr)
 
     def serve(self) -> None:
         while True:

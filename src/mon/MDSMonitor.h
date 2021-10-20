@@ -32,6 +32,9 @@ class FileSystemCommandHandler;
 
 class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHandler {
  public:
+  using clock = ceph::coarse_mono_clock;
+  using time = ceph::coarse_mono_time;
+
   MDSMonitor(Monitor &mn, Paxos &p, std::string service_name);
 
   // service methods
@@ -127,7 +130,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   void count_metadata(const std::string& field, ceph::Formatter *f);
 
 public:
-  void print_fs_summary(ostream& out) {
+  void print_fs_summary(std::ostream& out) {
     get_fsmap().print_fs_summary(out);
   }
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
@@ -146,6 +149,10 @@ protected:
   // when the mon was not updating us for some period (e.g. during slow
   // election) to reset last_beacon timeouts
   ceph::mono_time last_tick = ceph::mono_clock::zero();
+
+private:
+  time last_fsmap_struct_flush = clock::zero();
+  bool check_fsmap_struct_version = true;
 };
 
 #endif

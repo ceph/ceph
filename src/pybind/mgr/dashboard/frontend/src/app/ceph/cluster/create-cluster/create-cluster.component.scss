@@ -1,0 +1,30 @@
+@use './src/styles/vendor/variables' as vv;
+
+.container-fluid {
+  align-items: flex-start;
+  display: flex;
+  padding-left: 0;
+  width: 100%;
+}
+
+.card-body {
+  max-width: 85%;
+}
+
+.vertical-line {
+  border-left: 1px solid vv.$gray-400;
+}
+
+cd-wizard {
+  width: 15%;
+}
+
+cd-hosts {
+  ::ng-deep .nav {
+    display: none;
+  }
+}
+
+.alignForm {
+  margin-left: -1%;
+}

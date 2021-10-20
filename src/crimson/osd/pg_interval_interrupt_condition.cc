@@ -20,7 +20,7 @@ bool IOInterruptCondition::new_interval_created() {
   bool ret = e < pg->get_interval_start_epoch();
   if (ret)
     ::crimson::get_logger(ceph_subsys_osd).debug(
-      "{} new interval, should interrupt, e{}", *pg);
+      "{} new interval, should interrupt, e{}", *pg, e);
   return ret;
 }
 

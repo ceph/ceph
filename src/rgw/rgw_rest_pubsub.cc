@@ -21,6 +21,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static const char* AWS_SNS_NS("https://sns.amazonaws.com/doc/2010-03-31/");
 
 // command (AWS compliant): 
@@ -31,7 +33,7 @@ public:
   int get_params() override {
     topic_name = s->info.args.get("Name");
     if (topic_name.empty()) {
-      ldout(s->cct, 1) << "CreateTopic Action 'Name' argument is missing" << dendl;
+      ldpp_dout(this, 1) << "CreateTopic Action 'Name' argument is missing" << dendl;
       return -EINVAL;
     }
 
@@ -57,7 +59,7 @@ public:
     if (!dest.push_endpoint.empty() && dest.persistent) {
       const auto ret = rgw::notify::add_persistent_topic(topic_name, s->yield);
       if (ret < 0) {
-        ldout(s->cct, 1) << "CreateTopic Action failed to create queue for persistent topics. error:" << ret << dendl;
+        ldpp_dout(this, 1) << "CreateTopic Action failed to create queue for persistent topics. error:" << ret << dendl;
         return ret;
       }
     }
@@ -137,7 +139,7 @@ public:
     const auto topic_arn = rgw::ARN::parse((s->info.args.get("TopicArn")));
 
     if (!topic_arn || topic_arn->resource.empty()) {
-        ldout(s->cct, 1) << "GetTopic Action 'TopicArn' argument is missing or invalid" << dendl;
+        ldpp_dout(this, 1) << "GetTopic Action 'TopicArn' argument is missing or invalid" << dendl;
         return -EINVAL;
     }
 
@@ -178,7 +180,7 @@ public:
     const auto topic_arn = rgw::ARN::parse((s->info.args.get("TopicArn")));
 
     if (!topic_arn || topic_arn->resource.empty()) {
-        ldout(s->cct, 1) << "GetTopicAttribute Action 'TopicArn' argument is missing or invalid" << dendl;
+        ldpp_dout(this, 1) << "GetTopicAttribute Action 'TopicArn' argument is missing or invalid" << dendl;
         return -EINVAL;
     }
 
@@ -219,7 +221,7 @@ public:
     const auto topic_arn = rgw::ARN::parse((s->info.args.get("TopicArn")));
 
     if (!topic_arn || topic_arn->resource.empty()) {
-      ldout(s->cct, 1) << "DeleteTopic Action 'TopicArn' argument is missing or invalid" << dendl;
+      ldpp_dout(this, 1) << "DeleteTopic Action 'TopicArn' argument is missing or invalid" << dendl;
       return -EINVAL;
     }
 
@@ -233,7 +235,7 @@ public:
       return 0;
     }
     if (ret < 0) {
-      ldout(s->cct, 1) << "DeleteTopic Action failed to remove queue for persistent topics. error:" << ret << dendl;
+      ldpp_dout(this, 1) << "DeleteTopic Action failed to remove queue for persistent topics. error:" << ret << dendl;
       return ret;
     }
 
@@ -343,7 +345,7 @@ void update_attribute_map(const std::string& input, AttributeMap& map) {
 
 void RGWHandler_REST_PSTopic_AWS::rgw_topic_parse_input() {
   if (post_body.size() > 0) {
-    ldout(s->cct, 10) << "Content of POST: " << post_body << dendl;
+    ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
 
     if (post_body.find("Action") != string::npos) {
       const boost::char_separator<char> sep("&");
@@ -434,29 +436,29 @@ class RGWPSCreateNotif_ObjStore_S3 : public RGWPSCreateNotifOp {
     std::tie(r, data) = read_all_input(s, max_size, false);
 
     if (r < 0) {
-      ldout(s->cct, 1) << "failed to read XML payload" << dendl;
+      ldpp_dout(this, 1) << "failed to read XML payload" << dendl;
       return r;
     }
     if (data.length() == 0) {
-      ldout(s->cct, 1) << "XML payload missing" << dendl;
+      ldpp_dout(this, 1) << "XML payload missing" << dendl;
       return -EINVAL;
     }
 
     RGWXMLDecoder::XMLParser parser;
 
     if (!parser.init()){
-      ldout(s->cct, 1) << "failed to initialize XML parser" << dendl;
+      ldpp_dout(this, 1) << "failed to initialize XML parser" << dendl;
       return -EINVAL;
     }
     if (!parser.parse(data.c_str(), data.length(), 1)) {
-      ldout(s->cct, 1) << "failed to parse XML payload" << dendl;
+      ldpp_dout(this, 1) << "failed to parse XML payload" << dendl;
       return -ERR_MALFORMED_XML;
     }
     try {
       // NotificationConfigurations is mandatory
       RGWXMLDecoder::decode_xml("NotificationConfiguration", configurations, &parser, true);
     } catch (RGWXMLDecoder::err& err) {
-      ldout(s->cct, 1) << "failed to parse XML payload. error: " << err << dendl;
+      ldpp_dout(this, 1) << "failed to parse XML payload. error: " << err << dendl;
       return -ERR_MALFORMED_XML;
     }
     return 0;
@@ -466,15 +468,15 @@ class RGWPSCreateNotif_ObjStore_S3 : public RGWPSCreateNotifOp {
     bool exists;
     const auto no_value = s->info.args.get("notification", &exists);
     if (!exists) {
-      ldout(s->cct, 1) << "missing required param 'notification'" << dendl;
+      ldpp_dout(this, 1) << "missing required param 'notification'" << dendl;
       return -EINVAL;
     } 
     if (no_value.length() > 0) {
-      ldout(s->cct, 1) << "param 'notification' should not have any value" << dendl;
+      ldpp_dout(this, 1) << "param 'notification' should not have any value" << dendl;
       return -EINVAL;
     }
     if (s->bucket_name.empty()) {
-      ldout(s->cct, 1) << "request must be on a bucket" << dendl;
+      ldpp_dout(this, 1) << "request must be on a bucket" << dendl;
       return -EINVAL;
     }
     bucket_name = s->bucket_name;
@@ -512,25 +514,25 @@ void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
   for (const auto& c : configurations.list) {
     const auto& notif_name = c.id;
     if (notif_name.empty()) {
-      ldout(s->cct, 1) << "missing notification id" << dendl;
+      ldpp_dout(this, 1) << "missing notification id" << dendl;
       op_ret = -EINVAL;
       return;
     }
     if (c.topic_arn.empty()) {
-      ldout(s->cct, 1) << "missing topic ARN in notification: '" << notif_name << "'" << dendl;
+      ldpp_dout(this, 1) << "missing topic ARN in notification: '" << notif_name << "'" << dendl;
       op_ret = -EINVAL;
       return;
     }
 
     const auto arn = rgw::ARN::parse(c.topic_arn);
     if (!arn || arn->resource.empty()) {
-      ldout(s->cct, 1) << "topic ARN has invalid format: '" << c.topic_arn << "' in notification: '" << notif_name << "'" << dendl;
+      ldpp_dout(this, 1) << "topic ARN has invalid format: '" << c.topic_arn << "' in notification: '" << notif_name << "'" << dendl;
       op_ret = -EINVAL;
       return;
     }
 
     if (std::find(c.events.begin(), c.events.end(), rgw::notify::UnknownEvent) != c.events.end()) {
-      ldout(s->cct, 1) << "unknown event type in notification: '" << notif_name << "'" << dendl;
+      ldpp_dout(this, 1) << "unknown event type in notification: '" << notif_name << "'" << dendl;
       op_ret = -EINVAL;
       return;
     }
@@ -541,7 +543,7 @@ void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
     rgw_pubsub_topic topic_info;  
     op_ret = ps->get_topic(topic_name, &topic_info);
     if (op_ret < 0) {
-      ldout(s->cct, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
+      ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
       return;
     }
     // make sure that full topic configuration match
@@ -554,24 +556,24 @@ void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
     // generate the internal topic. destination is stored here for the "push-only" case
     // when no subscription exists
     // ARN is cached to make the "GET" method faster
-    op_ret = ps->create_topic(unique_topic_name, topic_info.dest, topic_info.arn, topic_info.opaque_data, y);
+    op_ret = ps->create_topic(this, unique_topic_name, topic_info.dest, topic_info.arn, topic_info.opaque_data, y);
     if (op_ret < 0) {
-      ldout(s->cct, 1) << "failed to auto-generate unique topic '" << unique_topic_name << 
+      ldpp_dout(this, 1) << "failed to auto-generate unique topic '" << unique_topic_name << 
         "', ret=" << op_ret << dendl;
       return;
     }
-    ldout(s->cct, 20) << "successfully auto-generated unique topic '" << unique_topic_name << "'" << dendl;
+    ldpp_dout(this, 20) << "successfully auto-generated unique topic '" << unique_topic_name << "'" << dendl;
     // generate the notification
     rgw::notify::EventTypeList events;
-    op_ret = b->create_notification(unique_topic_name, c.events, std::make_optional(c.filter), notif_name, y);
+    op_ret = b->create_notification(this, unique_topic_name, c.events, std::make_optional(c.filter), notif_name, y);
     if (op_ret < 0) {
-      ldout(s->cct, 1) << "failed to auto-generate notification for unique topic '" << unique_topic_name <<
+      ldpp_dout(this, 1) << "failed to auto-generate notification for unique topic '" << unique_topic_name <<
         "', ret=" << op_ret << dendl;
       // rollback generated topic (ignore return value)
-      ps->remove_topic(unique_topic_name, y);
+      ps->remove_topic(this, unique_topic_name, y);
       return;
     }
-    ldout(s->cct, 20) << "successfully auto-generated notification for unique topic '" << unique_topic_name << "'" << dendl;
+    ldpp_dout(this, 20) << "successfully auto-generated notification for unique topic '" << unique_topic_name << "'" << dendl;
   
     if (!push_only) {
       // generate the subscription with destination information from the original topic
@@ -579,16 +581,16 @@ void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
       dest.bucket_name = data_bucket_prefix + s->owner.get_id().to_str() + "-" + unique_topic_name;
       dest.oid_prefix = data_oid_prefix + notif_name + "/";
       auto sub = ps->get_sub(notif_name);
-      op_ret = sub->subscribe(unique_topic_name, dest, y, notif_name);
+      op_ret = sub->subscribe(this, unique_topic_name, dest, y, notif_name);
       if (op_ret < 0) {
-        ldout(s->cct, 1) << "failed to auto-generate subscription '" << notif_name << "', ret=" << op_ret << dendl;
+        ldpp_dout(this, 1) << "failed to auto-generate subscription '" << notif_name << "', ret=" << op_ret << dendl;
         // rollback generated notification (ignore return value)
-        b->remove_notification(unique_topic_name, y);
+        b->remove_notification(this, unique_topic_name, y);
         // rollback generated topic (ignore return value)
-        ps->remove_topic(unique_topic_name, y);
+        ps->remove_topic(this, unique_topic_name, y);
         return;
       }
-      ldout(s->cct, 20) << "successfully auto-generated subscription '" << notif_name << "'" << dendl;
+      ldpp_dout(this, 20) << "successfully auto-generated subscription '" << notif_name << "'" << dendl;
     }
   }
 }
@@ -602,11 +604,11 @@ private:
     bool exists;
     notif_name = s->info.args.get("notification", &exists);
     if (!exists) {
-      ldout(s->cct, 1) << "missing required param 'notification'" << dendl;
+      ldpp_dout(this, 1) << "missing required param 'notification'" << dendl;
       return -EINVAL;
     } 
     if (s->bucket_name.empty()) {
-      ldout(s->cct, 1) << "request must be on a bucket" << dendl;
+      ldpp_dout(this, 1) << "request must be on a bucket" << dendl;
       return -EINVAL;
     }
     bucket_name = s->bucket_name;
@@ -614,13 +616,13 @@ private:
   }
 
   void remove_notification_by_topic(const std::string& topic_name, const RGWPubSub::BucketRef& b, optional_yield y) {
-    op_ret = b->remove_notification(topic_name, y);
+    op_ret = b->remove_notification(this, topic_name, y);
     if (op_ret < 0) {
-      ldout(s->cct, 1) << "failed to remove notification of topic '" << topic_name << "', ret=" << op_ret << dendl;
+      ldpp_dout(this, 1) << "failed to remove notification of topic '" << topic_name << "', ret=" << op_ret << dendl;
     }
-    op_ret = ps->remove_topic(topic_name, y);
+    op_ret = ps->remove_topic(this, topic_name, y);
     if (op_ret < 0) {
-      ldout(s->cct, 1) << "failed to remove auto-generated topic '" << topic_name << "', ret=" << op_ret << dendl;
+      ldpp_dout(this, 1) << "failed to remove auto-generated topic '" << topic_name << "', ret=" << op_ret << dendl;
     }
   }
 
@@ -643,7 +645,7 @@ void RGWPSDeleteNotif_ObjStore_S3::execute(optional_yield y) {
   rgw_pubsub_bucket_topics bucket_topics;
   op_ret = b->get_topics(&bucket_topics);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to get list of topics from bucket '" << bucket_info.bucket.name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << bucket_info.bucket.name << "', ret=" << op_ret << dendl;
     return;
   }
 
@@ -654,16 +656,16 @@ void RGWPSDeleteNotif_ObjStore_S3::execute(optional_yield y) {
       // remove the auto generated subscription according to notification name (if exist)
       const auto unique_topic_name = unique_topic->get().topic.name;
       auto sub = ps->get_sub(notif_name);
-      op_ret = sub->unsubscribe(unique_topic_name, y);
+      op_ret = sub->unsubscribe(this, unique_topic_name, y);
       if (op_ret < 0 && op_ret != -ENOENT) {
-        ldout(s->cct, 1) << "failed to remove auto-generated subscription '" << notif_name << "', ret=" << op_ret << dendl;
+        ldpp_dout(this, 1) << "failed to remove auto-generated subscription '" << notif_name << "', ret=" << op_ret << dendl;
         return;
       }
       remove_notification_by_topic(unique_topic_name, b, y);
       return;
     }
     // notification to be removed is not found - considered success
-    ldout(s->cct, 20) << "notification '" << notif_name << "' already removed" << dendl;
+    ldpp_dout(this, 20) << "notification '" << notif_name << "' already removed" << dendl;
     return;
   }
 
@@ -677,15 +679,15 @@ void RGWPSDeleteNotif_ObjStore_S3::execute(optional_yield y) {
       rgw_pubsub_sub_config sub_conf;
       op_ret = sub->get_conf(&sub_conf);
       if (op_ret < 0) {
-        ldout(s->cct, 1) << "failed to get subscription '" << topic_sub_name << "' info, ret=" << op_ret << dendl;
+        ldpp_dout(this, 1) << "failed to get subscription '" << topic_sub_name << "' info, ret=" << op_ret << dendl;
         return;
       }
       if (!sub_conf.s3_id.empty()) {
         // S3 notification, has autogenerated subscription
         const auto& sub_topic_name = sub_conf.topic;
-        op_ret = sub->unsubscribe(sub_topic_name, y);
+        op_ret = sub->unsubscribe(this, sub_topic_name, y);
         if (op_ret < 0) {
-          ldout(s->cct, 1) << "failed to remove auto-generated subscription '" << topic_sub_name << "', ret=" << op_ret << dendl;
+          ldpp_dout(this, 1) << "failed to remove auto-generated subscription '" << topic_sub_name << "', ret=" << op_ret << dendl;
           return;
         }
       }
@@ -704,11 +706,11 @@ private:
     bool exists;
     notif_name = s->info.args.get("notification", &exists);
     if (!exists) {
-      ldout(s->cct, 1) << "missing required param 'notification'" << dendl;
+      ldpp_dout(this, 1) << "missing required param 'notification'" << dendl;
       return -EINVAL;
     } 
     if (s->bucket_name.empty()) {
-      ldout(s->cct, 1) << "request must be on a bucket" << dendl;
+      ldpp_dout(this, 1) << "request must be on a bucket" << dendl;
       return -EINVAL;
     }
     bucket_name = s->bucket_name;
@@ -742,7 +744,7 @@ void RGWPSListNotifs_ObjStore_S3::execute(optional_yield y) {
   rgw_pubsub_bucket_topics bucket_topics;
   op_ret = b->get_topics(&bucket_topics);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to get list of topics from bucket '" << bucket_info.bucket.name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << bucket_info.bucket.name << "', ret=" << op_ret << dendl;
     return;
   }
   if (!notif_name.empty()) {
@@ -753,7 +755,7 @@ void RGWPSListNotifs_ObjStore_S3::execute(optional_yield y) {
       return;
     }
     op_ret = -ENOENT;
-    ldout(s->cct, 1) << "failed to get notification info for '" << notif_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get notification info for '" << notif_name << "', ret=" << op_ret << dendl;
     return;
   }
   // loop through all topics of the bucket

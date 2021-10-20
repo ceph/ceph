@@ -1,11 +1,3 @@
-<form #docsForm
-      action="/docs"
-      target="_blank"
-      method="post">
-  <input type="hidden"
-         name="token" />
-</form>
-
 <div ngbDropdown
      placement="bottom-right">
   <a ngbDropdownToggle
@@ -22,9 +14,10 @@
        href="{{ docsUrl }}"
        target="_blank"
        i18n>documentation</a>
-    <button ngbDropdownItem
-            (click)="goToApiDocs()"
-            i18n>API</button>
+    <a ngbDropdownItem
+       routerLink="/api-docs"
+       target="_blank"
+       i18n>API</a>
     <button ngbDropdownItem
             (click)="openAboutModal()"
             i18n>About</button>

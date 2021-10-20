@@ -47,6 +47,20 @@
 
 using std::string;
 
+
+blk_access_mode_t buffermode(bool buffered) 
+{
+  return buffered ? blk_access_mode_t::BUFFERED : blk_access_mode_t::DIRECT;
+}
+
+std::ostream& operator<<(std::ostream& os, const blk_access_mode_t buffered) 
+{
+  os << (buffered == blk_access_mode_t::BUFFERED ? "(buffered)" : "(direct)");
+  return os;
+}
+
+
+
 void IOContext::aio_wait()
 {
   std::unique_lock l(lock);
@@ -104,8 +118,11 @@ BlockDevice::detect_device_type(const std::string& path)
     return block_device_t::hm_smr;
   }
 #endif
-
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   return block_device_t::aio;
+#else
+  return block_device_t::unknown;
+#endif
 }
 
 BlockDevice::block_device_t

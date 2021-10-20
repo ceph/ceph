@@ -45,6 +45,8 @@ extern "C" {
 #undef dout_prefix
 #define dout_prefix *_dout << "smrbdev(" << this << " " << path << ") "
 
+using namespace std;
+
 HMSMRDevice::HMSMRDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
@@ -410,6 +412,14 @@ void HMSMRDevice::_detect_vdo()
     dout(20) << __func__ << " no VDO volume maps to " << devname << dendl;
   }
   return;
+}
+
+void HMSMRDevice::reset_zones(const std::set<uint64_t>& zones) {
+  for (auto zone_num : zones) {
+    if (zbd_reset_zones(zbd_fd, zone_num * zone_size, zone_size) != 0) {
+      derr << __func__ << " resetting zone failed for zone " << zone_num << dendl;
+    }
+  }
 }
 
 bool HMSMRDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
@@ -891,7 +901,7 @@ int HMSMRDevice::write(
       bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
   }
-  dout(40) << "data: ";
+  dout(40) << "data:\n";
   bl.hexdump(*_dout);
   *_dout << dendl;
 
@@ -920,7 +930,7 @@ int HMSMRDevice::aio_write(
       bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
   }
-  dout(40) << "data: ";
+  dout(40) << "data:\n";
   bl.hexdump(*_dout);
   *_dout << dendl;
 
@@ -1046,7 +1056,7 @@ int HMSMRDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   ceph_assert((uint64_t)r == len);
   pbl->push_back(std::move(p));
 
-  dout(40) << "data: ";
+  dout(40) << "data:\n";
   pbl->hexdump(*_dout);
   *_dout << dendl;
 
@@ -1116,7 +1126,7 @@ int HMSMRDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
   ceph_assert((uint64_t)r == aligned_len);
   memcpy(buf, p.c_str() + (off - aligned_off), len);
 
-  dout(40) << __func__ << " data: ";
+  dout(40) << __func__ << " data:\n";
   bufferlist bl;
   bl.append(buf, len);
   bl.hexdump(*_dout);
@@ -1189,7 +1199,7 @@ int HMSMRDevice::read_random(uint64_t off, uint64_t len, char *buf,
     ceph_assert((uint64_t)r == len);
   }
 
-  dout(40) << __func__ << " data: ";
+  dout(40) << __func__ << " data:\n";
   bufferlist bl;
   bl.append(buf, len);
   bl.hexdump(*_dout);

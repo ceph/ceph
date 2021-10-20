@@ -24,10 +24,13 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static const auto signed_subresources = {
   "acl",
   "cors",
   "delete",
+  "encryption",
   "lifecycle",
   "location",
   "logging",
@@ -77,7 +80,7 @@ get_canon_amz_hdr(const meta_map_t& meta_map)
  * ?get the canonical representation of the object's location
  */
 static std::string
-get_canon_resource(const char* const request_uri,
+get_canon_resource(const DoutPrefixProvider *dpp, const char* const request_uri,
                    const std::map<std::string, std::string>& sub_resources)
 {
   std::string dest;
@@ -107,7 +110,7 @@ get_canon_resource(const char* const request_uri,
     }
   }
 
-  dout(10) << "get_canon_resource(): dest=" << dest << dendl;
+  ldpp_dout(dpp, 10) << "get_canon_resource(): dest=" << dest << dendl;
   return dest;
 }
 
@@ -116,6 +119,7 @@ get_canon_resource(const char* const request_uri,
  * compute a request's signature
  */
 void rgw_create_s3_canonical_header(
+  const DoutPrefixProvider *dpp,
   const char* const method,
   const char* const content_md5,
   const char* const content_type,
@@ -150,7 +154,7 @@ void rgw_create_s3_canonical_header(
 
   dest.append(get_canon_amz_hdr(meta_map));
   dest.append(get_canon_amz_hdr(qs_map));
-  dest.append(get_canon_resource(request_uri, sub_resources));
+  dest.append(get_canon_resource(dpp, request_uri, sub_resources));
 
   dest_str = dest;
 }
@@ -177,7 +181,8 @@ static inline void get_v2_qs_map(const req_info& info,
  * get the header authentication  information required to
  * compute a request's signature
  */
-bool rgw_create_s3_canonical_header(const req_info& info,
+bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
+                                    const req_info& info,
                                     utime_t* const header_time,
                                     std::string& dest,
                                     const bool qsr)
@@ -186,7 +191,7 @@ bool rgw_create_s3_canonical_header(const req_info& info,
   if (content_md5) {
     for (const char *p = content_md5; *p; p++) {
       if (!is_base64_for_content_md5(*p)) {
-        dout(0) << "NOTICE: bad content-md5 provided (not base64),"
+        ldpp_dout(dpp, 0) << "NOTICE: bad content-md5 provided (not base64),"
                 << " aborting request p=" << *p << " " << (int)*p << dendl;
         return false;
       }
@@ -207,7 +212,7 @@ bool rgw_create_s3_canonical_header(const req_info& info,
     if (str == NULL) {
       req_date = info.env->get("HTTP_DATE");
       if (!req_date) {
-        dout(0) << "NOTICE: missing date for auth header" << dendl;
+        ldpp_dout(dpp, 0) << "NOTICE: missing date for auth header" << dendl;
         return false;
       }
       date = req_date;
@@ -216,11 +221,11 @@ bool rgw_create_s3_canonical_header(const req_info& info,
     if (header_time) {
       struct tm t;
       if (!parse_rfc2616(req_date, &t)) {
-        dout(0) << "NOTICE: failed to parse date for auth header" << dendl;
+        ldpp_dout(dpp, 0) << "NOTICE: failed to parse date for auth header" << dendl;
         return false;
       }
       if (t.tm_year < 70) {
-        dout(0) << "NOTICE: bad date (predates epoch): " << req_date << dendl;
+        ldpp_dout(dpp, 0) << "NOTICE: bad date (predates epoch): " << req_date << dendl;
         return false;
       }
       *header_time = utime_t(internal_timegm(&t), 0);
@@ -238,7 +243,7 @@ bool rgw_create_s3_canonical_header(const req_info& info,
     request_uri = info.effective_uri;
   }
 
-  rgw_create_s3_canonical_header(info.method, content_md5, content_type,
+  rgw_create_s3_canonical_header(dpp, info.method, content_md5, content_type,
                                  date.c_str(), meta_map, qs_map,
 				 request_uri.c_str(), sub_resources, dest);
   return true;
@@ -446,6 +451,40 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   return 0;
 }
 
+bool is_non_s3_op(RGWOpType op_type)
+{
+  if (op_type == RGW_STS_GET_SESSION_TOKEN ||
+      op_type == RGW_STS_ASSUME_ROLE ||
+      op_type == RGW_STS_ASSUME_ROLE_WEB_IDENTITY ||
+      op_type == RGW_OP_CREATE_ROLE ||
+      op_type == RGW_OP_DELETE_ROLE ||
+      op_type == RGW_OP_GET_ROLE ||
+      op_type == RGW_OP_MODIFY_ROLE ||
+      op_type == RGW_OP_LIST_ROLES ||
+      op_type == RGW_OP_PUT_ROLE_POLICY ||
+      op_type == RGW_OP_GET_ROLE_POLICY ||
+      op_type == RGW_OP_LIST_ROLE_POLICIES ||
+      op_type == RGW_OP_DELETE_ROLE_POLICY ||
+      op_type == RGW_OP_PUT_USER_POLICY ||
+      op_type == RGW_OP_GET_USER_POLICY ||
+      op_type == RGW_OP_LIST_USER_POLICIES ||
+      op_type == RGW_OP_DELETE_USER_POLICY ||
+      op_type == RGW_OP_CREATE_OIDC_PROVIDER ||
+      op_type == RGW_OP_DELETE_OIDC_PROVIDER ||
+      op_type == RGW_OP_GET_OIDC_PROVIDER ||
+      op_type == RGW_OP_LIST_OIDC_PROVIDERS ||
+      op_type == RGW_OP_PUBSUB_TOPIC_CREATE ||
+      op_type == RGW_OP_PUBSUB_TOPICS_LIST ||
+      op_type == RGW_OP_PUBSUB_TOPIC_GET ||
+      op_type == RGW_OP_PUBSUB_TOPIC_DELETE ||
+      op_type == RGW_OP_TAG_ROLE ||
+      op_type == RGW_OP_LIST_ROLE_TAGS ||
+      op_type == RGW_OP_UNTAG_ROLE) {
+    return true;
+  }
+  return false;
+}
+
 int parse_v4_credentials(const req_info& info,                     /* in */
 			 std::string_view& access_key_id,        /* out */
 			 std::string_view& credential_scope,     /* out */
@@ -578,16 +617,8 @@ static void add_v4_canonical_params_from_map(const map<string, string>& m,
     if (key.empty()) {
       continue;
     }
-    const string *pval = &(entry.second);
-    string _val;
 
-    if (pval->find_first_of('+') != std::string::npos) {
-      _val = *pval;
-      boost::replace_all(_val, "+", " ");
-      pval = &_val;
-    }
-
-    (*result)[aws4_uri_recode(key, true)] = aws4_uri_recode(*pval, true);
+    (*result)[aws4_uri_recode(key, true)] = aws4_uri_recode(entry.second, true);
   }
 }
 

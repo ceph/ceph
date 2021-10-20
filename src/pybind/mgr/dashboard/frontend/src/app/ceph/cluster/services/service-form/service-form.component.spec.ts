@@ -1,9 +1,10 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
+import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 
@@ -22,6 +23,7 @@ describe('ServiceFormComponent', () => {
 
   configureTestBed({
     declarations: [ServiceFormComponent],
+    providers: [NgbActiveModal],
     imports: [
       HttpClientTestingModule,
       NgbTypeaheadModule,
@@ -35,6 +37,7 @@ describe('ServiceFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(ServiceFormComponent);
     component = fixture.componentInstance;
+    component.ngOnInit();
     form = component.serviceForm;
     formHelper = new FormHelper(form);
     fixture.detectChanges();
@@ -99,14 +102,15 @@ describe('ServiceFormComponent', () => {
     });
 
     it('should test unmanaged', () => {
-      formHelper.setValue('service_type', 'rgw');
+      formHelper.setValue('service_type', 'mgr');
+      formHelper.setValue('service_id', 'svc');
       formHelper.setValue('placement', 'label');
       formHelper.setValue('label', 'bar');
-      formHelper.setValue('rgw_frontend_port', 4567);
       formHelper.setValue('unmanaged', true);
       component.onSubmit();
       expect(cephServiceService.create).toHaveBeenCalledWith({
-        service_type: 'rgw',
+        service_type: 'mgr',
+        service_id: 'svc',
         placement: {},
         unmanaged: true
       });
@@ -140,28 +144,14 @@ describe('ServiceFormComponent', () => {
     describe('should test service nfs', () => {
       beforeEach(() => {
         formHelper.setValue('service_type', 'nfs');
-        formHelper.setValue('pool', 'foo');
       });
 
-      it('should submit nfs with namespace', () => {
-        formHelper.setValue('namespace', 'bar');
+      it('should submit nfs', () => {
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'nfs',
           placement: {},
-          unmanaged: false,
-          pool: 'foo',
-          namespace: 'bar'
-        });
-      });
-
-      it('should submit nfs w/o namespace', () => {
-        component.onSubmit();
-        expect(cephServiceService.create).toHaveBeenCalledWith({
-          service_type: 'nfs',
-          placement: {},
-          unmanaged: false,
-          pool: 'foo'
+          unmanaged: false
         });
       });
     });
@@ -169,37 +159,56 @@ describe('ServiceFormComponent', () => {
     describe('should test service rgw', () => {
       beforeEach(() => {
         formHelper.setValue('service_type', 'rgw');
+        formHelper.setValue('service_id', 'svc');
       });
 
       it('should test rgw valid service id', () => {
-        formHelper.setValue('service_id', 'foo.bar');
+        formHelper.setValue('service_id', 'svc.realm.zone');
         formHelper.expectValid('service_id');
-        formHelper.setValue('service_id', 'foo.bar.bas');
+        formHelper.setValue('service_id', 'svc');
         formHelper.expectValid('service_id');
       });
 
       it('should test rgw invalid service id', () => {
-        formHelper.setValue('service_id', 'foo');
+        formHelper.setValue('service_id', '.');
         formHelper.expectError('service_id', 'rgwPattern');
-        formHelper.setValue('service_id', 'foo.');
+        formHelper.setValue('service_id', 'svc.');
         formHelper.expectError('service_id', 'rgwPattern');
-        formHelper.setValue('service_id', 'foo.bar.');
+        formHelper.setValue('service_id', 'svc.realm');
         formHelper.expectError('service_id', 'rgwPattern');
-        formHelper.setValue('service_id', 'foo.bar.bas.');
+        formHelper.setValue('service_id', 'svc.realm.');
+        formHelper.expectError('service_id', 'rgwPattern');
+        formHelper.setValue('service_id', '.svc.realm');
+        formHelper.expectError('service_id', 'rgwPattern');
+        formHelper.setValue('service_id', 'svc.realm.zone.');
         formHelper.expectError('service_id', 'rgwPattern');
       });
 
-      it('should submit rgw with port', () => {
+      it('should submit rgw with realm and zone', () => {
+        formHelper.setValue('service_id', 'svc.my-realm.my-zone');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: 'my-realm',
+          rgw_zone: 'my-zone',
+          placement: {},
+          unmanaged: false,
+          ssl: false
+        });
+      });
+
+      it('should submit rgw with port and ssl enabled', () => {
         formHelper.setValue('rgw_frontend_port', 1234);
         formHelper.setValue('ssl', true);
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'rgw',
+          service_id: 'svc',
           placement: {},
           unmanaged: false,
           rgw_frontend_port: 1234,
           rgw_frontend_ssl_certificate: '',
-          rgw_frontend_ssl_key: '',
           ssl: true
         });
       });
@@ -239,10 +248,35 @@ describe('ServiceFormComponent', () => {
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'rgw',
+          service_id: 'svc',
           placement: {},
           unmanaged: false,
           ssl: false
         });
+      });
+
+      it('should not show private key field', () => {
+        formHelper.setValue('ssl', true);
+        fixture.detectChanges();
+        const ssl_key = fixture.debugElement.query(By.css('#ssl_key'));
+        expect(ssl_key).toBeNull();
+      });
+
+      it('should test .pem file', () => {
+        const pemCert = `
+-----BEGIN CERTIFICATE-----
+iJ5IbgzlKPssdYwuAEI3yPZxX/g5vKBrgcyD3LttLL/DlElq/1xCnwVrv7WROSNu
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+mn/S7BNBEC7AGe5ajmN+8hBTGdACUXe8rwMNrtTy/MwBZ0VpJsAAjJh+aptZh5yB
+-----END CERTIFICATE-----
+-----BEGIN RSA PRIVATE KEY-----
+x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
+-----END RSA PRIVATE KEY-----`;
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('ssl_cert', pemCert);
+        fixture.detectChanges();
+        formHelper.expectValid('ssl_cert');
       });
     });
 
@@ -329,6 +363,74 @@ describe('ServiceFormComponent', () => {
         formHelper.setValue('api_port', 'abc');
         component.onSubmit();
         formHelper.expectError('api_port', 'pattern');
+      });
+    });
+
+    describe('should test service ingress', () => {
+      beforeEach(() => {
+        formHelper.setValue('service_type', 'ingress');
+        formHelper.setValue('backend_service', 'rgw.foo');
+        formHelper.setValue('virtual_ip', '192.168.20.1/24');
+        formHelper.setValue('ssl', false);
+      });
+
+      it('should submit ingress', () => {
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'ingress',
+          placement: {},
+          unmanaged: false,
+          backend_service: 'rgw.foo',
+          service_id: 'rgw.foo',
+          virtual_ip: '192.168.20.1/24',
+          virtual_interface_networks: null,
+          ssl: false
+        });
+      });
+
+      it('should pre-populate the service id', () => {
+        component.prePopulateId();
+        const prePopulatedID = component.serviceForm.getValue('service_id');
+        expect(prePopulatedID).toBe('rgw.foo');
+      });
+
+      it('should submit valid frontend and monitor port', () => {
+        // min value
+        formHelper.setValue('frontend_port', 1);
+        formHelper.setValue('monitor_port', 1);
+        component.onSubmit();
+        formHelper.expectValid('frontend_port');
+        formHelper.expectValid('monitor_port');
+
+        // max value
+        formHelper.setValue('frontend_port', 65535);
+        formHelper.setValue('monitor_port', 65535);
+        component.onSubmit();
+        formHelper.expectValid('frontend_port');
+        formHelper.expectValid('monitor_port');
+      });
+
+      it('should submit invalid frontend and monitor port', () => {
+        // min
+        formHelper.setValue('frontend_port', 0);
+        formHelper.setValue('monitor_port', 0);
+        component.onSubmit();
+        formHelper.expectError('frontend_port', 'min');
+        formHelper.expectError('monitor_port', 'min');
+
+        // max
+        formHelper.setValue('frontend_port', 65536);
+        formHelper.setValue('monitor_port', 65536);
+        component.onSubmit();
+        formHelper.expectError('frontend_port', 'max');
+        formHelper.expectError('monitor_port', 'max');
+
+        // pattern
+        formHelper.setValue('frontend_port', 'abc');
+        formHelper.setValue('monitor_port', 'abc');
+        component.onSubmit();
+        formHelper.expectError('frontend_port', 'pattern');
+        formHelper.expectError('monitor_port', 'pattern');
       });
     });
   });

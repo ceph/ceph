@@ -18,7 +18,6 @@
 #include "include/Context.h"
 #include "Client.h"
 #include "barrier.h"
-#include "include/ceph_assert.h"
 
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << whoami << " "

@@ -47,7 +47,7 @@ their initial connection to the cluster as they may need to try more
 addresses before they reach an operating monitor.
 
 The down monitor daemon should generally be restarted as soon as
-possible to reduce the risk of a subsequen monitor failure leading to
+possible to reduce the risk of a subsequent monitor failure leading to
 a service outage.
 
 MON_CLOCK_SKEW
@@ -759,7 +759,7 @@ Detailed information about which PGs are affected is available from::
   ceph health detail
 
 In most cases the root cause is that one or more OSDs is currently
-down; see the dicussion for ``OSD_DOWN`` above.
+down; see the discussion for ``OSD_DOWN`` above.
 
 The state of specific problematic PGs can be queried with::
 
@@ -1210,6 +1210,40 @@ New crashes can be listed with::
 Information about a specific crash can be examined with::
 
   ceph crash info <crash-id>
+
+This warning can be silenced by "archiving" the crash (perhaps after
+being examined by an administrator) so that it does not generate this
+warning::
+
+  ceph crash archive <crash-id>
+
+Similarly, all new crashes can be archived with::
+
+  ceph crash archive-all
+
+Archived crashes will still be visible via ``ceph crash ls`` but not
+``ceph crash ls-new``.
+
+The time period for what "recent" means is controlled by the option
+``mgr/crash/warn_recent_interval`` (default: two weeks).
+
+These warnings can be disabled entirely with::
+
+  ceph config set mgr/crash/warn_recent_interval 0
+
+RECENT_MGR_MODULE_CRASH
+_______________________
+
+One or more ceph-mgr modules has crashed recently, and the crash as
+not yet been archived (acknowledged) by the administrator.  This
+generally indicates a software bug in one of the software modules run
+inside the ceph-mgr daemon.  Although the module that experienced the
+problem maybe be disabled as a result, the function of other modules
+is normally unaffected.
+
+As with the *RECENT_CRASH* health alert, the crash can be inspected with::
+
+    ceph crash info <crash-id>
 
 This warning can be silenced by "archiving" the crash (perhaps after
 being examined by an administrator) so that it does not generate this

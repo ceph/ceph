@@ -33,6 +33,7 @@ static ostream& _prefix(std::ostream *_dout, ReplicatedBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
+using std::less;
 using std::list;
 using std::make_pair;
 using std::map;
@@ -382,7 +383,7 @@ void generate_transaction(
       }
 
       if (!op.attr_updates.empty()) {
-	map<string, bufferlist> attrs;
+	map<string, bufferlist, less<>> attrs;
 	for (auto &&p: op.attr_updates) {
 	  if (p.second)
 	    attrs[p.first] = *(p.second);
@@ -1599,7 +1600,7 @@ void ReplicatedBackend::submit_push_data(
   const interval_set<uint64_t> &intervals_included,
   bufferlist data_included,
   bufferlist omap_header,
-  const map<string, bufferlist> &attrs,
+  const map<string, bufferlist, less<>> &attrs,
   const map<string, bufferlist> &omap_entries,
   ObjectStore::Transaction *t)
 {

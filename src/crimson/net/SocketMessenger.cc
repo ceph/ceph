@@ -14,6 +14,8 @@
 
 #include "SocketMessenger.h"
 
+#include <seastar/core/sleep.hh>
+
 #include <tuple>
 #include <boost/functional/hash.hpp>
 
@@ -53,7 +55,8 @@ seastar::future<> SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
   return Messenger::set_myaddrs(my_addrs);
 }
 
-SocketMessenger::bind_ertr::future<> SocketMessenger::do_bind(const entity_addrvec_t& addrs)
+crimson::net::listen_ertr::future<>
+SocketMessenger::do_listen(const entity_addrvec_t& addrs)
 {
   assert(seastar::this_shard_id() == master_sid);
   ceph_assert(addrs.front().get_family() == AF_INET);
@@ -65,22 +68,14 @@ SocketMessenger::bind_ertr::future<> SocketMessenger::do_bind(const entity_addrv
     } else {
       return seastar::now();
     }
-  }).then([this] () -> bind_ertr::future<> {
+  }).then([this] () -> listen_ertr::future<> {
     const entity_addr_t listen_addr = get_myaddr();
-    logger().debug("{} do_bind: try listen {}...", *this, listen_addr);
+    logger().debug("{} do_listen: try listen {}...", *this, listen_addr);
     if (!listener) {
-      logger().warn("{} do_bind: listener doesn't exist", *this);
-      return bind_ertr::now();
+      logger().warn("{} do_listen: listener doesn't exist", *this);
+      return listen_ertr::now();
     }
     return listener->listen(listen_addr);
-  });
-}
-
-SocketMessenger::bind_ertr::future<>
-SocketMessenger::bind(const entity_addrvec_t& addrs)
-{
-  return do_bind(addrs).safe_then([this] {
-    logger().info("{} bind: done", *this);
   });
 }
 
@@ -88,9 +83,13 @@ SocketMessenger::bind_ertr::future<>
 SocketMessenger::try_bind(const entity_addrvec_t& addrs,
                           uint32_t min_port, uint32_t max_port)
 {
-  auto addr = addrs.front();
+  // the classical OSD iterates over the addrvec and tries to listen on each
+  // addr. crimson doesn't need to follow as there is a consensus we need to
+  // worry only about proto v2.
+  assert(addrs.size() == 1);
+  auto addr = addrs.msgr2_addr();
   if (addr.get_port() != 0) {
-    return do_bind(addrs).safe_then([this] {
+    return do_listen(addrs).safe_then([this] {
       logger().info("{} try_bind: done", *this);
     });
   }
@@ -100,29 +99,78 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
     return seastar::repeat_until_value([this, max_port, addr, &port] {
       auto to_bind = addr;
       to_bind.set_port(port);
-      return do_bind(entity_addrvec_t{to_bind}
-      ).safe_then([this] () -> seastar::future<std::optional<bool>> {
+      return do_listen(entity_addrvec_t{to_bind}
+      ).safe_then([this] () -> seastar::future<std::optional<std::error_code>> {
         logger().info("{} try_bind: done", *this);
-        return seastar::make_ready_future<std::optional<bool>>(
-            std::make_optional<bool>(true));
-      }, bind_ertr::all_same_way([this, max_port, &port]
-                                 (const std::error_code& e) mutable
-                                 -> seastar::future<std::optional<bool>> {
-        assert(e == std::errc::address_in_use);
-        logger().trace("{} try_bind: {} already used", *this, port);
+        return seastar::make_ready_future<std::optional<std::error_code>>(
+          std::make_optional<std::error_code>(std::error_code{/* success! */}));
+      }, listen_ertr::all_same_way([this, max_port, &port]
+                                   (const std::error_code& e) mutable
+                                   -> seastar::future<std::optional<std::error_code>> {
+        logger().trace("{} try_bind: {} got error {}", *this, port, e);
         if (port == max_port) {
-          return seastar::make_ready_future<std::optional<bool>>(
-              std::make_optional<bool>(false));
+          return seastar::make_ready_future<std::optional<std::error_code>>(
+            std::make_optional<std::error_code>(e));
         }
         ++port;
-        return seastar::make_ready_future<std::optional<bool>>();
+        return seastar::make_ready_future<std::optional<std::error_code>>(
+          std::optional<std::error_code>{std::nullopt});
       }));
-    }).then([] (bool success) -> bind_ertr::future<> {
-      if (success) {
-        return bind_ertr::now();
-      } else {
+    }).then([] (const std::error_code e) -> bind_ertr::future<> {
+      if (!e) {
+        return bind_ertr::now(); // success!
+      } else if (e == std::errc::address_in_use) {
         return crimson::ct_error::address_in_use::make();
+      } else if (e == std::errc::address_not_available) {
+        return crimson::ct_error::address_not_available::make();
       }
+      ceph_abort();
+    });
+  });
+}
+
+SocketMessenger::bind_ertr::future<>
+SocketMessenger::bind(const entity_addrvec_t& addrs)
+{
+  using crimson::common::local_conf;
+  return seastar::do_with(int64_t{local_conf()->ms_bind_retry_count},
+                          [this, addrs] (auto& count) {
+    return seastar::repeat_until_value([this, addrs, &count] {
+      assert(count >= 0);
+      return try_bind(addrs,
+                      local_conf()->ms_bind_port_min,
+                      local_conf()->ms_bind_port_max)
+      .safe_then([this] {
+        logger().info("{} try_bind: done", *this);
+        return seastar::make_ready_future<std::optional<std::error_code>>(
+          std::make_optional<std::error_code>(std::error_code{/* success! */}));
+      }, bind_ertr::all_same_way([this, &count] (const std::error_code error) {
+        if (count-- > 0) {
+	  logger().info("{} was unable to bind. Trying again in {} seconds",
+                        *this, local_conf()->ms_bind_retry_delay);
+          return seastar::sleep(
+            std::chrono::seconds(local_conf()->ms_bind_retry_delay)
+          ).then([] {
+            // one more time, please
+            return seastar::make_ready_future<std::optional<std::error_code>>(
+              std::optional<std::error_code>{std::nullopt});
+          });
+        } else {
+          logger().info("{} was unable to bind after {} attempts: {}",
+                        *this, local_conf()->ms_bind_retry_count, error);
+          return seastar::make_ready_future<std::optional<std::error_code>>(
+            std::make_optional<std::error_code>(error));
+        }
+      }));
+    }).then([] (const std::error_code error) -> bind_ertr::future<> {
+      if (!error) {
+        return bind_ertr::now(); // success!
+      } else if (error == std::errc::address_in_use) {
+        return crimson::ct_error::address_in_use::make();
+      } else if (error == std::errc::address_not_available) {
+        return crimson::ct_error::address_not_available::make();
+      }
+      ceph_abort();
     });
   });
 }

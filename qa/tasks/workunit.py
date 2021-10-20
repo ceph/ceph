@@ -12,7 +12,7 @@ from tasks.util.workunit import get_refspec_after_overrides
 
 from teuthology import misc
 from teuthology.config import config as teuth_config
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from teuthology.parallel import parallel
 from teuthology.orchestra import run
 
@@ -400,6 +400,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     run.Raw('PATH=$PATH:/usr/sbin'),
                     run.Raw('CEPH_BASE={dir}'.format(dir=clonedir)),
                     run.Raw('CEPH_ROOT={dir}'.format(dir=clonedir)),
+                    run.Raw('CEPH_MNT={dir}'.format(dir=mnt)),
                 ]
                 if env is not None:
                     for var, val in env.items():

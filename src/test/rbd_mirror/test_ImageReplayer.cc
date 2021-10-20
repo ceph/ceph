@@ -272,7 +272,7 @@ public:
     return "image" + stringify(++_image_number);
   }
 
-  std::string get_image_id(librados::IoCtx &ioctx, const string &image_name)
+  std::string get_image_id(librados::IoCtx &ioctx, const std::string &image_name)
   {
     std::string obj = librbd::util::id_obj_name(image_name);
     std::string id;

@@ -23,6 +23,7 @@
 #define check_flag(stream, val, flag) if (val & flag) { stream << "[" #flag "]"; }
 #define check_flag_eq(stream, val, flag) if (val == flag) { stream << "[" #flag "]"; }
 
+using namespace std;
 
 void print_credentials(ostringstream& Stream, PDOKAN_FILE_INFO DokanFileInfo)
 {

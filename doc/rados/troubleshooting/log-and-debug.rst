@@ -69,7 +69,9 @@ To activate Ceph's debugging output (*i.e.*, ``dout()``) at boot time, you must
 add settings to your Ceph configuration file. Subsystems common to each daemon
 may be set under ``[global]`` in your configuration file. Subsystems for
 particular daemons are set under the daemon section in your configuration file
-(*e.g.*, ``[mon]``, ``[osd]``, ``[mds]``). For example::
+(*e.g.*, ``[mon]``, ``[osd]``, ``[mds]``). For example
+
+.. code-block:: ini
 
 	[global]
 		debug ms = 1/5
@@ -306,294 +308,48 @@ but you may override default settings as needed. Ceph supports the following
 settings:
 
 
-``log file``
-
-:Description: The location of the logging file for your cluster.
-:Type: String
-:Required: No
-:Default: ``/var/log/ceph/$cluster-$name.log``
-
-
-``log max new``
-
-:Description: The maximum number of new log files.
-:Type: Integer
-:Required: No
-:Default: ``1000``
-
-
-``log max recent``
-
-:Description: The maximum number of recent events to include in a log file.
-:Type: Integer
-:Required:  No
-:Default: ``10000``
-
-
-``log to file``
-
-:Description: Determines if logging messages should appear in a file.
-:Type: Boolean
-:Required: No
-:Default: ``true``
-
-
-``log to stderr``
-
-:Description: Determines if logging messages should appear in ``stderr``.
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``err to stderr``
-
-:Description: Determines if error messages should appear in ``stderr``.
-:Type: Boolean
-:Required: No
-:Default: ``true``
-
-
-``log to syslog``
-
-:Description: Determines if logging messages should appear in ``syslog``.
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``err to syslog``
-
-:Description: Determines if error messages should appear in ``syslog``.
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``log flush on exit``
-
-:Description: Determines if Ceph should flush the log files after exit.
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``clog to monitors``
-
-:Description: Determines if ``clog`` messages should be sent to monitors.
-:Type: Boolean
-:Required: No
-:Default: ``true``
-
-
-``clog to syslog``
-
-:Description: Determines if ``clog`` messages should be sent to syslog.
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``mon cluster log to syslog``
-
-:Description: Determines if the cluster log should be output to the syslog.
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``mon cluster log file``
-
-:Description: The locations of the cluster's log files. There are two channels in
-              Ceph: ``cluster`` and ``audit``. This option represents a mapping
-              from channels to log files, where the log entries of that
-              channel are sent to. The ``default`` entry is a fallback
-              mapping for channels not explicitly specified. So, the following
-              default setting will send cluster log to ``$cluster.log``, and
-              send audit log to ``$cluster.audit.log``, where ``$cluster`` will
-              be replaced with the actual cluster name.
-:Type: String
-:Required: No
-:Default: ``default=/var/log/ceph/$cluster.$channel.log,cluster=/var/log/ceph/$cluster.log``
-
-
+.. confval:: log_file
+.. confval:: log_max_new
+.. confval:: log_max_recent
+.. confval:: log_to_file
+.. confval:: log_to_stderr
+.. confval:: err_to_stderr
+.. confval:: log_to_syslog
+.. confval:: err_to_syslog
+.. confval:: log_flush_on_exit
+.. confval:: clog_to_monitors
+.. confval:: clog_to_syslog
+.. confval:: mon_cluster_log_to_syslog
+.. confval:: mon_cluster_log_file
 
 OSD
 ---
 
-
-``osd debug drop ping probability``
-
-:Description: ?
-:Type: Double
-:Required: No
-:Default: 0
-
-
-``osd debug drop ping duration``
-
-:Description: 
-:Type: Integer
-:Required: No
-:Default: 0
-
-``osd debug drop pg create probability``
-
-:Description: 
-:Type: Integer
-:Required: No
-:Default: 0
-
-``osd debug drop pg create duration``
-
-:Description: ?
-:Type: Double
-:Required: No
-:Default: 1
-
-
-``osd min pg log entries``
-
-:Description: The minimum number of log entries for placement groups. 
-:Type: 32-bit Unsigned Integer
-:Required: No
-:Default: 250
-
-
-``osd op log threshold``
-
-:Description: How many op log messages to show up in one pass. 
-:Type: Integer
-:Required: No
-:Default: 5
-
-
+.. confval:: osd_debug_drop_ping_probability
+.. confval:: osd_debug_drop_ping_duration
 
 Filestore
 ---------
 
-``filestore debug omap check``
-
-:Description: Debugging check on synchronization. This is an expensive operation.
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
+.. confval:: filestore_debug_omap_check
 
 MDS
 ---
 
-
-``mds debug scatterstat``
-
-:Description: Ceph will assert that various recursive stat invariants are true 
-              (for developers only).
-
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``mds debug frag``
-
-:Description: Ceph will verify directory fragmentation invariants when 
-              convenient (developers only).
-
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``mds debug auth pins``
-
-:Description: The debug auth pin invariants (for developers only).
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``mds debug subtrees``
-
-:Description: The debug subtree invariants (for developers only).
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
+- :confval:`mds_debug_scatterstat`
+- :confval:`mds_debug_frag`
+- :confval:`mds_debug_auth_pins`
+- :confval:`mds_debug_subtrees`
 
 RADOS Gateway
 -------------
 
-
-``rgw log nonexistent bucket``
-
-:Description: Should we log a non-existent buckets?
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``rgw log object name``
-
-:Description: Should an object's name be logged. // man date to see codes (a subset are supported)
-:Type: String
-:Required: No
-:Default: ``%Y-%m-%d-%H-%i-%n``
-
-
-``rgw log object name utc``
-
-:Description: Object log name contains UTC?
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``rgw enable ops log``
-
-:Description: Enables logging of every RGW operation.
-:Type: Boolean
-:Required: No
-:Default: ``true``
-
-
-``rgw enable usage log``
-
-:Description: Enable logging of RGW's bandwidth usage.
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
-``rgw usage log flush threshold``
-
-:Description: Threshold to flush pending log data.
-:Type: Integer
-:Required: No
-:Default: ``1024``
-
-
-``rgw usage log tick interval``
-
-:Description: Flush pending log data every ``s`` seconds.
-:Type: Integer
-:Required: No
-:Default: 30
-
-
-``rgw intent log object name``
-
-:Description: 
-:Type: String
-:Required: No
-:Default: ``%Y-%m-%d-%i-%n``
-
-
-``rgw intent log object name utc``
-
-:Description: Include a UTC timestamp in the intent log object name.
-:Type: Boolean
-:Required: No
-:Default: ``false``
+- :confval:`rgw_log_nonexistent_bucket`
+- :confval:`rgw_log_object_name`
+- :confval:`rgw_log_object_name_utc`
+- :confval:`rgw_enable_ops_log`
+- :confval:`rgw_enable_usage_log`
+- :confval:`rgw_usage_log_flush_threshold`
+- :confval:`rgw_usage_log_tick_interval`
 
 .. [#] there are levels >20 in some rare cases and that they are extremely verbose.

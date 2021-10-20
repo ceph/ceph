@@ -94,7 +94,7 @@ named ``site1`` and ``site2``::
   }
 
 Finally, inject the CRUSH map to make the rule available to the cluster::
-  
+
   $ crushtool -c crush.map.txt -o crush2.map.bin
   $ ceph osd setcrushmap -i crush2.map.bin
 
@@ -104,15 +104,20 @@ the instructions in `Changing Monitor Elections`_.
 .. _Changing Monitor elections: ../change-mon-elections
 
 And lastly, tell the cluster to enter stretch mode. Here, ``mon.e`` is the
-tiebreaker and we are splitting across data centers ::
+tiebreaker and we are splitting across data centers. ``mon.e`` should be also
+set a datacenter, that will differ from ``site1`` and ``site2``. For this
+purpose you can create another datacenter bucket named ```site3`` in your
+CRUSH and place ``mon.e`` there ::
 
-  $ ceph mon enable_stretch_mode e stretch_rule data center
+  $ ceph mon set_location e datacenter=site3
+  $ ceph mon enable_stretch_mode e stretch_rule datacenter
 
 When stretch mode is enabled, the OSDs wlll only take PGs active when
 they peer across data centers (or whatever other CRUSH bucket type
 you specified), assuming both are alive. Pools will increase in size
 from the default 3 to 4, expecting 2 copies in each site. OSDs will only
-be allowed to connect to monitors in the same data center.
+be allowed to connect to monitors in the same data center. New monitors
+will not be allowed to join the cluster if they do not specify a location.
 
 If all the OSDs and monitors from a data center become inaccessible
 at once, the surviving data center will enter a degraded stretch mode. This
@@ -132,7 +137,6 @@ restores min_size to its starting value (2) and requires both sites to peer,
 and stops requiring the always-alive site when peering (so that you can fail
 over to the other site, if necessary).
 
-  
 Stretch Mode Limitations
 ========================
 As implied by the setup, stretch mode only handles 2 sites with OSDs.
@@ -158,6 +162,22 @@ running with more than 2 full sites.
 
 Other commands
 ==============
+If your tiebreaker monitor fails for some reason, you can replace it. Turn on
+a new monitor and run ::
+
+  $ ceph mon set_new_tiebreaker mon.<new_mon_name>
+
+This command will protest if the new monitor is in the same location as existing
+non-tiebreaker monitors. This command WILL NOT remove the previous tiebreaker
+monitor; you should do so yourself.
+
+If you are writing your own tooling for deploying Ceph, you can use a new
+``--set-crush-location`` option when booting monitors, instead of running
+``ceph mon set_location``. This option accepts only a single "bucket=loc" pair, eg
+``ceph-mon --set-crush-location 'datacenter=a'``, which must match the
+bucket type you specified when running ``enable_stretch_mode``.
+
+
 When in stretch degraded mode, the cluster will go into "recovery" mode automatically
 when the disconnected data center comes back. If that doesn't work, or you want to
 enable recovery mode early, you can invoke ::
@@ -172,7 +192,7 @@ when the PGs are healthy. If this doesn't happen, or you want to force the
 cross-data-center peering early and are willing to risk data downtime (or have
 verified separately that all the PGs can peer, even if they aren't fully
 recovered), you can invoke ::
-  
+
   $ ceph osd force_healthy_stretch_mode --yes-i-really-mean-it
 
 This command should not be necessary; it is included to deal with

@@ -137,7 +137,7 @@ OpsExecuter::call_ierrorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 }
 
 static watch_info_t create_watch_info(const OSDOp& osd_op,
-                                      const MOSDOp& msg)
+                                      const OpsExecuter::ExecutableMessage& msg)
 {
   using crimson::common::local_conf;
   const uint32_t timeout =
@@ -161,7 +161,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
     crimson::net::ConnectionRef conn;
     watch_info_t info;
 
-    connect_ctx_t(const OSDOp& osd_op, const MOSDOp& msg)
+    connect_ctx_t(const OSDOp& osd_op, const ExecutableMessage& msg)
       : key(osd_op.op.watch.cookie, msg.get_reqid().name),
         conn(msg.get_connection()),
         info(create_watch_info(osd_op, msg)) {
@@ -180,11 +180,13 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
       }
       return seastar::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG> pg) {
+      assert(pg);
       auto [it, emplaced] = obc->watchers.try_emplace(ctx.key, nullptr);
       if (emplaced) {
         const auto& [cookie, entity] = ctx.key;
-        it->second = crimson::osd::Watch::create(obc, ctx.info, entity);
+        it->second = crimson::osd::Watch::create(
+          obc, ctx.info, entity, std::move(pg));
         logger().info("op_effect: added new watcher: {}", ctx.key);
       } else {
         logger().info("op_effect: found existing watcher: {}", ctx.key);
@@ -217,9 +219,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
 
   struct disconnect_ctx_t {
     ObjectContext::watch_key_t key;
-    bool send_disconnect{ false };
-
-    disconnect_ctx_t(const OSDOp& osd_op, const MOSDOp& msg)
+    disconnect_ctx_t(const OSDOp& osd_op, const ExecutableMessage& msg)
       : key(osd_op.op.watch.cookie, msg.get_reqid().name) {
     }
   };
@@ -234,12 +234,12 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
       }
       return seastar::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       if (auto nh = obc->watchers.extract(ctx.key); !nh.empty()) {
         return seastar::do_with(std::move(nh.mapped()),
                          [ctx](auto&& watcher) {
           logger().info("op_effect: disconnect watcher {}", ctx.key);
-          return watcher->remove(ctx.send_disconnect);
+          return watcher->remove();
         });
       } else {
         logger().info("op_effect: disconnect failed to find watcher {}", ctx.key);
@@ -320,7 +320,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify(
     const uint64_t client_gid;
     const epoch_t epoch;
 
-    notify_ctx_t(const MOSDOp& msg)
+    notify_ctx_t(const ExecutableMessage& msg)
       : conn(msg.get_connection()),
         client_gid(msg.get_reqid().name.num()),
         epoch(msg.get_map_epoch()) {
@@ -347,7 +347,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify(
       ceph::encode(ctx.ninfo.notify_id, osd_op.outdata);
       return seastar::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       auto alive_watchers = obc->watchers | boost::adaptors::map_values
                                           | boost::adaptors::filtered(
         [] (const auto& w) {
@@ -364,6 +364,25 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify(
   });
 }
 
+OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_list_watchers(
+  OSDOp& osd_op,
+  const ObjectState& os)
+{
+  logger().debug("{}", __func__);
+
+  obj_list_watch_response_t response;
+  for (const auto& [key, info] : os.oi.watchers) {
+    logger().debug("{}: key cookie={}, entity={}",
+                   __func__, key.first, key.second);
+    assert(key.first == info.cookie);
+    assert(key.second.is_client());
+    response.entries.emplace_back(watch_item_t{
+      key.second, info.cookie, info.timeout_seconds, info.addr});
+    response.encode(osd_op.outdata, get_message().get_features());
+  }
+  return watch_ierrorator::now();
+}
+
 OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify_ack(
   OSDOp& osd_op,
   const ObjectState& os)
@@ -376,7 +395,8 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify_ack(
     uint64_t notify_id;
     ceph::bufferlist reply_bl;
 
-    notifyack_ctx_t(const MOSDOp& msg) : entity(msg.get_reqid().name) {
+    notifyack_ctx_t(const ExecutableMessage& msg)
+      : entity(msg.get_reqid().name) {
     }
   };
   return with_effect_on_obc(notifyack_ctx_t{ get_message() },
@@ -396,7 +416,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify_ack(
       }
       return watch_errorator::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       logger().info("notify_ack watch_cookie={}, notify_id={}",
                     ctx.watch_cookie, ctx.notify_id);
       return seastar::do_for_each(obc->watchers,
@@ -458,6 +478,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_GETXATTRS:
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
       return backend.get_xattrs(os, osd_op);
+    });
+  case CEPH_OSD_OP_CMPXATTR:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.cmp_xattr(os, osd_op);
     });
   case CEPH_OSD_OP_RMXATTR:
     return do_write_op(
@@ -571,6 +595,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       return do_op_watch(osd_op, os, txn);
     }, false);
+  case CEPH_OSD_OP_LIST_WATCHERS:
+    return do_read_op([this, &osd_op] (auto&, const auto& os) {
+      return do_op_list_watchers(osd_op, os);
+    });
   case CEPH_OSD_OP_NOTIFY:
     return do_read_op([this, &osd_op] (auto&, const auto& os) {
       return do_op_notify(osd_op, os);
@@ -653,18 +681,16 @@ static PG::interruptible_future<hobject_t> pgls_filter(
     logger().debug("pgls_filter: filter is interested in xattr={} for obj={}",
                    xattr, sobj);
     return backend.getxattr(sobj, xattr).safe_then_interruptible(
-      [&filter, sobj] (ceph::bufferptr bp) {
+      [&filter, sobj] (ceph::bufferlist val) {
         logger().debug("pgls_filter: got xvalue for obj={}", sobj);
 
-        ceph::bufferlist val;
-        val.push_back(std::move(bp));
         const bool filtered = filter.filter(sobj, val);
         return seastar::make_ready_future<hobject_t>(filtered ? sobj : hobject_t{});
       }, PGBackend::get_attr_errorator::all_same_way([&filter, sobj] {
         logger().debug("pgls_filter: got error for obj={}", sobj);
 
         if (filter.reject_empty_xattr()) {
-          return seastar::make_ready_future<hobject_t>(hobject_t{});
+          return seastar::make_ready_future<hobject_t>();
         }
         ceph::bufferlist val;
         const bool filtered = filter.filter(sobj, val);
@@ -735,7 +761,7 @@ static PG::interruptible_future<ceph::bufferlist> do_pgnls_common(
           logger().debug("do_pgnls_common: 1st done");
           return seastar::make_ready_future<
             std::tuple<std::vector<hobject_t>, hobject_t>>(
-              std::make_tuple(std::move(items), std::move(next)));
+              std::move(items), std::move(next));
       });
   }).then_interruptible(
     [pg_end] (auto&& ret) {
@@ -864,7 +890,7 @@ static PG::interruptible_future<ceph::bufferlist> do_pgls_common(
                 return seastar::make_ready_future<hobject_t>(obj);
               }
             } else {
-              return seastar::make_ready_future<hobject_t>(hobject_t{});
+              return seastar::make_ready_future<hobject_t>();
             }
           },
           entries_t{},

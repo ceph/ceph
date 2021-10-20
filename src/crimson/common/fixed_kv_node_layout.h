@@ -3,7 +3,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <iostream>
+
+#include <boost/iterator/counting_iterator.hpp>
 
 #include "include/byteorder.h"
 
@@ -59,14 +62,15 @@ public:
     using parent_t = typename maybe_const_t<FixedKVNodeLayout, is_const>::type;
 
     parent_t node;
-    uint16_t offset;
+    uint16_t offset = 0;
 
+    iter_t() = default;
     iter_t(
       parent_t parent,
       uint16_t offset) : node(parent), offset(offset) {}
 
-    iter_t(const iter_t &) = default;
-    iter_t(iter_t &&) = default;
+    iter_t(const iter_t &) noexcept = default;
+    iter_t(iter_t &&) noexcept = default;
     iter_t &operator=(const iter_t &) = default;
     iter_t &operator=(iter_t &&) = default;
 
@@ -76,6 +80,7 @@ public:
     }
 
     // Work nicely with for loops without requiring a nested type.
+    using reference = iter_t&;
     iter_t &operator*() { return *this; }
     iter_t *operator->() { return this; }
 
@@ -87,6 +92,19 @@ public:
 
     iter_t &operator++() {
       ++offset;
+      return *this;
+    }
+
+    iter_t operator--(int) {
+      assert(offset > 0);
+      auto ret = *this;
+      --offset;
+      return ret;
+    }
+
+    iter_t &operator--() {
+      assert(offset > 0);
+      --offset;
       return *this;
     }
 
@@ -371,26 +389,32 @@ public:
   }
 
   const_iterator lower_bound(K l) const {
-    auto ret = begin();
-    for (; ret != end(); ++ret) {
-      if (ret->get_key() >= l)
-	break;
-    }
-    return ret;
+    auto it = std::lower_bound(boost::make_counting_iterator<uint16_t>(0),
+	                       boost::make_counting_iterator<uint16_t>(get_size()),
+		               l,
+		               [this](uint16_t i, K key) {
+			         const_iterator iter(this, i);
+			         return iter->get_key() < key;
+			       });
+    return const_iterator(this, *it);
   }
+
   iterator lower_bound(K l) {
     const auto &tref = *this;
     return iterator(this, tref.lower_bound(l).offset);
   }
 
   const_iterator upper_bound(K l) const {
-    auto ret = begin();
-    for (; ret != end(); ++ret) {
-      if (ret->get_key() > l)
-	break;
-    }
-    return ret;
+    auto it = std::upper_bound(boost::make_counting_iterator<uint16_t>(0),
+	                       boost::make_counting_iterator<uint16_t>(get_size()),
+		               l,
+		               [this](K key, uint16_t i) {
+			         const_iterator iter(this, i);
+			         return key < iter->get_key();
+			       });
+    return const_iterator(this, *it);
   }
+
   iterator upper_bound(K l) {
     const auto &tref = *this;
     return iterator(this, tref.upper_bound(l).offset);

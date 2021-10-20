@@ -9,6 +9,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/lowres_clock.hh>
+#include <seastar/core/shared_ptr.hh>
 #include <seastar/core/timer.hh>
 
 #include "auth/AuthRegistry.h"
@@ -54,8 +55,9 @@ class Client : public crimson::net::Dispatcher,
   const uint32_t want_keys;
 
   MonMap monmap;
-  std::unique_ptr<Connection> active_con;
-  std::vector<std::unique_ptr<Connection>> pending_conns;
+  bool ready_to_send = false;
+  seastar::shared_ptr<Connection> active_con;
+  std::vector<seastar::shared_ptr<Connection>> pending_conns;
   seastar::timer<seastar::lowres_clock> timer;
 
   crimson::net::Messenger& msgr;
@@ -68,7 +70,7 @@ class Client : public crimson::net::Dispatcher,
 
   ceph_tid_t last_mon_command_id = 0;
   using command_result_t =
-    seastar::future<std::tuple<std::int32_t, string, ceph::bufferlist>>;
+    seastar::future<std::tuple<std::int32_t, std::string, ceph::bufferlist>>;
   struct mon_command_t {
     ceph::ref_t<MMonCommand> req;
     typename command_result_t::promise_type result;
@@ -91,7 +93,7 @@ public:
   get_version_t get_version(const std::string& map);
   command_result_t run_command(std::string&& cmd,
                                bufferlist&& bl);
-  seastar::future<> send_message(MessageRef);
+  seastar::future<> send_message(MessageURef);
   bool sub_want(const std::string& what, version_t start, unsigned flags);
   void sub_got(const std::string& what, version_t have);
   void sub_unwant(const std::string& what);
@@ -180,8 +182,8 @@ private:
 
   // messages that are waiting for the active_con to be available
   struct pending_msg_t {
-    pending_msg_t(MessageRef& m) : msg(m) {}
-    MessageRef msg;
+    pending_msg_t(MessageURef m) : msg(std::move(m)) {}
+    MessageURef msg;
     seastar::promise<> pr;
   };
   std::deque<pending_msg_t> pending_messages;

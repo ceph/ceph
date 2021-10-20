@@ -24,6 +24,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 void encode_json(const char *name, const obj_version& v, Formatter *f)
 {
   f->open_object_section(name);
@@ -143,8 +145,11 @@ void RGWObjManifest::dump(Formatter *f) const
   ::encode_json("tail_instance", tail_instance, f);
   ::encode_json("tail_placement", tail_placement, f);
 
-  f->dump_object("begin_iter", begin_iter);
-  f->dump_object("end_iter", end_iter);
+  // nullptr being passed into iterators since there
+  // is no cct and we aren't doing anything with these
+  // iterators that would write do the log
+  f->dump_object("begin_iter", obj_begin(nullptr));
+  f->dump_object("end_iter", obj_end(nullptr));
 }
 
 void rgw_log_entry::dump(Formatter *f) const
@@ -155,9 +160,7 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_stream("time") << time;
   f->dump_string("remote_addr", remote_addr);
   f->dump_string("user", user);
-  stringstream s;
-  s << obj;
-  f->dump_string("obj", s.str());
+  f->dump_stream("obj") << obj;
   f->dump_string("op", op);
   f->dump_string("uri", uri);
   f->dump_string("http_status", http_status);
@@ -170,6 +173,7 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_string("referrer", referrer);
   f->dump_string("bucket_id", bucket_id);
   f->dump_string("trans_id", trans_id);
+  f->dump_unsigned("identity_type", identity_type);
 }
 
 void ACLPermission::dump(Formatter *f) const
@@ -683,10 +687,14 @@ void RGWStorageStats::dump(Formatter *f) const
 {
   encode_json("size", size, f);
   encode_json("size_actual", size_rounded, f);
-  encode_json("size_utilized", size_utilized, f);
+  if (dump_utilized) {
+    encode_json("size_utilized", size_utilized, f);
+  }
   encode_json("size_kb", rgw_rounded_kb(size), f);
   encode_json("size_kb_actual", rgw_rounded_kb(size_rounded), f);
-  encode_json("size_kb_utilized", rgw_rounded_kb(size_utilized), f);
+  if (dump_utilized) {
+    encode_json("size_kb_utilized", rgw_rounded_kb(size_utilized), f);
+  }
   encode_json("num_objects", num_objects, f);
 }
 

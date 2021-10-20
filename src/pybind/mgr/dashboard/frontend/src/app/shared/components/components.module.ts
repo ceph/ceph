@@ -16,6 +16,7 @@ import { ClickOutsideModule } from 'ng-click-outside';
 import { ChartsModule } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
+import { MotdComponent } from '~/app/shared/components/motd/motd.component';
 import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
 import { AlertPanelComponent } from './alert-panel/alert-panel.component';
@@ -44,6 +45,7 @@ import { SparklineComponent } from './sparkline/sparkline.component';
 import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { TelemetryNotificationComponent } from './telemetry-notification/telemetry-notification.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
+import { WizardComponent } from './wizard/wizard.component';
 
 @NgModule({
   imports: [
@@ -91,7 +93,9 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     DocComponent,
     Copy2ClipboardButtonComponent,
     DownloadButtonComponent,
-    FormButtonPanelComponent
+    FormButtonPanelComponent,
+    MotdComponent,
+    WizardComponent
   ],
   providers: [],
   exports: [
@@ -117,7 +121,9 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     DocComponent,
     Copy2ClipboardButtonComponent,
     DownloadButtonComponent,
-    FormButtonPanelComponent
+    FormButtonPanelComponent,
+    MotdComponent,
+    WizardComponent
   ]
 })
 export class ComponentsModule {}

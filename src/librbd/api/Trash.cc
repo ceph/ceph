@@ -25,7 +25,6 @@
 #include <json_spirit/json_spirit.h>
 #include "librbd/journal/DisabledPolicy.h"
 #include "librbd/image/ListWatchersRequest.h"
-#include <experimental/map>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -120,7 +119,7 @@ int list_trash_image_specs(
   uint32_t max_read = 1024;
   std::string last_read;
   do {
-    std::map<string, cls::rbd::TrashImageSpec> trash_entries;
+    std::map<std::string, cls::rbd::TrashImageSpec> trash_entries;
     int r = cls_client::trash_list(&io_ctx, last_read, max_read,
                                    &trash_entries);
     if (r < 0 && r != -ENOENT) {
@@ -295,19 +294,20 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
     if (r < 0) {
       return r;
     }
-
-    std::experimental::erase_if(
-      trash_image_specs, [image_name](const auto& pair) {
-        const auto& spec = pair.second;
-        return (spec.source != cls::rbd::TRASH_IMAGE_SOURCE_USER ||
-                spec.state != cls::rbd::TRASH_IMAGE_STATE_MOVING ||
-                spec.name != image_name);
-      });
-    if (trash_image_specs.empty()) {
+    if (auto found_image =
+        std::find_if(
+          trash_image_specs.begin(), trash_image_specs.end(),
+          [&](const auto& pair) {
+            const auto& spec = pair.second;
+            return (spec.source == cls::rbd::TRASH_IMAGE_SOURCE_USER &&
+                    spec.state == cls::rbd::TRASH_IMAGE_STATE_MOVING &&
+                    spec.name == image_name);
+          });
+        found_image != trash_image_specs.end()) {
+      image_id = found_image->first;
+    } else {
       return -ENOENT;
     }
-
-    image_id = trash_image_specs.begin()->first;
     ldout(cct, 15) << "derived image id " << image_id << " from existing "
                    << "trash entry" << dendl;
   } else if (r < 0) {
@@ -347,7 +347,7 @@ int Trash<I>::get(IoCtx &io_ctx, const std::string &id,
 }
 
 template <typename I>
-int Trash<I>::list(IoCtx &io_ctx, vector<trash_image_info_t> &entries,
+int Trash<I>::list(IoCtx &io_ctx, std::vector<trash_image_info_t> &entries,
                    bool exclude_user_remove_source) {
   CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << __func__ << " " << &io_ctx << dendl;
@@ -529,32 +529,48 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
 
   NoOpProgressContext remove_pctx;
   uint64_t list_size = to_be_removed.size(), i = 0;
-  for (const auto &entry_id : to_be_removed) {
-    r = librbd::api::Trash<I>::remove(io_ctx, entry_id, true, remove_pctx);
-    if (r < 0) {
-      if (r == -ENOTEMPTY) {
-        ldout(cct, 5) << "image has snapshots - these must be deleted "
-                      << "with 'rbd snap purge' before the image can be "
-                      << "removed." << dendl;
-      } else if (r == -EBUSY) {
-        ldout(cct, 5) << "error: image still has watchers" << std::endl
-                      << "This means the image is still open or the client "
-                      << "using it crashed. Try again after closing/unmapping "
-                      << "it or waiting 30s for the crashed client to timeout."
-                      << dendl;
-      } else if (r == -EUCLEAN) {
-        ldout(cct, 5) << "Image is not in the expected state. Ensure moving "
-                      << "the image to the trash completed successfully."
-                      << dendl;
-      } else if (r == -EMLINK) {
-        ldout(cct, 5) << "Remove the image from the group and try again."
-                      << dendl;
-      } else {
-        lderr(cct) << "remove error: " << cpp_strerror(r) << dendl;
+  int remove_err = 1;
+  while (!to_be_removed.empty() && remove_err == 1) {
+    remove_err = 0;
+    for (auto it = to_be_removed.begin(); it != to_be_removed.end(); ) {
+      trash_image_info_t trash_info;
+      r = Trash<I>::get(io_ctx, *it, &trash_info);
+      if (r == -ENOENT) {
+        // likely RBD_TRASH_IMAGE_SOURCE_USER_PARENT image removed as a side
+        // effect of a preceeding remove (last child detach)
+        pctx.update_progress(++i, list_size);
+        it = to_be_removed.erase(it);
+        continue;
+      } else if (r < 0) {
+        lderr(cct) << "error getting image id " << *it
+                   << " info: " << cpp_strerror(r) << dendl;
+        return r;
       }
-      return r;
+
+      r = Trash<I>::remove(io_ctx, *it, true, remove_pctx);
+      if (r == -ENOTEMPTY || r == -EBUSY || r == -EMLINK || r == -EUCLEAN) {
+        if (!remove_err) {
+          remove_err = r;
+        }
+        ++it;
+        continue;
+      } else if (r < 0) {
+        lderr(cct) << "error removing image id " << *it
+                   << ": " << cpp_strerror(r) << dendl;
+        return r;
+      }
+      pctx.update_progress(++i, list_size);
+      it = to_be_removed.erase(it);
+      remove_err = 1;
     }
-    pctx.update_progress(++i, list_size);
+    ldout(cct, 20) << "remove_err=" << remove_err << dendl;
+  }
+
+  if (!to_be_removed.empty()) {
+    ceph_assert(remove_err < 0);
+    ldout(cct, 10) << "couldn't remove " << to_be_removed.size()
+                   << " expired images" << dendl;
+    return remove_err;
   }
 
   return 0;

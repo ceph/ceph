@@ -90,7 +90,27 @@ void Protocol::close(bool dispatch_reset,
   });
 }
 
-seastar::future<> Protocol::send(MessageRef msg)
+ceph::bufferlist Protocol::sweep_messages_and_move_to_sent(
+      size_t num_msgs,
+      bool require_keepalive,
+      std::optional<utime_t> keepalive_ack,
+      bool require_ack)
+{
+  ceph::bufferlist bl = do_sweep_messages(conn.out_q, 
+                                          num_msgs, 
+                                          require_keepalive, 
+                                          keepalive_ack, 
+                                          require_ack);
+  if (!conn.policy.lossy) {
+    conn.sent.insert(conn.sent.end(),
+                     std::make_move_iterator(conn.out_q.begin()),
+                     std::make_move_iterator(conn.out_q.end()));
+  }
+  conn.out_q.clear();
+  return bl;
+}
+
+seastar::future<> Protocol::send(MessageURef msg)
 {
   if (write_state != write_state_t::drop) {
     conn.out_q.push_back(std::move(msg));
@@ -133,7 +153,7 @@ void Protocol::requeue_sent()
   conn.out_seq -= conn.sent.size();
   logger().debug("{} requeue {} items, revert out_seq to {}",
                  conn, conn.sent.size(), conn.out_seq);
-  for (MessageRef& msg : conn.sent) {
+  for (MessageURef& msg : conn.sent) {
     msg->clear_payload();
     msg->set_seq(0);
   }
@@ -184,7 +204,7 @@ void Protocol::ack_writes(seq_num_t seq)
   }
   while (!conn.sent.empty() && conn.sent.front()->get_seq() <= seq) {
     logger().trace("{} got ack seq {} >= {}, pop {}",
-                   conn, seq, conn.sent.front()->get_seq(), conn.sent.front());
+                   conn, seq, conn.sent.front()->get_seq(), *conn.sent.front());
     conn.sent.pop_front();
   }
 }
@@ -222,18 +242,11 @@ seastar::future<> Protocol::do_write_dispatch_sweep()
       if (unlikely(!still_queued)) {
         return try_exit_sweep();
       }
-      conn.pending_q.clear();
-      conn.pending_q.swap(conn.out_q);
-      if (!conn.policy.lossy) {
-        conn.sent.insert(conn.sent.end(),
-                         conn.pending_q.begin(),
-                         conn.pending_q.end());
-      }
       auto acked = ack_left;
       assert(acked == 0 || conn.in_seq > 0);
       // sweep all pending writes with the concrete Protocol
-      return socket->write(do_sweep_messages(
-          conn.pending_q, num_msgs, need_keepalive, keepalive_ack, acked > 0)
+      return socket->write(sweep_messages_and_move_to_sent(
+          num_msgs, need_keepalive, keepalive_ack, acked > 0)
       ).then([this, prv_keepalive_ack=keepalive_ack, acked] {
         need_keepalive = false;
         if (keepalive_ack == prv_keepalive_ack) {

@@ -20,6 +20,7 @@
 #define dout_prefix *_dout << "librbd::cache::ParentCacheObjectDispatch: " \
                            << this << " " << __func__ << ": "
 
+using namespace std;
 using namespace ceph::immutable_obj_cache;
 using librbd::util::data_object_name;
 
@@ -206,7 +207,7 @@ void ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish,
   Context* connect_ctx = new LambdaContext(
     [this, cct, register_ctx](int ret) {
     if (ret < 0) {
-      lderr(cct) << "Parent cache fail to connect RO daeomn." << dendl;
+      lderr(cct) << "Parent cache fail to connect RO daemon." << dendl;
       register_ctx->complete(ret);
       return;
     }

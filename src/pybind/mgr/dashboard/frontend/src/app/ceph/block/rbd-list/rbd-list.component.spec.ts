@@ -301,12 +301,12 @@ describe('RbdListComponent', () => {
   const getActionDisable = (name: string) =>
     component.tableActions.find((o) => o.name === name).disable;
 
-  const testActions = (selection: any, expected: string | boolean) => {
-    expect(getActionDisable('Edit')(selection)).toBe(expected);
-    expect(getActionDisable('Delete')(selection)).toBe(expected);
-    expect(getActionDisable('Copy')(selection)).toBe(expected);
+  const testActions = (selection: any, expected: { [action: string]: string | boolean }) => {
+    expect(getActionDisable('Edit')(selection)).toBe(expected.edit || false);
+    expect(getActionDisable('Delete')(selection)).toBe(expected.delete || false);
+    expect(getActionDisable('Copy')(selection)).toBe(expected.copy || false);
     expect(getActionDisable('Flatten')(selection)).toBeTruthy();
-    expect(getActionDisable('Move to Trash')(selection)).toBe(expected);
+    expect(getActionDisable('Move to Trash')(selection)).toBe(expected.moveTrash || false);
   };
 
   it('should test TableActions with valid/invalid image name', () => {
@@ -317,7 +317,7 @@ describe('RbdListComponent', () => {
         snapshots: []
       }
     ];
-    testActions(component.selection, false);
+    testActions(component.selection, {});
 
     component.selection.selected = [
       {
@@ -326,9 +326,32 @@ describe('RbdListComponent', () => {
         snapshots: []
       }
     ];
-    testActions(
-      component.selection,
-      `This RBD image has an invalid name and can't be managed by ceph.`
-    );
+    const message = `This RBD image has an invalid name and can't be managed by ceph.`;
+    const expected = {
+      edit: message,
+      delete: message,
+      copy: message,
+      moveTrash: message
+    };
+    testActions(component.selection, expected);
+  });
+
+  it('should disable edit, copy, flatten and move action if RBD is in status `Removing`', () => {
+    component.selection.selected = [
+      {
+        name: 'foobar',
+        pool_name: 'rbd',
+        snapshots: [],
+        source: 'REMOVING'
+      }
+    ];
+
+    const message = `Action not possible for an RBD in status 'Removing'`;
+    const expected = {
+      edit: message,
+      copy: message,
+      moveTrash: message
+    };
+    testActions(component.selection, expected);
   });
 });

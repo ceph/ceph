@@ -43,6 +43,8 @@
 #define MAX_TEST 1000000
 #define FILENAME "bufferlist"
 
+using namespace std;
+
 static char cmd[128];
 
 struct instrumented_bptr : public ceph::buffer::ptr {
@@ -1848,6 +1850,23 @@ TEST(BufferList, rebuild_aligned_size_and_memory) {
   EXPECT_TRUE(bl.is_aligned(SIMD_ALIGN));
   EXPECT_TRUE(bl.is_n_align_sized(BUFFER_SIZE));
   EXPECT_EQ(3U, bl.get_num_buffers());
+
+  {
+    /* bug replicator, to test rebuild_aligned_size_and_memory() in the
+     * scenario where the first bptr is both size and memory aligned and
+     * the second is 0-length */
+    bl.clear();
+    bufferptr ptr1(buffer::create_aligned(4096, 4096));
+    bl.append(ptr1);
+    bufferptr ptr(10);
+    /* bl.back().length() must be 0 */
+    bl.append(ptr, 0, 0);
+    EXPECT_EQ(bl.get_num_buffers(), 2);
+    EXPECT_EQ(bl.back().length(), 0);
+    /* rebuild_aligned() calls rebuild_aligned_size_and_memory() */
+    bl.rebuild_aligned(4096);
+    EXPECT_EQ(bl.get_num_buffers(), 1);
+  }
 }
 
 TEST(BufferList, is_zero) {
@@ -2301,6 +2320,25 @@ TEST(BufferList, c_str) {
   bl.append(other);
   EXPECT_EQ((unsigned)2, bl.get_num_buffers());
   EXPECT_EQ(0, ::memcmp("AB", bl.c_str(), 2));
+}
+
+TEST(BufferList, c_str_carriage) {
+  // verify the c_str() optimization for carriage handling
+  buffer::ptr bp("A", 1);
+  bufferlist bl;
+  bl.append(bp);
+  bl.append('B');
+  EXPECT_EQ(2U, bl.get_num_buffers());
+  EXPECT_EQ(2U, bl.length());
+
+  // this should leave an empty bptr for carriage at the end of the bl
+  bl.splice(1, 1);
+  EXPECT_EQ(2U, bl.get_num_buffers());
+  EXPECT_EQ(1U, bl.length());
+
+  std::ignore = bl.c_str();
+  // if we have an empty bptr at the end, we don't need to rebuild
+  EXPECT_EQ(2U, bl.get_num_buffers());
 }
 
 TEST(BufferList, substr_of) {

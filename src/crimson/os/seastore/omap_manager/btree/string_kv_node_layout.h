@@ -267,6 +267,24 @@ namespace crimson::os::seastore::omap_manager {
  * and related methods.
  *
  * Also included are helpers for doing splits and merges as for a btree.
+ *
+ * layout diagram:
+ *
+ * # <----------------------------- node range --------------------------------------------> #
+ * #                                                         #<~># free space                #
+ * # <------------- left part -----------------------------> # <~# <----- right keys  -----> #
+ * #               # <------------ left keys --------------> #~> #                           #
+ * #               #                         keys [2, n) |<~>#   #<~>| right keys [2, n)     #
+ * #               # <--- key 0 ----> | <--- key 1 ----> |   #   #   | <- k1 -> | <-- k0 --> #
+ * #               #                  |                  |   #   #   |          |            #
+ * #  num_ | meta  # key | key | val  | key | key | val  |   #   #   | key      | key        #
+ * #  keys | depth # off | len | laddr| off | len | laddr|   #   #   | buff     | buff       #
+ * #       |       # 0   | 0   | 0    | 1   | 1   | 1    |...#...#...| key 1    | key 0      #
+ * #                 |                  |                            | <- off --+----------> #
+ * #                 |                  |                                  ^    | <- off --> #
+ *                   |                  |                                  |          ^
+ *                   |                  +----------------------------------+          |
+ *                   +----------------------------------------------------------------+
  */
 class StringKVInnerNodeLayout {
   char *buf = nullptr;
@@ -304,6 +322,7 @@ public:
       return iter_t<!is_const>(node, index);
     }
 
+    using reference = iter_t&;
     iter_t &operator*() { return *this; }
     iter_t *operator->() { return this; }
 
@@ -540,20 +559,14 @@ public:
   }
 
   const_iterator string_lower_bound(std::string_view str) const {
-    uint16_t start = 0, end = get_size();
-    while (start != end) {
-      unsigned mid = (start + end) / 2;
-      const_iterator iter(this, mid);
-      std::string s = iter->get_key();
-      if (s < str) {
-        start = ++mid;
-      } else if ( s > str) {
-        end = mid;
-      } else {
-        return iter;
-      }
-    }
-    return const_iterator(this, start);
+    auto it = std::lower_bound(boost::make_counting_iterator<uint16_t>(0),
+                               boost::make_counting_iterator<uint16_t>(get_size()),
+                               str,
+                               [this](uint16_t i, std::string_view str) {
+                                 const_iterator iter(this, i);
+                                 return iter->get_key() < str;
+                               });
+    return const_iterator(this, *it);
   }
 
   iterator string_lower_bound(std::string_view str) {
@@ -562,13 +575,14 @@ public:
   }
 
   const_iterator string_upper_bound(std::string_view str) const {
-    auto ret = iter_begin();
-    for (; ret != iter_end(); ++ret) {
-      std::string s = ret->get_key();
-      if (s > str)
-        break;
-    }
-    return ret;
+    auto it = std::upper_bound(boost::make_counting_iterator<uint16_t>(0),
+                               boost::make_counting_iterator<uint16_t>(get_size()),
+                               str,
+                               [this](std::string_view str, uint16_t i) {
+                                 const_iterator iter(this, i);
+                                 return str < iter->get_key();
+                               });
+    return const_iterator(this, *it);
   }
 
   iterator string_upper_bound(std::string_view str) {
@@ -866,6 +880,27 @@ private:
 
 };
 
+/**
+ * StringKVLeafNodeLayout
+ *
+ * layout diagram:
+ *
+ * # <----------------------------- node range -------------------------------------------------> #
+ * #                                                       #<~># free space                       #
+ * # <------------- left part ---------------------------> # <~# <----- right key-value pairs --> #
+ * #               # <------------ left keys ------------> #~> #                                  #
+ * #               #                       keys [2, n) |<~>#   #<~>| right kvs [2, n)             #
+ * #               # <--- key 0 ---> | <--- key 1 ---> |   #   #   | <-- kv 1 --> | <-- kv 0 -->  #
+ * #               #                 |                 |   #   #   |              |               #
+ * # num_ | meta   # key | key | val | key | key | val |   #   #   | key   | val  | key   | val   #
+ * # keys | depth  # off | len | len | off | len | len |   #   #   | buff  | buff | buff  | buff  #
+ * #               # 0   | 0   | 0   | 1   | 1   | 1   |...#...#...| key 1 | val 1| key 0 | val 0 #
+ * #                 |                 |                           | <--- off ----+-------------> #
+ * #                 |                 |                                   ^      | <--- off ---> #
+ *                   |                 |                                   |             ^
+ *                   |                 +-----------------------------------+             |
+ *                   +-------------------------------------------------------------------+
+ */
 class StringKVLeafNodeLayout {
   char *buf = nullptr;
 

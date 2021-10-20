@@ -24,6 +24,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 RGWHTTPManager *rgw_http_manager;
 
 struct RGWCurlHandle;

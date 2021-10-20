@@ -1,9 +1,6 @@
 [submodule "ceph-object-corpus"]
 	path = ceph-object-corpus
 	url = https://github.com/ceph/ceph-object-corpus.git
-[submodule "src/civetweb"]
-	path = src/civetweb
-	url = https://github.com/ceph/civetweb
 [submodule "src/erasure-code/jerasure/jerasure"]
 	path = src/erasure-code/jerasure/jerasure
 	url = https://github.com/ceph/jerasure.git
@@ -73,10 +70,6 @@
 	path = src/jaegertracing/jaeger-client-cpp
 	url = https://github.com/ceph/jaeger-client-cpp.git
 	branch = hunter-disabled
-[submodule "src/jaegertracing/thrift"]
-	path = src/jaegertracing/thrift
-	url = https://github.com/apache/thrift.git
-	branch = 0.13.0
 [submodule "src/libkmip"]
 	path = src/libkmip
 	url = https://github.com/ceph/libkmip

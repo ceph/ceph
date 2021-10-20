@@ -9,6 +9,8 @@
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <boost/container/flat_set.hpp>
 
+#include "include/rados.h"
+
 #include "crimson/os/futurized_store.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/acked_peers.h"
@@ -58,6 +60,9 @@ public:
   using interruptible_future =
     ::crimson::interruptible::interruptible_future<
       ::crimson::osd::IOInterruptCondition, T>;
+  using rep_op_fut_t =
+    std::tuple<interruptible_future<>,
+	       interruptible_future<crimson::osd::acked_peers_t>>;
   PGBackend(shard_id_t shard, CollectionRef coll, crimson::os::FuturizedStore* store);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(pg_t pgid,
@@ -158,7 +163,7 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params);
-  interruptible_future<crimson::osd::acked_peers_t> mutate_object(
+  rep_op_fut_t mutate_object(
     std::set<pg_shard_t> pg_shards,
     crimson::osd::ObjectContextRef &&obc,
     ceph::os::Transaction&& txn,
@@ -181,10 +186,18 @@ public:
   get_attr_ierrorator::future<> getxattr(
     const ObjectState& os,
     OSDOp& osd_op) const;
-  get_attr_ierrorator::future<ceph::bufferptr> getxattr(
+  get_attr_ierrorator::future<ceph::bufferlist> getxattr(
     const hobject_t& soid,
     std::string_view key) const;
   get_attr_ierrorator::future<> get_xattrs(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
+  using cmp_xattr_errorator = ::crimson::os::FuturizedStore::get_attr_errorator;
+  using cmp_xattr_ierrorator =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      cmp_xattr_errorator>;
+  cmp_xattr_ierrorator::future<> cmp_xattr(
     const ObjectState& os,
     OSDOp& osd_op) const;
   using rm_xattr_ertr = crimson::errorator<crimson::ct_error::enoent>;
@@ -279,7 +292,7 @@ private:
     uint32_t flags) = 0;
 
   bool maybe_create_new_object(ObjectState& os, ceph::os::Transaction& txn);
-  virtual interruptible_future<crimson::osd::acked_peers_t>
+  virtual rep_op_fut_t
   _submit_transaction(std::set<pg_shard_t>&& pg_shards,
 		      const hobject_t& hoid,
 		      ceph::os::Transaction&& txn,

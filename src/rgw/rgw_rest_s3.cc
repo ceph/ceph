@@ -18,10 +18,14 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/tokenizer.hpp>
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
+#ifdef HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wimplicit-const-int-float-conversion"
+#endif
 #include <s3select/include/s3select.h>
+#ifdef HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION
 #pragma clang diagnostic pop
+#endif
 #undef BOOST_BIND_GLOBAL_PLACEHOLDERS
 
 #include <liboath/oath.h>
@@ -70,10 +74,9 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 using namespace rgw;
 using namespace ceph::crypto;
-
-using std::get;
 
 void list_all_buckets_start(struct req_state *s)
 {
@@ -393,7 +396,8 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
         try {
           decode(retention, iter->second);
           dump_header(s, "x-amz-object-lock-mode", retention.get_mode());
-          dump_time_header(s, "x-amz-object-lock-retain-until-date", retention.get_retain_until_date());
+          string date = ceph::to_iso_8601(retention.get_retain_until_date());
+          dump_header(s, "x-amz-object-lock-retain-until-date", date.c_str());
         } catch (buffer::error& err) {
           ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
         }
@@ -450,9 +454,9 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
   res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
   if (res == 0) {
     if (block_crypt != nullptr) {
-      auto f = std::make_unique<RGWGetObj_BlockDecrypt>(s->cct, cb, std::move(block_crypt));
+      auto f = std::make_unique<RGWGetObj_BlockDecrypt>(s, s->cct, cb, std::move(block_crypt));
       if (manifest_bl != nullptr) {
-        res = f->read_manifest(*manifest_bl);
+        res = f->read_manifest(this, *manifest_bl);
         if (res == 0) {
           *filter = std::move(f);
         }
@@ -609,7 +613,7 @@ void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
     try {
       tagset.decode(iter);
     } catch (buffer::error& err) {
-      ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+      ldpp_dout(this,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
       op_ret= -EIO;
       return;
     }
@@ -621,7 +625,7 @@ void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
   }
 }
 
-int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y)
+int RGWPutBucketTags_ObjStore_S3::get_params(const DoutPrefixProvider *dpp, optional_yield y)
 {
   RGWXMLParser parser;
 
@@ -647,7 +651,7 @@ int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y)
     RGWXMLDecoder::decode_xml("Tagging", tagging, &parser);
   } catch (RGWXMLDecoder::err& err) {
 
-    ldout(s->cct, 5) << "Malformed tagging request: " << err << dendl;
+    ldpp_dout(dpp, 5) << "Malformed tagging request: " << err << dendl;
     return -ERR_MALFORMED_XML;
   }
 
@@ -657,7 +661,7 @@ int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y)
     return r;
 
   obj_tags.encode(tags_bl);
-  ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
+  ldpp_dout(dpp, 20) << "Read " << obj_tags.count() << "tags" << dendl;
 
   // forward bucket tags requests to meta master zone
   if (!store->is_meta_master()) {
@@ -1131,7 +1135,7 @@ struct ReplicationConfiguration {
       bool enabled;
       int r = rule.to_sync_policy_pipe(s, store, &pipe, &enabled);
       if (r < 0) {
-        ldout(s->cct, 5) << "NOTICE: failed to convert replication configuration into sync policy pipe (rule.id=" << rule.id << "): " << cpp_strerror(-r) << dendl;
+        ldpp_dout(s, 5) << "NOTICE: failed to convert replication configuration into sync policy pipe (rule.id=" << rule.id << "): " << cpp_strerror(-r) << dendl;
         return r;
       }
 
@@ -1215,7 +1219,7 @@ int RGWPutBucketReplication_ObjStore_S3::get_params(optional_yield y)
     RGWXMLDecoder::decode_xml("ReplicationConfiguration", conf, &parser);
   } catch (RGWXMLDecoder::err& err) {
 
-    ldout(s->cct, 5) << "Malformed tagging request: " << err << dendl;
+    ldpp_dout(this, 5) << "Malformed tagging request: " << err << dendl;
     return -ERR_MALFORMED_XML;
   }
 
@@ -1469,7 +1473,7 @@ int RGWListBucket_ObjStore_S3::get_common_params()
       string err;
       shard_id = strict_strtol(shard_id_str, 10, &err);
       if (!err.empty()) {
-        ldout(s->cct, 5) << "bad shard id specified: " << shard_id_str << dendl;
+        ldpp_dout(this, 5) << "bad shard id specified: " << shard_id_str << dendl;
         return -EINVAL;
       }
     } else {
@@ -2066,16 +2070,16 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params(optional_yield y)
 
   if (website_conf.is_redirect_all && website_conf.redirect_all.hostname.empty()) {
     s->err.message = "A host name must be provided to redirect all requests (e.g. \"example.com\").";
-    ldout(s->cct, 5) << s->err.message << dendl;
+    ldpp_dout(this, 5) << s->err.message << dendl;
     return -EINVAL;
   } else if (!website_conf.is_redirect_all && !website_conf.is_set_index_doc) {
     s->err.message = "A value for IndexDocument Suffix must be provided if RedirectAllRequestsTo is empty";
-    ldout(s->cct, 5) << s->err.message << dendl;
+    ldpp_dout(this, 5) << s->err.message << dendl;
     return -EINVAL;
   } else if (!website_conf.is_redirect_all && website_conf.is_set_index_doc &&
              website_conf.index_doc_suffix.empty()) {
     s->err.message = "The IndexDocument Suffix is not well formed";
-    ldout(s->cct, 5) << s->err.message << dendl;
+    ldpp_dout(this, 5) << s->err.message << dendl;
     return -EINVAL;
   }
 
@@ -2234,9 +2238,11 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
   RGWAccessControlPolicy_S3 s3policy(s->cct);
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
 
-  int r = valid_s3_bucket_name(s->bucket_name, relaxed_names);
-  if (r)
-    return r;
+  int r;
+  if (!s->system_request) {
+    r = valid_s3_bucket_name(s->bucket_name, relaxed_names);
+    if (r) return r;
+  }
 
   r = create_s3_policy(s, store, s3policy, s->owner);
   if (r < 0)
@@ -2553,11 +2559,11 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
   res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses_unused);
   if (res == 0) {
     if (block_crypt != nullptr) {
-      auto f = std::unique_ptr<RGWGetObj_BlockDecrypt>(new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt)));
+      auto f = std::unique_ptr<RGWGetObj_BlockDecrypt>(new RGWGetObj_BlockDecrypt(s, s->cct, cb, std::move(block_crypt)));
       //RGWGetObj_BlockDecrypt* f = new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt));
       if (f != nullptr) {
         if (manifest_bl != nullptr) {
-          res = f->read_manifest(*manifest_bl);
+          res = f->read_manifest(this, *manifest_bl);
           if (res == 0) {
             *filter = std::move(f);
           }
@@ -2569,16 +2575,15 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
 }
 
 int RGWPutObj_ObjStore_S3::get_encrypt_filter(
-    std::unique_ptr<rgw::putobj::DataProcessor> *filter,
-    rgw::putobj::DataProcessor *cb)
+    std::unique_ptr<rgw::sal::DataProcessor> *filter,
+    rgw::sal::DataProcessor *cb)
 {
   int res = 0;
   if (!multipart_upload_id.empty()) {
-    RGWMPObj mp(s->object->get_name(), multipart_upload_id);
-    std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(
-						rgw_obj_key(mp.get_meta(),
-							    std::string(),
-							    RGW_OBJ_NS_MULTIPART));
+    std::unique_ptr<rgw::sal::MultipartUpload> upload =
+      store->get_multipart_upload(s->bucket.get(), s->object->get_name(),
+				  multipart_upload_id);
+    std::unique_ptr<rgw::sal::Object> obj = upload->get_meta_obj();
     obj->set_in_extra_data(true);
     res = obj->get_obj_attrs(s->obj_ctx, s->yield, this);
     if (res == 0) {
@@ -2587,7 +2592,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
        * We use crypto mode that configured as if we were decrypting. */
       res = rgw_s3_prepare_decrypt(s, obj->get_attrs(), &block_crypt, crypt_http_responses);
       if (res == 0 && block_crypt != nullptr)
-        filter->reset(new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
+        filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt)));
     }
     /* it is ok, to not have encryption at all */
   }
@@ -2596,7 +2601,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
     std::unique_ptr<BlockCrypt> block_crypt;
     res = rgw_s3_prepare_encrypt(s, attrs, nullptr, &block_crypt, crypt_http_responses);
     if (res == 0 && block_crypt != nullptr) {
-      filter->reset(new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
+      filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt)));
     }
   }
   return res;
@@ -3123,14 +3128,14 @@ done:
 }
 
 int RGWPostObj_ObjStore_S3::get_encrypt_filter(
-    std::unique_ptr<rgw::putobj::DataProcessor> *filter,
-    rgw::putobj::DataProcessor *cb)
+    std::unique_ptr<rgw::sal::DataProcessor> *filter,
+    rgw::sal::DataProcessor *cb)
 {
   std::unique_ptr<BlockCrypt> block_crypt;
   int res = rgw_s3_prepare_encrypt(s, attrs, &parts, &block_crypt,
                                    crypt_http_responses);
   if (res == 0 && block_crypt != nullptr) {
-    filter->reset(new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
+    filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt)));
   }
   return res;
 }
@@ -3196,6 +3201,37 @@ int RGWCopyObj_ObjStore_S3::init_dest_policy()
 
 int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
 {
+  //handle object lock
+  auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
+  auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
+  auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
+  if (obj_lock_mode_str && obj_lock_date_str) {
+    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
+    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
+      s->err.message = "invalid x-amz-object-lock-retain-until-date value";
+      ldpp_dout(this,0) << s->err.message << dendl;
+      return -EINVAL;
+    }
+    if (strcmp(obj_lock_mode_str, "GOVERNANCE") != 0 && strcmp(obj_lock_mode_str, "COMPLIANCE") != 0) {
+      s->err.message = "invalid x-amz-object-lock-mode value";
+      ldpp_dout(this,0) << s->err.message << dendl;
+      return -EINVAL;
+    }
+    obj_retention = new RGWObjectRetention(obj_lock_mode_str, *date);
+  } else if (obj_lock_mode_str || obj_lock_date_str) {
+    s->err.message = "need both x-amz-object-lock-mode and x-amz-object-lock-retain-until-date ";
+    ldpp_dout(this,0) << s->err.message << dendl;
+    return -EINVAL;
+  }
+  if (obj_legal_hold_str) {
+    if (strcmp(obj_legal_hold_str, "ON") != 0 && strcmp(obj_legal_hold_str, "OFF") != 0) {
+      s->err.message = "invalid x-amz-object-lock-legal-hold value";
+      ldpp_dout(this,0) << s->err.message << dendl;
+      return -EINVAL;
+    }
+    obj_legal_hold = new RGWObjectLegalHold(obj_legal_hold_str);
+  }
+
   if_mod = s->info.env->get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
   if_unmod = s->info.env->get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
   if_match = s->info.env->get("HTTP_X_AMZ_COPY_IF_MATCH");
@@ -3203,7 +3239,6 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
 
   src_tenant_name = s->src_tenant_name;
   src_bucket_name = s->src_bucket_name;
-  src_object = s->src_object->clone();
   dest_tenant_name = s->bucket->get_tenant();
   dest_bucket_name = s->bucket->get_name();
   dest_obj_name = s->object->get_name();
@@ -3233,8 +3268,8 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
   if (source_zone.empty() &&
       (dest_tenant_name.compare(src_tenant_name) == 0) &&
       (dest_bucket_name.compare(src_bucket_name) == 0) &&
-      (dest_obj_name.compare(src_object->get_name()) == 0) &&
-      src_object->get_instance().empty() &&
+      (dest_obj_name.compare(s->src_object->get_name()) == 0) &&
+      s->src_object->get_instance().empty() &&
       (attrs_mod != rgw::sal::ATTRSMOD_REPLACE)) {
     need_to_check_storage_class = true;
   }
@@ -3442,7 +3477,7 @@ void RGWGetCORS_ObjStore_S3::send_response()
 
 int RGWPutCORS_ObjStore_S3::get_params(optional_yield y)
 {
-  RGWCORSXMLParser_S3 parser(s->cct);
+  RGWCORSXMLParser_S3 parser(this, s->cct);
   RGWCORSConfiguration_S3 *cors_config;
 
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
@@ -3544,6 +3579,45 @@ void RGWOptionsCORS_ObjStore_S3::send_response()
   dump_access_control(s, origin, req_meth, hdrs.c_str(), exp_hdrs.c_str(),
 		      max_age);
   end_header(s, NULL);
+}
+
+void RGWPutBucketEncryption_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetBucketEncryption_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    if (op_ret == -ENOENT)
+      set_req_state_err(s, ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION);
+    else
+      set_req_state_err(s, op_ret);
+  }
+
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  if (!op_ret) {
+    encode_xml("ServerSideEncryptionConfiguration", bucket_encryption_conf, s->formatter);
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
+}
+
+void RGWDeleteBucketEncryption_ObjStore_S3::send_response()
+{
+  if (op_ret == 0) {
+    op_ret = STATUS_NO_CONTENT;
+  }
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s);
 }
 
 void RGWGetRequestPayment_ObjStore_S3::send_response()
@@ -3744,13 +3818,13 @@ void RGWListMultipart_ObjStore_S3::send_response()
   if (op_ret == 0) {
     dump_start(s);
     s->formatter->open_object_section_in_ns("ListPartsResult", XMLNS_AWS_S3);
-    map<uint32_t, RGWUploadPartInfo>::iterator iter;
-    map<uint32_t, RGWUploadPartInfo>::reverse_iterator test_iter;
+    map<uint32_t, std::unique_ptr<rgw::sal::MultipartPart>>::iterator iter;
+    map<uint32_t, std::unique_ptr<rgw::sal::MultipartPart>>::reverse_iterator test_iter;
     int cur_max = 0;
 
-    iter = parts.begin();
-    test_iter = parts.rbegin();
-    if (test_iter != parts.rend()) {
+    iter = upload->get_parts().begin();
+    test_iter = upload->get_parts().rbegin();
+    if (test_iter != upload->get_parts().rend()) {
       cur_max = test_iter->first;
     }
     if (!s->bucket_tenant.empty())
@@ -3767,16 +3841,16 @@ void RGWListMultipart_ObjStore_S3::send_response()
     ACLOwner& owner = policy.get_owner();
     dump_owner(s, owner.get_id(), owner.get_display_name());
 
-    for (; iter != parts.end(); ++iter) {
-      RGWUploadPartInfo& info = iter->second;
+    for (; iter != upload->get_parts().end(); ++iter) {
+      rgw::sal::MultipartPart* part = iter->second.get();
 
       s->formatter->open_object_section("Part");
 
-      dump_time(s, "LastModified", &info.modified);
+      dump_time(s, "LastModified", &part->get_mtime());
 
-      s->formatter->dump_unsigned("PartNumber", info.num);
-      s->formatter->dump_format("ETag", "\"%s\"", info.etag.c_str());
-      s->formatter->dump_unsigned("Size", info.accounted_size);
+      s->formatter->dump_unsigned("PartNumber", part->get_num());
+      s->formatter->dump_format("ETag", "\"%s\"", part->get_etag().c_str());
+      s->formatter->dump_unsigned("Size", part->get_size());
       s->formatter->close_section();
     }
     s->formatter->close_section();
@@ -3803,38 +3877,34 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
   s->formatter->dump_string("Bucket", s->bucket_name);
   if (!prefix.empty())
     s->formatter->dump_string("ListMultipartUploadsResult.Prefix", prefix);
-  const string& key_marker = marker.get_key();
-  if (!key_marker.empty())
-    s->formatter->dump_string("KeyMarker", key_marker);
-  const string& upload_id_marker = marker.get_upload_id();
-  if (!upload_id_marker.empty())
-    s->formatter->dump_string("UploadIdMarker", upload_id_marker);
-  string next_key = next_marker.mp.get_key();
-  if (!next_key.empty())
-    s->formatter->dump_string("NextKeyMarker", next_key);
-  string next_upload_id = next_marker.mp.get_upload_id();
-  if (!next_upload_id.empty())
-    s->formatter->dump_string("NextUploadIdMarker", next_upload_id);
+  if (!marker_key.empty())
+    s->formatter->dump_string("KeyMarker", marker_key);
+  if (!marker_upload_id.empty())
+    s->formatter->dump_string("UploadIdMarker", marker_upload_id);
+  if (!next_marker_key.empty())
+    s->formatter->dump_string("NextKeyMarker", next_marker_key);
+  if (!next_marker_upload_id.empty())
+    s->formatter->dump_string("NextUploadIdMarker", next_marker_upload_id);
   s->formatter->dump_int("MaxUploads", max_uploads);
   if (!delimiter.empty())
     s->formatter->dump_string("Delimiter", delimiter);
   s->formatter->dump_string("IsTruncated", (is_truncated ? "true" : "false"));
 
   if (op_ret >= 0) {
-    vector<RGWMultipartUploadEntry>::iterator iter;
+    vector<std::unique_ptr<rgw::sal::MultipartUpload>>::iterator iter;
     for (iter = uploads.begin(); iter != uploads.end(); ++iter) {
-      RGWMPObj& mp = iter->mp;
+      rgw::sal::MultipartUpload* upload = iter->get();
       s->formatter->open_array_section("Upload");
       if (encode_url) {
-        s->formatter->dump_string("Key", url_encode(mp.get_key(), false));
+        s->formatter->dump_string("Key", url_encode(upload->get_key(), false));
       } else {
-        s->formatter->dump_string("Key", mp.get_key());
+        s->formatter->dump_string("Key", upload->get_key());
       }
-      s->formatter->dump_string("UploadId", mp.get_upload_id());
+      s->formatter->dump_string("UploadId", upload->get_upload_id());
       dump_owner(s, s->user->get_id(), s->user->get_display_name(), "Initiator");
       dump_owner(s, s->user->get_id(), s->user->get_display_name());
       s->formatter->dump_string("StorageClass", "STANDARD");
-      dump_time(s, "Initiated", &iter->obj.meta.mtime);
+      dump_time(s, "Initiated", &upload->get_mtime());
       s->formatter->close_section();
     }
     if (!common_prefixes.empty()) {
@@ -3953,26 +4023,7 @@ void RGWGetObjLayout_ObjStore_S3::send_response()
   }
 
   f.open_object_section("result");
-  ::encode_json("head", head_obj, &f);
-  ::encode_json("manifest", *manifest, &f);
-  f.open_array_section("data_location");
-  for (auto miter = manifest->obj_begin(); miter != manifest->obj_end(); ++miter) {
-    f.open_object_section("obj");
-    rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(store);
-    uint64_t ofs = miter.get_ofs();
-    uint64_t left = manifest->get_obj_size() - ofs;
-    ::encode_json("ofs", miter.get_ofs(), &f);
-    ::encode_json("loc", raw_loc, &f);
-    ::encode_json("loc_ofs", miter.location_ofs(), &f);
-    uint64_t loc_size = miter.get_stripe_size();
-    if (loc_size > left) {
-      loc_size = left;
-    }
-    ::encode_json("loc_size", loc_size, &f);
-    f.close_section();
-    rgw_flush_formatter(s, &f);
-  }
-  f.close_section();
+  s->object->get_obj_layout(this, s->yield, &f, s->obj_ctx);
   f.close_section();
   rgw_flush_formatter(s, &f);
 }
@@ -4342,6 +4393,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetBucketPolicyStatus_ObjStore_S3;
   } else if (is_block_public_access_op()) {
     return new RGWGetBucketPublicAccessBlock_ObjStore_S3;
+  } else if (is_bucket_encryption_op()) {
+    return new RGWGetBucketEncryption_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -4395,6 +4448,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWPutBucketReplication_ObjStore_S3;
   } else if (is_block_public_access_op()) {
     return new RGWPutBucketPublicAccessBlock_ObjStore_S3;
+  } else if (is_bucket_encryption_op()) {
+    return new RGWPutBucketEncryption_ObjStore_S3;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -4419,6 +4474,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteBucketReplication_ObjStore_S3;
   } else if (is_block_public_access_op()) {
     return new RGWDeleteBucketPublicAccessBlock;
+  } else if (is_bucket_encryption_op()) {
+    return new RGWDeleteBucketEncryption_ObjStore_S3;
   }
 
   if (s->info.args.sub_resource_exists("website")) {
@@ -4597,6 +4654,8 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::Store* store,
       encoded_obj_str = req.substr(pos+1);
     }
 
+    /* dang: s->bucket is never set here, since it's created with permissions.
+     * These calls will always create an object with no bucket. */
     if (!encoded_obj_str.empty()) {
       if (s->bucket) {
 	s->object = s->bucket->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
@@ -4634,7 +4693,7 @@ static int verify_mfa(rgw::sal::Store* store, RGWUserInfo *user,
     return -EACCES;
   }
 
-  int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->cls->mfa.check_mfa(user->user_id, serial, pin, y);
+  int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->cls->mfa.check_mfa(dpp, user->user_id, serial, pin, y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
     return -EACCES;
@@ -4670,7 +4729,13 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
   }
 
   if (!t->src_bucket.empty()) {
-    rgw_parse_url_bucket(t->src_bucket, s->user->get_tenant(),
+    string auth_tenant;
+    if (s->auth.identity->get_identity_type() == TYPE_ROLE) {
+      auth_tenant = s->auth.identity->get_role_tenant();
+    } else {
+      auth_tenant = s->user->get_tenant();
+    }
+    rgw_parse_url_bucket(t->src_bucket, auth_tenant,
 			s->src_tenant_name, s->src_bucket_name);
     ret = rgw_validate_tenant_name(s->src_tenant_name);
     if (ret)
@@ -4917,14 +4982,6 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op, optional_yiel
   if (!(s->prot_flags & RGW_REST_WEBSITE))
     return 0;
 
-  int ret = store->get_bucket(s, nullptr, s->bucket_tenant, s->bucket_name, &s->bucket, y);
-  if (ret < 0) {
-      // TODO-FUTURE: if the bucket does not exist, maybe expose it here?
-      return -ERR_NO_SUCH_BUCKET;
-  }
-
-  s->bucket_attrs = s->bucket->get_attrs();
-
   if (!s->bucket->get_info().has_website) {
       // TODO-FUTURE: if the bucket has no WebsiteConfig, expose it here
       return -ERR_NO_SUCH_WEBSITE_CONFIGURATION;
@@ -4968,10 +5025,10 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op, optional_yiel
   /*
    * FIXME: if s->object != new_obj, drop op and create a new op to handle
    * operation. Or remove this comment if it's not applicable anymore
+   * dang: This could be problematic, since we're not actually replacing op, but
+   * we are replacing s->object.  Something might have a pointer to it.
    */
-
-  s->object = store->get_object(new_obj);
-  s->object->set_bucket(s->bucket.get());
+  s->object = s->bucket->get_object(new_obj);
 
   return 0;
 }
@@ -4986,7 +5043,7 @@ RGWOp* RGWHandler_REST_S3Website::op_head()
   return get_obj_op(false);
 }
 
-int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errordoc_key, optional_yield y) {
+int RGWHandler_REST_S3Website::serve_errordoc(const DoutPrefixProvider *dpp, int http_ret, const string& errordoc_key, optional_yield y) {
   int ret = 0;
   s->formatter->reset(); /* Try to throw it all away */
 
@@ -5000,6 +5057,9 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
   getop->if_unmod = NULL;
   getop->if_match = NULL;
   getop->if_nomatch = NULL;
+  /* This is okay.  It's an error, so nothing will run after this, and it can be
+   * called by abort_early(), which can be called before s->object or s->bucket
+   * are set up. Note, it won't have bucket. */
   s->object = store->get_object(errordoc_key);
 
   ret = init_permissions(getop.get(), y);
@@ -5099,7 +5159,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
        On success, it will return zero, and no further content should be sent to the socket
        On failure, we need the double-error handler
      */
-    new_err_no = RGWHandler_REST_S3Website::serve_errordoc(http_error_code, s->bucket->get_info().website_conf.error_doc, y);
+    new_err_no = RGWHandler_REST_S3Website::serve_errordoc(s, http_error_code, s->bucket->get_info().website_conf.error_doc, y);
     if (new_err_no != -1) {
       err_no = new_err_no;
     }
@@ -5352,29 +5412,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
     throw -EPERM;
   }
 
-  bool is_non_s3_op = false;
-  if (s->op_type == RGW_STS_GET_SESSION_TOKEN ||
-      s->op_type == RGW_STS_ASSUME_ROLE ||
-      s->op_type == RGW_STS_ASSUME_ROLE_WEB_IDENTITY ||
-      s->op_type == RGW_OP_CREATE_ROLE ||
-      s->op_type == RGW_OP_DELETE_ROLE ||
-      s->op_type == RGW_OP_GET_ROLE ||
-      s->op_type == RGW_OP_MODIFY_ROLE ||
-      s->op_type == RGW_OP_LIST_ROLES ||
-      s->op_type == RGW_OP_PUT_ROLE_POLICY ||
-      s->op_type == RGW_OP_GET_ROLE_POLICY ||
-      s->op_type == RGW_OP_LIST_ROLE_POLICIES ||
-      s->op_type == RGW_OP_DELETE_ROLE_POLICY ||
-      s->op_type == RGW_OP_PUT_USER_POLICY ||
-      s->op_type == RGW_OP_GET_USER_POLICY ||
-      s->op_type == RGW_OP_LIST_USER_POLICIES ||
-      s->op_type == RGW_OP_DELETE_USER_POLICY ||
-      s->op_type == RGW_OP_CREATE_OIDC_PROVIDER ||
-      s->op_type == RGW_OP_DELETE_OIDC_PROVIDER ||
-      s->op_type == RGW_OP_GET_OIDC_PROVIDER ||
-      s->op_type == RGW_OP_LIST_OIDC_PROVIDERS) {
-    is_non_s3_op = true;
-  }
+  bool is_non_s3_op = rgw::auth::s3::is_non_s3_op(s->op_type);
 
   const char* exp_payload_hash = nullptr;
   string payload_hash;
@@ -5457,6 +5495,9 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ:
         case RGW_OP_PUT_ACLS:
         case RGW_OP_PUT_CORS:
+        case RGW_OP_PUT_BUCKET_ENCRYPTION:
+        case RGW_OP_GET_BUCKET_ENCRYPTION:
+        case RGW_OP_DELETE_BUCKET_ENCRYPTION:
         case RGW_OP_INIT_MULTIPART: // in case that Init Multipart uses CHUNK encoding
         case RGW_OP_COMPLETE_MULTIPART:
         case RGW_OP_SET_BUCKET_VERSIONING:
@@ -5473,6 +5514,8 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_LC:
         case RGW_OP_SET_REQUEST_PAYMENT:
         case RGW_OP_PUBSUB_NOTIF_CREATE:
+        case RGW_OP_PUBSUB_NOTIF_DELETE:
+        case RGW_OP_PUBSUB_NOTIF_LIST:
         case RGW_OP_PUT_BUCKET_OBJ_LOCK:
         case RGW_OP_PUT_OBJ_RETENTION:
         case RGW_OP_PUT_OBJ_LEGAL_HOLD:
@@ -5615,7 +5658,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   /* Let's canonize the HTTP headers that are covered by the AWS auth v2. */
   std::string string_to_sign;
   utime_t header_time;
-  if (! rgw_create_s3_canonical_header(s->info, &header_time, string_to_sign,
+  if (! rgw_create_s3_canonical_header(s, s->info, &header_time, string_to_sign,
         qsr)) {
     ldpp_dout(s, 10) << "failed to create the canonized auth header\n"
                    << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
@@ -5926,7 +5969,7 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
     return -EINVAL;
   }
   string error;
-  auto* keyhandler = cryptohandler->get_key_handler(secret, error);
+  std::unique_ptr<CryptoKeyHandler> keyhandler(cryptohandler->get_key_handler(secret, error));
   if (! keyhandler) {
     return -EINVAL;
   }
@@ -5946,7 +5989,7 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
       auto iter = dec_output.cbegin();
       decode(token, iter);
     } catch (const buffer::error& e) {
-      ldout(cct, 0) << "ERROR: decode SessionToken failed: " << error << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: decode SessionToken failed: " << error << dendl;
       return -EINVAL;
     }
   }
@@ -6019,6 +6062,7 @@ rgw::auth::s3::STSEngine::authenticate(
   rgw_user user_id;
   string role_id;
   rgw::auth::RoleApplier::Role r;
+  rgw::auth::RoleApplier::TokenAttrs t_attrs;
   if (! token.roleId.empty()) {
     std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(token.roleId);
     if (role->get_by_id(dpp, y) < 0) {
@@ -6035,14 +6079,12 @@ rgw::auth::s3::STSEngine::authenticate(
         r.role_policies.push_back(std::move(perm_policy));
       }
     }
-    // This is mostly needed to assign the owner of a bucket during its creation
-    user_id = token.user;
   }
 
   user = store->get_user(token.user);
   if (! token.user.empty() && token.acct_type != TYPE_ROLE) {
     // get user info
-    int ret = user->load_by_id(dpp, y);
+    int ret = user->load_user(dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
       return result_t::reject(-EPERM);
@@ -6052,9 +6094,15 @@ rgw::auth::s3::STSEngine::authenticate(
   if (token.acct_type == TYPE_KEYSTONE || token.acct_type == TYPE_LDAP) {
     auto apl = remote_apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
                                             get_creds_info(token));
-    return result_t::grant(std::move(apl), completer_factory(boost::none));
+    return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else if (token.acct_type == TYPE_ROLE) {
-    auto apl = role_apl_factory->create_apl_role(cct, s, r, user_id, token.policy, token.role_session, token.token_claims, token.issued_at);
+    t_attrs.user_id = std::move(token.user); // This is mostly needed to assign the owner of a bucket during its creation
+    t_attrs.token_policy = std::move(token.policy);
+    t_attrs.role_session_name = std::move(token.role_session);
+    t_attrs.token_claims = std::move(token.token_claims);
+    t_attrs.token_issued_at = std::move(token.issued_at);
+    t_attrs.principal_tags = std::move(token.principal_tags);
+    auto apl = role_apl_factory->create_apl_role(cct, s, r, t_attrs);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else { // This is for all local users of type TYPE_RGW or TYPE_NONE
     string subuser;
@@ -6105,16 +6153,16 @@ int RGWSelectObj_ObjStore_S3::get_params(optional_yield y)
   int max_size = 4096;
   std::tie(ret, data) = read_all_input(s, max_size, false);
   if (ret != 0) {
-    ldout(s->cct, 10) << "s3-select query: failed to retrieve query; ret = " << ret << dendl;
+    ldpp_dout(this, 10) << "s3-select query: failed to retrieve query; ret = " << ret << dendl;
     return ret;
   }
 
   m_s3select_query = data.to_str();
   if (m_s3select_query.length() > 0) {
-    ldout(s->cct, 10) << "s3-select query: " << m_s3select_query << dendl;
+    ldpp_dout(this, 10) << "s3-select query: " << m_s3select_query << dendl;
   }
   else {
-    ldout(s->cct, 10) << "s3-select query: failed to retrieve query;" << dendl;
+    ldpp_dout(this, 10) << "s3-select query: failed to retrieve query;" << dendl;
     return -1;
   }
 
@@ -6265,7 +6313,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
 
   if (s3select_syntax->get_error_description().empty() == false) {
     m_result.append(s3select_syntax->get_error_description());
-    ldout(s->cct, 10) << "s3-select query: failed to prase query; {" << s3select_syntax->get_error_description() << "}"<< dendl;
+    ldpp_dout(this, 10) << "s3-select query: failed to prase query; {" << s3select_syntax->get_error_description() << "}"<< dendl;
     status = -1;
   }
   else {
@@ -6316,7 +6364,7 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   extract_by_tag("QuoteEscapeCharacter", m_escape_char);
   extract_by_tag("CompressionType", m_compression_type);
   if (m_compression_type.length()>0 && m_compression_type.compare("NONE") != 0) {
-    ldout(s->cct, 10) << "RGW supports currently only NONE option for compression type" << dendl;
+    ldpp_dout(this, 10) << "RGW supports currently only NONE option for compression type" << dendl;
     return -1;
   }
 
@@ -6368,11 +6416,11 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
 
   for(auto& it : bl.buffers()) {
 
-    ldout(s->cct, 10) << "processing segment " << i << " out of " << bl_len << " off " << ofs
+    ldpp_dout(this, 10) << "processing segment " << i << " out of " << bl_len << " off " << ofs
                       << " len " << len << " obj-size " << s->obj_size << dendl;
 
     if(it.length() == 0) {
-      ldout(s->cct, 10) << "s3select:it->_len is zero. segment " << i << " out of " << bl_len
+      ldpp_dout(this, 10) << "s3select:it->_len is zero. segment " << i << " out of " << bl_len
                         <<  " obj-size " << s->obj_size << dendl;
       continue; 
     }

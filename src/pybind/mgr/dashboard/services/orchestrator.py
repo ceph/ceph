@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import logging
 from functools import wraps
@@ -64,8 +63,12 @@ class HostManger(ResourceManager):
         return hosts[0] if hosts else None
 
     @wait_api_result
-    def add(self, hostname: str):
-        return self.api.add_host(HostSpec(hostname))
+    def add(self, hostname: str, addr: str, labels: List[str]):
+        return self.api.add_host(HostSpec(hostname, addr=addr, labels=labels))
+
+    @wait_api_result
+    def get_facts(self, hostname: Optional[str] = None) -> List[Dict[str, Any]]:
+        return self.api.get_facts(hostname)
 
     @wait_api_result
     def remove(self, hostname: str):
@@ -189,8 +192,8 @@ class OrchClient(object):
 
 class OrchFeature(object):
     HOST_LIST = 'get_hosts'
-    HOST_CREATE = 'add_host'
-    HOST_DELETE = 'remove_host'
+    HOST_ADD = 'add_host'
+    HOST_REMOVE = 'remove_host'
     HOST_LABEL_ADD = 'add_host_label'
     HOST_LABEL_REMOVE = 'remove_host_label'
     HOST_MAINTENANCE_ENTER = 'enter_host_maintenance'

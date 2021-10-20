@@ -32,6 +32,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 struct rgw_http_status_code {
   int code;
   const char *name;
@@ -1472,7 +1474,7 @@ static std::tuple<int, bufferlist> read_all_chunked_input(req_state *s, const ui
   int total = need_to_read;
   bufferlist bl;
 
-  int read_len = 0, len = 0;
+  int read_len = 0;
   do {
     bufferptr bp(need_to_read + 1);
     read_len = recv_body(s, bp.c_str(), need_to_read);
@@ -1483,7 +1485,6 @@ static std::tuple<int, bufferlist> read_all_chunked_input(req_state *s, const ui
     bp.c_str()[read_len] = '\0';
     bp.set_length(read_len);
     bl.append(bp);
-    len += read_len;
 
     if (read_len == need_to_read) {
       if (need_to_read < MAX_READ_CHUNK)
@@ -1612,8 +1613,14 @@ int RGWListBucketMultiparts_ObjStore::get_params(optional_yield y)
 
   string key_marker = s->info.args.get("key-marker");
   string upload_id_marker = s->info.args.get("upload-id-marker");
-  if (!key_marker.empty())
-    marker.init(key_marker, upload_id_marker);
+  if (!key_marker.empty()) {
+    std::unique_ptr<rgw::sal::MultipartUpload> upload;
+    upload = store->get_multipart_upload(s->bucket.get(), key_marker,
+					 upload_id_marker);
+    marker_meta = upload->get_meta();
+    marker_key = upload->get_key();
+    marker_upload_id = upload->get_upload_id();
+  }
 
   return 0;
 }
@@ -1849,16 +1856,15 @@ int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
     // We don't need user policies in case of STS token returned by AssumeRole, hence the check for user type
     if (! s->user->get_id().empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
       try {
-	rgw::sal::Attrs uattrs;
-        if (auto ret = s->user->read_attrs(s, y, &uattrs); ! ret) {
-          auto user_policies = get_iam_user_policy_from_attr(s->cct, uattrs, s->user->get_tenant());
+        if (auto ret = s->user->read_attrs(s, y); ! ret) {
+          auto user_policies = get_iam_user_policy_from_attr(s->cct, s->user->get_attrs(), s->user->get_tenant());
           s->iam_user_policies.insert(s->iam_user_policies.end(),
                                       std::make_move_iterator(user_policies.begin()),
                                       std::make_move_iterator(user_policies.end()));
 
         }
       } catch (const std::exception& e) {
-        lderr(s->cct) << "Error reading IAM User Policy: " << e.what() << dendl;
+        ldpp_dout(op, -1) << "Error reading IAM User Policy: " << e.what() << dendl;
       }
     }
     rgw_build_iam_environment(store, s);

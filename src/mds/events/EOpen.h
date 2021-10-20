@@ -21,14 +21,14 @@
 class EOpen : public LogEvent {
 public:
   EMetaBlob metablob;
-  vector<inodeno_t> inos;
-  vector<vinodeno_t> snap_inos;
+  std::vector<inodeno_t> inos;
+  std::vector<vinodeno_t> snap_inos;
 
   EOpen() : LogEvent(EVENT_OPEN) { }
   explicit EOpen(MDLog *mdlog) :
     LogEvent(EVENT_OPEN) { }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "EOpen " << metablob << ", " << inos.size() << " open files";
   }
 

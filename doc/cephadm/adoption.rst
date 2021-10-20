@@ -118,6 +118,12 @@ Adoption process
      document for instructions that describe how to import existing
      ssh keys.
 
+   .. note::
+     It is also possible to have cephadm use a non-root user to ssh
+     into cluster hosts. This user needs to have passwordless sudo access.
+     Use ``ceph cephadm set-user <user>`` and copy the ssh key to that user.
+     See :ref:`cephadm-ssh-user`
+
 #. Tell cephadm which hosts to manage:
 
    .. prompt:: bash #
@@ -126,8 +132,8 @@ Adoption process
 
    This will perform a ``cephadm check-host`` on each host before adding it;
    this check ensures that the host is functioning properly. The IP address
-   argument is required only if DNS does not allow you to connect to each host
-   by its short name.
+   argument is recommended; if not provided, then the host name will be resolved
+   via DNS.
 
 #. Verify that the adopted monitor and manager daemons are visible:
 

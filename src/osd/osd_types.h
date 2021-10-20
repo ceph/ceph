@@ -1255,9 +1255,10 @@ struct pg_pool_t {
     FLAG_SELFMANAGED_SNAPS = 1<<13, // pool uses selfmanaged snaps
     FLAG_POOL_SNAPS = 1<<14,        // pool has pool snaps
     FLAG_CREATING = 1<<15,          // initial pool PGs are being created
+    FLAG_EIO = 1<<16,               // return EIO for all client ops
   };
 
-  static const char *get_flag_name(int f) {
+  static const char *get_flag_name(uint64_t f) {
     switch (f) {
     case FLAG_HASHPSPOOL: return "hashpspool";
     case FLAG_FULL: return "full";
@@ -1275,6 +1276,7 @@ struct pg_pool_t {
     case FLAG_SELFMANAGED_SNAPS: return "selfmanaged_snaps";
     case FLAG_POOL_SNAPS: return "pool_snaps";
     case FLAG_CREATING: return "creating";
+    case FLAG_EIO: return "eio";
     default: return "???";
     }
   }
@@ -1325,6 +1327,8 @@ struct pg_pool_t {
       return FLAG_POOL_SNAPS;
     if (name == "creating")
       return FLAG_CREATING;
+    if (name == "eio")
+      return FLAG_EIO;
     return 0;
   }
 
@@ -1517,12 +1521,12 @@ public:
     return peering_crush_bucket_count != 0;
   }
 
-  bool stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
+  bool stretch_set_can_peer(const std::set<int>& want, const OSDMap& osdmap,
 			    std::ostream *out) const;
-  bool stretch_set_can_peer(const vector<int>& want, const OSDMap& osdmap,
+  bool stretch_set_can_peer(const std::vector<int>& want, const OSDMap& osdmap,
 			    std::ostream *out) const {
     if (!is_stretch_pool()) return true;
-    set<int> swant;
+    std::set<int> swant;
     for (auto i : want) swant.insert(i);
     return stretch_set_can_peer(swant, osdmap, out);
   }
@@ -2245,6 +2249,8 @@ struct pg_stat_t {
   bool pin_stats_invalid:1;
   bool manifest_stats_invalid:1;
 
+  double scrub_duration;
+
   pg_stat_t()
     : reported_seq(0),
       reported_epoch(0),
@@ -2262,7 +2268,8 @@ struct pg_stat_t {
       hitset_stats_invalid(false),
       hitset_bytes_stats_invalid(false),
       pin_stats_invalid(false),
-      manifest_stats_invalid(false)
+      manifest_stats_invalid(false),
+      scrub_duration(0)
   { }
 
   epoch_t get_effective_last_epoch_clean() const {
@@ -5310,7 +5317,7 @@ struct object_copy_data_t {
   utime_t mtime;
   uint32_t data_digest, omap_digest;
   uint32_t flags;
-  std::map<std::string, ceph::buffer::list> attrs;
+  std::map<std::string, ceph::buffer::list, std::less<>> attrs;
   ceph::buffer::list data;
   ceph::buffer::list omap_header;
   ceph::buffer::list omap_data;
@@ -5912,6 +5919,28 @@ struct object_info_t {
     auto p = std::cbegin(bl);
     decode(p);
   }
+
+  void encode_no_oid(ceph::buffer::list& bl, uint64_t features) {
+    // TODO: drop soid field and remove the denc no_oid methods
+    auto tmp_oid = hobject_t(hobject_t::get_max());
+    tmp_oid.swap(soid);
+    encode(bl, features);
+    soid = tmp_oid;
+  }
+  void decode_no_oid(ceph::buffer::list::const_iterator& bl) {
+    decode(bl);
+    ceph_assert(soid.is_max());
+  }
+  void decode_no_oid(const ceph::buffer::list& bl) {
+    auto p = std::cbegin(bl);
+    decode_no_oid(p);
+  }
+  void decode_no_oid(const ceph::buffer::list& bl, const hobject_t& _soid) {
+    auto p = std::cbegin(bl);
+    decode_no_oid(p);
+    soid = _soid;
+  }
+
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<object_info_t*>& o);
 
@@ -5934,6 +5963,11 @@ struct object_info_t {
 
   explicit object_info_t(const ceph::buffer::list& bl) {
     decode(bl);
+  }
+
+  explicit object_info_t(const ceph::buffer::list& bl, const hobject_t& _soid) {
+    decode_no_oid(bl);
+    soid = _soid;
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(object_info_t)
@@ -6031,7 +6065,7 @@ struct PushOp {
   interval_set<uint64_t> data_included;
   ceph::buffer::list omap_header;
   std::map<std::string, ceph::buffer::list> omap_entries;
-  std::map<std::string, ceph::buffer::list> attrset;
+  std::map<std::string, ceph::buffer::list, std::less<>> attrset;
 
   ObjectRecoveryInfo recovery_info;
   ObjectRecoveryProgress before_progress;
@@ -6056,7 +6090,7 @@ enum class scrub_type_t : bool { not_repair = false, do_repair = true };
  */
 struct ScrubMap {
   struct object {
-    std::map<std::string, ceph::buffer::ptr> attrs;
+    std::map<std::string, ceph::buffer::ptr, std::less<>> attrs;
     uint64_t size;
     __u32 omap_digest;         ///< omap crc32c
     __u32 digest;              ///< data crc32c

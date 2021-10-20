@@ -72,6 +72,9 @@ class to_ceph_volume(object):
         if self.spec.osds_per_device:
             cmd += " --osds-per-device {}".format(self.spec.osds_per_device)
 
+        if self.spec.data_allocate_fraction:
+            cmd += " --data-allocate-fraction {}".format(self.spec.data_allocate_fraction)
+
         if self.osd_id_claims:
             cmd += " --osd-ids {}".format(" ".join(self.osd_id_claims))
 

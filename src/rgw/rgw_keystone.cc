@@ -23,6 +23,8 @@
 #define dout_subsys ceph_subsys_rgw
 #define PKI_ANS1_PREFIX "MII"
 
+using namespace std;
+
 bool rgw_is_pki_token(const string& token)
 {
   return token.compare(0, sizeof(PKI_ANS1_PREFIX) - 1, PKI_ANS1_PREFIX) == 0;
@@ -132,7 +134,8 @@ std::string CephCtxConfig::get_admin_password() const noexcept  {
   return empty;
 }
 
-int Service::get_admin_token(CephContext* const cct,
+int Service::get_admin_token(const DoutPrefixProvider *dpp,
+                             CephContext* const cct,
                              TokenCache& token_cache,
                              const Config& config,
                              std::string& token)
@@ -149,13 +152,13 @@ int Service::get_admin_token(CephContext* const cct,
 
   /* Try cache first before calling Keystone for a new admin token. */
   if (token_cache.find_admin(t)) {
-    ldout(cct, 20) << "found cached admin token" << dendl;
+    ldpp_dout(dpp, 20) << "found cached admin token" << dendl;
     token = t.token.id;
     return 0;
   }
 
   /* Call Keystone now. */
-  const auto ret = issue_admin_token_request(cct, config, t);
+  const auto ret = issue_admin_token_request(dpp, cct, config, t);
   if (! ret) {
     token_cache.add_admin(t);
     token = t.token.id;
@@ -164,7 +167,8 @@ int Service::get_admin_token(CephContext* const cct,
   return ret;
 }
 
-int Service::issue_admin_token_request(CephContext* const cct,
+int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
+                                       CephContext* const cct,
                                        const Config& config,
                                        TokenEnvelope& t)
 {
@@ -215,7 +219,7 @@ int Service::issue_admin_token_request(CephContext* const cct,
     return -EACCES;
   }
 
-  if (t.parse(cct, token_req.get_subject_token(), token_bl,
+  if (t.parse(dpp, cct, token_req.get_subject_token(), token_bl,
               keystone_version) != 0) {
     return -EINVAL;
   }
@@ -223,7 +227,8 @@ int Service::issue_admin_token_request(CephContext* const cct,
   return 0;
 }
 
-int Service::get_keystone_barbican_token(CephContext * const cct,
+int Service::get_keystone_barbican_token(const DoutPrefixProvider *dpp,
+                                         CephContext * const cct,
                                          std::string& token)
 {
   using keystone_config_t = rgw::keystone::CephCtxConfig;
@@ -241,7 +246,7 @@ int Service::get_keystone_barbican_token(CephContext * const cct,
 
   /* Try cache first. */
   if (token_cache.find_barbican(t)) {
-    ldout(cct, 20) << "found cached barbican token" << dendl;
+    ldpp_dout(dpp, 20) << "found cached barbican token" << dendl;
     token = t.token.id;
     return 0;
   }
@@ -277,10 +282,10 @@ int Service::get_keystone_barbican_token(CephContext * const cct,
 
   token_req.set_url(token_url);
 
-  ldout(cct, 20) << "Requesting secret from barbican url=" << token_url << dendl;
+  ldpp_dout(dpp, 20) << "Requesting secret from barbican url=" << token_url << dendl;
   const int ret = token_req.process(null_yield);
   if (ret < 0) {
-    ldout(cct, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
+    ldpp_dout(dpp, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
     return ret;
   }
 
@@ -290,7 +295,7 @@ int Service::get_keystone_barbican_token(CephContext * const cct,
     return -EACCES;
   }
 
-  if (t.parse(cct, token_req.get_subject_token(), token_bl,
+  if (t.parse(dpp, cct, token_req.get_subject_token(), token_bl,
               keystone_version) != 0) {
     return -EINVAL;
   }
@@ -312,14 +317,15 @@ bool TokenEnvelope::has_role(const std::string& r) const
   return false;
 }
 
-int TokenEnvelope::parse(CephContext* const cct,
+int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
+                         CephContext* const cct,
                          const std::string& token_str,
                          ceph::bufferlist& bl,
                          const ApiVersion version)
 {
   JSONParser parser;
   if (! parser.parse(bl.c_str(), bl.length())) {
-    ldout(cct, 0) << "Keystone token parse error: malformed json" << dendl;
+    ldpp_dout(dpp, 0) << "Keystone token parse error: malformed json" << dendl;
     return -EINVAL;
   }
 
@@ -360,7 +366,7 @@ int TokenEnvelope::parse(CephContext* const cct,
       return -ENOTSUP;
     }
   } catch (const JSONDecoder::err& err) {
-    ldout(cct, 0) << "Keystone token parse error: " << err.what() << dendl;
+    ldpp_dout(dpp, 0) << "Keystone token parse error: " << err.what() << dendl;
     return -EINVAL;
   }
 
@@ -463,14 +469,14 @@ void TokenCache::add_barbican(const rgw::keystone::TokenEnvelope& token)
   add_locked(barbican_token_id, token);
 }
 
-void TokenCache::invalidate(const std::string& token_id)
+void TokenCache::invalidate(const DoutPrefixProvider *dpp, const std::string& token_id)
 {
   std::lock_guard l{lock};
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter == tokens.end())
     return;
 
-  ldout(cct, 20) << "invalidating revoked token id=" << token_id << dendl;
+  ldpp_dout(dpp, 20) << "invalidating revoked token id=" << token_id << dendl;
   token_entry& e = iter->second;
   tokens_lru.erase(e.lru_iter);
   tokens.erase(iter);

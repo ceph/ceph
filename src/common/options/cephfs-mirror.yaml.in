@@ -80,3 +80,15 @@ options:
   services:
   - cephfs-mirror
   min: 0
+- name: cephfs_mirror_mount_timeout
+  type: secs
+  level: advanced
+  desc: timeout for mounting primary/seconday ceph file system
+  long_desc: Timeout in seconds for mounting primary or secondary (remote) ceph file system
+    by the cephfs-mirror daemon. Setting this to a higher value could result in the mirror
+    daemon getting stalled when mounting a file system if the cluster is not reachable. This
+    option is used to override the usual client_mount_timeout.
+  default: 10
+  services:
+  - cephfs-mirror
+  min: 0

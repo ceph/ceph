@@ -21,7 +21,7 @@ struct Object : public boost::intrusive_ref_counter<
   bufferlist data;
   // use transparent comparator for better performance, see
   // https://en.cppreference.com/w/cpp/utility/functional/less_void
-  std::map<std::string,bufferptr,std::less<>> xattr;
+  std::map<std::string,bufferlist,std::less<>> xattr;
   bufferlist omap_header;
   std::map<std::string,bufferlist> omap;
 

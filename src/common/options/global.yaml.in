@@ -449,6 +449,7 @@ options:
   type: str
   level: basic
   desc: path to log file
+  fmt_desc: The location of the logging file for your cluster.
   daemon_default: /var/log/ceph/$cluster-$name.log
   see_also:
   - log_to_file
@@ -462,6 +463,7 @@ options:
   type: int
   level: advanced
   desc: max unwritten log entries to allow before waiting to flush to the log
+  fmt_desc: The maximum number of new log files.
   default: 1000
   see_also:
   - log_max_recent
@@ -485,6 +487,7 @@ options:
   type: bool
   level: basic
   desc: send log lines to a file
+  fmt_desc: Determines if logging messages should appear in a file.
   default: true
   see_also:
   - log_file
@@ -493,6 +496,7 @@ options:
   type: bool
   level: basic
   desc: send log lines to stderr
+  fmt_desc: Determines if logging messages should appear in ``stderr``.
   default: true
   daemon_default: false
   with_legacy: true
@@ -500,6 +504,7 @@ options:
   type: bool
   level: basic
   desc: send critical error log lines to stderr
+  fmt_desc: Determines if error messages should appear in ``stderr``.
   default: false
   daemon_default: true
   with_legacy: true
@@ -516,18 +521,21 @@ options:
   type: bool
   level: basic
   desc: send log lines to syslog facility
+  fmt_desc: Determines if logging messages should appear in ``syslog``.
   default: false
   with_legacy: true
 - name: err_to_syslog
   type: bool
   level: basic
   desc: send critical error log lines to syslog facility
+  fmt_desc: Determines if error messages should appear in ``syslog``.
   default: false
   with_legacy: true
 - name: log_flush_on_exit
   type: bool
   level: advanced
   desc: set a process exit handler to ensure the log is flushed on exit
+  fmt_desc: Determines if Ceph should flush the log files after exit.
   default: false
   with_legacy: true
 - name: log_stop_at_utilization
@@ -611,18 +619,29 @@ options:
   type: str
   level: advanced
   desc: Make daemons send cluster log messages to monitors
+  fmt_desc: Determines if ``clog`` messages should be sent to monitors.
   default: default=true
   flags:
   - runtime
   with_legacy: true
+  services:
+  - mgr
+  - osd
+  - mds
 - name: clog_to_syslog
   type: str
   level: advanced
   desc: Make daemons send cluster log messages to syslog
+  fmt_desc: Determines if ``clog`` messages should be sent to syslog.
   default: 'false'
   flags:
   - runtime
   with_legacy: true
+  services:
+  - mon
+  - mgr
+  - osd
+  - mds
 - name: clog_to_syslog_level
   type: str
   level: advanced
@@ -633,6 +652,11 @@ options:
   flags:
   - runtime
   with_legacy: true
+  services:
+  - mon
+  - mgr
+  - osd
+  - mds
 - name: clog_to_syslog_facility
   type: str
   level: advanced
@@ -643,6 +667,11 @@ options:
   flags:
   - runtime
   with_legacy: true
+  services:
+  - mon
+  - mgr
+  - osd
+  - mds
 - name: clog_to_graylog
   type: str
   level: advanced
@@ -650,6 +679,11 @@ options:
   default: 'false'
   flags:
   - runtime
+  services:
+  - mon
+  - mgr
+  - osd
+  - mds
 - name: clog_to_graylog_host
   type: str
   level: advanced
@@ -660,6 +694,11 @@ options:
   flags:
   - runtime
   with_legacy: true
+  services:
+  - mon
+  - mgr
+  - osd
+  - mds
 - name: clog_to_graylog_port
   type: str
   level: advanced
@@ -670,134 +709,11 @@ options:
   flags:
   - runtime
   with_legacy: true
-- name: mon_cluster_log_to_stderr
-  type: bool
-  level: advanced
-  desc: Make monitor send cluster log messages to stderr (prefixed by channel)
-  default: false
   services:
   - mon
-  see_also:
-  - log_stderr_prefix
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_cluster_log_to_syslog
-  type: str
-  level: advanced
-  desc: Make monitor send cluster log messages to syslog
-  default: default=false
-  services:
-  - mon
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_cluster_log_to_syslog_level
-  type: str
-  level: advanced
-  desc: Syslog level for cluster log messages
-  default: info
-  services:
-  - mon
-  see_also:
-  - mon_cluster_log_to_syslog
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_cluster_log_to_syslog_facility
-  type: str
-  level: advanced
-  desc: Syslog facility for cluster log messages
-  default: daemon
-  services:
-  - mon
-  see_also:
-  - mon_cluster_log_to_syslog
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_cluster_log_to_file
-  type: bool
-  level: advanced
-  desc: Make monitor send cluster log messages to file
-  default: true
-  services:
-  - mon
-  see_also:
-  - mon_cluster_log_file
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_cluster_log_file
-  type: str
-  level: advanced
-  desc: File(s) to write cluster log to
-  long_desc: This can either be a simple file name to receive all messages, or a list
-    of key/value pairs where the key is the log channel and the value is the filename,
-    which may include $cluster and $channel metavariables
-  default: default=/var/log/ceph/$cluster.$channel.log cluster=/var/log/ceph/$cluster.log
-  services:
-  - mon
-  see_also:
-  - mon_cluster_log_to_file
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_cluster_log_file_level
-  type: str
-  level: advanced
-  desc: Lowest level to include is cluster log file
-  default: debug
-  services:
-  - mon
-  see_also:
-  - mon_cluster_log_file
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_cluster_log_to_graylog
-  type: str
-  level: advanced
-  desc: Make monitor send cluster log to graylog
-  default: 'false'
-  services:
-  - mon
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_cluster_log_to_graylog_host
-  type: str
-  level: advanced
-  desc: Graylog host for cluster log messages
-  default: 127.0.0.1
-  services:
-  - mon
-  see_also:
-  - mon_cluster_log_to_graylog
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_cluster_log_to_graylog_port
-  type: str
-  level: advanced
-  desc: Graylog port for cluster log messages
-  default: '12201'
-  services:
-  - mon
-  see_also:
-  - mon_cluster_log_to_graylog
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_cluster_log_to_journald
-  type: str
-  level: advanced
-  desc: Make monitor send cluster log to journald
-  default: 'false'
-  services:
-  - mon
-  flags:
-  - runtime
+  - mgr
+  - osd
+  - mds
 - name: enable_experimental_unrecoverable_data_corrupting_features
   type: str
   level: advanced
@@ -1073,6 +989,56 @@ options:
   - ms_service_mode
   flags:
   - startup
+- name: ms_osd_compress_mode
+  type: str
+  level: advanced
+  desc: Compression policy to use in Messenger for communicating with OSD
+  default: none
+  services:
+  - osd
+  enum_values:
+  - none
+  - force
+  see_also:
+  - ms_compress_secure
+  flags:
+  - runtime
+- name: ms_osd_compress_min_size
+  type: uint
+  level: advanced
+  desc: Minimal message size eligable for on-wire compression
+  default: 1_K
+  services:
+  - osd
+  see_also:
+  - ms_osd_compress_mode
+  flags:
+  - runtime
+- name: ms_osd_compression_algorithm
+  type: str
+  level: advanced
+  desc: Compression algorithm to use in Messenger when communicating with OSD
+  long_desc: Compression algorithm for connections with OSD in order of preference
+  default: snappy zlib zstd lz4
+  services:
+  - osd
+  see_also:
+  - ms_osd_compress_mode
+  flags:
+  - runtime
+- name: ms_compress_secure
+  type: bool
+  level: advanced
+  desc: Allowing compression when on-wire encryption is enabled
+  long_desc: Combining encryption with compression reduces the level of security of
+    messages between peers. In case both encryption and compression are enabled, 
+    compression setting will be ignored and message will not be compressed. 
+    This behaviour can be override using this setting. 
+  default: false
+  see_also: 
+  - ms_osd_compress_mode
+  flags:
+  - runtime
 - name: ms_learn_addr_from_peer
   type: bool
   level: advanced
@@ -1173,13 +1139,6 @@ options:
   fmt_desc: Throttles total size of messages waiting to be dispatched.
   default: 100_M
   with_legacy: true
-- name: ms_bind_exclude_lo_iface
-  type: bool
-  level: advanced
-  desc: Allow servers to bind loopback network interfaces (lo)
-  default: true
-  flags:
-  - startup
 - name: ms_bind_ipv4
   type: bool
   level: advanced
@@ -1228,7 +1187,7 @@ options:
   level: advanced
   desc: Highest port number to bind daemon(s) to
   fmt_desc: The maximum port number to which an OSD or MDS daemon will bind.
-  default: 7300
+  default: 7568
   with_legacy: true
 # FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
 - name: ms_bind_retry_count
@@ -1358,6 +1317,13 @@ options:
   default: 3
   min: 1
   max: 24
+  with_legacy: true
+- name: ms_async_reap_threshold
+  type: uint
+  level: dev
+  desc: number of deleted connections before we reap
+  default: 5
+  min: 1
   with_legacy: true
 - name: ms_async_rdma_device_name
   type: str
@@ -1525,66 +1491,6 @@ options:
   desc: send ourselves a SIGTERM early during startup
   default: false
   with_legacy: true
-- name: mon_enable_op_tracker
-  type: bool
-  level: advanced
-  desc: enable/disable MON op tracking
-  default: true
-  services:
-  - mon
-- name: mon_op_complaint_time
-  type: secs
-  level: advanced
-  desc: time after which to consider a monitor operation blocked after no updates
-  default: 30
-  services:
-  - mon
-- name: mon_op_log_threshold
-  type: int
-  level: advanced
-  desc: max number of slow ops to display
-  default: 5
-  services:
-  - mon
-- name: mon_op_history_size
-  type: uint
-  level: advanced
-  desc: max number of completed ops to track
-  default: 20
-  services:
-  - mon
-- name: mon_op_history_duration
-  type: secs
-  level: advanced
-  desc: expiration time in seconds of historical MON OPS
-  default: 10_min
-  services:
-  - mon
-- name: mon_op_history_slow_op_size
-  type: uint
-  level: advanced
-  desc: max number of slow historical MON OPS to keep
-  default: 20
-  services:
-  - mon
-- name: mon_op_history_slow_op_threshold
-  type: secs
-  level: advanced
-  desc: duration of an op to be considered as a historical slow op
-  default: 10
-  services:
-  - mon
-- name: mon_data
-  type: str
-  level: advanced
-  desc: path to mon database
-  fmt_desc: The monitor's data location.
-  default: /var/lib/ceph/mon/$cluster-$id
-  services:
-  - mon
-  flags:
-  - no_mon_update
-  with_legacy: true
 # list of initial cluster mon ids; if specified, need majority to form initial quorum and create new cluster
 - name: mon_initial_members
   type: str
@@ -1601,660 +1507,6 @@ options:
   - no_mon_update
   - cluster_create
   with_legacy: true
-# compact leveldb on ceph-mon start
-- name: mon_compact_on_start
-  type: bool
-  level: advanced
-  default: false
-  services:
-  - mon
-  fmt_desc: Compact the database used as Ceph Monitor store on
-    ``ceph-mon`` start. A manual compaction helps to shrink the
-    monitor database and improve the performance of it if the regular
-    compaction fails to work.
-  with_legacy: true
-# trigger leveldb compaction on bootstrap
-- name: mon_compact_on_bootstrap
-  type: bool
-  level: advanced
-  default: false
-  services:
-  - mon
-  fmt_desc: Compact the database used as Ceph Monitor store
-    on bootstrap. Monitors probe each other to establish
-    a quorum after bootstrap. If a monitor times out before joining the
-    quorum, it will start over and bootstrap again.
-  with_legacy: true
-# compact (a prefix) when we trim old states
-- name: mon_compact_on_trim
-  type: bool
-  level: advanced
-  default: true
-  services:
-  - mon
-  fmt_desc: Compact a certain prefix (including paxos) when we trim its old states.
-  with_legacy: true
-- name: mon_osdmap_full_prune_enabled
-  type: bool
-  level: advanced
-  desc: enables pruning full osdmap versions when we go over a given number of maps
-  default: true
-  services:
-  - mon
-  see_also:
-  - mon_osdmap_full_prune_min
-  - mon_osdmap_full_prune_interval
-  - mon_osdmap_full_prune_txsize
-- name: mon_osdmap_full_prune_min
-  type: uint
-  level: advanced
-  desc: minimum number of versions in the store to trigger full map pruning
-  default: 10000
-  services:
-  - mon
-  see_also:
-  - mon_osdmap_full_prune_enabled
-  - mon_osdmap_full_prune_interval
-  - mon_osdmap_full_prune_txsize
-- name: mon_osdmap_full_prune_interval
-  type: uint
-  level: advanced
-  desc: interval between maps that will not be pruned; maps in the middle will be
-    pruned.
-  default: 10
-  services:
-  - mon
-  see_also:
-  - mon_osdmap_full_prune_enabled
-  - mon_osdmap_full_prune_interval
-  - mon_osdmap_full_prune_txsize
-- name: mon_osdmap_full_prune_txsize
-  type: uint
-  level: advanced
-  desc: number of maps we will prune per iteration
-  default: 100
-  services:
-  - mon
-  see_also:
-  - mon_osdmap_full_prune_enabled
-  - mon_osdmap_full_prune_interval
-  - mon_osdmap_full_prune_txsize
-- name: mon_osd_cache_size
-  type: int
-  level: advanced
-  desc: maximum number of OSDMaps to cache in memory
-  fmt_desc: The size of osdmaps cache, not to rely on underlying store's cache
-  default: 500
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_cache_size_min
-  type: size
-  level: advanced
-  desc: The minimum amount of bytes to be kept mapped in memory for osd monitor caches.
-  fmt_desc: The minimum amount of bytes to be kept mapped in memory for osd
-     monitor caches.
-  default: 128_M
-  services:
-  - mon
-  with_legacy: true
-- name: mon_memory_target
-  type: size
-  level: basic
-  desc: The amount of bytes pertaining to osd monitor caches and kv cache to be kept
-    mapped in memory with cache auto-tuning enabled
-  fmt_desc: The amount of bytes pertaining to OSD monitor caches and KV cache
-    to be kept mapped in memory with cache auto-tuning enabled.
-  default: 2_G
-  services:
-  - mon
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_memory_autotune
-  type: bool
-  level: basic
-  desc: Autotune the cache memory being used for osd monitors and kv database
-  fmt_desc: Autotune the cache memory used for OSD monitors and KV
-    database.
-  default: true
-  services:
-  - mon
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_cpu_threads
-  type: int
-  level: advanced
-  desc: worker threads for CPU intensive background work
-  fmt_desc: Number of threads for performing CPU intensive work on monitor.
-  default: 4
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_mapping_pgs_per_chunk
-  type: int
-  level: dev
-  desc: granularity of PG placement calculation background work
-  fmt_desc: We calculate the mapping from placement group to OSDs in chunks.
-    This option specifies the number of placement groups per chunk.
-  default: 4096
-  services:
-  - mon
-  with_legacy: true
-- name: mon_clean_pg_upmaps_per_chunk
-  type: uint
-  level: dev
-  desc: granularity of PG upmap validation background work
-  default: 256
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_max_creating_pgs
-  type: int
-  level: advanced
-  desc: maximum number of PGs the mon will create at once
-  default: 1024
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_max_initial_pgs
-  type: int
-  level: advanced
-  desc: maximum number of PGs a pool will created with
-  long_desc: If the user specifies more PGs than this, the cluster will subsequently
-    split PGs after the pool is created in order to reach the target.
-  default: 1024
-  services:
-  - mon
-- name: mon_tick_interval
-  type: int
-  level: advanced
-  desc: interval for internal mon background checks
-  fmt_desc: A monitor's tick interval in seconds.
-  default: 5
-  services:
-  - mon
-  with_legacy: true
-- name: mon_session_timeout
-  type: int
-  level: advanced
-  desc: close inactive mon client connections after this many seconds
-  fmt_desc: Monitor will terminate inactive sessions stay idle over this
-    time limit.
-  default: 5_min
-  services:
-  - mon
-  with_legacy: true
-- name: mon_subscribe_interval
-  type: float
-  level: dev
-  desc: subscribe interval for pre-jewel clients
-  fmt_desc: The refresh interval (in seconds) for subscriptions. The
-    subscription mechanism enables obtaining cluster maps
-    and log information.
-  default: 1_day
-  services:
-  - mon
-  with_legacy: true
-- name: mon_delta_reset_interval
-  type: float
-  level: advanced
-  desc: window duration for rate calculations in 'ceph status'
-  fmt_desc: Seconds of inactivity before we reset the PG delta to 0. We keep
-    track of the delta of the used space of each pool, so, for
-    example, it would be easier for us to understand the progress of
-    recovery or the performance of cache tier. But if there's no
-    activity reported for a certain pool, we just reset the history of
-    deltas of that pool.
-  default: 10
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_laggy_halflife
-  type: int
-  level: advanced
-  desc: halflife of OSD 'lagginess' factor
-  fmt_desc: The number of seconds laggy estimates will decay.
-  default: 1_hr
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_laggy_weight
-  type: float
-  level: advanced
-  desc: how heavily to weight OSD marking itself back up in overall laggy_probability
-  long_desc: 1.0 means that an OSD marking itself back up (because it was marked down
-    but not actually dead) means a 100% laggy_probability; 0.0 effectively disables
-    tracking of laggy_probability.
-  fmt_desc: The weight for new samples in laggy estimation decay.
-  default: 0.3
-  services:
-  - mon
-  min: 0
-  max: 1
-  with_legacy: true
-- name: mon_osd_laggy_max_interval
-  type: int
-  level: advanced
-  desc: cap value for period for OSD to be marked for laggy_interval calculation
-  fmt_desc: Maximum value of ``laggy_interval`` in laggy estimations (in seconds).
-              Monitor uses an adaptive approach to evaluate the ``laggy_interval`` of
-              a certain OSD. This value will be used to calculate the grace time for
-              that OSD.
-  default: 5_min
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_adjust_heartbeat_grace
-  type: bool
-  level: advanced
-  desc: increase OSD heartbeat grace if peers appear to be laggy
-  long_desc: If an OSD is marked down but then marks itself back up, it implies it
-    wasn't actually down but was unable to respond to heartbeats.  If this option
-    is true, we can use the laggy_probability and laggy_interval values calculated
-    to model this situation to increase the heartbeat grace period for this OSD so
-    that it isn't marked down again.  laggy_probability is an estimated probability
-    that the given OSD is down because it is laggy (not actually down), and laggy_interval
-    is an estiate on how long it stays down when it is laggy.
-  fmt_desc: If set to ``true``, Ceph will scale based on laggy estimations.
-  default: true
-  services:
-  - mon
-  see_also:
-  - mon_osd_laggy_halflife
-  - mon_osd_laggy_weight
-  - mon_osd_laggy_max_interval
-  with_legacy: true
-- name: mon_osd_adjust_down_out_interval
-  type: bool
-  level: advanced
-  desc: increase the mon_osd_down_out_interval if an OSD appears to be laggy
-  fmt_desc: If set to ``true``, Ceph will scaled based on laggy estimations.
-  default: true
-  services:
-  - mon
-  see_also:
-  - mon_osd_adjust_heartbeat_grace
-  with_legacy: true
-- name: mon_osd_auto_mark_in
-  type: bool
-  level: advanced
-  desc: mark any OSD that comes up 'in'
-  fmt_desc: Ceph will mark any booting Ceph OSD Daemons as ``in``
-              the Ceph Storage Cluster.
-  default: false
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_auto_mark_auto_out_in
-  type: bool
-  level: advanced
-  desc: mark any OSD that comes up that was automatically marked 'out' back 'in'
-  fmt_desc: Ceph will mark booting Ceph OSD Daemons auto marked ``out``
-              of the Ceph Storage Cluster as ``in`` the cluster.
-  default: true
-  services:
-  - mon
-  see_also:
-  - mon_osd_down_out_interval
-  with_legacy: true
-- name: mon_osd_auto_mark_new_in
-  type: bool
-  level: advanced
-  desc: mark any new OSD that comes up 'in'
-  fmt_desc: Ceph will mark booting new Ceph OSD Daemons as ``in`` the
-              Ceph Storage Cluster.
-  default: true
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_destroyed_out_interval
-  type: int
-  level: advanced
-  desc: mark any OSD 'out' that has been 'destroy'ed for this long (seconds)
-  default: 10_min
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_down_out_interval
-  type: int
-  level: advanced
-  desc: mark any OSD 'out' that has been 'down' for this long (seconds)
-  fmt_desc: The number of seconds Ceph waits before marking a Ceph OSD Daemon
-              ``down`` and ``out`` if it doesn't respond.
-  default: 10_min
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_down_out_subtree_limit
-  type: str
-  level: advanced
-  desc: do not automatically mark OSDs 'out' if an entire subtree of this size is
-    down
-  fmt_desc: The smallest :term:`CRUSH` unit type that Ceph will **not**
-              automatically mark out. For instance, if set to ``host`` and if
-              all OSDs of a host are down, Ceph will not automatically mark out
-              these OSDs.
-  default: rack
-  services:
-  - mon
-  see_also:
-  - mon_osd_down_out_interval
-  flags:
-  - runtime
-- name: mon_osd_min_up_ratio
-  type: float
-  level: advanced
-  desc: do not automatically mark OSDs 'out' if fewer than this many OSDs are 'up'
-  fmt_desc: The minimum ratio of ``up`` Ceph OSD Daemons before Ceph will
-              mark Ceph OSD Daemons ``down``.
-  default: 0.3
-  services:
-  - mon
-  see_also:
-  - mon_osd_down_out_interval
-  with_legacy: true
-- name: mon_osd_min_in_ratio
-  type: float
-  level: advanced
-  desc: do not automatically mark OSDs 'out' if fewer than this many OSDs are 'in'
-  fmt_desc: The minimum ratio of ``in`` Ceph OSD Daemons before Ceph will
-              mark Ceph OSD Daemons ``out``.
-  default: 0.75
-  services:
-  - mon
-  see_also:
-  - mon_osd_down_out_interval
-  with_legacy: true
-- name: mon_osd_warn_op_age
-  type: float
-  level: advanced
-  desc: issue REQUEST_SLOW health warning if OSD ops are slower than this age (seconds)
-  default: 32
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_osd_warn_num_repaired
-  type: uint
-  level: advanced
-  desc: issue OSD_TOO_MANY_REPAIRS health warning if an OSD has more than this many
-    read repairs
-  default: 10
-  services:
-  - mon
-- name: mon_osd_err_op_age_ratio
-  type: float
-  level: advanced
-  desc: issue REQUEST_STUCK health error if OSD ops are slower than is age (seconds)
-  default: 128
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_osd_prime_pg_temp
-  type: bool
-  level: dev
-  desc: minimize peering work by priming pg_temp values after a map change
-  fmt_desc: Enables or disables priming the PGMap with the previous OSDs when an ``out``
-    OSD comes back into the cluster. With the ``true`` setting, clients
-    will continue to use the previous OSDs until the newly ``in`` OSDs for
-    a PG have peered.
-  default: true
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_prime_pg_temp_max_time
-  type: float
-  level: dev
-  desc: maximum time to spend precalculating PG mappings on map change (seconds)
-  fmt_desc: How much time in seconds the monitor should spend trying to prime the
-    PGMap when an out OSD comes back into the cluster.
-  default: 0.5
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_prime_pg_temp_max_estimate
-  type: float
-  level: advanced
-  desc: calculate all PG mappings if estimated fraction of PGs that change is above
-    this amount
-  fmt_desc: Maximum estimate of time spent on each PG before we prime all PGs
-    in parallel.
-  default: 0.25
-  services:
-  - mon
-  with_legacy: true
-- name: mon_stat_smooth_intervals
-  type: uint
-  level: advanced
-  desc: number of PGMaps stats over which we calc the average read/write throughput
-    of the whole cluster
-  fmt_desc: Ceph will smooth statistics over the last ``N`` PG maps.
-  default: 6
-  services:
-  - mgr
-  min: 1
-- name: mon_election_timeout
-  type: float
-  level: advanced
-  desc: maximum time for a mon election (seconds)
-  fmt_desc: On election proposer, maximum waiting time for all ACKs in seconds.
-  default: 5
-  services:
-  - mon
-  with_legacy: true
-- name: mon_election_default_strategy
-  type: uint
-  level: advanced
-  desc: The election strategy to set when constructing the first monmap.
-  default: 1
-  min: 1
-  max: 3
-- name: mon_lease
-  type: float
-  level: advanced
-  desc: lease interval between quorum monitors (seconds)
-  long_desc: This setting controls how sensitive your mon quorum is to intermittent
-    network issues or other failures.
-  fmt_desc: The length (in seconds) of the lease on the monitor's versions.
-  default: 5
-  services:
-  - mon
-  with_legacy: true
-- name: mon_lease_renew_interval_factor
-  type: float
-  level: advanced
-  desc: multiple of mon_lease for the lease renewal interval
-  long_desc: Leases must be renewed before they time out.  A smaller value means frequent
-    renewals, while a value close to 1 makes a lease expiration more likely.
-  fmt_desc: |
-    ``mon_lease`` \* ``mon_lease_renew_interval_factor`` will be the
-    interval for the Leader to renew the other monitor's leases. The
-    factor should be less than ``1.0``.
-  default: 0.6
-  services:
-  - mon
-  see_also:
-  - mon_lease
-  min: 0
-  max: 0.9999999
-  with_legacy: true
-- name: mon_lease_ack_timeout_factor
-  type: float
-  level: advanced
-  desc: multiple of mon_lease for the lease ack interval before calling new election
-  fmt_desc: The Leader will wait ``mon_lease`` \* ``mon_lease_ack_timeout_factor``
-    for the Providers to acknowledge the lease extension.
-  default: 2
-  services:
-  - mon
-  see_also:
-  - mon_lease
-  min: 1.0001
-  max: 100
-  with_legacy: true
-- name: mon_accept_timeout_factor
-  type: float
-  level: advanced
-  desc: multiple of mon_lease for follower mons to accept proposed state changes before
-    calling a new election
-  fmt_desc: The Leader will wait ``mon_lease`` \* ``mon_accept_timeout_factor``
-    for the Requester(s) to accept a Paxos update. It is also used
-    during the Paxos recovery phase for similar purposes.
-  default: 2
-  services:
-  - mon
-  see_also:
-  - mon_lease
-  with_legacy: true
-- name: mon_elector_ping_timeout
-  type: float
-  level: advanced
-  desc: The time after which a ping 'times out' and a connection is considered down
-  default: 2
-  services:
-  - mon
-  see_also:
-  - mon_elector_ping_divisor
-- name: mon_elector_ping_divisor
-  type: uint
-  level: advanced
-  desc: We will send a ping up to this many times per timeout per
-  default: 2
-  services:
-  - mon
-  see_also:
-  - mon_elector_ping_timeout
-- name: mon_con_tracker_persist_interval
-  type: uint
-  level: advanced
-  desc: how many updates the ConnectionTracker takes before it persists to disk
-  default: 10
-  services:
-  - mon
-  min: 1
-  max: 100000
-- name: mon_con_tracker_score_halflife
-  type: uint
-  level: advanced
-  desc: The 'halflife' used when updating/calculating peer connection scores
-  default: 43200
-  services:
-  - mon
-  min: 60
-- name: mon_elector_ignore_propose_margin
-  type: float
-  level: advanced
-  desc: The difference in connection score allowed before a peon stops ignoring out-of-quorum
-    PROPOSEs
-  default: 0.0005
-  services:
-  - mon
-- name: mon_warn_on_degraded_stretch_mode
-  type: bool
-  level: advanced
-  desc: Issue a health warning if we are in degraded stretch mode
-  default: true
-  services:
-  - mon
-- name: mon_stretch_cluster_recovery_ratio
-  type: float
-  level: advanced
-  desc: the ratio of up OSDs at which a degraded stretch cluster enters recovery
-  default: 0.6
-  services:
-  - mon
-  min: 0.51
-  max: 1
-- name: mon_stretch_recovery_min_wait
-  type: float
-  level: advanced
-  desc: how long the monitors wait before considering fully-healthy PGs as evidence
-    the stretch mode is repaired
-  default: 15
-  services:
-  - mon
-  min: 1
-- name: mon_stretch_pool_size
-  type: uint
-  level: dev
-  default: 4
-  services:
-  - mon
-  min: 3
-  max: 6
-- name: mon_stretch_pool_min_size
-  type: uint
-  level: dev
-  default: 2
-  services:
-  - mon
-  min: 2
-  max: 4
-- name: mon_clock_drift_allowed
-  type: float
-  level: advanced
-  desc: allowed clock drift (in seconds) between mons before issuing a health warning
-  default: 0.05
-  services:
-  - mon
-  with_legacy: true
-# exponential backoff for clock drift warnings
-- name: mon_clock_drift_warn_backoff
-  type: float
-  level: advanced
-  desc: exponential backoff factor for logging clock drift warnings in the cluster
-    log
-  default: 5
-  services:
-  - mon
-  with_legacy: true
-# on leader, timecheck (clock drift check) interval (seconds)
-- name: mon_timecheck_interval
-  type: float
-  level: advanced
-  desc: frequency of clock synchronization checks between monitors (seconds)
-  fmt_desc: The time check interval (clock drift check) in seconds
-    for the Leader.
-  default: 5_min
-  services:
-  - mon
-  with_legacy: true
-# on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)
-- name: mon_timecheck_skew_interval
-  type: float
-  level: advanced
-  desc: frequency of clock synchronization (re)checks between monitors while clocks
-    are believed to be skewed (seconds)
-  fmt_desc: The time check interval (clock drift check) in seconds when in
-    presence of a skew in seconds for the Leader.
-  default: 30
-  services:
-  - mon
-  see_also:
-  - mon_timecheck_interval
-  with_legacy: true
-- name: mon_pg_stuck_threshold
-  type: int
-  level: advanced
-  desc: number of seconds after which pgs can be considered stuck inactive, unclean,
-    etc
-  long_desc: see doc/control.rst under dump_stuck for more info
-  fmt_desc: Number of seconds after which PGs can be considered as
-    being stuck.
-  default: 1_min
-  services:
-  - mgr
-- name: mon_pg_warn_min_per_osd
-  type: uint
-  level: advanced
-  desc: minimal number PGs per (in) osd before we warn the admin
-  fmt_desc: Raise ``HEALTH_WARN`` if the average number
-    of PGs per ``in`` OSD is under this number. A non-positive number
-    disables this.
-  default: 0
-  services:
-  - mgr
 - name: mon_max_pg_per_osd
   type: uint
   level: advanced
@@ -2264,71 +1516,12 @@ options:
     at which some pools' pg_num may be shrunk in order to enable increasing the pg_num
     of others.
   default: 250
-  services:
-  - mgr
-  min: 1
-- name: mon_target_pg_per_osd
-  type: uint
-  level: advanced
-  desc: Automated PG management creates this many PGs per OSD
-  long_desc: When creating pools, the automated PG management logic will attempt to
-    reach this target.  In some circumstances, it may exceed this target, up to the
-    ``mon_max_pg_per_osd`` limit. Conversely, a lower number of PGs per OSD may be
-    created if the cluster is not yet fully utilised
-  default: 100
-  min: 1
-- name: mon_pg_warn_max_object_skew
-  type: float
-  level: advanced
-  desc: max skew few average in objects per pg
-  fmt_desc: Raise ``HEALTH_WARN`` if the average RADOS object count per PG
-    of any pool is greater than ``mon_pg_warn_max_object_skew`` times
-    the average RADOS object count per PG of all pools. Zero or a non-positive
-    number disables this. Note that this option applies to ``ceph-mgr`` daemons.
-  default: 10
-  services:
-  - mgr
-- name: mon_pg_warn_min_objects
-  type: int
-  level: advanced
-  desc: 'do not warn below this object #'
-  fmt_desc: Do not warn if the total number of RADOS objects in cluster is below
-    this number
-  default: 10000
-  services:
-  - mgr
-- name: mon_pg_warn_min_pool_objects
-  type: int
-  level: advanced
-  desc: 'do not warn on pools below this object #'
-  fmt_desc: Do not warn on pools whose RADOS object count is below this number
-  default: 1000
-  services:
-  - mgr
-- name: mon_pg_check_down_all_threshold
-  type: float
-  level: advanced
-  desc: threshold of down osds after which we check all pgs
-  fmt_desc: Percentage threshold of ``down`` OSDs above which we check all PGs
-    for stale ones.
-  default: 0.5
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_cache_target_full_warn_ratio
-  type: float
-  level: advanced
-  desc: issue CACHE_POOL_NEAR_FULL health warning when cache pool utilization exceeds
-    this ratio of usable space
-  fmt_desc: Position between pool's ``cache_target_full`` and ``target_max_object``
-    where we start warning
-  default: 0.66
-  services:
-  - mgr
   flags:
-  - no_mon_update
-  - cluster_create
-  with_legacy: true
+  - runtime
+  services:
+  - mgr
+  - mon
+  min: 1
 - name: mon_osd_full_ratio
   type: float
   level: advanced
@@ -2436,117 +1629,6 @@ options:
   - mon
   see_also:
   - ms_bind_msgr2
-- name: mon_warn_on_legacy_crush_tunables
-  type: bool
-  level: advanced
-  desc: issue OLD_CRUSH_TUNABLES health warning if CRUSH tunables are older than mon_crush_min_required_version
-  fmt_desc: Raise ``HEALTH_WARN`` when CRUSH tunables are too old (older than ``mon_min_crush_required_version``)
-  default: true
-  services:
-  - mgr
-  see_also:
-  - mon_crush_min_required_version
-  with_legacy: true
-- name: mon_crush_min_required_version
-  type: str
-  level: advanced
-  desc: minimum ceph release to use for mon_warn_on_legacy_crush_tunables
-  fmt_desc: The minimum tunable profile required by the cluster. See
-    :ref:`CRUSH map tunables <crush-map-tunables>` for details.
-  default: hammer
-  services:
-  - mgr
-  see_also:
-  - mon_warn_on_legacy_crush_tunables
-  with_legacy: true
-- name: mon_warn_on_crush_straw_calc_version_zero
-  type: bool
-  level: advanced
-  desc: issue OLD_CRUSH_STRAW_CALC_VERSION health warning if the CRUSH map's straw_calc_version
-    is zero
-  fmt_desc: Raise ``HEALTH_WARN`` when the CRUSH ``straw_calc_version`` is zero. See
-    :ref:`CRUSH map tunables <crush-map-tunables>` for details.
-  default: true
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_warn_on_osd_down_out_interval_zero
-  type: bool
-  level: advanced
-  desc: issue OSD_NO_DOWN_OUT_INTERVAL health warning if mon_osd_down_out_interval
-    is zero
-  long_desc: Having mon_osd_down_out_interval set to 0 means that down OSDs are not
-    marked out automatically and the cluster does not heal itself without administrator
-    intervention.
-  fmt_desc: Raise ``HEALTH_WARN`` when ``mon_osd_down_out_interval`` is zero. Having this
-    option set to zero on the leader acts much like the ``noout`` flag. It's hard to figure
-    out what's going wrong with clusters without the ``noout`` flag set but acting like that
-    just the same, so we report a warning in this case.
-  default: true
-  services:
-  - mgr
-  see_also:
-  - mon_osd_down_out_interval
-  with_legacy: true
-- name: mon_warn_on_cache_pools_without_hit_sets
-  type: bool
-  level: advanced
-  desc: issue CACHE_POOL_NO_HIT_SET health warning for cache pools that do not have
-    hit sets configured
-  fmt_desc: Raise ``HEALTH_WARN`` when a cache pool does not have the ``hit_set_type``
-    value configured. See :ref:`hit_set_type <hit_set_type>` for more details.
-  default: true
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_warn_on_pool_no_app
-  type: bool
-  level: dev
-  desc: issue POOL_APP_NOT_ENABLED health warning if pool has not application enabled
-  default: true
-  services:
-  - mgr
-- name: mon_warn_on_pool_pg_num_not_power_of_two
-  type: bool
-  level: dev
-  desc: issue POOL_PG_NUM_NOT_POWER_OF_TWO warning if pool has a non-power-of-two
-    pg_num value
-  default: true
-  services:
-  - mon
-- name: mon_warn_on_pool_no_redundancy
-  type: bool
-  level: advanced
-  desc: Issue a health warning if any pool is configured with no replicas
-  fmt_desc: Raise ``HEALTH_WARN`` if any pool is configured with no replicas.
-  default: true
-  services:
-  - mon
-  see_also:
-  - osd_pool_default_size
-  - osd_pool_default_min_size
-- name: mon_allow_pool_size_one
-  type: bool
-  level: advanced
-  desc: allow configuring pool with no replicas
-  default: false
-  services:
-  - mon
-- name: mon_warn_on_misplaced
-  type: bool
-  level: advanced
-  desc: Issue a health warning if there are misplaced objects
-  default: false
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_warn_on_too_few_osds
-  type: bool
-  level: advanced
-  desc: Issue a health warning if there are fewer OSDs than osd_pool_default_size
-  default: true
-  services:
-  - mgr
 - name: mon_warn_on_slow_ping_time
   type: float
   level: advanced
@@ -2557,6 +1639,7 @@ options:
   default: 0
   services:
   - mgr
+  - osd
   see_also:
   - mon_warn_on_slow_ping_ratio
 - name: mon_warn_on_slow_ping_ratio
@@ -2568,6 +1651,7 @@ options:
   default: 0.05
   services:
   - mgr
+  - osd
   see_also:
   - osd_heartbeat_grace
   - mon_warn_on_slow_ping_time
@@ -2636,158 +1720,6 @@ options:
   desc: max bytes of outstanding client messages mon will read off the network
   fmt_desc: The amount of client message data allowed in memory (in bytes).
   default: 100_M
-  services:
-  - mon
-  with_legacy: true
-- name: mon_daemon_bytes
-  type: size
-  level: advanced
-  desc: max bytes of outstanding mon messages mon will read off the network
-  fmt_desc: The message memory cap for metadata server and OSD messages (in bytes).
-  default: 400_M
-  services:
-  - mon
-  with_legacy: true
-- name: mon_mgr_proxy_client_bytes_ratio
-  type: float
-  level: dev
-  desc: ratio of mon_client_bytes that can be consumed by proxied mgr commands before
-    we error out to client
-  default: 0.3
-  services:
-  - mon
-- name: mon_log_max_summary
-  type: uint
-  level: advanced
-  desc: number of recent cluster log messages to retain
-  default: 50
-  services:
-  - mon
-  with_legacy: true
-- name: mon_max_log_entries_per_event
-  type: int
-  level: advanced
-  desc: max cluster log entries per paxos event
-  fmt_desc: The maximum number of log entries per event.
-  default: 4096
-  services:
-  - mon
-  with_legacy: true
-# min pgs per osd for reweight-by-pg command
-- name: mon_reweight_min_pgs_per_osd
-  type: uint
-  level: advanced
-  default: 10
-  services:
-  - mgr
-  with_legacy: true
-# min bytes per osd for reweight-by-utilization command
-- name: mon_reweight_min_bytes_per_osd
-  type: size
-  level: advanced
-  default: 100_M
-  services:
-  - mgr
-  with_legacy: true
-# max osds to change per reweight-by-* command
-- name: mon_reweight_max_osds
-  type: int
-  level: advanced
-  default: 4
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_reweight_max_change
-  type: float
-  level: advanced
-  default: 0.05
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_health_to_clog
-  type: bool
-  level: advanced
-  desc: log monitor health to cluster log
-  fmt_desc: Enable sending a health summary to the cluster log periodically.
-  default: true
-  services:
-  - mon
-  with_legacy: true
-- name: mon_health_to_clog_interval
-  type: int
-  level: advanced
-  desc: frequency to log monitor health to cluster log
-  fmt_desc: How often (in seconds) the monitor sends a health summary to the cluster
-    log (a non-positive number disables). Monitors will always
-    send a summary to the cluster log whether or not it differs from
-    the previous summary.
-  default: 10_min
-  services:
-  - mon
-  see_also:
-  - mon_health_to_clog
-  with_legacy: true
-- name: mon_health_to_clog_tick_interval
-  type: float
-  level: dev
-  fmt_desc: How often (in seconds) the monitor sends a health summary to the cluster
-    log (a non-positive number disables). If current health summary
-    is empty or identical to the last time, monitor will not send it
-    to cluster log.
-  default: 1_min
-  services:
-  - mon
-  with_legacy: true
-- name: mon_health_detail_to_clog
-  type: bool
-  level: dev
-  desc: log health detail to cluster log
-  default: true
-  with_legacy: true
-- name: mon_health_max_detail
-  type: uint
-  level: advanced
-  desc: max detailed pgs to report in health detail
-  default: 50
-  services:
-  - mon
-- name: mon_health_log_update_period
-  type: int
-  level: dev
-  desc: minimum time in seconds between log messages about each health check
-  default: 5
-  services:
-  - mon
-  min: 0
-- name: mon_data_avail_crit
-  type: int
-  level: advanced
-  desc: issue MON_DISK_CRIT health error when mon available space below this percentage
-  fmt_desc: Raise ``HEALTH_ERR`` status when the filesystem that houses a
-    monitor's data store reports that its available capacity is
-    less than or equal to this percentage.
-  default: 5
-  services:
-  - mon
-  with_legacy: true
-- name: mon_data_avail_warn
-  type: int
-  level: advanced
-  desc: issue MON_DISK_LOW health warning when mon available space below this percentage
-  fmt_desc: Raise ``HEALTH_WARN`` status when the filesystem that houses a
-    monitor's data store reports that its available capacity is
-    less than or equal to this percentage .
-  default: 30
-  services:
-  - mon
-  with_legacy: true
-- name: mon_data_size_warn
-  type: size
-  level: advanced
-  desc: issue MON_DISK_BIG health warning when mon database is above this size
-  fmt_desc: Raise ``HEALTH_WARN`` status when a monitor's data
-    store grows to be larger than this size, 15GB by default.
-  default: 15_G
   services:
   - mon
   with_legacy: true
@@ -2954,29 +1886,6 @@ options:
   services:
   - mon
   with_legacy: true
-# force mon to trim mdsmaps to this point (dangerous)
-- name: mon_mds_force_trim_to
-  type: int
-  level: dev
-  desc: force mons to trim mdsmaps/fsmaps through this epoch
-  fmt_desc: Force monitor to trim mdsmaps to this point (0 disables it.
-    dangerous, use with care)
-  default: 0
-  services:
-  - mon
-  with_legacy: true
-# skip safety assertions on FSMap (in case of bugs where we want to continue anyway)
-- name: mon_mds_skip_sanity
-  type: bool
-  level: advanced
-  desc: skip sanity checks on fsmap/mdsmap
-  fmt_desc: Skip safety assertions on FSMap (in case of bugs where we want to
-    continue anyway). Monitor terminates if the FSMap sanity check
-    fails, but we can disable it by enabling this option.
-  default: false
-  services:
-  - mon
-  with_legacy: true
 - name: mon_debug_extra_checks
   type: bool
   level: dev
@@ -3140,183 +2049,6 @@ options:
   type: bool
   level: dev
   default: false
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_blocklist_default_expire
-  type: float
-  level: advanced
-  desc: Duration in seconds that blocklist entries for clients remain in the OSD map
-  default: 1_hr
-  services:
-  - mon
-  with_legacy: true
-- name: mon_mds_blocklist_interval
-  type: float
-  level: dev
-  desc: Duration in seconds that blocklist entries for MDS daemons remain in the OSD
-    map
-  default: 1_day
-  services:
-  - mon
-  min: 1_hr
-  flags:
-  - runtime
-- name: mon_mgr_blocklist_interval
-  type: float
-  level: dev
-  desc: Duration in seconds that blocklist entries for mgr daemons remain in the OSD
-    map
-  default: 1_day
-  services:
-  - mon
-  min: 1_hr
-  flags:
-  - runtime
-- name: mon_osd_crush_smoke_test
-  type: bool
-  level: advanced
-  desc: perform a smoke test on any new CRUSH map before accepting changes
-  default: true
-  services:
-  - mon
-  with_legacy: true
-- name: mon_smart_report_timeout
-  type: uint
-  level: advanced
-  desc: Timeout (in seconds) for smarctl to run, default is set to 5
-  default: 5
-  services:
-  - mon
-- name: mon_auth_validate_all_caps
-  type: bool
-  level: advanced
-  desc: Whether to parse non-monitor capabilities set by the 'ceph auth ...' commands.
-    Disabling this saves CPU on the monitor, but allows invalid capabilities to be
-    set, and only be rejected later, when they are used.
-  default: true
-  services:
-  - mon
-  flags:
-  - runtime
-- name: mon_warn_on_older_version
-  type: bool
-  level: advanced
-  desc: issue DAEMON_OLD_VERSION health warning if daemons are not all running the
-    same version
-  default: true
-  services:
-  - mon
-- name: mon_warn_older_version_delay
-  type: secs
-  level: advanced
-  desc: issue DAEMON_OLD_VERSION health warning after this amount of time has elapsed
-  default: 7_day
-  services:
-  - mon
-# how often (in commits) to stash a full copy of the PaxosService state
-- name: paxos_stash_full_interval
-  type: int
-  level: advanced
-  default: 25
-  services:
-  - mon
-  fmt_desc: How often (in commits) to stash a full copy of the PaxosService state.
-    Current this setting only affects ``mds``, ``mon``, ``auth`` and ``mgr``
-    PaxosServices.
-  with_legacy: true
-# max paxos iterations before we must first sync the monitor stores
-- name: paxos_max_join_drift
-  type: int
-  level: advanced
-  default: 10
-  services:
-  - mon
-  fmt_desc: The maximum Paxos iterations before we must first sync the
-    monitor data stores. When a monitor finds that its peer is too
-    far ahead of it, it will first sync with data stores before moving
-    on.
-  with_legacy: true
-# gather updates for this long before proposing a map update
-- name: paxos_propose_interval
-  type: float
-  level: advanced
-  default: 1
-  services:
-  - mon
-  fmt_desc: Gather updates for this time interval before proposing
-    a map update.
-  with_legacy: true
-# min time to gather updates for after period of inactivity
-- name: paxos_min_wait
-  type: float
-  level: advanced
-  default: 0.05
-  services:
-  - mon
-  fmt_desc: The minimum amount of time to gather updates after a period of
-    inactivity.
-  with_legacy: true
-# minimum number of paxos states to keep around
-- name: paxos_min
-  type: int
-  level: advanced
-  default: 500
-  services:
-  - mon
-  fmt_desc: The minimum number of Paxos states to keep around
-  with_legacy: true
-# number of extra proposals tolerated before trimming
-- name: paxos_trim_min
-  type: int
-  level: advanced
-  default: 250
-  services:
-  - mon
-  fmt_desc: Number of extra proposals tolerated before trimming
-  with_legacy: true
-# maximum amount of versions to trim during a single proposal (0 disables it)
-- name: paxos_trim_max
-  type: int
-  level: advanced
-  default: 500
-  services:
-  - mon
-  fmt_desc: The maximum number of extra proposals to trim at a time
-  with_legacy: true
-# minimum amount of versions to trigger a trim (0 disables it)
-- name: paxos_service_trim_min
-  type: uint
-  level: advanced
-  default: 250
-  services:
-  - mon
-  fmt_desc: The minimum amount of versions to trigger a trim (0 disables it)
-  with_legacy: true
-# maximum amount of versions to trim during a single proposal (0 disables it)
-- name: paxos_service_trim_max
-  type: uint
-  level: advanced
-  default: 500
-  services:
-  - mon
-  fmt_desc: The maximum amount of versions to trim during a single proposal (0 disables it)
-  with_legacy: true
-- name: paxos_service_trim_max_multiplier
-  type: uint
-  level: advanced
-  desc: factor by which paxos_service_trim_max will be multiplied to get a new upper
-    bound when trim sizes are high  (0 disables it)
-  default: 20
-  services:
-  - mon
-  min: 0
-  flags:
-  - runtime
-- name: paxos_kill_at
-  type: int
-  level: dev
-  default: 0
   services:
   - mon
   with_legacy: true
@@ -3540,25 +2272,6 @@ options:
   desc: Number of times to try sending a command directed at a specific monitor
   default: 2
   with_legacy: true
-- name: mon_max_pool_pg_num
-  type: uint
-  level: advanced
-  default: 64_K
-  fmt_desc: The maximum number of placement groups per pool.
-- name: mon_pool_quota_warn_threshold
-  type: int
-  level: advanced
-  desc: percent of quota at which to issue warnings
-  default: 0
-  services:
-  - mgr
-- name: mon_pool_quota_crit_threshold
-  type: int
-  level: advanced
-  desc: percent of quota at which to issue errors
-  default: 0
-  services:
-  - mgr
 # whitespace-separated list of key=value pairs describing crush location
 - name: crush_location
   type: str
@@ -3672,250 +2385,6 @@ options:
   default: 100
   flags:
   - runtime
-- name: osd_numa_prefer_iface
-  type: bool
-  level: advanced
-  desc: prefer IP on network interface on same numa node as storage
-  default: true
-  see_also:
-  - osd_numa_auto_affinity
-  flags:
-  - startup
-- name: osd_numa_auto_affinity
-  type: bool
-  level: advanced
-  desc: automatically set affinity to numa node when storage and network match
-  default: true
-  flags:
-  - startup
-- name: osd_numa_node
-  type: int
-  level: advanced
-  desc: set affinity to a numa node (-1 for none)
-  default: -1
-  see_also:
-  - osd_numa_auto_affinity
-  flags:
-  - startup
-- name: osd_smart_report_timeout
-  type: uint
-  level: advanced
-  desc: Timeout (in seconds) for smarctl to run, default is set to 5
-  default: 5
-# verify backend can support configured max object name length
-- name: osd_check_max_object_name_len_on_startup
-  type: bool
-  level: dev
-  default: true
-  with_legacy: true
-- name: osd_max_backfills
-  type: uint
-  level: advanced
-  desc: Maximum number of concurrent local and remote backfills or recoveries per
-    OSD
-  long_desc: There can be osd_max_backfills local reservations AND the same remote
-    reservations per OSD. So a value of 1 lets this OSD participate as 1 PG primary
-    in recovery and 1 shard of another recovering PG.
-  fmt_desc: The maximum number of backfills allowed to or from a single OSD.
-    Note that this is applied separately for read and write operations.
-  default: 1
-  flags:
-  - runtime
-  with_legacy: true
-# Minimum recovery priority (255 = max, smaller = lower)
-- name: osd_min_recovery_priority
-  type: int
-  level: advanced
-  desc: Minimum priority below which recovery is not performed
-  long_desc: The purpose here is to prevent the cluster from doing *any* lower priority
-    work (e.g., rebalancing) below this threshold and focus solely on higher priority
-    work (e.g., replicating degraded objects).
-  default: 0
-  with_legacy: true
-- name: osd_backfill_retry_interval
-  type: float
-  level: advanced
-  desc: how frequently to retry backfill reservations after being denied (e.g., due
-    to a full OSD)
-  fmt_desc: The number of seconds to wait before retrying backfill requests.
-  default: 30
-  with_legacy: true
-- name: osd_recovery_retry_interval
-  type: float
-  level: advanced
-  desc: how frequently to retry recovery reservations after being denied (e.g., due
-    to a full OSD)
-  default: 30
-  with_legacy: true
-- name: osd_agent_max_ops
-  type: int
-  level: advanced
-  desc: maximum concurrent tiering operations for tiering agent
-  fmt_desc: The maximum number of simultaneous flushing ops per tiering agent
-    in the high speed mode.
-  default: 4
-  with_legacy: true
-- name: osd_agent_max_low_ops
-  type: int
-  level: advanced
-  desc: maximum concurrent low-priority tiering operations for tiering agent
-  fmt_desc: The maximum number of simultaneous flushing ops per tiering agent
-    in the low speed mode.
-  default: 2
-  with_legacy: true
-- name: osd_agent_min_evict_effort
-  type: float
-  level: advanced
-  desc: minimum effort to expend evicting clean objects
-  default: 0.1
-  min: 0
-  max: 0.99
-  with_legacy: true
-- name: osd_agent_quantize_effort
-  type: float
-  level: advanced
-  desc: size of quantize unit for eviction effort
-  default: 0.1
-  with_legacy: true
-- name: osd_agent_delay_time
-  type: float
-  level: advanced
-  desc: how long agent should sleep if it has no work to do
-  default: 5
-  with_legacy: true
-- name: osd_find_best_info_ignore_history_les
-  type: bool
-  level: dev
-  desc: ignore last_epoch_started value when peering AND PROBABLY LOSE DATA
-  long_desc: THIS IS AN EXTREMELY DANGEROUS OPTION THAT SHOULD ONLY BE USED AT THE
-    DIRECTION OF A DEVELOPER.  It makes peering ignore the last_epoch_started value
-    when peering, which can allow the OSD to believe an OSD has an authoritative view
-    of a PG's contents even when it is in fact old and stale, typically leading to
-    data loss (by believing a stale PG is up to date).
-  default: false
-  with_legacy: true
-# decay atime and hist histograms after how many objects go by
-- name: osd_agent_hist_halflife
-  type: int
-  level: advanced
-  desc: halflife of agent atime and temp histograms
-  default: 1000
-  with_legacy: true
-# decay atime and hist histograms after how many objects go by
-- name: osd_agent_slop
-  type: float
-  level: advanced
-  desc: slop factor to avoid switching tiering flush and eviction mode
-  default: 0.02
-  with_legacy: true
-- name: osd_uuid
-  type: uuid
-  level: advanced
-  desc: uuid label for a new OSD
-  fmt_desc: The universally unique identifier (UUID) for the Ceph OSD Daemon.
-  note: The ``osd_uuid`` applies to a single Ceph OSD Daemon. The ``fsid``
-    applies to the entire cluster.
-  flags:
-  - create
-  with_legacy: true
-- name: osd_data
-  type: str
-  level: advanced
-  desc: path to OSD data
-  fmt_desc: The path to the OSDs data. You must create the directory when
-    deploying Ceph. You should mount a drive for OSD data at this
-    mount point. We do not recommend changing the default.
-  default: /var/lib/ceph/osd/$cluster-$id
-  flags:
-  - no_mon_update
-  with_legacy: true
-- name: osd_journal
-  type: str
-  level: advanced
-  desc: path to OSD journal (when FileStore backend is in use)
-  fmt_desc: The path to the OSD's journal. This may be a path to a file or a
-    block device (such as a partition of an SSD). If it is a file,
-    you must create the directory to contain it. We recommend using a
-    separate fast device when the ``osd_data`` drive is an HDD.
-  default: /var/lib/ceph/osd/$cluster-$id/journal
-  flags:
-  - no_mon_update
-  with_legacy: true
-- name: osd_journal_size
-  type: size
-  level: advanced
-  desc: size of FileStore journal (in MiB)
-  fmt_desc: The size of the journal in megabytes.
-  default: 5_K
-  flags:
-  - create
-  with_legacy: true
-- name: osd_journal_flush_on_shutdown
-  type: bool
-  level: advanced
-  desc: flush FileStore journal contents during clean OSD shutdown
-  default: true
-  with_legacy: true
-- name: osd_compact_on_start
-  type: bool
-  level: advanced
-  desc: compact OSD's object store's OMAP on start
-  default: false
-# flags for specific control purpose during osd mount() process.
-# e.g., can be 1 to skip over replaying journal
-# or 2 to skip over mounting omap or 3 to skip over both.
-# This might be helpful in case the journal is totally corrupted
-# and we still want to bring the osd daemon back normally, etc.
-- name: osd_os_flags
-  type: uint
-  level: dev
-  desc: flags to skip filestore omap or journal initialization
-  default: 0
-- name: osd_max_write_size
-  type: size
-  level: advanced
-  desc: Maximum size of a RADOS write operation in megabytes
-  long_desc: This setting prevents clients from doing very large writes to RADOS.  If
-    you set this to a value below what clients expect, they will receive an error
-    when attempting to write to the cluster.
-  fmt_desc: The maximum size of a write in megabytes.
-  default: 90
-  min: 4
-  with_legacy: true
-- name: osd_max_pgls
-  type: uint
-  level: advanced
-  desc: maximum number of results when listing objects in a pool
-  fmt_desc: The maximum number of placement groups to list. A client
-    requesting a large number can tie up the Ceph OSD Daemon.
-  default: 1_K
-  with_legacy: true
-- name: osd_client_message_size_cap
-  type: size
-  level: advanced
-  desc: maximum memory to devote to in-flight client requests
-  long_desc: If this value is exceeded, the OSD will not read any new client data
-    off of the network until memory is freed.
-  fmt_desc: The largest client data message allowed in memory.
-  default: 500_M
-  with_legacy: true
-- name: osd_client_message_cap
-  type: uint
-  level: advanced
-  desc: maximum number of in-flight client requests
-  default: 0
-  with_legacy: true
-- name: osd_crush_update_weight_set
-  type: bool
-  level: advanced
-  desc: update CRUSH weight-set weights when updating weights
-  long_desc: If this setting is true, we will update the weight-set weights when adjusting
-    an item's weight, effectively making changes take effect immediately, and discarding
-    any previous optimization in the weight-set value.  Setting this value to false
-    will leave it to the balancer to (slowly, presumably) adjust weights to approach
-    the new target value.
-  default: true
-  with_legacy: true
 # 1 = host
 - name: osd_crush_chooseleaf_type
   type: int
@@ -3934,29 +2403,6 @@ options:
   desc: use UTC for hitset timestamps
   long_desc: This setting only exists for compatibility with hammer (and older) clusters.
   default: true
-  with_legacy: true
-- name: osd_crush_update_on_start
-  type: bool
-  level: advanced
-  desc: update OSD CRUSH location on startup
-  default: true
-  with_legacy: true
-- name: osd_class_update_on_start
-  type: bool
-  level: advanced
-  desc: set OSD device class on startup
-  default: true
-  with_legacy: true
-- name: osd_crush_initial_weight
-  type: float
-  level: advanced
-  desc: if >= 0, initial CRUSH weight for newly created OSDs
-  long_desc: If this value is negative, the size of the OSD in TiB is used.
-  fmt_desc: The initial CRUSH weight for newly added OSDs. The default
-    value of this option is ``the size of a newly added OSD in TB``. By default,
-    the initial CRUSH weight for a newly added OSD is set to its device size in
-    TB. See `Weighting Bucket Items`_ for details.
-  default: -1
   with_legacy: true
 # whether turn on fast read on the pool or not
 - name: osd_pool_default_ec_fast_read
@@ -3978,20 +2424,6 @@ options:
     default value of ``-1`` means "pick the rule with the lowest numerical ID and
     use that".  This is to make pool creation work in the absence of rule 0.
   default: -1
-  services:
-  - mon
-- name: osd_pool_erasure_code_stripe_unit
-  type: size
-  level: advanced
-  desc: the amount of data (in bytes) in a data chunk, per stripe
-  fmt_desc: Sets the default size, in bytes, of a chunk of an object
-    stripe for erasure coded pools. Every object of size S
-    will be stored as N stripes, with each data chunk
-    receiving ``stripe unit`` bytes. Each stripe of ``N *
-    stripe unit`` bytes will be encoded/decoded
-    individually. This option can is overridden by the
-    ``stripe_unit`` setting in an erasure code profile.
-  default: 4_K
   services:
   - mon
 - name: osd_pool_default_size
@@ -4036,9 +2468,14 @@ options:
   desc: number of PGs for new pools
   fmt_desc: The default number of placement groups for a pool. The default
     value is the same as ``pg_num`` with ``mkpool``.
+  long_desc: With default value of `osd_pool_default_pg_autoscale_mode` being 
+    `on` the number of PGs for new pools will start out with 1 pg, unless the 
+    user specifies the pg_num.
   default: 32
   services:
   - mon
+  see_also: 
+  - osd_pool_default_pg_autoscale_mode
   flags:
   - runtime
 - name: osd_pool_default_pgp_num
@@ -4086,15 +2523,6 @@ options:
   - osd
   flags:
   - startup
-  with_legacy: true
-# Allows the "peered" state for recovery and backfill below min_size
-- name: osd_allow_recovery_below_min_size
-  type: bool
-  level: dev
-  desc: allow replicated pools to recover with < min_size active members
-  default: true
-  services:
-  - osd
   with_legacy: true
 - name: osd_pool_default_flags
   type: int
@@ -4190,6 +2618,8 @@ options:
   type: str
   level: advanced
   desc: Default PG autoscaling behavior for new pools
+  long_desc: With default value `on`, the autoscaler starts a new pool with 1
+    pg, unless the user specifies the pg_num.
   default: 'on'
   enum_values:
   - 'off'
@@ -4301,568 +2731,30 @@ options:
   default: true
   fmt_desc: Enable removing duplicates in the OSD map.
   with_legacy: true
-- name: osd_map_cache_size
-  type: int
-  level: advanced
-  default: 50
-  fmt_desc: The number of OSD maps to keep cached.
-  with_legacy: true
 - name: osd_map_message_max
   type: int
   level: advanced
   desc: maximum number of OSDMaps to include in a single message
   fmt_desc: The maximum map entries allowed per MOSDMap message.
   default: 40
+  services:
+  - osd
+  - mon
   with_legacy: true
 - name: osd_map_message_max_bytes
   type: size
   level: advanced
   desc: maximum number of bytes worth of OSDMaps to include in a single message
   default: 10_M
+  services:
+  - osd
+  - mon
   with_legacy: true
-# cap on # of inc maps we send to peers, clients
-- name: osd_map_share_max_epochs
-  type: int
-  level: advanced
-  default: 40
-  with_legacy: true
-- name: osd_pg_epoch_max_lag_factor
-  type: float
-  level: advanced
-  desc: Max multiple of the map cache that PGs can lag before we throttle map injest
-  default: 2
-  see_also:
-  - osd_map_cache_size
-- name: osd_inject_bad_map_crc_probability
-  type: float
-  level: dev
-  default: 0
-  with_legacy: true
-- name: osd_inject_failure_on_pg_removal
-  type: bool
-  level: dev
-  default: false
-  with_legacy: true
-# shutdown the OSD if stuatus flipping more than max_markdown_count times in recent max_markdown_period seconds
-- name: osd_max_markdown_period
-  type: int
-  level: advanced
-  default: 10_min
-  with_legacy: true
-- name: osd_max_markdown_count
-  type: int
-  level: advanced
-  default: 5
-  with_legacy: true
-- name: osd_op_pq_max_tokens_per_priority
-  type: uint
-  level: advanced
-  default: 4_M
-  with_legacy: true
-- name: osd_op_pq_min_cost
-  type: size
-  level: advanced
-  default: 64_K
-  with_legacy: true
-# preserve clone_overlap during recovery/migration
-- name: osd_recover_clone_overlap
-  type: bool
-  level: advanced
-  default: true
-  fmt_desc: Preserves clone overlap during recovery. Should always be set
-    to ``true``.
-  with_legacy: true
-- name: osd_num_cache_shards
-  type: size
-  level: advanced
-  desc: The number of cache shards to use in the object store.
-  default: 32
-  flags:
-  - startup
-- name: osd_op_num_threads_per_shard
-  type: int
-  level: advanced
-  default: 0
-  flags:
-  - startup
-  with_legacy: true
-- name: osd_op_num_threads_per_shard_hdd
-  type: int
-  level: advanced
-  default: 1
-  see_also:
-  - osd_op_num_threads_per_shard
-  flags:
-  - startup
-  with_legacy: true
-- name: osd_op_num_threads_per_shard_ssd
-  type: int
-  level: advanced
-  default: 2
-  see_also:
-  - osd_op_num_threads_per_shard
-  flags:
-  - startup
-  with_legacy: true
-- name: osd_op_num_shards
-  type: int
-  level: advanced
-  fmt_desc: The number of shards allocated for a given OSD. Each shard has its own processing queue.
-    PGs on the OSD are distributed evenly in the shard. This setting overrides _ssd and _hdd if
-    non-zero.
-  default: 0
-  flags:
-  - startup
-  with_legacy: true
-- name: osd_op_num_shards_hdd
-  type: int
-  level: advanced
-  fmt_desc: the number of shards allocated for a given OSD (for rotational media).
-  default: 5
-  see_also:
-  - osd_op_num_shards
-  flags:
-  - startup
-  with_legacy: true
-- name: osd_op_num_shards_ssd
-  type: int
-  level: advanced
-  fmt_desc: the number of shards allocated for a given OSD (for solid state media).
-  default: 8
-  see_also:
-  - osd_op_num_shards
-  flags:
-  - startup
-  with_legacy: true
-- name: osd_skip_data_digest
-  type: bool
-  level: dev
-  desc: Do not store full-object checksums if the backend (bluestore) does its own
-    checksums.  Only usable with all BlueStore OSDs.
-  default: false
-# PrioritzedQueue (prio), Weighted Priority Queue (wpq ; default),
-# mclock_opclass, mclock_client, or debug_random. "mclock_opclass"
-# and "mclock_client" are based on the mClock/dmClock algorithm
-# (Gulati, et al. 2010). "mclock_opclass" prioritizes based on the
-# class the operation belongs to. "mclock_client" does the same but
-# also works to ienforce fairness between clients. "debug_random"
-# chooses among all four with equal probability.
-- name: osd_op_queue
-  type: str
-  level: advanced
-  desc: which operation priority queue algorithm to use
-  long_desc: which operation priority queue algorithm to use; mclock_scheduler is
-    currently experimental
-  fmt_desc: This sets the type of queue to be used for prioritizing ops
-    within each OSD. Both queues feature a strict sub-queue which is
-    dequeued before the normal queue. The normal queue is different
-    between implementations. The WeightedPriorityQueue (``wpq``)
-    dequeues operations in relation to their priorities to prevent
-    starvation of any queue. WPQ should help in cases where a few OSDs
-    are more overloaded than others. The new mClockQueue
-    (``mclock_scheduler``) prioritizes operations based on which class
-    they belong to (recovery, scrub, snaptrim, client op, osd subop).
-    See `QoS Based on mClock`_. Requires a restart.
-  default: wpq
-  see_also:
-  - osd_op_queue_cut_off
-  enum_values:
-  - wpq
-  - mclock_scheduler
-  - debug_random
-  with_legacy: true
-# Min priority to go to strict queue. (low, high)
-- name: osd_op_queue_cut_off
-  type: str
-  level: advanced
-  desc: the threshold between high priority ops and low priority ops
-  long_desc: the threshold between high priority ops that use strict priority ordering
-    and low priority ops that use a fairness algorithm that may or may not incorporate
-    priority
-  fmt_desc: This selects which priority ops will be sent to the strict
-    queue verses the normal queue. The ``low`` setting sends all
-    replication ops and higher to the strict queue, while the ``high``
-    option sends only replication acknowledgment ops and higher to
-    the strict queue. Setting this to ``high`` should help when a few
-    OSDs in the cluster are very busy especially when combined with
-    ``wpq`` in the ``osd_op_queue`` setting. OSDs that are very busy
-    handling replication traffic could starve primary client traffic
-    on these OSDs without these settings. Requires a restart.
-  default: high
-  see_also:
-  - osd_op_queue
-  enum_values:
-  - low
-  - high
-  - debug_random
-  with_legacy: true
-- name: osd_mclock_scheduler_client_res
-  type: uint
-  level: advanced
-  desc: IO proportion reserved for each client (default)
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: IO proportion reserved for each client (default).
-  default: 1
-  see_also:
-  - osd_op_queue
-- name: osd_mclock_scheduler_client_wgt
-  type: uint
-  level: advanced
-  desc: IO share for each client (default) over reservation
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: IO share for each client (default) over reservation.
-  default: 1
-  see_also:
-  - osd_op_queue
-- name: osd_mclock_scheduler_client_lim
-  type: uint
-  level: advanced
-  desc: IO limit for each client (default) over reservation
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: IO limit for each client (default) over reservation.
-  default: 999999
-  see_also:
-  - osd_op_queue
-- name: osd_mclock_scheduler_background_recovery_res
-  type: uint
-  level: advanced
-  desc: IO proportion reserved for background recovery (default)
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: IO proportion reserved for background recovery (default).
-  default: 1
-  see_also:
-  - osd_op_queue
-- name: osd_mclock_scheduler_background_recovery_wgt
-  type: uint
-  level: advanced
-  desc: IO share for each background recovery over reservation
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: IO share for each background recovery over reservation.
-  default: 1
-  see_also:
-  - osd_op_queue
-- name: osd_mclock_scheduler_background_recovery_lim
-  type: uint
-  level: advanced
-  desc: IO limit for background recovery over reservation
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: IO limit for background recovery over reservation.
-  default: 999999
-  see_also:
-  - osd_op_queue
-- name: osd_mclock_scheduler_background_best_effort_res
-  type: uint
-  level: advanced
-  desc: IO proportion reserved for background best_effort (default)
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: IO proportion reserved for background best_effort (default).
-  default: 1
-  see_also:
-  - osd_op_queue
-- name: osd_mclock_scheduler_background_best_effort_wgt
-  type: uint
-  level: advanced
-  desc: IO share for each background best_effort over reservation
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: IO share for each background best_effort over reservation.
-  default: 1
-  see_also:
-  - osd_op_queue
-- name: osd_mclock_scheduler_background_best_effort_lim
-  type: uint
-  level: advanced
-  desc: IO limit for background best_effort over reservation
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: IO limit for background best_effort over reservation.
-  default: 999999
-  see_also:
-  - osd_op_queue
-- name: osd_mclock_scheduler_anticipation_timeout
-  type: float
-  level: advanced
-  desc: mclock anticipation timeout in seconds
-  long_desc: the amount of time that mclock waits until the unused resource is forfeited
-  default: 0
-- name: osd_mclock_cost_per_io_usec
-  type: float
-  level: dev
-  desc: Cost per IO in microseconds to consider per OSD (overrides _ssd and _hdd if
-    non-zero)
-  long_desc: This option specifies the cost factor to consider in usec per OSD. This
-    is considered by the mclock scheduler to set an additional cost factor in QoS
-    calculations. Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: Cost per IO in microseconds to consider per OSD (overrides _ssd
-    and _hdd if non-zero)
-  default: 0
-  flags:
-  - runtime
-- name: osd_mclock_cost_per_io_usec_hdd
-  type: float
-  level: dev
-  desc: Cost per IO in microseconds to consider per OSD (for rotational media)
-  long_desc: This option specifies the cost factor to consider in usec per OSD for
-    rotational device type. This is considered by the mclock_scheduler to set an additional
-    cost factor in QoS calculations. Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: Cost per IO in microseconds to consider per OSD (for rotational
-    media)
-  default: 25000
-  flags:
-  - runtime
-- name: osd_mclock_cost_per_io_usec_ssd
-  type: float
-  level: dev
-  desc: Cost per IO in microseconds to consider per OSD (for solid state media)
-  long_desc: This option specifies the cost factor to consider in usec per OSD for
-    solid state device type. This is considered by the mclock_scheduler to set an
-    additional cost factor in QoS calculations. Only considered for osd_op_queue =
-    mclock_scheduler
-  fmt_desc: Cost per IO in microseconds to consider per OSD (for solid state
-    media)
-  default: 50
-  flags:
-  - runtime
-- name: osd_mclock_cost_per_byte_usec
-  type: float
-  level: dev
-  desc: Cost per byte in microseconds to consider per OSD (overrides _ssd and _hdd
-    if non-zero)
-  long_desc: This option specifies the cost per byte to consider in microseconds per
-    OSD. This is considered by the mclock scheduler to set an additional cost factor
-    in QoS calculations. Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: Cost per byte in microseconds to consider per OSD (overrides _ssd
-    and _hdd if non-zero)
-  default: 0
-  flags:
-  - runtime
-- name: osd_mclock_cost_per_byte_usec_hdd
-  type: float
-  level: dev
-  desc: Cost per byte in microseconds to consider per OSD (for rotational media)
-  long_desc: This option specifies the cost per byte to consider in microseconds per
-    OSD for rotational device type. This is considered by the mclock_scheduler to
-    set an additional cost factor in QoS calculations. Only considered for osd_op_queue
-    = mclock_scheduler
-  fmt_desc: Cost per byte in microseconds to consider per OSD (for rotational
-    media)
-  default: 5.2
-  flags:
-  - runtime
-- name: osd_mclock_cost_per_byte_usec_ssd
-  type: float
-  level: dev
-  desc: Cost per byte in microseconds to consider per OSD (for solid state media)
-  long_desc: This option specifies the cost per byte to consider in microseconds per
-    OSD for solid state device type. This is considered by the mclock_scheduler to
-    set an additional cost factor in QoS calculations. Only considered for osd_op_queue
-    = mclock_scheduler
-  fmt_desc: Cost per byte in microseconds to consider per OSD (for solid state
-    media)
-  default: 0.011
-  flags:
-  - runtime
-- name: osd_mclock_max_capacity_iops
-  type: float
-  level: basic
-  desc: Max IOPs capacity (at 4KiB block size) to consider per OSD (overrides _ssd
-    and _hdd if non-zero)
-  long_desc: This option specifies the max osd capacity in iops per OSD. Helps in
-    QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue
-    = mclock_scheduler
-  fmt_desc: Max IOPS capacity (at 4KiB block size) to consider per OSD
-    (overrides _ssd and _hdd if non-zero)
-  default: 0
-  flags:
-  - runtime
-- name: osd_mclock_max_capacity_iops_hdd
-  type: float
-  level: basic
-  desc: Max IOPs capacity (at 4KiB block size) to consider per OSD (for rotational
-    media)
-  long_desc: This option specifies the max OSD capacity in iops per OSD. Helps in
-    QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue
-    = mclock_scheduler
-  fmt_desc: Max IOPS capacity (at 4KiB block size) to consider per OSD (for
-    rotational media)
-  default: 315
-  flags:
-  - runtime
-- name: osd_mclock_max_capacity_iops_ssd
-  type: float
-  level: basic
-  desc: Max IOPs capacity (at 4KiB block size) to consider per OSD (for solid state
-    media)
-  long_desc: This option specifies the max OSD capacity in iops per OSD. Helps in
-    QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue
-    = mclock_scheduler
-  fmt_desc: Max IOPS capacity (at 4KiB block size) to consider per OSD (for
-    solid state media)
-  default: 21500
-  flags:
-  - runtime
-- name: osd_mclock_profile
-  type: str
-  level: advanced
-  desc: Which mclock profile to use
-  long_desc: This option specifies the mclock profile to enable - one among the set
-    of built-in profiles or a custom profile. Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: |
-    This sets the type of mclock profile to use for providing QoS
-    based on operations belonging to different classes (background
-    recovery, scrub, snaptrim, client op, osd subop). Once a built-in
-    profile is enabled, the lower level mclock resource control
-    parameters [*reservation, weight, limit*] and some Ceph
-    configuration parameters are set transparently. Note that the
-    above does not apply for the *custom* profile.
-  default: high_client_ops
-  see_also:
-  - osd_op_queue
-  enum_values:
-  - balanced
-  - high_recovery_ops
-  - high_client_ops
-  - custom
-  flags:
-  - runtime
 # do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
 - name: osd_ignore_stale_divergent_priors
   type: bool
   level: advanced
   default: false
-  with_legacy: true
-# Set to true for testing.  Users should NOT set this.
-# If set to true even after reading enough shards to
-# decode the object, any error will be reported.
-- name: osd_read_ec_check_for_errors
-  type: bool
-  level: advanced
-  default: false
-  with_legacy: true
-# Only use clone_overlap for recovery if there are fewer than
-# osd_recover_clone_overlap_limit entries in the overlap set
-- name: osd_recover_clone_overlap_limit
-  type: uint
-  level: advanced
-  default: 10
-  flags:
-  - runtime
-- name: osd_debug_feed_pullee
-  type: int
-  level: dev
-  desc: Feed a pullee, and force primary to pull a currently missing object from it
-  default: -1
-  with_legacy: true
-- name: osd_backfill_scan_min
-  type: int
-  level: advanced
-  default: 64
-  fmt_desc: The minimum number of objects per backfill scan.
-  with_legacy: true
-- name: osd_backfill_scan_max
-  type: int
-  level: advanced
-  default: 512
-  fmt_desc: The maximum number of objects per backfill scan.p
-  with_legacy: true
-- name: osd_op_thread_timeout
-  type: int
-  level: advanced
-  default: 15
-  fmt_desc: The Ceph OSD Daemon operation thread timeout in seconds.
-  with_legacy: true
-- name: osd_op_thread_suicide_timeout
-  type: int
-  level: advanced
-  default: 150
-  with_legacy: true
-- name: osd_recovery_sleep
-  type: float
-  level: advanced
-  desc: Time in seconds to sleep before next recovery or backfill op
-  fmt_desc: Time in seconds to sleep before the next recovery or backfill op.
-    Increasing this value will slow down recovery operation while
-    client operations will be less impacted.
-  default: 0
-  flags:
-  - runtime
-  with_legacy: true
-- name: osd_recovery_sleep_hdd
-  type: float
-  level: advanced
-  desc: Time in seconds to sleep before next recovery or backfill op for HDDs
-  fmt_desc: Time in seconds to sleep before next recovery or backfill op
-    for HDDs.
-  default: 0.1
-  flags:
-  - runtime
-  with_legacy: true
-- name: osd_recovery_sleep_ssd
-  type: float
-  level: advanced
-  desc: Time in seconds to sleep before next recovery or backfill op for SSDs
-  fmt_desc: Time in seconds to sleep before the next recovery or backfill op
-    for SSDs.
-  default: 0
-  see_also:
-  - osd_recovery_sleep
-  flags:
-  - runtime
-  with_legacy: true
-- name: osd_recovery_sleep_hybrid
-  type: float
-  level: advanced
-  desc: Time in seconds to sleep before next recovery or backfill op when data is
-    on HDD and journal is on SSD
-  fmt_desc: Time in seconds to sleep before the next recovery or backfill op
-    when OSD data is on HDD and OSD journal / WAL+DB is on SSD.
-  default: 0.025
-  see_also:
-  - osd_recovery_sleep
-  flags:
-  - runtime
-- name: osd_snap_trim_sleep
-  type: float
-  level: advanced
-  desc: Time in seconds to sleep before next snap trim (overrides values below)
-  fmt_desc: Time in seconds to sleep before next snap trim op.
-    Increasing this value will slow down snap trimming.
-    This option overrides backend specific variants.
-  default: 0
-  with_legacy: true
-- name: osd_snap_trim_sleep_hdd
-  type: float
-  level: advanced
-  desc: Time in seconds to sleep before next snap trim for HDDs
-  default: 5
-- name: osd_snap_trim_sleep_ssd
-  type: float
-  level: advanced
-  desc: Time in seconds to sleep before next snap trim for SSDs
-  fmt_desc: Time in seconds to sleep before next snap trim op
-    for SSD OSDs (including NVMe).
-  default: 0
-- name: osd_snap_trim_sleep_hybrid
-  type: float
-  level: advanced
-  desc: Time in seconds to sleep before next snap trim when data is on HDD and journal
-    is on SSD
-  fmt_desc: Time in seconds to sleep before next snap trim op
-    when OSD data is on an HDD and the OSD journal or WAL+DB is on an SSD.
-  default: 2
-- name: osd_scrub_invalid_stats
-  type: bool
-  level: advanced
-  default: true
-  with_legacy: true
-- name: osd_command_thread_timeout
-  type: int
-  level: advanced
-  default: 10_min
-  fmt_desc: The maximum time in seconds before timing out a command thread.
-  with_legacy: true
-- name: osd_command_thread_suicide_timeout
-  type: int
-  level: advanced
-  default: 15_min
   with_legacy: true
 - name: osd_heartbeat_interval
   type: int
@@ -4892,12 +2784,6 @@ options:
     them down. The primary benefit is that OSD doesn't need to keep a flood of blocked
     heartbeat messages around in memory.
   default: 10_min
-# minimum number of peers
-- name: osd_heartbeat_min_peers
-  type: int
-  level: advanced
-  default: 10
-  with_legacy: true
 # prio the heartbeat tcp socket and set dscp as CS6 on it if true
 - name: osd_heartbeat_use_min_delay_socket
   type: bool
@@ -4992,411 +2878,6 @@ options:
   type: bool
   level: advanced
   default: false
-  with_legacy: true
-- name: osd_recovery_delay_start
-  type: float
-  level: advanced
-  default: 0
-  fmt_desc: After peering completes, Ceph will delay for the specified number
-    of seconds before starting to recover RADOS objects.
-  with_legacy: true
-- name: osd_recovery_max_active
-  type: uint
-  level: advanced
-  desc: Number of simultaneous active recovery operations per OSD (overrides _ssd
-    and _hdd if non-zero)
-  fmt_desc: The number of active recovery requests per OSD at one time. More
-    requests will accelerate recovery, but the requests places an
-    increased load on the cluster.
-  note: This value is only used if it is non-zero. Normally it
-    is ``0``, which means that the ``hdd`` or ``ssd`` values
-    (below) are used, depending on the type of the primary
-    device backing the OSD.
-  default: 0
-  see_also:
-  - osd_recovery_max_active_hdd
-  - osd_recovery_max_active_ssd
-  flags:
-  - runtime
-  with_legacy: true
-- name: osd_recovery_max_active_hdd
-  type: uint
-  level: advanced
-  desc: Number of simultaneous active recovery operations per OSD (for rotational
-    devices)
-  fmt_desc: The number of active recovery requests per OSD at one time, if the
-    primary device is rotational.
-  default: 3
-  see_also:
-  - osd_recovery_max_active
-  - osd_recovery_max_active_ssd
-  flags:
-  - runtime
-  with_legacy: true
-- name: osd_recovery_max_active_ssd
-  type: uint
-  level: advanced
-  desc: Number of simultaneous active recovery operations per OSD (for non-rotational
-    solid state devices)
-  fmt_desc: The number of active recovery requests per OSD at one time, if the
-    primary device is non-rotational (i.e., an SSD).
-  default: 10
-  see_also:
-  - osd_recovery_max_active
-  - osd_recovery_max_active_hdd
-  flags:
-  - runtime
-  with_legacy: true
-- name: osd_recovery_max_single_start
-  type: uint
-  level: advanced
-  default: 1
-  fmt_desc: The maximum number of recovery operations per OSD that will be
-    newly started when an OSD is recovering.
-  with_legacy: true
-# max size of push chunk
-- name: osd_recovery_max_chunk
-  type: size
-  level: advanced
-  default: 8_M
-  fmt_desc: the maximum total size of data chunks a recovery op can carry.
-  with_legacy: true
-# max number of omap entries per chunk; 0 to disable limit
-- name: osd_recovery_max_omap_entries_per_chunk
-  type: uint
-  level: advanced
-  default: 8096
-  with_legacy: true
-# max size of a COPYFROM chunk
-- name: osd_copyfrom_max_chunk
-  type: size
-  level: advanced
-  default: 8_M
-  with_legacy: true
-# push cost per object
-- name: osd_push_per_object_cost
-  type: size
-  level: advanced
-  default: 1000
-  fmt_desc: the overhead for serving a push op
-  with_legacy: true
-# max size of push message
-- name: osd_max_push_cost
-  type: size
-  level: advanced
-  default: 8_M
-  with_legacy: true
-# max objects in single push op
-- name: osd_max_push_objects
-  type: uint
-  level: advanced
-  default: 10
-  with_legacy: true
-- name: osd_max_scrubs
-  type: int
-  level: advanced
-  desc: Maximum concurrent scrubs on a single OSD
-  fmt_desc: The maximum number of simultaneous scrub operations for
-    a Ceph OSD Daemon.
-  default: 1
-  with_legacy: true
-- name: osd_scrub_during_recovery
-  type: bool
-  level: advanced
-  desc: Allow scrubbing when PGs on the OSD are undergoing recovery
-  fmt_desc: Allow scrub during recovery. Setting this to ``false`` will disable
-    scheduling new scrub (and deep--scrub) while there is active recovery.
-    Already running scrubs will be continued. This might be useful to reduce
-    load on busy clusters.
-  default: false
-  with_legacy: true
-- name: osd_repair_during_recovery
-  type: bool
-  level: advanced
-  desc: Allow requested repairing when PGs on the OSD are undergoing recovery
-  default: false
-  with_legacy: true
-- name: osd_scrub_begin_hour
-  type: int
-  level: advanced
-  desc: Restrict scrubbing to this hour of the day or later
-  long_desc: Use osd_scrub_begin_hour=0 and osd_scrub_end_hour=0 for the entire day.
-  fmt_desc: This restricts scrubbing to this hour of the day or later.
-    Use ``osd_scrub_begin_hour = 0`` and ``osd_scrub_end_hour = 0``
-    to allow scrubbing the entire day.  Along with ``osd_scrub_end_hour``, they define a time
-    window, in which the scrubs can happen.
-    But a scrub will be performed
-    no matter whether the time window allows or not, as long as the placement
-    group's scrub interval exceeds ``osd_scrub_max_interval``.
-  default: 0
-  see_also:
-  - osd_scrub_end_hour
-  min: 0
-  max: 23
-  with_legacy: true
-- name: osd_scrub_end_hour
-  type: int
-  level: advanced
-  desc: Restrict scrubbing to hours of the day earlier than this
-  long_desc: Use osd_scrub_begin_hour=0 and osd_scrub_end_hour=0 for the entire day.
-  fmt_desc: This restricts scrubbing to the hour earlier than this.
-    Use ``osd_scrub_begin_hour = 0`` and ``osd_scrub_end_hour = 0`` to allow scrubbing
-    for the entire day.  Along with ``osd_scrub_begin_hour``, they define a time
-    window, in which the scrubs can happen. But a scrub will be performed
-    no matter whether the time window allows or not, as long as the placement
-    group's scrub interval exceeds ``osd_scrub_max_interval``.
-  default: 0
-  see_also:
-  - osd_scrub_begin_hour
-  min: 0
-  max: 23
-  with_legacy: true
-- name: osd_scrub_begin_week_day
-  type: int
-  level: advanced
-  desc: Restrict scrubbing to this day of the week or later
-  long_desc: 0 = Sunday, 1 = Monday, etc. Use osd_scrub_begin_week_day=0 osd_scrub_end_week_day=0
-    for the entire week.
-  fmt_desc: This restricts scrubbing to this day of the week or later.
-    0  = Sunday, 1 = Monday, etc. Use ``osd_scrub_begin_week_day = 0``
-    and ``osd_scrub_end_week_day = 0`` to allow scrubbing for the entire week.
-    Along with ``osd_scrub_end_week_day``, they define a time window in which
-    scrubs can happen. But a scrub will be performed
-    no matter whether the time window allows or not, when the PG's
-    scrub interval exceeds ``osd_scrub_max_interval``.
-  default: 0
-  see_also:
-  - osd_scrub_end_week_day
-  min: 0
-  max: 6
-  with_legacy: true
-- name: osd_scrub_end_week_day
-  type: int
-  level: advanced
-  desc: Restrict scrubbing to days of the week earlier than this
-  long_desc: 0 = Sunday, 1 = Monday, etc. Use osd_scrub_begin_week_day=0 osd_scrub_end_week_day=0
-    for the entire week.
-  fmt_desc: This restricts scrubbing to days of the week earlier than this.
-    0 = Sunday, 1 = Monday, etc.  Use ``osd_scrub_begin_week_day = 0``
-    and ``osd_scrub_end_week_day = 0`` to allow scrubbing for the entire week.
-    Along with ``osd_scrub_begin_week_day``, they define a time
-    window, in which the scrubs can happen. But a scrub will be performed
-    no matter whether the time window allows or not, as long as the placement
-    group's scrub interval exceeds ``osd_scrub_max_interval``.
-  default: 0
-  see_also:
-  - osd_scrub_begin_week_day
-  min: 0
-  max: 6
-  with_legacy: true
-- name: osd_scrub_load_threshold
-  type: float
-  level: advanced
-  desc: Allow scrubbing when system load divided by number of CPUs is below this value
-  fmt_desc: The normalized maximum load. Ceph will not scrub when the system load
-    (as defined by ``getloadavg() / number of online CPUs``) is higher than this number.
-    Default is ``0.5``.
-  default: 0.5
-  with_legacy: true
-# if load is low
-- name: osd_scrub_min_interval
-  type: float
-  level: advanced
-  desc: Scrub each PG no more often than this interval
-  fmt_desc: The minimal interval in seconds for scrubbing the Ceph OSD Daemon
-    when the Ceph Storage Cluster load is low.
-  default: 1_day
-  see_also:
-  - osd_scrub_max_interval
-  with_legacy: true
-# regardless of load
-- name: osd_scrub_max_interval
-  type: float
-  level: advanced
-  desc: Scrub each PG no less often than this interval
-  fmt_desc: The maximum interval in seconds for scrubbing the Ceph OSD Daemon
-    irrespective of cluster load.
-  default: 7_day
-  see_also:
-  - osd_scrub_min_interval
-  with_legacy: true
-# randomize the scheduled scrub in the span of [min,min*(1+randomize_ratio))
-- name: osd_scrub_interval_randomize_ratio
-  type: float
-  level: advanced
-  desc: Ratio of scrub interval to randomly vary
-  long_desc: This prevents a scrub 'stampede' by randomly varying the scrub intervals
-    so that they are soon uniformly distributed over the week
-  fmt_desc: Add a random delay to ``osd_scrub_min_interval`` when scheduling
-    the next scrub job for a PG. The delay is a random
-    value less than ``osd_scrub_min_interval`` \*
-    ``osd_scrub_interval_randomized_ratio``. The default setting
-    spreads scrubs throughout the allowed time
-    window of ``[1, 1.5]`` \* ``osd_scrub_min_interval``.
-  default: 0.5
-  see_also:
-  - osd_scrub_min_interval
-  with_legacy: true
-# the probability to back off the scheduled scrub
-- name: osd_scrub_backoff_ratio
-  type: float
-  level: dev
-  desc: Backoff ratio for scheduling scrubs
-  long_desc: This is the precentage of ticks that do NOT schedule scrubs, 66% means
-    that 1 out of 3 ticks will schedule scrubs
-  default: 0.66
-  with_legacy: true
-- name: osd_scrub_chunk_min
-  type: int
-  level: advanced
-  desc: Minimum number of objects to scrub in a single chunk
-  fmt_desc: The minimal number of object store chunks to scrub during single operation.
-    Ceph blocks writes to single chunk during scrub.
-  default: 5
-  see_also:
-  - osd_scrub_chunk_max
-  with_legacy: true
-- name: osd_scrub_chunk_max
-  type: int
-  level: advanced
-  desc: Maximum number of objects to scrub in a single chunk
-  fmt_desc: The maximum number of object store chunks to scrub during single operation.
-  default: 25
-  see_also:
-  - osd_scrub_chunk_min
-  with_legacy: true
-# sleep between [deep]scrub ops
-- name: osd_scrub_sleep
-  type: float
-  level: advanced
-  desc: Duration to inject a delay during scrubbing
-  fmt_desc: Time to sleep before scrubbing the next group of chunks. Increasing this value will slow
-    down the overall rate of scrubbing so that client operations will be less impacted.
-  default: 0
-  with_legacy: true
-# more sleep between [deep]scrub ops
-- name: osd_scrub_extended_sleep
-  type: float
-  level: advanced
-  desc: Duration to inject a delay during scrubbing out of scrubbing hours
-  default: 0
-  see_also:
-  - osd_scrub_begin_hour
-  - osd_scrub_end_hour
-  - osd_scrub_begin_week_day
-  - osd_scrub_end_week_day
-  with_legacy: true
-# whether auto-repair inconsistencies upon deep-scrubbing
-- name: osd_scrub_auto_repair
-  type: bool
-  level: advanced
-  desc: Automatically repair damaged objects detected during scrub
-  fmt_desc: Setting this to ``true`` will enable automatic PG repair when errors
-    are found by scrubs or deep-scrubs.  However, if more than
-    ``osd_scrub_auto_repair_num_errors`` errors are found a repair is NOT performed.
-  default: false
-  with_legacy: true
-# only auto-repair when number of errors is below this threshold
-- name: osd_scrub_auto_repair_num_errors
-  type: uint
-  level: advanced
-  desc: Maximum number of detected errors to automatically repair
-  fmt_desc: Auto repair will not occur if more than this many errors are found.
-  default: 5
-  see_also:
-  - osd_scrub_auto_repair
-  with_legacy: true
-- name: osd_scrub_max_preemptions
-  type: uint
-  level: advanced
-  desc: Set the maximum number of times we will preempt a deep scrub due to a client
-    operation before blocking client IO to complete the scrub
-  default: 5
-  min: 0
-  max: 30
-- name: osd_deep_scrub_interval
-  type: float
-  level: advanced
-  desc: Deep scrub each PG (i.e., verify data checksums) at least this often
-  fmt_desc: The interval for "deep" scrubbing (fully reading all data). The
-    ``osd_scrub_load_threshold`` does not affect this setting.
-  default: 7_day
-  with_legacy: true
-- name: osd_deep_scrub_randomize_ratio
-  type: float
-  level: advanced
-  desc: Scrubs will randomly become deep scrubs at this rate (0.15 -> 15% of scrubs
-    are deep)
-  long_desc: This prevents a deep scrub 'stampede' by spreading deep scrubs so they
-    are uniformly distributed over the week
-  default: 0.15
-  with_legacy: true
-- name: osd_deep_scrub_stride
-  type: size
-  level: advanced
-  desc: Number of bytes to read from an object at a time during deep scrub
-  fmt_desc: Read size when doing a deep scrub.
-  default: 512_K
-  with_legacy: true
-- name: osd_deep_scrub_keys
-  type: int
-  level: advanced
-  desc: Number of keys to read from an object at a time during deep scrub
-  default: 1024
-  with_legacy: true
-# objects must be this old (seconds) before we update the whole-object digest on scrub
-- name: osd_deep_scrub_update_digest_min_age
-  type: int
-  level: advanced
-  desc: Update overall object digest only if object was last modified longer ago than
-    this
-  default: 2_hr
-  with_legacy: true
-- name: osd_deep_scrub_large_omap_object_key_threshold
-  type: uint
-  level: advanced
-  desc: Warn when we encounter an object with more omap keys than this
-  default: 200000
-  services:
-  - osd
-  see_also:
-  - osd_deep_scrub_large_omap_object_value_sum_threshold
-  with_legacy: true
-- name: osd_deep_scrub_large_omap_object_value_sum_threshold
-  type: size
-  level: advanced
-  desc: Warn when we encounter an object with more omap key bytes than this
-  default: 1_G
-  services:
-  - osd
-  see_also:
-  - osd_deep_scrub_large_omap_object_key_threshold
-  with_legacy: true
-# where rados plugins are stored
-- name: osd_class_dir
-  type: str
-  level: advanced
-  default: @CMAKE_INSTALL_LIBDIR@/rados-classes
-  fmt_desc: The class path for RADOS class plug-ins.
-  with_legacy: true
-- name: osd_open_classes_on_start
-  type: bool
-  level: advanced
-  default: true
-  with_legacy: true
-# list of object classes allowed to be loaded (allow all: *)
-- name: osd_class_load_list
-  type: str
-  level: advanced
-  default: cephfs hello journal lock log numops otp rbd refcount rgw rgw_gc timeindex
-    user version cas cmpomap queue 2pc_queue fifo
-  with_legacy: true
-# list of object classes with default execute perm (allow all: *)
-- name: osd_class_default_list
-  type: str
-  level: advanced
-  default: cephfs hello journal lock log numops otp rbd refcount rgw rgw_gc timeindex
-    user version cas cmpomap queue 2pc_queue fifo
   with_legacy: true
 - name: osd_check_for_log_corruption
   type: bool
@@ -5616,11 +3097,13 @@ options:
   default: 0.1
   with_legacy: true
 - name: osd_debug_drop_ping_probability
+  desc: N/A
   type: float
   level: dev
   default: 0
   with_legacy: true
 - name: osd_debug_drop_ping_duration
+  desc: N/A
   type: int
   level: dev
   default: 0
@@ -5747,30 +3230,6 @@ options:
   level: advanced
   default: 30
   with_legacy: true
-- name: osd_delete_sleep
-  type: float
-  level: advanced
-  desc: Time in seconds to sleep before next removal transaction (overrides values
-    below)
-  fmt_desc: Time in seconds to sleep before the next removal transaction. This
-    throttles the PG deletion process.
-  default: 0
-- name: osd_delete_sleep_hdd
-  type: float
-  level: advanced
-  desc: Time in seconds to sleep before next removal transaction for HDDs
-  default: 5
-- name: osd_delete_sleep_ssd
-  type: float
-  level: advanced
-  desc: Time in seconds to sleep before next removal transaction for SSDs
-  default: 1
-- name: osd_delete_sleep_hybrid
-  type: float
-  level: advanced
-  desc: Time in seconds to sleep before next removal transaction when OSD data is on HDD
-    and OSD journal or WAL+DB is on SSD
-  default: 1
 # what % full makes an OSD "full" (failsafe)
 - name: osd_failsafe_full_ratio
   type: float
@@ -6041,11 +3500,6 @@ options:
   level: dev
   desc: The block size for index partitions. (0 = rocksdb default)
   default: 4_K
-- name: mon_rocksdb_options
-  type: str
-  level: advanced
-  default: write_buffer_size=33554432,compression=kNoCompression,level_compaction_dynamic_level_bytes=true
-  with_legacy: true
 # osd_*_priority adjust the relative priority of client io, recovery io,
 # snaptrim io, etc
 #
@@ -6207,7 +3661,7 @@ options:
   desc: Max size of the per-op payload for requests with the RETURNVEC flag set
   long_desc: This value caps the amount of data (per op; a request may have many ops)
     that will be sent back to the client and recorded in the PG log.
-  default: 32
+  default: 64
   with_legacy: true
 - name: osd_objectstore
   type: str
@@ -6219,6 +3673,8 @@ options:
   - filestore
   - memstore
   - kstore
+  - seastore
+  - cyanstore
   flags:
   - create
   with_legacy: true
@@ -6294,9 +3750,17 @@ options:
   - bluestore_cache_autotune
   - osd_memory_cache_min
   - osd_memory_base
+  - osd_memory_target_autotune
   min: 896_M
   flags:
   - runtime
+- name: osd_memory_target_autotune
+  type: bool
+  default: false
+  level: advanced
+  desc: If enabled, allow orchestrator to automatically tune osd_memory_target
+  see_also:
+  - osd_memory_target
 - name: osd_memory_target_cgroup_limit_ratio
   type: float
   level: advanced
@@ -6541,9 +4005,15 @@ options:
   desc: Enabled buffered IO for bluefs reads.
   long_desc: When this option is enabled, bluefs will in some cases perform buffered
     reads.  This allows the kernel page cache to act as a secondary cache for things
-    like RocksDB compaction.  For example, if the rocksdb block cache isn't large
-    enough to hold blocks from the compressed SST files itself, they can be read from
-    page cache instead of from the disk.
+    like RocksDB block reads.  For example, if the rocksdb block cache isn't large
+    enough to hold all blocks during OMAP iteration, it may be possible to read them
+    from page cache instead of from the disk.  This can dramatically improve
+    performance when the osd_memory_target is too small to hold all entries in block
+    cache but it does come with downsides.  It has been reported to occasionally
+    cause excessive kernel swapping (and associated stalls) under certain workloads.
+    Currently the best and most consistent performing combination appears to be
+    enabling bluefs_buffered_io and disabling system level swap.  It is possible
+    that this recommendation may change in the future however.
   default: true
   with_legacy: true
 - name: bluefs_sync_write
@@ -6691,7 +4161,7 @@ options:
   with_legacy: true
 # rocksdb ssts (hot/warm)
 - name: bluestore_block_db_size
-  type: uint
+  type: size
   level: dev
   desc: Size of file to create for bluestore_block_db_path
   default: 0
@@ -7314,6 +4784,12 @@ options:
   desc: Run fsck at umount
   default: false
   with_legacy: true
+- name: bluestore_allocation_from_file
+  type: bool
+  level: dev
+  desc: Remove allocation info from RocksDB and store the info in a new allocation file
+  default: true
+  with_legacy: true
 - name: bluestore_fsck_on_umount_deep
   type: bool
   level: dev
@@ -7624,6 +5100,18 @@ options:
   - hdd
   - ssd
   with_legacy: true
+- name: bluestore_avl_alloc_ff_max_search_count
+  type: uint
+  level: dev
+  desc: Search for this many ranges in first-fit mode before switching over to
+    to best-fit mode. 0 to iterate through all ranges for required chunk.
+  default: 100
+- name: bluestore_avl_alloc_ff_max_search_bytes
+  type: size
+  level: dev
+  desc: Maximum distance to search in first-fit mode before switching over to
+    to best-fit mode. 0 to iterate through all ranges for required chunk.
+  default: 16_M
 - name: bluestore_avl_alloc_bf_threshold
   type: uint
   level: dev
@@ -7716,6 +5204,15 @@ options:
   long_desc: How often (in seconds) to print KV sync thread utilization, not logged
     when set to 0 or when utilization is 0%
   default: 10
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluestore_fail_eio
+  type: bool
+  level: dev
+  desc: fail/crash on EIO
+  long_desc: whether bluestore osd fails on eio
+  default: false
   flags:
   - runtime
   with_legacy: true
@@ -7909,6 +5406,8 @@ options:
   type: bool
   level: dev
   default: false
+  fmt_desc: Debugging check on synchronization. This is an expensive operation.
+
   with_legacy: true
 - name: filestore_omap_header_cache_size
   type: size
@@ -8370,21 +5869,13 @@ options:
   level: dev
   default: 0
   with_legacy: true
-- name: mgr_stats_threshold
-  type: int
-  level: advanced
-  desc: Lowest perfcounter priority collected by mgr
-  long_desc: Daemons only set perf counter data to the manager daemon if the counter
-    has a priority higher than this.
-  default: 5
-  min: 0
-  max: 11
 - name: journal_zero_on_create
   type: bool
   level: dev
   default: false
-  fmt_desc: Causes the file store to overwrite the entire journal with
-   ``0``'s during ``mkfs``.
+  fmt_desc: |
+    Causes the file store to overwrite the entire journal with
+    ``0``'s during ``mkfs``.
   with_legacy: true
 # assume journal is not corrupt
 - name: journal_ignore_corruption
@@ -8426,193 +5917,17 @@ options:
   level: advanced
   default: false
   with_legacy: true
-- name: cephadm_path
-  type: str
-  level: advanced
-  desc: Path to cephadm utility
-  default: /usr/sbin/cephadm
-  services:
-  - mgr
-- name: mgr_module_path
-  type: str
-  level: advanced
-  desc: Filesystem path to manager modules.
-  default: @CEPH_INSTALL_DATADIR@/mgr
-  services:
-  - mgr
-- name: mgr_standby_modules
-  type: bool
-  default: true
-  level: advanced
-  desc: Start modules in standby (redirect) mode when mgr is standby
-  long_desc: By default, the standby modules will answer incoming requests with a
-    HTTP redirect to the active manager, allowing users to point their browser at any
-    mgr node and find their way to an active mgr.  However, this mode is problematic
-    when using a load balancer because (1) the redirect locations are usually private
-    IPs and (2) the load balancer can't identify which mgr is the right one to send
-    traffic to. If a load balancer is being used, set this to false.
-- name: mgr_disabled_modules
-  type: str
-  level: advanced
-  desc: List of manager modules never get loaded
-  long_desc: A comma delimited list of module names. This list is read by manager
-    when it starts. By default, manager loads all modules found in specified 'mgr_module_path',
-    and it starts the enabled ones as instructed. The modules in this list will not
-    be loaded at all.
-  default: @mgr_disabled_modules@
-  services:
-  - mgr
-  see_also:
-  - mgr_module_path
-  flags:
-  - startup
-- name: mgr_initial_modules
-  type: str
-  level: basic
-  desc: List of manager modules to enable when the cluster is first started
-  long_desc: This list of module names is read by the monitor when the cluster is
-    first started after installation, to populate the list of enabled manager modules.  Subsequent
-    updates are done using the 'mgr module [enable|disable]' commands.  List may be
-    comma or space separated.
-  default: restful iostat
-  services:
-  - mon
-  flags:
-  - no_mon_update
-  - cluster_create
-- name: mgr_data
-  type: str
-  level: advanced
-  desc: Filesystem path to the ceph-mgr data directory, used to contain keyring.
-  default: /var/lib/ceph/mgr/$cluster-$id
-  services:
-  - mgr
-  flags:
-  - no_mon_update
-- name: mgr_tick_period
-  type: secs
-  level: advanced
-  desc: Period in seconds of beacon messages to monitor
-  default: 2
-  services:
-  - mgr
-- name: mgr_stats_period
-  type: int
-  level: basic
-  desc: Period in seconds of OSD/MDS stats reports to manager
-  long_desc: Use this setting to control the granularity of time series data collection
-    from daemons.  Adjust upwards if the manager CPU load is too high, or if you simply
-    do not require the most up to date performance counter data.
-  default: 5
-  services:
-  - mgr
-- name: mgr_client_bytes
-  type: size
-  level: dev
-  default: 128_M
-  services:
-  - mgr
-- name: mgr_client_messages
-  type: uint
-  level: dev
-  default: 512
-  services:
-  - mgr
-- name: mgr_osd_bytes
-  type: size
-  level: dev
-  default: 512_M
-  services:
-  - mgr
-- name: mgr_osd_messages
-  type: uint
-  level: dev
-  default: 8_K
-  services:
-  - mgr
-- name: mgr_mds_bytes
-  type: size
-  level: dev
-  default: 128_M
-  services:
-  - mgr
-- name: mgr_mds_messages
-  type: uint
-  level: dev
-  default: 128
-  services:
-  - mgr
-- name: mgr_mon_bytes
-  type: size
-  level: dev
-  default: 128_M
-  services:
-  - mgr
-- name: mgr_mon_messages
-  type: uint
-  level: dev
-  default: 128
-  services:
-  - mgr
 - name: mgr_connect_retry_interval
   type: float
   level: dev
   default: 1
   services:
   - common
-- name: mgr_service_beacon_grace
-  type: float
-  level: advanced
-  desc: Period in seconds from last beacon to manager dropping state about a monitored
-    service (RGW, rbd-mirror etc)
-  default: 1_min
-  services:
-  - mgr
 - name: mgr_client_service_daemon_unregister_timeout
   type: float
   level: dev
   desc: Time to wait during shutdown to deregister service with mgr
   default: 1
-- name: mgr_debug_aggressive_pg_num_changes
-  type: bool
-  level: dev
-  desc: Bypass most throttling and safety checks in pg[p]_num controller
-  default: false
-  services:
-  - mgr
-- name: mon_mgr_digest_period
-  type: int
-  level: dev
-  desc: Period in seconds between monitor-to-manager health/status updates
-  default: 5
-  services:
-  - mon
-- name: mon_mgr_beacon_grace
-  type: secs
-  level: advanced
-  desc: Period in seconds from last beacon to monitor marking a manager daemon as
-    failed
-  default: 30
-  services:
-  - mon
-- name: mon_mgr_inactive_grace
-  type: int
-  level: advanced
-  desc: Period in seconds after cluster creation during which cluster may have no
-    active manager
-  long_desc: This grace period enables the cluster to come up cleanly without raising
-    spurious health check failures about managers that aren't online yet
-  default: 1_min
-  services:
-  - mon
-- name: mon_mgr_mkfs_grace
-  type: int
-  level: advanced
-  desc: Period in seconds that the cluster may have no active manager before this
-    is reported as an ERR rather than a WARN
-  default: 2_min
-  services:
-  - mon
 - name: throttler_perf_counter
   type: bool
   level: advanced

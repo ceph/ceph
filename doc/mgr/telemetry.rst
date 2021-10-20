@@ -46,6 +46,13 @@ the per-channel setting has no effect.)
     - cluster description
     - contact email address
 
+* **perf** (default: off): Aggregated performance counter metrics of a cluster, which can be used to
+
+    - reveal overall cluster health
+    - identify workload patterns
+    - troubleshoot issues with latency, throttling, memory management, etc.
+    - monitor cluster performance by daemon types
+
 The data being reported does *not* contain any sensitive
 data like pool names, object names, object contents, hostnames, or device
 serial numbers.
@@ -85,6 +92,7 @@ Individual channels can be enabled or disabled with::
   ceph config set mgr mgr/telemetry/channel_basic false
   ceph config set mgr mgr/telemetry/channel_crash false
   ceph config set mgr mgr/telemetry/channel_device false
+  ceph config set mgr mgr/telemetry/channel_perf false
   ceph telemetry show
   ceph telemetry show-device
 

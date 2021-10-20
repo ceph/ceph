@@ -17,7 +17,7 @@ namespace {
   }
 }
 
-class TestOnode : public Onode {
+class TestOnode final : public Onode {
   onode_layout_t layout;
   bool dirty = false;
 
@@ -30,6 +30,7 @@ public:
     return layout;
   }
   bool is_dirty() const { return dirty; }
+  laddr_t get_hint() const final {return L_ADDR_MIN; }
   ~TestOnode() final = default;
 };
 
@@ -42,13 +43,6 @@ struct object_data_handler_test_t:
   extent_len_t size = 0;
 
   object_data_handler_test_t() {}
-
-  auto submit_transaction(TransactionRef &&t) {
-    return tm->submit_transaction(std::move(t)
-    ).safe_then([this] {
-      return segment_cleaner->run_until_halt();
-    });
-  }
 
   void write(Transaction &t, objaddr_t offset, extent_len_t len, char fill) {
     ceph_assert(offset + len <= known_contents.length());
@@ -63,19 +57,21 @@ struct object_data_handler_test_t:
 	known_contents,
 	offset,
 	len));
-    return ObjectDataHandler().write(
-      ObjectDataHandler::context_t{
-	*tm,
-	t,
-	*onode,
-      },
-      offset,
-      bl).unsafe_get0();
+    with_trans_intr(t, [&](auto &t) {
+      return ObjectDataHandler().write(
+        ObjectDataHandler::context_t{
+          *tm,
+          t,
+          *onode,
+        },
+        offset,
+        bl);
+    }).unsafe_get0();
   }
   void write(objaddr_t offset, extent_len_t len, char fill) {
-    auto t = tm->create_transaction();
+    auto t = create_mutate_transaction();
     write(*t, offset, len, fill);
-    return submit_transaction(std::move(t)).unsafe_get0();
+    return submit_transaction(std::move(t));
   }
 
   void truncate(Transaction &t, objaddr_t offset) {
@@ -84,31 +80,35 @@ struct object_data_handler_test_t:
 	known_contents.c_str() + offset,
 	0,
 	size - offset);
-      ObjectDataHandler().truncate(
-	ObjectDataHandler::context_t{
-	  *tm,
-	  t,
-	  *onode
-	},
-	offset).unsafe_get0();
+      with_trans_intr(t, [&](auto &t) {
+        return ObjectDataHandler().truncate(
+          ObjectDataHandler::context_t{
+            *tm,
+            t,
+            *onode
+          },
+          offset);
+      }).unsafe_get0();
     }
     size = offset;
   }
   void truncate(objaddr_t offset) {
-    auto t = tm->create_transaction();
+    auto t = create_mutate_transaction();
     truncate(*t, offset);
-    return submit_transaction(std::move(t)).unsafe_get0();
+    return submit_transaction(std::move(t));
   }
 
   void read(Transaction &t, objaddr_t offset, extent_len_t len) {
-    bufferlist bl = ObjectDataHandler().read(
-      ObjectDataHandler::context_t{
-	*tm,
-	t,
-	*onode
-      },
-      offset,
-      len).unsafe_get0();
+    bufferlist bl = with_trans_intr(t, [&](auto &t) {
+      return ObjectDataHandler().read(
+        ObjectDataHandler::context_t{
+          *tm,
+          t,
+          *onode
+        },
+        offset,
+        len);
+    }).unsafe_get0();
     bufferlist known;
     known.append(
       bufferptr(
@@ -119,7 +119,7 @@ struct object_data_handler_test_t:
     EXPECT_EQ(bl, known);
   }
   void read(objaddr_t offset, extent_len_t len) {
-    auto t = tm->create_transaction();
+    auto t = create_read_transaction();
     read(*t, offset, len);
   }
   void read_near(objaddr_t offset, extent_len_t len, extent_len_t fuzz) {
@@ -134,6 +134,7 @@ struct object_data_handler_test_t:
   seastar::future<> set_up_fut() final {
     onode = new TestOnode{};
     known_contents = buffer::create(4<<20 /* 4MB */);
+    memset(known_contents.c_str(), 0, known_contents.length());
     size = 0;
     return tm_setup();
   }

@@ -19,19 +19,23 @@
 #include "include/common_fwd.h"
 #include "ceph_time.h"
 #include "ceph_mutex.h"
+#include "fair_mutex.h"
+#include <condition_variable>
 
 class Context;
-class SafeTimerThread;
 
-class SafeTimer
+template <class Mutex> class CommonSafeTimerThread;
+
+template <class Mutex>
+class CommonSafeTimer
 {
   CephContext *cct;
-  ceph::mutex& lock;
-  ceph::condition_variable cond;
+  Mutex& lock;
+  std::condition_variable_any cond;
   bool safe_callbacks;
 
-  friend class SafeTimerThread;
-  SafeTimerThread *thread;
+  friend class CommonSafeTimerThread<Mutex>;
+  class CommonSafeTimerThread<Mutex> *thread;
 
   void timer_thread();
   void _shutdown();
@@ -47,8 +51,8 @@ class SafeTimer
 
 public:
   // This class isn't supposed to be copied
-  SafeTimer(const SafeTimer&) = delete;
-  SafeTimer& operator=(const SafeTimer&) = delete;
+  CommonSafeTimer(const CommonSafeTimer&) = delete;
+  CommonSafeTimer& operator=(const CommonSafeTimer&) = delete;
 
   /* Safe callbacks determines whether callbacks are called with the lock
    * held.
@@ -60,8 +64,8 @@ public:
    * If you are able to relax requirements on cancelled callbacks, then
    * setting safe_callbacks = false eliminates the lock cycle issue.
    * */
-  SafeTimer(CephContext *cct, ceph::mutex &l, bool safe_callbacks=true);
-  virtual ~SafeTimer();
+  CommonSafeTimer(CephContext *cct, Mutex &l, bool safe_callbacks=true);
+  virtual ~CommonSafeTimer();
 
   /* Call with the event_lock UNLOCKED.
    *
@@ -95,5 +99,9 @@ public:
   void cancel_all_events();
 
 };
+
+extern template class CommonSafeTimer<ceph::mutex>;
+extern template class CommonSafeTimer<ceph::fair_mutex>;
+using SafeTimer = class CommonSafeTimer<ceph::mutex>;
 
 #endif

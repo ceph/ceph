@@ -26,7 +26,6 @@
 #include <mach/mach.h>
 #include <mach/mach_time.h>
 
-#include <ostringstream>
 
 #ifndef NSEC_PER_SEC
 #define NSEC_PER_SEC 1000000000ULL
@@ -150,11 +149,11 @@ std::string timespan_str(timespan t)
   // that isn't as lame as this one!
   uint64_t nsec = std::chrono::nanoseconds(t).count();
   std::ostringstream ss;
-  if (nsec < 2000000000) {
-    ss << ((float)nsec / 1000000000) << "s";
+  if (nsec < 2'000'000'000) {
+    ss << ((float)nsec / 1'000'000'000) << "s";
     return ss.str();
   }
-  uint64_t sec = nsec / 1000000000;
+  uint64_t sec = nsec / 1'000'000'000;
   if (sec < 120) {
     ss << sec << "s";
     return ss.str();
@@ -192,8 +191,8 @@ std::string timespan_str(timespan t)
 std::string exact_timespan_str(timespan t)
 {
   uint64_t nsec = std::chrono::nanoseconds(t).count();
-  uint64_t sec = nsec / 1000000000;
-  nsec %= 1000000000;
+  uint64_t sec = nsec / 1'000'000'000;
+  nsec %= 1'000'000'000;
   uint64_t yr = sec / (60 * 60 * 24 * 365);
   std::ostringstream ss;
   if (yr) {
@@ -225,14 +224,12 @@ std::string exact_timespan_str(timespan t)
     ss << min << "m";
     sec -= min * 60;
   }
-  if (sec) {
-    ss << sec;
-  }
-  if (nsec) {
-    ss << ((float)nsec / 1000000000);
-  }
   if (sec || nsec) {
-    ss << "s";
+    if (nsec) {
+      ss << (((float)nsec / 1'000'000'000) + sec) << "s";
+    } else {
+      ss << sec << "s";
+    }
   }
   return ss.str();
 }

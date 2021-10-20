@@ -36,8 +36,6 @@ struct OMapInnerNode
     OMapNode(std::forward<T>(t)...),
     StringKVInnerNodeLayout(get_bptr().c_str()) {}
 
-  static constexpr extent_types_t type = extent_types_t::OMAP_INNER;
-
   omap_node_meta_t get_node_meta() const final { return get_meta(); }
   bool extent_will_overflow(size_t ksize, std::optional<size_t> vsize) const {
     return is_overflow(ksize);
@@ -73,8 +71,8 @@ struct OMapInnerNode
 
   clear_ret clear(omap_context_t oc) final;
 
-  using split_children_ertr = base_ertr;
-  using split_children_ret = split_children_ertr::future
+  using split_children_iertr = base_iertr;
+  using split_children_ret = split_children_iertr::future
           <std::tuple<OMapInnerNodeRef, OMapInnerNodeRef, std::string>>;
   split_children_ret make_split_children(omap_context_t oc);
 
@@ -84,35 +82,37 @@ struct OMapInnerNode
   make_balanced_ret make_balanced(
     omap_context_t oc, OMapNodeRef right) final;
 
-  using make_split_insert_ertr = base_ertr; 
-  using make_split_insert_ret = make_split_insert_ertr::future<mutation_result_t>;
+  using make_split_insert_iertr = base_iertr; 
+  using make_split_insert_ret = make_split_insert_iertr::future<mutation_result_t>;
   make_split_insert_ret make_split_insert(
     omap_context_t oc, internal_iterator_t iter,
     std::string key, laddr_t laddr);
 
-  using merge_entry_ertr = base_ertr;
-  using merge_entry_ret = merge_entry_ertr::future<mutation_result_t>;
+  using merge_entry_iertr = base_iertr;
+  using merge_entry_ret = merge_entry_iertr::future<mutation_result_t>;
   merge_entry_ret merge_entry(
     omap_context_t oc,
     internal_iterator_t iter, OMapNodeRef entry);
 
-  using handle_split_ertr = base_ertr;
-  using handle_split_ret = handle_split_ertr::future<mutation_result_t>;
+  using handle_split_iertr = base_iertr;
+  using handle_split_ret = handle_split_iertr::future<mutation_result_t>;
   handle_split_ret handle_split(
     omap_context_t oc, internal_iterator_t iter,
     mutation_result_t mresult);
 
   std::ostream &print_detail_l(std::ostream &out) const final;
 
+  static constexpr extent_types_t TYPE = extent_types_t::OMAP_INNER;
   extent_types_t get_type() const final {
-    return type;
+    return TYPE;
   }
 
   ceph::bufferlist get_delta() final {
-    assert(!delta_buffer.empty());
     ceph::bufferlist bl;
-    encode(delta_buffer, bl);
-    delta_buffer.clear();
+    if (!delta_buffer.empty()) {
+      encode(delta_buffer, bl);
+      delta_buffer.clear();
+    }
     return bl;
   }
 
@@ -148,8 +148,6 @@ struct OMapLeafNode
   OMapLeafNode(T&&... t) :
     OMapNode(std::forward<T>(t)...),
     StringKVLeafNodeLayout(get_bptr().c_str()) {}
-
-  static constexpr extent_types_t type = extent_types_t::OMAP_LEAF;
 
   omap_node_meta_t get_node_meta() const final { return get_meta(); }
   bool extent_will_overflow(
@@ -188,8 +186,8 @@ struct OMapLeafNode
   clear_ret clear(
     omap_context_t oc) final;
 
-  using split_children_ertr = base_ertr;
-  using split_children_ret = split_children_ertr::future
+  using split_children_iertr = base_iertr;
+  using split_children_ret = split_children_iertr::future
           <std::tuple<OMapLeafNodeRef, OMapLeafNodeRef, std::string>>;
   split_children_ret make_split_children(
     omap_context_t oc);
@@ -202,15 +200,17 @@ struct OMapLeafNode
     omap_context_t oc,
     OMapNodeRef _right) final;
 
+  static constexpr extent_types_t TYPE = extent_types_t::OMAP_LEAF;
   extent_types_t get_type() const final {
-    return type;
+    return TYPE;
   }
 
   ceph::bufferlist get_delta() final {
-    assert(!delta_buffer.empty());
     ceph::bufferlist bl;
-    encode(delta_buffer, bl);
-    delta_buffer.clear();
+    if (!delta_buffer.empty()) {
+      encode(delta_buffer, bl);
+      delta_buffer.clear();
+    }
     return bl;
   }
 

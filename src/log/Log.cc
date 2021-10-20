@@ -12,6 +12,7 @@
 #include "include/ceph_assert.h"
 #include "include/compat.h"
 #include "include/on_exit.h"
+#include "include/uuid.h"
 
 #include "Entry.h"
 #include "LogClock.h"
@@ -165,11 +166,15 @@ void Log::set_graylog_level(int log, int crash)
   m_graylog_crash = crash;
 }
 
-void Log::start_graylog()
+void Log::start_graylog(const std::string& host,
+			const uuid_d& fsid)
 {
   std::scoped_lock lock(m_flush_mutex);
-  if (! m_graylog.get())
+  if (! m_graylog.get()) {
     m_graylog = std::make_shared<Graylog>(m_subs, "dlog");
+    m_graylog->set_hostname(host);
+    m_graylog->set_fsid(fsid);
+  }
 }
 
 
@@ -409,7 +414,9 @@ void Log::dump_recent()
   {
     char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
     ceph_pthread_getname(pthread_id, pthread_name, sizeof(pthread_name));
-    _log_message(fmt::format("  {} / {}",
+    // we want the ID to be printed in the same format as we use for a log entry.
+    // The reason is easier grepping.
+    _log_message(fmt::format("  {:x} / {}",
 			     tid_to_int(pthread_id), pthread_name), true);
   }
 

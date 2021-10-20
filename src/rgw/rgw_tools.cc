@@ -33,9 +33,12 @@
 
 #define READ_CHUNK_LEN (512 * 1024)
 
+using namespace std;
+
 static std::map<std::string, std::string>* ext_mime_map;
 
-int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
+int rgw_init_ioctx(const DoutPrefixProvider *dpp,
+                   librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx, bool create,
 		   bool mostly_omap)
 {
@@ -43,7 +46,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
   if (r == -ENOENT && create) {
     r = rados->pool_create(pool.name.c_str());
     if (r == -ERANGE) {
-      dout(0)
+      ldpp_dout(dpp, 0)
         << __func__
         << " ERROR: librados::Rados::pool_create returned " << cpp_strerror(-r)
         << " (this can be due to a pool or placement group misconfiguration, e.g."
@@ -74,7 +77,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	stringify(bias) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
-	dout(10) << __func__ << " warning: failed to set pg_autoscale_bias on "
+	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_autoscale_bias on "
 		 << pool.name << dendl;
       }
       // set pg_num_min
@@ -85,7 +88,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	stringify(min) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
-	dout(10) << __func__ << " warning: failed to set pg_num_min on "
+	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_num_min on "
 		 << pool.name << dendl;
       }
       // set recovery_priority
@@ -96,7 +99,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	stringify(p) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
-	dout(10) << __func__ << " warning: failed to set recovery_priority on "
+	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set recovery_priority on "
 		 << pool.name << dendl;
       }
     }
@@ -155,7 +158,8 @@ int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
   return 0;
 }
 
-int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+int rgw_put_system_obj(const DoutPrefixProvider *dpp, 
+                       RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
@@ -171,7 +175,7 @@ int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
                   .set_exclusive(exclusive)
                   .set_mtime(set_mtime)
                   .set_attrs(*pattrs)
-                  .write(data, y);
+                  .write(dpp, data, y);
 
   return ret;
 }
@@ -179,7 +183,7 @@ int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info,
-		       boost::optional<obj_version> refresh_version)
+		       boost::optional<obj_version> refresh_version, bool raw_attrs)
 {
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
@@ -197,13 +201,14 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
     int ret = rop.set_attrs(pattrs)
                  .set_last_mod(pmtime)
                  .set_objv_tracker(objv_tracker)
+                 .set_raw_attrs(raw_attrs)
                  .stat(y, dpp);
     if (ret < 0)
       return ret;
 
     ret = rop.set_cache_info(cache_info)
              .set_refresh_version(refresh_version)
-             .read(&bl, y);
+             .read(dpp, &bl, y);
     if (ret == -ECANCELED) {
       /* raced, restart */
       if (!original_readv.empty()) {
@@ -228,7 +233,8 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
   return 0;
 }
 
-int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
+int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 
+                          RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
   auto obj_ctx = sysobj_svc->init_obj_ctx();
@@ -236,12 +242,12 @@ int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const 
   rgw_raw_obj obj(pool, oid);
   return sysobj.wop()
                .set_objv_tracker(objv_tracker)
-               .remove(y);
+               .remove(dpp, y);
 }
 
 thread_local bool is_asio_thread = false;
 
-int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
                       optional_yield y, int flags)
 {
@@ -260,12 +266,12 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
   }
   // work on asio threads should be asynchronous, so warn when they block
   if (is_asio_thread) {
-    dout(20) << "WARNING: blocking librados call" << dendl;
+    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
   }
   return ioctx.operate(oid, op, nullptr, flags);
 }
 
-int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y,
 		      int flags)
 {
@@ -277,12 +283,12 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
     return -ec.value();
   }
   if (is_asio_thread) {
-    dout(20) << "WARNING: blocking librados call" << dendl;
+    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
   }
   return ioctx.operate(oid, op, flags);
 }
 
-int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
+int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                      bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
                      optional_yield y)
 {
@@ -298,7 +304,7 @@ int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
     return -ec.value();
   }
   if (is_asio_thread) {
-    dout(20) << "WARNING: blocking librados call" << dendl;
+    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
   }
   return ioctx.notify2(oid, bl, timeout_ms, pbl);
 }
@@ -341,14 +347,14 @@ void parse_mime_map(const char *buf)
   }
 }
 
-static int ext_mime_map_init(CephContext *cct, const char *ext_map)
+static int ext_mime_map_init(const DoutPrefixProvider *dpp, CephContext *cct, const char *ext_map)
 {
   int fd = open(ext_map, O_RDONLY);
   char *buf = NULL;
   int ret;
   if (fd < 0) {
     ret = -errno;
-    ldout(cct, 0) << __func__ << " failed to open file=" << ext_map
+    ldpp_dout(dpp, 0) << __func__ << " failed to open file=" << ext_map
                   << " : " << cpp_strerror(-ret) << dendl;
     return ret;
   }
@@ -357,7 +363,7 @@ static int ext_mime_map_init(CephContext *cct, const char *ext_map)
   ret = fstat(fd, &st);
   if (ret < 0) {
     ret = -errno;
-    ldout(cct, 0) << __func__ << " failed to stat file=" << ext_map
+    ldpp_dout(dpp, 0) << __func__ << " failed to stat file=" << ext_map
                   << " : " << cpp_strerror(-ret) << dendl;
     goto done;
   }
@@ -365,17 +371,17 @@ static int ext_mime_map_init(CephContext *cct, const char *ext_map)
   buf = (char *)malloc(st.st_size + 1);
   if (!buf) {
     ret = -ENOMEM;
-    ldout(cct, 0) << __func__ << " failed to allocate buf" << dendl;
+    ldpp_dout(dpp, 0) << __func__ << " failed to allocate buf" << dendl;
     goto done;
   }
 
   ret = safe_read(fd, buf, st.st_size + 1);
   if (ret != st.st_size) {
     // huh? file size has changed?
-    ldout(cct, 0) << __func__ << " raced! will retry.." << dendl;
+    ldpp_dout(dpp, 0) << __func__ << " raced! will retry.." << dendl;
     free(buf);
     close(fd);
-    return ext_mime_map_init(cct, ext_map);
+    return ext_mime_map_init(dpp, cct, ext_map);
   }
   buf[st.st_size] = '\0';
 
@@ -485,16 +491,16 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   string req_id = store->zone_unique_id(store->get_new_req_id());
 
-  using namespace rgw::putobj;
-  AtomicObjectProcessor processor(&aio, store, b.get(), nullptr,
-                                  owner.get_id(), obj_ctx, std::move(obj), olh_epoch,
-                                  req_id, dpp, y);
+  std::unique_ptr<rgw::sal::Writer> processor;
+  processor = store->get_atomic_writer(dpp, y, std::move(obj),
+				       owner.get_id(), obj_ctx,
+				       nullptr, olh_epoch, req_id);
 
-  int ret = processor.prepare(y);
+  int ret = processor->prepare(y);
   if (ret < 0)
     return ret;
 
-  DataProcessor *filter = &processor;
+  rgw::sal::DataProcessor *filter = processor.get();
 
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
@@ -503,7 +509,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   if (compression_type != "none") {
     plugin = Compressor::create(store->ctx(), compression_type);
     if (!plugin) {
-      ldout(store->ctx(), 1) << "Cannot load plugin for compression type "
+      ldpp_dout(dpp, 1) << "Cannot load plugin for compression type "
         << compression_type << dendl;
     } else {
       compressor.emplace(store->ctx(), plugin, filter);
@@ -567,7 +573,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
     puser_data = &(*user_data);
   }
 
-  return processor.complete(obj_size, etag,
+  return processor->complete(obj_size, etag,
 			    &mtime, mtime,
 			    attrs, delete_at,
                             nullptr, nullptr,
@@ -580,10 +586,10 @@ void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)
   policy.encode(aclbl.emplace());
 }
 
-int rgw_tools_init(CephContext *cct)
+int rgw_tools_init(const DoutPrefixProvider *dpp, CephContext *cct)
 {
   ext_mime_map = new std::map<std::string, std::string>;
-  ext_mime_map_init(cct, cct->_conf->rgw_mime_types_file.c_str());
+  ext_mime_map_init(dpp, cct, cct->_conf->rgw_mime_types_file.c_str());
   // ignore errors; missing mime.types is not fatal
   return 0;
 }

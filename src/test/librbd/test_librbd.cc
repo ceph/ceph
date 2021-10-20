@@ -2089,6 +2089,91 @@ TEST_F(TestLibRBD, TestCreateLsRenameSnapPP)
   ioctx.close();
 }
 
+TEST_F(TestLibRBD, ConcurrentCreatesUnvalidatedPool)
+{
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, create_pool(true).c_str(),
+                                  &ioctx));
+
+  std::vector<std::string> names;
+  for (int i = 0; i < 4; i++) {
+    names.push_back(get_temp_image_name());
+  }
+  uint64_t size = 2 << 20;
+
+  std::vector<std::thread> threads;
+  for (const auto& name : names) {
+    threads.emplace_back([ioctx, &name, size]() {
+      int order = 0;
+      ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  for (const auto& name : names) {
+    ASSERT_EQ(0, rbd_remove(ioctx, name.c_str()));
+  }
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, CreateThickRemoveFullTry)
+{
+  REQUIRE(!is_librados_test_stub(_rados));
+
+  rados_ioctx_t ioctx;
+  auto pool_name = create_pool(true);
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, pool_name.c_str(), &ioctx));
+
+  int order = 0;
+  auto image_name = get_temp_image_name();
+  uint64_t quota = 10 << 20;
+  uint64_t size = 5 * quota;
+  ASSERT_EQ(0, create_image(ioctx, image_name.c_str(), size, &order));
+
+  // FIXME: this is a workaround for rbd_trash object being created
+  // on the first remove -- pre-create it to avoid bumping into quota
+  ASSERT_EQ(0, rbd_remove(ioctx, image_name.c_str()));
+  ASSERT_EQ(0, create_image(ioctx, image_name.c_str(), size, &order));
+
+  std::string cmdstr = "{\"prefix\": \"osd pool set-quota\", \"pool\": \"" +
+      pool_name + "\", \"field\": \"max_bytes\", \"val\": \"" +
+      std::to_string(quota) + "\"}";
+  char *cmd[1];
+  cmd[0] = (char *)cmdstr.c_str();
+  ASSERT_EQ(0, rados_mon_command(_cluster, (const char **)cmd, 1, "", 0,
+                                 nullptr, 0, nullptr, 0));
+
+  rados_set_pool_full_try(ioctx);
+
+  rbd_image_t image;
+  ASSERT_EQ(0, rbd_open(ioctx, image_name.c_str(), &image, nullptr));
+
+  uint64_t off;
+  size_t len = 1 << 20;
+  ssize_t ret;
+  for (off = 0; off < size; off += len) {
+    ret = rbd_write_zeroes(image, off, len,
+                           RBD_WRITE_ZEROES_FLAG_THICK_PROVISION, 0);
+    if (ret < 0) {
+      break;
+    }
+    ASSERT_EQ(ret, len);
+    sleep(1);
+  }
+  ASSERT_TRUE(off >= quota && off < size);
+  ASSERT_EQ(ret, -EDQUOT);
+
+  ASSERT_EQ(0, rbd_close(image));
+
+  // make sure we have latest map that marked the pool full
+  ASSERT_EQ(0, rados_wait_for_latest_osdmap(_cluster));
+  ASSERT_EQ(0, rbd_remove(ioctx, image_name.c_str()));
+
+  rados_ioctx_destroy(ioctx);
+}
+
 TEST_F(TestLibRBD, TestIO)
 {
   rados_ioctx_t ioctx;
@@ -5197,6 +5282,43 @@ TEST_F(TestLibRBD, SnapRemoveViaLockOwner)
 
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
   ASSERT_TRUE(lock_owner);
+}
+
+TEST_F(TestLibRBD, UpdateFeaturesViaLockOwner) {
+
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  librbd::RBD rbd;
+  int order = 0;
+  //creates full with rbd default features
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  bool lock_owner;
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.update_features(RBD_FEATURE_OBJECT_MAP, false));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.update_features(RBD_FEATURE_OBJECT_MAP, true));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
 }
 
 TEST_F(TestLibRBD, EnableJournalingViaLockOwner)

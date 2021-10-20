@@ -54,11 +54,13 @@
 #define tracepoint(...)
 #endif
 
-using std::string;
-using std::map;
-using std::set;
-using std::vector;
 using std::list;
+using std::map;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
@@ -2314,6 +2316,11 @@ void librados::IoCtx::set_osdmap_full_try()
 void librados::IoCtx::unset_osdmap_full_try()
 {
   io_ctx_impl->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
+}
+
+bool librados::IoCtx::get_pool_full_try()
+{
+  return (io_ctx_impl->extra_op_flags & CEPH_OSD_FLAG_FULL_TRY) != 0;
 }
 
 void librados::IoCtx::set_pool_full_try()

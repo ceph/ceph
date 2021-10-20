@@ -1,4 +1,3 @@
-from __future__ import print_function
 import pkgutil
 if not pkgutil.find_loader('setuptools'):
     from distutils.core import setup

@@ -22,6 +22,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 using rgw::dmclock::Scheduler;
 
 void RGWProcess::RGWWQ::_dump_queue()
@@ -82,7 +83,7 @@ RGWRequest* RGWProcess::RGWWQ::_dequeue() {
 
 void RGWProcess::RGWWQ::_process(RGWRequest *req, ThreadPool::TPHandle &) {
   perfcounter->inc(l_rgw_qactive);
-  process->handle_request(req);
+  process->handle_request(this, req);
   process->req_throttle.put(1);
   perfcounter->inc(l_rgw_qactive, -1);
 }
@@ -143,7 +144,12 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   ldpp_dout(op, 2) << "verifying op permissions" << dendl;
-  ret = op->verify_permission(y);
+  {
+    auto span = rgw_tracer.start_span("verify_permission", s->trace);
+    std::swap(span, s->trace);
+    ret = op->verify_permission(y);
+    std::swap(span, s->trace);
+  }
   if (ret < 0) {
     if (s->system_request) {
       dout(2) << "overriding permissions due to system operation" << dendl;
@@ -164,7 +170,12 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   op->pre_exec();
 
   ldpp_dout(op, 2) << "executing" << dendl;
-  op->execute(y);
+  {
+    auto span = rgw_tracer.start_span("execute", s->trace);
+    std::swap(span, s->trace);
+    op->execute(y);
+    std::swap(span, s->trace);
+  }
 
   ldpp_dout(op, 2) << "completing" << dendl;
   op->complete();
@@ -296,6 +307,11 @@ int process_request(rgw::sal::Store* const store,
       goto done;
     }
 
+    const auto trace_name = std::string(op->name()) + " " + s->trans_id;
+    s->trace = rgw_tracer.start_trace(trace_name);
+    s->trace->SetTag(tracing::OP, op->name());
+    s->trace->SetTag(tracing::TYPE, tracing::REQUEST);
+
     ret = rgw_process_authenticated(handler, op, req, s, yield);
     if (ret < 0) {
       abort_early(s, op, ret, handler, yield);
@@ -308,6 +324,16 @@ int process_request(rgw::sal::Store* const store,
 
 done:
   if (op) {
+    s->trace->SetTag(tracing::RETURN, op->get_ret());
+    if (s->user) {
+      s->trace->SetTag(tracing::USER_ID, s->user->get_id().id);
+    }
+    if (s->bucket) {
+      s->trace->SetTag(tracing::BUCKET_NAME, s->bucket->get_name());
+    }
+    if (s->object) {
+      s->trace->SetTag(tracing::OBJECT_NAME, s->object->get_name());
+    }
     std::string script;
     auto rc = rgw::lua::read_script(s, store, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
     if (rc == -ENOENT) {

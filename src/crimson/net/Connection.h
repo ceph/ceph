@@ -126,7 +126,7 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
 #endif
 
   /// send a message over a connection that has completed its handshake
-  virtual seastar::future<> send(MessageRef msg) = 0;
+  virtual seastar::future<> send(MessageURef msg) = 0;
 
   /// send a keepalive message over a connection that has completed its
   /// handshake
@@ -136,7 +136,7 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   // without dispatching any reset event
   virtual void mark_down() = 0;
 
-  virtual void print(ostream& out) const = 0;
+  virtual void print(std::ostream& out) const = 0;
 
   void set_last_keepalive(clock_t::time_point when) {
     last_keepalive = when;
@@ -151,12 +151,12 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
     virtual ~user_private_t() = default;
   };
 private:
-  unique_ptr<user_private_t> user_private;
+  std::unique_ptr<user_private_t> user_private;
 public:
   bool has_user_private() const {
     return user_private != nullptr;
   }
-  void set_user_private(unique_ptr<user_private_t> new_user_private) {
+  void set_user_private(std::unique_ptr<user_private_t> new_user_private) {
     user_private = std::move(new_user_private);
   }
   user_private_t &get_user_private() {
@@ -165,7 +165,7 @@ public:
   }
 };
 
-inline ostream& operator<<(ostream& out, const Connection& conn) {
+inline std::ostream& operator<<(std::ostream& out, const Connection& conn) {
   out << "[";
   conn.print(out);
   out << "]";

@@ -21,9 +21,9 @@ GenericLogOperation::GenericLogOperation(utime_t dispatch_time,
 
 std::ostream& GenericLogOperation::format(std::ostream &os) const {
   os << "dispatch_time=[" << dispatch_time << "], "
-     << "buf_persist_time=[" << buf_persist_time << "], "
+     << "buf_persist_start_time=[" << buf_persist_start_time << "], "
      << "buf_persist_comp_time=[" << buf_persist_comp_time << "], "
-     << "log_append_time=[" << log_append_time << "], "
+     << "log_append_start_time=[" << log_append_start_time << "], "
      << "log_append_comp_time=[" << log_append_comp_time << "], ";
   return os;
 }
@@ -70,9 +70,9 @@ std::vector<Context*> SyncPointLogOperation::append_sync_point() {
 void SyncPointLogOperation::clear_earlier_sync_point() {
   std::lock_guard locker(m_lock);
   ceph_assert(sync_point->later_sync_point);
-  ceph_assert(sync_point->later_sync_point->earlier_sync_point ==
-              sync_point);
+  ceph_assert(sync_point->later_sync_point->earlier_sync_point == sync_point);
   sync_point->later_sync_point->earlier_sync_point = nullptr;
+  sync_point->later_sync_point = nullptr;
 }
 
 std::vector<Context*> SyncPointLogOperation::swap_on_sync_point_persisted() {
@@ -204,7 +204,7 @@ void WriteLogOperation::init(bool has_data, std::vector<WriteBufferAllocation>::
 }
 
 std::ostream &WriteLogOperation::format(std::ostream &os) const {
-  string op_name = is_writesame ? "(Write Same) " : "(Write) ";
+  std::string op_name = is_writesame ? "(Write Same) " : "(Write) ";
   os << op_name;
   GenericWriteLogOperation::format(os);
   os << ", ";
@@ -226,12 +226,15 @@ std::ostream &operator<<(std::ostream &os,
 
 void WriteLogOperation::complete(int result) {
   GenericWriteLogOperation::complete(result);
-  m_perfcounter->tinc(l_librbd_pwl_log_op_dis_to_buf_t, buf_persist_time - dispatch_time);
-  utime_t buf_lat = buf_persist_comp_time - buf_persist_time;
-  m_perfcounter->tinc(l_librbd_pwl_log_op_buf_to_bufc_t, buf_lat);
-  m_perfcounter->hinc(l_librbd_pwl_log_op_buf_to_bufc_t_hist, buf_lat.to_nsec(),
+  m_perfcounter->tinc(l_librbd_pwl_log_op_dis_to_buf_t,
+                      buf_persist_start_time - dispatch_time);
+  utime_t buf_persist_lat = buf_persist_comp_time - buf_persist_start_time;
+  m_perfcounter->tinc(l_librbd_pwl_log_op_buf_to_bufc_t, buf_persist_lat);
+  m_perfcounter->hinc(l_librbd_pwl_log_op_buf_to_bufc_t_hist,
+                      buf_persist_lat.to_nsec(),
                       log_entry->ram_entry.write_bytes);
-  m_perfcounter->tinc(l_librbd_pwl_log_op_buf_to_app_t, log_append_time - buf_persist_time);
+  m_perfcounter->tinc(l_librbd_pwl_log_op_buf_to_app_t,
+                      log_append_start_time - buf_persist_start_time);
 }
 
 WriteLogOperationSet::WriteLogOperationSet(utime_t dispatched, PerfCounters *perfcounter, std::shared_ptr<SyncPoint> sync_point,

@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import json
 from datetime import datetime
@@ -9,17 +8,17 @@ import requests
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..settings import Settings
-from . import ApiController, BaseController, Controller, ControllerDoc, Endpoint, RESTController
+from . import APIDoc, APIRouter, BaseController, Endpoint, RESTController, Router
 
 
-@Controller('/api/prometheus_receiver', secure=False)
+@Router('/api/prometheus_receiver', secure=False)
 class PrometheusReceiver(BaseController):
     """
     The receiver is needed in order to receive alert notifications (reports)
     """
     notifications = []
 
-    @Endpoint('POST', path='/')
+    @Endpoint('POST', path='/', version=None)
     def fetch_alert(self, **notification):
         notification['notified'] = datetime.now().isoformat()
         notification['id'] = str(len(self.notifications))
@@ -60,8 +59,8 @@ class PrometheusRESTController(RESTController):
         raise DashboardException(content, http_status_code=400, component='prometheus')
 
 
-@ApiController('/prometheus', Scope.PROMETHEUS)
-@ControllerDoc("Prometheus Management API", "Prometheus")
+@APIRouter('/prometheus', Scope.PROMETHEUS)
+@APIDoc("Prometheus Management API", "Prometheus")
 class Prometheus(PrometheusRESTController):
     def list(self, **params):
         return self.alert_proxy('GET', '/alerts', params)
@@ -83,8 +82,8 @@ class Prometheus(PrometheusRESTController):
         return self.alert_proxy('DELETE', '/silence/' + s_id) if s_id else None
 
 
-@ApiController('/prometheus/notifications', Scope.PROMETHEUS)
-@ControllerDoc("Prometheus Notifications Management API", "PrometheusNotifications")
+@APIRouter('/prometheus/notifications', Scope.PROMETHEUS)
+@APIDoc("Prometheus Notifications Management API", "PrometheusNotifications")
 class PrometheusNotifications(RESTController):
 
     def list(self, **params):

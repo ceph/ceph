@@ -1,3 +1,6 @@
+roles:
+- [mgr.x, mon.a, mon.c, mds.a, mds.c, osd.0, client.0]
+- [mgr.y, mgr.z, mon.b, mds.b, osd.1, osd.2, osd.3, client.1]
 
 tasks:
   - install:
@@ -36,6 +39,7 @@ tasks:
         - tasks.mgr.dashboard.test_auth
         - tasks.mgr.dashboard.test_cephfs
         - tasks.mgr.dashboard.test_cluster_configuration
+        - tasks.mgr.dashboard.test_cluster
         - tasks.mgr.dashboard.test_crush_rule
         - tasks.mgr.dashboard.test_erasure_code_profile
         - tasks.mgr.dashboard.test_ganesha
@@ -57,3 +61,4 @@ tasks:
         - tasks.mgr.dashboard.test_summary
         - tasks.mgr.dashboard.test_telemetry
         - tasks.mgr.dashboard.test_user
+        - tasks.mgr.dashboard.test_motd

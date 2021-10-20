@@ -23,6 +23,10 @@ namespace po = boost::program_options;
                   const std::vector<std::string> &ceph_global_args);    \
   int execute_unmap(const po::variables_map &vm,                        \
                     const std::vector<std::string> &ceph_global_args);  \
+  int execute_attach(const po::variables_map &vm,                       \
+                     const std::vector<std::string> &ceph_global_args); \
+  int execute_detach(const po::variables_map &vm,                       \
+                     const std::vector<std::string> &ceph_global_args); \
   }
 
 DECLARE_DEVICE_OPERATIONS(ggate);
@@ -41,30 +45,42 @@ struct DeviceOperations {
                      const std::vector<std::string> &ceph_global_args);
   int (*execute_unmap)(const po::variables_map &vm,
                        const std::vector<std::string> &ceph_global_args);
+  int (*execute_attach)(const po::variables_map &vm,
+                        const std::vector<std::string> &ceph_global_args);
+  int (*execute_detach)(const po::variables_map &vm,
+                        const std::vector<std::string> &ceph_global_args);
 };
 
 const DeviceOperations ggate_operations = {
   ggate::execute_list,
   ggate::execute_map,
   ggate::execute_unmap,
+  ggate::execute_attach,
+  ggate::execute_detach,
 };
 
 const DeviceOperations krbd_operations = {
   kernel::execute_list,
   kernel::execute_map,
   kernel::execute_unmap,
+  kernel::execute_attach,
+  kernel::execute_detach,
 };
 
 const DeviceOperations nbd_operations = {
   nbd::execute_list,
   nbd::execute_map,
   nbd::execute_unmap,
+  nbd::execute_attach,
+  nbd::execute_detach,
 };
 
 const DeviceOperations wnbd_operations = {
   wnbd::execute_list,
   wnbd::execute_map,
   wnbd::execute_unmap,
+  wnbd::execute_attach,
+  wnbd::execute_detach,
 };
 
 enum device_type_t {
@@ -189,6 +205,44 @@ int execute_unmap(const po::variables_map &vm,
   return (*get_device_operations(vm)->execute_unmap)(vm, ceph_global_init_args);
 }
 
+void get_attach_arguments(po::options_description *positional,
+                          po::options_description *options) {
+  add_device_type_option(options);
+  at::add_image_or_snap_spec_options(positional, options,
+                                     at::ARGUMENT_MODIFIER_NONE);
+  options->add_options()
+    ("device", po::value<std::string>()->required(), "specify device path")
+    ("read-only", po::bool_switch(), "attach read-only")
+    ("force", po::bool_switch(), "force attach")
+    ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions")
+    ("quiesce", po::bool_switch(), "use quiesce hooks")
+    ("quiesce-hook", po::value<std::string>(), "quiesce hook path");
+  add_device_specific_options(options);
+}
+
+int execute_attach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+  return (*get_device_operations(vm)->execute_attach)(vm, ceph_global_init_args);
+}
+
+void get_detach_arguments(po::options_description *positional,
+                          po::options_description *options) {
+  add_device_type_option(options);
+  positional->add_options()
+    ("image-or-snap-or-device-spec",
+     "image, snapshot, or device specification\n"
+     "[<pool-name>/]<image-name>[@<snap-name>] or <device-path>");
+  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
+  add_device_specific_options(options);
+}
+
+int execute_detach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+  return (*get_device_operations(vm)->execute_detach)(vm, ceph_global_init_args);
+}
+
 Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
 Shell::Action action_list(
   {"device", "list"}, {"showmapped"}, "List mapped rbd images.", "",
@@ -205,6 +259,14 @@ Shell::Action action_map(
 Shell::Action action_unmap(
   {"device", "unmap"}, {"unmap"}, "Unmap a rbd device.", "",
   &get_unmap_arguments, &execute_unmap);
+
+Shell::Action action_attach(
+  {"device", "attach"}, {}, "Attach image to device.", "",
+  &get_attach_arguments, &execute_attach);
+
+Shell::Action action_detach(
+  {"device", "detach"}, {}, "Detach image from device.", "",
+  &get_detach_arguments, &execute_detach);
 
 } // namespace device
 } // namespace action

@@ -23,6 +23,8 @@
 #include "gtest/gtest.h"
 #include "common/config_proxy.h"
 
+using namespace std;
+
 TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();

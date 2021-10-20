@@ -16,27 +16,30 @@
 
 #include <atomic>
 #include <iostream>
+#include <list>
 #include <memory>
-#include <unistd.h>
+#include <set>
 #include <stdlib.h>
 #include <time.h>
-#include <set>
-#include <list>
-#include "common/ceph_mutex.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "msg/Dispatcher.h"
-#include "msg/msg_types.h"
-#include "msg/Message.h"
-#include "msg/Messenger.h"
-#include "msg/Connection.h"
-#include "messages/MPing.h"
-#include "messages/MCommand.h"
+#include <unistd.h>
 
+#include <boost/random/binomial_distribution.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
-#include <boost/random/binomial_distribution.hpp>
 #include <gtest/gtest.h>
+
+#define MSG_POLICY_UNIT_TESTING
+
+#include "common/ceph_argparse.h"
+#include "common/ceph_mutex.h"
+#include "global/global_init.h"
+#include "messages/MCommand.h"
+#include "messages/MPing.h"
+#include "msg/Connection.h"
+#include "msg/Dispatcher.h"
+#include "msg/Message.h"
+#include "msg/Messenger.h"
+#include "msg/msg_types.h"
 
 typedef boost::mt11213b gen_type;
 
@@ -58,6 +61,8 @@ typedef boost::mt11213b gen_type;
     usleep(1000);                       \
   }                                     \
 } while(0);
+
+using namespace std;
 
 class MessengerTest : public ::testing::TestWithParam<const char*> {
  public:
@@ -2338,8 +2343,7 @@ INSTANTIATE_TEST_SUITE_P(
 );
 
 int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,

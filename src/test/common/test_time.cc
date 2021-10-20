@@ -20,6 +20,7 @@
 #include "gtest/gtest.h"
 #include "include/stringify.h"
 
+using namespace std;
 
 using ceph::real_clock;
 using ceph::real_time;

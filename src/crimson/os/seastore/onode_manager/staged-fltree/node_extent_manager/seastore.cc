@@ -7,12 +7,7 @@
 #include "crimson/os/seastore/onode_manager/staged-fltree/stages/node_stage_layout.h"
 
 namespace {
-
-seastar::logger& logger()
-{
-  return crimson::get_logger(ceph_subsys_filestore);
-}
-
+LOG_PREFIX(OTree::Seastore);
 }
 
 namespace crimson::os::seastore::onode {
@@ -49,20 +44,12 @@ static DeltaRecorderURef create_replay_recorder(
   }
 }
 
-void SeastoreSuper::write_root_laddr(context_t c, laddr_t addr)
-{
-  logger().info("OTree::Seastore: update root {:#x} ...", addr);
-  root_addr = addr;
-  auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
-  nm->get_tm().write_onode_root(c.t, addr);
-}
-
 NodeExtentRef SeastoreNodeExtent::mutate(
     context_t c, DeltaRecorderURef&& _recorder)
 {
-  logger().debug("OTree::Seastore: mutate {:#x} ...", get_laddr());
-  auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
-  auto extent = nm->get_tm().get_mutable_extent(c.t, this);
+  DEBUGT("mutate {} ...", c.t, *this);
+  auto p_handle = static_cast<TransactionManagerHandle*>(&c.nm);
+  auto extent = p_handle->tm.get_mutable_extent(c.t, this);
   auto ret = extent->cast<SeastoreNodeExtent>();
   // A replayed extent may already have an empty recorder, we discard it for
   // simplicity.
@@ -73,23 +60,29 @@ NodeExtentRef SeastoreNodeExtent::mutate(
 
 void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl)
 {
-  logger().debug("OTree::Seastore: replay {:#x} ...", get_laddr());
+  DEBUG("replay {} ...", *this);
   if (!recorder) {
-    auto [node_type, field_type] = get_types();
-    recorder = create_replay_recorder(node_type, field_type);
+    auto header = get_header();
+    auto field_type = header.get_field_type();
+    if (!field_type.has_value()) {
+      ERROR("replay got invalid node -- {}", *this);
+      ceph_abort("fatal error");
+    }
+    auto node_type = header.get_node_type();
+    recorder = create_replay_recorder(node_type, *field_type);
   } else {
 #ifndef NDEBUG
-    auto [node_type, field_type] = get_types();
-    assert(recorder->node_type() == node_type);
-    assert(recorder->field_type() == field_type);
+    auto header = get_header();
+    assert(recorder->node_type() == header.get_node_type());
+    assert(recorder->field_type() == *header.get_field_type());
 #endif
   }
-  assert(is_clean());
-  auto node = do_get_mutable();
+  auto mut = do_get_mutable();
   auto p = bl.cbegin();
   while (p != bl.end()) {
-    recorder->apply_delta(p, node, get_laddr());
+    recorder->apply_delta(p, mut, *this);
   }
+  DEBUG("relay done!");
 }
 
 }

@@ -1,4 +1,5 @@
 #!/bin/sh
+# -*- mode:sh; tab-width:8; indent-tabs-mode:nil -*-
 # vim: set noet ts=8:
 # postinst script for ceph-mds
 #
@@ -41,7 +42,7 @@ case "$1" in
        if ! getent group | grep -q "^$SERVER_GROUP:" ; then
           echo -n "Adding group $SERVER_GROUP.."
           addgroup --quiet --system --gid $SERVER_GID \
-	      $SERVER_GROUP 2>/dev/null ||true
+              $SERVER_GROUP 2>/dev/null ||true
           echo "..done"
        fi
        # 2. create user if not existing
@@ -51,8 +52,8 @@ case "$1" in
                  --system \
                  --no-create-home \
                  --disabled-password \
-	         --uid $SERVER_UID \
-	         --gid $SERVER_GID \
+                 --uid $SERVER_UID \
+                 --gid $SERVER_GID \
                  $SERVER_USER 2>/dev/null || true
          echo "..done"
        fi
@@ -70,27 +71,25 @@ case "$1" in
        fi
        echo "..done"
 
-       # 5. adjust file and directory permissions
-       if ! dpkg-statoverride --list $SERVER_HOME >/dev/null
-       then
+       # 4. adjust file and directory permissions
+       if ! dpkg-statoverride --list $SERVER_HOME >/dev/null; then
            chown $SERVER_USER:$SERVER_GROUP $SERVER_HOME
            chmod u=rwx,g=rx,o= $SERVER_HOME
        fi
-       if ! dpkg-statoverride --list /var/log/ceph >/dev/null
-       then
-	   # take care not to touch cephadm log subdirs
+       if ! dpkg-statoverride --list /var/log/ceph >/dev/null; then
+           # take care not to touch cephadm log subdirs
            chown $SERVER_USER:$SERVER_GROUP /var/log/ceph
-	   chown $SERVER_USER:$SERVER_GROUP /var/log/ceph/*.log* || true
-	   # members of group ceph can log here, but cannot remove
-	   # others' files.  non-members cannot read any logs.
+           chown $SERVER_USER:$SERVER_GROUP /var/log/ceph/*.log* || true
+           # members of group ceph can log here, but cannot remove
+           # others' files.  non-members cannot read any logs.
            chmod u=rwx,g=rwxs,o=t /var/log/ceph
        fi
 
-       # 6. fix /var/run/ceph
+       # 5. fix /var/run/ceph
        if [ -d /var/run/ceph ]; then
-	   echo -n "Fixing /var/run/ceph ownership.."
-	   chown $SERVER_USER:$SERVER_GROUP /var/run/ceph
-	   echo "..done"
+           echo -n "Fixing /var/run/ceph ownership.."
+           chown $SERVER_USER:$SERVER_GROUP /var/run/ceph
+           echo "..done"
        fi
 
        # create /run/ceph.  fail softly if systemd isn't present or
@@ -98,7 +97,7 @@ case "$1" in
        [ -x /bin/systemd-tmpfiles ] && systemd-tmpfiles --create || true
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
-	:
+       :
     ;;
 
     *)

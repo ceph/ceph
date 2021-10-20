@@ -8,6 +8,7 @@
 #include "rgw_tools.h"
 #include "cls_fifo_legacy.h"
 
+using namespace std::chrono_literals;
 namespace cb = ceph::buffer;
 
 static constexpr auto dout_subsys = ceph_subsys_rgw;
@@ -30,105 +31,76 @@ inline std::ostream& operator <<(std::ostream& m, const shard_check& t) {
 
 namespace {
 /// Return the shard type, and a bool to see whether it has entries.
-std::pair<shard_check, bool>
-probe_shard(librados::IoCtx& ioctx, const std::string& oid,
+shard_check
+probe_shard(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
 	    bool& fifo_unsupported, optional_yield y)
 {
-  auto cct = static_cast<CephContext*>(ioctx.cct());
-  bool omap = false;
-  {
-    librados::ObjectReadOperation op;
-    cls_log_header header;
-    cls_log_info(op, &header);
-    auto r = rgw_rados_operate(ioctx, oid, &op, nullptr, y);
-    if (r == -ENOENT) {
-      return { shard_check::dne, {} };
-    }
-
-    if (r < 0) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << " error probing for omap: r=" << r
-		 << ", oid=" << oid << dendl;
-      return { shard_check::corrupt, {} };
-    }
-    if (header != cls_log_header{})
-      omap = true;
-  }
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		     << " probing oid=" << oid
+		     << dendl;
   if (!fifo_unsupported) {
     std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
-    auto r = rgw::cls::fifo::FIFO::open(ioctx, oid,
+    auto r = rgw::cls::fifo::FIFO::open(dpp, ioctx, oid,
 					&fifo, y,
 					std::nullopt, true);
-    if (r < 0 && !(r == -ENOENT || r == -ENODATA || r == -EPERM)) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << " error probing for fifo: r=" << r
-		 << ", oid=" << oid << dendl;
-      return { shard_check::corrupt, {} };
-    }
-    if (fifo && omap) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << " fifo and omap found: oid=" << oid << dendl;
-      return { shard_check::corrupt, {} };
-    }
-    if (fifo) {
-      bool more = false;
-      std::vector<rgw::cls::fifo::list_entry> entries;
-      r = fifo->list(1, nullopt, &entries, &more, y);
-      if (r < 0) {
-	lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		   << ": unable to list entries: r=" << r
-		   << ", oid=" << oid << dendl;
-	return { shard_check::corrupt, {} };
-      }
-      return { shard_check::fifo, !entries.empty() };
-    }
-    if (r == -EPERM) {
-      // Returned by OSD id CLS module not loaded.
-      fifo_unsupported = true;
-    }
-  }
-  if (omap) {
-    std::list<cls_log_entry> entries;
-    std::string out_marker;
-    bool truncated = false;
-    librados::ObjectReadOperation op;
-    cls_log_list(op, {}, {}, {}, 1, entries,
-		 &out_marker, &truncated);
-    auto r = rgw_rados_operate(ioctx, oid, &op, nullptr, y);
-    if (r < 0) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": failed to list: r=" << r << ", oid=" << oid << dendl;
-      return { shard_check::corrupt, {} };
-    }
-    return { shard_check::omap, !entries.empty() };
-  }
+    switch (r) {
+    case 0:
+      ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			 << ": oid=" << oid << " is FIFO"
+			 << dendl;
+      return shard_check::fifo;
 
-  // An object exists, but has never had FIFO or cls_log entries written
-  // to it. Likely just the marker Omap.
-  return { shard_check::dne, {} };
+    case -ENODATA:
+      ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			 << ": oid=" << oid << " is empty and therefore OMAP"
+			 << dendl;
+      return shard_check::omap;
+
+    case -ENOENT:
+      ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			 << ": oid=" << oid << " does not exist"
+			 << dendl;
+      return shard_check::dne;
+
+    case -EPERM:
+      ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			 << ": FIFO is unsupported, marking."
+			 << dendl;
+      fifo_unsupported = true;
+      return shard_check::omap;
+
+    default:
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			 << ": error probing: r=" << r
+			 << ", oid=" << oid << dendl;
+      return shard_check::corrupt;
+    }
+  } else {
+    // Since FIFO is unsupported, OMAP is the only alternative
+    return shard_check::omap;
+  }
 }
 
 tl::expected<log_type, bs::error_code>
-handle_dne(librados::IoCtx& ioctx,
+handle_dne(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx,
 	   log_type def,
 	   std::string oid,
 	   bool fifo_unsupported,
 	   optional_yield y)
 {
-  auto cct = static_cast<CephContext*>(ioctx.cct());
   if (def == log_type::fifo) {
     if (fifo_unsupported) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << " WARNING: FIFO set as default but not supported by OSD. "
 		 << "Falling back to OMAP." << dendl;
       return log_type::omap;
     }
     std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
-    auto r = rgw::cls::fifo::FIFO::create(ioctx, oid,
+    auto r = rgw::cls::fifo::FIFO::create(dpp, ioctx, oid,
 					  &fifo, y,
 					  std::nullopt);
     if (r < 0) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << " error creating FIFO: r=" << r
 		 << ", oid=" << oid << dendl;
       return tl::unexpected(bs::error_code(-r, bs::system_category()));
@@ -139,17 +111,17 @@ handle_dne(librados::IoCtx& ioctx,
 }
 
 tl::expected<log_type, bs::error_code>
-log_backing_type(librados::IoCtx& ioctx,
+log_backing_type(const DoutPrefixProvider *dpp, 
+                 librados::IoCtx& ioctx,
 		 log_type def,
 		 int shards,
 		 const fu2::unique_function<std::string(int) const>& get_oid,
 		 optional_yield y)
 {
-  auto cct = static_cast<CephContext*>(ioctx.cct());
   auto check = shard_check::dne;
   bool fifo_unsupported = false;
   for (int i = 0; i < shards; ++i) {
-    auto [c, e] = probe_shard(ioctx, get_oid(i), fifo_unsupported, y);
+    auto c = probe_shard(dpp, ioctx, get_oid(i), fifo_unsupported, y);
     if (c == shard_check::corrupt)
       return tl::unexpected(bs::error_code(EIO, bs::system_category()));
     if (c == shard_check::dne) continue;
@@ -159,20 +131,20 @@ log_backing_type(librados::IoCtx& ioctx,
     }
 
     if (check != c) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << " clashing types: check=" << check
 		 << ", c=" << c << dendl;
       return tl::unexpected(bs::error_code(EIO, bs::system_category()));
     }
   }
   if (check == shard_check::corrupt) {
-    lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " should be unreachable!" << dendl;
     return tl::unexpected(bs::error_code(EIO, bs::system_category()));
   }
 
   if (check == shard_check::dne)
-    return handle_dne(ioctx,
+    return handle_dne(dpp, ioctx,
 		      def,
 		      get_oid(0),
 		      fifo_unsupported,
@@ -181,20 +153,20 @@ log_backing_type(librados::IoCtx& ioctx,
   return (check == shard_check::fifo ? log_type::fifo : log_type::omap);
 }
 
-bs::error_code log_remove(librados::IoCtx& ioctx,
+bs::error_code log_remove(const DoutPrefixProvider *dpp, 
+                          librados::IoCtx& ioctx,
 			  int shards,
 			  const fu2::unique_function<std::string(int) const>& get_oid,
 			  bool leave_zero,
 			  optional_yield y)
 {
   bs::error_code ec;
-  auto cct = static_cast<CephContext*>(ioctx.cct());
   for (int i = 0; i < shards; ++i) {
     auto oid = get_oid(i);
     rados::cls::fifo::info info;
     uint32_t part_header_size = 0, part_entry_overhead = 0;
 
-    auto r = rgw::cls::fifo::get_meta(ioctx, oid, nullopt, &info,
+    auto r = rgw::cls::fifo::get_meta(dpp, ioctx, oid, std::nullopt, &info,
 				      &part_header_size, &part_entry_overhead,
 				      0, y, true);
     if (r == -ENOENT) continue;
@@ -203,11 +175,11 @@ bs::error_code log_remove(librados::IoCtx& ioctx,
 	librados::ObjectWriteOperation op;
 	op.remove();
 	auto part_oid = info.part_oid(j);
-	auto subr = rgw_rados_operate(ioctx, part_oid, &op, null_yield);
+	auto subr = rgw_rados_operate(dpp, ioctx, part_oid, &op, null_yield);
 	if (subr < 0 && subr != -ENOENT) {
 	  if (!ec)
 	    ec = bs::error_code(-subr, bs::system_category());
-	  lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+	  ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		     << ": failed removing FIFO part: part_oid=" << part_oid
 		     << ", subr=" << subr << dendl;
 	}
@@ -216,7 +188,7 @@ bs::error_code log_remove(librados::IoCtx& ioctx,
     if (r < 0 && r != -ENODATA) {
       if (!ec)
 	ec = bs::error_code(-r, bs::system_category());
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": failed checking FIFO part: oid=" << oid
 		 << ", r=" << r << dendl;
     }
@@ -231,11 +203,11 @@ bs::error_code log_remove(librados::IoCtx& ioctx,
     } else {
       op.remove();
     }
-    r = rgw_rados_operate(ioctx, oid, &op, null_yield);
+    r = rgw_rados_operate(dpp, ioctx, oid, &op, null_yield);
     if (r < 0 && r != -ENOENT) {
       if (!ec)
 	ec = bs::error_code(-r, bs::system_category());
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": failed removing shard: oid=" << oid
 		 << ", r=" << r << dendl;
     }
@@ -255,13 +227,14 @@ logback_generations::~logback_generations() {
   }
 }
 
-bs::error_code logback_generations::setup(log_type def,
+bs::error_code logback_generations::setup(const DoutPrefixProvider *dpp,
+                                          log_type def,
 					  optional_yield y) noexcept
 {
   try {
-    auto cct = static_cast<CephContext*>(ioctx.cct());
     // First, read.
-    auto res = read(y);
+    auto cct = static_cast<CephContext*>(ioctx.cct());
+    auto res = read(dpp, y);
     if (!res && res.error() != bs::errc::no_such_file_or_directory) {
       return res.error();
     }
@@ -272,7 +245,7 @@ bs::error_code logback_generations::setup(log_type def,
       // Are we the first? Then create generation 0 and the generations
       // metadata.
       librados::ObjectWriteOperation op;
-      auto type = log_backing_type(ioctx, def, shards,
+      auto type = log_backing_type(dpp, ioctx, def, shards,
 				   [this](int shard) {
 				     return this->get_oid(0, shard);
 				   }, y);
@@ -295,16 +268,16 @@ bs::error_code logback_generations::setup(log_type def,
       lock.unlock();
 
       op.write_full(bl);
-      auto r = rgw_rados_operate(ioctx, oid, &op, y);
+      auto r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
       if (r < 0 && r != -EEXIST) {
-	lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << ": failed writing oid=" << oid
 		   << ", r=" << r << dendl;
 	bs::system_error(-r, bs::system_category());
       }
       // Did someone race us? Then re-read.
       if (r != 0) {
-	res = read(y);
+	res = read(dpp, y);
 	if (!res)
 	  return res.error();
 	if (res->first.empty())
@@ -314,7 +287,7 @@ bs::error_code logback_generations::setup(log_type def,
 	// generation zero, incremented, then erased generation zero,
 	// don't leave generation zero lying around.
 	if (l.gen_id != 0) {
-	  auto ec = log_remove(ioctx, shards,
+	  auto ec = log_remove(dpp, ioctx, shards,
 			       [this](int shard) {
 				 return this->get_oid(0, shard);
 			       }, true, y);
@@ -333,7 +306,7 @@ bs::error_code logback_generations::setup(log_type def,
     m.unlock();
     auto ec = watch();
     if (ec) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": failed to re-establish watch, unsafe to continue: oid="
 		 << oid << ", ec=" << ec.message() << dendl;
     }
@@ -343,11 +316,10 @@ bs::error_code logback_generations::setup(log_type def,
   }
 }
 
-bs::error_code logback_generations::update(optional_yield y) noexcept
+bs::error_code logback_generations::update(const DoutPrefixProvider *dpp, optional_yield y) noexcept
 {
   try {
-    auto cct = static_cast<CephContext*>(ioctx.cct());
-    auto res = read(y);
+    auto res = read(dpp, y);
     if (!res) {
       return res.error();
     }
@@ -361,7 +333,7 @@ bs::error_code logback_generations::update(optional_yield y) noexcept
 
     // Check consistency and prepare update
     if (es.empty()) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": INCONSISTENCY! Read empty update." << dendl;
       return bs::error_code(EFAULT, bs::system_category());
     }
@@ -370,12 +342,12 @@ bs::error_code logback_generations::update(optional_yield y) noexcept
     assert(cur_lowest != entries_.cend());
     auto new_lowest = lowest_nomempty(es);
     if (new_lowest == es.cend()) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": INCONSISTENCY! Read update with no active head." << dendl;
       return bs::error_code(EFAULT, bs::system_category());
     }
     if (new_lowest->first < cur_lowest->first) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": INCONSISTENCY! Tail moved wrong way." << dendl;
       return bs::error_code(EFAULT, bs::system_category());
     }
@@ -389,7 +361,7 @@ bs::error_code logback_generations::update(optional_yield y) noexcept
     entries_t new_entries;
 
     if ((es.end() - 1)->first < (entries_.end() - 1)->first) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": INCONSISTENCY! Head moved wrong way." << dendl;
       return bs::error_code(EFAULT, bs::system_category());
     }
@@ -420,11 +392,10 @@ bs::error_code logback_generations::update(optional_yield y) noexcept
   return {};
 }
 
-auto logback_generations::read(optional_yield y) noexcept ->
+auto logback_generations::read(const DoutPrefixProvider *dpp, optional_yield y) noexcept ->
   tl::expected<std::pair<entries_t, obj_version>, bs::error_code>
 {
   try {
-    auto cct = static_cast<CephContext*>(ioctx.cct());
     librados::ObjectReadOperation op;
     std::unique_lock l(m);
     cls_version_check(op, version, VER_COND_GE);
@@ -433,14 +404,14 @@ auto logback_generations::read(optional_yield y) noexcept ->
     cls_version_read(op, &v2);
     cb::list bl;
     op.read(0, 0, &bl, nullptr);
-    auto r = rgw_rados_operate(ioctx, oid, &op, nullptr, y);
+    auto r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
     if (r < 0) {
       if (r == -ENOENT) {
-	ldout(cct, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
+	ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		      << ": oid=" << oid
 		      << " not found" << dendl;
       } else {
-	lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << ": failed reading oid=" << oid
 		   << ", r=" << r << dendl;
       }
@@ -459,7 +430,7 @@ auto logback_generations::read(optional_yield y) noexcept ->
   }
 }
 
-bs::error_code logback_generations::write(entries_t&& e,
+bs::error_code logback_generations::write(const DoutPrefixProvider *dpp, entries_t&& e,
 					  std::unique_lock<std::mutex>&& l_,
 					  optional_yield y) noexcept
 {
@@ -467,14 +438,13 @@ bs::error_code logback_generations::write(entries_t&& e,
   ceph_assert(l.mutex() == &m &&
 	      l.owns_lock());
   try {
-    auto cct = static_cast<CephContext*>(ioctx.cct());
     librados::ObjectWriteOperation op;
     cls_version_check(op, version, VER_COND_GE);
     cb::list bl;
     encode(e, bl);
     op.write_full(bl);
     cls_version_inc(op);
-    auto r = rgw_rados_operate(ioctx, oid, &op, y);
+    auto r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
     if (r == 0) {
       entries_ = std::move(e);
       version.inc();
@@ -482,13 +452,13 @@ bs::error_code logback_generations::write(entries_t&& e,
     }
     l.unlock();
     if (r < 0 && r != -ECANCELED) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": failed reading oid=" << oid
 		 << ", r=" << r << dendl;
       return { -r, bs::system_category() };
     }
     if (r == -ECANCELED) {
-      auto ec = update(y);
+      auto ec = update(dpp, y);
       if (ec) {
 	return ec;
       } else {
@@ -518,12 +488,12 @@ bs::error_code logback_generations::watch() noexcept {
   return {};
 }
 
-bs::error_code logback_generations::new_backing(log_type type,
+bs::error_code logback_generations::new_backing(const DoutPrefixProvider *dpp, 
+                                                log_type type,
 						optional_yield y) noexcept {
-  auto cct = static_cast<CephContext*>(ioctx.cct());
   static constexpr auto max_tries = 10;
   try {
-    auto ec = update(y);
+    auto ec = update(dpp, y);
     if (ec) return ec;
     auto tries = 0;
     entries_t new_entries;
@@ -541,27 +511,27 @@ bs::error_code logback_generations::new_backing(log_type type,
       new_entries.emplace(newgenid, newgen);
       auto es = entries_;
       es.emplace(newgenid, std::move(newgen));
-      ec = write(std::move(es), std::move(l), y);
+      ec = write(dpp, std::move(es), std::move(l), y);
       ++tries;
     } while (ec == bs::errc::operation_canceled &&
 	     tries < max_tries);
     if (tries >= max_tries) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": exhausted retry attempts." << dendl;
       return ec;
     }
 
     if (ec) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": write failed with ec=" << ec.message() << dendl;
       return ec;
     }
 
     cb::list bl, rbl;
 
-    auto r = rgw_rados_notify(ioctx, oid, bl, 10'000, &rbl, y);
+    auto r = rgw_rados_notify(dpp, ioctx, oid, bl, 10'000, &rbl, y);
     if (r < 0) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": notify failed with r=" << r << dendl;
       return { -r, bs::system_category() };
     }
@@ -572,12 +542,12 @@ bs::error_code logback_generations::new_backing(log_type type,
   return {};
 }
 
-bs::error_code logback_generations::empty_to(uint64_t gen_id,
+bs::error_code logback_generations::empty_to(const DoutPrefixProvider *dpp, 
+                                             uint64_t gen_id,
 					     optional_yield y) noexcept {
-  auto cct = static_cast<CephContext*>(ioctx.cct());
   static constexpr auto max_tries = 10;
   try {
-    auto ec = update(y);
+    auto ec = update(dpp, y);
     if (ec) return ec;
     auto tries = 0;
     uint64_t newtail = 0;
@@ -586,7 +556,7 @@ bs::error_code logback_generations::empty_to(uint64_t gen_id,
       {
 	auto last = entries_.end() - 1;
 	if (gen_id >= last->first) {
-	  lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+	  ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		     << ": Attempt to trim beyond the possible." << dendl;
 	  return bs::error_code(EINVAL, bs::system_category());
 	}
@@ -601,27 +571,27 @@ bs::error_code logback_generations::empty_to(uint64_t gen_id,
 	newtail = i->first;
 	i->second.pruned = ceph::real_clock::now();
       }
-      ec = write(std::move(es), std::move(l), y);
+      ec = write(dpp, std::move(es), std::move(l), y);
       ++tries;
     } while (ec == bs::errc::operation_canceled &&
 	     tries < max_tries);
     if (tries >= max_tries) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": exhausted retry attempts." << dendl;
       return ec;
     }
 
     if (ec) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": write failed with ec=" << ec.message() << dendl;
       return ec;
     }
 
     cb::list bl, rbl;
 
-    auto r = rgw_rados_notify(ioctx, oid, bl, 10'000, &rbl, y);
+    auto r = rgw_rados_notify(dpp, ioctx, oid, bl, 10'000, &rbl, y);
     if (r < 0) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": notify failed with r=" << r << dendl;
       return { -r, bs::system_category() };
     }
@@ -632,11 +602,10 @@ bs::error_code logback_generations::empty_to(uint64_t gen_id,
   return {};
 }
 
-bs::error_code logback_generations::remove_empty(optional_yield y) noexcept {
-  auto cct = static_cast<CephContext*>(ioctx.cct());
+bs::error_code logback_generations::remove_empty(const DoutPrefixProvider *dpp, optional_yield y) noexcept {
   static constexpr auto max_tries = 10;
   try {
-    auto ec = update(y);
+    auto ec = update(dpp, y);
     if (ec) return ec;
     auto tries = 0;
     entries_t new_entries;
@@ -664,14 +633,14 @@ bs::error_code logback_generations::remove_empty(optional_yield y) noexcept {
       auto es2 = entries_;
       for (const auto& [gen_id, e] : es) {
 	ceph_assert(e.pruned);
-	auto ec = log_remove(ioctx, shards,
-			     [this, gen_id=gen_id](int shard) {
+	auto ec = log_remove(dpp, ioctx, shards,
+			     [this, gen_id = gen_id](int shard) {
 			       return this->get_oid(gen_id, shard);
 			     }, (gen_id == 0), y);
 	if (ec) {
-	  lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		     << ": Error pruning: gen_id=" << gen_id
-		     << " ec=" << ec.message() << dendl;
+	  ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			     << ": Error pruning: gen_id=" << gen_id
+			     << " ec=" << ec.message() << dendl;
 	}
 	if (auto i = es2.find(gen_id); i != es2.end()) {
 	  es2.erase(i);
@@ -679,18 +648,18 @@ bs::error_code logback_generations::remove_empty(optional_yield y) noexcept {
       }
       l.lock();
       es.clear();
-      ec = write(std::move(es2), std::move(l), y);
+      ec = write(dpp, std::move(es2), std::move(l), y);
       ++tries;
     } while (ec == bs::errc::operation_canceled &&
 	     tries < max_tries);
     if (tries >= max_tries) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": exhausted retry attempts." << dendl;
       return ec;
     }
 
     if (ec) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": write failed with ec=" << ec.message() << dendl;
       return ec;
     }
@@ -706,8 +675,9 @@ void logback_generations::handle_notify(uint64_t notify_id,
 					bufferlist& bl)
 {
   auto cct = static_cast<CephContext*>(ioctx.cct());
+  const DoutPrefix dp(cct, dout_subsys, "logback generations handle_notify: ");
   if (notifier_id != my_id) {
-    auto ec = update(null_yield);
+    auto ec = update(&dp, null_yield);
     if (ec) {
       lderr(cct)
 	<< __PRETTY_FUNCTION__ << ":" << __LINE__

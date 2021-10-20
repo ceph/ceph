@@ -83,17 +83,17 @@ class LogSegment {
   elist<CInode*>  dirty_dirfrag_nest;
   elist<CInode*>  dirty_dirfrag_dirfragtree;
 
-  set<CInode*> truncating_inodes;
+  std::set<CInode*> truncating_inodes;
   interval_set<inodeno_t> purging_inodes;
   MDSContext* purged_cb = nullptr;
 
-  map<int, ceph::unordered_set<version_t> > pending_commit_tids;  // mdstable
-  set<metareqid_t> uncommitted_leaders;
-  set<metareqid_t> uncommitted_peers;
-  set<dirfrag_t> uncommitted_fragments;
+  std::map<int, ceph::unordered_set<version_t> > pending_commit_tids;  // mdstable
+  std::set<metareqid_t> uncommitted_leaders;
+  std::set<metareqid_t> uncommitted_peers;
+  std::set<dirfrag_t> uncommitted_fragments;
 
   // client request ids
-  map<int, ceph_tid_t> last_client_tids;
+  std::map<int, ceph_tid_t> last_client_tids;
 
   // potentially dirty sessions
   std::set<entity_name_t> touched_sessions;
@@ -101,7 +101,7 @@ class LogSegment {
   // table version
   version_t inotablev = 0;
   version_t sessionmapv = 0;
-  map<int,version_t> tablev;
+  std::map<int,version_t> tablev;
 
   MDSContext::vec expiry_waiters;
 };

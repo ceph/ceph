@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_CRYPTO_CRYPTO_CONTEXT_POOL_H
 
 #include "librbd/crypto/DataCryptor.h"
-#include "common/allocator.h"
 #include "include/ceph_assert.h"
 #include <boost/lockfree/queue.hpp>
 
@@ -44,9 +43,7 @@ public:
       return m_data_cryptor->update_context(ctx, in, out, len);
     }
 
-    typedef boost::lockfree::queue<
-            T*,
-            boost::lockfree::allocator<ceph::allocator<void>>> ContextQueue;
+    using ContextQueue = boost::lockfree::queue<T*>;
 
 private:
     DataCryptor<T>* m_data_cryptor;

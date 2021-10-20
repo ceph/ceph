@@ -18,6 +18,10 @@ namespace {
   }
 }
 
+using std::less;
+using std::map;
+using std::string;
+
 RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::recover_object(
   const hobject_t& soid,
@@ -53,7 +57,7 @@ ReplicatedRecoveryBackend::maybe_push_shards(
   return interruptor::parallel_for_each(get_shards_to_push(soid),
     [this, need, soid](auto shard) {
     return prep_push(soid, need, shard).then_interruptible([this, soid, shard](auto push) {
-      auto msg = make_message<MOSDPGPush>();
+      auto msg = crimson::make_message<MOSDPGPush>();
       msg->from = pg.get_pg_whoami();
       msg->pgid = pg.get_pgid();
       msg->map_epoch = pg.get_osdmap_epoch();
@@ -106,7 +110,7 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
   recovery_waiter.pi = std::make_optional<RecoveryBackend::PullInfo>();
   auto& pi = *recovery_waiter.pi;
   prepare_pull(po, pi, soid, need);
-  auto msg = make_message<MOSDPGPull>();
+  auto msg = crimson::make_message<MOSDPGPull>();
   msg->from = pg.get_pg_whoami();
   msg->set_priority(pg.get_recovery_op_priority());
   msg->pgid = pg.get_pgid();
@@ -144,7 +148,7 @@ ReplicatedRecoveryBackend::push_delete(
       logger().debug("push_delete: will remove {} from {}", soid, shard);
       pg.begin_peer_recover(shard, soid);
       spg_t target_pg(pg.get_info().pgid.pgid, shard.shard);
-      auto msg = make_message<MOSDPGRecoveryDelete>(
+      auto msg = crimson::make_message<MOSDPGRecoveryDelete>(
 	  pg.get_pg_whoami(), target_pg, pg.get_osdmap_epoch(), min_epoch);
       msg->set_priority(pg.get_recovery_op_priority());
       msg->objects.push_back(std::make_pair(soid, need));
@@ -169,7 +173,7 @@ ReplicatedRecoveryBackend::handle_recovery_delete(
   return local_recover_delete(p.first, p.second, pg.get_osdmap_epoch())
   .then_interruptible(
     [this, m] {
-    auto reply = make_message<MOSDPGRecoveryDeleteReply>();
+    auto reply = crimson::make_message<MOSDPGRecoveryDeleteReply>();
     reply->from = pg.get_pg_whoami();
     reply->set_priority(m->get_priority());
     reply->pgid = spg_t(pg.get_info().pgid.pgid, m->from.shard);
@@ -453,12 +457,12 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
       return eversion_t{};
     }
     push_op->omap_header.claim_append(std::move(bl));
-    for (auto&& [key, val] : std::move(attrs)) {
-      push_op->attrset[key].push_back(val);
+    for (auto&& [key, val] : attrs) {
+      push_op->attrset.emplace(std::move(key), std::move(val));
     }
     logger().debug("read_metadata_for_push_op: {}", push_op->attrset[OI_ATTR]);
     object_info_t oi;
-    oi.decode(push_op->attrset[OI_ATTR]);
+    oi.decode_no_oid(push_op->attrset[OI_ATTR]);
     new_progress.first = false;
     return oi.version;
   });
@@ -608,7 +612,7 @@ ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
         }
         return build_push_op(recovery_info, progress, 0);
       }).then_interruptible([this, from](auto pop) {
-        auto msg = make_message<MOSDPGPush>();
+        auto msg = crimson::make_message<MOSDPGPush>();
         msg->from = pg.get_pg_whoami();
         msg->pgid = pg.get_pgid();
         msg->map_epoch = pg.get_osdmap_epoch();
@@ -652,7 +656,7 @@ ReplicatedRecoveryBackend::_handle_pull_response(
       pi.recovery_info.soid, [&pi, &recovery_waiter, &pop](auto obc) {
         pi.obc = obc;
         recovery_waiter.obc = obc;
-        obc->obs.oi.decode(pop.attrset.at(OI_ATTR));
+        obc->obs.oi.decode_no_oid(pop.attrset.at(OI_ATTR), pop.soid);
         pi.recovery_info.oi = obc->obs.oi;
         return crimson::osd::PG::load_obc_ertr::now();
       }).handle_error_interruptible(crimson::ct_error::assert_all{});
@@ -738,7 +742,7 @@ ReplicatedRecoveryBackend::handle_pull_response(
 	recovering.at(pop.soid).set_pulled();
 	return seastar::make_ready_future<>();
       } else {
-	auto reply = make_message<MOSDPGPull>();
+	auto reply = crimson::make_message<MOSDPGPull>();
 	reply->from = pg.get_pg_whoami();
 	reply->set_priority(m->get_priority());
 	reply->pgid = pg.get_info().pgid;
@@ -813,7 +817,7 @@ ReplicatedRecoveryBackend::handle_push(
 	});
       });
     }).then_interruptible([this, m, &response]() mutable {
-      auto reply = make_message<MOSDPGPushReply>();
+      auto reply = crimson::make_message<MOSDPGPushReply>();
       reply->from = pg.get_pg_whoami();
       reply->set_priority(m->get_priority());
       reply->pgid = pg.get_info().pgid;
@@ -872,7 +876,7 @@ ReplicatedRecoveryBackend::handle_push_reply(
   return _handle_push_reply(from, push_reply).then_interruptible(
     [this, from](std::optional<PushOp> push_op) {
     if (push_op) {
-      auto msg = make_message<MOSDPGPush>();
+      auto msg = crimson::make_message<MOSDPGPush>();
       msg->from = pg.get_pg_whoami();
       msg->pgid = pg.get_pgid();
       msg->map_epoch = pg.get_osdmap_epoch();
@@ -927,7 +931,7 @@ ReplicatedRecoveryBackend::prep_push_target(
   bool complete,
   bool clear_omap,
   ObjectStore::Transaction* t,
-  const map<string, bufferlist>& attrs,
+  const map<string, bufferlist, less<>>& attrs,
   bufferlist&& omap_header)
 {
   if (!first) {
@@ -951,7 +955,8 @@ ReplicatedRecoveryBackend::prep_push_target(
   if (!complete || !recovery_info.object_exist) {
     t->remove(coll->get_cid(), target_oid);
     t->touch(coll->get_cid(), target_oid);
-    object_info_t oi(attrs.at(OI_ATTR));
+    object_info_t oi;
+    oi.decode_no_oid(attrs.at(OI_ATTR));
     t->set_alloc_hint(coll->get_cid(), target_oid,
                       oi.expected_object_size,
                       oi.expected_write_size,
@@ -1003,7 +1008,7 @@ ReplicatedRecoveryBackend::submit_push_data(
   interval_set<uint64_t>&& intervals_included,
   bufferlist&& data_included,
   bufferlist&& omap_header,
-  const map<string, bufferlist> &attrs,
+  const map<string, bufferlist, less<>> &attrs,
   map<string, bufferlist>&& omap_entries,
   ObjectStore::Transaction *t)
 {

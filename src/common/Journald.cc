@@ -72,9 +72,17 @@ class EntryEncoderBase {
  public:
   EntryEncoderBase():
     m_msg_vec {
-      {}, {}, { (char *)"\n", 1 },
-    } 
+     {}, {}, {}, { (char *)"\n", 1 },
+    }
   {
+    std::string id = program_invocation_short_name;
+    for (auto& c : id) {
+      if (c == '\n')
+        c = '_';
+    }
+    static_segment = "SYSLOG_IDENTIFIER=" + id + "\n";
+    m_msg_vec[0].iov_base = static_segment.data();
+    m_msg_vec[0].iov_len = static_segment.size();
   }
 
   constexpr struct iovec *iovec() { return this->m_msg_vec; }
@@ -83,9 +91,15 @@ class EntryEncoderBase {
     return sizeof(m_msg_vec) / sizeof(m_msg_vec[0]);
   }
 
+ private:
+  struct iovec m_msg_vec[4];
+  std::string static_segment;
+
  protected:
   fmt::memory_buffer meta_buf;
-  struct iovec m_msg_vec[3];
+
+  struct iovec &meta_vec() { return m_msg_vec[1]; }
+  struct iovec &msg_vec() { return m_msg_vec[2]; }
 };
 
 class EntryEncoder : public EntryEncoderBase {
@@ -111,11 +125,11 @@ MESSAGE
     meta_buf.resize(meta_buf.size() + sizeof(msg_len));
     *(reinterpret_cast<uint64_t*>(meta_buf.end()) - 1) = htole64(e.size());
 
-    m_msg_vec[0].iov_base = meta_buf.data();
-    m_msg_vec[0].iov_len = meta_buf.size();
+    meta_vec().iov_base = meta_buf.data();
+    meta_vec().iov_len = meta_buf.size();
 
-    m_msg_vec[1].iov_base = (void *)e.strv().data();
-    m_msg_vec[1].iov_len = e.size();
+    msg_vec().iov_base = (void *)e.strv().data();
+    msg_vec().iov_len = e.size();
   }
 };
 
@@ -144,11 +158,11 @@ MESSAGE
     meta_buf.resize(meta_buf.size() + sizeof(msg_len));
     *(reinterpret_cast<uint64_t*>(meta_buf.end()) - 1) = htole64(le.msg.size());
 
-    m_msg_vec[0].iov_base = meta_buf.data();
-    m_msg_vec[0].iov_len = meta_buf.size();
+    meta_vec().iov_base = meta_buf.data();
+    meta_vec().iov_len = meta_buf.size();
 
-    m_msg_vec[1].iov_base = (void *)le.msg.data();
-    m_msg_vec[1].iov_len = le.msg.size();
+    msg_vec().iov_base = (void *)le.msg.data();
+    msg_vec().iov_len = le.msg.size();
   }
 };
 
@@ -270,7 +284,7 @@ err_close_buffer_fd:
 } // namespace ceph::logging::detail
 
 JournaldLogger::JournaldLogger(const SubsystemMap *s) :
-  m_entry_encoder(make_unique<detail::EntryEncoder>()),
+  m_entry_encoder(std::make_unique<detail::EntryEncoder>()),
   m_subs(s)
 {
   client.m_msghdr.msg_iov = m_entry_encoder->iovec();
@@ -286,7 +300,7 @@ int JournaldLogger::log_entry(const Entry& e)
 }
 
 JournaldClusterLogger::JournaldClusterLogger() :
-  m_log_entry_encoder(make_unique<detail::LogEntryEncoder>())
+  m_log_entry_encoder(std::make_unique<detail::LogEntryEncoder>())
 {
   client.m_msghdr.msg_iov = m_log_entry_encoder->iovec();
   client.m_msghdr.msg_iovlen = m_log_entry_encoder->iovec_len();

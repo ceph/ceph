@@ -101,7 +101,7 @@ struct old_rgw_bucket {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(list<old_rgw_bucket*>& o);
+  static void generate_test_instances(std::list<old_rgw_bucket*>& o);
 
   bool operator<(const old_rgw_bucket& b) const {
     return name.compare(b.name) < 0;
@@ -167,7 +167,7 @@ public:
   }
 
   int clear_instance() {
-    return set_instance(string());
+    return set_instance(std::string());
   }
 
   void set_loc(const std::string& k) {
@@ -217,7 +217,7 @@ public:
       object = "_";
       object.append(ns);
       if (need_to_encode_instance()) {
-        object.append(string(":") + instance);
+        object.append(std::string(":") + instance);
       }
       object.append("_");
       object.append(o);
@@ -269,7 +269,7 @@ public:
     key->instance = instance;
   }
 
-  static void parse_ns_field(string& ns, std::string& instance) {
+  static void parse_ns_field(std::string& ns, std::string& instance) {
     int pos = ns.find(':');
     if (pos >= 0) {
       instance = ns.substr(pos + 1);
@@ -290,7 +290,7 @@ public:
    * and cuts down the name to the unmangled version. If it is not
    * part of the given namespace, it returns false.
    */
-  static bool translate_raw_obj_to_obj_in_ns(string& obj, std::string& instance, std::string& ns) {
+  static bool translate_raw_obj_to_obj_in_ns(std::string& obj, std::string& instance, std::string& ns) {
     if (obj[0] != '_') {
       if (ns.empty()) {
         return true;
@@ -342,7 +342,7 @@ public:
    * It returns true after successfully doing so, or
    * false if it fails.
    */
-  static bool strip_namespace_from_object(string& obj, std::string& ns, std::string& instance) {
+  static bool strip_namespace_from_object(std::string& obj, std::string& ns, std::string& instance) {
     ns.clear();
     instance.clear();
     if (obj[0] != '_') {
@@ -448,7 +448,7 @@ public:
 };
 WRITE_CLASS_ENCODER(old_rgw_obj)
 
-static inline void prepend_old_bucket_marker(const old_rgw_bucket& bucket, const string& orig_oid, string& oid)
+static inline void prepend_old_bucket_marker(const old_rgw_bucket& bucket, const std::string& orig_oid, std::string& oid)
 {
   if (bucket.marker.empty() || orig_oid.empty()) {
     oid = orig_oid;

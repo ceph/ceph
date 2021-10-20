@@ -68,12 +68,6 @@ class TestModuleSelftest(MgrTestCase):
 
     def test_devicehealth(self):
         self._selftest_plugin("devicehealth")
-        # Clean up the pool that the module creates, because otherwise
-        # it's low PG count causes test failures.
-        pool_name = "device_health_metrics"
-        self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                "osd", "pool", "delete", pool_name, pool_name,
-                "--yes-i-really-really-mean-it")
 
     def test_selftest_run(self):
         self._load_module("selftest")
@@ -200,7 +194,10 @@ class TestModuleSelftest(MgrTestCase):
         self.wait_for_health(
             "Module 'selftest' has failed: Synthetic exception in serve",
             timeout=30)
-
+        # prune the crash reports, so that the health report is back to
+        # clean
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "crash", "prune", "0")
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
             "mgr", "module", "disable", "selftest")
 

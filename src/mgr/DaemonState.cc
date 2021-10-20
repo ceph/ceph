@@ -24,6 +24,15 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
+using std::list;
+using std::make_pair;
+using std::map;
+using std::ostream;
+using std::ostringstream;
+using std::string;
+using std::stringstream;
+using std::unique_ptr;
+
 void DeviceState::set_metadata(map<string,string>&& m)
 {
   metadata = std::move(m);

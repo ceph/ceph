@@ -58,6 +58,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".journal "
 
+using std::list;
+using std::map;
+using std::ostream;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
 
 // -----------------------
 // LogSegment
@@ -1731,7 +1738,7 @@ void EPurged::replay(MDSRank *mds)
       dout(10) << "EPurged.replay inotable " << mds->inotable->get_version()
 	       << " < " << inotablev << " " << dendl;
       mds->inotable->replay_release_ids(inos);
-      assert(mds->inotable->get_version() == inotablev);
+      ceph_assert(mds->inotable->get_version() == inotablev);
     }
   }
   update_segment();

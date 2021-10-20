@@ -52,7 +52,7 @@ TEST_F(TestGroup, group_createPP)
   librbd::RBD rbd;
   ASSERT_EQ(0, rbd.group_create(ioctx, "mygroup"));
 
-  vector<string> groups;
+  std::vector<std::string> groups;
   ASSERT_EQ(0, rbd.group_list(ioctx, &groups));
   ASSERT_EQ(1U, groups.size());
   ASSERT_EQ("mygroup", groups[0]);
@@ -172,7 +172,7 @@ TEST_F(TestGroup, add_imagePP)
   ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_GROUP) ==
                 RBD_OPERATION_FEATURE_GROUP);
 
-  vector<librbd::group_image_info_t> images;
+  std::vector<librbd::group_image_info_t> images;
   ASSERT_EQ(0, rbd.group_image_list(ioctx, group_name, &images,
                                     sizeof(librbd::group_image_info_t)));
   ASSERT_EQ(1U, images.size());

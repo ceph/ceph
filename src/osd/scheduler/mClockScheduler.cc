@@ -99,22 +99,19 @@ const dmc::ClientInfo *mClockScheduler::ClientRegistry::get_info(
 
 void mClockScheduler::set_max_osd_capacity()
 {
-  if (cct->_conf.get_val<double>("osd_mclock_max_capacity_iops")) {
+  if (is_rotational) {
     max_osd_capacity =
-      cct->_conf.get_val<double>("osd_mclock_max_capacity_iops");
+      cct->_conf.get_val<double>("osd_mclock_max_capacity_iops_hdd");
   } else {
-    if (is_rotational) {
-      max_osd_capacity =
-        cct->_conf.get_val<double>("osd_mclock_max_capacity_iops_hdd");
-    } else {
-      max_osd_capacity =
-        cct->_conf.get_val<double>("osd_mclock_max_capacity_iops_ssd");
-    }
+    max_osd_capacity =
+      cct->_conf.get_val<double>("osd_mclock_max_capacity_iops_ssd");
   }
   // Set per op-shard iops limit
   max_osd_capacity /= num_shards;
   dout(1) << __func__ << " #op shards: " << num_shards
-          << " max osd capacity(iops) per shard: " << max_osd_capacity << dendl;
+          << std::fixed << std::setprecision(2)
+          << " max osd capacity(iops) per shard: " << max_osd_capacity
+          << dendl;
 }
 
 void mClockScheduler::set_osd_mclock_cost_per_io()
@@ -137,7 +134,8 @@ void mClockScheduler::set_osd_mclock_cost_per_io()
     }
   }
   dout(1) << __func__ << " osd_mclock_cost_per_io: "
-          << std::fixed << osd_mclock_cost_per_io << dendl;
+          << std::fixed << std::setprecision(7) << osd_mclock_cost_per_io
+          << dendl;
 }
 
 void mClockScheduler::set_osd_mclock_cost_per_byte()
@@ -160,7 +158,8 @@ void mClockScheduler::set_osd_mclock_cost_per_byte()
     }
   }
   dout(1) << __func__ << " osd_mclock_cost_per_byte: "
-          << std::fixed << osd_mclock_cost_per_byte << dendl;
+          << std::fixed << std::setprecision(7) << osd_mclock_cost_per_byte
+          << dendl;
 }
 
 void mClockScheduler::set_mclock_profile()
@@ -334,8 +333,6 @@ void mClockScheduler::enable_mclock_profile_settings()
 
   // Set the mclock config parameters
   set_profile_config();
-  // Set recovery specific Ceph options
-  set_global_recovery_options();
 }
 
 void mClockScheduler::set_profile_config()
@@ -372,45 +369,20 @@ void mClockScheduler::set_profile_config()
     std::to_string(best_effort.lim));
 }
 
-void mClockScheduler::set_global_recovery_options()
-{
-  // Set high value for recovery max active and max backfill
-  int rec_max_active = 1000;
-  int max_backfills = 1000;
-  cct->_conf.set_val("osd_recovery_max_active", std::to_string(rec_max_active));
-  cct->_conf.set_val("osd_max_backfills", std::to_string(max_backfills));
-
-  // Disable recovery sleep
-  cct->_conf.set_val("osd_recovery_sleep", std::to_string(0));
-  cct->_conf.set_val("osd_recovery_sleep_hdd", std::to_string(0));
-  cct->_conf.set_val("osd_recovery_sleep_ssd", std::to_string(0));
-  cct->_conf.set_val("osd_recovery_sleep_hybrid", std::to_string(0));
-
-  // Disable delete sleep
-  cct->_conf.set_val("osd_delete_sleep", std::to_string(0));
-  cct->_conf.set_val("osd_delete_sleep_hdd", std::to_string(0));
-  cct->_conf.set_val("osd_delete_sleep_ssd", std::to_string(0));
-  cct->_conf.set_val("osd_delete_sleep_hybrid", std::to_string(0));
-
-  // Disable snap trim sleep
-  cct->_conf.set_val("osd_snap_trim_sleep", std::to_string(0));
-  cct->_conf.set_val("osd_snap_trim_sleep_hdd", std::to_string(0));
-  cct->_conf.set_val("osd_snap_trim_sleep_ssd", std::to_string(0));
-  cct->_conf.set_val("osd_snap_trim_sleep_hybrid", std::to_string(0));
-
-  // Disable scrub sleep
-  cct->_conf.set_val("osd_scrub_sleep", std::to_string(0));
-
-  // Apply the changes
-  cct->_conf.apply_changes(nullptr);
-}
-
 int mClockScheduler::calc_scaled_cost(int item_cost)
 {
   // Calculate total scaled cost in secs
   int scaled_cost =
     std::round(osd_mclock_cost_per_io + (osd_mclock_cost_per_byte * item_cost));
   return std::max(scaled_cost, 1);
+}
+
+void mClockScheduler::update_configuration()
+{
+  // Apply configuration change. The expectation is that
+  // at least one of the tracked mclock config option keys
+  // is modified before calling this method.
+  cct->_conf.apply_changes(nullptr);
 }
 
 void mClockScheduler::dump(ceph::Formatter &f) const
@@ -482,7 +454,6 @@ const char** mClockScheduler::get_tracked_conf_keys() const
     "osd_mclock_cost_per_byte_usec",
     "osd_mclock_cost_per_byte_usec_hdd",
     "osd_mclock_cost_per_byte_usec_ssd",
-    "osd_mclock_max_capacity_iops",
     "osd_mclock_max_capacity_iops_hdd",
     "osd_mclock_max_capacity_iops_ssd",
     "osd_mclock_profile",
@@ -505,8 +476,7 @@ void mClockScheduler::handle_conf_change(
       changed.count("osd_mclock_cost_per_byte_usec_ssd")) {
     set_osd_mclock_cost_per_byte();
   }
-  if (changed.count("osd_mclock_max_capacity_iops") ||
-      changed.count("osd_mclock_max_capacity_iops_hdd") ||
+  if (changed.count("osd_mclock_max_capacity_iops_hdd") ||
       changed.count("osd_mclock_max_capacity_iops_ssd")) {
     set_max_osd_capacity();
     if (mclock_profile != "custom") {
@@ -526,7 +496,10 @@ void mClockScheduler::handle_conf_change(
       changed.count("osd_mclock_scheduler_client_lim") ||
       changed.count("osd_mclock_scheduler_background_recovery_res") ||
       changed.count("osd_mclock_scheduler_background_recovery_wgt") ||
-      changed.count("osd_mclock_scheduler_background_recovery_lim")) {
+      changed.count("osd_mclock_scheduler_background_recovery_lim") ||
+      changed.count("osd_mclock_scheduler_background_best_effort_res") ||
+      changed.count("osd_mclock_scheduler_background_best_effort_wgt") ||
+      changed.count("osd_mclock_scheduler_background_best_effort_lim")) {
     if (mclock_profile == "custom") {
       client_registry.update_from_config(conf);
     }

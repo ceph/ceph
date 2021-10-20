@@ -170,6 +170,14 @@ OpTracker::OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards):
 
 OpTracker::~OpTracker() {
   while (!sharded_in_flight_list.empty()) {
+    ShardedTrackingData* sdata = sharded_in_flight_list.back();
+    ceph_assert(NULL != sdata);
+    while (!sdata->ops_in_flight_sharded.empty()) {
+      {
+        std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
+        sdata->ops_in_flight_sharded.pop_back();
+      }
+    }
     ceph_assert((sharded_in_flight_list.back())->ops_in_flight_sharded.empty());
     delete sharded_in_flight_list.back();
     sharded_in_flight_list.pop_back();
@@ -251,8 +259,9 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
   if (print_only_blocked) {
     f->dump_float("complaint_time", complaint_time);
     f->dump_int("num_blocked_ops", total_ops_in_flight);
-  } else
+  } else {
     f->dump_int("num_ops", total_ops_in_flight);
+  }
   f->close_section(); // overall dump
   return true;
 }

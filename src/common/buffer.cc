@@ -103,8 +103,8 @@ static ceph::spinlock debug_lock;
 	   unsigned align,
 	   int mempool = mempool::mempool_buffer_anon)
     {
-      if (!align)
-	align = sizeof(size_t);
+      // posix_memalign() requires a multiple of sizeof(void *)
+      align = std::max<unsigned>(align, sizeof(void *));
       size_t rawlen = round_up_to(sizeof(buffer::raw_combined),
 				  alignof(buffer::raw_combined));
       size_t datalen = round_up_to(len, alignof(buffer::raw_combined));
@@ -165,8 +165,8 @@ static ceph::spinlock debug_lock;
     MEMPOOL_CLASS_HELPERS();
 
     raw_posix_aligned(unsigned l, unsigned _align) : raw(l) {
-      align = _align;
-      ceph_assert((align >= sizeof(void *)) && (align & (align - 1)) == 0);
+      // posix_memalign() requires a multiple of sizeof(void *)
+      align = std::max<unsigned>(_align, sizeof(void *));
 #ifdef DARWIN
       data = (char *) valloc(len);
 #else
@@ -1258,8 +1258,12 @@ static ceph::spinlock debug_lock;
             buffer::create_aligned(unaligned._len, align_memory)));
         had_to_rebuild = true;
       }
-      _buffers.insert_after(p_prev, *ptr_node::create(unaligned._buffers.front()).release());
-      _num += 1;
+      if (unaligned.get_num_buffers()) {
+        _buffers.insert_after(p_prev, *ptr_node::create(unaligned._buffers.front()).release());
+        _num += 1;
+      } else {
+        // a bufferlist containing only 0-length bptrs is rebuilt as empty
+      }
       ++p_prev;
     }
     return had_to_rebuild;
@@ -1519,16 +1523,19 @@ static ceph::spinlock debug_lock;
    */
   char *buffer::list::c_str()
   {
-    if (_buffers.empty())
-      return 0;                         // no buffers
-
-    auto iter = std::cbegin(_buffers);
-    ++iter;
-
-    if (iter != std::cend(_buffers)) {
+    if (const auto len = length(); len == 0) {
+      return nullptr;                         // no non-empty buffers
+    } else if (len != _buffers.front().length()) {
       rebuild();
+    } else {
+      // there are two *main* scenarios that hit this branch:
+      //   1. bufferlist with single, non-empty buffer;
+      //   2. bufferlist with single, non-empty buffer followed by
+      //      empty buffer. splice() tries to not waste our appendable
+      //      space; to carry it an empty bptr is added at the end.
+      // we account for these and don't rebuild unnecessarily
     }
-    return _buffers.front().c_str();  // good, we're already contiguous.
+    return _buffers.front().c_str();
   }
 
   string buffer::list::to_str() const {
@@ -2022,6 +2029,33 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
   return write_fd(fd);
 }
 #endif
+
+buffer::list::iov_vec_t buffer::list::prepare_iovs() const
+{
+  size_t index = 0;
+  uint64_t off = 0;
+  iov_vec_t iovs{_num / IOV_MAX + 1};
+  auto it = iovs.begin();
+  for (auto& bp : _buffers) {
+    if (index == 0) {
+      it->offset = off;
+      it->length = 0;
+      size_t nr_iov_created = std::distance(iovs.begin(), it);
+      it->iov.resize(
+	std::min(_num - IOV_MAX * nr_iov_created, (size_t)IOV_MAX));
+    }
+    it->iov[index].iov_base = (void*)bp.c_str();
+    it->iov[index].iov_len = bp.length();
+    off += bp.length();
+    it->length += bp.length();
+    if (++index == IOV_MAX) {
+      // continue with a new vector<iov> if we have more buf
+      ++it;
+      index = 0;
+    }
+  }
+  return iovs;
+}
 
 __u32 buffer::list::crc32c(__u32 crc) const
 {

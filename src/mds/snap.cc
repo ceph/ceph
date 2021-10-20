@@ -18,6 +18,7 @@
 
 #include "common/Formatter.h"
 
+using namespace std;
 /*
  * SnapInfo
  */

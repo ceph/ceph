@@ -29,7 +29,6 @@ class DeltaRecorder {
   }
 
   ceph::bufferlist get_delta() {
-    assert(!is_empty());
     return std::move(encoded);
   }
 
@@ -42,7 +41,7 @@ class DeltaRecorder {
   virtual field_type_t field_type() const = 0;
   virtual void apply_delta(ceph::bufferlist::const_iterator&,
                            NodeExtentMutable&,
-                           laddr_t) = 0;
+                           const NodeExtent&) = 0;
 
  protected:
   DeltaRecorder() = default;

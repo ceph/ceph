@@ -906,6 +906,16 @@ namespace jwt {
 				throw std::bad_cast();
 			return val.get<double>();
 		}
+		/**
+		 * Get the contained object as an object
+		 * \return content as object
+		 * \throws std::bad_cast Content was not an object
+		 */
+		const picojson::object& as_object() const {
+			if (!val.is<picojson::object>())
+				throw std::bad_cast();
+			return val.get<picojson::object>();
+		}
 	};
 
 	/**

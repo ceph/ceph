@@ -3,6 +3,7 @@ ceph manager -- Thrasher and CephManager objects
 """
 from functools import wraps
 import contextlib
+import errno
 import random
 import signal
 import time
@@ -49,6 +50,20 @@ def shell(ctx, cluster_name, remote, args, name=None, **kwargs):
         ] + args,
         **kwargs
     )
+
+# this is for rook clusters
+def toolbox(ctx, cluster_name, args, **kwargs):
+    return ctx.rook[cluster_name].remote.run(
+        args=[
+            'kubectl',
+            '-n', 'rook-ceph',
+            'exec',
+            ctx.rook[cluster_name].toolbox,
+            '--',
+        ] + args,
+        **kwargs
+    )
+
 
 def write_conf(ctx, conf_path=DEFAULT_CONF_PATH, cluster='ceph'):
     conf_fp = BytesIO()
@@ -267,7 +282,7 @@ class OSDThrasher(Thrasher):
         self.logger.info(msg, *args, **kwargs)
 
     def cmd_exists_on_osds(self, cmd):
-        if self.ceph_manager.cephadm:
+        if self.ceph_manager.cephadm or self.ceph_manager.rook:
             return True
         allremotes = self.ceph_manager.ctx.cluster.only(\
             teuthology.is_type('osd', self.cluster)).remotes.keys()
@@ -289,6 +304,8 @@ class OSDThrasher(Thrasher):
                 wait=True, check_status=False,
                 stdout=StringIO(),
                 stderr=StringIO())
+        elif self.ceph_manager.rook:
+            assert False, 'not implemented'
         else:
             return remote.run(
                 args=['sudo', 'adjust-ulimits', 'ceph-objectstore-tool', '--err-to-stderr'] + cmd,
@@ -305,6 +322,8 @@ class OSDThrasher(Thrasher):
                 wait=True, check_status=False,
                 stdout=StringIO(),
                 stderr=StringIO())
+        elif self.ceph_manager.rook:
+            assert False, 'not implemented'
         else:
             return remote.run(
                 args=['sudo', 'ceph-bluestore-tool', '--err-to-stderr'] + cmd,
@@ -347,6 +366,9 @@ class OSDThrasher(Thrasher):
                 '--no-mon-config',
                 '--log-file=/var/log/ceph/objectstore_tool.$pid.log',
             ]
+
+            if self.ceph_manager.rook:
+                assert False, 'not implemented'
 
             if not self.ceph_manager.cephadm:
                 # ceph-objectstore-tool might be temporarily absent during an
@@ -1416,7 +1438,7 @@ class ObjectStoreTool:
             if self.osd == "primary":
                 self.osd = self.manager.get_object_primary(self.pool,
                                                            self.object_name)
-        assert self.osd
+        assert self.osd is not None
         if self.object_name:
             self.pgid = self.manager.get_object_pg_with_shard(self.pool,
                                                               self.object_name,
@@ -1486,14 +1508,14 @@ class CephManager:
     """
 
     def __init__(self, controller, ctx=None, config=None, logger=None,
-                 cluster='ceph', cephadm=False) -> None:
+                 cluster='ceph', cephadm=False, rook=False) -> None:
         self.lock = threading.RLock()
         self.ctx = ctx
         self.config = config
         self.controller = controller
         self.next_pool_id = 0
         self.cluster = cluster
-        self.cephadm = cephadm
+
         if (logger):
             self.log = lambda x: logger.info(x)
         else:
@@ -1503,8 +1525,21 @@ class CephManager:
                 """
                 print(x)
             self.log = tmp
+
         if self.config is None:
             self.config = dict()
+
+        # NOTE: These variables are meant to be overriden by vstart_runner.py.
+        self.rook = rook
+        self.cephadm = cephadm
+        self.testdir = teuthology.get_testdir(self.ctx)
+        self.run_cluster_cmd_prefix = [
+            'sudo', 'adjust-ulimits', 'ceph-coverage',
+            f'{self.testdir}/archive/coverage', 'timeout', '120', 'ceph',
+            '--cluster', self.cluster]
+        self.run_ceph_w_prefix = ['sudo', 'daemon-helper', 'kill', 'ceph',
+                                  '--cluster', self.cluster]
+
         pools = self.list_pools()
         self.pools = {}
         for pool in pools:
@@ -1534,18 +1569,21 @@ class CephManager:
         """
         if isinstance(kwargs['args'], str):
             kwargs['args'] = shlex.split(kwargs['args'])
+        elif isinstance(kwargs['args'], tuple):
+            kwargs['args'] = list(kwargs['args'])
 
         if self.cephadm:
             return shell(self.ctx, self.cluster, self.controller,
                          args=['ceph'] + list(kwargs['args']),
                          stdout=StringIO(),
                          check_status=kwargs.get('check_status', True))
+        if self.rook:
+            return toolbox(self.ctx, self.cluster,
+                           args=['ceph'] + list(kwargs['args']),
+                           stdout=StringIO(),
+                           check_status=kwargs.get('check_status', True))
 
-        testdir = teuthology.get_testdir(self.ctx)
-        prefix = ['sudo', 'adjust-ulimits', 'ceph-coverage',
-                  f'{testdir}/archive/coverage', 'timeout', '120', 'ceph',
-                  '--cluster', self.cluster]
-        kwargs['args'] = prefix + list(kwargs['args'])
+        kwargs['args'] = self.run_cluster_cmd_prefix + kwargs['args']
         return self.controller.run(**kwargs)
 
     def raw_cluster_cmd(self, *args, **kwargs) -> str:
@@ -1566,14 +1604,7 @@ class CephManager:
         kwargs['check_status'] = False
         return self.run_cluster_cmd(**kwargs).exitstatus
 
-    # XXX: Setting "shell" to True for LocalCephManager.run_ceph_w(), doesn't
-    # work with vstart_runner.py; see https://tracker.ceph.com/issues/49644.
-    # shell=False as default parameter is just to maintain compatibility
-    # between interfaces of CephManager.run_ceph_w() and
-    # LocalCephManager.run_ceph_w(). This doesn't affect how "ceph -w" process
-    # is launched by this method since this parameters remains unused in
-    # this method.
-    def run_ceph_w(self, watch_channel=None, shell=False):
+    def run_ceph_w(self, watch_channel=None):
         """
         Execute "ceph -w" in the background with stdout connected to a BytesIO,
         and return the RemoteProcess.
@@ -1582,13 +1613,7 @@ class CephManager:
                               'cluster', 'audit', ...
         :type watch_channel: str
         """
-        args = ["sudo",
-                "daemon-helper",
-                "kill",
-                "ceph",
-                '--cluster',
-                self.cluster,
-                "-w"]
+        args = self.run_ceph_w_prefix + ['-w']
         if watch_channel is not None:
             args.append("--watch-channel")
             args.append(watch_channel)
@@ -1689,11 +1714,10 @@ class CephManager:
         if remote is None:
             remote = self.controller
 
-        testdir = teuthology.get_testdir(self.ctx)
         pre = [
             'adjust-ulimits',
             'ceph-coverage',
-            '{tdir}/archive/coverage'.format(tdir=testdir),
+           f'{self.testdir}/archive/coverage',
             'rados',
             '--cluster',
             self.cluster,
@@ -1802,13 +1826,14 @@ class CephManager:
                 wait=True,
                 check_status=check_status,
             )
+        if self.rook:
+            assert False, 'not implemented'
 
-        testdir = teuthology.get_testdir(self.ctx)
         args = [
             'sudo',
             'adjust-ulimits',
             'ceph-coverage',
-            '{tdir}/archive/coverage'.format(tdir=testdir),
+           f'{self.testdir}/archive/coverage',
             'timeout',
             str(timeout),
             'ceph',
@@ -2306,6 +2331,15 @@ class CephManager:
             return j['pg_map']['pg_stats']
         except KeyError:
             return j['pg_stats']
+
+    def get_osd_df(self, osdid):
+        """
+        Get the osd df stats
+        """
+        out = self.raw_cluster_cmd('osd', 'df', 'name', 'osd.{}'.format(osdid),
+                                   '--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        return j['nodes'][0]
 
     def get_pgids_to_force(self, backfill):
         """
@@ -3062,13 +3096,22 @@ class CephManager:
         Loop until quorum size is reached.
         """
         self.log('waiting for quorum size %d' % size)
-        start = time.time()
-        while not len(self.get_mon_quorum()) == size:
-            if timeout is not None:
-                assert time.time() - start < timeout, \
-                    ('failed to reach quorum size %d '
-                     'before timeout expired' % size)
-            time.sleep(3)
+        sleep = 3
+        with safe_while(sleep=sleep,
+                        tries=timeout // sleep,
+                        action=f'wait for quorum size {size}') as proceed:
+            while proceed():
+                try:
+                    if len(self.get_mon_quorum()) == size:
+                        break
+                except CommandFailedError as e:
+                    # could fail instea4d of blocked if the rotating key of the
+                    # connected monitor is not updated yet after they form the
+                    # quorum
+                    if e.exitstatus == errno.EACCES:
+                        pass
+                    else:
+                        raise
         self.log("quorum is size %d" % size)
 
     def get_mon_health(self, debug=False):

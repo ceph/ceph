@@ -253,3 +253,16 @@ def test_ceph_volume_command_8():
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(sel, []).run()
     assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --db-devices /dev/sdc --yes --no-systemd'
+
+
+def test_ceph_volume_command_9():
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
+                          data_devices=DeviceSelection(all=True),
+                          data_allocate_fraction=0.8
+                          )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device()*2)
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmd = translate.to_ceph_volume(sel, []).run()
+    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --data-allocate-fraction 0.8 --yes --no-systemd'

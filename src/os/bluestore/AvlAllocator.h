@@ -65,11 +65,11 @@ protected:
   */
   AvlAllocator(CephContext* cct, int64_t device_size, int64_t block_size,
     uint64_t max_mem,
-    const std::string& name);
+    std::string_view name);
 
 public:
   AvlAllocator(CephContext* cct, int64_t device_size, int64_t block_size,
-	       const std::string& name);
+	       std::string_view name);
   ~AvlAllocator();
   const char* get_type() const override
   {
@@ -92,8 +92,14 @@ public:
   void shutdown() override;
 
 private:
-  template<class Tree>
-  uint64_t _block_picker(const Tree& t, uint64_t *cursor, uint64_t size,
+  // pick a range by search from cursor forward
+  uint64_t _pick_block_after(
+    uint64_t *cursor,
+    uint64_t size,
+    uint64_t align);
+  // pick a range with exactly the same size or larger
+  uint64_t _pick_block_fits(
+    uint64_t size,
     uint64_t align);
   int _allocate(
     uint64_t size,
@@ -152,7 +158,18 @@ private:
    * switch to using best-fit allocations.
    */
   int range_size_alloc_free_pct = 0;
-
+  /*
+   * Maximum number of segments to check in the first-fit mode, without this
+   * limit, fragmented device can see lots of iterations and _block_picker()
+   * becomes the performance limiting factor on high-performance storage.
+   */
+  const uint32_t max_search_count;
+  /*
+   * Maximum distance to search forward from the last offset, without this
+   * limit, fragmented device can see lots of iterations and _block_picker()
+   * becomes the performance limiting factor on high-performance storage.
+   */
+  const uint32_t max_search_bytes;
   /*
   * Max amount of range entries allowed. 0 - unlimited
   */

@@ -37,6 +37,8 @@
 
 #include "neorados/cls/fifo.h"
 
+using namespace std;
+
 namespace ba = boost::asio;
 namespace bs = boost::system;
 namespace bpo = boost::program_options;

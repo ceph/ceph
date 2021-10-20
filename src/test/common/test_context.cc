@@ -26,6 +26,8 @@
 #include "common/config_proxy.h"
 #include "log/Log.h"
 
+using namespace std;
+
 TEST(CephContext, do_command)
 {
   CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();

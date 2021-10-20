@@ -52,6 +52,8 @@ def mock_lv_device_generator():
         dev.used_by_ceph = False
         dev.vg_size = [size]
         dev.vg_free = dev.vg_size
+        dev.available_lvm = True
+        dev.is_device = False
         dev.lvs = [lvm.Volume(vg_name=dev.vg_name, lv_name=dev.lv_name, lv_size=size, lv_tags='')]
         return dev
     return mock_lv
@@ -293,3 +295,7 @@ def device_info(monkeypatch, patch_bluestore_label):
         monkeypatch.setattr("ceph_volume.util.device.disk.blkid", lambda path: blkid)
         monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: udevadm)
     return apply
+
+@pytest.fixture(params=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.999, 1.0])
+def data_allocate_fraction(request):
+    return request.param

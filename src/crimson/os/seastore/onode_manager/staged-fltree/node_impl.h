@@ -58,30 +58,46 @@ class NodeExtentMutable;
  */
 class NodeImpl {
  public:
-  using alloc_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange,
-    crimson::ct_error::eagain
-   >;
   virtual ~NodeImpl() = default;
 
   virtual node_type_t node_type() const = 0;
   virtual field_type_t field_type() const = 0;
   virtual laddr_t laddr() const = 0;
   virtual const char* read() const = 0;
-  virtual bool is_duplicate() const = 0;
+  virtual extent_len_t get_node_size() const = 0;
+  virtual nextent_state_t get_extent_state() const = 0;
   virtual void prepare_mutate(context_t) = 0;
   virtual bool is_level_tail() const = 0;
-  virtual bool is_empty() const = 0;
+
+  /* Invariants for num_keys and num_values:
+   * - for leaf node and non-tail internal node, num_keys == num_values;
+   * - for tail internal node, num_keys + 1 == num_values;
+   * - all node must have at least 1 value, except the root leaf node;
+   * - the root internal node must have more than 1 values;
+   */
+  virtual void validate_non_empty() const = 0;
+  virtual bool is_keys_empty() const = 0;
+  // under the assumption that node is not empty
+  virtual bool has_single_value() const = 0;
+
   virtual level_t level() const = 0;
   virtual node_offset_t free_size() const = 0;
+  virtual extent_len_t total_size() const = 0;
+  virtual bool is_extent_retired() const = 0;
   virtual std::optional<key_view_t> get_pivot_index() const = 0;
+  virtual bool is_size_underflow() const = 0;
+
+  virtual std::tuple<match_stage_t, search_position_t> erase(const search_position_t&) = 0;
+  virtual std::tuple<match_stage_t, std::size_t> evaluate_merge(NodeImpl&) = 0;
+  virtual search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, extent_len_t) = 0;
+  virtual eagain_ifuture<NodeExtentMutable> rebuild_extent(context_t) = 0;
+  virtual eagain_ifuture<> retire_extent(context_t) = 0;
+  virtual search_position_t make_tail() = 0;
 
   virtual node_stats_t get_stats() const = 0;
   virtual std::ostream& dump(std::ostream&) const = 0;
   virtual std::ostream& dump_brief(std::ostream&) const = 0;
+  virtual const std::string& get_name() const = 0;
   virtual void validate_layout() const = 0;
 
   virtual void test_copy_to(NodeExtentMutable&) const = 0;
@@ -105,6 +121,13 @@ class InternalNodeImpl : public NodeImpl {
   virtual void get_slot(const search_position_t&,                 // IN
                         key_view_t* = nullptr,                    // OUT
                         const laddr_packed_t** = nullptr) const { // OUT
+    ceph_abort("impossible path");
+  }
+
+  #pragma GCC diagnostic ignored "-Woverloaded-virtual"
+  virtual void get_prev_slot(search_position_t&,                       // IN&OUT
+                             key_view_t* = nullptr,                    // OUT
+                             const laddr_packed_t** = nullptr) const { // OUT
     ceph_abort("impossible path");
   }
 
@@ -156,9 +179,9 @@ class InternalNodeImpl : public NodeImpl {
       return {std::move(impl), mut};
     }
   };
-  static alloc_ertr::future<fresh_impl_t> allocate(context_t, field_type_t, bool, level_t);
+  static eagain_ifuture<fresh_impl_t> allocate(context_t, laddr_t, field_type_t, bool, level_t);
 
-  static InternalNodeImplURef load(NodeExtentRef, field_type_t, bool);
+  static InternalNodeImplURef load(NodeExtentRef, field_type_t);
 
  protected:
   InternalNodeImpl() = default;
@@ -178,6 +201,13 @@ class LeafNodeImpl : public NodeImpl {
   virtual void get_slot(const search_position_t&,                 // IN
                         key_view_t* = nullptr,                    // OUT
                         const value_header_t** = nullptr) const { // OUT
+    ceph_abort("impossible path");
+  }
+
+  #pragma GCC diagnostic ignored "-Woverloaded-virtual"
+  virtual void get_prev_slot(search_position_t&,                       // IN&OUT
+                             key_view_t* = nullptr,                    // OUT
+                             const value_header_t** = nullptr) const { // OUT
     ceph_abort("impossible path");
   }
 
@@ -229,9 +259,9 @@ class LeafNodeImpl : public NodeImpl {
       return {std::move(impl), mut};
     }
   };
-  static alloc_ertr::future<fresh_impl_t> allocate(context_t, field_type_t, bool);
+  static eagain_ifuture<fresh_impl_t> allocate(context_t, laddr_t, field_type_t, bool);
 
-  static LeafNodeImplURef load(NodeExtentRef, field_type_t, bool);
+  static LeafNodeImplURef load(NodeExtentRef, field_type_t);
 
  protected:
   LeafNodeImpl() = default;

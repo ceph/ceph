@@ -101,7 +101,7 @@ public:
   virtual void setup_buffer_resources(
       uint64_t *bytes_cached, uint64_t *bytes_dirtied, uint64_t *bytes_allocated,
       uint64_t *number_lanes, uint64_t *number_log_entries,
-      uint64_t *number_unpublished_reserves) {};
+      uint64_t *number_unpublished_reserves) = 0;
 
 protected:
   utime_t m_arrived_time;
@@ -136,7 +136,7 @@ public:
   bufferlist cmp_bl;
   bufferlist read_bl;
   bool is_comp_and_write = false;
-  unique_ptr<WriteLogOperationSet> op_set = nullptr;
+  std::unique_ptr<WriteLogOperationSet> op_set = nullptr;
 
   C_WriteRequest(T &pwl, const utime_t arrived, io::Extents &&image_extents,
                  bufferlist&& bl, const int fadvise_flags, ceph::mutex &lock,

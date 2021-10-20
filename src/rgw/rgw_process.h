@@ -44,7 +44,7 @@ class RGWFrontendConfig;
 class RGWRequest;
 
 class RGWProcess {
-  deque<RGWRequest*> m_req_queue;
+  std::deque<RGWRequest*> m_req_queue;
 protected:
   CephContext *cct;
   rgw::sal::Store* store;
@@ -57,7 +57,7 @@ protected:
   int sock_fd;
   std::string uri_prefix;
 
-  struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
+  struct RGWWQ : public DoutPrefixProvider, public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess* process;
     RGWWQ(RGWProcess* p, ceph::timespan timeout, ceph::timespan suicide_timeout,
 	  ThreadPool* tp)
@@ -85,6 +85,11 @@ protected:
     void _clear() override {
       ceph_assert(process->m_req_queue.empty());
     }
+
+  CephContext *get_cct() const override { return process->cct; }
+  unsigned get_subsys() const { return ceph_subsys_rgw; }
+  std::ostream& gen_prefix(std::ostream& out) const { return out << "rgw request work queue: ";}
+
   } req_wq;
 
 public:
@@ -111,7 +116,7 @@ public:
   virtual ~RGWProcess() = default;
 
   virtual void run() = 0;
-  virtual void handle_request(RGWRequest *req) = 0;
+  virtual void handle_request(const DoutPrefixProvider *dpp, RGWRequest *req) = 0;
 
   void pause() {
     m_tp.pause();
@@ -132,24 +137,6 @@ public:
   }
 }; /* RGWProcess */
 
-class RGWFCGXProcess : public RGWProcess {
-  int max_connections;
-public:
-
-  /* have a bit more connections than threads so that requests are
-   * still accepted even if we're still processing older requests */
-  RGWFCGXProcess(CephContext* const cct,
-                 RGWProcessEnv* const pe,
-                 const int num_threads,
-                 RGWFrontendConfig* const conf)
-    : RGWProcess(cct, pe, num_threads, conf),
-      max_connections(num_threads + (num_threads >> 3)) {
-  }
-
-  void run() override;
-  void handle_request(RGWRequest* req) override;
-};
-
 class RGWProcessControlThread : public Thread {
   RGWProcess *pprocess;
 public:
@@ -169,8 +156,8 @@ public:
   RGWProcess(cct, pe, num_threads, _conf) {}
   void run() override;
   void checkpoint();
-  void handle_request(RGWRequest* req) override;
-  void gen_request(const string& method, const string& resource,
+  void handle_request(const DoutPrefixProvider *dpp, RGWRequest* req) override;
+  void gen_request(const std::string& method, const std::string& resource,
 		  int content_length, std::atomic<bool>* fail_flag);
 
   void set_access_key(RGWAccessKey& key) { access_key = key; }

@@ -15,7 +15,7 @@ Synopsis
 **ceph-volume** **inventory**
 
 **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
-| *zap* | *list* | *batch*]
+| *zap* | *list* | *batch* | *new-wal* | *new-db* | *migrate* ]
 
 **ceph-volume** **simple** [ *trigger* | *scan* | *activate* ]
 
@@ -38,6 +38,8 @@ Commands
 
 inventory
 ---------
+
+.. program:: ceph-volume inventory
 
 This subcommand provides information about a host's physical disc inventory and
 reports metadata about these discs. Among this metadata one can find disc
@@ -65,6 +67,8 @@ Optional arguments:
 lvm
 ---
 
+.. program:: ceph-volume lvm
+
 By making use of LVM tags, the ``lvm`` sub-command is able to store and later
 re-discover and query devices associated with OSDs so that they can later
 activated.
@@ -73,6 +77,8 @@ Subcommands:
 
 batch
 ^^^^^
+
+.. program:: ceph-volume lvm batch
 
 Creates OSDs from a list of devices using a ``filestore``
 or ``bluestore`` (default) setup. It will create all necessary volume groups
@@ -145,11 +151,14 @@ Required positional arguments:
    Full path to a raw device, like ``/dev/sda``. Multiple
    ``<DEVICE>`` paths can be passed in.
 
-.. describe:: **activate**
+activate
+^^^^^^^^
 
-   Enables a systemd unit that persists the OSD ID and its UUID (also called
-   ``fsid`` in Ceph CLI tools), so that at boot time it can understand what OSD is
-   enabled and needs to be mounted.
+.. program:: ceph-volume lvm activate
+
+Enables a systemd unit that persists the OSD ID and its UUID (also called
+``fsid`` in Ceph CLI tools), so that at boot time it can understand what OSD is
+enabled and needs to be mounted.
 
 Usage::
 
@@ -190,6 +199,8 @@ Multiple OSDs can be activated at once by using the (idempotent) ``--all`` flag:
 
 prepare
 ^^^^^^^
+
+.. program:: ceph-volume lvm prepare
 
 Prepares a logical volume to be used as an OSD and journal using a ``filestore``
 or ``bluestore`` (default) setup. It will not create or modify the logical volumes
@@ -354,6 +365,102 @@ Positional arguments:
    ``/path/to/sda1`` or ``/path/to/sda`` for regular devices.
 
 
+new-wal
+^^^^^^^
+
+.. program:: ceph-volume lvm new-wal
+
+Attaches the given logical volume to OSD as a WAL. Logical volume
+name format is vg/lv. Fails if OSD has already got attached WAL.
+
+Usage::
+
+    ceph-volume lvm new-wal --osd-id OSD_ID --osd-fsid OSD_FSID --target <target lv>
+
+Optional arguments:
+
+.. option:: -h, --help
+
+   show the help message and exit
+
+.. option:: --no-systemd
+
+   Skip checking OSD systemd unit
+
+Required arguments:
+
+.. option:: --target
+
+   logical volume name to attach as WAL
+
+new-db
+^^^^^^
+
+.. program:: ceph-volume lvm new-db
+
+Attaches the given logical volume to OSD as a DB. Logical volume
+name format is vg/lv. Fails if OSD has already got attached DB.
+
+Usage::
+
+    ceph-volume lvm new-db --osd-id OSD_ID --osd-fsid OSD_FSID --target <target lv>
+
+Optional arguments:
+
+.. option:: -h, --help
+
+   show the help message and exit
+
+.. option:: --no-systemd
+
+   Skip checking OSD systemd unit
+
+Required arguments:
+
+.. option:: --target
+
+   logical volume name to attach as DB
+
+migrate
+^^^^^^^
+
+.. program:: ceph-volume lvm migrate
+
+Moves BlueFS data from source volume(s) to the target one, source volumes
+(except the main, i.e. data or block one) are removed on success. LVM volumes
+are permitted for Target only, both already attached or new one. In the latter
+case it is attached to the OSD replacing one of the source devices. Following
+replacement rules apply (in the order of precedence, stop on the first match):
+
+    - if source list has DB volume - target device replaces it.
+    - if source list has WAL volume - target device replace it.
+    - if source list has slow volume only - operation is not permitted,
+      requires explicit allocation via new-db/new-wal command.
+
+Usage::
+
+    ceph-volume lvm migrate --osd-id OSD_ID --osd-fsid OSD_FSID --target <target lv> --from {data|db|wal} [{data|db|wal} ...]
+
+Optional arguments:
+
+.. option:: -h, --help
+
+   show the help message and exit
+
+.. option:: --no-systemd
+
+   Skip checking OSD systemd unit
+
+Required arguments:
+
+.. option:: --from
+
+   list of source device type names
+
+.. option:: --target
+
+   logical volume to move data to
+
 simple
 ------
 
@@ -364,6 +471,8 @@ Subcommands:
 
 activate
 ^^^^^^^^
+
+.. program:: ceph-volume simple activate
 
 Enables a systemd unit that persists the OSD ID and its UUID (also called
 ``fsid`` in Ceph CLI tools), so that at boot time it can understand what OSD is
@@ -397,6 +506,8 @@ Optional Arguments:
 
 scan
 ^^^^
+
+.. program:: ceph-volume simple scan
 
 Scan a running OSD or data device for an OSD for metadata that can later be
 used to activate and manage the OSD with ceph-volume. The scan method will

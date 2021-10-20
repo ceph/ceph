@@ -80,7 +80,8 @@ public:
 };
 
 static const size_t AES_256_KEYSIZE = 256 / 8;
-bool AES_256_ECB_encrypt(CephContext* cct,
+bool AES_256_ECB_encrypt(const DoutPrefixProvider* dpp,
+                         CephContext* cct,
                          const uint8_t* key,
                          size_t key_size,
                          const uint8_t* data_in,
@@ -88,8 +89,8 @@ bool AES_256_ECB_encrypt(CephContext* cct,
                          size_t data_size);
 
 class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
+  const DoutPrefixProvider *dpp;
   CephContext* cct;
-
   std::unique_ptr<BlockCrypt> crypt; /**< already configured stateless BlockCrypt
                                           for operations when enough data is accumulated */
   off_t enc_begin_skip; /**< amount of data to skip from beginning of received data */
@@ -103,7 +104,8 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
 protected:
   std::vector<size_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
 public:
-  RGWGetObj_BlockDecrypt(CephContext* cct,
+  RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
+                         CephContext* cct,
                          RGWGetObj_Filter* next,
                          std::unique_ptr<BlockCrypt> crypt);
   virtual ~RGWGetObj_BlockDecrypt();
@@ -115,20 +117,22 @@ public:
                           off_t bl_len) override;
   virtual int flush() override;
 
-  int read_manifest(bufferlist& manifest_bl);
+  int read_manifest(const DoutPrefixProvider *dpp, bufferlist& manifest_bl);
 }; /* RGWGetObj_BlockDecrypt */
 
 
 class RGWPutObj_BlockEncrypt : public rgw::putobj::Pipe
 {
+  const DoutPrefixProvider *dpp;
   CephContext* cct;
   std::unique_ptr<BlockCrypt> crypt; /**< already configured stateless BlockCrypt
                                           for operations when enough data is accumulated */
   bufferlist cache; /**< stores extra data that could not (yet) be processed by BlockCrypt */
   const size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
 public:
-  RGWPutObj_BlockEncrypt(CephContext* cct,
-                         rgw::putobj::DataProcessor *next,
+  RGWPutObj_BlockEncrypt(const DoutPrefixProvider *dpp,
+                         CephContext* cct,
+                         rgw::sal::DataProcessor *next,
                          std::unique_ptr<BlockCrypt> crypt);
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
@@ -150,7 +154,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
                            std::map<std::string,
                                     std::string>& crypt_http_responses);
 
-static inline void set_attr(map<string, bufferlist>& attrs,
+static inline void set_attr(std::map<std::string, bufferlist>& attrs,
                             const char* key,
                             std::string_view value)
 {
@@ -159,7 +163,7 @@ static inline void set_attr(map<string, bufferlist>& attrs,
   attrs[key] = std::move(bl);
 }
 
-static inline std::string get_str_attribute(map<string, bufferlist>& attrs,
+static inline std::string get_str_attribute(std::map<std::string, bufferlist>& attrs,
                                             const char *name)
 {
   auto iter = attrs.find(name);

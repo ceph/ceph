@@ -4,14 +4,25 @@
 #pragma once
 
 #include "crimson/os/seastore/onode_manager.h"
-#include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager/seastore.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/value.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree.h"
 
 namespace crimson::os::seastore::onode {
 
-struct FLTreeOnode : Onode, Value {
-  static constexpr value_magic_t HEADER_MAGIC = value_magic_t::ONODE;
+struct FLTreeOnode final : Onode, Value {
+  static constexpr tree_conf_t TREE_CONF = {
+    value_magic_t::ONODE,
+    256,        // max_ns_size
+                //   same to option osd_max_object_namespace_len
+    2048,       // max_oid_size
+                //   same to option osd_max_object_name_len
+    1200,       // max_value_payload_size
+                //   see crimson::os::seastore::onode_layout_t
+    8192,       // internal_node_size
+                //   see the formula in validate_tree_config
+    16384       // leaf_node_size
+                //   see the formula in validate_tree_config
+  };
 
   enum class status_t {
     STABLE,
@@ -28,13 +39,11 @@ struct FLTreeOnode : Onode, Value {
   template <typename... T>
   FLTreeOnode(T&&... args) : Value(std::forward<T>(args)...) {}
 
-
-
   struct Recorder : public ValueDeltaRecorder {
     Recorder(bufferlist &bl) : ValueDeltaRecorder(bl) {}
 
     value_magic_t get_header_magic() const final {
-      return value_magic_t::ONODE;
+      return TREE_CONF.value_magic;
     }
 
     void apply_value_delta(
@@ -55,10 +64,12 @@ struct FLTreeOnode : Onode, Value {
   };
 
   const onode_layout_t &get_layout() const final {
+    assert(status != status_t::DELETED);
     return *read_payload<onode_layout_t>();
   }
 
   onode_layout_t &get_mutable_layout(Transaction &t) final {
+    assert(status != status_t::DELETED);
     auto p = prepare_mutate_payload<
       onode_layout_t,
       Recorder>(t);
@@ -67,6 +78,7 @@ struct FLTreeOnode : Onode, Value {
   };
 
   void populate_recorder(Transaction &t) {
+    assert(status == status_t::MUTATED);
     auto p = prepare_mutate_payload<
       onode_layout_t,
       Recorder>(t);
@@ -77,6 +89,14 @@ struct FLTreeOnode : Onode, Value {
     status = status_t::STABLE;
   }
 
+  void mark_delete() {
+    assert(status != status_t::DELETED);
+    status = status_t::DELETED;
+  }
+
+  laddr_t get_hint() const final {
+    return Value::get_hint();
+  }
   ~FLTreeOnode() final {}
 };
 
@@ -87,18 +107,15 @@ class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
 
 public:
   FLTreeOnodeManager(TransactionManager &tm) :
-    tree(std::make_unique<SeastoreNodeExtentManager>(
-	   tm, laddr_t{})) {}
+    tree(NodeExtentManager::create_seastore(tm)) {}
 
   mkfs_ret mkfs(Transaction &t) {
-    return tree.mkfs(t
-    ).handle_error(
-      mkfs_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-	"Invalid error in FLTreeOnodeManager::mkfs"
-      }
-    );
+    return tree.mkfs(t);
   }
+
+  contains_onode_ret contains_onode(
+    Transaction &trans,
+    const ghobject_t &hoid) final;
 
   get_onode_ret get_onode(
     Transaction &trans,
@@ -115,6 +132,16 @@ public:
   write_dirty_ret write_dirty(
     Transaction &trans,
     const std::vector<OnodeRef> &onodes) final;
+
+  erase_onode_ret erase_onode(
+    Transaction &trans,
+    OnodeRef &onode) final;
+
+  list_onodes_ret list_onodes(
+    Transaction &trans,
+    const ghobject_t& start,
+    const ghobject_t& end,
+    uint64_t limit) final;
 
   ~FLTreeOnodeManager();
 };

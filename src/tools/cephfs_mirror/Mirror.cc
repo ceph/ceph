@@ -27,7 +27,7 @@ namespace {
 
 const std::string SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY("mirroring_failed");
 
-class SafeTimerSingleton : public SafeTimer {
+class SafeTimerSingleton : public CommonSafeTimer<ceph::mutex> {
 public:
   ceph::mutex timer_lock = ceph::make_mutex("cephfs::mirror::timer_lock");
 
@@ -222,7 +222,6 @@ Mirror::~Mirror() {
   {
     std::scoped_lock locker(m_lock);
     m_thread_pool->stop();
-    m_cluster_watcher.reset();
   }
 }
 
@@ -284,16 +283,33 @@ int Mirror::init(std::string &reason) {
 
 void Mirror::shutdown() {
   dout(20) << dendl;
-
-  std::unique_lock locker(m_lock);
   m_stopping = true;
+  m_cluster_watcher->shutdown();
   m_cond.notify_all();
+}
+
+void Mirror::reopen_logs() {
+  for (auto &[filesystem, mirror_action] : m_mirror_actions) {
+    mirror_action.fs_mirror->reopen_logs();
+  }
+  g_ceph_context->reopen_logs();
 }
 
 void Mirror::handle_signal(int signum) {
   dout(10) << ": signal=" << signum << dendl;
-  ceph_assert(signum == SIGTERM || signum == SIGINT);
-  shutdown();
+
+  std::scoped_lock locker(m_lock);
+  switch (signum) {
+  case SIGHUP:
+    reopen_logs();
+    break;
+  case SIGINT:
+  case SIGTERM:
+    shutdown();
+    break;
+  default:
+    ceph_abort_msgf("unexpected signal %d", signum);
+  }
 }
 
 void Mirror::handle_enable_mirroring(const Filesystem &filesystem,
@@ -490,24 +506,26 @@ void Mirror::update_fs_mirrors() {
   {
     std::scoped_lock locker(m_lock);
     for (auto &[filesystem, mirror_action] : m_mirror_actions) {
-      if (check_failure && !mirror_action.action_in_progress &&
-          mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed()) {
+      auto failed = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed();
+      auto blocklisted = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted();
+
+      if (check_failure && !mirror_action.action_in_progress && failed) {
         // about to restart failed mirror instance -- nothing
         // should interfere
         dout(5) << ": filesystem=" << filesystem << " failed mirroring -- restarting" << dendl;
         auto peers = mirror_action.fs_mirror->get_peers();
-        mirror_action.action_ctxs.push_front(
-          new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers));
-      } else if (check_blocklist && !mirror_action.action_in_progress &&
-                 mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted()) {
+        auto ctx =  new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers);
+        ctx->complete(0);
+      } else if (check_blocklist && !mirror_action.action_in_progress && blocklisted) {
         // about to restart blocklisted mirror instance -- nothing
         // should interfere
         dout(5) << ": filesystem=" << filesystem << " is blocklisted -- restarting" << dendl;
         auto peers = mirror_action.fs_mirror->get_peers();
-        mirror_action.action_ctxs.push_front(
-          new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers));
+        auto ctx = new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers);
+        ctx->complete(0);
       }
-      if (!mirror_action.action_ctxs.empty() && !mirror_action.action_in_progress) {
+      if (!failed && !blocklisted && !mirror_action.action_ctxs.empty()
+          && !mirror_action.action_in_progress) {
         auto ctx = std::move(mirror_action.action_ctxs.front());
         mirror_action.action_ctxs.pop_front();
         ctx->complete(0);

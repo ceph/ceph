@@ -55,8 +55,7 @@ KvStoreBench::~KvStoreBench()
 }
 
 int KvStoreBench::setup(int argc, const char** argv) {
-  vector<const char*> args;
-  argv_to_vec(argc,argv,args);
+  auto args = argv_to_vec(argc, argv);
   srand(time(NULL));
 
   stringstream help;

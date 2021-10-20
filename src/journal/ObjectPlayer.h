@@ -8,6 +8,7 @@
 #include "include/interval_set.h"
 #include "include/rados/librados.hpp"
 #include "common/ceph_mutex.h"
+#include "common/Timer.h"
 #include "common/RefCountedObj.h"
 #include "journal/Entry.h"
 #include <list>
@@ -15,8 +16,6 @@
 #include <boost/noncopyable.hpp>
 #include <boost/unordered_map.hpp>
 #include "include/ceph_assert.h"
-
-class SafeTimer;
 
 namespace journal {
 

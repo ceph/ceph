@@ -34,6 +34,7 @@
 
 using std::dec;
 using std::hex;
+using std::less;
 using std::list;
 using std::make_pair;
 using std::map;
@@ -433,7 +434,7 @@ void ECBackend::handle_recovery_push_reply(
 void ECBackend::handle_recovery_read_complete(
   const hobject_t &hoid,
   boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
-  std::optional<map<string, bufferlist> > attrs,
+  std::optional<map<string, bufferlist, less<>> > attrs,
   RecoveryMessages *m)
 {
   dout(10) << __func__ << ": returned " << hoid << " "
@@ -478,7 +479,7 @@ void ECBackend::handle_recovery_read_complete(
       }
       // Need to remove ECUtil::get_hinfo_key() since it should not leak out
       // of the backend (see bug #12983)
-      map<string, bufferlist> sanitized_attrs(op.xattrs);
+      map<string, bufferlist, less<>> sanitized_attrs(op.xattrs);
       sanitized_attrs.erase(ECUtil::get_hinfo_key());
       op.obc = get_parent()->get_obc(hoid, sanitized_attrs);
       ceph_assert(op.obc);
@@ -604,7 +605,16 @@ void ECBackend::continue_recovery_op(
       if (op.recovery_progress.first && op.obc) {
 	/* We've got the attrs and the hinfo, might as well use them */
 	op.hinfo = get_hash_info(op.hoid);
-	ceph_assert(op.hinfo);
+	if (!op.hinfo) {
+          derr << __func__ << ": " << op.hoid << " has inconsistent hinfo"
+               << dendl;
+          ceph_assert(recovery_ops.count(op.hoid));
+          eversion_t v = recovery_ops[op.hoid].v;
+          recovery_ops.erase(op.hoid);
+          get_parent()->on_failed_pull({get_parent()->whoami_shard()},
+                                       op.hoid, v);
+          return;
+        }
 	op.xattrs = op.obc->attr_cache;
 	encode(*(op.hinfo), op.xattrs[ECUtil::get_hinfo_key()]);
       }
@@ -941,7 +951,7 @@ void ECBackend::handle_sub_write(
     msg->mark_event("sub_op_started");
   trace.event("handle_sub_write");
 #ifdef HAVE_JAEGER
-  if (msg->osd_parent_span) {
+  if (msg && msg->osd_parent_span) {
     auto ec_sub_trans = jaeger_tracing::child_span(__func__, msg->osd_parent_span);
   }
 #endif
@@ -1231,7 +1241,7 @@ void ECBackend::handle_sub_read_reply(
       dout(20) << __func__ << " to_read skipping" << dendl;
       continue;
     }
-    rop.complete[i->first].attrs = map<string, bufferlist>();
+    rop.complete[i->first].attrs.emplace();
     (*(rop.complete[i->first].attrs)).swap(i->second);
   }
   for (auto i = op.errors.begin();
@@ -1544,7 +1554,7 @@ void ECBackend::submit_transaction(
     op->trace = client_op->pg_trace;
 
 #ifdef HAVE_JAEGER
-  if (client_op->osd_parent_span) {
+  if (client_op && client_op->osd_parent_span) {
     auto ec_sub_trans = jaeger_tracing::child_span("ECBackend::submit_transaction", client_op->osd_parent_span);
   }
 #endif
@@ -1817,7 +1827,7 @@ void ECBackend::do_read_op(ReadOp &op)
 }
 
 ECUtil::HashInfoRef ECBackend::get_hash_info(
-  const hobject_t &hoid, bool checks, const map<string,bufferptr> *attrs)
+  const hobject_t &hoid, bool create, const map<string,bufferptr,less<>> *attrs)
 {
   dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
   ECUtil::HashInfoRef ref = unstable_hashinfo_registry.lookup(hoid);
@@ -1829,7 +1839,6 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
       ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &st);
     ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
-    // XXX: What does it mean if there is no object on disk?
     if (r >= 0) {
       dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
       bufferlist bl;
@@ -1859,7 +1868,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
 	  dout(0) << __func__ << ": Can't decode hinfo for " << hoid << dendl;
 	  return ECUtil::HashInfoRef();
         }
-	if (checks && hinfo.get_total_chunk_size() != (uint64_t)st.st_size) {
+	if (hinfo.get_total_chunk_size() != (uint64_t)st.st_size) {
 	  dout(0) << __func__ << ": Mismatch of total_chunk_size "
 			       << hinfo.get_total_chunk_size() << dendl;
 	  return ECUtil::HashInfoRef();
@@ -1867,6 +1876,10 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
       } else if (st.st_size > 0) { // If empty object and no hinfo, create it
 	return ECUtil::HashInfoRef();
       }
+    } else if (r != -ENOENT || !create) {
+      derr << __func__ << ": stat " << hoid << " failed: " << cpp_strerror(r)
+           << dendl;
+      return ECUtil::HashInfoRef();
     }
     ref = unstable_hashinfo_registry.lookup_or_create(hoid, hinfo);
   }
@@ -1881,7 +1894,7 @@ void ECBackend::start_rmw(Op *op, PGTransactionUPtr &&t)
     sinfo,
     std::move(t),
     [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref = get_hash_info(i, false);
+      ECUtil::HashInfoRef ref = get_hash_info(i, true);
       if (!ref) {
 	derr << __func__ << ": get_hash_info(" << i << ")"
 	     << " returned a null pointer and there is no "
@@ -2118,7 +2131,7 @@ bool ECBackend::try_reads_to_commit()
   }
 
 #ifdef HAVE_JAEGER
-   if (op->client_op->osd_parent_span) {
+   if (op->client_op && op->client_op->osd_parent_span) {
       auto sub_write_span = jaeger_tracing::child_span("EC sub write", op->client_op->osd_parent_span);
     }
 #endif
@@ -2481,7 +2494,7 @@ int ECBackend::send_all_remaining_reads(
 
 int ECBackend::objects_get_attrs(
   const hobject_t &hoid,
-  map<string, bufferlist> *out)
+  map<string, bufferlist, less<>> *out)
 {
   int r = store->getattrs(
     ch,
@@ -2578,7 +2591,11 @@ int ECBackend::be_deep_scrub(
     return 0;
   } else {
     if (!get_parent()->get_pool().allows_ecoverwrites()) {
-      ceph_assert(hinfo->has_chunk_hash());
+      if (!hinfo->has_chunk_hash()) {
+        dout(0) << "_scan_list  " << poid << " got invalid hash info" << dendl;
+        o.ec_size_mismatch = true;
+        return 0;
+      }
       if (hinfo->get_total_chunk_size() != (unsigned)pos.data_pos) {
 	dout(0) << "_scan_list  " << poid << " got incorrect size on read 0x"
 		<< std::hex << pos

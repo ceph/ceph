@@ -183,8 +183,8 @@ Example ceph.conf
 
 
 
-Running Multiple Clusters (DEPRECATED)
-======================================
+Naming Clusters (deprecated)
+============================
 
 Each Ceph cluster has an internal name that is used as part of configuration
 and log file names as well as directory and mountpoint names.  This name

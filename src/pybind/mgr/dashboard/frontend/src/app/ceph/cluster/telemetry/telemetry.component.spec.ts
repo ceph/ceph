@@ -29,6 +29,7 @@ describe('TelemetryComponent', () => {
     'channel_crash',
     'channel_device',
     'channel_ident',
+    'channel_perf',
     'contact',
     'description',
     'device_url',
@@ -78,6 +79,29 @@ describe('TelemetryComponent', () => {
 
     it('should create', () => {
       expect(component).toBeTruthy();
+    });
+
+    it('should show/hide ident fields on checking/unchecking', () => {
+      const getContactField = () =>
+        fixture.debugElement.nativeElement.querySelector('input[id=contact]');
+      const getDescriptionField = () =>
+        fixture.debugElement.nativeElement.querySelector('input[id=description]');
+
+      // Initially hidden.
+      expect(getContactField()).toBeFalsy();
+      expect(getDescriptionField()).toBeFalsy();
+
+      // Show fields.
+      component.toggleIdent();
+      fixture.detectChanges();
+      expect(getContactField()).toBeTruthy();
+      expect(getDescriptionField()).toBeTruthy();
+
+      // Hide fields.
+      component.toggleIdent();
+      fixture.detectChanges();
+      expect(getContactField()).toBeFalsy();
+      expect(getDescriptionField()).toBeFalsy();
     });
 
     it('should set module enability to true correctly', () => {
@@ -144,6 +168,104 @@ describe('TelemetryComponent', () => {
 
     it('should create', () => {
       expect(component).toBeTruthy();
+    });
+
+    it('should only replace the ranges and values of a JSON object', () => {
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ]
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0]
+        ]
+      });
+
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: true
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: true
+      });
+
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: 1
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: 1
+      });
+
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: { value: 0 }
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: { value: 0 }
+      });
     });
 
     it('should submit', () => {

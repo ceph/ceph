@@ -108,7 +108,7 @@ Two data types in Ceph
 * Data (object data)
 
   - The cost of double write is high
-  - The best mehod to store this data is in-place update
+  - The best method to store this data is in-place update
 
     - At least two operations required to store the data: 1) data and 2) location of
       data. Nevertheless, a constant number of operations would be better than out-of-place

@@ -8,6 +8,7 @@ import { of } from 'rxjs';
 
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { HealthService } from '~/app/shared/api/health.service';
+import { CssHelper } from '~/app/shared/classes/css-helper';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { FeatureTogglesService } from '~/app/shared/services/feature-toggles.service';
@@ -61,7 +62,8 @@ describe('HealthComponent', () => {
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       PgCategoryService,
-      RefreshIntervalService
+      RefreshIntervalService,
+      CssHelper
     ]
   });
 

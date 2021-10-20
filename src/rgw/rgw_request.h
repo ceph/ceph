@@ -8,9 +8,6 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
-#if defined(WITH_RADOSGW_FCGI_FRONTEND)
-#include "rgw_fcgi.h"
-#endif
 
 #include "common/QueueRing.h"
 
@@ -31,30 +28,13 @@ struct RGWRequest
   }
 }; /* RGWRequest */
 
-#if defined(WITH_RADOSGW_FCGI_FRONTEND)
-struct RGWFCGXRequest : public RGWRequest {
-  FCGX_Request *fcgx;
-  QueueRing<FCGX_Request *> *qr;
-
-  RGWFCGXRequest(uint64_t req_id, QueueRing<FCGX_Request *> *_qr)
-	  : RGWRequest(req_id), qr(_qr) {
-    qr->dequeue(&fcgx);
-  }
-
-  ~RGWFCGXRequest() override {
-    FCGX_Finish_r(fcgx);
-    qr->enqueue(fcgx);
-  }
-};
-#endif
-
 struct RGWLoadGenRequest : public RGWRequest {
-	string method;
-	string resource;
+	std::string method;
+	std::string resource;
 	int content_length;
 	std::atomic<bool>* fail_flag = nullptr;
 
-RGWLoadGenRequest(uint64_t req_id, const string& _m, const  string& _r, int _cl,
+RGWLoadGenRequest(uint64_t req_id, const std::string& _m, const std::string& _r, int _cl,
 		std::atomic<bool> *ff)
 	: RGWRequest(req_id), method(_m), resource(_r), content_length(_cl),
 		fail_flag(ff) {}

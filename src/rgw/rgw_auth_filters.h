@@ -90,11 +90,11 @@ public:
     return get_decoratee().get_identity_type();
   }
 
-  string get_acct_name() const override {
+  std::string get_acct_name() const override {
     return get_decoratee().get_acct_name();
   }
 
-  string get_subuser() const override {
+  std::string get_subuser() const override {
     return get_decoratee().get_subuser();
   }
 
@@ -107,7 +107,7 @@ public:
     get_decoratee().to_str(out);
   }
 
-  string get_role_tenant() const override {     /* in/out */
+  std::string get_role_tenant() const override {     /* in/out */
     return get_decoratee().get_role_tenant();
   }
 
@@ -185,7 +185,7 @@ void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, 
       const rgw_user tenanted_uid(acct_user_override.id, acct_user_override.id);
       user = store->get_user(tenanted_uid);
 
-      if (user->load_by_id(dpp, null_yield) >= 0) {
+      if (user->load_user(dpp, null_yield) >= 0) {
 	user_info = user->get_info();
         /* Succeeded. */
         return;
@@ -193,7 +193,7 @@ void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, 
     }
 
     user = store->get_user(acct_user_override);
-    const int ret = user->load_by_id(dpp, null_yield);
+    const int ret = user->load_user(dpp, null_yield);
     if (ret < 0) {
       /* We aren't trying to recover from ENOENT here. It's supposed that creating
        * someone else's account isn't a thing we want to support in this filter. */
@@ -263,7 +263,7 @@ void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo
        * reasons. rgw_get_user_info_by_uid doesn't trigger the operator=() but
        * calls ::decode instead. */
       std::unique_ptr<rgw::sal::User> user = store->get_user(effective_uid);
-      if (user->load_by_id(dpp, null_yield) < 0) {
+      if (user->load_user(dpp, null_yield) < 0) {
         //ldpp_dout(dpp, 0) << "User lookup failed!" << dendl;
         throw -EACCES;
       }

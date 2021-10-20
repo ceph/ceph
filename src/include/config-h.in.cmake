@@ -3,6 +3,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+/* Define to 1 if you have the `memset_s()` function. */
+#cmakedefine HAVE_MEMSET_S
+
 /* fallocate(2) is supported */
 #cmakedefine CEPH_HAVE_FALLOCATE
 
@@ -62,6 +65,12 @@
 
 /* Define to 1 if the system has the type `__u8'. */
 #cmakedefine HAVE___U8 1
+
+/* Define if the system has the type `in_addr_t' */
+#cmakedefine HAVE_IN_ADDR_T
+
+/* Define if you have suseconds_t */
+#cmakedefine HAVE_SUSECONDS_T
 
 /* Define if you have res_nquery */
 #cmakedefine HAVE_RES_NQUERY
@@ -148,14 +157,8 @@
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
 
-/* define if radosgw enabled */
-#cmakedefine WITH_RADOSGW_FCGI_FRONTEND
-
 /* define if leveldb is enabled */
 #cmakedefine WITH_LEVELDB
-
-/* define if radosgw's beast frontend enabled */
-#cmakedefine WITH_RADOSGW_BEAST_FRONTEND
 
 /* define if radosgw has openssl support */
 #cmakedefine WITH_CURL_OPENSSL
@@ -268,6 +271,12 @@
 /* Define if the C compiler supports __PRETTY_FUNCTION__ */
 #cmakedefine HAVE_PRETTY_FUNC
 
+/* Define if the C compiler supports __attribute__((__symver__ (".."))) */
+#cmakedefine HAVE_ATTR_SYMVER
+
+/* Define if the C compiler supports __asm__(".symver ..") */
+#cmakedefine HAVE_ASM_SYMVER
+
 /* Have eventfd extension. */
 #cmakedefine HAVE_EVENTFD
 
@@ -345,6 +354,9 @@
 /* Defined if lua packages can be installed by radosgw */
 #cmakedefine WITH_RADOSGW_LUA_PACKAGES
 
+/* Backend dbstore for Rados Gateway */
+#cmakedefine WITH_RADOSGW_DBSTORE
+
 /* Defined if std::map::merge() is supported */
 #cmakedefine HAVE_STDLIB_MAP_SPLICING
 
@@ -368,9 +380,6 @@
 
 /* Define if PWL-SSD is enabled */
 #cmakedefine WITH_RBD_SSD_CACHE
-
-/* Define if libcryptsetup version < 2.0.5 */
-#cmakedefine LIBCRYPTSETUP_LEGACY_DATA_ALIGNMENT
 
 /* Define if libcryptsetup can be used (linux only) */
 #cmakedefine HAVE_LIBCRYPTSETUP

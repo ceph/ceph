@@ -33,7 +33,7 @@
   </li>
 
   <li ngbNavItem
-      *ngIf="permissions.grafana.read">
+      *cdScope="'grafana'">
     <a ngbNavLink
        i18n>Overall Performance</a>
     <ng-template ngbNavContent>

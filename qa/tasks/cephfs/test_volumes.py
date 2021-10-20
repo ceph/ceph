@@ -233,20 +233,20 @@ class TestVolumesHelper(CephFSTestCase):
         subvolpath = self._get_subvolume_path(self.volname, subvolume, group_name=subvolume_group)
 
         if pool is not None:
-            self.mount_a.setfattr(subvolpath, 'ceph.dir.layout.pool', pool)
+            self.mount_a.setfattr(subvolpath, 'ceph.dir.layout.pool', pool, sudo=True)
 
         if pool_namespace is not None:
-            self.mount_a.setfattr(subvolpath, 'ceph.dir.layout.pool_namespace', pool_namespace)
+            self.mount_a.setfattr(subvolpath, 'ceph.dir.layout.pool_namespace', pool_namespace, sudo=True)
 
     def _do_subvolume_attr_update(self, subvolume, uid, gid, mode, subvolume_group=None):
         subvolpath = self._get_subvolume_path(self.volname, subvolume, group_name=subvolume_group)
 
         # mode
-        self.mount_a.run_shell(['chmod', mode, subvolpath])
+        self.mount_a.run_shell(['chmod', mode, subvolpath], sudo=True)
 
         # ownership
-        self.mount_a.run_shell(['chown', uid, subvolpath])
-        self.mount_a.run_shell(['chgrp', gid, subvolpath])
+        self.mount_a.run_shell(['chown', uid, subvolpath], sudo=True)
+        self.mount_a.run_shell(['chgrp', gid, subvolpath], sudo=True)
 
     def _do_subvolume_io(self, subvolume, subvolume_group=None, create_dir=None,
                          number_of_files=DEFAULT_NUMBER_OF_FILES, file_size=DEFAULT_FILE_SIZE):
@@ -262,7 +262,7 @@ class TestVolumesHelper(CephFSTestCase):
         io_path = subvolpath
         if create_dir:
             io_path = os.path.join(subvolpath, create_dir)
-            self.mount_a.run_shell(["mkdir", "-p", io_path])
+            self.mount_a.run_shell_payload(f"mkdir -p {io_path}")
 
         log.debug("filling subvolume {0} with {1} files each {2}MB size under directory {3}".format(subvolume, number_of_files, file_size, io_path))
         for i in range(number_of_files):
@@ -278,11 +278,11 @@ class TestVolumesHelper(CephFSTestCase):
         # this symlink's ownership would be changed
         sym_path2 = os.path.join(dir_path, "sym.0")
 
-        self.mount_a.run_shell(["sudo", "mkdir", dir_path], omit_sudo=False)
-        self.mount_a.run_shell(["sudo", "ln", "-s", "./{}".format(reg_file), sym_path1], omit_sudo=False)
-        self.mount_a.run_shell(["sudo", "ln", "-s", "./{}".format(reg_file), sym_path2], omit_sudo=False)
+        self.mount_a.run_shell(["mkdir", dir_path])
+        self.mount_a.run_shell(["ln", "-s", "./{}".format(reg_file), sym_path1])
+        self.mount_a.run_shell(["ln", "-s", "./{}".format(reg_file), sym_path2])
         # flip ownership to nobody. assumption: nobody's id is 65534
-        self.mount_a.run_shell(["sudo", "chown", "-h", "65534:65534", sym_path2], omit_sudo=False)
+        self.mount_a.run_shell(["chown", "-h", "65534:65534", sym_path2], sudo=True, omit_sudo=False)
 
     def _wait_for_trash_empty(self, timeout=30):
         # XXX: construct the trash dir path (note that there is no mgr
@@ -301,7 +301,7 @@ class TestVolumesHelper(CephFSTestCase):
             group = subvol_group if subvol_group is not None else '_nogroup'
             metapath = os.path.join(".", "volumes", group, subvol_name, ".meta")
 
-        out = self.mount_a.run_shell(['cat', metapath])
+        out = self.mount_a.run_shell(['cat', metapath], sudo=True)
         lines = out.stdout.getvalue().strip().split('\n')
         sv_version = -1
         for line in lines:
@@ -316,16 +316,16 @@ class TestVolumesHelper(CephFSTestCase):
         basepath = os.path.join("volumes", group, subvol_name)
         uuid_str = str(uuid.uuid4())
         createpath = os.path.join(basepath, uuid_str)
-        self.mount_a.run_shell(['mkdir', '-p', createpath])
+        self.mount_a.run_shell(['mkdir', '-p', createpath], sudo=True)
 
         # create a v1 snapshot, to prevent auto upgrades
         if has_snapshot:
             snappath = os.path.join(createpath, ".snap", "fake")
-            self.mount_a.run_shell(['mkdir', '-p', snappath])
+            self.mount_a.run_shell(['mkdir', '-p', snappath], sudo=True)
 
         # add required xattrs to subvolume
         default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
-        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool)
+        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool, sudo=True)
 
         # create a v1 .meta file
         meta_contents = "[GLOBAL]\nversion = 1\ntype = {0}\npath = {1}\nstate = {2}\n".format(subvol_type, "/" + createpath, state)
@@ -333,17 +333,16 @@ class TestVolumesHelper(CephFSTestCase):
             # add a fake clone source
             meta_contents = meta_contents + '[source]\nvolume = fake\nsubvolume = fake\nsnapshot = fake\n'
         meta_filepath1 = os.path.join(self.mount_a.mountpoint, basepath, ".meta")
-        self.mount_a.client_remote.write_file(meta_filepath1,
-                                              meta_contents, sudo=True)
+        self.mount_a.client_remote.write_file(meta_filepath1, meta_contents, sudo=True)
         return createpath
 
     def _update_fake_trash(self, subvol_name, subvol_group=None, trash_name='fake', create=True):
         group = subvol_group if subvol_group is not None else '_nogroup'
         trashpath = os.path.join("volumes", group, subvol_name, '.trash', trash_name)
         if create:
-            self.mount_a.run_shell(['mkdir', '-p', trashpath])
+            self.mount_a.run_shell(['mkdir', '-p', trashpath], sudo=True)
         else:
-            self.mount_a.run_shell(['rmdir', trashpath])
+            self.mount_a.run_shell(['rmdir', trashpath], sudo=True)
 
     def _configure_guest_auth(self, guest_mount, authid, key):
         """
@@ -611,17 +610,20 @@ class TestSubvolumeGroups(TestVolumesHelper):
         expected_mode2 = "777"
 
         # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group2, f"--mode={expected_mode2}")
         self._fs_cmd("subvolumegroup", "create", self.volname, group1)
-        self._fs_cmd("subvolumegroup", "create", self.volname, group2, "--mode", "777")
 
         group1_path = self._get_subvolume_group_path(self.volname, group1)
         group2_path = self._get_subvolume_group_path(self.volname, group2)
+        volumes_path = os.path.dirname(group1_path)
 
         # check group's mode
         actual_mode1 = self.mount_a.run_shell(['stat', '-c' '%a', group1_path]).stdout.getvalue().strip()
         actual_mode2 = self.mount_a.run_shell(['stat', '-c' '%a', group2_path]).stdout.getvalue().strip()
+        actual_mode3 = self.mount_a.run_shell(['stat', '-c' '%a', volumes_path]).stdout.getvalue().strip()
         self.assertEqual(actual_mode1, expected_mode1)
         self.assertEqual(actual_mode2, expected_mode2)
+        self.assertEqual(actual_mode3, expected_mode1)
 
         self._fs_cmd("subvolumegroup", "rm", self.volname, group1)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group2)
@@ -726,7 +728,7 @@ class TestSubvolumes(TestVolumesHelper):
 
         # create subvolumes
         for subvolume in subvolumes:
-            self._fs_cmd("subvolume", "create", self.volname, subvolume)
+            self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
             self._do_subvolume_io(subvolume, number_of_files=10)
 
         self.mount_a.umount_wait()
@@ -918,6 +920,36 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, subvol2, group)
         self._fs_cmd("subvolume", "rm", self.volname, subvol1, group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_create_with_desired_mode(self):
+        subvol1 = self._generate_random_subvolume_name()
+
+        # default mode
+        default_mode = "755"
+        # desired mode
+        desired_mode = "777"
+
+        self._fs_cmd("subvolume", "create", self.volname, subvol1,  "--mode", "777")
+
+        subvol1_path = self._get_subvolume_path(self.volname, subvol1)
+
+        # check subvolumegroup's mode
+        subvol_par_path = os.path.dirname(subvol1_path)
+        group_path = os.path.dirname(subvol_par_path)
+        actual_mode1 = self.mount_a.run_shell(['stat', '-c' '%a', group_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode1, default_mode)
+        # check /volumes mode
+        volumes_path = os.path.dirname(group_path)
+        actual_mode2 = self.mount_a.run_shell(['stat', '-c' '%a', volumes_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode2, default_mode)
+        # check subvolume's  mode
+        actual_mode3 = self.mount_a.run_shell(['stat', '-c' '%a', subvol1_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode3, desired_mode)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvol1)
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
@@ -1157,7 +1189,7 @@ class TestSubvolumes(TestVolumesHelper):
             else:
                 raise RuntimeError("expected renaming subvolume incarnation out of subvolume directory to fail")
             """)
-        self.mount_a.run_python(rename_script.format(src=srcpath, dst=dstpath))
+        self.mount_a.run_python(rename_script.format(src=srcpath, dst=dstpath), sudo=True)
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
@@ -1196,11 +1228,11 @@ class TestSubvolumes(TestVolumesHelper):
 
         # emulate a old-fashioned subvolume in a custom group
         createpath = os.path.join(".", "volumes", group, subvolume)
-        self.mount_a.run_shell(['mkdir', '-p', createpath])
+        self.mount_a.run_shell(['mkdir', '-p', createpath], sudo=True)
 
         # add required xattrs to subvolume
         default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
-        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool)
+        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool, sudo=True)
 
         mount_path = os.path.join("/", "volumes", group, subvolume)
 
@@ -1216,7 +1248,7 @@ class TestSubvolumes(TestVolumesHelper):
         self._configure_guest_auth(guest_mount, authid, key)
 
         # mount the subvolume, and write to it
-        guest_mount.mount(cephfs_mntpt=mount_path)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
         guest_mount.write_n_mb("data.bin", 1)
 
         # authorize guest authID read access to subvolume
@@ -1226,7 +1258,7 @@ class TestSubvolumes(TestVolumesHelper):
         # guest client sees the change in access level to read only after a
         # remount of the subvolume.
         guest_mount.umount_wait()
-        guest_mount.mount(cephfs_mntpt=mount_path)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
 
         # read existing content of the subvolume
         self.assertListEqual(guest_mount.ls(guest_mount.mountpoint), ["data.bin"])
@@ -1253,7 +1285,7 @@ class TestSubvolumes(TestVolumesHelper):
         guest_mount.umount_wait()
 
         # create group
-        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "--mode=777")
 
         # create subvolume in group
         self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
@@ -1272,7 +1304,7 @@ class TestSubvolumes(TestVolumesHelper):
         self._configure_guest_auth(guest_mount, authid, key)
 
         # mount the subvolume, and write to it
-        guest_mount.mount(cephfs_mntpt=mount_path)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
         guest_mount.write_n_mb("data.bin", 1)
 
         # authorize guest authID read access to subvolume
@@ -1282,7 +1314,7 @@ class TestSubvolumes(TestVolumesHelper):
         # guest client sees the change in access level to read only after a
         # remount of the subvolume.
         guest_mount.umount_wait()
-        guest_mount.mount(cephfs_mntpt=mount_path)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
 
         # read existing content of the subvolume
         self.assertListEqual(guest_mount.ls(guest_mount.mountpoint), ["data.bin"])
@@ -1630,7 +1662,7 @@ class TestSubvolumes(TestVolumesHelper):
 
         # Induce partial auth update state by modifying the auth metadata file,
         # and then run authorize again.
-        guest_mount.run_shell(['sed', '-i', 's/false/true/g', 'volumes/{0}'.format(auth_metadata_filename)])
+        guest_mount.run_shell(['sed', '-i', 's/false/true/g', 'volumes/{0}'.format(auth_metadata_filename)], sudo=True)
 
         # Authorize 'guestclient_1' to access the subvolume.
         self._fs_cmd("subvolume", "authorize", self.volname, subvolume, guestclient_1["auth_id"],
@@ -1686,7 +1718,7 @@ class TestSubvolumes(TestVolumesHelper):
 
         # Induce partial auth update state by modifying the auth metadata file,
         # and then run de-authorize.
-        guest_mount.run_shell(['sed', '-i', 's/false/true/g', 'volumes/{0}'.format(auth_metadata_filename)])
+        guest_mount.run_shell(['sed', '-i', 's/false/true/g', 'volumes/{0}'.format(auth_metadata_filename)], sudo=True)
 
         # Deauthorize 'guestclient_1' to access the subvolume2.
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume2, guestclient_1["auth_id"],
@@ -1739,7 +1771,7 @@ class TestSubvolumes(TestVolumesHelper):
         self.assertIn(auth_metadata_filename, guest_mount.ls("volumes"))
 
         # Replace 'subvolumes' to 'volumes', old style auth-metadata file
-        guest_mount.run_shell(['sed', '-i', 's/subvolumes/volumes/g', 'volumes/{0}'.format(auth_metadata_filename)])
+        guest_mount.run_shell(['sed', '-i', 's/subvolumes/volumes/g', 'volumes/{0}'.format(auth_metadata_filename)], sudo=True)
 
         # Authorize 'guestclient_1' to access the subvolume2. This should transparently update 'volumes' to 'subvolumes'
         self._fs_cmd("subvolume", "authorize", self.volname, subvolume2, guestclient_1["auth_id"],
@@ -1817,7 +1849,7 @@ class TestSubvolumes(TestVolumesHelper):
         self.assertIn(auth_metadata_filename, guest_mount.ls("volumes"))
 
         # Replace 'subvolumes' to 'volumes', old style auth-metadata file
-        guest_mount.run_shell(['sed', '-i', 's/subvolumes/volumes/g', 'volumes/{0}'.format(auth_metadata_filename)])
+        guest_mount.run_shell(['sed', '-i', 's/subvolumes/volumes/g', 'volumes/{0}'.format(auth_metadata_filename)], sudo=True)
 
         # Deauthorize 'guestclient_1' to access the subvolume2. This should update 'volumes' to subvolumes'
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume2, auth_id, "--group_name", group)
@@ -1875,7 +1907,7 @@ class TestSubvolumes(TestVolumesHelper):
         # subvolumes. Mount the two subvolumes. Write data to the volumes.
         for i in range(2):
             # Create subvolume.
-            self._fs_cmd("subvolume", "create", self.volname, subvolumes[i], "--group_name", group)
+            self._fs_cmd("subvolume", "create", self.volname, subvolumes[i], "--group_name", group, "--mode=777")
 
             # authorize guest authID read-write access to subvolume
             key = self._fs_cmd("subvolume", "authorize", self.volname, subvolumes[i], guestclient_1["auth_id"],
@@ -1887,7 +1919,7 @@ class TestSubvolumes(TestVolumesHelper):
             self._configure_guest_auth(guest_mounts[i], auth_id, key)
 
             # mount the subvolume, and write to it
-            guest_mounts[i].mount(cephfs_mntpt=mount_path)
+            guest_mounts[i].mount_wait(cephfs_mntpt=mount_path)
             guest_mounts[i].write_n_mb("data.bin", 1)
 
         # Evict client, guest_mounts[0], using auth ID 'guest' and has mounted
@@ -2010,7 +2042,7 @@ class TestSubvolumes(TestVolumesHelper):
         osize = self.DEFAULT_FILE_SIZE*1024*1024*20
         # create subvolume
         subvolname = self._generate_random_subvolume_name()
-        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size", str(osize))
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size", str(osize), "--mode=777")
 
         # make sure it exists
         subvolpath = self._get_subvolume_path(self.volname, subvolname)
@@ -2057,7 +2089,7 @@ class TestSubvolumes(TestVolumesHelper):
         osize = self.DEFAULT_FILE_SIZE*1024*1024*20
         # create subvolume
         subvolname = self._generate_random_subvolume_name()
-        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size", str(osize))
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size", str(osize), "--mode=777")
 
         # make sure it exists
         subvolpath = self._get_subvolume_path(self.volname, subvolname)
@@ -2105,7 +2137,7 @@ class TestSubvolumes(TestVolumesHelper):
         osize = self.DEFAULT_FILE_SIZE*1024*1024*10
         # create subvolume of quota 10MB and make sure it exists
         subvolname = self._generate_random_subvolume_name()
-        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size", str(osize))
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size", str(osize), "--mode=777")
         subvolpath = self._get_subvolume_path(self.volname, subvolname)
         self.assertNotEqual(subvolpath, None)
 
@@ -2181,7 +2213,7 @@ class TestSubvolumes(TestVolumesHelper):
         # create subvolume
         subvolname = self._generate_random_subvolume_name()
         self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size",
-                     str(self.DEFAULT_FILE_SIZE*1024*1024*5))
+                     str(self.DEFAULT_FILE_SIZE*1024*1024*5), "--mode=777")
 
         # make sure it exists
         subvolpath = self._get_subvolume_path(self.volname, subvolname)
@@ -2482,7 +2514,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         snapshot, snap_missing = self._generate_random_snapshot_name(2)
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=1)
@@ -2594,13 +2626,13 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         # Create snapshot at ancestral level
         ancestral_snappath1 = os.path.join(".", "volumes", group, ".snap", "ancestral_snap_1")
         ancestral_snappath2 = os.path.join(".", "volumes", group, ".snap", "ancestral_snap_2")
-        self.mount_a.run_shell(['mkdir', '-p', ancestral_snappath1, ancestral_snappath2])
+        self.mount_a.run_shell(['mkdir', '-p', ancestral_snappath1, ancestral_snappath2], sudo=True)
 
         subvolsnapshotls = json.loads(self._fs_cmd('subvolume', 'snapshot', 'ls', self.volname, subvolume, group))
         self.assertEqual(len(subvolsnapshotls), snap_count)
 
         # remove ancestral snapshots
-        self.mount_a.run_shell(['rmdir', ancestral_snappath1, ancestral_snappath2])
+        self.mount_a.run_shell(['rmdir', ancestral_snappath1, ancestral_snappath2], sudo=True)
 
         # remove snapshot
         for snapshot in snapshots:
@@ -2634,7 +2666,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         # Create snapshot at ancestral level
         ancestral_snap_name = "ancestral_snap_1"
         ancestral_snappath1 = os.path.join(".", "volumes", group, ".snap", ancestral_snap_name)
-        self.mount_a.run_shell(['mkdir', '-p', ancestral_snappath1])
+        self.mount_a.run_shell(['mkdir', '-p', ancestral_snappath1], sudo=True)
 
         # Validate existence of inherited snapshot
         group_path = os.path.join(".", "volumes", group)
@@ -2652,7 +2684,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
             self.fail("expected snapshot info of inherited snapshot to fail")
 
         # remove ancestral snapshots
-        self.mount_a.run_shell(['rmdir', ancestral_snappath1])
+        self.mount_a.run_shell(['rmdir', ancestral_snappath1], sudo=True)
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
@@ -2682,7 +2714,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         # Create snapshot at ancestral level
         ancestral_snap_name = "ancestral_snap_1"
         ancestral_snappath1 = os.path.join(".", "volumes", group, ".snap", ancestral_snap_name)
-        self.mount_a.run_shell(['mkdir', '-p', ancestral_snappath1])
+        self.mount_a.run_shell(['mkdir', '-p', ancestral_snappath1], sudo=True)
 
         # Validate existence of inherited snap
         group_path = os.path.join(".", "volumes", group)
@@ -2700,7 +2732,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
             self.fail("expected removing inheirted snapshot to fail")
 
         # remove ancestral snapshots
-        self.mount_a.run_shell(['rmdir', ancestral_snappath1])
+        self.mount_a.run_shell(['rmdir', ancestral_snappath1], sudo=True)
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, group)
@@ -2730,7 +2762,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
 
         # Create subvolumegroup snapshot
         group_snapshot_path = os.path.join(".", "volumes", group, ".snap", group_snapshot)
-        self.mount_a.run_shell(['mkdir', '-p', group_snapshot_path])
+        self.mount_a.run_shell(['mkdir', '-p', group_snapshot_path], sudo=True)
 
         # Validate existence of subvolumegroup snapshot
         self.mount_a.run_shell(['ls', group_snapshot_path])
@@ -2744,7 +2776,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
             self.fail("expected subvolume snapshot creation with same name as subvolumegroup snapshot to fail")
 
         # remove subvolumegroup snapshot
-        self.mount_a.run_shell(['rmdir', group_snapshot_path])
+        self.mount_a.run_shell(['rmdir', group_snapshot_path], sudo=True)
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, group)
@@ -3057,7 +3089,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         clone = self._generate_random_clone_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=64)
@@ -3115,7 +3147,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clone = self._generate_random_clone_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=1)
@@ -3175,7 +3207,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         osize = self.DEFAULT_FILE_SIZE*1024*1024*12
 
         # create subvolume, in an isolated namespace with a specified size
-        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--namespace-isolated", "--size", str(osize))
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--namespace-isolated", "--size", str(osize), "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=8)
@@ -3218,13 +3250,16 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clone = self._generate_random_clone_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=64)
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
 
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
@@ -3264,13 +3299,16 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clone = self._generate_random_clone_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=64)
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
 
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
@@ -3309,13 +3347,16 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clone = self._generate_random_clone_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=64)
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
 
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
@@ -3357,7 +3398,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clone = self._generate_random_clone_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # store path for clone verification
         subvol1_path = self._get_subvolume_path(self.volname, subvolume)
@@ -3431,7 +3472,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clone = self._generate_random_clone_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # store path for clone verification
         subvol_path = self._get_subvolume_path(self.volname, subvolume)
@@ -3476,7 +3517,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clone = self._generate_random_clone_name(1)
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=16)
@@ -3488,7 +3529,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--retain-snapshots")
 
         # recreate subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # get and store path for clone verification
         subvol2_path = self._get_subvolume_path(self.volname, subvolume)
@@ -3533,7 +3574,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         snapshot = self._generate_random_snapshot_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # store path for clone verification
         subvol_path = self._get_subvolume_path(self.volname, subvolume)
@@ -3632,7 +3673,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clone = self._generate_random_clone_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io_mixed(subvolume)
@@ -3665,7 +3706,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clone = self._generate_random_clone_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=64)
@@ -3692,13 +3733,66 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_snapshot_in_complete_clone_rm(self):
+        """
+        Validates the removal of clone when it is not in 'complete|cancelled|failed' state.
+        The forceful removl of subvolume clone succeeds only if it's in any of the
+        'complete|cancelled|failed' states. It fails with EAGAIN in any other states.
+        """
+
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=64)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
+
+        # schedule a clone
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # Use --force since clone is not complete. Returns EAGAIN as clone is not either complete or cancelled.
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, clone, "--force")
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.EAGAIN:
+                raise RuntimeError("invalid error code when trying to remove failed clone")
+        else:
+            raise RuntimeError("expected error when removing a failed clone")
+
+        # cancel on-going clone
+        self._fs_cmd("clone", "cancel", self.volname, clone)
+
+        # verify canceled state
+        self._check_clone_canceled(clone)
+
+        # clone removal should succeed after cancel
+        self._fs_cmd("subvolume", "rm", self.volname, clone, "--force")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_snapshot_clone_retain_suid_guid(self):
         subvolume = self._generate_random_subvolume_name()
         snapshot = self._generate_random_snapshot_name()
         clone = self._generate_random_clone_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # Create a file with suid, guid bits set along with executable bit.
         args = ["subvolume", "getpath", self.volname, subvolume]
@@ -3740,7 +3834,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clone1, clone2 = self._generate_random_clone_name(2)
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=32)
@@ -3793,13 +3887,16 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clone = self._generate_random_clone_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=128)
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
 
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
@@ -3841,7 +3938,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clones = self._generate_random_clone_name(NR_CLONES)
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=4, file_size=FILE_SIZE_MB)
@@ -3898,7 +3995,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolumegroup", "create", self.volname, c_group)
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume, s_group)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, s_group, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, subvolume_group=s_group, number_of_files=32)
@@ -3940,7 +4037,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         nr_files = int((pool_capacity * 0.99) / (TestVolumes.DEFAULT_FILE_SIZE * 1024 * 1024))
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=nr_files)
@@ -3999,8 +4096,8 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         clone = self._generate_random_clone_name()
 
         # create subvolumes
-        self._fs_cmd("subvolume", "create", self.volname, subvolume1)
-        self._fs_cmd("subvolume", "create", self.volname, subvolume2)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume1, "--mode=777")
+        self._fs_cmd("subvolume", "create", self.volname, subvolume2, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume1, number_of_files=32)
@@ -4055,7 +4152,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         newid = self.fs.add_data_pool(new_pool)
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=32)
@@ -4096,7 +4193,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         group = self._generate_random_group_name()
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=32)
@@ -4185,11 +4282,11 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         # emulate a old-fashioned subvolume
         createpath = os.path.join(".", "volumes", "_nogroup", subvolume)
-        self.mount_a.run_shell(['mkdir', '-p', createpath])
+        self.mount_a.run_shell_payload(f"mkdir -p -m 777 {createpath}", sudo=True)
 
         # add required xattrs to subvolume
         default_pool = self.mount_a.getfattr(".", "ceph.dir.layout.pool")
-        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool)
+        self.mount_a.setfattr(createpath, 'ceph.dir.layout.pool', default_pool, sudo=True)
 
         # do some IO
         self._do_subvolume_io(subvolume, number_of_files=64)
@@ -4199,6 +4296,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         # ensure metadata file is in legacy location, with required version v1
         self._assert_meta_location_and_version(self.volname, subvolume, version=1, legacy=True)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
 
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
@@ -4249,6 +4349,25 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
         self.assertEqual(max_concurrent_clones, 2)
 
+    def test_subvolume_snapshot_config_snapshot_clone_delay(self):
+        """
+        Validate 'snapshot_clone_delay' config option
+        """
+
+        # get the default delay before starting the clone
+        default_timeout = int(self.config_get('mgr', 'mgr/volumes/snapshot_clone_delay'))
+        self.assertEqual(default_timeout, 0)
+
+        # Insert delay of 2 seconds at the beginning of the snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
+        default_timeout = int(self.config_get('mgr', 'mgr/volumes/snapshot_clone_delay'))
+        self.assertEqual(default_timeout, 2)
+
+        # Decrease number of cloner threads
+        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 2)
+        max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
+        self.assertEqual(max_concurrent_clones, 2)
+
     def test_subvolume_under_group_snapshot_clone(self):
         subvolume = self._generate_random_subvolume_name()
         group = self._generate_random_group_name()
@@ -4259,7 +4378,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolumegroup", "create", self.volname, group)
 
         # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume, group)
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, group, "--mode=777")
 
         # do some IO
         self._do_subvolume_io(subvolume, subvolume_group=group, number_of_files=32)
@@ -4426,11 +4545,11 @@ class TestMisc(TestVolumesHelper):
         # emulate a old-fashioned subvolume -- one in the default group and
         # the other in a custom group
         createpath1 = os.path.join(".", "volumes", "_nogroup", subvolume1)
-        self.mount_a.run_shell(['mkdir', '-p', createpath1])
+        self.mount_a.run_shell(['mkdir', '-p', createpath1], sudo=True)
 
         # create group
         createpath2 = os.path.join(".", "volumes", group, subvolume2)
-        self.mount_a.run_shell(['mkdir', '-p', createpath2])
+        self.mount_a.run_shell(['mkdir', '-p', createpath2], sudo=True)
 
         # this would auto-upgrade on access without anyone noticing
         subvolpath1 = self._fs_cmd("subvolume", "getpath", self.volname, subvolume1)

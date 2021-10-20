@@ -24,8 +24,11 @@ class CephadmNoImage(Enum):
 CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw', 'rbd-mirror', 'cephfs-mirror']
 GATEWAY_TYPES = ['iscsi', 'nfs']
 MONITORING_STACK_TYPES = ['node-exporter', 'prometheus', 'alertmanager', 'grafana']
+
 CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES
 
+# these daemon types use the ceph container image
+CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs']
 
 # Used for _run_cephadm used for check-host etc that don't require an --image parameter
 cephadmNoImage = CephadmNoImage.token
@@ -119,3 +122,14 @@ def resolve_ip(hostname: str) -> str:
 
 def ceph_release_to_major(release: str) -> int:
     return ord(release[0]) - ord('a') + 1
+
+
+def file_mode_to_str(mode: int) -> str:
+    r = ''
+    for shift in range(0, 9, 3):
+        r = (
+            f'{"r" if (mode >> shift) & 4 else "-"}'
+            f'{"w" if (mode >> shift) & 2 else "-"}'
+            f'{"x" if (mode >> shift) & 1 else "-"}'
+        ) + r
+    return r

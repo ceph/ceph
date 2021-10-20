@@ -37,62 +37,74 @@ To add each new host to the cluster, perform two steps:
 
    .. prompt:: bash #
 
-     ceph orch host add *newhost*
+     ceph orch host add *<newhost>* [*<ip>*] [*<label1> ...*]
 
    For example:
 
    .. prompt:: bash #
 
-     ceph orch host add host2
-     ceph orch host add host3
-     
+     ceph orch host add host2 10.10.0.102
+     ceph orch host add host3 10.10.0.103
+
+   It is best to explicitly provide the host IP address.  If an IP is
+   not provided, then the host name will be immediately resolved via
+   DNS and that IP will be used.
+
+   One or more labels can also be included to immediately label the
+   new host.  For example, by default the ``_admin`` label will make
+   cephadm maintain a copy of the ``ceph.conf`` file and a
+   ``client.admin`` keyring file in ``/etc/ceph``:
+
+   .. prompt:: bash #
+
+       ceph orch host add host4 10.10.0.104 --labels _admin
+
 .. _cephadm-removing-hosts:
 
 Removing Hosts
 ==============
 
-If the node that want you to remove is running OSDs, make sure you remove the OSDs from the node.
+A host can safely be removed from a the cluster once all daemons are removed from it.
 
-To remove a host from a cluster, do the following:
-
-For all Ceph service types, except for ``node-exporter`` and ``crash``, remove
-the host from the placement specification file (for example, cluster.yml).
-For example, if you are removing the host named host2, remove all occurrences of
-``- host2`` from all ``placement:`` sections.
-
-Update:
-
-.. code-block:: yaml
-
-  service_type: rgw
-  placement:
-    hosts:
-    - host1
-    - host2
-
-To:
-
-.. code-block:: yaml
-
-
-  service_type: rgw
-  placement:
-    hosts:
-    - host1
-
-Remove the host from cephadm's environment:
+To drain all daemons from a host do the following:
 
 .. prompt:: bash #
 
-  ceph orch host rm host2
+  ceph orch host drain *<host>*
 
+The '_no_schedule' label will be applied to the host. See :ref:`cephadm-special-host-labels`
 
-If the host is running ``node-exporter`` and crash services, remove them by running
-the following command on the host:
+All osds on the host will be scheduled to be removed. You can check osd removal progress with the following:
 
 .. prompt:: bash #
 
-  cephadm rm-daemon --fsid CLUSTER_ID --name SERVICE_NAME
+  ceph orch osd rm status
+
+see :ref:`cephadm-osd-removal` for more details about osd removal
+
+You can check if there are no deamons left on the host with the following:
+
+.. prompt:: bash #
+
+  ceph orch ps <host> 
+
+Once all daemons are removed you can remove the host with the following:
+
+.. prompt:: bash #
+
+  ceph orch host rm <host>
+
+Offline host removal
+--------------------
+
+If a host is offline and can not be recovered it can still be removed from the cluster with the following:
+
+.. prompt:: bash #
+
+  ceph orch host rm <host> --offline --force
+
+This can potentially cause data loss as osds will be forcefully purged from the cluster by calling ``osd purge-actual`` for each osd.
+Service specs that still contain this host should be manually updated.
 
 .. _orchestrator-host-labels:
 
@@ -131,6 +143,19 @@ The following host labels have a special meaning to cephadm.  All start with ``_
   an existing host that already contains Ceph daemons, it will cause cephadm to move
   those daemons elsewhere (except OSDs, which are not removed automatically).
 
+* ``_no_autotune_memory``: *Do not autotune memory on this host*.
+
+  This label will prevent daemon memory from being tuned even when the
+  ``osd_memory_target_autotune`` or similar option is enabled for one or more daemons
+  on that host.
+
+* ``_admin``: *Distribute client.admin and ceph.conf to this host*.
+
+  By default, an ``_admin`` label is applied to the first host in the cluster (where
+  bootstrap was originally run), and the ``client.admin`` key is set to be distributed
+  to that host via the ``ceph orch client-keyring ...`` function.  Adding this label
+  to additional hosts will normally cause cephadm to deploy config and keyring files
+  in ``/etc/ceph``.
 
 Maintenance Mode
 ================
@@ -144,33 +169,54 @@ Where the force flag when entering maintenance allows the user to bypass warning
 
 See also :ref:`cephadm-fqdn`
 
-Host Specification
-==================
+Creating many hosts at once
+===========================
 
 Many hosts can be added at once using
-``ceph orch apply -i`` by submitting a multi-document YAML file::
+``ceph orch apply -i`` by submitting a multi-document YAML file:
 
-    ---
+.. code-block:: yaml
+
     service_type: host
-    addr: node-00
     hostname: node-00
+    addr: 192.168.0.10
     labels:
     - example1
     - example2
     ---
     service_type: host
-    addr: node-01
     hostname: node-01
+    addr: 192.168.0.11
     labels:
     - grafana
     ---
     service_type: host
-    addr: node-02
     hostname: node-02
+    addr: 192.168.0.12
 
 This can be combined with service specifications (below) to create a cluster spec
 file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec``
 also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior to adding them.
+
+Setting the initial CRUSH location of host
+==========================================
+
+Hosts can contain a ``location`` identifier which will instruct cephadm to 
+create a new CRUSH host located in the specified hierachy.
+
+.. code-block:: yaml
+
+    service_type: host
+    hostname: node-00
+    addr: 192.168.0.10
+    location:
+      rack: rack1
+
+.. note:: 
+
+  The ``location`` attribute will be only affect the initial CRUSH location. Subsequent
+  changes of the ``location`` property will be ignored. Also, removing a host will no remove
+  any CRUSH buckets.
 
 SSH Configuration
 =================
@@ -207,6 +253,8 @@ You can make use of an existing key by directly importing it with::
 You will then need to restart the mgr daemon to reload the configuration with::
 
   ceph mgr fail
+
+.. _cephadm-ssh-user:
 
 Configuring a different SSH user
 ----------------------------------
@@ -264,24 +312,12 @@ There are two ways to customize this configuration for your environment:
 Fully qualified domain names vs bare host names
 ===============================================
 
-cephadm has very minimal requirements when it comes to resolving host
-names etc. When cephadm initiates an ssh connection to a remote host,
-the host name  can be resolved in four different ways:
-
--  a custom ssh config resolving the name to an IP
--  via an externally maintained ``/etc/hosts``
--  via explicitly providing an IP address to cephadm: ``ceph orch host add <hostname> <IP>``
--  automatic name resolution via DNS.
-
-Ceph itself uses the command ``hostname`` to determine the name of the
-current host.
-
 .. note::
 
   cephadm demands that the name of the host given via ``ceph orch host add`` 
   equals the output of ``hostname`` on remote hosts.
 
-Otherwise cephadm can't be sure, the host names returned by
+Otherwise cephadm can't be sure that names returned by
 ``ceph * metadata`` match the hosts known to cephadm. This might result
 in a :ref:`cephadm-stray-host` warning.
 

@@ -3,8 +3,9 @@ import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
 import { of as observableOf } from 'rxjs';
-import { mergeMap } from 'rxjs/operators';
+import { catchError, mapTo } from 'rxjs/operators';
 
+import { ApiClient } from '~/app/shared/api/api-client';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { cdEncode } from '~/app/shared/decorators/cd-encode';
 
@@ -12,29 +13,27 @@ import { cdEncode } from '~/app/shared/decorators/cd-encode';
 @Injectable({
   providedIn: 'root'
 })
-export class RgwBucketService {
+export class RgwBucketService extends ApiClient {
   private url = 'api/rgw/bucket';
 
-  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {}
+  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {
+    super();
+  }
 
   /**
    * Get the list of buckets.
    * @return Observable<Object[]>
    */
-  list() {
+  list(stats: boolean = false, uid: string = '') {
     return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.append('stats', 'true');
-      return this.http.get(this.url, { params: params });
-    });
-  }
-
-  /**
-   * Get the list of bucket names.
-   * @return Observable<string[]>
-   */
-  enumerate() {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.get(this.url, { params: params });
+      params = params.append('stats', stats.toString());
+      if (uid) {
+        params = params.append('uid', uid);
+      }
+      return this.http.get(this.url, {
+        headers: { Accept: this.getVersionHeaderValue(1, 1) },
+        params: params
+      });
     });
   }
 
@@ -51,8 +50,7 @@ export class RgwBucketService {
     placementTarget: string,
     lockEnabled: boolean,
     lock_mode: 'GOVERNANCE' | 'COMPLIANCE',
-    lock_retention_period_days: string,
-    lock_retention_period_years: string
+    lock_retention_period_days: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       return this.http.post(this.url, null, {
@@ -65,7 +63,6 @@ export class RgwBucketService {
             lock_enabled: String(lockEnabled),
             lock_mode,
             lock_retention_period_days,
-            lock_retention_period_years,
             daemon_name: params.get('daemon_name')
           }
         })
@@ -82,8 +79,7 @@ export class RgwBucketService {
     mfaTokenSerial: string,
     mfaTokenPin: string,
     lockMode: 'GOVERNANCE' | 'COMPLIANCE',
-    lockRetentionPeriodDays: string,
-    lockRetentionPeriodYears: string
+    lockRetentionPeriodDays: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.append('bucket_id', bucketId);
@@ -94,7 +90,6 @@ export class RgwBucketService {
       params = params.append('mfa_token_pin', mfaTokenPin);
       params = params.append('lock_mode', lockMode);
       params = params.append('lock_retention_period_days', lockRetentionPeriodDays);
-      params = params.append('lock_retention_period_years', lockRetentionPeriodYears);
       return this.http.put(`${this.url}/${bucket}`, null, { params: params });
     });
   }
@@ -112,11 +107,22 @@ export class RgwBucketService {
    * @return Observable<boolean>
    */
   exists(bucket: string) {
-    return this.enumerate().pipe(
-      mergeMap((resp: string[]) => {
-        const index = _.indexOf(resp, bucket);
-        return observableOf(-1 !== index);
+    return this.get(bucket).pipe(
+      mapTo(true),
+      catchError((error: Event) => {
+        if (_.isFunction(error.preventDefault)) {
+          error.preventDefault();
+        }
+        return observableOf(false);
       })
     );
+  }
+
+  getLockDays(bucketData: object): number {
+    if (bucketData['lock_retention_period_years'] > 0) {
+      return Math.floor(bucketData['lock_retention_period_years'] * 365.242);
+    }
+
+    return bucketData['lock_retention_period_days'] || 0;
   }
 }

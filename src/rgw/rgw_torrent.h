@@ -11,7 +11,6 @@
 
 #include "common/ceph_time.h"
 
-#include "rgw_rados.h"
 #include "rgw_common.h"
 
 using ceph::crypto::SHA1;
@@ -93,16 +92,16 @@ private:
   {
     int piece_length;    // each piece length
     bufferlist sha1_bl;  // save sha1
-    string name;    // file name
+    std::string name;    // file name
     off_t len;    // file total bytes
   }info;
 
-  string  announce;    // tracker
-  string origin; // origin
+  std::string  announce;    // tracker
+  std::string origin; // origin
   time_t create_date{0};    // time of the file created
-  string comment;  // comment
-  string create_by;    // app name and version
-  string encoding;    // if encode use gbk rather than gtf-8 use this field
+  std::string comment;  // comment
+  std::string create_by;    // app name and version
+  std::string encoding;    // if encode use gbk rather than gtf-8 use this field
   uint64_t sha_len;  // sha1 length
   bool is_torrent;  // flag
   bufferlist bl;  // bufflist ready to send
@@ -127,7 +126,7 @@ public:
   bool get_flag();
 
   void set_create_date(ceph::real_time& value);
-  void set_info_name(const string& value);
+  void set_info_name(const std::string& value);
   void update(bufferlist &bl);
   int complete(optional_yield y);
 

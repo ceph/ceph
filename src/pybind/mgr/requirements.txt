@@ -1,11 +1,3 @@
-pytest-cov==2.7.1
--e../../python-common
+-rrequirements-required.txt
+asyncssh
 kubernetes
-requests-mock
-pyyaml
-prettytable
-pyOpenSSL
-execnet
-remoto
-Jinja2
-pyfakefs

@@ -18,6 +18,8 @@ import { GrafanaComponent } from './grafana.component';
 describe('GrafanaComponent', () => {
   let component: GrafanaComponent;
   let fixture: ComponentFixture<GrafanaComponent>;
+  const expected_url =
+    'http:localhost:3000/d/foo/somePath&refresh=2s&var-datasource=Dashboard1&kiosk&from=now-1h&to=now';
 
   configureTestBed({
     declarations: [GrafanaComponent, AlertPanelComponent, LoadingPanelComponent, DocComponent],
@@ -56,24 +58,18 @@ describe('GrafanaComponent', () => {
       expect(component.grafanaExist).toBe(true);
       expect(component.baseUrl).toBe('http:localhost:3000/d/');
       expect(component.loading).toBe(false);
-      expect(component.url).toBe(
-        'http:localhost:3000/d/foo/somePath&refresh=2s&kiosk&from=now-1h&to=now'
-      );
+      expect(component.url).toBe(expected_url);
       expect(component.grafanaSrc).toEqual({
-        changingThisBreaksApplicationSecurity:
-          'http:localhost:3000/d/foo/somePath&refresh=2s&kiosk&from=now-1h&to=now'
+        changingThisBreaksApplicationSecurity: expected_url
       });
     });
 
     it('should reset the values', () => {
       component.reset();
       expect(component.time).toBe('from=now-1h&to=now');
-      expect(component.url).toBe(
-        'http:localhost:3000/d/foo/somePath&refresh=2s&kiosk&from=now-1h&to=now'
-      );
+      expect(component.url).toBe(expected_url);
       expect(component.grafanaSrc).toEqual({
-        changingThisBreaksApplicationSecurity:
-          'http:localhost:3000/d/foo/somePath&refresh=2s&kiosk&from=now-1h&to=now'
+        changingThisBreaksApplicationSecurity: expected_url
       });
     });
 

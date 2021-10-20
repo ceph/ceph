@@ -44,7 +44,7 @@ function run() {
 
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     if in_jenkins; then
-        if ! ctest $CHECK_MAKEOPTS --no-compress-output --output-on-failure -T Test; then
+        if ! ctest $CHECK_MAKEOPTS --no-compress-output --output-on-failure --test-output-size-failed 1024000 -T Test; then
             # do not return failure, as the jenkins publisher will take care of this
             rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
         fi
@@ -69,9 +69,27 @@ function main() {
         echo "Please fix 'hostname --fqdn', otherwise 'make check' will fail"
         return 1
     fi
+    # uses run-make.sh to install-deps
     FOR_MAKE_CHECK=1 prepare
+    local cxx_compiler=g++
+    local c_compiler=gcc
+    for i in $(seq 14 -1 10); do
+        if type -t clang-$i > /dev/null; then
+            cxx_compiler="clang++-$i"
+            c_compiler="clang-$i"
+            break
+        fi
+    done
     # Init defaults after deps are installed.
-    local cmake_opts=" -DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_CEPHFS_SHELL=ON -DWITH_SPDK=ON -DENABLE_GIT_VERSION=OFF"
+    local cmake_opts
+    cmake_opts+=" -DCMAKE_CXX_COMPILER=$cxx_compiler -DCMAKE_C_COMPILER=$c_compiler"
+    cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
+    cmake_opts+=" -DENABLE_GIT_VERSION=OFF"
+    cmake_opts+=" -DWITH_GTEST_PARALLEL=ON"
+    cmake_opts+=" -DWITH_FIO=ON"
+    cmake_opts+=" -DWITH_CEPHFS_SHELL=ON"
+    cmake_opts+=" -DWITH_GRAFANA=ON"
+    cmake_opts+=" -DWITH_SPDK=ON"
     if [ $WITH_SEASTAR ]; then
         cmake_opts+=" -DWITH_SEASTAR=ON"
     fi
@@ -81,10 +99,10 @@ function main() {
     if [ $WITH_PMEM ]; then
         cmake_opts+=" -DWITH_RBD_RWL=ON -DWITH_SYSTEM_PMDK=ON"
     fi
-    configure $cmake_opts $@
+    configure "$cmake_opts" "$@"
     build tests
     echo "make check: successful build on $(git rev-parse HEAD)"
-    run
+    FOR_MAKE_CHECK=1 run
 }
 
 main "$@"

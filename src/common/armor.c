@@ -45,7 +45,7 @@ static int set_str_val(char **pdst, const char *end, char c)
 	return 0;
 }
 
-int ceph_armor_line_break(char *dst, const char *dst_end, const char *src, const char *end, int line_width)
+int ceph_armor_line_break(char *dst, char * const dst_end, const char *src, const char *end, int line_width)
 {
 	int olen = 0;
 	int line = 0;
@@ -91,12 +91,12 @@ int ceph_armor_line_break(char *dst, const char *dst_end, const char *src, const
 	return olen;
 }
 
-int ceph_armor(char *dst, const char *dst_end, const char *src, const char *end)
+int ceph_armor(char *dst, char * const dst_end, const char *src, const char *end)
 {
 	return ceph_armor_line_break(dst, dst_end, src, end, 0);
 }
 
-int ceph_unarmor(char *dst, const char *dst_end, const char *src, const char *end)
+int ceph_unarmor(char *dst, char * const dst_end, const char *src, const char *end)
 {
 	int olen = 0;
 

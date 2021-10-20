@@ -7,7 +7,7 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_seastore);
   }
 }
 
@@ -112,7 +112,13 @@ void btree_pin_set_t::add_pin(btree_range_pin_t &pin)
 
   auto [prev, inserted] = pins.insert(pin);
   if (!inserted) {
-    logger().error("{}: unable to add {}, found {}", __func__, pin, *prev);
+    logger().error(
+      "{}: unable to add {} ({}), found {} ({})",
+      __func__,
+      pin,
+      *(pin.extent),
+      *prev,
+      *(prev->extent));
     ceph_assert(0 == "impossible");
     return;
   }

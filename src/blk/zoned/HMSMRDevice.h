@@ -38,9 +38,10 @@ class HMSMRDevice final : public BlockDevice {
   bool aio, dio;
 
   int vdo_fd = -1;      ///< fd for vdo sysfs directory
-  string vdo_name;
+  std::string vdo_name;
 
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
+  int zbd_fd = -1;	///< fd for the zoned block device
 
   ceph::mutex debug_lock = ceph::make_mutex("HMSMRDevice::debug_lock");
   interval_set<uint64_t> debug_inflight;
@@ -123,7 +124,7 @@ public:
   void discard_drain() final;
 
   int collect_metadata(const std::string& prefix,
-                       map<std::string,std::string> *pm) const final;
+                       std::map<std::string,std::string> *pm) const final;
   int get_devname(std::string *s) const final {
     if (devname.empty()) {
       return -ENOENT;
@@ -134,6 +135,8 @@ public:
   int get_devices(std::set<std::string> *ls) const final;
 
   bool is_smr() const final { return true; }
+
+  void reset_zones(const std::set<uint64_t>& zones) override;
 
   bool get_thin_utilization(uint64_t *total, uint64_t *avail) const final;
 

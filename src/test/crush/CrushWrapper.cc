@@ -31,6 +31,8 @@
 
 #include "crush/CrushWrapper.h"
 
+using namespace std;
+
 class CrushWrapperTest : public ::testing::Test
 {
 public:
@@ -1416,7 +1418,7 @@ TEST_F(CrushWrapperTest, try_remap_rule) {
   // choose + choose
   {
     cout << "take + choose + choose + choose + emit" << std::endl;
-    int rule = c.add_rule(2, 5, 0, 1, 10);
+    int rule = c.add_rule(2, 5, 0);
     ASSERT_EQ(2, rule);
     c.set_rule_step_take(rule, 0, bno);
     c.set_rule_step_choose_indep(rule, 1, 2, 2);

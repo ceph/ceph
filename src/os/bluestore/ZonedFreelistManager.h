@@ -2,9 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 //
-// A freelist manager for zoned devices.  This iteration just keeps the write
-// pointer per zone.  Following iterations will add enough information to enable
-// cleaning of zones.
+// A freelist manager for zoned devices.
 //
 // Copyright (C) 2020 Abutalib Aghayev
 //
@@ -20,8 +18,11 @@
 #include "common/ceph_mutex.h"
 #include "include/buffer.h"
 #include "kv/KeyValueDB.h"
+#include "zoned_types.h"
 
 using cfg_reader_t = std::function<int(const std::string&, std::string*)>;
+
+const std::string CLEANING_IN_PROGRESS_KEY = "cleaning_in_progress";
 
 class ZonedFreelistManager : public FreelistManager {
   std::string meta_prefix;    ///< device size, zone size, etc.
@@ -98,9 +99,14 @@ public:
   }
 
   void get_meta(uint64_t target_size,
-		std::vector<std::pair<string, string>>*) const override;
+		std::vector<std::pair<std::string, std::string>>*) const override;
 
-  std::vector<zone_state_t> get_zone_states(KeyValueDB *kvdb) const override;
+  std::vector<zone_state_t> get_zone_states(KeyValueDB *kvdb) const;
+  std::set<uint64_t> get_cleaning_in_progress_zones(KeyValueDB *kvdb) const;
+  void mark_zones_to_clean_free(const std::set<uint64_t>& zones_to_clean, 
+				KeyValueDB *kvdb);
+  void mark_zones_to_clean_in_progress(const std::set<uint64_t>& zones_to_clean,
+				       KeyValueDB *kvdb);
 };
 
 #endif

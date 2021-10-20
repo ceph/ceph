@@ -31,6 +31,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 namespace {
 
   using namespace rgw;
@@ -425,14 +427,10 @@ TEST(LibRGW, SHUTDOWN) {
 
 int main(int argc, char *argv[])
 {
-  char *v{nullptr};
-  string val;
-  vector<const char*> args;
-
-  argv_to_vec(argc, const_cast<const char**>(argv), args);
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
-  v = getenv("AWS_ACCESS_KEY_ID");
+  char* v = getenv("AWS_ACCESS_KEY_ID");
   if (v) {
     access_key = v;
   }
@@ -442,6 +440,7 @@ int main(int argc, char *argv[])
     secret_key = v;
   }
 
+  string val;
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_witharg(args, arg_iter, &val, "--access",
 			      (char*) nullptr)) {

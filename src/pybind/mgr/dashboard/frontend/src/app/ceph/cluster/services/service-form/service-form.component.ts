@@ -1,8 +1,8 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, Input, OnInit, ViewChild } from '@angular/core';
 import { AbstractControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import { NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
+import { NgbActiveModal, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { merge, Observable, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
@@ -18,6 +18,7 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
+import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 @Component({
@@ -26,8 +27,11 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
   styleUrls: ['./service-form.component.scss']
 })
 export class ServiceFormComponent extends CdForm implements OnInit {
+  readonly RGW_SVC_ID_PATTERN = /^([^.]+)(\.([^.]+)\.([^.]+))?$/;
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
+
+  @Input() public hiddenServices: string[] = [];
 
   serviceForm: CdFormGroup;
   action: string;
@@ -38,6 +42,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   labelClick = new Subject<string>();
   labelFocus = new Subject<string>();
   pools: Array<object>;
+  services: Array<CephServiceSpec> = [];
+  pageURL: string;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -46,7 +52,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     private hostService: HostService,
     private poolService: PoolService,
     private router: Router,
-    private taskWrapperService: TaskWrapperService
+    private taskWrapperService: TaskWrapperService,
+    public activeModal: NgbActiveModal
   ) {
     super();
     this.resource = $localize`service`;
@@ -76,6 +83,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           CdValidators.requiredIf({
             service_type: 'iscsi'
           }),
+          CdValidators.requiredIf({
+            service_type: 'ingress'
+          }),
           CdValidators.composeIf(
             {
               service_type: 'rgw'
@@ -86,7 +96,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 if (_.isEmpty(value)) {
                   return false;
                 }
-                return !/^[^.]+\.[^.]+(\.[^.]+)?$/.test(value);
+                return !this.RGW_SVC_ID_PATTERN.test(value);
               })
             ]
           )
@@ -105,22 +115,16 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       hosts: [[]],
       count: [null, [CdValidators.number(false), Validators.min(1)]],
       unmanaged: [false],
-      // NFS & iSCSI
+      // iSCSI
       pool: [
         null,
         [
-          CdValidators.requiredIf({
-            service_type: 'nfs',
-            unmanaged: false
-          }),
           CdValidators.requiredIf({
             service_type: 'iscsi',
             unmanaged: false
           })
         ]
       ],
-      // NFS
-      namespace: [null],
       // RGW
       rgw_frontend_port: [
         null,
@@ -147,7 +151,29 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           })
         ]
       ],
-      // RGW & iSCSI
+      // Ingress
+      backend_service: [
+        null,
+        [
+          CdValidators.requiredIf({
+            service_type: 'ingress',
+            unmanaged: false
+          })
+        ]
+      ],
+      virtual_ip: [
+        null,
+        [
+          CdValidators.requiredIf({
+            service_type: 'ingress',
+            unmanaged: false
+          })
+        ]
+      ],
+      frontend_port: [null, [CdValidators.number(false), Validators.min(1), Validators.max(65535)]],
+      monitor_port: [null, [CdValidators.number(false), Validators.min(1), Validators.max(65535)]],
+      virtual_interface_networks: [null],
+      // RGW, Ingress & iSCSI
       ssl: [false],
       ssl_cert: [
         '',
@@ -158,7 +184,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               unmanaged: false,
               ssl: true
             },
-            [Validators.required, CdValidators.sslCert()]
+            [Validators.required, CdValidators.pemCert()]
           ),
           CdValidators.composeIf(
             {
@@ -175,14 +201,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         [
           CdValidators.composeIf(
             {
-              service_type: 'rgw',
-              unmanaged: false,
-              ssl: true
-            },
-            [Validators.required, CdValidators.sslPrivKey()]
-          ),
-          CdValidators.composeIf(
-            {
               service_type: 'iscsi',
               unmanaged: false,
               ssl: true
@@ -195,14 +213,19 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit(): void {
+    if (this.router.url.includes('services')) {
+      this.pageURL = 'services';
+    }
     this.action = this.actionLabels.CREATE;
     this.cephServiceService.getKnownTypes().subscribe((resp: Array<string>) => {
       // Remove service types:
       // osd       - This is deployed a different way.
       // container - This should only be used in the CLI.
-      this.serviceTypes = _.difference(resp, ['container', 'osd']).sort();
+      this.hiddenServices.push('osd', 'container');
+
+      this.serviceTypes = _.difference(resp, this.hiddenServices).sort();
     });
-    this.hostService.list().subscribe((resp: object[]) => {
+    this.hostService.list('false').subscribe((resp: object[]) => {
       const options: SelectOption[] = [];
       _.forEach(resp, (host: object) => {
         if (_.get(host, 'sources.orchestrator', false)) {
@@ -218,10 +241,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     this.poolService.getList().subscribe((resp: Array<object>) => {
       this.pools = resp;
     });
-  }
-
-  goToListView() {
-    this.router.navigate(['/services']);
+    this.cephServiceService.list().subscribe((services: CephServiceSpec[]) => {
+      this.services = services.filter((service: any) => service.service_type === 'rgw');
+    });
   }
 
   searchLabels = (text$: Observable<string>) => {
@@ -251,16 +273,34 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     reader.readAsText(file, 'utf8');
   }
 
+  prePopulateId() {
+    const control: AbstractControl = this.serviceForm.get('service_id');
+    const backendService = this.serviceForm.getValue('backend_service');
+    // Set Id as read-only
+    control.reset({ value: backendService, disabled: true });
+  }
+
   onSubmit() {
     const self = this;
     const values: object = this.serviceForm.value;
-    const serviceId: string = values['service_id'];
     const serviceType: string = values['service_type'];
     const serviceSpec: object = {
       service_type: serviceType,
       placement: {},
       unmanaged: values['unmanaged']
     };
+    let svcId: string;
+    if (serviceType === 'rgw') {
+      const svcIdMatch = values['service_id'].match(this.RGW_SVC_ID_PATTERN);
+      svcId = svcIdMatch[1];
+      if (svcIdMatch[3]) {
+        serviceSpec['rgw_realm'] = svcIdMatch[3];
+        serviceSpec['rgw_zone'] = svcIdMatch[4];
+      }
+    } else {
+      svcId = values['service_id'];
+    }
+    const serviceId: string = svcId;
     let serviceName: string = serviceType;
     if (_.isString(serviceId) && !_.isEmpty(serviceId)) {
       serviceName = `${serviceType}.${serviceId}`;
@@ -281,12 +321,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         serviceSpec['placement']['count'] = values['count'];
       }
       switch (serviceType) {
-        case 'nfs':
-          serviceSpec['pool'] = values['pool'];
-          if (_.isString(values['namespace']) && !_.isEmpty(values['namespace'])) {
-            serviceSpec['namespace'] = values['namespace'];
-          }
-          break;
         case 'rgw':
           if (_.isNumber(values['rgw_frontend_port']) && values['rgw_frontend_port'] > 0) {
             serviceSpec['rgw_frontend_port'] = values['rgw_frontend_port'];
@@ -294,7 +328,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['ssl'] = values['ssl'];
           if (values['ssl']) {
             serviceSpec['rgw_frontend_ssl_certificate'] = values['ssl_cert'].trim();
-            serviceSpec['rgw_frontend_ssl_key'] = values['ssl_key'].trim();
           }
           break;
         case 'iscsi':
@@ -313,6 +346,25 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             serviceSpec['ssl_key'] = values['ssl_key'].trim();
           }
           break;
+        case 'ingress':
+          serviceSpec['backend_service'] = values['backend_service'];
+          serviceSpec['service_id'] = values['backend_service'];
+          if (_.isString(values['virtual_ip']) && !_.isEmpty(values['virtual_ip'])) {
+            serviceSpec['virtual_ip'] = values['virtual_ip'].trim();
+          }
+          if (_.isNumber(values['frontend_port']) && values['frontend_port'] > 0) {
+            serviceSpec['frontend_port'] = values['frontend_port'];
+          }
+          if (_.isNumber(values['monitor_port']) && values['monitor_port'] > 0) {
+            serviceSpec['monitor_port'] = values['monitor_port'];
+          }
+          serviceSpec['ssl'] = values['ssl'];
+          if (values['ssl']) {
+            serviceSpec['ssl_cert'] = values['ssl_cert'].trim();
+            serviceSpec['ssl_key'] = values['ssl_key'].trim();
+          }
+          serviceSpec['virtual_interface_networks'] = values['virtual_interface_networks'];
+          break;
       }
     }
     this.taskWrapperService
@@ -326,8 +378,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         error() {
           self.serviceForm.setErrors({ cdSubmitButton: true });
         },
-        complete() {
-          self.goToListView();
+        complete: () => {
+          this.pageURL === 'services'
+            ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
+            : this.activeModal.close();
         }
       });
   }

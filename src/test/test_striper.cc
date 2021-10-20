@@ -3,6 +3,8 @@
 
 #include "osdc/Striper.h"
 
+using namespace std;
+
 TEST(Striper, Stripe1)
 {
   file_layout_t l;

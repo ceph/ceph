@@ -53,6 +53,8 @@
 #define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
 #define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
 
+using namespace std;
+
 static const ceph::unordered_map<int,int> cephfs_errno_to_system_errno = {
   {CEPHFS_EBLOCKLISTED,    ESHUTDOWN},
   {CEPHFS_EPERM,           EPERM},
@@ -1322,6 +1324,26 @@ int CephFuse::Handle::init(int argc, const char *argv[])
 
   ceph_assert(args.allocated);  // Checking fuse has realloc'd args so we can free newargv
   free(newargv);
+
+  struct ceph_client_callback_args cb_args = {
+    handle: this,
+    ino_cb: client->cct->_conf.get_val<bool>("fuse_use_invalidate_cb") ?
+      ino_invalidate_cb : NULL,
+    dentry_cb: dentry_invalidate_cb,
+    switch_intr_cb: switch_interrupt_cb,
+#if defined(__linux__)
+    remount_cb: remount_cb,
+#endif
+#if !defined(__APPLE__)
+    umask_cb: umask_cb,
+#endif
+  };
+  r = client->ll_register_callbacks2(&cb_args);
+  if (r) {
+    derr << "registering callbacks failed: " << r << dendl;
+    return r;
+  }
+
   return 0;
 }
 
@@ -1362,22 +1384,6 @@ int CephFuse::Handle::start()
 #else
   fuse_session_add_chan(se, ch);
 #endif
-
-
-  struct ceph_client_callback_args args = {
-    handle: this,
-    ino_cb: client->cct->_conf.get_val<bool>("fuse_use_invalidate_cb") ?
-      ino_invalidate_cb : NULL,
-    dentry_cb: dentry_invalidate_cb,
-    switch_intr_cb: switch_interrupt_cb,
-#if defined(__linux__)
-    remount_cb: remount_cb,
-#endif
-#if !defined(__APPLE__)
-    umask_cb: umask_cb,
-#endif
-  };
-  client->ll_register_callbacks(&args);
 
   return 0;
 }

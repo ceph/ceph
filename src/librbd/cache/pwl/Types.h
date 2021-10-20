@@ -41,13 +41,13 @@ enum {
 
   // All write requests
   l_librbd_pwl_wr_req,             // write requests
+  l_librbd_pwl_wr_bytes,           // bytes written
   l_librbd_pwl_wr_req_def,         // write requests deferred for resources
   l_librbd_pwl_wr_req_def_lanes,   // write requests deferred for lanes
   l_librbd_pwl_wr_req_def_log,     // write requests deferred for log entries
   l_librbd_pwl_wr_req_def_buf,     // write requests deferred for buffer space
   l_librbd_pwl_wr_req_overlap,     // write requests detained for overlap
   l_librbd_pwl_wr_req_queued,      // write requests queued for prior barrier
-  l_librbd_pwl_wr_bytes,           // bytes written
 
   // Write log operations (1 .. n per request that appends to the log)
   l_librbd_pwl_log_ops,            // log append ops
@@ -137,7 +137,8 @@ enum {
   l_librbd_pwl_cmp_latency,
   l_librbd_pwl_cmp_fails,
 
-  l_librbd_pwl_flush,
+  l_librbd_pwl_internal_flush,
+  l_librbd_pwl_writeback_latency,
   l_librbd_pwl_invalidate_cache,
   l_librbd_pwl_invalidate_discard_cache,
 
@@ -173,6 +174,7 @@ const unsigned int MAX_CONCURRENT_WRITES = (1024 * 1024);
 
 const uint64_t DEFAULT_POOL_SIZE = 1u<<30;
 const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
+const uint64_t POOL_SIZE_ALIGN = 1 << 20;
 constexpr double USABLE_SIZE = (7.0 / 10);
 const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
 const uint8_t RWL_POOL_VERSION = 1;
@@ -273,7 +275,7 @@ struct WriteLogCacheEntry {
   }
   #endif
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(list<WriteLogCacheEntry*>& ls);
+  static void generate_test_instances(std::list<WriteLogCacheEntry*>& ls);
 };
 
 struct WriteLogPoolRoot {
@@ -314,7 +316,7 @@ struct WriteLogPoolRoot {
   #endif
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(list<WriteLogPoolRoot*>& ls);
+  static void generate_test_instances(std::list<WriteLogPoolRoot*>& ls);
 };
 
 struct WriteBufferAllocation {

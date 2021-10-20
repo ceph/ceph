@@ -15,10 +15,13 @@
 
 namespace {
 
+using namespace std::chrono_literals;
+
 using seastar::engine;
 using seastar::future;
 using crimson::net::error;
 using crimson::net::FixedCPUServerSocket;
+using crimson::net::listen_ertr;
 using crimson::net::Socket;
 using crimson::net::SocketRef;
 using crimson::net::stop_t;
@@ -73,7 +76,7 @@ future<> test_bind_same() {
         return pss2->listen(saddr).safe_then([] {
           logger.error("test_bind_same() should raise address_in_use");
           ceph_abort();
-        }, FixedCPUServerSocket::listen_ertr::all_same_way(
+        }, listen_ertr::all_same_way(
             [] (const std::error_code& e) {
           if (e == std::errc::address_in_use) {
             // successful!
@@ -89,7 +92,7 @@ future<> test_bind_same() {
           return pss2->destroy();
         });
       });
-    }, FixedCPUServerSocket::listen_ertr::all_same_way(
+    }, listen_ertr::all_same_way(
         [saddr] (const std::error_code& e) {
       logger.error("test_bind_same(): there is another instance running at {}",
                    saddr);
@@ -114,7 +117,7 @@ future<> test_accept() {
           return socket->close().finally([cleanup = std::move(socket)] {});
         });
       });
-    }, FixedCPUServerSocket::listen_ertr::all_same_way(
+    }, listen_ertr::all_same_way(
         [saddr] (const std::error_code& e) {
       logger.error("test_accept(): there is another instance running at {}",
                    saddr);
@@ -160,7 +163,7 @@ class SocketFactory {
       return FixedCPUServerSocket::create().then([psf, saddr] (auto pss) {
         psf->pss = pss;
         return pss->listen(saddr
-        ).safe_then([]{}, FixedCPUServerSocket::listen_ertr::all_same_way(
+        ).safe_then([]{}, listen_ertr::all_same_way(
             [saddr] (const std::error_code& e) {
           logger.error("dispatch_sockets(): there is another instance running at {}",
                        saddr);

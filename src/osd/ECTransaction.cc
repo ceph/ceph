@@ -21,6 +21,7 @@
 #include "os/ObjectStore.h"
 #include "common/inline_variant.h"
 
+using std::less;
 using std::make_pair;
 using std::map;
 using std::pair;
@@ -330,7 +331,7 @@ void ECTransaction::generate_transactions(
       ceph_assert(op.omap_updates.empty());
 
       if (!op.attr_updates.empty()) {
-	map<string, bufferlist> to_set;
+	map<string, bufferlist, less<>> to_set;
 	for (auto &&j: op.attr_updates) {
 	  if (j.second) {
 	    to_set[j.first] = *(j.second);

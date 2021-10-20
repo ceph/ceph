@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Set, no_type_check
 
 import cherrypy
 from mgr_module import CLICommand, Option
 
 from ..controllers.cephfs import CephFS
 from ..controllers.iscsi import Iscsi, IscsiTarget
-from ..controllers.nfsganesha import NFSGanesha, NFSGaneshaExports, NFSGaneshaService
+from ..controllers.nfsganesha import NFSGanesha, NFSGaneshaExports
 from ..controllers.rbd import Rbd, RbdSnapshot, RbdTrash
 from ..controllers.rbd_mirroring import RbdMirroringPoolMode, \
     RbdMirroringPoolPeer, RbdMirroringSummary
@@ -17,11 +16,6 @@ from ..controllers.rgw import Rgw, RgwBucket, RgwDaemon, RgwUser
 from . import PLUGIN_MANAGER as PM
 from . import interfaces as I  # noqa: E741,N812
 from .ttl_cache import ttl_cache
-
-try:
-    from typing import Set, no_type_check
-except ImportError:
-    no_type_check = object()  # Just for type checking
 
 
 class Features(Enum):
@@ -42,7 +36,7 @@ Feature2Controller = {
     Features.ISCSI: [Iscsi, IscsiTarget],
     Features.CEPHFS: [CephFS],
     Features.RGW: [Rgw, RgwDaemon, RgwBucket, RgwUser],
-    Features.NFS: [NFSGanesha, NFSGaneshaService, NFSGaneshaExports],
+    Features.NFS: [NFSGanesha, NFSGaneshaExports],
 }
 
 
@@ -138,7 +132,7 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
 
     @PM.add_hook
     def get_controllers(self):
-        from ..controllers import ApiController, ControllerDoc, EndpointDoc, RESTController
+        from ..controllers import APIDoc, APIRouter, EndpointDoc, RESTController
 
         FEATURES_SCHEMA = {
             "rbd": (bool, ''),
@@ -149,8 +143,8 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             "nfs": (bool, '')
         }
 
-        @ApiController('/feature_toggles')
-        @ControllerDoc("Manage Features API", "FeatureTogglesEndpoint")
+        @APIRouter('/feature_toggles')
+        @APIDoc("Manage Features API", "FeatureTogglesEndpoint")
         class FeatureTogglesEndpoint(RESTController):
             @EndpointDoc("Get List Of Features",
                          responses={200: FEATURES_SCHEMA})

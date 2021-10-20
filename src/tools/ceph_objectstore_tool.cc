@@ -46,6 +46,7 @@
 #include "include/compat.h"
 #include "include/util.h"
 
+using namespace std;
 namespace po = boost::program_options;
 
 #ifdef INTERNAL_TEST
@@ -610,18 +611,21 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   int ret = write_info(t, epoch, info, past_intervals);
   if (ret)
     return ret;
+
   coll_t coll(info.pgid);
   map<string,bufferlist> km;
-
+  const bool require_rollback = !info.pgid.is_no_shard();
   if (!divergent.empty()) {
     ceph_assert(missing.get_items().empty());
     PGLog::write_log_and_missing_wo_missing(
-      t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent, true);
+      t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent,
+      require_rollback);
   } else {
     pg_missing_tracker_t tmissing(missing);
     bool rebuilt_missing_set_with_deletes = missing.may_include_deletes;
     PGLog::write_log_and_missing(
-      t, &km, log, coll, info.pgid.make_pgmeta_oid(), tmissing, true,
+      t, &km, log, coll, info.pgid.make_pgmeta_oid(), tmissing,
+      require_rollback,
       &rebuilt_missing_set_with_deletes);
   }
   t.omap_setkeys(coll, info.pgid.make_pgmeta_oid(), km);
@@ -806,7 +810,7 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
   }
 
   //Handle attrs for this object
-  map<string,bufferptr> aset;
+  map<string,bufferptr,less<>> aset;
   ret = store->getattrs(ch, obj, aset);
   if (ret) return ret;
   attr_section as(aset);
@@ -2143,7 +2147,7 @@ int do_remove_object(ObjectStore *store, coll_t coll,
 int do_list_attrs(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 {
   auto ch = store->open_collection(coll);
-  map<string,bufferptr> aset;
+  map<string,bufferptr,less<>> aset;
   int r = store->getattrs(ch, ghobj, aset);
   if (r < 0) {
     cerr << "getattrs: " << cpp_strerror(r) << std::endl;
@@ -3005,7 +3009,7 @@ int dup(string srcpath, ObjectStore *src, string dstpath, ObjectStore *dst)
 	ObjectStore::Transaction t;
 	t.touch(cid, oid);
 
-	map<string,bufferptr> attrs;
+	map<string,bufferptr,less<>> attrs;
 	src->getattrs(ch, oid, attrs);
 	if (!attrs.empty()) {
 	  t.setattrs(cid, oid, attrs);
@@ -3513,8 +3517,8 @@ int main(int argc, char **argv)
     }
   }
 
-  ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
-  if (fs == NULL) {
+  std::unique_ptr<ObjectStore> fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
+  if (!fs) {
     cerr << "Unable to create store of type " << type << std::endl;
     return 1;
   }
@@ -3577,14 +3581,14 @@ int main(int argc, char **argv)
       target_type = string(bl.c_str(), bl.length() - 1);  // drop \n
     }
     ::close(fd);
-    ObjectStore *targetfs = ObjectStore::create(
+    unique_ptr<ObjectStore> targetfs = ObjectStore::create(
       g_ceph_context, target_type,
       target_data_path, "", 0);
-    if (targetfs == NULL) {
+    if (!targetfs) {
       cerr << "Unable to open store of type " << target_type << std::endl;
       return 1;
     }
-    int r = dup(dpath, fs, target_data_path, targetfs);
+    int r = dup(dpath, fs.get(), target_data_path, targetfs.get());
     if (r < 0) {
       cerr << "dup failed: " << cpp_strerror(r) << std::endl;
       return 1;
@@ -3604,9 +3608,10 @@ int main(int argc, char **argv)
 
   if (op == "fuse") {
 #ifdef HAVE_LIBFUSE
-    FuseStore fuse(fs, mountpoint);
+    FuseStore fuse(fs.get(), mountpoint);
     cout << "mounting fuse at " << mountpoint << " ..." << std::endl;
     int r = fuse.main();
+    fs->umount();
     if (r < 0) {
       cerr << "failed to mount fuse: " << cpp_strerror(r) << std::endl;
       return 1;
@@ -3672,7 +3677,7 @@ int main(int argc, char **argv)
       target_level = atoi(arg1.c_str());
     }
     ceph_assert(superblock != nullptr);
-    ret = apply_layout_settings(fs, *superblock, pool, pgid, dry_run, target_level);
+    ret = apply_layout_settings(fs.get(), *superblock, pool, pgid, dry_run, target_level);
     goto out;
   }
 
@@ -3691,11 +3696,11 @@ int main(int argc, char **argv)
 	  head = true;
 	lookup_ghobject lookup(object, nspace, head);
 	if (pgidstr == "meta")
-	  ret = action_on_all_objects_in_exact_pg(fs, coll_t::meta(), lookup, debug);
+	  ret = action_on_all_objects_in_exact_pg(fs.get(), coll_t::meta(), lookup, debug);
 	else if (pgidstr.length())
-	  ret = action_on_all_objects_in_exact_pg(fs, coll_t(pgid), lookup, debug);
+	  ret = action_on_all_objects_in_exact_pg(fs.get(), coll_t(pgid), lookup, debug);
 	else
-	  ret = action_on_all_objects(fs, lookup, debug);
+	  ret = action_on_all_objects(fs.get(), lookup, debug);
 	if (ret) {
 	  throw std::runtime_error("Internal error");
 	} else {
@@ -3799,7 +3804,7 @@ int main(int argc, char **argv)
   if (op == "import") {
     ceph_assert(superblock != nullptr);
     try {
-      ret = tool.do_import(fs, *superblock, force, pgidstr);
+      ret = tool.do_import(fs.get(), *superblock, force, pgidstr);
     }
     catch (const buffer::error &e) {
       cerr << "do_import threw exception error " << e.what() << std::endl;
@@ -3831,7 +3836,7 @@ int main(int argc, char **argv)
       ceph_assert(superblock != nullptr);
       epoch = superblock->current_epoch;
     }
-    ret = get_osdmap(fs, epoch, osdmap, bl);
+    ret = get_osdmap(fs.get(), epoch, osdmap, bl);
     if (ret) {
       cerr << "Failed to get osdmap#" << epoch << ": "
 	   << cpp_strerror(ret) << std::endl;
@@ -3850,7 +3855,7 @@ int main(int argc, char **argv)
     if (ret < 0) {
       cerr << "Failed to read osdmap " << cpp_strerror(ret) << std::endl;
     } else {
-      ret = set_osdmap(fs, epoch, bl, force);
+      ret = set_osdmap(fs.get(), epoch, bl, force);
     }
     goto out;
   } else if (op == "get-inc-osdmap") {
@@ -3859,7 +3864,7 @@ int main(int argc, char **argv)
       ceph_assert(superblock != nullptr);
       epoch = superblock->current_epoch;
     }
-    ret = get_inc_osdmap(fs, epoch, bl);
+    ret = get_inc_osdmap(fs.get(), epoch, bl);
     if (ret < 0) {
       cerr << "Failed to get incremental osdmap# " << epoch << ": "
 	   << cpp_strerror(ret) << std::endl;
@@ -3879,7 +3884,7 @@ int main(int argc, char **argv)
       cerr << "Failed to read incremental osdmap  " << cpp_strerror(ret) << std::endl;
       goto out;
     } else {
-      ret = set_inc_osdmap(fs, epoch, bl, force);
+      ret = set_inc_osdmap(fs.get(), epoch, bl, force);
     }
     goto out;
   } else if (op == "update-mon-db") {
@@ -3899,7 +3904,7 @@ int main(int argc, char **argv)
       ret = -EINVAL;
       goto out;
     }
-    ret = initiate_new_remove_pg(fs, pgid);
+    ret = initiate_new_remove_pg(fs.get(), pgid);
     if (ret < 0) {
       cerr << "PG '" << pgid << "' not found" << std::endl;
       goto out;
@@ -3912,14 +3917,14 @@ int main(int argc, char **argv)
     boost::scoped_ptr<action_on_object_t> action;
     action.reset(new do_fix_lost());
     if (pgidstr.length())
-      ret = action_on_all_objects_in_exact_pg(fs, coll_t(pgid), *action, debug);
+      ret = action_on_all_objects_in_exact_pg(fs.get(), coll_t(pgid), *action, debug);
     else
-      ret = action_on_all_objects(fs, *action, debug);
+      ret = action_on_all_objects(fs.get(), *action, debug);
     goto out;
   }
 
   if (op == "list") {
-    ret = do_list(fs, pgidstr, object, nspace, formatter, debug,
+    ret = do_list(fs.get(), pgidstr, object, nspace, formatter, debug,
                   human_readable, head);
     if (ret < 0) {
       cerr << "do_list failed: " << cpp_strerror(ret) << std::endl;
@@ -3927,7 +3932,7 @@ int main(int argc, char **argv)
     goto out;
   }
   if (op == "list-slow-omap") {
-    ret = do_list_slow(fs, pgidstr, object, slow_threshold, formatter, debug,
+    ret = do_list_slow(fs.get(), pgidstr, object, slow_threshold, formatter, debug,
                   human_readable);
     if (ret < 0) {
       cerr << "do_list failed: " << cpp_strerror(ret) << std::endl;
@@ -3961,7 +3966,7 @@ int main(int argc, char **argv)
   }
 
   if (op == "meta-list") {
-    ret = do_meta(fs, object, formatter, debug, human_readable);
+    ret = do_meta(fs.get(), object, formatter, debug, human_readable);
     if (ret < 0) {
       cerr << "do_meta failed: " << cpp_strerror(ret) << std::endl;
     }
@@ -4038,13 +4043,13 @@ int main(int argc, char **argv)
           type = NOSNAPMAP;
         else if (rmtypestr == "snapmap")
           type = SNAPMAP;
-        ret = do_remove_object(fs, coll, ghobj, all, force, type);
+        ret = do_remove_object(fs.get(), coll, ghobj, all, force, type);
         goto out;
       } else if (objcmd == "list-attrs") {
-        ret = do_list_attrs(fs, coll, ghobj);
+        ret = do_list_attrs(fs.get(), coll, ghobj);
         goto out;
       } else if (objcmd == "list-omap") {
-        ret = do_list_omap(fs, coll, ghobj);
+        ret = do_list_omap(fs.get(), coll, ghobj);
         goto out;
       } else if (objcmd == "get-bytes" || objcmd == "set-bytes") {
         if (objcmd == "get-bytes") {
@@ -4059,7 +4064,7 @@ int main(int argc, char **argv)
               goto out;
             }
           }
-          ret = do_get_bytes(fs, coll, ghobj, fd);
+          ret = do_get_bytes(fs.get(), coll, ghobj, fd);
           if (fd != STDOUT_FILENO)
             close(fd);
         } else {
@@ -4080,7 +4085,7 @@ int main(int argc, char **argv)
               goto out;
             }
           }
-          ret = do_set_bytes(fs, coll, ghobj, fd);
+          ret = do_set_bytes(fs.get(), coll, ghobj, fd);
           if (fd != STDIN_FILENO)
             close(fd);
         }
@@ -4091,7 +4096,7 @@ int main(int argc, char **argv)
           ret = 1;
           goto out;
         }
-	ret = do_get_attr(fs, coll, ghobj, arg1);
+	ret = do_get_attr(fs.get(), coll, ghobj, arg1);
         goto out;
       } else if (objcmd == "set-attr") {
 	if (vm.count("arg1") == 0) {
@@ -4116,7 +4121,7 @@ int main(int argc, char **argv)
 	    goto out;
 	  }
 	}
-	ret = do_set_attr(fs, coll, ghobj, arg1, fd);
+	ret = do_set_attr(fs.get(), coll, ghobj, arg1, fd);
 	if (fd != STDIN_FILENO)
 	  close(fd);
         goto out;
@@ -4126,7 +4131,7 @@ int main(int argc, char **argv)
           ret = 1;
           goto out;
         }
-	ret = do_rm_attr(fs, coll, ghobj, arg1);
+	ret = do_rm_attr(fs.get(), coll, ghobj, arg1);
         goto out;
       } else if (objcmd == "get-omap") {
 	if (vm.count("arg1") == 0) {
@@ -4134,7 +4139,7 @@ int main(int argc, char **argv)
           ret = 1;
           goto out;
         }
-	ret = do_get_omap(fs, coll, ghobj, arg1);
+	ret = do_get_omap(fs.get(), coll, ghobj, arg1);
         goto out;
       } else if (objcmd == "set-omap") {
 	if (vm.count("arg1") == 0) {
@@ -4159,7 +4164,7 @@ int main(int argc, char **argv)
 	    goto out;
 	  }
 	}
-	ret = do_set_omap(fs, coll, ghobj, arg1, fd);
+	ret = do_set_omap(fs.get(), coll, ghobj, arg1, fd);
 	if (fd != STDIN_FILENO)
 	  close(fd);
         goto out;
@@ -4169,7 +4174,7 @@ int main(int argc, char **argv)
           ret = 1;
           goto out;
         }
-	ret = do_rm_omap(fs, coll, ghobj, arg1);
+	ret = do_rm_omap(fs.get(), coll, ghobj, arg1);
         goto out;
       } else if (objcmd == "get-omaphdr") {
 	if (vm.count("arg1")) {
@@ -4177,7 +4182,7 @@ int main(int argc, char **argv)
           ret = 1;
           goto out;
         }
-	ret = do_get_omaphdr(fs, coll, ghobj);
+	ret = do_get_omaphdr(fs.get(), coll, ghobj);
         goto out;
       } else if (objcmd == "set-omaphdr") {
         // Extra arg
@@ -4203,7 +4208,7 @@ int main(int argc, char **argv)
 	    goto out;
 	  }
 	}
-	ret = do_set_omaphdr(fs, coll, ghobj, fd);
+	ret = do_set_omaphdr(fs.get(), coll, ghobj, fd);
 	if (fd != STDIN_FILENO)
 	  close(fd);
         goto out;
@@ -4214,7 +4219,7 @@ int main(int argc, char **argv)
 	  ret = 1;
 	  goto out;
 	}
-	ret = print_obj_info(fs, coll, ghobj, formatter);
+	ret = print_obj_info(fs.get(), coll, ghobj, formatter);
 	goto out;
       } else if (objcmd == "corrupt-info") {   // Undocumented testing feature
 	// There should not be any other arguments
@@ -4223,7 +4228,7 @@ int main(int argc, char **argv)
           ret = 1;
           goto out;
         }
-        ret = corrupt_info(fs, coll, ghobj, formatter);
+        ret = corrupt_info(fs.get(), coll, ghobj, formatter);
         goto out;
       } else if (objcmd == "set-size" || objcmd == "corrupt-size") {
 	// Undocumented testing feature
@@ -4240,10 +4245,10 @@ int main(int argc, char **argv)
 	  goto out;
 	}
 	uint64_t size = atoll(arg1.c_str());
-	ret = set_size(fs, coll, ghobj, size, formatter, corrupt);
+	ret = set_size(fs.get(), coll, ghobj, size, formatter, corrupt);
 	goto out;
       } else if (objcmd == "clear-data-digest") {
-        ret = clear_data_digest(fs, coll, ghobj);
+        ret = clear_data_digest(fs.get(), coll, ghobj);
         goto out;
       } else if (objcmd == "clear-snapset") {
         // UNDOCUMENTED: For testing zap SnapSet
@@ -4253,7 +4258,7 @@ int main(int argc, char **argv)
 	  ret = 1;
 	  goto out;
 	}
-        ret = clear_snapset(fs, coll, ghobj, arg1);
+        ret = clear_snapset(fs.get(), coll, ghobj, arg1);
         goto out;
       } else if (objcmd == "remove-clone-metadata") {
         // Extra arg
@@ -4273,7 +4278,7 @@ int main(int argc, char **argv)
 	  goto out;
 	}
         snapid_t cloneid = atoi(arg1.c_str());
-	ret = remove_clone(fs, coll, ghobj, cloneid, force);
+	ret = remove_clone(fs.get(), coll, ghobj, cloneid, force);
 	goto out;
       }
       cerr << "Unknown object command '" << objcmd << "'" << std::endl;
@@ -4283,7 +4288,7 @@ int main(int argc, char **argv)
     }
 
     map_epoch = 0;
-    ret = PG::peek_map_epoch(fs, pgid, &map_epoch);
+    ret = PG::peek_map_epoch(fs.get(), pgid, &map_epoch);
     if (ret < 0)
       cerr << "peek_map_epoch reports error" << std::endl;
     if (debug)
@@ -4292,7 +4297,7 @@ int main(int argc, char **argv)
     pg_info_t info(pgid);
     PastIntervals past_intervals;
     __u8 struct_ver;
-    ret = PG::read_info(fs, pgid, coll, info, past_intervals, struct_ver);
+    ret = PG::read_info(fs.get(), pgid, coll, info, past_intervals, struct_ver);
     if (ret < 0) {
       cerr << "read_info error " << cpp_strerror(ret) << std::endl;
       goto out;
@@ -4307,11 +4312,11 @@ int main(int argc, char **argv)
 
     if (op == "export" || op == "export-remove") {
       ceph_assert(superblock != nullptr);
-      ret = tool.do_export(fs, coll, pgid, info, map_epoch, struct_ver, *superblock, past_intervals);
+      ret = tool.do_export(fs.get(), coll, pgid, info, map_epoch, struct_ver, *superblock, past_intervals);
       if (ret == 0) {
         cerr << "Export successful" << std::endl;
         if (op == "export-remove") {
-          ret = initiate_new_remove_pg(fs, pgid);
+          ret = initiate_new_remove_pg(fs.get(), pgid);
           // Export succeeded, so pgid is there
           ceph_assert(ret == 0);
           cerr << "Remove successful" << std::endl;
@@ -4326,7 +4331,7 @@ int main(int argc, char **argv)
     } else if (op == "log") {
       PGLog::IndexedLog log;
       pg_missing_t missing;
-      ret = get_log(fs, struct_ver, pgid, info, log, missing);
+      ret = get_log(fs.get(), struct_ver, pgid, info, log, missing);
       if (ret < 0)
           goto out;
 
@@ -4362,7 +4367,7 @@ int main(int argc, char **argv)
       }
       cout << "Marking complete succeeded" << std::endl;
     } else if (op == "trim-pg-log") {
-      ret = do_trim_pg_log(fs, coll, info, pgid,
+      ret = do_trim_pg_log(fs.get(), coll, info, pgid,
 			   map_epoch, past_intervals);
       if (ret < 0) {
 	cerr << "Error trimming pg log: " << cpp_strerror(ret) << std::endl;

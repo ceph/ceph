@@ -4,7 +4,7 @@ from collections import OrderedDict
 from functools import wraps
 from ipaddress import ip_network, ip_address
 from typing import Optional, Dict, Any, List, Union, Callable, Iterable, Type, TypeVar, cast, \
-    NamedTuple
+    NamedTuple, Mapping
 
 import yaml
 
@@ -411,11 +411,10 @@ class ServiceSpec(object):
 
     This structure is supposed to be enough information to
     start the services.
-
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
-                          'node-exporter osd prometheus rbd-mirror rgw ' \
-                          'container cephadm-exporter ingress cephfs-mirror'.split()
+                          'node-exporter osd prometheus rbd-mirror rgw agent ' \
+                          'container ingress cephfs-mirror'.split()
     REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ingress '.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
@@ -433,6 +432,9 @@ class ServiceSpec(object):
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
             'container': CustomContainerSpec,
+            'grafana': MonitoringSpec,
+            'node-exporter': MonitoringSpec,
+            'prometheus': MonitoringSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise SpecValidationError('Spec needs a "service_type" key.')
@@ -463,15 +465,37 @@ class ServiceSpec(object):
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
                  ):
+
+        #: See :ref:`orchestrator-cli-placement-spec`.
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
         assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES, service_type
+        #: The type of the service. Needs to be either a Ceph
+        #: service (``mon``, ``crash``, ``mds``, ``mgr``, ``osd`` or
+        #: ``rbd-mirror``), a gateway (``nfs`` or ``rgw``), part of the
+        #: monitoring stack (``alertmanager``, ``grafana``, ``node-exporter`` or
+        #: ``prometheus``) or (``container``) for custom containers.
         self.service_type = service_type
+
+        #: The name of the service. Required for ``iscsi``, ``mds``, ``nfs``, ``osd``, ``rgw``,
+        #: ``container``, ``ingress``
         self.service_id = None
+
         if self.service_type in self.REQUIRES_SERVICE_ID:
             self.service_id = service_id
+
+        #: If set to ``true``, the orchestrator will not deploy nor remove
+        #: any daemon associated with this service. Placement and all other properties
+        #: will be ignored. This is useful, if you do not want this service to be
+        #: managed temporarily. For cephadm, See :ref:`cephadm-spec-unmanaged`
         self.unmanaged = unmanaged
         self.preview_only = preview_only
+
+        #: A list of network identities instructing the daemons to only bind
+        #: on the particular networks in that list. In case the cluster is distributed
+        #: across multiple networks, you can add multiple networks. See
+        #: :ref:`cephadm-monitoring-networks-ports`,
+        #: :ref:`cephadm-rgw-networks` and :ref:`cephadm-mgr-networks`.
         self.networks: List[str] = networks or []
 
         self.config: Optional[Dict[str, str]] = None
@@ -516,6 +540,8 @@ class ServiceSpec(object):
         the next two major releases (octoups, pacific).
 
         :param json_spec: A valid dict with ServiceSpec
+
+        :meta private:
         """
 
         if not isinstance(json_spec, dict):
@@ -653,7 +679,7 @@ class ServiceSpec(object):
 
     @staticmethod
     def yaml_representer(dumper: 'yaml.SafeDumper', data: 'ServiceSpec') -> Any:
-        return dumper.represent_dict(data.to_json().items())
+        return dumper.represent_dict(cast(Mapping, data.to_json().items()))
 
 
 yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
@@ -663,13 +689,12 @@ class NFSServiceSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'nfs',
                  service_id: Optional[str] = None,
-                 pool: Optional[str] = None,
-                 namespace: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 port: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -677,32 +702,16 @@ class NFSServiceSpec(ServiceSpec):
             placement=placement, unmanaged=unmanaged, preview_only=preview_only,
             config=config, networks=networks)
 
-        #: RADOS pool where NFS client recovery data is stored.
-        self.pool = pool
+        self.port = port
 
-        #: RADOS namespace where NFS client recovery data is stored in the pool.
-        self.namespace = namespace
-
-    def validate(self) -> None:
-        super(NFSServiceSpec, self).validate()
-
-        if not self.pool:
-            raise SpecValidationError(
-                'Cannot add NFS: No Pool specified')
+    def get_port_start(self) -> List[int]:
+        if self.port:
+            return [self.port]
+        return []
 
     def rados_config_name(self):
         # type: () -> str
         return 'conf-' + self.service_name()
-
-    def rados_config_location(self):
-        # type: () -> str
-        url = ''
-        if self.pool:
-            url += 'rados://' + self.pool + '/'
-            if self.namespace:
-                url += self.namespace + '/'
-            url += self.rados_config_name()
-        return url
 
 
 yaml.add_representer(NFSServiceSpec, ServiceSpec.yaml_representer)
@@ -712,7 +721,21 @@ class RGWSpec(ServiceSpec):
     """
     Settings to configure a (multisite) Ceph RGW
 
+    .. code-block:: yaml
+
+        service_type: rgw
+        service_id: myrealm.myzone
+        spec:
+            rgw_realm: myrealm
+            rgw_zone: myzone
+            ssl: true
+            rgw_frontend_port: 1234
+            rgw_frontend_type: beast
+            rgw_frontend_ssl_certificate: ...
+
+    See also: :ref:`orchestrator-cli-service-spec`
     """
+
     MANAGED_CONFIG_OPTIONS = ServiceSpec.MANAGED_CONFIG_OPTIONS + [
         'rgw_zone',
         'rgw_realm',
@@ -746,11 +769,17 @@ class RGWSpec(ServiceSpec):
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config, networks=networks)
 
-        self.rgw_realm = rgw_realm
-        self.rgw_zone = rgw_zone
-        self.rgw_frontend_port = rgw_frontend_port
-        self.rgw_frontend_ssl_certificate = rgw_frontend_ssl_certificate
-        self.rgw_frontend_type = rgw_frontend_type
+        #: The RGW realm associated with this service. Needs to be manually created
+        self.rgw_realm: Optional[str] = rgw_realm
+        #: The RGW zone associated with this service. Needs to be manually created
+        self.rgw_zone: Optional[str] = rgw_zone
+        #: Port of the RGW daemons
+        self.rgw_frontend_port: Optional[int] = rgw_frontend_port
+        #: List of SSL certificates
+        self.rgw_frontend_ssl_certificate: Optional[List[str]] = rgw_frontend_ssl_certificate
+        #: civetweb or beast (default: beast). See :ref:`rgw_frontends`
+        self.rgw_frontend_type: Optional[str] = rgw_frontend_type
+        #: enable SSL
         self.ssl = ssl
 
     def get_port_start(self) -> List[int]:
@@ -804,12 +833,19 @@ class IscsiServiceSpec(ServiceSpec):
 
         #: RADOS pool where ceph-iscsi config data is stored.
         self.pool = pool
+        #: list of trusted IP addresses
         self.trusted_ip_list = trusted_ip_list
+        #: ``api_port`` as defined in the ``iscsi-gateway.cfg``
         self.api_port = api_port
+        #: ``api_user`` as defined in the ``iscsi-gateway.cfg``
         self.api_user = api_user
+        #: ``api_password`` as defined in the ``iscsi-gateway.cfg``
         self.api_password = api_password
+        #: ``api_secure`` as defined in the ``iscsi-gateway.cfg``
         self.api_secure = api_secure
+        #: SSL certificate
         self.ssl_cert = ssl_cert
+        #: SSL private key
         self.ssl_key = ssl_key
 
         if not self.api_secure and self.ssl_cert and self.ssl_key:
@@ -842,6 +878,7 @@ class AlertManagerSpec(ServiceSpec):
                  user_data: Optional[Dict[str, Any]] = None,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 port: Optional[int] = None,
                  ):
         assert service_type == 'alertmanager'
         super(AlertManagerSpec, self).__init__(
@@ -864,6 +901,23 @@ class AlertManagerSpec(ServiceSpec):
         #                        added to the default receivers'
         #                        <webhook_configs> configuration.
         self.user_data = user_data or {}
+        self.port = port
+
+    def get_port_start(self) -> List[int]:
+        return [self.get_port(), 9094]
+
+    def get_port(self) -> int:
+        if self.port:
+            return self.port
+        else:
+            return 9093
+
+    def validate(self) -> None:
+        super(AlertManagerSpec, self).validate()
+
+        if self.port == 9094:
+            raise SpecValidationError(
+                'Port 9094 is reserved for AlertManager cluster listen address')
 
 
 yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
@@ -879,6 +933,7 @@ class IngressSpec(ServiceSpec):
                  backend_service: Optional[str] = None,
                  frontend_port: Optional[int] = None,
                  ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
                  ssl_dh_param: Optional[str] = None,
                  ssl_ciphers: Optional[List[str]] = None,
                  ssl_options: Optional[List[str]] = None,
@@ -889,8 +944,8 @@ class IngressSpec(ServiceSpec):
                  keepalived_password: Optional[str] = None,
                  virtual_ip: Optional[str] = None,
                  virtual_interface_networks: Optional[List[str]] = [],
-                 haproxy_container_image: Optional[str] = None,
-                 keepalived_container_image: Optional[str] = None,
+                 unmanaged: bool = False,
+                 ssl: bool = False
                  ):
         assert service_type == 'ingress'
         super(IngressSpec, self).__init__(
@@ -901,6 +956,7 @@ class IngressSpec(ServiceSpec):
         self.backend_service = backend_service
         self.frontend_port = frontend_port
         self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
         self.ssl_dh_param = ssl_dh_param
         self.ssl_ciphers = ssl_ciphers
         self.ssl_options = ssl_options
@@ -910,8 +966,8 @@ class IngressSpec(ServiceSpec):
         self.keepalived_password = keepalived_password
         self.virtual_ip = virtual_ip
         self.virtual_interface_networks = virtual_interface_networks or []
-        self.haproxy_container_image = haproxy_container_image
-        self.keepalived_container_image = keepalived_container_image
+        self.unmanaged = unmanaged
+        self.ssl = ssl
 
     def get_port_start(self) -> List[int]:
         return [cast(int, self.frontend_port),
@@ -935,6 +991,9 @@ class IngressSpec(ServiceSpec):
         if not self.virtual_ip:
             raise SpecValidationError(
                 'Cannot add ingress: No virtual_ip provided')
+
+
+yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
 
 
 class CustomContainerSpec(ServiceSpec):
@@ -1002,3 +1061,37 @@ class CustomContainerSpec(ServiceSpec):
 
 
 yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)
+
+
+class MonitoringSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str,
+                 service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 port: Optional[int] = None,
+                 ):
+        assert service_type in ['grafana', 'node-exporter', 'prometheus']
+
+        super(MonitoringSpec, self).__init__(
+            service_type, service_id,
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only, config=config,
+            networks=networks)
+
+        self.service_type = service_type
+        self.port = port
+
+    def get_port_start(self) -> List[int]:
+        return [self.get_port()]
+
+    def get_port(self) -> int:
+        if self.port:
+            return self.port
+        else:
+            return {'prometheus': 9095,
+                    'node-exporter': 9100,
+                    'grafana': 3000}[self.service_type]

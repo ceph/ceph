@@ -82,6 +82,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   pgAutoscaleModes: string[];
   crushUsage: string[] = undefined; // Will only be set if a rule is used by some pool
   ecpUsage: string[] = undefined; // Will only be set if a rule is used by some pool
+  crushRuleMaxSize = 10;
 
   private modalSubscription: Subscription;
 
@@ -155,7 +156,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
           validators: [
             CdValidators.custom(
               'tooFewOsds',
-              (rule: any) => this.info && rule && this.info.osd_count < rule.min_size
+              (rule: any) => this.info && rule && this.info.osd_count < 1
             ),
             CdValidators.custom(
               'required',
@@ -422,10 +423,6 @@ export class PoolFormComponent extends CdForm implements OnInit {
     if (!this.info || this.info.osd_count < 1) {
       return 0;
     }
-    const rule = this.form.getValue('crushRule');
-    if (rule) {
-      return rule.min_size;
-    }
     return 1;
   }
 
@@ -469,8 +466,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
       rule.steps[0].item_name
     );
     const currentDomain = domains[rule.steps[1].type];
-    const usable = currentDomain ? currentDomain.length : rule.max_size;
-    rule.usable_size = Math.min(usable, rule.max_size);
+    const usable = currentDomain ? currentDomain.length : this.crushRuleMaxSize;
+    rule.usable_size = Math.min(usable, this.crushRuleMaxSize);
   }
 
   private replicatedPgCalc(pgs: number): number {

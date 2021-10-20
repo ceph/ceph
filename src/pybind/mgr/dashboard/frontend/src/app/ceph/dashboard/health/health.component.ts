@@ -5,6 +5,7 @@ import { Subscription } from 'rxjs';
 
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { HealthService } from '~/app/shared/api/health.service';
+import { CssHelper } from '~/app/shared/classes/css-helper';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { Permissions } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
@@ -15,7 +16,6 @@ import {
   FeatureTogglesService
 } from '~/app/shared/services/feature-toggles.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
-import styles from '~/styles.scss';
 
 @Component({
   selector: 'cd-health',
@@ -32,7 +32,10 @@ export class HealthComponent implements OnInit, OnDestroy {
   clientStatsConfig = {
     colors: [
       {
-        backgroundColor: [styles.chartHealthColorCyan, styles.chartHealthColorPurple]
+        backgroundColor: [
+          this.cssHelper.propertyValue('chart-color-cyan'),
+          this.cssHelper.propertyValue('chart-color-purple')
+        ]
       }
     ]
   };
@@ -40,7 +43,10 @@ export class HealthComponent implements OnInit, OnDestroy {
   rawCapacityChartConfig = {
     colors: [
       {
-        backgroundColor: [styles.chartHealthColorBlue, styles.chartHealthColorGray]
+        backgroundColor: [
+          this.cssHelper.propertyValue('chart-color-blue'),
+          this.cssHelper.propertyValue('chart-color-gray')
+        ]
       }
     ]
   };
@@ -58,7 +64,8 @@ export class HealthComponent implements OnInit, OnDestroy {
     private featureToggles: FeatureTogglesService,
     private refreshIntervalService: RefreshIntervalService,
     private dimlessBinary: DimlessBinaryPipe,
-    private dimless: DimlessPipe
+    private dimless: DimlessPipe,
+    private cssHelper: CssHelper
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();

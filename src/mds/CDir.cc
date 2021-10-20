@@ -28,6 +28,7 @@
 #include "Locker.h"
 #include "MDLog.h"
 #include "LogSegment.h"
+#include "MDBalancer.h"
 
 #include "common/bloom_filter.hpp"
 #include "include/Context.h"
@@ -43,6 +44,8 @@
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
+
+using namespace std;
 
 int CDir::num_frozen_trees = 0;
 int CDir::num_freezing_trees = 0;
@@ -1577,6 +1580,8 @@ void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnab
 
   if (mdcache->mds->logger) mdcache->mds->logger->inc(l_mds_dir_fetch);
 
+  mdcache->mds->balancer->hit_dir(this, META_POP_FETCH);
+
   std::set<dentry_key_t> empty;
   _omap_fetch(NULL, empty);
 }
@@ -1601,6 +1606,8 @@ void CDir::fetch(MDSContext *c, const std::set<dentry_key_t>& keys)
 
   auth_pin(this);
   if (mdcache->mds->logger) mdcache->mds->logger->inc(l_mds_dir_fetch);
+
+  mdcache->mds->balancer->hit_dir(this, META_POP_FETCH);
 
   _omap_fetch(c, keys);
 }
@@ -2193,7 +2200,7 @@ public:
 		      vector<string> &&r,
 		      mempool::mds_co::compact_set<mempool::mds_co::string> &&stales) :
     dir(d), op_prio(pr) {
-    metapool = dir->mdcache->mds->mdsmap->get_metadata_pool();
+    metapool = dir->mdcache->mds->get_metadata_pool();
     version = dir->get_version();
     is_new = dir->is_new();
     to_set.swap(s);
@@ -2335,7 +2342,6 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
     _rm.emplace(std::move(key));
   }
 
-  uint64_t off = 0;
   bufferlist bl;
   using ceph::encode;
   for (auto &item : to_set) {
@@ -2352,7 +2358,6 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
       _encode_primary_inode_base(item, dfts, bl);
       ENCODE_FINISH(bl);
     }
-    off += item.dft_len;
 
     unsigned size = item.key.length() + bl.length() + 2 * sizeof(__u32);
     if (write_size + size > max_write_size)
@@ -2439,7 +2444,7 @@ void CDir::_omap_commit(int op_prio)
   };
 
   if (state_test(CDir::STATE_FRAGMENTING) && is_new()) {
-    assert(committed_version == 0);
+    ceph_assert(committed_version == 0);
     for (auto p = items.begin(); p != items.end(); ) {
       CDentry *dn = p->second;
       ++p;
@@ -2551,6 +2556,8 @@ void CDir::_commit(version_t want, int op_prio)
   }
   
   if (mdcache->mds->logger) mdcache->mds->logger->inc(l_mds_dir_commit);
+
+  mdcache->mds->balancer->hit_dir(this, META_POP_STORE);
 
   _omap_commit(op_prio);
 }

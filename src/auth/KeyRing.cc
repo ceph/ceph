@@ -49,7 +49,7 @@ int KeyRing::from_ceph_context(CephContext *cct)
     if (ret < 0)
       lderr(cct) << "failed to load " << filename
 		 << ": " << cpp_strerror(ret) << dendl;
-  } else {
+  } else if (conf->key.empty() && conf->keyfile.empty()) {
     lderr(cct) << "unable to find a keyring on " << conf->keyring
 	       << ": " << cpp_strerror(ret) << dendl;
   }
@@ -162,7 +162,7 @@ void KeyRing::encode_formatted(string label, Formatter *f, bufferlist& bl)
   f->flush(bl);
 }
 
-void KeyRing::decode_plaintext(bufferlist::const_iterator& bli)
+void KeyRing::decode(bufferlist::const_iterator& bli)
 {
   int ret;
   bufferlist bl;
@@ -198,19 +198,6 @@ void KeyRing::decode_plaintext(bufferlist::const_iterator& bli)
 	throw ceph::buffer::malformed_input(oss.str().c_str());
       }
     }
-  }
-}
-
-void KeyRing::decode(bufferlist::const_iterator& bl) {
-  __u8 struct_v;
-  auto start_pos = bl;
-  try {
-    using ceph::decode;
-    decode(struct_v, bl);
-    decode(keys, bl);
-  } catch (ceph::buffer::error& err) {
-    keys.clear();
-    decode_plaintext(start_pos);
   }
 }
 

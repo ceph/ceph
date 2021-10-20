@@ -40,6 +40,9 @@ namespace cb = ceph::buffer;
 namespace fifo = rados::cls::fifo;
 namespace RCf = rgw::cls::fifo;
 
+auto cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
+const DoutPrefix dp(cct, 1, "test log backing: ");
+
 class LogBacking : public testing::Test {
 protected:
   static constexpr int SHARDS = 3;
@@ -72,7 +75,7 @@ protected:
       cb::list bl;
       encode(i, bl);
       cls_log_add(op, ceph_clock_now(), {}, "meow", bl);
-      auto r = rgw_rados_operate(ioctx, get_oid(0, i), &op, null_yield);
+      auto r = rgw_rados_operate(&dp, ioctx, get_oid(0, i), &op, null_yield);
       ASSERT_GE(r, 0);
     }
   }
@@ -83,7 +86,7 @@ protected:
     cb::list bl;
     encode(i, bl);
     cls_log_add(op, ceph_clock_now(), {}, "meow", bl);
-    auto r = rgw_rados_operate(ioctx, get_oid(0, i), &op, null_yield);
+    auto r = rgw_rados_operate(&dp, ioctx, get_oid(0, i), &op, null_yield);
     ASSERT_GE(r, 0);
   }
 
@@ -96,14 +99,14 @@ protected:
 	std::list<cls_log_entry> entries;
 	bool truncated = false;
 	cls_log_list(op, {}, {}, {}, 1, entries, &to_marker, &truncated);
-	auto r = rgw_rados_operate(ioctx, oid, &op, nullptr, null_yield);
+	auto r = rgw_rados_operate(&dp, ioctx, oid, &op, nullptr, null_yield);
 	ASSERT_GE(r, 0);
 	ASSERT_FALSE(entries.empty());
       }
       {
 	lr::ObjectWriteOperation op;
 	cls_log_trim(op, {}, {}, {}, to_marker);
-	auto r = rgw_rados_operate(ioctx, oid, &op, null_yield);
+	auto r = rgw_rados_operate(&dp, ioctx, oid, &op, null_yield);
 	ASSERT_GE(r, 0);
       }
       {
@@ -111,7 +114,7 @@ protected:
 	std::list<cls_log_entry> entries;
 	bool truncated = false;
 	cls_log_list(op, {}, {}, {}, 1, entries, &to_marker, &truncated);
-	auto r = rgw_rados_operate(ioctx, oid, &op, nullptr, null_yield);
+	auto r = rgw_rados_operate(&dp, ioctx, oid, &op, nullptr, null_yield);
 	ASSERT_GE(r, 0);
 	ASSERT_TRUE(entries.empty());
       }
@@ -122,7 +125,7 @@ protected:
     {
       for (int i = 0; i < SHARDS; ++i) {
 	std::unique_ptr<RCf::FIFO> fifo;
-	auto r = RCf::FIFO::create(ioctx, get_oid(0, i), &fifo, null_yield);
+	auto r = RCf::FIFO::create(&dp, ioctx, get_oid(0, i), &fifo, null_yield);
 	ASSERT_EQ(0, r);
 	ASSERT_TRUE(fifo);
       }
@@ -132,12 +135,12 @@ protected:
     {
       using ceph::encode;
       std::unique_ptr<RCf::FIFO> fifo;
-      auto r = RCf::FIFO::open(ioctx, get_oid(0, i), &fifo, null_yield);
+      auto r = RCf::FIFO::open(&dp, ioctx, get_oid(0, i), &fifo, null_yield);
       ASSERT_GE(0, r);
       ASSERT_TRUE(fifo);
       cb::list bl;
       encode(i, bl);
-      r = fifo->push(bl, null_yield);
+      r = fifo->push(&dp, bl, null_yield);
       ASSERT_GE(0, r);
     }
 
@@ -154,7 +157,7 @@ protected:
 TEST_F(LogBacking, TestOmap)
 {
   make_omap();
-  auto stat = log_backing_type(ioctx, log_type::fifo, SHARDS,
+  auto stat = log_backing_type(&dp, ioctx, log_type::fifo, SHARDS,
 			       [this](int shard){ return get_oid(0, shard); },
 			       null_yield);
   ASSERT_EQ(log_type::omap, *stat);
@@ -162,7 +165,7 @@ TEST_F(LogBacking, TestOmap)
 
 TEST_F(LogBacking, TestOmapEmpty)
 {
-  auto stat = log_backing_type(ioctx, log_type::omap, SHARDS,
+  auto stat = log_backing_type(&dp, ioctx, log_type::omap, SHARDS,
 			       [this](int shard){ return get_oid(0, shard); },
 			       null_yield);
   ASSERT_EQ(log_type::omap, *stat);
@@ -171,7 +174,7 @@ TEST_F(LogBacking, TestOmapEmpty)
 TEST_F(LogBacking, TestFIFO)
 {
   make_fifo();
-  auto stat = log_backing_type(ioctx, log_type::fifo, SHARDS,
+  auto stat = log_backing_type(&dp, ioctx, log_type::fifo, SHARDS,
 			       [this](int shard){ return get_oid(0, shard); },
 			       null_yield);
   ASSERT_EQ(log_type::fifo, *stat);
@@ -179,14 +182,14 @@ TEST_F(LogBacking, TestFIFO)
 
 TEST_F(LogBacking, TestFIFOEmpty)
 {
-  auto stat = log_backing_type(ioctx, log_type::fifo, SHARDS,
+  auto stat = log_backing_type(&dp, ioctx, log_type::fifo, SHARDS,
 			       [this](int shard){ return get_oid(0, shard); },
 			       null_yield);
   ASSERT_EQ(log_type::fifo, *stat);
 }
 
 TEST(CursorGen, RoundTrip) {
-  const auto pcurs = "fded"sv;
+  const std::string_view pcurs = "fded";
   {
     auto gc = gencursor(0, pcurs);
     ASSERT_EQ(pcurs, gc);
@@ -230,7 +233,7 @@ public:
 TEST_F(LogBacking, GenerationSingle)
 {
   auto lgr = logback_generations::init<generations>(
-    ioctx, "foobar", [this](uint64_t gen_id, int shard) {
+    &dp, ioctx, "foobar", [this](uint64_t gen_id, int shard) {
       return get_oid(gen_id, shard);
     }, SHARDS, log_type::fifo, null_yield);
   ASSERT_TRUE(lgr);
@@ -243,14 +246,13 @@ TEST_F(LogBacking, GenerationSingle)
   ASSERT_EQ(log_type::fifo, lg->got_entries[0].type);
   ASSERT_FALSE(lg->got_entries[0].pruned);
 
-  auto ec = lg->empty_to(0, null_yield);
+  auto ec = lg->empty_to(&dp, 0, null_yield);
   ASSERT_TRUE(ec);
-
 
   lg.reset();
 
   lg = *logback_generations::init<generations>(
-    ioctx, "foobar", [this](uint64_t gen_id, int shard) {
+    &dp, ioctx, "foobar", [this](uint64_t gen_id, int shard) {
       return get_oid(gen_id, shard);
     }, SHARDS, log_type::fifo, null_yield);
 
@@ -262,7 +264,7 @@ TEST_F(LogBacking, GenerationSingle)
 
   lg->got_entries.clear();
 
-  ec = lg->new_backing(log_type::omap, null_yield);
+  ec = lg->new_backing(&dp, log_type::omap, null_yield);
   ASSERT_FALSE(ec);
 
   ASSERT_EQ(1, lg->got_entries.size());
@@ -273,7 +275,7 @@ TEST_F(LogBacking, GenerationSingle)
   lg.reset();
 
   lg = *logback_generations::init<generations>(
-    ioctx, "foobar", [this](uint64_t gen_id, int shard) {
+    &dp, ioctx, "foobar", [this](uint64_t gen_id, int shard) {
       return get_oid(gen_id, shard);
     }, SHARDS, log_type::fifo, null_yield);
 
@@ -286,7 +288,7 @@ TEST_F(LogBacking, GenerationSingle)
   ASSERT_EQ(log_type::omap, lg->got_entries[1].type);
   ASSERT_FALSE(lg->got_entries[1].pruned);
 
-  ec = lg->empty_to(0, null_yield);
+  ec = lg->empty_to(&dp, 0, null_yield);
   ASSERT_FALSE(ec);
 
   ASSERT_EQ(0, *lg->tail);
@@ -294,7 +296,7 @@ TEST_F(LogBacking, GenerationSingle)
   lg.reset();
 
   lg = *logback_generations::init<generations>(
-    ioctx, "foobar", [this](uint64_t gen_id, int shard) {
+    &dp, ioctx, "foobar", [this](uint64_t gen_id, int shard) {
       return get_oid(gen_id, shard);
     }, SHARDS, log_type::fifo, null_yield);
 
@@ -302,28 +304,16 @@ TEST_F(LogBacking, GenerationSingle)
   ASSERT_EQ(1, lg->got_entries[1].gen_id);
   ASSERT_EQ(log_type::omap, lg->got_entries[1].type);
   ASSERT_FALSE(lg->got_entries[1].pruned);
-
-  ec = lg->remove_empty(null_yield);
-  ASSERT_FALSE(ec);
-
-  auto entries = lg->entries();
-  ASSERT_EQ(1, entries.size());
-
-  ASSERT_EQ(1, entries[1].gen_id);
-  ASSERT_EQ(log_type::omap, entries[1].type);
-  ASSERT_FALSE(entries[1].pruned);
-
-  lg.reset();
 }
 
 TEST_F(LogBacking, GenerationWN)
 {
   auto lg1 = *logback_generations::init<generations>(
-    ioctx, "foobar", [this](uint64_t gen_id, int shard) {
+    &dp, ioctx, "foobar", [this](uint64_t gen_id, int shard) {
       return get_oid(gen_id, shard);
     }, SHARDS, log_type::fifo, null_yield);
 
-  auto ec = lg1->new_backing(log_type::omap, null_yield);
+  auto ec = lg1->new_backing(&dp, log_type::omap, null_yield);
   ASSERT_FALSE(ec);
 
   ASSERT_EQ(1, lg1->got_entries.size());
@@ -334,7 +324,7 @@ TEST_F(LogBacking, GenerationWN)
   lg1->got_entries.clear();
 
   auto lg2 = *logback_generations::init<generations>(
-    ioctx2, "foobar", [this](uint64_t gen_id, int shard) {
+    &dp, ioctx2, "foobar", [this](uint64_t gen_id, int shard) {
       return get_oid(gen_id, shard);
     }, SHARDS, log_type::fifo, null_yield);
 
@@ -350,7 +340,7 @@ TEST_F(LogBacking, GenerationWN)
 
   lg2->got_entries.clear();
 
-  ec = lg1->new_backing(log_type::fifo, null_yield);
+  ec = lg1->new_backing(&dp, log_type::fifo, null_yield);
   ASSERT_FALSE(ec);
 
   ASSERT_EQ(1, lg1->got_entries.size());
@@ -366,7 +356,7 @@ TEST_F(LogBacking, GenerationWN)
   lg1->got_entries.clear();
   lg2->got_entries.clear();
 
-  ec = lg2->empty_to(1, null_yield);
+  ec = lg2->empty_to(&dp, 1, null_yield);
   ASSERT_FALSE(ec);
 
   ASSERT_EQ(1, *lg1->tail);

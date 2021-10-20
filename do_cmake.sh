@@ -19,16 +19,21 @@ if [ -r /etc/os-release ]; then
   source /etc/os-release
   case "$ID" in
       fedora)
-          PYBUILD="3.7"
-          if [ "$VERSION_ID" -eq "32" ] ; then
-              PYBUILD="3.8"
+          if [ "$VERSION_ID" -ge "35" ] ; then
+            PYBUILD="3.10"
           elif [ "$VERSION_ID" -ge "33" ] ; then
-              PYBUILD="3.9"
+            PYBUILD="3.9"
+          elif [ "$VERSION_ID" -ge "32" ] ; then
+            PYBUILD="3.8"
+          else
+            PYBUILD="3.7"
           fi
           ;;
       rhel|centos)
           MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
-          if [ "$MAJOR_VER" -ge "8" ] ; then
+          if [ "$MAJOR_VER" -ge "9" ] ; then
+              PYBUILD="3.9"
+          elif [ "$MAJOR_VER" -ge "8" ] ; then
               PYBUILD="3.6"
           fi
           ;;
@@ -52,11 +57,6 @@ ARGS+=" -DWITH_PYTHON3=${PYBUILD}"
 if type ccache > /dev/null 2>&1 ; then
     echo "enabling ccache"
     ARGS+=" -DWITH_CCACHE=ON"
-fi
-
-if [[ ! "$ARGS $@" =~ "-DBOOST_J" ]] ; then
-    ncpu=$(getconf _NPROCESSORS_ONLN 2>&1)
-    [ -n "$ncpu" -a "$ncpu" -gt 1 ] && ARGS+=" -DBOOST_J=$(expr $ncpu / 2)"
 fi
 
 mkdir $BUILD_DIR

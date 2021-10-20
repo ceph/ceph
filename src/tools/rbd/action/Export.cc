@@ -15,6 +15,9 @@
 #include <boost/program_options.hpp>
 #include <boost/scope_exit.hpp>
 
+using std::cerr;
+using std::string;
+
 namespace rbd {
 namespace action {
 namespace export_full {
@@ -527,7 +530,7 @@ static int do_export_v1(librbd::Image& image, librbd::image_info_t &info,
       break;
     }
 
-    uint64_t length = min(period, info.size - offset);
+    uint64_t length = std::min(period, info.size - offset);
     C_Export *ctx = new C_Export(throttle, image, file_size + offset, offset,
                                  length, fd);
     ctx->send();

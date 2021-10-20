@@ -15,7 +15,7 @@ public:
   bool incremental = false;
 
   // use transparent comparator so we can lookup in it by std::string_view keys
-  std::map<std::string,boost::optional<bufferlist>,std::less<>> data;
+  std::map<std::string,std::optional<bufferlist>,std::less<>> data;
 
   MKVData() : Message{MSG_KV_DATA, HEAD_VERSION, COMPAT_VERSION} { }
 

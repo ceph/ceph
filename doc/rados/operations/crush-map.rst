@@ -714,7 +714,7 @@ The ``bobtail`` tunable profile fixes a few key misbehaviors:
 
  * For large clusters, some small percentages of PGs map to fewer than
    the desired number of OSDs.  This is more prevalent when there are
-   mutiple hierarchy layers in use (e.g., ``row``, ``rack``, ``host``, ``osd``).
+   multiple hierarchy layers in use (e.g., ``row``, ``rack``, ``host``, ``osd``).
 
  * When some OSDs are marked out, the data tends to get redistributed
    to nearby OSDs instead of across the entire hierarchy.

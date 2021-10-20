@@ -158,6 +158,8 @@ TEST_F(TestObjectMap, AcquireLockInvalidatesWhenTooSmall) {
   ASSERT_TRUE(flags_set);
 }
 
+namespace chrono = std::chrono;
+
 TEST_F(TestObjectMap, DISABLED_StressTest) {
   REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
 

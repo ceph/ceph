@@ -27,6 +27,7 @@
 
 #define DEFAULT_SWIFT_PREFIX "/swift"
 
+using namespace std;
 using namespace ceph::crypto;
 
 
@@ -92,7 +93,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
     if (uid.tenant.empty()) {
       rgw_user tenanted_uid(uid.id, uid.id);
       user = store->get_user(tenanted_uid);
-      if (user->load_by_id(dpp, s->yield) >= 0) {
+      if (user->load_user(dpp, s->yield) >= 0) {
 	/* Succeeded */
 	found = true;
       }
@@ -100,7 +101,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
 
     if (!found) {
       user = store->get_user(uid);
-      if (user->load_by_id(dpp, s->yield) < 0) {
+      if (user->load_user(dpp, s->yield) < 0) {
 	throw -EPERM;
       }
     }
@@ -122,7 +123,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
 
   std::unique_ptr<rgw::sal::User> user;
   user = store->get_user(bucket->get_info().owner);
-  if (user->load_by_id(dpp, s->yield) < 0) {
+  if (user->load_user(dpp, s->yield) < 0) {
     throw -EPERM;
   }
 

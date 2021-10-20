@@ -1,4 +1,4 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 
 import { Icons } from '~/app/shared/enum/icons.enum';
 
@@ -13,7 +13,7 @@ export class AlertPanelComponent implements OnInit {
   @Input()
   bootstrapClass = '';
   @Input()
-  type: 'warning' | 'error' | 'info' | 'success';
+  type: 'warning' | 'error' | 'info' | 'success' | 'danger';
   @Input()
   typeIcon: Icons | string;
   @Input()
@@ -22,6 +22,15 @@ export class AlertPanelComponent implements OnInit {
   showIcon = true;
   @Input()
   showTitle = true;
+  @Input()
+  dismissible = false;
+
+  /**
+   * The event that is triggered when the close button (x) has been
+   * pressed.
+   */
+  @Output()
+  dismissed = new EventEmitter();
 
   icons = Icons;
 
@@ -47,6 +56,15 @@ export class AlertPanelComponent implements OnInit {
         this.typeIcon = this.typeIcon || Icons.check;
         this.bootstrapClass = this.bootstrapClass || 'success';
         break;
+      case 'danger':
+        this.title = this.title || $localize`Danger`;
+        this.typeIcon = this.typeIcon || Icons.warning;
+        this.bootstrapClass = this.bootstrapClass || 'danger';
+        break;
     }
+  }
+
+  onClose(): void {
+    this.dismissed.emit();
   }
 }

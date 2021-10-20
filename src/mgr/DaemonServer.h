@@ -146,7 +146,7 @@ protected:
   std::set<ConnectionRef> daemon_connections;
 
   /// connections for osds
-  ceph::unordered_map<int,set<ConnectionRef>> osd_cons;
+  ceph::unordered_map<int,std::set<ConnectionRef>> osd_cons;
 
   ServiceMap pending_service_map;  // uncommitted
 
@@ -155,13 +155,13 @@ protected:
   ceph::mutex lock = ceph::make_mutex("DaemonServer");
 
   static void _generate_command_map(cmdmap_t& cmdmap,
-                                    map<string,string> &param_str_map);
-  static const MonCommand *_get_mgrcommand(const string &cmd_prefix,
+                                    std::map<std::string,std::string> &param_str_map);
+  static const MonCommand *_get_mgrcommand(const std::string &cmd_prefix,
                                            const std::vector<MonCommand> &commands);
   bool _allowed_command(
-    MgrSession *s, const string &service, const string &module,
-    const string &prefix, const cmdmap_t& cmdmap,
-    const map<string,string>& param_str_map,
+    MgrSession *s, const std::string &service, const std::string &module,
+    const std::string &prefix, const cmdmap_t& cmdmap,
+    const std::map<std::string,std::string>& param_str_map,
     const MonCommand *this_cmd);
 
 private:
@@ -172,7 +172,7 @@ private:
   void _prune_pending_service_map();
 
   void _check_offlines_pgs(
-    const set<int>& osds,
+    const std::set<int>& osds,
     const OSDMap& osdmap,
     const PGMap& pgmap,
     offline_pg_report *report);

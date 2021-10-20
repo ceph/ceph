@@ -29,6 +29,7 @@
 namespace librbd {
 namespace cache {
 namespace pwl {
+using namespace std;
 using namespace librbd::cache::pwl;
 namespace rwl {
 
@@ -60,7 +61,7 @@ WriteLog<I>::~WriteLog() {
 template <typename I>
 void WriteLog<I>::collect_read_extents(
       uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
-      std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+      std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
       std::vector<bufferlist*> &bls_to_read, uint64_t entry_hit_length,
       Extent hit_extent, pwl::C_ReadRequest *read_ctx) {
   /* Make a bl for this hit extent. This will add references to the
@@ -82,7 +83,7 @@ void WriteLog<I>::collect_read_extents(
 
 template <typename I>
 void WriteLog<I>::complete_read(
-    std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+    std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
     std::vector<bufferlist*> &bls_to_read, Context *ctx) {
   ctx->complete(0);
 }
@@ -162,7 +163,7 @@ int WriteLog<I>::append_op_log_entries(GenericLogOperations &ops)
     ldout(m_image_ctx.cct, 05) << "APPENDING: index="
                                << operation->get_log_entry()->log_entry_index << " "
                                << "operation=[" << *operation << "]" << dendl;
-    operation->log_append_time = now;
+    operation->log_append_start_time = now;
     *operation->get_log_entry()->cache_entry = operation->get_log_entry()->ram_entry;
     ldout(m_image_ctx.cct, 20) << "APPENDING: index="
                                << operation->get_log_entry()->log_entry_index << " "
@@ -266,7 +267,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     if ((m_log_pool =
          pmemobj_create(this->m_log_pool_name.c_str(),
                         this->m_pwl_pool_layout_name,
-                        this->m_log_pool_config_size,
+                        this->m_log_pool_size,
                         (S_IWUSR | S_IRUSR))) == NULL) {
       lderr(cct) << "failed to create pool (" << this->m_log_pool_name << ")"
                  << pmemobj_errormsg() << dendl;
@@ -283,7 +284,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
 
     /* new pool, calculate and store metadata */
-    size_t effective_pool_size = (size_t)(this->m_log_pool_config_size * USABLE_SIZE);
+    size_t effective_pool_size = (size_t)(this->m_log_pool_size * USABLE_SIZE);
     size_t small_write_size = MIN_WRITE_ALLOC_SIZE + BLOCK_ALLOC_OVERHEAD_BYTES + sizeof(struct WriteLogCacheEntry);
     uint64_t num_small_writes = (uint64_t)(effective_pool_size / small_write_size);
     if (num_small_writes > MAX_LOG_ENTRIES) {
@@ -294,7 +295,6 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       on_finish->complete(-EINVAL);
       return false;
     }
-    this->m_log_pool_actual_size = this->m_log_pool_config_size;
     this->m_bytes_allocated_cap = effective_pool_size;
     /* Log ring empty */
     m_first_free_entry = 0;
@@ -305,7 +305,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       D_RW(pool_root)->log_entries =
         TX_ZALLOC(struct WriteLogCacheEntry,
                   sizeof(struct WriteLogCacheEntry) * num_small_writes);
-      D_RW(pool_root)->pool_size = this->m_log_pool_actual_size;
+      D_RW(pool_root)->pool_size = this->m_log_pool_size;
       D_RW(pool_root)->flushed_sync_gen = this->m_flushed_sync_gen;
       D_RW(pool_root)->block_size = MIN_WRITE_ALLOC_SIZE;
       D_RW(pool_root)->num_log_entries = num_small_writes;
@@ -348,7 +348,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       on_finish->complete(-EINVAL);
       return false;
     }
-    this->m_log_pool_actual_size = D_RO(pool_root)->pool_size;
+    this->m_log_pool_size = D_RO(pool_root)->pool_size;
     this->m_flushed_sync_gen = D_RO(pool_root)->flushed_sync_gen;
     this->m_total_log_entries = D_RO(pool_root)->num_log_entries;
     m_first_free_entry = D_RO(pool_root)->first_free_entry;
@@ -364,7 +364,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
        * entries, and n-1 free log entries */
       this->m_free_log_entries = this->m_total_log_entries - (m_first_free_entry - m_first_valid_entry) -1;
     }
-    size_t effective_pool_size = (size_t)(this->m_log_pool_config_size * USABLE_SIZE);
+    size_t effective_pool_size = (size_t)(this->m_log_pool_size * USABLE_SIZE);
     this->m_bytes_allocated_cap = effective_pool_size;
     load_existing_entries(later);
     m_cache_state->clean = this->m_dirty_log_entries.empty();
@@ -436,7 +436,16 @@ void WriteLog<I>::load_existing_entries(DeferredContexts &later) {
     entry_index = (entry_index + 1) % this->m_total_log_entries;
   }
 
-  this->update_sync_points(missing_sync_points, sync_point_entries, later, MIN_WRITE_ALLOC_SIZE);
+  this->update_sync_points(missing_sync_points, sync_point_entries, later);
+}
+
+template <typename I>
+void WriteLog<I>::inc_allocated_cached_bytes(
+    std::shared_ptr<pwl::GenericLogEntry> log_entry) {
+  if (log_entry->is_write_entry()) {
+    this->m_bytes_allocated += std::max(log_entry->write_bytes(), MIN_WRITE_ALLOC_SIZE);
+    this->m_bytes_cached += log_entry->write_bytes();
+  }
 }
 
 template <typename I>
@@ -626,7 +635,7 @@ void WriteLog<I>::flush_then_append_scheduled_ops(void)
      * get to the log message append step. */
     if (ops.size()) {
       flush_pmem_buffer(ops);
-      schedule_append_ops(ops);
+      schedule_append_ops(ops, nullptr);
     }
   } while (ops_remain);
   append_scheduled_ops();
@@ -696,7 +705,7 @@ void WriteLog<I>::setup_schedule_append(
  * all prior log entries are persisted everywhere.
  */
 template <typename I>
-void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops)
+void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops, C_BlockIORequestT *req)
 {
   bool need_finisher;
   GenericLogOperationsVector appending;
@@ -826,6 +835,16 @@ template <typename I>
 template <typename V>
 void WriteLog<I>::flush_pmem_buffer(V& ops)
 {
+  utime_t now = ceph_clock_now();
+  for (auto &operation : ops) {
+    if (operation->reserved_allocated()) {
+      operation->buf_persist_start_time = now;
+    } else {
+      ldout(m_image_ctx.cct, 20) << "skipping non-write op: "
+                                 << *operation << dendl;
+    }
+  }
+
   for (auto &operation : ops) {
     if(operation->is_writing_op()) {
       auto log_entry = static_pointer_cast<WriteLogEntry>(operation->get_log_entry());
@@ -836,12 +855,13 @@ void WriteLog<I>::flush_pmem_buffer(V& ops)
   /* Drain once for all */
   pmemobj_drain(m_log_pool);
 
-  utime_t now = ceph_clock_now();
+  now = ceph_clock_now();
   for (auto &operation : ops) {
     if (operation->reserved_allocated()) {
       operation->buf_persist_comp_time = now;
     } else {
-      ldout(m_image_ctx.cct, 20) << "skipping non-write op: " << *operation << dendl;
+      ldout(m_image_ctx.cct, 20) << "skipping non-write op: "
+                                 << *operation << dendl;
     }
   }
 }
@@ -897,6 +917,12 @@ void WriteLog<I>::reserve_cache(C_BlockIORequestT *req,
                                 << *req << dendl;
       alloc_succeeds = false;
       no_space = true; /* Entries need to be retired */
+
+      if (this->m_free_log_entries == this->m_total_log_entries - 1) {
+        /* When the cache is empty, there is still no space to allocate.
+         * Defragment. */
+        pmemobj_defrag(m_log_pool, NULL, 0, NULL);
+      }
       break;
     } else {
       buffer.allocated = true;
@@ -932,9 +958,9 @@ bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
   req->setup_buffer_resources(&bytes_cached, &bytes_dirtied, &bytes_allocated,
                               &num_lanes, &num_log_entries, &num_unpublished_reserves);
 
-  alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied, bytes_allocated,
-                              num_lanes, num_log_entries, num_unpublished_reserves,
-                              this->m_bytes_allocated_cap);
+  alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied,
+                                          bytes_allocated, num_lanes, num_log_entries,
+                                          num_unpublished_reserves);
 
   std::vector<WriteBufferAllocation>& buffers = req->get_resources_buffers();
   if (!alloc_succeeds) {

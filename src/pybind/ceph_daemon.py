@@ -15,16 +15,14 @@ import json
 import socket
 import struct
 import time
-try:
-    from collections.abc import OrderedDict
-except ImportError:
-    from collections import OrderedDict
+from collections import OrderedDict
 from fcntl import ioctl
 from fnmatch import fnmatch
 from prettytable import PrettyTable, HEADER
-from signal import signal, SIGWINCH
+from signal import signal, Signals, SIGWINCH
 from termios import TIOCGWINSZ
-from typing import Optional
+from types import FrameType
+from typing import Any, Callable, Dict, List, Optional, Sequence, TextIO, Tuple
 
 from ceph_argparse import parse_json_funcsigs, validate_command
 
@@ -34,7 +32,7 @@ READ_CHUNK_SIZE = 4096
 
 
 def admin_socket(asok_path: str,
-                 cmd: str,
+                 cmd: List[str],
                  format: Optional[str] = '') -> bytes:
     """
     Send a daemon (--admin-daemon) command 'cmd'.  asok_path is the
@@ -43,7 +41,7 @@ def admin_socket(asok_path: str,
     (daemon commands don't support 'plain' output).
     """
 
-    def do_sockio(path, cmd_bytes):
+    def do_sockio(path: str, cmd_bytes: bytes) -> bytes:
         """ helper: do all the actual low-level stream I/O """
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.connect(path)
@@ -74,9 +72,6 @@ def admin_socket(asok_path: str,
     except Exception as e:
         raise RuntimeError('exception getting command descriptions: ' + str(e))
 
-    if cmd == 'get_command_descriptions':
-        return cmd_json
-
     sigdict = parse_json_funcsigs(cmd_json.decode('utf-8'), 'cli')
     valid_dict = validate_command(sigdict, cmd)
     if not valid_dict:
@@ -95,11 +90,12 @@ def admin_socket(asok_path: str,
 
 class Termsize(object):
     DEFAULT_SIZE = (25, 80)
-    def __init__(self):
+
+    def __init__(self) -> None:
         self.rows, self.cols = self._gettermsize()
         self.changed = False
 
-    def _gettermsize(self):
+    def _gettermsize(self) -> Tuple[int, int]:
         try:
             fd = sys.stdin.fileno()
             sz = struct.pack('hhhh', 0, 0, 0, 0)
@@ -108,22 +104,22 @@ class Termsize(object):
         except IOError:
             return self.DEFAULT_SIZE
 
-    def update(self):
+    def update(self) -> None:
         rows, cols = self._gettermsize()
         if not self.changed:
             self.changed = (self.rows, self.cols) != (rows, cols)
         self.rows, self.cols = rows, cols
 
-    def reset_changed(self):
+    def reset_changed(self) -> None:
         self.changed = False
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '%s(%dx%d, changed %s)' % (self.__class__,
                                           self.rows, self.cols, self.changed)
 
-    def __repr__(self):
-        return 'Termsize(%d,%d,%s)' % (self.__class__,
-                                       self.rows, self.cols, self.changed)
+    def __repr__(self) -> str:
+        return '%s(%d,%d,%s)' % (self.__class__,
+                                 self.rows, self.cols, self.changed)
 
 
 class DaemonWatcher(object):
@@ -149,18 +145,21 @@ class DaemonWatcher(object):
     BOLD_SEQ = "\033[1m"
     UNDERLINE_SEQ = "\033[4m"
 
-    def __init__(self, asok, statpats=None, min_prio=0):
+    def __init__(self,
+                 asok: str,
+                 statpats: Optional[Sequence[str]] = None,
+                 min_prio: int = 0) -> None:
         self.asok_path = asok
         self._colored = False
 
-        self._stats = None
+        self._stats: Optional[Dict[str, dict]] = None
         self._schema = None
         self._statpats = statpats
-        self._stats_that_fit = dict()
+        self._stats_that_fit: Dict[str, dict] = OrderedDict()
         self._min_prio = min_prio
         self.termsize = Termsize()
 
-    def supports_color(self, ostr):
+    def supports_color(self, ostr: TextIO) -> bool:
         """
         Returns True if the running system's terminal supports color, and False
         otherwise.
@@ -172,20 +171,23 @@ class DaemonWatcher(object):
             return False
         return True
 
-    def colorize(self, msg, color, dark=False):
+    def colorize(self,
+                 msg: str,
+                 color: int,
+                 dark: bool = False) -> str:
         """
         Decorate `msg` with escape sequences to give the requested color
         """
         return (self.COLOR_DARK_SEQ if dark else self.COLOR_SEQ) % (30 + color) \
                + msg + self.RESET_SEQ
 
-    def bold(self, msg):
+    def bold(self, msg: str) -> str:
         """
         Decorate `msg` with escape sequences to make it appear bold
         """
         return self.BOLD_SEQ + msg + self.RESET_SEQ
 
-    def format_dimless(self, n, width):
+    def format_dimless(self, n: int, width: int) -> str:
         """
         Format a number without units, so as to fit into `width` characters, substituting
         an appropriate unit suffix.
@@ -215,7 +217,7 @@ class DaemonWatcher(object):
         else:
             return formatted
 
-    def col_width(self, nick):
+    def col_width(self, nick: str) -> int:
         """
         Given the short name `nick` for a column, how many characters
         of width should the column be allocated?  Does not include spacing
@@ -223,14 +225,15 @@ class DaemonWatcher(object):
         """
         return max(len(nick), 4)
 
-    def get_stats_that_fit(self):
+    def get_stats_that_fit(self) -> Tuple[Dict[str, dict], bool]:
         '''
         Get a possibly-truncated list of stats to display based on
         current terminal width.  Allow breaking mid-section.
         '''
-        current_fit = OrderedDict()
+        current_fit: Dict[str, dict] = OrderedDict()
         if self.termsize.changed or not self._stats_that_fit:
             width = 0
+            assert self._stats is not None
             for section_name, names in self._stats.items():
                 for name, stat_data in names.items():
                     width += self.col_width(stat_data) + 1
@@ -243,12 +246,12 @@ class DaemonWatcher(object):
                     break
 
         self.termsize.reset_changed()
-        changed = current_fit and (current_fit != self._stats_that_fit)
+        changed = bool(current_fit) and (current_fit != self._stats_that_fit)
         if changed:
             self._stats_that_fit = current_fit
         return self._stats_that_fit, changed
 
-    def _print_headers(self, ostr):
+    def _print_headers(self, ostr: TextIO) -> None:
         """
         Print a header row to `ostr`
         """
@@ -278,7 +281,10 @@ class DaemonWatcher(object):
         sub_header += "\n"
         ostr.write(sub_header)
 
-    def _print_vals(self, ostr, dump, last_dump):
+    def _print_vals(self,
+                    ostr: TextIO,
+                    dump: Dict[str, Any],
+                    last_dump: Dict[str, Any]) -> None:
         """
         Print a single row of values to `ostr`, based on deltas between `dump` and
         `last_dump`.
@@ -289,6 +295,7 @@ class DaemonWatcher(object):
             self._print_headers(ostr)
         for section_name, names in fit.items():
             for stat_name, stat_nick in names.items():
+                assert self._schema is not None
                 stat_type = self._schema[section_name][stat_name]['type']
                 if bool(stat_type & COUNTER):
                     n = max(dump[section_name][stat_name] -
@@ -306,14 +313,15 @@ class DaemonWatcher(object):
                 else:
                     n = dump[section_name][stat_name]
 
-                val_row += self.format_dimless(n, self.col_width(stat_nick))
+                val_row += self.format_dimless(int(n),
+                                               self.col_width(stat_nick))
                 val_row += " "
             val_row = val_row[0:-1]
             val_row += self.colorize("|", self.BLUE)
         val_row = val_row[0:-len(self.colorize("|", self.BLUE))]
         ostr.write("{0}\n".format(val_row))
 
-    def _should_include(self, sect, name, prio):
+    def _should_include(self, sect: str, name: str, prio: int) -> bool:
         '''
         boolean: should we output this stat?
 
@@ -336,7 +344,7 @@ class DaemonWatcher(object):
 
         return True
 
-    def _load_schema(self):
+    def _load_schema(self) -> None:
         """
         Populate our instance-local copy of the daemon's performance counter
         schema, and work out which stats we will display.
@@ -347,6 +355,7 @@ class DaemonWatcher(object):
 
         # Build list of which stats we will display
         self._stats = OrderedDict()
+        assert self._schema is not None
         for section_name, section_stats in self._schema.items():
             for name, schema_data in section_stats.items():
                 prio = schema_data.get('priority', 0)
@@ -357,10 +366,15 @@ class DaemonWatcher(object):
         if not len(self._stats):
             raise RuntimeError("no stats selected by filters")
 
-    def _handle_sigwinch(self, signo, frame):
+    def _handle_sigwinch(self,
+                         signo: Signals,
+                         frame: FrameType) -> None:
         self.termsize.update()
 
-    def run(self, interval, count=None, ostr=sys.stdout):
+    def run(self,
+            interval: int,
+            count: Optional[int] = None,
+            ostr: TextIO = sys.stdout) -> None:
         """
         Print output at regular intervals until interrupted.
 
@@ -398,7 +412,7 @@ class DaemonWatcher(object):
         except KeyboardInterrupt:
             return
 
-    def list(self, ostr=sys.stdout):
+    def list(self, ostr: TextIO = sys.stdout) -> None:
         """
         Show all selected stats with section, full name, nick, and prio
         """
@@ -408,6 +422,8 @@ class DaemonWatcher(object):
         table.align['nick'] = 'l'
         table.align['prio'] = 'r'
         self._load_schema()
+        assert self._stats is not None
+        assert self._schema is not None
         for section_name, section_stats in self._stats.items():
             for name, nick in section_stats.items():
                 prio = self._schema[section_name][name].get('priority') or 0

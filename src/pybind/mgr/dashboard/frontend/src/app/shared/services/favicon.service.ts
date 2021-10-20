@@ -3,7 +3,8 @@ import { Inject, Injectable, OnDestroy } from '@angular/core';
 
 import { Subscription } from 'rxjs';
 
-import { Color } from '../enum/color.enum';
+import { CssHelper } from '~/app/shared/classes/css-helper';
+import { HealthColor } from '~/app/shared/enum/health-color.enum';
 import { SummaryService } from './summary.service';
 
 @Injectable()
@@ -14,7 +15,8 @@ export class FaviconService implements OnDestroy {
 
   constructor(
     @Inject(DOCUMENT) private document: HTMLDocument,
-    private summaryService: SummaryService
+    private summaryService: SummaryService,
+    private cssHelper: CssHelper
   ) {}
 
   init() {
@@ -48,7 +50,7 @@ export class FaviconService implements OnDestroy {
       // Draw Original Favicon as Background
       context.drawImage(img, 0, 0, faviconSize, faviconSize);
 
-      if (Color[status]) {
+      if (Object.keys(HealthColor).includes(status as HealthColor)) {
         // Cut notification circle area
         context.save();
         context.globalCompositeOperation = 'destination-out';
@@ -61,7 +63,7 @@ export class FaviconService implements OnDestroy {
         context.beginPath();
         context.arc(canvas.width - radius, radius, radius, 0, 2 * Math.PI);
 
-        context.fillStyle = Color[status];
+        context.fillStyle = this.cssHelper.propertyValue(HealthColor[status]);
         context.fill();
       }
 

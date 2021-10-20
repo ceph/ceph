@@ -7,6 +7,8 @@
 #include "crimson/net/Connection.h"
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/osd_operations/client_request_common.h"
+#include "crimson/osd/osd_operations/common/pg_pipeline.h"
 #include "crimson/common/type_helpers.h"
 #include "messages/MOSDOp.h"
 
@@ -14,7 +16,8 @@ namespace crimson::osd {
 class PG;
 class OSD;
 
-class ClientRequest final : public OperationT<ClientRequest> {
+class ClientRequest final : public OperationT<ClientRequest>,
+                            private CommonClientRequest {
   OSD &osd;
   crimson::net::ConnectionRef conn;
   Ref<MOSDOp> m;
@@ -31,21 +34,15 @@ public:
     };
     friend class ClientRequest;
   };
-  class PGPipeline {
+  class PGPipeline : public CommonPGPipeline {
     OrderedExclusivePhase await_map = {
       "ClientRequest::PGPipeline::await_map"
     };
-    OrderedExclusivePhase wait_for_active = {
-      "ClientRequest::PGPipeline::wait_for_active"
+    OrderedConcurrentPhase wait_repop = {
+      "ClientRequest::PGPipeline::wait_repop"
     };
-    OrderedExclusivePhase recover_missing = {
-      "ClientRequest::PGPipeline::recover_missing"
-    };
-    OrderedExclusivePhase get_obc = {
-      "ClientRequest::PGPipeline::get_obc"
-    };
-    OrderedExclusivePhase process = {
-      "ClientRequest::PGPipeline::process"
+    OrderedExclusivePhase send_reply = {
+      "ClientRequest::PGPipeline::send_reply"
     };
     friend class ClientRequest;
   };
@@ -60,9 +57,11 @@ public:
 
 public:
   seastar::future<> start();
+  bool same_session_and_pg(const ClientRequest& other_op) const;
 
 private:
-  interruptible_future<> do_recover_missing(Ref<PG>& pgref);
+  template <typename FuncT>
+  interruptible_future<> with_sequencer(FuncT&& func);
   interruptible_future<> do_process(
     Ref<PG>& pg,
     crimson::osd::ObjectContextRef obc);
@@ -77,8 +76,11 @@ private:
   ConnectionPipeline &cp();
   PGPipeline &pp(PG &pg);
 
-  OpSequencer& sequencer;
-  uint64_t prev_op_id = 0;
+  class OpSequencer& sequencer;
+  // a tombstone used currently by OpSequencer. In the future it's supposed
+  // to be replaced with a reusage of OpTracking facilities.
+  bool finished = false;
+  friend class OpSequencer;
 
   template <typename Errorator>
   using interruptible_errorator =
@@ -87,7 +89,6 @@ private:
       Errorator>;
 private:
   bool is_misdirected(const PG& pg) const;
-  void may_set_prev_op();
 };
 
 }

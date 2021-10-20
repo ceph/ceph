@@ -30,10 +30,12 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 void RGWOp_ZoneGroupMap_Get::execute(optional_yield y) {
-  op_ret = zonegroup_map.read(g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, y);
+  op_ret = zonegroup_map.read(this, g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, y);
   if (op_ret < 0) {
-    dout(5) << "failed to read zone_group map" << dendl;
+    ldpp_dout(this, 5) << "failed to read zone_group map" << dendl;
   }
 }
 

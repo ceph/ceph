@@ -67,6 +67,7 @@ struct rbd_bencher {
   }
 
   void wait_for(int max) {
+    using namespace std::chrono_literals;
     std::unique_lock l{lock};
     while (in_flight > max) {
       cond.wait_for(l, 200ms);
@@ -81,7 +82,7 @@ void rbd_bencher_completion(void *vc, void *pc) {
   //cout << "complete " << c << std::endl;
   int ret = c->get_return_value();
   if (ret != 0) {
-    cout << "write error: " << cpp_strerror(ret) << std::endl;
+    std::cout << "write error: " << cpp_strerror(ret) << std::endl;
     exit(ret < 0 ? -ret : ret);
   }
   b->lock.lock();
@@ -104,7 +105,7 @@ void write_image(librbd::Image &image) {
   image.size(&size);
   ceph_assert(size != 0);
 
-  vector<uint64_t> thread_offset;
+  std::vector<uint64_t> thread_offset;
   uint64_t i;
   uint64_t start_pos;
 
@@ -149,10 +150,9 @@ void write_image(librbd::Image &image) {
 
 int main(int argc, const char **argv)
 {
-  std::vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
-    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    std::cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
   }
   if (ceph_argparse_need_usage(args)) {
@@ -160,7 +160,7 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_UTILITY,
                          CINIT_FLAG_NO_MON_CONFIG);
 

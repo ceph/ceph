@@ -24,5 +24,5 @@ tasks:
 - install:
 - ceph:
     pre-mgr-commands:
-      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+      - sudo ceph config set mgr mgr_pool false --force
 - divergent_priors:

@@ -12,6 +12,7 @@
  */
 
 #include <Python.h>
+#include <boost/algorithm/string/replace.hpp>
 
 #include "common/errno.h"
 #include "common/signal.h"
@@ -35,6 +36,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
+using std::map;
+using std::string;
+using std::vector;
 
 MgrStandby::MgrStandby(int argc, const char **argv) :
   Dispatcher(g_ceph_context),
@@ -258,6 +262,12 @@ void MgrStandby::send_beacon()
       std::vector<MonCommand> commands = mgr_commands;
       std::vector<MonCommand> py_commands = py_module_registry.get_commands();
       commands.insert(commands.end(), py_commands.begin(), py_commands.end());
+      if (monc.monmap.min_mon_release < ceph_release_t::quincy) {
+	dout(10) << " stripping out positional=false quincy-ism" << dendl;
+	for (auto& i : commands) {
+	  boost::replace_all(i.cmdstring, ",positional=false", "");
+	}
+      }
       m->set_command_descs(commands);
       dout(4) << "going active, including " << m->get_command_descs().size()
               << " commands in beacon" << dendl;

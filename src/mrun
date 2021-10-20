@@ -21,10 +21,9 @@ fi
 
 shift 2
 
-if [ "$RGW_VALGRIND" == 'yes' ] && [ $command == 'radosgw' ]; then
+if [ "$RGW_VALGRIND" = "yes" ] && [ "$command" = "radosgw" ]; then
     valgrind --trace-children=yes --tool=memcheck --max-threads=1024 $CEPH_BIN/$command -c $CEPH_CONF_PATH/ceph.conf "$@"
     sleep 10
 else
     $CEPH_BIN/$command -c $CEPH_CONF_PATH/ceph.conf "$@"
 fi
-

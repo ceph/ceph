@@ -4,7 +4,8 @@ import signal
 from textwrap import dedent
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from teuthology.orchestra.run import CommandFailedError, Raw
+from teuthology.orchestra.run import Raw
+from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
@@ -119,7 +120,7 @@ class TestSnapshots(CephFSTestCase):
             self.fs.rank_freeze(True, rank=1) # prevent failover...
             self.fs.rank_asok(['config', 'set', "mds_kill_mdstable_at", "{0}".format(i)], rank=0, status=status)
             proc = self.mount_a.run_shell(["mkdir", "d1/dir/.snap/s2{0}".format(i)], wait=False)
-            self.wait_until_true(lambda: "laggy_since" in self.fs.get_rank(rank=0), timeout=grace*2);
+            self.wait_until_true(lambda: "laggy_since" in self.fs.get_rank(rank=0), timeout=grace*3);
             self.delete_mds_coredump(rank0['name']);
 
             self.fs.rank_signal(signal.SIGKILL, rank=1)

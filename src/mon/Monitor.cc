@@ -337,9 +337,15 @@ int Monitor::do_admin_command(
   } else if (command == "quorum_status") {
     _quorum_status(f, out);
   } else if (command == "sync_force") {
-    string validate;
-    if ((!cmd_getval(cmdmap, "validate", validate)) ||
-	(validate != "--yes-i-really-mean-it")) {
+    bool validate = false;
+    if (!cmd_getval(cmdmap, "yes_i_really_mean_it", validate)) {
+      std::string v;
+      if (cmd_getval(cmdmap, "validate", v) &&
+	  v == "--yes-i-really-mean-it") {
+	validate = true;
+      }
+    }
+    if (!validate) {
       err << "are you SURE? this will mean the monitor store will be erased "
 	"the next time the monitor is restarted.  pass "
 	"'--yes-i-really-mean-it' if you really do.";
@@ -487,9 +493,13 @@ abort:
 
 void Monitor::handle_signal(int signum)
 {
-  ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got Signal " << sig_str(signum) << " ***" << dendl;
-  shutdown();
+  if (signum == SIGHUP) {
+    sighup_handler(signum);
+  } else {
+    ceph_assert(signum == SIGINT || signum == SIGTERM);
+    shutdown();
+  }
 }
 
 CompatSet Monitor::get_initial_supported_features()
@@ -601,6 +611,7 @@ const char** Monitor::get_tracked_conf_keys() const
     "clog_to_graylog",
     "clog_to_graylog_host",
     "clog_to_graylog_port",
+    "mon_cluster_log_to_file",
     "host",
     "fsid",
     // periodic health to clog
@@ -2603,8 +2614,7 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
   if (!quorum.empty()) {
     f->dump_int(
       "quorum_age",
-      std::chrono::duration_cast<std::chrono::seconds>(
-	mono_clock::now() - quorum_since).count());
+      quorum_age());
   }
 
   f->open_object_section("features");
@@ -2639,8 +2649,7 @@ void Monitor::get_mon_status(Formatter *f)
   if (!quorum.empty()) {
     f->dump_int(
       "quorum_age",
-      std::chrono::duration_cast<std::chrono::seconds>(
-	mono_clock::now() - quorum_since).count());
+      quorum_age());
   }
 
   f->open_object_section("features");
@@ -2979,7 +2988,6 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
 
   const auto&& fs_names = session->get_allowed_fs_names();
 
-  mono_clock::time_point now = mono_clock::now();
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
     healthmon()->get_health_status(false, f, nullptr);
@@ -2995,8 +3003,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
       f->close_section();
       f->dump_int(
 	"quorum_age",
-	std::chrono::duration_cast<std::chrono::seconds>(
-	  mono_clock::now() - quorum_since).count());
+        quorum_age());
     }
     f->open_object_section("monmap");
     monmap->dump_summary(f);
@@ -3050,7 +3057,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
       const auto quorum_names = get_quorum_names();
       const auto mon_count = monmap->mon_info.size();
       ss << "    mon: " << spacing << mon_count << " daemons, quorum "
-	 << quorum_names << " (age " << timespan_str(now - quorum_since) << ")";
+	 << quorum_names << " (age " << quorum_age() << ")";
       if (quorum_names.size() != mon_count) {
 	std::list<std::string> out_of_q;
 	for (size_t i = 0; i < monmap->ranks.size(); ++i) {
@@ -3340,8 +3347,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   dout(0) << "handle_command " << *m << dendl;
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   get_str_vec(prefix, fullcmd);
@@ -6020,8 +6026,6 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
     r = ceph_resolve_file_search(g_conf()->keyring, keyring_filename);
     if (r) {
-      derr << "unable to find a keyring file on " << g_conf()->keyring
-	   << ": " << cpp_strerror(r) << dendl;
       if (g_conf()->key != "") {
 	string keyring_plaintext = "[mon.]\n\tkey = " + g_conf()->key +
 	  "\n\tcaps mon = \"allow *\"\n";
@@ -6029,7 +6033,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 	bl.append(keyring_plaintext);
 	try {
 	  auto i = bl.cbegin();
-	  keyring.decode_plaintext(i);
+	  keyring.decode(i);
 	}
 	catch (const ceph::buffer::error& e) {
 	  derr << "error decoding keyring " << keyring_plaintext
@@ -6037,7 +6041,9 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 	  return -EINVAL;
 	}
       } else {
-	return -ENOENT;
+	derr << "unable to find a keyring on " << g_conf()->keyring
+	     << ": " << cpp_strerror(r) << dendl;
+	return r;
       }
     } else {
       r = keyring.load(g_ceph_context, keyring_filename);
@@ -6799,10 +6805,12 @@ bool Monitor::session_stretch_allowed(MonSession *s, MonOpRequestRef& op)
   if (s->con->peer_is_osd()) {
     dout(20) << __func__ << "checking OSD session" << s << dendl;
     // okay, check the crush location
-    int barrier_id;
-    int retval = osdmon()->osdmap.crush->get_validated_type_id(stretch_bucket_divider,
-							       &barrier_id);
-    ceph_assert(retval >= 0);
+    int barrier_id = [&] {
+      auto type_id = osdmon()->osdmap.crush->get_validated_type_id(
+	stretch_bucket_divider);
+      ceph_assert(type_id.has_value());
+      return *type_id;
+    }();
     int osd_bucket_id = osdmon()->osdmap.crush->get_parent_of_type(s->con->peer_id,
 								   barrier_id);
     const auto &mi = monmap->mon_info.find(name);

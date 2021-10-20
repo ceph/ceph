@@ -18,6 +18,13 @@ PerfCountersCollectionImpl* PerfCountersCollection:: get_perf_collection()
   return perf_collection.get();
 }
 
+void PerfCountersCollection::dump_formatted(ceph::Formatter *f, bool schema,
+                                            const std::string &logger,
+                                            const std::string &counter)
+{
+  perf_collection->dump_formatted(f, schema, logger, counter);
+}
+
 PerfCountersCollection::ShardedPerfCountersCollection PerfCountersCollection::sharded_perf_coll;
 
 }

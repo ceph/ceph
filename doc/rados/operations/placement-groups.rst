@@ -1,3 +1,5 @@
+.. _placement groups:
+
 ==================
  Placement Groups
 ==================
@@ -8,26 +10,26 @@ Autoscaling placement groups
 ============================
 
 Placement groups (PGs) are an internal implementation detail of how
-Ceph distributes data.  You can allow the cluster to either make
-recommendations or automatically tune PGs based on how the cluster is
-used by enabling *pg-autoscaling*.
+Ceph distributes data.  You may enable *pg-autoscaling* to allow the cluster to
+make recommendations or automatically adjust the numbers of PGs (``pgp_num``)
+for each pool based on expected cluster and pool utilization.
 
-Each pool in the system has a ``pg_autoscale_mode`` property that can be set to ``off``, ``on``, or ``warn``.
+Each pool has a ``pg_autoscale_mode`` property that can be set to ``off``, ``on``, or ``warn``.
 
-* ``off``: Disable autoscaling for this pool.  It is up to the administrator to choose an appropriate PG number for each pool.  Please refer to :ref:`choosing-number-of-placement-groups` for more information.
+* ``off``: Disable autoscaling for this pool.  It is up to the administrator to choose an appropriate ``pgp_num`` for each pool.  Please refer to :ref:`choosing-number-of-placement-groups` for more information.
 * ``on``: Enable automated adjustments of the PG count for the given pool.
 * ``warn``: Raise health alerts when the PG count should be adjusted
 
-To set the autoscaling mode for existing pools,::
+To set the autoscaling mode for an existing pool::
 
   ceph osd pool set <pool-name> pg_autoscale_mode <mode>
 
-For example to enable autoscaling on pool ``foo``,::
+For example to enable autoscaling on pool ``foo``::
 
   ceph osd pool set foo pg_autoscale_mode on
 
 You can also configure the default ``pg_autoscale_mode`` that is
-applied to any pools that are created in the future with::
+set on any pools that are subsequently created::
 
   ceph config set global osd_pool_default_pg_autoscale_mode <mode>
 
@@ -41,10 +43,10 @@ the PG count with this command::
 
 Output will be something like::
 
-   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  TARGET RATIO  EFFECTIVE RATIO PG_NUM  NEW PG_NUM  AUTOSCALE
-   a     12900M                3.0        82431M  0.4695                                     8         128  warn
-   c         0                 3.0        82431M  0.0000        0.2000           0.9884      1          64  warn
-   b         0        953.6M   3.0        82431M  0.0347                                     8              warn
+   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  TARGET RATIO  EFFECTIVE RATIO BIAS PG_NUM  NEW PG_NUM  AUTOSCALE PROFILE 
+   a     12900M                3.0        82431M  0.4695                                          8         128  warn      scale-up
+   c         0                 3.0        82431M  0.0000        0.2000           0.9884  1.0      1          64  warn      scale-down
+   b         0        953.6M   3.0        82431M  0.0347                                          8              warn      scale-down
 
 **SIZE** is the amount of data stored in the pool. **TARGET SIZE**, if
 present, is the amount of data the administrator has specified that
@@ -69,35 +71,46 @@ ratio takes precedence.
 
 **EFFECTIVE RATIO** is the target ratio after adjusting in two ways:
 
-1. subtracting any capacity expected to be used by pools with target size set
-2. normalizing the target ratios among pools with target ratio set so
+1. Subtracting any capacity expected to be used by pools with target size set
+2. Normalizing the target ratios among pools with target ratio set so
    they collectively target the rest of the space. For example, 4
    pools with target_ratio 1.0 would have an effective ratio of 0.25.
 
 The system uses the larger of the actual ratio and the effective ratio
 for its calculation.
 
+**BIAS** is used as a multiplier to manually adjust a pool's PG based
+on prior information about how much PGs a specific pool is expected
+to have.
+
 **PG_NUM** is the current number of PGs for the pool (or the current
 number of PGs that the pool is working towards, if a ``pg_num``
 change is in progress).  **NEW PG_NUM**, if present, is what the
 system believes the pool's ``pg_num`` should be changed to.  It is
 always a power of 2, and will only be present if the "ideal" value
-varies from the current value by more than a factor of 3.
+varies from the current value by more than a factor of 3 by default.
+This factor can be be adjusted with::
 
-The final column, **AUTOSCALE**, is the pool ``pg_autoscale_mode``,
+  ceph osd pool set threshold 2.0
+
+**AUTOSCALE**, is the pool ``pg_autoscale_mode``
 and will be either ``on``, ``off``, or ``warn``.
+
+The final column, **PROFILE** shows the autoscale profile 
+used by each pool. ``scale-up`` and ``scale-down`` are the
+currently available profiles.
 
 
 Automated scaling
 -----------------
 
-Allowing the cluster to automatically scale PGs based on usage is the
+Allowing the cluster to automatically scale ``pgp_num`` based on usage is the
 simplest approach.  Ceph will look at the total available storage and
 target number of PGs for the whole system, look at how much data is
-stored in each pool, and try to apportion the PGs accordingly.  The
+stored in each pool, and try to apportion PGs accordingly.  The
 system is relatively conservative with its approach, only making
 changes to a pool when the current number of PGs (``pg_num``) is more
-than 3 times off from what it thinks it should be.
+than a factor of 3 off from what it thinks it should be.
 
 The target number of PGs per OSD is based on the
 ``mon_target_pg_per_osd`` configurable (default: 100), which can be
@@ -113,6 +126,28 @@ example, a pool that maps to OSDs of class `ssd` and a pool that maps
 to OSDs of class `hdd` will each have optimal PG counts that depend on
 the number of those respective device types.
 
+The autoscaler uses the `scale-down` profile by default, 
+where each pool starts out with a full complements of PGs and only scales 
+down when the usage ratio across the pools is not even. However, it also has 
+a `scale-up` profile, where it starts out each pool with minimal PGs and scales
+up PGs when there is more usage in each pool.
+
+With only the `scale-down` profile, the autoscaler identifies
+any overlapping roots and prevents the pools with such roots
+from scaling because overlapping roots can cause problems
+with the scaling process.
+
+To use the `scale-up` profile::
+
+  ceph osd pool set autoscale-profile scale-up
+
+To switch back to the default `scale-down` profile::
+
+  ceph osd pool set autoscale-profile scale-down
+
+Existing clusters will continue to use the `scale-up` profile.
+To use the `scale-down` profile, users will need to set autoscale-profile `scale-down`,
+after upgrading to a version of Ceph that provides the `scale-down` feature.
 
 .. _specifying_pool_target_size:
 
@@ -133,12 +168,12 @@ The *target size* of a pool can be specified in two ways: either in
 terms of the absolute size of the pool (i.e., bytes), or as a weight
 relative to other pools with a ``target_size_ratio`` set.
 
-For example,::
+For example::
 
   ceph osd pool set mypool target_size_bytes 100T
 
 will tell the system that `mypool` is expected to consume 100 TiB of
-space.  Alternatively,::
+space.  Alternatively::
 
   ceph osd pool set mypool target_size_ratio 1.0
 
@@ -191,7 +226,7 @@ for you based on how much data is stored in the pool (see above, :ref:`pg-autosc
 Alternatively, ``pg_num`` can be explicitly provided.  However,
 whether you specify a ``pg_num`` value or not does not affect whether
 the value is automatically tuned by the cluster after the fact.  To
-enable or disable auto-tuning,::
+enable or disable auto-tuning::
 
   ceph osd pool set {pool-name} pg_autoscale_mode (on|off|warn)
 

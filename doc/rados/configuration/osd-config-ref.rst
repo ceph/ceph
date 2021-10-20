@@ -323,7 +323,7 @@ mClock as it exists in this code base along with their modifications
 to the code base. We hope you'll share you're experiences with your
 mClock and dmClock experiments on the ``ceph-devel`` mailing list.
 
-
+.. confval:: osd_async_recovery_min_cost
 .. confval:: osd_push_per_object_cost
 .. confval:: osd_mclock_scheduler_client_res
 .. confval:: osd_mclock_scheduler_client_wgt
@@ -419,7 +419,6 @@ Miscellaneous
 
 .. confval:: osd_default_notify_timeout
 .. confval:: osd_check_for_log_corruption
-.. confval:: osd_command_thread_timeout
 .. confval:: osd_delete_sleep
 .. confval:: osd_delete_sleep_hdd
 .. confval:: osd_delete_sleep_ssd

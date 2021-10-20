@@ -647,7 +647,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   inodeno_t ino() const { return get_inode()->ino; }
   vinodeno_t vino() const { return vinodeno_t(ino(), last); }
   int d_type() const { return IFTODT(get_inode()->mode); }
-  bool is_root() const { return ino() == MDS_INO_ROOT; }
+  bool is_root() const { return ino() == CEPH_INO_ROOT; }
   bool is_stray() const { return MDS_INO_IS_STRAY(ino()); }
   mds_rank_t get_stray_owner() const {
     return (mds_rank_t)MDS_INO_STRAY_OWNER(ino());

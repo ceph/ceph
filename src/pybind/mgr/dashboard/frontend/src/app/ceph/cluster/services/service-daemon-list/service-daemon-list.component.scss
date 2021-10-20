@@ -1,0 +1,13 @@
+@use './src/styles/vendor/variables' as vv;
+
+.fa-info-circle {
+  color: vv.$info;
+}
+
+.fa-exclamation-triangle {
+  color: vv.$danger;
+}
+
+.ul-margin {
+  margin-left: -30px;
+}

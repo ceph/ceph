@@ -60,7 +60,7 @@ class CapsHelper(CephFSTestCase):
                     self.assertEqual(data, contents1)
 
     def conduct_neg_test_for_write_caps(self, filepaths, mounts):
-        cmdargs = ['echo', 'some random data', Raw('|'), 'sudo', 'tee']
+        cmdargs = ['echo', 'some random data', Raw('|'), 'tee']
 
         for mount in mounts:
             for path in filepaths:

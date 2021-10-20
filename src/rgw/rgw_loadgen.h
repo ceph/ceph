@@ -27,7 +27,7 @@ struct RGWLoadGenRequestEnv {
   }
 
   void set_date(utime_t& tm);
-  int sign(RGWAccessKey& access_key);
+  int sign(const DoutPrefixProvider *dpp, RGWAccessKey& access_key);
 };
 
 /* XXX does RGWLoadGenIO actually want to perform stream/HTTP I/O,

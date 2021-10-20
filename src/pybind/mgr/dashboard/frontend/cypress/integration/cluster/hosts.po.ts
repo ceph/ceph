@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 const pages = {
   index: { url: '#/hosts', id: 'cd-hosts' },
-  create: { url: '#/hosts/create', id: 'cd-host-form' }
+  add: { url: '#/hosts/(modal:add)', id: 'cd-host-form' }
 };
 
 export class HostsPageHelper extends PageHelper {
@@ -41,30 +41,23 @@ export class HostsPageHelper extends PageHelper {
       });
   }
 
-  @PageHelper.restrictTo(pages.index.url)
-  clickHostTab(hostname: string, tabName: string) {
-    this.getExpandCollapseElement(hostname).click();
-    cy.get('cd-host-details').within(() => {
-      this.getTab(tabName).click();
-    });
-  }
-
-  @PageHelper.restrictTo(pages.create.url)
-  add(hostname: string, exist?: boolean) {
-    cy.get(`${this.pages.create.id}`).within(() => {
+  add(hostname: string, exist?: boolean, maintenance?: boolean) {
+    cy.get(`${this.pages.add.id}`).within(() => {
       cy.get('#hostname').type(hostname);
+      if (maintenance) {
+        cy.get('label[for=maintenance]').click();
+      }
+      if (exist) {
+        cy.get('#hostname').should('have.class', 'ng-invalid');
+      }
       cy.get('cd-submit-button').click();
     });
-    if (exist) {
-      cy.get('#hostname').should('have.class', 'ng-invalid');
-    } else {
-      // back to host list
-      cy.get(`${this.pages.index.id}`);
-    }
+    // back to host list
+    cy.get(`${this.pages.index.id}`);
   }
 
-  @PageHelper.restrictTo(pages.index.url)
   checkExist(hostname: string, exist: boolean) {
+    this.clearTableSearchInput();
     this.getTableCell(this.columnIndex.hostname, hostname).should(($elements) => {
       const hosts = $elements.map((_, el) => el.textContent).get();
       if (exist) {
@@ -75,13 +68,11 @@ export class HostsPageHelper extends PageHelper {
     });
   }
 
-  @PageHelper.restrictTo(pages.index.url)
   delete(hostname: string) {
-    super.delete(hostname, this.columnIndex.hostname);
+    super.delete(hostname, this.columnIndex.hostname, 'hosts');
   }
 
   // Add or remove labels on a host, then verify labels in the table
-  @PageHelper.restrictTo(pages.index.url)
   editLabels(hostname: string, labels: string[], add: boolean) {
     this.getTableCell(this.columnIndex.hostname, hostname).click();
     this.clickActionButton('edit');
@@ -101,7 +92,10 @@ export class HostsPageHelper extends PageHelper {
       }
     }
     cy.get('cd-modal cd-submit-button').click();
+    this.checkLabelExists(hostname, labels, add);
+  }
 
+  checkLabelExists(hostname: string, labels: string[], add: boolean) {
     // Verify labels are added or removed from Labels column
     // First find row with hostname, then find labels in the row
     this.getTableCell(this.columnIndex.hostname, hostname)
@@ -120,41 +114,51 @@ export class HostsPageHelper extends PageHelper {
   }
 
   @PageHelper.restrictTo(pages.index.url)
-  maintenance(hostname: string, exit = false) {
-    let services: string[];
-    let runTest = false;
-    this.getTableCell(this.columnIndex.hostname, hostname)
-      .parent()
-      .find(`datatable-body-cell:nth-child(${this.columnIndex.services}) a`)
-      .should(($el) => {
-        services = $el.text().split(', ');
-        if (services.length < 2 && services[0].includes('osd')) {
-          runTest = true;
-        }
-      });
-    if (runTest) {
+  maintenance(hostname: string, exit = false, force = false) {
+    if (force) {
       this.getTableCell(this.columnIndex.hostname, hostname).click();
-      if (exit) {
-        this.clickActionButton('exit-maintenance');
+      this.clickActionButton('enter-maintenance');
 
-        this.getTableCell(this.columnIndex.hostname, hostname)
-          .parent()
-          .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
-          .should(($ele) => {
-            const status = $ele.toArray().map((v) => v.innerText);
-            expect(status).to.not.include('maintenance');
-          });
-      } else {
-        this.clickActionButton('enter-maintenance');
+      cy.contains('cd-modal button', 'Continue').click();
 
-        this.getTableCell(this.columnIndex.hostname, hostname)
-          .parent()
-          .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
-          .should(($ele) => {
-            const status = $ele.toArray().map((v) => v.innerText);
-            expect(status).to.include('maintenance');
-          });
-      }
+      this.getTableCell(this.columnIndex.hostname, hostname)
+        .parent()
+        .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
+        .should(($ele) => {
+          const status = $ele.toArray().map((v) => v.innerText);
+          expect(status).to.include('maintenance');
+        });
+    }
+    if (exit) {
+      this.getTableCell(this.columnIndex.hostname, hostname)
+        .click()
+        .parent()
+        .find(`datatable-body-cell:nth-child(${this.columnIndex.status})`)
+        .then(($ele) => {
+          const status = $ele.toArray().map((v) => v.innerText);
+          if (status[0].includes('maintenance')) {
+            this.clickActionButton('exit-maintenance');
+          }
+        });
+
+      this.getTableCell(this.columnIndex.hostname, hostname)
+        .parent()
+        .find(`datatable-body-cell:nth-child(${this.columnIndex.status})`)
+        .should(($ele) => {
+          const status = $ele.toArray().map((v) => v.innerText);
+          expect(status).to.not.include('maintenance');
+        });
+    } else {
+      this.getTableCell(this.columnIndex.hostname, hostname).click();
+      this.clickActionButton('enter-maintenance');
+
+      this.getTableCell(this.columnIndex.hostname, hostname)
+        .parent()
+        .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
+        .should(($ele) => {
+          const status = $ele.toArray().map((v) => v.innerText);
+          expect(status).to.include('maintenance');
+        });
     }
   }
 }

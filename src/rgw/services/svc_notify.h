@@ -15,6 +15,7 @@ class RGWSI_Finisher;
 
 class RGWWatcher;
 class RGWSI_Notify_ShutdownCB;
+struct RGWCacheNotifyInfo;
 
 class RGWSI_Notify : public RGWServiceInstance
 {
@@ -36,15 +37,15 @@ private:
   int num_watchers{0};
   RGWWatcher **watchers{nullptr};
   std::set<int> watchers_set;
-  vector<RGWSI_RADOS::Obj> notify_objs;
+  std::vector<RGWSI_RADOS::Obj> notify_objs;
 
   bool enabled{false};
 
   double inject_notify_timeout_probability{0};
-  unsigned max_notify_retries{0};
+  static constexpr unsigned max_notify_retries = 10;
 
-  string get_control_oid(int i);
-  RGWSI_RADOS::Obj pick_control_obj(const string& key);
+  std::string get_control_oid(int i);
+  RGWSI_RADOS::Obj pick_control_obj(const std::string& key);
 
   CB *cb{nullptr};
 
@@ -53,7 +54,7 @@ private:
 
   bool finalized{false};
 
-  int init_watch(optional_yield y);
+  int init_watch(const DoutPrefixProvider *dpp, optional_yield y);
   void finalize_watch();
 
   void init(RGWSI_Zone *_zone_svc,
@@ -70,32 +71,36 @@ private:
   void add_watcher(int i);
   void remove_watcher(int i);
 
-  int watch_cb(uint64_t notify_id,
+  int watch_cb(const DoutPrefixProvider *dpp,
+               uint64_t notify_id,
                uint64_t cookie,
                uint64_t notifier_id,
                bufferlist& bl);
   void _set_enabled(bool status);
   void set_enabled(bool status);
 
-  int robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
-                    optional_yield y);
+  int robust_notify(const DoutPrefixProvider *dpp, RGWSI_RADOS::Obj& notify_obj,
+		    const RGWCacheNotifyInfo& bl, optional_yield y);
 
   void schedule_context(Context *c);
 public:
   RGWSI_Notify(CephContext *cct): RGWServiceInstance(cct) {}
-  ~RGWSI_Notify();
+
+  virtual ~RGWSI_Notify() override;
 
   class CB {
     public:
       virtual ~CB() {}
-      virtual int watch_cb(uint64_t notify_id,
+      virtual int watch_cb(const DoutPrefixProvider *dpp,
+                           uint64_t notify_id,
                            uint64_t cookie,
                            uint64_t notifier_id,
                            bufferlist& bl) = 0;
       virtual void set_enabled(bool status) = 0;
   };
 
-  int distribute(const string& key, bufferlist& bl, optional_yield y);
+  int distribute(const DoutPrefixProvider *dpp, const std::string& key, const RGWCacheNotifyInfo& bl,
+		 optional_yield y);
 
   void register_watch_cb(CB *cb);
 };

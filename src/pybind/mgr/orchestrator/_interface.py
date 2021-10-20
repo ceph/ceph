@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from functools import wraps, reduce
 
 from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, \
-    Sequence, Dict, cast
+    Sequence, Dict, cast, Mapping
 
 try:
     from typing import Protocol  # Protocol was added in Python 3.8
@@ -343,11 +343,19 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_host(self, host: str) -> OrchResult[str]:
+    def remove_host(self, host: str, force: bool, offline: bool) -> OrchResult[str]:
         """
         Remove a host from the orchestrator inventory.
 
         :param host: hostname
+        """
+        raise NotImplementedError()
+
+    def drain_host(self, hostname: str) -> OrchResult[str]:
+        """
+        drain all daemons from a host
+
+        :param hostname: hostname
         """
         raise NotImplementedError()
 
@@ -365,6 +373,12 @@ class Orchestrator(object):
         Report the hosts in the cluster.
 
         :return: list of HostSpec
+        """
+        raise NotImplementedError()
+
+    def get_facts(self, hostname: Optional[str] = None) -> OrchResult[List[Dict[str, Any]]]:
+        """
+        Return hosts metadata(gather_facts).
         """
         raise NotImplementedError()
 
@@ -452,7 +466,6 @@ class Orchestrator(object):
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
             'host': self.add_host,
-            'cephadm-exporter': self.apply_cephadm_exporter,
         }
 
         def merge(l: OrchResult[List[str]], r: OrchResult[str]) -> OrchResult[List[str]]:  # noqa: E741
@@ -632,11 +645,10 @@ class Orchestrator(object):
         """Update an existing AlertManager daemon(s)"""
         raise NotImplementedError()
 
-    def apply_cephadm_exporter(self, spec: ServiceSpec) -> OrchResult[str]:
-        """Update an existing cephadm exporter daemon"""
+    def upgrade_check(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
         raise NotImplementedError()
 
-    def upgrade_check(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
+    def upgrade_ls(self, image: Optional[str], tags: bool) -> OrchResult[Dict[Any, Any]]:
         raise NotImplementedError()
 
     def upgrade_start(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
@@ -700,7 +712,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'crash': 'crash',
         'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
-        'cephadm-exporter': 'cephadm-exporter',
+        'agent': 'agent'
     }
     return mapping[dtype]
 
@@ -723,9 +735,13 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'node-exporter': ['node-exporter'],
         'crash': ['crash'],
         'container': ['container'],
-        'cephadm-exporter': ['cephadm-exporter'],
+        'agent': ['agent']
     }
     return mapping[stype]
+
+
+KNOWN_DAEMON_TYPES: List[str] = list(
+    sum((service_to_daemon_types(t) for t in ServiceSpec.KNOWN_SERVICE_TYPES), []))
 
 
 class UpgradeStatusSpec(object):
@@ -794,6 +810,8 @@ class DaemonDescription(object):
                  ports: Optional[List[int]] = None,
                  ip: Optional[str] = None,
                  deployed_by: Optional[List[str]] = None,
+                 rank: Optional[int] = None,
+                 rank_generation: Optional[int] = None,
                  ) -> None:
 
         # Host is at the same granularity as InventoryHost
@@ -815,6 +833,11 @@ class DaemonDescription(object):
         # This is the <foo> in mds.<foo>, the ID that will appear
         # in the FSMap/ServiceMap.
         self.daemon_id: Optional[str] = daemon_id
+        self.daemon_name = self.name()
+
+        # Some daemon types have a numeric rank assigned
+        self.rank: Optional[int] = rank
+        self.rank_generation: Optional[int] = rank_generation
 
         self._service_name: Optional[str] = service_name
 
@@ -943,6 +966,45 @@ class DaemonDescription(object):
         out: Dict[str, Any] = OrderedDict()
         out['daemon_type'] = self.daemon_type
         out['daemon_id'] = self.daemon_id
+        out['service_name'] = self._service_name
+        out['daemon_name'] = self.name()
+        out['hostname'] = self.hostname
+        out['container_id'] = self.container_id
+        out['container_image_id'] = self.container_image_id
+        out['container_image_name'] = self.container_image_name
+        out['container_image_digests'] = self.container_image_digests
+        out['memory_usage'] = self.memory_usage
+        out['memory_request'] = self.memory_request
+        out['memory_limit'] = self.memory_limit
+        out['version'] = self.version
+        out['status'] = self.status.value if self.status is not None else None
+        out['status_desc'] = self.status_desc
+        if self.daemon_type == 'osd':
+            out['osdspec_affinity'] = self.osdspec_affinity
+        out['is_active'] = self.is_active
+        out['ports'] = self.ports
+        out['ip'] = self.ip
+        out['rank'] = self.rank
+        out['rank_generation'] = self.rank_generation
+
+        for k in ['last_refresh', 'created', 'started', 'last_deployed',
+                  'last_configured']:
+            if getattr(self, k):
+                out[k] = datetime_to_str(getattr(self, k))
+
+        if self.events:
+            out['events'] = [e.to_json() for e in self.events]
+
+        empty = [k for k, v in out.items() if v is None]
+        for e in empty:
+            del out[e]
+        return out
+
+    def to_dict(self) -> dict:
+        out: Dict[str, Any] = OrderedDict()
+        out['daemon_type'] = self.daemon_type
+        out['daemon_id'] = self.daemon_id
+        out['daemon_name'] = self.name()
         out['hostname'] = self.hostname
         out['container_id'] = self.container_id
         out['container_image_id'] = self.container_image_id
@@ -966,7 +1028,7 @@ class DaemonDescription(object):
                 out[k] = datetime_to_str(getattr(self, k))
 
         if self.events:
-            out['events'] = [e.to_json() for e in self.events]
+            out['events'] = [e.to_dict() for e in self.events]
 
         empty = [k for k, v in out.items() if v is None]
         for e in empty:
@@ -984,6 +1046,8 @@ class DaemonDescription(object):
                 c[k] = str_to_datetime(c[k])
         events = [OrchestratorEvent.from_json(e) for e in event_strs]
         status_int = c.pop('status', None)
+        if 'daemon_name' in c:
+            del c['daemon_name']
         status = DaemonDescriptionStatus(status_int) if status_int is not None else None
         return cls(events=events, status=status, **c)
 
@@ -993,7 +1057,7 @@ class DaemonDescription(object):
 
     @staticmethod
     def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription') -> Any:
-        return dumper.represent_dict(data.to_json().items())
+        return dumper.represent_dict(cast(Mapping, data.to_json().items()))
 
 
 yaml.add_representer(DaemonDescription, DaemonDescription.yaml_representer)
@@ -1016,7 +1080,6 @@ class ServiceDescription(object):
                  spec: ServiceSpec,
                  container_image_id: Optional[str] = None,
                  container_image_name: Optional[str] = None,
-                 rados_config_location: Optional[str] = None,
                  service_url: Optional[str] = None,
                  last_refresh: Optional[datetime.datetime] = None,
                  created: Optional[datetime.datetime] = None,
@@ -1031,10 +1094,6 @@ class ServiceDescription(object):
         # (image name)
         self.container_image_id = container_image_id      # image hash
         self.container_image_name = container_image_name  # image friendly name
-
-        # Location of the service configuration when stored in rados
-        # object. Format: "rados://<pool>/[<namespace/>]<object>"
-        self.rados_config_location = rados_config_location
 
         # If the service exposes REST-like API, this attribute should hold
         # the URL.
@@ -1074,7 +1133,6 @@ class ServiceDescription(object):
         status = {
             'container_image_id': self.container_image_id,
             'container_image_name': self.container_image_name,
-            'rados_config_location': self.rados_config_location,
             'service_url': self.service_url,
             'size': self.size,
             'running': self.running,
@@ -1090,6 +1148,28 @@ class ServiceDescription(object):
         out['status'] = status
         if self.events:
             out['events'] = [e.to_json() for e in self.events]
+        return out
+
+    def to_dict(self) -> OrderedDict:
+        out = self.spec.to_json()
+        status = {
+            'container_image_id': self.container_image_id,
+            'container_image_name': self.container_image_name,
+            'service_url': self.service_url,
+            'size': self.size,
+            'running': self.running,
+            'last_refresh': self.last_refresh,
+            'created': self.created,
+            'virtual_ip': self.virtual_ip,
+            'ports': self.ports if self.ports else None,
+        }
+        for k in ['last_refresh', 'created']:
+            if getattr(self, k):
+                status[k] = datetime_to_str(getattr(self, k))
+        status = {k: v for (k, v) in status.items() if v is not None}
+        out['status'] = status
+        if self.events:
+            out['events'] = [e.to_dict() for e in self.events]
         return out
 
     @classmethod
@@ -1108,8 +1188,8 @@ class ServiceDescription(object):
         return cls(spec=spec, events=events, **c_status)
 
     @staticmethod
-    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription') -> Any:
-        return dumper.represent_dict(data.to_json().items())
+    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'ServiceDescription') -> Any:
+        return dumper.represent_dict(cast(Mapping, data.to_json().items()))
 
 
 yaml.add_representer(ServiceDescription, ServiceDescription.yaml_representer)
@@ -1248,6 +1328,15 @@ class OrchestratorEvent:
         # Make a long list of events readable.
         created = datetime_to_str(self.created)
         return f'{created} {self.kind_subject()} [{self.level}] "{self.message}"'
+
+    def to_dict(self) -> dict:
+        # Convert events data to dict.
+        return {
+            'created': datetime_to_str(self.created),
+            'subject': self.kind_subject(),
+            'level': self.level,
+            'message': self.message
+        }
 
     @classmethod
     @handle_type_error

@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
@@ -25,6 +24,7 @@
 #include "mgr/Gil.h"
 
 #include "PyModuleRunner.h"
+#include "PyModule.h"
 
 #include <vector>
 #include <string>
@@ -98,5 +98,4 @@ public:
 
 };
 
-std::string handle_pyerror();
 

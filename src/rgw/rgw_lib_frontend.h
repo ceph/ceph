@@ -59,14 +59,14 @@ namespace rgw {
 
       lsubdout(g_ceph_context, rgw, 10)
 	<< __func__ << " enqueue request req="
-	<< hex << req << dec << dendl;
+	<< std::hex << req << std::dec << dendl;
 
       req_throttle.get(1);
       req_wq.queue(req);
     } /* enqueue_req */
 
     /* "regular" requests */
-    void handle_request(RGWRequest* req) override; // async handler, deletes req
+    void handle_request(const DoutPrefixProvider *dpp, RGWRequest* req) override; // async handler, deletes req
     int process_request(RGWLibRequest* req);
     int process_request(RGWLibRequest* req, RGWLibIO* io);
     void set_access_key(RGWAccessKey& key) { access_key = key; }

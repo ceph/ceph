@@ -55,6 +55,13 @@ add_executable(unittest_bloom_filter
 add_ceph_unittest(unittest_bloom_filter)
 target_link_libraries(unittest_bloom_filter ceph-common)
 
+# unittest_lruset
+add_executable(unittest_lruset
+  test_lruset.cc
+  )
+add_ceph_unittest(unittest_lruset)
+target_link_libraries(unittest_lruset)
+
 # unittest_histogram
 add_executable(unittest_histogram
   histogram.cc
@@ -276,6 +283,11 @@ add_executable(unittest_shunique_lock
 add_ceph_unittest(unittest_shunique_lock)
 target_link_libraries(unittest_shunique_lock ceph-common)
 
+add_executable(unittest_fair_mutex
+  test_fair_mutex.cc)
+add_ceph_unittest(unittest_fair_mutex)
+target_link_libraries(unittest_fair_mutex ceph-common)
+
 # unittest_perf_histogram
 add_executable(unittest_perf_histogram
   test_perf_histogram.cc
@@ -353,6 +365,9 @@ add_ceph_unittest(unittest_cdc)
 add_executable(unittest_ceph_timer test_ceph_timer.cc)
 add_ceph_unittest(unittest_ceph_timer)
 
+add_executable(unittest_option test_option.cc)
+target_link_libraries(unittest_option ceph-common GTest::Main)
+add_ceph_unittest(unittest_option)
 
 add_executable(unittest_blocked_completion test_blocked_completion.cc)
 add_ceph_unittest(unittest_blocked_completion)

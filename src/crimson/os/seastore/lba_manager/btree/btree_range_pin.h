@@ -21,7 +21,7 @@ struct lba_node_meta_t {
   bool is_parent_of(const lba_node_meta_t &other) const {
     return (depth == other.depth + 1) &&
       (begin <= other.begin) &&
-      (end >= other.end);
+      (end > other.begin);
   }
 
   std::pair<lba_node_meta_t, lba_node_meta_t> split_into(laddr_t pivot) const {
@@ -117,6 +117,15 @@ public:
     extent = nextent;
   }
 
+  CachedExtent &get_extent() {
+    assert(extent);
+    return *extent;
+  }
+
+  bool has_ref() {
+    return !!ref;
+  }
+
   void take_pin(btree_range_pin_t &other);
 
   friend bool operator<(
@@ -178,10 +187,6 @@ class btree_pin_set_t {
   using pins_t = btree_range_pin_t::index_t;
   pins_t pins;
 
-  pins_t::iterator get_iter(btree_range_pin_t &pin) {
-    return pins_t::s_iterator_to(pin);
-  }
-
   /// Removes pin from set optionally checking whether parent has other children
   void remove_pin(btree_range_pin_t &pin, bool check_parent);
 
@@ -212,6 +217,13 @@ public:
   void retire(btree_range_pin_t &pin);
   void check_parent(btree_range_pin_t &pin);
 
+  template <typename F>
+  void scan(F &&f) {
+    for (auto &i : pins) {
+      std::invoke(f, i);
+    }
+  }
+
   ~btree_pin_set_t() {
     ceph_assert(pins.empty());
   }
@@ -219,6 +231,7 @@ public:
 
 class BtreeLBAPin : public LBAPin {
   friend class BtreeLBAManager;
+  friend class LBABtree;
 
   /**
    * parent

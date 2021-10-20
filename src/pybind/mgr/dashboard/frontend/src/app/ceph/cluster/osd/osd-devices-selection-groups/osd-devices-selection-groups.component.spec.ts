@@ -2,6 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
@@ -34,7 +35,8 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
       FormsModule,
       HttpClientTestingModule,
       SharedModule,
-      ToastrModule.forRoot()
+      ToastrModule.forRoot(),
+      RouterTestingModule
     ],
     declarations: [OsdDevicesSelectionGroupsComponent, InventoryDevicesComponent]
   });
@@ -92,8 +94,10 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
 
   describe('with devices selected', () => {
     beforeEach(() => {
+      component.isOsdPage = true;
       component.availDevices = [];
       component.devices = devices;
+      component.ngOnInit();
       fixture.detectChanges();
     });
 

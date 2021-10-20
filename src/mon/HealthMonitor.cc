@@ -280,8 +280,7 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
     return true;
   }
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
@@ -798,7 +797,9 @@ void HealthMonitor::check_for_mon_down(health_check_map_t *checks)
 {
   int max = mon.monmap->size();
   int actual = mon.get_quorum().size();
-  if (actual < max) {
+  const auto now = ceph::real_clock::now();
+  if (actual < max &&
+      now > mon.monmap->created.to_real_time() + g_conf().get_val<std::chrono::seconds>("mon_down_mkfs_grace")) {
     ostringstream ss;
     ss << (max-actual) << "/" << max << " mons down, quorum "
        << mon.get_quorum_names();

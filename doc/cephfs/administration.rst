@@ -82,6 +82,16 @@ file system.  If any files have layouts for the removed data pool, the file
 data will become unavailable. The default data pool (when creating the file
 system) cannot be removed.
 
+::
+
+    fs rename <file system name> <new file system name> [--yes-i-really-mean-it]
+
+Rename a Ceph file system. This also changes the application tags on the data
+pools and metadata pool of the file system to the new file system name.
+The CephX IDs authorized to the old file system name need to be reauthorized
+to the new name. Any on-going operations of the clients using these IDs may be
+disrupted. Mirroring is expected to be disabled on the file system.
+
 
 Settings
 --------
@@ -222,30 +232,15 @@ does not change a MDS; it manipulates the file system rank which has been
 marked damaged.
 
 
-Minimum Client Version
-----------------------
+Required Client Features
+------------------------
 
-It is sometimes desirable to set the minimum version of Ceph that a client must be
-running to connect to a CephFS cluster. Older clients may sometimes still be
-running with bugs that can cause locking issues between clients (due to
-capability release). CephFS provides a mechanism to set the minimum
-client version:
+It is sometimes desirable to set features that clients must support to talk to
+CephFS. Clients without those features may disrupt other clients or behave in
+surprising ways. Or, you may want to require newer features to prevent older
+and possibly buggy clients from connecting.
 
-::
-
-    fs set <fs name> min_compat_client <release>
-
-For example, to only allow Nautilus clients, use:
-
-::
-
-    fs set cephfs min_compat_client nautilus
-
-Clients running an older version will be automatically evicted.
-
-Enforcing minimum version of CephFS client is achieved by setting required
-client features. Commands to manipulate required client features of a file
-system:
+Commands to manipulate required client features of a file system:
 
 ::
 
@@ -258,8 +253,9 @@ To list all CephFS features
 
     fs feature ls
 
+Clients that are missing newly added features will be evicted automatically.
 
-CephFS features and first release they came out.
+Here are the current CephFS features and first release they came out:
 
 +------------------+--------------+-----------------+
 | Feature          | Ceph release | Upstream Kernel |
@@ -283,6 +279,8 @@ CephFS features and first release they came out.
 | deleg_ino        | octopus      | 5.6             |
 +------------------+--------------+-----------------+
 | metric_collect   | pacific      | N/A             |
++------------------+--------------+-----------------+
+| alternate_name   | pacific      | PLANNED         |
 +------------------+--------------+-----------------+
 
 CephFS Feature Descriptions
@@ -334,6 +332,13 @@ delegated inode numbers is a prerequisite for client to do async file creation.
 
 Clients can send performance metric to MDS if MDS support this feature.
 
+::
+
+    alternate_name
+
+Clients can set and understand "alternate names" for directory entries. This is
+to be used for encrypted file name support.
+
 
 Global settings
 ---------------
@@ -351,6 +356,7 @@ Some flags require you to confirm your intentions with "--yes-i-really-mean-it"
 or a similar string they will prompt you with. Consider these actions carefully
 before proceeding; they are placed on especially dangerous activities.
 
+.. _advanced-cephfs-admin-settings:
 
 Advanced
 --------
@@ -359,24 +365,6 @@ These commands are not required in normal operation, and exist
 for use in exceptional circumstances.  Incorrect use of these
 commands may cause serious problems, such as an inaccessible
 file system.
-
-::
-
-    mds compat rm_compat
-
-Removes an compatibility feature flag.
-
-::
-
-    mds compat rm_incompat
-
-Removes an incompatibility feature flag.
-
-::
-
-    mds compat show
-
-Show MDS compatibility flags.
 
 ::
 
@@ -390,3 +378,14 @@ This removes a rank from the failed set.
 
 This command resets the file system state to defaults, except for the name and
 pools. Non-zero ranks are saved in the stopped set.
+
+
+::
+
+    fs new <file system name> <metadata pool name> <data pool name> --fscid <fscid> --force
+
+This command creates a file system with a specific **fscid** (file system cluster ID).
+You may want to do this when an application expects the file system's ID to be
+stable after it has been recovered, e.g., after monitor databases are lost and
+rebuilt. Consequently, file system IDs don't always keep increasing with newer
+file systems.

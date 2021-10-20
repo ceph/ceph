@@ -19,6 +19,12 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_standby_replay_damaged
+  type: bool
+  level: dev
+  default: false
+  flags:
+  - runtime
 - name: mds_numa_node
   type: int
   level: advanced
@@ -95,6 +101,10 @@ options:
   type: float
   level: advanced
   desc: amount of memory to reserve for future cached objects
+  fmt_desc: The cache reservation (memory or inodes) for the MDS cache to maintain.
+    Once the MDS begins dipping into its reservation, it will recall
+    client state until its cache size shrinks to restore the
+    reservation.
   default: 0.05
   services:
   - mds
@@ -111,6 +121,8 @@ options:
   type: float
   level: advanced
   desc: midpoint for MDS cache LRU
+  fmt_desc: The insertion point for new items in the cache LRU
+    (from the top).
   default: 0.7
   services:
   - mds
@@ -144,6 +156,8 @@ options:
   type: int
   level: advanced
   desc: maximum size in megabytes for a RADOS write to a directory
+  fmt_desc: The maximum size of a directory update before Ceph breaks it into
+    smaller transactions (MB).
   default: 10
   services:
   - mds
@@ -167,7 +181,7 @@ options:
 - name: mds_beacon_interval
   type: float
   level: advanced
-  desc: interval in seconds between MDS beacons to monitors
+  desc: interval in seconds between MDS beacon messages sent to monitors
   default: 4
   services:
   - mds
@@ -176,6 +190,8 @@ options:
   type: float
   level: advanced
   desc: tolerance in seconds for missed MDS beacons to monitors
+  fmt_desc: The interval without beacons before Ceph declares an MDS laggy
+    (and possibly replace it).
   default: 15
   services:
   - mds
@@ -383,6 +399,7 @@ options:
   type: float
   level: advanced
   desc: time in seconds between upkeep tasks
+  fmt_desc: How frequently the MDS performs internal periodic tasks.
   default: 5
   services:
   - mds
@@ -394,12 +411,15 @@ options:
   default: 1
   services:
   - mds
+  fmt_desc: The minimum interval (in seconds) to try to avoid propagating
+    recursive stats up the tree.
   with_legacy: true
 # how quickly dirstat changes propagate up the hierarchy
 - name: mds_scatter_nudge_interval
   type: float
   level: advanced
   desc: minimum interval between scatter lock updates
+  fmt_desc: How quickly dirstat changes propagate up.
   default: 5
   services:
   - mds
@@ -408,6 +428,7 @@ options:
   type: int
   level: advanced
   desc: number of unused inodes to pre-allocate to clients for file creation
+  fmt_desc: The number of inode numbers to preallocate per client session.
   default: 1000
   services:
   - mds
@@ -426,6 +447,8 @@ options:
   level: advanced
   desc: additional reply to clients that metadata requests are complete but not yet
     durable
+  fmt_desc: Determines whether the MDS should allow clients to see request
+    results before they commit to the journal.
   default: true
   services:
   - mds
@@ -444,6 +467,7 @@ options:
   type: int
   level: advanced
   desc: hash function to select directory fragment for dentry name
+  fmt_desc: The function to use for hashing files across directory fragments.
   # CEPH_STR_HASH_RJENKINS
   default: 2
   services:
@@ -462,11 +486,15 @@ options:
   default: false
   services:
   - mds
+  fmt_desc: Determines whether the MDS should try to skip corrupt journal
+    events during journal replay.
   with_legacy: true
 - name: mds_log_max_events
   type: int
   level: advanced
   desc: maximum number of events in the MDS journal (-1 is unlimited)
+  fmt_desc: The maximum events in the journal before we initiate trimming.
+    Set to ``-1`` to disable limits.
   default: -1
   services:
   - mds
@@ -492,6 +520,8 @@ options:
   type: uint
   level: advanced
   desc: maximum number of segments which may be untrimmed
+  fmt_desc: The maximum number of segments (objects) in the journal before
+    we initiate trimming. Set to ``-1`` to disable limits.
   default: 128
   services:
   - mds
@@ -566,6 +596,8 @@ options:
   type: float
   level: advanced
   desc: interval in seconds between balancer ticks
+  fmt_desc: Determines how frequently to sample directory temperature
+    (for fragmentation decisions).
   default: 3
   services:
   - mds
@@ -574,6 +606,8 @@ options:
   type: float
   level: advanced
   desc: hot popularity threshold to replicate a subtree
+  fmt_desc: The maximum temperature before Ceph attempts to replicate
+    metadata to other nodes.
   default: 8000
   services:
   - mds
@@ -582,6 +616,8 @@ options:
   type: float
   level: advanced
   desc: cold popularity threshold to merge subtrees
+  fmt_desc: The minimum temperature before Ceph stops replicating
+    metadata to other nodes.
   default: 0
   services:
   - mds
@@ -590,6 +626,8 @@ options:
   type: int
   level: advanced
   desc: minimum size of directory fragment before splitting
+  fmt_desc: The maximum directory size before the MDS will split a directory
+    fragment into smaller bits.
   default: 10000
   services:
   - mds
@@ -598,6 +636,8 @@ options:
   type: float
   level: advanced
   desc: hot read popularity threshold for splitting a directory fragment
+  fmt_desc: The maximum directory read temperature before Ceph splits
+    a directory fragment.
   default: 25000
   services:
   - mds
@@ -606,6 +646,8 @@ options:
   type: float
   level: advanced
   desc: hot write popularity threshold for splitting a directory fragment
+  fmt_desc: The maximum directory write temperature before Ceph splits
+    a directory fragment.
   default: 10000
   services:
   - mds
@@ -614,6 +656,7 @@ options:
   type: int
   level: advanced
   desc: power of two child fragments for a fragment on split
+  fmt_desc: The number of bits by which to split a directory fragment.
   default: 3
   services:
   - mds
@@ -624,6 +667,8 @@ options:
   type: int
   level: advanced
   desc: size of fragments where merging should occur
+  fmt_desc: The minimum directory size before Ceph tries to merge
+    adjacent directory fragments.
   default: 50
   services:
   - mds
@@ -632,6 +677,7 @@ options:
   type: int
   level: advanced
   desc: interval between MDS balancer cycles
+  fmt_desc: The frequency (in seconds) of workload exchanges between MDSs.
   default: 10
   services:
   - mds
@@ -639,6 +685,8 @@ options:
   type: int
   level: advanced
   desc: delay in seconds before interrupting client IO to perform splits
+  fmt_desc: The delay (in seconds) between a fragment being eligible for split
+    or merge and executing the fragmentation change.
   default: 5
   services:
   - mds
@@ -647,6 +695,8 @@ options:
   type: int
   level: advanced
   desc: maximum size of a directory fragment before new creat/links fail
+  fmt_desc: The maximum size of a fragment before any new entries
+    are rejected with ENOSPC.
   default: 100000
   services:
   - mds
@@ -656,6 +706,8 @@ options:
   type: float
   level: advanced
   desc: ratio of mds_bal_split_size at which fast fragment splitting occurs
+  fmt_desc: The ratio by which frags may exceed the split size before
+    a split is executed immediately (skipping the fragment interval)
   default: 1.5
   services:
   - mds
@@ -676,6 +728,8 @@ options:
   type: float
   level: advanced
   desc: idle metadata popularity threshold before rebalancing
+  fmt_desc: The minimum temperature before Ceph migrates a subtree
+    back to its parent.
   default: 0
   services:
   - mds
@@ -686,6 +740,8 @@ options:
   default: -1
   services:
   - mds
+  fmt_desc: The number of iterations to run balancer before Ceph stops.
+    (used for testing purposes only)
   with_legacy: true
 - name: mds_bal_max_until
   type: int
@@ -693,6 +749,8 @@ options:
   default: -1
   services:
   - mds
+  fmt_desc: The number of seconds to run balancer before Ceph stops.
+    (used for testing purposes only)
   with_legacy: true
 - name: mds_bal_mode
   type: int
@@ -700,12 +758,19 @@ options:
   default: 0
   services:
   - mds
+  fmt_desc: |
+    The method for calculating MDS load.
+
+      - ``0`` = Hybrid.
+      - ``1`` = Request rate and latency.
+      - ``2`` = CPU load.
   with_legacy: true
 # must be this much above average before we export anything
 - name: mds_bal_min_rebalance
   type: float
   level: dev
   desc: amount overloaded over internal target before balancer begins offloading
+  fmt_desc: The minimum subtree temperature before Ceph migrates.
   default: 0.1
   services:
   - mds
@@ -717,6 +782,7 @@ options:
   default: 0.2
   services:
   - mds
+  fmt_desc: The minimum subtree temperature before Ceph searches a subtree.
   with_legacy: true
 # take within this range of what we need
 - name: mds_bal_need_min
@@ -725,6 +791,7 @@ options:
   default: 0.8
   services:
   - mds
+  fmt_desc: The minimum fraction of target subtree size to accept.
   with_legacy: true
 - name: mds_bal_need_max
   type: float
@@ -732,6 +799,7 @@ options:
   default: 1.2
   services:
   - mds
+  fmt_desc: The maximum fraction of target subtree size to accept.
   with_legacy: true
 # any sub bigger than this taken in full
 - name: mds_bal_midchunk
@@ -740,6 +808,8 @@ options:
   default: 0.3
   services:
   - mds
+  fmt_desc: Ceph will migrate any subtree that is larger than this fraction
+    of the target subtree size.
   with_legacy: true
 # never take anything smaller than this
 - name: mds_bal_minchunk
@@ -748,6 +818,8 @@ options:
   default: 0.001
   services:
   - mds
+  fmt_desc: Ceph will ignore any subtree that is smaller than this fraction
+    of the target subtree size.
   with_legacy: true
 # target decay half-life in MDSMap (2x larger is approx. 2x slower)
 - name: mds_bal_target_decay
@@ -772,6 +844,8 @@ options:
   type: float
   level: advanced
   desc: time in seconds between replay of updates to journal by standby replay MDS
+  fmt_desc: The journal poll interval when in standby-replay mode.
+    ("hot standby")
   default: 1
   services:
   - mds
@@ -782,6 +856,7 @@ options:
   default: 0
   services:
   - mds
+  fmt_desc: The interval for polling the cache during MDS shutdown.
   with_legacy: true
 - name: mds_thrash_exports
   type: int
@@ -789,6 +864,7 @@ options:
   default: 0
   services:
   - mds
+  fmt_desc: Ceph will randomly export subtrees between nodes (testing only).
   with_legacy: true
 - name: mds_thrash_fragments
   type: int
@@ -796,6 +872,7 @@ options:
   default: 0
   services:
   - mds
+  fmt_desc: Ceph will randomly fragment or merge directories.
   with_legacy: true
 - name: mds_dump_cache_on_map
   type: bool
@@ -803,6 +880,7 @@ options:
   default: false
   services:
   - mds
+  fmt_desc: Ceph will dump the MDS cache contents to a file on each MDSMap.
   with_legacy: true
 - name: mds_dump_cache_after_rejoin
   type: bool
@@ -810,6 +888,8 @@ options:
   default: false
   services:
   - mds
+  fmt_desc: Ceph will dump MDS cache contents to a file after
+    rejoining the cache (during recovery).
   with_legacy: true
 - name: mds_verify_scatter
   type: bool
@@ -817,6 +897,8 @@ options:
   default: false
   services:
   - mds
+  fmt_desc: Ceph will assert that various scatter/gather invariants
+    are ``true`` (developers only).
   with_legacy: true
 - name: mds_debug_scatterstat
   type: bool
@@ -824,6 +906,8 @@ options:
   default: false
   services:
   - mds
+  fmt_desc: Ceph will assert that various recursive stat invariants
+    are ``true`` (for developers only).
   with_legacy: true
 - name: mds_debug_frag
   type: bool
@@ -831,6 +915,8 @@ options:
   default: false
   services:
   - mds
+  fmt_desc: Ceph will verify directory fragmentation invariants
+    when convenient (developers only).
   with_legacy: true
 - name: mds_debug_auth_pins
   type: bool
@@ -838,6 +924,7 @@ options:
   default: false
   services:
   - mds
+  fmt_desc: The debug auth pin invariants (for developers only).
   with_legacy: true
 - name: mds_debug_subtrees
   type: bool
@@ -845,6 +932,7 @@ options:
   default: false
   services:
   - mds
+  fmt_desc: The debug subtree invariants (for developers only).
   with_legacy: true
 - name: mds_kill_mdstable_at
   type: int
@@ -852,6 +940,8 @@ options:
   default: 0
   services:
   - mds
+  fmt_desc: Ceph will inject MDS failure in MDSTable code
+    (for developers only).
   with_legacy: true
 - name: mds_max_export_size
   type: size
@@ -865,6 +955,8 @@ options:
   default: 0
   services:
   - mds
+  fmt_desc: Ceph will inject MDS failure in the subtree export code
+    (for developers only).
   with_legacy: true
 - name: mds_kill_import_at
   type: int
@@ -872,6 +964,8 @@ options:
   default: 0
   services:
   - mds
+  fmt_desc: Ceph will inject MDS failure in the subtree import code
+    (for developers only).
   with_legacy: true
 - name: mds_kill_link_at
   type: int
@@ -879,6 +973,8 @@ options:
   default: 0
   services:
   - mds
+  fmt_desc: Ceph will inject MDS failure in hard link code
+    (for developers only).
   with_legacy: true
 - name: mds_kill_rename_at
   type: int
@@ -886,6 +982,8 @@ options:
   default: 0
   services:
   - mds
+  fmt_desc: Ceph will inject MDS failure in the rename code
+    (for developers only).
   with_legacy: true
 - name: mds_kill_openc_at
   type: int
@@ -943,6 +1041,8 @@ options:
   default: false
   services:
   - mds
+  fmt_desc: Ceph will delete all client sessions on startup
+    (for testing only).
   with_legacy: true
 - name: mds_wipe_ino_prealloc
   type: bool
@@ -950,6 +1050,8 @@ options:
   default: false
   services:
   - mds
+  fmt_desc: Ceph will delete ino preallocation metadata on startup
+    (for testing only).
   with_legacy: true
 - name: mds_skip_ino
   type: int
@@ -957,6 +1059,8 @@ options:
   default: 0
   services:
   - mds
+  fmt_desc: The number of inode numbers to skip on startup
+    (for testing only).
   with_legacy: true
 - name: mds_enable_op_tracker
   type: bool
@@ -1290,6 +1394,17 @@ options:
   long_desc: interval in seconds after which active MDSs send client metrics data
     to rank 0.
   default: 2
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_dir_max_entries
+  type: uint
+  level: advanced
+  desc: maximum number of entries per directory before new creat/links fail
+  long_desc: The maximum number of entries before any new entries
+    are rejected with ENOSPC.
+  default: 0
   services:
   - mds
   flags:

@@ -1,15 +1,15 @@
 Vulnerability Management Process
 ================================
 
-#. The report will be acknowledged within three business days or less.
-#. The team will investigate and update the email thread with relevant
-   information and may ask for additional information or guidance
-   surrounding the reported issue.
+#. The report will be acknowledged within three business days.
+#. The team will investigate the reported issue and will update the email
+   thread with relevant information. The team may ask for additional
+   information regarding the reported issue.
 #. If the team does not confirm the report, no further action will be
    taken and the issue will be closed.
-#. If the team confirms the report, a unique CVE identifier will be
-   assigned and shared with the reporter. The team will take action to
-   fix the issue.
+#. If the report is confirmed by Ceph team members, a unique CVE identifier
+   will be assigned to the report and then shared with the reporter. The Ceph
+   security team will start working on a fix. 
 #. If a reporter has no disclosure date in mind, a Ceph security team
    member will coordinate a release date (CRD) with the list members
    and share the mutually agreed disclosure date with the reporter.
@@ -22,10 +22,10 @@ Vulnerability Management Process
    an easy workaround or where an issue that is already public, a
    standard patch release process will be followed to fix the
    vulnerability once CVE is assigned.
-#. Medium and Low severity issues will be released as part of the next
-   standard release cycle, with at least a 7 days advanced
-   notification to the list members prior to the release date. The CVE
-   fix details will be included in the release notes, which will be
+#. Fixes for issues of "Medium" and "Low" severity will be released as part of
+   the next standard release cycle. List members will receive seven days of
+   advance notice prior to the release date of these fixes. The details of the
+   CVE fix will be included in the release notes, and the release notes will be
    linked in the public announcement.
 #. Commits will be handled in a private repository for review and
    testing and a new patch version will be released from this private

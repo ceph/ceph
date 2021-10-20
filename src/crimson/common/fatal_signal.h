@@ -3,13 +3,15 @@
 
 #pragma once
 
+#include <csignal>
+
 class FatalSignal {
 public:
   FatalSignal();
 
 private:
-  static void signaled(int signum);
-  static void print_backtrace(int signum);
+  static void signal_entry(int signum, siginfo_t* siginfo, void* p);
+  static void signaled(int signum, const siginfo_t& siginfo);
 
   template <int... SigNums>
   void install_oneshot_signals_handler();

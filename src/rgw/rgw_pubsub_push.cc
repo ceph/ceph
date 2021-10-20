@@ -73,7 +73,7 @@ private:
     }
 
     // send message to endpoint
-    int send_request() override {
+    int send_request(const DoutPrefixProvider *dpp) override {
       init_new_io(this);
       const auto rc = sync_env->http_manager->add_request(this);
       if (rc < 0) {
@@ -141,6 +141,7 @@ public:
     const auto post_data = json_format_pubsub_event(event);
     request.set_post_data(post_data);
     request.set_send_length(post_data.length());
+    request.append_header("Content-Type", "application/json");
     if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_pending);
     const auto rc = RGWHTTP::process(&request, y);
     if (perfcounter) perfcounter->dec(l_rgw_pubsub_push_pending);
@@ -232,7 +233,7 @@ private:
       topic(_topic), conn(_conn), message(_message) {}
 
     // send message to endpoint, without waiting for reply
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         const auto rc = amqp::publish(conn, topic, message);
         if (rc < 0) {
@@ -262,7 +263,7 @@ private:
       topic(_topic), conn(_conn), message(_message) {}
 
     // send message to endpoint, waiting for reply
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield {
           init_new_io(this);
@@ -504,7 +505,7 @@ private:
       topic(_topic), conn(_conn), message(_message) {}
 
     // send message to endpoint, without waiting for reply
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         const auto rc = kafka::publish(conn, topic, message);
         if (rc < 0) {
@@ -534,7 +535,7 @@ private:
       topic(_topic), conn(_conn), message(_message) {}
 
     // send message to endpoint, waiting for reply
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield {
           init_new_io(this);

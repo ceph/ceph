@@ -58,13 +58,15 @@ protected:
                      bool generic_prepare,
                      const DoutPrefixProvider *dpp);
 
-  virtual int pre_modify(Context *ctx,
+  virtual int pre_modify(const DoutPrefixProvider *dpp, 
+                         Context *ctx,
                          const std::string& key,
                          RGWMetadataLogData& log_data,
                          RGWObjVersionTracker *objv_tracker,
                          RGWMDLogStatus op_type,
                          optional_yield y);
-  virtual int post_modify(Context *ctx,
+  virtual int post_modify(const DoutPrefixProvider *dpp, 
+                          Context *ctx,
                           const std::string& key,
                           RGWMetadataLogData& log_data,
                           RGWObjVersionTracker *objv_tracker, int ret,
@@ -144,26 +146,29 @@ public:
                         RGWObjVersionTracker *objv_tracker,
                         optional_yield y,
                         const DoutPrefixProvider *dpp) = 0;
-  virtual int put_entry(RGWSI_MetaBackend::Context *ctx,
+  virtual int put_entry(const DoutPrefixProvider *dpp, 
+                        RGWSI_MetaBackend::Context *ctx,
                         const std::string& key,
                         RGWSI_MetaBackend::PutParams& params,
                         RGWObjVersionTracker *objv_tracker,
                         optional_yield y) = 0;
-  virtual int remove_entry(Context *ctx,
+  virtual int remove_entry(const DoutPrefixProvider *dpp, 
+                           Context *ctx,
                            const std::string& key,
                            RGWSI_MetaBackend::RemoveParams& params,
                            RGWObjVersionTracker *objv_tracker,
                            optional_yield y) = 0;
 
-  virtual int list_init(RGWSI_MetaBackend::Context *ctx, const string& marker) = 0;
-  virtual int list_next(RGWSI_MetaBackend::Context *ctx,
-                        int max, list<string> *keys,
+  virtual int list_init(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx, const std::string& marker) = 0;
+  virtual int list_next(const DoutPrefixProvider *dpp,
+                        RGWSI_MetaBackend::Context *ctx,
+                        int max, std::list<std::string> *keys,
                         bool *truncated)  = 0;
   virtual int list_get_marker(RGWSI_MetaBackend::Context *ctx,
-                              string *marker) = 0;
+                              std::string *marker) = 0;
 
   int call(std::function<int(RGWSI_MetaBackend::Context *)> f) {
-    return call(nullopt, f);
+    return call(std::nullopt, f);
   }
 
   virtual int call(std::optional<RGWSI_MetaBackend_CtxParams> opt,
@@ -252,14 +257,14 @@ public:
       return be->mutate(be_ctx, key, params, objv_tracker, y, f, dpp);
     }
 
-    int list_init(const string& marker) {
-      return be->list_init(be_ctx, marker);
+    int list_init(const DoutPrefixProvider *dpp, const std::string& marker) {
+      return be->list_init(dpp, be_ctx, marker);
     }
-    int list_next(int max, list<string> *keys,
+    int list_next(const DoutPrefixProvider *dpp, int max, std::list<std::string> *keys,
                   bool *truncated) {
-      return be->list_next(be_ctx, max, keys, truncated);
+      return be->list_next(dpp, be_ctx, max, keys, truncated);
     }
-    int list_get_marker(string *marker) {
+    int list_get_marker(std::string *marker) {
       return be->list_get_marker(be_ctx, marker);
     }
 
@@ -278,7 +283,7 @@ public:
   virtual ~RGWSI_MetaBackend_Handler() {}
 
   int call(std::function<int(Op *)> f) {
-    return call(nullopt, f);
+    return call(std::nullopt, f);
   }
 
   virtual int call(std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,

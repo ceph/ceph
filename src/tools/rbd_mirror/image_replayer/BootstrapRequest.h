@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "common/ceph_mutex.h"
+#include "common/Timer.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/mirror/Types.h"
 #include "tools/rbd_mirror/CancelableRequest.h"
@@ -14,7 +15,6 @@
 #include <string>
 
 class Context;
-class SafeTimer;
 
 namespace journal { class CacheManagerHandler; }
 namespace librbd { class ImageCtx; }

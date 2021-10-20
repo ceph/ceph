@@ -6,6 +6,8 @@
 # relies on this ordering
 export LC_ALL=C
 
+# If your ceph.conf is not in /etc/ceph, then set CEPH_CONF="-c /path/to/ceph.conf"
+
 out_dir="."
 temp_file=/tmp/temp.$$
 timestamp=$(date -u +%Y%m%d%H%M%S)
@@ -34,12 +36,12 @@ error_out() {
 prompt_pool() {
     # note: all prompts go to stderr so stdout contains just the result
     >&2 echo "Available pools:"
-    rados lspools >"$temp_file" 2>"$lspools_err"
+    rados ${CEPH_CONF} lspools >"$temp_file" 2>"$lspools_err"
     if [ "$?" -ne 0 ] ;then
 	error_out "rados lspools" "$lspools_err"
     fi
     >&2 sed 's/^/    /' "$temp_file" # list pools and indent
-    >&2 printf "Which pool do you want to search for orphans? "
+    >&2 printf "Which pool do you want to search for orphans (for multiple, use space-separated list)? "
     local mypool
     read mypool
     echo $mypool
@@ -47,10 +49,8 @@ prompt_pool() {
 
 if [ $# -eq 0 ] ;then
     pool="$(prompt_pool)"
-elif [ $# -eq 1 ] ;then
-    pool="$1"
 else
-    error_out "Usage: $0 [pool]"
+    pool="$*"
 fi
 
 echo "Pool is \"$pool\"."
@@ -59,10 +59,15 @@ echo "Note: output files produced will be tagged with the current timestamp -- $
 
 echo "running 'rados ls' at $(date)"
 # since --format is not specified, plain should be used
-rados ls --pool="$pool" --all >"$rados_out" 2>"$rados_err"
-if [ "$?" -ne 0 ] ;then
-    error_out "rados ls" "$rados_err"
-fi
+
+rm -f "$rados_out" &> /dev/null
+for mypool in $pool ; do
+    echo "running 'rados ls' on pool ${mypool}."
+    rados ${CEPH_CONF} ls --pool="$mypool" --all >>"$rados_out" 2>"$rados_err"
+    if [ "$?" -ne 0 ] ;then
+	error_out "rados ls" "$rados_err"
+    fi
+done
 
 # NOTE: Each entry (line of output) of `rados ls --all` should be in
 # one of four formats depending on whether or not an entry has a
@@ -108,7 +113,7 @@ sort -u "$rados_out" >"$temp_file"
 mv -f "$temp_file" "$rados_out"
 
 echo "running 'radosgw-admin bucket radoslist' at $(date)"
-radosgw-admin bucket radoslist >"$rgwadmin_out" 2>"$rgwadmin_err"
+radosgw-admin ${CEPH_CONF} bucket radoslist >"$rgwadmin_out" 2>"$rgwadmin_err"
 if [ "$?" -ne 0 ] ;then
     error_out "radosgw-admin radoslist" "$rgwadmin_err"
 fi

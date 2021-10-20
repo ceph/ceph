@@ -1,3 +1,6 @@
+api-change:
+  - src/pybind/mgr/dashboard/openapi.yaml
+
 build/ops:
   - "**/CMakeLists.txt"
   - admin/**
@@ -73,7 +76,7 @@ cephadm:
   - doc/cephadm/**
   - doc/dev/cephadm/**
   - doc/man/8/cephadm.rst
-  - qa/suites/rados/cephadm/**
+  - qa/suites/orch/cephadm/**
   - qa/tasks/cephadm.py
   - qa/tasks/cephadm_cases
   - qa/tasks/mgr/test_cephadm_orchestrator.py
@@ -90,6 +93,12 @@ orchestrator:
   - src/pybind/mgr/rook/**
   - src/pybind/mgr/test_orchestrator/**
   - qa/tasks/mgr/test_orchestrator_cli.py
+
+rook:
+  - doc/mgr/rook.rst
+  - src/pybind/mgr/rook/**
+  - qa/tasks/rook.py
+  - qa/suites/orch/rook/smoke/**
 
 bluestore:
   - src/os/bluestore/**
@@ -232,3 +241,28 @@ tests:
   - qa/tasks/**
   - qa/workunits/**
   - src/test/**
+
+nfs:
+  - src/pybind/mgr/nfs/**
+  - src/pybind/mgr/cephadm/services/nfs.py
+  - src/pybind/mgr/cephadm/templates/services/nfs/ganesha.conf.j2
+  - src/pybind/mgr/dashboard/services/ganesha.py
+  - src/pybind/mgr/dashboard/tests/test_ganesha.py
+  - qa/tasks/cephfs/test_nfs.py
+  - qa/tasks/mgr/dashboard/test_ganesha.py
+  - doc/mgr/nfs.rst
+  - doc/cephfs/nfs.rst
+  - doc/cephadm/nfs.rst
+  - doc/radosgw/nfs.rst
+  - doc/dev/vstart-ganesha.rst
+
+monitoring:
+  - doc/cephadm/monitoring.rst
+  - src/pybind/mgr/cephadm/services/monitoring.py
+  - src/pybind/mgr/cephadm/templates/services/alertmanager/**
+  - src/pybind/mgr/cephadm/templates/services/grafana/**
+  - src/pybind/mgr/cephadm/templates/services/prometheus/**
+  - src/pybind/mgr/dashboard/ci/check_grafana_dashboards.py
+  - src/pybind/mgr/prometheus/**
+  - monitoring/**  
+  

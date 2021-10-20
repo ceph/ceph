@@ -11,11 +11,15 @@ Synopsis
 
 | **ceph-bluestore-tool** *command*
   [ --dev *device* ... ]
+  [ -i *osd_id* ]
   [ --path *osd path* ]
   [ --out-dir *dir* ]
   [ --log-file | -l *filename* ]
   [ --deep ]
 | **ceph-bluestore-tool** fsck|repair --path *osd path* [ --deep ]
+| **ceph-bluestore-tool** qfsck       --path *osd path*
+| **ceph-bluestore-tool** allocmap    --path *osd path*
+| **ceph-bluestore-tool** restore_cfb --path *osd path*
 | **ceph-bluestore-tool** show-label --dev *device* ...
 | **ceph-bluestore-tool** prime-osd-dir --dev *device* --path *osd path*
 | **ceph-bluestore-tool** bluefs-export --path *osd path* --out-dir *dir*
@@ -47,6 +51,19 @@ Commands
 :command:`repair`
 
    Run a consistency check *and* repair any errors we can.
+
+:command:`qfsck`
+
+   run consistency check on BlueStore metadata comparing allocator data (from RocksDB CFB when exists and if not uses allocation-file) with ONodes state.
+
+:command:`allocmap`
+
+   performs the same check done by qfsck and then stores a new allocation-file (command is disabled by default and requires a special build)
+
+:command:`restore_cfb`
+
+   Reverses changes done by the new NCB code (either through ceph restart or when running allocmap command) and restores RocksDB B Column-Family (allocator-map).
+
 
 :command:`bluefs-export`
 
@@ -121,6 +138,11 @@ Options
 
    Add *device* to the list of devices to consider
 
+.. option:: -i *osd_id*
+
+   Operate as OSD *osd_id*. Connect to monitor for OSD specific options.
+   If monitor is unavailable, add --no-mon-config to read from ceph.conf instead.
+
 .. option:: --devs-source *device*
 
    Add *device* to the list of devices to consider as sources for migrate operation
@@ -131,7 +153,7 @@ Options
 
 .. option:: --path *osd path*
 
-   Specify an osd path.  In most cases, the device list is inferred from the symlinks present in *osd path*.  This is usually simpler than explicitly specifying the device(s) with --dev.
+   Specify an osd path.  In most cases, the device list is inferred from the symlinks present in *osd path*.  This is usually simpler than explicitly specifying the device(s) with --dev. Not necessary if -i *osd_id* is provided.
 
 .. option:: --out-dir *dir*
 
@@ -160,6 +182,12 @@ Options
    and how large should commit batch be before committing to RocksDB. Option format is:
    <iterator_refresh_bytes>/<iterator_refresh_keys>/<batch_commit_bytes>/<batch_commit_keys>
    Default: 10000000/10000/1000000/1000
+
+Additional ceph.conf options
+============================
+
+Any configuration option that is accepted by OSD can be also passed to **ceph-bluestore-tool**.
+Useful to provide necessary configuration options when access to monitor/ceph.conf is impossible and -i option cannot be used.
 
 Device labels
 =============

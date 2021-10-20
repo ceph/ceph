@@ -39,7 +39,7 @@ ReplicatedBackend::_read(const hobject_t& hoid,
   return store->read(coll, ghobject_t{hoid}, off, len, flags);
 }
 
-ReplicatedBackend::interruptible_future<crimson::osd::acked_peers_t>
+ReplicatedBackend::rep_op_fut_t
 ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                        const hobject_t& hoid,
                                        ceph::os::Transaction&& txn,
@@ -55,50 +55,55 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
   }
 
   const ceph_tid_t tid = next_txn_id++;
-  auto req_id = osd_op_p.req->get_reqid();
   auto pending_txn =
     pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
   bufferlist encoded_txn;
   encode(txn, encoded_txn);
 
-  return interruptor::parallel_for_each(std::move(pg_shards),
-    [=, encoded_txn=std::move(encoded_txn), txn=std::move(txn)]
-    (auto pg_shard) mutable {
-      if (pg_shard == whoami) {
-        return shard_services.get_store().do_transaction(coll,std::move(txn));
-      } else {
-        auto m = make_message<MOSDRepOp>(req_id, whoami,
-                                         spg_t{pgid, pg_shard.shard}, hoid,
-                                         CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK,
-                                         map_epoch, min_epoch,
-                                         tid, osd_op_p.at_version);
-        m->set_data(encoded_txn);
-        pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
-	encode(log_entries, m->logbl);
-	m->pg_trim_to = osd_op_p.pg_trim_to;
-	m->min_last_complete_ondisk = osd_op_p.min_last_complete_ondisk;
-	m->set_rollback_to(osd_op_p.at_version);
-        // TODO: set more stuff. e.g., pg_states
-        return shard_services.send_to_osd(pg_shard.osd, std::move(m), map_epoch);
-      }
-    }).then_interruptible([this, peers=pending_txn->second.weak_from_this()] {
-      if (!peers) {
-	// for now, only actingset_changed can cause peers
-	// to be nullptr
-	assert(peering);
-	throw crimson::common::actingset_changed(peering->is_primary);
-      }
-      if (--peers->pending == 0) {
-        peers->all_committed.set_value();
-	peers->all_committed = {};
-	return seastar::now();
-      }
-      return peers->all_committed.get_shared_future();
-    }).then_interruptible([pending_txn, this] {
-      auto acked_peers = std::move(pending_txn->second.acked_peers);
-      pending_trans.erase(pending_txn);
-      return seastar::make_ready_future<crimson::osd::acked_peers_t>(std::move(acked_peers));
-    });
+  auto all_completed = interruptor::make_interruptible(
+      shard_services.get_store().do_transaction(coll, std::move(txn)))
+  .then_interruptible([this, peers=pending_txn->second.weak_from_this()] {
+    if (!peers) {
+      // for now, only actingset_changed can cause peers
+      // to be nullptr
+      assert(peering);
+      throw crimson::common::actingset_changed(peering->is_primary);
+    }
+    if (--peers->pending == 0) {
+      peers->all_committed.set_value();
+      peers->all_committed = {};
+      return seastar::now();
+    }
+    return peers->all_committed.get_shared_future();
+  }).then_interruptible([pending_txn, this] {
+    auto acked_peers = std::move(pending_txn->second.acked_peers);
+    pending_trans.erase(pending_txn);
+    return seastar::make_ready_future<crimson::osd::acked_peers_t>(std::move(acked_peers));
+  });
+
+  for (auto pg_shard : pg_shards) {
+    if (pg_shard != whoami) {
+      auto m = crimson::make_message<MOSDRepOp>(
+	osd_op_p.req_id,
+	whoami,
+	spg_t{pgid, pg_shard.shard},
+	hoid,
+	CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK,
+	map_epoch,
+	min_epoch,
+	tid,
+	osd_op_p.at_version);
+      m->set_data(encoded_txn);
+      pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
+      encode(log_entries, m->logbl);
+      m->pg_trim_to = osd_op_p.pg_trim_to;
+      m->min_last_complete_ondisk = osd_op_p.min_last_complete_ondisk;
+      m->set_rollback_to(osd_op_p.at_version);
+      // TODO: set more stuff. e.g., pg_states
+      (void) shard_services.send_to_osd(pg_shard.osd, std::move(m), map_epoch);
+    }
+  }
+  return {seastar::now(), std::move(all_completed)};
 }
 
 void ReplicatedBackend::on_actingset_changed(peering_info_t pi)

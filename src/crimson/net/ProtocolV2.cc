@@ -27,7 +27,12 @@ using crimson::common::local_conf;
 
 namespace {
 
-// TODO: apply the same logging policy to Protocol V1
+// TODO: CEPH_MSGR2_FEATURE_COMPRESSION
+const uint64_t CRIMSON_MSGR2_SUPPORTED_FEATURES =
+  (CEPH_MSGR2_FEATURE_REVISION_1 |
+   // CEPH_MSGR2_FEATURE_COMPRESSION |
+   UINT64_C(0));
+
 // Log levels in V2 Protocol:
 // * error level, something error that cause connection to terminate:
 //   - fatal errors;
@@ -304,10 +309,9 @@ seastar::future<> ProtocolV2::read_frame_payload()
     logger().trace("{} RECV({}) frame epilogue", conn, bl.size());
     bool ok = false;
     try {
-      rx_frame_asm.disassemble_first_segment(rx_preamble, rx_segments_data[0]);
       bufferlist rx_epilogue;
       rx_epilogue.append(buffer::create(std::move(bl)));
-      ok = rx_frame_asm.disassemble_remaining_segments(rx_segments_data.data(), rx_epilogue);
+      ok = rx_frame_asm.disassemble_segments(rx_preamble, rx_segments_data.data(), rx_epilogue);
     } catch (FrameError& e) {
       logger().error("read_frame_payload: {} {}", conn, e.what());
       abort_in_fault();
@@ -396,7 +400,7 @@ ProtocolV2::banner_exchange(bool is_connect)
 {
   // 1. prepare and send banner
   bufferlist banner_payload;
-  encode((uint64_t)CEPH_MSGR2_SUPPORTED_FEATURES, banner_payload, 0);
+  encode((uint64_t)CRIMSON_MSGR2_SUPPORTED_FEATURES, banner_payload, 0);
   encode((uint64_t)CEPH_MSGR2_REQUIRED_FEATURES, banner_payload, 0);
 
   bufferlist bl;
@@ -407,7 +411,8 @@ ProtocolV2::banner_exchange(bool is_connect)
   logger().debug("{} SEND({}) banner: len_payload={}, supported={}, "
                  "required={}, banner=\"{}\"",
                  conn, bl.length(), len_payload,
-                 CEPH_MSGR2_SUPPORTED_FEATURES, CEPH_MSGR2_REQUIRED_FEATURES,
+                 CRIMSON_MSGR2_SUPPORTED_FEATURES,
+                 CEPH_MSGR2_REQUIRED_FEATURES,
                  CEPH_BANNER_V2_PREFIX);
   INTERCEPT_CUSTOM(custom_bp_t::BANNER_WRITE, bp_type_t::WRITE);
   return write_flush(std::move(bl)).then([this] {
@@ -462,7 +467,7 @@ ProtocolV2::banner_exchange(bool is_connect)
                      peer_supported_features, peer_required_features);
 
       // Check feature bit compatibility
-      uint64_t supported_features = CEPH_MSGR2_SUPPORTED_FEATURES;
+      uint64_t supported_features = CRIMSON_MSGR2_SUPPORTED_FEATURES;
       uint64_t required_features = CEPH_MSGR2_REQUIRED_FEATURES;
       if ((required_features & peer_supported_features) != required_features) {
         logger().error("{} peer does not support all required features"
@@ -1474,6 +1479,7 @@ void ProtocolV2::execute_accepting()
           INTERCEPT_N_RW(custom_bp_t::SOCKET_ACCEPTED);
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
           session_stream_handlers = { nullptr, nullptr };
+          session_comp_handlers = { nullptr, nullptr };
           enable_recording();
           return banner_exchange(false);
         }).then([this] (auto&& ret) {
@@ -1792,7 +1798,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
 // READY state
 
 ceph::bufferlist ProtocolV2::do_sweep_messages(
-    const std::deque<MessageRef>& msgs,
+    const std::deque<MessageURef>& msgs,
     size_t num_msgs,
     bool require_keepalive,
     std::optional<utime_t> _keepalive_ack,
@@ -1818,7 +1824,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::ACK, bp_type_t::WRITE);
   }
 
-  std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageRef& msg) {
+  std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageURef& msg) {
     // TODO: move to common code
     // set priority
     msg->get_header().src = messenger.get_myname();

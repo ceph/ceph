@@ -8,6 +8,7 @@ import re
 import stat
 import threading
 import uuid
+from typing import Dict, Any
 
 import cephfs
 import rados
@@ -375,34 +376,38 @@ class FSSnapshotMirror:
                 return True
         return False
 
-    def get_mirror_info(self, remote_fs):
+    @staticmethod
+    def get_mirror_info(fs):
         try:
-            val = remote_fs.getxattr('/', 'ceph.mirror.info')
+            val = fs.getxattr('/', 'ceph.mirror.info')
             match = re.search(r'^cluster_id=([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}) fs_id=(\d+)$',
                               val.decode('utf-8'))
             if match and len(match.groups()) == 2:
                 return {'cluster_id': match.group(1),
                         'fs_id': int(match.group(2))
                         }
-            return None
+            raise MirrorException(-errno.EINVAL, 'invalid ceph.mirror.info value format')
         except cephfs.Error as e:
-            return None
+            raise MirrorException(-e.errno, 'error fetching ceph.mirror.info xattr')
 
-    def set_mirror_info(self, local_cluster_id, local_fsid, remote_fs):
+    @staticmethod
+    def set_mirror_info(local_cluster_id, local_fsid, remote_fs):
         log.info(f'setting {local_cluster_id}::{local_fsid} on remote')
         try:
             remote_fs.setxattr('/', 'ceph.mirror.info',
                                f'cluster_id={local_cluster_id} fs_id={local_fsid}'.encode('utf-8'), os.XATTR_CREATE)
         except cephfs.Error as e:
             if e.errno == errno.EEXIST:
-                mi = self.get_mirror_info(remote_fs)
-                if not mi:
-                    log.error(f'error fetching mirror info when setting mirror info')
-                    raise Exception(-errno.EINVAL)
-                cluster_id = mi['cluster_id']
-                fs_id = mi['fs_id']
-                if not (cluster_id == local_cluster_id and fs_id == local_fsid):
-                    raise MirrorException(-errno.EEXIST, f'peer mirrorred by: (cluster_id: {cluster_id}, fs_id: {fs_id})')
+                try:
+                    mi = FSSnapshotMirror.get_mirror_info(remote_fs)
+                    cluster_id = mi['cluster_id']
+                    fs_id = mi['fs_id']
+                    if not (cluster_id == local_cluster_id and fs_id == local_fsid):
+                        raise MirrorException(-errno.EEXIST, f'peer mirrorred by: (cluster_id: {cluster_id}, fs_id: {fs_id})')
+                except MirrorException:
+                    # if mirror info cannot be fetched for some reason, let's just
+                    # fail.
+                    raise MirrorException(-errno.EEXIST, f'already an active peer')
             else:
                 log.error(f'error setting mirrored fsid: {e}')
                 raise Exception(-e.errno)
@@ -443,25 +448,32 @@ class FSSnapshotMirror:
         client_name, cluster_name = FSSnapshotMirror.split_spec(remote_cluster_spec)
         remote_cluster, remote_fs = connect_to_filesystem(client_name, cluster_name, remote_fs_name,
                                                           'remote', conf_dct=remote_conf)
-        if 'fsid' in remote_conf:
-            if not remote_cluster.get_fsid() == remote_conf['fsid']:
-                raise MirrorException(-errno.EINVAL, 'FSID mismatch between bootstrap token and remote cluster')
-
-        local_fsid = FSSnapshotMirror.get_filesystem_id(local_fs_name, self.fs_map)
-        if local_fsid is None:
-            log.error(f'error looking up filesystem id for {local_fs_name}')
-            raise Exception(-errno.EINVAL)
-
-        # post cluster id comparison, filesystem name comparison would suffice
-        local_cluster_id = self.rados.get_fsid()
-        remote_cluster_id = remote_cluster.get_fsid()
-        log.debug(f'local_cluster_id={local_cluster_id} remote_cluster_id={remote_cluster_id}')
-        if local_cluster_id == remote_cluster_id and local_fs_name == remote_fs_name:
-            raise MirrorException(-errno.EINVAL, "'Source and destination cluster fsid and "\
-                                  "file-system name can't be the same")
-
         try:
-            self.set_mirror_info(local_cluster_id, local_fsid, remote_fs)
+            local_cluster_id = self.rados.get_fsid()
+            remote_cluster_id = remote_cluster.get_fsid()
+            log.debug(f'local_cluster_id={local_cluster_id} remote_cluster_id={remote_cluster_id}')
+            if 'fsid' in remote_conf:
+                if not remote_cluster_id == remote_conf['fsid']:
+                    raise MirrorException(-errno.EINVAL, 'FSID mismatch between bootstrap token and remote cluster')
+
+            local_fscid = remote_fscid = None
+            with open_filesystem(self.local_fs, local_fs_name) as local_fsh:
+                local_fscid = local_fsh.get_fscid()
+                remote_fscid = remote_fs.get_fscid()
+                log.debug(f'local_fscid={local_fscid} remote_fscid={remote_fscid}')
+                mi = None
+                try:
+                    mi = FSSnapshotMirror.get_mirror_info(local_fsh)
+                except MirrorException as me:
+                    if me.args[0] != -errno.ENODATA:
+                        raise Exception(-errno.EINVAL)
+                if mi and mi['cluster_id'] == remote_cluster_id and mi['fs_id'] == remote_fscid:
+                    raise MirrorException(-errno.EINVAL, f'file system is an active peer for file system: {remote_fs_name}')
+
+            if local_cluster_id == remote_cluster_id and local_fscid == remote_fscid:
+                raise MirrorException(-errno.EINVAL, "'Source and destination cluster fsid and "\
+                                      "file-system name can't be the same")
+            FSSnapshotMirror.set_mirror_info(local_cluster_id, local_fscid, remote_fs)
         finally:
             disconnect_from_filesystem(cluster_name, remote_fs_name, remote_cluster, remote_fs)
 
@@ -737,33 +749,43 @@ class FSSnapshotMirror:
         except MirrorException as me:
             return me.args[0], '', me.args[1]
 
-    def daemon_status(self, filesystem):
+    def daemon_status(self):
         try:
             with self.lock:
-                if not self.filesystem_exist(filesystem):
-                    raise MirrorException(-errno.ENOENT, f'filesystem {filesystem} does not exist')
-                fspolicy = self.pool_policy.get(filesystem, None)
-                if not fspolicy:
-                    raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                daemons = {}
+                daemons = []
                 sm = self.mgr.get('service_map')
                 daemon_entry = sm['services'].get('cephfs-mirror', None)
-                if daemon_entry:
-                    for daemon_key in daemon_entry['daemons']:
+                log.debug(f'daemon_entry: {daemon_entry}')
+                if daemon_entry is not None:
+                    for daemon_key in daemon_entry.get('daemons', []):
                         try:
                             daemon_id = int(daemon_key)
-                            daemon_status = self.mgr.get_daemon_status('cephfs-mirror', daemon_key)
-                            if not daemon_status:
-                                # temporary, should get updated soon
-                                log.debug(f'daemon status not yet availble for daemon_id {daemon_id}')
-                                continue
-                            try:
-                                daemons[daemon_id] = json.loads(daemon_status['status_json'])
-                            except KeyError:
-                                # temporary, should get updated soon
-                                log.debug(f'daemon status not yet available for daemon_id {daemon_id}')
                         except ValueError:
-                            pass
+                            continue
+                        daemon = {
+                            'daemon_id'   : daemon_id,
+                            'filesystems' : []
+                        } # type: Dict[str, Any]
+                        daemon_status = self.mgr.get_daemon_status('cephfs-mirror', daemon_key)
+                        if not daemon_status:
+                            log.debug(f'daemon status not yet availble for cephfs-mirror daemon: {daemon_key}')
+                            continue
+                        status = json.loads(daemon_status['status_json'])
+                        for fs_id, fs_desc in status.items():
+                            fs = {'filesystem_id'   : int(fs_id),
+                                'name'            : fs_desc['name'],
+                                'directory_count' : fs_desc['directory_count'],
+                                'peers'           : []
+                            } # type: Dict[str, Any]
+                            for peer_uuid, peer_desc in fs_desc['peers'].items():
+                                peer = {
+                                    'uuid'   : peer_uuid,
+                                    'remote' : peer_desc['remote'],
+                                    'stats'  : peer_desc['stats']
+                                }
+                                fs['peers'].append(peer)
+                            daemon['filesystems'].append(fs)
+                        daemons.append(daemon)
                 return 0, json.dumps(daemons), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]

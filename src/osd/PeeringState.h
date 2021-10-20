@@ -61,7 +61,11 @@ struct PeeringCtx;
 
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
+#if defined(WITH_SEASTAR)
+  std::map<int, std::vector<MessageURef>> message_map;
+#else
   std::map<int, std::vector<MessageRef>> message_map;
+#endif
 
   BufferedRecoveryMessages() = default;
   BufferedRecoveryMessages(PeeringCtx &ctx);
@@ -71,14 +75,15 @@ struct BufferedRecoveryMessages {
       auto &ovec = message_map[target];
       // put buffered messages in front
       ls.reserve(ls.size() + ovec.size());
-      ls.insert(ls.end(), ovec.begin(), ovec.end());
+      ls.insert(ls.end(), std::make_move_iterator(ovec.begin()), std::make_move_iterator(ovec.end()));
       ovec.clear();
       ovec.swap(ls);
     }
   }
 
-  void send_osd_message(int target, MessageRef m) {
-    message_map[target].push_back(std::move(m));
+  template <class MsgT> // MsgT = MessageRef for ceph-osd and MessageURef for crimson-osd
+  void send_osd_message(int target, MsgT&& m) {
+    message_map[target].emplace_back(std::forward<MsgT>(m));
   }
   void send_notify(int to, const pg_notify_t &n);
   void send_query(int to, spg_t spgid, const pg_query_t &q);
@@ -222,8 +227,9 @@ struct PeeringCtxWrapper {
 
   PeeringCtxWrapper(PeeringCtxWrapper &&ctx) = default;
 
-  void send_osd_message(int target, MessageRef m) {
-    msgs.send_osd_message(target, std::move(m));
+  template <class MsgT> // MsgT = MessageRef for ceph-osd and MessageURef for crimson-osd
+  void send_osd_message(int target, MsgT&& m) {
+    msgs.send_osd_message(target, std::forward<MsgT>(m));
   }
   void send_notify(int to, const pg_notify_t &n) {
     msgs.send_notify(to, n);
@@ -258,6 +264,13 @@ public:
 
     /// Notify that info/history changed (generally to update scrub registration)
     virtual void on_info_history_change() = 0;
+
+    /// Notify PG that Primary/Replica status has changed (to update scrub registration)
+    virtual void on_primary_status_change(bool was_primary, bool now_primary) = 0;
+
+    /// Need to reschedule next scrub. Assuming no change in role
+    virtual void reschedule_scrub() = 0;
+
     /// Notify that a scrub has been requested
     virtual void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) = 0;
 
@@ -265,8 +278,13 @@ public:
     virtual uint64_t get_snap_trimq_size() const = 0;
 
     /// Send cluster message to osd
+    #if defined(WITH_SEASTAR)
+    virtual void send_cluster_message(
+      int osd, MessageURef m, epoch_t epoch, bool share_map_update=false) = 0;
+    #else
     virtual void send_cluster_message(
       int osd, MessageRef m, epoch_t epoch, bool share_map_update=false) = 0;
+    #endif
     /// Send pg_created to mon
     virtual void send_pg_created(pg_t pgid) = 0;
 
@@ -1507,7 +1525,7 @@ public:
   }
 
   void update_heartbeat_peers();
-  void query_unfound(Formatter *f, string state);
+  void query_unfound(Formatter *f, std::string state);
   bool proc_replica_info(
     pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch);
   void remove_down_peer_info(const OSDMapRef &osdmap);
@@ -1567,18 +1585,18 @@ public:
     std::set<pg_shard_t> *acting_backfill,
     std::ostream &ss);
 
-  static std::pair<map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
+  static std::pair<std::map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
   select_replicated_primary(
-    map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
     uint64_t force_auth_primary_missing_objects,
     const std::vector<int> &up,
     pg_shard_t up_primary,
-    const map<pg_shard_t, pg_info_t> &all_info,
+    const std::map<pg_shard_t, pg_info_t> &all_info,
     const OSDMapRef osdmap,
-    ostream &ss);
+    std::ostream &ss);
 
   static void calc_replicated_acting(
-    map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
+    std::map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
     eversion_t oldest_auth_log_entry,
     unsigned size,
     const std::vector<int> &acting,
@@ -1593,7 +1611,7 @@ public:
     const PGPool& pool,
     std::ostream &ss);
   static void calc_replicated_acting_stretch(
-    map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
+    std::map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
     eversion_t oldest_auth_log_entry,
     unsigned size,
     const std::vector<int> &acting,
@@ -1719,7 +1737,6 @@ public:
     const std::vector<int>& newacting, int new_acting_primary,
     const pg_history_t& history,
     const PastIntervals& pi,
-    bool backfill,
     ObjectStore::Transaction &t);
 
   /// Init pg instance from disk state

@@ -5,8 +5,9 @@ import string
 from typing import List, Dict, Any, Tuple, cast, Optional
 
 from ceph.deployment.service_spec import IngressSpec
+from mgr_util import build_url
 from cephadm.utils import resolve_ip
-
+from orchestrator import OrchestratorError
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,10 @@ class IngressService(CephService):
     ) -> Tuple[Dict[str, Any], List[str]]:
         spec = cast(IngressSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         assert spec.backend_service
+        if spec.backend_service not in self.mgr.spec_store:
+            raise RuntimeError(
+                f'{spec.service_name()} backend service {spec.backend_service} does not exist')
+        backend_spec = self.mgr.spec_store[spec.backend_service].spec
         daemons = self.mgr.cache.get_daemons_by_service(spec.backend_service)
         deps = [d.name() for d in daemons]
 
@@ -80,17 +85,48 @@ class IngressService(CephService):
         if spec.monitor_password:
             password = spec.monitor_password
 
+        if backend_spec.service_type == 'nfs':
+            mode = 'tcp'
+            by_rank = {d.rank: d for d in daemons if d.rank is not None}
+            servers = []
+
+            # try to establish how many ranks we *should* have
+            num_ranks = backend_spec.placement.count
+            if not num_ranks:
+                num_ranks = 1 + max(by_rank.keys())
+
+            for rank in range(num_ranks):
+                if rank in by_rank:
+                    d = by_rank[rank]
+                    assert(d.ports)
+                    servers.append({
+                        'name': f"{spec.backend_service}.{rank}",
+                        'ip': d.ip or resolve_ip(self.mgr.inventory.get_addr(str(d.hostname))),
+                        'port': d.ports[0],
+                    })
+                else:
+                    # offline/missing server; leave rank in place
+                    servers.append({
+                        'name': f"{spec.backend_service}.{rank}",
+                        'ip': '0.0.0.0',
+                        'port': 0,
+                    })
+        else:
+            mode = 'http'
+            servers = [
+                {
+                    'name': d.name(),
+                    'ip': d.ip or resolve_ip(self.mgr.inventory.get_addr(str(d.hostname))),
+                    'port': d.ports[0],
+                } for d in daemons if d.ports
+            ]
+
         haproxy_conf = self.mgr.template.render(
             'services/ingress/haproxy.cfg.j2',
             {
                 'spec': spec,
-                'servers': [
-                    {
-                        'name': d.name(),
-                        'ip': d.ip or resolve_ip(str(d.hostname)),
-                        'port': d.ports[0],
-                    } for d in daemons if d.ports
-                ],
+                'mode': mode,
+                'servers': servers,
                 'user': spec.monitor_user or 'admin',
                 'password': password,
                 'ip': daemon_spec.ip or '*',
@@ -149,10 +185,15 @@ class IngressService(CephService):
             password = spec.keepalived_password
 
         daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
+
+        if not daemons:
+            raise OrchestratorError(
+                f'Failed to generate keepalived.conf: No daemons deployed for {spec.service_name()}')
+
         deps = sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
 
         host = daemon_spec.host
-        hosts = sorted(list(set([str(d.hostname) for d in daemons])))
+        hosts = sorted(list(set([host] + [str(d.hostname) for d in daemons])))
 
         # interface
         bare_ip = str(spec.virtual_ip).split('/')[0]
@@ -164,10 +205,10 @@ class IngressService(CephService):
                     f'{bare_ip} is in {subnet} on {host} interface {interface}'
                 )
                 break
-        if not interface and spec.networks:
-            # hmm, try spec.networks
+        # try to find interface by matching spec.virtual_interface_networks
+        if not interface and spec.virtual_interface_networks:
             for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
-                if subnet in spec.networks:
+                if subnet in spec.virtual_interface_networks:
                     interface = list(ifaces.keys())[0]
                     logger.info(
                         f'{spec.virtual_ip} will be configured on {host} interface '
@@ -175,7 +216,9 @@ class IngressService(CephService):
                     )
                     break
         if not interface:
-            interface = 'eth0'
+            raise OrchestratorError(
+                f"Unable to identify interface for {spec.virtual_ip} on {host}"
+            )
 
         # script to monitor health
         script = '/usr/bin/false'
@@ -184,7 +227,7 @@ class IngressService(CephService):
                 if d.daemon_type == 'haproxy':
                     assert d.ports
                     port = d.ports[1]   # monitoring port
-                    script = f'/usr/bin/curl http://{d.ip or "localhost"}:{port}/health'
+                    script = f'/usr/bin/curl {build_url(scheme="http", host=d.ip or "localhost", port=port)}/health'
         assert script
 
         # set state. first host in placement is master all others backups
@@ -194,8 +237,9 @@ class IngressService(CephService):
 
         # remove host, daemon is being deployed on from hosts list for
         # other_ips in conf file and converter to ips
-        hosts.remove(host)
-        other_ips = [resolve_ip(h) for h in hosts]
+        if host in hosts:
+            hosts.remove(host)
+        other_ips = [resolve_ip(self.mgr.inventory.get_addr(h)) for h in hosts]
 
         keepalived_conf = self.mgr.template.render(
             'services/ingress/keepalived.conf.j2',
@@ -206,7 +250,7 @@ class IngressService(CephService):
                 'interface': interface,
                 'state': state,
                 'other_ips': other_ips,
-                'host_ip': resolve_ip(host),
+                'host_ip': resolve_ip(self.mgr.inventory.get_addr(host)),
             }
         )
 
