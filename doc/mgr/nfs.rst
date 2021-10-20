@@ -239,16 +239,16 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export create cephfs <fsname> <cluster_id> <pseudo_path> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>]
+    $ ceph nfs export create cephfs --cluster-id <cluster_id> --pseudo-path <pseudo_path> --fsname <fsname> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>]
 
 This creates export RADOS objects containing the export block, where
-
-``<fsname>`` is the name of the FS volume used by the NFS Ganesha cluster
-that will serve this export.
 
 ``<cluster_id>`` is the NFS Ganesha cluster ID.
 
 ``<pseudo_path>`` is the export position within the NFS v4 Pseudo Filesystem where the export will be available on the server. It must be an absolute path and unique.
+
+``<fsname>`` is the name of the FS volume used by the NFS Ganesha cluster
+that will serve this export.
 
 ``<path>`` is the path within cephfs. Valid path should be given and default
 path is '/'. It need not be unique. Subvolume path can be fetched using:
