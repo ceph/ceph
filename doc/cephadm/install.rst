@@ -176,7 +176,7 @@ available options.
 * By default, Ceph daemons send their log output to stdout/stderr, which is picked
   up by the container runtime (docker or podman) and (on most systems) sent to
   journald.  If you want Ceph to write traditional log files to ``/var/log/ceph/$fsid``,
-  use ``--log-to-file`` option during bootstrap.
+  use the ``--log-to-file`` option during bootstrap.
 
 * Larger Ceph clusters perform better when (external to the Ceph cluster)
   public network traffic is separated from (internal to the Ceph cluster)
