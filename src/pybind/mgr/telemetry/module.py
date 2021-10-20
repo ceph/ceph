@@ -428,7 +428,7 @@ class Module(MgrModule):
 
         return result
 
-    def get_osd_histograms(self) -> List[Dict[str, dict]]:
+    def get_osd_histograms(self, mode: str = 'separated') -> List[Dict[str, dict]]:
         # Initialize result dict
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(
                                               lambda: defaultdict(
@@ -438,7 +438,7 @@ class Module(MgrModule):
 
         # Get list of osd ids from the metadata
         osd_metadata = self.get('osd_metadata')
-        
+
         # Grab output from the "osd.x perf histogram dump" command
         for osd_id in osd_metadata:
             cmd_dict = {
@@ -496,8 +496,7 @@ class Module(MgrModule):
                         # At this point, you will see that the name of the key is the string
                         # form of our axes list (str(axes)). This is there so that histograms
                         # with different axis configs will not be combined.
-                        # The key names are modified into something more readable ('config_x')
-                        # down below.
+                        # These key names are later dropped when only the values are returned.
                         result[str(axes)][histogram]['axes'] = axes
 
                         # Collect current values and make sure they are in
@@ -506,21 +505,30 @@ class Module(MgrModule):
                         for value_list in dump['osd'][histogram]['values']:
                             values.append([int(v) for v in value_list])
 
-                        # Aggregate values. If 'values' have already been initialized,
-                        # we can safely add.
-                        if 'values' in result[str(axes)][histogram]:
-                            for i in range (0, len(values)):
-                                for j in range (0, len(values[i])):
-                                    values[i][j] += result[str(axes)][histogram]['values'][i][j]
+                        if mode == 'separated':
+                            if 'osds' not in result[str(axes)][histogram]:
+                                result[str(axes)][histogram]['osds'] = []
+                            result[str(axes)][histogram]['osds'].append({'osd_id': int(osd_id), 'values': values})
 
-                        # Add the values to result.
-                        result[str(axes)][histogram]['values'] = values
+                        elif mode == 'aggregated':
+                            # Aggregate values. If 'values' have already been initialized,
+                            # we can safely add.
+                            if 'values' in result[str(axes)][histogram]:
+                                for i in range (0, len(values)):
+                                    for j in range (0, len(values[i])):
+                                        values[i][j] += result[str(axes)][histogram]['values'][i][j]
 
-                        # Update num_combined_osds
-                        if 'num_combined_osds' not in result[str(axes)][histogram]:
-                            result[str(axes)][histogram]['num_combined_osds'] = 1
+                            # Add the values to result.
+                            result[str(axes)][histogram]['values'] = values
+
+                            # Update num_combined_osds
+                            if 'num_combined_osds' not in result[str(axes)][histogram]:
+                                result[str(axes)][histogram]['num_combined_osds'] = 1
+                            else:
+                                result[str(axes)][histogram]['num_combined_osds'] += 1
                         else:
-                            result[str(axes)][histogram]['num_combined_osds'] += 1
+                            self.log.error('Incorrect mode specified in get_osd_histograms: {}'.format(mode))
+                            return list()
 
                 # Sometimes, json errors occur if you give it an empty string.
                 # I am also putting in a catch for a KeyError since it could
@@ -975,7 +983,9 @@ class Module(MgrModule):
 
             report['stat_sum_per_pool'] = self.get_stat_sum_per_pool()
             report['io_rate'] = self.get_io_rate()
-            report['osd_perf_histograms'] = self.get_osd_histograms()
+
+            report['osd_perf_histograms_aggregated'] = self.get_osd_histograms('aggregated')
+            report['osd_perf_histograms_separated'] = self.get_osd_histograms('separated')
 
             report['mempool_aggregated'] = self.get_mempool('aggregated')
             report['mempool_separated'] = self.get_mempool('separated')
