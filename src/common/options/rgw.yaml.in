@@ -408,10 +408,12 @@ options:
 - name: rgw_lc_debug_interval
   type: int
   level: dev
-  desc: Lifecycle processing interval
-  long_desc: When set to greater than 0, treat this many seconds as a day.
-    This facilitates debugging and testing of lifecycle code without lengthy
-    delays.
+  desc: The number of seconds that simulate one "day" in order to debug RGW LifeCycle.
+    Do *not* modify for a production cluster.
+  long_desc: For debugging RGW LifeCycle, the number of seconds that are equivalent to
+    one simulated "day". Values less than 1 are ignored and do not change LifeCycle behavior.
+    For example, during debugging if one wanted every 10 minutes to be equivalent to one day,
+    then this would be set to 600, the number of seconds in 10 minutes.
   default: -1
   services:
   - rgw
