@@ -348,6 +348,29 @@ class CephadmAgentHelpers:
         )
         self.mgr.spec_store.save(spec)
 
+    def _handle_use_agent_setting(self) -> bool:
+        need_apply = False
+        if self.mgr.use_agent:
+            # on the off chance there are still agents hanging around from
+            # when we turned the config option off, we need to redeploy them
+            # we can tell they're in that state if we don't have a keyring for
+            # them in the host cache
+            for agent in self.mgr.cache.get_daemons_by_service('agent'):
+                if agent.hostname not in self.mgr.cache.agent_keys:
+                    self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
+            if 'agent' not in self.mgr.spec_store:
+                self.mgr.agent_helpers._apply_agent()
+                need_apply = True
+        else:
+            if 'agent' in self.mgr.spec_store:
+                self.mgr.spec_store.rm('agent')
+                need_apply = True
+            self.mgr.cache.agent_counter = {}
+            self.mgr.cache.agent_timestamp = {}
+            self.mgr.cache.agent_keys = {}
+            self.mgr.cache.agent_ports = {}
+        return need_apply
+
 
 class SSLCerts:
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
