@@ -117,9 +117,6 @@
 /* PMEM_DEVICE (OSD) conditional compilation */
 #cmakedefine HAVE_BLUESTORE_PMEM
 
-/* Defined if LevelDB supports bloom filters */
-#cmakedefine HAVE_LEVELDB_FILTER_POLICY
-
 /* Define if you have tcmalloc */
 #cmakedefine HAVE_LIBTCMALLOC
 #cmakedefine LIBTCMALLOC_MISSING_ALIGNED_ALLOC
@@ -156,9 +153,6 @@
 
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
-
-/* define if leveldb is enabled */
-#cmakedefine WITH_LEVELDB
 
 /* define if radosgw has openssl support */
 #cmakedefine WITH_CURL_OPENSSL
