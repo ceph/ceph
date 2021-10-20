@@ -1871,6 +1871,17 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_curl_tcp_keepalive
+  type: int
+  level: advanced
+  long_desc: Enable TCP keepalive on the HTTP client sockets managed by libcurl. This does not apply to connections received by the HTTP frontend, but only to HTTP requests sent by radosgw. Examples include requests to Keystone for authentication, sync requests from multisite, and requests to key management servers for SSE.
+  enum_values:
+  - 0
+  - 1
+  default: 0
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_copy_obj_progress
   type: bool
   level: advanced
