@@ -88,7 +88,7 @@ seastar::future<> SeaStore::stop()
   return seastar::now();
 }
 
-seastar::future<> SeaStore::mount()
+SeaStore::mount_ertr::future<> SeaStore::mount()
 {
   return segment_manager->mount(
   ).safe_then([this] {
