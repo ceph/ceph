@@ -40,7 +40,7 @@ tasks:
 
 - cephadm.shell:
     host.a:
-      - ceph nfs export create rgw foobucket foo --pseudo-path /foobucket
+      - ceph nfs export create rgw --bucket foobucket --cluster-id foo --pseudo-path /foobucket 
 
 - cephadm.wait_for_service:
     service: nfs.foo
