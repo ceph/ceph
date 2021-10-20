@@ -15,7 +15,7 @@ ExternalProject_Add(QatDrv
 
 # Temporarily forcing single thread as multi-threaded make is causing build
 # failues.
-  BUILD_COMMAND make -j1 quickassist-all
+  BUILD_COMMAND ${CMAKE_COMMAND} -j1 quickassist-all
   BUILD_IN_SOURCE 1
   INSTALL_COMMAND ""
   TEST_COMMAND ""
