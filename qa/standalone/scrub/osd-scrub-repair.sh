@@ -4673,8 +4673,6 @@ EOF
           "primary": false
         },
         {
-          "data_digest": "0x00000000",
-          "omap_digest": "0xffffffff",
           "object_info": {
             "oid": {
               "oid": "EOBJ5",
@@ -4711,6 +4709,7 @@ EOF
           },
           "size": 4096,
           "errors": [
+            "read_error",
             "size_mismatch_info",
             "obj_size_info_mismatch"
           ],
@@ -4763,6 +4762,7 @@ EOF
         "watchers": {}
       },
       "union_shard_errors": [
+        "read_error",
         "size_mismatch_info",
         "obj_size_info_mismatch"
       ],
@@ -5441,8 +5441,8 @@ EOF
           "size": 4096,
           "shard": 0,
           "errors": [
+            "read_error",
             "size_mismatch_info",
-            "ec_size_error",
             "obj_size_info_mismatch"
           ],
           "osd": 1,
@@ -5493,8 +5493,8 @@ EOF
         "watchers": {}
       },
       "union_shard_errors": [
+        "read_error",
         "size_mismatch_info",
-        "ec_size_error",
         "obj_size_info_mismatch"
       ],
       "errors": [
