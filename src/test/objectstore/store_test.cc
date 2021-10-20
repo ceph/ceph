@@ -3615,6 +3615,10 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
 TEST_P(StoreTest, BlueStoreUnshareBlobTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "SKIP: non-deterministic behavior with smr" << std::endl;
+    return;
+  }
   int r;
   coll_t cid;
   auto ch = store->create_new_collection(cid);
