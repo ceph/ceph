@@ -988,13 +988,14 @@ public:
         rgw_obj_key end_marker;
         std::string ns;
         bool enforce_ns;
-        RGWAccessListFilter *filter;
+        RGWAccessListFilter* access_list_filter;
+	RGWBucketListNameFilter force_check_filter;
         bool list_versions;
 	bool allow_unordered;
 
         Params() :
 	  enforce_ns(true),
-	  filter(NULL),
+	  access_list_filter(nullptr),
 	  list_versions(false),
 	  allow_unordered(false)
 	{}
@@ -1367,8 +1368,6 @@ public:
   using ent_map_t =
     boost::container::flat_map<std::string, rgw_bucket_dir_entry>;
 
-  using check_filter_t = bool (*)(const std::string&);
-
   int cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
                               RGWBucketInfo& bucket_info,
 			      const int shard_id,
@@ -1383,7 +1382,7 @@ public:
 			      bool* cls_filtered,
 			      rgw_obj_index_key *last_entry,
                               optional_yield y,
-			      check_filter_t force_check_filter = nullptr);
+			      RGWBucketListNameFilter force_check_filter = {});
   int cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
                                 RGWBucketInfo& bucket_info,
 				int shard_id,
@@ -1395,7 +1394,7 @@ public:
 				bool *is_truncated,
 				rgw_obj_index_key *last_entry,
                                 optional_yield y,
-				check_filter_t = nullptr);
+				RGWBucketListNameFilter force_check_filter = {});
   int cls_bucket_head(const DoutPrefixProvider *dpp,
 		      const RGWBucketInfo& bucket_info,
 		      int shard_id,
