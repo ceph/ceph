@@ -378,6 +378,7 @@ seastar::future<> OSD::start()
     if (auto [addrs, changed] =
         replace_unknown_addrs(cluster_msgr->get_myaddrs(),
                               public_msgr->get_myaddrs()); changed) {
+      logger().debug("replacing unkwnown addrs of cluster messenger");
       return cluster_msgr->set_myaddrs(addrs);
     } else {
       return seastar::now();
