@@ -295,12 +295,13 @@ void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User* user,
   } while (user_buckets.is_truncated());
 }
 
-// note: function type conforms to RGWRados::check_filter_t
-bool rgw_bucket_object_check_filter(const string& oid)
+// returns true if entry is in the empty namespace. note: function
+// type conforms to type RGWBucketListNameFilter
+bool rgw_bucket_object_check_filter(const std::string& oid)
 {
-  rgw_obj_key key;
-  string ns;
-  return rgw_obj_key::oid_to_key_in_ns(oid, &key, ns);
+  const static std::string empty_ns;
+  rgw_obj_key key; // thrown away but needed for parsing
+  return rgw_obj_key::oid_to_key_in_ns(oid, &key, empty_ns);
 }
 
 int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw::sal::Bucket* bucket, rgw_obj_key& key)
@@ -604,6 +605,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
   while (results.is_truncated) {
     rgw::sal::Bucket::ListParams params;
     params.marker = results.next_marker;
+    params.force_check_filter = rgw_bucket_object_check_filter;
 
     int r = bucket->list(dpp, params, listing_max_entries, results, y);
 
