@@ -46,13 +46,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self,
             cluster_id: str,
             pseudo_path: str,
-            bucket: str,
+            bucket: Optional[str] = None,
+            user_id: Optional[str] = None,
             readonly: Optional[bool] = False,
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
     ) -> Tuple[int, str, str]:
         """Create an RGW export"""
         return self.export_mgr.create_export(fsal_type='rgw', bucket=bucket,
+                                             user_id=user_id,
                                              cluster_id=cluster_id, pseudo_path=pseudo_path,
                                              read_only=readonly, squash=squash,
                                              addr=client_addr)
