@@ -16,14 +16,15 @@ namespace crimson::os::seastore::lba_manager::btree {
 void btree_range_pin_t::take_pin(btree_range_pin_t &other)
 {
   ceph_assert(other.extent);
-  ceph_assert(other.pins);
-  other.pins->replace_pin(*this, other);
-  pins = other.pins;
-  other.pins = nullptr;
+  if (other.pins) {
+    other.pins->replace_pin(*this, other);
+    pins = other.pins;
+    other.pins = nullptr;
 
-  if (other.has_ref()) {
-    other.drop_ref();
-    acquire_ref();
+    if (other.has_ref()) {
+      other.drop_ref();
+      acquire_ref();
+    }
   }
 }
 

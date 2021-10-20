@@ -267,8 +267,10 @@ LBABtree::init_cached_extent_ret LBABtree::init_cached_extent(
 	  iter.get_val().paddr == logn->get_paddr()) {
 	logn->set_pin(iter.get_pin());
 	ceph_assert(iter.get_val().len == e->get_length());
-	c.pins.add_pin(
-	  static_cast<BtreeLBAPin&>(logn->get_pin()).pin);
+	if (c.pins) {
+	  c.pins->add_pin(
+	    static_cast<BtreeLBAPin&>(logn->get_pin()).pin);
+	}
 	DEBUGT("logical extent {} live, initialized", c.trans, *logn);
 	return e;
       } else {
@@ -411,7 +413,9 @@ LBABtree::get_internal_node_ret LBABtree::get_internal_node(
     ceph_assert(depth == meta.depth);
     if (!ret->is_pending() && !ret->pin.is_linked()) {
       ret->pin.set_range(meta);
-      c.pins.add_pin(ret->pin);
+      if (c.pins) {
+	c.pins->add_pin(ret->pin);
+      }
     }
     return get_internal_node_ret(
       interruptible::ready_future_marker{},
@@ -446,7 +450,9 @@ LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
     ceph_assert(1 == meta.depth);
     if (!ret->is_pending() && !ret->pin.is_linked()) {
       ret->pin.set_range(meta);
-      c.pins.add_pin(ret->pin);
+      if (c.pins) {
+	c.pins->add_pin(ret->pin);
+      }
     }
     return get_leaf_node_ret(
       interruptible::ready_future_marker{},

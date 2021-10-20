@@ -25,8 +25,8 @@ using base_iertr = LBAManager::base_iertr;
 
 struct op_context_t {
   Cache &cache;
-  btree_pin_set_t &pins;
   Transaction &trans;
+  btree_pin_set_t *pins = nullptr;
 };
 
 /**
