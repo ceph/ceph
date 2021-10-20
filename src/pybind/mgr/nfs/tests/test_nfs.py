@@ -163,6 +163,11 @@ EXPORT {
         ] if enable else []
 
         def mock_exec(cls, args):
+            if args[1:3] == ['bucket', 'stats']:
+                bucket_info = {
+                    "owner": "bucket_owner_user",
+                }
+                return 0, json.dumps(bucket_info), ''
             u = {
                 "user_id": "abc",
                 "display_name": "foo",
@@ -790,10 +795,10 @@ NFS_CORE_PARAM {
         assert len(exports) == 1
         assert exports[0].export_id == 1
 
-    def test_create_export_rgw(self):
-        self._do_mock_test(self._do_test_create_export_rgw)
+    def test_create_export_rgw_bucket(self):
+        self._do_mock_test(self._do_test_create_export_rgw_bucket)
 
-    def _do_test_create_export_rgw(self):
+    def _do_test_create_export_rgw_bucket(self):
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
 
@@ -825,6 +830,7 @@ NFS_CORE_PARAM {
         assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
+        assert export.fsal.user_id == "bucket_owner_user"
         assert export.fsal.access_key_id == "the_access_key"
         assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 1
@@ -833,6 +839,95 @@ NFS_CORE_PARAM {
         assert export.clients[0].addresses == ["192.168.0.0/16"]
         assert export.cluster_id == self.cluster_id
 
+    def test_create_export_rgw_bucket_user(self):
+        self._do_mock_test(self._do_test_create_export_rgw_bucket_user)
+
+    def _do_test_create_export_rgw_bucket_user(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+
+        exports = conf.list_exports(cluster_id=self.cluster_id)
+        ls = json.loads(exports[1])
+        assert len(ls) == 2
+
+        r = conf.create_export(
+            fsal_type='rgw',
+            cluster_id=self.cluster_id,
+            bucket='bucket',
+            user_id='other_user',
+            pseudo_path='/mybucket',
+            read_only=False,
+            squash='root',
+            addr=["192.168.0.0/16"]
+        )
+        assert r[0] == 0
+
+        exports = conf.list_exports(cluster_id=self.cluster_id)
+        ls = json.loads(exports[1])
+        assert len(ls) == 3
+
+        export = conf._fetch_export('foo', '/mybucket')
+        assert export.export_id
+        assert export.path == "bucket"
+        assert export.pseudo == "/mybucket"
+        assert export.access_type == "none"
+        assert export.squash == "none"
+        assert export.protocols == [4]
+        assert export.transports == ["TCP"]
+        assert export.fsal.name == "RGW"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
+        assert len(export.clients) == 1
+        assert export.clients[0].squash == 'root'
+        assert export.fsal.user_id == "other_user"
+        assert export.clients[0].access_type == 'rw'
+        assert export.clients[0].addresses == ["192.168.0.0/16"]
+        assert export.cluster_id == self.cluster_id
+        
+    def test_create_export_rgw_user(self):
+        self._do_mock_test(self._do_test_create_export_rgw_user)
+
+    def _do_test_create_export_rgw_user(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+
+        exports = conf.list_exports(cluster_id=self.cluster_id)
+        ls = json.loads(exports[1])
+        assert len(ls) == 2
+
+        r = conf.create_export(
+            fsal_type='rgw',
+            cluster_id=self.cluster_id,
+            user_id='some_user',
+            pseudo_path='/mybucket',
+            read_only=False,
+            squash='root',
+            addr=["192.168.0.0/16"]
+        )
+        assert r[0] == 0
+
+        exports = conf.list_exports(cluster_id=self.cluster_id)
+        ls = json.loads(exports[1])
+        assert len(ls) == 3
+
+        export = conf._fetch_export('foo', '/mybucket')
+        assert export.export_id
+        assert export.path == "/"
+        assert export.pseudo == "/mybucket"
+        assert export.access_type == "none"
+        assert export.squash == "none"
+        assert export.protocols == [4]
+        assert export.transports == ["TCP"]
+        assert export.fsal.name == "RGW"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
+        assert len(export.clients) == 1
+        assert export.clients[0].squash == 'root'
+        assert export.fsal.user_id == "some_user"
+        assert export.clients[0].access_type == 'rw'
+        assert export.clients[0].addresses == ["192.168.0.0/16"]
+        assert export.cluster_id == self.cluster_id
+        
     def test_create_export_cephfs(self):
         self._do_mock_test(self._do_test_create_export_cephfs)
 
