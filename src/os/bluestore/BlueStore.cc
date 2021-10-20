@@ -17526,7 +17526,7 @@ int BlueStore::restore_allocator(Allocator* dest_allocator, uint64_t *num, uint6
   utime_t    start = ceph_clock_now();
   Allocator *temp_allocator = create_bitmap_allocator(bdev->get_size());
   if (temp_allocator == nullptr) {
-    derr << "****failed create_bitmap_allocator()" << dendl;
+    derr << "Failed create_bitmap_allocator()" << dendl;
     return -1;
   }
 
@@ -17541,7 +17541,7 @@ int BlueStore::restore_allocator(Allocator* dest_allocator, uint64_t *num, uint6
   copy_allocator(temp_allocator, dest_allocator, &num_entries);
   delete temp_allocator;
   utime_t duration = ceph_clock_now() - start;
-  dout(5) << " <<<FINISH>>> in " << duration << " seconds, num_entries=" << num_entries << dendl;
+  dout(5) << "restored in " << duration << " seconds, num_entries=" << num_entries << dendl;
   return ret;
 }
 
@@ -18287,7 +18287,11 @@ static int commit_freelist_type(KeyValueDB *db, const std::string& freelist_type
   bl.append(freelist_type);
   t->set(PREFIX_SUPER, "freelist_type", bl);
 
-  return db->submit_transaction_sync(t);
+  int ret = db->submit_transaction_sync(t);
+  if (ret != 0) {
+    derr << "Failed db->submit_transaction_sync(t)" << dendl;
+  }
+  return ret;
 }
 
 //-------------------------------------------------------------------------------------
@@ -18318,11 +18322,16 @@ int BlueStore::commit_to_real_manager()
   if (ret == 0) {
     //remove the allocation_file
     invalidate_allocation_file_on_bluefs();
-    dout(5) << "Remove Allocation File" << dendl;
     ret = bluefs->unlink(allocator_dir, allocator_file);
     bluefs->sync_metadata(false);
-    dout(1) << "Remove Allocation File ret_code=" << ret << dendl;
+    if (ret == 0) {
+      dout(5) << "Remove Allocation File successfully" << dendl;
+    }
+    else {
+      derr << "Remove Allocation File ret_code=" << ret << dendl;
+    }
   }
+
   return ret;
 }
 
