@@ -184,6 +184,7 @@ class HostData:
 
             if 'ls' in data and data['ls']:
                 self.mgr._process_ls_output(host, data['ls'])
+                self.mgr.update_failed_daemon_health_check()
             if 'networks' in data and data['networks']:
                 self.mgr.cache.update_host_networks(host, data['networks'])
             if 'facts' in data and data['facts']:
