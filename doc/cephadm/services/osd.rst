@@ -636,10 +636,10 @@ See a full list in the DriveGroupSpecs
    :exclude-members: from_json
 
 Examples
---------
+========
 
 The simple case
-^^^^^^^^^^^^^^^
+---------------
 
 All nodes with the same setup
 
@@ -702,8 +702,8 @@ If you know that drives with more than 2TB will always be the slower data device
 Note: All of the above DriveGroups are equally valid. Which of those you want to use depends on taste and on how much you expect your node layout to change.
 
 
-The advanced case
-^^^^^^^^^^^^^^^^^
+Multiple OSD specs for a single host
+------------------------------------
 
 Here we have two distinct setups
 
@@ -756,10 +756,18 @@ This can be described with two layouts.
 This would create the desired layout by using all HDDs as data_devices with two SSD assigned as dedicated db/wal devices.
 The remaining SSDs(8) will be data_devices that have the 'VendorC' NVMEs assigned as dedicated db/wal devices.
 
-The advanced case (with non-uniform nodes)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Multiple hosts with the same disk layout
+----------------------------------------
 
-The examples above assumed that all nodes have the same drives. That's however not always the case.
+Assuming the cluster has different kinds of hosts each with similar disk 
+layout, it is recommended to apply different OSD specs matching only one
+set of hosts. Typically you will have a spec for multiple hosts with the 
+same layout. 
+
+The sevice id as the unique key: In case a new OSD spec with an already
+applied service id is applied, the existing OSD spec will be superseeded.
+cephadm will now create new OSD daemons based on the new spec
+definition. Existing OSD daemons will not be affected. See :ref:`cephadm-osd-declarative`.
 
 Node1-5
 
@@ -787,15 +795,14 @@ Node6-10
     Model: MC-55-44-ZX
     Size: 512GB
 
-You can use the 'host_pattern' key in the layout to target certain nodes. Salt target notation helps to keep things easy.
-
+You can use the 'placement' key in the layout to target certain nodes.
 
 .. code-block:: yaml
 
     service_type: osd
-    service_id: osd_spec_node_one_to_five
+    service_id: disk_layout_a
     placement:
-      host_pattern: 'node[1-5]'
+      label: disk_layout_a
     spec:
       data_devices:
         rotational: 1
@@ -803,19 +810,26 @@ You can use the 'host_pattern' key in the layout to target certain nodes. Salt t
         rotational: 0
     ---
     service_type: osd
-    service_id: osd_spec_six_to_ten
+    service_id: disk_layout_b
     placement:
-      host_pattern: 'node[6-10]'
+      label: disk_layout_b
     spec:
       data_devices:
         model: MC-55-44-XZ
       db_devices:
         model: SSD-123-foo
 
-This applies different OSD specs to different hosts depending on the `host_pattern` key.
+This applies different OSD specs to different hosts depending on the `placement` key.
+See :ref:`orchestrator-cli-placement-spec`
+
+.. note::
+
+   Assuming each host has a unique disk layout, each OSD 
+   spec needs to have a different service id
+
 
 Dedicated wal + db
-^^^^^^^^^^^^^^^^^^
+------------------
 
 All previous cases co-located the WALs with the DBs.
 It's however possible to deploy the WAL on a dedicated device as well, if it makes sense.
