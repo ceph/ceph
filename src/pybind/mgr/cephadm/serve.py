@@ -358,22 +358,7 @@ class CephadmServe:
 
         refresh(self.mgr.cache.get_hosts())
 
-        if 'CEPHADM_AGENT_DOWN' in self.mgr.health_checks:
-            del self.mgr.health_checks['CEPHADM_AGENT_DOWN']
-        if agents_down:
-            detail: List[str] = []
-            for agent in agents_down:
-                detail.append((f'Cephadm agent on host {agent} has not reported in '
-                              f'{2.5 * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
-                               'down and host may be offline.'))
-            self.mgr.health_checks['CEPHADM_AGENT_DOWN'] = {
-                'severity': 'warning',
-                'summary': '%d Cephadm Agent(s) are not reporting. '
-                'Hosts may be offline' % (len(agents_down)),
-                'count': len(agents_down),
-                'detail': detail,
-            }
-            self.mgr.set_health_checks(self.mgr.health_checks)
+        self.mgr.agent_helpers._update_agent_down_healthcheck(agents_down)
 
         self.mgr.config_checker.run_checks()
 
