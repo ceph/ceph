@@ -1278,6 +1278,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return image
 
     def _check_valid_addr(self, host: str, addr: str) -> str:
+        # make sure mgr is not resolving own ip
+        if addr in self.get_mgr_id():
+            raise OrchestratorError(
+                "Can not automatically resolve ip address of host where active mgr is running. Please explicitly provide the address.")
+
         # make sure hostname is resolvable before trying to make a connection
         try:
             ip_addr = utils.resolve_ip(addr)
@@ -1326,6 +1331,9 @@ Then run the following:
         ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
         if spec.addr == spec.hostname and ip_addr:
             spec.addr = ip_addr
+
+        if spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr:
+            self.cache.refresh_all_host_info(spec.hostname)
 
         # prime crush map?
         if spec.location:
