@@ -444,6 +444,9 @@ public:
     return get_state_gid(it->second);
   }
 
+  auto get_gid(mds_rank_t r) const {
+    return up.at(r);
+  }
   const auto& get_info(mds_rank_t m) const {
     return mds_info.at(up.at(m));
   }
@@ -547,10 +550,10 @@ public:
    * Get MDS rank incarnation if the rank is up, else -1
    */
   mds_gid_t get_incarnation(mds_rank_t m) const {
-    std::map<mds_rank_t, mds_gid_t>::const_iterator u = up.find(m);
-    if (u == up.end())
+    auto it = up.find(m);
+    if (it == up.end())
       return MDS_GID_NONE;
-    return (mds_gid_t)get_inc_gid(u->second);
+    return (mds_gid_t)get_inc_gid(it->second);
   }
 
   int get_inc_gid(mds_gid_t gid) const {

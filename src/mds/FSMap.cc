@@ -1011,7 +1011,7 @@ void FSMap::damaged(mds_gid_t who, epoch_t blocklist_epoch)
 {
   ceph_assert(mds_roles.at(who) != FS_CLUSTER_ID_NONE);
   auto fs = filesystems.at(mds_roles.at(who));
-  mds_rank_t rank = fs->mds_map.mds_info[who].rank;
+  mds_rank_t rank = fs->mds_map.mds_info.at(who).rank;
 
   erase(who, blocklist_epoch);
   fs->mds_map.failed.erase(rank);

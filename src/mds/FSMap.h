@@ -523,8 +523,14 @@ public:
   bool filesystem_exists(fs_cluster_id_t fscid) const {return filesystems.count(fscid) > 0;}
   Filesystem::const_ref get_filesystem(fs_cluster_id_t fscid) const {return std::const_pointer_cast<const Filesystem>(filesystems.at(fscid));}
   Filesystem::ref get_filesystem(fs_cluster_id_t fscid) {return filesystems.at(fscid);}
+  Filesystem::ref get_filesystem(mds_gid_t gid) {
+    return filesystems.at(mds_roles.at(gid));
+  }
   Filesystem::const_ref get_filesystem(void) const {return std::const_pointer_cast<const Filesystem>(filesystems.begin()->second);}
   Filesystem::const_ref get_filesystem(std::string_view name) const;
+  Filesystem::const_ref get_filesystem(mds_gid_t gid) const {
+    return filesystems.at(mds_roles.at(gid));
+  }
 
   std::vector<Filesystem::const_ref> get_filesystems(void) const;
 

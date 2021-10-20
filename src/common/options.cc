@@ -8197,6 +8197,11 @@ std::vector<Option> get_mds_options() {
     .set_default(false)
     .set_flag(Option::FLAG_RUNTIME),
 
+    Option("mds_standby_replay_damaged", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description(""),
+
     Option("mds_numa_node", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(-1)
     .set_flag(Option::FLAG_STARTUP)
