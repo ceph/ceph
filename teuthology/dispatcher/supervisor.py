@@ -175,10 +175,20 @@ def reimage(job_config):
 def unlock_targets(job_config):
     serializer = report.ResultsSerializer(teuth_config.archive_base)
     job_info = serializer.job_info(job_config['name'], job_config['job_id'])
-    machine_status = query.get_statuses(job_info['targets'].keys())
-    # only unlock/nuke targets if locked in the first place
-    locked = [shortname(_['name'])
-              for _ in machine_status if _['locked']]
+    machine_statuses = query.get_statuses(job_info['targets'].keys())
+    # only unlock/nuke targets if locked and description matches
+    locked = []
+    for status in machine_statuses:
+        name = shortname(status['name'])
+        description = status['description']
+        if not status['locked']:
+            continue
+        if description != job_info['archive_path']:
+            log.warning(
+                "Was going to unlock %s but it was locked by another job: %s",
+                name, description
+            )
+        locked.append(name)
     if not locked:
         return
     job_status = get_status(job_info)
