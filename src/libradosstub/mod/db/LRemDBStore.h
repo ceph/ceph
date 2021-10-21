@@ -70,6 +70,10 @@ public:
 
   Transaction new_transaction();
   Transaction *alloc_transaction();
+
+  const std::string& get_name() {
+    return name;
+  }
 };
 
 using LRemDBOpsRef = std::shared_ptr<LRemDBOps>;

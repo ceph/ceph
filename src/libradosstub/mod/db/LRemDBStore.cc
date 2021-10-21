@@ -229,6 +229,32 @@ void LRemDBOps::flush() {
   statement_keys.clear();
 }
 
+class DBOpsCache {
+  ceph::mutex lock = ceph::make_mutex("DBOpsCache::lock");
+  map<string, list<LRemDBOpsRef> > entries;
+
+public:
+  DBOpsCache() {}
+
+  LRemDBOpsRef get(const string& dbname) {
+    std::unique_lock locker{lock};
+    auto& l = entries[dbname];
+    if (l.empty()) {
+      return make_shared<LRemDBOps>(dbname, SQLite::OPEN_NOMUTEX|SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
+    }
+    auto dbo = l.front();
+    l.pop_front();
+    return dbo;
+  }
+
+  void put(LRemDBOpsRef&& dbo) {
+    std::unique_lock locker{lock};
+    entries[dbo->get_name()].push_back(std::move(dbo));
+  }
+};
+
+static DBOpsCache dbops_cache;
+
 #warning remove me
 map<void *, int> m;
 ceph::mutex mlock = ceph::make_mutex("LRemDBCluster::m_lock");
@@ -330,12 +356,14 @@ LRemDBTransactionState::~LRemDBTransactionState() {
   }
 
   dbo->flush();
+
+  dbops_cache.put(std::move(dbo));
 }
 
 void LRemDBTransactionState::init(bool start_trans) {
   auto uuid = cct->_conf.get_val<uuid_d>("fsid");
   string dbname = string("cluster-") + uuid.to_string() + ".db3";
-  dbo = make_shared<LRemDBOps>(dbname, SQLite::OPEN_NOMUTEX|SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
+  dbo = dbops_cache.get(dbname);
   dbc = std::make_shared<LRemDBStore::Cluster>(cct, this);
 
   if (start_trans) {
