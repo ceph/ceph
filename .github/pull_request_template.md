@@ -1,5 +1,7 @@
 
 
+
+
 <!--
   - Please give your pull request a title like
 
@@ -16,23 +18,47 @@
 
     For examples, use "git log".
 
-  - The Signed-off-by line in every git commit is important; see SubmittingPatches.rst.
+  - The Signed-off-by line in every git commit is important; see <span class="x x-first x-last">[Submitting Patches to Ceph](https://github.com/ceph/ceph/blob/master/</span>SubmittingPatches.rst<span class="x x-first x-last">)</span>
 -->
 
 ## Checklist
 - Tracker (select at least one)
-  - [ ] Very recent bug; references commit where it was introduced
-  - [ ] New feature (no ticket)
   - [ ] References tracker ticket
-  - [ ] Doc update (no ticket)
+  - [ ] Very recent bug; references commit where it was introduced
+  - [ ] New feature (ticket optional)
+  - [ ] Doc update (no ticket needed)
+- Component impact
+  - [ ] Affects [Dashboard](https://tracker.ceph.com/projects/dashboard/issues/new), opened tracker ticket
+  - [ ] Affects [Orchestrator](https://tracker.ceph.com/projects/orchestrator/issues/new), opened tracker ticket
+  - [ ] No impact that needs to be tracked
 - Documentation (select at least one)
   - [ ] Updates relevant documentation
   - [ ] No doc update is appropriate
 - Tests (select at least one)
-  - [ ] Includes unit test(s)
-  - [ ] Includes integration test(s)
+  - [ ] Includes [unit test(s)](https://docs.ceph.com/en/latest/dev/developer_guide/tests-unit-tests/)
+  - [ ] Includes [integration test(s)](https://docs.ceph.com/en/latest/dev/developer_guide/testing_integration_tests/)
   - [ ] Includes bug reproducer
   - [ ] No tests
 - Teuthology
   - [ ] Completed teuthology run
   - [ ] No teuthology test necessary (e.g., documentation)
+
+<details>
+<summary>Show available Jenkins commands</summary>
+
+- `jenkins retest this please`
+- `jenkins test classic perf`
+- `jenkins test crimson perf`
+- `jenkins test signed`
+- `jenkins test make check`
+- `jenkins test make check arm64`
+- `jenkins test submodules`
+- `jenkins test dashboard`
+- `jenkins test dashboard cephadm`
+- `jenkins test api`
+- `jenkins test docs`
+- `jenkins render docs`
+- `jenkins test ceph-volume all`
+- `jenkins test ceph-volume tox`
+
+</details>
