@@ -528,7 +528,7 @@ public:
   virtual const std::string& get_key() const override { return mp_obj.get_key(); }
   virtual const std::string& get_upload_id() const override { return mp_obj.get_upload_id(); }
   virtual const ACLOwner& get_owner() const override { return owner; }
-  virtual ceph::real_time get_mtime() const override { return mtime; }
+  virtual ceph::real_time& get_mtime() override { return mtime; }
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, RGWObjectCtx* obj_ctx, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;
   virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
