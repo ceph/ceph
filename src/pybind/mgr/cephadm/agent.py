@@ -321,22 +321,20 @@ class CephadmAgentHelpers:
         return False
 
     def _update_agent_down_healthcheck(self, down_agent_hosts: List[str]) -> None:
-        if 'CEPHADM_AGENT_DOWN' in self.mgr.health_checks:
-            del self.mgr.health_checks['CEPHADM_AGENT_DOWN']
+        self.mgr.remove_health_warning('CEPHADM_AGENT_DOWN')
         if down_agent_hosts:
             detail: List[str] = []
             for agent in down_agent_hosts:
                 detail.append((f'Cephadm agent on host {agent} has not reported in '
                               f'{2.5 * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
                                'down and host may be offline.'))
-            self.mgr.health_checks['CEPHADM_AGENT_DOWN'] = {
-                'severity': 'warning',
-                'summary': '%d Cephadm Agent(s) are not reporting. '
-                'Hosts may be offline' % (len(down_agent_hosts)),
-                'count': len(down_agent_hosts),
-                'detail': detail,
-            }
-            self.mgr.set_health_checks(self.mgr.health_checks)
+            self.mgr.set_health_warning(
+                'CEPHADM_AGENT_DOWN',
+                summary='%d Cephadm Agent(s) are not reporting. Hosts may be offline' % (
+                    len(down_agent_hosts)),
+                count=len(down_agent_hosts),
+                detail=detail,
+            )
 
     # this function probably seems very unnecessary, but it makes it considerably easier
     # to get the unit tests working. All unit tests that check which daemons were deployed
