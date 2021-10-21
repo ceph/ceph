@@ -1176,7 +1176,7 @@ export CXXFLAGS="$RPM_OPT_FLAGS"
 export LDFLAGS="$RPM_LD_FLAGS"
 
 # Parallel build settings ...
-CEPH_MFLAGS_JOBS="%{?_smp_mflags}"
+CEPH_MFLAGS_JOBS="-j200"
 CEPH_SMP_NCPUS=$(echo "$CEPH_MFLAGS_JOBS" | sed 's/-j//')
 %if 0%{?__isa_bits} == 32
 # 32-bit builds can use 3G memory max, which is not enough even for -j2
@@ -1202,7 +1202,7 @@ env | sort
 mkdir build
 cd build
 %if 0%{?rhel} == 7
-CMAKE=cmake3
+CMAKE='ib_console cmake3'
 %else
 CMAKE=cmake
 %endif
