@@ -1421,3 +1421,13 @@ options:
   default: false
   flags:
   - runtime
+- name: mds_symlink_recovery
+  type: bool
+  level: advanced
+  desc: Stores symlink target on the first data object of symlink file.
+    Allows recover of symlink using recovery tools.
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime

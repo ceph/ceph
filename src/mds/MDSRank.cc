@@ -3748,6 +3748,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_cap_acquisition_throttle_retry_request_time",
     "mds_alternate_name_max",
     "mds_dir_max_entries",
+    "mds_symlink_recovery",
     NULL
   };
   return KEYS;
