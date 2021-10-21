@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "crimson/common/log.h"
-
 #include <boost/intrusive_ptr.hpp>
 
 #include <seastar/core/future.hh>
@@ -31,6 +29,13 @@ class SegmentedAllocator;
 class Journal {
 public:
   Journal(SegmentManager &segment_manager, ExtentReader& scanner);
+
+  /**
+   * Gets the current journal segment sequence.
+   */
+  segment_seq_t get_segment_seq() const {
+    return next_journal_segment_seq - 1;
+  }
 
   /**
    * Sets the SegmentProvider.
@@ -207,7 +212,6 @@ private:
     const bufferlist &bl);
 
 private:
-
   /// replays records starting at start through end of segment
   replay_ertr::future<>
   replay_segment(
@@ -217,7 +221,6 @@ private:
   );
 
   extent_len_t max_record_length() const;
-  friend class crimson::os::seastore::SegmentedAllocator;
 };
 using JournalRef = std::unique_ptr<Journal>;
 

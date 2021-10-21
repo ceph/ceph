@@ -9,7 +9,6 @@
 
 #include "include/intarith.h"
 #include "crimson/os/seastore/segment_cleaner.h"
-#include "crimson/os/seastore/segment_manager.h"
 
 namespace {
   seastar::logger& logger() {
@@ -206,7 +205,7 @@ Journal::prep_replay_segments(
   std::vector<std::pair<segment_id_t, segment_header_t>> segments)
 {
   logger().debug(
-    "prep_replay_segments: have {} segments",
+    "Journal::prep_replay_segments: have {} segments",
     segments.size());
   if (segments.empty()) {
     return crimson::ct_error::input_output_error::make();
@@ -247,7 +246,7 @@ Journal::prep_replay_segments(
       });
     if (from->second.journal_segment_seq != journal_tail.segment_seq) {
       logger().error(
-	"prep_replay_segments: journal_tail {} does not match {}",
+	"Journal::prep_replay_segments: journal_tail {} does not match {}",
 	journal_tail,
 	from->second);
       assert(0 == "invalid");
@@ -285,7 +284,7 @@ std::optional<std::vector<delta_info_t>> Journal::try_decode_deltas(
   bliter += ceph::encoded_sizeof_bounded<record_header_t>();
   bliter += sizeof(checksum_t) /* crc */;
   bliter += header.extents  * ceph::encoded_sizeof_bounded<extent_info_t>();
-  logger().debug("{}: decoding {} deltas", __func__, header.deltas);
+  logger().debug("Journal::try_decode_deltas: decoding {} deltas", header.deltas);
   std::vector<delta_info_t> deltas(header.deltas);
   for (auto &&i : deltas) {
     try {
@@ -303,7 +302,7 @@ Journal::replay_segment(
   segment_header_t header,
   delta_handler_t &handler)
 {
-  logger().debug("replay_segment: starting at {}", seq);
+  logger().debug("Journal::replay_segment: starting at {}", seq);
   return seastar::do_with(
     scan_valid_records_cursor(seq.offset),
     ExtentReader::found_record_handler_t(
@@ -316,7 +315,7 @@ Journal::replay_segment(
 	if (!deltas) {
 	  // This should be impossible, we did check the crc on the mdbuf
 	  logger().error(
-	    "Journal::replay_segment unable to decode deltas for record {}",
+	    "Journal::replay_segment: unable to decode deltas for record {}",
 	    base);
 	  assert(deltas);
 	}
@@ -375,7 +374,7 @@ Journal::replay_ret Journal::replay(
     (auto &handler, auto &segments) mutable -> replay_ret {
       return prep_replay_segments(std::move(segment_headers)).safe_then(
         [this, &handler, &segments](auto replay_segs) mutable {
-          logger().debug("replay: found {} segments", replay_segs.size());
+          logger().debug("Journal::replay: found {} segments", replay_segs.size());
           segments = std::move(replay_segs);
           return crimson::do_for_each(segments, [this, &handler](auto i) mutable {
             return replay_segment(i.first, i.second, handler);
