@@ -305,6 +305,10 @@ This follows the same procedure as the procedure in the "Remove OSD" section, wi
 one exception: the OSD is not permanently removed from the CRUSH hierarchy, but is
 instead assigned a 'destroyed' flag.
 
+.. note::
+    The new OSD that will replace the removed OSD must be created on the same host 
+    as the OSD that was removed.
+
 **Preserving the OSD ID**
 
 The 'destroyed' flag is used to determine which OSD ids will be reused in the
