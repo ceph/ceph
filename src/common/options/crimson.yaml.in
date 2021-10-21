@@ -45,3 +45,18 @@ options:
   level: dev
   desc: Initial number of segments for rewriting extents per device
   default: 6
+- name: seastore_journal_batch_capacity
+  type: uint
+  level: dev
+  desc: The number limit of records in a journal batch
+  default: 16
+- name: seastore_journal_batch_flush_size
+  type: size
+  level: dev
+  desc: The size threshold to force flush a journal batch
+  default: 16_M
+- name: seastore_journal_iodepth_limit
+  type: uint
+  level: dev
+  desc: The io depth limit to submit journal records
+  default: 2
