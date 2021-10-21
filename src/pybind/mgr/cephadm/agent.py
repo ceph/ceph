@@ -9,10 +9,11 @@ import time
 
 # from orchestrator import OrchestratorError
 from mgr_util import verify_tls_files
+from orchestrator import DaemonDescriptionStatus
 from ceph.utils import datetime_now
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
-from orchestrator import DaemonDescriptionStatus
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
 from datetime import datetime, timedelta
 from OpenSSL import crypto
@@ -71,6 +72,7 @@ class CherryPyThread(threading.Thread):
             self.mgr.log.info('Starting cherrypy engine...')
             cherrypy.engine.start()
             self.mgr.log.info('Cherrypy engine started.')
+            self.mgr._kick_serve_loop()
             # wait for the shutdown event
             self.cherrypy_shutdown_event.wait()
             self.cherrypy_shutdown_event.clear()
@@ -316,6 +318,9 @@ class CephadmAgentHelpers:
         # be an agent deployed there and therefore we should return False
         if host not in [h.hostname for h in self.mgr.cache.get_non_draining_hosts()]:
             return False
+        # if we haven't deployed an agent on the host yet, don't say an agent is down
+        if not [a for a in self.mgr.cache.get_daemons_by_type('agent') if a.hostname == host]:
+            return False
         # if we don't have a timestamp, it's likely because of a mgr fail over.
         # just set the timestamp to now. However, if host was offline before, we
         # should not allow creating a new timestamp to cause it to be marked online
@@ -380,6 +385,40 @@ class CephadmAgentHelpers:
             self.mgr.cache.agent_keys = {}
             self.mgr.cache.agent_ports = {}
         return need_apply
+
+    def _check_agent(self, host: str) -> bool:
+        if self.mgr.agent_helpers._agent_down(host):
+            if host not in self.mgr.offline_hosts:
+                self.mgr.cache.metadata_up_to_date[host] = False
+                # In case host is actually offline, it's best to reset the connection to avoid
+                # a long timeout trying to use an existing connection to an offline host
+                self.mgr.ssh._reset_con(host)
+
+                try:
+                    # try to schedule redeploy of agent in case it is individually down
+                    agent = [a for a in self.mgr.cache.get_daemons_by_type(
+                        'agent') if a.hostname == host][0]
+                    self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
+                except Exception as e:
+                    self.mgr.log.debug(
+                        f'Failed to find entry for agent deployed on host {host}. Agent possibly never deployed: {e}')
+            return True
+        else:
+            try:
+                agent = [a for a in self.mgr.cache.get_daemons_by_type(
+                    'agent') if a.hostname == host][0]
+                assert agent.daemon_id is not None
+                spec = self.mgr.spec_store.active_specs.get('agent', None)
+                deps = self.mgr._calc_daemon_deps(spec, 'agent', agent.daemon_id)
+                last_deps, last_config = self.mgr.cache.get_daemon_last_config_deps(
+                    host, agent.name())
+                if not last_config or last_deps != deps:
+                    daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
+                    self.mgr._daemon_action(daemon_spec, action='reconfig')
+            except Exception as e:
+                self.mgr.log.debug(
+                    f'Agent on host {host} not ready to have config and deps checked: {e}')
+            return False
 
 
 class SSLCerts:
