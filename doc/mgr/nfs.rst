@@ -341,18 +341,18 @@ An existing export can be dumped in JSON format with:
 
 .. prompt:: bash #
 
-    ceph nfs export info *<cluster_id>* *<pseudo_path>*
+    ceph nfs export get *<cluster_id>* *<pseudo_path>*
 
 An export can be created or modified by importing a JSON description in the
 same format:
 
 .. prompt:: bash #
 
-    ceph nfs export apply *<cluster_id>* -i <json_file>
+    ceph nfs export update *<cluster_id>* -i <json_file>
 
 For example,::
 
-   $ ceph nfs export info mynfs /cephfs > update_cephfs_export.json
+   $ ceph nfs export get mynfs /cephfs > update_cephfs_export.json
    $ cat update_cephfs_export.json
    {
      "export_id": 1,
@@ -389,7 +389,7 @@ previous state of the export where possible.
 
 ::
 
-   $ ceph nfs export apply mynfs -i update_cephfs_export.json
+   $ ceph nfs export update mynfs -i update_cephfs_export.json
    $ cat update_cephfs_export.json
    {
      "export_id": 1,
@@ -417,7 +417,7 @@ previous state of the export where possible.
 An export can also be created or updated by injecting a Ganesha NFS EXPORT config
 fragment.  For example,::
 
-   $ ceph nfs export apply mynfs -i update_cephfs_export.conf
+   $ ceph nfs export update mynfs -i update_cephfs_export.conf
    $ cat update_cephfs_export.conf
    EXPORT {
        FSAL {
