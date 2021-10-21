@@ -222,7 +222,7 @@ SegmentedAllocator::Writer::init_segment(Segment& segment) {
       segment_manager.get_block_size()));
   bp.zero();
   auto header =segment_header_t{
-    journal.next_journal_segment_seq - 1, // current seg seq = next seg seq - 1
+    journal.get_segment_seq(),
     segment.get_segment_id(),
     NO_DELTAS, 0, true};
   logger().debug("SegmentedAllocator::Writer::init_segment: initting {}, {}",
