@@ -306,8 +306,6 @@ class TestFailover(CephFSTestCase):
         in thrashing tests.
         """
 
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
-
         (original_active, ) = self.fs.get_active_names()
         original_standbys = self.mds_cluster.get_standby_daemons()
 
@@ -321,7 +319,7 @@ class TestFailover(CephFSTestCase):
 
         log.info("Waiting for promotion of one of the original standbys {0}".format(
             original_standbys))
-        self.wait_until_true(promoted, timeout=grace*2)
+        self.wait_until_true(promoted, timeout=self.fs.beacon_timeout)
 
         # Start the original rank 0 daemon up again, see that he becomes a standby
         self.fs.mds_restart(original_active)
@@ -342,8 +340,6 @@ class TestFailover(CephFSTestCase):
         require_active = self.fs.get_config("fuse_require_active_mds", service_type="mon").lower() == "true"
         if not require_active:
             self.skipTest("fuse_require_active_mds is not set")
-
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
 
         # Check it's not laggy to begin with
         (original_active, ) = self.fs.get_active_names()
@@ -367,7 +363,7 @@ class TestFailover(CephFSTestCase):
 
             return True
 
-        self.wait_until_true(laggy, grace * 2)
+        self.wait_until_true(laggy, self.fs.beacon_timeout)
         with self.assertRaises(CommandFailedError):
             self.mounts[0].mount_wait()
 
@@ -379,8 +375,6 @@ class TestFailover(CephFSTestCase):
         # Need all my standbys up as well as the active daemons
         self.wait_for_daemon_start()
 
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
-
         standbys = self.mds_cluster.get_standby_daemons()
         self.assertGreaterEqual(len(standbys), 1)
         self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', str(len(standbys)))
@@ -388,8 +382,7 @@ class TestFailover(CephFSTestCase):
         # Kill a standby and check for warning
         victim = standbys.pop()
         self.fs.mds_stop(victim)
-        log.info("waiting for insufficient standby daemon warning")
-        self.wait_for_health("MDS_INSUFFICIENT_STANDBY", grace*2)
+        self.wait_for_health("MDS_INSUFFICIENT_STANDBY", self.fs.beacon_timeout)
 
         # restart the standby, see that he becomes a standby, check health clears
         self.fs.mds_restart(victim)
@@ -403,8 +396,7 @@ class TestFailover(CephFSTestCase):
         standbys = self.mds_cluster.get_standby_daemons()
         self.assertGreaterEqual(len(standbys), 1)
         self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', str(len(standbys)+1))
-        log.info("waiting for insufficient standby daemon warning")
-        self.wait_for_health("MDS_INSUFFICIENT_STANDBY", grace*2)
+        self.wait_for_health("MDS_INSUFFICIENT_STANDBY", self.fs.beacon_timeout)
 
         # Set it to 0
         self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', '0')
@@ -420,7 +412,6 @@ class TestFailover(CephFSTestCase):
 
         self.mount_a.umount_wait()
 
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
         monc_timeout = float(self.fs.get_config("mon_client_ping_timeout", service_type="mds"))
 
         mds_0 = self.fs.get_rank(rank=0, status=status)
@@ -428,7 +419,7 @@ class TestFailover(CephFSTestCase):
         self.fs.rank_signal(signal.SIGSTOP, rank=0, status=status)
         self.wait_until_true(
             lambda: "laggy_since" in self.fs.get_rank(),
-            timeout=grace * 2
+            timeout=self.fs.beacon_timeout
         )
 
         self.fs.rank_fail(rank=1)
@@ -441,7 +432,7 @@ class TestFailover(CephFSTestCase):
         self.fs.rank_signal(signal.SIGCONT, rank=0)
         self.wait_until_true(
             lambda: "laggy_since" not in self.fs.get_rank(rank=0),
-            timeout=grace * 2
+            timeout=self.fs.beacon_timeout
         )
 
         # mds.b will be stuck at 'reconnect' state if snapserver gets confused
