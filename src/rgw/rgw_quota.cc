@@ -273,11 +273,11 @@ int BucketAsyncRefreshHandler::init_fetch()
 
   ldpp_dout(&dp, 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
 
-  r = rbucket->get_bucket_stats_async(&dp, RGW_NO_SHARD, this);
+  r = rbucket->read_stats_async(&dp, RGW_NO_SHARD, this);
   if (r < 0) {
     ldpp_dout(&dp, 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
 
-    /* get_bucket_stats_async() dropped our reference already */
+    /* read_stats_async() dropped our reference already */
     return r;
   }
 
@@ -345,7 +345,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& _u, const rgw_
   string master_ver;
 
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
-  r = bucket->get_bucket_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, bucket_stats);
+  r = bucket->read_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, bucket_stats);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "could not get bucket stats for bucket="
                            << _b.name << dendl;
