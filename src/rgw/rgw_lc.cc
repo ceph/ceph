@@ -844,7 +844,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
     auto& [rule, obj] = wt;
     if (obj_has_expired(this, cct, obj.meta.mtime, rule.mp_expiration)) {
       rgw_obj_key key(obj.key);
-      std::unique_ptr<rgw::sal::MultipartUpload> mpu = store->get_multipart_upload(target, key.name);
+      std::unique_ptr<rgw::sal::MultipartUpload> mpu = target->get_multipart_upload(key.name);
       RGWObjectCtx rctx(store);
       int ret = mpu->abort(this, cct, &rctx);
       if (ret == 0) {
@@ -1446,9 +1446,9 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     return ret;
   }
 
-  ret = bucket->get_bucket_info(this, null_yield);
+  ret = bucket->load_bucket(this, null_yield);
   if (ret < 0) {
-    ldpp_dout(this, 0) << "LC:get_bucket_info for " << bucket_name
+    ldpp_dout(this, 0) << "LC:load_bucket for " << bucket_name
 		       << " failed" << dendl;
     return ret;
   }
