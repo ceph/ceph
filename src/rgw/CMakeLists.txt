@@ -62,6 +62,7 @@ set(librgw_common_srcs
   rgw_bucket_layout.cc
   rgw_bucket_sync.cc
   rgw_cache.cc
+  rgw_directory.cc
   rgw_d3n_datacache.cc
   rgw_common.cc
   rgw_compression.cc
@@ -231,6 +232,9 @@ if(WITH_CPP_REDIS)
   target_link_libraries(rgw_common PRIVATE cpp_redis)
   target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/includes")
   target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/tacopie/includes")
+  target_link_libraries(ceph_test_rgw_directory PRIVATE cpp_redis)
+  target_include_directories(ceph_test_rgw_directory PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/includes")
+  target_include_directories(ceph_test_rgw_directory PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/tacopie/includes")
 endif()
 
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
