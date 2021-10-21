@@ -94,6 +94,7 @@ public:
   }
 
   std::string cache_location;
+  RGWBlockDirectory *blk_dir;
 
   bool get(const std::string& oid, const off_t len);
   void put(bufferlist& bl, unsigned int len, std::string& obj_key);
