@@ -817,6 +817,15 @@ class HostCache():
                 r.append(dd)
         return r
 
+    def get_error_daemons(self):
+        # type: () -> List[orchestrator.DaemonDescription]
+        r = []
+        for host, dm in self.daemons.items():
+            for name, dd in dm.items():
+                if dd.status is not None and dd.status == orchestrator.DaemonDescriptionStatus.error:
+                    r.append(dd)
+        return r
+
     def get_daemons_by_host(self, host: str) -> List[orchestrator.DaemonDescription]:
         return list(self.daemons.get(host, {}).values())
 
