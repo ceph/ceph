@@ -1348,7 +1348,7 @@ cmake .. \
 %if 0%{?suse_version}
     -DBOOST_J:STRING=%{jobs} \
 %else
-    -DBOOST_J:STRING=%{_smp_build_ncpus} \
+    -DBOOST_J:STRING=200 \
 %endif
 %if 0%{?rhel}
     -DWITH_FMT_HEADER_ONLY:BOOL=ON \
