@@ -372,7 +372,7 @@ TEST(LibRGW, DELETE_OBJECT) {
   }
 }
 
-TEST(LibRGW, CLEANUP) {
+TEST(LibRGW, CLEANUP2) {
   if (do_readv) {
     // release resources
     ASSERT_NE(uio->uio_rele, nullptr);

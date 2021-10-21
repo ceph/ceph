@@ -393,7 +393,7 @@ TEST(LibRGW, MARKER1_OBJ_CLEANUP)
   marker_objs.clear();
 }
 
-TEST(LibRGW, CLEANUP) {
+TEST(LibRGW, CLEANUP6) {
   int rc;
 
   if (do_marker1) {
