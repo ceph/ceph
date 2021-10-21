@@ -7245,7 +7245,7 @@ void BlueStore::_fsck_check_pool_statfs(
 	  ++errors;
 	}
 	if (repairer) {
-	  repairer->remove_key(db, PREFIX_SHARED_BLOB, key);
+	  repairer->remove_key(db, PREFIX_STAT, key);
 	}
 	continue;
       }
