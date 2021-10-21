@@ -12,6 +12,7 @@ from mgr_util import verify_tls_files
 from ceph.utils import datetime_now
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+from orchestrator import DaemonDescriptionStatus
 
 from datetime import datetime, timedelta
 from OpenSSL import crypto
@@ -164,6 +165,9 @@ class HostData:
 
             # update timestamp of most recent agent update
             self.mgr.cache.agent_timestamp[host] = datetime_now()
+
+            error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+
             agents_down = []
             for h in self.mgr.cache.get_hosts():
                 if self.mgr.agent_helpers._agent_down(h):
@@ -192,6 +196,11 @@ class HostData:
             if 'volume' in data and data['volume']:
                 ret = Devices.from_json(json.loads(data['volume']))
                 self.mgr.cache.update_host_devices(host, ret.devices)
+
+            if error_daemons_old != set([dd.name() for dd in self.mgr.cache.get_error_daemons()]):
+                self.mgr.log.info(
+                    f'Change detected in daemons in error state from {host} agent metadata. Kicking serve loop')
+                self.mgr._kick_serve_loop()
 
             if up_to_date:
                 was_out_of_date = not self.mgr.cache.all_host_metadata_up_to_date()
@@ -328,6 +337,8 @@ class CephadmAgentHelpers:
                 detail.append((f'Cephadm agent on host {agent} has not reported in '
                               f'{2.5 * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
                                'down and host may be offline.'))
+            for dd in [d for d in self.mgr.cache.get_daemons_by_type('agent') if d.hostname in down_agent_hosts]:
+                dd.status = DaemonDescriptionStatus.error
             self.mgr.set_health_warning(
                 'CEPHADM_AGENT_DOWN',
                 summary='%d Cephadm Agent(s) are not reporting. Hosts may be offline' % (
