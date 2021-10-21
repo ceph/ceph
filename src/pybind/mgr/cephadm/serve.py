@@ -247,54 +247,63 @@ class CephadmServe:
             if self.mgr.inventory._inventory[host].get("status", "").lower() == "maintenance":
                 return
 
-            if self.mgr.use_agent and self.mgr.agent_helpers._agent_down(host):
-                agents_down.append(host)
-                self.mgr.cache.metadata_up_to_date[host] = False
-                if host in self.mgr.offline_hosts:
-                    return
-
-                # In case host is actually offline, it's best to reset the connection to avoid
-                # a long timeout trying to use an existing connection to an offline host
-                # REVISIT AFTER https://github.com/ceph/ceph/pull/42919
-                # self.mgr.ssh._reset_con(host)
-
-                try:
-                    # try to schedule redeploy of agent in case it is individually down
-                    agent = [a for a in self.mgr.cache.get_daemons_by_host(
-                        host) if a.hostname == host][0]
-                    self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
-                except Exception as e:
-                    self.log.debug(
-                        f'Failed to find entry for agent deployed on host {host}. Agent possibly never deployed: {e}')
-                return
+            if self.mgr.use_agent:
+                if self.mgr.agent_helpers._check_agent(host):
+                    agents_down.append(host)
 
             if self.mgr.cache.host_needs_check(host):
                 r = self._check_host(host)
                 if r is not None:
                     bad_hosts.append(r)
 
-            if not self.mgr.use_agent or host not in [h.hostname for h in self.mgr.cache.get_non_draining_hosts()]:
-                if self.mgr.cache.host_needs_daemon_refresh(host):
+            if (
+                not self.mgr.use_agent
+                or host not in [h.hostname for h in self.mgr.cache.get_non_draining_hosts()]
+                or host in agents_down
+            ):
+                if (
+                    self.mgr.cache.host_needs_daemon_refresh(host)
+                    or not self.mgr.cache.host_metadata_up_to_date(host)
+                ):
                     self.log.debug('refreshing %s daemons' % host)
                     r = self._refresh_host_daemons(host)
                     if r:
                         failures.append(r)
 
-                if self.mgr.cache.host_needs_facts_refresh(host):
+                if (
+                    self.mgr.cache.host_needs_facts_refresh(host)
+                    or not self.mgr.cache.host_metadata_up_to_date(host)
+                ):
                     self.log.debug(('Refreshing %s facts' % host))
                     r = self._refresh_facts(host)
                     if r:
                         failures.append(r)
 
-                if self.mgr.cache.host_needs_network_refresh(host):
+                if (
+                    self.mgr.cache.host_needs_network_refresh(host)
+                    or not self.mgr.cache.host_metadata_up_to_date(host)
+                ):
                     self.log.debug(('Refreshing %s networks' % host))
                     r = self._refresh_host_networks(host)
                     if r:
                         failures.append(r)
 
-                if self.mgr.cache.host_needs_device_refresh(host):
+                if (
+                    self.mgr.cache.host_needs_device_refresh(host)
+                    or not self.mgr.cache.host_metadata_up_to_date(host)
+                ):
                     self.log.debug('refreshing %s devices' % host)
                     r = self._refresh_host_devices(host)
+                    if r:
+                        failures.append(r)
+                self.mgr.cache.metadata_up_to_date[host] = True
+            elif not [a for a in self.mgr.cache.get_daemons_by_type('agent') if a.hostname == host]:
+                if (
+                    self.mgr.cache.host_needs_daemon_refresh(host)
+                    or not self.mgr.cache.host_metadata_up_to_date(host)
+                ):
+                    self.log.debug('refreshing %s daemons' % host)
+                    r = self._refresh_host_daemons(host)
                     if r:
                         failures.append(r)
                 self.mgr.cache.metadata_up_to_date[host] = True
@@ -876,7 +885,6 @@ class CephadmServe:
         return r
 
     def _check_daemons(self) -> None:
-
         daemons = self.mgr.cache.get_daemons()
         daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
         for dd in daemons:
