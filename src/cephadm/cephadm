@@ -4041,10 +4041,10 @@ def prepare_bootstrap_config(
         logger.info('Adjusting default settings to suit single-host cluster...')
         # replicate across osds, not hosts
         if (
-                not cp.has_option('global', 'osd_crush_choose_leaf_type')
-                and not cp.has_option('global', 'osd crush choose leaf type')
+                not cp.has_option('global', 'osd_crush_chooseleaf_type')
+                and not cp.has_option('global', 'osd crush chooseleaf type')
         ):
-            cp.set('global', 'osd_crush_choose_leaf_type', '0')
+            cp.set('global', 'osd_crush_chooseleaf_type', '0')
         # replica 2x
         if (
                 not cp.has_option('global', 'osd_pool_default_size')
