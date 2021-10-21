@@ -35,7 +35,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
     local HostsOverviewSingleStatPanel(format, title, description, valueName, expr, targetFormat, x, y, w, h) =
       addSingelStatSchema('$datasource', format, title, description, valueName, false, 100, false, false, '')
       .addTarget(addTargetSchema(expr, 1, targetFormat, '')) + {gridPos: {x: x, y: y, w: w, h: h}};
-    
+
     local HostsOverviewGraphPanel(title, description, formatY1, expr, legendFormat, x, y, w, h) =
       graphPanelSchema({}, title, description, 'null', false, formatY1, 'short', null, null, 0, 1, '$datasource')
       .addTargets(
@@ -84,11 +84,40 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
       HostsOverviewSingleStatPanel(
         'percent', 'AVG Disk Utilization', 'Average Disk utilization for all OSD data devices (i.e. excludes journal/WAL)', 'current', 'avg (\n  label_replace((irate(node_disk_io_time_ms[5m]) / 10 ) or\n   (irate(node_disk_io_time_seconds_total[5m]) * 100), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\"\n  ) *\n  on(instance, device, ceph_daemon) label_replace(label_replace(ceph_disk_occupation{instance=~\"($osd_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\")\n)', 'time_series', 16, 0, 4, 5),
       HostsOverviewSingleStatPanel(
-        'bytes', 'Network Load', 'Total send/receive network load across all hosts in the ceph cluster', 'current', 'sum (\n  irate(node_network_receive_bytes{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m]) or\n  irate(node_network_receive_bytes_total{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m])\n  ) +\nsum (\n  irate(node_network_transmit_bytes{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m]) or\n  irate(node_network_transmit_bytes_total{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m])\n  )', 'time_series', 20, 0, 4, 5),
+        'bytes', 'Network Load', 'Total send/receive network load across all hosts in the ceph cluster', 'current', |||
+		sum (
+			(
+				irate(node_network_receive_bytes{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[1m]) or
+				irate(node_network_receive_bytes_total{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[1m])
+			) unless on (device, instance)
+			label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)")
+		) +
+		sum (
+			(
+				irate(node_network_transmit_bytes{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[1m]) or
+				irate(node_network_transmit_bytes_total{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[1m])
+			) unless on (device, instance)
+			label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)")
+			)
+	|||
+	, 'time_series', 20, 0, 4, 5),
       HostsOverviewGraphPanel(
         'CPU Busy - Top 10 Hosts', 'Show the top 10 busiest hosts by cpu', 'percent', 'topk(10,100 * ( 1 - (\n    avg by(instance) \n      (irate(node_cpu_seconds_total{mode=\'idle\',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]) or\n       irate(node_cpu{mode=\'idle\',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]))\n    )\n  )\n)', '{{instance}}', 0, 5, 12, 9),
       HostsOverviewGraphPanel(
-        'Network Load - Top 10 Hosts', 'Top 10 hosts by network load', 'Bps', 'topk(10, (sum by(instance) (\n  (\n  irate(node_network_receive_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[1m]) or\n  irate(node_network_receive_bytes_total{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[1m])\n  ) +\n  (\n  irate(node_network_transmit_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[1m]) or\n  irate(node_network_transmit_bytes_total{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[1m])\n  ))\n  )\n)', '{{instance}}', 12, 5, 12, 9),    
+        'Network Load - Top 10 Hosts', 'Top 10 hosts by network load', 'Bps', |||
+		topk(10, (sum by(instance) (
+		(
+			irate(node_network_receive_bytes{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[1m]) or
+			irate(node_network_receive_bytes_total{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[1m])
+		) +
+		(
+			irate(node_network_transmit_bytes{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[1m]) or
+			irate(node_network_transmit_bytes_total{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[1m])
+		) unless on (device, instance)
+			label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)"))
+		))
+	|||
+	, '{{instance}}', 12, 5, 12, 9),
     ])
 }
 {
@@ -96,7 +125,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
     local HostDetailsSingleStatPanel(format, title, description, valueName, expr, targetFormat, x, y, w, h) =
       addSingelStatSchema('$datasource', format, title, description, valueName, false, 100, false, false, '')
       .addTarget(addTargetSchema(expr, 1, targetFormat, '')) + {gridPos: {x: x, y: y, w: w, h: h}};
-    
+
     local HostDetailsGraphPanel(alias, title, description, nullPointMode, formatY1, labelY1, expr, legendFormat, x, y, w, h) =
       graphPanelSchema(alias, title, description, nullPointMode, false, formatY1, 'short', labelY1, null, null, 1, '$datasource')
       .addTargets(
@@ -385,7 +414,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
       RbdOverviewPanel(
         'Throughput', 'Bps', 'round(sum(irate(ceph_rbd_write_bytes[30s])))','round(sum(irate(ceph_rbd_read_bytes[30s])))', 'Write', 'Read', 8, 0, 8, 7),
       RbdOverviewPanel(
-        'Average Latency', 'ns', 'round(sum(irate(ceph_rbd_write_latency_sum[30s])) / sum(irate(ceph_rbd_write_latency_count[30s])))','round(sum(irate(ceph_rbd_read_latency_sum[30s])) / sum(irate(ceph_rbd_read_latency_count[30s])))', 'Write', 'Read', 16, 0, 8, 7),  
+        'Average Latency', 'ns', 'round(sum(irate(ceph_rbd_write_latency_sum[30s])) / sum(irate(ceph_rbd_write_latency_count[30s])))','round(sum(irate(ceph_rbd_read_latency_sum[30s])) / sum(irate(ceph_rbd_read_latency_count[30s])))', 'Write', 'Read', 16, 0, 8, 7),
       addTableSchema(
         '$datasource', '', {"col": 3,"desc": true}, [RgwOverviewStyle('Pool', 'pool', 'string', 'short'),RgwOverviewStyle('Image', 'image', 'string', 'short'),RgwOverviewStyle('IOPS', 'Value', 'number', 'iops'), RgwOverviewStyle('', '/.*/', 'hidden', 'short')], 'Highest IOPS', 'table'
       )
@@ -396,13 +425,13 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
         '$datasource', '', {"col": 3,"desc": true}, [RgwOverviewStyle('Pool', 'pool', 'string', 'short'),RgwOverviewStyle('Image', 'image', 'string', 'short'),RgwOverviewStyle('Throughput', 'Value', 'number', 'Bps'), RgwOverviewStyle('', '/.*/', 'hidden', 'short')], 'Highest Throughput', 'table'
       )
       .addTarget(
-        addTargetSchema('topk(10, sort(sum(irate(ceph_rbd_read_bytes[30s]) + irate(ceph_rbd_write_bytes[30s])) by (pool, image, namespace)))', 1, 'table', '') 
+        addTargetSchema('topk(10, sort(sum(irate(ceph_rbd_read_bytes[30s]) + irate(ceph_rbd_write_bytes[30s])) by (pool, image, namespace)))', 1, 'table', '')
       ) + {gridPos: {x: 8, y: 7, w: 8, h: 7}},
       addTableSchema(
         '$datasource', '', {"col": 3,"desc": true}, [RgwOverviewStyle('Pool', 'pool', 'string', 'short'),RgwOverviewStyle('Image', 'image', 'string', 'short'),RgwOverviewStyle('Latency', 'Value', 'number', 'ns'), RgwOverviewStyle('', '/.*/', 'hidden', 'short')], 'Highest Latency', 'table'
       )
       .addTarget(
-        addTargetSchema('topk(10,\n  sum(\n    irate(ceph_rbd_write_latency_sum[30s]) / clamp_min(irate(ceph_rbd_write_latency_count[30s]), 1) +\n    irate(ceph_rbd_read_latency_sum[30s]) / clamp_min(irate(ceph_rbd_read_latency_count[30s]), 1)\n  ) by (pool, image, namespace)\n)', 1, 'table', '') 
+        addTargetSchema('topk(10,\n  sum(\n    irate(ceph_rbd_write_latency_sum[30s]) / clamp_min(irate(ceph_rbd_write_latency_count[30s]), 1) +\n    irate(ceph_rbd_read_latency_sum[30s]) / clamp_min(irate(ceph_rbd_read_latency_count[30s]), 1)\n  ) by (pool, image, namespace)\n)', 1, 'table', '')
       ) + {gridPos: {x: 16, y: 7, w: 8, h: 7}}
     ])
 }
@@ -413,8 +442,8 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
       .addTarget(addTargetSchema(expr, 1, targetFormat, '')) + {gridPos: {x: x, y: y, w: w, h: h}};
 
     local PoolOverviewStyle(alias, pattern, type, unit, colorMode, thresholds, valueMaps) =
-      addStyle(alias, colorMode, ["rgba(245, 54, 54, 0.9)","rgba(237, 129, 40, 0.89)","rgba(50, 172, 45, 0.97)"], 'YYYY-MM-DD HH:mm:ss', 2, 1, pattern, thresholds, type, unit, valueMaps);  
-    
+      addStyle(alias, colorMode, ["rgba(245, 54, 54, 0.9)","rgba(237, 129, 40, 0.89)","rgba(50, 172, 45, 0.97)"], 'YYYY-MM-DD HH:mm:ss', 2, 1, pattern, thresholds, type, unit, valueMaps);
+
     local PoolOverviewGraphPanel(title, description, formatY1, labelY1, expr, targetFormat, legendFormat, x, y, w, h) =
       graphPanelSchema({}, title, description, 'null as zero', false, formatY1, 'short', labelY1, null, 0, 1, '$datasource')
       .addTargets(
@@ -445,7 +474,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
       PoolOverviewSingleStatPanel(
         'bytes', 'Logical Stored ', 'Total of client data stored in the cluster', 'current', 'sum(ceph_pool_stored)', '', 12, 0, 3, 3),
       PoolOverviewSingleStatPanel(
-        'bytes', 'Compression Savings', 'A compression saving is determined as the data eligible to be compressed minus the capacity used to store the data after compression', 'current', 'sum(ceph_pool_compress_under_bytes - ceph_pool_compress_bytes_used)', '', 15, 0, 3, 3),    
+        'bytes', 'Compression Savings', 'A compression saving is determined as the data eligible to be compressed minus the capacity used to store the data after compression', 'current', 'sum(ceph_pool_compress_under_bytes - ceph_pool_compress_bytes_used)', '', 15, 0, 3, 3),
       PoolOverviewSingleStatPanel(
         'percent', 'Compression Eligibility', 'Indicates how suitable the data is within the pools that are/have been enabled for compression - averaged across all pools holding compressed data\n', 'current', '(sum(ceph_pool_compress_under_bytes > 0) / sum(ceph_pool_stored_raw and ceph_pool_compress_under_bytes > 0)) * 100', 'table', 18, 0, 3, 3),
       PoolOverviewSingleStatPanel(
@@ -486,7 +515,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
     local PoolDetailSingleStatPanel(format, title, description, valueName, colorValue, gaugeMaxValue, gaugeShow, sparkLineShow, thresholds, expr, targetFormat, x, y, w, h) =
       addSingelStatSchema('$datasource', format, title, description, valueName, colorValue, gaugeMaxValue, gaugeShow, sparkLineShow, thresholds)
       .addTarget(addTargetSchema(expr, 1, targetFormat, '')) + {gridPos: {x: x, y: y, w: w, h: h}};
-    
+
     local PoolDetailGraphPanel(alias, title, description, formatY1, labelY1, expr, targetFormat, legendFormat, x, y, w, h) =
       graphPanelSchema(alias, title, description, 'null as zero', false, formatY1, 'short', labelY1, null, null, 1, '$datasource')
       .addTargets(
@@ -625,7 +654,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
       OsdOverviewGraphPanel(
         {},'Read/Write Profile', 'Show the read/write workload profile overtime', 'short', null, null, 'round(sum(irate(ceph_pool_rd[30s])))', 'Reads', 0, 17, 24, 8)
       .addTargets([addTargetSchema('round(sum(irate(ceph_pool_wr[30s])))', 1, 'time_series', 'Writes')])
-      ])   
+      ])
 }
 {
   "osd-device-details.json":
