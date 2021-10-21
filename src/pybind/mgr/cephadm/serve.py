@@ -1083,6 +1083,7 @@ class CephadmServe:
 
                 if daemon_spec.daemon_type == 'agent':
                     self.mgr.cache.agent_timestamp[daemon_spec.host] = datetime_now()
+                    self.mgr.cache.agent_counter[daemon_spec.host] = 1
 
                 # refresh daemon state?  (ceph daemon reconfig does not need it)
                 if not reconfig or daemon_spec.daemon_type not in CEPH_TYPES:

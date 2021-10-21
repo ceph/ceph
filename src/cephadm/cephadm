@@ -3519,7 +3519,7 @@ class CephadmAgent():
         self.listener_cert_path = os.path.join(self.daemon_dir, 'listener.crt')
         self.listener_key_path = os.path.join(self.daemon_dir, 'listener.key')
         self.listener_port = ''
-        self.ack = -1
+        self.ack = 1
         self.event = Event()
         self.mgr_listener = MgrListener(self)
         self.device_enhanced_scan = False
