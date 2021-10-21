@@ -411,7 +411,7 @@ Ceph documentation commits are simple, but follow a strict convention:
 - The comment summary MUST be one line only. (strict)
 - Additional comments MAY follow a blank line after the summary, 
   but should be terse.
-- A commit MAY include ``Fixes: #{bug number}``.
+- A commit MAY include ``Fixes: https://tracker.ceph.com/issues/{bug number}``.
 - Commits MUST include ``Signed-off-by: Firstname Lastname <email>``. (strict)
 
 .. tip:: Follow the foregoing convention particularly where it says 
@@ -429,7 +429,7 @@ The following comment includes a reference to a bug. ::
 
 	doc: Fixes a spelling error and a broken hyperlink.
 
-	Fixes: #1234
+	Fixes: https://tracker.ceph.com/issues/1234
 	
 	Signed-off-by: John Doe <john.doe@gmail.com>
 
@@ -510,9 +510,8 @@ Pull`_ approach.
 Notify Us
 ---------
 
-After you make a pull request, please email ceph-docs@redhat.com.
-
-
+In case The PR did not got a review within in a resonable timeframe, please get in touch
+with the corresponding component lead of the :ref:`clt`.
 
 Documentation Style Guide
 =========================
