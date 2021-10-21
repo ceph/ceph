@@ -2231,6 +2231,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   std::string etag;
   bufferlist etag_bl;
   MD5 hash;
+  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   bool truncated;
   int ret;
 
