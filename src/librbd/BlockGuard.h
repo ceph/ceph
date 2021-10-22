@@ -81,8 +81,18 @@ public:
       // request against an already detained block
       detained_block_extent = &(*it);
       if (block_operation != nullptr) {
+        m_detained_block_extents.erase(it);
         detained_block_extent->block_operations.emplace_back(
           std::move(*block_operation));
+
+        if (block_extent.block_start < detained_block_extent->block_extent.block_start) {
+          detained_block_extent->block_extent.block_start = block_extent.block_start;
+        }
+        if (block_extent.block_end > detained_block_extent->block_extent.block_end) {
+          detained_block_extent->block_extent.block_end = block_extent.block_end;
+        }
+
+        m_detained_block_extents.insert(*detained_block_extent);
       }
 
       // alert the caller that the IO was detained
@@ -121,7 +131,14 @@ public:
                      << dendl;
 
     *block_operations = std::move(detained_block_extent.block_operations);
-    m_detained_block_extents.erase(detained_block_extent.block_extent);
+    for (auto it = m_detained_block_extents.find(detained_block_extent.block_extent);
+        it != m_detained_block_extents.end(); it++) {
+      if ((detained_block_extent.block_extent.block_start >= it->block_extent.block_start)
+          && (detained_block_extent.block_extent.block_end <= it->block_extent.block_end)) {
+        m_detained_block_extents.erase(it);
+        break;
+      }
+    }
     m_free_detained_block_extents.push_back(detained_block_extent);
   }
 
@@ -152,7 +169,7 @@ private:
 
   typedef std::deque<DetainedBlockExtent> DetainedBlockExtentsPool;
   typedef boost::intrusive::list<DetainedBlockExtent> DetainedBlockExtents;
-  typedef boost::intrusive::set<
+  typedef boost::intrusive::multiset<
     DetainedBlockExtent,
     boost::intrusive::compare<DetainedBlockExtentCompare>,
     boost::intrusive::key_of_value<DetainedBlockExtentKey> >
