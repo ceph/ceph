@@ -122,7 +122,7 @@ bool KeyServerData::get_caps(CephContext *cct, const EntityName& name,
   ldout(cct, 10) << "get_caps: name=" << name.to_str() << dendl;
   auto iter = secrets.find(name);
   if (iter != secrets.end()) {
-    ldout(cct, 10) << "get_secret: num of caps=" << iter->second.caps.size() << dendl;
+    ldout(cct, 10) << "get_caps: num of caps=" << iter->second.caps.size() << dendl;
     auto capsiter = iter->second.caps.find(type);
     if (capsiter != iter->second.caps.end()) {
       caps_info.caps = capsiter->second;
