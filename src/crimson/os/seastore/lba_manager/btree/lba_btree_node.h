@@ -48,6 +48,12 @@ struct lba_map_val_t {
     uint32_t checksum)
     : len(len), paddr(paddr), refcount(refcount), checksum(checksum) {}
 };
+WRITE_EQ_OPERATORS_4(
+  lba_map_val_t,
+  len,
+  paddr,
+  refcount,
+  checksum);
 
 class BtreeLBAPin;
 using BtreeLBAPinRef = std::unique_ptr<BtreeLBAPin>;
