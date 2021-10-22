@@ -64,8 +64,8 @@ struct rbm_test_t : public  seastar_test_suite_t,
     reader->add_segment_manager(segment_manager.get());
     device = new nvme_device::TestMemory(DEFAULT_TEST_SIZE);
     rbm_manager.reset(new NVMeManager(device, std::string()));
-    config.start = 0;
-    config.end = DEFAULT_TEST_SIZE;
+    config.start = paddr_t {0, 0, 0};
+    config.end = paddr_t {0, 0, DEFAULT_TEST_SIZE};
     config.block_size = DEFAULT_BLOCK_SIZE;
     config.total_size = DEFAULT_TEST_SIZE;
   }
@@ -86,7 +86,11 @@ struct rbm_test_t : public  seastar_test_suite_t,
   }
 
   auto read_rbm_header() {
-    return rbm_manager->read_rbm_header(config.start).unsafe_get0();
+    blk_paddr_t addr = convert_paddr_to_blk_paddr(
+      config.start,
+      config.block_size,
+      config.blocks_per_segment);
+    return rbm_manager->read_rbm_header(addr).unsafe_get0();
   }
 
   auto open() {
@@ -283,8 +287,8 @@ TEST_F(rbm_test_t, block_alloc_free_test)
 TEST_F(rbm_test_t, many_block_alloc)
 {
  run_async([this] {
-   config.start = 0;
-   config.end = DEFAULT_TEST_SIZE * 1024;
+   config.start = paddr_t {0, 0, 0};
+   config.end = paddr_t {0, 0, DEFAULT_TEST_SIZE * 1024};
    config.block_size = DEFAULT_BLOCK_SIZE;
    config.total_size = DEFAULT_TEST_SIZE * 1024;
    mkfs();

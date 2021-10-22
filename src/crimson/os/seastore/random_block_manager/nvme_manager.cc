@@ -119,15 +119,25 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
 {
   logger().debug("path {}", path);
   return _open_device(path).safe_then([this, &config]() {
-    return read_rbm_header(config.start).safe_then([](auto super) {
+    blk_paddr_t addr = convert_paddr_to_blk_paddr(
+      config.start,
+      config.block_size,
+      config.blocks_per_segment);
+    return read_rbm_header(addr).safe_then([](auto super) {
       logger().debug(" already exists ");
       return mkfs_ertr::now();
     }).handle_error(
       crimson::ct_error::enoent::handle([this, &config] (auto) {
 	super.uuid = uuid_d(); // TODO
 	super.magic = 0xFF; // TODO
-	super.start = config.start;
-	super.end = config.end;
+	super.start = convert_paddr_to_blk_paddr(
+	  config.start,
+	  config.block_size,
+	  config.blocks_per_segment);
+	super.end = convert_paddr_to_blk_paddr(
+	  config.end,
+	  config.block_size,
+	  config.blocks_per_segment);
 	super.block_size = config.block_size;
 	super.size = config.total_size;
 	super.free_block_count = config.total_size/config.block_size - 2;
@@ -465,9 +475,14 @@ NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
 }
 
 NVMeManager::open_ertr::future<> NVMeManager::open(
-    const std::string &path, blk_paddr_t addr)
+    const std::string &path, paddr_t paddr)
 {
   logger().debug("open: path{}", path);
+
+  blk_paddr_t addr = convert_paddr_to_blk_paddr(
+    paddr,
+    super.block_size,
+    super.blocks_per_segment);
   return _open_device(path
       ).safe_then([this, addr]() {
       return read_rbm_header(addr).safe_then([&](auto s)

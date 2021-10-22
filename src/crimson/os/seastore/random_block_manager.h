@@ -28,8 +28,8 @@ public:
 
   struct mkfs_config_t {
     std::string path;
-    blk_paddr_t start;
-    blk_paddr_t end;
+    paddr_t start;
+    paddr_t end;
     size_t block_size = 0;
     size_t total_size = 0;
     uint32_t blocks_per_segment = 1 << 18;
@@ -61,7 +61,7 @@ public:
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg,
     crimson::ct_error::enoent>;
-  virtual open_ertr::future<> open(const std::string &path, blk_paddr_t start) = 0;
+  virtual open_ertr::future<> open(const std::string &path, paddr_t start) = 0;
 
   using close_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
