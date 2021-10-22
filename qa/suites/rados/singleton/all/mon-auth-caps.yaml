@@ -17,3 +17,4 @@ tasks:
     clients:
       all:
         - mon/auth_caps.sh
+        - mon/auth_key_rotation.sh
