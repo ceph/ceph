@@ -115,6 +115,7 @@
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 #include "messages/MMonGlobalID.h"
+#include "messages/MMonUsedPendingKeys.h"
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
@@ -643,6 +644,9 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MON_GLOBAL_ID:
     m = make_message<MMonGlobalID>();
+    break; 
+  case MSG_MON_USED_PENDING_KEYS:
+    m = make_message<MMonUsedPendingKeys>();
     break; 
 
     // clients
