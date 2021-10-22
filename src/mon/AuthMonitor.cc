@@ -819,6 +819,9 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       prefix == "auth rm" ||
       prefix == "auth get-or-create" ||
       prefix == "auth get-or-create-key" ||
+      prefix == "auth get-or-create-pending" ||
+      prefix == "auth clear-pending" ||
+      prefix == "auth commit-pending" ||
       prefix == "fs authorize" ||
       prefix == "auth import" ||
       prefix == "auth caps") {
@@ -1505,6 +1508,90 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						   get_last_committed() + 1));
+    return true;
+  } else if ((prefix == "auth get-or-create-pending" ||
+	      prefix == "auth clear-pending" ||
+	      prefix == "auth commit-pending")) {
+    if (mon.monmap->min_mon_release < ceph_release_t::quincy) {
+      err = -EPERM;
+      ss << "pending_keys are not available until after upgrading to quincy";
+      goto done;
+    }
+
+    EntityAuth entity_auth;
+    if (!mon.key_server.get_auth(entity, entity_auth)) {
+      ss << "entity " << entity << " does not exist";
+      err = -ENOENT;
+      goto done;
+    }
+
+    // is there an uncommitted pending_key? (or any change for this entity)
+    for (auto& p : pending_auth) {
+      if (p.inc_type == AUTH_DATA) {
+	KeyServerData::Incremental auth_inc;
+	auto q = p.auth_data.cbegin();
+	decode(auth_inc, q);
+	if (auth_inc.op == KeyServerData::AUTH_INC_ADD &&
+	    auth_inc.name == entity) {
+	  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+						get_last_committed() + 1));
+	  return true;
+	}
+      }
+    }
+
+    if (prefix == "auth get-or-create-pending") {
+      KeyRing kr;
+      bool exists = false;
+      if (!entity_auth.pending_key.empty()) {
+	kr.add(entity, entity_auth.key, entity_auth.pending_key);
+	err = 0;
+	exists = true;
+      } else {
+	KeyServerData::Incremental auth_inc;
+	auth_inc.op = KeyServerData::AUTH_INC_ADD;
+	auth_inc.name = entity;
+	auth_inc.auth = entity_auth;
+	auth_inc.auth.pending_key.create(g_ceph_context, CEPH_CRYPTO_AES);
+	push_cephx_inc(auth_inc);
+	kr.add(entity, auth_inc.auth.key, auth_inc.auth.pending_key);
+        push_cephx_inc(auth_inc);
+      }
+      if (f) {
+	kr.encode_formatted("auth", f.get(), rdata);
+      } else {
+	kr.encode_plaintext(rdata);
+      }
+      if (exists) {
+	goto done;
+      }
+    } else if (prefix == "auth clear-pending") {
+      if (entity_auth.pending_key.empty()) {
+	err = 0;
+	goto done;
+      }
+      KeyServerData::Incremental auth_inc;
+      auth_inc.op = KeyServerData::AUTH_INC_ADD;
+      auth_inc.name = entity;
+      auth_inc.auth = entity_auth;
+      auth_inc.auth.pending_key.clear();
+      push_cephx_inc(auth_inc);
+    } else if (prefix == "auth commit-pending") {
+      if (entity_auth.pending_key.empty()) {
+	err = 0;
+	ss << "no pending key";
+	goto done;
+      }
+      KeyServerData::Incremental auth_inc;
+      auth_inc.op = KeyServerData::AUTH_INC_ADD;
+      auth_inc.name = entity;
+      auth_inc.auth = entity_auth;
+      auth_inc.auth.key = auth_inc.auth.pending_key;
+      auth_inc.auth.pending_key.clear();
+      push_cephx_inc(auth_inc);
+    }
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
+					      get_last_committed() + 1));
     return true;
   } else if ((prefix == "auth get-or-create-key" ||
 	      prefix == "auth get-or-create") &&
