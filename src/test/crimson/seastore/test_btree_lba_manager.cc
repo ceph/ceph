@@ -114,6 +114,154 @@ struct btree_test_base :
   }
 };
 
+struct lba_btree_test : btree_test_base {
+  std::map<laddr_t, lba_map_val_t> check;
+
+  auto get_op_context(Transaction &t) {
+    return op_context_t{cache, t};
+  }
+
+  LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
+    return cache.get_root(
+      t
+    ).si_then([this, &t](RootBlockRef croot) {
+      auto mut_croot = cache.duplicate_for_write(
+	t, croot
+      )->cast<RootBlock>();
+      mut_croot->root.lba_root = LBABtree::mkfs(get_op_context(t));
+    });
+  }
+
+  void update_if_dirty(Transaction &t, LBABtree &btree, RootBlockRef croot) {
+    if (btree.is_root_dirty()) {
+      auto mut_croot = cache.duplicate_for_write(
+	t, croot
+      )->cast<RootBlock>();
+      mut_croot->root.lba_root = btree.get_root_undirty();
+    }
+  }
+
+  template <typename F>
+  auto lba_btree_update(F &&f) {
+    auto tref = cache.create_transaction(Transaction::src_t::MUTATE);
+    auto &t = *tref;
+    with_trans_intr(
+      t,
+      [this, tref=std::move(tref), f=std::forward<F>(f)](auto &t) mutable {
+	return cache.get_root(
+	  t
+	).si_then([this, f=std::move(f), &t](RootBlockRef croot) {
+	  return seastar::do_with(
+	    LBABtree(croot->root.lba_root),
+	    [this, croot, f=std::move(f), &t](auto &btree) mutable {
+	      return std::invoke(
+		std::move(f), btree, t
+	      ).si_then([this, croot, &t, &btree] {
+		update_if_dirty(t, btree, croot);
+		return seastar::now();
+	      });
+	    });
+	}).si_then([this, tref=std::move(tref)]() mutable {
+	  return submit_transaction(std::move(tref));
+	});
+      }).unsafe_get0();
+  }
+
+  template <typename F>
+  auto lba_btree_read(F &&f) {
+    auto t = cache.create_transaction(Transaction::src_t::READ);
+    return with_trans_intr(
+      *t,
+      [this, f=std::forward<F>(f)](auto &t) mutable {
+	return cache.get_root(
+	  t
+	).si_then([f=std::move(f), &t](RootBlockRef croot) mutable {
+	  return seastar::do_with(
+	    LBABtree(croot->root.lba_root),
+	    [f=std::move(f), &t](auto &btree) mutable {
+	      return std::invoke(
+		std::move(f), btree, t
+	      );
+	    });
+	});
+      }).unsafe_get0();
+  }
+
+  static auto get_map_val(extent_len_t len) {
+    return lba_map_val_t{0, P_ADDR_NULL, len, 0};
+  }
+
+  void insert(laddr_t addr, extent_len_t len) {
+    ceph_assert(check.count(addr) == 0);
+    check.emplace(addr, get_map_val(len));
+    lba_btree_update([=](auto &btree, auto &t) {
+      return btree.insert(
+	get_op_context(t), addr, get_map_val(len)
+      ).si_then([](auto){});
+    });
+  }
+
+  void remove(laddr_t addr) {
+    auto iter = check.find(addr);
+    ceph_assert(iter != check.end());
+    auto len = iter->second.len;
+    check.erase(iter++);
+    lba_btree_update([=](auto &btree, auto &t) {
+      return btree.lower_bound(
+	get_op_context(t), addr
+      ).si_then([this, len, addr, &btree, &t](auto iter) {
+	EXPECT_FALSE(iter.is_end());
+	EXPECT_TRUE(iter.get_key() == addr);
+	EXPECT_TRUE(iter.get_val().len == len);
+	return btree.remove(
+	  get_op_context(t), iter 
+	);
+      });
+    });
+  }
+
+  void check_lower_bound(laddr_t addr) {
+    auto iter = check.lower_bound(addr);
+    auto result = lba_btree_read([=](auto &btree, auto &t) {
+      return btree.lower_bound(
+	get_op_context(t), addr
+      ).si_then([](auto iter)
+		-> std::optional<std::pair<const laddr_t, const lba_map_val_t>> {
+	if (iter.is_end()) {
+	  return std::nullopt;
+	} else {
+	  return std::make_optional(
+	    std::make_pair(iter.get_key(), iter.get_val()));
+	}
+      });
+    });
+    if (iter == check.end()) {
+      EXPECT_FALSE(result);
+    } else {
+      EXPECT_TRUE(result);
+      decltype(result) to_check = *iter;
+      EXPECT_EQ(to_check, *result);
+    }
+  }
+};
+
+TEST_F(lba_btree_test, basic)
+{
+  run_async([this] {
+    constexpr unsigned total = 16<<10;
+    for (unsigned i = 0; i < total; i += 16) {
+      insert(i, 8);
+    }
+
+    for (unsigned i = 0; i < total; i += 16) {
+      check_lower_bound(i);
+      check_lower_bound(i + 4);
+      check_lower_bound(i + 8);
+      check_lower_bound(i + 12);
+    }
+  });
+}
+
 struct btree_lba_manager_test : btree_test_base {
   BtreeLBAManagerRef lba_manager;
 
