@@ -6564,6 +6564,7 @@ class HostFacts():
     _disk_vendor_workarounds = {
         '0x1af4': 'Virtio Block Device'
     }
+    _excluded_block_devices = ('sr', 'zram', 'dm-')
 
     def __init__(self, ctx: CephadmContext):
         self.ctx: CephadmContext = ctx
@@ -6603,7 +6604,7 @@ class HostFacts():
         # type: () -> List[str]
         """Determine the list of block devices by looking at /sys/block"""
         return [dev for dev in os.listdir('/sys/block')
-                if not dev.startswith('dm')]
+                if not dev.startswith(HostFacts._excluded_block_devices)]
 
     def _get_devs_by_type(self, rota='0'):
         # type: (str) -> List[str]
