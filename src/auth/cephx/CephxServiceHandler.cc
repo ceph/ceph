@@ -170,8 +170,8 @@ int CephxServiceHandler::handle_request(
 	break;
       }
 
-      CryptoKey secret;
-      if (!key_server->get_secret(entity_name, secret)) {
+      EntityAuth eauth;
+      if (!key_server->get_auth(entity_name, eauth)) {
         ldout(cct, 0) << "couldn't find entity name: " << entity_name << dendl;
 	ret = -EACCES;
 	break;
@@ -183,9 +183,24 @@ int CephxServiceHandler::handle_request(
       }      
 
       uint64_t expected_key;
+      CryptoKey *used_key = &eauth.key;
       std::string error;
-      cephx_calc_client_server_challenge(cct, secret, server_challenge,
+      cephx_calc_client_server_challenge(cct, eauth.key, server_challenge,
 					 req.client_challenge, &expected_key, error);
+      if ((!error.empty() || req.key != expected_key) &&
+	  !eauth.pending_key.empty()) {
+	ldout(cct, 10) << "normal key failed for " << entity_name
+		       << ", trying pending_key" << dendl;
+	// try pending_key instead
+	error.clear();
+	cephx_calc_client_server_challenge(cct, eauth.pending_key,
+					   server_challenge,
+					   req.client_challenge, &expected_key,
+					   error);
+	if (error.empty()) {
+	  used_key = &eauth.pending_key;
+	}
+      }
       if (!error.empty()) {
 	ldout(cct, 0) << " cephx_calc_client_server_challenge error: " << error << dendl;
 	ret = -EACCES;
@@ -204,12 +219,6 @@ int CephxServiceHandler::handle_request(
       CryptoKey session_key;
       CephXSessionAuthInfo info;
       bool should_enc_ticket = false;
-
-      EntityAuth eauth;
-      if (! key_server->get_auth(entity_name, eauth)) {
-	ret = -EACCES;
-	break;
-      }
 
       CephXServiceTicketInfo old_ticket_info;
       ret = verify_old_ticket(req, old_ticket_info, should_enc_ticket);
@@ -245,7 +254,7 @@ int CephxServiceHandler::handle_request(
 
       build_cephx_response_header(cephx_header.request_type, 0, *result_bl);
       if (!cephx_build_service_ticket_reply(
-	    cct, eauth.key, info_vec, should_enc_ticket,
+	    cct, *used_key, info_vec, should_enc_ticket,
 	    old_ticket_info.session_key, *result_bl)) {
 	ret = -EIO;
 	break;
