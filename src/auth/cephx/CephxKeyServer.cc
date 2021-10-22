@@ -148,7 +148,6 @@ KeyServer::KeyServer(CephContext *cct_, KeyRing *extra_secrets)
 int KeyServer::start_server()
 {
   std::scoped_lock l{lock};
-
   _dump_rotating_secrets();
   return 0;
 }
@@ -236,6 +235,24 @@ bool KeyServer::get_service_secret(uint32_t service_id,
   std::scoped_lock l{lock};
 
   return data.get_service_secret(cct, service_id, secret_id, secret);
+}
+
+void KeyServer::note_used_pending_key(const EntityName& name, const CryptoKey& key)
+{
+  std::scoped_lock l(lock);
+  used_pending_keys[name] = key;
+}
+
+void KeyServer::clear_used_pending_keys()
+{
+  std::scoped_lock l(lock);
+  used_pending_keys.clear();
+}
+
+void KeyServer::get_used_pending_keys(std::map<EntityName,CryptoKey> *used)
+{
+  std::scoped_lock l(lock);
+  used->swap(used_pending_keys);
 }
 
 bool KeyServer::generate_secret(CryptoKey& secret)
