@@ -72,12 +72,18 @@ public:
   }
 
   // modifiers
-  void add(const EntityName& name, EntityAuth &a) {
+  void add(const EntityName& name, const EntityAuth &a) {
     keys[name] = a;
   }
-  void add(const EntityName& name, CryptoKey &k) {
+  void add(const EntityName& name, const CryptoKey &k) {
     EntityAuth a;
     a.key = k;
+    keys[name] = a;
+  }
+  void add(const EntityName& name, const CryptoKey &k, const CryptoKey &pk) {
+    EntityAuth a;
+    a.key = k;
+    a.pending_key = pk;
     keys[name] = a;
   }
   void remove(const EntityName& name) {

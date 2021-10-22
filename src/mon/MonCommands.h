@@ -173,6 +173,18 @@ COMMAND("auth get-or-create "
 	"name=caps,type=CephString,n=N,req=false",
 	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command",
 	"auth", "rwx")
+COMMAND("auth get-or-create-pending "
+	"name=entity,type=CephString",
+	"generate and/or retrieve existing pending key (rotated into place on first use)",
+	"auth", "rwx")
+COMMAND("auth clear-pending "
+	"name=entity,type=CephString",
+	"clear pending key",
+	"auth", "rwx")
+COMMAND("auth commit-pending "
+	"name=entity,type=CephString",
+	"rotate pending key into active position",
+	"auth", "rwx")
 COMMAND("fs authorize "
    "name=filesystem,type=CephString "
    "name=entity,type=CephString "
