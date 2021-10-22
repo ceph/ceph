@@ -199,6 +199,7 @@ int CephxServiceHandler::handle_request(
 					   error);
 	if (error.empty()) {
 	  used_key = &eauth.pending_key;
+	  key_server->note_used_pending_key(entity_name, eauth.pending_key);
 	}
       }
       if (!error.empty()) {
