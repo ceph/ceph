@@ -204,7 +204,7 @@ class HostData:
                     f'Change detected in daemons in error state from {host} agent metadata. Kicking serve loop')
                 self.mgr._kick_serve_loop()
 
-            if up_to_date:
+            if up_to_date and ('ls' in data and data['ls']):
                 was_out_of_date = not self.mgr.cache.all_host_metadata_up_to_date()
                 self.mgr.cache.metadata_up_to_date[host] = True
                 if was_out_of_date and self.mgr.cache.all_host_metadata_up_to_date():
