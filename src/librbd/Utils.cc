@@ -149,6 +149,9 @@ int create_ioctx(librados::IoCtx& src_io_ctx, const std::string& pool_desc,
 
   dst_io_ctx->set_namespace(
     pool_namespace ? *pool_namespace : src_io_ctx.get_namespace());
+  if (src_io_ctx.get_pool_full_try()) {
+    dst_io_ctx->set_pool_full_try();
+  }
   return 0;
 }
 
