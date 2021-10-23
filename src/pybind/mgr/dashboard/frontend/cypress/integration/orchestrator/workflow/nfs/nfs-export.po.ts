@@ -28,6 +28,11 @@ export class NFSPageHelper extends PageHelper {
     cy.get('button[name=add_client]').click({ force: true });
     cy.get('input[name=addresses]').type(client['addresses']);
 
+    // Check if we can remove clients and add it again
+    cy.get('span[name=remove_client]').click({ force: true });
+    cy.get('button[name=add_client]').click({ force: true });
+    cy.get('input[name=addresses]').type(client['addresses']);
+
     cy.get('cd-submit-button').click();
   }
 
