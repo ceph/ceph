@@ -195,6 +195,7 @@ class Objecter::RequestStateHook : public AdminSocketHook {
 public:
   explicit RequestStateHook(Objecter *objecter);
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist&,
 	   Formatter *f,
 	   std::ostream& ss,
 	   cb::list& out) override;
@@ -4713,6 +4714,7 @@ Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
 
 int Objecter::RequestStateHook::call(std::string_view command,
 				     const cmdmap_t& cmdmap,
+				     const bufferlist&,
 				     Formatter *f,
 				     std::ostream& ss,
 				     cb::list& out)

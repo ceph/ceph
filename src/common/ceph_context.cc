@@ -182,6 +182,7 @@ public:
 
   // AdminSocketHook
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist& inbl,
 	   ceph::Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
@@ -442,6 +443,7 @@ public:
   explicit CephContextHook(CephContext *cct) : m_cct(cct) {}
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
+	   const bufferlist& inbl,
 	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
