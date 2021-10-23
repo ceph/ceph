@@ -909,12 +909,11 @@ class CephadmServe:
 
             if dd.daemon_type == 'agent':
                 try:
-                    assert self.mgr.cherrypy_thread
-                    assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+                    self.mgr.agent_helpers._check_agent(dd.hostname)
                 except Exception:
-                    self.log.info(
-                        f'Delaying checking {dd.name()} until cephadm endpoint finished creating root cert')
-                    continue
+                    self.log.debug(
+                        f'Agent {dd.name()} could not be checked in _check_daemons')
+                continue
 
             # These daemon types require additional configs after creation
             if dd.daemon_type in REQUIRES_POST_ACTIONS:
