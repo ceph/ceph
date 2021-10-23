@@ -56,7 +56,8 @@ public:
   }
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
-     Formatter *f, std::ostream& errss, bufferlist& out) override;
+	   const bufferlist&,
+	   Formatter *f, std::ostream& errss, bufferlist& out) override;
 };
 
 
