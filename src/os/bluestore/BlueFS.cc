@@ -3014,7 +3014,9 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
   }
 
   dout(20) << __func__ << " file now, unflushed " << h->file->fnode << dendl;
-  return _flush_data(h, offset, length, buffered);
+  int res = _flush_data(h, offset, length, buffered);
+  vselector->add_usage(h->file->vselector_hint, h->file->fnode);
+  return res;
 }
 
 int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered)
@@ -3093,7 +3095,6 @@ int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool bu
       }
     }
   }
-  vselector->add_usage(h->file->vselector_hint, h->file->fnode);
   dout(20) << __func__ << " h " << h << " pos now 0x"
            << std::hex << h->pos << std::dec << dendl;
   return 0;
@@ -3219,7 +3220,9 @@ int BlueFS::_flush_special(FileWriter *h)
   uint64_t offset = h->pos;
   ceph_assert(length + offset <= h->file->fnode.get_allocated());
   if (h->file->fnode.size < offset + length) {
+    vselector->sub_usage(h->file->vselector_hint, h->file->fnode.size);
     h->file->fnode.size = offset + length;
+    vselector->add_usage(h->file->vselector_hint, h->file->fnode.size);
   }
   return _flush_data(h, offset, length, false);
 }
