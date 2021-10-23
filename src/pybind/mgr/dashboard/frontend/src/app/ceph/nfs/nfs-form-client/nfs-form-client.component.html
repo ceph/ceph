@@ -12,12 +12,13 @@
     </span>
 
     <ng-container formArrayName="clients">
-      <div *ngFor="let item of form.get('clients').value; let index = index; trackBy: trackByFn">
+      <div *ngFor="let item of clientsFormArray.controls; let index = index; trackBy: trackByFn">
         <div class="card"
-             [formGroupName]="index">
+             [formGroup]="item">
           <div class="card-header">
             {{ (index + 1) | ordinal }}
             <span class="float-right clickable"
+                  name="remove_client"
                   (click)="removeClient(index)"
                   ngbTooltip="Remove">&times;</span>
           </div>
