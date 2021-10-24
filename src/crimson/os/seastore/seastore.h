@@ -350,6 +350,7 @@ private:
   }
   seastar::metrics::metric_group metrics;
   void register_metrics();
+  seastar::future<> write_fsid(uuid_d new_osd_fsid);
 };
 
 std::unique_ptr<SeaStore> make_seastore(

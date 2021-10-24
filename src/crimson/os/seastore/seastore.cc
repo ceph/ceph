@@ -9,9 +9,12 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
+#include <seastar/core/file.hh>
+#include <seastar/core/fstream.hh>
 #include <seastar/core/shared_mutex.hh>
 
 #include "common/safe_io.h"
+#include "include/stringify.h"
 #include "os/Transaction.h"
 
 #include "crimson/common/buffer_io.h"
@@ -136,6 +139,24 @@ seastar::future<> SeaStore::umount()
   );
 }
 
+seastar::future<> SeaStore::write_fsid(uuid_d new_osd_fsid)
+{
+  LOG_PREFIX(SeaStore::write_fsid);
+  return read_meta("fsid").then([this, FNAME, new_osd_fsid] (auto tuple) {
+    auto [ret, fsid] = tuple;
+    std::string str_fsid = stringify(new_osd_fsid);
+    if (ret == -1) {
+       return write_meta("fsid", stringify(new_osd_fsid));
+    } else if (ret == 0 && fsid != str_fsid) {
+       ERROR("on-disk fsid {} != provided {}",
+         fsid, stringify(new_osd_fsid));
+       throw std::runtime_error("store fsid error");
+     } else {
+      return seastar::now();
+     }
+   });
+}
+
 SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
 {
   return seastar::do_with(
@@ -238,6 +259,23 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
 	});
       });
     });
+  }).safe_then([this, new_osd_fsid] {
+    return write_fsid(new_osd_fsid);
+  }).safe_then([this] {
+    return read_meta("type").then([this] (auto tuple) {
+      auto [ret, type] = tuple;
+      if (ret == 0 && type == "seastore") {
+        return seastar::now();
+      } else if (ret == 0 && type != "seastore") {
+        LOG_PREFIX(SeaStore::mkfs);
+        ERROR("expected seastore, but type is {}", type);
+        throw std::runtime_error("store type error");
+      } else {
+        return write_meta("type", "seastore");
+      }
+    });
+  }).safe_then([this] {
+    return write_meta("mkfs_done", "yes");
   }).safe_then([this] {
     return umount();
   }).handle_error(
