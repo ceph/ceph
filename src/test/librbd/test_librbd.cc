@@ -2145,7 +2145,8 @@ static void remove_full_try(rados_ioctx_t ioctx, const std::string& image_name,
   ssize_t ret;
   for (off = 0; off < size; off += len) {
     ret = rbd_write_zeroes(image, off, len,
-                           RBD_WRITE_ZEROES_FLAG_THICK_PROVISION, 0);
+                           RBD_WRITE_ZEROES_FLAG_THICK_PROVISION,
+                           LIBRADOS_OP_FLAG_FADVISE_FUA);
     if (ret < 0) {
       break;
     }
@@ -2164,6 +2165,7 @@ static void remove_full_try(rados_ioctx_t ioctx, const std::string& image_name,
 
 TEST_F(TestLibRBD, RemoveFullTry)
 {
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
   REQUIRE(!is_librados_test_stub(_rados));
 
   rados_ioctx_t ioctx;
@@ -2188,6 +2190,7 @@ TEST_F(TestLibRBD, RemoveFullTry)
 TEST_F(TestLibRBD, RemoveFullTryDataPool)
 {
   REQUIRE_FORMAT_V2();
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
   REQUIRE(!is_librados_test_stub(_rados));
 
   rados_ioctx_t ioctx;
