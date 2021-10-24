@@ -474,10 +474,23 @@ private:
     return get_leaf_node(
       c,
       node_iter->get_val().maybe_relative_to(parent->get_paddr())
-    ).si_then([visitor, &iter, &f](LBALeafNodeRef node) {
+    ).si_then([visitor, &iter, &f, c](LBALeafNodeRef node)
+      -> lookup_leaf_iertr::future<> {
+      LOG_PREFIX(LBATree::lookup_leaf);
       iter.leaf.node = node;
       auto node_iter = f(*node);
+      if (node_iter->get_offset() > 0
+	  && node_iter == node->end()) {
+	iter.leaf.pos = node_iter->get_offset() - 1;
+	DEBUGT("reached leaf node end {}, one step back: {}, and find next",
+	  c.trans, *node, iter.leaf.pos);
+	return iter.next(c, visitor).si_then([&iter](auto it) {
+	  iter = it;
+	  return seastar::now();
+	});
+      }
       iter.leaf.pos = node_iter->get_offset();
+      DEBUGT("found pos: {}, at {}", c.trans, *node, iter.leaf.pos);
       if (visitor) (*visitor)(node->get_paddr(), node->get_length());
       return seastar::now();
     });
