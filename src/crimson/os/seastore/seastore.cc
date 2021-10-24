@@ -1220,6 +1220,19 @@ boost::intrusive_ptr<SeastoreCollection> SeaStore::_get_collection(const coll_t&
   return new SeastoreCollection{cid};
 }
 
+seastar::future<> SeaStore::write_meta_file(const std::string& key,
+                                            const std::string& value)
+{
+  std::string path = fmt::format("{}/{}", root, key);
+  std::string fvalue = value;
+  fvalue += "\n";
+  ceph::bufferptr bp(fvalue.length());
+  ceph::bufferlist bl;
+  bp.copy_in(0, fvalue.length(), fvalue.c_str());
+  bl.push_back(bp);
+  return crimson::write_file(std::move(bl), path);
+}
+
 seastar::future<> SeaStore::write_meta(const std::string& key,
 					const std::string& value)
 {
@@ -1228,50 +1241,57 @@ seastar::future<> SeaStore::write_meta(const std::string& key,
   return seastar::do_with(
       key, value,
       [this, FNAME](auto& key, auto& value) {
-    return repeat_eagain([this, FNAME, &key, &value] {
-      return transaction_manager->with_transaction_intr(
-          Transaction::src_t::MUTATE,
-          [this, FNAME, &key, &value](auto& t) {
-        DEBUGT("Have transaction, key: {}; value: {}", t, key, value);
-        return transaction_manager->update_root_meta(
-          t, key, value
-        ).si_then([this, &t] {
-          return transaction_manager->submit_transaction(t);
-        });
-      });
-    });
-  }).handle_error(
-    crimson::ct_error::assert_all{"Invalid error in SeaStore::write_meta"}
-  );
+	return repeat_eagain([this, FNAME, &key, &value] {
+	  return transaction_manager->with_transaction_intr(
+	    Transaction::src_t::MUTATE,
+	    [this, FNAME, &key, &value](auto& t) {
+	      DEBUGT("Have transaction, key: {}; value: {}", t, key, value);
+	      return transaction_manager->update_root_meta(
+		t, key, value
+	      ).si_then([this, &t] {
+		return transaction_manager->submit_transaction(t);
+	      });
+	    });
+	}).safe_then([this, &key, &value] {
+	  return write_meta_file(key, value);
+	});
+      }).handle_error(
+	crimson::ct_error::assert_all{"Invalid error in SeaStore::write_meta"}
+      );
+}
+
+seastar::future<std::optional<std::string>>
+SeaStore::read_meta_file(const std::string& key)
+{
+  std::string path = fmt::format("{}/{}", root, key);
+  return seastar::file_exists(
+    path
+  ).then([path] (bool exist) {
+    if (exist) {
+      return crimson::read_file(path)
+        .then([] (auto tmp_buf) {
+	  std::string v = {tmp_buf.get(), tmp_buf.size()};
+	  std::size_t pos = v.find("\n");
+	  std::string str = v.substr(0, pos);
+	  return seastar::make_ready_future<std::optional<std::string>>(str);
+	});
+    } else {
+      return seastar::make_ready_future<std::optional<std::string>>(std::nullopt);
+    }
+  });
 }
 
 seastar::future<std::tuple<int, std::string>> SeaStore::read_meta(const std::string& key)
 {
   LOG_PREFIX(SeaStore::read_meta);
   DEBUG("key: {}", key);
-  return seastar::do_with(
-      std::tuple<int, std::string>(), key,
-      [this](auto &ret, auto& key) {
-    return repeat_eagain([this, &ret, &key] {
-      return transaction_manager->with_transaction_intr(
-          Transaction::src_t::READ,
-          [this, &ret, &key](auto& t) {
-        return transaction_manager->read_root_meta(
-          t, key
-        ).si_then([&ret](auto v) {
-          if (v) {
-            ret = std::make_tuple(0, std::move(*v));
-          } else {
-            ret = std::make_tuple(-1, std::string(""));
-          }
-        });
-      });
-    }).safe_then([&ret] {
-      return std::move(ret);
-    });
-  }).handle_error(
-    crimson::ct_error::assert_all{"Invalid error in SeaStore::read_meta"}
-  );
+  return read_meta_file(key).then([](auto v) {
+    if (v) {
+      return std::make_tuple(0, std::move(*v));
+    } else {
+      return std::make_tuple(-1, std::string(""));
+    }
+  });
 }
 
 uuid_d SeaStore::get_fsid() const
