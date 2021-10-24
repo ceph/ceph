@@ -129,6 +129,7 @@ def task(ctx, config):
                 p.spawn(_run_tests, ctx, refspec, role, tests,
                         config.get('env'),
                         basedir=config.get('basedir','qa/workunits'),
+                        subdir=config.get('subdir'),
                         timeout=timeout,
                         cleanup=cleanup,
                         coverage_and_limits=not config.get('no_coverage_and_limits', None))
