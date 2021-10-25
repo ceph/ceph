@@ -87,6 +87,21 @@
   deprecated and will be removed in a future release.  Please use
   ``nfs cluster rm`` and ``nfs export rm`` instead.
 
+* The ``nfs export create`` CLI arguments have changed, with the
+  *fsname* or *bucket-name* argument position moving to the right of
+  *the *cluster-id* and *pseudo-path*.  Consider transitioning to
+  *using named arguments instead of positional arguments (e.g., ``ceph
+  *nfs export create cephfs --cluster-id mycluster --pseudo-path /foo
+  *--fsname myfs`` instead of ``ceph nfs export create cephfs
+  *mycluster /foo myfs`` to ensure correct behavior with any
+  *version.
+
+* mgr-pg_autoscaler: Autoscaler will now start out by scaling each
+  pool to have a full complements of pgs from the start and will only
+  decrease it when other pools need more pgs due to increased usage.
+  This improves out of the box performance of Ceph by allowing more PGs 
+  to be created for a given pool.
+
 * CephFS: Disabling allow_standby_replay on a file system will also stop all
   standby-replay daemons for that file system.
 
