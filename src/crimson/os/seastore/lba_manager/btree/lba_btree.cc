@@ -166,7 +166,7 @@ LBABtree::insert_ret LBABtree::insert(
       return find_insertion(
 	c, laddr, ret
       ).si_then([this, c, laddr, val, &ret] {
-	if (!ret.is_end() && ret.get_key() == laddr) {
+	if (!ret.at_boundary() && ret.get_key() == laddr) {
 	  return insert_ret(
 	    interruptible::ready_future_marker{},
 	    std::make_pair(ret, false));
@@ -488,7 +488,7 @@ LBABtree::find_insertion_ret LBABtree::find_insertion(
       // invariant that pos is a valid index for the node in the event
       // that the insertion point is at the end of a node.
       p.leaf.pos++;
-      assert(p.is_end());
+      assert(p.at_boundary());
       iter = p;
       return seastar::now();
     });

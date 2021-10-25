@@ -87,8 +87,8 @@ public:
     }
 
     bool is_end() const {
-      assert(leaf.pos <= leaf.node->get_size());
-      return leaf.pos == leaf.node->get_size();
+      // external methods may only resolve at a boundary if at end
+      return at_boundary();
     }
 
     bool is_begin() const {
@@ -133,6 +133,11 @@ public:
     boost::container::static_vector<
       node_position_t<LBAInternalNode>, MAX_DEPTH> internal;
     node_position_t<LBALeafNode> leaf;
+
+    bool at_boundary() const {
+      assert(leaf.pos <= leaf.node->get_size());
+      return leaf.pos == leaf.node->get_size();
+    }
 
     depth_t check_split() const {
       if (!leaf.node->at_max_capacity()) {
