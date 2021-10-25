@@ -44,6 +44,7 @@ LBABtree::iterator::handle_boundary_ret LBABtree::iterator::handle_boundary(
 	}
 	leaf.reset();
 	get_internal(depth_with_space).pos++;
+	// note, cannot result in at_boundary() by construction
 	return lookup_depth_range(
 	  c, *this, depth_with_space - 1, 0, li, ll, visitor
 	);
@@ -113,9 +114,11 @@ LBABtree::iterator_fut LBABtree::iterator::prev(op_context_t c) const
       }
       ret.leaf.reset();
       ret.get_internal(depth_with_space).pos--;
+      // note, cannot result in at_boundary() by construction
       return lookup_depth_range(
 	c, ret, depth_with_space - 1, 0, li, ll, nullptr
       ).si_then([&ret] {
+	assert(!ret.at_boundary());
 	return std::move(ret);
       });
     });

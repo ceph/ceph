@@ -494,6 +494,14 @@ private:
     });
   }
 
+  /**
+   * lookup_depth_range
+   *
+   * Performs node lookups on depths [from, to) using li and ll to
+   * specific target at each level.  Note, may leave the iterator
+   * at_boundary(), call handle_boundary() prior to returning out
+   * lf LBABtree.
+   */
   using lookup_depth_range_iertr = base_iertr;
   using lookup_depth_range_ret = lookup_depth_range_iertr::future<>;
   template <typename LI, typename LL>
@@ -579,7 +587,14 @@ private:
 	    0,
 	    li,
 	    ll,
-	    visitor);
+	    visitor
+	  ).si_then([c, visitor, &iter] {
+	    if (iter.at_boundary()) {
+	      return iter.handle_boundary(c, visitor);
+	    } else {
+	      return lookup_iertr::now();
+	    }
+	  });
 	}).si_then([&iter] {
 	  return std::move(iter);
 	});
