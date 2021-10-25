@@ -390,14 +390,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(label_replace(irate(node_disk_read_time_seconds_total[1m]) / irate(node_disk_reads_completed_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"))",
+          "expr": "(label_replace(irate(node_disk_read_time_seconds_total[1m]) / irate(node_disk_reads_completed_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}/{{device}} Reads",
           "refId": "A"
         },
         {
-          "expr": "(label_replace(irate(node_disk_write_time_seconds_total[1m]) / irate(node_disk_writes_completed_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"))",
+          "expr": "(label_replace(irate(node_disk_write_time_seconds_total[1m]) / irate(node_disk_writes_completed_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}/{{device}} Writes",
@@ -486,14 +486,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "label_replace(irate(node_disk_writes_completed_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
+          "expr": "label_replace(irate(node_disk_writes_completed_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{device}} on {{instance}} Writes",
           "refId": "A"
         },
         {
-          "expr": "label_replace(irate(node_disk_reads_completed_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
+          "expr": "label_replace(irate(node_disk_reads_completed_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{device}} on {{instance}} Reads",
@@ -582,14 +582,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "label_replace(irate(node_disk_read_bytes_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
+          "expr": "label_replace(irate(node_disk_read_bytes_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} {{device}} Reads",
           "refId": "A"
         },
         {
-          "expr": "label_replace(irate(node_disk_written_bytes_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
+          "expr": "label_replace(irate(node_disk_written_bytes_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} {{device}} Writes",
@@ -673,7 +673,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "label_replace(irate(node_disk_io_time_seconds_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
+          "expr": "label_replace(irate(node_disk_io_time_seconds_total[1m]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\")",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{device}} on {{instance}}",

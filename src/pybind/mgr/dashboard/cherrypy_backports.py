@@ -75,7 +75,7 @@ def patch_builtin_ssl_wrap(v, new_wrap):
     if v < StrictVersion("9.0.0"):
         from cherrypy.wsgiserver.ssl_builtin import BuiltinSSLAdapter as builtin_ssl
     else:
-        from cheroot.ssl.builtin import BuiltinSSLAdapter as builtin_ssl
+        from cheroot.ssl.builtin import BuiltinSSLAdapter as builtin_ssl  # type: ignore
     builtin_ssl.wrap = new_wrap(builtin_ssl.wrap)
 
 
