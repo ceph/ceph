@@ -21,21 +21,11 @@ LBABtree::mkfs_ret LBABtree::mkfs(op_context_t c)
   return lba_root_t{root_leaf->get_paddr(), 1u};
 }
 
-LBABtree::iterator_fut LBABtree::iterator::next(
+LBABtree::iterator::handle_boundary_ret LBABtree::iterator::handle_boundary(
   op_context_t c,
-  mapped_space_visitor_t *visitor) const
+  mapped_space_visitor_t *visitor)
 {
-  assert_valid();
-  assert(!is_end());
-
-  if ((leaf.pos + 1) < leaf.node->get_size()) {
-    auto ret = *this;
-    ret.leaf.pos++;
-    return iterator_fut(
-      interruptible::ready_future_marker{},
-      ret);
-  }
-
+  assert(at_boundary());
   depth_t depth_with_space = 2;
   for (; depth_with_space <= get_depth(); ++depth_with_space) {
     if ((get_internal(depth_with_space).pos + 1) <
@@ -46,29 +36,49 @@ LBABtree::iterator_fut LBABtree::iterator::next(
 
   if (depth_with_space <= get_depth()) {
     return seastar::do_with(
-      *this,
       [](const LBAInternalNode &internal) { return internal.begin(); },
       [](const LBALeafNode &leaf) { return leaf.begin(); },
-      [c, depth_with_space, visitor](auto &ret, auto &li, auto &ll) {
+      [this, c, depth_with_space, visitor](auto &li, auto &ll) {
 	for (depth_t depth = 2; depth < depth_with_space; ++depth) {
-	  ret.get_internal(depth).reset();
+	  get_internal(depth).reset();
 	}
-	ret.leaf.reset();
-	ret.get_internal(depth_with_space).pos++;
+	leaf.reset();
+	get_internal(depth_with_space).pos++;
 	return lookup_depth_range(
-	  c, ret, depth_with_space - 1, 0, li, ll, visitor
+	  c, *this, depth_with_space - 1, 0, li, ll, visitor
+	);
+      });
+  } else {
+    // end
+    return seastar::now();
+  }
+}
+
+LBABtree::iterator_fut LBABtree::iterator::next(
+  op_context_t c,
+  mapped_space_visitor_t *visitor) const
+{
+  assert_valid();
+  assert(!is_end());
+
+  auto ret = *this;
+  ret.leaf.pos++;
+  if (ret.at_boundary()) {
+    return seastar::do_with(
+      ret,
+      [c, visitor](auto &ret) mutable {
+	return ret.handle_boundary(
+	  c, visitor
 	).si_then([&ret] {
 	  return std::move(ret);
 	});
       });
   } else {
-    // end
-    auto ret = *this;
-    ret.leaf.pos = ret.leaf.node->get_size();
     return iterator_fut(
       interruptible::ready_future_marker{},
       ret);
   }
+
 }
 
 LBABtree::iterator_fut LBABtree::iterator::prev(op_context_t c) const

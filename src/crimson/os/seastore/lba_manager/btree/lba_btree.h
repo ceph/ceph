@@ -139,6 +139,12 @@ public:
       return leaf.pos == leaf.node->get_size();
     }
 
+    using handle_boundary_ertr = base_iertr;
+    using handle_boundary_ret = handle_boundary_ertr::future<>;
+    handle_boundary_ret handle_boundary(
+      op_context_t c,
+      mapped_space_visitor_t *visitor);
+
     depth_t check_split() const {
       if (!leaf.node->at_max_capacity()) {
 	return 0;
