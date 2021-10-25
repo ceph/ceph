@@ -74,7 +74,7 @@ ObjectDataHandler::write_ret do_removals(
   return trans_intr::do_for_each(
     pins,
     [ctx](auto &pin) {
-      LOG_PREFIX(do_removals);
+      LOG_PREFIX(object_data_handler.cc::do_removals);
       DEBUGT("decreasing ref: {}",
 	     ctx.t,
 	     pin->get_laddr());
@@ -99,7 +99,7 @@ ObjectDataHandler::write_ret do_insertions(
   return trans_intr::do_for_each(
     to_write,
     [ctx](auto &region) {
-      LOG_PREFIX(do_insertions);
+      LOG_PREFIX(object_data_handler.cc::do_insertions);
       if (region.to_write) {
 	assert_aligned(region.addr);
 	assert_aligned(region.len);
@@ -135,12 +135,12 @@ ObjectDataHandler::write_ret do_insertions(
 	  ctx.t,
 	  region.addr,
 	  region.len
-	).si_then([&region](auto pin) {
+	).si_then([FNAME, ctx, &region](auto pin) {
 	  ceph_assert(pin->get_length() == region.len);
 	  if (pin->get_laddr() != region.addr) {
-	    logger().debug(
-	      "object_data_handler::do_insertions"
+	    ERRORT(
 	      "inconsistent laddr: pin: {} region {}",
+	      ctx.t,
 	      pin->get_laddr(),
 	      region.addr);
 	  }
@@ -264,7 +264,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   ceph_assert(size <= MAX_OBJECT_SIZE);
   if (!object_data.is_null()) {
     ceph_assert(object_data.get_reserved_data_len() == MAX_OBJECT_SIZE);
-    DEBUGT("non null object_data: {}~{}",
+    DEBUGT("reservation present: {}~{}",
            ctx.t,
            object_data.get_reserved_data_base(),
            object_data.get_reserved_data_len());
