@@ -158,6 +158,7 @@ def preview_table_osd(data: List) -> str:
     table.align = 'l'
     table.left_padding_width = 0
     table.right_padding_width = 2
+    notes = ''
     for osd_data in data:
         if osd_data.get('service_type') != 'osd':
             continue
@@ -166,6 +167,8 @@ def preview_table_osd(data: List) -> str:
                 if spec.get('error'):
                     return spec.get('message')
                 dg_name = spec.get('osdspec')
+                if spec.get('notes', []):
+                    notes += '\n'.join(spec.get('notes')) + '\n'
                 for osd in spec.get('data', []):
                     db_path = osd.get('block_db', '-')
                     wal_path = osd.get('block_wal', '-')
@@ -173,7 +176,7 @@ def preview_table_osd(data: List) -> str:
                     if not block_data:
                         continue
                     table.add_row(('osd', dg_name, host, block_data, db_path, wal_path))
-    return table.get_string()
+    return notes + table.get_string()
 
 
 def preview_table_services(data: List) -> str:

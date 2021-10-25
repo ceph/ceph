@@ -204,12 +204,14 @@ class OSDService(CephService):
         [
           {'data': {<metadata>},
            'osdspec': <name of osdspec>,
-           'host': <name of host>
+           'host': <name of host>,
+           'notes': <notes>
            },
 
            {'data': ...,
             'osdspec': ..,
-            'host': ..
+            'host': ...,
+            'notes': ...
            }
         ]
 
@@ -246,10 +248,16 @@ class OSDService(CephService):
                     except ValueError:
                         logger.exception('Cannot decode JSON: \'%s\'' % ' '.join(out))
                         concat_out = {}
-
+                    notes = []
+                    if osdspec.data_devices is not None and osdspec.data_devices.limit and len(concat_out) < osdspec.data_devices.limit:
+                        found = len(concat_out)
+                        limit = osdspec.data_devices.limit
+                        notes.append(
+                            f'NOTE: Did not find enough disks matching filter on host {host} to reach data device limit (Found: {found} | Limit: {limit})')
                     ret_all.append({'data': concat_out,
                                     'osdspec': osdspec.service_id,
-                                    'host': host})
+                                    'host': host,
+                                    'notes': notes})
         return ret_all
 
     def resolve_hosts_for_osdspecs(self,
