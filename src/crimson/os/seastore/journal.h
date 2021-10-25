@@ -8,6 +8,7 @@
 
 #include <seastar/core/circular_buffer.hh>
 #include <seastar/core/future.hh>
+#include <seastar/core/metrics.hh>
 #include <seastar/core/shared_future.hh>
 
 #include "include/ceph_assert.h"
@@ -75,6 +76,7 @@ public:
   using close_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
   close_ertr::future<> close() {
+    metrics.clear();
     return journal_segment_manager.close();
   }
 
@@ -331,11 +333,34 @@ private:
       // OVERFLOW: outstanding_io >  io_depth_limit is impossible
     };
 
+    struct grouped_io_stats {
+      uint64_t num_io = 0;
+      uint64_t num_io_grouped = 0;
+
+      void increment(uint64_t num_grouped_io) {
+        ++num_io;
+        num_io_grouped += num_grouped_io;
+      }
+    };
+
   public:
     RecordSubmitter(std::size_t io_depth,
                     std::size_t batch_capacity,
                     std::size_t batch_flush_size,
                     JournalSegmentManager&);
+
+    grouped_io_stats get_record_batch_stats() const {
+      return record_batch_stats;
+    }
+
+    grouped_io_stats get_io_depth_stats() const {
+      return io_depth_stats;
+    }
+
+    void reset_stats() {
+      record_batch_stats = {};
+      io_depth_stats = {};
+    }
 
     void set_write_pipeline(WritePipeline *_write_pipeline) {
       write_pipeline = _write_pipeline;
@@ -349,6 +374,7 @@ private:
 
     void increment_io() {
       ++num_outstanding_io;
+      io_depth_stats.increment(num_outstanding_io);
       update_state();
     }
 
@@ -410,12 +436,16 @@ private:
     RecordBatch* p_current_batch = nullptr;
     seastar::circular_buffer<RecordBatch*> free_batch_ptrs;
     std::optional<seastar::promise<> > wait_submit_promise;
+
+    grouped_io_stats record_batch_stats;
+    grouped_io_stats io_depth_stats;
   };
 
   SegmentProvider* segment_provider = nullptr;
   JournalSegmentManager journal_segment_manager;
   RecordSubmitter record_submitter;
   ExtentReader& scanner;
+  seastar::metrics::metric_group metrics;
 
   /// return ordered vector of segments to replay
   using replay_segments_t = std::vector<
@@ -433,7 +463,6 @@ private:
     record_header_t header,
     const bufferlist &bl);
 
-private:
   /// replays records starting at start through end of segment
   replay_ertr::future<>
   replay_segment(
@@ -441,6 +470,8 @@ private:
     segment_header_t header,         ///< [in] segment header
     delta_handler_t &delta_handler   ///< [in] processes deltas in order
   );
+
+  void register_metrics();
 };
 using JournalRef = std::unique_ptr<Journal>;
 
