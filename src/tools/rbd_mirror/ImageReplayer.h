@@ -204,9 +204,12 @@ private:
   BootstrapProgressContext m_progress_cxt;
 
   bool m_finished = false;
+  bool m_delete_in_progress = false;
   bool m_delete_requested = false;
   bool m_resync_requested = false;
   bool m_restart_requested = false;
+
+  bool m_status_removed = false;
 
   image_replayer::StateBuilder<ImageCtxT>* m_state_builder = nullptr;
   image_replayer::Replayer* m_replayer = nullptr;
@@ -258,6 +261,8 @@ private:
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
   void reregister_admin_socket_hook();
+  void remove_image_status(bool force, Context *on_finish);
+  void remove_image_status_remote(bool force, Context *on_finish);
 
 };
 

@@ -1889,6 +1889,11 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(1U, states.size());
   ASSERT_EQ(3, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN]);
 
+  // Test remove of status
+  ASSERT_EQ(0, mirror_image_status_set(&ioctx, "uuid1", status1));
+  ASSERT_EQ(0, mirror_image_status_remove(&ioctx, "uuid1"));
+  ASSERT_EQ(-ENOENT, mirror_image_instance_get(&ioctx, "uuid1", &read_instance));
+
   // Test statuses are not down after watcher is started
 
   ASSERT_EQ(0, mirror_image_status_set(&ioctx, "uuid1", status1));
