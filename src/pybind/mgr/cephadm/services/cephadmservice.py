@@ -237,6 +237,14 @@ class CephadmService(metaclass=ABCMeta):
             })
             if err:
                 self.mgr.log.warning(f"Unable to update caps for {entity}")
+
+            # get keyring anyway
+            ret, keyring, err = self.mgr.mon_command({
+                'prefix': 'auth get',
+                'entity': entity,
+            })
+            if err:
+                self.mgr.log.warning(f"Unable to fetch keyring for {entity}")
         return keyring
 
     def _inventory_get_fqdn(self, hostname: str) -> str:
