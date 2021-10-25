@@ -212,7 +212,7 @@ seastar::future<> OSD::_write_superblock()
       // meta collection does not yet, create superblock
       logger().info(
         "{} writing superblock cluster_fsid {} osd_fsid {}",
-        __func__,
+        "_write_superblock",
         superblock.cluster_fsid,
         superblock.osd_fsid);
       return store.create_new_collection(coll_t::meta()).then([this] (auto ch) {
@@ -380,6 +380,7 @@ seastar::future<> OSD::start()
     if (auto [addrs, changed] =
         replace_unknown_addrs(cluster_msgr->get_myaddrs(),
                               public_msgr->get_myaddrs()); changed) {
+      logger().debug("replacing unkwnown addrs of cluster messenger");
       return cluster_msgr->set_myaddrs(addrs);
     } else {
       return seastar::now();
