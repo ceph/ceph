@@ -16,6 +16,9 @@ import yaml
 
 from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List
 
+LabelValues = Tuple[str, ...]
+Number = Union[int, float]
+
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
 # see https://github.com/prometheus/prometheus/wiki/Default-port-allocations
 # for Prometheus exporter port registry
@@ -302,18 +305,17 @@ class HealthHistory:
 
 
 class Metric(object):
-    def __init__(self, mtype: str, name: str, desc: str, labels: Optional[Tuple[str, ...]] = None) -> None:
+    def __init__(self, mtype: str, name: str, desc: str, labels: Optional[LabelValues] = None) -> None:
         self.mtype = mtype
         self.name = name
         self.desc = desc
-        self.labelnames = labels    # tuple if present
-        self.value: Dict[Tuple[str, ...], Union[float, int]
-                         ] = {}             # indexed by label values
+        self.labelnames = labels  # tuple if present
+        self.value: Dict[LabelValues, Number] = {}
 
     def clear(self) -> None:
         self.value = {}
 
-    def set(self, value: Union[float, int], labelvalues: Optional[Tuple[str, ...]] = None) -> None:
+    def set(self, value: Number, labelvalues: Optional[LabelValues] = None) -> None:
         # labelvalues must be a tuple
         labelvalues = labelvalues or ('',)
         self.value[labelvalues] = value
@@ -374,7 +376,7 @@ class MetricCounter(Metric):
     def __init__(self,
                  name: str,
                  desc: str,
-                 labels: Optional[Tuple[str, ...]] = None) -> None:
+                 labels: Optional[LabelValues] = None) -> None:
         super(MetricCounter, self).__init__('counter', name, desc, labels)
         self.value = defaultdict(lambda: 0)
 
@@ -382,14 +384,14 @@ class MetricCounter(Metric):
         pass  # Skip calls to clear as we want to keep the counters here.
 
     def set(self,
-            value: Union[float, int],
-            labelvalues: Optional[Tuple[str, ...]] = None) -> None:
+            value: Number,
+            labelvalues: Optional[LabelValues] = None) -> None:
         msg = 'This method must not be used for instances of MetricCounter class'
         raise NotImplementedError(msg)
 
     def add(self,
-            value: Union[float, int],
-            labelvalues: Optional[Tuple[str, ...]] = None) -> None:
+            value: Number,
+            labelvalues: Optional[LabelValues] = None) -> None:
         # labelvalues must be a tuple
         labelvalues = labelvalues or ('',)
         self.value[labelvalues] += value
@@ -1079,7 +1081,7 @@ class Module(MgrModule):
                     continue
                 mirror_metadata['ceph_daemon'] = '{}.{}'.format(service_type,
                                                                 service_id)
-                rbd_mirror_metadata = cast(Tuple[str, ...],
+                rbd_mirror_metadata = cast(LabelValues,
                                            (mirror_metadata.get(k, '')
                                             for k in RBD_MIRROR_METADATA))
                 self.metrics['rbd_mirror_metadata'].set(
@@ -1360,7 +1362,7 @@ class Module(MgrModule):
                         metrics.mtype,
                         new_path,
                         metrics.desc,
-                        cast(Tuple[str, ...], metrics.labelnames) + ('source_zone',)
+                        cast(LabelValues, metrics.labelnames) + ('source_zone',)
                     )
                 for label_values, value in metrics.value.items():
                     new_metrics[new_path].set(value, label_values + (match.group(1),))
