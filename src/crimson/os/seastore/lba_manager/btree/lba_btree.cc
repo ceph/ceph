@@ -493,7 +493,7 @@ LBABtree::handle_split_ret LBABtree::handle_split(
   op_context_t c,
   iterator &iter)
 {
-  LOG_PREFIX(LBATree::insert);
+  LOG_PREFIX(LBATree::handle_split);
 
   depth_t split_from = iter.check_split();
 
