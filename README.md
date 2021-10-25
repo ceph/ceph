@@ -8,7 +8,7 @@
 ### Project Overview
 With data volumes growing exponentially, a highly scalable storage that preserves and records digital content for ongoing or future company operations is a paramount solution to any successful business. Red Hat Ceph, an open-source software that facilitates distributed object, block, and file storage, emerged as a massively scalable storage solution for modern data pipelines to store and streamline important digital information.
 
-To access stored data in Ceph, one can achieve this in three ways, with the first being most relevant to this project: **radosgw (RGW)**, librados, and RADOS block device (RBD). With RGW, data can be accessed using HTTP with the Ceph Object Gateway daemon providing interfaces compatible with Amazon S3 and OpenStack Swift.
+To access stored data in Ceph, one can achieve this in three ways: **radosgw (RGW)**, librados, and RADOS block device (RBD). Our project focuses on Ceph's object storage, so we will only be working with radosgw. With RGW, data can be accessed using an HTTP server with the Ceph Object Gateway daemon, which provides interfaces compatible with Amazon S3 and OpenStack Swift.
 
 The current version of Ceph is paired with Datacenter-Data-Delivery Network (D3N), a multi-layer cache infrastructure for data centers. Its goal is to speed up performance of big data analytics by caching commonly accessed data on computing clusters connected to a larger data lake.
 
