@@ -5,6 +5,6 @@ flake8-colors==0.1.6
 #flake8-docstrings
 #pep8-naming
 rstcheck==3.3.1
-autopep8
-pyfakefs
+autopep8==1.5.7
+pyfakefs==4.5.0
 isort==5.5.3
