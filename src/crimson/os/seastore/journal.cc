@@ -62,7 +62,9 @@ Journal::Journal(
                        "seastore_journal_batch_flush_size"),
                      journal_segment_manager),
     scanner(scanner)
-{}
+{
+  register_metrics();
+}
 
 Journal::prep_replay_segments_fut
 Journal::prep_replay_segments(
@@ -245,6 +247,45 @@ Journal::replay_ret Journal::replay(
           });
         });
     });
+}
+
+void Journal::register_metrics()
+{
+  record_submitter.reset_stats();
+  namespace sm = seastar::metrics;
+  metrics.add_group(
+    "journal",
+    {
+      sm::make_counter(
+        "record_num",
+        [this] {
+          return record_submitter.get_record_batch_stats().num_io;
+        },
+        sm::description("total number of records submitted")
+      ),
+      sm::make_counter(
+        "record_batch_num",
+        [this] {
+          return record_submitter.get_record_batch_stats().num_io_grouped;
+        },
+        sm::description("total number of records batched")
+      ),
+      sm::make_counter(
+        "io_num",
+        [this] {
+          return record_submitter.get_io_depth_stats().num_io;
+        },
+        sm::description("total number of io submitted")
+      ),
+      sm::make_counter(
+        "io_depth_num",
+        [this] {
+          return record_submitter.get_io_depth_stats().num_io_grouped;
+        },
+        sm::description("total number of io depth")
+      ),
+    }
+  );
 }
 
 Journal::JournalSegmentManager::JournalSegmentManager(
@@ -631,6 +672,8 @@ Journal::RecordSubmitter::submit_pending(
   bool flush)
 {
   assert(!p_current_batch->is_submitting());
+  record_batch_stats.increment(
+      p_current_batch->get_num_records() + 1);
   auto write_fut = [this, flush, record=std::move(record), &rsize]() mutable {
     if (flush && p_current_batch->is_empty()) {
       // fast path with direct write
