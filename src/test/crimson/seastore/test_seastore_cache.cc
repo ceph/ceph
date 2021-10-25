@@ -29,7 +29,7 @@ struct cache_test_t : public seastar_test_suite_t {
   cache_test_t()
     : segment_manager(segment_manager::create_test_ephemeral()),
       reader(new ExtentReader()),
-      cache(*reader, segment_manager->get_block_size()),
+      cache(*reader),
       current(segment_id_t(segment_manager->get_device_id(), 0), 0) {
     reader->add_segment_manager(segment_manager.get());
   }

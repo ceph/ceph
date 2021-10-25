@@ -42,7 +42,7 @@ struct btree_test_base :
     : segment_manager(segment_manager::create_test_ephemeral()),
       scanner(new ExtentReader()),
       journal(*segment_manager, *scanner),
-      cache(*scanner, segment_manager->get_block_size()),
+      cache(*scanner),
       block_size(segment_manager->get_block_size()),
       next(segment_manager->get_device_id(), 0)
   {

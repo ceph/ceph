@@ -59,7 +59,7 @@ struct rbm_test_t : public  seastar_test_suite_t,
   rbm_test_t() :
       segment_manager(segment_manager::create_test_ephemeral()),
       reader(new ExtentReader()),
-      cache(*reader, segment_manager->get_block_size())
+      cache(*reader)
   {
     reader->add_segment_manager(segment_manager.get());
     device = new nvme_device::TestMemory(DEFAULT_TEST_SIZE);
