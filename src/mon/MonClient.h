@@ -27,6 +27,7 @@
 #include "MonMap.h"
 #include "MonSub.h"
 
+#include "common/admin_socket.h"
 #include "common/async/completion.h"
 #include "common/Timer.h"
 #include "common/config.h"
@@ -269,7 +270,8 @@ const boost::system::error_category& monc_category() noexcept;
 
 class MonClient : public Dispatcher,
 		  public AuthClient,
-		  public AuthServer /* for mgr, osd, mds */ {
+		  public AuthServer, /* for mgr, osd, mds */
+		  public AdminSocketHook {
   static constexpr auto dout_subsys = ceph_subsys_monc;
 public:
   // Error, Newest, Oldest
@@ -315,6 +317,14 @@ private:
 
   void handle_auth(MAuthReply *m);
 
+  int call(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    const ceph::buffer::list &inbl,
+    ceph::Formatter *f,
+    std::ostream& errss,
+    ceph::buffer::list& out) override;
+  
   // monitor session
   utime_t last_keepalive;
   utime_t last_send_log;
