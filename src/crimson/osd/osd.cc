@@ -169,12 +169,14 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
     superblock.compat_features = get_osd_initial_compat_set();
     return _write_superblock();
   }).then([cluster_fsid, this] {
-    return when_all_succeed(
-      store.write_meta("ceph_fsid", cluster_fsid.to_string()),
-      store.write_meta("whoami", std::to_string(whoami)),
-      _write_key_meta(),
-      store.write_meta("ready", "ready"));
-  }).then_unpack([cluster_fsid, this] {
+    return store.write_meta("ceph_fsid", cluster_fsid.to_string());
+  }).then([this] {
+    return store.write_meta("whoami", std::to_string(whoami));
+  }).then([this] {
+    return _write_key_meta();
+  }).then([this] {
+    return store.write_meta("ready", "ready");
+  }).then([cluster_fsid, this] {
     fmt::print("created object store {} for osd.{} fsid {}\n",
                local_conf().get_val<std::string>("osd_data"),
                whoami, cluster_fsid);
