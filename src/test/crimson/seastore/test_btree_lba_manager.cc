@@ -573,7 +573,7 @@ TEST_F(btree_lba_manager_test, single_transaction_split_merge)
   run_async([this] {
     {
       auto t = create_transaction();
-      for (unsigned i = 0; i < 600; ++i) {
+      for (unsigned i = 0; i < 400; ++i) {
 	alloc_mapping(t, 0, block_size, get_paddr());
       }
       check_mappings(t);
@@ -614,7 +614,7 @@ TEST_F(btree_lba_manager_test, split_merge_multi)
 {
   run_async([this] {
     auto iterate = [&](auto f) {
-      for (uint64_t i = 0; i < (1<<12); ++i) {
+      for (uint64_t i = 0; i < (1<<10); ++i) {
 	auto t = create_transaction(false);
 	logger().debug("opened transaction");
 	for (unsigned j = 0; j < 5; ++j) {
