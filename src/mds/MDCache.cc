@@ -13242,7 +13242,9 @@ void MDCache::upkeep_main(void)
         if (active_with_clients) {
           trim_client_leases();
         }
-        trim();
+        if (is_open()) {
+          trim();
+        }
         if (active_with_clients) {
           auto recall_flags = Server::RecallFlags::ENFORCE_MAX|Server::RecallFlags::ENFORCE_LIVENESS;
           if (cache_toofull()) {
