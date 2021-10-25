@@ -44,6 +44,8 @@ class FakeMgr:
         if prefix == 'set-cmd':
             self.config = cmd_dict.get('value')
             return 0, 'value set', ''
+        if prefix in ['auth get']:
+            return 0, '[foo]\nkeyring = asdf\n', ''
         return -1, '', 'error'
 
     def get_minimal_ceph_conf(self) -> str:
@@ -184,9 +186,12 @@ class TestISCSIService:
         expected_call2 = call({'prefix': 'auth caps',
                                'entity': 'client.iscsi.a',
                                'caps': expected_caps})
+        expected_call3 = call({'prefix': 'auth get',
+                               'entity': 'client.iscsi.a'})
 
         assert expected_call in self.mgr.mon_command.mock_calls
         assert expected_call2 in self.mgr.mon_command.mock_calls
+        assert expected_call3 in self.mgr.mon_command.mock_calls
 
     @patch('cephadm.utils.resolve_ip')
     def test_iscsi_dashboard_config(self, mock_resolve_ip):
