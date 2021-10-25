@@ -30,11 +30,11 @@ The goal of this project is to incorporate D4N, an upgrade to the D3N caching ar
 ### Requirements
 Virtual Machines will be used rather than containers because the latter require more overhead. Additionally, utilizing containers creates unnecessary complications in comparison to the more optimal environment that VMs offer for the purpose of this project. Finally, deploying this system on an OCT is possible but difficult to set up. Working on a VM is analogous to working on a regular host, resulting in this final environment setup.
 
-This project requires three separate Virtual Machines (VMs), which the team is currently requesting from OpenStack and the Mass Open Cloud. These machines have the following specifications:
+This project requires three separate Virtual Machines (VMs). These machines have the following specifications:
 
 - VM One serves as a gateway and is less powerful than its fellow computers. It will run with 4 cores, 8 gigabytes of RAM, and a 64 gigabyte disk.
 
-- VMs Two and Three act as the Ceph cluster that the team will be modifying. Each VM will have 16 cores, 32 gigabytes of RAM, and 250 gigabyte disk, along with their own floating IP addresses. All three machines will be accessed through an OpenStack Terminal. To have machines on the OpenStack, the team requires accounts for the system, which are pending.
+- VMs Two and Three act as the Ceph cluster that the team will be modifying. Each VM will have 16 cores, 32 gigabytes of RAM, and 250 gigabyte disk, along with their own floating IP addresses. All three machines will be accessed through an OpenStack Terminal.
 
 <p align="center">
 	<img src="./images/LAPTOP.png" width="35%" />
