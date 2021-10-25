@@ -61,9 +61,15 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
     const config = route.data['moduleStatusGuardConfig'];
     let backendCheck = false;
     if (config.backend) {
-      this.mgrModuleService.getConfig('orchestrator').subscribe((resp) => {
-        backendCheck = config.backend === resp['orchestrator'];
-      });
+      this.mgrModuleService.getConfig('orchestrator').subscribe(
+        (resp) => {
+          backendCheck = config.backend === resp['orchestrator'];
+        },
+        () => {
+          this.router.navigate([config.redirectTo]);
+          return observableOf(false);
+        }
+      );
     }
     return this.http.get(`api/${config.apiPath}/status`).pipe(
       map((resp: any) => {
