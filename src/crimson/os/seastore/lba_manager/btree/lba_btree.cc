@@ -666,7 +666,7 @@ LBABtree::handle_merge_ret merge_level(
     auto [liter, riter] = donor_is_left ?
       std::make_pair(donor_iter, iter) : std::make_pair(iter, donor_iter);
 
-    if (donor->at_min_capacity()) {
+    if (donor->below_min_capacity()) {
       auto replacement = l->make_full_merge(c, r);
 
       parent_pos.node->update(
@@ -727,8 +727,8 @@ LBABtree::handle_merge_ret LBABtree::handle_merge(
   iterator &iter)
 {
   LOG_PREFIX(LBATree::handle_merge);
-  if (!iter.leaf.node->at_min_capacity() ||
-      iter.get_depth() == 1) {
+  if (iter.get_depth() == 1 ||
+      !iter.leaf.node->below_min_capacity()) {
     DEBUGT(
       "no need to merge leaf, leaf size {}, depth {}",
       c.trans,
@@ -775,7 +775,7 @@ LBABtree::handle_merge_ret LBABtree::handle_merge(
 		DEBUGT("no need to collapse root", c.trans);
 	      }
 	      return seastar::stop_iteration::yes;
-	    } else if (pos.node->at_min_capacity()) {
+	    } else if (pos.node->below_min_capacity()) {
 	      DEBUGT(
 		"continuing, next node {} depth {} at min",
 		c.trans,

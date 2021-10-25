@@ -157,11 +157,11 @@ public:
     }
 
     depth_t check_merge() const {
-      if (!leaf.node->at_min_capacity()) {
+      if (!leaf.node->below_min_capacity()) {
 	return 0;
       }
       for (depth_t merge_from = 1; merge_from < get_depth(); ++merge_from) {
-	if (!get_internal(merge_from + 1).node->at_min_capacity())
+	if (!get_internal(merge_from + 1).node->below_min_capacity())
 	  return merge_from;
       }
       return get_depth();

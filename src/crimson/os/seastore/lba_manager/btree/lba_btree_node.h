@@ -313,12 +313,18 @@ struct LBAInternalNode
     resolve_relative_addrs(base);
   }
 
+  constexpr static size_t get_min_capacity() {
+    return (get_capacity() - 1) / 2;
+  }
+
   bool at_max_capacity() const {
+    assert(get_size() <= get_capacity());
     return get_size() == get_capacity();
   }
 
-  bool at_min_capacity() const {
-    return get_size() == (get_capacity() / 2);
+  bool below_min_capacity() const {
+    assert(get_size() >= (get_min_capacity() - 1));
+    return get_size() < get_min_capacity();
   }
 };
 using LBAInternalNodeRef = LBAInternalNode::Ref;
@@ -530,12 +536,18 @@ struct LBALeafNode
 
   std::ostream &print_detail(std::ostream &out) const final;
 
+  constexpr static size_t get_min_capacity() {
+    return (get_capacity() - 1) / 2;
+  }
+
   bool at_max_capacity() const {
+    assert(get_size() <= get_capacity());
     return get_size() == get_capacity();
   }
 
-  bool at_min_capacity() const {
-    return get_size() == (get_capacity() / 2);
+  bool below_min_capacity() const {
+    assert(get_size() >= (get_min_capacity() - 1));
+    return get_size() < get_min_capacity();
   }
 };
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
