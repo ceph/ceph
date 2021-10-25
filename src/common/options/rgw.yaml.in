@@ -3248,3 +3248,13 @@ options:
   - rgw
   flags:
   - startup
+- name: rgw_dbstore_pragma
+  type: str
+  level: advanced
+  desc: PRAGMA statements passed to the dbstore sqlite database
+  long_desc: defaults to buffered io performance optimized settings
+  default: PRAGMA journal_mode=OFF; PRAGMA synchronous=0; PRAGMA cache_size=32768; PRAGMA locking_mode=EXCLUSIVE; PRAGMA temp_store=MEMORY;
+  services:
+  - rgw
+  flags:
+  - startup

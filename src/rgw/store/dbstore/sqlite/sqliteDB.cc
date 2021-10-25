@@ -507,6 +507,7 @@ void *SQLiteDB::openDB(const DoutPrefixProvider *dpp)
 {
   string dbname;
   int rc = 0;
+  const auto& rgw_dbstore_pragma = g_conf().get_val<std::string>("rgw_dbstore_pragma");
 
   dbname = getDBfile();
   if (dbname.empty()) {
@@ -517,7 +518,7 @@ void *SQLiteDB::openDB(const DoutPrefixProvider *dpp)
   rc = sqlite3_open_v2(dbname.c_str(), (sqlite3**)&db,
       SQLITE_OPEN_READWRITE |
       SQLITE_OPEN_CREATE |
-      SQLITE_OPEN_FULLMUTEX,
+      SQLITE_OPEN_NOMUTEX,
       NULL);
 
   if (rc) {
@@ -528,6 +529,10 @@ void *SQLiteDB::openDB(const DoutPrefixProvider *dpp)
   }
 
   exec(dpp, "PRAGMA foreign_keys=ON", NULL);
+
+  ldpp_dout(dpp, 10) << "Setting database PRAGMAs: " << std::quoted(rgw_dbstore_pragma) << dendl;
+  ldpp_dout(dpp, 10) << "sqlite3 threadsafe: " << sqlite3_threadsafe() << dendl;
+  exec(dpp, rgw_dbstore_pragma.c_str(), NULL);
 
 out:
   return db;
