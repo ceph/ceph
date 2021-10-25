@@ -932,11 +932,11 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   } else if (prefix == "auth get" && !entity_name.empty()) {
     KeyRing keyring;
     EntityAuth entity_auth;
-    if(!mon.key_server.get_auth(entity, entity_auth)) {
+    if (!mon.key_server.get_auth(entity, entity_auth)) {
       ss << "failed to find " << entity_name << " in keyring";
       r = -ENOENT;
     } else {
-      keyring.add(entity, entity_auth);
+      keyring.add(entity, entity_auth.key, entity_auth.pending_key);
       if (f)
 	keyring.encode_formatted("auth", f.get(), rdata);
       else
@@ -1690,7 +1690,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
         }
       } else {
 	KeyRing kr;
-	kr.add(entity, entity_auth.key);
+	kr.add(entity, entity_auth.key, entity_auth.pending_key);
         if (f) {
           kr.set_caps(entity, entity_auth.caps);
           kr.encode_formatted("auth", f.get(), rdata);
