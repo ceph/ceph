@@ -665,9 +665,9 @@ This is a common setup and can be described quite easily:
       host_pattern: '*'
     spec:
       data_devices:
-        model: HDD-123-foo <- note that HDD-123 would also be valid
+        model: HDD-123-foo # Note, HDD-123 would also be valid
       db_devices:
-        model: MC-55-44-XZ <- same here, MC-55-44 is valid
+        model: MC-55-44-XZ # Same here, MC-55-44 is valid
 
 However, we can improve it by reducing the filters on core properties of the drives:
 
@@ -741,7 +741,7 @@ This can be described with two layouts.
         rotational: 0
       db_devices:
         model: MC-55-44-XZ
-        limit: 2 (db_slots is actually to be favoured here, but it's not implemented yet)
+        limit: 2 # db_slots is actually to be favoured here, but it's not implemented yet
     ---
     service_type: osd
     service_id: osd_spec_ssd
