@@ -87,8 +87,8 @@ public:
     }
 
     bool is_end() const {
-      assert(leaf.pos <= leaf.node->get_size());
-      return leaf.pos == leaf.node->get_size();
+      // external methods may only resolve at a boundary if at end
+      return at_boundary();
     }
 
     bool is_begin() const {
@@ -134,6 +134,17 @@ public:
       node_position_t<LBAInternalNode>, MAX_DEPTH> internal;
     node_position_t<LBALeafNode> leaf;
 
+    bool at_boundary() const {
+      assert(leaf.pos <= leaf.node->get_size());
+      return leaf.pos == leaf.node->get_size();
+    }
+
+    using handle_boundary_ertr = base_iertr;
+    using handle_boundary_ret = handle_boundary_ertr::future<>;
+    handle_boundary_ret handle_boundary(
+      op_context_t c,
+      mapped_space_visitor_t *visitor);
+
     depth_t check_split() const {
       if (!leaf.node->at_max_capacity()) {
 	return 0;
@@ -146,11 +157,11 @@ public:
     }
 
     depth_t check_merge() const {
-      if (!leaf.node->at_min_capacity()) {
+      if (!leaf.node->below_min_capacity()) {
 	return 0;
       }
       for (depth_t merge_from = 1; merge_from < get_depth(); ++merge_from) {
-	if (!get_internal(merge_from + 1).node->at_min_capacity())
+	if (!get_internal(merge_from + 1).node->below_min_capacity())
 	  return merge_from;
       }
       return get_depth();
@@ -483,6 +494,14 @@ private:
     });
   }
 
+  /**
+   * lookup_depth_range
+   *
+   * Performs node lookups on depths [from, to) using li and ll to
+   * specific target at each level.  Note, may leave the iterator
+   * at_boundary(), call handle_boundary() prior to returning out
+   * lf LBABtree.
+   */
   using lookup_depth_range_iertr = base_iertr;
   using lookup_depth_range_ret = lookup_depth_range_iertr::future<>;
   template <typename LI, typename LL>
@@ -568,7 +587,14 @@ private:
 	    0,
 	    li,
 	    ll,
-	    visitor);
+	    visitor
+	  ).si_then([c, visitor, &iter] {
+	    if (iter.at_boundary()) {
+	      return iter.handle_boundary(c, visitor);
+	    } else {
+	      return lookup_iertr::now();
+	    }
+	  });
 	}).si_then([&iter] {
 	  return std::move(iter);
 	});

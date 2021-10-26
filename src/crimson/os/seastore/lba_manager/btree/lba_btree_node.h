@@ -25,8 +25,8 @@ using base_iertr = LBAManager::base_iertr;
 
 struct op_context_t {
   Cache &cache;
-  btree_pin_set_t &pins;
   Transaction &trans;
+  btree_pin_set_t *pins = nullptr;
 };
 
 /**
@@ -48,6 +48,12 @@ struct lba_map_val_t {
     uint32_t checksum)
     : len(len), paddr(paddr), refcount(refcount), checksum(checksum) {}
 };
+WRITE_EQ_OPERATORS_4(
+  lba_map_val_t,
+  len,
+  paddr,
+  refcount,
+  checksum);
 
 class BtreeLBAPin;
 using BtreeLBAPinRef = std::unique_ptr<BtreeLBAPin>;
@@ -307,12 +313,18 @@ struct LBAInternalNode
     resolve_relative_addrs(base);
   }
 
+  constexpr static size_t get_min_capacity() {
+    return (get_capacity() - 1) / 2;
+  }
+
   bool at_max_capacity() const {
+    assert(get_size() <= get_capacity());
     return get_size() == get_capacity();
   }
 
-  bool at_min_capacity() const {
-    return get_size() == (get_capacity() / 2);
+  bool below_min_capacity() const {
+    assert(get_size() >= (get_min_capacity() - 1));
+    return get_size() < get_min_capacity();
   }
 };
 using LBAInternalNodeRef = LBAInternalNode::Ref;
@@ -524,12 +536,18 @@ struct LBALeafNode
 
   std::ostream &print_detail(std::ostream &out) const final;
 
+  constexpr static size_t get_min_capacity() {
+    return (get_capacity() - 1) / 2;
+  }
+
   bool at_max_capacity() const {
+    assert(get_size() <= get_capacity());
     return get_size() == get_capacity();
   }
 
-  bool at_min_capacity() const {
-    return get_size() == (get_capacity() / 2);
+  bool below_min_capacity() const {
+    assert(get_size() >= (get_min_capacity() - 1));
+    return get_size() < get_min_capacity();
   }
 };
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;

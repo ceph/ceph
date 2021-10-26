@@ -140,12 +140,22 @@ BtreeLBAManager::alloc_extent(
   return with_btree_state<state_t>(
     c,
     hint,
-    [FNAME, c, hint, len, addr](auto &btree, auto &state) {
+    [FNAME, c, hint, len, addr, &t](auto &btree, auto &state) {
       return LBABtree::iterate_repeat(
 	c,
 	btree.upper_bound_right(c, hint),
 	true,
-	[&state, len](auto &pos) {
+	[&state, len, &t, hint](auto &pos) {
+	  LOG_PREFIX(BtreeLBAManager::alloc_extent);
+	  if (!pos.is_end()) {
+	    DEBUGT("iterate_repeat: pos: {}~{}, state: {}~{}, hint: {}",
+                   t,
+                   pos.get_key(),
+                   pos.get_val().len,
+                   state.last_end,
+                   len,
+                   hint);
+	  }
 	  if (pos.is_end() || pos.get_key() >= (state.last_end + len)) {
 	    state.insert_iter = pos;
 	    return LBABtree::iterate_repeat_ret_inner(
