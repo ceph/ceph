@@ -337,7 +337,7 @@
                formArrayName="initiators">
             <div class="card mb-2"
                  *ngFor="let initiator of initiators.controls; let ii = index"
-                 [formGroupName]="ii">
+                 [formGroup]="initiator">
               <div class="card-header">
                 <ng-container i18n>Initiator</ng-container>: {{ initiator.getValue('client_iqn') }}
                 <button type="button"
@@ -559,7 +559,7 @@
                formArrayName="groups">
             <div class="card mb-2"
                  *ngFor="let group of groups.controls; let gi = index"
-                 [formGroupName]="gi">
+                 [formGroup]="group">
               <div class="card-header">
                 <ng-container i18n>Group</ng-container>: {{ group.getValue('group_id') }}
                 <button type="button"
