@@ -914,7 +914,6 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
 	  kr.encode_formatted("auth", f.get(), rdata);
 	else
 	  kr.encode_plaintext(rdata);
-	ss << "export " << eauth;
 	r = 0;
       } else {
 	ss << "no key for " << eauth;
@@ -925,8 +924,6 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
 	keyring.encode_formatted("auth", f.get(), rdata);
       else
 	keyring.encode_plaintext(rdata);
-
-      ss << "exported master keyring";
       r = 0;
     }
   } else if (prefix == "auth get" && !entity_name.empty()) {
@@ -941,7 +938,6 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
 	keyring.encode_formatted("auth", f.get(), rdata);
       else
 	keyring.encode_plaintext(rdata);
-      ss << "exported keyring for " << entity_name;
       r = 0;
     }
   } else if (prefix == "auth print-key" ||
@@ -965,10 +961,6 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       mon.key_server.encode_formatted("auth", f.get(), rdata);
     } else {
       mon.key_server.encode_plaintext(rdata);
-      if (rdata.length() > 0)
-        ss << "installed auth entries:" << std::endl;
-      else
-        ss << "no installed auth entries!" << std::endl;
     }
     r = 0;
     goto done;
@@ -1462,8 +1454,6 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       mon.reply_command(op, -EINVAL, rs, get_last_committed());
       return true;
     }
-    ss << "imported keyring";
-    getline(ss, rs);
     err = 0;
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
@@ -1923,15 +1913,12 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     KeyServerData::Incremental auth_inc;
     auth_inc.name = entity;
     if (!mon.key_server.contains(auth_inc.name)) {
-      ss << "entity " << entity << " does not exist";
       err = 0;
       goto done;
     }
     auth_inc.op = KeyServerData::AUTH_INC_DEL;
     push_cephx_inc(auth_inc);
 
-    ss << "updated";
-    getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
