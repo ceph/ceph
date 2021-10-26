@@ -1042,6 +1042,6 @@ class CephadmAgent(CephService):
             'listener.key': listener_key,
         }
 
-        return config, sorted([str(self.mgr.get_mgr_ip()), self.mgr.inventory.get_addr(daemon_spec.host),
-                               str(self.mgr.endpoint_port), self.mgr.cherrypy_thread.ssl_certs.get_root_cert(),
+        return config, sorted([str(self.mgr.get_mgr_ip()), str(self.mgr.endpoint_port),
+                               self.mgr.cherrypy_thread.ssl_certs.get_root_cert(),
                                str(self.mgr.get_module_option('device_enhanced_scan'))])

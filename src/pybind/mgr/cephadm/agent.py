@@ -212,7 +212,7 @@ class AgentMessageThread(threading.Thread):
     def __init__(self, host: str, port: int, data: Dict[Any, Any], mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
         self.host = host
-        self.addr = self.mgr.inventory.get_addr(host)
+        self.addr = self.mgr.inventory.get_addr(host) if host in self.mgr.inventory else host
         self.port = port
         self.data: str = json.dumps(data)
         super(AgentMessageThread, self).__init__(target=self.run)

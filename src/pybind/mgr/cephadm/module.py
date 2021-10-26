@@ -2153,8 +2153,8 @@ Then run the following:
                 root_cert = self.cherrypy_thread.ssl_certs.get_root_cert()
             except Exception:
                 pass
-            deps = sorted([self.get_mgr_ip(), self.inventory.get_addr(daemon_id), str(self.endpoint_port),
-                           root_cert, str(self.get_module_option('device_enhanced_scan'))])
+            deps = sorted([self.get_mgr_ip(), str(self.endpoint_port), root_cert,
+                           str(self.get_module_option('device_enhanced_scan'))])
         elif daemon_type == 'iscsi':
             deps = [self.get_mgr_ip()]
         else:
