@@ -309,6 +309,7 @@ private:
     if (p->second->is_unregistered()) {
       std::lock_guard l{deleted_lock};
       if (deleted_conns.erase(p->second)) {
+	p->second->get_perf_counter()->dec(l_msgr_active_connections);
 	conns.erase(p);
 	return nullref;
       }
@@ -397,8 +398,6 @@ public:
    */
   void unregister_conn(const AsyncConnectionRef& conn) {
     std::lock_guard l{deleted_lock};
-    if (!accepting_conns.count(conn) || anon_conns.count(conn))
-      conn->get_perf_counter()->dec(l_msgr_active_connections);
     deleted_conns.emplace(std::move(conn));
     conn->unregister();
 
