@@ -25,6 +25,9 @@ CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw', 'rbd-mirror', 'cephfs-
 GATEWAY_TYPES = ['iscsi', 'nfs']
 MONITORING_STACK_TYPES = ['node-exporter', 'prometheus', 'alertmanager', 'grafana']
 
+# daemon types we want to try to redeploy ourselves if we find they are in an error state
+REDEPLOY_ON_ERROR = ['nfs']
+
 CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES
 
 # these daemon types use the ceph container image
@@ -133,3 +136,10 @@ def file_mode_to_str(mode: int) -> str:
             f'{"x" if (mode >> shift) & 1 else "-"}'
         ) + r
     return r
+
+
+def exponential_backoff(t: int) -> int:
+    if t < 1:  # default non-positive ints to result for t=1
+        return 90
+    # 90s, 6m, 24m, 1h|36m, 6h|24m, 1d|1h|36m, etc.
+    return (4 ** t) * 90

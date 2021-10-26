@@ -13,7 +13,7 @@ from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
 
-from .utils import resolve_ip
+from .utils import resolve_ip, exponential_backoff
 from .migrations import queue_migrate_nfs_spec
 
 if TYPE_CHECKING:
@@ -469,6 +469,8 @@ class HostCache():
         self.agent_keys = {}  # type: Dict[str, str]
         self.agent_ports = {}  # type: Dict[str, int]
         self.sending_agent_message = {}  # type: Dict[str, bool]
+
+        self.redeploy_backoff = {}  # type: Dict[str, Tuple[int, datetime.datetime]]
 
     def load(self):
         # type: () -> None
@@ -1081,6 +1083,26 @@ class HostCache():
         assert not daemon.startswith('ha-rgw.')
 
         return self.scheduled_daemon_actions.get(host, {}).get(daemon)
+
+    def can_redeploy_on_error(self, daemon_name: str) -> bool:
+        if daemon_name not in self.redeploy_backoff:
+            return True
+        else:
+            time_diff = datetime_now() - self.redeploy_backoff[daemon_name][1]
+            if time_diff.total_seconds() < exponential_backoff(self.redeploy_backoff[daemon_name][0]):
+                return False
+            return True
+
+    def did_redeploy_on_error(self, daemon_name: str) -> None:
+        if daemon_name not in self.redeploy_backoff:
+            self.redeploy_backoff[daemon_name] = (1, datetime_now())
+        else:
+            self.redeploy_backoff[daemon_name] = (
+                self.redeploy_backoff[daemon_name][0] + 1, datetime_now())
+
+    def clear_redeploy_on_error_counter(self, daemon_name: str) -> None:
+        if daemon_name in self.redeploy_backoff:
+            del self.redeploy_backoff[daemon_name]
 
 
 class EventStore():

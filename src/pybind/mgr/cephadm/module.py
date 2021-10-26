@@ -57,7 +57,7 @@ from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, EventStore, ClientKeyringStore, ClientKeyringSpec
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
-from .utils import CEPH_IMAGE_TYPES, forall_hosts, cephadmNoImage
+from .utils import CEPH_IMAGE_TYPES, forall_hosts, cephadmNoImage, REDEPLOY_ON_ERROR, exponential_backoff
 from .configchecks import CephadmConfigChecks
 
 try:
@@ -1250,6 +1250,36 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.keys.rm(entity)
         self._kick_serve_loop()
         return HandleCommandResult()
+
+    @orchestrator._cli_read_command('orch view backoff')
+    def _view_backoff(self, daemon_name: str) -> HandleCommandResult:
+        """
+        Cephadm will attempts to redeploy daemons of certain types when in error state.
+        This command allows you to view how many times redeploy was attempted and when it will be tried again.
+        """
+        if daemon_name.split('.')[0] not in REDEPLOY_ON_ERROR:
+            return HandleCommandResult(stdout=f'Redeploy on error is not done for daemons of type {daemon_name.split(".")[0]}')
+        elif daemon_name not in self.cache.redeploy_backoff:
+            return HandleCommandResult(stdout=f'No redeploy backoff data found for {daemon_name}')
+        else:
+            count, last_time = self.cache.redeploy_backoff[daemon_name]
+            time_since = datetime_now() - last_time
+            time_until = exponential_backoff(count) - time_since.total_seconds()
+            return HandleCommandResult(stdout=(f'Daemon {daemon_name} has been redeploy {count+1} times. '
+                                               + f'The last redeploy was at {last_time}. The next redeploy attempt will '
+                                               + f'be in  {str(datetime.timedelta(seconds=time_until))}'))
+
+    @orchestrator._cli_write_command('orch clear backoff')
+    def _clear_backoff(self, daemon_name: str) -> HandleCommandResult:
+        """
+        Cephadm will attempts to redeploy daemons of certain types when in error state.
+        This command allows you to clear the data on redeploy attempts for a certain daemon
+        """
+        if daemon_name.split('.')[0] not in REDEPLOY_ON_ERROR:
+            return HandleCommandResult(stdout=('Redeploy on error is not done for daemons of '
+                                               + f'type {daemon_name.split(".")[0]}. No data to remove.'))
+        self.cache.clear_redeploy_on_error_counter(daemon_name)
+        return HandleCommandResult(stdout=f'Redeploy backoff data for {daemon_name} removed.')
 
     def _get_container_image(self, daemon_name: str) -> Optional[str]:
         daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
