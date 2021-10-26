@@ -1235,10 +1235,13 @@ class LocalCluster(object):
 
 class LocalContext(object):
     def __init__(self):
-        self.config = {}
+        self.config = {'cluster': 'ceph'}
         self.teuthology_config = teuth_config
         self.cluster = LocalCluster()
         self.daemons = DaemonGroup()
+        if not hasattr(self, 'managers'):
+            self.managers = {}
+        self.managers[self.config['cluster']] = LocalCephManager()
 
         # Shove some LocalDaemons into the ctx.daemons DaemonGroup instance so that any
         # tests that want to look these up via ctx can do so.
