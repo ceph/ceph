@@ -114,6 +114,15 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
       }));
   }
 
+  seastar::future<> tear_down_fut() final {
+    return journal->close(
+    ).handle_error(
+      crimson::ct_error::all_same_way([](auto e) {
+        ASSERT_FALSE("Unable to close");
+      })
+    );
+  }
+
   template <typename T>
   auto replay(T &&f) {
     return journal->close(
@@ -207,10 +216,6 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
       handle).unsafe_get0();
     records.back().record_final_offset = addr;
     return addr;
-  }
-
-  seastar::future<> tear_down_fut() final {
-    return seastar::now();
   }
 
   extent_t generate_extent(size_t blocks) {
