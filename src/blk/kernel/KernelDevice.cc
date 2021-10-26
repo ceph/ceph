@@ -457,7 +457,7 @@ int KernelDevice::flush()
     _exit(1);
   }
   utime_t start = ceph_clock_now();
-  int r = ::fdatasync(fd_directs[WRITE_LIFE_NOT_SET]);
+  int r = ::fdatasync(fd_buffereds[WRITE_LIFE_NOT_SET]);
   utime_t end = ceph_clock_now();
   utime_t dur = end - start;
   if (r < 0) {
