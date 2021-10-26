@@ -2,6 +2,7 @@ import errno
 import logging
 import os
 from typing import List, Any, Tuple, Dict, Optional, cast
+from urllib.parse import urlparse
 
 from mgr_module import HandleCommandResult
 
@@ -32,7 +33,8 @@ class GrafanaService(CephadmService):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
             port = dd.ports[0] if dd.ports else 9095
-            prom_services.append(addr + ':' + str(port))
+            prom_services.append(build_url(scheme='http', host=addr, port=port))
+
             deps.append(dd.name())
         grafana_data_sources = self.mgr.template.render(
             'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services})
@@ -130,8 +132,9 @@ class AlertmanagerService(CephadmService):
         url = mgr_map.get('services', {}).get('dashboard', None)
         if url:
             dashboard_urls.append(url)
-            proto = url.split('/')[0]
-            port = url.split('/')[2].split(':')[1]
+            p_result = urlparse(url)
+            proto = p_result.scheme
+            port = p_result.port
         # scan all mgrs to generate deps and to get standbys too.
         # assume that they are all on the same port as the active mgr.
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
@@ -144,8 +147,7 @@ class AlertmanagerService(CephadmService):
                 continue
             assert dd.hostname is not None
             addr = self.mgr.inventory.get_addr(dd.hostname)
-            dashboard_urls.append('%s//%s:%s/' % (proto, addr.split(':')[0],
-                                                  port))
+            dashboard_urls.append(build_url(scheme=proto, host=addr, port=port))
 
         context = {
             'dashboard_urls': dashboard_urls,
@@ -154,12 +156,12 @@ class AlertmanagerService(CephadmService):
         yml = self.mgr.template.render('services/alertmanager/alertmanager.yml.j2', context)
 
         peers = []
-        port = '9094'
+        port = 9094
         for dd in self.mgr.cache.get_daemons_by_service('alertmanager'):
             assert dd.hostname is not None
             deps.append(dd.name())
             addr = self.mgr.inventory.get_addr(dd.hostname)
-            peers.append(addr.split(':')[0] + ':' + port)
+            peers.append(build_url(host=addr, port=port).lstrip('/'))
         return {
             "files": {
                 "alertmanager.yml": yml
@@ -179,7 +181,7 @@ class AlertmanagerService(CephadmService):
         assert dd.hostname is not None
         addr = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
-        service_url = 'http://{}:{}'.format(addr, port)
+        service_url = build_url(scheme='http', host=addr, port=port)
         self._set_service_url_on_dashboard(
             'AlertManager',
             'dashboard get-alertmanager-api-host',
@@ -233,11 +235,10 @@ class PrometheusService(CephadmService):
         port = None
         t = mgr_map.get('services', {}).get('prometheus', None)
         if t:
+            p_result = urlparse(t)
             t = t.split('/')[2]
             mgr_scrape_list.append(t)
-            port = '9283'
-            if ':' in t:
-                port = t.split(':')[1]
+            port = p_result.port or 9283
         # scan all mgrs to generate deps and to get standbys too.
         # assume that they are all on the same port as the active mgr.
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
@@ -250,7 +251,7 @@ class PrometheusService(CephadmService):
                 continue
             assert dd.hostname is not None
             addr = self.mgr.inventory.get_addr(dd.hostname)
-            mgr_scrape_list.append(addr.split(':')[0] + ':' + port)
+            mgr_scrape_list.append(build_url(host=addr, port=port).lstrip('/'))
 
         # scrape node exporters
         nodes = []
@@ -258,10 +259,10 @@ class PrometheusService(CephadmService):
             assert dd.hostname is not None
             deps.append(dd.name())
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
-            port = str(dd.ports[0]) if dd.ports else '9100'
+            port = dd.ports[0] if dd.ports else 9100
             nodes.append({
                 'hostname': dd.hostname,
-                'url': addr.split(':')[0] + ':' + port
+                'url': build_url(host=addr, port=port).lstrip('/')
             })
 
         # scrape alert managers
@@ -270,8 +271,8 @@ class PrometheusService(CephadmService):
             assert dd.hostname is not None
             deps.append(dd.name())
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
-            port = str(dd.ports[0]) if dd.ports else '9093'
-            alertmgr_targets.append("'{}:{}'".format(addr.split(':')[0], port))
+            port = dd.ports[0] if dd.ports else 9093
+            alertmgr_targets.append("'{}'".format(build_url(host=addr, port=port).lstrip('/')))
 
         # scrape haproxies
         haproxy_targets = []
@@ -283,7 +284,7 @@ class PrometheusService(CephadmService):
                 if dd.daemon_type == 'haproxy':
                     addr = self.mgr.inventory.get_addr(dd.hostname)
                     haproxy_targets.append({
-                        "url": f"'{addr.split(':')[0]}:{spec.monitor_port}'",
+                        "url": f"'{build_url(host=addr, port=spec.monitor_port).lstrip('/')}'",
                         "service": dd.service_name(),
                     })
 
@@ -322,7 +323,7 @@ class PrometheusService(CephadmService):
         assert dd.hostname is not None
         addr = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
-        service_url = 'http://{}:{}'.format(addr, port)
+        service_url = build_url(scheme='http', host=addr, port=port)
         self._set_service_url_on_dashboard(
             'Prometheus',
             'dashboard get-prometheus-api-host',
