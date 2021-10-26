@@ -3684,7 +3684,7 @@ WantedBy=ceph-{fsid}.target
             self.event.wait(max(self.loop_interval - int(run_time_average), 0))
             self.event.clear()
 
-    def _ceph_volume(self, enhanced: bool = False) -> str:
+    def _ceph_volume(self, enhanced: bool = False) -> Tuple[str, bool]:
         self.ctx.command = 'inventory --format=json'.split()
         if enhanced:
             self.ctx.command.append('--with-lsm')
@@ -3697,7 +3697,7 @@ WantedBy=ceph-{fsid}.target
         stdout = stream.getvalue()
 
         if stdout:
-            return stdout
+            return (stdout, False)
         else:
             raise Exception('ceph-volume returned empty value')
 
@@ -3774,15 +3774,17 @@ WantedBy=ceph-{fsid}.target
                 name_id_mapping[name] = id
         return name_id_mapping
 
-    def _get_ls(self) -> List[Dict[str, str]]:
+    def _get_ls(self) -> Tuple[List[Dict[str, str]], bool]:
         if not self.cached_ls_values:
             logger.info('No cached ls output. Running full daemon ls')
             ls = list_daemons(self.ctx)
             for d in ls:
                 self.cached_ls_values[d['name']] = d
+            return (ls, True)
         else:
             ls_subset = self._daemon_ls_subset()
             need_full_ls = False
+            state_change = False
             if set(self.cached_ls_values.keys()) != set(ls_subset.keys()):
                 # case for a new daemon in ls or an old daemon no longer appearing.
                 # If that happens we need a full ls
@@ -3790,7 +3792,7 @@ WantedBy=ceph-{fsid}.target
                 ls = list_daemons(self.ctx)
                 for d in ls:
                     self.cached_ls_values[d['name']] = d
-                return ls
+                return (ls, True)
             for daemon, info in self.cached_ls_values.items():
                 if info['style'] == 'legacy':
                     # for legacy containers, ls_subset just grabs all the info
@@ -3801,6 +3803,14 @@ WantedBy=ceph-{fsid}.target
                         # info we didn't grab like version and start time could have changed
                         need_full_ls = True
                         break
+
+                    # want to know if a daemons state change because in those cases we want
+                    # to report back quicker
+                    if (
+                        self.cached_ls_values[daemon]['enabled'] != ls_subset[daemon]['enabled']
+                        or self.cached_ls_values[daemon]['state'] != ls_subset[daemon]['state']
+                    ):
+                        state_change = True
                     # if we reach here, container id matched. Update the few values we do track
                     # from ls subset: state, enabled, memory_usage.
                     self.cached_ls_values[daemon]['enabled'] = ls_subset[daemon]['enabled']
@@ -3812,9 +3822,10 @@ WantedBy=ceph-{fsid}.target
                 ls = list_daemons(self.ctx)
                 for d in ls:
                     self.cached_ls_values[d['name']] = d
+                return (ls, True)
             else:
                 ls = [info for daemon, info in self.cached_ls_values.items()]
-        return ls
+                return (ls, state_change)
 
 
 class AgentGatherer(Thread):
@@ -3836,12 +3847,13 @@ class AgentGatherer(Thread):
                 start_time = time.monotonic()
 
                 ack = self.agent.ack
+                change = False
                 try:
-                    self.data = self.func()
+                    self.data, change = self.func()
                 except Exception as e:
                     logger.error(f'{self.gatherer_type} Gatherer encountered exception gathering data: {e}')
                     self.data = None
-                if ack != self.ack:
+                if ack != self.ack or change:
                     self.ack = ack
                     self.agent.wakeup()
 
