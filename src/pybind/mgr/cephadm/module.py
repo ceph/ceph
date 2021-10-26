@@ -296,6 +296,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Custom repository password'
         ),
         Option(
+            'registry_insecure',
+            type='bool',
+            default=False,
+            desc='Registry is to be considered insecure (no TLS available). Only for development purposes.'
+        ),
+        Option(
             'use_repo_digest',
             type='bool',
             default=True,
@@ -402,6 +408,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.registry_url: Optional[str] = None
             self.registry_username: Optional[str] = None
             self.registry_password: Optional[str] = None
+            self.registry_insecure: bool = False
             self.use_repo_digest = True
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0
