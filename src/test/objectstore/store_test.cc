@@ -39,10 +39,11 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 #include "include/coredumpctl.h"
-
 #include "include/unordered_map.h"
+#include "os/kv.h"
 #include "store_test_fixture.h"
 
+using namespace std;
 using namespace std::placeholders;
 
 typedef boost::mt11213b gen_type;
@@ -7392,6 +7393,7 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
       const PerfCounters* counters = store->get_perf_counters();
       ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x3ffffu);
     }
+
     {
       struct store_statfs_t statfs;
       WRITE_AT(0, buf_len-1);
@@ -7613,7 +7615,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     }
 
     bstore->umount();
-    ASSERT_EQ(bstore->fsck(false), 3);
+    ASSERT_EQ(bstore->fsck(false), 4);
     ASSERT_LE(bstore->repair(false), 0);
     ASSERT_EQ(bstore->fsck(false), 0);
   }
@@ -7722,6 +7724,78 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenZombieRepairTest) {
   bstore->mount();
 }
 
+TEST_P(StoreTestSpecificAUSize, BluestoreRepairSharedBlobTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
+
+  const size_t block_size = 0x1000;
+  StartDeferred(block_size);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+
+  // fill the store with some data
+  const uint64_t pool = 555;
+  coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
+  auto ch = store->create_new_collection(cid);
+
+  ghobject_t hoid = make_object("Object 1", pool);
+  ghobject_t hoid_cloned = hoid;
+  hoid_cloned.hobj.snap = 1;
+  ghobject_t hoid2 = make_object("Object 2", pool);
+
+  string s(block_size, 1);
+  bufferlist bl;
+  bl.append(s);
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // check the scenario when shared blob contains
+  // references to extents from two objects which don't overlapp
+  // o1 -> 0x2000~1K
+  // o2 -> 0x4000~1k
+  cerr << "introduce 2 non-overlapped extents in a shared blob"
+       << std::endl;
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, bl.length(), bl);
+    t.write(cid, hoid2, 0, bl.length(), bl); // to make a gap in allocations
+    t.write(cid, hoid, block_size * 2 , bl.length(), bl);
+    t.clone(cid, hoid, hoid_cloned);
+    t.zero(cid, hoid, 0, bl.length());
+    t.zero(cid, hoid_cloned, block_size * 2, bl.length());
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bstore->umount();
+  bstore->mount();
+  {
+    string key;
+    _key_encode_u64(1, &key);
+    bluestore_shared_blob_t sb(1);
+    sb.ref_map.get(0x2000, block_size);
+    sb.ref_map.get(0x4000, block_size);
+    sb.ref_map.get(0x4000, block_size);
+    bufferlist bl;
+    encode(sb, bl);
+    bstore->inject_broken_shared_blob_key(key, bl);
+  }
+  bstore->umount();
+  ASSERT_EQ(bstore->fsck(false), 2);
+  ASSERT_EQ(bstore->repair(false), 0);
+  ASSERT_EQ(bstore->fsck(false), 0);
+
+  cerr << "Completing" << std::endl;
+  bstore->mount();
+}
+
 TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
   if (string(GetParam()) != "bluestore")
     return;
@@ -7745,6 +7819,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
     ghobject_t hoid = make_object("Object", pool);
     ghobject_t hoid_cloned = hoid;
     hoid_cloned.hobj.snap = 1;
+
 
     {
       ObjectStore::Transaction t;
@@ -7772,12 +7847,22 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
   cerr << "injecting" << std::endl;
   sleep(3); // need some time for the previous write to land
   bstore->inject_no_shared_blob_key();
+  bstore->inject_stray_shared_blob_key(12345678);
 
   {
     cerr << "fscking/fixing" << std::endl;
     bstore->umount();
-    ASSERT_EQ(bstore->fsck(false), 3);
-    ASSERT_LE(bstore->repair(false), 3);
+    // depending on the allocation map's source we can
+    // either observe or don't observe an additional
+    // extent leak detection. Hence adjusting the expected
+    // value
+    size_t expected_error_count =
+      7; // 4 sb ref mismatch errors + 1 statfs + 1 block leak + 1 non-free
+    ASSERT_EQ(bstore->fsck(false), expected_error_count);
+    // repair might report less errors than fsck above showed
+    // as some errors, e.g. statfs mismatch, are implicitly fixed
+    // before the detection during the previous repair steps...
+    ASSERT_LE(bstore->repair(false), expected_error_count);
     ASSERT_EQ(bstore->fsck(false), 0);
   }
 
