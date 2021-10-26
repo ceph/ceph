@@ -17,6 +17,7 @@
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/root_block.h"
 #include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/random_block_manager.h"
 
 namespace crimson::os::seastore {
 
