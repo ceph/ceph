@@ -28,10 +28,12 @@ public:
 
   struct mkfs_config_t {
     std::string path;
-    blk_paddr_t start;
-    blk_paddr_t end;
+    paddr_t start;
+    paddr_t end;
     size_t block_size = 0;
     size_t total_size = 0;
+    uint32_t blocks_per_segment = 1 << 18;
+    device_id_t device_id = 0;
     seastore_meta_t meta;
   };
   using mkfs_ertr = crimson::errorator<
@@ -60,7 +62,7 @@ public:
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg,
     crimson::ct_error::enoent>;
-  virtual open_ertr::future<> open(const std::string &path, blk_paddr_t start) = 0;
+  virtual open_ertr::future<> open(const std::string &path, paddr_t start) = 0;
 
   using close_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
@@ -72,14 +74,9 @@ public:
     crimson::ct_error::invarg,
     crimson::ct_error::enospc
     >;
-  virtual allocate_ertr::future<> alloc_extent(Transaction &t, size_t size) = 0; // allocator, return blocks
-
-  using free_block_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg
-    >;
-  // TODO: will include trim if necessary
-  virtual free_block_ertr::future<> free_extent(Transaction &t, blk_paddr_t from, size_t len) = 0;
+  using allocate_ret = allocate_ertr::future<paddr_t>;
+  // allocator, return start addr of allocated blocks
+  virtual allocate_ret alloc_extent(Transaction &t, size_t size) = 0;
 
   using abort_allocation_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
@@ -98,6 +95,8 @@ public:
   virtual size_t get_size() const = 0;
   virtual size_t get_block_size() const = 0;
   virtual uint64_t get_free_blocks() const = 0;
+  virtual uint32_t get_blocks_per_segment() const = 0;
+  virtual device_id_t get_device_id() const = 0;
   virtual ~RandomBlockManager() {}
 };
 using RandomBlockManagerRef = std::unique_ptr<RandomBlockManager>;

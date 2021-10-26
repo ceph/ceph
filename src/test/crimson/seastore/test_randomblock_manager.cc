@@ -64,8 +64,8 @@ struct rbm_test_t : public  seastar_test_suite_t,
     reader->add_segment_manager(segment_manager.get());
     device = new nvme_device::TestMemory(DEFAULT_TEST_SIZE);
     rbm_manager.reset(new NVMeManager(device, std::string()));
-    config.start = 0;
-    config.end = DEFAULT_TEST_SIZE;
+    config.start = paddr_t {0, 0, 0};
+    config.end = paddr_t {0, 0, DEFAULT_TEST_SIZE};
     config.block_size = DEFAULT_BLOCK_SIZE;
     config.total_size = DEFAULT_TEST_SIZE;
   }
@@ -86,7 +86,11 @@ struct rbm_test_t : public  seastar_test_suite_t,
   }
 
   auto read_rbm_header() {
-    return rbm_manager->read_rbm_header(config.start).unsafe_get0();
+    blk_paddr_t addr = convert_paddr_to_blk_paddr(
+      config.start,
+      config.block_size,
+      config.blocks_per_segment);
+    return rbm_manager->read_rbm_header(addr).unsafe_get0();
   }
 
   auto open() {
@@ -109,11 +113,17 @@ struct rbm_test_t : public  seastar_test_suite_t,
     auto tt = create_mutate_transaction(); // dummy transaction
     auto extent = rbm_manager->find_free_block(*tt, size).unsafe_get0();
     if (!extent.empty()) {
-      rbm_alloc_delta_t alloc_info {
-	extent_types_t::RBM_ALLOC_INFO,
-	  extent,
-	  rbm_alloc_delta_t::op_types_t::SET
-      };
+      rbm_alloc_delta_t alloc_info;
+      for (auto p : extent) {
+	paddr_t paddr = convert_blk_paddr_to_paddr(
+	    p.first * block_size,
+	    block_size,
+	    config.blocks_per_segment,
+	    0);
+	size_t len = p.second * block_size;
+	alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
+	alloc_info.op = rbm_alloc_delta_t::op_types_t::SET;
+      }
       t.add_rbm_allocated_blocks(alloc_info);
     }
   }
@@ -123,7 +133,7 @@ struct rbm_test_t : public  seastar_test_suite_t,
       logger().debug("free_extent: start {} len {}", off * DEFAULT_BLOCK_SIZE,
 		      len * DEFAULT_BLOCK_SIZE);
       rbm_manager->add_free_extent(t.allocated_blocks, off * DEFAULT_BLOCK_SIZE,
-				    len * DEFAULT_BLOCK_SIZE).unsafe_get();
+				    len * DEFAULT_BLOCK_SIZE);
     }
   }
 
@@ -131,7 +141,14 @@ struct rbm_test_t : public  seastar_test_suite_t,
     auto allocated_blocks = t.get_rbm_allocated_blocks();
     interval_set<blk_id_t> alloc_ids;
     for (auto p : allocated_blocks) {
-      alloc_ids.insert(p.alloc_blk_ids);
+      for (auto b : p.alloc_blk_ranges) {
+	blk_paddr_t addr =
+	  convert_paddr_to_blk_paddr(
+	    b.first,
+	    block_size,
+	    config.blocks_per_segment);
+	alloc_ids.insert(addr / block_size, b.second / block_size);
+      }
     }
     logger().debug(" get allocated blockid {}", alloc_ids);
     return alloc_ids;
@@ -283,8 +300,8 @@ TEST_F(rbm_test_t, block_alloc_free_test)
 TEST_F(rbm_test_t, many_block_alloc)
 {
  run_async([this] {
-   config.start = 0;
-   config.end = DEFAULT_TEST_SIZE * 1024;
+   config.start = paddr_t {0, 0, 0};
+   config.end = paddr_t {0, 0, DEFAULT_TEST_SIZE * 1024};
    config.block_size = DEFAULT_BLOCK_SIZE;
    config.total_size = DEFAULT_TEST_SIZE * 1024;
    mkfs();

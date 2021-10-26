@@ -1069,13 +1069,27 @@ constexpr blk_id_t NULL_BLK_ID =
 using blk_paddr_t = uint64_t;
 struct rbm_alloc_delta_t {
   enum class op_types_t : uint8_t {
+    NONE = 0,
     SET = 1,
     CLEAR = 2
   };
-  extent_types_t type;
-  interval_set<blk_id_t> alloc_blk_ids;
-  op_types_t op;
+  std::vector<std::pair<paddr_t, size_t>> alloc_blk_ranges;
+  op_types_t op = op_types_t::NONE;
+
+  rbm_alloc_delta_t() = default;
+
+  DENC(rbm_alloc_delta_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.alloc_blk_ranges, p);
+    denc(v.op, p);
+    DENC_FINISH(p);
+  }
 };
+
+paddr_t convert_blk_paddr_to_paddr(blk_paddr_t addr, size_t block_size,
+    uint32_t blocks_per_segment, device_id_t d_id);
+blk_paddr_t convert_paddr_to_blk_paddr(paddr_t addr, size_t block_size,
+	uint32_t blocks_per_segment);
 
 struct extent_info_t {
   extent_types_t type = extent_types_t::NONE;
@@ -1219,6 +1233,7 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::delta_info_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::extent_info_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::rbm_alloc_delta_t)
 
 template<>
 struct denc_traits<crimson::os::seastore::device_type_t> {
