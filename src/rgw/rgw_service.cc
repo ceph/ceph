@@ -372,7 +372,7 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixPr
   }
 
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc());
-  meta.role = std::make_unique<rgw::sal::RGWRoleMetadataHandler>(svc.cct, store);
+  meta.role = std::make_unique<rgw::sal::RGWRoleMetadataHandler>(svc.cct, store, svc.zone, svc.meta, svc.meta_be_sobj, svc.sysobj);
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
   bucket.reset(new RGWBucketCtl(svc.zone,

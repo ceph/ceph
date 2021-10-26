@@ -193,9 +193,13 @@ public:
 
   RGWSI_MetaBackend_Handler * get_be_handler();
 
-  int do_start(optional_yield y, const DoutPrefixProvider *dpp);
+  //int do_start(optional_yield y, const DoutPrefixProvider *dpp);
 
-  RGWRoleMetadataHandler(CephContext *cct, Store* store);
+  RGWRoleMetadataHandler(CephContext *cct, Store* store,
+                          RGWSI_Zone *_zone_svc,
+                          RGWSI_Meta *_meta_svc,
+                          RGWSI_MetaBackend *_meta_be_svc,
+                          RGWSI_SysObj *_sysobj_svc);
 
   std::string get_type() final { return "roles";  }
 
@@ -228,6 +232,7 @@ private:
   RGWSI_MetaBackend_Handler *be_handler;
   std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
   std::unique_ptr<Store> store;
+  CephContext *cct;
 };
 } } // namespace rgw::sal
 
