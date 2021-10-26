@@ -4,7 +4,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ActivatedRouteSnapshot, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { of as observableOf } from 'rxjs';
+import { of as observableOf, throwError } from 'rxjs';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { MgrModuleService } from '../api/mgr-module.service';
@@ -31,12 +31,16 @@ describe('ModuleStatusGuardService', () => {
     getResult: {},
     activateResult: boolean,
     urlResult: string,
-    backend = 'cephadm'
+    backend = 'cephadm',
+    configOptPermission = true
   ) => {
     let result: boolean;
     spyOn(httpClient, 'get').and.returnValue(observableOf(getResult));
-    const test = { orchestrator: backend };
-    spyOn(mgrModuleService, 'getConfig').and.returnValue(observableOf(test));
+    const orchBackend = { orchestrator: backend };
+    const getConfigSpy = spyOn(mgrModuleService, 'getConfig');
+    configOptPermission
+      ? getConfigSpy.and.returnValue(observableOf(orchBackend))
+      : getConfigSpy.and.returnValue(throwError({}));
     ngZone.run(() => {
       service.canActivateChild(route).subscribe((resp) => {
         result = resp;
@@ -90,5 +94,9 @@ describe('ModuleStatusGuardService', () => {
 
   it('should redirect normally if the backend provided matches the current backend', fakeAsync(() => {
     testCanActivate({ available: true, message: 'foo' }, true, '/', 'rook');
+  }));
+
+  it('should redirect to the "redirectTo" link for user without sufficient permission', fakeAsync(() => {
+    testCanActivate({ available: true, message: 'foo' }, true, '/foo', 'rook', false);
   }));
 });
