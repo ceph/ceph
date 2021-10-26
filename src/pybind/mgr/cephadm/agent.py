@@ -174,6 +174,7 @@ class HostData:
             self.mgr.cache.agent_timestamp[host] = datetime_now()
 
             error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+            daemon_count_old = len(self.mgr.cache.get_daemons_by_host(host))
 
             agents_down = []
             for h in self.mgr.cache.get_hosts():
@@ -204,9 +205,12 @@ class HostData:
                 ret = Devices.from_json(json.loads(data['volume']))
                 self.mgr.cache.update_host_devices(host, ret.devices)
 
-            if error_daemons_old != set([dd.name() for dd in self.mgr.cache.get_error_daemons()]):
+            if (
+                error_daemons_old != set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+                or daemon_count_old != len(self.mgr.cache.get_daemons_by_host(host))
+            ):
                 self.mgr.log.info(
-                    f'Change detected in daemons in error state from {host} agent metadata. Kicking serve loop')
+                    f'Change detected in state of daemons from {host} agent metadata. Kicking serve loop')
                 self.mgr._kick_serve_loop()
 
             if up_to_date and ('ls' in data and data['ls']):
