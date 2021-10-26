@@ -302,6 +302,10 @@ class AgentMessageThread(threading.Thread):
         return
 
 
+class AgentLockException(Exception):
+    pass
+
+
 class CephadmAgentHelpers:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
@@ -398,7 +402,7 @@ class CephadmAgentHelpers:
             self.mgr.agent_helpers.agent_locks[host] = threading.Lock()
         lock = self.mgr.agent_helpers.agent_locks[host]
         if not lock.acquire(False):
-            raise Exception('Agent lock in use')
+            raise AgentLockException()
         try:
             yield lock
         finally:
@@ -425,6 +429,9 @@ class CephadmAgentHelpers:
                     with self.mgr.agent_helpers.agent_lock(host):
                         daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
                         self.mgr._daemon_action(daemon_spec, action='redeploy')
+                except AgentLockException:
+                    self.mgr.log.debug(
+                        f'Could not redeploy agent on host {host}. Someone else holds agent\'s lock')
                 except Exception as e:
                     self.mgr.log.debug(
                         f'Failed to redeploy agent on host {host}. Agent possibly never deployed: {e}')
@@ -448,6 +455,9 @@ class CephadmAgentHelpers:
                     with self.mgr.agent_helpers.agent_lock(host):
                         self.mgr._daemon_action(daemon_spec, action='reconfig')
                     return False
+            except AgentLockException:
+                self.mgr.log.debug(
+                    f'Could not reconfig agent on host {host}. Someone else holds agent\'s lock')
             except Exception as e:
                 self.mgr.log.debug(
                     f'Agent on host {host} not ready to have config and deps checked: {e}')
@@ -458,6 +468,9 @@ class CephadmAgentHelpers:
                         daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
                         self.mgr._daemon_action(daemon_spec, action=action)
                         self.mgr.cache.rm_scheduled_daemon_action(agent.hostname, agent.name())
+                except AgentLockException:
+                    self.mgr.log.debug(
+                        f'Could not {action} agent on host {host}. Someone else holds agent\'s lock')
                 except Exception as e:
                     self.mgr.log.debug(
                         f'Agent on host {host} not ready to {action}: {e}')
