@@ -580,7 +580,7 @@ All
 
 This will take all disks that are 'available'
 
-Note: This is exclusive for the data_devices section.
+.. note:: This is exclusive for the data_devices section.
 
 .. code-block:: yaml
 
@@ -605,7 +605,7 @@ but want to use only the first two, you could use `limit`:
     vendor: VendorA
     limit: 2
 
-Note: `limit` is a last resort and shouldn't be used if it can be avoided.
+.. note:: `limit` is a last resort and shouldn't be used if it can be avoided.
 
 
 Additional Options
@@ -699,7 +699,7 @@ If you know that drives with more than 2TB will always be the slower data device
       db_devices:
         size: ':2TB'
 
-Note: All of the above OSD specs  are equally valid. Which of those you want to use depends on taste and on how much you expect your node layout to change.
+.. note:: All of the above OSD specs  are equally valid. Which of those you want to use depends on taste and on how much you expect your node layout to change.
 
 
 Multiple OSD specs for a single host
