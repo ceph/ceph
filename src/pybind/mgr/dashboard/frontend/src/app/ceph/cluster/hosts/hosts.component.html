@@ -13,7 +13,8 @@
                 selectionType="single"
                 [hasDetails]="hasTableDetails"
                 (setExpandedRow)="setExpandedRow($event)"
-                (updateSelection)="updateSelection($event)">
+                (updateSelection)="updateSelection($event)"
+                [toolHeader]="!hideToolHeader">
         <div class="table-actions btn-toolbar">
           <cd-table-actions [permission]="permissions.hosts"
                             [selection]="selection"

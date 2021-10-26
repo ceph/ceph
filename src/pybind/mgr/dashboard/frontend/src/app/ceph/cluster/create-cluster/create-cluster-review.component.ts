@@ -73,7 +73,6 @@ export class CreateClusterReviewComponent implements OnInit {
           (this.serviceOccurrences[serviceKey['service_type']] || 0) + 1;
         this.uniqueServices.add(serviceKey['service_type']);
       });
-      this.totalMemory = this.dimlessBinary.transform(this.totalMemory);
 
       this.uniqueServices.forEach((serviceType) => {
         this.hostsCountPerService.push({
