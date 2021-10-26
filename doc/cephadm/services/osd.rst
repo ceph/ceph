@@ -362,7 +362,7 @@ Example command:
 
 .. note::
     If the unmanaged flag is unset, cephadm automatically deploys drives that
-    match the DriveGroup in your OSDSpec.  For example, if you use the
+    match the OSDSpec.  For example, if you use the
     ``all-available-devices`` option when creating OSDs, when you ``zap`` a
     device the cephadm orchestrator automatically creates a new OSD in the
     device.  To disable this behavior, see :ref:`cephadm-osd-declarative`.
@@ -616,7 +616,7 @@ Additional Options
 ------------------
 
 There are multiple optional settings you can use to change the way OSDs are deployed.
-You can add these options to the base level of a DriveGroup for it to take effect.
+You can add these options to the base level of an OSD spec for it to take effect.
 
 This example would deploy all OSDs with encryption enabled.
 
@@ -703,7 +703,7 @@ If you know that drives with more than 2TB will always be the slower data device
       db_devices:
         size: ':2TB'
 
-Note: All of the above DriveGroups are equally valid. Which of those you want to use depends on taste and on how much you expect your node layout to change.
+Note: All of the above OSD specs  are equally valid. Which of those you want to use depends on taste and on how much you expect your node layout to change.
 
 
 Multiple OSD specs for a single host
