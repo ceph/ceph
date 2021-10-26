@@ -600,8 +600,7 @@ function test_auth()
   ceph auth caps client.xx mon 'allow command "osd tree"'
   ceph auth export | grep client.xx
   ceph auth export -o authfile
-  ceph auth import -i authfile 2>$TMPFILE
-  check_response "imported keyring"
+  ceph auth import -i authfile
 
   ceph auth export -o authfile2
   diff authfile authfile2
