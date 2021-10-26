@@ -4848,6 +4848,14 @@ options:
   desc: Number of additional threads to perform quick-fix (shallow fsck) command
   default: 2
   with_legacy: true
+- name: bluestore_fsck_shared_blob_tracker_size
+  type: size
+  level: dev
+  desc: Size in bytes for a hash table to track shared blobs ref counts. Higher the size, more precise is the tracker -> less overhead during the repair.
+  default: 128_M
+  flags:
+  - runtime
+  with_legacy: true
 - name: bluestore_throttle_bytes
   type: size
   level: advanced

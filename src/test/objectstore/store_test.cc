@@ -9100,7 +9100,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     }
 
     bstore->umount();
-    ASSERT_EQ(bstore->fsck(false), 3);
+    ASSERT_EQ(bstore->fsck(false), 4);
     ASSERT_LE(bstore->repair(false), 0);
     ASSERT_EQ(bstore->fsck(false), 0);
   }
@@ -9266,6 +9266,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
   cerr << "injecting" << std::endl;
   sleep(3); // need some time for the previous write to land
   bstore->inject_no_shared_blob_key();
+  bstore->inject_stray_shared_blob_key(12345678);
 
   {
     cerr << "fscking/fixing" << std::endl;
@@ -9276,9 +9277,12 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
     // value
     size_t expected_error_count =
       g_ceph_context->_conf->bluestore_allocation_from_file ?
-      2 :
-      3;
+      5: // 4 sb ref mismatch errors + 1 statfs mismatch
+      7; // 4 sb ref mismatch errors + 1 statfs + 1 block leak + 1 non-free
     ASSERT_EQ(bstore->fsck(false), expected_error_count);
+    // repair might report less errors than fsck above showed
+    // as some errors, e.g. statfs mismatch, are implicitly fixed
+    // before the detection during the previous repair steps...
     ASSERT_LE(bstore->repair(false), expected_error_count);
     ASSERT_EQ(bstore->fsck(false), 0);
   }
