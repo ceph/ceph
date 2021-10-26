@@ -1982,33 +1982,89 @@ Then run the following:
 
     @handle_orch_error
     def zap_device(self, host: str, path: str) -> str:
+        """Zap a device on a managed host.
+
+        Use ceph-volume zap to return a device to an unused/free state
+
+        Args:
+            host (str): hostname of the cluster host
+            path (str): device path
+
+        Raises:
+            OrchestratorError: host is not a cluster host
+            OrchestratorError: host is in maintenance and therefore unavailable
+            OrchestratorError: device path not found on the host
+            OrchestratorError: device is known to a different ceph cluster
+            OrchestratorError: device holds active osd
+            OrchestratorError: device cache hasn't been populated yet..
+
+        Returns:
+            str: output from the zap command
+        """
+
         self.log.info('Zap device %s:%s' % (host, path))
 
-        out, err, code = CephadmServe(self)._run_cephadm(
-            host, 'osd.', 'ceph-volume',
-            ['--', 'lvm', 'list', path, '--format', 'json'],
-            error_ok=True)
-        if code:
-            raise OrchestratorError('Zap failed: ceph-volume lvm list %s' % '\n'.join(path))
-        osd_info = json.loads('\n'.join(out))
+        if host not in self.inventory.keys():
+            raise OrchestratorError(
+                f"Host '{host}' is not a member of the cluster")
 
-        for osd_id in osd_info.keys():
-            out, err, code = CephadmServe(self)._run_cephadm(
-                host, 'osd.', 'unit',
-                ['is-active', '--name', 'osd.%s' % osd_id],
-                error_ok=True)
-            if code == 0:
-                raise OrchestratorError('The systemctl unit of osd is active. Rm osd first')
+        host_info = self.inventory._inventory.get(host, {})
+        if host_info.get('status', '').lower() == 'maintenance':
+            raise OrchestratorError(
+                f"Host '{host}' is in maintenance mode, which prevents any actions against it.")
+
+        if host not in self.cache.devices:
+            raise OrchestratorError(
+                f"Host '{host} hasn't been scanned yet to determine it's inventory. Please try again later.")
+
+        host_devices = self.cache.devices[host]
+        path_found = False
+        osd_id_list: List[str] = []
+
+        for dev in host_devices:
+            if dev.path == path:
+                # match, so look a little deeper
+                if dev.lvs:
+                    for lv in cast(List[Dict[str, str]], dev.lvs):
+                        if lv.get('osd_id', ''):
+                            lv_fsid = lv.get('cluster_fsid')
+                            if lv_fsid != self._cluster_fsid:
+                                raise OrchestratorError(
+                                    f"device {path} has lv's from a different Ceph cluster ({lv_fsid})")
+                            osd_id_list.append(lv.get('osd_id', ''))
+                path_found = True
+                break
+        if not path_found:
+            raise OrchestratorError(
+                f"Device path '{path}' not found on host '{host}'")
+
+        if osd_id_list:
+            dev_name = os.path.basename(path)
+            active_osds: List[str] = []
+            for osd_id in osd_id_list:
+                metadata = self.get_metadata('osd', str(osd_id))
+                if metadata:
+                    if metadata.get('hostname', '') == host and dev_name in metadata.get('devices', '').split(','):
+                        active_osds.append("osd." + osd_id)
+            if active_osds:
+                raise OrchestratorError(
+                    f"Unable to zap: device '{path}' on {host} has {len(active_osds)} active "
+                    f"OSD{'s' if len(active_osds) > 1 else ''}"
+                    f" ({', '.join(active_osds)}). Use 'ceph orch osd rm' first.")
 
         out, err, code = CephadmServe(self)._run_cephadm(
             host, 'osd', 'ceph-volume',
             ['--', 'lvm', 'zap', '--destroy', path],
             error_ok=True)
+
         self.cache.invalidate_host_devices(host)
         self.cache.invalidate_host_networks(host)
         if code:
             raise OrchestratorError('Zap failed: %s' % '\n'.join(out + err))
-        return '\n'.join(out + err)
+        msg = f'zap successful for {path} on {host}'
+        self.log.info(msg)
+
+        return msg + '\n'
 
     @handle_orch_error
     def blink_device_light(self, ident_fault: str, on: bool, locs: List[orchestrator.DeviceLightLoc]) -> List[str]:
