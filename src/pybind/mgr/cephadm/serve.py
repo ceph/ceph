@@ -261,47 +261,32 @@ class CephadmServe:
                 or host not in [h.hostname for h in self.mgr.cache.get_non_draining_hosts()]
                 or host in agents_down
             ):
-                if (
-                    self.mgr.cache.host_needs_daemon_refresh(host)
-                    or not self.mgr.cache.host_metadata_up_to_date(host)
-                ):
+                if self.mgr.cache.host_needs_daemon_refresh(host):
                     self.log.debug('refreshing %s daemons' % host)
                     r = self._refresh_host_daemons(host)
                     if r:
                         failures.append(r)
 
-                if (
-                    self.mgr.cache.host_needs_facts_refresh(host)
-                    or not self.mgr.cache.host_metadata_up_to_date(host)
-                ):
+                if self.mgr.cache.host_needs_facts_refresh(host):
                     self.log.debug(('Refreshing %s facts' % host))
                     r = self._refresh_facts(host)
                     if r:
                         failures.append(r)
 
-                if (
-                    self.mgr.cache.host_needs_network_refresh(host)
-                    or not self.mgr.cache.host_metadata_up_to_date(host)
-                ):
+                if self.mgr.cache.host_needs_network_refresh(host):
                     self.log.debug(('Refreshing %s networks' % host))
                     r = self._refresh_host_networks(host)
                     if r:
                         failures.append(r)
 
-                if (
-                    self.mgr.cache.host_needs_device_refresh(host)
-                    or not self.mgr.cache.host_metadata_up_to_date(host)
-                ):
+                if self.mgr.cache.host_needs_device_refresh(host):
                     self.log.debug('refreshing %s devices' % host)
                     r = self._refresh_host_devices(host)
                     if r:
                         failures.append(r)
                 self.mgr.cache.metadata_up_to_date[host] = True
-            elif not [a for a in self.mgr.cache.get_daemons_by_type('agent') if a.hostname == host]:
-                if (
-                    self.mgr.cache.host_needs_daemon_refresh(host)
-                    or not self.mgr.cache.host_metadata_up_to_date(host)
-                ):
+            elif not self.mgr.cache.get_daemons_by_type('agent', host=host):
+                if self.mgr.cache.host_needs_daemon_refresh(host):
                     self.log.debug('refreshing %s daemons' % host)
                     r = self._refresh_host_daemons(host)
                     if r:

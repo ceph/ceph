@@ -325,7 +325,7 @@ class CephadmAgentHelpers:
         if host not in [h.hostname for h in self.mgr.cache.get_non_draining_hosts()]:
             return False
         # if we haven't deployed an agent on the host yet, don't say an agent is down
-        if not [a for a in self.mgr.cache.get_daemons_by_type('agent') if a.hostname == host]:
+        if not self.mgr.cache.get_daemons_by_type('agent', host=host):
             return False
         # if we don't have a timestamp, it's likely because of a mgr fail over.
         # just set the timestamp to now. However, if host was offline before, we
@@ -421,8 +421,7 @@ class CephadmAgentHelpers:
 
                 try:
                     # try to schedule redeploy of agent in case it is individually down
-                    agent = [a for a in self.mgr.cache.get_daemons_by_type(
-                        'agent') if a.hostname == host][0]
+                    agent = self.mgr.cache.get_daemons_by_type('agent', host=host)[0]
                     with self.mgr.agent_helpers.agent_lock(host):
                         daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
                         self.mgr._daemon_action(daemon_spec, action='redeploy')
@@ -432,8 +431,7 @@ class CephadmAgentHelpers:
             return True
         else:
             try:
-                agent = [a for a in self.mgr.cache.get_daemons_by_type(
-                    'agent') if a.hostname == host][0]
+                agent = self.mgr.cache.get_daemons_by_type('agent', host=host)[0]
                 assert agent.daemon_id is not None
                 assert agent.hostname is not None
             except Exception as e:
