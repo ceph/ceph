@@ -18,8 +18,14 @@
 using namespace std;
 
 void usage(const string &name) {
-  cerr << "Usage: " << name << " <log_to_replay> <raw_duplicate|free_dump|try_alloc count want alloc_unit>"
-       << std::endl;
+  cerr << "Usage: " << name << " <log_to_replay> <raw_duplicate|free_dump|try_alloc count want alloc_unit|replay_alloc alloc_list_file>" << std::endl;
+}
+
+void usage_replay_alloc(const string &name) {
+  cerr << "Detailed replay_alloc usage: " << name << " <allocator_dump_JSON> replay_alloc <alloc_list_file> [number of replays]" << std::endl;
+  cerr << "The number of replays defaults to 1." << std::endl;
+  cerr << "The \"alloc_list_file\" parameter should be a file with allocation requests, one per line." << std::endl;
+  cerr << "Allocation request format (space separated, optional parameters are 0 if not given): want unit [max] [hint]" << std::endl;
 }
 
 int replay_and_check_for_duplicate(char* fname)
@@ -389,5 +395,99 @@ int main(int argc, char **argv)
                   << ", unit:" << alloc_unit << std::endl;
         return 0;
       });
+  } else if (strcmp(argv[2], "replay_alloc") == 0) {
+    if (argc < 4) {
+      std::cerr << "Error: insufficient arguments for \"replay_alloc\" option."
+                << std::endl;
+      usage_replay_alloc(argv[0]);
+      return 1;
+    }
+    return replay_free_dump_and_apply(argv[1],
+      [&](Allocator *a, const string &aname) {
+        ceph_assert(a);
+        std::cout << "Fragmentation:" << a->get_fragmentation()
+                  << std::endl;
+        std::cout << "Fragmentation score:" << a->get_fragmentation_score()
+                  << std::endl;
+        std::cout << "Free:" << std::hex << a->get_free() << std::dec
+                  << std::endl;
+        {
+          /* replay a set of allocation requests */
+          char s[4096];
+
+          FILE *f_alloc_list = fopen(argv[3], "r");
+          if (!f_alloc_list) {
+            std::cerr << "error: unable to open " << argv[3] << std::endl;
+            return -1;
+          }
+
+          /* Replay user specified number of times to simulate extended activity
+           * Defaults to 1 replay.
+           */
+          auto replay_count = 1;
+          if (argc == 5) {
+            replay_count = atoi(argv[4]);
+          }
+
+          for (auto i = 0; i < replay_count; ++i) {
+            while (fgets(s, sizeof(s), f_alloc_list) != nullptr) {
+              /* parse allocation request */
+              uint64_t want = 0, unit = 0, max = 0, hint = 0;
+
+              if (std::sscanf(s, "%ji %ji %ji %ji", &want, &unit, &max, &hint) < 2)
+              {
+                cerr << "Error: malformed allocation request:" << std::endl;
+                cerr << s << std::endl;
+                /* do not attempt to allocate a malformed request */
+                continue;
+              }
+
+              /* timestamp for allocation start */
+              auto t0 = ceph::mono_clock::now();
+
+              /* allocate */
+              PExtentVector extents;
+              auto r = a->allocate(want, unit, max, hint, &extents);
+              if (r < 0) {
+                /* blind replays of allocations may run out of space, provide info for easy confirmation */
+                std::cerr << "Error: allocation failure code: " << r
+                          << " requested want/unit/max/hint (hex): " << std::hex
+                          << want << "/" << unit << "/" << max << "/" << hint
+                          << std::dec << std::endl;
+                std::cerr << "Fragmentation:" << a->get_fragmentation()
+                          << std::endl;
+                std::cerr << "Fragmentation score:" << a->get_fragmentation_score()
+                          << std::endl;
+                std::cerr << "Free:" << std::hex << a->get_free() << std::dec
+                          << std::endl;
+                /* return 0 if the allocator ran out of space */
+                if (r == -ENOSPC) {
+                  return 0;
+                }
+                return -1;
+              }
+
+              /* Outputs the allocation's duration in nanoseconds and the allocation request parameters */
+              std::cout << "Duration (ns): " << (ceph::mono_clock::now() - t0).count()
+                        << " want/unit/max/hint (hex): " << std::hex
+                        << want << "/" << unit << "/" << max << "/" << hint
+                        << std::dec << std::endl;
+
+              /* Do not release. */
+              //alloc->release(extents);
+              extents.clear();
+            }
+            fseek(f_alloc_list, 0, SEEK_SET);
+          }
+          fclose(f_alloc_list);
+          std::cout << "Fragmentation:" << a->get_fragmentation()
+                    << std::endl;
+          std::cout << "Fragmentation score:" << a->get_fragmentation_score()
+                    << std::endl;
+          std::cout << "Free:" << std::hex << a->get_free() << std::dec
+                    << std::endl;
+        }
+        return 0;
+    });
   }
 }
