@@ -9,9 +9,6 @@
 #include "crimson/os/seastore/random_block_manager/nvme_manager.h"
 #include "crimson/os/seastore/random_block_manager/nvmedevice.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
-#include "crimson/os/seastore/transaction_manager.h"
-#include "crimson/os/seastore/cache.h"
-#include "crimson/os/seastore/segment_manager/ephemeral.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -26,13 +23,10 @@ namespace {
 constexpr uint64_t DEFAULT_TEST_SIZE = 1 << 20;
 constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
 
-struct rbm_test_t : public  seastar_test_suite_t,
-  TMTestState {
-  segment_manager::EphemeralSegmentManagerRef segment_manager; // Need to be deleted, just for Cache
-  ExtentReaderRef reader;
-  Cache cache;
+struct rbm_test_t :
+  public seastar_test_suite_t, TMTestState {
   std::unique_ptr<NVMeManager> rbm_manager;
-  nvme_device::NVMeBlockDevice *device;
+  std::unique_ptr<nvme_device::NVMeBlockDevice> device;
 
   struct rbm_transaction {
     void add_rbm_allocated_blocks(rbm_alloc_delta_t &d) {
@@ -56,14 +50,9 @@ struct rbm_test_t : public  seastar_test_suite_t,
   RandomBlockManager::mkfs_config_t config;
   paddr_t current;
 
-  rbm_test_t() :
-      segment_manager(segment_manager::create_test_ephemeral()),
-      reader(new ExtentReader()),
-      cache(*reader)
-  {
-    reader->add_segment_manager(segment_manager.get());
-    device = new nvme_device::TestMemory(DEFAULT_TEST_SIZE);
-    rbm_manager.reset(new NVMeManager(device, std::string()));
+  rbm_test_t() {
+    device.reset(new nvme_device::TestMemory(DEFAULT_TEST_SIZE));
+    rbm_manager.reset(new NVMeManager(device.get(), std::string()));
     config.start = paddr_t {0, 0, 0};
     config.end = paddr_t {0, 0, DEFAULT_TEST_SIZE};
     config.block_size = DEFAULT_BLOCK_SIZE;
@@ -75,9 +64,7 @@ struct rbm_test_t : public  seastar_test_suite_t,
   }
 
   seastar::future<> tear_down_fut() final {
-    if (device) {
-      delete device;
-    }
+    device.reset();
     return tm_teardown();
   }
 
