@@ -1756,6 +1756,7 @@ fi
 
 %files mgr-dashboard
 %{_datadir}/ceph/mgr/dashboard
+%ghost %{_datadir}/ceph/mgr/dashboard/frontend/node_modules/*
 
 %post mgr-dashboard
 if [ $1 -eq 1 ] ; then
