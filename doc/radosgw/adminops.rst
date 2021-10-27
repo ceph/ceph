@@ -783,7 +783,7 @@ Syntax
 ::
 
 	PUT /{admin}/user?subuser&format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 
 Request Parameters
@@ -892,7 +892,7 @@ Syntax
 ::
 
 	POST /{admin}/user?subuser&format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 
 Request Parameters
@@ -997,7 +997,7 @@ Syntax
 ::
 
 	DELETE /{admin}/user?subuser&format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 
 Request Parameters
@@ -1057,7 +1057,7 @@ Syntax
 ::
 
 	PUT /{admin}/user?key&format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 
 Request Parameters
@@ -1174,7 +1174,7 @@ Syntax
 ::
 
 	DELETE /{admin}/user?key&format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 
 Request Parameters
@@ -1235,7 +1235,7 @@ Syntax
 ::
 
 	GET /{admin}/bucket?format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 
 Request Parameters
@@ -1348,7 +1348,7 @@ Syntax
 ::
 
 	GET /{admin}/bucket?index&format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 
 Request Parameters
@@ -1404,7 +1404,7 @@ Syntax
 ::
 
 	DELETE /{admin}/bucket?format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 
 
@@ -1457,7 +1457,7 @@ Syntax
 ::
 
 	POST /{admin}/bucket?format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 
 Request Parameters
@@ -1504,7 +1504,7 @@ Syntax
 ::
 
 	PUT /{admin}/bucket?format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 
 Request Parameters
@@ -1607,7 +1607,7 @@ Syntax
 ::
 
 	DELETE /{admin}/bucket?object&format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 Request Parameters
 ~~~~~~~~~~~~~~~~~~
@@ -1659,7 +1659,7 @@ Syntax
 ::
 
 	GET /{admin}/bucket?policy&format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 
 Request Parameters
@@ -1711,7 +1711,7 @@ Syntax
 ::
 
 	PUT /{admin}/user?caps&format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 Request Parameters
 ~~~~~~~~~~~~~~~~~~
@@ -1787,7 +1787,7 @@ Syntax
 ::
 
 	DELETE /{admin}/user?caps&format=json HTTP/1.1
-	Host {fqdn}
+	Host: {fqdn}
 
 Request Parameters
 ~~~~~~~~~~~~~~~~~~
