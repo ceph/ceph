@@ -392,8 +392,19 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
     });
   }
 
+  checkHostsFactsAvailable() {
+    const orchFeatures = this.orchStatus.features;
+    if (!_.isEmpty(orchFeatures)) {
+      if (orchFeatures.get_facts.available) {
+        return true;
+      }
+      return false;
+    }
+    return false;
+  }
+
   transformHostsData() {
-    if (this.orchStatus?.available) {
+    if (this.checkHostsFactsAvailable()) {
       _.forEach(this.hosts, (hostKey) => {
         hostKey['memory_total_bytes'] = hostKey['memory_total_kb'] * 1024;
         hostKey['raw_capacity'] = hostKey['hdd_capacity_bytes'] + hostKey['flash_capacity_bytes'];
@@ -426,8 +437,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       .pipe(
         mergeMap((orchStatus) => {
           this.orchStatus = orchStatus;
-
-          return this.hostService.list(`${this.orchStatus?.available}`);
+          const factsAvailable = this.checkHostsFactsAvailable();
+          return this.hostService.list(`${factsAvailable}`);
         }),
         map((hostList: object[]) =>
           hostList.map((host) => {

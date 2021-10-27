@@ -13,12 +13,13 @@ from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 @contextlib.contextmanager
-def patch_orch(available: bool, hosts: Optional[List[HostSpec]] = None,
+def patch_orch(available: bool, missing_features: Optional[List[str]] = None,
+               hosts: Optional[List[HostSpec]] = None,
                inventory: Optional[List[dict]] = None):
     with mock.patch('dashboard.controllers.orchestrator.OrchClient.instance') as instance:
         fake_client = mock.Mock()
         fake_client.available.return_value = available
-        fake_client.get_missing_features.return_value = []
+        fake_client.get_missing_features.return_value = missing_features
 
         if hosts is not None:
             fake_client.hosts.list.return_value = hosts
@@ -160,6 +161,13 @@ class HostControllerTest(ControllerTestCase):
             self.assertHeader('Content-Type',
                               'application/vnd.ceph.api.v1.1+json')
             self.assertJsonBody(hosts_without_facts)
+
+        # test with orchestrator available but orch backend!=cephadm
+        with patch_orch(True, missing_features=['get_facts']) as fake_client:
+            mock_get_hosts.return_value = hosts_without_facts
+            # test with ?facts=true
+            self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self.assertStatus(400)
 
         # test with no orchestrator available
         with patch_orch(False):
