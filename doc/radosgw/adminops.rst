@@ -60,7 +60,7 @@ Request Parameters
 
 :Description: Specifies whether data entries should be returned.
 :Type: Boolean
-:Example: True [True]
+:Example: ``True`` [``True``]
 :Required: No
 
 
@@ -68,7 +68,7 @@ Request Parameters
 
 :Description: Specifies whether data summary should be returned.
 :Type: Boolean
-:Example: True [True]
+:Example: ``True`` [``True``]
 :Required: No
 
 
@@ -214,7 +214,7 @@ Request Parameters
 
 :Description: Required when uid is not specified, in order to acknowledge multi user data removal.
 :Type: Boolean
-:Example: True [False]
+:Example: ``True`` [``False``]
 :Required: No
 
 Special Error Responses
@@ -401,21 +401,21 @@ A tenant name may also specified as a part of ``uid``, by following the syntax
 
 :Description: Generate a new key pair and add to the existing keyring.
 :Type: Boolean
-:Example: True [True]
+:Example: ``True`` [``True``]
 :Required: No
 
 ``max-buckets``
 
 :Description: Specify the maximum number of buckets the user can own.
 :Type: Integer
-:Example: 500 [1000]
+:Example: ``500`` [``1000``]
 :Required: No
 
 ``suspended``
 
 :Description: Specify whether the user should be suspended.
 :Type: Boolean
-:Example: False [False]
+:Example: ``False`` [``False``]
 :Required: No
 
 .. versionadded:: Jewel
@@ -579,7 +579,7 @@ Request Parameters
 
 :Description: Generate a new key pair and add to the existing keyring.
 :Type: Boolean
-:Example: True [False]
+:Example: ``True`` [``False``]
 :Required: No
 
 ``access-key``
@@ -600,7 +600,7 @@ Request Parameters
 
 :Description: Key type to be generated, options are: swift, s3 (default).
 :Type: String
-:Example: ``s3``
+:Example: ``s3`` [``s3``]
 :Required: No
 
 ``user-caps``
@@ -621,7 +621,7 @@ Request Parameters
 
 :Description: Specify whether the user should be suspended.
 :Type: Boolean
-:Example: False [False]
+:Example: ``False`` [``False``]
 :Required: No
 
 ``op-mask``
@@ -760,7 +760,7 @@ Request Parameters
 :Description: When specified the buckets and objects belonging
               to the user will also be removed.
 :Type: Boolean
-:Example: True
+:Example: ``True``
 :Required: No
 
 Response Entities
@@ -837,7 +837,7 @@ Request Parameters
 
 :Description: Generate the secret key.
 :Type: Boolean
-:Example: True [False]
+:Example: ``True`` [``False``]
 :Required: No
 
 Response Entities
@@ -924,7 +924,7 @@ Request Parameters
 :Description: Generate a new secret key for the subuser,
               replacing the existing key.
 :Type: Boolean
-:Example: True [False]
+:Example: ``True`` [``False``]
 :Required: No
 
 ``secret``
@@ -1029,7 +1029,7 @@ Request Parameters
 
 :Description: Remove keys belonging to the subuser.
 :Type: Boolean
-:Example: True [True]
+:Example: ``True`` [``True``]
 :Required: No
 
 Response Entities
@@ -1109,7 +1109,7 @@ Request Parameters
 
 :Description: Generate a new key pair and add to the existing keyring.
 :Type: Boolean
-:Example: True [``True``]
+:Example: ``True`` [``True``]
 :Required: No
 
 
@@ -1266,7 +1266,7 @@ Request Parameters
 
 :Description: Return bucket statistics.
 :Type: Boolean
-:Example: True [False]
+:Example: ``True`` [``False``]
 :Required: No
 
 Response Entities
@@ -1372,14 +1372,14 @@ Request Parameters
 
 :Description: Check multipart object accounting.
 :Type: Boolean
-:Example: True [False]
+:Example: ``True`` [``False``]
 :Required: No
 
 ``fix``
 
 :Description: Also fix the bucket index when checking.
 :Type: Boolean
-:Example: False [False]
+:Example: ``False`` [``False``]
 :Required: No
 
 Response Entities
@@ -1429,7 +1429,7 @@ Request Parameters
 
 :Description: Remove a buckets objects before deletion.
 :Type: Boolean
-:Example: True [False]
+:Example: ``True`` [``False``]
 :Required: No
 
 Response Entities
