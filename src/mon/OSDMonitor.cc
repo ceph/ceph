@@ -12695,11 +12695,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     else {
-      if (osdmap.require_osd_release >= ceph_release_t::nautilus) {
-	// always blocklist type ANY
-	addr.set_type(entity_addr_t::TYPE_ANY);
-      } else {
-	addr.set_type(entity_addr_t::TYPE_LEGACY);
+      if (!addr.is_cidr()) {
+	if (osdmap.require_osd_release >= ceph_release_t::nautilus) {
+	  // always blocklist type ANY
+	  addr.set_type(entity_addr_t::TYPE_ANY);
+	} else {
+	  addr.set_type(entity_addr_t::TYPE_LEGACY);
+	}
       }
 
       string blocklistop;
