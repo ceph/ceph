@@ -143,6 +143,7 @@ void usage()
 "    [--op chunk-repair --chunk-pool POOL --object OID --target-ref OID --target-ref-pool-id POOL_ID] \n"
 "    [--op dump-chunk-refs --chunk-pool POOL --object OID] \n"
 "    [--op chunk-dedup --pool POOL --object OID --chunk-pool POOL --fingerprint-algorithm FP --source-off OFFSET --source-length LENGTH] \n"
+"    [--op object-dedup --pool POOL --object OID --chunk-pool POOL --fingerprint-algorithm FP --dedup-cdc-chunk-size CHUNK_SIZE] \n"
   << std::endl;
   cout << "optional arguments: " << std::endl;
   cout << "   --object <object_name> " << std::endl;
@@ -952,12 +953,24 @@ out:
   return (ret < 0) ? 1 : 0;
 }
 
+string make_pool_str(string pool, string var, string val)
+{
+  return string("{\"prefix\": \"osd pool set\",\"pool\":\"") + pool
+    + string("\",\"var\": \"") + var + string("\",\"val\": \"")
+    + val + string("\"}");
+}
+
+string make_pool_str(string pool, string var, int val)
+{
+  return make_pool_str(pool, var, stringify(val));
+}
+
 int make_dedup_object(const std::map < std::string, std::string > &opts,
 		      std::vector<const char*> &nargs)
 {
   Rados rados;
   IoCtx io_ctx, chunk_io_ctx;
-  std::string object_name, chunk_pool_name, op_name, pool_name;
+  std::string object_name, chunk_pool_name, op_name, pool_name, fp_algo;
   int ret;
   std::map<std::string, std::string>::const_iterator i;
 
@@ -1018,10 +1031,19 @@ int make_dedup_object(const std::map < std::string, std::string > &opts,
 	 << cpp_strerror(ret) << std::endl;
     goto out;
   }
+  i = opts.find("fingerprint-algorithm");
+  if (i != opts.end()) {
+    fp_algo = i->second.c_str();
+    if (fp_algo != "sha1"
+	&& fp_algo != "sha256" && fp_algo != "sha512") {
+      cerr << "unrecognized fingerprint-algorithm " << fp_algo << std::endl;
+      exit(1);
+    }
+  }
 
   if (op_name == "chunk-dedup") {
     uint64_t offset, length;
-    string chunk_object, fp_algo;
+    string chunk_object;
     i = opts.find("source-off");
     if (i != opts.end()) {
       if (rados_sistrtoll(i, &offset)) {
@@ -1039,15 +1061,6 @@ int make_dedup_object(const std::map < std::string, std::string > &opts,
     } else {
       cerr << "must specify --source-off" << std::endl;
       exit(1);
-    }
-    i = opts.find("fingerprint-algorithm");
-    if (i != opts.end()) {
-      fp_algo = i->second.c_str();
-      if (fp_algo != "sha1"
-	  && fp_algo != "sha256" && fp_algo != "sha512") {
-	cerr << "unrecognized fingerprint-algorithm " << fp_algo << std::endl;
-	exit(1);
-      }
     }
     // 1. make a copy from manifest object to chunk object
     bufferlist bl;
@@ -1080,6 +1093,99 @@ int make_dedup_object(const std::map < std::string, std::string > &opts,
     ret = io_ctx.operate(object_name, &op, NULL);
     if (ret < 0) {
       cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  } else if (op_name == "object-dedup") {
+    unsigned chunk_size;
+    i = opts.find("dedup-cdc-chunk-size");
+    if (i != opts.end()) {
+      if (rados_sistrtoll(i, &chunk_size)) {
+	cerr << "unrecognized dedup_cdc_chunk_size " << chunk_size << std::endl;
+	return -EINVAL;
+      }
+    }
+
+    bufferlist inbl;
+    ret = rados.mon_command(
+	make_pool_str(pool_name, "fingerprint_algorithm", fp_algo),
+	inbl, NULL, NULL);
+    if (ret < 0) {
+      cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
+      return ret;
+    }
+    ret = rados.mon_command(
+	make_pool_str(pool_name, "dedup_tier", chunk_pool_name),
+	inbl, NULL, NULL);
+    if (ret < 0) {
+      cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
+      return ret;
+    }
+    ret = rados.mon_command(
+	make_pool_str(pool_name, "dedup_chunk_algorithm", "fastcdc"),
+	inbl, NULL, NULL);
+    if (ret < 0) {
+      cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
+      return ret;
+    }
+    ret = rados.mon_command(
+	make_pool_str(pool_name, "dedup_cdc_chunk_size", chunk_size),
+	inbl, NULL, NULL);
+    if (ret < 0) {
+      cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
+      return ret;
+    }
+
+    // convert object to manifest object
+    ObjectWriteOperation op;
+    bufferlist temp;
+    temp.append("temp");
+    op.write_full(temp);
+
+    auto gen_r_num = [] () -> string {
+      std::random_device rd;
+      std::mt19937 gen(rd());
+      std::uniform_int_distribution<uint64_t> dist;
+      uint64_t r_num = dist(gen);
+      return to_string(r_num);
+    };
+    string temp_oid = gen_r_num();
+    // create temp chunk object for set-chunk
+    ret = chunk_io_ctx.operate(temp_oid, &op);
+    if (ret == -EEXIST) {
+      // one more try
+      temp_oid = gen_r_num();
+      ret = chunk_io_ctx.operate(temp_oid, &op);
+    }
+    if (ret < 0) {
+      cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+
+    // set-chunk to make manifest object
+    ObjectReadOperation chunk_op;
+    chunk_op.set_chunk(0, 4, chunk_io_ctx, temp_oid, 0,
+      CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    ret = io_ctx.operate(object_name, &chunk_op, NULL);
+    if (ret < 0) {
+      cerr << " set_chunk fail : " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+
+    // tier-flush to perform deduplication
+    ObjectReadOperation flush_op;
+    flush_op.tier_flush();
+    ret = io_ctx.operate(object_name, &flush_op, NULL);
+    if (ret < 0) {
+      cerr << " tier_flush fail : " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+
+    // tier-evict
+    ObjectReadOperation evict_op;
+    evict_op.tier_evict();
+    ret = io_ctx.operate(object_name, &evict_op, NULL);
+    if (ret < 0) {
+      cerr << " tier_evict fail : " << cpp_strerror(ret) << std::endl;
       goto out;
     }
   }
@@ -1152,6 +1258,8 @@ int main(int argc, const char **argv)
       opts["source-off"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--source-length", (char*)NULL)) {
       opts["source-length"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dedup-cdc-chunk-size", (char*)NULL)) {
+      opts["dedup-cdc-chunk-size"] = val;
     } else if (ceph_argparse_flag(args, i, "--debug", (char*)NULL)) {
       opts["debug"] = "true";
     } else {
@@ -1171,7 +1279,8 @@ int main(int argc, const char **argv)
 	     op_name == "chunk-repair" ||
 	     op_name == "dump-chunk-refs") {
     return chunk_scrub_common(opts, args);
-  } else if (op_name == "chunk-dedup") {
+  } else if (op_name == "chunk-dedup" ||
+	     op_name == "object-dedup") {
     return make_dedup_object(opts, args);
   } else {
     cerr << "unrecognized op " << op_name << std::endl;
