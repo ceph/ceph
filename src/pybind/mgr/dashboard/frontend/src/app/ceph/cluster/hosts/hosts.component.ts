@@ -69,6 +69,9 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   hasTableDetails = true;
 
   @Input()
+  hideToolHeader = false;
+
+  @Input()
   showGeneralActionsOnly = false;
 
   permissions: Permissions;
