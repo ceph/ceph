@@ -226,7 +226,7 @@ public:
             auto [socket, paddr] = std::move(accept_result);
             entity_addr_t peer_addr;
             peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
-            peer_addr.set_type(entity_addr_t::TYPE_ANY);
+            peer_addr.set_type(ss.addr.get_type());
             SocketRef _socket = std::make_unique<Socket>(
                 std::move(socket), Socket::side_t::acceptor,
                 peer_addr.get_port(), Socket::construct_tag{});
