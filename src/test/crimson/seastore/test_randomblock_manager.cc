@@ -50,20 +50,20 @@ struct rbm_test_t :
   RandomBlockManager::mkfs_config_t config;
   paddr_t current;
 
-  rbm_test_t() {
+  rbm_test_t() = default;
+
+  seastar::future<> set_up_fut() final {
     device.reset(new nvme_device::TestMemory(DEFAULT_TEST_SIZE));
     rbm_manager.reset(new NVMeManager(device.get(), std::string()));
     config.start = paddr_t {0, 0, 0};
     config.end = paddr_t {0, 0, DEFAULT_TEST_SIZE};
     config.block_size = DEFAULT_BLOCK_SIZE;
     config.total_size = DEFAULT_TEST_SIZE;
-  }
-
-  seastar::future<> set_up_fut() final {
     return tm_setup();
   }
 
   seastar::future<> tear_down_fut() final {
+    rbm_manager.reset();
     device.reset();
     return tm_teardown();
   }

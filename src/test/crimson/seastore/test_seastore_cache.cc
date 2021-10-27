@@ -22,21 +22,15 @@ namespace {
 struct cache_test_t : public seastar_test_suite_t {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   ExtentReaderRef reader;
-  Cache cache;
+  CacheRef cache;
   paddr_t current;
   journal_seq_t seq;
 
-  cache_test_t()
-    : segment_manager(segment_manager::create_test_ephemeral()),
-      reader(new ExtentReader()),
-      cache(*reader),
-      current(segment_id_t(segment_manager->get_device_id(), 0), 0) {
-    reader->add_segment_manager(segment_manager.get());
-  }
+  cache_test_t() = default;
 
   seastar::future<paddr_t> submit_transaction(
     TransactionRef t) {
-    auto record = cache.prepare_record(*t);
+    auto record = cache->prepare_record(*t);
 
     bufferlist bl;
     for (auto &&block : record.extents) {
@@ -61,7 +55,7 @@ struct cache_test_t : public seastar_test_suite_t {
       true
     ).safe_then(
       [this, prev, t=std::move(t)]() mutable {
-	cache.complete_commit(*t, prev, seq /* TODO */);
+	cache->complete_commit(*t, prev, seq /* TODO */);
         return prev;
       },
       crimson::ct_error::all_same_way([](auto e) {
@@ -71,7 +65,7 @@ struct cache_test_t : public seastar_test_suite_t {
   }
 
   auto get_transaction() {
-    return cache.create_transaction(Transaction::src_t::MUTATE);
+    return cache->create_transaction(Transaction::src_t::MUTATE);
   }
 
   template <typename T, typename... Args>
@@ -79,20 +73,25 @@ struct cache_test_t : public seastar_test_suite_t {
     return with_trans_intr(
       t,
       [this](auto &&... args) {
-	return cache.get_extent<T>(args...);
+	return cache->get_extent<T>(args...);
       },
       std::forward<Args>(args)...);
   }
 
   seastar::future<> set_up_fut() final {
+    segment_manager = segment_manager::create_test_ephemeral();
+    reader.reset(new ExtentReader());
+    cache.reset(new Cache(*reader));
+    current = paddr_t(segment_id_t(segment_manager->get_device_id(), 0), 0);
+    reader->add_segment_manager(segment_manager.get());
     return segment_manager->init(
     ).safe_then([this] {
       return seastar::do_with(
           get_transaction(),
           [this](auto &ref_t) {
-        cache.init();
+        cache->init();
         return with_trans_intr(*ref_t, [&](auto &t) {
-          return cache.mkfs(t);
+          return cache->mkfs(t);
         }).safe_then([this, &ref_t] {
           return submit_transaction(std::move(ref_t)
           ).then([](auto p) {});
@@ -106,8 +105,14 @@ struct cache_test_t : public seastar_test_suite_t {
   }
 
   seastar::future<> tear_down_fut() final {
-    return cache.close().handle_error(
-      Cache::close_ertr::assert_all{});
+    return cache->close(
+    ).safe_then([this] {
+      segment_manager.reset();
+      reader.reset();
+      cache.reset();
+    }).handle_error(
+      Cache::close_ertr::assert_all{}
+    );
   }
 };
 
@@ -118,7 +123,7 @@ TEST_F(cache_test_t, test_addr_fixup)
     int csum = 0;
     {
       auto t = get_transaction();
-      auto extent = cache.alloc_new_extent<TestBlockPhysical>(
+      auto extent = cache->alloc_new_extent<TestBlockPhysical>(
 	*t,
 	TestBlockPhysical::SIZE);
       extent->set_contents('c');
@@ -147,7 +152,7 @@ TEST_F(cache_test_t, test_dirty_extent)
     {
       // write out initial test block
       auto t = get_transaction();
-      auto extent = cache.alloc_new_extent<TestBlockPhysical>(
+      auto extent = cache->alloc_new_extent<TestBlockPhysical>(
 	*t,
 	TestBlockPhysical::SIZE);
       extent->set_contents('c');
@@ -192,7 +197,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();
       // duplicate and reset contents
-      extent = cache.duplicate_for_write(*t, extent)->cast<TestBlockPhysical>();
+      extent = cache->duplicate_for_write(*t, extent)->cast<TestBlockPhysical>();
       extent->set_contents('c');
       csum2 = extent->get_crc32c();
       ASSERT_EQ(extent->get_paddr(), addr);
