@@ -288,18 +288,17 @@ class Host(RESTController):
         hosts = get_hosts(sources)
         orch = OrchClient.instance()
         if str_to_bool(facts):
-            if orch.available(['get_facts']):
-                try:
+            if orch.available():
+                if not orch.get_missing_features(['get_facts']):
                     hosts_facts = orch.hosts.get_facts()
                     return merge_list_of_dicts_by_key(hosts, hosts_facts, 'hostname')
 
-                except Exception:
-                    raise DashboardException(
-                        code='invalid_orchestrator_backend',  # pragma: no cover
-                        msg="Please enable the cephadm orchestrator backend "
-                        "(try `ceph orch set backend cephadm`)",
-                        component='orchestrator',
-                        http_status_code=400)
+                raise DashboardException(
+                    code='invalid_orchestrator_backend',  # pragma: no cover
+                    msg="Please enable the cephadm orchestrator backend "
+                    "(try `ceph orch set backend cephadm`)",
+                    component='orchestrator',
+                    http_status_code=400)
 
             raise DashboardException(code='orchestrator_status_unavailable',  # pragma: no cover
                                      msg="Please configure and enable the orchestrator if you "
