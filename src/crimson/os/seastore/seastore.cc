@@ -159,130 +159,137 @@ seastar::future<> SeaStore::write_fsid(uuid_d new_osd_fsid)
 
 SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
 {
-  return seastar::do_with(
-    secondary_device_set_t(),
-    [this, new_osd_fsid](auto& sds) {
-    auto fut = seastar::now();
-    LOG_PREFIX(SeaStore::mkfs);
-    DEBUG("root: {}", root);
-    if (!root.empty()) {
-      fut = seastar::open_directory(root).then(
-	[this, &sds, new_osd_fsid](seastar::file rdir) mutable {
-	std::unique_ptr<seastar::file> root_f =
-	  std::make_unique<seastar::file>(std::move(rdir));
-	auto sub = root_f->list_directory(
-	  [this, &sds, new_osd_fsid](auto de) mutable
-	  -> seastar::future<> {
-	  LOG_PREFIX(SeaStore::mkfs);
-	  DEBUG("found file: {}", de.name);
-	  if (de.name.find("block.") == 0
-	      && de.name.length() > 6 /* 6 for "block." */) {
-	    std::string entry_name = de.name;
-	    auto dtype_end = entry_name.find_first_of('.', 6);
-	    device_type_t dtype =
-	      string_to_device_type(
-		entry_name.substr(6, dtype_end - 6));
-	    if (!dtype) {
-	      // invalid device type
-	      return seastar::now();
-	    }
-	    auto id = std::stoi(entry_name.substr(dtype_end + 1));
-	    auto sm = std::make_unique<
-	      segment_manager::block::BlockSegmentManager
-	      >(root + "/" + entry_name);
-	    magic_t magic = (magic_t)std::rand();
-	    sds.emplace(
-	      (device_id_t)id,
-	      device_spec_t{
-		  magic,
-		  dtype,
-		  (device_id_t)id});
-	    return sm->mkfs(
-	      segment_manager_config_t{
-	      false,
-	      magic,
-	      dtype,
-	      (device_id_t)id,
-	      seastore_meta_t{new_osd_fsid},
-	      secondary_device_set_t()}
-	    ).safe_then([this, sm=std::move(sm), id]() mutable {
-	      LOG_PREFIX(SeaStore::mkfs);
-	      DEBUG("mkfs: finished for segment manager {}", id);
-	      secondaries.emplace_back(std::move(sm));
-	      return seastar::now();
-	    }).handle_error(crimson::ct_error::assert_all{"not possible"});
-	  }
-	  return seastar::now();
-	});
-	return sub.done().then(
-	  [root_f=std::move(root_f)] {
-	  return seastar::now();
-	});
-      });
-    }
-    return fut.then([this, &sds, new_osd_fsid] {
-      return segment_manager->mkfs(
-	segment_manager_config_t{
-	  true,
-	  (magic_t)std::rand(),
-	  device_type_t::SEGMENTED,
-	  0,
-	  seastore_meta_t{new_osd_fsid},
-	  sds}
-      );
-    }).safe_then([this] {
-      return crimson::do_for_each(secondaries, [this](auto& sec_sm) {
-	return sec_sm->mount().safe_then([this, &sec_sm] {
-	  transaction_manager->add_segment_manager(sec_sm.get());
-	  return seastar::now();
-	});
-      });
-    });
-  }).safe_then([this] {
-    return segment_manager->mount();
-  }).safe_then([this] {
-    transaction_manager->add_segment_manager(segment_manager.get());
-    return transaction_manager->mkfs();
-  }).safe_then([this] {
-    return transaction_manager->mount();
-  }).safe_then([this] {
-    return repeat_eagain([this] {
-      return transaction_manager->with_transaction_intr(
-	  Transaction::src_t::MUTATE, [this](auto& t) {
-	return onode_manager->mkfs(t
-	).si_then([this, &t] {
-	  return collection_manager->mkfs(t);
-	}).si_then([this, &t](auto coll_root) {
-	  transaction_manager->write_collection_root(
-	    t, coll_root);
-	  return transaction_manager->submit_transaction(t);
-	});
-      });
-    });
-  }).safe_then([this, new_osd_fsid] {
-    return write_fsid(new_osd_fsid);
-  }).safe_then([this] {
-    return read_meta("type").then([this] (auto tuple) {
-      auto [ret, type] = tuple;
-      if (ret == 0 && type == "seastore") {
-        return seastar::now();
-      } else if (ret == 0 && type != "seastore") {
+  return read_meta("mkfs_done").then([this, new_osd_fsid] (auto tuple) {
+    auto [done, value] = tuple;
+    if (done == 0) {
+      return seastar::now();
+    } else {
+      return seastar::do_with(
+        secondary_device_set_t(),
+        [this, new_osd_fsid](auto& sds) {
+        auto fut = seastar::now();
         LOG_PREFIX(SeaStore::mkfs);
-        ERROR("expected seastore, but type is {}", type);
-        throw std::runtime_error("store type error");
-      } else {
-        return write_meta("type", "seastore");
-      }
-    });
-  }).safe_then([this] {
-    return write_meta("mkfs_done", "yes");
-  }).safe_then([this] {
-    return umount();
-  }).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStore::mkfs"
+        DEBUG("root: {}", root);
+        if (!root.empty()) {
+          fut = seastar::open_directory(root).then(
+            [this, &sds, new_osd_fsid](seastar::file rdir) mutable {
+            std::unique_ptr<seastar::file> root_f =
+              std::make_unique<seastar::file>(std::move(rdir));
+            auto sub = root_f->list_directory(
+              [this, &sds, new_osd_fsid](auto de) mutable
+              -> seastar::future<> {
+              LOG_PREFIX(SeaStore::mkfs);
+              DEBUG("found file: {}", de.name);
+              if (de.name.find("block.") == 0
+                  && de.name.length() > 6 /* 6 for "block." */) {
+                std::string entry_name = de.name;
+                auto dtype_end = entry_name.find_first_of('.', 6);
+                device_type_t dtype =
+                  string_to_device_type(
+                    entry_name.substr(6, dtype_end - 6));
+                if (!dtype) {
+                  // invalid device type
+                  return seastar::now();
+                }
+                auto id = std::stoi(entry_name.substr(dtype_end + 1));
+                auto sm = std::make_unique<
+                  segment_manager::block::BlockSegmentManager
+                  >(root + "/" + entry_name);
+                magic_t magic = (magic_t)std::rand();
+                sds.emplace(
+                  (device_id_t)id,
+                  device_spec_t{
+                    magic,
+                    dtype,
+                    (device_id_t)id});
+                return sm->mkfs(
+                  segment_manager_config_t{
+                    false,
+                    magic,
+                    dtype,
+                    (device_id_t)id,
+                    seastore_meta_t{new_osd_fsid},
+                    secondary_device_set_t()}
+                ).safe_then([this, sm=std::move(sm), id]() mutable {
+                  LOG_PREFIX(SeaStore::mkfs);
+                  DEBUG("mkfs: finished for segment manager {}", id);
+                  secondaries.emplace_back(std::move(sm));
+                  return seastar::now();
+                }).handle_error(crimson::ct_error::assert_all{"not possible"});
+              }
+            return seastar::now();
+          });
+            return sub.done().then(
+              [root_f=std::move(root_f)] {
+              return seastar::now();
+            });
+          });
+        }
+        return fut.then([this, &sds, new_osd_fsid] {
+          return segment_manager->mkfs(
+            segment_manager_config_t{
+              true,
+              (magic_t)std::rand(),
+              device_type_t::SEGMENTED,
+              0,
+              seastore_meta_t{new_osd_fsid},
+              sds}
+          );
+        }).safe_then([this] {
+          return crimson::do_for_each(secondaries, [this](auto& sec_sm) {
+            return sec_sm->mount().safe_then([this, &sec_sm] {
+              transaction_manager->add_segment_manager(sec_sm.get());
+              return seastar::now();
+            });
+          });
+        });
+      }).safe_then([this] {
+        return segment_manager->mount();
+      }).safe_then([this] {
+        transaction_manager->add_segment_manager(segment_manager.get());
+        return transaction_manager->mkfs();
+      }).safe_then([this] {
+        return transaction_manager->mount();
+      }).safe_then([this] {
+        return repeat_eagain([this] {
+          return transaction_manager->with_transaction_intr(
+            Transaction::src_t::MUTATE, [this](auto& t) {
+            return onode_manager->mkfs(t
+            ).si_then([this, &t] {
+              return collection_manager->mkfs(t);
+            }).si_then([this, &t](auto coll_root) {
+              transaction_manager->write_collection_root(
+                t, coll_root);
+              return transaction_manager->submit_transaction(t);
+            });
+          });
+        });
+      }).safe_then([this, new_osd_fsid] {
+        return write_fsid(new_osd_fsid);
+      }).safe_then([this] {
+        return read_meta("type").then([this] (auto tuple) {
+          auto [ret, type] = tuple;
+          if (ret == 0 && type == "seastore") {
+            return seastar::now();
+          } else if (ret == 0 && type != "seastore") {
+            LOG_PREFIX(SeaStore::mkfs);
+            ERROR("expected seastore, but type is {}", type);
+            throw std::runtime_error("store type error");
+          } else {
+            return write_meta("type", "seastore");
+          }
+        });
+      }).safe_then([this] {
+        return write_meta("mkfs_done", "yes");
+      }).safe_then([this] {
+        return umount();
+      }).handle_error(
+        crimson::ct_error::assert_all{
+          "Invalid error in SeaStore::mkfs"
+        }
+      );
     }
-  );
+  });
 }
 
 seastar::future<store_statfs_t> SeaStore::stat() const
