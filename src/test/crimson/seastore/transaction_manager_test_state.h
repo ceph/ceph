@@ -22,8 +22,7 @@ class EphemeralTestState {
 protected:
   segment_manager::EphemeralSegmentManagerRef segment_manager;
 
-  EphemeralTestState()
-    : segment_manager(segment_manager::create_test_ephemeral()) {}
+  EphemeralTestState() = default;
 
   virtual void _init() = 0;
   void init() {
@@ -48,6 +47,7 @@ protected:
   }
 
   seastar::future<> tm_setup() {
+    segment_manager = segment_manager::create_test_ephemeral();
     init();
     return segment_manager->init(
     ).safe_then([this] {
@@ -64,7 +64,9 @@ protected:
   }
 
   seastar::future<> tm_teardown() {
-    return _teardown();
+    return _teardown().then([this] {
+      segment_manager.reset();
+    });
   }
 };
 
