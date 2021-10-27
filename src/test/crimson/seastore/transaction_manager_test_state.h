@@ -20,7 +20,7 @@ using namespace crimson::os::seastore;
 
 class EphemeralTestState {
 protected:
-  std::unique_ptr<segment_manager::EphemeralSegmentManager> segment_manager;
+  segment_manager::EphemeralSegmentManagerRef segment_manager;
 
   EphemeralTestState()
     : segment_manager(segment_manager::create_test_ephemeral()) {}
@@ -124,13 +124,13 @@ protected:
 
   TMTestState() : EphemeralTestState() {}
 
-  virtual void _init() {
+  virtual void _init() override {
     tm = get_transaction_manager(*segment_manager);
     segment_cleaner = tm->get_segment_cleaner();
     lba_manager = tm->get_lba_manager();
   }
 
-  virtual void _destroy() {
+  virtual void _destroy() override {
     segment_cleaner = nullptr;
     lba_manager = nullptr;
     tm.reset();
