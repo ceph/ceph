@@ -45,6 +45,9 @@ protected:
   std::string tenant;
   uint64_t max_session_duration;
   std::multimap<std::string,std::string> tags;
+  std::map<std::string, bufferlist> attrs;
+  RGWObjVersionTracker objv_tracker;
+  real_time mtime;
 
 public:
   virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
@@ -75,6 +78,7 @@ public:
     } else {
       max_session_duration = std::stoull(max_session_duration_str);
     }
+    mtime = real_time();
   }
 
   RGWRole(std::string id) : id(std::move(id)) {}
@@ -122,11 +126,14 @@ public:
   const std::string& get_create_date() const { return creation_date; }
   const std::string& get_assume_role_policy() const { return trust_policy;}
   const uint64_t& get_max_session_duration() const { return max_session_duration; }
+  const RGWObjVersionTracker& get_objv_tracker() const { return objv_tracker; }
+  const real_time& get_mtime() const { return mtime; }
 
   void set_id(const std::string& id) { this->id = id; }
   //TODO: Remove the following two
   void set_arn(const std::string& arn) { this->arn = arn; }
   void set_creation_date(const std::string& creation_date) { this->creation_date = creation_date; }
+  void set_mtime(const real_time& mtime) { this->mtime = mtime; }
 
   virtual int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
   virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) = 0;

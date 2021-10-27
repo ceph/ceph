@@ -3073,12 +3073,14 @@ int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optiona
   if (!this->tags.empty()) {
     bufferlist bl_tags;
     encode(this->tags, bl_tags);
-    map<string, bufferlist> attrs;
     attrs.emplace("tagging", bl_tags);
-    return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y, &attrs);
   }
 
-  return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y);
+  if (!attrs.empty()) {
+    return rgw_put_system_obj(dpp, obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, mtime, y, &attrs);
+  }
+
+  return rgw_put_system_obj(dpp, obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, mtime, y);
 }
 
 int RadosRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
@@ -3162,8 +3164,7 @@ int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
   std::string oid = get_info_oid_prefix() + id;
   bufferlist bl;
 
-  map<string, bufferlist> attrs;
-  int ret = rgw_get_system_obj(obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp, &attrs, nullptr, boost::none, true);
+  int ret = rgw_get_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, &objv_tracker, &mtime, null_yield, dpp, &attrs, nullptr, boost::none, true);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role info from Role pool: " << id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
