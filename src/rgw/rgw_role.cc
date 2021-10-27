@@ -329,7 +329,7 @@ RGWRoleMetadataHandler::RGWRoleMetadataHandler(CephContext *cct, Store* store,
                                               RGWSI_SysObj *_sysobj_svc)
 {
   this->cct = cct;
-  store = store;
+  this->store = store;
   init(_zone_svc, _meta_svc, _meta_be_svc, _sysobj_svc);
 }
 
@@ -337,14 +337,14 @@ void RGWRoleCompleteInfo::dump(ceph::Formatter *f) const
 {
   info->dump(f);
   if (has_attrs) {
-    encode_json("attrs", attrs, f);
+    encode_json("attrs", info->get_attrs(), f);
   }
 }
 
 void RGWRoleCompleteInfo::decode_json(JSONObj *obj)
 {
   decode_json_obj(*info, obj);
-  has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
+  has_attrs = JSONDecoder::decode_json("attrs", info->get_attrs(), obj);
 }
 
 
@@ -370,16 +370,6 @@ int RGWRoleMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
                                    const DoutPrefixProvider *dpp)
 {
   RGWRoleCompleteInfo rci;
-#if 0
-  int ret = svc.role->read_info(op->ctx(),
-                                entry,
-                                &rci.info,
-                                &objv_tracker,
-                                &mtime,
-                                &rci.attrs,
-                                y,
-                                dpp);
-#endif
   rci.info = store->get_role(entry).get();
   int ret = rci.info->read_info(dpp, y);
   if (ret < 0) {
@@ -402,14 +392,6 @@ int RGWRoleMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
                                       optional_yield y,
                                       const DoutPrefixProvider *dpp)
 {
-#if 0
-  int ret = svc.role->read_info(op->ctx(), entry, &info, &objv_tracker,
-				&_mtime, nullptr, y, dpp);
-  if (ret < 0) {
-    return ret == -ENOENT ? 0 : ret;
-  }
-  return svc.role->delete_role(op->ctx(), info, &objv_tracker, y, dpp);
-#endif
   std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(entry);
   int ret = role->read_info(dpp, y);
   if (ret < 0) {
@@ -440,18 +422,6 @@ public:
   int put_checked(const DoutPrefixProvider *dpp) override {
     auto& rci = mdo->get_rci();
     auto mtime = mdo->get_mtime();
-#if 0
-    int ret = rhandler->role->create(op->ctx(),
-					 rci.info,
-					 &objv_tracker,
-					 mtime,
-					 false,
-					 pattrs,
-					 y,
-           dpp);
-
-    return ret < 0 ? ret : STATUS_APPLIED;
-#endif
     rci.info->set_mtime(mtime);
     int ret = rci.info->create(dpp, true, y);
     return ret < 0 ? ret : STATUS_APPLIED;
