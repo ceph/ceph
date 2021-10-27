@@ -37,7 +37,7 @@ vgchange --refresh
 for((i=0;i<$NUM_OSDS;i++)); do
 	echo "Creating osd.${i}"
 	# create osd folder
-	$CEPHADM_PATH ceph-volume --shared_ceph_folder /ceph lvm create --bluestore --data "/dev/vg1/lv${i}" --no-systemd
+	$CEPHADM_PATH ceph-volume --shared_ceph_folder /ceph lvm create --bluestore --no-tmpfs --data "/dev/vg1/lv${i}" --no-systemd
 	echo "Deploying osd.${i}..."
 	# deploy osd with osd data folder
 	$CEPHADM_PATH deploy --name "osd.${i}"
