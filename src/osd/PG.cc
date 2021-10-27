@@ -829,6 +829,7 @@ void PG::publish_stats_to_osd()
   std::lock_guard l{pg_stats_publish_lock};
   auto stats =
     recovery_state.prepare_stats_for_publish(pg_stats_publish, unstable_stats);
+  unstable_stats.clear();
   if (stats) {
     pg_stats_publish = std::move(stats);
   }

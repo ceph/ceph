@@ -3832,8 +3832,8 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   }
   update_blocked_by();
 
+  info.stats.stats.add(unstable_stats);
   pg_stat_t pre_publish = info.stats;
-  pre_publish.stats.add(unstable_stats);
   utime_t cutoff = now;
   cutoff -= cct->_conf->osd_pg_stat_report_interval_max;
 
