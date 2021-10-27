@@ -262,6 +262,29 @@ function test_dedup_object()
   CHUNK_OID=$(echo -n "There hiHI" | sha1sum | awk '{print $1}')
 
   RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID | grep foo)
+
+  if [ -z "$RESULT" ] ; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "Scrub failed expecting bar is removed"
+  fi
+
+  $RADOS_TOOL -p $CHUNK_POOL get $CHUNK_OID ./chunk
+  VERIFY=$(cat ./chunk | sha1sum | awk '{print $1}')
+  if [ "$CHUNK_OID" != "$VERIFY" ] ; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "Comparing failed expecting chunk mismatch"
+  fi
+
+  echo -n "There hihiHI" > bar
+
+  $RADOS_TOOL -p $POOL put bar ./bar
+  RESULT=$($DEDUP_TOOL --pool $POOL --op object-dedup --object bar --chunk-pool $CHUNK_POOL --fingerprint-algorithm sha1 --dedup-cdc-chunk-size 4096)
+
+  CHUNK_OID=$(echo -n "There hihiHI" | sha1sum | awk '{print $1}')
+
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID | grep bar)
   if [ -z "$RESULT" ] ; then
     $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
     $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
@@ -278,8 +301,9 @@ function test_dedup_object()
 
   $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
 
-  rm -rf ./foo ./chunk
+  rm -rf ./foo ./bar ./chunk
   $RADOS_TOOL -p $POOL rm foo
+  $RADOS_TOOL -p $POOL rm bar
 }
 
 test_dedup_ratio_fixed
