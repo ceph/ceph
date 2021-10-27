@@ -9,12 +9,15 @@ describe('Create cluster add host page', () => {
   const hostnames = [
     'ceph-node-00.cephlab.com',
     'ceph-node-01.cephlab.com',
-    'ceph-node-02.cephlab.com'
+    'ceph-node-02.cephlab.com',
+    'ceph-node-[01-02].cephlab.com'
   ];
-  const addHost = (hostname: string, exist?: boolean) => {
+  const addHost = (hostname: string, exist?: boolean, pattern?: boolean) => {
     cy.get('.btn.btn-accent').first().click({ force: true });
     createClusterHostPage.add(hostname, exist, false);
-    createClusterHostPage.checkExist(hostname, true);
+    if (!pattern) {
+      createClusterHostPage.checkExist(hostname, true);
+    }
   };
 
   beforeEach(() => {
@@ -35,6 +38,9 @@ describe('Create cluster add host page', () => {
 
     addHost(hostnames[1], false);
     addHost(hostnames[2], false);
+    createClusterHostPage.delete(hostnames[1]);
+    createClusterHostPage.delete(hostnames[2]);
+    addHost(hostnames[3], false, true);
   });
 
   it('should delete a host and add it back', () => {
