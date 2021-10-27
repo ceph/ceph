@@ -144,14 +144,14 @@
     orphans list-jobs          deprecated -- list the current job-ids for orphans search
                              * the three 'orphans' sub-commands are now deprecated; consider using the `rgw-orphan-list` tool
     role create                create a AWS role for use with STS
-    role rm                    remove a role
+    role delete                remove a role
     role get                   get a role
     role list                  list roles with specified path prefix
     role modify                modify the assume role policy of an existing role
     role-policy put            add/update permission policy to role
     role-policy list           list policies attached to a role
     role-policy get            get the specified inline policy document embedded with the given role
-    role-policy rm             remove policy attached to a role
+    role-policy delete         remove policy attached to a role
     reshard add                schedule a resharding of a bucket
     reshard list               list all bucket resharding or scheduled to be resharded
     reshard status             read bucket resharding status
