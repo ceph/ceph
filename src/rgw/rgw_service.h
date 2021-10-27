@@ -12,7 +12,6 @@
 #include "common/async/yield_context.h"
 
 #include "rgw/rgw_common.h"
-//#include "rgw/rgw_sal_rados.h"
 
 struct RGWServices_Def;
 
@@ -66,8 +65,6 @@ class RGWSI_MetaBackend_OTP;
 class RGWSI_Notify;
 class RGWSI_OTP;
 class RGWSI_RADOS;
-//class RGWSI_Role;
-//class RGWSI_Role_RADOS;
 class RGWSI_Zone;
 class RGWSI_ZoneUtils;
 class RGWSI_Quota;
@@ -108,7 +105,6 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_SysObj_Cache> sysobj_cache;
   std::unique_ptr<RGWSI_User_RADOS> user_rados;
   std::unique_ptr<RGWDataChangesLog> datalog_rados;
-  //std::unique_ptr<rgw::sal::RadosRole> role_rados;
 
   RGWServices_Def();
   ~RGWServices_Def();
@@ -172,7 +168,6 @@ class RGWMetadataHandler;
 class RGWUserCtl;
 class RGWBucketCtl;
 class RGWOTPCtl;
-//class RGWRoleCtl;
 
 struct RGWCtlDef {
   struct _meta {
@@ -190,7 +185,6 @@ struct RGWCtlDef {
   std::unique_ptr<RGWUserCtl> user;
   std::unique_ptr<RGWBucketCtl> bucket;
   std::unique_ptr<RGWOTPCtl> otp;
-  //std::unique_ptr<RGWRoleCtl> role;
 
   RGWCtlDef();
   ~RGWCtlDef();
@@ -217,7 +211,6 @@ struct RGWCtl {
   RGWUserCtl *user{nullptr};
   RGWBucketCtl *bucket{nullptr};
   RGWOTPCtl *otp{nullptr};
-  //RGWRoleCtl *role{nullptr};
 
   int init(RGWServices *_svc, rgw::sal::Store* store, const DoutPrefixProvider *dpp);
 };

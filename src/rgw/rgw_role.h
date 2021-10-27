@@ -13,11 +13,7 @@
 #include "rgw/rgw_rados.h"
 #include "rgw_metadata.h"
 
-class RGWCtl;
 class RGWRados;
-class RGWSI_Role;
-class RGWSI_MetaBackend_Handler;
-class RGWRoleCtl;
 
 namespace rgw { namespace sal {
 class RGWRole
@@ -32,8 +28,6 @@ public:
   static constexpr uint64_t SESSION_DURATION_MIN = 3600; // in seconds
   static constexpr uint64_t SESSION_DURATION_MAX = 43200; // in seconds
 protected:
-
-  RGWRoleCtl *role_ctl;
 
   std::string id;
   std::string name;
@@ -128,11 +122,9 @@ public:
   const uint64_t& get_max_session_duration() const { return max_session_duration; }
   const RGWObjVersionTracker& get_objv_tracker() const { return objv_tracker; }
   const real_time& get_mtime() const { return mtime; }
+  std::map<std::string, bufferlist>& get_attrs() { return attrs; }
 
   void set_id(const std::string& id) { this->id = id; }
-  //TODO: Remove the following two
-  void set_arn(const std::string& arn) { this->arn = arn; }
-  void set_creation_date(const std::string& creation_date) { this->creation_date = creation_date; }
   void set_mtime(const real_time& mtime) { this->mtime = mtime; }
 
   virtual int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
@@ -159,7 +151,6 @@ WRITE_CLASS_ENCODER(RGWRole)
 
 struct RGWRoleCompleteInfo {
   RGWRole* info;
-  std::map<std::string, bufferlist> attrs;
   bool has_attrs;
 
   void dump(Formatter *f) const;
@@ -238,7 +229,7 @@ public:
 private:
   RGWSI_MetaBackend_Handler *be_handler;
   std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
-  std::unique_ptr<Store> store;
+  Store* store;
   CephContext *cct;
 };
 } } // namespace rgw::sal
