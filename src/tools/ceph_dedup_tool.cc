@@ -142,6 +142,7 @@ void usage()
 "    [--op chunk-put-ref --chunk-pool POOL --object OID --target-ref OID --target-ref-pool-id POOL_ID] \n"
 "    [--op chunk-repair --chunk-pool POOL --object OID --target-ref OID --target-ref-pool-id POOL_ID] \n"
 "    [--op dump-chunk-refs --chunk-pool POOL --object OID] \n"
+"    [--op chunk-dedup --pool POOL --object OID --chunk-pool POOL --fingerprint-algorithm FP --source-off OFFSET --source-length LENGTH] \n"
   << std::endl;
   cout << "optional arguments: " << std::endl;
   cout << "   --object <object_name> " << std::endl;
@@ -951,6 +952,142 @@ out:
   return (ret < 0) ? 1 : 0;
 }
 
+int make_dedup_object(const std::map < std::string, std::string > &opts,
+		      std::vector<const char*> &nargs)
+{
+  Rados rados;
+  IoCtx io_ctx, chunk_io_ctx;
+  std::string object_name, chunk_pool_name, op_name, pool_name;
+  int ret;
+  std::map<std::string, std::string>::const_iterator i;
+
+  i = opts.find("op_name");
+  if (i != opts.end()) {
+    op_name = i->second;
+  } else {
+    cerr << "must specify op" << std::endl;
+    exit(1);
+  }
+  i = opts.find("pool");
+  if (i != opts.end()) {
+    pool_name = i->second;
+  } else {
+    cerr << "must specify --pool" << std::endl;
+    exit(1);
+  }
+  i = opts.find("object");
+  if (i != opts.end()) {
+    object_name = i->second;
+  } else {
+    cerr << "must specify object" << std::endl;
+    exit(1);
+  }
+
+  i = opts.find("chunk-pool");
+  if (i != opts.end()) {
+    chunk_pool_name = i->second;
+  } else {
+    cerr << "must specify --chunk-pool" << std::endl;
+    exit(1);
+  }
+  i = opts.find("pgid");
+  boost::optional<pg_t> pgid(i != opts.end(), pg_t());
+
+  ret = rados.init_with_context(g_ceph_context);
+  if (ret < 0) {
+     cerr << "couldn't initialize rados: " << cpp_strerror(ret) << std::endl;
+     goto out;
+  }
+  ret = rados.connect();
+  if (ret) {
+     cerr << "couldn't connect to cluster: " << cpp_strerror(ret) << std::endl;
+     ret = -1;
+     goto out;
+  }
+  ret = rados.ioctx_create(pool_name.c_str(), io_ctx);
+  if (ret < 0) {
+    cerr << "error opening pool "
+	 << chunk_pool_name << ": "
+	 << cpp_strerror(ret) << std::endl;
+    goto out;
+  }
+  ret = rados.ioctx_create(chunk_pool_name.c_str(), chunk_io_ctx);
+  if (ret < 0) {
+    cerr << "error opening pool "
+	 << chunk_pool_name << ": "
+	 << cpp_strerror(ret) << std::endl;
+    goto out;
+  }
+
+  if (op_name == "chunk-dedup") {
+    uint64_t offset, length;
+    string chunk_object, fp_algo;
+    i = opts.find("source-off");
+    if (i != opts.end()) {
+      if (rados_sistrtoll(i, &offset)) {
+	return -EINVAL;
+      }
+    } else {
+      cerr << "must specify --source-off" << std::endl;
+      exit(1);
+    }
+    i = opts.find("source-length");
+    if (i != opts.end()) {
+      if (rados_sistrtoll(i, &length)) {
+	return -EINVAL;
+      }
+    } else {
+      cerr << "must specify --source-off" << std::endl;
+      exit(1);
+    }
+    i = opts.find("fingerprint-algorithm");
+    if (i != opts.end()) {
+      fp_algo = i->second.c_str();
+      if (fp_algo != "sha1"
+	  && fp_algo != "sha256" && fp_algo != "sha512") {
+	cerr << "unrecognized fingerprint-algorithm " << fp_algo << std::endl;
+	exit(1);
+      }
+    }
+    // 1. make a copy from manifest object to chunk object
+    bufferlist bl;
+    ret = io_ctx.read(object_name, bl, length, offset);
+    if (ret < 0) {
+      cerr << " reading object in base pool fails : " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+    chunk_object = [&fp_algo, &bl]() -> string {
+      if (fp_algo == "sha1") {
+        return ceph::crypto::digest<ceph::crypto::SHA1>(bl).to_str();
+      } else if (fp_algo == "sha256") {
+        return ceph::crypto::digest<ceph::crypto::SHA256>(bl).to_str();
+      } else if (fp_algo == "sha512") {
+        return ceph::crypto::digest<ceph::crypto::SHA512>(bl).to_str();
+      } else {
+        assert(0 == "unrecognized fingerprint type");
+        return {};
+      }
+    }();
+    ret = chunk_io_ctx.write(chunk_object, bl, length, offset);
+    if (ret < 0) {
+      cerr << " writing object in chunk pool fails : " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+    // 2. call set_chunk
+    ObjectReadOperation op;
+    op.set_chunk(offset, length, chunk_io_ctx, chunk_object, 0,
+	CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    ret = io_ctx.operate(object_name, &op, NULL);
+    if (ret < 0) {
+      cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  }
+
+out:
+  return (ret < 0) ? 1 : 0;
+}
+
 int main(int argc, const char **argv)
 {
   auto args = argv_to_vec(argc, argv);
@@ -1009,6 +1146,12 @@ int main(int argc, const char **argv)
       opts["min-chunk-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-chunk-size", (char*)NULL)) {
       opts["max-chunk-size"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--chunk-object", (char*)NULL)) {
+      opts["chunk-object"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-off", (char*)NULL)) {
+      opts["source-off"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-length", (char*)NULL)) {
+      opts["source-length"] = val;
     } else if (ceph_argparse_flag(args, i, "--debug", (char*)NULL)) {
       opts["debug"] = "true";
     } else {
@@ -1028,6 +1171,8 @@ int main(int argc, const char **argv)
 	     op_name == "chunk-repair" ||
 	     op_name == "dump-chunk-refs") {
     return chunk_scrub_common(opts, args);
+  } else if (op_name == "chunk-dedup") {
+    return make_dedup_object(opts, args);
   } else {
     cerr << "unrecognized op " << op_name << std::endl;
     exit(1);
