@@ -17,9 +17,10 @@ from ..services.ceph_service import CephService
 from ..services.exception import handle_orchestrator_error
 from ..services.orchestrator import OrchClient, OrchFeature
 from ..tools import TaskManager, str_to_bool
-from . import ApiController, BaseController, ControllerDoc, Endpoint, \
-    EndpointDoc, ReadPermission, RESTController, Task, UiApiController, \
-    UpdatePermission, allow_empty_body
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
+    ReadPermission, RESTController, Task, UIRouter, UpdatePermission, \
+    allow_empty_body
+from ._version import APIVersion
 from .orchestrator import raise_if_no_orchestrator
 
 LIST_HOST_SCHEMA = {
@@ -267,8 +268,8 @@ def add_host(hostname: str, addr: Optional[str] = None,
         orch_client.hosts.enter_maintenance(hostname)
 
 
-@ApiController('/host', Scope.HOSTS)
-@ControllerDoc("Get Host Details", "Host")
+@APIRouter('/host', Scope.HOSTS)
+@APIDoc("Get Host Details", "Host")
 class Host(RESTController):
     @EndpointDoc("List Host Specifications",
                  parameters={
@@ -294,7 +295,7 @@ class Host(RESTController):
                      'status': (str, 'Host Status'),
                  },
                  responses={200: None, 204: None})
-    @RESTController.MethodMap(version='0.1')
+    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
     def create(self, hostname: str,
                addr: Optional[str] = None,
                labels: Optional[List[str]] = None,
@@ -407,7 +408,7 @@ class Host(RESTController):
                      'force': (bool, 'Force Enter Maintenance')
                  },
                  responses={200: None, 204: None})
-    @RESTController.MethodMap(version='0.1')
+    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
     def set(self, hostname: str, update_labels: bool = False,
             labels: List[str] = None, maintenance: bool = False,
             force: bool = False):
@@ -449,7 +450,7 @@ class Host(RESTController):
                 orch.hosts.add_label(hostname, label)
 
 
-@UiApiController('/host', Scope.HOSTS)
+@UIRouter('/host', Scope.HOSTS)
 class HostUi(BaseController):
     @Endpoint('GET')
     @ReadPermission

@@ -79,9 +79,9 @@ class Motd(SP):
 
     @PM.add_hook
     def get_controllers(self):
-        from ..controllers import RESTController, UiApiController
+        from ..controllers import RESTController, UIRouter
 
-        @UiApiController('/motd')
+        @UIRouter('/motd')
         class MessageOfTheDay(RESTController):
             def list(_) -> Optional[Dict]:  # pylint: disable=no-self-argument
                 value: str = self.get_option(self.NAME)

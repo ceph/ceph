@@ -27,7 +27,7 @@ from mgr_util import ServerConfigException, build_url, \
     create_self_signed_cert, get_default_addr, verify_tls_files
 
 from . import mgr
-from .controllers import generate_routes, json_error_page
+from .controllers import Router, json_error_page
 from .grafana import push_local_dashboards
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
@@ -330,7 +330,7 @@ class Module(MgrModule, CherryPyConfig):
         # about to start serving
         self.set_uri(uri)
 
-        mapper, parent_urls = generate_routes(self.url_prefix)
+        mapper, parent_urls = Router.generate_routes(self.url_prefix)
 
         config = {}
         for purl in parent_urls:

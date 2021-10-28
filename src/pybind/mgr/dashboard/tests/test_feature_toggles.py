@@ -23,8 +23,8 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
         cls.mgr = mgr
 
         # Populate real endpoint map
-        from ..controllers import load_controllers
-        cls.controllers = load_controllers()
+        from ..controllers import BaseController
+        cls.controllers = BaseController.load_controllers()
 
         # Initialize FeatureToggles plugin
         cls.plugin = FeatureToggles()
