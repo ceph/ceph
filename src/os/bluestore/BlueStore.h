@@ -2403,6 +2403,7 @@ private:
 	       bool to_repair_db=false,
 	       bool read_only = false);
   void _close_db(bool read_only);
+  void _close_db_leave_bluefs();
   int _open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_restore = false);
   void _close_fm();
   int _write_out_fm_meta(uint64_t target_size);

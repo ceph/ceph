@@ -6089,7 +6089,12 @@ out_fm:
 
 void BlueStore::_close_db_and_around(bool read_only)
 {
-  _close_db(read_only);
+  if (db) {
+    _close_db_leave_bluefs();
+  }
+  if (bluefs) {
+    _close_bluefs(read_only);
+  }
   _close_fm();
   _close_alloc();
   _close_bdev();
@@ -6325,6 +6330,13 @@ void BlueStore::_close_db(bool cold_close)
   if (bluefs) {
     _close_bluefs(cold_close);
   }
+}
+
+void BlueStore::_close_db_leave_bluefs()
+{
+  ceph_assert(db);
+  delete db;
+  db = nullptr;
 }
 
 void BlueStore::_dump_alloc_on_failure()
@@ -7274,6 +7286,7 @@ int BlueStore::umount()
     dout(20) << __func__ << " closing" << dendl;
   }
 
+  _close_db_leave_bluefs();
   // GBH - Vault the allocation state
   dout(5) << "NCB::BlueStore::umount->store_allocation_state_on_bluestore() " << dendl;
   if (was_mounted && fm->is_null_manager()) {
@@ -17210,6 +17223,9 @@ const unsigned MAX_EXTENTS_IN_BUFFER = 4 * 1024; // 4K extents = 64KB of data
 //-----------------------------------------------------------------------------------
 int BlueStore::store_allocator(Allocator* src_allocator)
 {
+  // when storing allocations to file we must be sure there is no background compactions
+  // the easiest way to achieve it is to make sure db is closed
+  ceph_assert(db == nullptr);
   utime_t  start_time = ceph_clock_now();
   int ret = 0;
 
@@ -17989,6 +18005,7 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool(bool test_store_and
   }
 
   if (test_store_and_restore) {
+    _close_db_leave_bluefs();
     dout(5) << "calling store_allocator(shared_alloc.a)" << dendl;
     store_allocator(shared_alloc.a);
     Allocator* alloc2 = create_bitmap_allocator(bdev_size);
