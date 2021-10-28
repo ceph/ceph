@@ -522,10 +522,10 @@ public:
   RadosMultipartUpload(RadosStore* _store, Bucket* _bucket, const std::string& oid, std::optional<std::string> upload_id, ceph::real_time _mtime) : MultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), mtime(_mtime) {}
   virtual ~RadosMultipartUpload() = default;
 
-  virtual const std::string& get_meta() const { return mp_obj.get_meta(); }
-  virtual const std::string& get_key() const { return mp_obj.get_key(); }
-  virtual const std::string& get_upload_id() const { return mp_obj.get_upload_id(); }
-  virtual ceph::real_time& get_mtime() { return mtime; }
+  virtual const std::string& get_meta() const override { return mp_obj.get_meta(); }
+  virtual const std::string& get_key() const override { return mp_obj.get_key(); }
+  virtual const std::string& get_upload_id() const override { return mp_obj.get_upload_id(); }
+  virtual ceph::real_time get_mtime() const override { return mtime; }
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, RGWObjectCtx* obj_ctx, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;
   virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
