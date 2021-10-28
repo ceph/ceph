@@ -6,6 +6,7 @@ import logging
 from io import BytesIO
 
 from tasks.mgr.mgr_test_case import MgrTestCase
+from teuthology import contextutil
 from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
@@ -153,6 +154,15 @@ class TestNFS(MgrTestCase):
         '''
         if create_fs:
             self._cmd('fs', 'volume', 'create', self.fs_name)
+            with contextutil.safe_while(sleep=5, tries=30) as proceed:
+                while proceed():
+                    output = self._cmd(
+                        'orch', 'ls', '-f', 'json',
+                        '--service-name', f'mds.{self.fs_name}'
+                    )
+                    j = json.loads(output)
+                    if j[0]['status']['running']:
+                        break
         export_cmd = ['nfs', 'export', 'create', 'cephfs', self.fs_name, self.cluster_id]
         if isinstance(extra_cmd, list):
             export_cmd.extend(extra_cmd)
