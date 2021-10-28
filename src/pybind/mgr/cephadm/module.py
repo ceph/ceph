@@ -350,12 +350,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='How often agent on each host will try to gather and send metadata'
         ),
         Option(
-            'endpoint_port',
-            type='int',
-            default=8499,
-            desc='Which port cephadm http endpoint will listen on'
-        ),
-        Option(
             'agent_starting_port',
             type='int',
             default=4721,
@@ -429,7 +423,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.ssh_pub: Optional[str] = None
             self.use_agent = False
             self.agent_refresh_rate = 0
-            self.endpoint_port = 0
             self.agent_starting_port = 0
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
@@ -2219,11 +2212,13 @@ Then run the following:
             deps = [d.name() for d in daemons if d.daemon_type == 'haproxy']
         elif daemon_type == 'agent':
             root_cert = ''
+            server_port = ''
             try:
+                server_port = str(self.cherrypy_thread.server_port)
                 root_cert = self.cherrypy_thread.ssl_certs.get_root_cert()
             except Exception:
                 pass
-            deps = sorted([self.get_mgr_ip(), str(self.endpoint_port), root_cert,
+            deps = sorted([self.get_mgr_ip(), server_port, root_cert,
                            str(self.get_module_option('device_enhanced_scan'))])
         elif daemon_type == 'iscsi':
             deps = [self.get_mgr_ip()]
