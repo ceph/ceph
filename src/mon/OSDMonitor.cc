@@ -12713,16 +12713,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           g_conf()->mon_osd_blocklist_default_expire);
 	expires += d;
 
-	pending_inc.new_blocklist[addr] = expires;
-
-        {
-          // cancel any pending un-blocklisting request too
-          auto it = std::find(pending_inc.old_blocklist.begin(),
-            pending_inc.old_blocklist.end(), addr);
-          if (it != pending_inc.old_blocklist.end()) {
-            pending_inc.old_blocklist.erase(it);
-          }
-        }
+	auto add_to_pending_blocklists = [](auto& nb, auto& ob,
+					    const auto& addr,
+					    const auto& expires) {
+	  nb[addr] = expires;
+	  // cancel any pending un-blocklisting request too
+	  auto it = std::find(ob.begin(),
+			      ob.end(), addr);
+	  if (it != ob.end()) {
+	    ob.erase(it);
+	  }
+	};
+	add_to_pending_blocklists(pending_inc.new_blocklist,
+				  pending_inc.old_blocklist,
+				  addr, expires);
 
 	ss << "blocklisting " << addr << " until " << expires << " (" << d << " sec)";
 	getline(ss, rs);
@@ -12730,12 +12734,23 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 						  get_last_committed() + 1));
 	return true;
       } else if (blocklistop == "rm") {
-	if (osdmap.is_blocklisted(addr) ||
-	    pending_inc.new_blocklist.count(addr)) {
-	  if (osdmap.is_blocklisted(addr))
-	    pending_inc.old_blocklist.push_back(addr);
-	  else
-	    pending_inc.new_blocklist.erase(addr);
+	auto maybe_rm_from_pending_blocklists = [](const auto& addr,
+						   auto& blocklist,
+						   auto& ob, auto& pb) {
+	  if (blocklist.count(addr) ||
+	      pb.count(addr)) {
+	    if (blocklist.count(addr))
+	      ob.push_back(addr);
+	    else
+	      pb.erase(addr);
+	    return true;
+	  } else {
+	    return false;
+	  }
+	};
+	if (maybe_rm_from_pending_blocklists(addr, osdmap.blocklist,
+					     pending_inc.old_blocklist,
+					     pending_inc.new_blocklist)) {
 	  ss << "un-blocklisting " << addr;
 	  getline(ss, rs);
 	  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
