@@ -648,7 +648,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
   }
 
   {
-    uint8_t target_v = 9; // if bumping this, be aware of stretch_mode target_v 10!
+    uint8_t target_v = 9; // if bumping this, be aware of range_blocklist 11
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -656,6 +656,10 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     }
     if (change_stretch_mode) {
       target_v = std::max((uint8_t)10, target_v);
+    }
+    if (!new_range_blocklist.empty() ||
+	!old_range_blocklist.empty()) {
+      target_v = std::max((uint8_t)11, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -705,6 +709,10 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
       encode(new_recovering_stretch_mode, bl);
       encode(new_stretch_mode_bucket, bl);
       encode(stretch_mode_enabled, bl);
+    }
+    if (target_v >= 11) {
+      encode(new_range_blocklist, bl, features);
+      encode(old_range_blocklist, bl, features);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -980,7 +988,10 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
       decode(new_stretch_mode_bucket, bl);
       decode(stretch_mode_enabled, bl);
     }
-
+    if (struct_v >= 11) {
+      decode(new_range_blocklist, bl);
+      decode(old_range_blocklist, bl);
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -1224,6 +1235,17 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->close_section();
   f->open_array_section("old_blocklist");
   for (const auto &blist : old_blocklist)
+    f->dump_stream("addr") << blist;
+  f->close_section();
+  f->open_array_section("new_range_blocklist");
+  for (const auto &blist : new_range_blocklist) {
+    stringstream ss;
+    ss << blist.first;
+    f->dump_stream(ss.str().c_str()) << blist.second;
+  }
+  f->close_section();
+  f->open_array_section("old_range_blocklist");
+  for (const auto &blist : old_range_blocklist)
     f->dump_stream("addr") << blist;
   f->close_section();
 
@@ -2287,6 +2309,14 @@ int OSDMap::apply_incremental(const Incremental &inc)
   for (const auto &addr : inc.old_blocklist)
     blocklist.erase(addr);
 
+  if (!inc.new_range_blocklist.empty()) {
+    range_blocklist.insert(inc.new_range_blocklist.begin(),
+			   inc.new_range_blocklist.end());
+    new_blocklist_entries = true;
+  }
+  for (const auto &addr : inc.old_range_blocklist)
+    range_blocklist.erase(addr);
+
   for (auto& i : inc.new_crush_node_flags) {
     if (i.second) {
       crush_node_flags[i.first] = i.second;
@@ -3037,7 +3067,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 9; // when bumping this, be aware of stretch_mode target_v 10!
+    uint8_t target_v = 9; // when bumping this, be aware of range blocklist
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -3047,6 +3077,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (stretch_mode_enabled) {
       target_v = std::max((uint8_t)10, target_v);
+    }
+    if (!range_blocklist.empty()) {
+      target_v = std::max((uint8_t)11, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -3102,6 +3135,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
       encode(degraded_stretch_mode, bl);
       encode(recovering_stretch_mode, bl);
       encode(stretch_mode_bucket, bl);
+    }
+    if (target_v >= 11) {
+      ::encode(range_blocklist, bl, features);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -3442,6 +3478,9 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
       recovering_stretch_mode = 0;
       stretch_mode_bucket = 0;
     }
+    if (struct_v >= 11) {
+      decode(range_blocklist, bl);
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -3649,6 +3688,13 @@ void OSDMap::dump(Formatter *f) const
 
   f->open_object_section("blocklist");
   for (const auto &addr : blocklist) {
+    stringstream ss;
+    ss << addr.first;
+    f->dump_stream(ss.str().c_str()) << addr.second;
+  }
+  f->close_section();
+  f->open_object_section("range_blocklist");
+  for (const auto &addr : range_blocklist) {
     stringstream ss;
     ss << addr.first;
     f->dump_stream(ss.str().c_str()) << addr.second;
@@ -3918,6 +3964,8 @@ void OSDMap::print(ostream& out) const
 
   for (const auto &addr : blocklist)
     out << "blocklist " << addr.first << " expires " << addr.second << "\n";
+  for (const auto &addr : range_blocklist)
+    out << "range blocklist " << addr.first << " expires " << addr.second << "\n";
 }
 
 class OSDTreePlainDumper : public CrushTreeDumper::Dumper<TextTable> {
