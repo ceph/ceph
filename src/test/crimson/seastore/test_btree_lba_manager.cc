@@ -29,27 +29,16 @@ struct btree_test_base :
 
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   ExtentReaderRef scanner;
-  Journal journal;
-  Cache cache;
+  JournalRef journal;
+  CacheRef cache;
 
-  const size_t block_size;
+  size_t block_size;
 
   WritePipeline pipeline;
 
   segment_id_t next;
 
-  btree_test_base()
-    : segment_manager(segment_manager::create_test_ephemeral()),
-      scanner(new ExtentReader()),
-      journal(*segment_manager, *scanner),
-      cache(*scanner, segment_manager->get_block_size()),
-      block_size(segment_manager->get_block_size()),
-      next(segment_manager->get_device_id(), 0)
-  {
-    scanner->add_segment_manager(segment_manager.get());
-    journal.set_segment_provider(this);
-    journal.set_write_pipeline(&pipeline);
-  }
+  btree_test_base() = default;
 
   get_segment_ret get_segment(device_id_t id) final {
     auto ret = next;
@@ -67,27 +56,38 @@ struct btree_test_base :
   virtual void complete_commit(Transaction &t) {}
   seastar::future<> submit_transaction(TransactionRef t)
   {
-    auto record = cache.prepare_record(*t);
-    return journal.submit_record(std::move(record), t->get_handle()).safe_then(
+    auto record = cache->prepare_record(*t);
+    return journal->submit_record(std::move(record), t->get_handle()).safe_then(
       [this, t=std::move(t)](auto p) mutable {
 	auto [addr, seq] = p;
-	cache.complete_commit(*t, addr, seq);
+	cache->complete_commit(*t, addr, seq);
 	complete_commit(*t);
       }).handle_error(crimson::ct_error::assert_all{});
   }
 
   virtual LBAManager::mkfs_ret test_structure_setup(Transaction &t) = 0;
   seastar::future<> set_up_fut() final {
+    segment_manager = segment_manager::create_test_ephemeral();
+    scanner.reset(new ExtentReader());
+    journal.reset(new Journal(*segment_manager, *scanner));
+    cache.reset(new Cache(*scanner));
+
+    block_size = segment_manager->get_block_size();
+    next = segment_id_t{segment_manager->get_device_id(), 0};
+    scanner->add_segment_manager(segment_manager.get());
+    journal->set_segment_provider(this);
+    journal->set_write_pipeline(&pipeline);
+
     return segment_manager->init(
     ).safe_then([this] {
-      return journal.open_for_write();
+      return journal->open_for_write();
     }).safe_then([this](auto addr) {
       return seastar::do_with(
-	cache.create_transaction(Transaction::src_t::MUTATE),
+	cache->create_transaction(Transaction::src_t::MUTATE),
 	[this](auto &ref_t) {
 	  return with_trans_intr(*ref_t, [&](auto &t) {
-	    cache.init();
-	    return cache.mkfs(t
+	    cache->init();
+	    return cache->mkfs(t
 	    ).si_then([this, &t] {
 	      return test_structure_setup(t);
 	    });
@@ -102,10 +102,17 @@ struct btree_test_base :
     );
   }
 
+  virtual void test_structure_reset() {}
   seastar::future<> tear_down_fut() final {
-    return cache.close(
+    return cache->close(
     ).safe_then([this] {
-      return journal.close();
+      return journal->close();
+    }).safe_then([this] {
+      test_structure_reset();
+      segment_manager.reset();
+      scanner.reset();
+      journal.reset();
+      cache.reset();
     }).handle_error(
       crimson::ct_error::all_same_way([] {
 	ASSERT_FALSE("Unable to close");
@@ -118,14 +125,14 @@ struct lba_btree_test : btree_test_base {
   std::map<laddr_t, lba_map_val_t> check;
 
   auto get_op_context(Transaction &t) {
-    return op_context_t{cache, t};
+    return op_context_t{*cache, t};
   }
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
-    return cache.get_root(
+    return cache->get_root(
       t
     ).si_then([this, &t](RootBlockRef croot) {
-      auto mut_croot = cache.duplicate_for_write(
+      auto mut_croot = cache->duplicate_for_write(
 	t, croot
       )->cast<RootBlock>();
       mut_croot->root.lba_root = LBABtree::mkfs(get_op_context(t));
@@ -134,7 +141,7 @@ struct lba_btree_test : btree_test_base {
 
   void update_if_dirty(Transaction &t, LBABtree &btree, RootBlockRef croot) {
     if (btree.is_root_dirty()) {
-      auto mut_croot = cache.duplicate_for_write(
+      auto mut_croot = cache->duplicate_for_write(
 	t, croot
       )->cast<RootBlock>();
       mut_croot->root.lba_root = btree.get_root_undirty();
@@ -143,12 +150,12 @@ struct lba_btree_test : btree_test_base {
 
   template <typename F>
   auto lba_btree_update(F &&f) {
-    auto tref = cache.create_transaction(Transaction::src_t::MUTATE);
+    auto tref = cache->create_transaction(Transaction::src_t::MUTATE);
     auto &t = *tref;
     with_trans_intr(
       t,
       [this, tref=std::move(tref), f=std::forward<F>(f)](auto &t) mutable {
-	return cache.get_root(
+	return cache->get_root(
 	  t
 	).si_then([this, f=std::move(f), &t](RootBlockRef croot) {
 	  return seastar::do_with(
@@ -169,11 +176,11 @@ struct lba_btree_test : btree_test_base {
 
   template <typename F>
   auto lba_btree_read(F &&f) {
-    auto t = cache.create_transaction(Transaction::src_t::READ);
+    auto t = cache->create_transaction(Transaction::src_t::READ);
     return with_trans_intr(
       *t,
       [this, f=std::forward<F>(f)](auto &t) mutable {
-	return cache.get_root(
+	return cache->get_root(
 	  t
 	).si_then([f=std::move(f), &t](RootBlockRef croot) mutable {
 	  return seastar::do_with(
@@ -265,15 +272,19 @@ TEST_F(lba_btree_test, basic)
 struct btree_lba_manager_test : btree_test_base {
   BtreeLBAManagerRef lba_manager;
 
-  btree_lba_manager_test()
-    : lba_manager(new BtreeLBAManager(*segment_manager, cache)) {}
+  btree_lba_manager_test() = default;
 
   void complete_commit(Transaction &t) final {
     lba_manager->complete_transaction(t);
   }
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
+    lba_manager.reset(new BtreeLBAManager(*segment_manager, *cache));
     return lba_manager->mkfs(t);
+  }
+
+  void test_structure_reset() final {
+    lba_manager.reset();
   }
 
   struct test_extent_t {
@@ -290,18 +301,18 @@ struct btree_lba_manager_test : btree_test_base {
 
   auto create_transaction(bool create_fake_extent=true) {
     auto t = test_transaction_t{
-      cache.create_transaction(Transaction::src_t::MUTATE),
+      cache->create_transaction(Transaction::src_t::MUTATE),
       test_lba_mappings
     };
     if (create_fake_extent) {
-      cache.alloc_new_extent<TestBlockPhysical>(*t.t, TestBlockPhysical::SIZE);
+      cache->alloc_new_extent<TestBlockPhysical>(*t.t, TestBlockPhysical::SIZE);
     };
     return t;
   }
 
   auto create_weak_transaction() {
     auto t = test_transaction_t{
-      cache.create_weak_transaction(Transaction::src_t::READ),
+      cache->create_weak_transaction(Transaction::src_t::READ),
       test_lba_mappings
     };
     return t;
