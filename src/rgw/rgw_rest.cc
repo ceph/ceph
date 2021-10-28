@@ -479,10 +479,10 @@ void dump_epoch_header(struct req_state *s, const char *name, real_time t)
   return dump_header(s, name, std::string_view(buf, len));
 }
 
-void dump_time(struct req_state *s, const char *name, real_time *t)
+void dump_time(struct req_state *s, const char *name, real_time t)
 {
   char buf[TIME_BUF_SIZE];
-  rgw_to_iso8601(*t, buf, sizeof(buf));
+  rgw_to_iso8601(t, buf, sizeof(buf));
 
   s->formatter->dump_string(name, buf);
 }
