@@ -947,7 +947,10 @@ namespace rgw::sal {
     return 0;
   }
 
-  std::unique_ptr<MultipartUpload> DBStore::get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id, ceph::real_time mtime) {
+  std::unique_ptr<MultipartUpload>
+  DBStore::get_multipart_upload(Bucket* bucket, const std::string& oid,
+                                std::optional<std::string> upload_id,
+                                ACLOwner owner, ceph::real_time mtime) {
     return nullptr;
   }
 
