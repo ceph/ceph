@@ -4357,7 +4357,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   bufferlist first_chunk;
 
-  bool copy_itself = (dest_obj == src_obj);
+  const bool copy_itself = (dest_obj->get_obj() == src_obj->get_obj());
   RGWObjManifest *pmanifest; 
   ldpp_dout(dpp, 20) << "dest_obj=" << dest_obj << " src_obj=" << src_obj << " copy_itself=" << (int)copy_itself << dendl;
 
