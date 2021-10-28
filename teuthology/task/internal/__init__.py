@@ -317,6 +317,7 @@ def fetch_binaries_for_coredumps(path, remote):
             # Parse file output to get program, Example output:
             # 1422917770.7450.core: ELF 64-bit LSB core file x86-64, version 1 (SYSV), SVR4-style, \
             # from 'radosgw --rgw-socket-path /home/ubuntu/cephtest/apache/tmp.client.0/fastcgi_soc'
+            log.info(f' core looks like: {dump_out}')
             dump_program = dump_out.split("from '")[1].split(' ')[0]
 
             # Find path on remote server:
