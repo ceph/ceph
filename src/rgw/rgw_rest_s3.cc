@@ -3901,8 +3901,9 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
         s->formatter->dump_string("Key", upload->get_key());
       }
       s->formatter->dump_string("UploadId", upload->get_upload_id());
-      dump_owner(s, s->user->get_id(), s->user->get_display_name(), "Initiator");
-      dump_owner(s, s->user->get_id(), s->user->get_display_name());
+      const ACLOwner& owner = upload->get_owner();
+      dump_owner(s, owner.get_id(), owner.get_display_name(), "Initiator");
+      dump_owner(s, owner.get_id(), owner.get_display_name()); // Owner
       s->formatter->dump_string("StorageClass", "STANDARD");
       dump_time(s, "Initiated", upload->get_mtime());
       s->formatter->close_section();

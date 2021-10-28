@@ -777,7 +777,10 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
   if (!results.objs.empty()) {
     for (const rgw_bucket_dir_entry& dentry : results.objs) {
       rgw_obj_key key(dentry.key);
-      uploads.push_back(store->get_multipart_upload(this, key.name));
+      ACLOwner owner(rgw_user(dentry.meta.owner));
+      owner.set_name(dentry.meta.owner_display_name);
+      uploads.push_back(store->get_multipart_upload(
+              this, key.name, std::nullopt, std::move(owner)));
     }
   }
   if (common_prefixes) {
@@ -1441,9 +1444,13 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-std::unique_ptr<MultipartUpload> RadosStore::get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id, ceph::real_time mtime)
+std::unique_ptr<MultipartUpload>
+RadosStore::get_multipart_upload(Bucket* bucket, const std::string& oid,
+                                 std::optional<std::string> upload_id,
+                                 ACLOwner owner, ceph::real_time mtime)
 {
-  return std::make_unique<RadosMultipartUpload>(this, bucket, oid, upload_id, mtime);
+  return std::make_unique<RadosMultipartUpload>(this, bucket, oid, upload_id,
+                                                std::move(owner), mtime);
 }
 
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,

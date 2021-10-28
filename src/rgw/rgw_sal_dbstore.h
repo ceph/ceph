@@ -540,7 +540,10 @@ protected:
       virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
           const std::string& tenant,
           vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
-      virtual std::unique_ptr<MultipartUpload> get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id, ceph::real_time mtime) override;
+      virtual std::unique_ptr<MultipartUpload>
+      get_multipart_upload(Bucket* bucket, const std::string& oid,
+                           std::optional<std::string> upload_id=std::nullopt,
+                           ACLOwner owner={}, ceph::real_time mtime=ceph::real_clock::now()) override;
       virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
