@@ -441,23 +441,31 @@ class CephadmUpgrade:
                 continue_upgrade = False
                 continue
 
-            if not (mdsmap['in'] == [0] and len(mdsmap['up']) == 1):
+            if not (mdsmap['in'] == [0] and len(mdsmap['up']) <= 1):
                 self.mgr.log.info('Upgrade: Waiting for fs %s to scale down to reach 1 MDS' % (fs_name))
                 time.sleep(10)
                 continue_upgrade = False
                 continue
 
-            mdss = list(mdsmap['info'].values())
-            assert len(mdss) == 1
-            lone_mds = mdss[0]
-            if lone_mds['state'] != 'up:active':
-                self.mgr.log.info('Upgrade: Waiting for mds.%s to be up:active (currently %s)' % (
-                    lone_mds['name'],
-                    lone_mds['state'],
-                ))
-                time.sleep(10)
-                continue_upgrade = False
-                continue
+            if len(mdsmap['up']) == 0:
+                self.mgr.log.warning("Upgrade: No mds is up; continuing upgrade procedure to poke things in the right direction")
+                # This can happen because the current version MDS have
+                # incompatible compatsets; the mons will not do any promotions.
+                # We must upgrade to continue.
+            elif len(mdsmap['up']) > 0:
+                mdss = list(mdsmap['info'].values())
+                assert len(mdss) == 1
+                lone_mds = mdss[0]
+                if lone_mds['state'] != 'up:active':
+                    self.mgr.log.info('Upgrade: Waiting for mds.%s to be up:active (currently %s)' % (
+                        lone_mds['name'],
+                        lone_mds['state'],
+                    ))
+                    time.sleep(10)
+                    continue_upgrade = False
+                    continue
+            else:
+                assert False
 
         return continue_upgrade
 
