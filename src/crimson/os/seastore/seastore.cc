@@ -35,13 +35,52 @@ using crimson::common::local_conf;
 
 namespace crimson::os::seastore {
 
+class FileMDStore final : public SeaStore::MDStore {
+  std::string root;
+public:
+  FileMDStore(std::string root) : root(root) {}
+
+  write_meta_ret write_meta(
+    const std::string& key, const std::string& value) final {
+    std::string path = fmt::format("{}/{}", root, key);
+    std::string fvalue = value;
+    fvalue += "\n";
+    ceph::bufferptr bp(fvalue.length());
+    ceph::bufferlist bl;
+    bp.copy_in(0, fvalue.length(), fvalue.c_str());
+    bl.push_back(bp);
+    return crimson::write_file(std::move(bl), path);
+  }
+
+  read_meta_ret read_meta(const std::string& key) final {
+    std::string path = fmt::format("{}/{}", root, key);
+    return seastar::file_exists(
+      path
+    ).then([path] (bool exist) {
+      if (exist) {
+	return crimson::read_file(path)
+	  .then([] (auto tmp_buf) {
+	    std::string v = {tmp_buf.get(), tmp_buf.size()};
+	    std::size_t pos = v.find("\n");
+	    std::string str = v.substr(0, pos);
+	    return seastar::make_ready_future<std::optional<std::string>>(str);
+	  });
+      } else {
+	return seastar::make_ready_future<std::optional<std::string>>(std::nullopt);
+      }
+    });
+  }
+};
+
 SeaStore::SeaStore(
   std::string root,
+  MDStoreRef mdstore,
   SegmentManagerRef sm,
   TransactionManagerRef tm,
   CollectionManagerRef cm,
   OnodeManagerRef om)
   : root(root),
+    mdstore(std::move(mdstore)),
     segment_manager(std::move(sm)),
     transaction_manager(std::move(tm)),
     collection_manager(std::move(cm)),
@@ -49,6 +88,17 @@ SeaStore::SeaStore(
 {
   register_metrics();
 }
+
+SeaStore::SeaStore(
+  std::string root,
+  SegmentManagerRef sm,
+  TransactionManagerRef tm,
+  CollectionManagerRef cm,
+  OnodeManagerRef om)
+  : SeaStore(
+    root,
+    std::make_unique<FileMDStore>(root),
+    std::move(sm), std::move(tm), std::move(cm), std::move(om)) {}
 
 SeaStore::~SeaStore() = default;
 
@@ -1265,19 +1315,6 @@ boost::intrusive_ptr<SeastoreCollection> SeaStore::_get_collection(const coll_t&
   return new SeastoreCollection{cid};
 }
 
-seastar::future<> SeaStore::write_meta_file(const std::string& key,
-                                            const std::string& value)
-{
-  std::string path = fmt::format("{}/{}", root, key);
-  std::string fvalue = value;
-  fvalue += "\n";
-  ceph::bufferptr bp(fvalue.length());
-  ceph::bufferlist bl;
-  bp.copy_in(0, fvalue.length(), fvalue.c_str());
-  bl.push_back(bp);
-  return crimson::write_file(std::move(bl), path);
-}
-
 seastar::future<> SeaStore::write_meta(const std::string& key,
 					const std::string& value)
 {
@@ -1298,45 +1335,28 @@ seastar::future<> SeaStore::write_meta(const std::string& key,
 	      });
 	    });
 	}).safe_then([this, &key, &value] {
-	  return write_meta_file(key, value);
+	  return mdstore->write_meta(key, value);
 	});
       }).handle_error(
 	crimson::ct_error::assert_all{"Invalid error in SeaStore::write_meta"}
       );
 }
 
-seastar::future<std::optional<std::string>>
-SeaStore::read_meta_file(const std::string& key)
-{
-  std::string path = fmt::format("{}/{}", root, key);
-  return seastar::file_exists(
-    path
-  ).then([path] (bool exist) {
-    if (exist) {
-      return crimson::read_file(path)
-        .then([] (auto tmp_buf) {
-	  std::string v = {tmp_buf.get(), tmp_buf.size()};
-	  std::size_t pos = v.find("\n");
-	  std::string str = v.substr(0, pos);
-	  return seastar::make_ready_future<std::optional<std::string>>(str);
-	});
-    } else {
-      return seastar::make_ready_future<std::optional<std::string>>(std::nullopt);
-    }
-  });
-}
-
 seastar::future<std::tuple<int, std::string>> SeaStore::read_meta(const std::string& key)
 {
   LOG_PREFIX(SeaStore::read_meta);
   DEBUG("key: {}", key);
-  return read_meta_file(key).then([](auto v) {
+  return mdstore->read_meta(key).safe_then([](auto v) {
     if (v) {
       return std::make_tuple(0, std::move(*v));
     } else {
       return std::make_tuple(-1, std::string(""));
     }
-  });
+  }).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::read_meta"
+    }
+  );
 }
 
 uuid_d SeaStore::get_fsid() const
