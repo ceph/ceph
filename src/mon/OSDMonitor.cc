@@ -12751,16 +12751,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	auto maybe_rm_from_pending_blocklists = [](const auto& addr,
 						   auto& blocklist,
 						   auto& ob, auto& pb) {
-	  if (blocklist.count(addr) ||
-	      pb.count(addr)) {
-	    if (blocklist.count(addr))
-	      ob.push_back(addr);
-	    else
-	      pb.erase(addr);
+	  if (blocklist.count(addr)) {
+	    ob.push_back(addr);
 	    return true;
-	  } else {
-	    return false;
+	  } else if (pb.count(addr)) {
+	    pb.erase(addr);
+	    return true;
 	  }
+	  return false;
 	};
 	if (maybe_rm_from_pending_blocklists(addr, osdmap.blocklist,
 					     pending_inc.old_blocklist,
