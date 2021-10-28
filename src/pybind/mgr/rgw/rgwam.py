@@ -463,7 +463,7 @@ class RGWAM:
                 svc_id = realm_name  + '.' + zone_name
                 self.env.mgr.apply_rgw(svc_id, realm_name, zone_name, o.port)
 
-        realm_token = RealmToken(ep, sys_user.uid, sys_access_key, sys_secret)
+        realm_token = RealmToken(realm_id, ep, sys_user.uid, sys_access_key, sys_secret)
 
         logging.info(realm_token.to_json())
 
@@ -520,14 +520,14 @@ class RGWAM:
             sys_access_key = sys_user.keys[0].access_key
             sys_secret = sys_user.keys[0].secret_key
 
-        realm_token = RealmToken(ep, sys_user.uid, sys_access_key, sys_secret)
+        realm_token = RealmToken(period.realm_id, ep, sys_user.uid, sys_access_key, sys_secret)
 
         logging.info(realm_token.to_json())
 
         realm_token_b = realm_token.to_json().encode('utf-8')
         return (0, 'Realm Token: %s' % base64.b64encode(realm_token_b).decode('utf-8'), '')
 
-    def realm_rm_zone_creds(self, realm_name, realm_token_b64):
+    def realm_rm_zone_creds(self, realm_token_b64):
         if not realm_token_b64:
             print('missing realm token')
             return False
@@ -538,9 +538,10 @@ class RGWAM:
         realm_token = json.loads(realm_token_s)
 
         access_key = realm_token['access_key']
+        realm_id = realm_token['realm_id']
 
         try:
-            period_info = self.period_op().get(EntityName(realm_name))
+            period_info = self.period_op().get(EntityID(realm_id))
         except RGWAMException as e:
             raise RGWAMException('failed to fetch period info', e)
 
