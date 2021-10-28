@@ -111,7 +111,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  endpoints: Optional[str] = None,
                                  sys_uid: Optional[str] = None,
                                  uid: Optional[str] = None,
-                                 start_radosgw: Optional[bool] = False):
+                                 start_radosgw: Optional[bool] = True):
         """Bootstrap new rgw realm, zonegroup, and zone"""
 
 
@@ -158,7 +158,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                              zonegroup_name: Optional[str] = None,
                              zone_name: Optional[str] = None,
                              endpoints: Optional[str] = None,
-                             start_radosgw: Optional[bool] = False):
+                             start_radosgw: Optional[bool] = True):
         """Bootstrap new rgw zone that syncs with existing zone"""
 
         try:
