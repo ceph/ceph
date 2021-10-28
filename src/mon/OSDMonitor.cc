@@ -12695,7 +12695,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     else {
-      if (!addr.is_cidr()) {
+      if (addr.is_cidr()) {
+	err = check_cluster_features(CEPH_FEATUREMASK_RANGE_BLOCKLIST, ss);
+	if (err) {
+	  goto reply;
+	}
+      } else {
 	if (osdmap.require_osd_release >= ceph_release_t::nautilus) {
 	  // always blocklist type ANY
 	  addr.set_type(entity_addr_t::TYPE_ANY);
@@ -12726,9 +12731,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	    ob.erase(it);
 	  }
 	};
-	add_to_pending_blocklists(pending_inc.new_blocklist,
-				  pending_inc.old_blocklist,
-				  addr, expires);
+	if (addr.is_cidr()) {
+	  add_to_pending_blocklists(pending_inc.new_range_blocklist,
+				    pending_inc.old_range_blocklist,
+				    addr, expires);
+
+	} else {
+	  add_to_pending_blocklists(pending_inc.new_blocklist,
+				    pending_inc.old_blocklist,
+				    addr, expires);
+	}
 
 	ss << "blocklisting " << addr << " until " << expires << " (" << d << " sec)";
 	getline(ss, rs);
@@ -12752,7 +12764,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	};
 	if (maybe_rm_from_pending_blocklists(addr, osdmap.blocklist,
 					     pending_inc.old_blocklist,
-					     pending_inc.new_blocklist)) {
+					     pending_inc.new_blocklist) ||
+	    maybe_rm_from_pending_blocklists(addr, osdmap.range_blocklist,
+					     pending_inc.old_range_blocklist,
+					     pending_inc.new_range_blocklist)) {
 	  ss << "un-blocklisting " << addr;
 	  getline(ss, rs);
 	  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
