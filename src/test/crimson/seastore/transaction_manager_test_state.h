@@ -20,10 +20,9 @@ using namespace crimson::os::seastore;
 
 class EphemeralTestState {
 protected:
-  std::unique_ptr<segment_manager::EphemeralSegmentManager> segment_manager;
+  segment_manager::EphemeralSegmentManagerRef segment_manager;
 
-  EphemeralTestState()
-    : segment_manager(segment_manager::create_test_ephemeral()) {}
+  EphemeralTestState() = default;
 
   virtual void _init() = 0;
   void init() {
@@ -48,6 +47,7 @@ protected:
   }
 
   seastar::future<> tm_setup() {
+    segment_manager = segment_manager::create_test_ephemeral();
     init();
     return segment_manager->init(
     ).safe_then([this] {
@@ -64,7 +64,9 @@ protected:
   }
 
   seastar::future<> tm_teardown() {
-    return _teardown();
+    return _teardown().then([this] {
+      segment_manager.reset();
+    });
   }
 };
 
@@ -78,7 +80,7 @@ auto get_transaction_manager(
     std::move(scanner),
     true);
   auto journal = std::make_unique<Journal>(segment_manager, scanner_ref);
-  auto cache = std::make_unique<Cache>(scanner_ref, segment_manager.get_block_size());
+  auto cache = std::make_unique<Cache>(scanner_ref);
   auto lba_manager = lba_manager::create_lba_manager(segment_manager, *cache);
 
   auto epm = std::make_unique<ExtentPlacementManager>(*cache, *lba_manager);
@@ -124,13 +126,13 @@ protected:
 
   TMTestState() : EphemeralTestState() {}
 
-  virtual void _init() {
+  virtual void _init() override {
     tm = get_transaction_manager(*segment_manager);
     segment_cleaner = tm->get_segment_cleaner();
     lba_manager = tm->get_lba_manager();
   }
 
-  virtual void _destroy() {
+  virtual void _destroy() override {
     segment_cleaner = nullptr;
     lba_manager = nullptr;
     tm.reset();

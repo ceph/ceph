@@ -14,6 +14,12 @@ class TransactionManager;
 
 class ExtentReader {
 public:
+  segment_off_t get_block_size() const {
+    assert(segment_managers.size());
+    // assume all segment managers have the same block size
+    return segment_managers[0]->get_block_size();
+  }
+
   using read_ertr = SegmentManager::read_ertr;
   ExtentReader() {
     segment_managers.resize(DEVICE_ID_MAX, nullptr);
