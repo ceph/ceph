@@ -818,7 +818,7 @@ public:
   virtual const std::string& get_meta() const = 0;
   virtual const std::string& get_key() const = 0;
   virtual const std::string& get_upload_id() const = 0;
-  virtual ceph::real_time& get_mtime() = 0;
+  virtual ceph::real_time get_mtime() const = 0;
 
   std::map<uint32_t, std::unique_ptr<MultipartPart>>& get_parts() { return parts; }
 
