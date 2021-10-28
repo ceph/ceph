@@ -342,7 +342,7 @@ public:
       string instance = (!e.key.instance.empty() ? e.key.instance : "null");
       s->formatter->dump_string("Instance", instance.c_str());
       s->formatter->dump_int("VersionedEpoch", e.versioned_epoch);
-      dump_time(s, "LastModified", &e.meta.mtime);
+      dump_time(s, "LastModified", e.meta.mtime);
       s->formatter->dump_int("Size", e.meta.size);
       s->formatter->dump_format("ETag", "\"%s\"", e.meta.etag.c_str());
       s->formatter->dump_string("ContentType", e.meta.content_type.c_str());

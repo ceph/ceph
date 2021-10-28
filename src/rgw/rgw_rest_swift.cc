@@ -401,7 +401,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
         }
         s->formatter->dump_string("content_type", single_content_type);
       }
-      dump_time(s, "last_modified", &iter->meta.mtime);
+      dump_time(s, "last_modified", iter->meta.mtime);
       s->formatter->close_section();
     }
 
