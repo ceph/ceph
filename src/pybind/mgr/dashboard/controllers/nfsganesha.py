@@ -22,8 +22,8 @@ logger = logging.getLogger('controllers.nfs')
 
 
 class NFSException(DashboardException):
-    def __init__(self, msg):
-        super(NFSException, self).__init__(component="nfs", msg=msg)
+    def __init__(self, msg, code=None):
+        super(NFSException, self).__init__(component="nfs", msg=msg, code=code)
 
 
 # documentation helpers
@@ -165,6 +165,9 @@ class NFSGaneshaExports(RESTController):
             'clients': clients
         }
         export_mgr = mgr.remote('nfs', 'fetch_nfs_export_obj')
+
+        if export_mgr._get_export_dict(cluster_id, pseudo):  # pylint: disable=W0212
+            raise NFSException("Export already exists", 400)
         ret, _, err = export_mgr.apply_export(cluster_id, json.dumps(raw_ex))
         if ret == 0:
             return self._get_schema_export(
