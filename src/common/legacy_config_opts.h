@@ -536,6 +536,9 @@ OPTION(osd_agent_min_evict_effort, OPT_FLOAT)
 OPTION(osd_agent_quantize_effort, OPT_FLOAT)
 OPTION(osd_agent_delay_time, OPT_FLOAT)
 
+// Allow OSD daemon to send an aggregated slow ops to the cluster log
+OPTION(osd_aggregated_slow_ops_logging, OPT_BOOL)
+
 // osd ignore history.last_epoch_started in find_best_info
 OPTION(osd_find_best_info_ignore_history_les, OPT_BOOL)
 
