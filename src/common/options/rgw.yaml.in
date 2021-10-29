@@ -1446,6 +1446,7 @@ options:
   - rgw_log_object_name
   - rgw_ops_log_rados
   - rgw_ops_log_socket_path
+  - rgw_ops_log_file_path
   with_legacy: true
 # enable logging bandwidth usage
 - name: rgw_enable_usage_log
@@ -1485,6 +1486,18 @@ options:
   see_also:
   - rgw_enable_ops_log
   - rgw_ops_log_data_backlog
+  with_legacy: true
+# path to file where ops log can go
+- name: rgw_ops_log_file_path
+  type: str
+  level: advanced
+  desc: File-system path for ops log.
+  long_desc: Path to file that RGW will log ops logs to.
+  fmt_desc: The file-system path for writing operations logs.
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_ops_log
   with_legacy: true
 # max data backlog for ops log
 - name: rgw_ops_log_data_backlog

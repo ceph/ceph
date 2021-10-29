@@ -34,7 +34,7 @@ namespace rgw::dmclock {
 struct RGWProcessEnv {
   rgw::sal::Store* store;
   RGWREST *rest;
-  OpsLogSocket *olog;
+  OpsLogSink *olog;
   int port;
   std::string uri_prefix;
   std::shared_ptr<rgw::auth::StrategyRegistry> auth_registry;
@@ -49,7 +49,7 @@ protected:
   CephContext *cct;
   rgw::sal::Store* store;
   rgw_auth_registry_ptr_t auth_registry;
-  OpsLogSocket* olog;
+  OpsLogSink* olog;
   ThreadPool m_tp;
   Throttle req_throttle;
   RGWREST* rest;
@@ -169,7 +169,7 @@ extern int process_request(rgw::sal::Store* store,
                            const std::string& frontend_prefix,
                            const rgw_auth_registry_t& auth_registry,
                            RGWRestfulIO* client_io,
-                           OpsLogSocket* olog,
+                           OpsLogSink* olog,
                            optional_yield y,
                            rgw::dmclock::Scheduler *scheduler,
                            std::string* user,
