@@ -90,7 +90,7 @@ Gateway can be configured to authenticate to Vault using the
 
 Most tokens in Vault have limited lifetimes and powers.  The only
 sort of Vault token that does not have a lifetime are root tokens.
-For all other tokens, it is necesary to periodically refresh them,
+For all other tokens, it is necessary to periodically refresh them,
 either by performing initial authentication, or by renewing the token.
 Ceph does not have any logic to perform either operation.
 The simplest best way to use Vault tokens with ceph is to
@@ -170,7 +170,7 @@ with the following settings::
   rgw crypt vault token file = /run/.rgw-vault-token
   rgw crypt vault addr = https://vault-server-fqdn:8200
 
-Adjust these settinsg to match your configuration.
+Adjust these settings to match your configuration.
 For security reasons, the token file must be readable by the Object Gateway
 only.
 
@@ -409,23 +409,23 @@ following options::
   rgw crypt vault ssl clientkey = /etc/ceph/vault.key
 
 where vault.ca is CA certificate and vault.key/vault.crt are private key and ssl
-ceritificate generated for RGW to access the vault server. It highly recommended to
+certificate generated for RGW to access the vault server. It highly recommended to
 set this option true, setting false is very dangerous and need to avoid since this
-runs in very secured enviroments.
+runs in very secured environments.
 
 Transit engine compatibility support
 ------------------------------------
 The transit engine has compatibility support for previous
 versions of ceph, which used the transit engine as a simple key store.
 
-There is a a "compat" option which can be given to the transit
+There is a "compat" option which can be given to the transit
 engine to configure the compatibility support,
 
 To entirely disable backwards support, use::
 
   rgw crypt vault secret engine = transit compat=0
 
-This will be the default in future verisons. and is safe to use
+This will be the default in future versions. and is safe to use
 for new installs using the current version.
 
 This is the normal default with the current version::

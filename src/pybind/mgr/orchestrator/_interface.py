@@ -124,6 +124,7 @@ def handle_orch_error(f: Callable[..., T]) -> Callable[..., 'OrchResult[T]']:
         try:
             return OrchResult(f(*args, **kwargs))
         except Exception as e:
+            logger.exception(e)
             return OrchResult(None, exception=e)
 
     return cast(Callable[..., OrchResult[T]], wrapper)
@@ -376,6 +377,12 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def get_facts(self, hostname: Optional[str] = None) -> OrchResult[List[Dict[str, Any]]]:
+        """
+        Return hosts metadata(gather_facts).
+        """
+        raise NotImplementedError()
+
     def add_host_label(self, host: str, label: str) -> OrchResult[str]:
         """
         Add a host label
@@ -460,7 +467,6 @@ class Orchestrator(object):
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
             'host': self.add_host,
-            'cephadm-exporter': self.apply_cephadm_exporter,
         }
 
         def merge(l: OrchResult[List[str]], r: OrchResult[str]) -> OrchResult[List[str]]:  # noqa: E741
@@ -548,11 +554,13 @@ class Orchestrator(object):
 
     def remove_osds(self, osd_ids: List[str],
                     replace: bool = False,
-                    force: bool = False) -> OrchResult[str]:
+                    force: bool = False,
+                    zap: bool = False) -> OrchResult[str]:
         """
         :param osd_ids: list of OSD IDs
         :param replace: marks the OSD as being destroyed. See :ref:`orchestrator-osd-replace`
         :param force: Forces the OSD removal process without waiting for the data to be drained first.
+        :param zap: Zap/Erase all devices associated with the OSDs (DESTROYS DATA)
         Note that this can only remove OSDs that were successfully
         created (i.e. got an OSD ID).
         """
@@ -640,11 +648,10 @@ class Orchestrator(object):
         """Update an existing AlertManager daemon(s)"""
         raise NotImplementedError()
 
-    def apply_cephadm_exporter(self, spec: ServiceSpec) -> OrchResult[str]:
-        """Update an existing cephadm exporter daemon"""
+    def upgrade_check(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
         raise NotImplementedError()
 
-    def upgrade_check(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
+    def upgrade_ls(self, image: Optional[str], tags: bool) -> OrchResult[Dict[Any, Any]]:
         raise NotImplementedError()
 
     def upgrade_start(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
@@ -708,7 +715,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'crash': 'crash',
         'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
-        'cephadm-exporter': 'cephadm-exporter',
+        'agent': 'agent'
     }
     return mapping[dtype]
 
@@ -731,7 +738,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'node-exporter': ['node-exporter'],
         'crash': ['crash'],
         'container': ['container'],
-        'cephadm-exporter': ['cephadm-exporter'],
+        'agent': ['agent']
     }
     return mapping[stype]
 
@@ -829,6 +836,7 @@ class DaemonDescription(object):
         # This is the <foo> in mds.<foo>, the ID that will appear
         # in the FSMap/ServiceMap.
         self.daemon_id: Optional[str] = daemon_id
+        self.daemon_name = self.name()
 
         # Some daemon types have a numeric rank assigned
         self.rank: Optional[int] = rank
@@ -962,6 +970,7 @@ class DaemonDescription(object):
         out['daemon_type'] = self.daemon_type
         out['daemon_id'] = self.daemon_id
         out['service_name'] = self._service_name
+        out['daemon_name'] = self.name()
         out['hostname'] = self.hostname
         out['container_id'] = self.container_id
         out['container_image_id'] = self.container_image_id
@@ -998,6 +1007,7 @@ class DaemonDescription(object):
         out: Dict[str, Any] = OrderedDict()
         out['daemon_type'] = self.daemon_type
         out['daemon_id'] = self.daemon_id
+        out['daemon_name'] = self.name()
         out['hostname'] = self.hostname
         out['container_id'] = self.container_id
         out['container_image_id'] = self.container_image_id
@@ -1039,6 +1049,8 @@ class DaemonDescription(object):
                 c[k] = str_to_datetime(c[k])
         events = [OrchestratorEvent.from_json(e) for e in event_strs]
         status_int = c.pop('status', None)
+        if 'daemon_name' in c:
+            del c['daemon_name']
         status = DaemonDescriptionStatus(status_int) if status_int is not None else None
         return cls(events=events, status=status, **c)
 

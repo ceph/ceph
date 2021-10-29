@@ -451,7 +451,7 @@ mds_gid_t Filesystem::get_standby_replay(mds_gid_t who) const
 
 Filesystem::ref FSMap::create_filesystem(std::string_view name,
     int64_t metadata_pool, int64_t data_pool, uint64_t features,
-    fs_cluster_id_t fscid)
+    fs_cluster_id_t fscid, bool recover)
 {
   auto fs = Filesystem::create();
   fs->mds_map.epoch = epoch;
@@ -468,6 +468,15 @@ Filesystem::ref FSMap::create_filesystem(std::string_view name,
   } else {
     fs->fscid = fscid;
     next_filesystem_id = std::max(fscid,  (fs_cluster_id_t)next_filesystem_id) + 1;
+  }
+
+  if (recover) {
+    // Populate rank 0 as existing (so don't go into CREATING)
+    // but failed (so that next available MDS is assigned the rank)
+    fs->mds_map.in.insert(mds_rank_t(0));
+    fs->mds_map.failed.insert(mds_rank_t(0));
+
+    fs->mds_map.set_flag(CEPH_MDSMAP_NOT_JOINABLE);
   }
 
   // File system's ID can be FS_CLUSTER_ID_ANONYMOUS if we're recovering
@@ -642,6 +651,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
 
 void FSMap::decode(bufferlist::const_iterator& p)
 {
+  struct_version = 0;
   DECODE_START(STRUCT_VERSION, p);
   DECODE_OLDEST(7);
   struct_version = struct_v;
@@ -841,8 +851,12 @@ const MDSMap::mds_info_t* FSMap::find_replacement_for(mds_role_t role) const
   return get_available_standby(*fs);
 }
 
-void FSMap::sanity() const
+void FSMap::sanity(bool pending) const
 {
+  /* Only do some sanity checks on **new** FSMaps. Older versions may not be
+   * compliant.
+   */
+
   if (legacy_client_fscid != FS_CLUSTER_ID_NONE) {
     ceph_assert(filesystems.count(legacy_client_fscid) == 1);
   }
@@ -859,7 +873,7 @@ void FSMap::sanity() const
         ceph_assert(fs->mds_map.failed.count(info.rank) == 0);
         ceph_assert(fs->mds_map.damaged.count(info.rank) == 0);
       } else {
-        ceph_assert(fs->mds_map.allows_standby_replay());
+        ceph_assert(!pending || fs->mds_map.allows_standby_replay());
       }
       ceph_assert(info.compat.writeable(fs->mds_map.compat));
     }
@@ -1012,7 +1026,7 @@ void FSMap::damaged(mds_gid_t who, epoch_t blocklist_epoch)
 {
   ceph_assert(mds_roles.at(who) != FS_CLUSTER_ID_NONE);
   auto fs = filesystems.at(mds_roles.at(who));
-  mds_rank_t rank = fs->mds_map.mds_info[who].rank;
+  mds_rank_t rank = fs->mds_map.mds_info.at(who).rank;
 
   erase(who, blocklist_epoch);
   fs->mds_map.failed.erase(rank);

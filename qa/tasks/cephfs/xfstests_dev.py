@@ -95,7 +95,7 @@ class XFSTestsDev(CephFSTestCase):
         # we keep fedora here so that right deps are installed when this test
         # is run locally by a dev.
         if distro in ('redhatenterpriseserver', 'redhatenterprise', 'fedora',
-                      'centos'):
+                      'centos', 'centosstream'):
             deps = """acl attr automake bc dbench dump e2fsprogs fio \
             gawk gcc indent libtool lvm2 make psmisc quota sed \
             xfsdump xfsprogs \

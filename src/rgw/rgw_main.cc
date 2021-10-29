@@ -53,6 +53,9 @@
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 #include "rgw_lua.h"
 #endif
+#ifdef WITH_RADOSGW_DBSTORE
+#include "rgw_sal_dbstore.h"
+#endif
 
 #include "services/svc_zone.h"
 
@@ -346,9 +349,18 @@ int radosgw_Main(int argc, const char **argv)
   }
   lsubdout(cct, rgw, 1) << "D3N datacache enabled: " << rgw_d3n_datacache_enabled << dendl;
 
+  std::string rgw_store = (!rgw_d3n_datacache_enabled) ? "rados" : "d3n";
+
+  const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+#ifdef WITH_RADOSGW_DBSTORE
+  if (config_store == "dbstore") {
+    rgw_store = "dbstore";
+  }
+#endif
+
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
-				 (!rgw_d3n_datacache_enabled) ? "rados" : "d3n",
+				 rgw_store,
 				 g_conf()->rgw_enable_gc_threads,
 				 g_conf()->rgw_enable_lc_threads,
 				 g_conf()->rgw_enable_quota_threads,
@@ -434,17 +446,20 @@ int radosgw_Main(int argc, const char **argv)
     store->set_luarocks_path(luarocks_path+"/"+g_conf()->name.to_str());
   }
 #ifdef WITH_RADOSGW_LUA_PACKAGES
-  rgw::lua::packages_t failed_packages;
-  std::string output;
-  r = rgw::lua::install_packages(&dp, store, null_yield, failed_packages, output);
-  if (r < 0) {
-    dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
-  }
-  if (!output.empty()) {
-    dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
-  }
-  for (const auto& p : failed_packages) {
-    dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
+  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
+  if (rados) { /* Supported for only RadosStore */
+    rgw::lua::packages_t failed_packages;
+    std::string output;
+    r = rgw::lua::install_packages(&dp, rados, null_yield, failed_packages, output);
+    if (r < 0) {
+      dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
+    }
+    if (!output.empty()) {
+      dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
+    }
+    for (const auto& p : failed_packages) {
+      dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
+    }
   }
 #endif
 

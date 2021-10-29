@@ -3,6 +3,8 @@ from ceph_volume import process, conf
 from ceph_volume import terminal
 import argparse
 
+def valid_osd_id(val):
+    return str(int(val))
 
 def rollback_osd(args, osd_id=None):
     """
@@ -56,6 +58,7 @@ common_args = {
     '--osd-id': {
         'help': 'Reuse an existing OSD id',
         'default': None,
+        'type': valid_osd_id,
     },
     '--osd-fsid': {
         'help': 'Reuse an existing OSD fsid',
@@ -119,6 +122,12 @@ bluestore_args = {
               'of those slots or 1/nth of the available capacity'),
         'type': int,
         'default': 1,
+    },
+    '--no-tmpfs': {
+        'action': 'store_true',
+        'dest': 'no_tmpfs',
+        'help': ('Disable tmpfs osd data directory with bluestore.'
+            'Useful if you want to run lvm preprare from cephadm'),
     },
 }
 

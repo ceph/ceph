@@ -5,6 +5,7 @@
 
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/osd_operation_sequencer.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/replicated_request.h"

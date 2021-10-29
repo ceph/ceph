@@ -11,17 +11,16 @@ Build-Depends: automake,
                bison  <pkg.ceph.jaeger>,
                cmake (>= 3.10.2),
                cpio,
-               cryptsetup-bin | cryptsetup,
                cython3,
-               debhelper (>= 9),
+               debhelper (>= 10),
                default-jdk,
                dh-exec,
                dh-python,
-               dh-systemd,
                flex  <pkg.ceph.jaeger>,
                git,
                gperf,
                g++ (>= 7),
+               hostname <pkg.ceph.check>,
                javahelper,
                jq <pkg.ceph.check>,
                jsonnet <pkg.ceph.check>,
@@ -78,7 +77,6 @@ Build-Depends: automake,
                libxmlsec1-dev <pkg.ceph.check>,
                ninja-build <pkg.ceph.check>,
                nlohmann-json3-dev <pkg.ceph.jaeger>,
-               parted,
                patch,
                pkg-config,
                prometheus <pkg.ceph.check>,
@@ -107,7 +105,6 @@ Build-Depends: automake,
                uuid-runtime,
                valgrind,
                xfslibs-dev,
-               xfsprogs <pkg.ceph.check>,
                xmlstarlet <pkg.ceph.check>,
                nasm [amd64],
                zlib1g-dev,
@@ -128,15 +125,12 @@ Package: ceph-base
 Architecture: linux-any
 Depends: binutils,
          ceph-common (= ${binary:Version}),
-         cryptsetup-bin | cryptsetup,
          debianutils,
-         e2fsprogs,
          findutils,
          grep,
          logrotate,
          parted,
          psmisc,
-         xfsprogs,
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
@@ -349,7 +343,8 @@ Depends: ceph-mgr (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          openssh-client,
-         python3-jinja2
+         python3-jinja2,
+         python3-cherrypy
 Description: cephadm orchestrator module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -406,13 +401,19 @@ Description: debugging symbols for ceph-mon
 Package: ceph-osd
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
-         lvm2,
-	 sudo,
+         sudo,
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
-Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
-Breaks: ceph (<< 10), ceph-test (<< 12.2.2-14)
+Replaces: ceph (<< 10),
+          ceph-test (<< 12.2.2-14),
+          ceph-osd (<< 17.0.0)
+Breaks: ceph (<< 10),
+        ceph-test (<< 12.2.2-14),
+        ceph-osd (<< 17.0.0)
+Recommends: ceph-volume (= ${binary:Version}),
+            nvme-cli,
+            smartmontools,
 Description: OSD server for the ceph storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -434,6 +435,27 @@ Description: debugging symbols for ceph-osd
  block and file system storage.
  .
  This package contains the debugging symbols for ceph-osd.
+
+Package: ceph-volume
+Architecture: all
+Section: python
+Depends: ceph-osd (= ${binary:Version}),
+         cryptsetup-bin,
+         e2fsprogs,
+         lvm2,
+         parted,
+         util-linux,
+         xfsprogs,
+         ${misc:Depends},
+         ${python3:Depends}
+Description: tool to facilidate OSD deployment
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains a tool to deploy OSD with different devices like
+ lvm or physical disks, and trying to follow a predictable, and robust
+ way of preparing, activating, and starting the deployed OSD.
 
 Package: ceph-fuse
 Architecture: linux-any

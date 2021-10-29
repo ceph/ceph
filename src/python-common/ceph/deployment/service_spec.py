@@ -411,11 +411,10 @@ class ServiceSpec(object):
 
     This structure is supposed to be enough information to
     start the services.
-
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
-                          'node-exporter osd prometheus rbd-mirror rgw ' \
-                          'container cephadm-exporter ingress cephfs-mirror'.split()
+                          'node-exporter osd prometheus rbd-mirror rgw agent ' \
+                          'container ingress cephfs-mirror'.split()
     REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ingress '.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
@@ -466,15 +465,37 @@ class ServiceSpec(object):
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
                  ):
+
+        #: See :ref:`orchestrator-cli-placement-spec`.
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
         assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES, service_type
+        #: The type of the service. Needs to be either a Ceph
+        #: service (``mon``, ``crash``, ``mds``, ``mgr``, ``osd`` or
+        #: ``rbd-mirror``), a gateway (``nfs`` or ``rgw``), part of the
+        #: monitoring stack (``alertmanager``, ``grafana``, ``node-exporter`` or
+        #: ``prometheus``) or (``container``) for custom containers.
         self.service_type = service_type
+
+        #: The name of the service. Required for ``iscsi``, ``mds``, ``nfs``, ``osd``, ``rgw``,
+        #: ``container``, ``ingress``
         self.service_id = None
+
         if self.service_type in self.REQUIRES_SERVICE_ID:
             self.service_id = service_id
+
+        #: If set to ``true``, the orchestrator will not deploy nor remove
+        #: any daemon associated with this service. Placement and all other properties
+        #: will be ignored. This is useful, if you do not want this service to be
+        #: managed temporarily. For cephadm, See :ref:`cephadm-spec-unmanaged`
         self.unmanaged = unmanaged
         self.preview_only = preview_only
+
+        #: A list of network identities instructing the daemons to only bind
+        #: on the particular networks in that list. In case the cluster is distributed
+        #: across multiple networks, you can add multiple networks. See
+        #: :ref:`cephadm-monitoring-networks-ports`,
+        #: :ref:`cephadm-rgw-networks` and :ref:`cephadm-mgr-networks`.
         self.networks: List[str] = networks or []
 
         self.config: Optional[Dict[str, str]] = None
@@ -519,6 +540,8 @@ class ServiceSpec(object):
         the next two major releases (octoups, pacific).
 
         :param json_spec: A valid dict with ServiceSpec
+
+        :meta private:
         """
 
         if not isinstance(json_spec, dict):
@@ -698,7 +721,21 @@ class RGWSpec(ServiceSpec):
     """
     Settings to configure a (multisite) Ceph RGW
 
+    .. code-block:: yaml
+
+        service_type: rgw
+        service_id: myrealm.myzone
+        spec:
+            rgw_realm: myrealm
+            rgw_zone: myzone
+            ssl: true
+            rgw_frontend_port: 1234
+            rgw_frontend_type: beast
+            rgw_frontend_ssl_certificate: ...
+
+    See also: :ref:`orchestrator-cli-service-spec`
     """
+
     MANAGED_CONFIG_OPTIONS = ServiceSpec.MANAGED_CONFIG_OPTIONS + [
         'rgw_zone',
         'rgw_realm',
@@ -732,11 +769,17 @@ class RGWSpec(ServiceSpec):
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config, networks=networks)
 
-        self.rgw_realm = rgw_realm
-        self.rgw_zone = rgw_zone
-        self.rgw_frontend_port = rgw_frontend_port
-        self.rgw_frontend_ssl_certificate = rgw_frontend_ssl_certificate
-        self.rgw_frontend_type = rgw_frontend_type
+        #: The RGW realm associated with this service. Needs to be manually created
+        self.rgw_realm: Optional[str] = rgw_realm
+        #: The RGW zone associated with this service. Needs to be manually created
+        self.rgw_zone: Optional[str] = rgw_zone
+        #: Port of the RGW daemons
+        self.rgw_frontend_port: Optional[int] = rgw_frontend_port
+        #: List of SSL certificates
+        self.rgw_frontend_ssl_certificate: Optional[List[str]] = rgw_frontend_ssl_certificate
+        #: civetweb or beast (default: beast). See :ref:`rgw_frontends`
+        self.rgw_frontend_type: Optional[str] = rgw_frontend_type
+        #: enable SSL
         self.ssl = ssl
 
     def get_port_start(self) -> List[int]:
@@ -790,12 +833,19 @@ class IscsiServiceSpec(ServiceSpec):
 
         #: RADOS pool where ceph-iscsi config data is stored.
         self.pool = pool
+        #: list of trusted IP addresses
         self.trusted_ip_list = trusted_ip_list
+        #: ``api_port`` as defined in the ``iscsi-gateway.cfg``
         self.api_port = api_port
+        #: ``api_user`` as defined in the ``iscsi-gateway.cfg``
         self.api_user = api_user
+        #: ``api_password`` as defined in the ``iscsi-gateway.cfg``
         self.api_password = api_password
+        #: ``api_secure`` as defined in the ``iscsi-gateway.cfg``
         self.api_secure = api_secure
+        #: SSL certificate
         self.ssl_cert = ssl_cert
+        #: SSL private key
         self.ssl_key = ssl_key
 
         if not self.api_secure and self.ssl_cert and self.ssl_key:

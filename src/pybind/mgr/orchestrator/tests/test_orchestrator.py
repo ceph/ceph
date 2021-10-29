@@ -11,9 +11,10 @@ from mgr_module import HandleCommandResult
 
 from test_orchestrator import TestOrchestrator as _TestOrchestrator
 
-from orchestrator import InventoryHost, DaemonDescription, ServiceDescription, DaemonDescriptionStatus
+from orchestrator import InventoryHost, DaemonDescription, ServiceDescription, DaemonDescriptionStatus, OrchResult
 from orchestrator import OrchestratorValidationError
 from orchestrator.module import to_format, Format, OrchestratorCli, preview_table_osd
+from unittest import mock
 
 
 def _test_resource(data, resource_class, extra=None):
@@ -83,6 +84,7 @@ def test_apply():
 def test_yaml():
     y = """daemon_type: crash
 daemon_id: ubuntu
+daemon_name: crash.ubuntu
 hostname: ubuntu
 status: 1
 status_desc: starting
@@ -138,6 +140,21 @@ def test_handle_command():
     r = m._handle_command(None, cmd)
     assert r == HandleCommandResult(
         retval=-2, stdout='', stderr='No orchestrator configured (try `ceph orch set backend`)')
+
+
+r = OrchResult([ServiceDescription(spec=ServiceSpec(service_type='osd'), running=123)])
+
+
+@mock.patch("orchestrator.OrchestratorCli.describe_service", return_value=r)
+def test_orch_ls(_describe_service):
+    cmd = {
+        'prefix': 'orch ls',
+    }
+    m = OrchestratorCli('orchestrator', 0, 0)
+    r = m._handle_command(None, cmd)
+    out = 'NAME  PORTS  RUNNING  REFRESHED  AGE  PLACEMENT  \n' \
+          'osd              123  -          -               '
+    assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
 
 
 def test_preview_table_osd_smoke():

@@ -34,13 +34,33 @@ CyanStore::CyanStore(const std::string& path)
 
 CyanStore::~CyanStore() = default;
 
-seastar::future<> CyanStore::mount()
+template <const char* MsgV>
+struct singleton_ec : std::error_code {
+  singleton_ec()
+    : error_code(42, this_error_category{}) {
+  };
+private:
+  struct this_error_category : std::error_category {
+    const char* name() const noexcept final {
+      // XXX: we could concatenate with MsgV at compile-time but the burden
+      // isn't worth the benefit.
+      return "singleton_ec";
+    }
+    std::string message([[maybe_unused]] const int ev) const final {
+      assert(ev == 42);
+      return MsgV;
+    }
+  };
+};
+
+CyanStore::mount_ertr::future<> CyanStore::mount()
 {
+  static const char read_file_errmsg[]{"read_file"};
   ceph::bufferlist bl;
   std::string fn = path + "/collections";
   std::string err;
   if (int r = bl.read_file(fn.c_str(), &err); r < 0) {
-    throw std::runtime_error("read_file");
+    return crimson::stateful_ec{ singleton_ec<read_file_errmsg>() };
   }
 
   std::set<coll_t> collections;
@@ -51,7 +71,7 @@ seastar::future<> CyanStore::mount()
     std::string fn = fmt::format("{}/{}", path, coll);
     ceph::bufferlist cbl;
     if (int r = cbl.read_file(fn.c_str(), &err); r < 0) {
-      throw std::runtime_error("read_file");
+      return crimson::stateful_ec{ singleton_ec<read_file_errmsg>() };
     }
     boost::intrusive_ptr<Collection> c{new Collection{coll}};
     auto p = cbl.cbegin();
@@ -59,7 +79,7 @@ seastar::future<> CyanStore::mount()
     coll_map[coll] = c;
     used_bytes += c->used_bytes();
   }
-  return seastar::now();
+  return mount_ertr::now();
 }
 
 seastar::future<> CyanStore::umount()
@@ -82,9 +102,12 @@ seastar::future<> CyanStore::umount()
   });
 }
 
-seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
+CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
 {
-  return read_meta("fsid").then([=](auto&& ret) {
+  static const char read_meta_errmsg[]{"read_meta"};
+  static const char parse_fsid_errmsg[]{"failed to parse fsid"};
+  static const char match_ofsid_errmsg[]{"unmatched osd_fsid"};
+  return read_meta("fsid").then([=](auto&& ret) -> mkfs_ertr::future<> {
     auto& [r, fsid_str] = ret;
     if (r == -ENOENT) {
       if (new_osd_fsid.is_zero()) {
@@ -94,25 +117,25 @@ seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
       }
       return write_meta("fsid", fmt::format("{}", osd_fsid));
     } else if (r < 0) {
-      throw std::runtime_error("read_meta");
+      return crimson::stateful_ec{ singleton_ec<read_meta_errmsg>() };
     } else {
       logger().info("mkfs already has fsid {}", fsid_str);
       if (!osd_fsid.parse(fsid_str.c_str())) {
-        throw std::runtime_error("failed to parse fsid");
+        return crimson::stateful_ec{ singleton_ec<parse_fsid_errmsg>() };
       } else if (osd_fsid != new_osd_fsid) {
         logger().error("on-disk fsid {} != provided {}", osd_fsid, new_osd_fsid);
-        throw std::runtime_error("unmatched osd_fsid");
+        return crimson::stateful_ec{ singleton_ec<match_ofsid_errmsg>() };
       } else {
-	return seastar::now();
+	return mkfs_ertr::now();
       }
     }
-  }).then([this]{
+  }).safe_then([this]{
     std::string fn = path + "/collections";
     ceph::bufferlist bl;
     std::set<coll_t> collections;
     ceph::encode(collections, bl);
     return crimson::write_file(std::move(bl), fn);
-  }).then([this] {
+  }).safe_then([this] {
     return write_meta("type", "memstore");
   });
 }

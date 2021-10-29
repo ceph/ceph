@@ -328,7 +328,7 @@ public:
   device_type_t backend_type = device_type_t::NONE;
 
   /// hint for allocators
-  ool_placement_hint_t hint;
+  placement_hint_t hint = placement_hint_t::NUM_HINTS;
 
   bool is_inline() const {
     return poffset.is_relative();
@@ -550,19 +550,19 @@ public:
     );
   }
 
-  template <typename Disposer>
-  void clear_and_dispose(Disposer disposer) {
-    extent_index.clear_and_dispose(disposer);
-    bytes = 0;
-  }
-
   void clear() {
-    extent_index.clear();
+    struct cached_extent_disposer {
+      void operator() (CachedExtent* extent) {
+	extent->parent_index = nullptr;
+      }
+    };
+    extent_index.clear_and_dispose(cached_extent_disposer());
     bytes = 0;
   }
 
   void insert(CachedExtent &extent) {
     // sanity check
+    ceph_assert(!extent.parent_index);
     auto [a, b] = get_overlap(
       extent.get_paddr(),
       extent.get_length());
@@ -578,7 +578,7 @@ public:
   void erase(CachedExtent &extent) {
     assert(extent.parent_index);
     assert(extent.is_linked());
-    auto erased = extent_index.erase(
+    [[maybe_unused]] auto erased = extent_index.erase(
       extent_index.s_iterator_to(extent));
     extent.parent_index = nullptr;
 

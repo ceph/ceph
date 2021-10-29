@@ -72,30 +72,37 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   std::default_random_engine generator;
 
-  const segment_off_t block_size;
+  segment_off_t block_size;
 
-  ScannerRef scanner;
+  ExtentReaderRef scanner;
 
-  journal_test_t()
-    : segment_manager(segment_manager::create_test_ephemeral()),
-      block_size(segment_manager->get_block_size()),
-      scanner(std::make_unique<Scanner>(*segment_manager))
-  {}
+  segment_id_t next;
 
-  segment_id_t next = 0;
-  get_segment_ret get_segment() final {
+  journal_test_t() = default;
+
+  get_segment_ret get_segment(device_id_t id) final {
+    auto ret = next;
+    next = segment_id_t{
+      next.device_id(),
+      next.device_segment_id() + 1};
     return get_segment_ret(
       get_segment_ertr::ready_future_marker{},
-      next++);
+      ret);
   }
 
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
   void update_journal_tail_committed(journal_seq_t paddr) final {}
 
   seastar::future<> set_up_fut() final {
+    segment_manager = segment_manager::create_test_ephemeral();
+    block_size = segment_manager->get_block_size();
+    scanner.reset(new ExtentReader());
+    next = segment_id_t(segment_manager->get_device_id(), 0);
     journal.reset(new Journal(*segment_manager, *scanner));
+
     journal->set_segment_provider(this);
     journal->set_write_pipeline(&pipeline);
+    scanner->add_segment_manager(segment_manager.get());
     return segment_manager->init(
     ).safe_then([this] {
       return journal->open_for_write();
@@ -104,6 +111,19 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
       crimson::ct_error::all_same_way([] {
 	ASSERT_FALSE("Unable to mount");
       }));
+  }
+
+  seastar::future<> tear_down_fut() final {
+    return journal->close(
+    ).safe_then([this] {
+      segment_manager.reset();
+      scanner.reset();
+      journal.reset();
+    }).handle_error(
+      crimson::ct_error::all_same_way([](auto e) {
+        ASSERT_FALSE("Unable to close");
+      })
+    );
   }
 
   template <typename T>
@@ -117,13 +137,18 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 	std::vector<std::pair<segment_id_t, segment_header_t>>(),
 	[this](auto& segments) {
 	return crimson::do_for_each(
-	  boost::make_counting_iterator(segment_id_t{0}),
-	  boost::make_counting_iterator(segment_manager->get_num_segments()),
+	  boost::make_counting_iterator(device_segment_id_t{0}),
+	  boost::make_counting_iterator(device_segment_id_t{
+	    segment_manager->get_num_segments()}),
 	  [this, &segments](auto segment_id) {
-	  return scanner->read_segment_header(segment_id)
+	  return scanner->read_segment_header(segment_id_t{0, segment_id})
 	  .safe_then([&segments, segment_id](auto header) {
 	    if (!header.out_of_line) {
-	      segments.emplace_back(std::make_pair(segment_id, std::move(header)));
+	      segments.emplace_back(
+		std::make_pair(
+		  segment_id_t{0, segment_id},
+		  std::move(header)
+		));
 	    }
 	    return seastar::now();
 	  }).handle_error(
@@ -194,10 +219,6 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
       handle).unsafe_get0();
     records.back().record_final_offset = addr;
     return addr;
-  }
-
-  seastar::future<> tear_down_fut() final {
-    return seastar::now();
   }
 
   extent_t generate_extent(size_t blocks) {

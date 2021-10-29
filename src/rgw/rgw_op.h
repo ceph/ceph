@@ -1497,7 +1497,6 @@ protected:
   rgw::sal::Attrs attrs;
   std::string src_tenant_name, src_bucket_name, src_obj_name;
   std::unique_ptr<rgw::sal::Bucket> src_bucket;
-  std::unique_ptr<rgw::sal::Object> src_object;
   std::string dest_tenant_name, dest_bucket_name, dest_obj_name;
   std::unique_ptr<rgw::sal::Bucket> dest_bucket;
   std::unique_ptr<rgw::sal::Object> dest_object;

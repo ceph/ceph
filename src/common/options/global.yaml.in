@@ -1516,6 +1516,8 @@ options:
     at which some pools' pg_num may be shrunk in order to enable increasing the pg_num
     of others.
   default: 250
+  flags:
+  - runtime
   services:
   - mgr
   - mon
@@ -5202,6 +5204,15 @@ options:
   long_desc: How often (in seconds) to print KV sync thread utilization, not logged
     when set to 0 or when utilization is 0%
   default: 10
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluestore_fail_eio
+  type: bool
+  level: dev
+  desc: fail/crash on EIO
+  long_desc: whether bluestore osd fails on eio
+  default: false
   flags:
   - runtime
   with_legacy: true

@@ -170,6 +170,104 @@ describe('TelemetryComponent', () => {
       expect(component).toBeTruthy();
     });
 
+    it('should only replace the ranges and values of a JSON object', () => {
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ]
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0]
+        ]
+      });
+
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: true
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: true
+      });
+
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: 1
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: 1
+      });
+
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: { value: 0 }
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: { value: 0 }
+      });
+    });
+
     it('should submit', () => {
       component.onSubmit();
       const req = httpTesting.expectOne('api/telemetry');

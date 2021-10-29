@@ -267,7 +267,7 @@ OMapInnerNode::split_children_ret
 OMapInnerNode:: make_split_children(omap_context_t oc)
 {
   logger().debug("OMapInnerNode: {}", __func__);
-  return oc.tm.alloc_extents<OMapInnerNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE, 2)
+  return oc.tm.alloc_extents<OMapInnerNode>(oc.t, oc.hint, OMAP_BLOCK_SIZE, 2)
     .si_then([this] (auto &&ext_pair) {
       auto left = ext_pair.front();
       auto right = ext_pair.back();
@@ -295,7 +295,7 @@ OMapInnerNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
 {
   logger().debug("OMapInnerNode: {}", __func__);
   ceph_assert(_right->get_type() == TYPE);
-  return oc.tm.alloc_extents<OMapInnerNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE, 2)
+  return oc.tm.alloc_extents<OMapInnerNode>(oc.t, oc.hint, OMAP_BLOCK_SIZE, 2)
     .si_then([this, _right] (auto &&replacement_pair){
       auto replacement_left = replacement_pair.front();
       auto replacement_right = replacement_pair.back();
@@ -323,7 +323,7 @@ OMapInnerNode::merge_entry(
   auto is_left = (iter + 1) == iter_end();
   auto donor_iter = is_left ? iter - 1 : iter + 1;
   return omap_load_extent(oc, donor_iter->get_val(), get_meta().depth - 1)
-    .si_then([=, px=this] (auto &&donor) mutable {
+    .si_then([=] (auto &&donor) mutable {
     auto [l, r] = is_left ?
       std::make_pair(donor, entry) : std::make_pair(entry, donor);
     auto [liter, riter] = is_left ?
@@ -332,8 +332,8 @@ OMapInnerNode::merge_entry(
       logger().debug("{}::merge_entry make_full_merge l {} r {}", __func__, *l, *r);
       assert(entry->extent_is_below_min());
       return l->make_full_merge(oc, r).si_then([liter=liter, riter=riter,
-                                                  l=l, r=r, oc, this, px] (auto &&replacement){
-	logger().debug("OMapInnerNode::merge_entry to update parent: {}", *px);
+                                                  l=l, r=r, oc, this] (auto &&replacement){
+	logger().debug("OMapInnerNode::merge_entry to update parent: {}", *this);
         journal_inner_update(liter, replacement->get_laddr(), maybe_get_delta_buffer());
         journal_inner_remove(riter, maybe_get_delta_buffer());
         //retire extent
@@ -354,8 +354,8 @@ OMapInnerNode::merge_entry(
     } else {
       logger().debug("{}::merge_entry balanced l {} r {}", __func__, *l, *r);
       return l->make_balanced(oc, r).si_then([liter=liter, riter=riter,
-                                                l=l, r=r, oc, this, px] (auto tuple) {
-	logger().debug("OMapInnerNode::merge_entry to update parent: {}", *px);
+                                                l=l, r=r, oc, this] (auto tuple) {
+	logger().debug("OMapInnerNode::merge_entry to update parent: {}", *this);
         auto [replacement_l, replacement_r, replacement_pivot] = tuple;
         //update operation will not cuase node overflow, so we can do it first
         journal_inner_update(liter, replacement_l->get_laddr(), maybe_get_delta_buffer());
@@ -556,7 +556,7 @@ OMapLeafNode::split_children_ret
 OMapLeafNode::make_split_children(omap_context_t oc)
 {
   logger().debug("OMapLeafNode: {}", __func__);
-  return oc.tm.alloc_extents<OMapLeafNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE, 2)
+  return oc.tm.alloc_extents<OMapLeafNode>(oc.t, oc.hint, OMAP_BLOCK_SIZE, 2)
     .si_then([this] (auto &&ext_pair) {
       auto left = ext_pair.front();
       auto right = ext_pair.back();
@@ -585,7 +585,7 @@ OMapLeafNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
 {
   ceph_assert(_right->get_type() == TYPE);
   logger().debug("OMapLeafNode: {}",  __func__);
-  return oc.tm.alloc_extents<OMapLeafNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE, 2)
+  return oc.tm.alloc_extents<OMapLeafNode>(oc.t, oc.hint, OMAP_BLOCK_SIZE, 2)
     .si_then([this, _right] (auto &&replacement_pair) {
       auto replacement_left = replacement_pair.front();
       auto replacement_right = replacement_pair.back();

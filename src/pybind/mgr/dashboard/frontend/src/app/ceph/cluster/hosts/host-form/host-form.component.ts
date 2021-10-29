@@ -2,6 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import expand from 'brace-expansion';
+
 import { HostService } from '~/app/shared/api/host.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -21,9 +24,12 @@ export class HostFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   hostnames: string[];
+  hostnameArray: string[] = [];
   addr: string;
   status: string;
-  allLabels: any;
+  allLabels: string[];
+  pageURL: string;
+  hostPattern = false;
 
   messages = new SelectMessages({
     empty: $localize`There are no labels.`,
@@ -35,21 +41,31 @@ export class HostFormComponent extends CdForm implements OnInit {
     private router: Router,
     private actionLabels: ActionLabelsI18n,
     private hostService: HostService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    public activeModal: NgbActiveModal
   ) {
     super();
     this.resource = $localize`host`;
-    this.action = this.actionLabels.CREATE;
-    this.createForm();
+    this.action = this.actionLabels.ADD;
   }
 
   ngOnInit() {
-    this.hostService.list().subscribe((resp: any[]) => {
+    if (this.router.url.includes('hosts')) {
+      this.pageURL = 'hosts';
+    }
+    this.createForm();
+    this.hostService.list('false').subscribe((resp: any[]) => {
       this.hostnames = resp.map((host) => {
         return host['hostname'];
       });
       this.loadingReady();
     });
+  }
+
+  // check if hostname is a single value or pattern to hide network address field
+  checkHostNameValue() {
+    const hostNames = this.hostForm.get('hostname').value;
+    hostNames.match(/[()\[\]{},]/g) ? (this.hostPattern = true) : (this.hostPattern = false);
   }
 
   private createForm() {
@@ -66,29 +82,81 @@ export class HostFormComponent extends CdForm implements OnInit {
         validators: [CdValidators.ip()]
       }),
       labels: new FormControl([]),
-      maintenance: new FormControl(false)
+      maintenance: new FormControl({ value: false, disabled: this.pageURL !== 'hosts' })
     });
+  }
+
+  private isCommaSeparatedPattern(hostname: string) {
+    // eg. ceph-node-01.cephlab.com,ceph-node-02.cephlab.com
+    return hostname.includes(',');
+  }
+
+  private isRangeTypePattern(hostname: string) {
+    // check if it is a range expression or comma separated range expression
+    // eg. ceph-mon-[01-05].lab.com,ceph-osd-[02-08].lab.com,ceph-rgw-[01-09]
+    return hostname.includes('[') && hostname.includes(']') && !hostname.match(/(?![^(]*\)),/g);
+  }
+
+  private replaceBraces(hostname: string) {
+    // pattern to replace range [0-5] to [0..5](valid expression for brace expansion)
+    // replace any kind of brackets with curly braces
+    return hostname
+      .replace(/(?<=\d)\s*-\s*(?=\d)/g, '..')
+      .replace(/\(/g, '{')
+      .replace(/\)/g, '}')
+      .replace(/\[/g, '{')
+      .replace(/]/g, '}');
+  }
+
+  // expand hostnames in case hostname is a pattern
+  private checkHostNamePattern(hostname: string) {
+    if (this.isRangeTypePattern(hostname)) {
+      const hostnameRange = this.replaceBraces(hostname);
+      this.hostnameArray = expand(hostnameRange);
+    } else if (this.isCommaSeparatedPattern(hostname)) {
+      let hostArray = [];
+      hostArray = hostname.split(',');
+      hostArray.forEach((host: string) => {
+        if (this.isRangeTypePattern(host)) {
+          const hostnameRange = this.replaceBraces(host);
+          this.hostnameArray = this.hostnameArray.concat(expand(hostnameRange));
+        } else {
+          this.hostnameArray.push(host);
+        }
+      });
+    } else {
+      // single hostname
+      this.hostnameArray.push(hostname);
+    }
   }
 
   submit() {
     const hostname = this.hostForm.get('hostname').value;
+    this.checkHostNamePattern(hostname);
     this.addr = this.hostForm.get('addr').value;
     this.status = this.hostForm.get('maintenance').value ? 'maintenance' : '';
     this.allLabels = this.hostForm.get('labels').value;
-    this.taskWrapper
-      .wrapTaskAroundCall({
-        task: new FinishedTask('host/' + URLVerbs.CREATE, {
-          hostname: hostname
-        }),
-        call: this.hostService.create(hostname, this.addr, this.allLabels, this.status)
-      })
-      .subscribe({
-        error: () => {
-          this.hostForm.setErrors({ cdSubmitButton: true });
-        },
-        complete: () => {
-          this.router.navigate(['/hosts']);
-        }
-      });
+    if (this.pageURL !== 'hosts' && !this.allLabels.includes('_no_schedule')) {
+      this.allLabels.push('_no_schedule');
+    }
+    this.hostnameArray.forEach((hostName: string) => {
+      this.taskWrapper
+        .wrapTaskAroundCall({
+          task: new FinishedTask('host/' + URLVerbs.ADD, {
+            hostname: hostName
+          }),
+          call: this.hostService.create(hostName, this.addr, this.allLabels, this.status)
+        })
+        .subscribe({
+          error: () => {
+            this.hostForm.setErrors({ cdSubmitButton: true });
+          },
+          complete: () => {
+            this.pageURL === 'hosts'
+              ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
+              : this.activeModal.close();
+          }
+        });
+    });
   }
 }

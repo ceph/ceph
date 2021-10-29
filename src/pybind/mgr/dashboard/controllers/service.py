@@ -7,8 +7,8 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.exception import handle_orchestrator_error
 from ..services.orchestrator import OrchClient, OrchFeature
-from . import ApiController, ControllerDoc, CreatePermission, \
-    DeletePermission, Endpoint, ReadPermission, RESTController, Task
+from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
+    ReadPermission, RESTController, Task
 from .orchestrator import raise_if_no_orchestrator
 
 
@@ -16,8 +16,8 @@ def service_task(name, metadata, wait_for=2.0):
     return Task("service/{}".format(name), metadata, wait_for)
 
 
-@ApiController('/service', Scope.HOSTS)
-@ControllerDoc("Service Management API", "Service")
+@APIRouter('/service', Scope.HOSTS)
+@APIDoc("Service Management API", "Service")
 class Service(RESTController):
 
     @Endpoint()

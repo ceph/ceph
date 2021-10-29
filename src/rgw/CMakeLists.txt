@@ -169,6 +169,9 @@ if(WITH_RADOSGW_DBSTORE)
   add_subdirectory(store/dbstore)
   list(APPEND librgw_common_srcs rgw_sal_dbstore.cc)
 endif()
+if(WITH_JAEGER)
+  list(APPEND librgw_common_srcs rgw_tracer.cc)
+endif()
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
 
@@ -240,6 +243,7 @@ endif()
 
 if(WITH_JAEGER)
   add_dependencies(rgw_common jaeger-base)
+  target_link_libraries(rgw_common PUBLIC jaeger-base)
 endif()
 
 if(WITH_RADOSGW_DBSTORE)

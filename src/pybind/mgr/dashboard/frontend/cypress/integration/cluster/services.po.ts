@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 const pages = {
   index: { url: '#/services', id: 'cd-services' },
-  create: { url: '#/services/create', id: 'cd-service-form' }
+  create: { url: '#/services/(modal:create)', id: 'cd-service-form' }
 };
 
 export class ServicesPageHelper extends PageHelper {
@@ -16,6 +16,12 @@ export class ServicesPageHelper extends PageHelper {
     last_refresh: 6
   };
 
+  serviceDetailColumnIndex = {
+    hostname: 1,
+    daemonType: 2,
+    status: 8
+  };
+
   check_for_service() {
     this.getTableCount('total').should('not.be.eq', 0);
   }
@@ -24,19 +30,34 @@ export class ServicesPageHelper extends PageHelper {
     return this.selectOption('service_type', serviceType);
   }
 
-  @PageHelper.restrictTo(pages.create.url)
-  addService(serviceType: string, exist?: boolean) {
+  clickServiceTab(serviceName: string, tabName: string) {
+    this.getExpandCollapseElement(serviceName).click();
+    cy.get('cd-service-details').within(() => {
+      this.getTab(tabName).click();
+    });
+  }
+
+  addService(serviceType: string, exist?: boolean, count = '1') {
     cy.get(`${this.pages.create.id}`).within(() => {
       this.selectServiceType(serviceType);
-      if (serviceType === 'rgw') {
-        cy.get('#service_id').type('rgw.foo');
-        cy.get('#count').type('1');
-      } else if (serviceType === 'ingress') {
-        this.selectOption('backend_service', 'rgw.rgw.foo');
-        cy.get('#service_id').should('have.value', 'rgw.rgw.foo');
-        cy.get('#virtual_ip').type('192.168.20.1/24');
-        cy.get('#frontend_port').type('8081');
-        cy.get('#monitor_port').type('8082');
+      switch (serviceType) {
+        case 'rgw':
+          cy.get('#service_id').type('foo');
+          cy.get('#count').type(count);
+          break;
+
+        case 'ingress':
+          this.selectOption('backend_service', 'rgw.foo');
+          cy.get('#service_id').should('have.value', 'rgw.foo');
+          cy.get('#virtual_ip').type('192.168.20.1/24');
+          cy.get('#frontend_port').type('8081');
+          cy.get('#monitor_port').type('8082');
+          break;
+
+        case 'nfs':
+          cy.get('#service_id').type('testnfs');
+          cy.get('#count').type(count);
+          break;
       }
 
       cy.get('cd-submit-button').click();
@@ -49,7 +70,16 @@ export class ServicesPageHelper extends PageHelper {
     }
   }
 
-  @PageHelper.restrictTo(pages.index.url)
+  checkServiceStatus(daemon: string) {
+    this.getTableCell(this.serviceDetailColumnIndex.daemonType, daemon)
+      .parent()
+      .find(`datatable-body-cell:nth-child(${this.serviceDetailColumnIndex.status}) .badge`)
+      .should(($ele) => {
+        const status = $ele.toArray().map((v) => v.innerText);
+        expect(status).to.include('running');
+      });
+  }
+
   checkExist(serviceName: string, exist: boolean) {
     this.getTableCell(this.columnIndex.service_name, serviceName).should(($elements) => {
       const services = $elements.map((_, el) => el.textContent).get();
@@ -61,8 +91,7 @@ export class ServicesPageHelper extends PageHelper {
     });
   }
 
-  @PageHelper.restrictTo(pages.index.url)
-  deleteService(serviceName: string, wait: number) {
+  deleteService(serviceName: string) {
     const getRow = this.getTableCell.bind(this, this.columnIndex.service_name);
     getRow(serviceName).click();
 
@@ -75,10 +104,6 @@ export class ServicesPageHelper extends PageHelper {
 
     // Wait for modal to close
     cy.get('cd-modal').should('not.exist');
-
-    // wait for delete operation to complete: tearing down the service daemons
-    cy.wait(wait);
-
     this.checkExist(serviceName, false);
   }
 }

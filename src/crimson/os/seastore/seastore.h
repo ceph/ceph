@@ -42,6 +42,7 @@ class SeaStore final : public FuturizedStore {
 public:
 
   SeaStore(
+    std::string root,
     SegmentManagerRef sm,
     TransactionManagerRef tm,
     CollectionManagerRef cm,
@@ -49,10 +50,10 @@ public:
   ~SeaStore();
     
   seastar::future<> stop() final;
-  seastar::future<> mount() final;
+  mount_ertr::future<> mount() final;
   seastar::future<> umount() final;
 
-  seastar::future<> mkfs(uuid_d new_osd_fsid) final;
+  mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
   seastar::future<store_statfs_t> stat() const final;
 
   read_errorator::future<ceph::bufferlist> read(
@@ -263,7 +264,9 @@ private:
     const std::optional<std::string> &_start,
     OMapManager::omap_list_config_t config);
 
+  std::string root;
   SegmentManagerRef segment_manager;
+  std::vector<SegmentManagerRef> secondaries;
   TransactionManagerRef transaction_manager;
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;

@@ -62,9 +62,11 @@ options:
   desc: Set RGW max chunk size
   long_desc: The chunk size is the size of RADOS I/O requests that RGW sends when
     accessing data objects. RGW read and write operations will never request more than
-    this amount in a single request. This also defines the RGW object head size, as
+    this amount in a single request. This also defines the RGW head object size, as
     head operations need to be atomic, and anything larger than this would require
-    more than a single operation.
+    more than a single operation. When RGW objects are written to the default
+    storage class, up to this amount of payload data will be stored alongside
+    metadata in the head object.
   default: 4_M
   services:
   - rgw
@@ -406,6 +408,12 @@ options:
 - name: rgw_lc_debug_interval
   type: int
   level: dev
+  desc: The number of seconds that simulate one "day" in order to debug RGW LifeCycle.
+    Do *not* modify for a production cluster.
+  long_desc: For debugging RGW LifeCycle, the number of seconds that are equivalent to
+    one simulated "day". Values less than 1 are ignored and do not change LifeCycle behavior.
+    For example, during debugging if one wanted every 10 minutes to be equivalent to one day,
+    then this would be set to 600, the number of seconds in 10 minutes.
   default: -1
   services:
   - rgw
@@ -2119,7 +2127,7 @@ options:
   type: size
   level: advanced
   desc: Minimum S3 multipart-upload part size
-  long_desc: When doing a multipart upload, each part (other than the last part) should
+  long_desc: When doing a multipart upload, each part (other than the last part) must
     be at least this size.
   default: 5_M
   services:
@@ -3167,7 +3175,7 @@ options:
   type: size
   level: advanced
   desc: datacache maximum size on disk in bytes
-  default: 1048576
+  default: 1_G
   services:
   - rgw
   with_legacy: true
@@ -3220,6 +3228,17 @@ options:
   see_also:
   - rgw_thread_pool_size
   with_legacy: true
+- name: rgw_backend_store
+  type: str
+  level: advanced
+  desc: experimental Option to set backend store type
+  long_desc: defaults to rados. Other valid values are dbstore(experimental).
+  default: rados
+  services:
+  - rgw
+  enum_values:
+  - rados
+  - dbstore
 - name: rgw_luarocks_location
   type: str
   level: advanced

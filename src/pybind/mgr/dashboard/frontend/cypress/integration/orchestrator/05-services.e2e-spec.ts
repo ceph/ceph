@@ -14,16 +14,16 @@ describe('Services page', () => {
       services.navigateTo('create');
       services.addService('rgw');
 
-      services.checkExist('rgw.rgw.foo', true);
+      services.checkExist('rgw.foo', true);
     });
 
     it('should create and delete an ingress service', () => {
       services.navigateTo('create');
       services.addService('ingress');
 
-      services.checkExist('ingress.rgw.rgw.foo', true);
+      services.checkExist('ingress.rgw.foo', true);
 
-      services.deleteService('ingress.rgw.rgw.foo', 5000);
+      services.deleteService('ingress.rgw.foo');
     });
   });
 });

@@ -39,18 +39,23 @@ class OnCommit final: public Context
 {
   const int cpuid;
   Context *oncommit;
+  seastar::alien::instance &alien;
   seastar::promise<> &alien_done;
 public:
   OnCommit(
     int id,
     seastar::promise<> &done,
     Context *oncommit,
+    seastar::alien::instance &alien,
     ceph::os::Transaction& txn)
-    : cpuid(id), oncommit(oncommit),
-      alien_done(done) {}
+    : cpuid(id),
+      oncommit(oncommit),
+      alien(alien),
+      alien_done(done) {
+  }
 
   void finish(int) final {
-    return seastar::alien::submit_to(seastar::engine().alien(), cpuid, [this] {
+    return seastar::alien::submit_to(alien, cpuid, [this] {
       if (oncommit) {
         oncommit->complete(0);
       }
@@ -121,15 +126,19 @@ seastar::future<> AlienStore::stop()
 
 AlienStore::~AlienStore() = default;
 
-seastar::future<> AlienStore::mount()
+AlienStore::mount_ertr::future<> AlienStore::mount()
 {
   logger().debug("{}", __func__);
   assert(tp);
   return tp->submit([this] {
     return store->mount();
-  }).then([] (int r) {
-    assert(r == 0);
-    return seastar::now();
+  }).then([] (const int r) -> mount_ertr::future<> {
+    if (r != 0) {
+      return crimson::stateful_ec{
+        std::error_code(-r, std::generic_category()) };
+    } else {
+      return mount_ertr::now();
+    }
   });
 }
 
@@ -150,16 +159,20 @@ seastar::future<> AlienStore::umount()
   });
 }
 
-seastar::future<> AlienStore::mkfs(uuid_d osd_fsid)
+AlienStore::mkfs_ertr::future<> AlienStore::mkfs(uuid_d osd_fsid)
 {
   logger().debug("{}", __func__);
   store->set_fsid(osd_fsid);
   assert(tp);
   return tp->submit([this] {
     return store->mkfs();
-  }).then([] (int r) {
-    assert(r == 0);
-    return seastar::now();
+  }).then([] (int r) -> mkfs_ertr::future<> {
+    if (r != 0) {
+      return crimson::stateful_ec{
+        std::error_code(-r, std::generic_category()) };
+    } else {
+      return mkfs_ertr::now();
+    }
   });
 }
 
@@ -425,9 +438,9 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
 	    ceph::os::Transaction::collect_all_contexts(txn);
 	  assert(tp);
 	  return tp->submit(ch->get_cid().hash_to_shard(tp->size()),
-	    [this, ch, id, crimson_wrapper, &txn, &done] {
+	    [this, ch, id, crimson_wrapper, &txn, &done, &alien=seastar::engine().alien()] {
 	    txn.register_on_commit(new OnCommit(id, done, crimson_wrapper,
-						txn));
+						alien, txn));
 	    auto c = static_cast<AlienCollection*>(ch.get());
 	    return store->queue_transaction(c->collection, std::move(txn));
 	  });

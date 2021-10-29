@@ -107,6 +107,7 @@ struct Config {
   bool readonly = false;
   bool set_max_part = false;
   bool try_netlink = false;
+  bool show_cookie = false;
 
   std::string poolname;
   std::string nsname;
@@ -123,12 +124,13 @@ struct Config {
 
   Command command = None;
   int pid = 0;
+  std::string cookie;
 
   std::string image_spec() const {
     std::string spec = poolname + "/";
 
     if (!nsname.empty()) {
-      spec += "/" + nsname;
+      spec += nsname + "/";
     }
     spec += imgname;
 
@@ -164,6 +166,8 @@ static void usage()
             << "  --reattach-timeout <sec>      Set nbd re-attach timeout\n"
             << "                                (default: " << Config().reattach_timeout << ")\n"
             << "  --try-netlink                 Use the nbd netlink interface\n"
+            << "  --show-cookie                 Show device cookie\n"
+            << "  --cookie                      Specify device cookie\n"
             << "\n"
             << "List options:\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
@@ -189,6 +193,8 @@ static int netlink_resize(int nbd_index, uint64_t size);
 static int run_quiesce_hook(const std::string &quiesce_hook,
                             const std::string &devpath,
                             const std::string &command);
+
+static std::string get_cookie(const std::string &devpath);
 
 class NBDServer
 {
@@ -797,6 +803,7 @@ public:
         continue;
       }
       ifs >> pid;
+      ifs.close();
 
       // If the rbd-nbd is re-attached the pid may store garbage
       // here. We are sure this is the case when it is negative or
@@ -901,6 +908,7 @@ private:
       c.devpath = cfg->devpath;
     }
 
+    c.cookie = get_cookie(cfg->devpath);
     *cfg = c;
     return 0;
   }
@@ -928,6 +936,20 @@ private:
     return -1;
   }
 };
+
+static std::string get_cookie(const std::string &devpath)
+{
+  std::string cookie;
+  std::ifstream ifs;
+  std::string path = "/sys/block/" + devpath.substr(sizeof("/dev/") - 1) + "/backend";
+
+  ifs.open(path, std::ifstream::in);
+  if (ifs.is_open()) {
+    std::getline(ifs, cookie);
+    ifs.close();
+  }
+  return cookie;
+}
 
 static int load_module(Config *cfg)
 {
@@ -1325,6 +1347,8 @@ static int netlink_connect(Config *cfg, struct nl_sock *sock, int nl_id, int fd,
   NLA_PUT_U64(msg, NBD_ATTR_BLOCK_SIZE_BYTES, RBD_NBD_BLKSIZE);
   NLA_PUT_U64(msg, NBD_ATTR_SERVER_FLAGS, flags);
   NLA_PUT_U64(msg, NBD_ATTR_DEAD_CONN_TIMEOUT, cfg->reattach_timeout);
+  if (!cfg->cookie.empty())
+    NLA_PUT_STRING(msg, NBD_ATTR_BACKEND_IDENTIFIER, cfg->cookie.c_str());
 
   sock_attr = nla_nest_start(msg, NBD_ATTR_SOCKETS);
   if (!sock_attr) {
@@ -1719,6 +1743,12 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
 
   use_netlink = cfg->try_netlink || reconnect;
   if (use_netlink) {
+    // generate when the cookie is not supplied at CLI
+    if (!reconnect && cfg->cookie.empty()) {
+      uuid_d uuid_gen;
+      uuid_gen.generate_random();
+      cfg->cookie = uuid_gen.to_string();
+    }
     r = try_netlink_setup(cfg, fd[0], size, flags, reconnect);
     if (r < 0) {
       goto free_server;
@@ -1761,7 +1791,16 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
     if (r < 0)
       goto close_nbd;
 
-    cout << cfg->devpath << std::endl;
+    std::string cookie;
+    if (use_netlink) {
+      cookie = get_cookie(cfg->devpath);
+      ceph_assert(cookie == cfg->cookie || cookie.empty());
+    }
+    if (cfg->show_cookie && !cookie.empty()) {
+      cout << cfg->devpath << " " << cookie << std::endl;
+    } else {
+      cout << cfg->devpath << std::endl;
+    }
 
     run_server(forker, server, use_netlink);
 
@@ -1899,6 +1938,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
     tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("cookie", TextTable::LEFT, TextTable::LEFT);
   }
 
   Config cfg;
@@ -1912,6 +1952,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
       f->dump_string("image", cfg.imgname);
       f->dump_string("snap", cfg.snapname);
       f->dump_string("device", cfg.devpath);
+      f->dump_string("cookie", cfg.cookie);
       f->close_section();
     } else {
       should_print = true;
@@ -1919,7 +1960,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
         cfg.snapname = "-";
       }
       tbl << cfg.pid << cfg.poolname << cfg.nsname << cfg.imgname
-          << cfg.snapname << cfg.devpath << TextTable::endrow;
+          << cfg.snapname << cfg.devpath << cfg.cookie << TextTable::endrow;
     }
   }
 
@@ -2056,6 +2097,9 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       cfg->pretty_format = true;
     } else if (ceph_argparse_flag(args, i, "--try-netlink", (char *)NULL)) {
       cfg->try_netlink = true;
+    } else if (ceph_argparse_flag(args, i, "--show-cookie", (char *)NULL)) {
+      cfg->show_cookie = true;
+    } else if (ceph_argparse_witharg(args, i, &cfg->cookie, "--cookie", (char *)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &arg_value,
                                      "--encryption-format", (char *)NULL)) {
       if (arg_value == "luks1") {
@@ -2101,10 +2145,26 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     return -EINVAL;
   }
 
+  std::string cookie;
   switch (cmd) {
     case Attach:
       if (cfg->devpath.empty()) {
         *err_msg << "rbd-nbd: must specify device to attach";
+        return -EINVAL;
+      }
+      // Allowing attach without --cookie option for kernel without
+      // NBD_ATTR_BACKEND_IDENTIFIER support for compatibility
+      cookie = get_cookie(cfg->devpath);
+      if (!cookie.empty()) {
+        if (cfg->cookie.empty()) {
+          *err_msg << "rbd-nbd: must specify cookie to attach";
+          return -EINVAL;
+	} else if (cookie != cfg->cookie) {
+          *err_msg << "rbd-nbd: cookie mismatch";
+          return -EINVAL;
+        }
+      } else if (!cfg->cookie.empty()) {
+        *err_msg << "rbd-nbd: kernel does not have cookie support";
         return -EINVAL;
       }
       [[fallthrough]];

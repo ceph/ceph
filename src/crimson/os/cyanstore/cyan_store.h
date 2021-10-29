@@ -68,10 +68,10 @@ public:
   seastar::future<> stop() final {
     return seastar::now();
   }
-  seastar::future<> mount() final;
+  mount_ertr::future<> mount() final;
   seastar::future<> umount() final;
 
-  seastar::future<> mkfs(uuid_d new_osd_fsid) final;
+  mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
   seastar::future<store_statfs_t> stat() const final;
   seastar::future<struct stat> stat(
     CollectionRef c,

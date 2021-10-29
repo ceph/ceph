@@ -8,6 +8,7 @@
 #include <boost/intrusive/list.hpp>
 
 #include "crimson/common/log.h"
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cached_extent.h"
@@ -24,12 +25,6 @@ class Transaction;
  * Representation of in-progress mutation. Used exclusively through Cache methods.
  */
 class Transaction {
-  struct cached_extent_disposer {
-    void operator() (CachedExtent* extent) {
-      extent->parent_index = nullptr;
-      extent->state = CachedExtent::extent_state_t::INVALID;
-    }
-  };
 public:
   using Ref = std::unique_ptr<Transaction>;
   using on_destruct_func_t = std::function<void(Transaction&)>;
@@ -39,17 +34,14 @@ public:
     RETIRED
   };
   get_extent_ret get_extent(paddr_t addr, CachedExtentRef *out) {
+    LOG_PREFIX(Transaction::get_extent);
     if (retired_set.count(addr)) {
       return get_extent_ret::RETIRED;
     } else if (auto iter = write_set.find_offset(addr);
 	iter != write_set.end()) {
       if (out)
 	*out = CachedExtentRef(&*iter);
-      return get_extent_ret::PRESENT;
-    } else if (auto iter = delayed_set.find_offset(addr);
-	iter != delayed_set.end()) {
-      if (out)
-	*out = CachedExtentRef(&*iter);
+      TRACET("Found offset {} in write_set: {}", *this, addr, *iter);
       return get_extent_ret::PRESENT;
     } else if (
       auto iter = read_set.find(addr);
@@ -59,6 +51,7 @@ public:
       assert(iter->ref->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
       if (out)
 	*out = iter->ref;
+      TRACET("Found offset {} in read_set: {}", *this, addr, *(iter->ref));
       return get_extent_ret::PRESENT;
     } else {
       return get_extent_ret::ABSENT;
@@ -68,16 +61,8 @@ public:
   void add_to_retired_set(CachedExtentRef ref) {
     ceph_assert(!is_weak());
     if (ref->is_initial_pending()) {
-      // We decide not to remove it from fresh_block_list because touching this
-      // will affect relative paddrs, and it should be rare to retire a fresh
-      // extent.
       ref->state = CachedExtent::extent_state_t::INVALID;
-      if (ref->is_inline()) {
-	write_set.erase(*ref);
-      } else {
-	// if ref is not relative, it must be in the delayed set
-	delayed_set.erase(*ref);
-      }
+      write_set.erase(*ref);
     } else if (ref->is_mutation_pending()) {
       ref->state = CachedExtent::extent_state_t::INVALID;
       write_set.erase(*ref);
@@ -103,40 +88,52 @@ public:
   void add_fresh_extent(
     CachedExtentRef ref,
     bool delayed = false) {
+    LOG_PREFIX(Transaction::add_fresh_extent);
     ceph_assert(!is_weak());
     if (delayed) {
       assert(ref->is_logical());
       ref->set_paddr(delayed_temp_paddr(delayed_temp_offset));
       delayed_temp_offset += ref->get_length();
       delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
-      delayed_set.insert(*ref);
     } else {
       ref->set_paddr(make_record_relative_paddr(offset));
       offset += ref->get_length();
-      fresh_block_list.push_back(ref);
-      write_set.insert(*ref);
+      inline_block_list.push_back(ref);
     }
-  }
-
-  void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
-    ref->set_paddr(make_record_relative_paddr(offset));
-    offset += ref->get_length();
-    delayed_set.erase(*ref);
-    fresh_block_list.push_back(ref);
+    ++fresh_block_stats.num;
+    fresh_block_stats.bytes += ref->get_length();
+    TRACET("adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
-  void mark_delayed_extent_ool(LogicalCachedExtentRef& ref) {
+  void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
+    LOG_PREFIX(Transaction::mark_delayed_extent_inline);
+    TRACET("removing {} from write_set", *this, *ref);
+    write_set.erase(*ref);
+    ref->set_paddr(make_record_relative_paddr(offset));
+    offset += ref->get_length();
+    inline_block_list.push_back(ref);
+    TRACET("adding {} to write_set", *this, *ref);
+    write_set.insert(*ref);
+  }
+
+  void mark_delayed_extent_ool(LogicalCachedExtentRef& ref, paddr_t final_addr) {
+    LOG_PREFIX(Transaction::mark_delayed_extent_ool);
+    TRACET("removing {} from write_set", *this, *ref);
+    write_set.erase(*ref);
+    ref->set_paddr(final_addr);
     assert(!ref->get_paddr().is_null());
     assert(!ref->is_inline());
-    delayed_set.erase(*ref);
-    fresh_block_list.push_back(ref);
+    ool_block_list.push_back(ref);
+    TRACET("adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
   void add_mutated_extent(CachedExtentRef ref) {
+    LOG_PREFIX(Transaction::add_mutated_extent);
     ceph_assert(!is_weak());
     mutated_block_list.push_back(ref);
+    TRACET("adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
@@ -172,10 +169,6 @@ public:
     return to_release;
   }
 
-  const auto &get_fresh_block_list() {
-    return fresh_block_list;
-  }
-
   auto& get_delayed_alloc_list() {
     return delayed_alloc_list;
   }
@@ -186,6 +179,26 @@ public:
 
   const auto &get_retired_set() {
     return retired_set;
+  }
+
+  template <typename F>
+  auto for_each_fresh_block(F &&f) const {
+    std::for_each(ool_block_list.begin(), ool_block_list.end(), f);
+    std::for_each(inline_block_list.begin(), inline_block_list.end(), f);
+  }
+
+  struct io_stat_t {
+    uint64_t num = 0;
+    uint64_t bytes = 0;
+  };
+  const io_stat_t& get_fresh_block_stats() const {
+    return fresh_block_stats;
+  }
+
+  size_t get_allocation_size() const {
+    size_t ret = 0;
+    for_each_fresh_block([&ret](auto &e) { ret += e->get_length(); });
+    return ret;
   }
 
   enum class src_t : uint8_t {
@@ -227,11 +240,16 @@ public:
       src(src)
   {}
 
+  void invalidate_clear_write_set() {
+    for (auto &&i: write_set) {
+      i.state = CachedExtent::extent_state_t::INVALID;
+    }
+    write_set.clear();
+  }
 
   ~Transaction() {
     on_destruct(*this);
-    write_set.clear_and_dispose(cached_extent_disposer());
-    delayed_set.clear_and_dispose(cached_extent_disposer());
+    invalidate_clear_write_set();
   }
 
   friend class crimson::os::seastore::SeaStore;
@@ -242,14 +260,17 @@ public:
     offset = 0;
     delayed_temp_offset = 0;
     read_set.clear();
-    write_set.clear_and_dispose(cached_extent_disposer());
-    delayed_set.clear_and_dispose(cached_extent_disposer());
-    fresh_block_list.clear();
+    invalidate_clear_write_set();
     mutated_block_list.clear();
+    fresh_block_stats = {};
+    num_delayed_invalid_extents = 0;
     delayed_alloc_list.clear();
+    inline_block_list.clear();
+    ool_block_list.clear();
     retired_set.clear();
     onode_tree_stats = {};
     lba_tree_stats = {};
+    ool_write_stats = {};
     to_release = NULL_SEG_ID;
     conflicted = false;
     if (!has_reset) {
@@ -278,6 +299,31 @@ public:
   tree_stats_t& get_lba_tree_stats() {
     return lba_tree_stats;
   }
+  void add_rbm_alloc_info_blocks(rbm_alloc_delta_t &d) {
+    rbm_alloc_info_blocks.push_back(d);
+  }
+  void clear_rbm_alloc_info_blocks() {
+    if (!rbm_alloc_info_blocks.empty()) {
+      rbm_alloc_info_blocks.clear();
+    }
+  }
+  const auto &get_rbm_alloc_info_blocks() {
+    return rbm_alloc_info_blocks;
+  }
+
+  struct ool_write_stats_t {
+    io_stat_t extents;
+    uint64_t header_raw_bytes = 0;
+    uint64_t header_bytes = 0;
+    uint64_t num_records = 0;
+  };
+  ool_write_stats_t& get_ool_write_stats() {
+    return ool_write_stats;
+  }
+
+  void increment_delayed_invalid_extents() {
+    ++num_delayed_invalid_extents;
+  }
 
 private:
   friend class Cache;
@@ -294,21 +340,51 @@ private:
   segment_off_t offset = 0; ///< relative offset of next block
   segment_off_t delayed_temp_offset = 0;
 
+  /**
+   * read_set
+   *
+   * Holds a reference (with a refcount) to every extent read via *this.
+   * Submitting a transaction mutating any contained extent/addr will
+   * invalidate *this.
+   */
   read_set_t<Transaction> read_set; ///< set of extents read by paddr
-  ExtentIndex write_set;            ///< set of extents written by paddr
-  ExtentIndex delayed_set;	    ///< set of extents whose paddr
-				    ///	 allocation are delayed
 
-  std::list<CachedExtentRef> fresh_block_list;   ///< list of fresh blocks
-  std::list<CachedExtentRef> mutated_block_list; ///< list of mutated blocks
-  ///< list of ool extents whose addresses are not
-  //   determine until transaction submission
+  /**
+   * write_set
+   *
+   * Contains a reference (without a refcount) to every extent mutated
+   * as part of *this.  No contained extent may be referenced outside
+   * of *this.  Every contained extent will be in one of inline_block_list,
+   * ool_block_list, mutated_block_list, or delayed_alloc_list.
+   */
+  ExtentIndex write_set;
+
+  /**
+   * lists of fresh blocks, holds refcounts, subset of write_set
+   */
+  io_stat_t fresh_block_stats;
+  uint64_t num_delayed_invalid_extents = 0;
+  /// blocks that will be committed with journal record inline
+  std::list<CachedExtentRef> inline_block_list;
+  /// blocks that will be committed with out-of-line record
+  std::list<CachedExtentRef> ool_block_list;
+  /// blocks with delayed allocation, may become inline or ool above
   std::list<LogicalCachedExtentRef> delayed_alloc_list;
 
-  pextent_set_t retired_set; ///< list of extents mutated by this transaction
+  /// list of mutated blocks, holds refcounts, subset of write_set
+  std::list<CachedExtentRef> mutated_block_list;
 
+  /**
+   * retire_set
+   *
+   * Set of extents retired by *this.
+   */
+  pextent_set_t retired_set;
+
+  /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
   tree_stats_t lba_tree_stats;
+  ool_write_stats_t ool_write_stats;
 
   ///< if != NULL_SEG_ID, release this segment after completion
   segment_id_t to_release = NULL_SEG_ID;
@@ -322,6 +398,8 @@ private:
   on_destruct_func_t on_destruct;
 
   const src_t src;
+
+  std::vector<rbm_alloc_delta_t> rbm_alloc_info_blocks;
 };
 using TransactionRef = Transaction::Ref;
 

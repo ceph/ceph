@@ -32,5 +32,5 @@ function(build_opentracing)
     BUILD_COMMAND ${make_cmd}
     INSTALL_COMMAND ${install_cmd}
     BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so
-    )
+    LOG_BUILD ON)
 endfunction()

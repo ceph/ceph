@@ -19,6 +19,7 @@ from teuthology import contextutil
 from teuthology.orchestra import run
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
+from textwrap import dedent
 
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
@@ -66,6 +67,18 @@ def build_initial_config(ctx, config):
 
     return conf
 
+
+def distribute_iscsi_gateway_cfg(ctx, conf_data):
+    """
+    Distribute common gateway config to get the IPs.
+    These will help in iscsi clients with finding trusted_ip_list.
+    """
+    log.info('Distributing iscsi-gateway.cfg...')
+    for remote, roles in ctx.cluster.remotes.items():
+        remote.write_file(
+            path='/etc/ceph/iscsi-gateway.cfg',
+            data=conf_data,
+            sudo=True)
 
 def update_archive_setting(ctx, key, value):
     """
@@ -756,6 +769,26 @@ def ceph_osds(ctx, config):
             )
             cur += 1
 
+        if cur == 0:
+            _shell(ctx, cluster_name, remote, [
+                'ceph', 'orch', 'apply', 'osd', '--all-available-devices',
+            ])
+            # expect the number of scratch devs
+            num_osds = sum(map(len, devs_by_remote.values()))
+            assert num_osds
+        else:
+            # expect the number of OSDs we created
+            num_osds = cur
+
+        log.info(f'Waiting for {num_osds} OSDs to come up...')
+        with contextutil.safe_while(sleep=1, tries=120) as proceed:
+            while proceed():
+                p = _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
+                           ['ceph', 'osd', 'stat', '-f', 'json'], stdout=StringIO())
+                j = json.loads(p.stdout.getvalue())
+                if int(j.get('num_up_osds', 0)) == num_osds:
+                    break;
+
         yield
     finally:
         pass
@@ -885,32 +918,44 @@ def ceph_iscsi(ctx, config):
 
     nodes = []
     daemons = {}
+    ips = []
+
     for remote, roles in ctx.cluster.remotes.items():
         for role in [r for r in roles
-                    if teuthology.is_type('iscsi', cluster_name)(r)]:
+                     if teuthology.is_type('iscsi', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
             log.info('Adding %s on %s' % (role, remote.shortname))
             nodes.append(remote.shortname + '=' + id_)
             daemons[role] = (remote, id_)
+            ips.append(remote.ip_address)
+    trusted_ip_list = ','.join(ips)
     if nodes:
-        poolname = 'iscsi'
-        # ceph osd pool create iscsi 3 3 replicated
+        poolname = 'datapool'
+        # ceph osd pool create datapool 3 3 replicated
         _shell(ctx, cluster_name, remote, [
             'ceph', 'osd', 'pool', 'create',
             poolname, '3', '3', 'replicated']
         )
 
         _shell(ctx, cluster_name, remote, [
-            'ceph', 'osd', 'pool', 'application', 'enable',
-            poolname, 'rbd']
+            'rbd', 'pool', 'init', poolname]
         )
 
-        # ceph orch apply iscsi iscsi user password
+        # ceph orch apply iscsi datapool (admin)user (admin)password
         _shell(ctx, cluster_name, remote, [
             'ceph', 'orch', 'apply', 'iscsi',
-            poolname, 'user', 'password',
+            poolname, 'admin', 'admin',
+            '--trusted_ip_list', trusted_ip_list,
             '--placement', str(len(nodes)) + ';' + ';'.join(nodes)]
         )
+
+        # used by iscsi client to identify valid gateway ip's
+        conf_data = dedent(f"""
+        [config]
+        trusted_ip_list = {trusted_ip_list}
+        """)
+        distribute_iscsi_gateway_cfg(ctx, conf_data)
+
     for role, i in daemons.items():
         remote, id_ = i
         ctx.daemons.register_daemon(

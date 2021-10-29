@@ -6,7 +6,7 @@ import re
 from io import StringIO
 from textwrap import dedent
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
 from teuthology.contextutil import MaxWhileTries
 
@@ -16,7 +16,8 @@ log = logging.getLogger(__name__)
 
 
 UMOUNT_TIMEOUT = 300
-
+# internal metadata directory
+DEBUGFS_META_DIR = 'meta'
 
 class KernelMount(CephFSMount):
     def __init__(self, ctx, test_dir, client_id, client_remote,
@@ -27,6 +28,7 @@ class KernelMount(CephFSMount):
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
+        self.dynamic_debug = config.get('dynamic_debug', False)
         self.rbytes = config.get('rbytes', False)
         self.inst = None
         self.addr = None
@@ -49,6 +51,12 @@ class KernelMount(CephFSMount):
             return retval
 
         self._set_filemode_on_mntpt()
+
+        if self.dynamic_debug:
+            kmount_count = self.ctx.get(f'kmount_count.{self.client_remote.hostname}', 0)
+            if kmount_count == 0:
+                self.enable_dynamic_debug()
+            self.ctx[f'kmount_count.{self.client_remote.hostname}'] = kmount_count + 1
 
         self.mounted = True
 
@@ -112,6 +120,13 @@ class KernelMount(CephFSMount):
                       run.Raw(';'), 'ps', 'auxf'],
                 timeout=(15*60), omit_sudo=False)
             raise e
+
+        if self.dynamic_debug:
+            kmount_count = self.ctx.get(f'kmount_count.{self.client_remote.hostname}')
+            assert kmount_count
+            if kmount_count == 1:
+                self.disable_dynamic_debug()
+            self.ctx[f'kmount_count.{self.client_remote.hostname}'] = kmount_count - 1
 
         self.mounted = False
         self.cleanup()
@@ -200,6 +215,8 @@ class KernelMount(CephFSMount):
                 def get_id_to_dir():
                     result = {}
                     for dir in glob.glob("/sys/kernel/debug/ceph/*"):
+                        if os.path.basename(dir) == DEBUGFS_META_DIR:
+                            continue
                         mds_sessions_lines = open(os.path.join(dir, "mds_sessions")).readlines()
                         global_id = mds_sessions_lines[0].split()[1].strip('"')
                         client_id = mds_sessions_lines[1].split()[1].strip('"')
@@ -220,6 +237,32 @@ class KernelMount(CephFSMount):
                     self.client_id, ",".join(client_id_to_global_id.keys())
                 ))
                 raise
+
+    def _dynamic_debug_control(self, enable):
+        """
+        Write to dynamic debug control file.
+        """
+        if enable:
+            fdata = "module ceph +p"
+        else:
+            fdata = "module ceph -p"
+
+        self.run_shell_payload(f"""
+sudo modprobe ceph
+echo '{fdata}' | sudo tee /sys/kernel/debug/dynamic_debug/control
+""")
+
+    def enable_dynamic_debug(self):
+        """
+        Enable the dynamic debug.
+        """
+        self._dynamic_debug_control(True)
+
+    def disable_dynamic_debug(self):
+        """
+        Disable the dynamic debug.
+        """
+        self._dynamic_debug_control(False)
 
     def get_global_id(self):
         """

@@ -4,7 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 
@@ -23,6 +23,7 @@ describe('ServiceFormComponent', () => {
 
   configureTestBed({
     declarations: [ServiceFormComponent],
+    providers: [NgbActiveModal],
     imports: [
       HttpClientTestingModule,
       NgbTypeaheadModule,
@@ -36,6 +37,7 @@ describe('ServiceFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(ServiceFormComponent);
     component = fixture.componentInstance;
+    component.ngOnInit();
     form = component.serviceForm;
     formHelper = new FormHelper(form);
     fixture.detectChanges();
@@ -142,28 +144,14 @@ describe('ServiceFormComponent', () => {
     describe('should test service nfs', () => {
       beforeEach(() => {
         formHelper.setValue('service_type', 'nfs');
-        formHelper.setValue('pool', 'foo');
       });
 
-      it('should submit nfs with namespace', () => {
-        formHelper.setValue('namespace', 'bar');
+      it('should submit nfs', () => {
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'nfs',
           placement: {},
-          unmanaged: false,
-          pool: 'foo',
-          namespace: 'bar'
-        });
-      });
-
-      it('should submit nfs w/o namespace', () => {
-        component.onSubmit();
-        expect(cephServiceService.create).toHaveBeenCalledWith({
-          service_type: 'nfs',
-          placement: {},
-          unmanaged: false,
-          pool: 'foo'
+          unmanaged: false
         });
       });
     });

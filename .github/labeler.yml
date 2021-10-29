@@ -76,7 +76,7 @@ cephadm:
   - doc/cephadm/**
   - doc/dev/cephadm/**
   - doc/man/8/cephadm.rst
-  - qa/suites/rados/cephadm/**
+  - qa/suites/orch/cephadm/**
   - qa/tasks/cephadm.py
   - qa/tasks/cephadm_cases
   - qa/tasks/mgr/test_cephadm_orchestrator.py

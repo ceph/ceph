@@ -16,30 +16,6 @@
 
 namespace crimson::os::seastore::segment_manager::block {
 
-struct block_sm_superblock_t {
-  size_t size = 0;
-  size_t segment_size = 0;
-  size_t block_size = 0;
-    
-  size_t segments = 0;
-  uint64_t tracker_offset = 0;
-  uint64_t first_segment_offset = 0;
-
-  seastore_meta_t meta;
-    
-  DENC(block_sm_superblock_t, v, p) {
-    DENC_START(1, 1, p);
-    denc(v.size, p);
-    denc(v.segment_size, p);
-    denc(v.block_size, p);
-    denc(v.segments, p);
-    denc(v.tracker_offset, p);
-    denc(v.first_segment_offset, p);
-    denc(v.meta, p);
-    DENC_FINISH(p);
-  }
-};
-
 using write_ertr = crimson::errorator<
   crimson::ct_error::input_output_error>;
 using read_ertr = crimson::errorator<
@@ -83,14 +59,14 @@ public:
     return bptr.length();
   }
 
-  segment_state_t get(segment_id_t offset) const {
+  segment_state_t get(device_segment_id_t offset) const {
     assert(offset < get_capacity());
     return static_cast<segment_state_t>(
       layout.template Pointer<0>(
 	bptr.c_str())[offset]);
   }
 
-  void set(segment_id_t offset, segment_state_t state) {
+  void set(device_segment_id_t offset, segment_state_t state) {
     assert(offset < get_capacity());
     layout.template Pointer<0>(bptr.c_str())[offset] =
       static_cast<uint8_t>(state);
@@ -134,16 +110,14 @@ class BlockSegmentManager final : public SegmentManager {
 public:
   mount_ret mount() final;
 
-  mkfs_ret mkfs(seastore_meta_t) final;
-  
-  using close_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error
-    >;
+  mkfs_ret mkfs(segment_manager_config_t) final;
+
   close_ertr::future<> close();
 
-  BlockSegmentManager(const std::string &path) : device_path(path) {
-    register_metrics();
-  }
+  BlockSegmentManager(
+    const std::string &path)
+  : device_path(path) {}
+
   ~BlockSegmentManager();
 
   open_ertr::future<SegmentRef> open(segment_id_t id) final;
@@ -165,11 +139,27 @@ public:
     return superblock.segment_size;
   }
 
+  device_id_t get_device_id() const final {
+    return superblock.device_id;
+  }
+  secondary_device_set_t& get_secondary_devices() final {
+    return superblock.secondary_devices;
+  }
   // public so tests can bypass segment interface when simpler
   Segment::write_ertr::future<> segment_write(
     paddr_t addr,
     ceph::bufferlist bl,
     bool ignore_check=false);
+
+  device_spec_t get_device_spec() const final {
+    return {superblock.magic,
+	    superblock.dtype,
+	    superblock.device_id};
+  }
+
+  magic_t get_magic() const final {
+    return superblock.magic;
+  }
 
 private:
   friend class BlockSegment;
@@ -213,9 +203,11 @@ private:
   block_sm_superblock_t superblock;
   seastar::file device;
 
+  device_id_t device_id = 0;
+
   size_t get_offset(paddr_t addr) {
     return superblock.first_segment_offset +
-      (addr.segment * superblock.segment_size) +
+      (addr.segment.device_segment_id() * superblock.segment_size) +
       addr.offset;
   }
 
@@ -232,8 +224,3 @@ private:
 };
 
 }
-
-WRITE_CLASS_DENC_BOUNDED(
-  crimson::os::seastore::segment_manager::block::block_sm_superblock_t
-)
-

@@ -32,3 +32,4 @@ tasks:
       - rbd-fuse-debuginfo
       - rbd-mirror-debuginfo
       - rbd-nbd-debuginfo
+      - ceph-volume

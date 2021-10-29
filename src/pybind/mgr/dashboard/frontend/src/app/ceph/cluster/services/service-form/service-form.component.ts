@@ -1,8 +1,8 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, Input, OnInit, ViewChild } from '@angular/core';
 import { AbstractControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import { NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
+import { NgbActiveModal, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { merge, Observable, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
@@ -31,6 +31,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
 
+  @Input() public hiddenServices: string[] = [];
+
   serviceForm: CdFormGroup;
   action: string;
   resource: string;
@@ -41,6 +43,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   labelFocus = new Subject<string>();
   pools: Array<object>;
   services: Array<CephServiceSpec> = [];
+  pageURL: string;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -49,7 +52,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     private hostService: HostService,
     private poolService: PoolService,
     private router: Router,
-    private taskWrapperService: TaskWrapperService
+    private taskWrapperService: TaskWrapperService,
+    public activeModal: NgbActiveModal
   ) {
     super();
     this.resource = $localize`service`;
@@ -111,22 +115,16 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       hosts: [[]],
       count: [null, [CdValidators.number(false), Validators.min(1)]],
       unmanaged: [false],
-      // NFS & iSCSI
+      // iSCSI
       pool: [
         null,
         [
-          CdValidators.requiredIf({
-            service_type: 'nfs',
-            unmanaged: false
-          }),
           CdValidators.requiredIf({
             service_type: 'iscsi',
             unmanaged: false
           })
         ]
       ],
-      // NFS
-      namespace: [null],
       // RGW
       rgw_frontend_port: [
         null,
@@ -215,14 +213,19 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit(): void {
+    if (this.router.url.includes('services')) {
+      this.pageURL = 'services';
+    }
     this.action = this.actionLabels.CREATE;
     this.cephServiceService.getKnownTypes().subscribe((resp: Array<string>) => {
       // Remove service types:
       // osd       - This is deployed a different way.
       // container - This should only be used in the CLI.
-      this.serviceTypes = _.difference(resp, ['container', 'osd']).sort();
+      this.hiddenServices.push('osd', 'container');
+
+      this.serviceTypes = _.difference(resp, this.hiddenServices).sort();
     });
-    this.hostService.list().subscribe((resp: object[]) => {
+    this.hostService.list('false').subscribe((resp: object[]) => {
       const options: SelectOption[] = [];
       _.forEach(resp, (host: object) => {
         if (_.get(host, 'sources.orchestrator', false)) {
@@ -241,10 +244,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     this.cephServiceService.list().subscribe((services: CephServiceSpec[]) => {
       this.services = services.filter((service: any) => service.service_type === 'rgw');
     });
-  }
-
-  goToListView() {
-    this.router.navigate(['/services']);
   }
 
   searchLabels = (text$: Observable<string>) => {
@@ -322,12 +321,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         serviceSpec['placement']['count'] = values['count'];
       }
       switch (serviceType) {
-        case 'nfs':
-          serviceSpec['pool'] = values['pool'];
-          if (_.isString(values['namespace']) && !_.isEmpty(values['namespace'])) {
-            serviceSpec['namespace'] = values['namespace'];
-          }
-          break;
         case 'rgw':
           if (_.isNumber(values['rgw_frontend_port']) && values['rgw_frontend_port'] > 0) {
             serviceSpec['rgw_frontend_port'] = values['rgw_frontend_port'];
@@ -385,8 +378,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         error() {
           self.serviceForm.setErrors({ cdSubmitButton: true });
         },
-        complete() {
-          self.goToListView();
+        complete: () => {
+          this.pageURL === 'services'
+            ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
+            : this.activeModal.close();
         }
       });
   }

@@ -14,6 +14,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "PrimaryLogPG.h"
 
 #include <errno.h>
 
@@ -24,42 +25,45 @@
 #include <boost/intrusive_ptr.hpp>
 #include <boost/tuple/tuple.hpp>
 
-#include "PG.h"
-#include "pg_scrubber.h"
 #include "PrimaryLogPG.h"
-#include "OSD.h"
-#include "PrimaryLogScrub.h"
-#include "OpRequest.h"
-#include "ScrubStore.h"
-#include "Session.h"
-#include "objclass/objclass.h"
-#include "osd/ClassHandler.h"
 
 #include "cls/cas/cls_cas_ops.h"
+#include "common/CDC.h"
+#include "common/EventTrace.h"
 #include "common/ceph_crypto.h"
 #include "common/config.h"
 #include "common/errno.h"
-#include "common/scrub_types.h"
 #include "common/perf_counters.h"
-#include "common/CDC.h"
-#include "common/EventTrace.h"
-
-#include "messages/MOSDOp.h"
+#include "common/scrub_types.h"
+#include "include/compat.h"
+#include "json_spirit/json_spirit_reader.h"
+#include "json_spirit/json_spirit_value.h"
+#include "messages/MCommandReply.h"
 #include "messages/MOSDBackoff.h"
-#include "messages/MOSDPGTrim.h"
-#include "messages/MOSDPGScan.h"
-#include "messages/MOSDRepScrub.h"
+#include "messages/MOSDOp.h"
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MOSDPGLog.h"
+#include "messages/MOSDPGScan.h"
+#include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
-#include "messages/MCommandReply.h"
+#include "messages/MOSDRepScrub.h"
 #include "messages/MOSDScrubReserve.h"
-
-#include "include/compat.h"
 #include "mon/MonClient.h"
+#include "objclass/objclass.h"
+#include "osd/ClassHandler.h"
 #include "osdc/Objecter.h"
+#include "osd/scrubber/PrimaryLogScrub.h"
+#include "osd/scrubber/ScrubStore.h"
+#include "osd/scrubber/pg_scrubber.h"
+
+#include "OSD.h"
+#include "OpRequest.h"
+#include "PG.h"
+#include "Session.h"
+
+// required includes order:
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
 #include "include/ceph_assert.h"  // json_spirit clobbers it
@@ -1756,6 +1760,11 @@ PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
   m_scrubber = make_unique<PrimaryLogScrub>(this);
 }
 
+PrimaryLogPG::~PrimaryLogPG()
+{
+  m_scrubber.reset();
+}
+
 void PrimaryLogPG::get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc)
 {
   src_oloc = oloc;
@@ -2123,12 +2132,21 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     return;
   }
   int64_t poolid = get_pgid().pool();
-  if (op->may_write()) {
-
-    const pg_pool_t *pi = get_osdmap()->get_pg_pool(poolid);
-    if (!pi) {
-      return;
+  const pg_pool_t *pi = get_osdmap()->get_pg_pool(poolid);
+  if (!pi) {
+    return;
+  }
+  if (pi->has_flag(pg_pool_t::FLAG_EIO)) {
+    // drop op on the floor; the client will handle returning EIO
+    if (m->has_flag(CEPH_OSD_FLAG_SUPPORTSPOOLEIO)) {
+      dout(10) << __func__ << " discarding op due to pool EIO flag" << dendl;
+    } else {
+      dout(10) << __func__ << " replying EIO due to pool EIO flag" << dendl;
+      osd->reply_op_error(op, -EIO);
     }
+    return;
+  }
+  if (op->may_write()) {
 
     // invalid?
     if (m->get_snapid() != CEPH_NOSNAP) {
@@ -2530,7 +2548,8 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
 	op.op == CEPH_OSD_OP_UNSET_MANIFEST ||
 	op.op == CEPH_OSD_OP_TIER_PROMOTE ||
 	op.op == CEPH_OSD_OP_TIER_FLUSH ||
-	op.op == CEPH_OSD_OP_TIER_EVICT) {
+	op.op == CEPH_OSD_OP_TIER_EVICT ||
+	op.op == CEPH_OSD_OP_ISDIRTY) {
       return cache_result_t::NOOP;
     }
   }
@@ -7398,20 +7417,14 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 
 	// The chunks already has a reference, so it is just enough to invoke truncate if necessary
-	uint64_t chunk_length = 0;
-	for (auto p : obs.oi.manifest.chunk_map) {
-	  chunk_length += p.second.length;
-	}
-	if (chunk_length == obs.oi.size) {
-	  for (auto &p : obs.oi.manifest.chunk_map) {
-	    p.second.set_flag(chunk_info_t::FLAG_MISSING);
-	  }
+	for (auto &p : obs.oi.manifest.chunk_map) {
+	  p.second.set_flag(chunk_info_t::FLAG_MISSING);
 	  // punch hole
-	  t->zero(soid, 0, oi.size);
-	  oi.clear_data_digest();
-	  ctx->delta_stats.num_wr++;
-	  ctx->cache_operation = true;
+	  t->zero(soid, p.first, p.second.length);
 	}
+	oi.clear_data_digest();
+	ctx->delta_stats.num_wr++;
+	ctx->cache_operation = true;
 	osd->logger->inc(l_osd_tier_evict);
       }
 
@@ -12860,8 +12873,7 @@ void PrimaryLogPG::on_shutdown()
   }
 
   m_scrubber->scrub_clear_state();
-
-  m_scrubber->unreg_next_scrub();
+  m_scrubber->rm_from_osd_scrubbing();
 
   vector<ceph_tid_t> tids;
   cancel_copy_ops(false, &tids);

@@ -152,7 +152,7 @@ class OSDService(CephService):
     def prepare_drivegroup(self, drive_group: DriveGroupSpec) -> List[Tuple[str, DriveSelection]]:
         # 1) use fn_filter to determine matching_hosts
         matching_hosts = drive_group.placement.filter_matching_hostspecs(
-            self.mgr._schedulable_hosts())
+            self.mgr.cache.get_schedulable_hosts())
         # 2) Map the inventory to the InventoryHost object
         host_ds_map = []
 
@@ -261,7 +261,7 @@ class OSDService(CephService):
         if not osdspecs:
             self.mgr.log.debug("No OSDSpecs found")
             return []
-        return sum([spec.placement.filter_matching_hostspecs(self.mgr._schedulable_hosts()) for spec in osdspecs], [])
+        return sum([spec.placement.filter_matching_hostspecs(self.mgr.cache.get_schedulable_hosts()) for spec in osdspecs], [])
 
     def resolve_osdspecs_for_host(self, host: str,
                                   specs: Optional[List[DriveGroupSpec]] = None) -> List[DriveGroupSpec]:
@@ -271,7 +271,7 @@ class OSDService(CephService):
             specs = [cast(DriveGroupSpec, spec) for (sn, spec) in self.mgr.spec_store.spec_preview.items()
                      if spec.service_type == 'osd']
         for spec in specs:
-            if host in spec.placement.filter_matching_hostspecs(self.mgr._schedulable_hosts()):
+            if host in spec.placement.filter_matching_hostspecs(self.mgr.cache.get_schedulable_hosts()):
                 self.mgr.log.debug(f"Found OSDSpecs for host: <{host}> -> <{spec}>")
                 matching_specs.append(spec)
         return matching_specs
@@ -467,6 +467,19 @@ class RemoveUtil(object):
         self.mgr.log.info(f"{osd} weight is now {weight}")
         return True
 
+    def zap_osd(self, osd: "OSD") -> str:
+        "Zaps all devices that are associated with an OSD"
+        if osd.hostname is not None:
+            out, err, code = CephadmServe(self.mgr)._run_cephadm(
+                osd.hostname, 'osd', 'ceph-volume',
+                ['--', 'lvm', 'zap', '--destroy', '--osd-id', str(osd.osd_id)],
+                error_ok=True)
+            self.mgr.cache.invalidate_host_devices(osd.hostname)
+            if code:
+                raise OrchestratorError('Zap failed: %s' % '\n'.join(out + err))
+            return '\n'.join(out + err)
+        raise OrchestratorError(f"Failed to zap OSD {osd.osd_id} because host was unknown")
+
     def safe_to_destroy(self, osd_ids: List[int]) -> bool:
         """ Queries the safe-to-destroy flag for OSDs """
         cmd_args = {'prefix': 'osd safe-to-destroy',
@@ -521,7 +534,7 @@ class OSD:
                  replace: bool = False,
                  force: bool = False,
                  hostname: Optional[str] = None,
-                 ):
+                 zap: bool = False):
         # the ID of the OSD
         self.osd_id = osd_id
 
@@ -557,6 +570,9 @@ class OSD:
         self.rm_util: RemoveUtil = remove_util
 
         self.original_weight: Optional[float] = None
+
+        # Whether devices associated with the OSD should be zapped (DATA ERASED)
+        self.zap = zap
 
     def start(self) -> None:
         if self.started:
@@ -628,6 +644,9 @@ class OSD:
     def destroy(self) -> bool:
         return self.rm_util.destroy_osd(self.osd_id)
 
+    def do_zap(self) -> str:
+        return self.rm_util.zap_osd(self)
+
     def purge(self) -> bool:
         return self.rm_util.purge_osd(self.osd_id)
 
@@ -656,6 +675,7 @@ class OSD:
         out['stopped'] = self.stopped
         out['replace'] = self.replace
         out['force'] = self.force
+        out['zap'] = self.zap
         out['hostname'] = self.hostname  # type: ignore
 
         for k in ['drain_started_at', 'drain_stopped_at', 'drain_done_at', 'process_started_at']:
@@ -713,10 +733,10 @@ class OSDRemovalQueue(object):
         self.cleanup()
 
         # find osds that are ok-to-stop and not yet draining
-        ok_to_stop_osds = self.rm_util.find_osd_stop_threshold(self.idling_osds())
-        if ok_to_stop_osds:
+        ready_to_drain_osds = self._ready_to_drain_osds()
+        if ready_to_drain_osds:
             # start draining those
-            _ = [osd.start_draining() for osd in ok_to_stop_osds]
+            _ = [osd.start_draining() for osd in ready_to_drain_osds]
 
         all_osds = self.all_osds()
 
@@ -748,8 +768,12 @@ class OSDRemovalQueue(object):
 
             # stop and remove daemon
             assert osd.hostname is not None
-            CephadmServe(self.mgr)._remove_daemon(f'osd.{osd.osd_id}', osd.hostname)
-            logger.info(f"Successfully removed {osd} on {osd.hostname}")
+
+            if self.mgr.cache.has_daemon(f'osd.{osd.osd_id}'):
+                CephadmServe(self.mgr)._remove_daemon(f'osd.{osd.osd_id}', osd.hostname)
+                logger.info(f"Successfully removed {osd} on {osd.hostname}")
+            else:
+                logger.info(f"Daemon {osd} on {osd.hostname} was already removed")
 
             if osd.replace:
                 # mark destroyed in osdmap
@@ -763,6 +787,12 @@ class OSDRemovalQueue(object):
                 if not osd.purge():
                     raise orchestrator.OrchestratorError(f"Could not purge {osd}")
                 logger.info(f"Successfully purged {osd} on {osd.hostname}")
+
+            if osd.zap:
+                # throws an exception if the zap fails
+                logger.info(f"Zapping devices for {osd} on {osd.hostname}")
+                osd.do_zap()
+                logger.info(f"Successfully zapped devices for {osd} on {osd.hostname}")
 
             logger.debug(f"Removing {osd} from the queue.")
 
@@ -778,6 +808,18 @@ class OSDRemovalQueue(object):
         with self.lock:
             for osd in self._not_in_cluster():
                 self.osds.remove(osd)
+
+    def _ready_to_drain_osds(self) -> List["OSD"]:
+        """
+        Returns OSDs that are ok to stop and not yet draining. Only returns as many OSDs as can
+        be accomodated by the 'max_osd_draining_count' config value, considering the number of OSDs
+        that are already draining.
+        """
+        draining_limit = max(1, self.mgr.max_osd_draining_count)
+        num_already_draining = len(self.draining_osds())
+        num_to_start_draining = max(0, draining_limit - num_already_draining)
+        stoppable_osds = self.rm_util.find_osd_stop_threshold(self.idling_osds())
+        return [] if stoppable_osds is None else stoppable_osds[:num_to_start_draining]
 
     def _save_to_store(self) -> None:
         osd_queue = [osd.to_json() for osd in self.osds]

@@ -83,6 +83,19 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     /* Initialize the dbstore with cct & dpp */
     DB *db = static_cast<rgw::sal::DBStore *>(store)->getDB();
     db->set_context(cct);
+
+    /* XXX: temporary - create testid user */
+    rgw_user testid_user("", "testid", "");
+    std::unique_ptr<rgw::sal::User> user = store->get_user(testid_user);
+    user->get_info().display_name = "M. Tester";
+    user->get_info().user_email = "tester@ceph.com";
+    RGWAccessKey k1("0555b35654ad1656d804", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==");
+    user->get_info().access_keys["0555b35654ad1656d804"] = k1;
+
+    int r = user->store_user(dpp, null_yield, true);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed inserting testid user in dbstore error r=" << r << dendl;
+    }
     return store;
 #endif
   }
@@ -129,4 +142,28 @@ void StoreManager::close_storage(rgw::sal::Store* store)
   store->finalize();
 
   delete store;
+}
+
+namespace rgw::sal {
+int Object::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
+{
+  if (ofs < 0) {
+    ofs += obj_size;
+    if (ofs < 0)
+      ofs = 0;
+    end = obj_size - 1;
+  } else if (end < 0) {
+    end = obj_size - 1;
+  }
+
+  if (obj_size > 0) {
+    if (ofs >= (off_t)obj_size) {
+      return -ERANGE;
+    }
+    if (end >= (off_t)obj_size) {
+      end = obj_size - 1;
+    }
+  }
+  return 0;
+}
 }

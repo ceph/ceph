@@ -284,6 +284,7 @@ def test_dd_octopus(dd_json):
                   'last_configured']:
             if k in j:
                 j[k] = j[k].rstrip('Z')
+        del j['daemon_name']
         return j
 
     assert dd_json == convert_to_old_style_json(
@@ -579,18 +580,6 @@ def test_dd_octopus(dd_json):
         True
     ),
 
-    (
-        # daemon_id only contains hostname
-        ServiceSpec(
-            service_type='cephadm-exporter',
-        ),
-        DaemonDescription(
-            daemon_type='cephadm-exporter',
-            daemon_id="testhost",
-            hostname="testhost",
-        ),
-        True
-    ),
 ])
 def test_daemon_description_service_name(spec: ServiceSpec,
                                          dd: DaemonDescription,

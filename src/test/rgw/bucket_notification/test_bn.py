@@ -1057,6 +1057,137 @@ def test_ps_s3_notification_push_amqp_on_master():
     conn.delete_bucket(bucket_name)
 
 
+@attr('manual_test')
+def test_ps_s3_notification_push_amqp_idleness_check():
+    """ test pushing amqp s3 notification and checking for connection idleness """
+    return SkipTest("only used in manual testing")
+    hostname = get_ip()
+    conn = connection()
+    zonegroup = 'default'
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name1 = bucket_name + TOPIC_SUFFIX + '_1'
+
+    # start amqp receivers
+    exchange = 'ex1'
+    task1, receiver1 = create_amqp_receiver_thread(exchange, topic_name1)
+    task1.start()
+
+    # create two s3 topic
+    endpoint_address = 'amqp://' + hostname
+    # with acks from broker
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
+    topic_conf1 = PSTopicS3(conn, topic_name1, zonegroup, endpoint_args=endpoint_args)
+    topic_arn1 = topic_conf1.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name+'_1', 'TopicArn': topic_arn1,
+                         'Events': []
+                       }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket (async)
+    number_of_objects = 10
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for creation + amqp notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    # check amqp receiver
+    keys = list(bucket.list())
+    print('total number of objects: ' + str(len(keys)))
+    receiver1.verify_s3_events(keys, exact_match=True)
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for deletion + amqp notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    # check amqp receiver 1 for deletions
+    receiver1.verify_s3_events(keys, exact_match=True, deletions=True)
+
+    print('waiting for 40sec for checking idleness')
+    time.sleep(40)
+
+    os.system("netstat -nnp | grep 5672");
+
+    # do the process of uploading an object and checking for notification again
+    number_of_objects = 10
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for creation + amqp notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    # check amqp receiver
+    keys = list(bucket.list())
+    print('total number of objects: ' + str(len(keys)))
+    receiver1.verify_s3_events(keys, exact_match=True)
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for deletion + amqp notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    # check amqp receiver 1 for deletions
+    receiver1.verify_s3_events(keys, exact_match=True, deletions=True)
+
+    os.system("netstat -nnp | grep 5672");
+
+    # cleanup
+    stop_amqp_receiver(receiver1, task1)
+    s3_notification_conf.del_config()
+    topic_conf1.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+
+
 @attr('kafka_test')
 def test_ps_s3_notification_push_kafka_on_master():
     """ test pushing kafka s3 notification on master """
@@ -1598,6 +1729,77 @@ def test_ps_s3_creation_triggers_on_master_ssl():
 
 
 @attr('amqp_test')
+def test_http_post_object_upload():
+    """ test that uploads object using HTTP POST """
+
+    import boto3
+    from collections import OrderedDict
+    import requests
+
+    hostname = get_ip()
+    zonegroup = 'default'
+    conn = connection()
+
+    endpoint = "http://%s:%d" % (get_config_host(), get_config_port())
+
+    conn1 = boto3.client(service_name='s3',
+                         aws_access_key_id=get_access_key(),
+                         aws_secret_access_key=get_secret_key(),
+                         endpoint_url=endpoint,
+                        )
+
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    key_name = 'foo.txt'
+
+    resp = conn1.generate_presigned_post(Bucket=bucket_name, Key=key_name,)
+
+    url = resp['url']
+
+    bucket = conn1.create_bucket(ACL='public-read-write', Bucket=bucket_name)
+
+    # start amqp receivers
+    exchange = 'ex1'
+    task1, receiver1 = create_amqp_receiver_thread(exchange, topic_name+'_1')
+    task1.start()
+
+    # create s3 topics
+    endpoint_address = 'amqp://' + hostname
+    endpoint_args = 'push-endpoint=' + endpoint_address + '&amqp-exchange=' + exchange + '&amqp-ack-level=broker'
+    topic_conf1 = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
+    topic_arn1 = topic_conf1.set_config()
+
+    # create s3 notifications
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name+'_1', 'TopicArn': topic_arn1,
+                        'Events': ['s3:ObjectCreated:Post']
+                       }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    payload = OrderedDict([("key" , "foo.txt"),("acl" , "public-read"),\
+    ("Content-Type" , "text/plain"),('file', ('bar'))])
+
+    # POST upload
+    r = requests.post(url, files=payload, verify=True)
+    assert_equal(r.status_code, 204)
+
+    # check amqp receiver
+    events = receiver1.get_and_reset_events()
+    assert_equal(len(events), 1)
+
+    # cleanup
+    stop_amqp_receiver(receiver1, task1)
+    s3_notification_conf.del_config()
+    topic_conf1.del_config()
+    conn1.delete_object(Bucket=bucket_name, Key=key_name)
+    # delete the bucket
+    conn1.delete_bucket(Bucket=bucket_name)
+
+
+@attr('amqp_test')
 def test_ps_s3_multipart_on_master():
     """ test multipart object upload on master"""
 
@@ -1767,7 +1969,7 @@ def test_ps_s3_metadata_on_master():
     time.sleep(5)
     # check amqp receiver
     events = receiver.get_and_reset_events()
-    assert_equal(len(events), 3) # PUT, COPY, Multipart start, Multipart End
+    assert_equal(len(events), 3) # PUT, COPY, Multipart Complete
     for event in events:
         assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
 

@@ -764,6 +764,13 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mds_beacon_mon_down_grace
+  type: secs
+  level: advanced
+  desc: tolerance in seconds for missed MDS beacons to monitors
+  fmt_desc: The interval without beacons before Ceph declares an MDS laggy
+    when a monitor is down.
+  default: 1_min
 # skip safety assertions on FSMap (in case of bugs where we want to continue anyway)
 - name: mon_mds_skip_sanity
   type: bool

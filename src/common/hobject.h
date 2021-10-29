@@ -146,6 +146,13 @@ public:
     build_hash_cache();
   }
 
+  // used by Crimson
+  hobject_t(const std::string &key, snapid_t snap, uint32_t reversed_hash,
+            int64_t pool, const std::string& nspace)
+    : oid(key), snap(snap), max(false), pool(pool), nspace(nspace) {
+    set_bitwise_key_u32(reversed_hash);
+  }
+
   /// @return min hobject_t ret s.t. ret.hash == this->hash
   hobject_t get_boundary() const {
     if (is_max())
@@ -397,10 +404,11 @@ public:
       shard_id(shard),
       max(false) {}
 
-  ghobject_t(shard_id_t shard, int64_t pool, uint32_t hash,
+  // used by Crimson
+  ghobject_t(shard_id_t shard, int64_t pool, uint32_t reversed_hash,
              const std::string& nspace, const std::string& oid,
              snapid_t snap, gen_t gen)
-    : hobj(object_t(oid), "", snap, hash, pool, nspace),
+    : hobj(oid, snap, reversed_hash, pool, nspace),
       generation(gen),
       shard_id(shard),
       max(false) {}

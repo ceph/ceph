@@ -16,6 +16,7 @@
 #include <typeinfo>
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/likely.h"
 #include "common/async/blocked_completion.h"
 
 #include "messages/MClientRequestForward.h"
@@ -62,7 +63,7 @@ public:
   }
 
   void send() {
-    assert(ceph_mutex_is_locked(mds->mds_lock));
+    ceph_assert(ceph_mutex_is_locked(mds->mds_lock));
 
     dout(20) << __func__ << dendl;
 
@@ -263,7 +264,7 @@ public:
   void send() {
     // not really a hard requirement here, but lets ensure this in
     // case we change the logic here.
-    assert(ceph_mutex_is_locked(mds->mds_lock));
+    ceph_assert(ceph_mutex_is_locked(mds->mds_lock));
 
     dout(20) << __func__ << dendl;
     f->open_object_section("result");
@@ -1733,8 +1734,12 @@ void MDSRank::replay_start()
 {
   dout(1) << "replay_start" << dendl;
 
-  if (is_standby_replay())
+  if (is_standby_replay()) {
     standby_replaying = true;
+    if (unlikely(g_conf().get_val<bool>("mds_standby_replay_damaged"))) {
+      damaged();
+    }
+  }
 
   // Check if we need to wait for a newer OSD map before starting
   bool const ready = objecter->with_osdmap(
@@ -1925,6 +1930,17 @@ void MDSRank::resolve_done()
   snapclient->sync(new C_MDSInternalNoop);
 }
 
+void MDSRank::apply_blocklist(const std::set<entity_addr_t> &addrs, epoch_t epoch) {
+  auto victims = server->apply_blocklist(addrs);
+  dout(4) << __func__ << ": killed " << victims << " blocklisted sessions ("
+          << addrs.size() << " blocklist entries, "
+          << sessionmap.get_sessions().size() << ")" << dendl;
+  if (victims) {
+    set_osd_epoch_barrier(epoch);
+  }
+}
+
+
 void MDSRank::reconnect_start()
 {
   dout(1) << "reconnect_start" << dendl;
@@ -1942,13 +1958,8 @@ void MDSRank::reconnect_start()
       o.get_blocklist(&blocklist);
       epoch = o.get_epoch();
   });
-  auto killed = server->apply_blocklist(blocklist);
-  dout(4) << "reconnect_start: killed " << killed << " blocklisted sessions ("
-          << blocklist.size() << " blocklist entries, "
-          << sessionmap.get_sessions().size() << ")" << dendl;
-  if (killed) {
-    set_osd_epoch_barrier(epoch);
-  }
+
+  apply_blocklist(blocklist, epoch);
 
   server->reconnect_clients(new C_MDS_VoidFn(this, &MDSRank::reconnect_done));
   finish_contexts(g_ceph_context, waiting_for_reconnect);
@@ -2324,7 +2335,7 @@ void MDSRankDispatcher::handle_mds_map(
 
     if (oldstate == MDSMap::STATE_STANDBY_REPLAY) {
         dout(10) << "Monitor activated us! Deactivating replay loop" << dendl;
-        assert (state == MDSMap::STATE_REPLAY);
+        ceph_assert (state == MDSMap::STATE_REPLAY);
     } else {
       // did i just recover?
       if ((is_active() || is_clientreplay()) &&
@@ -3450,16 +3461,16 @@ void MDSRankDispatcher::handle_osd_map()
 
   purge_queue.update_op_limit(*mdsmap);
 
-  std::set<entity_addr_t> newly_blocklisted;
-  objecter->consume_blocklist_events(&newly_blocklisted);
-  auto epoch = objecter->with_osdmap([](const OSDMap &o){return o.get_epoch();});
-  dout(4) << "handle_osd_map epoch " << epoch << ", "
-          << newly_blocklisted.size() << " new blocklist entries" << dendl;
-  auto victims = server->apply_blocklist(newly_blocklisted);
-  if (victims) {
-    set_osd_epoch_barrier(epoch);
+  // it's ok if replay state is reached via standby-replay, the
+  // reconnect state will journal blocklisted clients (journal
+  // is opened for writing in `replay_done` before moving to
+  // up:resolve).
+  if (!is_replay()) {
+    std::set<entity_addr_t> newly_blocklisted;
+    objecter->consume_blocklist_events(&newly_blocklisted);
+    auto epoch = objecter->with_osdmap([](const OSDMap &o){return o.get_epoch();});
+    apply_blocklist(newly_blocklisted, epoch);
   }
-
 
   // By default the objecter only requests OSDMap updates on use,
   // we would like to always receive the latest maps in order to
@@ -3702,6 +3713,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_session_max_caps_throttle_ratio",
     "mds_cap_acquisition_throttle_retry_request_time",
     "mds_alternate_name_max",
+    "mds_dir_max_entries",
     NULL
   };
   return KEYS;

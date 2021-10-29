@@ -119,15 +119,25 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
 {
   logger().debug("path {}", path);
   return _open_device(path).safe_then([this, &config]() {
-    return read_rbm_header(config.start).safe_then([](auto super) {
+    blk_paddr_t addr = convert_paddr_to_blk_paddr(
+      config.start,
+      config.block_size,
+      config.blocks_per_segment);
+    return read_rbm_header(addr).safe_then([](auto super) {
       logger().debug(" already exists ");
       return mkfs_ertr::now();
     }).handle_error(
       crimson::ct_error::enoent::handle([this, &config] (auto) {
 	super.uuid = uuid_d(); // TODO
 	super.magic = 0xFF; // TODO
-	super.start = config.start;
-	super.end = config.end;
+	super.start = convert_paddr_to_blk_paddr(
+	  config.start,
+	  config.block_size,
+	  config.blocks_per_segment);
+	super.end = convert_paddr_to_blk_paddr(
+	  config.end,
+	  config.block_size,
+	  config.blocks_per_segment);
 	super.block_size = config.block_size;
 	super.size = config.total_size;
 	super.free_block_count = config.total_size/config.block_size - 2;
@@ -137,6 +147,8 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
 	  super.start_alloc_area + super.alloc_area_size;
 	super.crc = 0;
 	super.feature |= RBM_BITMAP_BLOCK_CRC;
+	super.blocks_per_segment = config.blocks_per_segment;
+	super.device_id = config.device_id;
 
 	logger().debug(" super {} ", super);
 	// write super block
@@ -239,7 +251,7 @@ NVMeManager::find_block_ret NVMeManager::find_free_block(Transaction &t, size_t 
 }
 
 /* TODO : block allocator */
-NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
+NVMeManager::allocate_ret NVMeManager::alloc_extent(
     Transaction &t, size_t size)
 {
 
@@ -253,20 +265,33 @@ NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
    *
    */
   return find_free_block(t, size
-      ).safe_then([] (auto alloc_extent) mutable
-	-> allocate_ertr::future<> {
+      ).safe_then([this, &t] (auto alloc_extent) mutable
+	-> allocate_ertr::future<paddr_t> {
 	logger().debug("after find_free_block: allocated {}", alloc_extent);
 	if (!alloc_extent.empty()) {
-	  rbm_alloc_delta_t alloc_info {
-	    extent_types_t::RBM_ALLOC_INFO,
-	    alloc_extent,
-	    rbm_alloc_delta_t::op_types_t::SET
-	  };
-	  // TODO: add alloc info to delta
+	  rbm_alloc_delta_t alloc_info;
+	  for (auto p : alloc_extent) {
+	    paddr_t paddr = convert_blk_paddr_to_paddr(
+	      p.first * super.block_size,
+	      super.block_size,
+	      super.blocks_per_segment,
+	      super.device_id);
+	    size_t len = p.second * super.block_size;
+	    alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
+	    alloc_info.op = rbm_alloc_delta_t::op_types_t::SET;
+	  }
+	  t.add_rbm_alloc_info_blocks(alloc_info);
 	} else {
 	  return crimson::ct_error::enospc::make();
 	}
-	return allocate_ertr::now();
+	paddr_t paddr = convert_blk_paddr_to_paddr(
+	  alloc_extent.range_start() * super.block_size,
+	  super.block_size,
+	  super.blocks_per_segment,
+	  super.device_id);
+	return allocate_ret(
+	  allocate_ertr::ready_future_marker{},
+	  paddr);
 	}
       ).handle_error(
 	allocate_ertr::pass_further{},
@@ -276,27 +301,19 @@ NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
 	);
 }
 
-NVMeManager::free_block_ertr::future<> NVMeManager::free_extent(
-    Transaction &t, blk_paddr_t from, size_t len)
-{
-  return free_block_ertr::now();
-}
-
-NVMeManager::free_block_ertr::future<> NVMeManager::add_free_extent(
+void NVMeManager::add_free_extent(
     std::vector<rbm_alloc_delta_t>& v, blk_paddr_t from, size_t len)
 {
   ceph_assert(!(len % super.block_size));
-  blk_id_t blk_id_start = from / super.block_size;
-
-  interval_set<blk_id_t> free_extent;
-  free_extent.insert(blk_id_start, len / super.block_size);
-  rbm_alloc_delta_t alloc_info {
-    extent_types_t::RBM_ALLOC_INFO,
-    free_extent,
-    rbm_alloc_delta_t::op_types_t::CLEAR
-  };
+  paddr_t paddr = convert_blk_paddr_to_paddr(
+    from,
+    super.block_size,
+    super.blocks_per_segment,
+    super.device_id);
+  rbm_alloc_delta_t alloc_info;
+  alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
+  alloc_info.op = rbm_alloc_delta_t::op_types_t::CLEAR;
   v.push_back(alloc_info);
-  return free_block_ertr::now();
 }
 
 NVMeManager::write_ertr::future<> NVMeManager::rbm_sync_block_bitmap_by_range(
@@ -427,31 +444,40 @@ NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
     [&, this] (auto &alloc_blocks) mutable {
     return crimson::do_for_each(alloc_blocks,
       [this](auto &alloc) {
-      return crimson::do_for_each(alloc.alloc_blk_ids,
+      return crimson::do_for_each(alloc.alloc_blk_ranges,
         [this, &alloc] (auto &range) -> write_ertr::future<> {
         logger().debug("range {} ~ {}", range.first, range.second);
 	bitmap_op_types_t op =
 	  (alloc.op == rbm_alloc_delta_t::op_types_t::SET) ?
 	  bitmap_op_types_t::ALL_SET :
 	  bitmap_op_types_t::ALL_CLEAR;
-	return rbm_sync_block_bitmap_by_range(
+	blk_paddr_t addr = convert_paddr_to_blk_paddr(
 	  range.first,
-	  range.first + range.second - 1,
+	  super.block_size,
+	  super.blocks_per_segment);
+	blk_id_t start = addr / super.block_size;
+	blk_id_t end = start +
+	  (round_up_to(range.second, super.block_size)) / super.block_size
+	   - 1;
+	return rbm_sync_block_bitmap_by_range(
+	  start,
+	  end,
 	  op);
       });
     }).safe_then([this, &alloc_blocks]() mutable {
       int alloc_block_count = 0;
       for (const auto& b : alloc_blocks) {
-	for (interval_set<blk_id_t>::const_iterator r = b.alloc_blk_ids.begin();
-	     r != b.alloc_blk_ids.end(); ++r) {
+	for (auto r : b.alloc_blk_ranges) {
 	  if (b.op == rbm_alloc_delta_t::op_types_t::SET) {
-	    alloc_block_count += r.get_len();
+	    alloc_block_count +=
+	      round_up_to(r.second, super.block_size) / super.block_size;
 	    logger().debug(" complete alloc block: start {} len {} ",
-			   r.get_start(), r.get_len());
+			   r.first, r.second);
 	  } else {
-	    alloc_block_count -= r.get_len();
-	    logger().debug(" complete free block:  start {} len {} ",
-			   r.get_start(), r.get_len());
+	    alloc_block_count -=
+	      round_up_to(r.second, super.block_size) / super.block_size;
+	    logger().debug(" complete alloc block: start {} len {} ",
+			   r.first, r.second);
 	  }
 	}
       }
@@ -464,9 +490,14 @@ NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
 }
 
 NVMeManager::open_ertr::future<> NVMeManager::open(
-    const std::string &path, blk_paddr_t addr)
+    const std::string &path, paddr_t paddr)
 {
   logger().debug("open: path{}", path);
+
+  blk_paddr_t addr = convert_paddr_to_blk_paddr(
+    paddr,
+    super.block_size,
+    super.blocks_per_segment);
   return _open_device(path
       ).safe_then([this, addr]() {
       return read_rbm_header(addr).safe_then([&](auto s)

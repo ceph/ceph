@@ -10,6 +10,7 @@
 #include "crimson/osd/pg.h"
 #include "crimson/osd/osd.h"
 #include "common/Formatter.h"
+#include "crimson/osd/osd_operation_sequencer.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_connection_priv.h"
 
@@ -36,7 +37,7 @@ ClientRequest::~ClientRequest()
 
 void ClientRequest::print(std::ostream &lhs) const
 {
-  lhs << "m=[" << *m << "], prev_op_id=" << prev_op_id;
+  lhs << "m=[" << *m << "]";
 }
 
 void ClientRequest::dump_detail(Formatter *f) const
@@ -53,6 +54,12 @@ ClientRequest::PGPipeline &ClientRequest::pp(PG &pg)
   return pg.client_request_pg_pipeline;
 }
 
+bool ClientRequest::same_session_and_pg(const ClientRequest& other_op) const
+{
+  return &get_osd_priv(conn.get()) == &get_osd_priv(other_op.conn.get()) &&
+         m->get_spg() == other_op.m->get_spg();
+}
+
 bool ClientRequest::is_pg_op() const
 {
   return std::any_of(
@@ -60,12 +67,10 @@ bool ClientRequest::is_pg_op() const
     [](auto& op) { return ceph_osd_op_type_pg(op.op.op); });
 }
 
-void ClientRequest::may_set_prev_op()
+template <typename FuncT>
+ClientRequest::interruptible_future<> ClientRequest::with_sequencer(FuncT&& func)
 {
-  // set prev_op_id if it's not set yet
-  if (__builtin_expect(!prev_op_id.has_value(), true)) {
-    prev_op_id.emplace(sequencer.get_last_issued());
-  }
+  return sequencer.start_op(*this, handle, osd.get_shard_services().registry, std::forward<FuncT>(func));
 }
 
 seastar::future<> ClientRequest::start()
@@ -90,39 +95,42 @@ seastar::future<> ClientRequest::start()
           if (m->finish_decode()) {
             m->clear_payload();
           }
-          const bool has_pg_op = is_pg_op();
-          auto interruptible_do_op = interruptor::wrap_function([=] {
+          return with_sequencer(interruptor::wrap_function([pgref, this] {
             PG &pg = *pgref;
             if (pg.can_discard_op(*m)) {
-              return interruptible_future<>(
-                osd.send_incremental_map(conn, m->get_map_epoch()));
+              return osd.send_incremental_map(
+                conn, m->get_map_epoch()).then([this] {
+                  sequencer.finish_op_out_of_order(*this, osd.get_shard_services().registry);
+                  return interruptor::now();
+              });
             }
-            return with_blocking_future_interruptible<IOInterruptCondition>(
+            return with_blocking_future_interruptible<interruptor::condition>(
               handle.enter(pp(pg).await_map)
             ).then_interruptible([this, &pg] {
-              return with_blocking_future_interruptible<IOInterruptCondition>(
+              return with_blocking_future_interruptible<interruptor::condition>(
                 pg.osdmap_gate.wait_for_map(m->get_min_epoch()));
             }).then_interruptible([this, &pg](auto map) {
-              return with_blocking_future_interruptible<IOInterruptCondition>(
+              return with_blocking_future_interruptible<interruptor::condition>(
                 handle.enter(pp(pg).wait_for_active));
             }).then_interruptible([this, &pg]() {
-              return with_blocking_future_interruptible<IOInterruptCondition>(
+              return with_blocking_future_interruptible<interruptor::condition>(
                 pg.wait_for_active_blocker.wait());
-            }).then_interruptible([this,
-                                   has_pg_op,
-                                   pgref=std::move(pgref)]() mutable {
-              return (has_pg_op ?
-                      process_pg_op(pgref) :
-                      process_op(pgref));
+            }).then_interruptible([this, pgref=std::move(pgref)]() mutable {
+              if (is_pg_op()) {
+                return process_pg_op(pgref).then_interruptible([this] {
+                  sequencer.finish_op_out_of_order(*this, osd.get_shard_services().registry);
+                });
+              } else {
+                return process_op(pgref).then_interruptible([this] {
+                  // NOTE: this assumes process_op() handles everything
+                  // in-order which I'm not sure about.
+                  sequencer.finish_op_in_order(*this);
+                });
+              }
             });
+          })).then_interruptible([pgref] {
+            return seastar::stop_iteration::yes;
           });
-          // keep the ordering of non-pg ops when across pg internvals
-          return (has_pg_op ?
-                  interruptible_do_op() :
-                  with_sequencer(std::move(interruptible_do_op)))
-            .then_interruptible([pgref]() {
-              return seastar::stop_iteration::yes;
-            });
 	}, [this, pgref](std::exception_ptr eptr) {
           if (should_abort_request(*this, std::move(eptr))) {
             sequencer.abort();
@@ -149,7 +157,7 @@ ClientRequest::process_pg_op(
 ClientRequest::interruptible_future<>
 ClientRequest::process_op(Ref<PG> &pg)
 {
-  return with_blocking_future_interruptible<IOInterruptCondition>(
+  return with_blocking_future_interruptible<interruptor::condition>(
       handle.enter(pp(*pg).recover_missing))
   .then_interruptible(
     [this, pg]() mutable {
@@ -164,14 +172,14 @@ ClientRequest::process_op(Ref<PG> &pg)
           CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
         return conn->send(std::move(reply));
       } else {
-        return with_blocking_future_interruptible<IOInterruptCondition>(
+        return with_blocking_future_interruptible<interruptor::condition>(
             handle.enter(pp(*pg).get_obc)).then_interruptible(
           [this, pg]() mutable -> PG::load_obc_iertr::future<> {
           logger().debug("{}: got obc lock", *this);
           op_info.set_from_op(&*m, *pg->get_osdmap());
           return pg->with_locked_obc(m->get_hobj(), op_info,
                                      [this, pg](auto obc) mutable {
-            return with_blocking_future_interruptible<IOInterruptCondition>(
+            return with_blocking_future_interruptible<interruptor::condition>(
               handle.enter(pp(*pg).process)
             ).then_interruptible([this, pg, obc]() mutable {
               return do_process(pg, obc);
@@ -209,13 +217,13 @@ ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
     [this, pg](auto submitted, auto all_completed) mutable {
     return submitted.then_interruptible(
       [this, pg] {
-        return with_blocking_future_interruptible<IOInterruptCondition>(
+        return with_blocking_future_interruptible<interruptor::condition>(
             handle.enter(pp(*pg).wait_repop));
     }).then_interruptible(
       [this, pg, all_completed=std::move(all_completed)]() mutable {
       return all_completed.safe_then_interruptible(
         [this, pg](MURef<MOSDOpReply> reply) {
-        return with_blocking_future_interruptible<IOInterruptCondition>(
+        return with_blocking_future_interruptible<interruptor::condition>(
             handle.enter(pp(*pg).send_reply)).then_interruptible(
               [this, reply=std::move(reply)]() mutable{
               return conn->send(std::move(reply));

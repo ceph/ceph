@@ -49,7 +49,7 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
 
   char *s = (char *)ptr, *end = (char *)ptr + len;
   char *p = line;
-  ldpp_dout(this, 10) << "receive_http_header" << dendl;
+  ldpp_dout(this, 30) << "receive_http_header" << dendl;
 
   while (s != end) {
     if (*s == '\r') {
@@ -58,7 +58,7 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
     }
     if (*s == '\n') {
       *p = '\0';
-      ldpp_dout(this, 10) << "received header:" << line << dendl;
+      ldpp_dout(this, 30) << "received header:" << line << dendl;
       // TODO: fill whatever data required here
       char *l = line;
       char *tok = strsep(&l, " \t:");

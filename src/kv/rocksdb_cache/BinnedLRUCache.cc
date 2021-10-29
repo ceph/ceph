@@ -151,13 +151,20 @@ void BinnedLRUCacheShard::EraseUnRefEntries() {
   }
 }
 
-void BinnedLRUCacheShard::ApplyToAllCacheEntries(void (*callback)(void*, size_t),
-                                           bool thread_safe) {
+void BinnedLRUCacheShard::ApplyToAllCacheEntries(
+  const std::function<void(const rocksdb::Slice& key,
+                           void* value,
+                           size_t charge,
+                           DeleterFn)>& callback,
+  bool thread_safe)
+{
   if (thread_safe) {
     mutex_.lock();
   }
   table_.ApplyToAllCacheEntries(
-      [callback](BinnedLRUHandle* h) { callback(h->value, h->charge); });
+    [callback](BinnedLRUHandle* h) {
+      callback(h->key(), h->value, h->charge, h->deleter);
+    });
   if (thread_safe) {
     mutex_.unlock();
   }
@@ -345,7 +352,7 @@ bool BinnedLRUCacheShard::Release(rocksdb::Cache::Handle* handle, bool force_era
 
 rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t hash, void* value,
                              size_t charge,
-                             void (*deleter)(const rocksdb::Slice& key, void* value),
+                             DeleterFn deleter,
                              rocksdb::Cache::Handle** handle, rocksdb::Cache::Priority priority) {
   auto e = new BinnedLRUHandle();
   rocksdb::Status s;
@@ -464,6 +471,12 @@ std::string BinnedLRUCacheShard::GetPrintableOptions() const {
   return std::string(buffer);
 }
 
+DeleterFn BinnedLRUCacheShard::GetDeleter(rocksdb::Cache::Handle* h) const
+{
+  auto* handle = reinterpret_cast<BinnedLRUHandle*>(h);
+  return handle->deleter;
+}
+
 BinnedLRUCache::BinnedLRUCache(CephContext *c, 
                                size_t capacity, 
                                int num_shard_bits,
@@ -518,6 +531,13 @@ void BinnedLRUCache::DisownData() {
   shards_ = nullptr;
 #endif  // !__SANITIZE_ADDRESS__
 }
+
+#if (ROCKSDB_MAJOR >= 6 && ROCKSDB_MINOR >= 22)
+DeleterFn BinnedLRUCache::GetDeleter(Handle* handle) const
+{
+  return reinterpret_cast<const BinnedLRUHandle*>(handle)->deleter;
+}
+#endif
 
 size_t BinnedLRUCache::TEST_GetLRUSize() {
   size_t lru_size_of_all_shards = 0;

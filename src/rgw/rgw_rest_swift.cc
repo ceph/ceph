@@ -977,6 +977,8 @@ int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
     }
 
     MD5 etag_sum;
+    // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+    etag_sum.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
     uint64_t total_size = 0;
     for (auto& entry : slo_info->entries) {
       etag_sum.Update((const unsigned char *)entry.etag.c_str(),
@@ -1382,7 +1384,6 @@ int RGWCopyObj_ObjStore_SWIFT::get_params(optional_yield y)
 
   src_tenant_name = s->src_tenant_name;
   src_bucket_name = s->src_bucket_name;
-  src_object = s->src_object->clone();
   dest_tenant_name = s->bucket_tenant;
   dest_bucket_name = s->bucket_name;
   dest_obj_name = s->object->get_name();
@@ -1429,7 +1430,7 @@ void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
 {
   /* Dump X-Copied-From. */
   dump_header(s, "X-Copied-From", url_encode(src_bucket->get_name()) +
-              "/" + url_encode(src_object->get_name()));
+              "/" + url_encode(s->src_object->get_name()));
 
   /* Dump X-Copied-From-Account. */
   /* XXX tenant */
@@ -2366,6 +2367,9 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
     }
   } get_errpage_op(store, handler, s, http_ret);
 
+  /* This is okay.  It's an error, so nothing will run after this, and it can be
+   * called by abort_early(), which can be called before s->object or s->bucket
+   * are set up. */
   if (!rgw::sal::Bucket::empty(s->bucket.get())) {
     s->object = s->bucket->get_object(rgw_obj_key(std::to_string(http_ret) + error_doc));
   } else {

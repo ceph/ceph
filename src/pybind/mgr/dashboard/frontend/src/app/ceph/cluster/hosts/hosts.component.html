@@ -5,14 +5,16 @@
     <a ngbNavLink
        i18n>Hosts List</a>
     <ng-template ngbNavContent>
-      <cd-table [data]="hosts"
+      <cd-table #table
+                [data]="hosts"
                 [columns]="columns"
                 columnMode="flex"
                 (fetchData)="getHosts($event)"
                 selectionType="single"
-                [hasDetails]="true"
+                [hasDetails]="hasTableDetails"
                 (setExpandedRow)="setExpandedRow($event)"
-                (updateSelection)="updateSelection($event)">
+                (updateSelection)="updateSelection($event)"
+                [toolHeader]="!hideToolHeader">
         <div class="table-actions btn-toolbar">
           <cd-table-actions [permission]="permissions.hosts"
                             [selection]="selection"
@@ -66,3 +68,16 @@
   <ng-container i18n
                 *ngIf="showSubmit">Are you sure you want to continue?</ng-container>
 </ng-template>
+
+<ng-template #orchTmpl>
+  <span i18n
+        i18n-ngbTooltip
+        ngbTooltip="Data will be available only if Orchestrator is available.">Unavailable</span>
+</ng-template>
+
+<ng-template #flashTmpl>
+  <span i18n
+        i18n-ngbTooltip
+        ngbTooltip="SSD, NVMEs">Flash</span>
+</ng-template>
+<router-outlet name="modal"></router-outlet>

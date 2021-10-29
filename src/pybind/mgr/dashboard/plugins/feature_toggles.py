@@ -8,7 +8,7 @@ from mgr_module import CLICommand, Option
 
 from ..controllers.cephfs import CephFS
 from ..controllers.iscsi import Iscsi, IscsiTarget
-from ..controllers.nfsganesha import NFSGanesha, NFSGaneshaExports, NFSGaneshaService
+from ..controllers.nfsganesha import NFSGanesha, NFSGaneshaExports
 from ..controllers.rbd import Rbd, RbdSnapshot, RbdTrash
 from ..controllers.rbd_mirroring import RbdMirroringPoolMode, \
     RbdMirroringPoolPeer, RbdMirroringSummary
@@ -36,7 +36,7 @@ Feature2Controller = {
     Features.ISCSI: [Iscsi, IscsiTarget],
     Features.CEPHFS: [CephFS],
     Features.RGW: [Rgw, RgwDaemon, RgwBucket, RgwUser],
-    Features.NFS: [NFSGanesha, NFSGaneshaService, NFSGaneshaExports],
+    Features.NFS: [NFSGanesha, NFSGaneshaExports],
 }
 
 
@@ -132,7 +132,7 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
 
     @PM.add_hook
     def get_controllers(self):
-        from ..controllers import ApiController, ControllerDoc, EndpointDoc, RESTController
+        from ..controllers import APIDoc, APIRouter, EndpointDoc, RESTController
 
         FEATURES_SCHEMA = {
             "rbd": (bool, ''),
@@ -143,8 +143,8 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             "nfs": (bool, '')
         }
 
-        @ApiController('/feature_toggles')
-        @ControllerDoc("Manage Features API", "FeatureTogglesEndpoint")
+        @APIRouter('/feature_toggles')
+        @APIDoc("Manage Features API", "FeatureTogglesEndpoint")
         class FeatureTogglesEndpoint(RESTController):
             @EndpointDoc("Get List Of Features",
                          responses={200: FEATURES_SCHEMA})

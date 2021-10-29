@@ -318,18 +318,18 @@ def rook_cluster(ctx, config):
     ctx.rook[cluster_name].num_osds = num_devs
 
     # config
-    config = build_initial_config(ctx, config)
-    config_fp = BytesIO()
-    config.write(config_fp)
-    log.info(f'Config:\n{config_fp.getvalue()}')
-    _kubectl(ctx, config, ['create', '-f', '-'], stdin=yaml.dump({
+    ceph_conf = build_initial_config(ctx, config)
+    ceph_conf_fp = BytesIO()
+    ceph_conf.write(ceph_conf_fp)
+    log.info(f'Config:\n{ceph_conf_fp.getvalue()}')
+    _kubectl(ctx, ceph_conf, ['create', '-f', '-'], stdin=yaml.dump({
         'apiVersion': 'v1',
         'kind': 'ConfigMap',
         'metadata': {
             'name': 'rook-config-override',
             'namespace': 'rook-ceph'},
         'data': {
-            'config': config_fp.getvalue()
+            'config': ceph_conf_fp.getvalue()
         }
     }))
 
@@ -646,4 +646,21 @@ def task(ctx, config):
             yield
 
         finally:
+            to_remove = []
+            ret = _shell(ctx, config, ['ceph', 'orch', 'ls', '-f', 'json'], stdout=BytesIO())
+            if ret.exitstatus == 0:
+                r = json.loads(ret.stdout.getvalue().decode('utf-8'))
+                for service in r:
+                    if service['service_type'] in ['rgw', 'mds', 'nfs']:
+                        _shell(ctx, config, ['ceph', 'orch', 'rm', service['service_name']])
+                        to_remove.append(service['service_name'])
+                with safe_while(sleep=10, tries=90, action="waiting for service removal") as proceed:
+                    while proceed():
+                        ret = _shell(ctx, config, ['ceph', 'orch', 'ls', '-f', 'json'], stdout=BytesIO())
+                        if ret.exitstatus == 0:
+                            r = json.loads(ret.stdout.getvalue().decode('utf-8'))
+                            still_up = [service['service_name'] for service in r]
+                            matches = set(still_up).intersection(to_remove)
+                            if not matches:
+                                break
             log.info('Tearing down rook')

@@ -2,26 +2,32 @@
 
 import unittest
 
-from ..controllers import ApiController, RESTController
+from ..controllers._api_router import APIRouter
+from ..controllers._rest_controller import RESTController
+from ..controllers._version import APIVersion
 from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
-@ApiController("/vtest", secure=False)
+@APIRouter("/vtest", secure=False)
 class VTest(RESTController):
     RESOURCE_ID = "vid"
 
-    @RESTController.MethodMap(version="0.1")
+    @RESTController.MethodMap(version=APIVersion(0, 1))
     def list(self):
         return {'version': ""}
 
     def get(self):
         return {'version': ""}
 
-    @RESTController.Collection('GET', version="1.0")
+    @RESTController.Collection('GET', version=APIVersion(1, 0))
     def vmethod(self):
         return {'version': '1.0'}
 
-    @RESTController.Collection('GET', version="2.0")
+    @RESTController.Collection('GET', version=APIVersion(1, 1))
+    def vmethodv1_1(self):
+        return {'version': '1.1'}
+
+    @RESTController.Collection('GET', version=APIVersion(2, 0))
     def vmethodv2(self):
         return {'version': '2.0'}
 
@@ -33,27 +39,40 @@ class RESTVersioningTest(ControllerTestCase, unittest.TestCase):
 
     def test_list(self):
         for (version, expected_status) in [
-                ("0.1", 200),
-                ("2.0", 415)
+                ((0, 1), 200),
+                ((2, 0), 415)
         ]:
             with self.subTest(version=version):
-                self._get('/test/api/vtest', version=version)
+                self._get('/test/api/vtest', version=APIVersion._make(version))
                 self.assertStatus(expected_status)
 
     def test_v1(self):
         for (version, expected_status) in [
-                ("1.0", 200),
-                ("2.0", 415)
+                ((1, 0), 200),
+                ((2, 0), 415)
         ]:
             with self.subTest(version=version):
-                self._get('/test/api/vtest/vmethod', version=version)
+                self._get('/test/api/vtest/vmethod',
+                          version=APIVersion._make(version))
                 self.assertStatus(expected_status)
 
     def test_v2(self):
         for (version, expected_status) in [
-                ("2.0", 200),
-                ("1.0", 415)
+                ((2, 0), 200),
+                ((1, 0), 415)
         ]:
             with self.subTest(version=version):
-                self._get('/test/api/vtest/vmethodv2', version=version)
+                self._get('/test/api/vtest/vmethodv2',
+                          version=APIVersion._make(version))
+                self.assertStatus(expected_status)
+
+    def test_backward_compatibility(self):
+        for (version, expected_status) in [
+                ((1, 1), 200),
+                ((1, 0), 200),
+                ((2, 0), 415)
+        ]:
+            with self.subTest(version=version):
+                self._get('/test/api/vtest/vmethodv1_1',
+                          version=APIVersion._make(version))
                 self.assertStatus(expected_status)

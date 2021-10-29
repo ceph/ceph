@@ -1196,6 +1196,15 @@ struct error_code;
 	++n;
       }
     }
+
+    struct iovec_t {
+      uint64_t offset;
+      uint64_t length;
+      std::vector<iovec> iov;
+    };
+    using iov_vec_t = std::vector<iovec_t>;
+    iov_vec_t prepare_iovs() const;
+
     uint32_t crc32c(uint32_t crc) const;
     void invalidate_crc();
 

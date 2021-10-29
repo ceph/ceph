@@ -3536,11 +3536,16 @@ TEST(LibCephFS, LookupMdsPrivateInos) {
       ASSERT_EQ(-ESTALE, ceph_ll_lookup_inode(cmount, ino, &inode));
     } else if (ino == CEPH_INO_ROOT || ino == CEPH_INO_GLOBAL_SNAPREALM) {
       ASSERT_EQ(0, ceph_ll_lookup_inode(cmount, ino, &inode));
+      ceph_ll_put(cmount, inode);
     } else if (ino == CEPH_INO_LOST_AND_FOUND) {
       // the ino 3 will only exists after the recovery tool ran, so
       // it may return -ESTALE with a fresh fs cluster
       int r = ceph_ll_lookup_inode(cmount, ino, &inode);
-      ASSERT_TRUE(r == -ESTALE || r == 0);
+      if (r == 0) {
+        ceph_ll_put(cmount, inode);
+      } else {
+        ASSERT_TRUE(r == -ESTALE);
+      }
     } else {
       // currently the ino 0 and 4~99 is not useded yet.
       ASSERT_EQ(-ESTALE, ceph_ll_lookup_inode(cmount, ino, &inode));

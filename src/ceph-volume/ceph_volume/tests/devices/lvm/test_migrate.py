@@ -992,13 +992,17 @@ class TestNew(object):
 
 class TestMigrate(object):
 
+    def test_invalid_osd_id_passed(self, is_root):
+        with pytest.raises(SystemExit):
+            migrate.Migrate(argv=['--osd-fsid', '123', '--from', 'data', '--target', 'foo', '--osd-id', 'foo']).main()
+
     mock_volume = None
     def mock_get_lv_by_fullname(self, *args, **kwargs):
         return self.mock_volume
 
     mock_process_input = []
     def mock_process(self, *args, **kwargs):
-        self.mock_process_input.append(args[0]);
+        self.mock_process_input.append(args[0])
         return ('', '', 0)
 
     mock_single_volumes = {}

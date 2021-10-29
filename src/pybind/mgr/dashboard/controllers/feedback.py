@@ -5,19 +5,18 @@ from ..model.feedback import Feedback
 from ..rest_client import RequestException
 from ..security import Scope
 from ..services import feedback
-from . import ApiController, ControllerDoc, RESTController
+from . import APIDoc, APIRouter, RESTController
 
 
-@ApiController('/feedback', Scope.CONFIG_OPT)
-@ControllerDoc("Feedback API", "Report")
+@APIRouter('/feedback', Scope.CONFIG_OPT)
+@APIDoc("Feedback API", "Report")
 class FeedbackController(RESTController):
     issueAPIkey = None
 
     def __init__(self):  # pragma: no cover
-        super(FeedbackController, self).__init__()
+        super().__init__()
         self.tracker_client = feedback.CephTrackerClient()
 
-    @RESTController.MethodMap(version='0.1')
     def create(self, project, tracker, subject, description):
         """
         Create an issue.
@@ -44,7 +43,6 @@ class FeedbackController(RESTController):
                                      http_status_code=401,
                                      component='feedback')
 
-    @RESTController.MethodMap(version='0.1')
     def get(self, issue_number):
         """
         Fetch issue details.

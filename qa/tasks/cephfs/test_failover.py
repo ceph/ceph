@@ -306,8 +306,7 @@ class TestFailover(CephFSTestCase):
         in thrashing tests.
         """
 
-        # Need all my standbys up as well as the active daemons
-        self.wait_for_daemon_start()
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
 
         (original_active, ) = self.fs.get_active_names()
         original_standbys = self.mds_cluster.get_standby_daemons()
@@ -315,18 +314,14 @@ class TestFailover(CephFSTestCase):
         # Kill the rank 0 daemon's physical process
         self.fs.mds_stop(original_active)
 
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
-
         # Wait until the monitor promotes his replacement
         def promoted():
-            active = self.fs.get_active_names()
-            return active and active[0] in original_standbys
+            ranks = list(self.fs.get_ranks())
+            return len(ranks) > 0 and ranks[0]['name'] in original_standbys
 
         log.info("Waiting for promotion of one of the original standbys {0}".format(
             original_standbys))
-        self.wait_until_true(
-            promoted,
-            timeout=grace*2)
+        self.wait_until_true(promoted, timeout=grace*2)
 
         # Start the original rank 0 daemon up again, see that he becomes a standby
         self.fs.mds_restart(original_active)
@@ -513,6 +508,22 @@ class TestStandbyReplay(CephFSTestCase):
         self.fs.set_allow_standby_replay(True)
         time.sleep(30)
         self._confirm_single_replay()
+
+    def test_standby_replay_damaged(self):
+        """
+        That a standby-replay daemon can cause the rank to go damaged correctly.
+        """
+
+        self._confirm_no_replay()
+        self.config_set("mds", "mds_standby_replay_damaged", True)
+        self.fs.set_allow_standby_replay(True)
+        self.wait_until_true(
+            lambda: len(self.fs.get_damaged()) > 0,
+            timeout=30
+        )
+        status = self.fs.status()
+        self.assertListEqual([], list(self.fs.get_ranks(status=status)))
+        self.assertListEqual([0], self.fs.get_damaged(status=status))
 
     def test_standby_replay_disable(self):
         """

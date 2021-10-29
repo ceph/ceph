@@ -262,6 +262,7 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   cap_acquisition_throttle = g_conf().get_val<uint64_t>("mds_session_cap_acquisition_throttle");
   max_caps_throttle_ratio = g_conf().get_val<double>("mds_session_max_caps_throttle_ratio");
   caps_throttle_retry_request_timeout = g_conf().get_val<double>("mds_cap_acquisition_throttle_retry_request_timeout");
+  dir_max_entries = g_conf().get_val<uint64_t>("mds_dir_max_entries");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
 
@@ -406,10 +407,10 @@ Session* Server::find_session_by_uuid(std::string_view uuid)
     if (!session) {
       session = it.second;
     } else if (!session->reclaiming_from) {
-      assert(it.second->reclaiming_from == session);
+      ceph_assert(it.second->reclaiming_from == session);
       session = it.second;
     } else {
-      assert(session->reclaiming_from == it.second);
+      ceph_assert(session->reclaiming_from == it.second);
     }
   }
   return session;
@@ -447,8 +448,8 @@ void Server::reclaim_session(Session *session, const cref_t<MClientReclaim> &m)
       mds->send_message_client(reply, session);
     }
 
-    assert(!target->reclaiming_from);
-    assert(!session->reclaiming_from);
+    ceph_assert(!target->reclaiming_from);
+    ceph_assert(!session->reclaiming_from);
     session->reclaiming_from = target;
     reply->set_addrs(entity_addrvec_t(target->info.inst.addr));
   }
@@ -471,7 +472,7 @@ void Server::finish_reclaim_session(Session *session, const ref_t<MClientReclaim
     if (reply) {
       int64_t session_id = session->get_client().v;
       send_reply = new LambdaContext([this, session_id, reply](int r) {
-	    assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
+	    ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(session_id));
 	    if (!session) {
 	      return;
@@ -503,7 +504,7 @@ void Server::handle_client_reclaim(const cref_t<MClientReclaim> &m)
 {
   Session *session = mds->get_session(m);
   dout(3) << __func__ <<  " " << *m << " from " << m->get_source() << dendl;
-  assert(m->get_source().is_client()); // should _not_ come from an mds!
+  ceph_assert(m->get_source().is_client()); // should _not_ come from an mds!
 
   if (!session) {
     dout(0) << " ignoring sessionless msg " << *m << dendl;
@@ -615,8 +616,8 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
         dout(2) << css->strv() << dendl;
       };
 
-      auto send_reject_message = [this, &session, &log_session_status](std::string_view err_str) {
-	auto m = make_message<MClientSession>(CEPH_SESSION_REJECT);
+      auto send_reject_message = [this, &session, &log_session_status](std::string_view err_str, unsigned flags=0) {
+	auto m = make_message<MClientSession>(CEPH_SESSION_REJECT, 0, flags);
 	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
 	  m->metadata["error_string"] = err_str;
 	mds->send_message_client(m, session);
@@ -635,7 +636,9 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	// has been blocklisted.  If mounted with recover_session=clean
 	// (since 5.4), it tries to automatically recover itself from
 	// blocklisting.
-	send_reject_message("blocklisted (blacklisted)");
+        unsigned flags = 0;
+	flags |= MClientSession::SESSION_BLOCKLISTED;
+	send_reject_message("blocklisted (blacklisted)", flags);
 	session->clear();
 	break;
       }
@@ -1164,7 +1167,7 @@ void Server::find_idle_sessions()
   const auto sessions_p2 = mds->sessionmap.by_state.find(Session::STATE_STALE);
   if (sessions_p2 != mds->sessionmap.by_state.end() && !sessions_p2->second->empty()) {
     for (auto session : *(sessions_p2->second)) {
-      assert(session->is_stale());
+      ceph_assert(session->is_stale());
       auto last_cap_renew_span = std::chrono::duration<double>(now - session->last_cap_renew).count();
       if (last_cap_renew_span < cutoff) {
 	dout(20) << "oldest stale session is " << session->info.inst
@@ -1254,6 +1257,11 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
   }
   if (changed.count("mds_alternate_name_max")) {
     alternate_name_max  = g_conf().get_val<Option::size_t>("mds_alternate_name_max");
+  }
+  if (changed.count("mds_dir_max_entries")) {
+    dir_max_entries = g_conf().get_val<uint64_t>("mds_dir_max_entries");
+    dout(20) << __func__ << " max entries per directory changed to "
+            << dir_max_entries << dendl;
   }
 }
 
@@ -3194,17 +3202,37 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
  * check whether fragment has reached maximum size
  *
  */
-bool Server::check_fragment_space(MDRequestRef &mdr, CDir *in)
+bool Server::check_fragment_space(MDRequestRef &mdr, CDir *dir)
 {
-  const auto size = in->get_frag_size();
-  if (size >= g_conf()->mds_bal_fragment_size_max) {
-    dout(10) << "fragment " << *in << " size exceeds " << g_conf()->mds_bal_fragment_size_max << " (CEPHFS_ENOSPC)" << dendl;
+  const auto size = dir->get_frag_size();
+  const auto max = g_conf()->mds_bal_fragment_size_max;
+  if (size >= max) {
+    dout(10) << "fragment " << *dir << " size exceeds " << max << " (CEPHFS_ENOSPC)" << dendl;
     respond_to_request(mdr, -CEPHFS_ENOSPC);
     return false;
+  } else {
+    dout(20) << "fragment " << *dir << " size " << size << " < "  << max << dendl;
   }
 
   return true;
 }
+
+/**
+ * check whether entries in a dir reached maximum size
+ *
+ */
+bool Server::check_dir_max_entries(MDRequestRef &mdr, CDir *in)
+{
+  const uint64_t size = in->inode->get_projected_inode()->dirstat.nfiles +
+                   in->inode->get_projected_inode()->dirstat.nsubdirs;
+  if (dir_max_entries && size >= dir_max_entries) {
+    dout(10) << "entries per dir " << *in << " size exceeds " << dir_max_entries << " (ENOSPC)" << dendl;
+    respond_to_request(mdr, -ENOSPC);
+    return false;
+  }
+  return true;
+}
+
 
 CDentry* Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
 {
@@ -4422,6 +4450,8 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   if (!check_access(mdr, diri, access))
     return;
   if (!check_fragment_space(mdr, dir))
+    return;
+  if (!check_dir_max_entries(mdr, dir))
     return;
 
   if (mdr->dn[0].size() == 1)
@@ -6328,7 +6358,9 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   CInode *diri = dir->get_inode();
   if (!check_access(mdr, diri, MAY_WRITE))
     return;
-  if (!check_fragment_space(mdr, dn->get_dir()))
+  if (!check_fragment_space(mdr, dir))
+    return;
+  if (!check_dir_max_entries(mdr, dir))
     return;
 
   ceph_assert(dn->get_projected_linkage()->is_null());
@@ -6429,6 +6461,8 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
 
   if (!check_fragment_space(mdr, dir))
     return;
+  if (!check_dir_max_entries(mdr, dir))
+    return;
 
   ceph_assert(dn->get_projected_linkage()->is_null());
   if (req->get_alternate_name().size() > alternate_name_max) {
@@ -6519,6 +6553,8 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   if (!check_access(mdr, diri, MAY_WRITE))
     return;
   if (!check_fragment_space(mdr, dir))
+    return;
+  if (!check_dir_max_entries(mdr, dir))
     return;
 
   ceph_assert(dn->get_projected_linkage()->is_null());
@@ -6658,6 +6694,9 @@ void Server::handle_client_link(MDRequestRef& mdr)
       return;
 
     if (!check_fragment_space(mdr, dir))
+      return;
+
+    if (!check_dir_max_entries(mdr, dir))
       return;
   }
 
@@ -8196,6 +8235,9 @@ void Server::handle_client_rename(MDRequestRef& mdr)
       return;
 
     if (!check_fragment_space(mdr, destdn->get_dir()))
+      return;
+
+    if (!check_dir_max_entries(mdr, destdn->get_dir()))
       return;
 
     if (!check_access(mdr, srci, MAY_WRITE))

@@ -3,14 +3,15 @@
 import unittest
 
 from ..api.doc import SchemaType
-from ..controllers import ApiController, ControllerDoc, Endpoint, EndpointDoc, RESTController
+from ..controllers import APIDoc, APIRouter, Endpoint, EndpointDoc, RESTController
+from ..controllers._version import APIVersion
 from ..controllers.docs import Docs
 from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 # Dummy controller and endpoint that can be assigned with @EndpointDoc and @GroupDoc
-@ControllerDoc("Group description", group="FooGroup")
-@ApiController("/doctest/", secure=False)
+@APIDoc("Group description", group="FooGroup")
+@APIRouter("/doctest/", secure=False)
 class DecoratedController(RESTController):
     RESOURCE_ID = 'doctest'
 
@@ -30,11 +31,11 @@ class DecoratedController(RESTController):
         },
     )
     @Endpoint(json_response=False)
-    @RESTController.Resource('PUT', version='0.1')
+    @RESTController.Resource('PUT', version=APIVersion(0, 1))
     def decorated_func(self, parameter):
         pass
 
-    @RESTController.MethodMap(version='0.1')
+    @RESTController.MethodMap(version=APIVersion(0, 1))
     def list(self):
         pass
 
@@ -87,7 +88,7 @@ class DocsTest(ControllerTestCase):
 
         expected_response_content = {
             '200': {
-                'application/vnd.ceph.api.v0.1+json': {
+                APIVersion(0, 1).to_mime_type(): {
                     'schema': {'type': 'array',
                                'items': {'type': 'object', 'properties': {
                                    'my_prop': {
@@ -95,7 +96,7 @@ class DocsTest(ControllerTestCase):
                                        'description': '200 property desc.'}}},
                                'required': ['my_prop']}}},
             '202': {
-                'application/vnd.ceph.api.v0.1+json': {
+                APIVersion(0, 1).to_mime_type(): {
                     'schema': {'type': 'object',
                                'properties': {'my_prop': {
                                    'type': 'string',
@@ -111,7 +112,7 @@ class DocsTest(ControllerTestCase):
     def test_gen_method_paths(self):
         outcome = Docs().gen_paths(False)['/api/doctest/']['get']
 
-        self.assertEqual({'application/vnd.ceph.api.v0.1+json': {'type': 'object'}},
+        self.assertEqual({APIVersion(0, 1).to_mime_type(): {'type': 'object'}},
                          outcome['responses']['200']['content'])
 
     def test_gen_paths_all(self):

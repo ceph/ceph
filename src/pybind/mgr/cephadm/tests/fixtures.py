@@ -6,10 +6,10 @@ from contextlib import contextmanager
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.utils import datetime_to_str, datetime_now
-from cephadm.serve import CephadmServe
+from cephadm.serve import CephadmServe, cephadmNoImage
 
 try:
-    from typing import Any, Iterator, List
+    from typing import Any, Iterator, List, Callable, Dict
 except ImportError:
     pass
 
@@ -50,6 +50,27 @@ class MockEventLoopThread:
             asyncio.set_event_loop(None)
 
 
+def receive_agent_metadata(m: CephadmOrchestrator, host: str, ops: List[str] = None) -> None:
+    to_update: Dict[str, Callable[[str, Any], None]] = {
+        'ls': m._process_ls_output,
+        'gather-facts': m.cache.update_host_facts,
+        'list-networks': m.cache.update_host_networks,
+    }
+    if ops:
+        for op in ops:
+            out = CephadmServe(m)._run_cephadm_json(host, cephadmNoImage, op, [])
+            to_update[op](host, out)
+    m.cache.last_daemon_update[host] = datetime_now()
+    m.cache.last_facts_update[host] = datetime_now()
+    m.cache.last_network_update[host] = datetime_now()
+    m.cache.metadata_up_to_date[host] = True
+
+
+def receive_agent_metadata_all_hosts(m: CephadmOrchestrator) -> None:
+    for host in m.cache.get_hosts():
+        receive_agent_metadata(m, host)
+
+
 @contextmanager
 def with_cephadm_module(module_options=None, store=None):
     """
@@ -60,7 +81,11 @@ def with_cephadm_module(module_options=None, store=None):
             mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
             mock.patch("cephadm.services.osd.OSDService.get_osdspec_affinity", return_value='test_spec'), \
-            mock.patch("cephadm.module.CephadmOrchestrator.remote"):
+            mock.patch("cephadm.module.CephadmOrchestrator.remote"), \
+            mock.patch("cephadm.agent.CephadmAgentHelpers._request_agent_acks"), \
+            mock.patch("cephadm.agent.CephadmAgentHelpers._apply_agent", return_value=False), \
+            mock.patch("cephadm.agent.CephadmAgentHelpers._agent_down", return_value=False), \
+            mock.patch('cephadm.agent.CherryPyThread.run'):
 
         m = CephadmOrchestrator.__new__(CephadmOrchestrator)
         if module_options is not None:
@@ -72,6 +97,14 @@ def with_cephadm_module(module_options=None, store=None):
             m.mock_store_set('_ceph_get', 'mon_map', {
                 'modified': datetime_to_str(datetime_now()),
                 'fsid': 'foobar',
+            })
+        if '_ceph_get/mgr_map' not in store:
+            m.mock_store_set('_ceph_get', 'mgr_map', {
+                'services': {
+                    'dashboard': 'http://[::1]:8080',
+                    'prometheus': 'http://[::1]:8081'
+                },
+                'modules': ['dashboard', 'prometheus'],
             })
         for k, v in store.items():
             m._ceph_set_store(k, v)
@@ -91,12 +124,13 @@ def wait(m, c):
 
 
 @contextmanager
-def with_host(m: CephadmOrchestrator, name, addr='1.2.3.4', refresh_hosts=True):
+def with_host(m: CephadmOrchestrator, name, addr='1::4', refresh_hosts=True):
     # type: (CephadmOrchestrator, str) -> None
     with mock.patch("cephadm.utils.resolve_ip", return_value=addr):
         wait(m, m.add_host(HostSpec(hostname=name)))
         if refresh_hosts:
             CephadmServe(m)._refresh_hosts_and_daemons()
+            receive_agent_metadata(m, name)
         yield
         wait(m, m.remove_host(name))
 

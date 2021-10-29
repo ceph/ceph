@@ -15,6 +15,10 @@ class TestBatch(object):
         b = batch.Batch([])
         b.main()
 
+    def test_invalid_osd_ids_passed(self):
+        with pytest.raises(SystemExit):
+            batch.Batch(argv=['--osd-ids', '1', 'foo']).main()
+
     def test_disjoint_device_lists(self, factory):
         device1 = factory(used_by_ceph=False, available=True, abspath="/dev/sda")
         device2 = factory(used_by_ceph=False, available=True, abspath="/dev/sdb")

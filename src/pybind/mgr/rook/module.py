@@ -1,3 +1,5 @@
+from logging import error
+import logging
 import threading
 import functools
 import os
@@ -222,7 +224,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def get_hosts(self):
         # type: () -> List[orchestrator.HostSpec]
-        return [orchestrator.HostSpec(n) for n in self.rook_cluster.get_node_names()]
+        return self.rook_cluster.get_hosts()
 
     @handle_orch_error
     def describe_service(self,
@@ -274,10 +276,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         if service_type == 'mds' or service_type is None:
             # CephFilesystems
-            all_fs = self.rook_cluster.rook_api_get(
-                "cephfilesystems/")
-            self.log.debug('CephFilesystems %s' % all_fs)
-            for fs in all_fs.get('items', []):
+            all_fs = self.rook_cluster.get_resource("cephfilesystems")
+            for fs in all_fs:
                 svc = 'mds.' + fs['metadata']['name']
                 if svc in spec:
                     continue
@@ -286,26 +286,22 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 total_mds = active
                 if fs['spec'].get('metadataServer', {}).get('activeStandby', False):
                     total_mds = active * 2
-                    spec[svc] = orchestrator.ServiceDescription(
-                        spec=ServiceSpec(
-                            service_type='mds',
-                            service_id=fs['metadata']['name'],
-                            placement=PlacementSpec(count=active),
-                        ),
-                        size=total_mds,
-                        container_image_name=image_name,
-                        last_refresh=now,
-                    )
+                spec[svc] = orchestrator.ServiceDescription(
+                    spec=ServiceSpec(
+                        service_type='mds',
+                        service_id=fs['metadata']['name'],
+                        placement=PlacementSpec(count=active),
+                    ),
+                    size=total_mds,
+                    container_image_name=image_name,
+                    last_refresh=now,
+                )
 
         if service_type == 'rgw' or service_type is None:
             # CephObjectstores
-            all_zones = self.rook_cluster.rook_api_get(
-                "cephobjectstores/")
-            self.log.debug('CephObjectstores %s' % all_zones)
-            for zone in all_zones.get('items', []):
-                rgw_realm = zone['metadata']['name']
-                rgw_zone = rgw_realm
-                svc = 'rgw.' + rgw_realm + '.' + rgw_zone
+            all_zones = self.rook_cluster.get_resource("cephobjectstores")
+            for zone in all_zones:
+                svc = 'rgw.' + zone['metadata']['name']
                 if svc in spec:
                     continue
                 active = zone['spec']['gateway']['instances'];
@@ -315,10 +311,10 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 else:
                     ssl = False
                     port = zone['spec']['gateway']['port'] or 80
+                rgw_zone = zone['spec'].get('zone', {}).get('name') or None
                 spec[svc] = orchestrator.ServiceDescription(
                     spec=RGWSpec(
-                        service_id=rgw_realm + '.' + rgw_zone,
-                        rgw_realm=rgw_realm,
+                        service_id=zone['metadata']['name'],
                         rgw_zone=rgw_zone,
                         ssl=ssl,
                         rgw_frontend_port=port,
@@ -331,10 +327,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         if service_type == 'nfs' or service_type is None:
             # CephNFSes
-            all_nfs = self.rook_cluster.rook_api_get(
-                "cephnfses/")
-            self.log.warning('CephNFS %s' % all_nfs)
-            for nfs in all_nfs.get('items', []):
+            all_nfs = self.rook_cluster.get_resource("cephnfses")
+            for nfs in all_nfs:
                 nfs_name = nfs['metadata']['name']
                 svc = 'nfs.' + nfs_name
                 if svc in spec:
@@ -348,7 +342,19 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     size=active,
                     last_refresh=now,
                 )
-
+        if service_type == 'osd' or service_type is None:
+            # OSDs
+            all_osds = self.rook_cluster.get_osds()
+            svc = 'osd'
+            spec[svc] = orchestrator.ServiceDescription(
+                spec=DriveGroupSpec(
+                    service_type='osd',
+                    placement=PlacementSpec(count=len(all_osds), hosts=[osd.metadata.labels['topology-location-host'] for osd in all_osds]),
+                ),
+                size=len(all_osds),
+                last_refresh=now,
+            running= sum(osd.status.phase == 'Running' for osd in all_osds)
+            )
         for dd in self._list_daemons():
             if dd.service_name() not in spec:
                 continue
@@ -422,6 +428,20 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return result
 
+    def _get_pool_params(self) -> Tuple[int, str]:
+        num_replicas = self.get_ceph_option('osd_pool_default_size')
+        assert type(num_replicas) is int
+
+        leaf_type_id = self.get_ceph_option('osd_crush_chooseleaf_type')
+        assert type(leaf_type_id) is int
+        crush = self.get('osd_map_crush')
+        leaf_type = 'host'
+        for t in crush['types']:
+            if t['type_id'] == leaf_type_id:
+                leaf_type = t['name']
+                break
+        return num_replicas, leaf_type
+
     @handle_orch_error
     def remove_service(self, service_name: str) -> str:
         service_type, service_name = service_name.split('.', 1)
@@ -434,6 +454,14 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         else:
             raise orchestrator.OrchestratorError(f'Service type {service_type} not supported')
 
+    def zap_device(self, host: str, path: str) -> OrchResult[str]:
+        try:
+            self.rook_cluster.create_zap_job(host, path)
+        except Exception as e:
+            logging.error(e)
+            return OrchResult(None, Exception("Unable to zap device: " + str(e.with_traceback(None))))
+        return OrchResult(f'{path} on {host} zapped') 
+
     @handle_orch_error
     def apply_mon(self, spec):
         # type: (ServiceSpec) -> str
@@ -445,12 +473,14 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def apply_mds(self, spec):
         # type: (ServiceSpec) -> str
-        return self.rook_cluster.apply_filesystem(spec)
+        num_replicas, leaf_type = self._get_pool_params()
+        return self.rook_cluster.apply_filesystem(spec, num_replicas, leaf_type)
 
     @handle_orch_error
     def apply_rgw(self, spec):
         # type: (RGWSpec) -> str
-        return self.rook_cluster.apply_objectstore(spec)
+        num_replicas, leaf_type = self._get_pool_params()
+        return self.rook_cluster.apply_objectstore(spec, num_replicas, leaf_type)
 
     @handle_orch_error
     def apply_nfs(self, spec):
@@ -479,11 +509,18 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             result_list.append(self.rook_cluster.add_osds(drive_group, matching_hosts))
         return OrchResult(result_list)
 
-    def remove_osds(self, osd_ids: List[str], replace: bool = False, force: bool = False) -> OrchResult[str]:
+    def remove_osds(self, osd_ids: List[str], replace: bool = False, force: bool = False, zap: bool = False) -> OrchResult[str]:
         assert self._rook_cluster is not None
+        if zap:
+            raise RuntimeError("Rook does not support zapping devices during OSD removal.")
         res = self._rook_cluster.remove_osds(osd_ids, replace, force, self.mon_command)
         return OrchResult(res)
 
+    def add_host_label(self, host: str, label: str) -> OrchResult[str]:
+        return self.rook_cluster.add_host_label(host, label)
+    
+    def remove_host_label(self, host: str, label: str) -> OrchResult[str]:
+        return self.rook_cluster.remove_host_label(host, label)
     """
     @handle_orch_error
     def create_osds(self, drive_group):

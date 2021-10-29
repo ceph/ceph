@@ -71,7 +71,8 @@ public:
     JournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
-    ExtentPlacementManagerRef&& epm);
+    ExtentPlacementManagerRef&& epm,
+    ExtentReader& scanner);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -274,7 +275,7 @@ public:
    * alloc_extent
    *
    * Allocates a new block of type T with the minimum lba range of size len
-   * greater than hint.
+   * greater than laddr_hint.
    */
   using alloc_extent_iertr = LBAManager::alloc_extent_iertr;
   template <typename T>
@@ -282,22 +283,30 @@ public:
   template <typename T>
   alloc_extent_ret<T> alloc_extent(
     Transaction &t,
-    laddr_t hint,
+    laddr_t laddr_hint,
     extent_len_t len) {
+    placement_hint_t placement_hint;
+    if constexpr (T::TYPE == extent_types_t::OBJECT_DATA_BLOCK ||
+                  T::TYPE == extent_types_t::COLL_BLOCK) {
+      placement_hint = placement_hint_t::COLD;
+    } else {
+      placement_hint = placement_hint_t::HOT;
+    }
     auto ext = epm->alloc_new_extent<T>(
       t,
-      len);
+      len,
+      placement_hint);
     return lba_manager->alloc_extent(
       t,
-      hint,
+      laddr_hint,
       len,
       ext->get_paddr()
-    ).si_then([ext=std::move(ext), len, hint, &t, this](auto &&ref) mutable {
+    ).si_then([ext=std::move(ext), len, laddr_hint, &t, this](auto &&ref) mutable {
       LOG_PREFIX(TransactionManager::alloc_extent);
       ext->set_pin(std::move(ref));
       stats.extents_allocated_total++;
       stats.extents_allocated_bytes += len;
-      DEBUGT("new extent: {}, hint: {}", t, *ext, hint);
+      DEBUGT("new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
       return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });
@@ -491,17 +500,35 @@ public:
     return segment_cleaner->stat();
   }
 
+  void add_segment_manager(SegmentManager* sm) {
+    LOG_PREFIX(TransactionManager::add_segment_manager);
+    DEBUG("adding segment manager {}", sm->get_device_id());
+    scanner.add_segment_manager(sm);
+    epm->add_allocator(
+      device_type_t::SEGMENTED,
+      std::make_unique<SegmentedAllocator>(
+	*segment_cleaner,
+	*sm,
+	*lba_manager,
+	*journal,
+	*cache));
+  }
+
   ~TransactionManager();
 
 private:
   friend class Transaction;
 
+  // although there might be multiple devices backing seastore,
+  // only one of them are supposed to hold the journal. This
+  // segment manager is that device
   SegmentManager &segment_manager;
   SegmentCleanerRef segment_cleaner;
   CacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
   ExtentPlacementManagerRef epm;
+  ExtentReader& scanner;
 
   WritePipeline write_pipeline;
 

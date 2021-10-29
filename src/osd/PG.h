@@ -68,6 +68,7 @@ namespace Scrub {
   class ReplicaReservations;
   class LocalReservation;
   class ReservedByRemotePrimary;
+  enum class schedule_result_t;
 }
 
 #ifdef PG_DEBUG_REFS
@@ -161,12 +162,20 @@ class PGRecoveryStats {
  *
  */
 
+/// Facilitating scrub-realated object access to private PG data
+class ScrubberPasskey {
+private:
+  friend class Scrub::ReplicaReservations;
+  friend class PrimaryLogScrub;
+  ScrubberPasskey() {}
+  ScrubberPasskey(const ScrubberPasskey&) = default;
+  ScrubberPasskey& operator=(const ScrubberPasskey&) = delete;
+};
+
 class PG : public DoutPrefixProvider, public PeeringState::PeeringListener {
   friend struct NamedState;
   friend class PeeringState;
   friend class PgScrubber;
-  friend class PrimaryLogScrub;
-  friend class Scrub::ReplicaReservations;
   friend class Scrub::LocalReservation;  // dout()-only friendship
   friend class Scrub::ReservedByRemotePrimary;  //  dout()-only friendship
 
@@ -384,6 +393,7 @@ public:
   /**
    *  a special version of PG::scrub(), which:
    *  - is initiated after repair, and
+   * (not true anymore:)
    *  - is not required to allocate local/remote OSD scrub resources
    */
   void recovery_scrub(epoch_t queued, ThreadPool::TPHandle& handle)
@@ -394,12 +404,17 @@ public:
 			"AfterRepairScrub");
   }
 
-  void replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+  void replica_scrub(epoch_t queued,
+		     Scrub::act_token_t act_token,
+		     ThreadPool::TPHandle& handle);
 
-  void replica_scrub_resched(epoch_t queued, ThreadPool::TPHandle& handle)
+  void replica_scrub_resched(epoch_t queued,
+			     Scrub::act_token_t act_token,
+			     ThreadPool::TPHandle& handle)
   {
     scrub_queued = false;
-    forward_scrub_event(&ScrubPgIF::send_sched_replica, queued, "SchedReplica");
+    forward_scrub_event(&ScrubPgIF::send_sched_replica, queued, act_token,
+			"SchedReplica");
   }
 
   void scrub_send_resources_granted(epoch_t queued, ThreadPool::TPHandle& handle)
@@ -482,8 +497,6 @@ public:
     forward_scrub_event(&ScrubPgIF::send_chunk_busy, queued, "ChunkIsBusy");
   }
 
-  void reg_next_scrub();
-
   void queue_want_pg_temp(const std::vector<int> &wanted) override;
   void clear_want_pg_temp() override;
 
@@ -497,6 +510,10 @@ public:
   virtual void plpg_on_pool_change() = 0;
 
   void on_info_history_change() override;
+
+  void on_primary_status_change(bool was_primary, bool now_primary) override;
+
+  void reschedule_scrub() override;
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 
@@ -621,7 +638,7 @@ public:
   virtual void on_shutdown() = 0;
 
   bool get_must_scrub() const;
-  bool sched_scrub();
+  Scrub::schedule_result_t sched_scrub();
 
   unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsigned int suggested_priority) const;
   /// the version that refers to flags_.priority
@@ -651,8 +668,14 @@ private:
 				  requested_scrub_t& planned) const;
 
   using ScrubAPI = void (ScrubPgIF::*)(epoch_t epoch_queued);
-
   void forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued, std::string_view desc);
+  // and for events that carry a meaningful 'activation token'
+  using ScrubSafeAPI = void (ScrubPgIF::*)(epoch_t epoch_queued,
+					   Scrub::act_token_t act_token);
+  void forward_scrub_event(ScrubSafeAPI fn,
+			   epoch_t epoch_queued,
+			   Scrub::act_token_t act_token,
+			   std::string_view desc);
 
 public:
   virtual void do_request(
@@ -1318,6 +1341,18 @@ protected:
 
   // ref to recovery_state.info
   const pg_info_t &info;
+
+
+// ScrubberPasskey getters:
+public:
+  const pg_info_t& get_pg_info(ScrubberPasskey) const {
+    return info;
+  }
+
+  OSDService* get_pg_osd(ScrubberPasskey) const {
+    return osd;
+  }
+
 };
 
 #endif

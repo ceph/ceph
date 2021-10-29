@@ -2403,6 +2403,7 @@ private:
 	       bool to_repair_db=false,
 	       bool read_only = false);
   void _close_db(bool read_only);
+  void _close_db_leave_bluefs();
   int _open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_restore = false);
   void _close_fm();
   int _write_out_fm_meta(uint64_t target_size);
@@ -3487,6 +3488,7 @@ private:
     uint32_t collection_search       = 0;
     uint32_t pad_limit_count         = 0;
 
+    uint64_t shared_blobs_count      = 0;
     uint64_t compressed_blob_count   = 0;
     uint64_t spanning_blob_count     = 0;
     uint64_t insert_count            = 0;
@@ -3504,6 +3506,7 @@ private:
     out << "==========================================================" << std::endl;
     out << "NCB::onode_count             = " ;out.width(10);out << stats.onode_count << std::endl
 	<< "NCB::shard_count             = " ;out.width(10);out << stats.shard_count << std::endl
+	<< "NCB::shared_blobs_count      = " ;out.width(10);out << stats.shared_blobs_count << std::endl
 	<< "NCB::compressed_blob_count   = " ;out.width(10);out << stats.compressed_blob_count << std::endl
 	<< "NCB::spanning_blob_count     = " ;out.width(10);out << stats.spanning_blob_count << std::endl
 	<< "NCB::collection search       = " ;out.width(10);out << stats.collection_search << std::endl
@@ -3545,6 +3548,7 @@ private:
   int  copy_allocator(Allocator* src_alloc, Allocator *dest_alloc, uint64_t* p_num_entries);
   int  store_allocator(Allocator* allocator);
   int  invalidate_allocation_file_on_bluefs();
+  int  __restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
   int  restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
   int  read_allocation_from_drive_on_startup();
   int  reconstruct_allocations(Allocator* allocator, read_alloc_stats_t &stats);

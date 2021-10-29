@@ -15,10 +15,11 @@ from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_orchestrator_error
 from ..services.orchestrator import OrchClient, OrchFeature
-from ..tools import TaskManager, str_to_bool
-from . import ApiController, BaseController, ControllerDoc, Endpoint, \
-    EndpointDoc, ReadPermission, RESTController, Task, UiApiController, \
-    UpdatePermission, allow_empty_body
+from ..tools import TaskManager, merge_list_of_dicts_by_key, str_to_bool
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
+    ReadPermission, RESTController, Task, UIRouter, UpdatePermission, \
+    allow_empty_body
+from ._version import APIVersion
 from .orchestrator import raise_if_no_orchestrator
 
 LIST_HOST_SCHEMA = {
@@ -153,10 +154,17 @@ def merge_hosts_by_hostname(ceph_hosts, orch_hosts):
     return hosts
 
 
-def get_hosts(from_ceph=True, from_orchestrator=True):
+def get_hosts(sources=None):
     """
     Get hosts from various sources.
     """
+    from_ceph = True
+    from_orchestrator = True
+    if sources:
+        _sources = sources.split(',')
+        from_ceph = 'ceph' in _sources
+        from_orchestrator = 'orchestrator' in _sources
+
     ceph_hosts = []
     if from_ceph:
         ceph_hosts = [
@@ -164,7 +172,6 @@ def get_hosts(from_ceph=True, from_orchestrator=True):
                 server, {
                     'addr': '',
                     'labels': [],
-                    'service_type': '',
                     'sources': {
                         'ceph': True,
                         'orchestrator': False
@@ -266,25 +273,43 @@ def add_host(hostname: str, addr: Optional[str] = None,
         orch_client.hosts.enter_maintenance(hostname)
 
 
-@ApiController('/host', Scope.HOSTS)
-@ControllerDoc("Get Host Details", "Host")
+@APIRouter('/host', Scope.HOSTS)
+@APIDoc("Get Host Details", "Host")
 class Host(RESTController):
     @EndpointDoc("List Host Specifications",
                  parameters={
                      'sources': (str, 'Host Sources'),
+                     'facts': (bool, 'Host Facts')
                  },
                  responses={200: LIST_HOST_SCHEMA})
-    def list(self, sources=None):
-        if sources is None:
-            return get_hosts()
-        _sources = sources.split(',')
-        from_ceph = 'ceph' in _sources
-        from_orchestrator = 'orchestrator' in _sources
-        return get_hosts(from_ceph, from_orchestrator)
+    @RESTController.MethodMap(version=APIVersion(1, 1))
+    def list(self, sources=None, facts=False):
+        hosts = get_hosts(sources)
+        orch = OrchClient.instance()
+        if str_to_bool(facts):
+            if orch.available(['get_facts']):
+                try:
+                    hosts_facts = orch.hosts.get_facts()
+                    return merge_list_of_dicts_by_key(hosts, hosts_facts, 'hostname')
 
-    @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_CREATE])
+                except Exception:
+                    raise DashboardException(
+                        code='invalid_orchestrator_backend',  # pragma: no cover
+                        msg="Please enable the cephadm orchestrator backend "
+                        "(try `ceph orch set backend cephadm`)",
+                        component='orchestrator',
+                        http_status_code=400)
+
+            raise DashboardException(code='orchestrator_status_unavailable',  # pragma: no cover
+                                     msg="Please configure and enable the orchestrator if you "
+                                         "really want to gather facts from hosts",
+                                     component='orchestrator',
+                                     http_status_code=400)
+        return hosts
+
+    @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_ADD])
     @handle_orchestrator_error('host')
-    @host_task('create', {'hostname': '{hostname}'})
+    @host_task('add', {'hostname': '{hostname}'})
     @EndpointDoc('',
                  parameters={
                      'hostname': (str, 'Hostname'),
@@ -293,16 +318,16 @@ class Host(RESTController):
                      'status': (str, 'Host Status')
                  },
                  responses={200: None, 204: None})
-    @RESTController.MethodMap(version='0.1')
+    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
     def create(self, hostname: str,
                addr: Optional[str] = None,
                labels: Optional[List[str]] = None,
                status: Optional[str] = None):  # pragma: no cover - requires realtime env
         add_host(hostname, addr, labels, status)
 
-    @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_DELETE])
+    @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_REMOVE])
     @handle_orchestrator_error('host')
-    @host_task('delete', {'hostname': '{hostname}'})
+    @host_task('remove', {'hostname': '{hostname}'})
     @allow_empty_body
     def delete(self, hostname):  # pragma: no cover - requires realtime env
         orch_client = OrchClient.instance()
@@ -406,7 +431,7 @@ class Host(RESTController):
                      'force': (bool, 'Force Enter Maintenance')
                  },
                  responses={200: None, 204: None})
-    @RESTController.MethodMap(version='0.1')
+    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
     def set(self, hostname: str, update_labels: bool = False,
             labels: List[str] = None, maintenance: bool = False,
             force: bool = False):
@@ -448,7 +473,7 @@ class Host(RESTController):
                 orch.hosts.add_label(hostname, label)
 
 
-@UiApiController('/host', Scope.HOSTS)
+@UIRouter('/host', Scope.HOSTS)
 class HostUi(BaseController):
     @Endpoint('GET')
     @ReadPermission

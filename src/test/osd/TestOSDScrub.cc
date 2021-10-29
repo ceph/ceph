@@ -52,7 +52,7 @@ public:
   }
 
   bool scrub_time_permit(utime_t now) {
-    return OSD::scrub_time_permit(now);
+    return service.get_scrub_services().scrub_time_permit(now);
   }
 };
 

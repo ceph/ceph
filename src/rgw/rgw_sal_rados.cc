@@ -205,7 +205,7 @@ int RadosUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, u
 
 int RadosUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-    return store->ctl()->user->get_info_by_uid(dpp, info.user_id, &info, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker));
+    return store->ctl()->user->get_info_by_uid(dpp, info.user_id, &info, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker).set_attrs(&attrs));
 }
 
 int RadosUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info)
@@ -736,7 +736,8 @@ int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
   list_op.params.end_marker = params.end_marker;
   list_op.params.ns = params.ns;
   list_op.params.enforce_ns = params.enforce_ns;
-  list_op.params.filter = params.filter;
+  list_op.params.access_list_filter = params.access_list_filter;
+  list_op.params.force_check_filter = params.force_check_filter;
   list_op.params.list_versions = params.list_versions;
   list_op.params.allow_unordered = params.allow_unordered;
 
@@ -766,7 +767,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
   params.delim = delim;
   params.marker = marker;
   params.ns = RGW_OBJ_NS_MULTIPART;
-  params.filter = &mp_filter;
+  params.access_list_filter = &mp_filter;
 
   int ret = list(dpp, params, max_uploads, results, null_yield);
 
@@ -1484,28 +1485,6 @@ int RadosStore::get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucke
   return rados->get_obj_head_ioctx(dpp, bucket_info, obj, ioctx);
 }
 
-int Object::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
-{
-  if (ofs < 0) {
-    ofs += obj_size;
-    if (ofs < 0)
-      ofs = 0;
-    end = obj_size - 1;
-  } else if (end < 0) {
-    end = obj_size - 1;
-  }
-
-  if (obj_size > 0) {
-    if (ofs >= (off_t)obj_size) {
-      return -ERANGE;
-    }
-    if (end >= (off_t)obj_size) {
-      end = obj_size - 1;
-    }
-  }
-  return 0;
-}
-
 RadosObject::~RadosObject() {}
 
 int RadosObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, RGWObjState **state, optional_yield y, bool follow_olh)
@@ -1593,6 +1572,11 @@ int RadosObject::copy_obj_data(RGWObjectCtx& rctx, Bucket* dest_bucket,
 					  dest_bucket->get_info().placement_rule, read_op,
 					  obj_size - 1, dest_obj, NULL, mtime, attrset, 0,
 					  real_time(), NULL, dpp, y);
+}
+
+void RadosObject::set_compressed(RGWObjectCtx* rctx) {
+  rgw_obj obj = get_obj();
+  store->getRados()->set_compressed(rctx, obj);
 }
 
 void RadosObject::set_atomic(RGWObjectCtx* rctx) const
@@ -2247,6 +2231,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   std::string etag;
   bufferlist etag_bl;
   MD5 hash;
+  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   bool truncated;
   int ret;
 

@@ -1,8 +1,10 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
+import { Subscription } from 'rxjs';
+import { map, mergeMap } from 'rxjs/operators';
 
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
@@ -11,7 +13,7 @@ import { ConfirmationModalComponent } from '~/app/shared/components/confirmation
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -24,12 +26,13 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permissions } from '~/app/shared/models/permissions';
-import { CephShortVersionPipe } from '~/app/shared/pipes/ceph-short-version.pipe';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { HostFormComponent } from './host-form/host-form.component';
 
 const BASE_URL = 'hosts';
 
@@ -39,13 +42,37 @@ const BASE_URL = 'hosts';
   styleUrls: ['./hosts.component.scss'],
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class HostsComponent extends ListWithDetails implements OnInit {
+export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit {
+  private sub = new Subscription();
+
   @ViewChild(TableComponent)
   table: TableComponent;
   @ViewChild('servicesTpl', { static: true })
   public servicesTpl: TemplateRef<any>;
   @ViewChild('maintenanceConfirmTpl', { static: true })
   maintenanceConfirmTpl: TemplateRef<any>;
+  @ViewChild('orchTmpl', { static: true })
+  orchTmpl: TemplateRef<any>;
+  @ViewChild('flashTmpl', { static: true })
+  flashTmpl: TemplateRef<any>;
+
+  @Input()
+  hiddenColumns: string[] = [];
+
+  @Input()
+  hideTitle = false;
+
+  @Input()
+  hideSubmitBtn = false;
+
+  @Input()
+  hasTableDetails = true;
+
+  @Input()
+  hideToolHeader = false;
+
+  @Input()
+  showGeneralActionsOnly = false;
 
   permissions: Permissions;
   columns: Array<CdTableColumn> = [];
@@ -58,6 +85,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   isExecuting = false;
   errorMessage: string;
   enableButton: boolean;
+  bsModalRef: NgbModalRef;
 
   icons = Icons;
 
@@ -67,9 +95,9 @@ export class HostsComponent extends ListWithDetails implements OnInit {
 
   orchStatus: OrchestratorStatus;
   actionOrchFeatures = {
-    create: [OrchestratorFeature.HOST_CREATE],
+    add: [OrchestratorFeature.HOST_ADD],
     edit: [OrchestratorFeature.HOST_LABEL_ADD, OrchestratorFeature.HOST_LABEL_REMOVE],
-    delete: [OrchestratorFeature.HOST_DELETE],
+    remove: [OrchestratorFeature.HOST_REMOVE],
     maintenance: [
       OrchestratorFeature.HOST_MAINTENANCE_ENTER,
       OrchestratorFeature.HOST_MAINTENANCE_EXIT
@@ -78,9 +106,8 @@ export class HostsComponent extends ListWithDetails implements OnInit {
 
   constructor(
     private authStorageService: AuthStorageService,
+    private dimlessBinary: DimlessBinaryPipe,
     private hostService: HostService,
-    private cephShortVersionPipe: CephShortVersionPipe,
-    private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
@@ -92,11 +119,14 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {
-        name: this.actionLabels.CREATE,
+        name: this.actionLabels.ADD,
         permission: 'create',
         icon: Icons.add,
-        click: () => this.router.navigate([this.urlBuilder.getCreate()]),
-        disable: (selection: CdTableSelection) => this.getDisable('create', selection)
+        click: () =>
+          this.router.url.includes('/hosts')
+            ? this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.ADD] } }])
+            : (this.bsModalRef = this.modalService.show(HostFormComponent)),
+        disable: (selection: CdTableSelection) => this.getDisable('add', selection)
       },
       {
         name: this.actionLabels.EDIT,
@@ -106,11 +136,11 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         disable: (selection: CdTableSelection) => this.getDisable('edit', selection)
       },
       {
-        name: this.actionLabels.DELETE,
+        name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deleteAction(),
-        disable: (selection: CdTableSelection) => this.getDisable('delete', selection)
+        disable: (selection: CdTableSelection) => this.getDisable('remove', selection)
       },
       {
         name: this.actionLabels.ENTER_MAINTENANCE,
@@ -118,7 +148,8 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         icon: Icons.enter,
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
-          this.getDisable('maintenance', selection) || this.isExecuting || this.enableButton
+          this.getDisable('maintenance', selection) || this.isExecuting || this.enableButton,
+        visible: () => !this.showGeneralActionsOnly
       },
       {
         name: this.actionLabels.EXIT_MAINTENANCE,
@@ -126,7 +157,8 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         icon: Icons.exit,
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
-          this.getDisable('maintenance', selection) || this.isExecuting || !this.enableButton
+          this.getDisable('maintenance', selection) || this.isExecuting || !this.enableButton,
+        visible: () => !this.showGeneralActionsOnly
       }
     ];
   }
@@ -141,7 +173,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
       {
         name: $localize`Services`,
         prop: 'services',
-        flexGrow: 3,
+        flexGrow: 2,
         cellTemplate: this.servicesTpl
       },
       {
@@ -165,15 +197,57 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         }
       },
       {
-        name: $localize`Version`,
-        prop: 'ceph_version',
-        flexGrow: 1,
-        pipe: this.cephShortVersionPipe
+        name: $localize`Model`,
+        prop: 'model',
+        flexGrow: 1
+      },
+      {
+        name: $localize`CPUs`,
+        prop: 'cpu_count',
+        flexGrow: 0.3
+      },
+      {
+        name: $localize`Cores`,
+        prop: 'cpu_cores',
+        flexGrow: 0.3
+      },
+      {
+        name: $localize`Total Memory`,
+        prop: 'memory_total_bytes',
+        pipe: this.dimlessBinary,
+        flexGrow: 0.4
+      },
+      {
+        name: $localize`Raw Capacity`,
+        prop: 'raw_capacity',
+        pipe: this.dimlessBinary,
+        flexGrow: 0.5
+      },
+      {
+        name: $localize`HDDs`,
+        prop: 'hdd_count',
+        flexGrow: 0.3
+      },
+      {
+        name: $localize`Flash`,
+        prop: 'flash_count',
+        headerTemplate: this.flashTmpl,
+        flexGrow: 0.3
+      },
+      {
+        name: $localize`NICs`,
+        prop: 'nic_count',
+        flexGrow: 0.3
       }
     ];
-    this.orchService.status().subscribe((status: OrchestratorStatus) => {
-      this.orchStatus = status;
+
+    this.columns = this.columns.filter((col: any) => {
+      return !this.hiddenColumns.includes(col.prop);
     });
+  }
+
+  ngOnDestroy() {
+    this.sub.unsubscribe();
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -287,10 +361,10 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   }
 
   getDisable(
-    action: 'create' | 'edit' | 'delete' | 'maintenance',
+    action: 'add' | 'edit' | 'remove' | 'maintenance',
     selection: CdTableSelection
   ): boolean | string {
-    if (action === 'delete' || action === 'edit' || action === 'maintenance') {
+    if (action === 'remove' || action === 'edit' || action === 'maintenance') {
       if (!selection?.hasSingleSelection) {
         return true;
       }
@@ -309,13 +383,39 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'Host',
       itemNames: [hostname],
-      actionDescription: 'delete',
+      actionDescription: 'remove',
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('host/delete', { hostname: hostname }),
+          task: new FinishedTask('host/remove', { hostname: hostname }),
           call: this.hostService.delete(hostname)
         })
     });
+  }
+
+  checkHostsFactsAvailable() {
+    const orchFeatures = this.orchStatus.features;
+    if (!_.isEmpty(orchFeatures)) {
+      if (orchFeatures.get_facts.available) {
+        return true;
+      }
+      return false;
+    }
+    return false;
+  }
+
+  transformHostsData() {
+    if (this.checkHostsFactsAvailable()) {
+      _.forEach(this.hosts, (hostKey) => {
+        hostKey['memory_total_bytes'] = hostKey['memory_total_kb'] * 1024;
+        hostKey['raw_capacity'] = hostKey['hdd_capacity_bytes'] + hostKey['flash_capacity_bytes'];
+      });
+    } else {
+      // mark host facts columns unavailable
+      for (let column = 4; column < this.columns.length; column++) {
+        this.columns[column]['prop'] = '';
+        this.columns[column]['cellTemplate'] = this.orchTmpl;
+      }
+    }
   }
 
   getHosts(context: CdTableFetchDataContext) {
@@ -332,24 +432,36 @@ export class HostsComponent extends ListWithDetails implements OnInit {
       'tcmu-runner': 'iscsi'
     };
     this.isLoadingHosts = true;
-    this.hostService.list().subscribe(
-      (resp: any[]) => {
-        resp.map((host) => {
-          host.services.map((service: any) => {
-            service.cdLink = `/perf_counters/${service.type}/${encodeURIComponent(service.id)}`;
-            const permission = this.permissions[typeToPermissionKey[service.type]];
-            service.canRead = permission ? permission.read : false;
-            return service;
-          });
-          return host;
-        });
-        this.hosts = resp;
-        this.isLoadingHosts = false;
-      },
-      () => {
-        this.isLoadingHosts = false;
-        context.error();
-      }
-    );
+    this.sub = this.orchService
+      .status()
+      .pipe(
+        mergeMap((orchStatus) => {
+          this.orchStatus = orchStatus;
+          const factsAvailable = this.checkHostsFactsAvailable();
+          return this.hostService.list(`${factsAvailable}`);
+        }),
+        map((hostList: object[]) =>
+          hostList.map((host) => {
+            host['services'].map((service: any) => {
+              service.cdLink = `/perf_counters/${service.type}/${encodeURIComponent(service.id)}`;
+              const permission = this.permissions[typeToPermissionKey[service.type]];
+              service.canRead = permission ? permission.read : false;
+              return service;
+            });
+            return host;
+          })
+        )
+      )
+      .subscribe(
+        (hostList) => {
+          this.hosts = hostList;
+          this.transformHostsData();
+          this.isLoadingHosts = false;
+        },
+        () => {
+          this.isLoadingHosts = false;
+          context.error();
+        }
+      );
   }
 }

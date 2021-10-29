@@ -39,6 +39,7 @@
 
 #include "crimson/admin/osd_admin.h"
 #include "crimson/admin/pg_commands.h"
+#include "crimson/common/buffer_io.h"
 #include "crimson/common/exception.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
@@ -152,9 +153,21 @@ CompatSet get_osd_initial_compat_set()
 seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
 {
   return store.start().then([this, osd_uuid] {
-    return store.mkfs(osd_uuid);
+    return store.mkfs(osd_uuid).handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        logger().error("error creating empty object store in {}: ({}) {}",
+                       local_conf().get_val<std::string>("osd_data"),
+                       ec.value(), ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([this] {
-    return store.mount();
+    return store.mount().handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        logger().error("error mounting object store in {}: ({}) {}",
+                       local_conf().get_val<std::string>("osd_data"),
+                       ec.value(), ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([cluster_fsid, this] {
     superblock.cluster_fsid = cluster_fsid;
     superblock.osd_fsid = store.get_fsid();
@@ -162,10 +175,14 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
     superblock.compat_features = get_osd_initial_compat_set();
     return _write_superblock();
   }).then([cluster_fsid, this] {
-    return when_all_succeed(
-      store.write_meta("ceph_fsid", cluster_fsid.to_string()),
-      store.write_meta("whoami", std::to_string(whoami)));
-  }).then_unpack([cluster_fsid, this] {
+    return store.write_meta("ceph_fsid", cluster_fsid.to_string());
+  }).then([this] {
+    return store.write_meta("whoami", std::to_string(whoami));
+  }).then([this] {
+    return _write_key_meta();
+  }).then([this] {
+    return store.write_meta("ready", "ready");
+  }).then([cluster_fsid, this] {
     fmt::print("created object store {} for osd.{} fsid {}\n",
                local_conf().get_val<std::string>("osd_data"),
                whoami, cluster_fsid);
@@ -195,7 +212,7 @@ seastar::future<> OSD::_write_superblock()
       // meta collection does not yet, create superblock
       logger().info(
         "{} writing superblock cluster_fsid {} osd_fsid {}",
-        __func__,
+        "_write_superblock",
         superblock.cluster_fsid,
         superblock.osd_fsid);
       return store.create_new_collection(coll_t::meta()).then([this] (auto ch) {
@@ -209,11 +226,40 @@ seastar::future<> OSD::_write_superblock()
   });
 }
 
+// this `to_string` sits in the `crimson::osd` namespace, so we don't brake
+// the language rule on not overloading in `std::`.
+static std::string to_string(const seastar::temporary_buffer<char>& temp_buf)
+{
+  return {temp_buf.get(), temp_buf.size()};
+}
+
+seastar::future<> OSD::_write_key_meta()
+{
+
+  if (auto key = local_conf().get_val<std::string>("key"); !std::empty(key)) {
+    return store.write_meta("osd_key", key);
+  } else if (auto keyfile = local_conf().get_val<std::string>("keyfile");
+             !std::empty(keyfile)) {
+    return read_file(keyfile).then([this] (const auto& temp_buf) {
+      // it's on a truly cold path, so don't worry about memcpy.
+      return store.write_meta("osd_key", to_string(temp_buf));
+    }).handle_exception([keyfile] (auto ep) {
+      logger().error("_write_key_meta: failed to handle keyfile {}: {}",
+                     keyfile, ep);
+      ceph_abort();
+    });
+  } else {
+    return seastar::now();
+  }
+}
+
 namespace {
   entity_addrvec_t pick_addresses(int what) {
     entity_addrvec_t addrs;
     crimson::common::CephContext cct;
-    if (int r = ::pick_addresses(&cct, what, &addrs, -1); r < 0) {
+    // we're interested solely in v2; crimson doesn't do v1
+    const auto flags = what | CEPH_PICK_ADDRESS_MSGR2;
+    if (int r = ::pick_addresses(&cct, flags, &addrs, -1); r < 0) {
       throw std::runtime_error("failed to pick address");
     }
     for (auto addr : addrs.v) {
@@ -257,7 +303,13 @@ seastar::future<> OSD::start()
   startup_time = ceph::mono_clock::now();
 
   return store.start().then([this] {
-    return store.mount();
+    return store.mount().handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        logger().error("error mounting object store in {}: ({}) {}",
+                       local_conf().get_val<std::string>("osd_data"),
+                       ec.value(), ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([this] {
     return store.open_collection(coll_t::meta());
   }).then([this](auto ch) {
@@ -298,24 +350,20 @@ seastar::future<> OSD::start()
 
     crimson::net::dispatchers_t dispatchers{this, monc.get(), mgrc.get()};
     return seastar::when_all_succeed(
-      cluster_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER),
-                             local_conf()->ms_bind_port_min,
-                             local_conf()->ms_bind_port_max)
+      cluster_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER))
         .safe_then([this, dispatchers]() mutable {
 	  return cluster_msgr->start(dispatchers);
         }, crimson::net::Messenger::bind_ertr::all_same_way(
             [] (const std::error_code& e) {
-          logger().error("cluster messenger try_bind(): address range is unavailable.");
+          logger().error("cluster messenger bind(): {}", e);
           ceph_abort();
         })),
-      public_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
-                            local_conf()->ms_bind_port_min,
-                            local_conf()->ms_bind_port_max)
+      public_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC))
         .safe_then([this, dispatchers]() mutable {
 	  return public_msgr->start(dispatchers);
         }, crimson::net::Messenger::bind_ertr::all_same_way(
             [] (const std::error_code& e) {
-          logger().error("public messenger try_bind(): address range is unavailable.");
+          logger().error("public messenger bind(): {}", e);
           ceph_abort();
         })));
   }).then_unpack([this] {
@@ -332,13 +380,14 @@ seastar::future<> OSD::start()
     if (auto [addrs, changed] =
         replace_unknown_addrs(cluster_msgr->get_myaddrs(),
                               public_msgr->get_myaddrs()); changed) {
+      logger().debug("replacing unkwnown addrs of cluster messenger");
       return cluster_msgr->set_myaddrs(addrs);
     } else {
       return seastar::now();
     }
   }).then([this] {
-    return heartbeat->start(public_msgr->get_myaddrs(),
-                            cluster_msgr->get_myaddrs());
+    return heartbeat->start(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
+                            pick_addresses(CEPH_PICK_ADDRESS_CLUSTER));
   }).then([this] {
     // create the admin-socket server, and the objects that register
     // to handle incoming commands

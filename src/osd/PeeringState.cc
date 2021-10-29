@@ -711,6 +711,8 @@ void PeeringState::start_peering_interval(
     // did primary change?
     if (was_old_primary != is_primary()) {
       state_clear(PG_STATE_CLEAN);
+      // queue/dequeue the scrubber
+      pl->on_primary_status_change(was_old_primary, is_primary());
     }
 
     pl->on_role_change();
@@ -732,6 +734,10 @@ void PeeringState::start_peering_interval(
 		 << ", replicas changed" << dendl;
       }
     }
+  }
+
+  if (is_primary() && was_old_primary) {
+    pl->reschedule_scrub();
   }
 
   if (acting.empty() && !up.empty() && up_primary == pg_whoami) {
@@ -2739,6 +2745,9 @@ void PeeringState::activate(
 
       bool needs_past_intervals = pi.dne();
 
+      // Save num_bytes for backfill reservation request, can't be negative
+      peer_bytes[peer] = std::max<int64_t>(0, pi.stats.stats.sum.num_bytes);
+
       if (pi.last_update == info.last_update) {
         // empty log
 	if (!pi.last_backfill.is_max())
@@ -2789,8 +2798,6 @@ void PeeringState::activate(
 	pi.last_interval_started = info.last_interval_started;
 	pi.history = info.history;
 	pi.hit_set = info.hit_set;
-        // Save num_bytes for reservation request, can't be negative
-        peer_bytes[peer] = std::max<int64_t>(0, pi.stats.stats.sum.num_bytes);
         pi.stats.stats.clear();
         pi.stats.stats.sum.num_bytes = peer_bytes[peer];
 
@@ -3969,7 +3976,7 @@ void PeeringState::update_stats(
   if (f(info.history, info.stats)) {
     pl->publish_stats_to_osd();
   }
-  pl->on_info_history_change();
+  pl->reschedule_scrub();
 
   if (t) {
     dirty_info = true;

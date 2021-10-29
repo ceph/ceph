@@ -6,6 +6,7 @@ import _ from 'lodash';
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
 import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
+import { CreateClusterComponent } from './ceph/cluster/create-cluster/create-cluster.component';
 import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
 import { HostFormComponent } from './ceph/cluster/hosts/host-form/host-form.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
@@ -90,14 +91,27 @@ const routes: Routes = [
 
       // Cluster
       {
+        path: 'expand-cluster',
+        component: CreateClusterComponent,
+        canActivate: [ModuleStatusGuardService],
+        data: {
+          moduleStatusGuardConfig: {
+            apiPath: 'orchestrator',
+            redirectTo: 'dashboard',
+            backend: 'cephadm'
+          },
+          breadcrumbs: 'Expand Cluster'
+        }
+      },
+      {
         path: 'hosts',
+        component: HostsComponent,
         data: { breadcrumbs: 'Cluster/Hosts' },
         children: [
-          { path: '', component: HostsComponent },
           {
-            path: URLVerbs.CREATE,
+            path: URLVerbs.ADD,
             component: HostFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
+            outlet: 'modal'
           }
         ]
       },
@@ -108,7 +122,8 @@ const routes: Routes = [
       },
       {
         path: 'services',
-        canActivateChild: [ModuleStatusGuardService],
+        component: ServicesComponent,
+        canActivate: [ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
             apiPath: 'orchestrator',
@@ -120,11 +135,10 @@ const routes: Routes = [
           breadcrumbs: 'Cluster/Services'
         },
         children: [
-          { path: '', component: ServicesComponent },
           {
             path: URLVerbs.CREATE,
             component: ServiceFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
+            outlet: 'modal'
           }
         ]
       },
@@ -363,7 +377,8 @@ const routes: Routes = [
   imports: [
     RouterModule.forRoot(routes, {
       useHash: true,
-      preloadingStrategy: PreloadAllModules
+      preloadingStrategy: PreloadAllModules,
+      relativeLinkResolution: 'legacy'
     })
   ],
   exports: [RouterModule],
