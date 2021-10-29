@@ -6,7 +6,7 @@ from typing import Optional, Tuple, Iterator, List, Any
 from contextlib import contextmanager
 from unittest import mock
 from unittest.mock import MagicMock
-from mgr_module import NFS_POOL_NAME
+from mgr_module import MgrModule, NFS_POOL_NAME
 
 from rados import ObjectNotFound
 
@@ -222,7 +222,7 @@ EXPORT {
                            return_value=[self.cluster_id]), \
                 mock.patch('nfs.export.restart_nfs_service'), \
                 mock.patch('nfs.cluster.restart_nfs_service'), \
-                mock.patch('nfs.export.ExportMgr._exec', mock_exec), \
+                mock.patch.object(MgrModule, 'tool_exec', mock_exec), \
                 mock.patch('nfs.export.check_fs', return_value=True), \
                 mock.patch('nfs.export_utils.check_fs', return_value=True), \
                 mock.patch('nfs.export.ExportMgr._create_user_key',
