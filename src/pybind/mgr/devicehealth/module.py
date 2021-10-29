@@ -562,7 +562,6 @@ CREATE TABLE DeviceHealthMetrics (
                     res[dt] = json.loads(row['raw_smart'])
                 except (ValueError, IndexError):
                     self.log.debug(f"unable to parse value for {devid}:{t}")
-                    pass
         return res
 
     def show_device_metrics(self, devid: str, sample: Optional[str]) -> Tuple[int, str, str]:
