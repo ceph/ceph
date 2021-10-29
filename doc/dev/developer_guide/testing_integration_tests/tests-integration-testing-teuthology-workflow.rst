@@ -110,7 +110,7 @@ teuthology. This procedure explains how to run tests using teuthology.
 Other frequently used/useful options are ``-d`` (or ``--distro``),
 ``--distroversion``, ``--filter-out``, ``--timeout``, ``flavor``, ``-rerun``,
 ``-l`` (for limiting number of jobs) , ``-n`` (for how many times the job will
-run). Run ``teuthology-suite --help`` to read descriptions of these and other
+run), and ``--subset`` (used to reduce the number of tests that are triggered). Run ``teuthology-suite --help`` to read descriptions of these and other
 options.
 
 .. _teuthology_testing_qa_changes:
