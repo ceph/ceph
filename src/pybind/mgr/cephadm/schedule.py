@@ -361,8 +361,8 @@ class HostAssignment(object):
     def find_ip_on_host(self, hostname: str, subnets: List[str]) -> Optional[str]:
         for subnet in subnets:
             ips: List[str] = []
-            for iface, ips in self.networks.get(hostname, {}).get(subnet, {}).items():
-                ips.extend(ips)
+            for iface, iface_ips in self.networks.get(hostname, {}).get(subnet, {}).items():
+                ips.extend(iface_ips)
             if ips:
                 return sorted(ips)[0]
         return None
