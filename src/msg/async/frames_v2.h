@@ -188,8 +188,9 @@ class FrameAssembler {
 public:
   // crypto must be non-null
   FrameAssembler(const ceph::crypto::onwire::rxtx_t* crypto, bool is_rev1, 
-    const ceph::compression::onwire::rxtx_t* compression)
-      : m_crypto(crypto), m_is_rev1(is_rev1), m_compression(compression) {}
+    bool with_data_crc, const ceph::compression::onwire::rxtx_t* compression)
+      : m_crypto(crypto), m_is_rev1(is_rev1), m_with_data_crc(with_data_crc),
+        m_compression(compression) {}
 
   void set_is_rev1(bool is_rev1) {
     m_descs.clear();
@@ -401,6 +402,7 @@ private:
   __u8 m_flags;
   const ceph::crypto::onwire::rxtx_t* m_crypto;
   bool m_is_rev1;  // msgr2.1?
+  bool m_with_data_crc;
   const ceph::compression::onwire::rxtx_t* m_compression;
 };
 
