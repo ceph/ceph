@@ -126,7 +126,11 @@ on ``mon.a``).
 
 	sudo ceph-mon -i {mon-id} --mkfs --monmap {tmp}/{map-filename} --keyring {tmp}/{key-filename}
 	
-
+#. Add the new monitor to the list of monitors of the cluster. 
+   This enables other nodes to use this monitor during their initial startup.
+   
+        ceph-mon add {mon-id} {ip:port}
+    
 #. Start the new monitor and it will automatically join the cluster.
    The daemon needs to know which address to bind to, via either the
    ``--public-addr {ip}`` or ``--public-network {network}`` argument.
