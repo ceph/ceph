@@ -124,8 +124,12 @@ class ProtocolV2 final : public Protocol {
 
   ceph::crypto::onwire::rxtx_t session_stream_handlers;
   ceph::compression::onwire::rxtx_t session_comp_handlers;
-  ceph::msgr::v2::FrameAssembler tx_frame_asm{&session_stream_handlers, false, &session_comp_handlers};
-  ceph::msgr::v2::FrameAssembler rx_frame_asm{&session_stream_handlers, false, &session_comp_handlers};
+  ceph::msgr::v2::FrameAssembler tx_frame_asm{
+    &session_stream_handlers, false, common::local_conf()->ms_crc_data,
+    &session_comp_handlers};
+  ceph::msgr::v2::FrameAssembler rx_frame_asm{
+    &session_stream_handlers, false, common::local_conf()->ms_crc_data,
+    &session_comp_handlers};
   ceph::bufferlist rx_preamble;
   ceph::msgr::v2::segment_bls_t rx_segments_data;
 
