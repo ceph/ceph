@@ -509,8 +509,10 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             result_list.append(self.rook_cluster.add_osds(drive_group, matching_hosts))
         return OrchResult(result_list)
 
-    def remove_osds(self, osd_ids: List[str], replace: bool = False, force: bool = False) -> OrchResult[str]:
+    def remove_osds(self, osd_ids: List[str], replace: bool = False, force: bool = False, zap: bool = False) -> OrchResult[str]:
         assert self._rook_cluster is not None
+        if zap:
+            raise RuntimeError("Rook does not support zapping devices during OSD removal.")
         res = self._rook_cluster.remove_osds(osd_ids, replace, force, self.mon_command)
         return OrchResult(res)
 
