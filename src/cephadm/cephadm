@@ -2336,6 +2336,8 @@ def get_config_and_keyring(ctx):
         d = get_parm(ctx.config_json)
         config = d.get('config')
         keyring = d.get('keyring')
+        if config and keyring:
+            return config, keyring
 
     if 'config' in ctx and ctx.config:
         try:
