@@ -103,6 +103,9 @@ public:
       return entity_name_t();
     }
   }
+  uint8_t state_flag() const {
+    return latest_flag_point;
+  }
 
   std::string_view state_string() const override {
     switch(latest_flag_point) {
@@ -115,6 +118,32 @@ public:
     default: break;
     }
     return "no flag points reached";
+  }
+
+  static std::string get_state_string(uint8_t flag) {
+    std::string flag_point;
+
+    switch(flag) {
+      case flag_queued_for_pg:
+        flag_point = "queued for pg";
+        break;
+      case flag_reached_pg:
+        flag_point = "reached pg";
+        break;
+      case flag_delayed:
+        flag_point = "delayed";
+        break;
+      case flag_started:
+        flag_point = "started";
+        break;
+      case flag_sub_op_sent:
+        flag_point = "waiting for sub ops";
+        break;
+      case flag_commit_sent:
+        flag_point = "commit sent; apply or cleanup";
+        break;
+    }
+    return flag_point;
   }
 
   void mark_queued_for_pg() {
