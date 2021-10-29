@@ -432,7 +432,6 @@ class SSLCerts:
                     ip = x509.IPAddress(ipaddress.IPv6Address(addr))
                 except Exception:
                     have_ip = False
-                    pass
         else:
             ip = x509.IPAddress(ipaddress.IPv4Address(self.mgr.get_mgr_ip()))
 
