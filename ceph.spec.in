@@ -1582,6 +1582,7 @@ exit 0
 %{_bindir}/cephfs-table-tool
 %{_bindir}/crushdiff
 %{_bindir}/rados
+%{_bindir}/notrados
 %{_bindir}/radosgw-admin
 %{_bindir}/rbd
 %{_bindir}/rbd-replay
@@ -2201,6 +2202,7 @@ fi
 
 %files -n librados2
 %{_libdir}/librados.so.*
+%{_libdir}/librados_stub.so.*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/libceph-common.so.*
 %if %{with lttng}
@@ -2217,6 +2219,7 @@ fi
 %{_includedir}/rados/librados.h
 %{_includedir}/rados/rados_types.h
 %{_libdir}/librados.so
+%{_libdir}/librados_stub.so
 %if %{with lttng}
 %{_libdir}/librados_tp.so
 %endif
