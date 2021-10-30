@@ -1,6 +1,7 @@
 import cherrypy
 import ipaddress
 import json
+import logging
 import socket
 import ssl
 import tempfile
@@ -25,6 +26,18 @@ from typing import Any, Dict, List, Set, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
+
+
+def cherrypy_filter(record: logging.LogRecord) -> int:
+    blocked = [
+        'TLSV1_ALERT_DECRYPT_ERROR'
+    ]
+    msg = record.getMessage()
+    return not any([m for m in blocked if m in msg])
+
+
+logging.getLogger('cherrypy.access').addFilter(cherrypy_filter)
+logging.getLogger('cherrypy.error').addFilter(cherrypy_filter)
 
 
 class CherryPyThread(threading.Thread):
