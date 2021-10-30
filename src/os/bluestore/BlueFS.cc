@@ -2264,11 +2264,11 @@ void BlueFS::compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
     std::lock_guard fl(file_ref->lock);
     if (file_ref->dirty_seq < capture_before_seq) {
       dout(20) << __func__ << " op_file_update " << file_ref->fnode << dendl;
-      t->op_file_update(file_ref->fnode);
     } else {
-      dout(20) << __func__ << " skipping just modified, dirty_seq="
+      dout(20) << __func__ << " op_file_update just modified, dirty_seq="
 	       << file_ref->dirty_seq << " " << file_ref->fnode << dendl;
     }
+    t->op_file_update(file_ref->fnode);
   }
   for (auto& [path, dir_ref] : nodes.dir_map) {
     dout(20) << __func__ << " op_dir_create " << path << dendl;
@@ -2476,12 +2476,16 @@ void BlueFS::_compact_log_async_LD_NF_D() //also locks FW for new_writer
   _flush_bdev();
   _flush_and_sync_log_jump_D(old_log_jump_to, runway);
 
-  log.lock.unlock();
-  // out of jump section - now log can be used to write to
+  // out of jump section
 
   // 2. prepare compacted log
   bluefs_transaction_t t;
   compact_log_async_dump_metadata_NF(&t, seq_now);
+
+  // now state is captured to bufferlist
+  // log can be used to write to, ops in log will be continuation of captured state
+  log.lock.unlock();
+
   uint64_t max_alloc_size = std::max(alloc_size[BDEV_WAL],
 				     std::max(alloc_size[BDEV_DB],
 					      alloc_size[BDEV_SLOW]));
