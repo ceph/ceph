@@ -113,9 +113,39 @@ int decode_base64(const string& s, T *t)
 
 namespace librados {
 
+class DBStatementCache {
+  SQLite::Database *db;
+  ceph::mutex lock = ceph::make_mutex("DBStatementCache::lock");
+  map<string, list<SQLite::Statement *> > entries;
+
+public:
+  DBStatementCache(SQLite::Database *_db) : db(_db) {}
+
+  SQLite::Statement *get(const string& sql) {
+    std::unique_lock locker{lock};
+    auto& l = entries[sql];
+    if (l.empty()) {
+
+      auto stmt = new SQLite::Statement(*db, sql);
+      return stmt;
+    }
+    auto stmt = l.front();
+    l.pop_front();
+    return stmt;
+  }
+
+  void put(SQLite::Statement *stmt) {
+    std::unique_lock locker{lock};
+    stmt->clearBindings();
+    stmt->reset();
+    entries[stmt->getQuery()].push_back(stmt);
+  }
+};
+
 LRemDBOps::LRemDBOps(const std::string& _name, int _flags) : name(_name), flags(_flags) {
 #define DB_TIMEOUT_SEC 20
   db = std::make_unique<SQLite::Database>(name, flags, DB_TIMEOUT_SEC * 1000);
+  stmt_cache = std::make_unique<DBStatementCache>(db.get());
 }
 
 LRemDBOps::Transaction LRemDBOps::new_transaction() {
@@ -133,7 +163,7 @@ SQLite::Statement LRemDBOps::statement(const string& sql) {
 
 SQLite::Statement *LRemDBOps::deferred_statement(const string& sql) {
   dout(20) << "Statement: " << sql << dendl;
-  return new SQLite::Statement(*db, sql);
+  return stmt_cache->get(sql);
 }
 
 void LRemDBOps::Transaction::complete_op(int r) {
@@ -168,12 +198,29 @@ void LRemDBOps::queue_remove_key(const std::string& key) {
   }
 }
 
+struct StatementCacheRef {
+  DBStatementCache *cache;
+  SQLite::Statement *stmt;
+
+  StatementCacheRef(DBStatementCache *_cache,
+                    SQLite::Statement *_stmt) : cache(_cache),
+                                                stmt(_stmt) {}
+
+  ~StatementCacheRef() {
+    cache->put(stmt);
+  }
+};
+
+StatementCacheRef *LRemDBOps::new_cache_ref(SQLite::Statement *statement) {
+  return new StatementCacheRef(stmt_cache.get(), statement);
+}
+
 void LRemDBOps::queue_statement(SQLite::Statement *statement, const std::string& key) {
   int num = statement_num++;
 
   queue_remove_key(key);
   statement_keys[key] = num;
-  deferred_statements[num] = {1, std::unique_ptr<SQLite::Statement>(statement)};
+  deferred_statements[num] = {1, std::unique_ptr<StatementCacheRef>(new_cache_ref(statement))};
 }
 
 void LRemDBOps::queue_statement(SQLite::Statement *statement, std::vector<std::string>& keys) {
@@ -184,7 +231,7 @@ void LRemDBOps::queue_statement(SQLite::Statement *statement, std::vector<std::s
     statement_keys[k] = num;
   }
 
-  deferred_statements[num] = {(int)keys.size(), std::unique_ptr<SQLite::Statement>(statement)};
+  deferred_statements[num] = {(int)keys.size(), std::unique_ptr<StatementCacheRef>(new_cache_ref(statement))};
 }
 
 void LRemDBOps::queue_statement_range(SQLite::Statement *statement,
@@ -202,7 +249,7 @@ void LRemDBOps::queue_statement_range(SQLite::Statement *statement,
   }
 
   /* this operation isn't indexed by key, therefore can't be removed */
-  deferred_statements[num] = {1, std::unique_ptr<SQLite::Statement>(statement)};
+  deferred_statements[num] = {1, std::unique_ptr<StatementCacheRef>(new_cache_ref(statement))};
 }
 
 static ceph::mutex flush_lock = ceph::make_mutex("LRemDBOps::flush_lock");
@@ -217,7 +264,7 @@ void LRemDBOps::flush() {
   Transaction t(*db);
 
   for (auto& i : deferred_statements) {
-    auto& s = i.second.statement;
+    auto s = i.second.ref->stmt;
     int r = exec(*s);
     if (r < 0) {
       t.complete_op(r);
@@ -255,24 +302,14 @@ public:
 
 static DBOpsCache dbops_cache;
 
-#warning remove me
-map<void *, int> m;
 ceph::mutex mlock = ceph::make_mutex("LRemDBCluster::m_lock");
 
 LRemDBOps::Transaction::Transaction(SQLite::Database& db) {
-  std::unique_lock locker{mlock};
-  p = (void *)&db;
-  int count = ++m[p];
-  dout(20) << "LRemDBOps::Transaction() db=" << p << " count=" << m[p] << dendl;
-  assert(count == 1);
-
   trans = make_unique<SQLite::Transaction>(db, true);
 }
 
 LRemDBOps::Transaction::~Transaction() {
   std::unique_lock locker{mlock};
-  --m[p];
-  dout(20) << "LRemDBOps::~Transaction() db=" << p << " count=" << m[p] << dendl;
 
   if (!trans) {
     return;

@@ -11,15 +11,19 @@
 
 namespace librados {
 
+class DBStatementCache;
+class StatementCacheRef;
+
 class LRemDBOps {
   std::string name;
   int flags;
 
   std::unique_ptr<SQLite::Database> db;
+  std::unique_ptr<DBStatementCache> stmt_cache;
 
   struct queued_statement {
     int count{0};
-    std::unique_ptr<SQLite::Statement> statement;
+    std::unique_ptr<StatementCacheRef> ref;
   };
 
   std::map<int, queued_statement> deferred_statements;
@@ -28,6 +32,7 @@ class LRemDBOps {
   int statement_num{0};
 
   void queue_remove_key(const std::string& key);
+  StatementCacheRef *new_cache_ref(SQLite::Statement *statement);
 public:
   LRemDBOps(const std::string& _name, int _flags);
 
