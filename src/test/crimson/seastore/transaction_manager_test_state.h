@@ -106,11 +106,12 @@ auto get_transaction_manager(
     scanner_ref);
 }
 
-auto get_seastore(SegmentManagerRef sm) {
+auto get_seastore(SeaStore::MDStoreRef mdstore, SegmentManagerRef sm) {
   auto tm = get_transaction_manager(*sm);
   auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
   return std::make_unique<SeaStore>(
     "",
+    std::move(mdstore),
     std::move(sm),
     std::move(tm),
     std::move(cm),
@@ -258,6 +259,38 @@ public:
 };
 
 class SeaStoreTestState : public EphemeralTestState {
+  class TestMDStoreState {
+    std::map<std::string, std::string> md;
+    public:
+    class Store final : public SeaStore::MDStore {
+      TestMDStoreState &parent;
+    public:
+      Store(TestMDStoreState &parent) : parent(parent) {}
+
+      write_meta_ret write_meta(
+	const std::string& key, const std::string& value) final {
+	parent.md[key] = value;
+	return seastar::now();
+      }
+
+      read_meta_ret read_meta(const std::string& key) final {
+	auto iter = parent.md.find(key);
+	if (iter != parent.md.end()) {
+	  return read_meta_ret(
+	    read_meta_ertr::ready_future_marker{},
+	    iter->second);
+	} else {
+	  return read_meta_ret(
+	    read_meta_ertr::ready_future_marker{},
+	    std::nullopt);
+	}
+      }
+    };
+    Store get_mdstore() {
+      return Store(*this);
+    }
+  } mdstore_state;
+
 protected:
   std::unique_ptr<SeaStore> seastore;
 
@@ -265,6 +298,7 @@ protected:
 
   virtual void _init() final {
     seastore = get_seastore(
+      std::make_unique<TestMDStoreState::Store>(mdstore_state.get_mdstore()),
       std::make_unique<TestSegmentManagerWrapper>(*segment_manager));
   }
 
