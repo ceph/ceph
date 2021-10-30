@@ -22,6 +22,7 @@
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/ssl/ssl_stream.hpp>
+#endif
 
 #include "common/split.h"
 
@@ -29,8 +30,6 @@
 #include "services/svc_zone.h"
 
 #include "rgw_zone.h"
-
-#endif
 
 #include "rgw_dmclock_async_scheduler.h"
 
