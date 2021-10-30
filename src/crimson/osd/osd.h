@@ -202,7 +202,7 @@ private:
                                        version_t last,
                                        Ref<MOSDMap> m);
 
-  void check_osdmap_features();
+  seastar::future<> check_osdmap_features();
 
   seastar::future<> handle_command(crimson::net::ConnectionRef conn,
 				   Ref<MCommand> m);

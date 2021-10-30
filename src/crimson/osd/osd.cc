@@ -177,6 +177,8 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
   }).then([cluster_fsid, this] {
     return store.write_meta("ceph_fsid", cluster_fsid.to_string());
   }).then([this] {
+    return store.write_meta("magic", CEPH_OSD_ONDISK_MAGIC);
+  }).then([this] {
     return store.write_meta("whoami", std::to_string(whoami));
   }).then([this] {
     return _write_key_meta();
@@ -1139,9 +1141,10 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
 	return seastar::now();
       }
     }
-    check_osdmap_features();
-    // yay!
-    return consume_map(osdmap->get_epoch());
+    return check_osdmap_features().then([this] {
+      // yay!
+      return consume_map(osdmap->get_epoch());
+    });
   }).then([m, this] {
     if (state.is_active()) {
       logger().info("osd.{}: now active", whoami);
@@ -1367,9 +1370,11 @@ seastar::future<> OSD::handle_peering_op(
   return seastar::now();
 }
 
-void OSD::check_osdmap_features()
+seastar::future<> OSD::check_osdmap_features()
 {
   heartbeat->set_require_authorizer(true);
+  return store.write_meta("require_osd_release",
+                          stringify((int)osdmap->require_osd_release));
 }
 
 seastar::future<> OSD::consume_map(epoch_t epoch)

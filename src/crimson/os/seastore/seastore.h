@@ -40,7 +40,34 @@ public:
 
 class SeaStore final : public FuturizedStore {
 public:
+  class MDStore {
+  public:
+    using base_iertr = crimson::errorator<
+      crimson::ct_error::input_output_error
+    >;
 
+    using write_meta_ertr = base_iertr;
+    using write_meta_ret = write_meta_ertr::future<>;
+    virtual write_meta_ret write_meta(
+      const std::string &key,
+      const std::string &val
+    ) = 0;
+
+    using read_meta_ertr = base_iertr;
+    using read_meta_ret = write_meta_ertr::future<std::optional<std::string>>;
+    virtual read_meta_ret read_meta(const std::string &key) = 0;
+
+    virtual ~MDStore() {}
+  };
+  using MDStoreRef = std::unique_ptr<MDStore>;
+
+  SeaStore(
+    std::string root,
+    MDStoreRef mdstore,
+    SegmentManagerRef sm,
+    TransactionManagerRef tm,
+    CollectionManagerRef cm,
+    OnodeManagerRef om);
   SeaStore(
     std::string root,
     SegmentManagerRef sm,
@@ -265,6 +292,7 @@ private:
     OMapManager::omap_list_config_t config);
 
   std::string root;
+  MDStoreRef mdstore;
   SegmentManagerRef segment_manager;
   std::vector<SegmentManagerRef> secondaries;
   TransactionManagerRef transaction_manager;
@@ -350,6 +378,7 @@ private:
   }
   seastar::metrics::metric_group metrics;
   void register_metrics();
+  seastar::future<> write_fsid(uuid_d new_osd_fsid);
 };
 
 std::unique_ptr<SeaStore> make_seastore(
