@@ -38,17 +38,13 @@ namespace crimson::os::seastore {
 class FileMDStore final : public SeaStore::MDStore {
   std::string root;
 public:
-  FileMDStore(std::string root) : root(root) {}
+  FileMDStore(const std::string& root) : root(root) {}
 
   write_meta_ret write_meta(
     const std::string& key, const std::string& value) final {
     std::string path = fmt::format("{}/{}", root, key);
-    std::string fvalue = value;
-    fvalue += "\n";
-    ceph::bufferptr bp(fvalue.length());
     ceph::bufferlist bl;
-    bp.copy_in(0, fvalue.length(), fvalue.c_str());
-    bl.push_back(bp);
+    bl.append(value + "\n");
     return crimson::write_file(std::move(bl), path);
   }
 
@@ -73,7 +69,7 @@ public:
 };
 
 SeaStore::SeaStore(
-  std::string root,
+  const std::string& root,
   MDStoreRef mdstore,
   SegmentManagerRef sm,
   TransactionManagerRef tm,
@@ -90,7 +86,7 @@ SeaStore::SeaStore(
 }
 
 SeaStore::SeaStore(
-  std::string root,
+  const std::string& root,
   SegmentManagerRef sm,
   TransactionManagerRef tm,
   CollectionManagerRef cm,
