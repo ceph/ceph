@@ -162,7 +162,7 @@ class OpsLogFile : public JsonOpsLogSink, public Thread, public DoutPrefixProvid
   ceph::mutex flush_mutex = ceph::make_mutex("OpsLogFile_flush");
   std::vector<bufferlist> log_buffer;
   std::vector<bufferlist> flush_buffer;
-  std::condition_variable cond_flush;
+  ceph::condition_variable cond_flush;
   std::ofstream file;
   bool stopped;
   uint64_t data_size;
