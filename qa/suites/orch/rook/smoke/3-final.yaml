@@ -8,3 +8,4 @@ tasks:
       - ceph orch device ls
       - ceph orch apply rgw foo
       - ceph orch apply mds foo
+      - ceph orch apply rbd-mirror
