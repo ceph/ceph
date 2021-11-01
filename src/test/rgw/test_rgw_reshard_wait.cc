@@ -67,7 +67,7 @@ TEST(ReshardWait, wait_yield)
   RGWReshardWait waiter(wait_duration);
 
   boost::asio::io_context context;
-  spawn::spawn(context, [&] (spawn::yield_context yield) {
+  spawn::spawn(context, [&] (yield_context yield) {
       EXPECT_EQ(0, waiter.wait(optional_yield{context, yield}));
     });
 
@@ -93,7 +93,7 @@ TEST(ReshardWait, stop_yield)
 
   boost::asio::io_context context;
   spawn::spawn(context,
-    [&] (spawn::yield_context yield) {
+    [&] (yield_context yield) {
       EXPECT_EQ(-ECANCELED, long_waiter.wait(optional_yield{context, yield}));
     });
 
@@ -136,7 +136,7 @@ TEST(ReshardWait, stop_multiple)
   // spawn 4 coroutines
   boost::asio::io_context context;
   {
-    auto async_waiter = [&] (spawn::yield_context yield) {
+    auto async_waiter = [&] (yield_context yield) {
         EXPECT_EQ(-ECANCELED, long_waiter.wait(optional_yield{context, yield}));
       };
     spawn::spawn(context, async_waiter);
