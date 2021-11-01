@@ -952,10 +952,12 @@ protected:
   void handle_client_reply(const MConstRef<MClientReply>& reply);
   bool is_dir_operation(MetaRequest *request);
 
-  int path_walk(const filepath& fp, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true, int mask=0,
-                InodeRef dirinode=nullptr);
+  int path_walk(const filepath& fp, struct walk_dentry_result* result,
+                const UserPerm& perms, bool followsym=true, int mask=0,
+                std::optional<int> dirfd=std::nullopt);
   int path_walk(const filepath& fp, InodeRef *end, const UserPerm& perms,
-                bool followsym=true, int mask=0, InodeRef dirinode=nullptr);
+                bool followsym=true, int mask=0,
+                std::optional<int> dirfd=std::nullopt);
 
   // fake inode number for 32-bits ino_t
   void _assign_faked_ino(Inode *in);
