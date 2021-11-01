@@ -24,16 +24,15 @@ constexpr const char* RequestLogAction{"Log"};
 
 int RequestLog(lua_State* L) 
 {
-  const auto store = reinterpret_cast<rgw::sal::RadosStore*>(lua_touserdata(L, lua_upvalueindex(1)));
-  const auto rest = reinterpret_cast<RGWREST*>(lua_touserdata(L, lua_upvalueindex(2)));
-  const auto olog = reinterpret_cast<OpsLogSocket*>(lua_touserdata(L, lua_upvalueindex(3)));
-  const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(4)));
-  const std::string op_name(reinterpret_cast<const char*>(lua_touserdata(L, lua_upvalueindex(5))));
-  if (store && s) {
-    const auto rc = rgw_log_op(store, rest, s, op_name, olog);
+  const auto rest = reinterpret_cast<RGWREST*>(lua_touserdata(L, lua_upvalueindex(1)));
+  const auto olog = reinterpret_cast<OpsLogSink*>(lua_touserdata(L, lua_upvalueindex(2)));
+  const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(3)));
+  const std::string op_name(reinterpret_cast<const char*>(lua_touserdata(L, lua_upvalueindex(4))));
+  if (s) {
+    const auto rc = rgw_log_op(rest, s, op_name, olog);
     lua_pushinteger(L, rc);
   } else {
-    ldpp_dout(s, 1) << "Lua ERROR: missing rados store, cannot use ops log"  << dendl;
+    ldpp_dout(s, 1) << "Lua ERROR: missing request state, cannot use ops log"  << dendl;
     lua_pushinteger(L, -EINVAL);
   }
 
@@ -777,7 +776,7 @@ struct RequestMetaTable : public EmptyMetaTable {
 int execute(
     rgw::sal::Store* store,
     RGWREST* rest,
-    OpsLogSocket* olog,
+    OpsLogSink* olog,
     req_state* s, 
     const char* op_name,
     const std::string& script)
@@ -799,12 +798,11 @@ int execute(
   lua_getglobal(L, RequestMetaTable::TableName().c_str());
   ceph_assert(lua_istable(L, -1));
   pushstring(L, RequestLogAction);
-  lua_pushlightuserdata(L, store);
   lua_pushlightuserdata(L, rest);
   lua_pushlightuserdata(L, olog);
   lua_pushlightuserdata(L, s);
   lua_pushlightuserdata(L, const_cast<char*>(op_name));
-  lua_pushcclosure(L, RequestLog, FIVE_UPVALS);
+  lua_pushcclosure(L, RequestLog, FOUR_UPVALS);
   lua_rawset(L, -3);
 
   try {

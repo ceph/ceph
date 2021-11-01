@@ -17,6 +17,9 @@
 
 #include "services/svc_zone.h"
 
+#include <chrono>
+#include <math.h>
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -317,13 +320,140 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   formatter->close_section();
 }
 
-void OpsLogSocket::formatter_to_bl(bufferlist& bl)
+OpsLogManifold::~OpsLogManifold()
+{
+    for (const auto &sink : sinks) {
+        delete sink;
+    }
+}
+
+void OpsLogManifold::add_sink(OpsLogSink* sink)
+{
+    sinks.push_back(sink);
+}
+
+int OpsLogManifold::log(struct req_state* s, struct rgw_log_entry& entry)
+{
+  int ret = 0;
+  for (const auto &sink : sinks) {
+    if (sink->log(s, entry) < 0) {
+      ret = -1;
+    }
+  }
+  return ret;
+}
+
+OpsLogFile::OpsLogFile(CephContext* cct, std::string& path, uint64_t max_data_size) :
+  cct(cct), file(path, std::ofstream::app), data_size(0), max_data_size(max_data_size)
+{
+}
+
+void OpsLogFile::flush()
+{
+  std::scoped_lock flush_lock(flush_mutex);
+  {
+    std::scoped_lock log_lock(log_mutex);
+    assert(flush_buffer.empty());
+    flush_buffer.swap(log_buffer);
+    data_size = 0;
+  }
+  for (auto bl : flush_buffer) {
+    int try_num = 0;
+    while (true) {
+      bl.write_stream(file);
+      if (!file) {
+        ldpp_dout(this, 0) << "ERROR: failed to log RGW ops log file entry" << dendl;
+        file.clear();
+        if (stopped) {
+          break;
+        }
+        int sleep_time_secs = std::min((int) pow(2, try_num), 60);
+        std::this_thread::sleep_for(std::chrono::seconds(sleep_time_secs));
+        try_num++;
+      } else {
+        break;
+      }
+    }
+  }
+  flush_buffer.clear();
+  file << std::endl;
+}
+
+void* OpsLogFile::entry() {
+  std::unique_lock lock(log_mutex);
+  while (!stopped) {
+    if (!log_buffer.empty()) {
+      lock.unlock();
+      flush();
+      lock.lock();
+      continue;
+    }
+    cond_flush.wait(lock);
+  }
+  flush();
+  return NULL;
+}
+
+void OpsLogFile::start() {
+  stopped = false;
+  create("ops_log_file");
+}
+
+void OpsLogFile::stop() {
+  {
+    cond_flush.notify_one();
+    stopped = true;
+  }
+  join();
+}
+
+OpsLogFile::~OpsLogFile()
+{
+  if (!stopped) {
+    stop();
+  }
+  file.close();
+}
+
+int OpsLogFile::log_json(struct req_state* s, bufferlist& bl)
+{
+  std::unique_lock lock(log_mutex);
+  if (data_size + bl.length() >= max_data_size) {
+    ldout(s->cct, 0) << "ERROR: RGW ops log file buffer too full, dropping log for txn: " << s->trans_id << dendl;
+    return -1;
+  }
+  log_buffer.push_back(bl);
+  data_size += bl.length();
+  cond_flush.notify_all();
+  return 0;
+}
+
+JsonOpsLogSink::JsonOpsLogSink() {
+  formatter = new JSONFormatter;
+}
+
+JsonOpsLogSink::~JsonOpsLogSink() {
+  delete formatter;
+}
+
+void JsonOpsLogSink::formatter_to_bl(bufferlist& bl)
 {
   stringstream ss;
   formatter->flush(ss);
   const string& s = ss.str();
-
   bl.append(s);
+}
+
+int JsonOpsLogSink::log(struct req_state* s, struct rgw_log_entry& entry)
+{
+  bufferlist bl;
+
+  lock.lock();
+  rgw_format_ops_log_entry(entry, formatter);
+  formatter_to_bl(bl);
+  lock.unlock();
+
+  return log_json(s, bl);
 }
 
 void OpsLogSocket::init_connection(bufferlist& bl)
@@ -333,29 +463,43 @@ void OpsLogSocket::init_connection(bufferlist& bl)
 
 OpsLogSocket::OpsLogSocket(CephContext *cct, uint64_t _backlog) : OutputDataSocket(cct, _backlog)
 {
-  formatter = new JSONFormatter;
   delim.append(",\n");
 }
 
-OpsLogSocket::~OpsLogSocket()
+int OpsLogSocket::log_json(struct req_state* s, bufferlist& bl)
 {
-  delete formatter;
-}
-
-void OpsLogSocket::log(struct rgw_log_entry& entry)
-{
-  bufferlist bl;
-
-  lock.lock();
-  rgw_format_ops_log_entry(entry, formatter);
-  formatter_to_bl(bl);
-  lock.unlock();
-
   append_output(bl);
+  return 0;
 }
 
-int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
-	       const string& op_name, OpsLogSocket *olog)
+OpsLogRados::OpsLogRados(rgw::sal::Store* store): store(store)
+{
+}
+
+int OpsLogRados::log(struct req_state* s, struct rgw_log_entry& entry)
+{
+  if (!s->cct->_conf->rgw_ops_log_rados) {
+    return 0;
+  }
+  bufferlist bl;
+  encode(entry, bl);
+
+  struct tm bdt;
+  time_t t = req_state::Clock::to_time_t(entry.time);
+  if (s->cct->_conf->rgw_log_object_name_utc)
+    gmtime_r(&t, &bdt);
+  else
+    localtime_r(&t, &bdt);
+  string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
+                                      entry.bucket_id, entry.bucket);
+  if (store->log_op(s, oid, bl) < 0) {
+    ldpp_dout(s, 0) << "ERROR: failed to log RADOS RGW ops log entry for txn: " << s->trans_id << dendl;
+    return -1;
+  }
+  return 0;
+}
+
+int rgw_log_op(RGWREST* const rest, struct req_state *s, const string& op_name, OpsLogSink *olog)
 {
   struct rgw_log_entry entry;
   string bucket_id;
@@ -473,37 +617,14 @@ int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", s->err.http_ret);
     entry.http_status = buf;
-  } else
+  } else {
     entry.http_status = "200"; // default
-
+  }
   entry.error_code = s->err.err_code;
   entry.bucket_id = bucket_id;
   entry.trans_id = s->trans_id;
-
-  bufferlist bl;
-  encode(entry, bl);
-
-  struct tm bdt;
-  time_t t = req_state::Clock::to_time_t(entry.time);
-  if (s->cct->_conf->rgw_log_object_name_utc)
-    gmtime_r(&t, &bdt);
-  else
-    localtime_r(&t, &bdt);
-
-  int ret = 0;
-
-  if (s->cct->_conf->rgw_ops_log_rados) {
-    string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
-				        entry.bucket_id, entry.bucket);
-    ret = store->log_op(s, oid, bl);
-  }
-
   if (olog) {
-    olog->log(entry);
+    return olog->log(s, entry);
   }
-  if (ret < 0)
-    ldpp_dout(s, 0) << "ERROR: failed to log entry" << dendl;
-
-  return ret;
+  return 0;
 }
-

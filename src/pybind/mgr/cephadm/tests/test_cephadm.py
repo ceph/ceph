@@ -666,6 +666,28 @@ class TestCephadm(object):
             assert out == "Created no osd(s) on host test; already created?"
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch('cephadm.services.osd.OSDService._run_ceph_volume_command')
+    @mock.patch('cephadm.services.osd.OSDService.driveselection_to_ceph_volume')
+    @mock.patch('cephadm.services.osd.OsdIdClaims.refresh', lambda _: None)
+    @mock.patch('cephadm.services.osd.OsdIdClaims.get', lambda _: {})
+    def test_limit_not_reached(self, d_to_cv, _run_cv_cmd, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
+                                data_devices=DeviceSelection(limit=5, rotational=1),
+                                service_id='not_enough')
+
+            disks_found = [
+                '[{"data": "/dev/vdb", "data_size": "50.00 GB", "encryption": "None"}, {"data": "/dev/vdc", "data_size": "50.00 GB", "encryption": "None"}]']
+            d_to_cv.return_value = 'foo'
+            _run_cv_cmd.return_value = (disks_found, '', 0)
+            preview = cephadm_module.osd_service.generate_previews([dg], 'test')
+
+            for osd in preview:
+                assert 'notes' in osd
+                assert osd['notes'] == [
+                    'NOTE: Did not find enough disks matching filter on host test to reach data device limit (Found: 2 | Limit: 5)']
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_prepare_drivegroup(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),

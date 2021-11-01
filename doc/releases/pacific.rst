@@ -763,6 +763,13 @@ Upgrading from Octopus or Nautilus
 Before starting, make sure your cluster is stable and healthy (no down or
 recovering OSDs).  (This is optional, but recommended.)
 
+
+.. note::
+  WARNING: Please do not set `bluestore_fsck_quick_fix_on_mount` to true or
+  run `ceph-bluestore-tool` repair or quick-fix commands in Pacific versions
+  <= 16.2.6, because this can lead to data corruption, details in
+  https://tracker.ceph.com/issues/53062.
+
 Upgrading cephadm clusters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
