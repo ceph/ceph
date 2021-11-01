@@ -388,10 +388,9 @@ protected:
   virtual void persist_last_flushed_sync_gen() {}
   virtual void reserve_cache(C_BlockIORequestT *req, bool &alloc_succeeds,
                              bool &no_space) {}
-  virtual Context *construct_flush_entry_ctx(
-      const std::shared_ptr<pwl::GenericLogEntry> log_entry) {
-    return nullptr;
-  }
+  virtual void construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
+					DeferredContexts &post_unlock,
+					bool has_write_entry) = 0;
   virtual uint64_t get_max_extent() {
     return 0;
   }
