@@ -11,8 +11,8 @@ from ceph.deployment.service_spec import RGWSpec
 from typing import cast, Any, Optional, Sequence
 
 from . import *
-from .types import RGWAMException, RGWAMEnvMgr
-from .rgwam import EnvArgs, RGWAM
+from ceph.rgw.types import RGWAMException, RGWAMEnvMgr
+from ceph.rgw.rgwam_core import EnvArgs, RGWAM
 
 
 class RGWAMOrchMgr(RGWAMEnvMgr):

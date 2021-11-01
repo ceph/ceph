@@ -18,8 +18,8 @@ import logging
 
 from urllib.parse import urlparse
 
-from .rgwam import RGWAM, EnvArgs
-from .types import RGWAMEnvMgr, RGWAMException
+from ceph.rgw.rgwam_core import RGWAM, EnvArgs
+from ceph.rgw.types import RGWAMEnvMgr, RGWAMException
 
 class RGWAMCLIMgr(RGWAMEnvMgr):
     def __init__(self):
