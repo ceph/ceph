@@ -321,20 +321,18 @@ SegmentCleaner::gc_trim_journal_ret SegmentCleaner::gc_trim_journal()
 SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 {
   if (!scan_cursor) {
-    paddr_t next = P_ADDR_NULL;
-    next.segment = get_next_gc_target();
-    if (next == P_ADDR_NULL) {
+    journal_seq_t next = get_next_gc_target();
+    if (next == journal_seq_t()) {
       logger().debug(
 	"SegmentCleaner::do_gc: no segments to gc");
       return seastar::now();
     }
-    next.offset = 0;
     scan_cursor =
       std::make_unique<ExtentReader::scan_extents_cursor>(
 	next);
     logger().debug(
       "SegmentCleaner::do_gc: starting gc on segment {}",
-      scan_cursor->get_offset().segment);
+      scan_cursor->seq);
   } else {
     ceph_assert(!scan_cursor->is_complete());
   }
@@ -384,7 +382,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
             });
           }).si_then([this, &t] {
             if (scan_cursor->is_complete()) {
-              t.mark_segment_to_release(scan_cursor->get_offset().segment);
+              t.mark_segment_to_release(scan_cursor->get_segment_id());
             }
             return ecb->submit_transaction_direct(t);
           });

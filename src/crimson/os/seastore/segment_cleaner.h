@@ -683,10 +683,6 @@ public:
 
   void update_journal_tail_target(journal_seq_t target);
 
-  void init_journal_tail(journal_seq_t tail) {
-    journal_tail_target = journal_tail_committed = tail;
-  }
-
   void init_mkfs(journal_seq_t head) {
     journal_tail_target = head;
     journal_tail_committed = head;
@@ -773,30 +769,32 @@ public:
     assert(ret >= 0);
   }
 
-  segment_id_t get_next_gc_target() const {
-    segment_id_t ret = NULL_SEG_ID;
+  journal_seq_t get_next_gc_target() const {
+    segment_id_t id = NULL_SEG_ID;
     segment_seq_t seq = NULL_SEG_SEQ;
     int64_t least_live_bytes = std::numeric_limits<int64_t>::max();
     for (auto it = segments.begin();
 	 it != segments.end();
 	 ++it) {
-      auto id = it->first;
+      auto _id = it->first;
       const auto& segment_info = it->second;
       if (segment_info.is_closed() &&
 	  !segment_info.is_in_journal(journal_tail_committed) &&
-	  space_tracker->get_usage(id) < least_live_bytes) {
-	ret = id;
+	  space_tracker->get_usage(_id) < least_live_bytes) {
+	id = _id;
 	seq = segment_info.journal_segment_seq;
 	least_live_bytes = space_tracker->get_usage(id);
       }
     }
-    if (ret != NULL_SEG_ID) {
+    if (id != NULL_SEG_ID) {
       crimson::get_logger(ceph_subsys_seastore).debug(
 	"SegmentCleaner::get_next_gc_target: segment {} seq {}",
-	ret,
+	id,
 	seq);
+      return journal_seq_t{seq, {id, 0}};
+    } else {
+      return journal_seq_t();
     }
-    return ret;
   }
 
   SpaceTrackerIRef get_empty_space_tracker() const {
@@ -987,7 +985,7 @@ private:
     if (!scan_cursor)
       return 0;
 
-    return scan_cursor->get_offset().offset;
+    return scan_cursor->get_segment_offset();
   }
 
   /// Returns free space available for writes
