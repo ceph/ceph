@@ -122,8 +122,9 @@ private:
   bool has_sync_point_logs(GenericLogOperations &ops);
   void append_op_log_entries(GenericLogOperations &ops);
   void alloc_op_log_entries(GenericLogOperations &ops);
-  Context* construct_flush_entry_ctx(
-      std::shared_ptr<GenericLogEntry> log_entry);
+  void construct_flush_entries(pwl::GenericLogEntries entires_to_flush,
+				DeferredContexts &post_unlock,
+				bool has_write_entry) override;
   void append_ops(GenericLogOperations &ops, Context *ctx,
                   uint64_t* new_first_free_entry);
   void write_log_entries(GenericLogEntriesVector log_entries,
