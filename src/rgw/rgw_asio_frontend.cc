@@ -54,13 +54,12 @@ template <typename Stream>
 class StreamIO : public rgw::asio::ClientIO {
   CephContext* const cct;
   Stream& stream;
-  spawn::yield_context yield;
+  yield_context yield;
   parse_buffer& buffer;
   ceph::timespan request_timeout;
  public:
   StreamIO(CephContext *cct, Stream& stream, rgw::asio::parser_type& parser,
-           spawn::yield_context yield,
-           parse_buffer& buffer, bool is_ssl,
+           yield_context yield, parse_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint,
            ceph::timespan request_timeout)
@@ -172,7 +171,7 @@ void handle_connection(boost::asio::io_context& context,
                        SharedMutex& pause_mutex,
                        rgw::dmclock::Scheduler *scheduler,
                        boost::system::error_code& ec,
-                       spawn::yield_context yield,
+                       yield_context yield,
                        ceph::timespan request_timeout)
 {
   // limit header to 4k, since we read it all into a single flat_buffer
@@ -950,7 +949,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   if (l.use_ssl) {
     spawn::spawn(context,
-      [this, s=std::move(stream)] (spawn::yield_context yield) mutable {
+      [this, s=std::move(stream)] (yield_context yield) mutable {
         Connection conn{s.socket()};
         auto c = connections.add(conn);
         // wrap the tcp_stream in an ssl stream
@@ -981,7 +980,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
   {
 #endif // WITH_RADOSGW_BEAST_OPENSSL
     spawn::spawn(context,
-      [this, s=std::move(stream)] (spawn::yield_context yield) mutable {
+      [this, s=std::move(stream)] (yield_context yield) mutable {
         Connection conn{s.socket()};
         auto c = connections.add(conn);
         auto buffer = std::make_unique<parse_buffer>();
