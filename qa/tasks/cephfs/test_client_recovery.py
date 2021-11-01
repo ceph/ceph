@@ -25,7 +25,6 @@ MDS_RESTART_GRACE = 60
 
 
 class TestClientNetworkRecovery(CephFSTestCase):
-    REQUIRE_KCLIENT_REMOTE = True
     REQUIRE_ONE_CLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
 
@@ -85,7 +84,6 @@ class TestClientNetworkRecovery(CephFSTestCase):
 
 
 class TestClientRecovery(CephFSTestCase):
-    REQUIRE_KCLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
 
     LOAD_SETTINGS = ["mds_reconnect_timeout", "ms_max_backoff"]
@@ -490,6 +488,30 @@ class TestClientRecovery(CephFSTestCase):
         self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
 
         self.mount_a.umount_wait(require_clean=True, timeout=30)
+
+    def test_mount_after_evicted_client(self):
+        """Test if a new mount of same fs works after client eviction."""
+
+        # trash this : we need it to use same remote as mount_a
+        self.mount_b.umount_wait()
+
+        cl = self.mount_a.__class__
+
+        # create a new instance of mount_a's class with most of the
+        # same settings, but mounted on mount_b's mountpoint.
+        m = cl(self.mount_a.ctx, self.mount_a.test_dir, self.mount_a.client_id,
+               self.mount_a.client_remote, self.mount_a.client_keyring_path,
+               self.mount_b.hostfs_mntpt, self.mount_a.cephfs_name,
+               self.mount_a.cephfs_mntpt, self.mount_a.ceph_brx_net)
+
+        # evict mount_a
+        mount_a_client_id = self.mount_a.get_global_id()
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
+
+        m.mount_wait()
+        m.create_files()
+        m.check_files()
+        m.umount_wait(require_clean=True)
 
     def test_stale_renew(self):
         if not isinstance(self.mount_a, FuseMount):
