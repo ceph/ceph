@@ -72,6 +72,26 @@ The project's base goal is to implement the directory functionality from the D4N
 Accomplishing this goal will lead into the next set of objectives for the team, which is to implement read and write functionality using the D4N style directory. Implementing these two additional features with the get function is what we consider to be full completion of the project. Overall, the limited scope of our project is due to our intended goal of producing a foundation for later teams to fully integrate D4N into the upstream code. Producing solid, testable code with good practices in mind is more important than implementing as many portions of D4N as possible.
 
 ---
+### Sprint Breakdowns
+#### Sprint 1 (September 27 to October 10)
+| User Stories | Description |
+| ----------- | ----------- |
+| Research relevant technology and concepts | This user story involved us reading papers on Ceph and the technology it uses, such as D3N, RADOS, Redis, S3, etc to obtain a higher comprehension of what we would be working with. |
+| Understand code | After meeting multiple times with our mentors and reviewing current github implementations of the codebase, we have gained a better understanding of both the D3N and D4N variations and how they are established in Ceph. |
+| Environment setup | Our mentors provided us with the environment requirements that we needed to request from the professors and, after doing so, we ensured each team member had the correct permissions to access these requirements. |
+| Create local Ceph cluster | We successfully cloned the Ceph github repository in both VMs and ran emulations of a Ceph cluster to ensure it has been set up properly. |
+| Complete sprint 1 demo | Through various meetings with our mentors, we achieved a better understanding of the project itself as well as the work we will be focusing on throughout the course of the semester. This user story was mainly administrative, however, necessary to set up the foundation we will be building our understanding off of further along the semester, allowing us to establish a standard of organization to follow as well. We set up our project on Taiga and proceeded to record the first demonstration of the progress we have made thus far. |
+
+#### Sprint 2 (October 11 to October 24)
+| User Stories | Description |
+| ----------- | ----------- |
+| Set up team logistics | Our project required the workload to be split into two distinct groups. We assigned ourselves to the group we preferred and set up meeting times with our mentors to establish the next steps. |
+| Understand "get" functionality | Members met with one of our mentors to work with D4N's "get" functionality and develop a deeper understanding of it. |
+| Become familiarized with Ceph environment | Our mentors showed us how to navigate the Ceph environment and interact with the technology we would be working with. We practiced performing these operations on our own to ensure we were comfortable with doing so. |
+| Explore D3N on Ceph VMs | We were able to learn how to put objects into, as well as get them from, the D3N cache. This allowed us to confirm the cache was working as expected and that we would be able to utilize this functionality in our future work. |
+| Complete sprint 2 demo | In addition to discussing the professors' feedback for our first demo amongst ourselves and our mentors, we decided what functionality we would show and how we would format the overall video. We did not keep Taiga's representation of our work up-to-date and so we learned to ensure we do this in future sprints. |
+
+---
 ### Resources
 1. Batra, Aman. “D4N S3 Select Caching and the Addition of Arrow Columnar Format.” YouTube, YouTube, 7 Aug. 2021, https://www.youtube.com/watch?v=X4-s978FCtM.
 2. CS6620-S21. “CS6620-S21/D4N-s3select-Caching.” GitHub, https://github.com/CS6620-S21/D4N-S3Select-Caching.
