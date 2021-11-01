@@ -1361,9 +1361,9 @@ cat ./CMakeFiles/CMakeError.log
 %endif
 
 %if 0%{?suse_version}
-make %{_smp_mflags}
+ib_console make %{_smp_mflags}
 %else
-%make_build
+ib_console make
 %endif
 
 popd
