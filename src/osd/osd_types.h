@@ -2259,7 +2259,7 @@ struct pg_stat_t {
   int32_t acting_primary;
 
   // snaptrimq.size() is 64bit, but let's be serious - anything over 50k is
-  // absurd already, so cap it to 2^32 and save 4 bytes at  the same time
+  // absurd already, so cap it to 2^32 and save 4 bytes at the same time
   uint32_t snaptrimq_len;
 
   pg_scrubbing_status_t scrub_sched_status;
