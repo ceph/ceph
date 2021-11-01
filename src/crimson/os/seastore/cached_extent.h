@@ -277,6 +277,11 @@ public:
     return !is_valid() || (prior_instance && !prior_instance->is_valid());
   }
 
+  /// Returns true if extent is a plcaeholder
+  bool is_placeholder() const {
+    return get_type() == extent_types_t::RETIRED_PLACEHOLDER;
+  }
+
   /// Return journal location of oldest relevant delta, only valid while DIRTY
   auto get_dirty_from() const {
     ceph_assert(is_dirty());

@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "crimson/os/seastore/logging.h"
+#include "crimson/common/config_proxy.h"
 
 // included for get_extent_by_type
 #include "crimson/os/seastore/collection_manager/collection_flat_node.h"
@@ -23,7 +24,9 @@ namespace crimson::os::seastore {
 
 Cache::Cache(
   ExtentReader &reader)
-  : reader(reader)
+  : reader(reader),
+    lru(crimson::common::get_conf<Option::size_t>(
+	  "seastore_cache_lru_size"))
 {
   register_metrics();
 }
@@ -31,6 +34,7 @@ Cache::Cache(
 Cache::~Cache()
 {
   LOG_PREFIX(Cache::~Cache);
+  lru.clear();
   for (auto &i: extents) {
     ERROR("extent {} still alive", i);
   }
@@ -453,6 +457,20 @@ void Cache::register_metrics()
         stats.dirty_bytes,
         sm::description("total bytes of dirty extents")
       ),
+      sm::make_counter(
+	"cache_lru_size_bytes",
+	[this] {
+	  return lru.get_current_contents_bytes();
+	},
+	sm::description("total bytes pinned by the lru")
+      ),
+      sm::make_counter(
+	"cache_lru_size_extents",
+	[this] {
+	  return lru.get_current_contents_extents();
+	},
+	sm::description("total extents pinned by the lru")
+      ),
     }
   );
 
@@ -600,9 +618,9 @@ void Cache::add_extent(CachedExtentRef ref)
 
   if (ref->is_dirty()) {
     add_to_dirty(ref);
-  } else {
-    ceph_assert(!ref->primary_ref_list_hook.is_linked());
-  }
+  } else if (!ref->is_placeholder()) {
+    lru.add_to_lru(*ref);
+  } 
   DEBUG("extent {}", *ref);
 }
 
@@ -614,6 +632,7 @@ void Cache::mark_dirty(CachedExtentRef ref)
     return;
   }
 
+  lru.remove_from_lru(*ref);
   add_to_dirty(ref);
   ref->state = CachedExtent::extent_state_t::DIRTY;
 
@@ -646,7 +665,11 @@ void Cache::remove_extent(CachedExtentRef ref)
   LOG_PREFIX(Cache::remove_extent);
   DEBUG("extent {}", *ref);
   assert(ref->is_valid());
-  remove_from_dirty(ref);
+  if (ref->is_dirty()) {
+    remove_from_dirty(ref);
+  } else {
+    lru.remove_from_lru(*ref);
+  }
   extents.erase(*ref);
 }
 
@@ -658,7 +681,12 @@ void Cache::commit_retire_extent(
   DEBUGT("extent {}", t, *ref);
   assert(ref->is_valid());
 
-  remove_from_dirty(ref);
+  // TODO: why does this duplicate remove_extent?
+  if (ref->is_dirty()) {
+    remove_from_dirty(ref);
+  } else {
+    lru.remove_from_lru(*ref);
+  }
   ref->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
 
   invalidate_extent(t, *ref);
@@ -694,6 +722,7 @@ void Cache::commit_replace_extent(
     intrusive_ptr_release(&*prev);
     intrusive_ptr_add_ref(&*next);
   } else {
+    lru.remove_from_lru(*prev);
     add_to_dirty(next);
   }
 
@@ -1147,7 +1176,7 @@ void Cache::init() {
   }
   root = new RootBlock();
   root->state = CachedExtent::extent_state_t::CLEAN;
-  add_extent(root);
+  extents.insert(*root);
 }
 
 Cache::mkfs_iertr::future<> Cache::mkfs(Transaction &t)
@@ -1173,6 +1202,7 @@ Cache::close_ertr::future<> Cache::close()
     intrusive_ptr_release(ptr);
   }
   assert(stats.dirty_bytes == 0);
+  clear_lru();
   return close_ertr::now();
 }
 
