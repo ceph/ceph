@@ -798,6 +798,9 @@ class TestBootstrap(object):
             *args,
         ]
 
+
+###############################################3
+
     def test_config(self, cephadm_fs):
         conf_file = 'foo'
         cmd = self._get_cmd(
@@ -1379,3 +1382,62 @@ class TestPull:
         with pytest.raises(cd.Error) as e:
             cd.command_pull(ctx)
         assert err in str(e.value)
+
+
+class TestApplySpec:
+ 
+    def test_parse_yaml(self, cephadm_fs):
+        yaml = '''service_type: host
+hostname: vm-00
+addr: 192.168.122.44
+labels:
+ - example1
+ - example2
+---
+service_type: host
+hostname: vm-01
+addr: 192.168.122.247
+labels:
+ - grafana
+---
+service_type: host
+hostname: vm-02
+addr: 192.168.122.165'''
+
+        cephadm_fs.create_file('spec.yml', contents=yaml)
+
+        retdic = [{'service_type': 'host', 'hostname': 'vm-00', 'addr': '192.168.122.44', 'labels': '- example1- example2'},
+                  {'service_type': 'host', 'hostname': 'vm-01', 'addr': '192.168.122.247', 'labels': '- grafana'},
+                  {'service_type': 'host', 'hostname': 'vm-02', 'addr': '192.168.122.165'}]
+      
+        with open('spec.yml') as f:
+            dic = cd.parse_yaml_objs(f)
+            assert dic == retdic
+
+    @mock.patch('cephadm.call', return_value=('', '', 0))
+    def test_distribute_ssh_keys(self, call):
+        ctx = cd.CephadmContext()
+        ctx.ssh_public_key = None
+        ctx.ssh_user = 'root'
+
+        host_spec = {'service_type': 'host', 'hostname': 'vm-02', 'addr': '192.168.122.165'}
+
+        retval = cd._distribute_ssh_keys(ctx, host_spec, 'bootstrap_hostname')
+
+        assert retval == 0
+
+        call.return_value = ('', '', 1)
+
+        retval = cd._distribute_ssh_keys(ctx, host_spec, 'bootstrap_hostname')
+
+        assert retval == 1
+
+
+
+
+
+
+
+
+
+  
