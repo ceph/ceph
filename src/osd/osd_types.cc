@@ -6397,8 +6397,9 @@ void object_info_t::dump(Formatter *f) const
   f->dump_unsigned("lost", (int)is_lost());
   vector<string> sv = get_flag_vector(flags);
   f->open_array_section("flags");
-  for (auto str: sv)
+  for (const auto& str: sv) {
     f->dump_string("flags", str);
+  }
   f->close_section();
   f->dump_unsigned("truncate_seq", truncate_seq);
   f->dump_unsigned("truncate_size", truncate_size);

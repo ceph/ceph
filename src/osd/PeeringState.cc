@@ -3810,7 +3810,7 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   if (info.stats.state != state) {
     info.stats.last_change = now;
     // Optimistic estimation, if we just find out an inactive PG,
-    // assumt it is active till now.
+    // assume it is active till now.
     if (!(state & PG_STATE_ACTIVE) &&
 	(info.stats.state & PG_STATE_ACTIVE))
       info.stats.last_active = now;
@@ -3989,7 +3989,6 @@ void PeeringState::update_stats_wo_resched(
 {
   f(info.history, info.stats);
 }
-
 
 bool PeeringState::append_log_entries_update_missing(
   const mempool::osd_pglog::list<pg_log_entry_t> &entries,

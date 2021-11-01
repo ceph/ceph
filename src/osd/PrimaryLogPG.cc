@@ -947,7 +947,7 @@ PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter)
   if (type.compare("plain") == 0) {
     filter = std::make_unique<PGLSPlainFilter>();
   } else {
-    std::size_t dot = type.find(".");
+    std::size_t dot = type.find('.');
     if (dot == std::string::npos || dot == 0 || dot == type.size() - 1) {
       return { -EINVAL, nullptr };
     }
@@ -1179,7 +1179,7 @@ void PrimaryLogPG::do_command(
       if (deep) {
         set_last_deep_scrub_stamp(stamp);
       } else {
-        set_last_scrub_stamp(stamp);
+        set_last_scrub_stamp(stamp); // also for 'deep', as we use this value to order scrubs
       }
       f->open_object_section("result");
       f->dump_bool("deep", deep);

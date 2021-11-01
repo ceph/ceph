@@ -3,6 +3,7 @@
 
 #include "./pg_scrubber.h"  // the '.' notation used to affect clang-format order
 
+#include <cmath>
 #include <iostream>
 #include <vector>
 
@@ -520,7 +521,7 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
 }
 
 ScrubQueue::sched_params_t
-PgScrubber::determine_scrub_time(const requested_scrub_t& request_flags)
+PgScrubber::determine_scrub_time(const requested_scrub_t& request_flags) const
 {
   ScrubQueue::sched_params_t res;
 
@@ -795,7 +796,7 @@ void PgScrubber::add_delayed_scheduling()
   if (m_needs_sleep) {
     double scrub_sleep =
       1000.0 * m_osds->get_scrub_services().scrub_sleep_time(m_flags.required);
-    sleep_time = milliseconds{long(scrub_sleep)};
+    sleep_time = milliseconds{int64_t(scrub_sleep)};
   }
   dout(15) << __func__ << " sleep: " << sleep_time.count() << "ms. needed? "
 	   << m_needs_sleep << dendl;
@@ -1348,7 +1349,7 @@ void PgScrubber::set_op_parameters(requested_scrub_t& request)
     // not calling update_op_mode_text() yet, as m_is_deep not set yet
   }
 
-  // the publishing here seems to be required for tests synchronization
+  // the publishing here is required for tests synchronization
   m_pg->publish_stats_to_osd();
   m_flags.deep_scrub_on_error = request.deep_scrub_on_error;
 }
@@ -1919,7 +1920,6 @@ void PgScrubber::on_digest_updates()
   }
 }
 
-
 /*
  * note that the flags-set fetched from the PG (m_pg->m_planned_scrub)
  * is cleared once scrubbing starts; Some of the values dumped here are
@@ -2049,7 +2049,7 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 
 void PgScrubber::handle_query_state(ceph::Formatter* f)
 {
-  dout(10) << __func__ << dendl;
+  dout(15) << __func__ << dendl;
 
   f->open_object_section("scrub");
   f->dump_stream("scrubber.epoch_start") << m_interval_start;
@@ -2095,7 +2095,8 @@ PgScrubber::PgScrubber(PG* pg)
 						     m_osds->get_nodeid());
 }
 
-void PgScrubber::set_scrub_begin_time() {
+void PgScrubber::set_scrub_begin_time()
+{
   scrub_begin_stamp = ceph_clock_now();
 }
 
