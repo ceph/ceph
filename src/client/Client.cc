@@ -9216,11 +9216,6 @@ int Client::open(const char *relpath, int flags, const UserPerm& perms,
                 stripe_count, object_size, data_pool, alternate_name);
 }
 
-int Client::_openat(int dirfd, const char *relpath, int flags, const UserPerm& perms,
-                    mode_t mode, std::string alternate_name) {
-  return create_and_open(dirfd, relpath, flags, perms, mode, 0, 0, 0, NULL, alternate_name);
-}
-
 int Client::openat(int dirfd, const char *relpath, int flags, const UserPerm& perms,
                    mode_t mode, int stripe_unit, int stripe_count, int object_size,
                    const char *data_pool, std::string alternate_name) {
