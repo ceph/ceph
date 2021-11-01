@@ -575,23 +575,27 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
 }
 
 template <typename I>
-Context* WriteLog<I>::construct_flush_entry_ctx(
-    std::shared_ptr<GenericLogEntry> log_entry) {
+void WriteLog<I>::construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
+				          DeferredContexts &post_unlock,
+					  bool has_write_entry) {
   bool invalidating = this->m_invalidating; // snapshot so we behave consistently
-  Context *ctx = this->construct_flush_entry(log_entry, invalidating);
 
-  if (invalidating) {
-    return ctx;
-  }
-  return new LambdaContext(
-    [this, log_entry, ctx](int r) {
-      m_image_ctx.op_work_queue->queue(new LambdaContext(
+  for (auto &log_entry : entries_to_flush) {
+    Context *ctx = this->construct_flush_entry(log_entry, invalidating);
+
+    if (!invalidating) {
+      ctx = new LambdaContext(
         [this, log_entry, ctx](int r) {
-          ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
-                                     << " " << *log_entry << dendl;
-          log_entry->writeback(this->m_image_writeback, ctx);
-        }), 0);
-    });
+	  m_image_ctx.op_work_queue->queue(new LambdaContext(
+	    [this, log_entry, ctx](int r) {
+	      ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
+					 << " " << *log_entry << dendl;
+	      log_entry->writeback(this->m_image_writeback, ctx);
+	    }), 0);
+        });
+   }
+   post_unlock.add(ctx);
+  }
 }
 
 const unsigned long int ops_flushed_together = 4;
