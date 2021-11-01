@@ -470,7 +470,9 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
   });
 }
 
-TransactionManager::~TransactionManager() {}
+TransactionManager::~TransactionManager() {
+  cache->clear_lru();
+}
 
 void TransactionManager::register_metrics()
 {
