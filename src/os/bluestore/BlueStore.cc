@@ -6422,9 +6422,10 @@ void BlueStore::_set_per_pool_omap()
     auto s = bl.to_str();
     if (s == stringify(OMAP_PER_POOL)) {
       per_pool_omap = OMAP_PER_POOL;
-    } else {
-      ceph_assert(s == stringify(OMAP_PER_PG));
+    } else if (s == stringify(OMAP_PER_PG)) {
       per_pool_omap = OMAP_PER_PG;
+    } else {
+      ceph_assert(s == stringify(OMAP_BULK));
     }
     dout(10) << __func__ << " per_pool_omap = " << per_pool_omap << dendl;
   } else {
@@ -6727,7 +6728,11 @@ int BlueStore::mkfs()
     }
     {
       bufferlist bl;
-      bl.append(stringify(OMAP_PER_PG));
+      if (cct->_conf.get_val<bool>("bluestore_debug_legacy_omap")) {
+	bl.append(stringify(OMAP_BULK));
+      } else {
+	bl.append(stringify(OMAP_PER_PG));
+      }
       t->set(PREFIX_SUPER, "per_pool_omap", bl);
     }
     ondisk_format = latest_ondisk_format;
@@ -8082,6 +8087,7 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
       string final_key;
       Onode::calc_omap_key(new_flags, o.get(), string(), &final_key);
       size_t base_key_len = final_key.size();
+      it->next();
       while (it->valid() && it->key() < tail) {
 	string user_key;
 	o->decode_omap_key(it->key(), &user_key);
@@ -8089,7 +8095,7 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
 	  << " -> " << user_key << dendl;
 
 	final_key.resize(base_key_len);
-	final_key += it->key();
+	final_key += user_key;
 	auto v = it->value();
 	txn->set(new_omap_prefix, final_key, v);
 	txn_cost += final_key.length() + v.length();
