@@ -104,7 +104,7 @@ describe('HostsComponent', () => {
       }
     ];
 
-    OrchestratorHelper.mockStatus(true);
+    OrchestratorHelper.mockStatus(false);
     hostListSpy.and.callFake(() => of(payload));
     fixture.detectChanges();
 
@@ -118,6 +118,7 @@ describe('HostsComponent', () => {
   });
 
   it('should test if host facts are tranformed correctly if orch available', () => {
+    const features = [OrchestratorFeature.HOST_FACTS];
     const payload = [
       {
         hostname: 'host_test',
@@ -137,7 +138,7 @@ describe('HostsComponent', () => {
         nic_count: 1
       }
     ];
-    OrchestratorHelper.mockStatus(true);
+    OrchestratorHelper.mockStatus(true, features);
     hostListSpy.and.callFake(() => of(payload));
     fixture.detectChanges();
 
@@ -165,6 +166,31 @@ describe('HostsComponent', () => {
       }
     ];
     OrchestratorHelper.mockStatus(false);
+    hostListSpy.and.callFake(() => of(payload));
+    fixture.detectChanges();
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    fixture.detectChanges();
+
+    const spans = fixture.debugElement.nativeElement.querySelectorAll(
+      '.datatable-body-cell-label span'
+    );
+    expect(spans[7].textContent).toBe('Unavailable');
+  });
+
+  it('should test if host facts are unavailable if get_fatcs orch feature is not available', () => {
+    const payload = [
+      {
+        hostname: 'host_test',
+        services: [
+          {
+            type: 'osd',
+            id: '0'
+          }
+        ]
+      }
+    ];
+    OrchestratorHelper.mockStatus(true);
     hostListSpy.and.callFake(() => of(payload));
     fixture.detectChanges();
 

@@ -1,3 +1,5 @@
+from logging import error
+import logging
 import threading
 import functools
 import os
@@ -284,24 +286,22 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 total_mds = active
                 if fs['spec'].get('metadataServer', {}).get('activeStandby', False):
                     total_mds = active * 2
-                    spec[svc] = orchestrator.ServiceDescription(
-                        spec=ServiceSpec(
-                            service_type='mds',
-                            service_id=fs['metadata']['name'],
-                            placement=PlacementSpec(count=active),
-                        ),
-                        size=total_mds,
-                        container_image_name=image_name,
-                        last_refresh=now,
-                    )
+                spec[svc] = orchestrator.ServiceDescription(
+                    spec=ServiceSpec(
+                        service_type='mds',
+                        service_id=fs['metadata']['name'],
+                        placement=PlacementSpec(count=active),
+                    ),
+                    size=total_mds,
+                    container_image_name=image_name,
+                    last_refresh=now,
+                )
 
         if service_type == 'rgw' or service_type is None:
             # CephObjectstores
             all_zones = self.rook_cluster.get_resource("cephobjectstores")
             for zone in all_zones:
-                rgw_realm = zone['metadata']['name']
-                rgw_zone = rgw_realm
-                svc = 'rgw.' + rgw_realm
+                svc = 'rgw.' + zone['metadata']['name']
                 if svc in spec:
                     continue
                 active = zone['spec']['gateway']['instances'];
@@ -311,10 +311,10 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 else:
                     ssl = False
                     port = zone['spec']['gateway']['port'] or 80
+                rgw_zone = zone['spec'].get('zone', {}).get('name') or None
                 spec[svc] = orchestrator.ServiceDescription(
                     spec=RGWSpec(
                         service_id=zone['metadata']['name'],
-                        rgw_realm=rgw_realm,
                         rgw_zone=rgw_zone,
                         ssl=ssl,
                         rgw_frontend_port=port,
@@ -453,6 +453,14 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             return self.rook_cluster.rm_service('cephnfses', service_name)
         else:
             raise orchestrator.OrchestratorError(f'Service type {service_type} not supported')
+
+    def zap_device(self, host: str, path: str) -> OrchResult[str]:
+        try:
+            self.rook_cluster.create_zap_job(host, path)
+        except Exception as e:
+            logging.error(e)
+            return OrchResult(None, Exception("Unable to zap device: " + str(e.with_traceback(None))))
+        return OrchResult(f'{path} on {host} zapped') 
 
     @handle_orch_error
     def apply_mon(self, spec):

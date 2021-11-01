@@ -54,6 +54,8 @@ struct rbm_metadata_header_t {
   uint32_t start_data_area;
   uint64_t flag; // reserved
   uint64_t feature;
+  uint32_t blocks_per_segment; // the number of blocks in segment
+  device_id_t device_id;
   checksum_t crc;
 
   DENC(rbm_metadata_header_t, v, p) {
@@ -70,6 +72,8 @@ struct rbm_metadata_header_t {
     denc(v.start_data_area, p);
     denc(v.flag, p);
     denc(v.feature, p);
+    denc(v.blocks_per_segment, p);
+    denc(v.device_id, p);
 
     denc(v.crc, p);
     DENC_FINISH(p);
@@ -184,7 +188,7 @@ public:
   mkfs_ertr::future<> mkfs(mkfs_config_t) final;
   read_ertr::future<> read(uint64_t addr, bufferptr &buffer) final;
   write_ertr::future<> write(uint64_t addr, bufferptr &buf) final;
-  open_ertr::future<> open(const std::string &path, blk_paddr_t start) final;
+  open_ertr::future<> open(const std::string &path, paddr_t start) final;
   close_ertr::future<> close() final;
 
   /*
@@ -201,7 +205,7 @@ public:
    * TODO: multiple allocation
    *
    */
-  allocate_ertr::future<> alloc_extent(
+  allocate_ret alloc_extent(
       Transaction &t, size_t size) final; // allocator, return blocks
 
   /*
@@ -210,9 +214,6 @@ public:
    * add a range of free blocks to transaction
    *
    */
-  // TODO: will include trim if necessary
-  free_block_ertr::future<> free_extent(
-      Transaction &t, blk_paddr_t from, size_t len) final;
   abort_allocation_ertr::future<> abort_allocation(Transaction &t) final;
   write_ertr::future<> complete_allocation(Transaction &t) final;
 
@@ -357,8 +358,15 @@ public:
   write_ertr::future<> write(blk_paddr_t addr, bufferlist &bl);
   write_ertr::future<> sync_allocation(
       std::vector<rbm_alloc_delta_t>& alloc_blocks);
-  free_block_ertr::future<> add_free_extent(
+  void add_free_extent(
       std::vector<rbm_alloc_delta_t>& v, blk_paddr_t from, size_t len);
+
+  uint32_t get_blocks_per_segment() const final {
+    return super.blocks_per_segment;
+  }
+  device_id_t get_device_id() const final {
+    return super.device_id;
+  }
 
 private:
   /*

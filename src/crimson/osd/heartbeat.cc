@@ -48,7 +48,8 @@ Heartbeat::Heartbeat(osd_id_t whoami,
 seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
                                    entity_addrvec_t back_addrs)
 {
-  logger().info("heartbeat: start");
+  logger().info("heartbeat: start front_addrs={}, back_addrs={}",
+                front_addrs, back_addrs);
   // i only care about the address, so any unused port would work
   for (auto& addr : boost::join(front_addrs.v, back_addrs.v)) {
     addr.set_port(0);
@@ -76,8 +77,8 @@ Heartbeat::start_messenger(crimson::net::Messenger& msgr,
   return msgr.bind(addrs).safe_then([this, &msgr]() mutable {
     return msgr.start({this});
   }, crimson::net::Messenger::bind_ertr::all_same_way(
-      [] (const std::error_code& e) {
-    logger().error("heartbeat messenger bind(): {}", e);
+      [addrs] (const std::error_code& e) {
+    logger().error("heartbeat messenger bind({}): {}", addrs, e);
     ceph_abort();
   }));
 }

@@ -91,23 +91,8 @@ class CephadmServe:
 
                     self._purge_deleted_services()
 
-                    if self.mgr.use_agent:
-                        # on the off chance there are still agents hanging around from
-                        # when we turned the config option off, we need to redeploy them
-                        # we can tell they're in that state if we don't have a keyring for
-                        # them in the host cache
-                        for agent in self.mgr.cache.get_daemons_by_service('agent'):
-                            if agent.hostname not in self.mgr.cache.agent_keys:
-                                self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
-                        if 'agent' not in self.mgr.spec_store:
-                            self.mgr.agent_helpers._apply_agent()
-                    else:
-                        if 'agent' in self.mgr.spec_store:
-                            self.mgr.spec_store.rm('agent')
-                        self.mgr.cache.agent_counter = {}
-                        self.mgr.cache.agent_timestamp = {}
-                        self.mgr.cache.agent_keys = {}
-                        self.mgr.cache.agent_ports = {}
+                    if self.mgr.agent_helpers._handle_use_agent_setting():
+                        continue
 
                     if self.mgr.upgrade.continue_upgrade():
                         continue
@@ -135,7 +120,8 @@ class CephadmServe:
 
     def _update_paused_health(self) -> None:
         if self.mgr.paused:
-            self.mgr.set_health_warning('CEPHADM_PAUSED', 'cephadm background work is paused', 1, ["'ceph orch resume' to resume"])
+            self.mgr.set_health_warning('CEPHADM_PAUSED', 'cephadm background work is paused', 1, [
+                                        "'ceph orch resume' to resume"])
         else:
             self.mgr.remove_health_warning('CEPHADM_PAUSED')
 
@@ -358,43 +344,22 @@ class CephadmServe:
 
         refresh(self.mgr.cache.get_hosts())
 
-        if 'CEPHADM_AGENT_DOWN' in self.mgr.health_checks:
-            del self.mgr.health_checks['CEPHADM_AGENT_DOWN']
-        if agents_down:
-            detail: List[str] = []
-            for agent in agents_down:
-                detail.append((f'Cephadm agent on host {agent} has not reported in '
-                              f'{2.5 * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
-                               'down and host may be offline.'))
-            self.mgr.health_checks['CEPHADM_AGENT_DOWN'] = {
-                'severity': 'warning',
-                'summary': '%d Cephadm Agent(s) are not reporting. '
-                'Hosts may be offline' % (len(agents_down)),
-                'count': len(agents_down),
-                'detail': detail,
-            }
-            self.mgr.set_health_checks(self.mgr.health_checks)
+        self.mgr.agent_helpers._update_agent_down_healthcheck(agents_down)
 
         self.mgr.config_checker.run_checks()
 
         for k in [
                 'CEPHADM_HOST_CHECK_FAILED',
-                'CEPHADM_FAILED_DAEMON',
                 'CEPHADM_REFRESH_FAILED',
         ]:
             self.mgr.remove_health_warning(k)
         if bad_hosts:
-            self.mgr.set_health_warning('CEPHADM_HOST_CHECK_FAILED', f'{len(bad_hosts)} hosts fail cephadm check', len(bad_hosts), bad_hosts)
+            self.mgr.set_health_warning(
+                'CEPHADM_HOST_CHECK_FAILED', f'{len(bad_hosts)} hosts fail cephadm check', len(bad_hosts), bad_hosts)
         if failures:
-            self.mgr.set_health_warning('CEPHADM_REFRESH_FAILED', 'failed to probe daemons or devices', len(failures), failures)
-        failed_daemons = []
-        for dd in self.mgr.cache.get_daemons():
-            if dd.status is not None and dd.status == DaemonDescriptionStatus.error:
-                failed_daemons.append('daemon %s on %s is in %s state' % (
-                    dd.name(), dd.hostname, dd.status_desc
-                ))
-        if failed_daemons:
-            self.mgr.set_health_warning('CEPHADM_FAILED_DAEMON', f'{len(failed_daemons)} failed cephadm daemon(s)', len(failed_daemons), failed_daemons)
+            self.mgr.set_health_warning(
+                'CEPHADM_REFRESH_FAILED', 'failed to probe daemons or devices', len(failures), failures)
+        self.mgr.update_failed_daemon_health_check()
 
     def _check_host(self, host: str) -> Optional[str]:
         if host not in self.mgr.inventory:
@@ -505,6 +470,7 @@ class CephadmServe:
             self.mgr.remove_health_warning(k)
         if self.mgr.warn_on_stray_hosts or self.mgr.warn_on_stray_daemons:
             ls = self.mgr.list_servers()
+            self.log.debug(ls)
             managed = self.mgr.cache.get_daemon_names()
             host_detail = []     # type: List[str]
             host_num_daemons = 0
@@ -547,9 +513,11 @@ class CephadmServe:
                         'stray host %s has %d stray daemons: %s' % (
                             host, len(missing_names), missing_names))
             if self.mgr.warn_on_stray_hosts and host_detail:
-                self.mgr.set_health_warning('CEPHADM_STRAY_HOST', f'{len(host_detail)} stray host(s) with {host_num_daemons} daemon(s) not managed by cephadm', len(host_detail), host_detail)
+                self.mgr.set_health_warning(
+                    'CEPHADM_STRAY_HOST', f'{len(host_detail)} stray host(s) with {host_num_daemons} daemon(s) not managed by cephadm', len(host_detail), host_detail)
             if self.mgr.warn_on_stray_daemons and daemon_detail:
-                self.mgr.set_health_warning('CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
+                self.mgr.set_health_warning(
+                    'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
 
     def _apply_all_services(self) -> bool:
         r = False
@@ -624,9 +592,11 @@ class CephadmServe:
                         options_failed_to_set.append(msg)
 
             if invalid_config_options:
-                self.mgr.set_health_warning('CEPHADM_INVALID_CONFIG_OPTION', f'Ignoring {len(invalid_config_options)} invalid config option(s)', len(invalid_config_options), invalid_config_options)
+                self.mgr.set_health_warning('CEPHADM_INVALID_CONFIG_OPTION', f'Ignoring {len(invalid_config_options)} invalid config option(s)', len(
+                    invalid_config_options), invalid_config_options)
             if options_failed_to_set:
-                self.mgr.set_health_warning('CEPHADM_FAILED_SET_OPTION', f'Failed to set {len(options_failed_to_set)} option(s)', len(options_failed_to_set), options_failed_to_set)
+                self.mgr.set_health_warning('CEPHADM_FAILED_SET_OPTION', f'Failed to set {len(options_failed_to_set)} option(s)', len(
+                    options_failed_to_set), options_failed_to_set)
 
     def _apply_service(self, spec: ServiceSpec) -> bool:
         """
@@ -867,7 +837,8 @@ class CephadmServe:
                 daemons.append(sd)
 
             if daemon_place_fails:
-                self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(daemon_place_fails), daemon_place_fails)
+                self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(
+                    daemon_place_fails), daemon_place_fails)
 
             # remove any?
             def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
@@ -1309,7 +1280,11 @@ class CephadmServe:
             self._registry_login(host, self.mgr.registry_url,
                                  self.mgr.registry_username, self.mgr.registry_password)
 
-        j = self._run_cephadm_json(host, '', 'pull', [], image=image_name, no_fsid=True)
+        pullargs: List[str] = []
+        if self.mgr.registry_insecure:
+            pullargs.append("--insecure")
+
+        j = self._run_cephadm_json(host, '', 'pull', pullargs, image=image_name, no_fsid=True)
 
         r = ContainerInspectInfo(
             j['image_id'],

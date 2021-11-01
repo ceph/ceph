@@ -1,13 +1,13 @@
 import logging
 import threading
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict, Any
 
 from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
 import orchestrator
 
 from .export import ExportMgr
 from .cluster import NFSCluster
-from typing import Any
+from .utils import available_clusters
 
 log = logging.getLogger(__name__)
 
@@ -120,6 +120,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Displays NFS Cluster info"""
         return self.nfs.show_nfs_cluster_info(cluster_id=cluster_id)
 
+    @CLICommand('nfs cluster config get', perm='r')
+    def _cmd_nfs_cluster_config_get(self, cluster_id: str) -> Tuple[int, str, str]:
+        """Fetch NFS-Ganesha config"""
+        return self.nfs.get_nfs_cluster_config(cluster_id=cluster_id)
+
     @CLICommand('nfs cluster config set', perm='rw')
     @CLICheckNonemptyFileInput(desc='NFS-Ganesha Configuration')
     def _cmd_nfs_cluster_config_set(self, cluster_id: str, inbuf: str) -> Tuple[int, str, str]:
@@ -130,3 +135,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_nfs_cluster_config_reset(self, cluster_id: str) -> Tuple[int, str, str]:
         """Reset NFS-Ganesha Config to default"""
         return self.nfs.reset_nfs_cluster_config(cluster_id=cluster_id)
+
+    def fetch_nfs_export_obj(self) -> ExportMgr:
+        return self.export_mgr
+
+    def export_ls(self) -> List[Dict[Any, Any]]:
+        return self.export_mgr.list_all_exports()
+
+    def export_get(self, cluster_id: str, export_id: int) -> Optional[Dict[str, Any]]:
+        return self.export_mgr.get_export_by_id(cluster_id, export_id)
+
+    def export_rm(self, cluster_id: str, pseudo: str) -> None:
+        self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo)
+
+    def cluster_ls(self) -> List[str]:
+        return available_clusters(self)

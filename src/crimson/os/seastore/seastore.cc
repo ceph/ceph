@@ -88,7 +88,7 @@ seastar::future<> SeaStore::stop()
   return seastar::now();
 }
 
-seastar::future<> SeaStore::mount()
+SeaStore::mount_ertr::future<> SeaStore::mount()
 {
   return segment_manager->mount(
   ).safe_then([this] {
@@ -1295,7 +1295,7 @@ std::unique_ptr<SeaStore> make_seastore(
     false /* detailed */);
 
   auto journal = std::make_unique<Journal>(*sm, scanner_ref);
-  auto cache = std::make_unique<Cache>(scanner_ref, sm->get_block_size());
+  auto cache = std::make_unique<Cache>(scanner_ref);
   auto lba_manager = lba_manager::create_lba_manager(*sm, *cache);
 
   auto epm = std::make_unique<ExtentPlacementManager>(*cache, *lba_manager);

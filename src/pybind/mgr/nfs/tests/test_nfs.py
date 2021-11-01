@@ -1,17 +1,20 @@
 # flake8: noqa
 import json
 import pytest
-from typing import Optional, Tuple, Iterator, List, Any, Dict
+from typing import Optional, Tuple, Iterator, List, Any
 
 from contextlib import contextmanager
 from unittest import mock
 from unittest.mock import MagicMock
 from mgr_module import NFS_POOL_NAME
 
+from rados import ObjectNotFound
+
 from ceph.deployment.service_spec import NFSServiceSpec
 from nfs import Module
 from nfs.export import ExportMgr
 from nfs.export_utils import GaneshaConfParser, Export, RawBlock
+from nfs.cluster import NFSCluster
 from orchestrator import ServiceDescription, DaemonDescription, OrchResult
 
 
@@ -123,6 +126,8 @@ EXPORT {
         return self.temp_store[self.temp_store_namespace][key].stat()
 
     def _ioctl_read_mock(self, key: str, size: Optional[Any] = None) -> bytes:
+        if key not in self.temp_store[self.temp_store_namespace]:
+            raise ObjectNotFound
         return self.temp_store[self.temp_store_namespace][key].read(size)
 
     def _ioctx_set_namespace_mock(self, namespace: str) -> None:
@@ -151,6 +156,10 @@ EXPORT {
         # mock nfs services
         orch_nfs_services = [
             ServiceDescription(spec=NFSServiceSpec(service_id=self.cluster_id))
+        ] if enable else []
+
+        orch_nfs_daemons = [
+            DaemonDescription('nfs', 'foo.mydaemon', 'myhostname')
         ] if enable else []
 
         def mock_exec(cls, args):
@@ -196,11 +205,23 @@ EXPORT {
                 return 0, json.dumps([u]), ''
             return 0, json.dumps(u), ''
 
-        with mock.patch('nfs.module.Module.describe_service') as describe_service, \
+        def mock_describe_service(cls, *args, **kwargs):
+            if kwargs['service_type'] == 'nfs':
+                return OrchResult(orch_nfs_services)
+            return OrchResult([])
+
+        def mock_list_daemons(cls, *args, **kwargs):
+            if kwargs['daemon_type'] == 'nfs':
+                return OrchResult(orch_nfs_daemons)
+            return OrchResult([])
+
+        with mock.patch('nfs.module.Module.describe_service', mock_describe_service) as describe_service, \
+             mock.patch('nfs.module.Module.list_daemons', mock_list_daemons) as list_daemons, \
                 mock.patch('nfs.module.Module.rados') as rados, \
                 mock.patch('nfs.export.available_clusters',
                            return_value=[self.cluster_id]), \
                 mock.patch('nfs.export.restart_nfs_service'), \
+                mock.patch('nfs.cluster.restart_nfs_service'), \
                 mock.patch('nfs.export.ExportMgr._exec', mock_exec), \
                 mock.patch('nfs.export.check_fs', return_value=True), \
                 mock.patch('nfs.export_utils.check_fs', return_value=True), \
@@ -209,8 +230,6 @@ EXPORT {
 
             rados.open_ioctx.return_value.__enter__.return_value = self.io_mock
             rados.open_ioctx.return_value.__exit__ = mock.Mock(return_value=None)
-
-            describe_service.return_value = OrchResult(orch_nfs_services)
 
             self._reset_temp_store()
 
@@ -324,9 +343,9 @@ NFS_CORE_PARAM {
         assert export.protocols == [4, 3]
         assert set(export.transports) == {"TCP", "UDP"}
         assert export.fsal.name == "RGW"
-        # assert export.fsal.rgw_user_id == "testuser"  # probably correct value
-        # assert export.fsal.access_key == "access_key"  # probably correct value
-        # assert export.fsal.secret_key == "secret_key"  # probably correct value
+        assert export.fsal.user_id == "nfs.foo.bucket"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 0
         assert export.cluster_id == 'foo'
 
@@ -474,7 +493,9 @@ NFS_CORE_PARAM {
             'clients': [],
             'fsal': {
                 'name': 'RGW',
-                'rgw_user_id': 'rgw.foo.bucket'
+                'user_id': 'rgw.foo.bucket',
+                'access_key_id': 'the_access_key',
+                'secret_access_key': 'the_secret_key'
             }
         })
 
@@ -486,9 +507,9 @@ NFS_CORE_PARAM {
         assert set(export.protocols) == {4, 3}
         assert set(export.transports) == {"TCP", "UDP"}
         assert export.fsal.name == "RGW"
-#        assert export.fsal.rgw_user_id == "testuser"
-#        assert export.fsal.access_key is None
-#        assert export.fsal.secret_key is None
+        assert export.fsal.user_id == "rgw.foo.bucket"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 0
         assert export.cluster_id == self.cluster_id
 
@@ -855,3 +876,50 @@ NFS_CORE_PARAM {
         assert export.clients[0].access_type == 'rw'
         assert export.clients[0].addresses == ["192.168.1.0/8"]
         assert export.cluster_id == self.cluster_id
+
+    def _do_test_cluster_ls(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+
+        rc, out, err = cluster.list_nfs_cluster()
+        assert rc == 0
+        assert out == self.cluster_id
+
+    def test_cluster_ls(self):
+        self._do_mock_test(self._do_test_cluster_ls)
+
+    def _do_test_cluster_info(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+
+        rc, out, err = cluster.show_nfs_cluster_info(self.cluster_id)
+        assert rc == 0
+        assert json.loads(out) == {"foo": {"virtual_ip": None, "backend": []}}
+
+    def test_cluster_info(self):
+        self._do_mock_test(self._do_test_cluster_info)
+
+    def _do_test_cluster_config(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+
+        rc, out, err = cluster.get_nfs_cluster_config(self.cluster_id)
+        assert rc == 0
+        assert out == ""
+
+        rc, out, err = cluster.set_nfs_cluster_config(self.cluster_id, '# foo\n')
+        assert rc == 0
+
+        rc, out, err = cluster.get_nfs_cluster_config(self.cluster_id)
+        assert rc == 0
+        assert out == "# foo\n"
+
+        rc, out, err = cluster.reset_nfs_cluster_config(self.cluster_id)
+        assert rc == 0
+
+        rc, out, err = cluster.get_nfs_cluster_config(self.cluster_id)
+        assert rc == 0
+        assert out == ""
+
+    def test_cluster_config(self):
+        self._do_mock_test(self._do_test_cluster_config)

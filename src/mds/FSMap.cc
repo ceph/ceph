@@ -651,6 +651,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
 
 void FSMap::decode(bufferlist::const_iterator& p)
 {
+  struct_version = 0;
   DECODE_START(STRUCT_VERSION, p);
   DECODE_OLDEST(7);
   struct_version = struct_v;
@@ -850,8 +851,12 @@ const MDSMap::mds_info_t* FSMap::find_replacement_for(mds_role_t role) const
   return get_available_standby(*fs);
 }
 
-void FSMap::sanity() const
+void FSMap::sanity(bool pending) const
 {
+  /* Only do some sanity checks on **new** FSMaps. Older versions may not be
+   * compliant.
+   */
+
   if (legacy_client_fscid != FS_CLUSTER_ID_NONE) {
     ceph_assert(filesystems.count(legacy_client_fscid) == 1);
   }
@@ -868,7 +873,7 @@ void FSMap::sanity() const
         ceph_assert(fs->mds_map.failed.count(info.rank) == 0);
         ceph_assert(fs->mds_map.damaged.count(info.rank) == 0);
       } else {
-        ceph_assert(fs->mds_map.allows_standby_replay());
+        ceph_assert(!pending || fs->mds_map.allows_standby_replay());
       }
       ceph_assert(info.compat.writeable(fs->mds_map.compat));
     }

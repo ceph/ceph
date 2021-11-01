@@ -736,7 +736,8 @@ int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
   list_op.params.end_marker = params.end_marker;
   list_op.params.ns = params.ns;
   list_op.params.enforce_ns = params.enforce_ns;
-  list_op.params.filter = params.filter;
+  list_op.params.access_list_filter = params.access_list_filter;
+  list_op.params.force_check_filter = params.force_check_filter;
   list_op.params.list_versions = params.list_versions;
   list_op.params.allow_unordered = params.allow_unordered;
 
@@ -766,7 +767,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
   params.delim = delim;
   params.marker = marker;
   params.ns = RGW_OBJ_NS_MULTIPART;
-  params.filter = &mp_filter;
+  params.access_list_filter = &mp_filter;
 
   int ret = list(dpp, params, max_uploads, results, null_yield);
 
@@ -1573,6 +1574,11 @@ int RadosObject::copy_obj_data(RGWObjectCtx& rctx, Bucket* dest_bucket,
 					  real_time(), NULL, dpp, y);
 }
 
+void RadosObject::set_compressed(RGWObjectCtx* rctx) {
+  rgw_obj obj = get_obj();
+  store->getRados()->set_compressed(rctx, obj);
+}
+
 void RadosObject::set_atomic(RGWObjectCtx* rctx) const
 {
   rgw_obj obj = get_obj();
@@ -2225,6 +2231,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   std::string etag;
   bufferlist etag_bl;
   MD5 hash;
+  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   bool truncated;
   int ret;
 

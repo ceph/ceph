@@ -161,7 +161,13 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
         std::exit(EXIT_FAILURE);
       }));
   }).then([this] {
-    return store.mount();
+    return store.mount().handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        logger().error("error mounting object store in {}: ({}) {}",
+                       local_conf().get_val<std::string>("osd_data"),
+                       ec.value(), ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([cluster_fsid, this] {
     superblock.cluster_fsid = cluster_fsid;
     superblock.osd_fsid = store.get_fsid();
@@ -169,12 +175,14 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
     superblock.compat_features = get_osd_initial_compat_set();
     return _write_superblock();
   }).then([cluster_fsid, this] {
-    return when_all_succeed(
-      store.write_meta("ceph_fsid", cluster_fsid.to_string()),
-      store.write_meta("whoami", std::to_string(whoami)),
-      _write_key_meta(),
-      store.write_meta("ready", "ready"));
-  }).then_unpack([cluster_fsid, this] {
+    return store.write_meta("ceph_fsid", cluster_fsid.to_string());
+  }).then([this] {
+    return store.write_meta("whoami", std::to_string(whoami));
+  }).then([this] {
+    return _write_key_meta();
+  }).then([this] {
+    return store.write_meta("ready", "ready");
+  }).then([cluster_fsid, this] {
     fmt::print("created object store {} for osd.{} fsid {}\n",
                local_conf().get_val<std::string>("osd_data"),
                whoami, cluster_fsid);
@@ -204,7 +212,7 @@ seastar::future<> OSD::_write_superblock()
       // meta collection does not yet, create superblock
       logger().info(
         "{} writing superblock cluster_fsid {} osd_fsid {}",
-        __func__,
+        "_write_superblock",
         superblock.cluster_fsid,
         superblock.osd_fsid);
       return store.create_new_collection(coll_t::meta()).then([this] (auto ch) {
@@ -295,7 +303,13 @@ seastar::future<> OSD::start()
   startup_time = ceph::mono_clock::now();
 
   return store.start().then([this] {
-    return store.mount();
+    return store.mount().handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        logger().error("error mounting object store in {}: ({}) {}",
+                       local_conf().get_val<std::string>("osd_data"),
+                       ec.value(), ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([this] {
     return store.open_collection(coll_t::meta());
   }).then([this](auto ch) {
@@ -366,13 +380,14 @@ seastar::future<> OSD::start()
     if (auto [addrs, changed] =
         replace_unknown_addrs(cluster_msgr->get_myaddrs(),
                               public_msgr->get_myaddrs()); changed) {
+      logger().debug("replacing unkwnown addrs of cluster messenger");
       return cluster_msgr->set_myaddrs(addrs);
     } else {
       return seastar::now();
     }
   }).then([this] {
-    return heartbeat->start(public_msgr->get_myaddrs(),
-                            cluster_msgr->get_myaddrs());
+    return heartbeat->start(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
+                            pick_addresses(CEPH_PICK_ADDRESS_CLUSTER));
   }).then([this] {
     // create the admin-socket server, and the objects that register
     // to handle incoming commands

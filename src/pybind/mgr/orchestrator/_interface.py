@@ -124,6 +124,7 @@ def handle_orch_error(f: Callable[..., T]) -> Callable[..., 'OrchResult[T]']:
         try:
             return OrchResult(f(*args, **kwargs))
         except Exception as e:
+            logger.exception(e)
             return OrchResult(None, exception=e)
 
     return cast(Callable[..., OrchResult[T]], wrapper)
@@ -646,6 +647,9 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def upgrade_check(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def upgrade_ls(self, image: Optional[str], tags: bool) -> OrchResult[Dict[Any, Any]]:
         raise NotImplementedError()
 
     def upgrade_start(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:

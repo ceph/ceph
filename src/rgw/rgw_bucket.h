@@ -50,7 +50,7 @@ extern void rgw_parse_url_bucket(const std::string& bucket,
                                  std::string &tenant_name, std::string &bucket_name);
 
 // this is used as a filter to RGWRados::cls_bucket_list_ordered; it
-// conforms to the type declaration of RGWRados::check_filter_t.
+// conforms to the type RGWBucketListNameFilter
 extern bool rgw_bucket_object_check_filter(const std::string& oid);
 
 void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,

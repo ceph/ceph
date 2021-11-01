@@ -305,6 +305,10 @@ This follows the same procedure as the procedure in the "Remove OSD" section, wi
 one exception: the OSD is not permanently removed from the CRUSH hierarchy, but is
 instead assigned a 'destroyed' flag.
 
+.. note::
+    The new OSD that will replace the removed OSD must be created on the same host 
+    as the OSD that was removed.
+
 **Preserving the OSD ID**
 
 The 'destroyed' flag is used to determine which OSD ids will be reused in the
@@ -358,7 +362,7 @@ Example command:
 
 .. note::
     If the unmanaged flag is unset, cephadm automatically deploys drives that
-    match the DriveGroup in your OSDSpec.  For example, if you use the
+    match the OSDSpec.  For example, if you use the
     ``all-available-devices`` option when creating OSDs, when you ``zap`` a
     device the cephadm orchestrator automatically creates a new OSD in the
     device.  To disable this behavior, see :ref:`cephadm-osd-declarative`.
@@ -437,11 +441,12 @@ Create a file called (for example) ``osd_spec.yml``:
 .. code-block:: yaml
 
     service_type: osd
-    service_id: default_drive_group  <- name of the drive_group (name can be custom)
+    service_id: default_drive_group  # custom name of the osd spec
     placement:
-      host_pattern: '*'              <- which hosts to target, currently only supports globs
-    data_devices:                    <- the type of devices you are applying specs to
-      all: true                      <- a filter, check below for a full list
+      host_pattern: '*'              # which hosts to target
+    spec:
+      data_devices:                  # the type of devices you are applying specs to
+        all: true                    # a filter, check below for a full list
 
 This means :
 
@@ -579,7 +584,7 @@ All
 
 This will take all disks that are 'available'
 
-Note: This is exclusive for the data_devices section.
+.. note:: This is exclusive for the data_devices section.
 
 .. code-block:: yaml
 
@@ -604,14 +609,14 @@ but want to use only the first two, you could use `limit`:
     vendor: VendorA
     limit: 2
 
-Note: `limit` is a last resort and shouldn't be used if it can be avoided.
+.. note:: `limit` is a last resort and shouldn't be used if it can be avoided.
 
 
 Additional Options
 ------------------
 
 There are multiple optional settings you can use to change the way OSDs are deployed.
-You can add these options to the base level of a DriveGroup for it to take effect.
+You can add these options to the base level of an OSD spec for it to take effect.
 
 This example would deploy all OSDs with encryption enabled.
 
@@ -621,9 +626,10 @@ This example would deploy all OSDs with encryption enabled.
     service_id: example_osd_spec
     placement:
       host_pattern: '*'
-    data_devices:
-      all: true
-    encrypted: true
+    spec:
+      data_devices:
+        all: true
+      encrypted: true
 
 See a full list in the DriveGroupSpecs
 
@@ -634,10 +640,10 @@ See a full list in the DriveGroupSpecs
    :exclude-members: from_json
 
 Examples
---------
+========
 
 The simple case
-^^^^^^^^^^^^^^^
+---------------
 
 All nodes with the same setup
 
@@ -661,10 +667,11 @@ This is a common setup and can be described quite easily:
     service_id: osd_spec_default
     placement:
       host_pattern: '*'
-    data_devices:
-      model: HDD-123-foo <- note that HDD-123 would also be valid
-    db_devices:
-      model: MC-55-44-XZ <- same here, MC-55-44 is valid
+    spec:
+      data_devices:
+        model: HDD-123-foo # Note, HDD-123 would also be valid
+      db_devices:
+        model: MC-55-44-XZ # Same here, MC-55-44 is valid
 
 However, we can improve it by reducing the filters on core properties of the drives:
 
@@ -674,10 +681,11 @@ However, we can improve it by reducing the filters on core properties of the dri
     service_id: osd_spec_default
     placement:
       host_pattern: '*'
-    data_devices:
-      rotational: 1
-    db_devices:
-      rotational: 0
+    spec:
+      data_devices:
+        rotational: 1
+      db_devices:
+        rotational: 0
 
 Now, we enforce all rotating devices to be declared as 'data devices' and all non-rotating devices will be used as shared_devices (wal, db)
 
@@ -689,16 +697,17 @@ If you know that drives with more than 2TB will always be the slower data device
     service_id: osd_spec_default
     placement:
       host_pattern: '*'
-    data_devices:
-      size: '2TB:'
-    db_devices:
-      size: ':2TB'
+    spec:
+      data_devices:
+        size: '2TB:'
+      db_devices:
+        size: ':2TB'
 
-Note: All of the above DriveGroups are equally valid. Which of those you want to use depends on taste and on how much you expect your node layout to change.
+.. note:: All of the above OSD specs  are equally valid. Which of those you want to use depends on taste and on how much you expect your node layout to change.
 
 
-The advanced case
-^^^^^^^^^^^^^^^^^
+Multiple OSD specs for a single host
+------------------------------------
 
 Here we have two distinct setups
 
@@ -731,28 +740,38 @@ This can be described with two layouts.
     service_id: osd_spec_hdd
     placement:
       host_pattern: '*'
-    data_devices:
-      rotational: 0
-    db_devices:
-      model: MC-55-44-XZ
-      limit: 2 (db_slots is actually to be favoured here, but it's not implemented yet)
+    spec:
+      data_devices:
+        rotational: 0
+      db_devices:
+        model: MC-55-44-XZ
+        limit: 2 # db_slots is actually to be favoured here, but it's not implemented yet
     ---
     service_type: osd
     service_id: osd_spec_ssd
     placement:
       host_pattern: '*'
-    data_devices:
-      model: MC-55-44-XZ
-    db_devices:
-      vendor: VendorC
+    spec:
+      data_devices:
+        model: MC-55-44-XZ
+      db_devices:
+        vendor: VendorC
 
 This would create the desired layout by using all HDDs as data_devices with two SSD assigned as dedicated db/wal devices.
 The remaining SSDs(8) will be data_devices that have the 'VendorC' NVMEs assigned as dedicated db/wal devices.
 
-The advanced case (with non-uniform nodes)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Multiple hosts with the same disk layout
+----------------------------------------
 
-The examples above assumed that all nodes have the same drives. That's however not always the case.
+Assuming the cluster has different kinds of hosts each with similar disk 
+layout, it is recommended to apply different OSD specs matching only one
+set of hosts. Typically you will have a spec for multiple hosts with the 
+same layout. 
+
+The sevice id as the unique key: In case a new OSD spec with an already
+applied service id is applied, the existing OSD spec will be superseeded.
+cephadm will now create new OSD daemons based on the new spec
+definition. Existing OSD daemons will not be affected. See :ref:`cephadm-osd-declarative`.
 
 Node1-5
 
@@ -780,33 +799,41 @@ Node6-10
     Model: MC-55-44-ZX
     Size: 512GB
 
-You can use the 'host_pattern' key in the layout to target certain nodes. Salt target notation helps to keep things easy.
-
+You can use the 'placement' key in the layout to target certain nodes.
 
 .. code-block:: yaml
 
     service_type: osd
-    service_id: osd_spec_node_one_to_five
+    service_id: disk_layout_a
     placement:
-      host_pattern: 'node[1-5]'
-    data_devices:
-      rotational: 1
-    db_devices:
-      rotational: 0
+      label: disk_layout_a
+    spec:
+      data_devices:
+        rotational: 1
+      db_devices:
+        rotational: 0
     ---
     service_type: osd
-    service_id: osd_spec_six_to_ten
+    service_id: disk_layout_b
     placement:
-      host_pattern: 'node[6-10]'
-    data_devices:
-      model: MC-55-44-XZ
-    db_devices:
-      model: SSD-123-foo
+      label: disk_layout_b
+    spec:
+      data_devices:
+        model: MC-55-44-XZ
+      db_devices:
+        model: SSD-123-foo
 
-This applies different OSD specs to different hosts depending on the `host_pattern` key.
+This applies different OSD specs to different hosts depending on the `placement` key.
+See :ref:`orchestrator-cli-placement-spec`
+
+.. note::
+
+   Assuming each host has a unique disk layout, each OSD 
+   spec needs to have a different service id
+
 
 Dedicated wal + db
-^^^^^^^^^^^^^^^^^^
+------------------
 
 All previous cases co-located the WALs with the DBs.
 It's however possible to deploy the WAL on a dedicated device as well, if it makes sense.
@@ -837,12 +864,13 @@ The OSD spec for this case would look like the following (using the `model` filt
     service_id: osd_spec_default
     placement:
       host_pattern: '*'
-    data_devices:
-      model: MC-55-44-XZ
-    db_devices:
-      model: SSD-123-foo
-    wal_devices:
-      model: NVME-QQQQ-987
+    spec:
+      data_devices:
+        model: MC-55-44-XZ
+      db_devices:
+        model: SSD-123-foo
+      wal_devices:
+        model: NVME-QQQQ-987
 
 
 It is also possible to specify directly device paths in specific hosts like the following:
@@ -855,14 +883,15 @@ It is also possible to specify directly device paths in specific hosts like the 
       hosts:
         - Node01
         - Node02
-    data_devices:
-      paths:
+    spec:
+      data_devices:
+        paths:
         - /dev/sdb
-    db_devices:
-      paths:
+      db_devices:
+        paths:
         - /dev/sdc
-    wal_devices:
-      paths:
+      wal_devices:
+        paths:
         - /dev/sdd
 
 

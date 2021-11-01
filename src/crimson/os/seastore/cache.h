@@ -17,6 +17,7 @@
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/root_block.h"
 #include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/random_block_manager.h"
 
 namespace crimson::os::seastore {
 
@@ -89,7 +90,7 @@ public:
     crimson::ct_error::input_output_error>;
   using base_iertr = trans_iertr<base_ertr>;
 
-  Cache(ExtentReader &reader, segment_off_t block_size);
+  Cache(ExtentReader &reader);
   ~Cache();
 
   /// Creates empty transaction by source
@@ -613,8 +614,6 @@ public:
 
 private:
   ExtentReader &reader;	   	   ///< ref to extent reader
-  segment_off_t block_size;	   ///< block size of the segment
-                                   ///< manager holding journal records
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents;             ///< set of live extents
 

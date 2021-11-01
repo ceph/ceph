@@ -29,6 +29,7 @@
          }
       ]
    },
+   "description": "",
    "editable": false,
    "gnetId": null,
    "graphTooltip": 0,
@@ -42,6 +43,7 @@
          "dashLength": 10,
          "dashes": false,
          "datasource": "$datasource",
+         "description": "",
          "fill": 1,
          "gridPos": {
             "h": 7,
@@ -126,6 +128,7 @@
          "dashLength": 10,
          "dashes": false,
          "datasource": "$datasource",
+         "description": "",
          "fill": 1,
          "gridPos": {
             "h": 7,
@@ -210,6 +213,7 @@
          "dashLength": 10,
          "dashes": false,
          "datasource": "$datasource",
+         "description": "",
          "fill": 1,
          "gridPos": {
             "h": 7,
@@ -294,6 +298,7 @@
          "dashLength": 10,
          "dashes": false,
          "datasource": "$datasource",
+         "description": "",
          "fill": 1,
          "gridPos": {
             "h": 7,
@@ -386,9 +391,9 @@
             "allValue": null,
             "current": { },
             "datasource": "$datasource",
-            "hide": 2,
+            "hide": 0,
             "includeAll": true,
-            "label": null,
+            "label": "",
             "multi": false,
             "name": "rgw_servers",
             "options": [ ],
