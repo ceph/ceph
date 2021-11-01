@@ -389,6 +389,66 @@ class TestCephadm(object):
                         {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://[1::4]:3000'},
                         None)
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1.2.3.4')
+    def test_iscsi_post_actions_with_missing_daemon_in_cache(self, cephadm_module: CephadmOrchestrator):
+        # https://tracker.ceph.com/issues/52866
+        with with_host(cephadm_module, 'test1'):
+            with with_host(cephadm_module, 'test2'):
+                with with_service(cephadm_module, IscsiServiceSpec(service_id='foobar', pool='pool', placement=PlacementSpec(host_pattern='*')), CephadmOrchestrator.apply_iscsi, 'test'):
+
+                    CephadmServe(cephadm_module)._apply_all_services()
+                    assert len(cephadm_module.cache.get_daemons_by_type('iscsi')) == 2
+
+                    # get a deamons from postaction list (ARRGH sets!!)
+                    tempset = cephadm_module.requires_post_actions.copy()
+                    tempdeamon1 = tempset.pop()
+                    tempdeamon2 = tempset.pop()
+
+                    # make sure post actions has 2 daemons in it
+                    assert len(cephadm_module.requires_post_actions) == 2
+
+                    # replicate a host cache that is not in sync when check_daemons is called
+                    tempdd1 = cephadm_module.cache.get_daemon(tempdeamon1)
+                    tempdd2 = cephadm_module.cache.get_daemon(tempdeamon2)
+                    host = 'test1'
+                    if 'test1' not in tempdeamon1:
+                        host = 'test2'
+                    cephadm_module.cache.rm_daemon(host, tempdeamon1)
+
+                    # Make sure, _check_daemons does a redeploy due to monmap change:
+                    cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
+                        'modified': datetime_to_str(datetime_now()),
+                        'fsid': 'foobar',
+                    })
+                    cephadm_module.notify('mon_map', None)
+                    cephadm_module.mock_store_set('_ceph_get', 'mgr_map', {
+                        'modules': ['dashboard']
+                    })
+
+                    with mock.patch("cephadm.module.IscsiService.config_dashboard") as _cfg_db:
+                        CephadmServe(cephadm_module)._check_daemons()
+                        _cfg_db.assert_called_once_with([tempdd2])
+
+                        # post actions still has the other deamon in it and will run next _check_deamons
+                        assert len(cephadm_module.requires_post_actions) == 1
+
+                        # post actions was missed for a daemon
+                        assert tempdeamon1 in cephadm_module.requires_post_actions
+
+                        # put the daemon back in the cache
+                        cephadm_module.cache.add_daemon(host, tempdd1)
+
+                        _cfg_db.reset_mock()
+                        # replicate serve loop running again
+                        CephadmServe(cephadm_module)._check_daemons()
+
+                        # post actions should have been called again
+                        _cfg_db.asset_called()
+
+                        # post actions is now empty
+                        assert len(cephadm_module.requires_post_actions) == 0
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_mon_add(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
