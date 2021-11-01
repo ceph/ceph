@@ -43,6 +43,7 @@ from .rook_client.ceph import cephfilesystem as cfs
 from .rook_client.ceph import cephnfs as cnfs
 from .rook_client.ceph import cephobjectstore as cos
 from .rook_client.ceph import cephcluster as ccl
+from .rook_client.ceph import cephrbdmirror as crbdm
 from .rook_client._helper import CrdClass
 
 import orchestrator
@@ -1212,6 +1213,46 @@ class RookCluster(object):
         )
         self.batchV1_api.create_namespaced_job('rook-ceph', body)
 
+    def rbd_mirror(self, spec: ServiceSpec) -> None:
+        service_id = spec.service_id or "default-rbd-mirror"
+        all_hosts = self.get_hosts()
+        def _create_rbd_mirror() -> crbdm.CephRBDMirror:
+            return crbdm.CephRBDMirror(
+                apiVersion=self.rook_env.api_name,
+                metadata=dict(
+                    name=service_id,
+                    namespace=self.rook_env.namespace,
+                ),
+                spec=crbdm.Spec(
+                    count=spec.placement.count or 1,
+                    placement=crbdm.Placement(
+                        nodeAffinity=crbdm.NodeAffinity(
+                            requiredDuringSchedulingIgnoredDuringExecution=crbdm.RequiredDuringSchedulingIgnoredDuringExecution(
+                                nodeSelectorTerms=crbdm.NodeSelectorTermsList(
+                                    [
+                                        placement_spec_to_node_selector(spec.placement, all_hosts)
+                                    ]
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        def _update_rbd_mirror(new: crbdm.CephRBDMirror) -> crbdm.CephRBDMirror:
+            new.spec.count = spec.placement.count or 1
+            new.spec.placement = crbdm.Placement(
+                nodeAffinity=crbdm.NodeAffinity(
+                    requiredDuringSchedulingIgnoredDuringExecution=crbdm.RequiredDuringSchedulingIgnoredDuringExecution(
+                        nodeSelectorTerms=crbdm.NodeSelectorTermsList(
+                            [
+                                placement_spec_to_node_selector(spec.placement, all_hosts)
+                            ]
+                        )
+                    )
+                )
+            )
+            return new
+        self._create_or_patch(crbdm.CephRBDMirror, 'cephrbdmirrors', service_id, _update_rbd_mirror, _create_rbd_mirror)
     def _patch(self, crd: Type, crd_name: str, cr_name: str, func: Callable[[CrdClassT, CrdClassT], CrdClassT]) -> str:
         current_json = self.rook_api_get(
             "{}/{}".format(crd_name, cr_name)
