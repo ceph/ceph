@@ -43,6 +43,12 @@ namespace http = boost::beast::http;
 namespace ssl = boost::asio::ssl;
 #endif
 
+// use explicit executor types instead of the type-erased boost::asio::executor
+using executor_type = boost::asio::io_context::executor_type;
+
+using tcp_socket = boost::asio::basic_stream_socket<tcp, executor_type>;
+using tcp_stream = boost::beast::basic_stream<tcp, executor_type>;
+
 using parse_buffer = boost::beast::flat_static_buffer<65536>;
 
 // use mmap/mprotect to allocate 512k coroutine stacks
@@ -79,7 +85,7 @@ class StreamIO : public rgw::asio::ClientIO {
       ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
       if (ec==boost::asio::error::broken_pipe) {
         boost::system::error_code ec_ignored;
-        timeout.socket().shutdown(tcp::socket::shutdown_both, ec_ignored);
+        timeout.socket().shutdown(tcp_socket::shutdown_both, ec_ignored);
       }
       throw rgw::io::Exception(ec.value(), std::system_category());
     }
@@ -307,8 +313,8 @@ void handle_connection(boost::asio::io_context& context,
 }
 
 struct Connection : boost::intrusive::list_base_hook<> {
-  tcp::socket& socket;
-  Connection(tcp::socket& socket) : socket(socket) {}
+  tcp_socket& socket;
+  Connection(tcp_socket& socket) : socket(socket) {}
 };
 
 class ConnectionList {
@@ -365,7 +371,7 @@ class AsioFrontend {
   struct Listener {
     tcp::endpoint endpoint;
     tcp::acceptor acceptor;
-    tcp::socket socket;
+    tcp_socket socket;
     bool use_ssl = false;
     bool use_nodelay = false;
 
@@ -944,7 +950,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
                             accept(l, ec);
                           });
   
-  boost::beast::tcp_stream stream(std::move(socket));
+  tcp_stream stream(std::move(socket));
   // spawn a coroutine to handle the connection
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   if (l.use_ssl) {
@@ -953,7 +959,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         Connection conn{s.socket()};
         auto c = connections.add(conn);
         // wrap the tcp_stream in an ssl stream
-        boost::beast::ssl_stream<boost::beast::tcp_stream&> stream{s, *ssl_context};
+        boost::beast::ssl_stream<tcp_stream&> stream{s, *ssl_context};
         auto buffer = std::make_unique<parse_buffer>();
         // do ssl handshake
         boost::system::error_code ec;
@@ -973,7 +979,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
           // ssl shutdown (ignoring errors)
           stream.async_shutdown(yield[ec]);
         }
-        s.socket().shutdown(tcp::socket::shutdown_both, ec);
+        s.socket().shutdown(tcp_socket::shutdown_both, ec);
       }, make_stack_allocator());
   } else {
 #else
@@ -987,7 +993,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         boost::system::error_code ec;
         handle_connection(context, env, s, *buffer, false, pause_mutex,
                           scheduler.get(), ec, yield, request_timeout);
-        s.socket().shutdown(tcp::socket::shutdown_both, ec);
+        s.socket().shutdown(tcp_socket::shutdown_both, ec);
       }, make_stack_allocator());
   }
 }
