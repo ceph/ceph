@@ -128,10 +128,10 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     RGWAccessKey k1("0555b35654ad1656d804", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==");
     user->get_info().access_keys["0555b35654ad1656d804"] = k1;
 
-    ldpp_dout(dpp, 0) << "Store testid and user for Motr. User = " << user->get_info().user_id.id << dendl;
+    ldpp_dout(dpp, 20) << "Store testid and user for Motr. User = " << user->get_info().user_id.id << dendl;
     int rc = user->store_user(dpp, null_yield, true);
     if (rc < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed inserting testid user in dbstore error rc=" << rc << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to store testid user ar Motr: rc=" << rc << dendl;
     }
 
     // Read user info and compare.
@@ -140,7 +140,7 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     suser->get_info().user_id = ruser;
     rc = suser->load_user(dpp, null_yield);
     if (rc != 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to load testid user in dbstore error rc=" << rc << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to load testid user from Motr: rc=" << rc << dendl;
     } else {
       ldpp_dout(dpp, 20) << "Read and compare user info: " << dendl;
       ldpp_dout(dpp, 20) << "User id = " << suser->get_info().user_id.id << dendl;

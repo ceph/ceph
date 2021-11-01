@@ -18,8 +18,11 @@
 #pragma once
 
 extern "C" {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wextern-c-compat"
 #include "motr/config.h"
 #include "motr/client.h"
+#pragma clang diagnostic pop
 }
 
 #include "rgw_sal.h"

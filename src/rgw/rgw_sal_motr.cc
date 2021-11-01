@@ -20,11 +20,14 @@
 #include <unistd.h>
 
 extern "C" {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wextern-c-compat"
 #include "motr/config.h"
 #include "lib/types.h"
 #include "lib/trace.h"   // m0_trace_set_mmapped_buffer
 #include "motr/layout.h" // M0_OBJ_LAYOUT_ID
 #include "helpers/helpers.h" // m0_ufid_next
+#pragma clang diagnostic pop
 }
 
 #include "common/Clock.h"
@@ -1768,7 +1771,6 @@ int MotrObject::get_part_objs(const DoutPrefixProvider* dpp,
                               std::map<int, std::unique_ptr<MotrObject>>& part_objs)
 {
   int rc;
-  int total_parts = 0;
   int max_parts = 1000;
   int marker = 0;
   uint64_t off = 0;
@@ -1784,8 +1786,6 @@ int MotrObject::get_part_objs(const DoutPrefixProvider* dpp,
     }
     if (rc < 0)
       return rc;
-
-    total_parts += upload->get_parts().size();
 
     std::map<uint32_t, std::unique_ptr<MultipartPart>>& parts = upload->get_parts();
     for (auto part_iter = parts.begin(); part_iter != parts.end(); ++part_iter) {
