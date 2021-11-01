@@ -5427,6 +5427,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   mds_rank_t mds = session->mds_num;
   int used = get_caps_used(in);
   int wanted = in->caps_wanted();
+  int flags = 0;
 
   const unsigned new_caps = m->get_caps();
   const bool was_stale = session->cap_gen > cap->gen;
@@ -5540,11 +5541,14 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
 	!_flush(in, new C_Client_FlushComplete(this, in))) {
       // waitin' for flush
     } else if (used & revoked & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO)) {
-      if (_release(in))
-	check = true;
+      if (_release(in)) {
+        check = true;
+        flags = CHECK_CAPS_NODELAY;
+      }
     } else {
       cap->wanted = 0; // don't let check_caps skip sending a response to MDS
       check = true;
+      flags = CHECK_CAPS_NODELAY;
     }
   } else if (cap->issued == new_caps) {
     ldout(cct, 10) << "  caps unchanged at " << ccap_string(cap->issued) << dendl;
@@ -5567,7 +5571,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   }
 
   if (check)
-    check_caps(in, 0);
+    check_caps(in, flags);
 
   // wake up waiters
   if (new_caps)
