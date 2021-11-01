@@ -71,6 +71,30 @@ Descriptions of fields
 
    number of opened inodes
 
+.. describe:: rtio
+
+   total size of read IOs
+
+.. describe:: wtio
+
+   total size of write IOs
+
+.. describe:: raio
+
+   average size of read IOs
+
+.. describe:: waio
+
+   average size of write IOs
+
+.. describe:: rsp
+
+   speed of read IOs compared with the last refresh
+
+.. describe:: wsp
+
+   speed of write IOs compared with the last refresh
+
 
 Availability
 ============
