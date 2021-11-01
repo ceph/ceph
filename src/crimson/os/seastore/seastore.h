@@ -62,14 +62,14 @@ public:
   using MDStoreRef = std::unique_ptr<MDStore>;
 
   SeaStore(
-    std::string root,
+    const std::string& root,
     MDStoreRef mdstore,
     SegmentManagerRef sm,
     TransactionManagerRef tm,
     CollectionManagerRef cm,
     OnodeManagerRef om);
   SeaStore(
-    std::string root,
+    const std::string& root,
     SegmentManagerRef sm,
     TransactionManagerRef tm,
     CollectionManagerRef cm,
