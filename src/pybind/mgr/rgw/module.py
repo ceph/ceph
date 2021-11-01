@@ -124,7 +124,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
-    @CLICommand('rgw realm create zone-creds', perm='rw')
+    @CLICommand('rgw realm zone-creds create', perm='rw')
     def _cmd_rgw_realm_new_zone_creds(self,
                                  realm_name: Optional[str] = None,
                                  endpoints: Optional[str] = None,
@@ -139,7 +139,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
-    @CLICommand('rgw realm remove zone-creds', perm='rw')
+    @CLICommand('rgw realm zone-creds remove', perm='rw')
     def _cmd_rgw_realm_rm_zone_creds(self,
                                  realm_token : Optional[str] = None):
         """Create credentials for new zone creation"""
