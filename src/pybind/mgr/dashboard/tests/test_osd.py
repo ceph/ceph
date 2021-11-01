@@ -255,6 +255,13 @@ class OsdTest(ControllerTestCase):
             self.assertStatus(200)
 
     @mock.patch('dashboard.controllers.osd.CephService')
+    def test_osd_scrub(self, instance):
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+        self._task_post('/api/osd/1/scrub', {'deep': True})
+        self.assertStatus(200)
+
+    @mock.patch('dashboard.controllers.osd.CephService')
     def test_osd_create_bare(self, ceph_service):
         ceph_service.send_command.return_value = '5'
         sample_data = {
@@ -270,6 +277,21 @@ class OsdTest(ControllerTestCase):
         self._task_post('/api/osd', data)
         self.assertStatus(201)
         ceph_service.send_command.assert_called()
+
+        # unknown method
+        data['method'] = 'other'
+        self._task_post('/api/osd', data)
+        self.assertStatus(400)
+        res = self.json_body()
+        self.assertIn('Unknown method', res['detail'])
+
+        # svc_id is not int
+        data['data']['svc_id'] = "five"
+        data['method'] = 'bare'
+        self._task_post('/api/osd', data)
+        self.assertStatus(400)
+        res = self.json_body()
+        self.assertIn('osd', res['component'])
 
     @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
     def test_osd_create_with_drive_groups(self, instance):
@@ -313,7 +335,34 @@ class OsdTest(ControllerTestCase):
         fake_client = mock.Mock()
         instance.return_value = fake_client
         action_list = ['OUT', 'IN', 'DOWN']
+
         for action in action_list:
             data = {'action': action}
             self._task_put('/api/osd/1/mark', data)
             self.assertStatus(200)
+
+        # invalid mark
+        self._task_put('/api/osd/1/mark', {'action': 'OTHER'})
+        self.assertStatus(200)
+
+        self._task_post('/api/osd/1/purge', {'svc_id': 1})
+        self.assertStatus(200)
+
+    @mock.patch('dashboard.controllers.osd.CephService')
+    def test_destory_osd(self, instance):
+        instance.send_command.return_value = '5'
+        uuid1 = str(uuid.uuid1())
+        sample_data = {
+            'uuid': uuid1,
+            'svc_id': 1
+        }
+        data = {
+            'method': 'bare',
+            'data': sample_data,
+            'tracking_id': 'bare-1'
+        }
+        self._task_post('/api/osd', data)
+        self._task_put('/api/osd/1/mark', {'action': 'DOWN'})
+        self.assertStatus(200)
+        self._task_post('/api/osd/1/reweight', {'weight': '1'})
+        self.assertStatus(200)
