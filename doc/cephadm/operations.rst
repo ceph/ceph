@@ -87,6 +87,21 @@ file but will not trigger a restart of the daemon.
    ceph orch daemon reconfig <name>
 
 
+Rotating a daemon's authenticate key
+------------------------------------
+
+All Ceph and gateway daemons in the cluster have a secret key that is used to connect
+to and authenticate with the cluster.  This key can be rotated (i.e., replaced with a
+new key) with the following command:
+
+.. prompt:: bash #
+
+   ceph orch daemon rotate-key <name>
+
+For MDS, OSD, and MGR daemons, this does not require a daemon restart.  For other
+daemons, however (e.g., RGW), the daemon may be restarted to switch to the new key.
+
+
 Ceph daemon logs
 ================
 
