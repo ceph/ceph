@@ -215,54 +215,43 @@ void AuthRegistry::get_supported_methods(
     }
   }
 
-  switch (cct->get_module_type()) {
-  case CEPH_ENTITY_TYPE_CLIENT:
-    // i am client
-    if (methods) {
+  if (methods) {
+    switch (cct->get_module_type()) {
+    case CEPH_ENTITY_TYPE_CLIENT:
+      // i am client
       *methods = client_methods;
-    }
-    return;
-  case CEPH_ENTITY_TYPE_MON:
-  case CEPH_ENTITY_TYPE_MGR:
-    // i am mon/mgr
-    switch (peer_type) {
+      return;
     case CEPH_ENTITY_TYPE_MON:
     case CEPH_ENTITY_TYPE_MGR:
-      // they are mon/mgr
-      if (methods) {
-	*methods = cluster_methods;
+      // i am mon/mgr
+      switch (peer_type) {
+      case CEPH_ENTITY_TYPE_MON:
+      case CEPH_ENTITY_TYPE_MGR:
+        // they are mon/mgr
+        *methods = cluster_methods;
+        break;
+      default:
+        // they are anything but mons
+        *methods = service_methods;
+        break;
       }
-      break;
+      return;
     default:
-      // they are anything but mons
-      if (methods) {
-	*methods = service_methods;
+      // i am a non-mon daemon
+      switch (peer_type) {
+      case CEPH_ENTITY_TYPE_MON:
+      case CEPH_ENTITY_TYPE_MGR:
+      case CEPH_ENTITY_TYPE_MDS:
+      case CEPH_ENTITY_TYPE_OSD:
+        // they are anything but a client
+        *methods = cluster_methods;
+        break;
+      default:
+        // they are a client
+        *methods = service_methods;
+        break;
       }
-    }
-    return;
-  default:
-    // i am a non-mon daemon
-    switch (peer_type) {
-    case CEPH_ENTITY_TYPE_MON:
-    case CEPH_ENTITY_TYPE_MGR:
-      // they are a mon daemon
-      if (methods) {
-	*methods = cluster_methods;
-      }
-      break;
-    case CEPH_ENTITY_TYPE_MDS:
-    case CEPH_ENTITY_TYPE_OSD:
-      // they are another daemon
-      if (methods) {
-	*methods = cluster_methods;
-      }
-      break;
-    default:
-      // they are a client
-      if (methods) {
-	*methods = service_methods;
-      }
-      break;
+      return;
     }
   }
 }
