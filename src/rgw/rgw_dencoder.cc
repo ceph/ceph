@@ -282,12 +282,29 @@ void rgw_bucket::generate_test_instances(list<rgw_bucket*>& o)
 
 void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
 {
+  // Since things without a log will have one synthesized on decode,
+  // ensure the things we attempt to encode will have one added so we
+  // round-trip properly.
+  auto gen_layout = [](rgw::BucketLayout& l) {
+    l.current_index.gen = 0;
+    l.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
+    l.current_index.layout.type = rgw::BucketIndexType::Normal;
+    l.current_index.layout.normal.num_shards = 11;
+    l.logs.push_back(log_layout_from_index(
+		       l.current_index.gen,
+		       l.current_index.layout.normal));
+  };
+
+
   RGWBucketInfo *i = new RGWBucketInfo;
   init_bucket(&i->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
   i->owner = "owner";
   i->flags = BUCKET_SUSPENDED;
+  gen_layout(i->layout);
   o.push_back(i);
-  o.push_back(new RGWBucketInfo);
+  i = new RGWBucketInfo;
+  gen_layout(i->layout);
+  o.push_back(i);
 }
 
 void RGWZoneGroup::generate_test_instances(list<RGWZoneGroup*>& o)
