@@ -1,5 +1,11 @@
 >=17.0.0
 
+* Critical bug in OMAP format upgrade is fixed. This could cause data corruption
+  (improperly formatted OMAP keys) after pre-Pacific cluster upgrade if
+  bluestore-quick-fix-on-mount parameter is set to true or ceph-bluestore-tool's
+  quick-fix/repair commands are invoked.
+  Relevant tracker: https://tracker.ceph.com/issues/53062
+
 * `ceph-mgr-modules-core` debian package does not recommend `ceph-mgr-rook`
   anymore. As the latter depends on `python3-numpy` which cannot be imported in
   different Python sub-interpreters multi-times if the version of
