@@ -1565,12 +1565,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 int BlueFS::log_dump()
 {
   // only dump log file's content
-<<<<<<< HEAD
-  ceph_assert(log_writer == nullptr && "cannot log_dump on mounted BlueFS");
-=======
   ceph_assert(log.writer == nullptr && "cannot log_dump on mounted BlueFS");
-  _init_logger();
->>>>>>> b661fa2fbcd (os/bluestore/bluefs: Reorganize BlueFS state variables)
   int r = _open_super();
   if (r < 0) {
     derr << __func__ << " failed to open super: " << cpp_strerror(r) << dendl;
@@ -2526,42 +2521,54 @@ void BlueFS::_compact_log_async_LD_NF_D() //also locks FW for new_writer
   new_log->lock.unlock();
   new_log_writer->lock.unlock();
   // 5. update our log fnode
-  // discard first old_log_jump_to extents
-
-  dout(10) << __func__ << " remove 0x" << std::hex << old_log_jump_to << std::dec
-	   << " of " << log_file->fnode.extents << dendl;
-
-  vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
-
-  uint64_t discarded = 0;
+  // we need to append to new_log the extents that were allocated in step 1.1
+  // we do it by inverse logic - we drop 'old_log_jump_to' bytes and keep rest
+  // todo - maybe improve _allocate so we will give clear set of new allocations
+  uint64_t processed = 0;
   mempool::bluefs::vector<bluefs_extent_t> old_extents;
-  while (discarded < old_log_jump_to) {
-    ceph_assert(!log_file->fnode.extents.empty());
-    bluefs_extent_t& e = log_file->fnode.extents.front();
-    bluefs_extent_t temp = e;
-    if (discarded + e.length <= old_log_jump_to) {
+  for (auto& e : log_file->fnode.extents) {
+    if (processed + e.length <= old_log_jump_to) {
+      // drop whole extent
       dout(10) << __func__ << " remove old log extent " << e << dendl;
-      discarded += e.length;
-      log_file->fnode.pop_front_extent();
+      old_extents.push_back(e);
     } else {
-      dout(10) << __func__ << " remove front of old log extent " << e << dendl;
-      uint64_t drop = old_log_jump_to - discarded;
-      temp.length = drop;
-      e.offset += drop;
-      e.length -= drop;
-      discarded += drop;
-      dout(10) << __func__ << "   kept " << e << " removed " << temp << dendl;
+      // keep, but how much?
+      if (processed < old_log_jump_to) {
+	ceph_assert(processed + e.length > old_log_jump_to);
+	ceph_assert(old_log_jump_to - processed <= std::numeric_limits<uint32_t>::max());
+	uint32_t cut_at = uint32_t(old_log_jump_to - processed);
+	// need to cut, first half gets dropped
+	bluefs_extent_t retire(e.bdev, e.offset, cut_at);
+	old_extents.push_back(retire);
+	// second half goes to new log
+	bluefs_extent_t keep(e.bdev, e.offset + cut_at, e.length - cut_at);
+	new_log->fnode.append_extent(keep);
+	dout(10) << __func__ << " kept " << keep << " removed " << retire << dendl;
+      } else {
+	// take entire extent
+	ceph_assert(processed >= old_log_jump_to);
+	new_log->fnode.append_extent(e);
+	dout(10) << __func__ << " kept " << e << dendl;
+      }
     }
-    old_extents.push_back(temp);
-  }
-  auto from = log_file->fnode.extents.begin();
-  auto to = log_file->fnode.extents.end();
-  while (from != to) {
-    new_log->fnode.append_extent(*from);
-    ++from;
+    processed += e.length;
   }
   // we will write it to super
   new_log->fnode.reset_delta();
+
+  // 6. write the super block to reflect the changes
+  dout(10) << __func__ << " writing super" << dendl;
+  new_log->fnode.ino = log_file->fnode.ino;
+  new_log->fnode.size = 0;
+  new_log->fnode.mtime = ceph_clock_now();
+  super.log_fnode = new_log->fnode;
+  ++super.version;
+  _write_super(BDEV_DB);
+  _flush_bdev();
+
+  log.lock.lock();
+  // swapping log_file and new_log
+  vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
 
   // clear the extents from old log file, they are added to new log
   log_file->fnode.clear_extents();
@@ -2573,13 +2580,7 @@ void BlueFS::_compact_log_async_LD_NF_D() //also locks FW for new_writer
 
   vselector->add_usage(log_file->vselector_hint, log_file->fnode);
 
-  // 6. write the super block to reflect the changes
-  dout(10) << __func__ << " writing super" << dendl;
-  super.log_fnode = log_file->fnode;
-  ++super.version;
-  _write_super(BDEV_DB);
-
-  _flush_bdev();
+  log.lock.unlock();
 
   old_forbidden = atomic_exchange(&log_forbidden_to_expand, false);
   ceph_assert(old_forbidden == true);
