@@ -85,7 +85,10 @@ describe('NavigationComponent', () => {
       ],
       [['monitor'], ['.tc_submenuitem_cluster_monitor']],
       [['osd'], ['.tc_submenuitem_osds', '.tc_submenuitem_crush']],
-      [['configOpt'], ['.tc_submenuitem_configuration', '.tc_submenuitem_modules']],
+      [
+        ['configOpt'],
+        ['.tc_submenuitem_configuration', '.tc_submenuitem_modules', '.tc_submenuitem_users']
+      ],
       [['log'], ['.tc_submenuitem_log']],
       [['prometheus'], ['.tc_submenuitem_monitoring']],
       [['pool'], ['.tc_menuitem_pool']],
