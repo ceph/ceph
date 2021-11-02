@@ -641,6 +641,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
 
 void FSMap::decode(bufferlist::const_iterator& p)
 {
+  struct_version = 0;
   DECODE_START(STRUCT_VERSION, p);
   DECODE_OLDEST(7);
   struct_version = struct_v;
