@@ -134,7 +134,7 @@ public:
   void find_idle_sessions();
 
   void kill_session(Session *session, Context *on_safe);
-  size_t apply_blocklist(const std::set<entity_addr_t> &blocklist);
+  size_t apply_blocklist();
   void journal_close_session(Session *session, int state, Context *on_safe);
 
   size_t get_num_pending_reclaim() const { return client_reclaim_gather.size(); }
