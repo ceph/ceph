@@ -1058,6 +1058,7 @@ public:
     MEMPOOL_CLASS_HELPERS();
 
     std::atomic_int nref;  ///< reference count
+    std::atomic_int put_nref = {0};
     Collection *c;
     ghobject_t oid;
 
