@@ -252,6 +252,28 @@ To access the admin socket, first enter the daemon container on the host::
     [root@mon1 ~]# cephadm enter --name <daemon-name>
     [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
 
+Calling miscellaneous ceph tools
+--------------------------------
+
+To call miscellaneous like ``ceph-objectstore-tool`` or 
+``ceph-monstore-tool``, you can run them by calling 
+``cephadm shell --name <daemon-name>`` like so::
+
+    root@myhostname # cephadm unit --name mon.myhostname stop
+    root@myhostname # cephadm shell --name mon.myhostname
+    [ceph: root@myhostname /]# ceph-monstore-tool /var/lib/ceph/mon/ceph-myhostname get monmap > monmap         
+    [ceph: root@myhostname /]# monmaptool --print monmap
+    monmaptool: monmap file monmap
+    epoch 1
+    fsid 28596f44-3b56-11ec-9034-482ae35a5fbb
+    last_changed 2021-11-01T20:57:19.755111+0000
+    created 2021-11-01T20:57:19.755111+0000
+    min_mon_release 17 (quincy)
+    election_strategy: 1
+    0: [v2:127.0.0.1:3300/0,v1:127.0.0.1:6789/0] mon.myhostname
+
+This command sets up the environment in a way that is suitable
+for extended daemon maintenance and running the deamon interactively. 
 
 .. _cephadm-restore-quorum:
 
