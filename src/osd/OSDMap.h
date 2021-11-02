@@ -698,8 +698,10 @@ public:
 
   bool is_blocklisted(const entity_addr_t& a) const;
   bool is_blocklisted(const entity_addrvec_t& a) const;
-  void get_blocklist(std::list<std::pair<entity_addr_t,utime_t > > *bl) const;
-  void get_blocklist(std::set<entity_addr_t> *bl) const;
+  void get_blocklist(std::list<std::pair<entity_addr_t,utime_t > > *bl,
+		     std::list<std::pair<entity_addr_t,utime_t> > *rl) const;
+  void get_blocklist(std::set<entity_addr_t> *bl,
+		     std::set<entity_addr_t> *rl) const;
 
   std::string get_cluster_snapshot() const {
     if (cluster_snapshot_epoch == epoch)
