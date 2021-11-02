@@ -187,6 +187,21 @@ TEST(LibRGW, INIT) {
   ASSERT_NE(rgw_h, nullptr);
 }
 
+TEST(LibRGW, MOUNT_NOROOT) {
+  /* do a mount at root="" and verify that it's root is "/" */
+  struct rgw_fs *fs = nullptr;
+  int ret = rgw_mount2(rgw_h, userid.c_str(), access_key.c_str(),
+                       secret_key.c_str(), "", &fs, RGW_MOUNT_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_NE(fs, nullptr);
+
+  auto& root_fh = static_cast<RGWLibFS*>(fs->fs_private)->get_fh();
+  ASSERT_EQ(root_fh.get_name(), "/");
+
+  ret = rgw_umount(fs, RGW_UMOUNT_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+}
+
 TEST(LibRGW, MOUNT) {
   int ret = rgw_mount2(rgw_h, userid.c_str(), access_key.c_str(),
                        secret_key.c_str(), "/", &fs, RGW_MOUNT_FLAG_NONE);
