@@ -405,15 +405,16 @@ void ImageMap<I>::update_images_removed(
     bool image_mapped = (info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
 
     bool image_removed = image_mapped;
-    bool peer_removed = false;
+    bool no_remote_peer = false;
     auto peer_it = m_peer_map.find(global_image_id);
     if (peer_it != m_peer_map.end()) {
       auto& peer_set = peer_it->second;
-      peer_removed = peer_set.erase(peer_uuid);
+      auto peer_removed = peer_set.erase(peer_uuid);
+      no_remote_peer = peer_removed && (peer_set.size() == peer_set.count(""));
       image_removed = peer_removed && peer_set.empty();
     }
 
-    if (image_mapped && peer_removed && !peer_uuid.empty()) {
+    if (image_mapped && no_remote_peer && !peer_uuid.empty()) {
       // peer image has been deleted
       to_remove.emplace_back(global_image_id, info.instance_id);
     }
