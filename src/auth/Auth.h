@@ -30,6 +30,15 @@ enum {
   AUTH_MODE_MON_MAX = 19,
 };
 
+enum ConnectionType {
+  CONN_TYPE_CLIENT,
+  CONN_TYPE_CLIENT_MON,
+  CONN_TYPE_CLUSTER,
+  CONN_TYPE_CLUSTER_MON,
+  CONN_TYPE_SERVICE,
+  CONN_TYPE_SERVICE_MON
+};
+
 
 struct EntityAuth {
   CryptoKey key;

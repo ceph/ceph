@@ -189,21 +189,37 @@ void AuthRegistry::get_supported_methods(
     modes->clear();
   }
   std::scoped_lock l(lock);
+
+  if (modes) {
+    switch (get_conn_type(peer_type)) {
+    case CONN_TYPE_CLIENT_MON:
+      *modes = mon_client_modes;
+      break;
+    case CONN_TYPE_CLIENT:
+      *modes = client_modes;
+      break;
+    case CONN_TYPE_CLUSTER_MON:
+      *modes = mon_cluster_modes;
+      break;
+    case CONN_TYPE_CLUSTER:
+      *modes = cluster_modes;
+      break;
+    case CONN_TYPE_SERVICE_MON:
+      *modes = mon_service_modes;
+      break;
+    case CONN_TYPE_SERVICE:
+      *modes = service_modes;
+      break;
+    default:
+      ceph_abort();
+    }
+  }
+
   switch (cct->get_module_type()) {
   case CEPH_ENTITY_TYPE_CLIENT:
     // i am client
     if (methods) {
       *methods = client_methods;
-    }
-    if (modes) {
-      switch (peer_type) {
-      case CEPH_ENTITY_TYPE_MON:
-      case CEPH_ENTITY_TYPE_MGR:
-	*modes = mon_client_modes;
-	break;
-      default:
-	*modes = client_modes;
-      }
     }
     return;
   case CEPH_ENTITY_TYPE_MON:
@@ -216,17 +232,11 @@ void AuthRegistry::get_supported_methods(
       if (methods) {
 	*methods = cluster_methods;
       }
-      if (modes) {
-	*modes = mon_cluster_modes;
-      }
       break;
     default:
       // they are anything but mons
       if (methods) {
 	*methods = service_methods;
-      }
-      if (modes) {
-	*modes = mon_service_modes;
       }
     }
     return;
@@ -239,9 +249,6 @@ void AuthRegistry::get_supported_methods(
       if (methods) {
 	*methods = cluster_methods;
       }
-      if (modes) {
-	*modes = mon_cluster_modes;
-      }
       break;
     case CEPH_ENTITY_TYPE_MDS:
     case CEPH_ENTITY_TYPE_OSD:
@@ -249,17 +256,11 @@ void AuthRegistry::get_supported_methods(
       if (methods) {
 	*methods = cluster_methods;
       }
-      if (modes) {
-	*modes = cluster_modes;
-      }
       break;
     default:
       // they are a client
       if (methods) {
 	*methods = service_methods;
-      }
-      if (modes) {
-	*modes = service_modes;
       }
       break;
     }
@@ -297,6 +298,53 @@ void AuthRegistry::get_supported_modes(
     }
   } else {
     *modes = s;
+  }
+}
+
+ConnectionType AuthRegistry::get_conn_type(int peer_type) const
+{
+  return get_conn_type(cct->get_module_type(), peer_type);
+}
+
+ConnectionType AuthRegistry::get_conn_type(int my_type, int peer_type)
+{
+  switch (my_type) {
+  case CEPH_ENTITY_TYPE_CLIENT:
+    // i am client
+    switch (peer_type) {
+    case CEPH_ENTITY_TYPE_MON:
+    case CEPH_ENTITY_TYPE_MGR:
+      return CONN_TYPE_CLIENT_MON;
+    default:
+      return CONN_TYPE_CLIENT;
+    }
+  case CEPH_ENTITY_TYPE_MON:
+  case CEPH_ENTITY_TYPE_MGR:
+    // i am mon/mgr
+    switch (peer_type) {
+    case CEPH_ENTITY_TYPE_MON:
+    case CEPH_ENTITY_TYPE_MGR:
+      // they are mon/mgr
+      return CONN_TYPE_CLUSTER_MON;
+    default:
+      // they are anything but mon/mgr
+      return CONN_TYPE_SERVICE_MON;
+    }
+  default:
+    // i am a non-mon daemon
+    switch (peer_type) {
+    case CEPH_ENTITY_TYPE_MON:
+    case CEPH_ENTITY_TYPE_MGR:
+      // they are a mon daemon
+      return CONN_TYPE_CLUSTER_MON;
+    case CEPH_ENTITY_TYPE_MDS:
+    case CEPH_ENTITY_TYPE_OSD:
+      // they are another daemon
+      return CONN_TYPE_CLUSTER;
+    default:
+      // they are a client
+      return CONN_TYPE_SERVICE;
+    }
   }
 }
 

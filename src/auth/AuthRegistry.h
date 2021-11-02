@@ -56,6 +56,9 @@ public:
 			   uint32_t auth_method,
 			   std::vector<uint32_t> *modes) const;
 
+  ConnectionType get_conn_type(int peer_type) const;
+  static ConnectionType get_conn_type(int my_type, int peer_type);
+
   uint32_t pick_mode(int peer_type,
 		     uint32_t auth_method,
 		     const std::vector<uint32_t>& preferred_modes);

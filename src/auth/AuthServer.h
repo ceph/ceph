@@ -25,6 +25,11 @@ public:
     auth_registry.get_supported_methods(peer_type, methods, modes);
   }
 
+  /// Get support connection type for the given peer type and our type
+  virtual ConnectionType get_conn_type(const int peer_type) const {
+    return auth_registry.get_conn_type(peer_type);
+  }
+
   /// Get support connection modes for the given peer type and auth method
   virtual uint32_t pick_con_mode(
     int peer_type,
