@@ -1404,15 +1404,22 @@ bool OSDMap::is_blocklisted(const entity_addrvec_t& av) const
   return false;
 }
 
-void OSDMap::get_blocklist(list<pair<entity_addr_t,utime_t> > *bl) const
+void OSDMap::get_blocklist(list<pair<entity_addr_t,utime_t> > *bl,
+			   std::list<std::pair<entity_addr_t,utime_t> > *rl) const
 {
    std::copy(blocklist.begin(), blocklist.end(), std::back_inserter(*bl));
+   std::copy(range_blocklist.begin(), range_blocklist.end(),
+	     std::back_inserter(*rl));
 }
 
-void OSDMap::get_blocklist(std::set<entity_addr_t> *bl) const
+void OSDMap::get_blocklist(std::set<entity_addr_t> *bl,
+			   std::set<entity_addr_t> *rl) const
 {
   for (const auto &i : blocklist) {
     bl->insert(i.first);
+  }
+  for (const auto &i : range_blocklist) {
+    rl->insert(i.first);
   }
 }
 
