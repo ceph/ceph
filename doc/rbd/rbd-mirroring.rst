@@ -310,7 +310,7 @@ For example::
    section of the local or centralized configuration.  Note that these
    settings may allow ``rbd-mirror`` to present a substantial write workload
    to the destination cluster:  monitor cluster performance closely during
-   migrations and test carefuly before running multiple migrations in parallel.
+   migrations and test carefully before running multiple migrations in parallel.
 
 Create Image Mirror-Snapshots
 -----------------------------
