@@ -9,6 +9,7 @@ import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ComponentsModule } from '../components/components.module';
 import { PipesModule } from '../pipes/pipes.module';
+import { CRUDTableComponent } from './crud-table/crud-table.component';
 import { TableActionsComponent } from './table-actions/table-actions.component';
 import { TableKeyValueComponent } from './table-key-value/table-key-value.component';
 import { TablePaginationComponent } from './table-pagination/table-pagination.component';
@@ -26,18 +27,14 @@ import { TableComponent } from './table/table.component';
     ComponentsModule,
     RouterModule
   ],
-  declarations: [
-    TableComponent,
-    TableKeyValueComponent,
-    TableActionsComponent,
-    TablePaginationComponent
-  ],
+  declarations: [TableComponent, TableKeyValueComponent, TableActionsComponent, CRUDTableComponent],
   exports: [
     TableComponent,
     NgxDatatableModule,
     TableKeyValueComponent,
     TableActionsComponent,
-    TablePaginationComponent
+    TablePaginationComponent,
+    CRUDTableComponent
   ]
 })
 export class DataTableModule {}

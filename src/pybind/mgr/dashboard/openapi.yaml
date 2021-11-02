@@ -2143,7 +2143,7 @@ paths:
       summary: Update the cluster status
       tags:
       - Cluster
-  /api/cluster/capacity:
+  /api/cluster/user:
     get:
       parameters: []
       responses:
@@ -2163,6 +2163,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Get Ceph Users
       tags:
       - Cluster
   /api/cluster_conf:
