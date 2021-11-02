@@ -4,8 +4,10 @@ NFS
 
 .. versionadded:: Jewel
 
-Ceph Object Gateway namespaces can now be exported over file-based
-access protocols such as NFSv3 and NFSv4, alongside traditional HTTP access
+.. note:: Only the NFSv4 protocol is supported when using a cephadm or rook based deployment.
+
+Ceph Object Gateway namespaces can be exported over the file-based
+NFSv4 protocols, alongside traditional HTTP access
 protocols (S3 and Swift).
 
 In particular, the Ceph Object Gateway can now be configured to
