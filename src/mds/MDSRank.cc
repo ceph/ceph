@@ -1971,9 +1971,10 @@ void MDSRank::reconnect_start()
   // into reconnect, so that we don't wait for them.
   objecter->enable_blocklist_events();
   std::set<entity_addr_t> blocklist;
+  std::set<entity_addr_t> range;
   epoch_t epoch = 0;
-  objecter->with_osdmap([&blocklist, &epoch](const OSDMap& o) {
-      o.get_blocklist(&blocklist);
+  objecter->with_osdmap([&blocklist, &range, &epoch](const OSDMap& o) {
+    o.get_blocklist(&blocklist, &range);
       epoch = o.get_epoch();
   });
 
