@@ -520,13 +520,11 @@ void Replayer<I>::scan_local_mirror_snapshots(
 
   if (m_local_snap_id_start > 0 || m_local_snap_id_end != CEPH_NOSNAP) {
     if (m_local_mirror_snap_ns.is_non_primary() &&
-        m_local_mirror_snap_ns.primary_mirror_uuid !=
-          m_state_builder->remote_mirror_uuid) {
-      // TODO support multiple peers
-      derr << "local image linked to unknown peer: "
+        m_local_mirror_snap_ns.primary_mirror_uuid.empty()) {
+      derr << "local image linked to empty peer: "
            << m_local_mirror_snap_ns.primary_mirror_uuid << dendl;
       handle_replay_complete(locker, -EEXIST,
-                             "local image linked to unknown peer");
+                             "local image linked to empty peer");
       return;
     } else if (m_local_mirror_snap_ns.state ==
                  cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
@@ -591,10 +589,6 @@ void Replayer<I>::scan_remote_mirror_snapshots(
     if (m_local_snap_id_start > 0 || m_local_snap_id_end != CEPH_NOSNAP) {
       // we have a local mirror snapshot
       if (m_local_mirror_snap_ns.is_non_primary()) {
-        // previously validated that it was linked to remote
-        ceph_assert(m_local_mirror_snap_ns.primary_mirror_uuid ==
-                      m_state_builder->remote_mirror_uuid);
-
         if (m_remote_snap_id_end == CEPH_NOSNAP) {
           // haven't found the end snap so treat this as a candidate for unlink
           unlink_snap_ids.insert(remote_snap_id);
