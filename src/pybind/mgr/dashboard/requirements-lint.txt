@@ -7,5 +7,5 @@ flake8-colors==0.1.6; python_version >= '3'
 #flake8-typing-imports; python_version >= '3'
 #pep8-naming
 rstcheck==3.3.1; python_version >= '3'
-autopep8; python_version >= '3'
-pyfakefs; python_version >= '3'
+autopep8==1.5.7; python_version >= '3'
+pyfakefs==4.5.0; python_version >= '3'
