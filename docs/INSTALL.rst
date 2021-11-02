@@ -5,11 +5,23 @@ Installation and setup
 
 Ubuntu, Fedora & SUSE/openSUSE
 ------------------------------
+First, clone the `git repository <https://github.com/ceph/teuthology/>`__::
 
-A bootstrap script is provided that will do everything for you assuming
+    git clone https://github.com/ceph/teuthology.git
+
+Next, run the bootstrap script, which will do everything for you assuming
 you have ``sudo``::
 
+    cd teuthology
     ./bootstrap
+
+Finally, activate the ``virtualenv``::
+
+    source virtualenv/bin/activate
+
+Run a teuthology command to confirm that everything's working. For instance::
+
+    teuthology --help
 
 MacOS X
 -------
