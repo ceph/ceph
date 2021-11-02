@@ -74,7 +74,12 @@ private:
   // TODO: move into auth_meta?
   ceph::crypto::onwire::rxtx_t session_stream_handlers;
   ceph::compression::onwire::rxtx_t session_compression_handlers;
-  
+  std::optional<crypto_perf_counters_t> crypto_counters;
+
+  static std::optional<crypto_perf_counters_t> get_crypto_counters(
+    const ceph::crypto::onwire::rxtx_t& session_stream_handlers,
+    ConnectionType);
+
 private:
   entity_name_t peer_name;
   State state;

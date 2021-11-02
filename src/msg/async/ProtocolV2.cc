@@ -11,6 +11,7 @@
 #include "common/errno.h"
 #include "include/random.h"
 #include "auth/AuthClient.h"
+#include "auth/AuthRegistry.h"
 #include "auth/AuthServer.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -564,9 +565,10 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
   } else {
     const auto sent_bytes = total_send_size - connection->outgoing_bl.length();
     connection->logger->inc(l_msgr_send_bytes, sent_bytes);
-    if (session_stream_handlers.tx) {
-      connection->logger->inc(l_msgr_send_encrypted_bytes, sent_bytes);
+    if (crypto_counters) {
+      connection->logger->inc(crypto_counters->tx, sent_bytes);
     }
+    ceph_assert(bool(session_stream_handlers.tx) == bool(crypto_counters));
     ldout(cct, 10) << __func__ << " sending " << m
                    << (rc ? " continuely." : " done.") << dendl;
   }
@@ -1486,10 +1488,11 @@ CtPtr ProtocolV2::handle_message() {
   connection->logger->inc(l_msgr_recv_messages);
   connection->logger->inc(l_msgr_recv_bytes,
                           rx_frame_asm.get_frame_onwire_len());
-  if (session_stream_handlers.rx) {
-    connection->logger->inc(l_msgr_recv_encrypted_bytes,
+  if (crypto_counters) {
+    connection->logger->inc(crypto_counters->rx,
                             rx_frame_asm.get_frame_onwire_len());
   }
+  ceph_assert(bool(session_stream_handlers.rx) == bool(crypto_counters));
 
   messenger->ms_fast_preprocess(message);
   fast_dispatch_time = ceph::mono_clock::now();
@@ -1809,6 +1812,52 @@ CtPtr ProtocolV2::handle_auth_reply_more(ceph::bufferlist &payload)
   return WRITE(more_reply, "auth request more", read_frame);
 }
 
+std::optional<crypto_perf_counters_t>
+ProtocolV2::get_crypto_counters(
+  const ceph::crypto::onwire::rxtx_t& session_stream_handlers,
+  ConnectionType conn_type)
+{
+  if (!session_stream_handlers.rx) {
+    return std::nullopt;
+  } else {
+    ceph_assert(session_stream_handlers.tx);
+  }
+  switch (conn_type) {
+    case CONN_TYPE_CLIENT:
+      return crypto_perf_counters_t{
+        l_msgr_recv_encrypted_bytes_client,
+        l_msgr_send_encrypted_bytes_client
+      };
+    case CONN_TYPE_CLIENT_MON:
+      return crypto_perf_counters_t{
+        l_msgr_recv_encrypted_bytes_mon_client,
+        l_msgr_send_encrypted_bytes_mon_client
+      };
+    case CONN_TYPE_CLUSTER:
+      return crypto_perf_counters_t{
+        l_msgr_recv_encrypted_bytes_cluster,
+        l_msgr_send_encrypted_bytes_cluster
+      };
+    case CONN_TYPE_CLUSTER_MON:
+      return crypto_perf_counters_t{
+        l_msgr_recv_encrypted_bytes_mon_cluster,
+        l_msgr_send_encrypted_bytes_mon_cluster
+      };
+    case CONN_TYPE_SERVICE:
+      return crypto_perf_counters_t{
+        l_msgr_recv_encrypted_bytes_service,
+        l_msgr_send_encrypted_bytes_service
+      };
+    case CONN_TYPE_SERVICE_MON:
+      return crypto_perf_counters_t{
+        l_msgr_recv_encrypted_bytes_mon_service,
+        l_msgr_send_encrypted_bytes_mon_service
+      };
+    default:
+      ceph_abort();
+  }
+}
+
 CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
 {
   ldout(cct, 20) << __func__
@@ -1844,6 +1893,10 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
   bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
   session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
       cct, *auth_meta, /*new_nonce_format=*/is_rev1, /*crossed=*/false);
+  crypto_counters = get_crypto_counters(
+      session_stream_handlers,
+      AuthRegistry::get_conn_type(
+          cct->get_module_type(), connection->get_peer_type()));
 
   state = AUTH_CONNECTING_SIGN;
 
@@ -2282,6 +2335,9 @@ CtPtr ProtocolV2::finish_auth()
   bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
   session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
       cct, *auth_meta, /*new_nonce_format=*/is_rev1, /*crossed=*/true);
+  crypto_counters = get_crypto_counters(
+      session_stream_handlers,
+      messenger->auth_server->get_conn_type(connection->get_peer_type()));
 
   const auto sig = auth_meta->session_key.empty() ? sha256_digest_t() :
     auth_meta->session_key.hmac_sha256(cct, pre_auth.rxbuf);
@@ -2750,6 +2806,7 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
   // no user outside its boundaries (simlarly to e.g. outgoing_bl).
   auto temp_stream_handlers = std::move(session_stream_handlers);
   auto temp_compression_handlers = std::move(session_compression_handlers);
+  exproto->crypto_counters = crypto_counters;
   exproto->auth_meta = auth_meta;
   exproto->comp_meta = comp_meta;
 

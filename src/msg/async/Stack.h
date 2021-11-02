@@ -186,7 +186,7 @@ class ServerSocket {
 
 class NetworkStack;
 
-enum {
+enum MsgrPerfCounters {
   l_msgr_first = 94000,
   l_msgr_recv_messages,
   l_msgr_send_messages,
@@ -203,10 +203,26 @@ enum {
   l_msgr_send_messages_queue_lat,
   l_msgr_handle_ack_lat,
 
-  l_msgr_recv_encrypted_bytes,
-  l_msgr_send_encrypted_bytes,
+  l_msgr_recv_encrypted_bytes_mon_cluster,
+  l_msgr_recv_encrypted_bytes_mon_service,
+  l_msgr_recv_encrypted_bytes_mon_client,
+  l_msgr_recv_encrypted_bytes_cluster,
+  l_msgr_recv_encrypted_bytes_service,
+  l_msgr_recv_encrypted_bytes_client,
+
+  l_msgr_send_encrypted_bytes_mon_cluster,
+  l_msgr_send_encrypted_bytes_mon_service,
+  l_msgr_send_encrypted_bytes_mon_client,
+  l_msgr_send_encrypted_bytes_cluster,
+  l_msgr_send_encrypted_bytes_service,
+  l_msgr_send_encrypted_bytes_client,
 
   l_msgr_last,
+};
+
+struct crypto_perf_counters_t {
+  MsgrPerfCounters rx;
+  MsgrPerfCounters tx;
 };
 
 class Worker {
@@ -249,8 +265,55 @@ class Worker {
     plb.add_time_avg(l_msgr_send_messages_queue_lat, "msgr_send_messages_queue_lat", "Network sent messages lat");
     plb.add_time_avg(l_msgr_handle_ack_lat, "msgr_handle_ack_lat", "Connection handle ack lat");
 
-    plb.add_u64_counter(l_msgr_recv_encrypted_bytes, "msgr_recv_encrypted_bytes", "Network received encrypted bytes", NULL, 0, unit_t(UNIT_BYTES));
-    plb.add_u64_counter(l_msgr_send_encrypted_bytes, "msgr_send_encrypted_bytes", "Network sent encrypted bytes", NULL, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_recv_encrypted_bytes_mon_cluster,
+      "msgr_recv_encrypted_bytes_mon_cluster",
+      "Network received encrypted bytes over mon-cluster connections",
+      nullptr, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_recv_encrypted_bytes_mon_service,
+      "msgr_recv_encrypted_bytes_mon_service",
+      "Network received encrypted bytes over mon-service connections",
+      nullptr, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_recv_encrypted_bytes_mon_client,
+      "msgr_recv_encrypted_bytes_mon_client",
+      "Network received encrypted bytes over mon-client connections",
+      nullptr, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_recv_encrypted_bytes_cluster,
+      "msgr_recv_encrypted_bytes_cluster",
+      "Network received encrypted bytes over cluster connections",
+      nullptr, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_recv_encrypted_bytes_service,
+      "msgr_recv_encrypted_bytes_service",
+      "Network received encrypted bytes over service connections",
+      nullptr, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_recv_encrypted_bytes_client,
+      "msgr_recv_encrypted_bytes_client",
+      "Network received encrypted bytes over client connections",
+      nullptr, 0, unit_t(UNIT_BYTES));
+
+    plb.add_u64_counter(l_msgr_send_encrypted_bytes_mon_cluster,
+      "msgr_send_encrypted_bytes_mon_cluster",
+      "Network sent encrypted bytes over mon-cluster connections",
+      nullptr, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_send_encrypted_bytes_mon_service,
+      "msgr_send_encrypted_bytes_mon_service",
+      "Network sent encrypted bytes over mon-service connections",
+      nullptr, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_send_encrypted_bytes_mon_client,
+      "msgr_send_encrypted_bytes_mon_client",
+      "Network sent encrypted bytes over mon-client connections",
+      nullptr, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_send_encrypted_bytes_cluster,
+      "msgr_send_encrypted_bytes_cluster",
+      "Network sent encrypted bytes over cluster connections",
+      nullptr, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_send_encrypted_bytes_service,
+      "msgr_send_encrypted_bytes_service",
+      "Network sent encrypted bytes over service connections",
+      nullptr, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_send_encrypted_bytes_client,
+      "msgr_send_encrypted_bytes_client",
+      "Network sent encrypted bytes over client connections",
+      nullptr, 0, unit_t(UNIT_BYTES));
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);
