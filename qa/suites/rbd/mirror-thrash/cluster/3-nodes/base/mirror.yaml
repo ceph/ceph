@@ -1,0 +1,41 @@
+meta:
+- desc: configure the permissions for client.mirror
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd default features: 125
+        debug rbd: 20
+        debug rbd_mirror: 15
+        log to stderr: false
+      # override to make these names predictable
+      client.mirror.0:
+        admin socket: /var/run/ceph/rbd-mirror.$cluster-$name.asok
+        pid file: /var/run/ceph/rbd-mirror.$cluster-$name.pid
+      client.mirror.1:
+        admin socket: /var/run/ceph/rbd-mirror.$cluster-$name.asok
+        pid file: /var/run/ceph/rbd-mirror.$cluster-$name.pid
+      client.mirror.2:
+        admin socket: /var/run/ceph/rbd-mirror.$cluster-$name.asok
+        pid file: /var/run/ceph/rbd-mirror.$cluster-$name.pid
+      client.mirror.3:
+        admin socket: /var/run/ceph/rbd-mirror.$cluster-$name.asok
+        pid file: /var/run/ceph/rbd-mirror.$cluster-$name.pid
+tasks:
+- exec:
+    cluster1.client.mirror.0:
+      - "sudo ceph --cluster cluster1 auth caps client.mirror mon 'profile rbd-mirror-peer' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster1 auth caps client.mirror.0 mon 'profile rbd-mirror' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster1 auth caps client.mirror.1 mon 'profile rbd-mirror' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster1 auth caps client.mirror.2 mon 'profile rbd-mirror' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster1 auth caps client.mirror.3 mon 'profile rbd-mirror' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster2 auth caps client.mirror mon 'profile rbd-mirror-peer' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster2 auth caps client.mirror.0 mon 'profile rbd-mirror' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster2 auth caps client.mirror.1 mon 'profile rbd-mirror' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster2 auth caps client.mirror.2 mon 'profile rbd-mirror' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster2 auth caps client.mirror.3 mon 'profile rbd-mirror' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster3 auth caps client.mirror mon 'profile rbd-mirror-peer' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster3 auth caps client.mirror.0 mon 'profile rbd-mirror' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster3 auth caps client.mirror.1 mon 'profile rbd-mirror' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster3 auth caps client.mirror.2 mon 'profile rbd-mirror' osd 'profile rbd'"
+      - "sudo ceph --cluster cluster3 auth caps client.mirror.3 mon 'profile rbd-mirror' osd 'profile rbd'"

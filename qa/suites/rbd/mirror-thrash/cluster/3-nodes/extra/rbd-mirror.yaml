@@ -1,0 +1,45 @@
+meta:
+- desc: run four rbd-mirror daemons on three clusters
+tasks:
+- rbd-mirror:
+    client: cluster1.client.mirror.0
+    thrash: True
+- rbd-mirror:
+    client: cluster1.client.mirror.1
+    thrash: True
+- rbd-mirror:
+    client: cluster1.client.mirror.2
+    thrash: True
+- rbd-mirror:
+    client: cluster1.client.mirror.3
+    thrash: True
+- rbd-mirror:
+    client: cluster2.client.mirror.0
+    thrash: True
+- rbd-mirror:
+    client: cluster2.client.mirror.1
+    thrash: True
+- rbd-mirror:
+    client: cluster2.client.mirror.2
+    thrash: True
+- rbd-mirror:
+    client: cluster2.client.mirror.3
+    thrash: True
+- rbd-mirror:
+    client: cluster3.client.mirror.0
+    thrash: True
+- rbd-mirror:
+    client: cluster3.client.mirror.1
+    thrash: True
+- rbd-mirror:
+    client: cluster3.client.mirror.2
+    thrash: True
+- rbd-mirror:
+    client: cluster3.client.mirror.3
+    thrash: True
+- rbd-mirror-thrash:
+    cluster: cluster1
+- rbd-mirror-thrash:
+    cluster: cluster2
+- rbd-mirror-thrash:
+    cluster: cluster3

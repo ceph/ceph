@@ -407,6 +407,10 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
   } else if (r == -EEXIST) {
     on_start_fail(r, "split-brain detected");
     return;
+  } else if (r == -ENOENT) {
+    dout(5) << "no primary remote image found" << dendl;
+    on_start_fail(r, "no remote image are primary");
+    return;
   } else if (r == -ENOLINK) {
     m_delete_requested = true;
     on_start_fail(0, "remote image no longer exists");
