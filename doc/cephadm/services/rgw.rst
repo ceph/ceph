@@ -287,3 +287,4 @@ Further Reading
 ===============
 
 * :ref:`object-gateway`
+* :ref:`mgr-rgw-module`
