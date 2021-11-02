@@ -904,6 +904,7 @@ class Module(MgrModule):
             report['perf_counters_separated'] = self.gather_perf_counters('separated')
 
             report['stats_per_pool'] = self.get('pg_dump')['pool_stats']
+            report['stats_per_pg'] = self.get('pg_dump')['pg_stats']
 
             report['io_rate'] = self.get_io_rate()
 
