@@ -842,9 +842,9 @@ TEST(BlueFS, test_truncate_stable_53129) {
   TempBdev bdev_slow{size_slow};
 
   BlueFS fs(g_ceph_context);
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  "wal",  false, 0));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   "db",   false, 0));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, "slow", false, 0));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  bdev_wal.path,  false, 0));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   bdev_db.path,   false, 0));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false, 0));
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
   ASSERT_EQ(0, fs.mount());
