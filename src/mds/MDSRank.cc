@@ -1949,8 +1949,8 @@ void MDSRank::resolve_done()
 }
 
 void MDSRank::apply_blocklist(const std::set<entity_addr_t> &addrs, epoch_t epoch) {
-  auto victims = server->apply_blocklist(addrs);
-  dout(4) << __func__ << ": killed " << victims << " blocklisted sessions ("
+  auto victims = server->apply_blocklist();
+  dout(4) << __func__ << ": killed " << victims << ", blocklisted sessions ("
           << addrs.size() << " blocklist entries, "
           << sessionmap.get_sessions().size() << ")" << dendl;
   if (victims) {
