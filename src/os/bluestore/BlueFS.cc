@@ -590,7 +590,9 @@ void BlueFS::_init_alloc()
               << std::dec << dendl;
       alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
 				    bdev[id]->get_size(),
-				    alloc_size[id], name);
+				    alloc_size[id],
+				    0, 0,
+				    name);
       alloc[id]->init_add_free(
         block_reserved[id],
         _get_total(id));

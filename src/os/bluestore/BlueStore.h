@@ -1603,16 +1603,13 @@ public:
     std::set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
 
 #ifdef HAVE_LIBZBD
-    // A map from onode to a vector of object offset.  For new objects created
-    // in the transaction we append the new offset to the vector, for
-    // overwritten objects we append the negative of the previous ondisk offset
-    // followed by the new offset, and for truncated objects we append the
-    // negative of the previous ondisk offset.  We need to maintain a vector of
-    // offsets because *within the same transaction* an object may be truncated
-    // and then written again, or an object may be overwritten multiple times to
-    // different zones.  See _zoned_update_cleaning_metadata function for how
-    // this map is used.
-    std::map<OnodeRef, std::vector<int64_t>> zoned_onode_to_offset_map;
+    // zone refs to add/remove.  each zone ref is a (zone, offset) tuple.  The offset
+    // is the first offset in the zone that the onode touched; subsequent writes
+    // to that zone do not generate additional refs.  This is a bit imprecise but
+    // is sufficient to generate reasonably sequential reads when doing zone
+    // cleaning with less metadata than a ref for every extent.
+    std::map<std::pair<OnodeRef, uint32_t>, uint64_t> new_zone_offset_refs;
+    std::map<std::pair<OnodeRef, uint32_t>, uint64_t> old_zone_offset_refs;
 #endif
     
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
@@ -1688,28 +1685,13 @@ public:
     }
 
 #ifdef HAVE_LIBZBD
-    void zoned_note_new_object(OnodeRef &o) {
-      auto [_, ok] = zoned_onode_to_offset_map.emplace(
-	  std::pair<OnodeRef, std::vector<int64_t>>(o, {o->zoned_get_ondisk_starting_offset()}));
-      ceph_assert(ok);
+    void note_write_zone_offset(OnodeRef& o, uint32_t zone, uint64_t offset) {
+      o->onode.zone_offset_refs[zone] = offset;
+      new_zone_offset_refs[std::make_pair(o, zone)] = offset;
     }
-
-    void zoned_note_updated_object(OnodeRef &o, int64_t prev_offset) {
-      int64_t new_offset = o->zoned_get_ondisk_starting_offset();
-      auto [it, ok] = zoned_onode_to_offset_map.emplace(
-	  std::pair<OnodeRef, std::vector<int64_t>>(o, {-prev_offset, new_offset}));
-      if (!ok) {
-	it->second.push_back(-prev_offset);
-	it->second.push_back(new_offset);
-      }
-    }
-
-    void zoned_note_truncated_object(OnodeRef &o, int64_t offset) {
-      auto [it, ok] = zoned_onode_to_offset_map.emplace(
-	    std::pair<OnodeRef, std::vector<int64_t>>(o, {-offset}));
-      if (!ok) {
-	it->second.push_back(-offset);
-      }
+    void note_release_zone_offset(OnodeRef& o, uint32_t zone, uint64_t offset) {
+      old_zone_offset_refs[std::make_pair(o, zone)] = offset;
+      o->onode.zone_offset_refs.erase(zone);
     }
 #endif
 
@@ -2062,7 +2044,8 @@ private:
   std::string freelist_type;
   FreelistManager *fm = nullptr;
 
-  bluefs_shared_alloc_context_t shared_alloc;
+  Allocator *alloc = nullptr;   ///< allocator consumed by BlueStore
+  bluefs_shared_alloc_context_t shared_alloc; ///< consumed by BlueFS (may be == alloc)
 
   uuid_d fsid;
   int path_fd = -1;  ///< open handle to $path
@@ -2148,6 +2131,10 @@ private:
   static_assert(std::numeric_limits<uint8_t>::max() >
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
+
+  // smr-only
+  uint64_t zone_size = 0;              ///< number of SMR zones 
+  uint64_t first_sequential_zone = 0;  ///< first SMR zone that is sequential-only
 
   enum {
     // Please preserve the order since it's DB persistent
@@ -2408,7 +2395,8 @@ private:
   void _close_fm();
   int _write_out_fm_meta(uint64_t target_size);
   int _create_alloc();
-  int _init_alloc();
+  int _init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments);
+  void _post_init_alloc(const std::map<uint64_t, uint64_t>& zone_adjustments);
   void _close_alloc();
   int _open_collections();
   void _fsck_collections(int64_t* errors);
@@ -2416,14 +2404,6 @@ private:
 
   int _setup_block_symlink_or_file(std::string name, std::string path, uint64_t size,
 				   bool create);
-
-#ifdef HAVE_LIBZBD
-  // Functions related to zoned storage.
-  uint64_t _zoned_piggyback_device_parameters_onto(uint64_t min_alloc_size);
-  int _zoned_check_config_settings();
-  void _zoned_update_cleaning_metadata(TransContext *txc);
-  std::string _zoned_key(uint64_t offset, const ghobject_t *oid);
-#endif
 
 public:
   utime_t get_deferred_last_submitted() {
@@ -2448,6 +2428,7 @@ private:
   void _dump_alloc_on_failure();
 
   CollectionRef _get_collection(const coll_t& cid);
+  CollectionRef _get_collection_by_oid(const ghobject_t& oid);
   void _queue_reap_collection(CollectionRef& c);
   void _reap_collections();
   void _update_cache_logger();
@@ -2498,7 +2479,10 @@ private:
   void _zoned_cleaner_start();
   void _zoned_cleaner_stop();
   void _zoned_cleaner_thread();
-  void _zoned_clean_zone(uint64_t zone_num);
+  void _zoned_clean_zone(uint64_t zone_num,
+			 class ZonedAllocator *a,
+			 class ZonedFreelistManager *f);
+  void _clean_some(ghobject_t oid, uint32_t zone_num);
 #endif
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, uint64_t len);
@@ -3421,6 +3405,7 @@ public:
 
     mempool_dynamic_bitset* used_blocks;
     uint64_t_btree_t* used_omap_head;
+    std::vector<std::unordered_map<ghobject_t, uint64_t>> *zone_refs;
 
     ceph::mutex* sb_info_lock;
     sb_info_map_t& sb_info;
@@ -3438,7 +3423,8 @@ public:
                    uint64_t& _num_spanning_blobs,
                    mempool_dynamic_bitset* _ub,
                    uint64_t_btree_t* _used_omap_head,
-                   ceph::mutex* _sb_info_lock,
+		   std::vector<std::unordered_map<ghobject_t, uint64_t>> *_zone_refs,
+		   ceph::mutex* _sb_info_lock,
                    sb_info_map_t& _sb_info,
                    store_statfs_t& _store_statfs,
                    per_pool_statfs& _pool_statfs,
@@ -3452,6 +3438,7 @@ public:
       num_spanning_blobs(_num_spanning_blobs),
       used_blocks(_ub),
       used_omap_head(_used_omap_head),
+      zone_refs(_zone_refs),
       sb_info_lock(_sb_info_lock),
       sb_info(_sb_info),
       expected_store_statfs(_store_statfs),
