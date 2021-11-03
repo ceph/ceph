@@ -3038,7 +3038,7 @@ int MDSRank::_command_export_dir(
 
   CInode *in = mdcache->cache_traverse(fp);
   if (!in) {
-    derr << "Bath path '" << path << "'" << dendl;
+    derr << "bad path '" << path << "'" << dendl;
     return -CEPHFS_ENOENT;
   }
   CDir *dir = in->get_dirfrag(frag_t());
