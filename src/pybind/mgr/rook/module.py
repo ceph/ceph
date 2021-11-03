@@ -279,7 +279,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 container_image_name=image_name,
                 last_refresh=now,
             )
-        if not cl['spec'].get('crashCollector', {}).get('disable', False):
+
+        if (
+            service_type == 'crash' or service_type is None
+            and not cl['spec'].get('crashCollector', {}).get('disable', False)
+        ):
             spec['crash'] = orchestrator.ServiceDescription(
                 spec=ServiceSpec(
                     'crash',
