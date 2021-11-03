@@ -1997,8 +1997,8 @@ def find_container_engine(ctx: CephadmContext) -> Optional[ContainerEngine]:
         for i in CONTAINER_PREFERENCE:
             try:
                 return i()
-            except Exception as e:
-                logger.debug('Could not locate %s: %s' % (i.EXE, e))
+            except Exception:
+                pass
     return None
 
 
