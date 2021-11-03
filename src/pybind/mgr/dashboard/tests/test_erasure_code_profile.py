@@ -2,7 +2,7 @@
 
 from .. import mgr
 from ..controllers.erasure_code_profile import ErasureCodeProfile
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase
 
 
 class ErasureCodeProfileTest(ControllerTestCase):
@@ -21,8 +21,6 @@ class ErasureCodeProfileTest(ControllerTestCase):
             'fs_map': {'filesystems': []},
 
         }[key]
-        # pylint: disable=protected-access
-        ErasureCodeProfile._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([ErasureCodeProfile])
 
     def test_list(self):
