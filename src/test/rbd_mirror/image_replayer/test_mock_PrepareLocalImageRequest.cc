@@ -5,6 +5,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "librbd/mirror/GetInfoRequest.h"
+#include "tools/rbd_mirror/ImageDeleter.h"
 #include "tools/rbd_mirror/image_replayer/GetMirrorImageIdRequest.h"
 #include "tools/rbd_mirror/image_replayer/PrepareLocalImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/StateBuilder.h"
@@ -70,6 +71,28 @@ GetInfoRequest<librbd::MockTestImageCtx>* GetInfoRequest<librbd::MockTestImageCt
 
 namespace rbd {
 namespace mirror {
+
+template <>
+struct ImageDeleter<librbd::MockTestImageCtx> {
+  static ImageDeleter* s_instance;
+
+  static void trash_move(librados::IoCtx& local_io_ctx,
+                         const std::string& global_image_id, bool resync,
+                         librbd::asio::ContextWQ* work_queue,
+                         Context* on_finish) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->trash_move(global_image_id, resync, on_finish);
+  }
+
+  MOCK_METHOD3(trash_move, void(const std::string&, bool, Context*));
+
+  ImageDeleter() {
+    s_instance = this;
+  }
+};
+
+ImageDeleter<librbd::MockTestImageCtx>* ImageDeleter<librbd::MockTestImageCtx>::s_instance = nullptr;
+
 namespace image_replayer {
 
 template <>
@@ -176,6 +199,7 @@ using ::testing::WithArgs;
 
 class TestMockImageReplayerPrepareLocalImageRequest : public TestMockFixture {
 public:
+  typedef ImageDeleter<librbd::MockTestImageCtx> MockImageDeleter;
   typedef PrepareLocalImageRequest<librbd::MockTestImageCtx> MockPrepareLocalImageRequest;
   typedef GetMirrorImageIdRequest<librbd::MockTestImageCtx> MockGetMirrorImageIdRequest;
   typedef StateBuilder<librbd::MockTestImageCtx> MockStateBuilder;
@@ -222,6 +246,17 @@ public:
             mock_get_mirror_info_request.on_finish, r);
         }));
   }
+
+  void expect_trash_move(MockImageDeleter& mock_image_deleter,
+                         const std::string& global_image_id,
+                         bool ignore_orphan, int r) {
+    EXPECT_CALL(mock_image_deleter,
+                trash_move(global_image_id, ignore_orphan, _))
+      .WillOnce(WithArg<2>(Invoke([this, r](Context* ctx) {
+                             m_threads->work_queue->queue(ctx, r);
+                           })));
+  }
+
 };
 
 TEST_F(TestMockImageReplayerPrepareLocalImageRequest, SuccessJournal) {
@@ -398,6 +433,71 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageInfoError) {
                                                   &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
+}
+
+TEST_F(TestMockImageReplayerPrepareLocalImageRequest, ImageCreating) {
+  InSequence seq;
+  MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
+  expect_get_mirror_image_id(mock_get_mirror_image_id_request, "local image id",
+                             0);
+  expect_dir_get_name(m_local_io_ctx, "local image name", 0);
+
+  MockGetMirrorInfoRequest mock_get_mirror_info_request;
+  expect_get_mirror_info(mock_get_mirror_info_request,
+                         {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
+                          "global image id",
+                          cls::rbd::MIRROR_IMAGE_STATE_CREATING},
+                         librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
+                         "remote mirror uuid", 0);
+
+  MockImageDeleter mock_image_deleter;
+  expect_trash_move(mock_image_deleter, "global image id", false, 0);
+
+  MockSnapshotStateBuilder mock_journal_state_builder;
+  MockStateBuilder* mock_state_builder = nullptr;
+  std::string local_image_name;
+  C_SaferCond ctx;
+  auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
+                                                  "global image id",
+                                                  &local_image_name,
+                                                  &mock_state_builder,
+                                                  m_threads->work_queue,
+                                                  &ctx);
+  req->send();
+
+  ASSERT_EQ(-ENOENT, ctx.wait());
+  ASSERT_TRUE(mock_state_builder == nullptr);
+}
+
+TEST_F(TestMockImageReplayerPrepareLocalImageRequest, ImageDisabling) {
+  InSequence seq;
+  MockGetMirrorImageIdRequest mock_get_mirror_image_id_request;
+  expect_get_mirror_image_id(mock_get_mirror_image_id_request, "local image id",
+                             0);
+  expect_dir_get_name(m_local_io_ctx, "local image name", 0);
+
+  MockGetMirrorInfoRequest mock_get_mirror_info_request;
+  expect_get_mirror_info(mock_get_mirror_info_request,
+                         {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
+                          "global image id",
+                          cls::rbd::MIRROR_IMAGE_STATE_DISABLING},
+                         librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
+                         "remote mirror uuid", 0);
+
+  MockSnapshotStateBuilder mock_journal_state_builder;
+  MockStateBuilder* mock_state_builder = nullptr;
+  std::string local_image_name;
+  C_SaferCond ctx;
+  auto req = MockPrepareLocalImageRequest::create(m_local_io_ctx,
+                                                  "global image id",
+                                                  &local_image_name,
+                                                  &mock_state_builder,
+                                                  m_threads->work_queue,
+                                                  &ctx);
+  req->send();
+
+  ASSERT_EQ(-ERESTART, ctx.wait());
+  ASSERT_TRUE(mock_state_builder == nullptr);
 }
 
 } // namespace image_replayer
