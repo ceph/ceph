@@ -262,7 +262,10 @@ class Store {
     virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
 				   const std::string& tenant,
 				   std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) = 0;
-    virtual std::unique_ptr<MultipartUpload> get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id=std::nullopt, ceph::real_time mtime=real_clock::now()) = 0;
+    virtual std::unique_ptr<MultipartUpload>
+    get_multipart_upload(Bucket* bucket, const std::string& oid,
+                         std::optional<std::string> upload_id=std::nullopt,
+                         ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) = 0;
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
@@ -818,7 +821,8 @@ public:
   virtual const std::string& get_meta() const = 0;
   virtual const std::string& get_key() const = 0;
   virtual const std::string& get_upload_id() const = 0;
-  virtual ceph::real_time& get_mtime() = 0;
+  virtual const ACLOwner& get_owner() const = 0;
+  virtual ceph::real_time get_mtime() const = 0;
 
   std::map<uint32_t, std::unique_ptr<MultipartPart>>& get_parts() { return parts; }
 
