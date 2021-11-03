@@ -234,6 +234,7 @@ private:
 
   void pwl_init(Context *on_finish, pwl::DeferredContexts &later);
   void update_image_cache_state(Context *on_finish);
+  void check_image_cache_state_clean();
 
   void flush_dirty_entries(Context *on_finish);
   bool can_flush_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);

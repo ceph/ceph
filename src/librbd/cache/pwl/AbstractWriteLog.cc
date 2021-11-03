@@ -624,7 +624,7 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
       }
       {
         std::lock_guard locker(m_lock);
-        ceph_assert(m_dirty_log_entries.size() == 0);
+        check_image_cache_state_clean();
         m_wake_up_enabled = false;
         m_cache_state->clean = true;
         m_log_entries.clear();
@@ -636,6 +636,14 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
         }
       }
       update_image_cache_state(next_ctx);
+    });
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      Context *next_ctx = override_ctx(r, ctx);
+      ldout(m_image_ctx.cct, 6) << "waiting for in flight operations" << dendl;
+      // Wait for in progress IOs to complete
+      next_ctx = util::create_async_context_callback(&m_work_queue, next_ctx);
+      m_async_op_tracker.wait_for_ops(next_ctx);
     });
   ctx = new LambdaContext(
     [this, ctx](int r) {
@@ -652,14 +660,6 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
         }
       }
       flush_dirty_entries(next_ctx);
-    });
-  ctx = new LambdaContext(
-    [this, ctx](int r) {
-      Context *next_ctx = override_ctx(r, ctx);
-      ldout(m_image_ctx.cct, 6) << "waiting for in flight operations" << dendl;
-      // Wait for in progress IOs to complete
-      next_ctx = util::create_async_context_callback(m_image_ctx, next_ctx);
-      m_async_op_tracker.wait_for_ops(next_ctx);
     });
   ctx = new LambdaContext(
     [this, ctx](int r) {
@@ -2083,6 +2083,20 @@ bool AbstractWriteLog<I>::can_retire_entry(std::shared_ptr<GenericLogEntry> log_
   ldout(cct, 20) << dendl;
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   return log_entry->can_retire();
+}
+
+template <typename I>
+void AbstractWriteLog<I>::check_image_cache_state_clean() {
+  ceph_assert(m_deferred_ios.empty());
+  ceph_assert(m_ops_to_append.empty());;
+  ceph_assert(m_async_flush_ops == 0);
+  ceph_assert(m_async_append_ops == 0);
+  ceph_assert(m_dirty_log_entries.empty());
+  ceph_assert(m_ops_to_flush.empty());
+  ceph_assert(m_flush_ops_in_flight == 0);
+  ceph_assert(m_flush_bytes_in_flight == 0);
+  ceph_assert(m_bytes_dirty == 0);
+  ceph_assert(m_work_queue.empty());
 }
 
 } // namespace pwl
