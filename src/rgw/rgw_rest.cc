@@ -479,15 +479,15 @@ void dump_epoch_header(struct req_state *s, const char *name, real_time t)
   return dump_header(s, name, std::string_view(buf, len));
 }
 
-void dump_time(struct req_state *s, const char *name, real_time *t)
+void dump_time(struct req_state *s, const char *name, real_time t)
 {
   char buf[TIME_BUF_SIZE];
-  rgw_to_iso8601(*t, buf, sizeof(buf));
+  rgw_to_iso8601(t, buf, sizeof(buf));
 
   s->formatter->dump_string(name, buf);
 }
 
-void dump_owner(struct req_state *s, const rgw_user& id, string& name,
+void dump_owner(struct req_state *s, const rgw_user& id, const string& name,
 		const char *section)
 {
   if (!section)

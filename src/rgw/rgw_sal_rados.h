@@ -444,7 +444,10 @@ class RadosStore : public Store {
     virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
 				   const std::string& tenant,
 				   std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
-    virtual std::unique_ptr<MultipartUpload> get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id=std::nullopt, ceph::real_time mtime=real_clock::now()) override;
+    virtual std::unique_ptr<MultipartUpload>
+    get_multipart_upload(Bucket* bucket, const std::string& oid,
+                         std::optional<std::string> upload_id=std::nullopt,
+                         ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
@@ -514,18 +517,24 @@ public:
 class RadosMultipartUpload : public MultipartUpload {
   RadosStore* store;
   RGWMPObj mp_obj;
+  ACLOwner owner;
   ceph::real_time mtime;
   rgw_placement_rule placement;
   RGWObjManifest manifest;
 
 public:
-  RadosMultipartUpload(RadosStore* _store, Bucket* _bucket, const std::string& oid, std::optional<std::string> upload_id, ceph::real_time _mtime) : MultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), mtime(_mtime) {}
+  RadosMultipartUpload(RadosStore* _store, Bucket* _bucket, const std::string& oid,
+                       std::optional<std::string> upload_id, ACLOwner owner,
+                       ceph::real_time _mtime)
+      : MultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id),
+        owner(owner), mtime(_mtime) {}
   virtual ~RadosMultipartUpload() = default;
 
-  virtual const std::string& get_meta() const { return mp_obj.get_meta(); }
-  virtual const std::string& get_key() const { return mp_obj.get_key(); }
-  virtual const std::string& get_upload_id() const { return mp_obj.get_upload_id(); }
-  virtual ceph::real_time& get_mtime() { return mtime; }
+  virtual const std::string& get_meta() const override { return mp_obj.get_meta(); }
+  virtual const std::string& get_key() const override { return mp_obj.get_key(); }
+  virtual const std::string& get_upload_id() const override { return mp_obj.get_upload_id(); }
+  virtual const ACLOwner& get_owner() const override { return owner; }
+  virtual ceph::real_time get_mtime() const override { return mtime; }
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, RGWObjectCtx* obj_ctx, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;
   virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
