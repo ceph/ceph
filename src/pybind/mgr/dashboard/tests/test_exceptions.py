@@ -8,8 +8,8 @@ from ..controllers import Endpoint, RESTController, Router, Task
 from ..services.ceph_service import SendCommandError
 from ..services.exception import handle_rados_error, \
     handle_send_command_error, serialize_dashboard_exception
+from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager, ViewCache
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 # pylint: disable=W0613

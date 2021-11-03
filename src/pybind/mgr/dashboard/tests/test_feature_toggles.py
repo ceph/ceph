@@ -8,7 +8,7 @@ except ImportError:
     from unittest.mock import Mock, patch
 
 from ..plugins.feature_toggles import Actions, Features, FeatureToggles
-from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
+from ..tests import KVStoreMockMixin
 
 
 class SettingsTest(unittest.TestCase, KVStoreMockMixin):

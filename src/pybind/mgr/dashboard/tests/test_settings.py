@@ -8,7 +8,7 @@ from mgr_module import ERROR_MSG_EMPTY_INPUT_FILE
 from .. import settings
 from ..controllers.settings import Settings as SettingsController
 from ..settings import Settings, handle_option_command
-from . import ControllerTestCase, KVStoreMockMixin  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase, KVStoreMockMixin
 
 
 class SettingsTest(unittest.TestCase, KVStoreMockMixin):
@@ -129,9 +129,6 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
 class SettingsControllerTest(ControllerTestCase, KVStoreMockMixin):
     @classmethod
     def setup_server(cls):
-        # pylint: disable=protected-access
-
-        SettingsController._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([SettingsController])
 
     @classmethod

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from ..controllers import APIRouter, BaseController, Endpoint, RESTController, Router
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase
 
 
 @Router("/btest/{key}", base_url="/ui", secure=False)

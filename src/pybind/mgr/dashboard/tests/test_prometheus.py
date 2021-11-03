@@ -7,7 +7,7 @@ except ImportError:
 
 from .. import mgr
 from ..controllers.prometheus import Prometheus, PrometheusNotifications, PrometheusReceiver
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase
 
 
 class PrometheusControllerTest(ControllerTestCase):
@@ -24,8 +24,6 @@ class PrometheusControllerTest(ControllerTestCase):
             'PROMETHEUS_API_HOST': cls.prometheus_host
         }
         mgr.get_module_option.side_effect = settings.get
-        Prometheus._cp_config['tools.authenticate.on'] = False
-        PrometheusNotifications._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([Prometheus, PrometheusNotifications, PrometheusReceiver])
 
     def test_rules(self):
