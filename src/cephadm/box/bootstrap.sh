@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 
 OSDS=1
 HOSTS=0
@@ -87,7 +88,12 @@ then
 	# loops should be created before starting docker-compose or else docker could
 	# not find lvs
 	docker-compose down
-	docker-compose up --scale hosts=$HOSTS -d
+	DCFLAGS="-f docker-compose.yml"
+        if [[ -n /sys/fs/cgroup/cgroup.controllers ]]; then
+            DCFLAGS+=" -f docker-compose.cgroup1.yml"
+        fi
+
+	docker-compose $DCFLAGS up --scale hosts=$HOSTS -d
 	sleep 3
 
 	IPS=$(docker-ips | grep "box_hosts" | awk '{ print $1 }')
