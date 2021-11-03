@@ -518,3 +518,28 @@ For example, to distribute configs to hosts with the ``bare_config`` label, run 
   ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf_hosts label:bare_config
 
 (See :ref:`orchestrator-cli-placement-spec` for more information about placement specs.)
+
+Purging a cluster
+=================
+
+.. danger:: THIS OPERATION WILL DESTROY ALL DATA STORED IN THIS CLUSTER
+
+In order to destory a cluster and delete all data stored in this cluster, pause 
+cephadm to avoid deploying new daemons.
+
+.. prompt:: bash #
+
+  ceph orch pause
+
+Then verify the FSID of the cluster:
+
+.. prompt:: bash #
+
+  ceph fsid 
+
+Purge ceph daemons from all hosts in the cluster
+
+.. prompt:: bash #
+
+  # For each host:
+  cephadm rm-cluster --force --zap-osds --fsid <fsid>
