@@ -1145,12 +1145,7 @@ static int init_bucket(rgw::sal::User* user,
 		       const string& bucket_id,
                        std::unique_ptr<rgw::sal::Bucket>* bucket)
 {
-  rgw_bucket b;
-  b.tenant = tenant_name;
-  b.name = bucket_name;
-  if (!bucket_id.empty()) {
-    b.bucket_id = bucket_name + ":" + bucket_id;
-  }
+  rgw_bucket b{tenant_name, bucket_name, bucket_id};
   return init_bucket(user, b, bucket);
 }
 
@@ -6848,12 +6843,13 @@ next:
 
     std::unique_ptr<rgw::sal::Bucket> cur_bucket;
     ret = init_bucket(user.get(), tenant, bucket_name, string(), &cur_bucket);
-    if (ret < 0) {
+    if (ret == -ENOENT) {
+      // no bucket entrypoint
+    } else if (ret < 0) {
       cerr << "ERROR: could not init current bucket info for bucket_name=" << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
       return -ret;
-    }
-
-    if (cur_bucket->get_bucket_id() == bucket->get_bucket_id() && !yes_i_really_mean_it) {
+    } else if (cur_bucket->get_bucket_id() == bucket->get_bucket_id() &&
+               !yes_i_really_mean_it) {
       cerr << "specified bucket instance points to a current bucket instance" << std::endl;
       cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
       return EINVAL;
