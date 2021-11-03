@@ -95,26 +95,13 @@ Accomplishing this goal will lead into the next set of objectives for the team, 
 #### Sprint 3 (October 24 to November 7)
 | User Stories | Description |
 | ----------- | ----------- |
-| Git setup | The original repository we were working on was not forked from Ceph, which would potentially
-create issues in the future. As a result, I forked the original Ceph code under our 
-organization and pushed all the progress we have made thus far. |
-| Get() directed acyclical graphs | The backend team completed DAGs for both the D3N and D4N get() functions in addition to
-finding the head object's data path for D4N. |
-| Initial set up and understanding of directory | To set up D4N functionality in the current Ceph version built onto our VMs, we had to
-cherry pick D4N-related commits, install Redis and start it up, and analyze the D4N code for
-a better understanding of how it works. |
-| Directory porting | This user story mainly included porting the rgw_directory.cc and rgw_directory.h files into
-the Ceph directory and adding the former into the CMake file. We are still in the
-process of debugging the issues that are resulting from this change after attempting to build
-the Ceph binaries, however. |
-| Backend | Like the directory porting user story, the backend team worked on porting specific
-D4N files to the upstreamed Ceph available on VM 1 and is working on debugging the build
-process. |
-| Beginning of testing phase | The directory team finished their tasks for this user story, which consisted of creating a write
-up with descriptions of each rgw_directory.cc function and meeting with the mentors to set up
-unit testing steps, practices, and the environment we would be using to test, namely, boto3. |
-| GDB debugging | While this user story is still mostly in progress, the backend team met with one of the
-mentors to make more progress on it before the end of the sprint. |
+| Git setup | The original repository we were working on was not forked from Ceph, which would potentially create issues in the future. As a result, I forked the original Ceph code under our  organization and pushed all the progress we have made thus far. |
+| Get() directed acyclical graphs | The backend team completed DAGs for both the D3N and D4N get() functions in addition to finding the head object's data path for D4N. |
+| Initial set up and understanding of directory | To set up D4N functionality in the current Ceph version built onto our VMs, we had tocherry pick D4N-related commits,  install Redis and start it up, and analyze the D4N code for a better understanding of how it works. |
+| Directory porting | This user story mainly included porting the rgw_directory.cc and rgw_directory.h files into the Ceph directory and adding the former into the CMake file. We are still in the process of debugging the issues that are resulting from this change after attempting to build the Ceph binaries, however. |
+| Backend | Like the directory porting user story, the backend team worked on porting specific D4N files to the upstreamed Ceph available on VM 1 and is working on debugging the build process. |
+| Beginning of testing phase | The directory team finished their tasks for this user story, which consisted of creating a write up with descriptions of each rgw_directory.cc function and meeting with the mentors to set up unit testing steps, practices, and the environment we would be using to test, namely, boto3. |
+| GDB debugging | While this user story is still mostly in progress, the backend team met with one of the mentors to make more progress on it before the end of the sprint. |
 
 ---
 ### Resources
