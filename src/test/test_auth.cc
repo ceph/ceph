@@ -11,6 +11,80 @@
 
 #include <sstream>
 
+TEST(AuthRegistry, con_types)
+{
+  // mons
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_MON,
+                                        CEPH_ENTITY_TYPE_MON),
+            CONN_TYPE_CLUSTER_MON);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_MON,
+                                        CEPH_ENTITY_TYPE_MGR),
+            CONN_TYPE_CLUSTER_MON);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_MON,
+                                        CEPH_ENTITY_TYPE_OSD),
+            CONN_TYPE_SERVICE_MON);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_MON,
+                                        CEPH_ENTITY_TYPE_CLIENT),
+            CONN_TYPE_SERVICE_MON);
+
+  // mgrs should be treated exactly like mons
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_MGR,
+                                        CEPH_ENTITY_TYPE_MON),
+            CONN_TYPE_CLUSTER_MON);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_MGR,
+                                        CEPH_ENTITY_TYPE_MGR),
+            CONN_TYPE_CLUSTER_MON);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_MGR,
+                                        CEPH_ENTITY_TYPE_OSD),
+            CONN_TYPE_SERVICE_MON);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_MGR,
+                                        CEPH_ENTITY_TYPE_CLIENT),
+            CONN_TYPE_SERVICE_MON);
+
+  // clients
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_CLIENT,
+                                        CEPH_ENTITY_TYPE_MON),
+            CONN_TYPE_CLIENT_MON);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_CLIENT,
+                                        CEPH_ENTITY_TYPE_MGR),
+            CONN_TYPE_CLIENT_MON);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_CLIENT,
+                                        CEPH_ENTITY_TYPE_OSD),
+            CONN_TYPE_CLIENT);
+  // client-to-client? ;-)
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_CLIENT,
+                                        CEPH_ENTITY_TYPE_CLIENT),
+            CONN_TYPE_CLIENT);
+
+  // OSDs
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_OSD,
+                                        CEPH_ENTITY_TYPE_MON),
+            CONN_TYPE_CLUSTER_MON);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_OSD,
+                                        CEPH_ENTITY_TYPE_MGR),
+            CONN_TYPE_CLUSTER_MON);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_OSD,
+                                        CEPH_ENTITY_TYPE_OSD),
+            CONN_TYPE_CLUSTER);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_OSD,
+                                        CEPH_ENTITY_TYPE_CLIENT),
+            CONN_TYPE_SERVICE);
+
+  // MDSes match OSDs
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_MDS,
+                                        CEPH_ENTITY_TYPE_MON),
+            CONN_TYPE_CLUSTER_MON);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_MDS,
+                                        CEPH_ENTITY_TYPE_MGR),
+            CONN_TYPE_CLUSTER_MON);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_MDS,
+                                        CEPH_ENTITY_TYPE_OSD),
+            CONN_TYPE_CLUSTER);
+  ASSERT_EQ(AuthRegistry::get_conn_type(CEPH_ENTITY_TYPE_MDS,
+                                        CEPH_ENTITY_TYPE_CLIENT),
+            CONN_TYPE_SERVICE);
+}
+
 TEST(AuthRegistry, con_modes)
 {
   auto cct = g_ceph_context;
