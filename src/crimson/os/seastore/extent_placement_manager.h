@@ -65,7 +65,7 @@ public:
     segment_off_t extent_offset = base + rsize.mdlength;
     for (auto& extent : extents) {
       extent.set_ool_paddr(
-        {segment, extent_offset});
+        paddr_t::make_seg_paddr(segment, extent_offset));
       extent_offset += extent.get_bptr().length();
     }
     assert(extent_offset == (segment_off_t)(base + rsize.mdlength + rsize.dlength));

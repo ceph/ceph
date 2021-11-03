@@ -78,8 +78,8 @@ public:
     paddr_t addr,
     size_t len,
     ceph::bufferptr &out) {
-    assert(segment_managers[addr.segment.device_id()]);
-    return segment_managers[addr.segment.device_id()]->read(addr, len, out);
+    assert(segment_managers[addr.get_device_id()]);
+    return segment_managers[addr.get_device_id()]->read(addr, len, out);
   }
 
 private:

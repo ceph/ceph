@@ -33,7 +33,9 @@ struct record_validator_t {
       auto test = manager.read(
 	record_final_offset.add_relative(addr),
 	block.bl.length()).unsafe_get0();
-      addr.offset += block.bl.length();
+      addr.as_seg_paddr().set_segment_off(
+	addr.as_seg_paddr().get_segment_off()
+	+ block.bl.length());
       bufferlist bl;
       bl.push_back(test);
       ASSERT_EQ(
@@ -306,9 +308,9 @@ TEST_F(journal_test_t, roll_journal_and_replay)
        { generate_extent(1), generate_extent(2) },
        { generate_delta(23), generate_delta(30) }
      });
-   auto starting_segment = current.segment;
+   auto starting_segment = current.as_seg_paddr().get_segment_id();
    unsigned so_far = 0;
-   while (current.segment == starting_segment) {
+   while (current.as_seg_paddr().get_segment_id() == starting_segment) {
      current = submit_record(record_t{
 	 { generate_extent(512), generate_extent(512) },
 	 { generate_delta(23), generate_delta(400) }

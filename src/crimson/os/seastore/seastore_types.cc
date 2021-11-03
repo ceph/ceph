@@ -9,16 +9,8 @@ std::ostream &segment_to_stream(std::ostream &out, const segment_id_t &t)
 {
   if (t == NULL_SEG_ID)
     return out << "NULL_SEG";
-  else if (t == BLOCK_REL_SEG_ID)
-    return out << "BLOCK_REL_SEG";
-  else if (t == RECORD_REL_SEG_ID)
-    return out << "RECORD_REL_SEG";
-  else if (t == ZERO_SEG_ID)
-    return out << "ZERO_SEG";
   else if (t == FAKE_SEG_ID)
     return out << "FAKE_SEG";
-  else if (t == DELAYED_TEMP_SEG_ID)
-    return out << "DELAYED_TEMP_SEG";
   else
     return out << t;
 }
@@ -40,9 +32,24 @@ std::ostream &operator<<(std::ostream &out, const segment_id_t& segment)
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 {
   out << "paddr_t<";
-  segment_to_stream(out, rhs.segment);
-  out << ", ";
-  offset_to_stream(out, rhs.offset);
+  if (rhs == P_ADDR_NULL) {
+    out << "NULL_PADDR";
+  } else if (rhs == P_ADDR_MIN) {
+    out << "MIN_PADDR";
+  } else if (rhs.is_block_relative()) {
+    out << "BLOCK_REG";
+  } else if (rhs.is_record_relative()) {
+    out << "RECORD_REG";
+  } else if (rhs.get_device_id() == DEVICE_ID_DELAYED) {
+    out << "DELAYED_TEMP";
+  } else if (rhs.get_addr_type() == addr_types_t::SEGMENT) {
+    const seg_paddr_t& s = rhs.as_seg_paddr();
+    segment_to_stream(out, s.get_segment_id());
+    out << ", ";
+    offset_to_stream(out, s.get_segment_off());
+  } else {
+    out << "INVALID";
+  }
   return out << ">";
 }
 
@@ -239,20 +246,21 @@ std::string device_type_to_string(device_type_t dtype) {
 paddr_t convert_blk_paddr_to_paddr(blk_paddr_t addr, size_t block_size,
     uint32_t blocks_per_segment, device_id_t d_id)
 {
-  paddr_t paddr;
-  paddr.segment = segment_id_t {
+  segment_id_t id = segment_id_t {
     d_id,
-    (uint32_t)(addr / (block_size * blocks_per_segment))
+    (device_segment_id_t)(addr / (block_size * blocks_per_segment))
   };
-  paddr.offset = addr % (block_size * blocks_per_segment);
-  return paddr;
+  segment_off_t off = addr % (block_size * blocks_per_segment);
+  return paddr_t::make_seg_paddr(id, off);
 }
 
 blk_paddr_t convert_paddr_to_blk_paddr(paddr_t addr, size_t block_size,
     uint32_t blocks_per_segment)
 {
-  return (blk_paddr_t)(addr.segment.device_segment_id() *
-	  (block_size * blocks_per_segment) + addr.offset);
+  seg_paddr_t& s = addr.as_seg_paddr();
+  return (blk_paddr_t)(s.get_segment_id().device_segment_id() *
+	  (block_size * blocks_per_segment) + s.get_segment_off());
 }
+
 
 }

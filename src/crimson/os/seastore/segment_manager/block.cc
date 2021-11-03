@@ -366,7 +366,7 @@ Segment::write_ertr::future<> BlockSegment::write(
     return crimson::ct_error::enospc::make();
 
   write_pointer = offset + bl.length();
-  return manager.segment_write({id, offset}, bl);
+  return manager.segment_write(paddr_t::make_seg_paddr(id, offset), bl);
 }
 
 Segment::close_ertr::future<> BlockSegmentManager::segment_close(
@@ -389,13 +389,14 @@ Segment::write_ertr::future<> BlockSegmentManager::segment_write(
   ceph::bufferlist bl,
   bool ignore_check)
 {
-  assert(addr.segment.device_id() == get_device_id());
+  assert(addr.get_device_id() == get_device_id());
   assert((bl.length() % superblock.block_size) == 0);
+  auto& seg_addr = addr.as_seg_paddr();
   logger().debug(
     "BlockSegmentManager::segment_write: "
     "segment_write to segment {} at offset {}, physical offset {}, len {}",
-    addr.segment,
-    addr.offset,
+    seg_addr.get_segment_id(),
+    seg_addr.get_segment_off(),
     get_offset(addr),
     bl.length());
   stats.data_write.increment(bl.length());
@@ -551,15 +552,16 @@ SegmentManager::read_ertr::future<> BlockSegmentManager::read(
   size_t len,
   ceph::bufferptr &out)
 {
-  assert(addr.segment.device_id() == get_device_id());
-  if (addr.segment.device_segment_id() >= get_num_segments()) {
+  assert(addr.get_device_id() == get_device_id());
+  auto& seg_addr = addr.as_seg_paddr();
+  if (seg_addr.get_segment_id().device_segment_id() >= get_num_segments()) {
     logger().error(
       "BlockSegmentManager::read: invalid segment {}",
       addr);
     return crimson::ct_error::invarg::make();
   }
 
-  if (addr.offset + len > superblock.segment_size) {
+  if (seg_addr.get_segment_off() + len > superblock.segment_size) {
     logger().error(
       "BlockSegmentManager::read: invalid offset {}~{}!",
       addr,
@@ -567,11 +569,12 @@ SegmentManager::read_ertr::future<> BlockSegmentManager::read(
     return crimson::ct_error::invarg::make();
   }
 
-  if (tracker->get(addr.segment.device_segment_id()) == segment_state_t::EMPTY) {
+  if (tracker->get(seg_addr.get_segment_id().device_segment_id()) == 
+      segment_state_t::EMPTY) {
     logger().error(
       "BlockSegmentManager::read: read on invalid segment {} state {}",
-      addr.segment,
-      tracker->get(addr.segment.device_segment_id()));
+      seg_addr.get_segment_id(),
+      tracker->get(seg_addr.get_segment_id().device_segment_id()));
     return crimson::ct_error::enoent::make();
   }
 
