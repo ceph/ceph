@@ -82,6 +82,23 @@ CompatSet MDSMap::get_compat_set_base() {
   return CompatSet(feature_compat_base, feature_ro_compat_base, feature_incompat_base);
 }
 
+// pre-v16.2.5 CompatSet in MDS beacon
+CompatSet MDSMap::get_compat_set_v16_2_4() {
+  CompatSet::FeatureSet feature_compat;
+  CompatSet::FeatureSet feature_ro_compat;
+  CompatSet::FeatureSet feature_incompat;
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_BASE);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_CLIENTRANGES);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILELAYOUT);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_DIRINODE);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_ENCODING);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_OMAPDIRFRAG);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_NOANCHOR);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_SNAPREALM_V2);
+  return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
+}
+
 void MDSMap::mds_info_t::dump(Formatter *f) const
 {
   f->dump_unsigned("gid", global_id);
@@ -613,6 +630,8 @@ void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
   }
   if (struct_v >= 10) {
     decode(compat, bl);
+  } else {
+    compat = MDSMap::get_compat_set_v16_2_4();
   }
   DECODE_FINISH(bl);
 }
