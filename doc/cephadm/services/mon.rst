@@ -5,7 +5,7 @@ MON Service
 .. _deploy_additional_monitors:
 
 Deploying additional monitors 
------------------------------
+=============================
 
 A typical Ceph cluster has three or five monitor daemons that are spread
 across different hosts.  We recommend deploying five monitors if there are
@@ -169,3 +169,11 @@ network ``10.1.2.0/24``, run the following commands:
   .. prompt:: bash #
 
     ceph orch apply mon --placement="newhost1,newhost2,newhost3" 
+
+Futher Reading
+==============
+
+* :ref:`rados-operations`
+* :ref:`rados-troubleshooting-mon`
+* :ref:`cephadm-restore-quorum`
+

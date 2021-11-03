@@ -2,9 +2,10 @@ import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Optional, Dict, List, Tuple
+from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any
 
 import orchestrator
+from cephadm.registry import Registry
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, MONITORING_STACK_TYPES
@@ -181,6 +182,37 @@ class CephadmUpgrade:
             return f'require_osd_release ({osd_min_name} or {osd_min}) < target {major} - 2; first complete an upgrade to an earlier release'
 
         return None
+
+    def upgrade_ls(self, image: Optional[str], tags: bool) -> Dict:
+        if not image:
+            image = self.mgr.container_image_base
+        reg_name, bare_image = image.split('/', 1)
+        reg = Registry(reg_name)
+        versions = []
+        r: Dict[Any, Any] = {
+            "image": image,
+            "registry": reg_name,
+            "bare_image": bare_image,
+        }
+        ls = reg.get_tags(bare_image)
+        if not tags:
+            for t in ls:
+                if t[0] != 'v':
+                    continue
+                v = t[1:].split('.')
+                if len(v) != 3:
+                    continue
+                if '-' in v[2]:
+                    continue
+                versions.append('.'.join(v))
+            r["versions"] = sorted(
+                versions,
+                key=lambda k: list(map(int, k.split('.'))),
+                reverse=True
+            )
+        else:
+            r["tags"] = sorted(ls)
+        return r
 
     def upgrade_start(self, image: str, version: str) -> str:
         if self.mgr.mode != 'root':
@@ -409,23 +441,31 @@ class CephadmUpgrade:
                 continue_upgrade = False
                 continue
 
-            if not (mdsmap['in'] == [0] and len(mdsmap['up']) == 1):
+            if not (mdsmap['in'] == [0] and len(mdsmap['up']) <= 1):
                 self.mgr.log.info('Upgrade: Waiting for fs %s to scale down to reach 1 MDS' % (fs_name))
                 time.sleep(10)
                 continue_upgrade = False
                 continue
 
-            mdss = list(mdsmap['info'].values())
-            assert len(mdss) == 1
-            lone_mds = mdss[0]
-            if lone_mds['state'] != 'up:active':
-                self.mgr.log.info('Upgrade: Waiting for mds.%s to be up:active (currently %s)' % (
-                    lone_mds['name'],
-                    lone_mds['state'],
-                ))
-                time.sleep(10)
-                continue_upgrade = False
-                continue
+            if len(mdsmap['up']) == 0:
+                self.mgr.log.warning("Upgrade: No mds is up; continuing upgrade procedure to poke things in the right direction")
+                # This can happen because the current version MDS have
+                # incompatible compatsets; the mons will not do any promotions.
+                # We must upgrade to continue.
+            elif len(mdsmap['up']) > 0:
+                mdss = list(mdsmap['info'].values())
+                assert len(mdss) == 1
+                lone_mds = mdss[0]
+                if lone_mds['state'] != 'up:active':
+                    self.mgr.log.info('Upgrade: Waiting for mds.%s to be up:active (currently %s)' % (
+                        lone_mds['name'],
+                        lone_mds['state'],
+                    ))
+                    time.sleep(10)
+                    continue_upgrade = False
+                    continue
+            else:
+                assert False
 
         return continue_upgrade
 

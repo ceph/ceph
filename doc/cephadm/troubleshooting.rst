@@ -253,6 +253,8 @@ To access the admin socket, first enter the daemon container on the host::
     [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
 
 
+.. _cephadm-restore-quorum:
+
 Restoring the MON quorum
 ------------------------
 
@@ -275,6 +277,7 @@ form the monmap by following these steps:
 
 3. Follow the steps in :ref:`rados-mon-remove-from-unhealthy`
 
+.. _cephadm-manually-deploy-mgr:
 
 Manually deploying a MGR daemon
 -------------------------------

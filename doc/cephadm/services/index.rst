@@ -2,10 +2,27 @@
 Service Management
 ==================
 
+A service is a group of daemons configured together. See these chapters
+for details on individual services:
+
+.. toctree::
+    :maxdepth: 1
+
+    mon
+    mgr
+    osd
+    rgw
+    mds
+    nfs
+    iscsi
+    custom-container
+    monitoring
+
 Service Status
 ==============
 
-A service is a group of daemons configured together. To see the status of one
+
+To see the status of one
 of the services running in the Ceph cluster, do the following:
 
 #. Use the command line to print a list of services. 
@@ -80,24 +97,17 @@ deployment of services.  Here is an example of a service specification in YAML:
         - host2
         - host3
     unmanaged: false
-    ...
+    networks:
+    - 192.169.142.0/24
+    spec:
+      # Additional service specific attributes.
 
 In this example, the properties of this service specification are:
 
-* ``service_type``
-    The type of the service. Needs to be either a Ceph
-    service (``mon``, ``crash``, ``mds``, ``mgr``, ``osd`` or
-    ``rbd-mirror``), a gateway (``nfs`` or ``rgw``), part of the
-    monitoring stack (``alertmanager``, ``grafana``, ``node-exporter`` or
-    ``prometheus``) or (``container``) for custom containers.
-* ``service_id``
-    The name of the service.
-* ``placement``
-    See :ref:`orchestrator-cli-placement-spec`.
-* ``unmanaged`` If set to ``true``, the orchestrator will not deploy nor remove
-    any daemon associated with this service. Placement and all other properties
-    will be ignored. This is useful, if you do not want this service to be
-    managed temporarily. For cephadm, See :ref:`cephadm-spec-unmanaged`
+.. py:currentmodule:: ceph.deployment.service_spec
+
+.. autoclass:: ServiceSpec
+   :members:
 
 Each service type can have additional service-specific properties.
 
@@ -144,10 +154,36 @@ following these instructions:
 
 The Specification can then be changed and re-applied as above.
 
+Updating Service Specifications
+-------------------------------
+
+The Ceph Orchestrator maintains a declarative state of each
+service in a ``ServiceSpec``. For certain operations, like updating
+the RGW HTTP port, we need to update the existing
+specification.
+
+1. List the current ``ServiceSpec``:
+
+   .. prompt:: bash #
+
+    ceph orch ls --service_name=<service-name> --export > myservice.yaml
+
+2. Update the yaml file:
+
+   .. prompt:: bash #
+
+    vi myservice.yaml
+
+3. Apply the new ``ServiceSpec``:
+
+   .. prompt:: bash #
+
+    ceph orch apply -i myservice.yaml [--dry-run]
+
 .. _orchestrator-cli-placement-spec:
 
-Placement Specification
-=======================
+Daemon Placement
+================
 
 For the orchestrator to deploy a *service*, it needs to know where to deploy
 *daemons*, and how many to deploy.  This is the role of a placement
@@ -158,53 +194,55 @@ or in a YAML files.
 
    cephadm will not deploy daemons on hosts with the ``_no_schedule`` label; see :ref:`cephadm-special-host-labels`.
 
-  .. note::
-     The **apply** command can be confusing. For this reason, we recommend using
-     YAML specifications.
+.. note::
+   The **apply** command can be confusing. For this reason, we recommend using
+   YAML specifications.
 
-     Each ``ceph orch apply <service-name>`` command supersedes the one before it.
-     If you do not use the proper syntax, you will clobber your work
-     as you go.
+   Each ``ceph orch apply <service-name>`` command supersedes the one before it.
+   If you do not use the proper syntax, you will clobber your work
+   as you go.
 
-     For example:
+   For example:
 
-     .. prompt:: bash #
+   .. prompt:: bash #
 
-          ceph orch apply mon host1
-          ceph orch apply mon host2
-          ceph orch apply mon host3
+        ceph orch apply mon host1
+        ceph orch apply mon host2
+        ceph orch apply mon host3
 
-     This results in only one host having a monitor applied to it: host 3.
+   This results in only one host having a monitor applied to it: host 3.
 
-     (The first command creates a monitor on host1. Then the second command
-     clobbers the monitor on host1 and creates a monitor on host2. Then the
-     third command clobbers the monitor on host2 and creates a monitor on
-     host3. In this scenario, at this point, there is a monitor ONLY on
-     host3.)
+   (The first command creates a monitor on host1. Then the second command
+   clobbers the monitor on host1 and creates a monitor on host2. Then the
+   third command clobbers the monitor on host2 and creates a monitor on
+   host3. In this scenario, at this point, there is a monitor ONLY on
+   host3.)
 
-     To make certain that a monitor is applied to each of these three hosts,
-     run a command like this:
+   To make certain that a monitor is applied to each of these three hosts,
+   run a command like this:
 
-     .. prompt:: bash #
+   .. prompt:: bash #
 
-       ceph orch apply mon "host1,host2,host3"
+     ceph orch apply mon "host1,host2,host3"
 
-     There is another way to apply monitors to multiple hosts: a ``yaml`` file
-     can be used. Instead of using the "ceph orch apply mon" commands, run a
-     command of this form:
+   There is another way to apply monitors to multiple hosts: a ``yaml`` file
+   can be used. Instead of using the "ceph orch apply mon" commands, run a
+   command of this form:
 
-     .. prompt:: bash #
+   .. prompt:: bash #
 
-        ceph orch apply -i file.yaml
+      ceph orch apply -i file.yaml
 
-     Here is a sample **file.yaml** file::
+   Here is a sample **file.yaml** file
 
-          service_type: mon
-          placement:
-            hosts:
-             - host1
-             - host2
-             - host3
+   .. code-block:: yaml
+
+        service_type: mon
+        placement:
+          hosts:
+           - host1
+           - host2
+           - host3
 
 Explicit placements
 -------------------
@@ -320,8 +358,8 @@ Or in YAML:
       host_pattern: "*"
 
 
-Changing the number of monitors
--------------------------------
+Changing the number of daemons
+------------------------------
 
 By specifying ``count``, only the number of daemons specified will be created:
 
@@ -363,38 +401,11 @@ YAML can also be used to specify limits on hosts:
         - host2
         - host3
 
-Updating Service Specifications
-===============================
+Algorithm description
+---------------------
 
-The Ceph Orchestrator maintains a declarative state of each
-service in a ``ServiceSpec``. For certain operations, like updating
-the RGW HTTP port, we need to update the existing
-specification.
-
-1. List the current ``ServiceSpec``:
-
-   .. prompt:: bash #
-
-    ceph orch ls --service_name=<service-name> --export > myservice.yaml
-
-2. Update the yaml file:
-
-   .. prompt:: bash #
-
-    vi myservice.yaml
-
-3. Apply the new ``ServiceSpec``:
-   
-   .. prompt:: bash #
-
-    ceph orch apply -i myservice.yaml [--dry-run]
-    
-Deployment of Daemons
-=====================
-
-Cephadm uses a declarative state to define the layout of the cluster. This
-state consists of a list of service specifications containing placement
-specifications (See :ref:`orchestrator-cli-service-spec` ). 
+Cephadm's declarative state consists of a list of service specifications
+containing placement specifications.
 
 Cephadm continually compares a list of daemons actually running in the cluster
 against the list in the service specifications. Cephadm adds new daemons and
@@ -437,12 +448,29 @@ Finally, cephadm removes daemons on hosts that are outside of the list of
 candidate hosts.
 
 .. note::
-    
+
    There is a special case that cephadm must consider.
 
-   If there are fewer hosts selected by the placement specification than 
+   If there are fewer hosts selected by the placement specification than
    demanded by ``count``, cephadm will deploy only on the selected hosts.
 
+.. _orch-rm:
+
+Removing a Service
+==================
+
+In order to remove a service including the removal
+of all daemons of that service, run
+
+.. prompt:: bash
+
+  ceph orch rm <service-name>
+
+For example:
+
+.. prompt:: bash
+
+  ceph orch rm rgw.myrgw
 
 .. _cephadm-spec-unmanaged:
 
@@ -451,6 +479,8 @@ Disabling automatic deployment of daemons
 
 Cephadm supports disabling the automated deployment and removal of daemons on a
 per service basis. The CLI supports two commands for this.
+
+In order to fully remove a service, see :ref:`orch-rm`.
 
 Disabling automatic management of daemons
 -----------------------------------------

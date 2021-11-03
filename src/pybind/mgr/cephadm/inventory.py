@@ -93,8 +93,16 @@ class Inventory:
             raise OrchestratorError('host %s does not exist' % host)
 
     def add_host(self, spec: HostSpec) -> None:
-        self._inventory[spec.hostname] = spec.to_json()
-        self.save()
+        if spec.hostname in self._inventory:
+            # addr
+            if self.get_addr(spec.hostname) != spec.addr:
+                self.set_addr(spec.hostname, spec.addr)
+            # labels
+            for label in spec.labels:
+                self.add_label(spec.hostname, label)
+        else:
+            self._inventory[spec.hostname] = spec.to_json()
+            self.save()
 
     def rm_host(self, host: str) -> None:
         self.assert_host(host)
@@ -602,6 +610,17 @@ class HostCache():
         self.registry_login_queue.add(host)
         self.last_client_files[host] = {}
 
+    def refresh_all_host_info(self, host):
+        # type: (str) -> None
+
+        self.last_host_check.pop(host, None)
+        self.daemon_refresh_queue.append(host)
+        self.registry_login_queue.add(host)
+        self.device_refresh_queue.append(host)
+        self.last_facts_update.pop(host, None)
+        self.osdspec_previews_refresh_queue.append(host)
+        self.last_autotune.pop(host, None)
+
     def invalidate_host_daemons(self, host):
         # type: (str) -> None
         self.daemon_refresh_queue.append(host)
@@ -725,6 +744,13 @@ class HostCache():
                 if dd.name() == daemon_name:
                     return dd
         raise orchestrator.OrchestratorError(f'Unable to find {daemon_name} daemon(s)')
+
+    def has_daemon(self, daemon_name: str) -> bool:
+        try:
+            self.get_daemon(daemon_name)
+        except orchestrator.OrchestratorError:
+            return False
+        return True
 
     def get_daemons_with_volatile_status(self) -> Iterator[Tuple[str, Dict[str, orchestrator.DaemonDescription]]]:
         def alter(host: str, dd_orig: orchestrator.DaemonDescription) -> orchestrator.DaemonDescription:

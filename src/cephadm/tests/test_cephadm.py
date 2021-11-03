@@ -12,6 +12,7 @@ import threading
 import unittest
 
 from http.server import HTTPServer
+from textwrap import dedent
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
@@ -24,7 +25,6 @@ from .fixtures import (
     mock_podman,
     with_cephadm_ctx,
 )
-
 
 with mock.patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
@@ -893,6 +893,7 @@ iMN28C2bKGao5UHvdER1rGy7
 
 class TestMaintenance:
     systemd_target = "ceph.00000000-0000-0000-0000-000000c0ffee.target"
+    fsid = '0ea8cdd0-1bbf-11ec-a9c7-5254002763fa'
 
     def test_systemd_target_OK(self, tmp_path):
         base = tmp_path 
@@ -900,14 +901,16 @@ class TestMaintenance:
         wants.mkdir()
         target = wants / TestMaintenance.systemd_target
         target.touch()
-        cd.UNIT_DIR = str(base)
+        ctx = cd.CephadmContext()
+        ctx.unit_dir = str(base)
 
-        assert cd.systemd_target_state(target.name)
+        assert cd.systemd_target_state(ctx, target.name)
 
     def test_systemd_target_NOTOK(self, tmp_path):
         base = tmp_path 
-        cd.UNIT_DIR = str(base)
-        assert not cd.systemd_target_state(TestMaintenance.systemd_target)
+        ctx = cd.CephadmContext()
+        ctx.unit_dir = str(base)
+        assert not cd.systemd_target_state(ctx, TestMaintenance.systemd_target)
 
     def test_parser_OK(self):
         args = cd._parse_args(['host-maintenance', 'enter'])
@@ -916,6 +919,58 @@ class TestMaintenance:
     def test_parser_BAD(self):
         with pytest.raises(SystemExit):
             cd._parse_args(['host-maintenance', 'wah'])
+
+    @mock.patch('os.listdir', return_value=[])
+    @mock.patch('cephadm.call')
+    @mock.patch('cephadm.systemd_target_state')
+    def test_enter_failure_1(self, _target_state, _call, _listdir):
+        _call.return_value = '', '', 999
+        _target_state.return_value = True
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
+            ['host-maintenance', 'enter', '--fsid', TestMaintenance.fsid])
+        ctx.container_engine = mock_podman()
+        retval = cd.command_maintenance(ctx)
+        assert retval.startswith('failed')
+
+    @mock.patch('os.listdir', return_value=[])
+    @mock.patch('cephadm.call')
+    @mock.patch('cephadm.systemd_target_state')
+    def test_enter_failure_2(self, _target_state, _call, _listdir):
+        _call.side_effect = [('', '', 0), ('', '', 999)]
+        _target_state.return_value = True
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
+            ['host-maintenance', 'enter', '--fsid', TestMaintenance.fsid])
+        ctx.container_engine = mock_podman()
+        retval = cd.command_maintenance(ctx)
+        assert retval.startswith('failed')
+
+    @mock.patch('os.listdir', return_value=[])
+    @mock.patch('cephadm.call')
+    @mock.patch('cephadm.systemd_target_state')
+    @mock.patch('cephadm.target_exists')
+    def test_exit_failure_1(self, _target_exists, _target_state, _call, _listdir):
+        _call.return_value = '', '', 999
+        _target_state.return_value = False
+        _target_exists.return_value = True
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
+            ['host-maintenance', 'exit', '--fsid', TestMaintenance.fsid])
+        ctx.container_engine = mock_podman()
+        retval = cd.command_maintenance(ctx)
+        assert retval.startswith('failed')
+
+    @mock.patch('os.listdir', return_value=[])
+    @mock.patch('cephadm.call')
+    @mock.patch('cephadm.systemd_target_state')
+    @mock.patch('cephadm.target_exists')
+    def test_exit_failure_2(self, _target_exists, _target_state, _call, _listdir):
+        _call.side_effect = [('', '', 0), ('', '', 999)]
+        _target_state.return_value = False
+        _target_exists.return_value = True
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
+            ['host-maintenance', 'exit', '--fsid', TestMaintenance.fsid])
+        ctx.container_engine = mock_podman()
+        retval = cd.command_maintenance(ctx)
+        assert retval.startswith('failed')
 
 
 class TestMonitoring(object):
@@ -1329,6 +1384,29 @@ class TestShell(object):
             assert retval == 0
             assert ctx.keyring == 'foo'
 
+    @mock.patch('cephadm.CephContainer')
+    def test_mount_no_dst(self, m_ceph_container, cephadm_fs):
+        cmd = ['shell', '--mount', '/etc/foo']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert m_ceph_container.call_args.kwargs['volume_mounts']['/etc/foo'] == '/mnt/foo'
+
+    @mock.patch('cephadm.CephContainer')
+    def test_mount_with_dst_no_opt(self, m_ceph_container, cephadm_fs):
+        cmd = ['shell', '--mount', '/etc/foo:/opt/foo/bar']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert m_ceph_container.call_args.kwargs['volume_mounts']['/etc/foo'] == '/opt/foo/bar'
+
+    @mock.patch('cephadm.CephContainer')
+    def test_mount_with_dst_and_opt(self, m_ceph_container, cephadm_fs):
+        cmd = ['shell', '--mount', '/etc/foo:/opt/foo/bar:Z']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert m_ceph_container.call_args.kwargs['volume_mounts']['/etc/foo'] == '/opt/foo/bar:Z'
 
 class TestCephVolume(object):
 
@@ -1418,8 +1496,7 @@ class TestIscsi:
             ctx.config_json = json.dumps(config_json)
             ctx.fsid = fsid
             cd.get_parm.return_value = config_json
-            iscsi = cd.CephIscsi(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9', 'daemon_id', config_json)
-            c = iscsi.get_tcmu_runner_container()
+            c = cd.get_container(ctx, fsid, 'iscsi', 'daemon_id')
 
             cd.make_data_dir(ctx, fsid, 'iscsi', 'daemon_id')
             cd.deploy_daemon_units(
@@ -1435,14 +1512,14 @@ class TestIscsi:
             with open('/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/unit.run') as f:
                 assert f.read() == """set -e
 if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs /proc/mounts; then mount -t configfs none /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs; fi
-# iscsi tcmu-runnter container
+# iscsi tcmu-runner container
 ! /usr/bin/podman rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id-tcmu 2> /dev/null
 ! /usr/bin/podman rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu 2> /dev/null
-/usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/bin/tcmu-runner --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -e CEPH_USE_RANDOM_NONCE=1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log/rbd-target-api:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph &
+/usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/bin/tcmu-runner --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -e CEPH_USE_RANDOM_NONCE=1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph &
 # iscsi.daemon_id
-! /usr/bin/podman rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id-tcmu 2> /dev/null
-! /usr/bin/podman rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu 2> /dev/null
-/usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/bin/tcmu-runner --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -e CEPH_USE_RANDOM_NONCE=1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log/rbd-target-api:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
+! /usr/bin/podman rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id 2> /dev/null
+! /usr/bin/podman rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id 2> /dev/null
+/usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/bin/rbd-target-api --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -e CEPH_USE_RANDOM_NONCE=1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
 """
 
     def test_get_container(self):
@@ -1460,4 +1537,118 @@ if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id
             assert c.old_cname == 'ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.something'
 
 
+class TestCheckHost:
 
+    @mock.patch('cephadm.find_executable', return_value='foo')
+    @mock.patch('cephadm.check_time_sync', return_value=True)
+    def test_container_engine(self, find_executable, check_time_sync):
+        ctx = cd.CephadmContext()
+
+        ctx.container_engine = None
+        err = r'No container engine binary found'
+        with pytest.raises(cd.Error, match=err):
+            cd.command_check_host(ctx)
+
+        ctx.container_engine = mock_podman()
+        cd.command_check_host(ctx)
+
+        ctx.container_engine = mock_docker()
+        cd.command_check_host(ctx)
+
+
+class TestRmRepo:
+
+    @pytest.mark.parametrize('os_release',
+        [
+            # Apt
+            dedent("""
+            NAME="Ubuntu"
+            VERSION="20.04 LTS (Focal Fossa)"
+            ID=ubuntu
+            ID_LIKE=debian
+            PRETTY_NAME="Ubuntu 20.04 LTS"
+            VERSION_ID="20.04"
+            HOME_URL="https://www.ubuntu.com/"
+            SUPPORT_URL="https://help.ubuntu.com/"
+            BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+            PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+            VERSION_CODENAME=focal
+            UBUNTU_CODENAME=focal
+            """),
+
+            # YumDnf
+            dedent("""
+            NAME="CentOS Linux"
+            VERSION="8 (Core)"
+            ID="centos"
+            ID_LIKE="rhel fedora"
+            VERSION_ID="8"
+            PLATFORM_ID="platform:el8"
+            PRETTY_NAME="CentOS Linux 8 (Core)"
+            ANSI_COLOR="0;31"
+            CPE_NAME="cpe:/o:centos:centos:8"
+            HOME_URL="https://www.centos.org/"
+            BUG_REPORT_URL="https://bugs.centos.org/"
+
+            CENTOS_MANTISBT_PROJECT="CentOS-8"
+            CENTOS_MANTISBT_PROJECT_VERSION="8"
+            REDHAT_SUPPORT_PRODUCT="centos"
+            REDHAT_SUPPORT_PRODUCT_VERSION="8"
+            """),
+
+            # Zypper
+            dedent("""
+            NAME="openSUSE Tumbleweed"
+            # VERSION="20210810"
+            ID="opensuse-tumbleweed"
+            ID_LIKE="opensuse suse"
+            VERSION_ID="20210810"
+            PRETTY_NAME="openSUSE Tumbleweed"
+            ANSI_COLOR="0;32"
+            CPE_NAME="cpe:/o:opensuse:tumbleweed:20210810"
+            BUG_REPORT_URL="https://bugs.opensuse.org"
+            HOME_URL="https://www.opensuse.org/"
+            DOCUMENTATION_URL="https://en.opensuse.org/Portal:Tumbleweed"
+            LOGO="distributor-logo"
+            """),
+        ])
+    @mock.patch('cephadm.find_executable', return_value='foo')
+    def test_container_engine(self, find_executable, os_release, cephadm_fs):
+        cephadm_fs.create_file('/etc/os-release', contents=os_release)
+        ctx = cd.CephadmContext()
+
+        ctx.container_engine = None
+        cd.command_rm_repo(ctx)
+
+        ctx.container_engine = mock_podman()
+        cd.command_rm_repo(ctx)
+
+        ctx.container_engine = mock_docker()
+        cd.command_rm_repo(ctx)
+
+
+class TestPull:
+
+    @mock.patch('time.sleep')
+    @mock.patch('cephadm.call', return_value=('', '', 0))
+    @mock.patch('cephadm.get_image_info_from_inspect', return_value={})
+    def test_error(self, get_image_info_from_inspect, call, sleep):
+        ctx = cd.CephadmContext()
+        ctx.container_engine = mock_podman()
+        ctx.insecure = False
+
+        call.return_value = ('', '', 0)
+        retval = cd.command_pull(ctx)
+        assert retval == 0
+
+        err = 'maximum retries reached'
+
+        call.return_value = ('', 'foobar', 1)
+        with pytest.raises(cd.Error) as e:
+            cd.command_pull(ctx)
+        assert err not in str(e.value)
+
+        call.return_value = ('', 'net/http: TLS handshake timeout', 1)
+        with pytest.raises(cd.Error) as e:
+            cd.command_pull(ctx)
+        assert err in str(e.value)
