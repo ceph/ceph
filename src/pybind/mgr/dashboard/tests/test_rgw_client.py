@@ -9,7 +9,7 @@ from ..exceptions import DashboardException
 from ..services.rgw_client import NoCredentialsException, \
     NoRgwDaemonsException, RgwClient, _parse_frontend_config
 from ..settings import Settings
-from . import CLICommandTestMixin, RgwStub  # pylint: disable=no-name-in-module
+from ..tests import CLICommandTestMixin, RgwStub
 
 
 @patch('dashboard.services.rgw_client.RgwClient._get_user_id', Mock(

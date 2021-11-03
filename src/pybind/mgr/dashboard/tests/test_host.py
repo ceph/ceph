@@ -8,8 +8,8 @@ from orchestrator import HostSpec, InventoryHost
 from .. import mgr
 from ..controllers._version import APIVersion
 from ..controllers.host import Host, HostUi, get_device_osd_map, get_hosts, get_inventories
+from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 @contextlib.contextmanager
@@ -44,8 +44,6 @@ class HostControllerTest(ControllerTestCase):
     def setup_server(cls):
         NotificationQueue.start_queue()
         TaskManager.init()
-        # pylint: disable=protected-access
-        Host._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([Host])
 
     @classmethod
@@ -340,8 +338,6 @@ class HostUiControllerTest(ControllerTestCase):
 
     @classmethod
     def setup_server(cls):
-        # pylint: disable=protected-access
-        HostUi._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([HostUi])
 
     def test_labels(self):
