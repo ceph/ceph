@@ -641,7 +641,16 @@ class DefaultRemover():
 class RookCluster(object):
     # import of client.CoreV1Api must be optional at import time.
     # Instead allow mgr/rook to be imported anyway.
-    def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', customObjects_api: 'client.CustomObjectsApi', storageV1_api: 'client.StorageV1Api', appsV1_api: 'client.AppsV1Api', rook_env: 'RookEnv', storage_class: 'str'):
+    def __init__(
+        self,
+        coreV1_api: 'client.CoreV1Api',
+        batchV1_api: 'client.BatchV1Api',
+        customObjects_api: 'client.CustomObjectsApi',
+        storageV1_api: 'client.StorageV1Api',
+        appsV1_api: 'client.AppsV1Api',
+        rook_env: 'RookEnv',
+        storage_class: 'str'
+    ):
         self.rook_env = rook_env  # type: RookEnv
         self.coreV1_api = coreV1_api  # client.CoreV1Api
         self.batchV1_api = batchV1_api
