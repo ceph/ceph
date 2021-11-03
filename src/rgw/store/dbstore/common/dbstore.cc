@@ -250,17 +250,14 @@ int DB::ProcessOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *p
   int ret = -1;
   class DBOp *db_op;
 
-  Lock(dpp);
   db_op = getDBOp(dpp, Op, params);
 
   if (!db_op) {
     ldpp_dout(dpp, 0)<<"No db_op found for Op("<<Op<<")" << dendl;
-    Unlock(dpp);
     return ret;
   }
   ret = db_op->Execute(dpp, params);
 
-  Unlock(dpp);
   if (ret) {
     ldpp_dout(dpp, 0)<<"In Process op Execute failed for fop(" \
       <<Op.c_str()<<") " << dendl;
