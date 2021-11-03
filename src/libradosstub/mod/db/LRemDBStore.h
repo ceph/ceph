@@ -279,10 +279,18 @@ namespace LRemDBStore {
 struct LRemDBTransactionState : public LRemTransactionState {
   CephContext *cct;
 
-  LRemDBOpsRef dbo;
+  string db_name_prefix;
+
+  struct {
+    LRemDBOpsRef dbroot;
+    LRemDBOpsRef dbo;
+  } ops;
+
+  std::list<LRemDBOpsRef> all_ops;
+
   LRemDBStore::ClusterRef dbc;
 
-  std::unique_ptr<LRemDBOps::Transaction> db_trans;
+  std::list<std::unique_ptr<LRemDBOps::Transaction> > db_trans;
 
   struct {
     std::optional<LRemDBStore::Obj::Meta> meta;
@@ -295,13 +303,18 @@ struct LRemDBTransactionState : public LRemTransactionState {
                          const LRemCluster::ObjectLocator& loc);
   ~LRemDBTransactionState();
 
-  void init(bool start_trans);
+  void init();
+
+  LRemDBOpsRef& dbo();
+  LRemDBOpsRef& dbroot();
 
   void set_write(bool w) override;
 
   void commit() {
-    if (db_trans) {
-      db_trans->commit();
+    for (auto& trans : db_trans) {
+      if (trans) {
+        trans->commit();
+      }
     }
   }
 
