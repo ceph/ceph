@@ -168,7 +168,7 @@ public:
     sm_info->avail_bytes += sm_info->segment_size;
   }
   void space_used(paddr_t addr, extent_len_t len) {
-    auto& sm_info = sm_infos[addr.segment.device_id()];
+    auto& sm_info = sm_infos[addr.get_device_id()];
     sm_info->avail_bytes -= len;
   }
   size_t get_empty_segments(device_id_t d_id) {
@@ -730,18 +730,19 @@ public:
     paddr_t addr,
     extent_len_t len,
     bool init_scan = false) {
-    assert(addr.segment.device_id() ==
-      segments[addr.segment.device_id()]->device_id);
-    assert(addr.segment.device_segment_id() <
-      segments[addr.segment.device_id()]->num_segments);
+    auto& seg_addr = addr.as_seg_paddr();
+    assert(seg_addr.get_segment_id().device_id() ==
+      segments[seg_addr.get_segment_id().device_id()]->device_id);
+    assert(seg_addr.get_segment_id().device_segment_id() <
+      segments[seg_addr.get_segment_id().device_id()]->num_segments);
 
     if (!init_scan && !init_complete)
       return;
 
     used_bytes += len;
     [[maybe_unused]] auto ret = space_tracker->allocate(
-      addr.segment,
-      addr.offset,
+      seg_addr.get_segment_id(),
+      seg_addr.get_segment_off(),
       len);
     segments.space_used(addr, len);
     gc_process.maybe_wake_on_space_used();
@@ -756,14 +757,15 @@ public:
 
     ceph_assert(used_bytes >= len);
     used_bytes -= len;
-    assert(addr.segment.device_id() ==
-      segments[addr.segment.device_id()]->device_id);
-    assert(addr.segment.device_segment_id() <
-      segments[addr.segment.device_id()]->num_segments);
+    auto& seg_addr = addr.as_seg_paddr();
+    assert(addr.get_device_id() ==
+      segments[seg_addr.get_segment_id().device_id()]->device_id);
+    assert(seg_addr.get_segment_id().device_segment_id() <
+      segments[seg_addr.get_segment_id().device_id()]->num_segments);
 
     [[maybe_unused]] auto ret = space_tracker->release(
-      addr.segment,
-      addr.offset,
+      seg_addr.get_segment_id(),
+      seg_addr.get_segment_off(),
       len);
     maybe_wake_gc_blocked_io();
     assert(ret >= 0);
@@ -791,7 +793,7 @@ public:
 	"SegmentCleaner::get_next_gc_target: segment {} seq {}",
 	id,
 	seq);
-      return journal_seq_t{seq, {id, 0}};
+      return journal_seq_t{seq, paddr_t::make_seg_paddr(id, 0)};
     } else {
       return journal_seq_t();
     }
@@ -966,12 +968,14 @@ private:
   gc_reclaim_space_ret gc_reclaim_space();
 
   size_t get_bytes_used_current_segment() const {
-    return journal_head.offset.offset;
+    auto& seg_addr = journal_head.offset.as_seg_paddr();
+    return seg_addr.get_segment_off();
   }
 
   size_t get_bytes_available_current_segment() const {
+    auto& seg_addr = journal_head.offset.as_seg_paddr();
     auto segment_size =
-      segments[journal_head.offset.segment.device_id()]->segment_size;
+      segments[seg_addr.get_segment_id().device_id()]->segment_size;
     return segment_size - get_bytes_used_current_segment();
   }
 
@@ -984,7 +988,6 @@ private:
   size_t get_bytes_scanned_current_segment() const {
     if (!scan_cursor)
       return 0;
-
     return scan_cursor->get_segment_offset();
   }
 
@@ -1029,8 +1032,9 @@ private:
       return segments.get_journal_segments() * segments[journal_device_id]->segment_size;
     } else {
       assert(journal_head >= journal_tail_committed);
+      auto& seg_addr = journal_head.offset.as_seg_paddr();
       auto segment_size =
-	segments[journal_head.offset.segment.device_id()]->segment_size;
+	segments[seg_addr.get_segment_id().device_id()]->segment_size;
       return (journal_head.segment_seq - journal_tail_committed.segment_seq + 1) *
 	segment_size;
     }
@@ -1207,6 +1211,7 @@ private:
   bool gc_should_run() const {
     return gc_should_reclaim_space() || gc_should_trim_journal();
   }
+
 
   void mark_closed(segment_id_t segment) {
     assert(segment.device_id() ==
