@@ -1054,10 +1054,18 @@ bool FSMap::undamaged(const fs_cluster_id_t fscid, const mds_rank_t rank)
 
 void FSMap::insert(const MDSMap::mds_info_t &new_info)
 {
+  static const CompatSet empty;
+
   ceph_assert(new_info.state == MDSMap::STATE_STANDBY);
   ceph_assert(new_info.rank == MDS_RANK_NONE);
   mds_roles[new_info.global_id] = FS_CLUSTER_ID_NONE;
-  standby_daemons[new_info.global_id] = new_info;
+  auto& info = standby_daemons[new_info.global_id];
+  info = new_info;
+  if (empty.compare(info.compat) == 0) {
+    // bootstrap old compat: boot beacon contains empty compat on old (v16.2.4
+    // or older) MDS.
+    info.compat = MDSMap::get_compat_set_v16_2_4();
+  }
   standby_epochs[new_info.global_id] = epoch;
 }
 
