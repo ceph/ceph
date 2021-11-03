@@ -15,7 +15,6 @@ services:
       - MKNOD
     stop_signal: RTMIN+3
     volumes:
-      - "/sys/fs/cgroup:/sys/fs/cgroup:ro"
       - ../../../:/ceph
       - ..:/cephadm
     networks:
