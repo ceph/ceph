@@ -18,6 +18,8 @@ class LRemDBOps {
   std::string name;
   int flags;
 
+  ceph::mutex *trans_lock;
+
   std::unique_ptr<SQLite::Database> db;
   std::unique_ptr<DBStatementCache> stmt_cache;
 
@@ -34,7 +36,7 @@ class LRemDBOps {
   void queue_remove_key(const std::string& key);
   StatementCacheRef *new_cache_ref(SQLite::Statement *statement);
 public:
-  LRemDBOps(const std::string& _name, int _flags);
+  LRemDBOps(const std::string& _name, int _flags, ceph::mutex *_trans_lock);
 
   int exec(const std::string& sql);
   int exec(SQLite::Statement& stmt);
@@ -55,6 +57,7 @@ public:
   struct Transaction {
     int retcode{0};
     std::unique_ptr<SQLite::Transaction> trans;
+    ceph::mutex *lock;
 
     void *p;
 
@@ -67,7 +70,7 @@ public:
       trans.reset();
     }
 
-    Transaction(SQLite::Database& db);
+    Transaction(SQLite::Database& db, ceph::mutex *_lock);
     ~Transaction();
 
     void complete_op(int _r);
@@ -109,7 +112,7 @@ namespace LRemDBStore {
     }
     virtual ~TableBase() {}
 
-    virtual int create_table() = 0;
+    virtual int create_table(int shard_id) = 0;
 
     void set_instance(LRemDBTransactionState *_trans);
 
@@ -137,7 +140,7 @@ namespace LRemDBStore {
       void touch(uint64_t epoch);
     };
 
-    int create_table() override;
+    int create_table(int shard_id) override;
 
     int read_meta(LRemDBStore::Obj::Meta *pmeta);
     int write_meta(const LRemDBStore::Obj::Meta& pmeta);
@@ -173,7 +176,7 @@ namespace LRemDBStore {
 
   public:
     ObjData(LRemDBTransactionState *_trans, int _pool_id) : TableBase(_trans, _pool_id, "objdata") {}
-    int create_table() override;
+    int create_table(int shard_id) override;
 
     int read(uint64_t ofs, uint64_t len, bufferlist *bl);
     int write(uint64_t ofs, uint64_t len, const bufferlist& bl);
@@ -188,7 +191,7 @@ namespace LRemDBStore {
                 const std::string& table_name_prefix) : TableBase(_trans, _pool_id, table_name_prefix) {}
     virtual ~KVTableBase() {}
 
-    int create_table() override;
+    int create_table(int shard_id) override;
 
     int get_vals(const std::string& start_after,
                  const std::string &filter_prefix,
@@ -276,17 +279,25 @@ namespace LRemDBStore {
 
 } // namespace LRemDBStore
 
+class DBOpsCache;
 struct LRemDBTransactionState : public LRemTransactionState {
   CephContext *cct;
 
   string db_name_prefix;
 
+  int shard_id{0};
+
   struct {
     LRemDBOpsRef dbroot;
-    LRemDBOpsRef dbo;
+    map<int, LRemDBOpsRef> dbo;
   } ops;
 
-  std::list<LRemDBOpsRef> all_ops;
+  struct op_info {
+    DBOpsCache *cache;
+    LRemDBOpsRef dbo;
+  };
+
+  std::list<op_info> all_ops;
 
   LRemDBStore::ClusterRef dbc;
 
@@ -305,8 +316,10 @@ struct LRemDBTransactionState : public LRemTransactionState {
 
   void init();
 
+  LRemDBOpsRef& dbo(int shard_id, bool start_trans = true);
   LRemDBOpsRef& dbo();
-  LRemDBOpsRef& dbroot();
+
+  LRemDBOpsRef& dbroot(bool start_trans = true);
 
   void set_write(bool w) override;
 
