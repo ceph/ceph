@@ -101,7 +101,7 @@ Accomplishing this goal will lead into the next set of objectives for the team, 
 | Directory porting | This user story mainly included porting the rgw_directory.cc and rgw_directory.h files into the Ceph directory and adding the former into the CMake file. We are still in the process of debugging the issues that are resulting from this change after attempting to build the Ceph binaries, however. |
 | Backend | Like the directory porting user story, the backend team worked on porting specific D4N files to the upstreamed Ceph available on VM 1 and is working on debugging the build process. |
 | Beginning of testing phase | The directory team finished their tasks for this user story, which consisted of creating a write up with descriptions of each rgw_directory.cc function and meeting with the mentors to set up unit testing steps, practices, and the environment we would be using to test, namely, boto3. |
-| GDB debugging | While this user story is still mostly in progress, the backend team met with one of the mentors to make more progress on it before the end of the sprint. |
+| GDB debugging | While this user story is still mostly incomplete, the backend team met with one of the mentors to make more progress on it before the end of the sprint. |
 
 ---
 ### Resources
