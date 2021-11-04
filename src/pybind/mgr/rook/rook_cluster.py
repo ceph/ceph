@@ -802,7 +802,11 @@ class RookCluster(object):
                 image_name = c['image']
                 break
 
-            image_id = d['status']['container_statuses'][0]['image_id']
+            ls = d['status'].get('container_statuses')
+            if not ls:
+                # ignore pods with no containers
+                continue
+            image_id = ls[0]['image_id']
             image_id = image_id.split(prefix)[1] if prefix in image_id else image_id
 
             s = {
