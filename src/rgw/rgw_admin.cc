@@ -242,6 +242,7 @@ void usage()
   cout << "  mdlog status               read metadata log status\n";
   cout << "  bilog list                 list bucket index log\n";
   cout << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
+  cout << "  mdlog autotrim             auto trim metadata log\n";
   cout << "  bilog status               read bucket index log status\n";
   cout << "  datalog list               list data log\n";
   cout << "  datalog trim               trim data log\n";
