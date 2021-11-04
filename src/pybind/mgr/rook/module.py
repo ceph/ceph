@@ -364,6 +364,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 )
         if service_type == 'osd' or service_type is None:
             # OSDs
+            # FIXME: map running OSDs back to their respective services...
+
+            # the catch-all unmanaged
             all_osds = self.rook_cluster.get_osds()
             svc = 'osd'
             spec[svc] = orchestrator.ServiceDescription(
@@ -373,8 +376,17 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 ),
                 size=len(all_osds),
                 last_refresh=now,
-            running= sum(osd.status.phase == 'Running' for osd in all_osds)
+                running= sum(osd.status.phase == 'Running' for osd in all_osds)
             )
+
+            # drivegroups
+            for name, dg in self._drive_group_map.items():
+                spec[f'osd.{name}'] = orchestrator.ServiceDescription(
+                    spec=dg,
+                    last_refresh=now,
+                    size=0,
+                    running=0,
+                )
         
         if service_type == 'rbd-mirror' or service_type is None:
             # rbd-mirrors
