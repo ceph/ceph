@@ -109,8 +109,6 @@ class CherryPyConfig(object):
         else:
             server_port = self.get_localized_module_option('ssl_server_port', 8443)  # type: ignore
 
-        if server_addr == '::':
-            server_addr = self.get_mgr_ip()  # type: ignore
         if server_addr is None:
             raise ServerConfigException(
                 'no server_addr configured; '
@@ -193,6 +191,8 @@ class CherryPyConfig(object):
         self._url_prefix = prepare_url_prefix(self.get_module_option(  # type: ignore
             'url_prefix', default=''))
 
+        if server_addr in ['::', '0.0.0.0']:
+            server_addr = self.get_mgr_ip()  # type: ignore
         base_url = build_url(
             scheme='https' if use_ssl else 'http',
             host=server_addr,

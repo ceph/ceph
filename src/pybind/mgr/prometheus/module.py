@@ -1374,17 +1374,17 @@ class Module(MgrModule):
 
         self.metrics_thread.start()
 
+        cherrypy.config.update({
+            'server.socket_host': server_addr,
+            'server.socket_port': server_port,
+            'engine.autoreload.on': False
+        })
         # Publish the URI that others may use to access the service we're
         # about to start serving
         if server_addr in ['::', '0.0.0.0']:
             server_addr = self.get_mgr_ip()
         self.set_uri(build_url(scheme='http', host=server_addr, port=server_port, path='/'))
 
-        cherrypy.config.update({
-            'server.socket_host': server_addr,
-            'server.socket_port': server_port,
-            'engine.autoreload.on': False
-        })
         cherrypy.tree.mount(Root(), "/")
         self.log.info('Starting engine...')
         cherrypy.engine.start()
