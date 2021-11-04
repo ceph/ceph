@@ -7,7 +7,6 @@ from functools import partial
 from typing import Any, Dict, List, Optional
 
 import cephfs
-import cherrypy
 from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
 
 from .. import mgr
@@ -149,7 +148,10 @@ class NFSGaneshaExports(RESTController):
     @RESTController.MethodMap(version=APIVersion(2, 0))  # type: ignore
     def create(self, path, cluster_id, pseudo, access_type,
                squash, security_label, protocols, transports, fsal, clients) -> Dict[str, Any]:
-
+        export_mgr = mgr.remote('nfs', 'fetch_nfs_export_obj')
+        if export_mgr.get_export_by_pseudo(cluster_id, pseudo):
+            raise DashboardException(msg=f'Pseudo {pseudo} is already in use.',
+                                     component='nfs')
         if hasattr(fsal, 'user_id'):
             fsal.pop('user_id')  # mgr/nfs does not let you customize user_id
         raw_ex = {
@@ -164,11 +166,10 @@ class NFSGaneshaExports(RESTController):
             'fsal': fsal,
             'clients': clients
         }
-        export_mgr = mgr.remote('nfs', 'fetch_nfs_export_obj')
         ret, _, err = export_mgr.apply_export(cluster_id, json.dumps(raw_ex))
         if ret == 0:
             return self._get_schema_export(
-                export_mgr._get_export_dict(cluster_id, pseudo))  # pylint: disable=W0212
+                export_mgr.get_export_by_pseudo(cluster_id, pseudo))
         raise NFSException(f"Export creation failed {err}")
 
     @EndpointDoc("Get an NFS-Ganesha export",
@@ -215,7 +216,7 @@ class NFSGaneshaExports(RESTController):
         ret, _, err = export_mgr.apply_export(cluster_id, json.dumps(raw_ex))
         if ret == 0:
             return self._get_schema_export(
-                export_mgr._get_export_dict(cluster_id, pseudo))  # pylint: disable=W0212
+                export_mgr.get_export_by_pseudo(cluster_id, pseudo))
         raise NFSException(f"Failed to update export: {err}")
 
     @NfsTask('delete', {'cluster_id': '{cluster_id}',
@@ -231,7 +232,10 @@ class NFSGaneshaExports(RESTController):
 
         export = mgr.remote('nfs', 'export_get', cluster_id, export_id)
         if not export:
-            raise cherrypy.HTTPError(404)  # pragma: no cover - the handling is too obvious
+            raise DashboardException(
+                http_status_code=404,
+                msg=f'Export with id {export_id} not found.',
+                component='nfs')
         mgr.remote('nfs', 'export_rm', cluster_id, export['pseudo'])
 
 
@@ -265,7 +269,7 @@ class NFSGaneshaUi(BaseController):
         finally:
             if error_msg:
                 raise DashboardException(code=400,
-                                         component='nfsganesha',
+                                         component='nfs',
                                          msg=error_msg)
 
         try:
