@@ -437,17 +437,15 @@ public:
   // file ops
   int mknod(const char *path, mode_t mode, const UserPerm& perms, dev_t rdev=0);
 
-  int create_and_open(std::optional<int> dirfd, const char *relpath, int flags, const UserPerm& perms,
-                      mode_t mode, int stripe_unit, int stripe_count, int object_size, const char *data_pool,
-                      std::string alternate_name);
+  int create_and_open(int dirfd, const char *relpath, int flags, const UserPerm& perms,
+                      mode_t mode, int stripe_unit, int stripe_count, int object_size,
+                      const char *data_pool, std::string alternate_name);
   int open(const char *path, int flags, const UserPerm& perms, mode_t mode=0, std::string alternate_name="") {
     return open(path, flags, perms, mode, 0, 0, 0, NULL, alternate_name);
   }
   int open(const char *path, int flags, const UserPerm& perms,
 	   mode_t mode, int stripe_unit, int stripe_count, int object_size,
 	   const char *data_pool, std::string alternate_name="");
-  int _openat(int dirfd, const char *relpath, int flags, const UserPerm& perms,
-              mode_t mode=0, std::string alternate_name="");
   int openat(int dirfd, const char *relpath, int flags, const UserPerm& perms,
              mode_t mode, int stripe_unit, int stripe_count,
              int object_size, const char *data_pool, std::string alternate_name);

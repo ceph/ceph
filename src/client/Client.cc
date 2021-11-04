@@ -9135,7 +9135,7 @@ int Client::getdir(const char *relpath, list<string>& contents,
 /****** file i/o **********/
 
 // common parts for open and openat. call with client_lock locked.
-int Client::create_and_open(std::optional<int> dirfd, const char *relpath, int flags,
+int Client::create_and_open(int dirfd, const char *relpath, int flags,
                             const UserPerm& perms, mode_t mode, int stripe_unit,
                             int stripe_count, int object_size, const char *data_pool,
                             std::string alternate_name) {
@@ -9161,14 +9161,12 @@ int Client::create_and_open(std::optional<int> dirfd, const char *relpath, int f
   int mask = ceph_caps_for_mode(ceph_flags_to_mode(cflags));
 
   InodeRef dirinode = nullptr;
-  if (dirfd) {
-    int r = get_fd_inode(*dirfd, &dirinode);
-    if (r < 0) {
-      return r;
-    }
+  int r = get_fd_inode(dirfd, &dirinode);
+  if (r < 0) {
+    return r;
   }
 
-  int r = path_walk(path, &in, perms, followsym, mask, dirinode);
+  r = path_walk(path, &in, perms, followsym, mask, dirinode);
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -CEPHFS_EEXIST;
 
@@ -9230,11 +9228,6 @@ int Client::open(const char *relpath, int flags, const UserPerm& perms,
 {
   return openat(CEPHFS_AT_FDCWD, relpath, flags, perms, mode, stripe_unit,
                 stripe_count, object_size, data_pool, alternate_name);
-}
-
-int Client::_openat(int dirfd, const char *relpath, int flags, const UserPerm& perms,
-                    mode_t mode, std::string alternate_name) {
-  return create_and_open(dirfd, relpath, flags, perms, mode, 0, 0, 0, NULL, alternate_name);
 }
 
 int Client::openat(int dirfd, const char *relpath, int flags, const UserPerm& perms,
