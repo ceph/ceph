@@ -338,52 +338,6 @@ class Module(MgrModule):
 
         return result
 
-    def get_stat_sum_per_pool(self) -> List[dict]:
-        # Initialize 'result' list
-        result: List[dict] = []
-
-        # Create a list of pool ids that will later act as a queue, i.e.:
-        #   pool_queue = [1, 2, 3]
-        osd_map = self.get('osd_map')
-        pool_queue = []
-        for pool in osd_map['pools']:
-            pool_queue.append(str(pool['pool']))
-
-        # Populate 'result', i.e.:
-        #   {
-        #       'pool_id': '1'
-        #       'stats_sum': {
-        #           'num_bytes': 36,
-        #           'num_bytes_hit_set_archive': 0,
-        #           ...
-        #           'num_write_kb': 0
-        #           }
-        #       }
-        #   }
-        while pool_queue:
-            # Pop the current pool id out of pool_queue
-            curr_pool_id = pool_queue.pop(0)
-
-            # Initialize a dict that will hold aggregated stats for the current pool
-            compiled_stats_dict: Dict[str, Any] = defaultdict(lambda: defaultdict(int))
-
-            # Find out which pgs belong to the current pool and add up
-            # their stats
-            pg_dump = self.get('pg_dump')
-            for pg in pg_dump['pg_stats']:
-                pool_id = pg['pgid'].split('.')[0]
-                if pool_id == curr_pool_id:
-                    compiled_stats_dict['pool_id'] = int(pool_id)
-                    for metric in pg['stat_sum']:
-                        compiled_stats_dict['stats_sum'][metric] += pg['stat_sum'][metric]
-                else:
-                    continue
-            # 'compiled_stats_dict' now holds all stats pertaining to
-            # the current pool. Adding it to the list of results.
-            result.append(compiled_stats_dict)
-
-        return result
-
     def get_osd_histograms(self, mode: str = 'separated') -> List[Dict[str, dict]]:
         # Initialize result dict
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(
@@ -949,7 +903,8 @@ class Module(MgrModule):
             report['perf_counters_aggregated'] = self.gather_perf_counters('aggregated')
             report['perf_counters_separated'] = self.gather_perf_counters('separated')
 
-            report['stat_sum_per_pool'] = self.get_stat_sum_per_pool()
+            report['stats_per_pool'] = self.get('pg_dump')['pool_stats']
+
             report['io_rate'] = self.get_io_rate()
 
             report['osd_perf_histograms_aggregated'] = self.get_osd_histograms('aggregated')
