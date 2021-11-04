@@ -10,7 +10,7 @@ except ImportError:
 
 from .. import mgr
 from ..controllers import RESTController, Router
-from . import ControllerTestCase, KVStoreMockMixin  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase, KVStoreMockMixin
 
 
 # pylint: disable=W0613

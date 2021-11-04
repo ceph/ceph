@@ -7,7 +7,7 @@ except ImportError:
     from unittest.mock import patch, Mock
 
 from ..controllers.cephfs import CephFS
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase
 
 
 class MetaDataMock(object):

@@ -5,6 +5,7 @@ import json
 import logging
 import threading
 import time
+from typing import Any, Dict
 from unittest.mock import Mock
 
 import cherrypy
@@ -101,12 +102,18 @@ class ControllerTestCase(helper.CPWebCase):
     _endpoints_cache = {}
 
     @classmethod
-    def setup_controllers(cls, ctrl_classes, base_url=''):
+    def setup_controllers(cls, ctrl_classes, base_url='', cp_config: Dict[str, Any] = None):
         if not isinstance(ctrl_classes, list):
             ctrl_classes = [ctrl_classes]
         mapper = cherrypy.dispatch.RoutesDispatcher()
         endpoint_list = []
         for ctrl in ctrl_classes:
+            ctrl._cp_config = {
+                'tools.dashboard_exception_handler.on': True,
+                'tools.authenticate.on': False
+            }
+            if cp_config:
+                ctrl._cp_config.update(cp_config)
             inst = ctrl()
 
             # We need to cache the controller endpoints because
