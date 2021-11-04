@@ -330,10 +330,15 @@ int main(int argc, char* argv[])
             fetch_config().get();
           }
           if (config.count("mkfs")) {
+            auto osd_uuid = local_conf().get_val<uuid_d>("osd_uuid");
+            if (osd_uuid.is_zero()) {
+              // use a random osd uuid if not specified
+              osd_uuid.generate_random();
+            }
             osd.invoke_on(
               0,
               &crimson::osd::OSD::mkfs,
-              local_conf().get_val<uuid_d>("osd_uuid"),
+              osd_uuid,
               local_conf().get_val<uuid_d>("fsid")).get();
           }
           if (config.count("mkkey") || config.count("mkfs")) {
