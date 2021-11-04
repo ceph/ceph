@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable } from 'rxjs';
+import { Observable, throwError } from 'rxjs';
 
 import { NfsFSAbstractionLayer } from '~/app/ceph/nfs/models/nfs.fsal';
 import { ApiClient } from '~/app/shared/api/api-client';
@@ -87,6 +87,9 @@ export class NfsService extends ApiClient {
   }
 
   lsDir(fs_name: string, root_dir: string): Observable<Directory> {
+    if (!fs_name) {
+      return throwError($localize`Please specify a filesystem volume.`);
+    }
     return this.http.get<Directory>(`${this.uiApiPath}/lsdir/${fs_name}?root_dir=${root_dir}`);
   }
 

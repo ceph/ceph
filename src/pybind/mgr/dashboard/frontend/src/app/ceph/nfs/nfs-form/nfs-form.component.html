@@ -39,7 +39,7 @@
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('cluster_id', formDir, 'required') || allClusters?.length === 0"
                   i18n>This field is required.
-                       To create a new NFS cluster, <a routerLink="/services/create"
+                       To create a new NFS cluster, <a [routerLink]="['/services', {outlets: {modal: ['create']}}]"
                                                        class="btn-link">add a new NFS Service</a>.</span>
           </div>
         </div>
@@ -79,7 +79,7 @@
             </div>
           </div>
 
-          <!-- CephFS fs_name -->
+          <!-- CephFS Volume -->
           <div class="form-group row"
                *ngIf="nfsForm.getValue('name') === 'CEPH'">
             <label class="cd-col-form-label required"
@@ -173,9 +173,9 @@
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('path', formDir, 'pattern')"
                   i18n>Path need to start with a '/' and can be followed by a word</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('path', formDir, 'pathNameNotAllowed')"
-                  i18n>The path does not exist.</span>
+                  i18n>The path does not exist in the selected volume.</span>
           </div>
         </div>
 
@@ -252,6 +252,9 @@
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('pseudo', formDir, 'required')"
                   i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="nfsForm.showError('pseudo', formDir, 'pseudoAlreadyExists')"
+                  i18n>The pseudo is already in use by another export.</span>
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('pseudo', formDir, 'pattern')"
                   i18n>Pseudo needs to start with a '/' and can't contain any of the following: &gt;, &lt;, |, &, ( or ).</span>

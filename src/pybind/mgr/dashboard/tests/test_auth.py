@@ -41,7 +41,7 @@ class AuthTest(ControllerTestCase):
 
     @patch('dashboard.controllers.auth.JwtManager.gen_token', Mock(return_value='my-token'))
     @patch('dashboard.controllers.auth.AuthManager.authenticate', Mock(return_value={
-        'permissions': {'read-only': ['read']},
+        'permissions': {'rgw': ['read']},
         'pwdExpirationDate': 1000000,
         'pwdUpdateRequired': False
     }))
@@ -51,7 +51,7 @@ class AuthTest(ControllerTestCase):
         self.assertJsonBody({
             'token': 'my-token',
             'username': 'my-user',
-            'permissions': {'read-only': ['read']},
+            'permissions': {'rgw': ['read']},
             'pwdExpirationDate': 1000000,
             'sso': False,
             'pwdUpdateRequired': False
