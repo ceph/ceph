@@ -271,11 +271,21 @@ permissible values.
 Create RGW Export
 -----------------
 
-To export a bucket
+There are two kinds of RGW exports:
+
+- a *user* export will export all buckets owned by an
+  RGW user, where the top-level directory of the export is a list of buckets.
+- a *bucket* export will export a single bucket, where the top-level directory contains
+  the objects in the bucket.
+
+RGW bucket export
+^^^^^^^^^^^^^^^^^
+  
+To export a *bucket*:
 
 .. code::
 
-   $ ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --bucket <bucket_name> [--readonly] [--client_addr <value>...] [--squash <value>]
+   $ ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --bucket <bucket_name> [--user-id <user-id>] [--readonly] [--client_addr <value>...] [--squash <value>]
 
 For example, to export *mybucket* via NFS cluster *mynfs* at the pseudo-path */bucketdata* to any host in the ``192.168.10.0/24`` network
 
@@ -291,6 +301,10 @@ For example, to export *mybucket* via NFS cluster *mynfs* at the pseudo-path */b
 
 ``<bucket_name>`` is the name of the bucket that will be exported.
 
+``<user_id>`` is optional, and specifies which RGW user will be used for read and write
+operations to the bucket.  If it is not specified, the user who owns the bucket will be
+used.
+
 .. note:: Currently, if multi-site RGW is enabled, Ceph can only export RGW buckets in the default realm.
 
 ``<client_addr>`` is the list of client address for which these export
@@ -301,6 +315,22 @@ for permissible values.
 ``<squash>`` defines the kind of user id squashing to be performed. The default
 value is `no_root_squash`. See the `NFS-Ganesha Export Sample`_ for
 permissible values.
+
+RGW user export
+^^^^^^^^^^^^^^^
+
+To export an RGW *user*:
+
+.. code::
+
+   $ ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --user-id <user-id> [--readonly] [--client_addr <value>...] [--squash <value>]
+
+For example, to export *myuser* via NFS cluster *mynfs* at the pseudo-path */myuser* to any host in the ``192.168.10.0/24`` network
+
+.. code::
+
+   $ ceph nfs export create rgw --cluster-id mynfs --pseudo-path /bucketdata --user-id myuser --client_addr 192.168.10.0/24
+
 
 Delete Export
 -------------
