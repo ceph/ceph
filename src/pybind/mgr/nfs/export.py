@@ -432,6 +432,14 @@ class ExportMgr:
         export = self._fetch_export_id(cluster_id, export_id)
         return export.to_dict() if export else None
 
+    def get_export_by_pseudo(
+            self,
+            cluster_id: str,
+            pseudo_path: str
+    ) -> Optional[Dict[str, Any]]:
+        export = self._fetch_export(cluster_id, pseudo_path)
+        return export.to_dict() if export else None
+
     def apply_export(self, cluster_id: str, export_config: str) -> Tuple[int, str, str]:
         try:
             if not export_config:

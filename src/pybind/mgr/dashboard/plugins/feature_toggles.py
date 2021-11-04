@@ -9,7 +9,7 @@ from mgr_module import CLICommand, Option
 
 from ..controllers.cephfs import CephFS
 from ..controllers.iscsi import Iscsi, IscsiTarget
-from ..controllers.nfsganesha import NFSGanesha, NFSGaneshaExports
+from ..controllers.nfs import NFSGanesha, NFSGaneshaExports
 from ..controllers.rbd import Rbd, RbdSnapshot, RbdTrash
 from ..controllers.rbd_mirroring import RbdMirroringPoolMode, \
     RbdMirroringPoolPeer, RbdMirroringSummary
