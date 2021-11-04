@@ -9,8 +9,8 @@ except ImportError:
 
 from ..controllers.pool import Pool
 from ..controllers.task import Task
+from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 class MockTask(object):
@@ -23,8 +23,6 @@ class MockTask(object):
 class PoolControllerTest(ControllerTestCase):
     @classmethod
     def setup_server(cls):
-        Task._cp_config['tools.authenticate.on'] = False
-        Pool._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([Pool, Task])
 
     @mock.patch('dashboard.services.progress.get_progress_tasks')

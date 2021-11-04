@@ -24,6 +24,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
+import { CdHttpErrorResponse } from '~/app/shared/services/api-interceptor.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
@@ -163,7 +164,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
       access_type: new FormControl('RW', {
         validators: [Validators.required]
       }),
-      squash: new FormControl('', {
+      squash: new FormControl(this.nfsSquash[0], {
         validators: [Validators.required]
       }),
       transportUDP: new FormControl(true, {
@@ -222,6 +223,9 @@ export class NfsFormComponent extends CdForm implements OnInit {
     for (const cluster of clusters) {
       this.allClusters.push({ cluster_id: cluster });
     }
+    if (!this.isEdit && this.allClusters.length > 0) {
+      this.nfsForm.get('cluster_id').setValue(this.allClusters[0].cluster_id);
+    }
   }
 
   resolveFsals(res: string[]) {
@@ -234,17 +238,18 @@ export class NfsFormComponent extends CdForm implements OnInit {
         this.allFsals.push(fsalItem);
       }
     });
-
-    if (this.allFsals.length === 1 && _.isUndefined(this.nfsForm.getValue('fsal'))) {
+    if (!this.isEdit && this.allFsals.length > 0) {
       this.nfsForm.patchValue({
-        fsal: this.allFsals[0]
+        fsal: {
+          name: this.allFsals[0].value
+        }
       });
     }
   }
 
   resolveFilesystems(filesystems: any[]) {
     this.allFsNames = filesystems;
-    if (filesystems.length === 1) {
+    if (!this.isEdit && filesystems.length > 0) {
       this.nfsForm.patchValue({
         fsal: {
           fs_name: filesystems[0].name
@@ -254,6 +259,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   }
 
   fsalChangeHandler() {
+    this.setPathValidation();
     const fsalValue = this.nfsForm.getValue('name');
     const checkAvailability =
       fsalValue === 'RGW'
@@ -276,13 +282,13 @@ export class NfsFormComponent extends CdForm implements OnInit {
     checkAvailability.subscribe({
       next: () => {
         this.setFsalAvailability(fsalValue, true);
-        this.nfsForm.patchValue({
-          path: fsalValue === 'RGW' ? '' : '/',
-          pseudo: this.generatePseudo(),
-          access_type: this.updateAccessType()
-        });
-
-        this.setPathValidation();
+        if (!this.isEdit) {
+          this.nfsForm.patchValue({
+            path: fsalValue === 'RGW' ? '' : '/',
+            pseudo: this.generatePseudo(),
+            access_type: this.updateAccessType()
+          });
+        }
 
         this.cdRef.detectChanges();
       },
@@ -360,9 +366,11 @@ export class NfsFormComponent extends CdForm implements OnInit {
   }
 
   pathChangeHandler() {
-    this.nfsForm.patchValue({
-      pseudo: this.generatePseudo()
-    });
+    if (!this.isEdit) {
+      this.nfsForm.patchValue({
+        pseudo: this.generatePseudo()
+      });
+    }
   }
 
   private getBucketTypeahead(path: string): Observable<any> {
@@ -430,9 +438,21 @@ export class NfsFormComponent extends CdForm implements OnInit {
     }
 
     action.subscribe({
-      error: () => this.nfsForm.setErrors({ cdSubmitButton: true }),
+      error: (errorResponse: CdHttpErrorResponse) => this.setFormErrors(errorResponse),
       complete: () => this.router.navigate(['/nfs'])
     });
+  }
+
+  private setFormErrors(errorResponse: CdHttpErrorResponse) {
+    if (
+      errorResponse.error.detail &&
+      errorResponse.error.detail
+        .toString()
+        .includes(`Pseudo ${this.nfsForm.getValue('pseudo')} is already in use`)
+    ) {
+      this.nfsForm.get('pseudo').setErrors({ pseudoAlreadyExists: true });
+    }
+    this.nfsForm.setErrors({ cdSubmitButton: true });
   }
 
   private buildRequest() {
@@ -500,15 +520,14 @@ export class NfsFormComponent extends CdForm implements OnInit {
         return of({ required: true });
       }
       const fsName = this.nfsForm.getValue('fsal').fs_name;
-      return this.nfsService
-        .lsDir(fsName, control.value)
-        .pipe(
-          map((directory: Directory) =>
-            directory.paths.includes(control.value) === requiredExistenceResult
-              ? null
-              : { pathNameNotAllowed: true }
-          )
-        );
+      return this.nfsService.lsDir(fsName, control.value).pipe(
+        map((directory: Directory) =>
+          directory.paths.includes(control.value) === requiredExistenceResult
+            ? null
+            : { pathNameNotAllowed: true }
+        ),
+        catchError(() => of({ pathNameNotAllowed: true }))
+      );
     };
   }
 }

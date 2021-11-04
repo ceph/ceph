@@ -15,7 +15,7 @@ from ..security import Permission, Scope
 from ..services.access_control import SYSTEM_ROLES, AccessControlDB, \
     PasswordPolicy, load_access_control_db, password_hash
 from ..settings import Settings
-from . import CLICommandTestMixin, CmdException  # pylint: disable=no-name-in-module
+from ..tests import CLICommandTestMixin, CmdException
 
 
 class AccessControlTest(unittest.TestCase, CLICommandTestMixin):

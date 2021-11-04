@@ -74,14 +74,14 @@ describe('NfsFormComponent', () => {
     expect(component.nfsForm.value).toEqual({
       access_type: 'RW',
       clients: [],
-      cluster_id: '',
-      fsal: { fs_name: 'a', name: '' },
+      cluster_id: 'mynfs',
+      fsal: { fs_name: 'a', name: 'CEPH' },
       path: '/',
       protocolNfsv4: true,
       pseudo: '',
       sec_label_xattr: 'security.selinux',
       security_label: false,
-      squash: '',
+      squash: 'no_root_squash',
       transportTCP: true,
       transportUDP: true
     });

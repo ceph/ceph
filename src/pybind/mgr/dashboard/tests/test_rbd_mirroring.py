@@ -14,7 +14,7 @@ from ..controllers.rbd_mirroring import RbdMirroring, \
     RbdMirroringPoolBootstrap, RbdMirroringSummary, get_daemons, get_pools
 from ..controllers.summary import Summary
 from ..services import progress
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase
 
 mock_list_servers = [{
     'hostname': 'ceph-host',
@@ -161,10 +161,6 @@ class RbdMirroringControllerTest(ControllerTestCase):
 
     @classmethod
     def setup_server(cls):
-        # pylint: disable=protected-access
-        RbdMirroring._cp_config['tools.authenticate.on'] = False
-        # pylint: enable=protected-access
-
         cls.setup_controllers([RbdMirroring])
 
     @mock.patch('dashboard.controllers.rbd_mirroring.rbd.RBD')
@@ -192,10 +188,6 @@ class RbdMirroringPoolBootstrapControllerTest(ControllerTestCase):
 
     @classmethod
     def setup_server(cls):
-        # pylint: disable=protected-access
-        RbdMirroringPoolBootstrap._cp_config['tools.authenticate.on'] = False
-        # pylint: enable=protected-access
-
         cls.setup_controllers([RbdMirroringPoolBootstrap])
 
     @mock.patch('dashboard.controllers.rbd_mirroring.rbd.RBD')
@@ -258,11 +250,6 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
 
         progress.get_progress_tasks = mock.MagicMock()
         progress.get_progress_tasks.return_value = ([], [])
-
-        # pylint: disable=protected-access
-        RbdMirroringSummary._cp_config['tools.authenticate.on'] = False
-        Summary._cp_config['tools.authenticate.on'] = False
-        # pylint: enable=protected-access
 
         cls.setup_controllers([RbdMirroringSummary, Summary], '/test')
 

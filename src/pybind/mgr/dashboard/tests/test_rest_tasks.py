@@ -10,8 +10,8 @@ except ImportError:
 from ..controllers import RESTController, Router, Task
 from ..controllers.task import Task as TaskController
 from ..services import progress
+from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 @Router('/test/task', secure=False)
@@ -58,8 +58,6 @@ class TaskControllerTest(ControllerTestCase):
 
         NotificationQueue.start_queue()
         TaskManager.init()
-        TaskTest._cp_config['tools.authenticate.on'] = False
-        TaskController._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([TaskTest, TaskController])
 
     @classmethod

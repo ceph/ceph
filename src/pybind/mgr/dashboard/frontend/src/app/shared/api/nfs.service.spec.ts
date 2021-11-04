@@ -1,5 +1,5 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { TestBed } from '@angular/core/testing';
+import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { NfsService } from './nfs.service';
@@ -63,4 +63,12 @@ describe('NfsService', () => {
     const req = httpTesting.expectOne('ui-api/nfs-ganesha/lsdir/a?root_dir=foo_dir');
     expect(req.request.method).toBe('GET');
   });
+
+  it('should not call lsDir if volume is not provided', fakeAsync(() => {
+    service.lsDir('', 'foo_dir').subscribe({
+      error: (error: string) => expect(error).toEqual('Please specify a filesystem volume.')
+    });
+    tick();
+    httpTesting.expectNone('ui-api/nfs-ganesha/lsdir/?root_dir=foo_dir');
+  }));
 });

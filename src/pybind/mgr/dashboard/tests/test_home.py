@@ -9,7 +9,7 @@ except ImportError:
 
 from .. import mgr
 from ..controllers.home import HomeController, LanguageMixin
-from . import ControllerTestCase, FakeFsMixin  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase, FakeFsMixin
 
 logger = logging.getLogger()
 
