@@ -371,12 +371,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             svc = 'osd'
             spec[svc] = orchestrator.ServiceDescription(
                 spec=DriveGroupSpec(
+                    unmanaged=True,
                     service_type='osd',
-                    placement=PlacementSpec(count=len(all_osds), hosts=[osd.metadata.labels['topology-location-host'] for osd in all_osds]),
                 ),
                 size=len(all_osds),
                 last_refresh=now,
-                running= sum(osd.status.phase == 'Running' for osd in all_osds)
+                running=sum(osd.status.phase == 'Running' for osd in all_osds)
             )
 
             # drivegroups
