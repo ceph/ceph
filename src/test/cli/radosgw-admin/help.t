@@ -134,6 +134,7 @@
     mdlog status               read metadata log status
     bilog list                 list bucket index log
     bilog trim                 trim bucket index log (use start-marker, end-marker)
+    mdlog autotrim             auto trim metadata log
     bilog status               read bucket index log status
     datalog list               list data log
     datalog trim               trim data log
