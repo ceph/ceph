@@ -10,6 +10,8 @@
 #include <functional>
 #include <errno.h>
 
+using namespace std;
+
 const librados::NObjectIterator librados::NObjectIterator::__EndObjectIterator(NULL);
 
 librados::NObjectIterator::NObjectIterator(ObjListCtx *ctx_)

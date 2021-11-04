@@ -29,7 +29,7 @@ class LRemDBOps {
   };
 
   std::map<int, queued_statement> deferred_statements;
-  std::map<string, int> statement_keys;
+  std::map<std::string, int> statement_keys;
 
   int statement_num{0};
 
@@ -116,7 +116,7 @@ namespace LRemDBStore {
 
     void set_instance(LRemDBTransactionState *_trans);
 
-    const string& get_table_name() const {
+    const std::string& get_table_name() const {
       return table_name;
     }
   };
@@ -204,8 +204,8 @@ namespace LRemDBStore {
     int get_val(const std::string& key,
                 bufferlist *bl);
     int rm_keys(const std::set<std::string>& keys);
-    int rm_range(const string& key_begin,
-                 const string& key_end);
+    int rm_range(const std::string& key_begin,
+                 const std::string& key_end);
     int clear();
     int set(const std::map<std::string, bufferlist>& m);
 
@@ -249,9 +249,9 @@ namespace LRemDBStore {
 
     int create(const std::string& _name, const std::string& _val);
     int read();
-    int list(std::optional<string> nspace,
-             const string& marker_oid,
-             std::optional<string> filter,
+    int list(std::optional<std::string> nspace,
+             const std::string& marker_oid,
+             std::optional<std::string> filter,
              int max,
              std::list<LRemCluster::ObjectLocator> *result,
              bool *more);
@@ -283,13 +283,13 @@ class DBOpsCache;
 struct LRemDBTransactionState : public LRemTransactionState {
   CephContext *cct;
 
-  string db_name_prefix;
+  std::string db_name_prefix;
 
   int shard_id{0};
 
   struct {
     LRemDBOpsRef dbroot;
-    map<int, LRemDBOpsRef> dbo;
+    std::map<int, LRemDBOpsRef> dbo;
   } ops;
 
   struct op_info {

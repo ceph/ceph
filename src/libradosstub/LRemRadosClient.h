@@ -161,7 +161,7 @@ public:
   virtual librados::ObjectCursor get_cursor() const = 0;
   virtual uint32_t get_pg_hash_position() const = 0;
 
-  virtual void set_nspace(const string& nspace) = 0;
+  virtual void set_nspace(const std::string& nspace) = 0;
   virtual void set_filter(const bufferlist& bl) = 0;
 
   virtual int list_objs(int max, std::list<librados::LRemRadosClient::Object> *result, bool *more) = 0;
@@ -190,7 +190,7 @@ struct ObjListCtx {
     return op->get_cursor();
   }
 
-  void set_nspace(const string& nspace) {
+  void set_nspace(const std::string& nspace) {
     op->set_nspace(nspace);
   }
 

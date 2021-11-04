@@ -151,8 +151,8 @@ public:
   virtual int omap_rm_keys(LRemTransactionStateRef& trans,
                            const std::set<std::string>& keys) = 0;
   virtual int omap_rm_range(LRemTransactionStateRef& trans,
-                            const string& key_begin,
-                            const string& key_end) = 0;
+                            const std::string& key_begin,
+                            const std::string& key_end) = 0;
   virtual int omap_clear(LRemTransactionStateRef& trans) = 0;
   virtual int omap_set(LRemTransactionStateRef& trans,
                        const std::map<std::string, bufferlist> &map) = 0;

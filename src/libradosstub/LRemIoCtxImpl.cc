@@ -16,6 +16,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
 
+using namespace std;
+
 namespace librados {
 
 LRemIoCtxImpl::LRemIoCtxImpl() : m_client(NULL) {

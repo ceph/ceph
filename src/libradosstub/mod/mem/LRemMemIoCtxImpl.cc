@@ -15,6 +15,8 @@
 #define dout_prefix *_dout << "LRemMemIoCtxImpl: " << this << " " << __func__ \
                            << ": " << oid << " "
 
+using namespace std;
+
 static void to_vector(const interval_set<uint64_t> &set,
                       std::vector<std::pair<uint64_t, uint64_t> > *vec) {
   vec->clear();

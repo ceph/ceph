@@ -127,7 +127,7 @@ private:
   ceph::condition_variable m_transaction_cond;
   std::set<ObjectLocator> m_transactions;
 
-  LRemDBCluster::PoolRef make_pool(const string& name, int id);
+  LRemDBCluster::PoolRef make_pool(const std::string& name, int id);
   PoolRef get_cached_pool(const ceph::mutex& lock,
                           int64_t pool_id);
 

@@ -53,8 +53,8 @@ public:
   int omap_rm_keys(LRemTransactionStateRef& trans,
                    const std::set<std::string>& keys) override;
   int omap_rm_range(LRemTransactionStateRef& trans,
-                    const string& key_begin,
-                    const string& key_end);
+                    const std::string& key_begin,
+                    const std::string& key_end);
   int omap_clear(LRemTransactionStateRef& trans) override;
   int omap_set(LRemTransactionStateRef& trans, const std::map<std::string,
                bufferlist> &map) override;

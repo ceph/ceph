@@ -9,6 +9,8 @@
 #define dout_prefix *_dout << "LRemDBCluster: " << this << " " << __func__ \
                            << ": "
 
+using namespace std;
+
 namespace librados {
 
 LRemDBCluster::File::File() {

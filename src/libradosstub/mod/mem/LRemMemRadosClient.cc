@@ -7,6 +7,8 @@
 #include <errno.h>
 #include <sstream>
 
+using namespace std;
+
 namespace librados {
 
 LRemMemRadosClient::LRemMemRadosClient(CephContext *cct,

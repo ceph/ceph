@@ -34,6 +34,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librados:"
 
+using namespace std;
 
 namespace librados_stub {
 

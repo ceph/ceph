@@ -13,7 +13,7 @@ struct LRemTransactionState {
   int flags = 0;
   bool write = false;
 
-  LRemTransactionState() : locator(string(), string()) {}
+  LRemTransactionState() : locator(std::string(), std::string()) {}
   LRemTransactionState(const LRemCluster::ObjectLocator& loc) : locator(loc) {}
   virtual ~LRemTransactionState() {}
 
