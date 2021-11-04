@@ -3920,6 +3920,11 @@ options:
   level: advanced
   default: 4_K
   with_legacy: true
+- name: bdev_read_preallocated_huge_buffer_num
+  type: size
+  level: advanced
+  default: 128
+  with_legacy: true
 - name: bdev_debug_aio
   type: bool
   level: dev
