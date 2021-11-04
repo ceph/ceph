@@ -498,15 +498,20 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     def remove_service(self, service_name: str) -> str:
         if service_name == 'rbd-mirror':
             return self.rook_cluster.rm_service('cephrbdmirrors', 'default-rbd-mirror')
-        service_type, service_name = service_name.split('.', 1)
+        service_type, service_id = service_name.split('.', 1)
         if service_type == 'mds':
-            return self.rook_cluster.rm_service('cephfilesystems', service_name)
+            return self.rook_cluster.rm_service('cephfilesystems', service_id)
         elif service_type == 'rgw':
-            return self.rook_cluster.rm_service('cephobjectstores', service_name)
+            return self.rook_cluster.rm_service('cephobjectstores', service_id)
         elif service_type == 'nfs':
-            return self.rook_cluster.rm_service('cephnfses', service_name)
+            return self.rook_cluster.rm_service('cephnfses', service_id)
         elif service_type == 'rbd-mirror':
-            return self.rook_cluster.rm_service('cephrbdmirrors', service_name)
+            return self.rook_cluster.rm_service('cephrbdmirrors', service_id)
+        elif service_type == 'osd':
+            if service_id in self._drive_group_map:
+                del self._drive_group_map[service_id]
+                self._save_drive_groups()
+            return f'Removed {service_name}'
         else:
             raise orchestrator.OrchestratorError(f'Service type {service_type} not supported')
 
