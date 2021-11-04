@@ -9,7 +9,7 @@ import yaml
 from prettytable import PrettyTable
 
 from ceph.deployment.inventory import Device
-from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
+from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, OSDMethod
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.utils import datetime_now
@@ -794,8 +794,10 @@ Examples:
         return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
     @_cli_write_command('orch daemon add osd')
-    def _daemon_add_osd(self, svc_arg: Optional[str] = None) -> HandleCommandResult:
-        """Create an OSD service. Either --svc_arg=host:drives"""
+    def _daemon_add_osd(self,
+                        svc_arg: Optional[str] = None,
+                        method: Optional[OSDMethod] = None) -> HandleCommandResult:
+        """Create OSD daemon(s) on specified host and device(s) (e.g., ceph orch daemon add osd myhost:/dev/sdb)"""
         # Create one or more OSDs"""
 
         usage = """
@@ -808,10 +810,13 @@ Usage:
             host_name, block_device = svc_arg.split(":")
             block_devices = block_device.split(',')
             devs = DeviceSelection(paths=block_devices)
-            drive_group = DriveGroupSpec(placement=PlacementSpec(
-                host_pattern=host_name), data_devices=devs)
-        except (TypeError, KeyError, ValueError):
-            msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
+            drive_group = DriveGroupSpec(
+                placement=PlacementSpec(host_pattern=host_name),
+                data_devices=devs,
+                method=method,
+            )
+        except (TypeError, KeyError, ValueError) as e:
+            msg = f"Invalid host:device spec: '{svc_arg}': {e}" + usage
             return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
         completion = self.create_osds(drive_group)
