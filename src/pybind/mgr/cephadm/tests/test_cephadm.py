@@ -1,4 +1,5 @@
 import json
+import logging
 
 from contextlib import contextmanager
 
@@ -652,8 +653,10 @@ class TestCephadm(object):
                 ['--config-json', '-', '--', 'lvm', 'batch',
                     '--no-auto', '/dev/sdb', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True, stdin='{"config": "", "keyring": ""}')
-            _run_cephadm.assert_called_with(
+            _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'], image='', no_fsid=False)
+            _run_cephadm.assert_any_call(
+                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'], image='', no_fsid=False)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_apply_osd_save_non_collocated(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -692,8 +695,10 @@ class TestCephadm(object):
                     '--wal-devices', '/dev/sdd', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=noncollocated'],
                 error_ok=True, stdin='{"config": "", "keyring": ""}')
-            _run_cephadm.assert_called_with(
+            _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'], image='', no_fsid=False)
+            _run_cephadm.assert_any_call(
+                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'], image='', no_fsid=False)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -1470,17 +1475,31 @@ Traceback (most recent call last):
                 ]
             })
 
-            ceph_volume_lvm_list = {
-                '1': [{
-                    'tags': {
-                        'ceph.cluster_fsid': cephadm_module._cluster_fsid,
-                        'ceph.osd_fsid': 'uuid'
-                    },
-                    'type': 'data'
-                }]
-            }
-            _run_cephadm.return_value = (json.dumps(ceph_volume_lvm_list), '', 0)
-            _run_cephadm.reset_mock()
+            def _ceph_volume_list(s, host, entity, cmd, **kwargs):
+                logging.info(f'ceph-volume cmd: {cmd}')
+                if 'raw' in cmd:
+                    return json.dumps({
+                        "21a4209b-f51b-4225-81dc-d2dca5b8b2f5": {
+                            "ceph_fsid": "64c84f19-fe1d-452a-a731-ab19dc144aa8",
+                            "device": "/dev/loop0",
+                            "osd_id": 21,
+                            "osd_uuid": "21a4209b-f51b-4225-81dc-d2dca5b8b2f5",
+                            "type": "bluestore"
+                        },
+                    }), '', 0
+                if 'lvm' in cmd:
+                    return json.dumps({
+                        '1': [{
+                            'tags': {
+                                'ceph.cluster_fsid': cephadm_module._cluster_fsid,
+                                'ceph.osd_fsid': 'uuid'
+                            },
+                            'type': 'data'
+                        }]
+                    }), '', 0
+                return '{}', '', 0
+            _run_cephadm.reset_mock(return_value=True)
+            _run_cephadm.side_effect = _ceph_volume_list
             assert cephadm_module._osd_activate(
                 ['test']).stdout == "Created osd(s) 1 on host 'test'"
             assert _run_cephadm.mock_calls == [
@@ -1490,6 +1509,8 @@ Traceback (most recent call last):
                           ['--name', 'osd.1', '--meta-json', mock.ANY,
                               '--config-json', '-', '--osd-fsid', 'uuid'],
                           stdin=mock.ANY, image=''),
+                mock.call('test', 'osd', 'ceph-volume',
+                          ['--', 'raw', 'list', '--format', 'json'], no_fsid=False, image=''),
             ]
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1546,23 +1567,37 @@ Traceback (most recent call last):
                 ]
             })
 
-            ceph_volume_lvm_list = {
-                '1': [{
-                    'tags': {
-                        'ceph.cluster_fsid': cephadm_module._cluster_fsid,
-                        'ceph.osd_fsid': 'uuid'
-                    },
-                    'type': 'data'
-                }, {
-                    'tags': {
-                        'ceph.cluster_fsid': cephadm_module._cluster_fsid,
-                        'ceph.osd_fsid': 'uuid'
-                    },
-                    'type': 'db'
-                }]
-            }
-            _run_cephadm.return_value = (json.dumps(ceph_volume_lvm_list), '', 0)
-            _run_cephadm.reset_mock()
+            def _ceph_volume_list(s, host, entity, cmd, **kwargs):
+                logging.info(f'ceph-volume cmd: {cmd}')
+                if 'raw' in cmd:
+                    return json.dumps({
+                        "21a4209b-f51b-4225-81dc-d2dca5b8b2f5": {
+                            "ceph_fsid": "64c84f19-fe1d-452a-a731-ab19dc144aa8",
+                            "device": "/dev/loop0",
+                            "osd_id": 21,
+                            "osd_uuid": "21a4209b-f51b-4225-81dc-d2dca5b8b2f5",
+                            "type": "bluestore"
+                        },
+                    }), '', 0
+                if 'lvm' in cmd:
+                    return json.dumps({
+                        '1': [{
+                            'tags': {
+                                'ceph.cluster_fsid': cephadm_module._cluster_fsid,
+                                'ceph.osd_fsid': 'uuid'
+                            },
+                            'type': 'data'
+                        }, {
+                            'tags': {
+                                'ceph.cluster_fsid': cephadm_module._cluster_fsid,
+                                'ceph.osd_fsid': 'uuid'
+                            },
+                            'type': 'db'
+                        }]
+                    }), '', 0
+                return '{}', '', 0
+            _run_cephadm.reset_mock(return_value=True)
+            _run_cephadm.side_effect = _ceph_volume_list
             assert cephadm_module._osd_activate(
                 ['test']).stdout == "Created osd(s) 1 on host 'test'"
             assert _run_cephadm.mock_calls == [
@@ -1572,4 +1607,6 @@ Traceback (most recent call last):
                           ['--name', 'osd.1', '--meta-json', mock.ANY,
                               '--config-json', '-', '--osd-fsid', 'uuid'],
                           stdin=mock.ANY, image=''),
+                mock.call('test', 'osd', 'ceph-volume',
+                          ['--', 'raw', 'list', '--format', 'json'], no_fsid=False, image=''),
             ]

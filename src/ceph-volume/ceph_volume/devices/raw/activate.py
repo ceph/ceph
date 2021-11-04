@@ -64,21 +64,32 @@ class Activate(object):
         self.args = None
 
     @decorators.needs_root
-    def activate(self, devices, tmpfs, systemd, block_wal, block_db):
+    def activate(self, device, start_osd_id, start_osd_uuid,
+                 tmpfs, systemd, block_wal, block_db):
         """
         :param args: The parsed arguments coming from the CLI
         """
-        assert devices
-        found = direct_report(devices)
+        assert device or start_osd_id or start_osd_uuid
+        found = direct_report(device)
 
-        for osd_id, meta in found.items():
+        activated_any = False
+        for osd_uuid, meta in found.items():
+            osd_id = meta['osd_id']
+            if start_osd_id is not None and str(osd_id) != str(start_osd_id):
+                continue
+            if start_osd_uuid is not None and osd_uuid != start_osd_uuid:
+                continue
             logger.info('Activating osd.%s uuid %s cluster %s' % (
-                        osd_id, meta['osd_uuid'], meta['ceph_fsid']))
+                        osd_id, osd_uuid, meta['ceph_fsid']))
             activate_bluestore(meta,
                                tmpfs=tmpfs,
                                systemd=systemd,
                                block_wal=block_wal,
                                block_db=block_db)
+            activated_any = True
+
+        if not activated_any:
+            raise RuntimeError('did not find any matching OSD to activate')
 
     def main(self):
         sub_command_help = dedent("""
@@ -97,9 +108,16 @@ class Activate(object):
         )
         parser.add_argument(
             '--device',
-            nargs='+',
             help='The device for the OSD to start'
-            )
+        )
+        parser.add_argument(
+            '--osd-id',
+            help='OSD ID to activate'
+        )
+        parser.add_argument(
+            '--osd-uuid',
+            help='OSD UUID to active'
+        )
         parser.add_argument(
             '--no-systemd',
             dest='no_systemd',
@@ -130,7 +148,9 @@ class Activate(object):
         if not args.no_systemd:
             terminal.error('systemd support not yet implemented')
             raise SystemExit(1)
-        self.activate(args.device,
+        self.activate(device=args.device,
+                      start_osd_id=args.osd_id,
+                      start_osd_uuid=args.osd_uuid,
                       tmpfs=not args.no_tmpfs,
                       systemd=not self.args.no_systemd,
                       block_wal=self.args.block_wal,
