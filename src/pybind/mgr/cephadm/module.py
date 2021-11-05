@@ -2030,15 +2030,6 @@ Then run the following:
 
         for dev in host_devices:
             if dev.path == path:
-                # match, so look a little deeper
-                if dev.lvs:
-                    for lv in cast(List[Dict[str, str]], dev.lvs):
-                        if lv.get('osd_id', ''):
-                            lv_fsid = lv.get('cluster_fsid')
-                            if lv_fsid != self._cluster_fsid:
-                                raise OrchestratorError(
-                                    f"device {path} has lv's from a different Ceph cluster ({lv_fsid})")
-                            osd_id_list.append(lv.get('osd_id', ''))
                 path_found = True
                 break
         if not path_found:
