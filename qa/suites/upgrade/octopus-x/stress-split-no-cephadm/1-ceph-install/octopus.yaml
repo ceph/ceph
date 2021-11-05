@@ -6,6 +6,7 @@ tasks:
       - ceph-mgr-cephadm
       - cephadm
       - libcephfs-dev
+      - ceph-volume
     branch: octopus
 - print: "**** done install octopus"
 - ceph:
