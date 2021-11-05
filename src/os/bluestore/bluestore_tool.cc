@@ -276,7 +276,8 @@ int main(int argc, char **argv)
         "free-score, "
         "bluefs-stats, "
         "reshard, "
-        "show-sharding")
+        "show-sharding, "
+        "repair_omap_upgrade")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -309,7 +310,8 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  if (action == "fsck" || action == "repair" || action == "quick-fix") {
+  if (action == "fsck" || action == "repair" || action == "quick-fix" ||
+      action == "repair_omap_upgrade") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -446,7 +448,8 @@ int main(int argc, char **argv)
 
   if (action == "fsck" ||
       action == "repair" ||
-      action == "quick-fix") {
+      action == "quick-fix" ||
+      action == "repair_omap_upgrade") {
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
     int r;
@@ -454,6 +457,8 @@ int main(int argc, char **argv)
       r = bluestore.fsck(fsck_deep);
     } else if (action == "repair") {
       r = bluestore.repair(fsck_deep);
+    } else if (action == "repair_omap_upgrade") {
+      r = bluestore.repair_omap_upgrade();
     } else {
       r = bluestore.quick_fix();
     }

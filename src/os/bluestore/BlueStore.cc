@@ -8261,6 +8261,93 @@ out_db:
   return r;
 }
 
+int BlueStore::repair_omap_upgrade()
+{
+  dout(1) << __func__  << dendl;
+
+  int r = _open_db_and_around(false);
+  if (r < 0)
+    return r;
+
+  r = _upgrade_super();
+  if (r < 0) {
+    goto out_db;
+  }
+
+  r = _open_collections();
+  if (r < 0)
+    goto out_db;
+
+  mempool_thread.init();
+
+  {
+    _kv_start();
+    r = _deferred_replay();
+    _kv_stop();
+  }
+  if (r < 0)
+    goto out_scan;
+
+  {
+    auto it = db->get_iterator(PREFIX_PERPG_OMAP);
+    if (it) {
+      size_t cnt = 0;
+      KeyValueDB::Transaction txn = db->get_transaction();
+      it->lower_bound(std::string());
+      while(it->valid()) {
+        auto key = it->key();
+        auto val = it->value();
+        it->next();
+        auto p1 = key.find_first_of('.');
+        if (p1 == string::npos || p1 <= 8) {
+          continue;
+        }
+        auto p2 = key.find_first_of('-', p1 + 1);
+        if (p2 == string::npos) {
+          p2 = key.find_first_of('.', p1 + 1);
+        }
+        if (p2 == string::npos || p1 + 8 > p2) {
+          continue;
+        }
+        string s1 = key.substr(p1 - 8, 8);
+        string s2 = key.substr(p2 - 8, 8);
+        if (s1 != s2) {
+          continue;
+        }
+        txn->rmkey(PREFIX_PERPG_OMAP, key);
+        if (key[p2] == '.') {
+          auto new_key = key;
+          new_key.erase(p1, p2 - p1);
+          dout(0) << __func__ << " " << pretty_binary_string(key)
+                  << " -> " << pretty_binary_string(new_key) << dendl;
+          txn->set(PREFIX_PERPG_OMAP, new_key, val);
+        } else {
+          dout(0) << __func__ << " " << pretty_binary_string(key)
+                  << " rm " << dendl;
+        }
+        cnt++;
+        if (cnt >= 1024) {
+          key = it->key();
+          db->submit_transaction_sync(txn);
+          it->lower_bound(key);
+          txn = db->get_transaction();
+          cnt = 0;
+        }
+      }
+      if (cnt > 0) {
+        db->submit_transaction_sync(txn);
+      }
+    }
+  }
+out_scan:
+  mempool_thread.shutdown();
+  _shutdown_cache();
+out_db:
+  _close_db_and_around(false);
+
+  return r;
+}
+
 int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 {
   dout(1) << __func__
