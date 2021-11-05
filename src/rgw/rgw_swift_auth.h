@@ -24,7 +24,7 @@ class TempURLApplier : public rgw::auth::LocalApplier {
 public:
   TempURLApplier(CephContext* const cct,
                  const RGWUserInfo& user_info)
-    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, boost::none) {
+    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, std::nullopt) {
   };
 
   void modify_request_state(const DoutPrefixProvider* dpp, req_state * s) const override; /* in/out */
@@ -153,8 +153,8 @@ class SwiftAnonymousApplier : public rgw::auth::LocalApplier {
   public:
     SwiftAnonymousApplier(CephContext* const cct,
                           const RGWUserInfo& user_info)
-      : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, boost::none) {
-      };
+      : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, std::nullopt) {
+    }
     bool is_admin_of(const rgw_user& uid) const {return false;}
     bool is_owner_of(const rgw_user& uid) const {return uid.id.compare(RGW_USER_ANON_ID) == 0;}
 };
@@ -225,7 +225,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
-                            const boost::optional<uint32_t>& perm_mask) const override {
+                            const std::optional<uint32_t>& perm_mask) const override {
     auto apl = \
       rgw::auth::add_3rdparty(store, rgw_user(s->account_name),
         rgw::auth::add_sysreq(cct, store, s,
