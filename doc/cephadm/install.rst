@@ -316,7 +316,16 @@ available and unused device:
 
     ceph orch apply osd --all-available-devices
 
-Or See :ref:`cephadm-deploy-osds` for more detailed instructions.
+See :ref:`cephadm-deploy-osds` for more detailed instructions.
+
+In case the cluster runs on hardware that is used exclusively for
+Ceph, it is recommended to enable ``osd_memory_target_autotune``.
+See :ref:`osd_autotune`.
+
+  .. prompt:: bash #
+
+    ceph config set osd osd_memory_target_autotune true
+
 
 Using Ceph
 ==========
