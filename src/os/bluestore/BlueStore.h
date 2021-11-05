@@ -2665,6 +2665,7 @@ public:
   int quick_fix() override {
     return _fsck(FSCK_SHALLOW, true);
   }
+  int repair_omap_upgrade();
 
   void set_cache_shards(unsigned num) override;
   void dump_cache_stats(ceph::Formatter *f) override {
