@@ -6,6 +6,7 @@
 #define CEPH_RGW_AUTH_H
 
 #include <functional>
+#include <optional>
 #include <ostream>
 #include <type_traits>
 #include <system_error>
@@ -645,14 +646,10 @@ public:
   LocalApplier(CephContext* const cct,
                const RGWUserInfo& user_info,
                std::string subuser,
-               const boost::optional<uint32_t>& perm_mask)
+               const std::optional<uint32_t>& perm_mask)
     : user_info(user_info),
-      subuser(std::move(subuser)) {
-    if (perm_mask) {
-      this->perm_mask = perm_mask.get();
-    } else {
-      this->perm_mask = RGW_PERM_INVALID;
-    }
+      subuser(std::move(subuser)),
+      perm_mask(perm_mask.value_or(RGW_PERM_INVALID)) {
   }
 
 
@@ -679,7 +676,7 @@ public:
                                       const req_state* s,
                                       const RGWUserInfo& user_info,
                                       const std::string& subuser,
-                                      const boost::optional<uint32_t>& perm_mask) const = 0;
+                                      const std::optional<uint32_t>& perm_mask) const = 0;
     };
 };
 
