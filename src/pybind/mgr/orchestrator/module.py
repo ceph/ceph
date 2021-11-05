@@ -850,14 +850,17 @@ Usage:
             out = to_format(report, format, many=True, cls=None)
         else:
             table = PrettyTable(
-                ['OSD_ID', 'HOST', 'STATE', 'PG_COUNT', 'REPLACE', 'FORCE', 'DRAIN_STARTED_AT'],
+                ['OSD', 'HOST', 'STATE', 'PGS', 'REPLACE', 'FORCE', 'ZAP',
+                 'DRAIN STARTED AT'],
                 border=False)
             table.align = 'l'
+            table._align['PGS'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for osd in sorted(report, key=lambda o: o.osd_id):
                 table.add_row([osd.osd_id, osd.hostname, osd.drain_status_human(),
-                               osd.get_pg_count(), osd.replace, osd.force, osd.drain_started_at])
+                               osd.get_pg_count(), osd.replace, osd.force, osd.zap,
+                               osd.drain_started_at or ''])
             out = table.get_string()
 
         return HandleCommandResult(stdout=out)
