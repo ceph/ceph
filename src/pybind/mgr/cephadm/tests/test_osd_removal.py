@@ -84,11 +84,13 @@ class TestOSDRemoval:
 
     def test_ok_to_stop(self, rm_util):
         rm_util.ok_to_stop([MockOSD(1)])
-        rm_util._run_mon_cmd.assert_called_with({'prefix': 'osd ok-to-stop', 'ids': ['1']})
+        rm_util._run_mon_cmd.assert_called_with({'prefix': 'osd ok-to-stop', 'ids': ['1']},
+                                                error_ok=True)
 
     def test_safe_to_destroy(self, rm_util):
         rm_util.safe_to_destroy([1])
-        rm_util._run_mon_cmd.assert_called_with({'prefix': 'osd safe-to-destroy', 'ids': ['1']})
+        rm_util._run_mon_cmd.assert_called_with({'prefix': 'osd safe-to-destroy',
+                                                 'ids': ['1']}, error_ok=True)
 
     def test_destroy_osd(self, rm_util):
         rm_util.destroy_osd(1)
