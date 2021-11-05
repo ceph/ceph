@@ -3024,6 +3024,10 @@ public:
   // resets per_pool_omap | pgmeta_omap for onode
   void inject_legacy_omap(coll_t cid, ghobject_t oid);
 
+  void inject_bluefs_file(std::string_view dir,
+			  std::string_view name,
+			  size_t new_size);
+
   void compact() override {
     ceph_assert(db);
     db->compact();
