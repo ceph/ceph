@@ -432,7 +432,7 @@ class RemoveUtil(object):
             'prefix': "osd ok-to-stop",
             'ids': [str(osd.osd_id) for osd in osds]
         }
-        return self._run_mon_cmd(cmd_args)
+        return self._run_mon_cmd(cmd_args, error_ok=True)
 
     def set_osd_flag(self, osds: List["OSD"], flag: str) -> bool:
         base_cmd = f"osd {flag}"
@@ -492,7 +492,7 @@ class RemoveUtil(object):
         """ Queries the safe-to-destroy flag for OSDs """
         cmd_args = {'prefix': 'osd safe-to-destroy',
                     'ids': [str(x) for x in osd_ids]}
-        return self._run_mon_cmd(cmd_args)
+        return self._run_mon_cmd(cmd_args, error_ok=True)
 
     def destroy_osd(self, osd_id: int) -> bool:
         """ Destroys an OSD (forcefully) """
@@ -510,14 +510,15 @@ class RemoveUtil(object):
         }
         return self._run_mon_cmd(cmd_args)
 
-    def _run_mon_cmd(self, cmd_args: dict) -> bool:
+    def _run_mon_cmd(self, cmd_args: dict, error_ok: bool = False) -> bool:
         """
         Generic command to run mon_command and evaluate/log the results
         """
         ret, out, err = self.mgr.mon_command(cmd_args)
         if ret != 0:
             self.mgr.log.debug(f"ran {cmd_args} with mon_command")
-            self.mgr.log.error(f"cmd: {cmd_args.get('prefix')} failed with: {err}. (errno:{ret})")
+            if not error_ok:
+                self.mgr.log.error(f"cmd: {cmd_args.get('prefix')} failed with: {err}. (errno:{ret})")
             return False
         self.mgr.log.debug(f"cmd: {cmd_args.get('prefix')} returns: {out}")
         return True
