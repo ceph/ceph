@@ -120,21 +120,22 @@ int LRemDBObjListOp::list_objs(int max, std::list<librados::LRemRadosClient::Obj
   if (filter.length() > 0) {
     opt_filter = filter.to_str();
   }
-  std::list<LRemCluster::ObjectLocator> objs;
+  std::list<LRemDBStore::Pool::list_entry> list_result;
   int r = pool_db->list(nspace, cursor.to_str(),
                         filter.to_str(), max,
-                        &objs, more);
+                        &list_result, more);
   if (r < 0) {
     return r;
   }
 
-  for (auto& loc : objs) {
+  for (auto& entry : list_result) {
+    auto& loc = entry.loc;
     LRemDBRadosClient::Object obj;
     obj.oid = loc.name;
     obj.nspace = loc.nspace;
     result->push_back(obj);
 
-    cursor.from_str(obj.oid);
+    cursor.from_str(entry.marker);
   }
 
   return 0;

@@ -249,11 +249,16 @@ namespace LRemDBStore {
 
     int create(const std::string& _name, const std::string& _val);
     int read();
+
+    struct list_entry {
+      std::string marker;
+      LRemCluster::ObjectLocator loc;
+    };
     int list(std::optional<std::string> nspace,
              const std::string& marker_oid,
              std::optional<std::string> filter,
              int max,
-             std::list<LRemCluster::ObjectLocator> *result,
+             std::list<list_entry> *result,
              bool *more);
 
     ObjRef get_obj_handler();

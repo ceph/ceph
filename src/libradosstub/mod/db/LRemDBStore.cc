@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 
+#include <boost/tokenizer.hpp>
+
 #include "SQLiteCpp/SQLiteCpp.h"
 #include "SQLiteCpp/Exception.h"
 #include "sqlite3.h"
@@ -747,17 +749,79 @@ int LRemDBStore::Pool::read() {
   return -ENOENT;
 }
 
+static inline string escape_str(const std::string& s,
+                                char esc_char,
+                                char special_char)
+{
+  const char *src = s.c_str();
+  char dest_buf[s.size() * 2 + 1];
+  char *destp = dest_buf;
+
+  for (size_t i = 0; i < s.size(); i++) {
+    char c = src[i];
+    if (c == esc_char || c == special_char) {
+      *destp++ = esc_char;
+    }
+    *destp++ = c;
+  }
+  *destp++ = '\0';
+  return string(dest_buf);
+}
+
+static inline string escape(std::vector<std::string> v, char esc = '\\', char sep = ':')
+{
+  string result;
+  bool start = true;
+
+  for (auto& s : v) {
+    if (!start) {
+      result += sep;
+    }
+    start = false;
+    result.append(escape_str(s, esc, sep));
+  }
+
+  return result;
+}
+
+static inline std::vector<string> unescape(string s, char esc = '\\', char sep = ':')
+{
+  vector<string> v;
+  boost::escaped_list_separator<char> els(esc, sep, '\0');
+  boost::tokenizer<boost::escaped_list_separator<char>> tok(s, els);
+  for (auto& s : tok) {
+    v.push_back(s);
+  }
+
+  return v;
+}
+
+
 int LRemDBStore::Pool::list(std::optional<string> nspace,
-             const string& marker_oid,
+             const string& _marker,
              std::optional<string> filter,
              int max,
-             std::list<LRemCluster::ObjectLocator> *result,
+             std::list<LRemDBStore::Pool::list_entry> *result,
              bool *more) {
+  string marker = _marker;
+
   auto obj = get_obj_handler();
 
   const auto& table_name = obj->get_table_name();
 
-  auto& dbo = trans->dbo();
+  string marker_oid;
+  string marker_nspace;
+  int shard_id = 0;
+
+  if (!marker.empty()) {
+    auto v = unescape(marker);
+    if (v.size() != 3) {
+      return -EINVAL;
+    }
+    shard_id = atoi(v[0].c_str());
+    marker_nspace = v[1];
+    marker_oid = v[2];
+  }
 
 #define MAX_LIST_DEFAULT 256
   int limit = (max ? max : MAX_LIST_DEFAULT);
@@ -765,51 +829,83 @@ int LRemDBStore::Pool::list(std::optional<string> nspace,
     limit = MAX_LIST_DEFAULT;
   }
 
-  try {
-    string s = string("SELECT nspace, oid from ") + table_name + " WHERE oid > ?";
+  result->clear();
 
-    string filter_str;
-    if (filter) {
-      s += " AND oid LIKE ?";
-    }
+  for (; shard_id < NUM_DB_SHARDS && limit > 0; ++shard_id) {
+    auto& dbo = trans->dbo(shard_id);
 
-    if (nspace) {
-      s += " AND nspace == ?";
-    }
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%08d", shard_id);
+    string marker_prefix = buf;
 
-    s += " LIMIT " + to_str(limit + 1);
+    try {
+      string s = string("SELECT nspace, oid from ") + table_name + " WHERE";
 
-    auto q = dbo->statement(s);
+      string filter_str;
 
-    int n = 0;
-    q.bind(++n, marker_oid);
-    if (filter) {
-      q.bind(++n, *filter + "%");
-    }
-    if (nspace) {
-      q.bind(++n, *nspace);
-    }
+      bool complex_marker = (!nspace && !marker.empty());
 
-    result->clear();
-
-    int count = 0;
-    while (dbo->exec_step(q)) {
-      if (++count > limit) {
-        *more = true;
-        break;
+      if (complex_marker) {
+        s += " ((nspace == ? AND oid > ?) OR (nspace > ?))";
+      } else {
+        s += " oid > ?";
       }
-      string result_nspace;
-      string result_oid;
+      if (filter) {
+        s += " AND oid LIKE ?";
+      }
 
-      result_nspace = q.getColumn(0).getString();
-      result_oid = q.getColumn(1).getString();
+      if (nspace) {
+        s += " AND nspace == ?";
+      }
 
-      result->push_back({result_nspace, result_oid});
+      s += " LIMIT " + to_str(limit + 1);
+
+      auto q = dbo->statement(s);
+
+      int n = 0;
+      if (complex_marker) {
+        q.bind(++n, marker_nspace);
+        q.bind(++n, marker_oid);
+        q.bind(++n, marker_nspace);
+      } else {
+        q.bind(++n, marker_oid);
+      }
+      if (filter) {
+        q.bind(++n, *filter + "%");
+      }
+      if (nspace) {
+        q.bind(++n, *nspace);
+      }
+
+      int count = 0;
+      while (dbo->exec_step(q)) {
+        if (++count > limit) {
+          *more = true;
+          break;
+        }
+        string result_nspace;
+        string result_oid;
+
+        result_nspace = q.getColumn(0).getString();
+        result_oid = q.getColumn(1).getString();
+
+        string marker = escape({ marker_prefix, result_nspace, result_oid });
+
+        list_entry e = { marker,
+                         {result_nspace, result_oid} };
+
+        result->push_back(e);
+      }
+
+      limit -= count;
+    } catch (SQLite::Exception& e) {
+      dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
+      return -EIO;
     }
 
-  } catch (SQLite::Exception& e) {
-    dout(0) << "ERROR: SQL exception: " << e.what() << " ret=" << e.getExtendedErrorCode() << dendl;
-    return -EIO;
+    marker.clear();
+    marker_nspace.clear();
+    marker_oid.clear();
   }
 
   return result->size();
