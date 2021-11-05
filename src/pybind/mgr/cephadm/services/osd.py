@@ -412,7 +412,7 @@ class RemoveUtil(object):
         while not self.ok_to_stop(osds):
             if len(osds) <= 1:
                 # can't even stop one OSD, aborting
-                self.mgr.log.info(
+                self.mgr.log.debug(
                     "Can't even stop one OSD. Cluster is probably busy. Retrying later..")
                 return []
 
