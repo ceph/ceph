@@ -1900,6 +1900,7 @@ protected:
   int marker;
   RGWAccessControlPolicy policy;
   bool truncated;
+  rgw_placement_rule* placement;
 
 public:
   RGWListMultipart() {
