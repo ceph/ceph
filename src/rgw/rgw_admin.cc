@@ -7666,7 +7666,7 @@ next:
 										 &last_stats_update);
     if (ret < 0) {
       if (ret == -ENOENT) { /* in case of ENOENT */
-        cerr << "User has not been initialized or user does not exist" << std::endl;
+        cerr << "User has not linked any bucket or user does not exist" << std::endl;
       } else {
         cerr << "ERROR: can't read user: " << cpp_strerror(ret) << std::endl;
       }
