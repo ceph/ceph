@@ -263,9 +263,9 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
   o.exec(RGW_CLASS, RGW_BUCKET_UPDATE_STATS, in);
 }
 
-void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
+void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, const string& tag,
                                const cls_rgw_obj_key& key, const string& locator, bool log_op,
-                               uint16_t bilog_flags, rgw_zone_set& zones_trace)
+                               uint16_t bilog_flags, const rgw_zone_set& zones_trace)
 {
   rgw_cls_obj_prepare_op call;
   call.op = op;
@@ -280,13 +280,13 @@ void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& 
   o.exec(RGW_CLASS, RGW_BUCKET_PREPARE_OP, in);
 }
 
-void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
-                                rgw_bucket_entry_ver& ver,
+void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const string& tag,
+                                const rgw_bucket_entry_ver& ver,
                                 const cls_rgw_obj_key& key,
-                                rgw_bucket_dir_entry_meta& dir_meta,
-				list<cls_rgw_obj_key> *remove_objs, bool log_op,
+                                const rgw_bucket_dir_entry_meta& dir_meta,
+				const list<cls_rgw_obj_key> *remove_objs, bool log_op,
                                 uint16_t bilog_flags,
-                                rgw_zone_set *zones_trace)
+                                const rgw_zone_set *zones_trace)
 {
 
   bufferlist in;
@@ -416,7 +416,7 @@ void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const real_time& mtim
 }
 
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
-                   BIIndexType index_type, cls_rgw_obj_key& key,
+                   BIIndexType index_type, const cls_rgw_obj_key& key,
                    rgw_cls_bi_entry *entry)
 {
   bufferlist in, out;
@@ -441,7 +441,7 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
   return 0;
 }
 
-int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, rgw_cls_bi_entry& entry)
+int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_entry& entry)
 {
   bufferlist in, out;
   rgw_cls_bi_put_op call;
@@ -454,7 +454,7 @@ int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, rgw_cls_bi_entry& 
   return 0;
 }
 
-void cls_rgw_bi_put(ObjectWriteOperation& op, const string oid, rgw_cls_bi_entry& entry)
+void cls_rgw_bi_put(ObjectWriteOperation& op, const string oid, const rgw_cls_bi_entry& entry)
 {
   bufferlist in, out;
   rgw_cls_bi_put_op call;
@@ -495,9 +495,9 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
 }
 
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid,
-                            const cls_rgw_obj_key& key, bufferlist& olh_tag,
-                            bool delete_marker, const string& op_tag, rgw_bucket_dir_entry_meta *meta,
-                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, rgw_zone_set& zones_trace)
+                            const cls_rgw_obj_key& key, const bufferlist& olh_tag,
+                            bool delete_marker, const string& op_tag, const rgw_bucket_dir_entry_meta *meta,
+                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace)
 {
   librados::ObjectWriteOperation op;
   cls_rgw_bucket_link_olh(op, key, olh_tag, delete_marker, op_tag, meta,
@@ -509,14 +509,14 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid,
 
 
 void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key,
-                            bufferlist& olh_tag, bool delete_marker,
-                            const string& op_tag, rgw_bucket_dir_entry_meta *meta,
-                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, rgw_zone_set& zones_trace)
+                            const bufferlist& olh_tag, bool delete_marker,
+                            const string& op_tag, const rgw_bucket_dir_entry_meta *meta,
+                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace)
 {
   bufferlist in, out;
   rgw_cls_link_olh_op call;
   call.key = key;
-  call.olh_tag = string(olh_tag.c_str(), olh_tag.length());
+  call.olh_tag = olh_tag.to_str();
   call.op_tag = op_tag;
   call.delete_marker = delete_marker;
   if (meta) {
@@ -533,7 +533,7 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
 
 int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
                                    const cls_rgw_obj_key& key, const string& op_tag,
-                                   const string& olh_tag, uint64_t olh_epoch, bool log_op, rgw_zone_set& zones_trace)
+                                   const string& olh_tag, uint64_t olh_epoch, bool log_op, const rgw_zone_set& zones_trace)
 {
   librados::ObjectWriteOperation op;
   cls_rgw_bucket_unlink_instance(op, key, op_tag, olh_tag, olh_epoch, log_op, zones_trace);
@@ -546,7 +546,7 @@ int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
 
 void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
                                    const cls_rgw_obj_key& key, const string& op_tag,
-                                   const string& olh_tag, uint64_t olh_epoch, bool log_op, rgw_zone_set& zones_trace)
+                                   const string& olh_tag, uint64_t olh_epoch, bool log_op, const rgw_zone_set& zones_trace)
 {
   bufferlist in, out;
   rgw_cls_unlink_instance_op call;
