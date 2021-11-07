@@ -462,8 +462,7 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
   formatter->open_object_section("usage");
   for (iter = stats.begin(); iter != stats.end(); ++iter) {
     RGWStorageStats& s = iter->second;
-    const char *cat_name = rgw_obj_category_name(iter->first);
-    formatter->open_object_section(cat_name);
+    formatter->open_object_section(to_string(iter->first));
     s.dump(formatter);
     formatter->close_section();
   }
