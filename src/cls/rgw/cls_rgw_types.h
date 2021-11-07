@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <string>
 #include <boost/container/flat_map.hpp>
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
@@ -95,6 +96,13 @@ enum RGWModifyOp {
   CLS_RGW_OP_SYNCSTOP        = 7,
   CLS_RGW_OP_RESYNC          = 8,
 };
+
+std::string_view to_string(RGWModifyOp op);
+RGWModifyOp parse_modify_op(std::string_view name);
+
+inline std::ostream& operator<<(std::ostream& out, RGWModifyOp op) {
+  return out << to_string(op);
+}
 
 enum RGWBILogFlags {
   RGW_BILOG_FLAG_VERSIONED_OP = 0x1,
