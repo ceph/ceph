@@ -376,11 +376,6 @@ struct cls_rgw_obj_key {
     return !(k < *this);
   }
 
-  std::ostream& operator<<(std::ostream& out) const {
-    out << to_string();
-    return out;
-  }
-
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
     encode(name, bl);
@@ -407,6 +402,13 @@ struct cls_rgw_obj_key {
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj_key)
 
+inline std::ostream& operator<<(std::ostream& out, const cls_rgw_obj_key& o) {
+  out << o.name;
+  if (!o.instance.empty()) {
+    out << '[' << o.instance << ']';
+  }
+  return out;
+}
 
 struct rgw_bucket_dir_entry {
   /* a versioned object instance */
