@@ -377,6 +377,11 @@ struct cls_rgw_obj_key {
            (instance.compare(k.instance) == 0);
   }
 
+  bool operator!=(const cls_rgw_obj_key& k) const {
+    return (name.compare(k.name) != 0) ||
+           (instance.compare(k.instance) != 0);
+  }
+
   bool operator<(const cls_rgw_obj_key& k) const {
     int r = name.compare(k.name);
     if (r == 0) {
@@ -752,6 +757,18 @@ struct rgw_bucket_category_stats {
   static void generate_test_instances(std::list<rgw_bucket_category_stats*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_category_stats)
+
+inline bool operator==(const rgw_bucket_category_stats& lhs,
+                       const rgw_bucket_category_stats& rhs) {
+  return lhs.total_size == rhs.total_size
+      && lhs.total_size_rounded == rhs.total_size_rounded
+      && lhs.num_entries == rhs.num_entries
+      && lhs.actual_size == rhs.actual_size;
+}
+inline bool operator!=(const rgw_bucket_category_stats& lhs,
+                       const rgw_bucket_category_stats& rhs) {
+  return !(lhs == rhs);
+}
 
 enum class cls_rgw_reshard_status : uint8_t {
   NOT_RESHARDING  = 0,
