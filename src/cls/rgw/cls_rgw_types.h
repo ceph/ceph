@@ -184,6 +184,11 @@ enum class RGWObjCategory : uint8_t {
   CloudTiered = 4, // b-i entries which are tiered to external cloud
 };
 
+std::string_view to_string(RGWObjCategory c);
+
+inline std::ostream& operator<<(std::ostream& out, RGWObjCategory c) {
+  return out << to_string(c);
+}
 
 struct rgw_bucket_dir_entry_meta {
   RGWObjCategory category;

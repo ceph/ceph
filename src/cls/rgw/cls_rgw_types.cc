@@ -116,6 +116,18 @@ RGWModifyOp parse_modify_op(std::string_view name)
   }
 }
 
+std::string_view to_string(RGWObjCategory c)
+{
+  switch (c) {
+    case RGWObjCategory::None: return "rgw.none";
+    case RGWObjCategory::Main: return "rgw.main";
+    case RGWObjCategory::Shadow: return "rgw.shadow";
+    case RGWObjCategory::MultiMeta: return "rgw.multimeta";
+    case RGWObjCategory::CloudTiered: return "rgw.cloudtiered";
+    default: return "unknown";
+  }
+}
+
 void rgw_bucket_pending_info::generate_test_instances(list<rgw_bucket_pending_info*>& o)
 {
   rgw_bucket_pending_info *i = new rgw_bucket_pending_info;

@@ -1965,24 +1965,6 @@ static inline void append_rand_alpha(CephContext *cct, const std::string& src, s
   dest.append(buf);
 }
 
-static inline const char *rgw_obj_category_name(RGWObjCategory category)
-{
-  switch (category) {
-  case RGWObjCategory::None:
-    return "rgw.none";
-  case RGWObjCategory::Main:
-    return "rgw.main";
-  case RGWObjCategory::Shadow:
-    return "rgw.shadow";
-  case RGWObjCategory::MultiMeta:
-    return "rgw.multimeta";
-  case RGWObjCategory::CloudTiered:
-    return "rgw.cloudtiered";
-  }
-
-  return "unknown";
-}
-
 static inline uint64_t rgw_rounded_kb(uint64_t bytes)
 {
   return (bytes + 1023) / 1024;
