@@ -1492,14 +1492,6 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_obj_key &o) {
   return out << o.to_str();
 }
 
-inline std::ostream& operator<<(std::ostream& out, const rgw_obj_index_key &o) {
-  if (o.instance.empty()) {
-    return out << o.name;
-  } else {
-    return out << o.name << "[" << o.instance << "]";
-  }
-}
-
 struct req_init_state {
   /* Keeps [[tenant]:]bucket until we parse the token. */
   std::string url_bucket;
