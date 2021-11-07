@@ -38,7 +38,7 @@ class segment_info_set_t {
 	block_size(block_size),
 	empty_segments(empty_segments),
 	size(size),
-	avail_bytes(segment_size * num_segments)
+	avail_bytes(size)
     {}
 
     device_id_t device_id = 0;
