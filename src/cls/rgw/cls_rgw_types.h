@@ -807,8 +807,10 @@ struct cls_rgw_bucket_instance_entry {
 };
 WRITE_CLASS_ENCODER(cls_rgw_bucket_instance_entry)
 
+using rgw_bucket_dir_stats = std::map<RGWObjCategory, rgw_bucket_category_stats>;
+
 struct rgw_bucket_dir_header {
-  std::map<RGWObjCategory, rgw_bucket_category_stats> stats;
+  rgw_bucket_dir_stats stats;
   uint64_t tag_timeout;
   uint64_t ver;
   uint64_t master_ver;
