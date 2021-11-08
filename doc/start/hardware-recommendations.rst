@@ -236,6 +236,125 @@ costs.  Some RAID HBAs can be configured with an IT-mode "personality".
    Throughput 2`_ for additional details.
 
 
+Benchmarking
+------------
+
+BlueStore opens block devices in O_DIRECT and uses fsync frequently to ensure
+that data is safely persisted to media. You can evaluate a drive's low-level
+write performance using ``fio``. For example, 4kB random write performance is
+measured as follows:
+
+.. code-block:: console
+
+  # fio --name=/dev/sdX --ioengine=libaio --direct=1 --fsync=1 --readwrite=randwrite --blocksize=4k --runtime=300
+
+Write Caches
+------------
+
+Enterprise SSDs and HDDs normally include power loss protection features which
+use multi-level caches to speed up direct or synchronous writes.  These devices
+can be toggled between two caching modes -- a volatile cache flushed to
+persistent media with fsync, or a non-volatile cache written synchronously.
+
+These two modes are selected by either "enabling" or "disabling" the write
+(volatile) cache.  When the volatile cache is enabled, Linux uses a device in
+"write back" mode, and when disabled, it uses "write through".
+
+The default configuration (normally caching enabled) may not be optimal, and
+OSD performance may be dramatically increased in terms of increased IOPS and
+decreased commit_latency by disabling the write cache.
+
+Users are therefore encouraged to benchmark their devices with ``fio`` as
+described earlier and persist the optimal cache configuration for their
+devices.
+
+The cache configuration can be queried with ``hdparm``, ``sdparm``,
+``smartctl`` or by reading the values in ``/sys/class/scsi_disk/*/cache_type``,
+for example:
+
+.. code-block:: console
+
+  # hdparm -W /dev/sda
+
+  /dev/sda:
+   write-caching =  1 (on)
+
+  # sdparm --get WCE /dev/sda
+      /dev/sda: ATA       TOSHIBA MG07ACA1  0101
+  WCE           1  [cha: y]
+  # smartctl -g wcache /dev/sda
+  smartctl 7.1 2020-04-05 r5049 [x86_64-linux-4.18.0-305.19.1.el8_4.x86_64] (local build)
+  Copyright (C) 2002-19, Bruce Allen, Christian Franke, www.smartmontools.org
+
+  Write cache is:   Enabled
+
+  # cat /sys/class/scsi_disk/0\:0\:0\:0/cache_type
+  write back
+
+The write cache can be disabled with those same tools:
+
+.. code-block:: console
+
+  # hdparm -W0 /dev/sda
+
+  /dev/sda:
+   setting drive write-caching to 0 (off)
+   write-caching =  0 (off)
+
+  # sdparm --clear WCE /dev/sda
+      /dev/sda: ATA       TOSHIBA MG07ACA1  0101
+  # smartctl -s wcache,off /dev/sda
+  smartctl 7.1 2020-04-05 r5049 [x86_64-linux-4.18.0-305.19.1.el8_4.x86_64] (local build)
+  Copyright (C) 2002-19, Bruce Allen, Christian Franke, www.smartmontools.org
+
+  === START OF ENABLE/DISABLE COMMANDS SECTION ===
+  Write cache disabled
+
+Normally, disabling the cache using ``hdparm``, ``sdparm``, or ``smartctl``
+results in the cache_type changing automatically to "write through". If this is
+not the case, you can try setting it directly as follows. (Users should note
+that setting cache_type also correctly persists the caching mode of the device
+until the next reboot):
+
+.. code-block:: console
+
+  # echo "write through" > /sys/class/scsi_disk/0\:0\:0\:0/cache_type
+
+  # hdparm -W /dev/sda
+
+  /dev/sda:
+   write-caching =  0 (off)
+
+.. tip:: This udev rule (tested on CentOS 8) will set all SATA/SAS device cache_types to "write
+  through":
+
+  .. code-block:: console
+
+    # cat /etc/udev/rules.d/99-ceph-write-through.rules
+    ACTION=="add", SUBSYSTEM=="scsi_disk", ATTR{cache_type}:="write through"
+
+.. tip:: This udev rule (tested on CentOS 7) will set all SATA/SAS device cache_types to "write
+  through":
+
+  .. code-block:: console
+
+    # cat /etc/udev/rules.d/99-ceph-write-through-el7.rules
+    ACTION=="add", SUBSYSTEM=="scsi_disk", RUN+="/bin/sh -c 'echo write through > /sys/class/scsi_disk/$kernel/cache_type'"
+
+.. tip:: The ``sdparm`` utility can be used to view/change the volatile write
+  cache on several devices at once:
+
+  .. code-block:: console
+
+    # sdparm --get WCE /dev/sd*
+        /dev/sda: ATA       TOSHIBA MG07ACA1  0101
+    WCE           0  [cha: y]
+        /dev/sdb: ATA       TOSHIBA MG07ACA1  0101
+    WCE           0  [cha: y]
+    # sdparm --clear WCE /dev/sd*
+        /dev/sda: ATA       TOSHIBA MG07ACA1  0101
+        /dev/sdb: ATA       TOSHIBA MG07ACA1  0101
+
 Additional Considerations
 -------------------------
 
