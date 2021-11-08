@@ -362,7 +362,7 @@ int LRemDBOps::exec(SQLite::Statement& stmt)
 
     try {
       retry = false;
-      dout(20) << "SQL: " << stmt.getExpandedSQL() << dendl;
+      dout(20) << "SQL: " << stmt.getQuery() << dendl;
       r = stmt.exec();
       /* return code is not interesting */
     } catch (SQLite::Exception& e) {
@@ -379,7 +379,7 @@ int LRemDBOps::exec(SQLite::Statement& stmt)
 
 int LRemDBOps::exec_step(SQLite::Statement& stmt)
 {
-  dout(20) << "SQL: " << stmt.getExpandedSQL() << dendl;
+  dout(20) << "SQL: " << stmt.getQuery() << dendl;
   return stmt.executeStep();
 }
 
