@@ -4908,6 +4908,12 @@ options:
     This setting is used only when OSD is doing ``--mkfs``.
     Next runs of OSD retrieve sharding from disk.
   default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P
+- name: bluestore_qfsck_on_mount
+  type: bool
+  level: dev
+  desc: Run quick-fsck at mount comparing allocation-file to RocksDB allocation state
+  default: true
+  with_legacy: true
 - name: bluestore_fsck_on_mount
   type: bool
   level: dev

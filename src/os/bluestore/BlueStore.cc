@@ -6413,17 +6413,27 @@ out_fm:
 
 void BlueStore::_close_db_and_around()
 {
+  utime_t  start_time_close_db = ceph_clock_now();
   if (db) {
     _close_db();
   }
+  utime_t  start_time_bluefs = ceph_clock_now();
   if (bluefs) {
     _close_bluefs();
   }
+
+  utime_t  start_time_fm = ceph_clock_now();
   _close_fm();
   _close_alloc();
+  utime_t  start_time_bdev = ceph_clock_now();
   _close_bdev();
+  utime_t  start_time_fsid = ceph_clock_now();
   _close_fsid();
   _close_path();
+  utime_t  end_time = ceph_clock_now();
+  dout(0) <<"Fast Shutdown(close_db): total =" << end_time        -start_time_close_db << " close_db =" << start_time_bluefs -start_time_close_db << dendl;
+  dout(0) <<"Fast Shutdown(close_db): bluefs=" << start_time_fm   -start_time_bluefs   << " fm/alloc =" << start_time_bdev   -start_time_fm       << dendl;
+  dout(0) <<"Fast Shutdown(close_db): bdev  =" << start_time_fsid -start_time_bdev     << " fsid     =" << end_time          -start_time_fsid     << dendl;
 }
 
 int BlueStore::open_db_environment(KeyValueDB **pdb, bool to_repair)
@@ -7522,7 +7532,6 @@ int BlueStore::expand_devices(ostream& out)
     // we grow the allocation range, must reflect it in the allocation file
     alloc->init_add_free(size0, size - size0);
     need_to_destage_allocation_file = true;
-
     _close_db_and_around();
 
     // mount in read/write to sync expansion changes
@@ -7564,9 +7573,31 @@ void BlueStore::set_cache_shards(unsigned num)
   }
 }
 
+//---------------------------------------------
+bool BlueStore::has_null_manager()
+{
+  return (fm && fm->is_null_manager());
+}
+
+// GBH: REMOVE-ME
+#define NCB_SAFE_FAST_SHUTDOWN_DEBUG
 int BlueStore::_mount()
 {
   dout(5) << __func__ << "NCB:: path " << path << dendl;
+
+  // GBH: REMOVE-ME
+  // Verify that allocation-file content matches RocksDB state
+  // Temporary solution to debug the safe-fast-shutdown
+  // TBD - use a config-file option instead
+#ifdef NCB_SAFE_FAST_SHUTDOWN_DEBUG
+  static bool perform_bluestore_qfsck = true;
+  if (perform_bluestore_qfsck && cct->_conf->bluestore_qfsck_on_mount) {
+    perform_bluestore_qfsck = false;
+    dout(0) << __func__ << "::NCB::bluestore_qfsck_on_mount was initiated ... " << dendl;
+    int ret = read_allocation_from_drive_for_fsck();
+    ceph_assert(ret == 0);
+  }
+#endif
   _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
     dout(5) << __func__ << "::NCB::calling fsck()" << dendl;
@@ -7664,12 +7695,14 @@ int BlueStore::_mount()
 int BlueStore::umount()
 {
   ceph_assert(_kv_only || mounted);
+  utime_t  start_time_func = ceph_clock_now();
   _osr_drain_all();
-
+  
   mounted = false;
 
   ceph_assert(alloc);
 
+  utime_t  start_time_kv        = ceph_clock_now();
   if (!_kv_only) {
     mempool_thread.shutdown();
 #ifdef HAVE_LIBZBD
@@ -7680,12 +7713,26 @@ int BlueStore::umount()
 #endif
     dout(20) << __func__ << " stopping kv thread" << dendl;
     _kv_stop();
-    _shutdown_cache();
+    if (!m_fast_shutdown) {
+      _shutdown_cache();
+    }
     dout(20) << __func__ << " closing" << dendl;
   }
+  utime_t  start_time_close = ceph_clock_now();
+
+  // raise debug level
+  // g_conf()->set_val("debug_bluestore", "20");
+  cct->_conf.set_val("debug_osd", "20");
+  cct->_conf.set_val("debug_bluestore", "20");
+  cct->_conf.set_val("debug_bluefs", "20");
+  cct->_conf.set_val("debug_rocksdb", "20");
 
   _close_db_and_around();
-  if (cct->_conf->bluestore_fsck_on_umount) {
+  dout(0) <<"Fast Shutdown: umount time: close=" << ceph_clock_now() - start_time_close << " kvmem=" << start_time_close - start_time_kv  <<
+    " drain=" << start_time_kv - start_time_func << dendl;
+
+  if (cct->_conf->bluestore_fsck_on_umount && !m_fast_shutdown) {
+    dout(5) << __func__ << "::NCB::calling fsck()" << dendl;
     int rc = fsck(cct->_conf->bluestore_fsck_on_umount_deep);
     if (rc < 0)
       return rc;
@@ -10304,6 +10351,14 @@ int BlueStore::get_numa_node(
   return 0;
 }
 
+void BlueStore::prepare_for_fast_shutdown() 
+{
+  m_fast_shutdown = true;
+  // TBD:  disable deferred_try_submit()
+  // TBD2: maybe disable _deferred_submit_unlock()
+  // TBD3: disable queue_transactions()
+}
+
 int BlueStore::get_devices(set<string> *ls)
 {
   if (bdev) {
@@ -10431,7 +10486,8 @@ int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
   string key_prefix;
   _key_encode_u64(pool_id, &key_prefix);
   *out_per_pool_omap = per_pool_omap != OMAP_BULK;
-  if (*out_per_pool_omap) {
+  // stop calls after db was closed
+  if (*out_per_pool_omap && db) {
     auto prefix = per_pool_omap == OMAP_PER_POOL ?
       PREFIX_PERPOOL_OMAP :
       PREFIX_PERPG_OMAP;
@@ -13029,12 +13085,13 @@ void BlueStore::_osr_drain_all()
     }
   }
   dout(20) << __func__ << " osr_set " << s << dendl;
-
+  //dout(0) << __func__ << "::Fast Shutdown: calling deferred_try_submit" << dendl;
   ++deferred_aggressive;
   {
     // submit anything pending
     deferred_try_submit();
   }
+  //dout(0) << __func__ << "::Fast Shutdown: calling kv_cond.notify_one" << dendl;
   {
     // wake up any previously finished deferred events
     std::lock_guard l(kv_lock);
@@ -13044,12 +13101,15 @@ void BlueStore::_osr_drain_all()
     std::lock_guard l(kv_finalize_lock);
     kv_finalize_cond.notify_one();
   }
+  //dout(0) << __func__ << "::Fast Shutdown: calling osr->drain" << dendl;
   for (auto osr : s) {
+    //dout(0) << __func__ << "::Fast Shutdown: drain " << osr << dendl;
     dout(20) << __func__ << " drain " << osr << dendl;
     osr->drain();
   }
   --deferred_aggressive;
 
+  //dout(0) << __func__ << "::Fast Shutdown: zombies loop" << dendl;
   {
     std::lock_guard l(zombie_osr_lock);
     for (auto& osr : zombies) {
@@ -13760,7 +13820,6 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
 	   << dendl;
   ceph_assert(osr->deferred_pending);
   ceph_assert(!osr->deferred_running);
-
   auto b = osr->deferred_pending;
   deferred_queue_size -= b->seq_bytes.size();
   ceph_assert(deferred_queue_size >= 0);
@@ -18339,7 +18398,7 @@ int BlueStore::store_allocator(Allocator* src_allocator)
 
   uint64_t file_size = p_handle->file->fnode.size;
   uint64_t allocated = p_handle->file->fnode.get_allocated();
-  dout(5) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
+  dout(10) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
 
   unique_ptr<Allocator> allocator(clone_allocator_without_bluefs(src_allocator));
   if (!allocator) {
@@ -18412,12 +18471,11 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   bluefs->fsync(p_handle);
 
   utime_t duration = ceph_clock_now() - start_time;
-  dout(5) <<"WRITE-extent_count=" << extent_count << ", file_size=" << p_handle->file->fnode.size << dendl;
-  dout(5) <<"p_handle->pos=" << p_handle->pos << " WRITE-duration=" << duration << " seconds" << dendl;
+  dout(1) <<"WRITE-extent_count=" << extent_count << ", file_size=" << p_handle->file->fnode.size << dendl;
+  dout(1) <<"p_handle->pos=" << p_handle->pos << " WRITE-duration=" << duration << " seconds" << dendl;
 
   bluefs->close_writer(p_handle);
   need_to_destage_allocation_file = false;
-  dout(10) << "need_to_destage_allocation_file was clear" << dendl;
   return 0;
 }
 
@@ -19021,14 +19079,14 @@ int BlueStore::compare_allocators(Allocator* alloc1, Allocator* alloc2, uint64_t
     return 0;
   } else {
     derr << "mismatch:: idx1=" << idx1 << " idx2=" << idx2 << dendl;
-    std::cout << "==================================================================="  << std::endl;
+    //std::cout << "==================================================================="  << std::endl;
     for (uint64_t i = 0; i < idx1; i++) {
-      std::cout << "arr1[" << i << "]<" << arr1[i].offset << "," << arr1[i].length << "> " << std::endl;
+      //std::cout << "arr1[" << i << "]<" << arr1[i].offset << "," << arr1[i].length << "> " << std::endl;
     }
 
-    std::cout << "==================================================================="  << std::endl;
+    //std::cout << "==================================================================="  << std::endl;
     for (uint64_t i = 0; i < idx2; i++) {
-      std::cout << "arr2[" << i << "]<" << arr2[i].offset << "," << arr2[i].length << "> " << std::endl;
+      //std::cout << "arr2[" << i << "]<" << arr2[i].offset << "," << arr2[i].length << "> " << std::endl;
     }
     return -1;
   }
@@ -19061,6 +19119,7 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool(bool test_store_and
   dout(5) << "test_store_and_restore=" << test_store_and_restore << dendl;
   int ret = 0;
   uint64_t memory_target = cct->_conf.get_val<Option::size_t>("osd_memory_target");
+  dout(5) << "calling open_db_and_around()" << dendl;
   ret = _open_db_and_around(true, false);
   if (ret < 0) {
     return ret;
@@ -19147,8 +19206,11 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool(bool test_store_and
     }
   }
 
-  std::cout << "<<<FINISH>>> in " << duration << " seconds; insert_count=" << stats.insert_count << "\n\n" << std::endl;
-  std::cout << stats << std::endl;
+  //std::cout << "<<<FINISH>>> in " << duration << " seconds; insert_count=" << stats.insert_count << "\n\n" << std::endl;
+  //std::cout << stats << std::endl;
+
+  dout(5) << "<<<FINISH>>> in " << duration << " seconds; insert_count=" << stats.insert_count << dendl;
+  dout(5) << stats << dendl;
 
   //out_db:
   delete allocator;

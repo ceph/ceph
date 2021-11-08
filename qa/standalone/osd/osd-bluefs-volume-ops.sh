@@ -18,7 +18,8 @@ function run() {
 
 function TEST_bluestore() {
     local dir=$1
-
+    local LOG_LEVEL=5
+    local LOG_FILE=out/bluestore_tool.log
     local flimit=$(ulimit -n)
     if [ $flimit -lt 1536 ]; then
         echo "Low open file limit ($flimit), test may fail. Increase to 1536 or higher and retry if that happens."
@@ -65,54 +66,54 @@ function TEST_bluestore() {
     ceph osd down 3
 
     # expand slow devices
-    ceph-bluestore-tool --path $dir/0 fsck || return 1
-    ceph-bluestore-tool --path $dir/1 fsck || return 1
-    ceph-bluestore-tool --path $dir/2 fsck || return 1
-    ceph-bluestore-tool --path $dir/3 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 fsck || return 1
 
     truncate $dir/0/block -s 4294967296 # 4GB
-    ceph-bluestore-tool --path $dir/0 bluefs-bdev-expand || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 bluefs-bdev-expand || return 1
     truncate $dir/1/block -s 4311744512 # 4GB + 16MB
-    ceph-bluestore-tool --path $dir/1 bluefs-bdev-expand || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 bluefs-bdev-expand || return 1
     truncate $dir/2/block -s 4295099392 # 4GB + 129KB
-    ceph-bluestore-tool --path $dir/2 bluefs-bdev-expand || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 bluefs-bdev-expand || return 1
     truncate $dir/3/block -s 4293918720 # 4GB - 1MB
-    ceph-bluestore-tool --path $dir/3 bluefs-bdev-expand || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 bluefs-bdev-expand || return 1
 
     # slow, DB, WAL -> slow, DB
-    ceph-bluestore-tool --path $dir/0 fsck || return 1
-    ceph-bluestore-tool --path $dir/1 fsck || return 1
-    ceph-bluestore-tool --path $dir/2 fsck || return 1
-    ceph-bluestore-tool --path $dir/3 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 fsck || return 1
 
-    ceph-bluestore-tool --path $dir/0 bluefs-bdev-sizes
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 bluefs-bdev-sizes
 
-    ceph-bluestore-tool --path $dir/0 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 \
       --devs-source $dir/0/block.wal \
       --dev-target $dir/0/block.db \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-bluestore-tool --path $dir/0 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 fsck || return 1
 
     # slow, DB, WAL -> slow, WAL
-    ceph-bluestore-tool --path $dir/1 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 \
       --devs-source $dir/1/block.db \
       --dev-target $dir/1/block \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-bluestore-tool --path $dir/1 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 fsck || return 1
 
     # slow, DB, WAL -> slow
-    ceph-bluestore-tool --path $dir/2 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 \
       --devs-source $dir/2/block.wal \
       --devs-source $dir/2/block.db \
       --dev-target $dir/2/block \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-bluestore-tool --path $dir/2 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 fsck || return 1
 
     # slow, DB, WAL -> slow, WAL (negative case)
-    ceph-bluestore-tool --path $dir/3 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 \
       --devs-source $dir/3/block.db \
       --dev-target $dir/3/block.wal \
       --command bluefs-bdev-migrate
@@ -121,22 +122,22 @@ function TEST_bluestore() {
     if [ $? -eq 0 ]; then
         return 1
     fi
-    ceph-bluestore-tool --path $dir/3 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 fsck || return 1
 
     # slow, DB, WAL -> slow, DB (WAL to slow then slow to DB)
-    ceph-bluestore-tool --path $dir/3 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 \
       --devs-source $dir/3/block.wal \
       --dev-target $dir/3/block \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-bluestore-tool --path $dir/3 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 fsck || return 1
 
-    ceph-bluestore-tool --path $dir/3 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 \
       --devs-source $dir/3/block \
       --dev-target $dir/3/block.db \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-bluestore-tool --path $dir/3 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 fsck || return 1
 
     activate_osd $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
@@ -163,58 +164,58 @@ function TEST_bluestore() {
     ceph osd down 3
 
     # slow, DB -> slow, DB, WAL
-    ceph-bluestore-tool --path $dir/0 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 fsck || return 1
 
     dd if=/dev/zero  of=$dir/0/wal count=512 bs=1M
-    ceph-bluestore-tool --path $dir/0 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 \
       --dev-target $dir/0/wal \
       --command bluefs-bdev-new-wal || return 1
 
-    ceph-bluestore-tool --path $dir/0 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 fsck || return 1
 
     # slow, WAL -> slow, DB, WAL
-    ceph-bluestore-tool --path $dir/1 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 fsck || return 1
 
     dd if=/dev/zero  of=$dir/1/db count=1024 bs=1M
-    ceph-bluestore-tool --path $dir/1 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 \
       --dev-target $dir/1/db \
       --command bluefs-bdev-new-db || return 1
 
-    ceph-bluestore-tool --path $dir/1 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 \
       --devs-source $dir/1/block \
       --dev-target $dir/1/block.db \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-bluestore-tool --path $dir/1 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 fsck || return 1
 
     # slow -> slow, DB, WAL
-    ceph-bluestore-tool --path $dir/2 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 fsck || return 1
 
-    ceph-bluestore-tool --path $dir/2 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 \
       --command bluefs-bdev-new-db || return 1
 
-    ceph-bluestore-tool --path $dir/2 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 \
       --command bluefs-bdev-new-wal || return 1
 
-    ceph-bluestore-tool --path $dir/2 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 \
       --devs-source $dir/2/block \
       --dev-target $dir/2/block.db \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-bluestore-tool --path $dir/2 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 fsck || return 1
 
     # slow, DB -> slow, WAL
-    ceph-bluestore-tool --path $dir/3 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 fsck || return 1
 
-    ceph-bluestore-tool --path $dir/3 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 \
       --command bluefs-bdev-new-wal || return 1
 
-    ceph-bluestore-tool --path $dir/3 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 \
       --devs-source $dir/3/block.db \
       --dev-target $dir/3/block \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-bluestore-tool --path $dir/3 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 fsck || return 1
 
     activate_osd $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
@@ -239,32 +240,32 @@ function TEST_bluestore() {
     ceph osd down 3
 
     # slow, DB1, WAL -> slow, DB2, WAL
-    ceph-bluestore-tool --path $dir/0 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 fsck || return 1
 
     dd if=/dev/zero  of=$dir/0/db2 count=1024 bs=1M
-    ceph-bluestore-tool --path $dir/0 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 \
       --devs-source $dir/0/block.db \
       --dev-target $dir/0/db2 \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-bluestore-tool --path $dir/0 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 fsck || return 1
 
     # slow, DB, WAL1 -> slow, DB, WAL2
 
     dd if=/dev/zero  of=$dir/0/wal2 count=512 bs=1M
-    ceph-bluestore-tool --path $dir/0 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 \
       --devs-source $dir/0/block.wal \
       --dev-target $dir/0/wal2 \
       --command bluefs-bdev-migrate || return 1
     rm -rf $dir/0/wal
 
-    ceph-bluestore-tool --path $dir/0 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 fsck || return 1
 
     # slow, DB + WAL -> slow, DB2 -> slow
-    ceph-bluestore-tool --path $dir/1 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 fsck || return 1
 
     dd if=/dev/zero  of=$dir/1/db2 count=1024 bs=1M
-    ceph-bluestore-tool --path $dir/1 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 \
       --devs-source $dir/1/block.db \
       --devs-source $dir/1/block.wal \
       --dev-target $dir/1/db2 \
@@ -272,23 +273,23 @@ function TEST_bluestore() {
 
     rm -rf $dir/1/db
 
-    ceph-bluestore-tool --path $dir/1 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 fsck || return 1
 
-    ceph-bluestore-tool --path $dir/1 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 \
       --devs-source $dir/1/block.db \
       --dev-target $dir/1/block \
       --command bluefs-bdev-migrate || return 1
 
     rm -rf $dir/1/db2
 
-    ceph-bluestore-tool --path $dir/1 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/1 fsck || return 1
 
     # slow -> slow, DB (negative case)
     ceph-objectstore-tool --type bluestore --data-path $dir/2 \
 			  --op fsck --no-mon-config || return 1
 
     dd if=/dev/zero  of=$dir/2/db2 count=1024 bs=1M
-    ceph-bluestore-tool --path $dir/2 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 \
       --devs-source $dir/2/block \
       --dev-target $dir/2/db2 \
       --command bluefs-bdev-migrate
@@ -297,30 +298,30 @@ function TEST_bluestore() {
     if [ $? -eq 0 ]; then
         return 1
     fi
-    ceph-bluestore-tool --path $dir/2 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 fsck || return 1
 
     # slow + DB + WAL -> slow, DB2
     dd if=/dev/zero  of=$dir/2/db2 count=1024 bs=1M
 
-    ceph-bluestore-tool --path $dir/2 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 \
       --devs-source $dir/2/block \
       --devs-source $dir/2/block.db \
       --devs-source $dir/2/block.wal \
       --dev-target $dir/2/db2 \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-bluestore-tool --path $dir/2 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/2 fsck || return 1
 
     # slow + WAL -> slow2, WAL2
     dd if=/dev/zero  of=$dir/3/wal2 count=1024 bs=1M
 
-    ceph-bluestore-tool --path $dir/3 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 \
       --devs-source $dir/3/block \
       --devs-source $dir/3/block.wal \
       --dev-target $dir/3/wal2 \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-bluestore-tool --path $dir/3 fsck || return 1
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/3 fsck || return 1
 
     activate_osd $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
@@ -339,6 +340,8 @@ function TEST_bluestore() {
 
 function TEST_bluestore2() {
     local dir=$1
+    local LOG_LEVEL=5
+    local LOG_FILE=out/bluestore_tool.log
 
     local flimit=$(ulimit -n)
     if [ $flimit -lt 1536 ]; then
@@ -383,15 +386,15 @@ function TEST_bluestore2() {
     while kill $osd_pid0; do sleep 1 ; done
     ceph osd down 0
 
-    ceph-bluestore-tool --path $dir/0 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 \
       --devs-source $dir/0/block.db \
       --dev-target $dir/0/block \
       --command bluefs-bdev-migrate || return 1
 
-    ceph-bluestore-tool --path $dir/0 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 \
       --command bluefs-bdev-sizes || return 1
 
-    ceph-bluestore-tool --path $dir/0 \
+    ceph-bluestore-tool --log-level $LOG_LEVEL --log-file $LOG_FILE  --path $dir/0 \
       --command fsck || return 1
 
     activate_osd $dir 0 || return 1

@@ -186,15 +186,15 @@ function teardown() {
 	    done
         fi
     fi
-    if [ "$cores" = "yes" -o "$dumplogs" = "1" ]; then
-	if [ -n "$LOCALRUN" ]; then
-	    display_logs $dir
-        else
+#   if [ "$cores" = "yes" -o "$dumplogs" = "1" ]; then
+#     if [ -n "$LOCALRUN" ]; then
+#	    display_logs $dir
+#       else
 	    # Move logs to where Teuthology will archive it
 	    mkdir -p $TESTDIR/archive/log
 	    mv $dir/*.log $TESTDIR/archive/log
-	fi
-    fi
+#       fi
+#   fi
     rm -fr $dir
     rm -rf $(get_asok_dir)
     if [ "$cores" = "yes" ]; then
