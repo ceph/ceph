@@ -303,6 +303,9 @@ class MDSRank {
     void send_message_client(const ref_t<Message>& m, Session* session);
     void send_message(const ref_t<Message>& m, const ConnectionRef& c);
 
+    void wait_for_bootstrapped_peer(mds_rank_t who, MDSContext *c) {
+      waiting_for_bootstrapping_peer[who].push_back(c);
+    }
     void wait_for_active_peer(mds_rank_t who, MDSContext *c) { 
       waiting_for_active_peer[who].push_back(c);
     }
@@ -587,6 +590,7 @@ class MDSRank {
     bool replaying_requests_done = false;
 
     map<mds_rank_t, MDSContext::vec> waiting_for_active_peer;
+    map<mds_rank_t, MDSContext::vec> waiting_for_bootstrapping_peer;
     map<epoch_t, MDSContext::vec> waiting_for_mdsmap;
 
     epoch_t osd_epoch_barrier = 0;
