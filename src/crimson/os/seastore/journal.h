@@ -140,10 +140,8 @@ private:
       return current_segment_nonce;
     }
 
-    segment_off_t get_committed_to() const {
-      assert(committed_to.segment_seq ==
-             get_segment_seq());
-      return committed_to.offset.offset;
+    journal_seq_t get_committed_to() const {
+      return committed_to;
     }
 
     segment_seq_t get_segment_seq() const {
@@ -287,7 +285,7 @@ private:
     // Encode the batched records for write.
     ceph::bufferlist encode_records(
         size_t block_size,
-        segment_off_t committed_to,
+        const journal_seq_t& committed_to,
         segment_nonce_t segment_nonce);
 
     // Set the write result and reset for reuse
@@ -304,7 +302,7 @@ private:
         record_t&&,
         const record_size_t&,
         size_t block_size,
-        segment_off_t committed_to,
+        const journal_seq_t& committed_to,
         segment_nonce_t segment_nonce);
 
   private:

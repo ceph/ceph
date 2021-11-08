@@ -62,7 +62,7 @@ ExtentReader::scan_extents_ret ExtentReader::scan_extents(
 {
   auto ret = std::make_unique<scan_extents_ret_bare>();
   auto* extents = ret.get();
-  return read_segment_header(cursor.get_offset().segment
+  return read_segment_header(cursor.get_segment_id()
   ).handle_error(
     scan_extents_ertr::pass_further{},
     crimson::ct_error::assert_all{
@@ -114,9 +114,9 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
   found_record_handler_t &handler)
 {
   auto& segment_manager =
-    *segment_managers[cursor.offset.segment.device_id()];
-  if (cursor.offset.offset == 0) {
-    cursor.offset.offset = segment_manager.get_block_size();
+    *segment_managers[cursor.get_segment_id().device_id()];
+  if (cursor.get_segment_offset() == 0) {
+    cursor.increment(segment_manager.get_block_size());
   }
   auto retref = std::make_unique<size_t>(0);
   auto &budget_used = *retref;
@@ -125,30 +125,33 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
     -> scan_valid_records_ertr::future<seastar::stop_iteration> {
       return [=, &handler, &cursor, &budget_used] {
 	if (!cursor.last_valid_header_found) {
-	  return read_validate_record_metadata(cursor.offset, nonce
+	  return read_validate_record_metadata(cursor.seq.offset, nonce
 	  ).safe_then([=, &cursor](auto md) {
 	    logger().debug(
 	      "ExtentReader::scan_valid_records: read complete {}",
-	      cursor.offset);
+	      cursor.seq);
 	    if (!md) {
 	      logger().debug(
 		"ExtentReader::scan_valid_records: found invalid header at {}, presumably at end",
-		cursor.offset);
+		cursor.seq);
 	      cursor.last_valid_header_found = true;
 	      return scan_valid_records_ertr::now();
 	    } else {
+	      auto new_committed_to = md->first.committed_to;
 	      logger().debug(
-		"ExtentReader::scan_valid_records: valid record read at {}",
-		cursor.offset);
-	      cursor.last_committed = paddr_t{
-		cursor.offset.segment,
-		md->first.committed_to};
+		"ExtentReader::scan_valid_records: valid record read at {}, now committed at {}",
+		cursor.seq,
+		new_committed_to);
+	      ceph_assert(cursor.last_committed == journal_seq_t() ||
+		          cursor.last_committed <= new_committed_to);
+	      cursor.last_committed = new_committed_to;
 	      cursor.pending_records.emplace_back(
-		cursor.offset,
+		cursor.seq.offset,
 		md->first,
 		md->second);
-	      cursor.offset.offset +=
-		md->first.dlength + md->first.mdlength;
+	      cursor.increment(md->first.dlength + md->first.mdlength);
+	      ceph_assert(new_committed_to == journal_seq_t() ||
+	                  new_committed_to < cursor.seq);
 	      return scan_valid_records_ertr::now();
 	    }
 	  }).safe_then([=, &cursor, &budget_used, &handler] {
@@ -166,7 +169,9 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
 		    seastar::stop_iteration>(seastar::stop_iteration::yes);
 		}
 		auto &next = cursor.pending_records.front();
-		if (next.offset > cursor.last_committed) {
+		journal_seq_t next_seq = {cursor.seq.segment_seq, next.offset};
+		if (cursor.last_committed == journal_seq_t() ||
+		    next_seq > cursor.last_committed) {
 		  return scan_valid_records_ertr::make_ready_future<
 		    seastar::stop_iteration>(seastar::stop_iteration::yes);
 		}

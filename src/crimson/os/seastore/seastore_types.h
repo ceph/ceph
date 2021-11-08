@@ -1143,11 +1143,11 @@ struct record_header_t {
   // Fixed portion
   extent_len_t  mdlength;       // block aligned, length of metadata
   extent_len_t  dlength;        // block aligned, length of data
-  uint32_t deltas;                // number of deltas
-  uint32_t extents;               // number of extents
+  uint32_t deltas;              // number of deltas
+  uint32_t extents;             // number of extents
   segment_nonce_t segment_nonce;// nonce of containing segment
-  segment_off_t committed_to;   // records in this segment prior to committed_to
-                                // have been fully written
+  journal_seq_t committed_to;   // records prior to committed_to have been
+                                // fully written, maybe in another segment.
   checksum_t data_crc;          // crc of data payload
 
 
@@ -1188,14 +1188,14 @@ ceph::bufferlist encode_record(
   record_size_t rsize,
   record_t &&record,
   size_t block_size,
-  segment_off_t committed_to,
+  const journal_seq_t& committed_to,
   segment_nonce_t current_segment_nonce = 0);
 
 /// scan segment for end incrementally
 struct scan_valid_records_cursor {
   bool last_valid_header_found = false;
-  paddr_t offset;
-  paddr_t last_committed;
+  journal_seq_t seq;
+  journal_seq_t last_committed;
 
   struct found_record_t {
     paddr_t offset;
@@ -1214,13 +1214,21 @@ struct scan_valid_records_cursor {
     return last_valid_header_found && pending_records.empty();
   }
 
-  paddr_t get_offset() const {
-    return offset;
+  segment_id_t get_segment_id() const {
+    return seq.offset.segment;
+  }
+
+  segment_off_t get_segment_offset() const {
+    return seq.offset.offset;
+  }
+
+  void increment(segment_off_t off) {
+    seq.offset.offset += off;
   }
 
   scan_valid_records_cursor(
-    paddr_t offset)
-    : offset(offset) {}
+    journal_seq_t seq)
+    : seq(seq) {}
 };
 
 }

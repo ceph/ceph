@@ -170,7 +170,7 @@ Journal::replay_segment(
 {
   logger().debug("Journal::replay_segment: starting at {}", seq);
   return seastar::do_with(
-    scan_valid_records_cursor(seq.offset),
+    scan_valid_records_cursor(seq),
     ExtentReader::found_record_handler_t(
       [=, &handler](paddr_t base,
 		    const record_header_t &header,
@@ -378,13 +378,9 @@ void Journal::JournalSegmentManager::mark_committed(
   logger().debug(
     "JournalSegmentManager::mark_committed: committed_to {} => {}",
     committed_to, new_committed_to);
-  assert(new_committed_to.segment_seq <=
-         get_segment_seq());
-  if (new_committed_to.segment_seq ==
-      get_segment_seq()) {
-    assert(committed_to.offset.offset < new_committed_to.offset.offset);
-    committed_to = new_committed_to;
-  }
+  assert(committed_to == journal_seq_t() ||
+         committed_to <= new_committed_to);
+  committed_to = new_committed_to;
 }
 
 Journal::JournalSegmentManager::initialize_segment_ertr::future<>
@@ -401,7 +397,7 @@ Journal::JournalSegmentManager::initialize_segment(Segment& segment)
   auto header = segment_header_t{
     seq,
     segment.get_segment_id(),
-    segment_provider->get_journal_tail_target(),
+    new_tail,
     current_segment_nonce,
     false};
   logger().debug(
@@ -421,14 +417,9 @@ Journal::JournalSegmentManager::initialize_segment(Segment& segment)
   bl.append(bp);
 
   written_to = 0;
-  // FIXME: improve committed_to to point to another segment
-  committed_to = get_current_write_seq();
   return write(bl
   ).safe_then([this, new_tail, write_size=bl.length()
               ](journal_seq_t write_start_seq) {
-    auto committed_to = write_start_seq;
-    committed_to.offset.offset += write_size;
-    mark_committed(committed_to);
     segment_provider->update_journal_tail_committed(new_tail);
   });
 }
@@ -475,7 +466,7 @@ Journal::RecordBatch::add_pending(
 
 ceph::bufferlist Journal::RecordBatch::encode_records(
   size_t block_size,
-  segment_off_t committed_to,
+  const journal_seq_t& committed_to,
   segment_nonce_t segment_nonce)
 {
   logger().debug(
@@ -532,7 +523,7 @@ ceph::bufferlist Journal::RecordBatch::submit_pending_fast(
   record_t&& record,
   const record_size_t& rsize,
   size_t block_size,
-  segment_off_t committed_to,
+  const journal_seq_t& committed_to,
   segment_nonce_t segment_nonce)
 {
   logger().debug(
