@@ -69,7 +69,7 @@ public:
       extent_offset += extent.get_bptr().length();
     }
     assert(extent_offset == (segment_off_t)(base + rsize.mdlength + rsize.dlength));
-    return encode_record(rsize, std::move(record), block_size, base, nonce);
+    return encode_record(rsize, std::move(record), block_size, journal_seq_t(), nonce);
   }
   void add_extent(LogicalCachedExtentRef& extent) {
     extents.emplace_back(extent);
@@ -87,7 +87,7 @@ public:
   void set_base(segment_off_t b) {
     base = b;
   }
-  segment_off_t get_base() {
+  segment_off_t get_base() const {
     return base;
   }
   void clear() {

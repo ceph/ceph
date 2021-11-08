@@ -150,7 +150,7 @@ ceph::bufferlist encode_record(
   record_size_t rsize,
   record_t &&record,
   size_t block_size,
-  segment_off_t committed_to,
+  const journal_seq_t& committed_to,
   segment_nonce_t current_segment_nonce)
 {
   bufferlist data_bl;
