@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <sys/file.h>
 
+#include <boost/container/flat_map.hpp>
 #include <boost/lockfree/queue.hpp>
 
 #include "KernelDevice.h"
@@ -28,6 +29,7 @@
 #include "include/types.h"
 #include "include/compat.h"
 #include "include/stringify.h"
+#include "include/str_map.h"
 #include "common/blkdev.h"
 #include "common/errno.h"
 #if defined(__FreeBSD__)
@@ -1102,8 +1104,8 @@ struct ExplicitHugePagePool {
     }
   }
 
-  bool empty_estimation() const {
-    return region_q.empty();
+  size_t get_buffer_size() const {
+    return buffer_size;
   }
 
 private:
@@ -1111,8 +1113,59 @@ private:
   region_queue_t region_q;
 };
 
+struct HugePagePoolOfPools {
+  HugePagePoolOfPools(const std::map<size_t, size_t> conf)
+    : pools(conf.size(), [conf] (size_t index, auto emplacer) {
+        ceph_assert(index < conf.size());
+        // it could be replaced with a state-mutating lambda and
+        // `conf::erase()` but performance is not a concern here.
+        const auto [buffer_size, buffers_in_pool] =
+          *std::next(std::begin(conf), index);
+        emplacer.emplace(buffer_size, buffers_in_pool);
+      }) {
+  }
 
-#define LUCKY_BUFFER_SIZE 4 * 1024 * 1024
+  ceph::unique_leakable_ptr<buffer::raw> try_create(const size_t size) {
+    // thankfully to `conf` being a `std::map` we store the pools
+    // sorted by buffer sizes. this would allow to clamp to log(n)
+    // but I doubt admins want to have dozens of accelerated buffer
+    // size. let's keep this simple for now.
+    if (auto iter = std::find_if(std::begin(pools), std::end(pools),
+                                 [size] (const auto& pool) {
+                                   return size == pool.get_buffer_size();
+                                 });
+        iter != std::end(pools)) {
+      return iter->try_create();
+    }
+    return nullptr;
+  }
+
+  static HugePagePoolOfPools from_desc(const std::string& conf);
+
+private:
+  // let's have some space inside (for 2 MB and 4 MB perhaps?)
+  // NOTE: we need tiny_vector as the boost::lockfree queue inside
+  // pool is not-movable.
+  ceph::containers::tiny_vector<ExplicitHugePagePool, 2> pools;
+};
+
+
+HugePagePoolOfPools HugePagePoolOfPools::from_desc(const std::string& desc) {
+  std::map<size_t, size_t> conf; // buffer_size -> buffers_in_pool
+  std::map<std::string, std::string> exploded_str_conf;
+  get_str_map(desc, &exploded_str_conf);
+  for (const auto& [buffer_size_s, buffers_in_pool_s] : exploded_str_conf) {
+    size_t buffer_size, buffers_in_pool;
+    if (sscanf(buffer_size_s.c_str(), "%zu", &buffer_size) != 1) {
+      ceph_abort("can't parse a key in the configuration");
+    }
+    if (sscanf(buffers_in_pool_s.c_str(), "%zu", &buffers_in_pool) != 1) {
+      ceph_abort("can't parse a value in the configuration");
+    }
+    conf[buffer_size] = buffers_in_pool;
+  }
+  return HugePagePoolOfPools{std::move(conf)};
+}
 
 // create a buffer basing on user-configurable. it's intended to make
 // our buffers THP-able.
@@ -1122,26 +1175,22 @@ ceph::unique_leakable_ptr<buffer::raw> KernelDevice::create_custom_aligned(
   // just to preserve the logic of create_small_page_aligned().
   if (len < CEPH_PAGE_SIZE) {
     return ceph::buffer::create_small_page_aligned(len);
-  } else if (len == LUCKY_BUFFER_SIZE) {
-    static ExplicitHugePagePool hp_pool{
-      LUCKY_BUFFER_SIZE,
-      cct->_conf->bdev_read_preallocated_huge_buffer_num
-    };
-    if (auto lucky_raw = hp_pool.try_create(); lucky_raw) {
+  } else {
+    static HugePagePoolOfPools hp_pools = HugePagePoolOfPools::from_desc(
+      cct->_conf.get_val<std::string>("bdev_read_preallocated_huge_buffers")
+    );
+    if (auto lucky_raw = hp_pools.try_create(len); lucky_raw) {
       dout(20) << __func__ << " allocated from huge pool"
 	       << " lucky_raw.data=" << (void*)lucky_raw->get_data()
-	       << " bdev_read_preallocated_huge_buffer_num="
-	       << cct->_conf->bdev_read_preallocated_huge_buffer_num
+	       << " bdev_read_preallocated_huge_buffers="
+	       << cct->_conf.get_val<std::string>("bdev_read_preallocated_huge_buffers")
 	       << dendl;
       return lucky_raw;
     } else {
       // fallthrough due to empty buffer pool. this can happen also
       // when the configurable was explicitly set to 0.
       dout(20) << __func__ << " cannot allocate from huge pool"
-	       << " hp_pool.empty_estimation=" << hp_pool.empty_estimation()
-	       << " bdev_read_preallocated_huge_buffer_num="
-	       << cct->_conf->bdev_read_preallocated_huge_buffer_num
-	       << dendl;
+               << dendl;
     }
   }
   const size_t custom_alignment = cct->_conf->bdev_read_buffer_alignment;
