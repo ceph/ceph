@@ -586,8 +586,8 @@ class MDSRank {
     MDSContext::que replay_queue;
     bool replaying_requests_done = false;
 
-    map<mds_rank_t, MDSContext::vec > waiting_for_active_peer;
-    map<epoch_t, MDSContext::vec > waiting_for_mdsmap;
+    map<mds_rank_t, MDSContext::vec> waiting_for_active_peer;
+    map<epoch_t, MDSContext::vec> waiting_for_mdsmap;
 
     epoch_t osd_epoch_barrier = 0;
 
