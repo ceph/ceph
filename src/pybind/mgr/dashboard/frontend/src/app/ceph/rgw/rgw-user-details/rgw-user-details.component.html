@@ -68,6 +68,11 @@
                   </div>
                 </td>
               </tr>
+              <tr *ngIf="user.mfa_ids?.length">
+                <td i18n
+                    class="bold">MFAs(Id)</td>
+                <td>{{ user.mfa_ids | join}}</td>
+              </tr>
             </tbody>
           </table>
 
