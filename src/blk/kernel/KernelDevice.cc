@@ -1044,16 +1044,15 @@ int KernelDevice::discard(uint64_t offset, uint64_t len)
   return r;
 }
 
-template <std::size_t BufferSizeV>
 struct ExplicitHugePagePool {
   using region_queue_t = boost::lockfree::queue<void*>;
 
   struct mmaped_buffer_raw : public buffer::raw {
     region_queue_t& region_q; // for recycling
 
-    mmaped_buffer_raw(void* mmaped_region, region_queue_t& region_q)
-      : raw(static_cast<char*>(mmaped_region), BufferSizeV),
-	region_q(region_q) {
+    mmaped_buffer_raw(void* mmaped_region, ExplicitHugePagePool& parent)
+      : raw(static_cast<char*>(mmaped_region), parent.buffer_size),
+	region_q(parent.region_q) {
       // the `mmaped_region` has been passed to `raw` as the buffer's `data`
     }
     ~mmaped_buffer_raw() override {
@@ -1067,12 +1066,12 @@ struct ExplicitHugePagePool {
     }
   };
 
-  ExplicitHugePagePool(size_t pool_size)
-    : region_q(pool_size) {
-    while (pool_size--) {
+  ExplicitHugePagePool(const size_t buffer_size, size_t buffers_in_pool)
+    : buffer_size(buffer_size), region_q(buffers_in_pool) {
+    while (buffers_in_pool--) {
       void* const mmaped_region = ::mmap(
         nullptr,
-        BufferSizeV,
+        buffer_size,
         PROT_READ | PROT_WRITE,
         MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB,
         -1,
@@ -1088,14 +1087,14 @@ struct ExplicitHugePagePool {
   ~ExplicitHugePagePool() {
     void* mmaped_region;
     while (region_q.pop(mmaped_region)) {
-      ::munmap(mmaped_region, BufferSizeV);
+      ::munmap(mmaped_region, buffer_size);
     }
   }
 
   ceph::unique_leakable_ptr<buffer::raw> try_create() {
     if (void* mmaped_region; region_q.pop(mmaped_region)) {
       return ceph::unique_leakable_ptr<buffer::raw> {
-	new mmaped_buffer_raw(mmaped_region, region_q)
+	new mmaped_buffer_raw(mmaped_region, *this)
       };
     } else {
       // oops, empty queue.
@@ -1108,6 +1107,7 @@ struct ExplicitHugePagePool {
   }
 
 private:
+  const size_t buffer_size;
   region_queue_t region_q;
 };
 
@@ -1123,7 +1123,8 @@ ceph::unique_leakable_ptr<buffer::raw> KernelDevice::create_custom_aligned(
   if (len < CEPH_PAGE_SIZE) {
     return ceph::buffer::create_small_page_aligned(len);
   } else if (len == LUCKY_BUFFER_SIZE) {
-    static ExplicitHugePagePool<LUCKY_BUFFER_SIZE> hp_pool{
+    static ExplicitHugePagePool hp_pool{
+      LUCKY_BUFFER_SIZE,
       cct->_conf->bdev_read_preallocated_huge_buffer_num
     };
     if (auto lucky_raw = hp_pool.try_create(); lucky_raw) {
