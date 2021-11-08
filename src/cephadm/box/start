@@ -5,7 +5,6 @@ set -euxo pipefail
 ln -s -f /cephadm/cephadm $CEPHADM_PATH
 chmod +x $CEPHADM_PATH
 
-tail -f /var/log/ceph/cephadm.log 1>&2 &
 
 EXTRA_ARGS=()
 if [[ -n "${SHARED_CEPH_FOLDER-}" ]]; then

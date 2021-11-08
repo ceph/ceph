@@ -89,7 +89,7 @@ then
 	# not find lvs
 	docker-compose down
 	DCFLAGS="-f docker-compose.yml"
-        if [[ -n /sys/fs/cgroup/cgroup.controllers ]]; then
+        if [[ ! -f /sys/fs/cgroup/cgroup.controllers ]]; then
             DCFLAGS+=" -f docker-compose.cgroup1.yml"
         fi
 
