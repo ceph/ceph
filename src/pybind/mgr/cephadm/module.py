@@ -2054,7 +2054,7 @@ Then run the following:
         return self._remove_daemons(args)
 
     @handle_orch_error
-    def remove_service(self, service_name: str) -> str:
+    def remove_service(self, service_name: str, force: bool = False) -> str:
         self.log.info('Remove service %s' % service_name)
         self._trigger_preview_refresh(service_name=service_name)
         if service_name in self.spec_store:
