@@ -17,8 +17,10 @@
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/pwl/LogEntry.h"
 #include "librbd/plugin/Api.h"
+#include "include/uuid.h"
 #include <map>
 #include <vector>
+#include <string>
 
 #undef dout_subsys
 #define dout_subsys ceph_subsys_rbd_pwl
@@ -246,7 +248,7 @@ void WriteLog<I>::remove_pool_file() {
   if (m_cache_state->clean) {
       ldout(m_image_ctx.cct, 5) << "Removing empty pool file: " << this->m_log_pool_name << dendl;
       if (remove(this->m_log_pool_name.c_str()) != 0) {
-        lderr(m_image_ctx.cct) << "failed to remove empty pool \"" << this->m_log_pool_name << "\": "
+        lderr(m_image_ctx.cct) << "failed to remove empty pool file \"" << this->m_log_pool_name << "\": "
           << pmemobj_errormsg() << dendl;
       } else {
         m_cache_state->clean = true;
@@ -296,6 +298,13 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       return false;
     }
     this->m_bytes_allocated_cap = effective_pool_size;
+
+    uuid_d uuid;
+    uuid.generate_random();
+    m_cache_state->id = uuid.to_string();
+    ldout(cct, 1) << "Generate uuid for this open request. "
+                  << " uuid = " <<  m_cache_state->id << dendl;
+
     /* Log ring empty */
     m_first_free_entry = 0;
     m_first_valid_entry = 0;
@@ -311,6 +320,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       D_RW(pool_root)->num_log_entries = num_small_writes;
       D_RW(pool_root)->first_free_entry = m_first_free_entry;
       D_RW(pool_root)->first_valid_entry = m_first_valid_entry;
+      uuid.print(D_RW(pool_root)->id);
     } TX_ONCOMMIT {
       this->m_total_log_entries = D_RO(pool_root)->num_log_entries;
       this->m_free_log_entries = D_RO(pool_root)->num_log_entries - 1; // leave one free
@@ -347,6 +357,26 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
                  << " expected " << MIN_WRITE_ALLOC_SIZE << dendl;
       on_finish->complete(-EINVAL);
       return false;
+    }
+    std::string id_string;
+    // The default length of UUID is 36
+    id_string.assign(D_RO(pool_root)->id, 36);
+    ldout(cct, 1) << "Check uuid, m_cache_state->id = "<< m_cache_state->id
+                  << " pool_root id = " <<  id_string << dendl;
+    if (id_string != m_cache_state->id) {
+      ldout(cct, 1) << "cache file is expired, need to be remove." << dendl;
+      // delete expired file
+      ceph_assert(m_log_pool);
+      pmemobj_close(m_log_pool);
+      if (remove(this->m_log_pool_name.c_str()) != 0) {
+        lderr(m_image_ctx.cct) << "failed to remove expired pool file \""
+          << this->m_log_pool_name << "\": "
+          << pmemobj_errormsg() << dendl;
+        on_finish->complete(-EINVAL);
+        return false;
+      }
+      // Call itself again to initialize
+      return initialize_pool(on_finish, later);
     }
     this->m_log_pool_size = D_RO(pool_root)->pool_size;
     this->m_flushed_sync_gen = D_RO(pool_root)->flushed_sync_gen;

@@ -32,6 +32,7 @@ public:
   std::string host;
   std::string path;
   std::string cache_type;
+  std::string id;
   uint64_t size = 0;
   bool log_periodic_stats;
 

@@ -59,6 +59,7 @@ ImageCacheState<I>::ImageCacheState(
   cache_type = f["cache_type"];
   host = f["pwl_host"];
   path = f["pwl_path"];
+  id = f["pwl_id"];
   uint64_t pwl_size;
   std::istringstream iss(f["pwl_size"]);
   iss >> pwl_size;
@@ -101,6 +102,7 @@ void ImageCacheState<I>::dump(ceph::Formatter *f) const {
   ::encode_json("pwl_host", host, f);
   ::encode_json("pwl_path", path, f);
   ::encode_json("pwl_size", size, f);
+  ::encode_json("pwl_id", id, f);
 }
 
 template <typename I>

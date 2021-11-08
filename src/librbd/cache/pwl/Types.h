@@ -299,6 +299,9 @@ struct WriteLogPoolRoot {
   uint32_t num_log_entries;
   uint32_t first_free_entry;     /* Entry following the newest valid entry */
   uint32_t first_valid_entry;    /* Index of the oldest valid entry in the log */
+  /* TODO: It's better to change memory-copy mode to encode/decode for RWL
+   *       Then char [] could be changed to string */
+  char id[37];                   /* id for this open request */
 
   #ifdef WITH_RBD_SSD_CACHE
   DENC(WriteLogPoolRoot, v, p) {
