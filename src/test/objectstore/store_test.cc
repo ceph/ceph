@@ -9462,6 +9462,76 @@ TEST_P(StoreTestSpecificAUSize, OmapUpgradeTest) {
   }
 }
 
+TEST_P(StoreTestSpecificAUSize, OmapUpgradeRecoveryTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_debug_legacy_omap", "true");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(0x1000);
+  int64_t poolid = 11;
+  coll_t cid(spg_t(pg_t(1, poolid), shard_id_t::NO_SHARD));
+  ghobject_t hoid(hobject_t("tesomap", "", CEPH_NOSNAP, 0, poolid, ""));
+  auto ch = store->create_new_collection(cid);
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  map<string, bufferlist> attrs;
+  bufferlist expected_header;
+  expected_header.append("this is a header");
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    bufferlist header;
+    header.append(expected_header);
+    t.omap_setheader(cid, hoid, header);
+    for (size_t i = 0; i < 8000; i++) {
+      bufferlist bl;
+      bl.append(string('a', i));
+      attrs.emplace(string("key" + stringify(i)), bl);
+    }
+    t.omap_setkeys(cid, hoid, attrs);
+    r = queue_transaction(store, ch, std::move(t));
+  }
+  store->umount();
+  ASSERT_EQ(store->fsck(false), 0);
+  SetVal(g_conf(), "bluestore_debug_legacy_omap", "false");
+  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_omap", "true");
+  g_conf().apply_changes(nullptr);
+
+  ASSERT_TRUE(store->fsck(false) > 0);
+  ASSERT_EQ(store->quick_fix(), 0);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  bstore->repair_omap_upgrade();
+  store->mount();
+  ch = store->open_collection(cid);
+  {
+    map<string,bufferlist> res;
+    bufferlist h;
+    r = store->omap_get(ch, hoid, &h, &res);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(res.size(), 8000);
+    for(auto& r : res) {
+      ASSERT_TRUE(bl_eq(attrs[r.first], r.second));
+    }
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {
