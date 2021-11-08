@@ -4,13 +4,12 @@ from .. import mgr
 from ..controllers.rgw import Rgw, RgwDaemon, RgwUser
 from ..rest_client import RequestException
 from ..services.rgw_client import RgwClient
-from . import ControllerTestCase, RgwStub  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase, RgwStub
 
 
 class RgwControllerTestCase(ControllerTestCase):
     @classmethod
     def setup_server(cls):
-        Rgw._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
         cls.setup_controllers([Rgw], '/test')
 
     def setUp(self) -> None:
@@ -61,7 +60,6 @@ class RgwControllerTestCase(ControllerTestCase):
 class RgwDaemonControllerTestCase(ControllerTestCase):
     @classmethod
     def setup_server(cls):
-        RgwDaemon._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
         cls.setup_controllers([RgwDaemon], '/test')
 
     @patch('dashboard.services.rgw_client.RgwClient._get_user_id', Mock(
@@ -77,12 +75,14 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             {
                 'ceph_version': 'ceph version master (dev)',
                 'id': 'daemon1',
+                'realm_name': 'realm1',
                 'zonegroup_name': 'zg1',
                 'zone_name': 'zone1'
             },
             {
                 'ceph_version': 'ceph version master (dev)',
                 'id': 'daemon2',
+                'realm_name': 'realm2',
                 'zonegroup_name': 'zg2',
                 'zone_name': 'zone2'
             }]
@@ -93,6 +93,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'service_map_id': '4832',
             'version': 'ceph version master (dev)',
             'server_hostname': 'host1',
+            'realm_name': 'realm1',
             'zonegroup_name': 'zg1',
             'zone_name': 'zone1', 'default': True
         },
@@ -101,6 +102,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'service_map_id': '5356',
             'version': 'ceph version master (dev)',
             'server_hostname': 'host1',
+            'realm_name': 'realm2',
             'zonegroup_name': 'zg2',
             'zone_name': 'zone2',
             'default': False
@@ -116,7 +118,6 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
 class RgwUserControllerTestCase(ControllerTestCase):
     @classmethod
     def setup_server(cls):
-        RgwUser._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
         cls.setup_controllers([RgwUser], '/test')
 
     @patch('dashboard.controllers.rgw.RgwRESTController.proxy')

@@ -32,7 +32,7 @@ describe('Mirroring page', () => {
       pools.navigateTo('create'); // Need pool for mirroring testing
       pools.create(poolName, 8, 'rbd');
       pools.navigateTo();
-      pools.exist(poolName, true);
+      pools.existTableCell(poolName, true);
     });
 
     it('tests editing mode for pools', () => {

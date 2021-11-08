@@ -1,12 +1,13 @@
-<div class="cd-col-form">
-  <form #frm="ngForm"
-        [formGroup]="serviceForm"
-        novalidate>
-    <div class="card">
-      <div i18n="form title|Example: Create Pool@@formTitle"
-           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+<cd-modal [pageURL]="pageURL"
+          [modalRef]="activeModal">
+  <span class="modal-title"
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
+  <ng-container class="modal-content">
+    <form #frm="ngForm"
+          [formGroup]="serviceForm"
+          novalidate>
+      <div class="modal-body">
 
-      <div class="card-body">
         <!-- Service type -->
         <div class="form-group row">
           <label class="cd-col-form-label required"
@@ -171,50 +172,6 @@
                   i18n>The entered value needs to be a number.</span>
           </div>
         </div>
-
-        <!-- NFS -->
-        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'nfs'">
-          <!-- pool -->
-          <div class="form-group row">
-            <label i18n
-                   class="cd-col-form-label required"
-                   for="pool">Pool</label>
-            <div class="cd-col-form-input">
-              <select id="pool"
-                      name="pool"
-                      class="form-control custom-select"
-                      formControlName="pool">
-                <option *ngIf="pools === null"
-                        [ngValue]="null"
-                        i18n>Loading...</option>
-                <option *ngIf="pools !== null && pools.length === 0"
-                        [ngValue]="null"
-                        i18n>-- No pools available --</option>
-                <option *ngIf="pools !== null && pools.length > 0"
-                        [ngValue]="null"
-                        i18n>-- Select a pool --</option>
-                <option *ngFor="let pool of pools"
-                        [value]="pool.pool_name">{{ pool.pool_name }}</option>
-              </select>
-              <span class="invalid-feedback"
-                    *ngIf="serviceForm.showError('pool', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
-          </div>
-
-          <!-- namespace -->
-          <div class="form-group row">
-            <label i18n
-                   class="cd-col-form-label"
-                   for="namespace">Namespace</label>
-            <div class="cd-col-form-input">
-              <input id="namespace"
-                     class="form-control"
-                     type="text"
-                     formControlName="namespace">
-            </div>
-          </div>
-        </ng-container>
 
         <!-- RGW -->
         <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'rgw'">
@@ -534,13 +491,13 @@
         </ng-container>
       </div>
 
-      <div class="card-footer">
+      <div class="modal-footer">
         <div class="text-right">
           <cd-form-button-panel (submitActionEvent)="onSubmit()"
                                 [form]="serviceForm"
                                 [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
         </div>
       </div>
-    </div>
-  </form>
-</div>
+    </form>
+  </ng-container>
+</cd-modal>

@@ -5,6 +5,7 @@ import _ from 'lodash';
 import { map } from 'rxjs/operators';
 
 import { CdDevice } from '../models/devices';
+import { InventoryDeviceType } from '../models/inventory-device-type.model';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
 
@@ -13,6 +14,7 @@ import { DeviceService } from '../services/device.service';
 })
 export class OsdService {
   private path = 'api/osd';
+  osdDevices: InventoryDeviceType[] = [];
 
   osdRecvSpeedModalPriorities = {
     KNOWN_PRIORITIES: [

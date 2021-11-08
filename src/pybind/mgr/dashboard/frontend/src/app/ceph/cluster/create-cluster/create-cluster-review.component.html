@@ -1,0 +1,50 @@
+<div class="row">
+  <div class="col-lg-4">
+    <fieldset>
+      <legend class="cd-header"
+              i18n>Cluster Resources</legend>
+      <table class="table table-striped">
+        <tr>
+          <td i18n
+              class="bold">Hosts</td>
+          <td>{{ hostsCount }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold">Storage Capacity</td>
+          <td><span i18n>Number of devices: {{ totalDevices }}. Raw capacity:
+            {{ totalCapacity | dimlessBinary }}.</span></td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold">CPUs</td>
+          <td>{{ totalCPUs }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold">Memory</td>
+          <td>{{ totalMemory }}</td>
+        </tr>
+      </table>
+    </fieldset>
+  </div>
+
+  <div class="col-lg-8">
+    <legend i18n
+            class="cd-header">Hosts by Services</legend>
+    <cd-table [data]="hostsByService['data']"
+              [columns]="hostsByService['columns']"
+              [toolHeader]="false">
+    </cd-table>
+  </div>
+</div>
+
+<legend i18n
+        class="cd-header">Host Details</legend>
+<cd-hosts [hiddenColumns]="['services', 'status']"
+          [hideToolHeader]="true"
+          [hideTitle]="true"
+          [hideSubmitBtn]="true"
+          [hasTableDetails]="false"
+          [showGeneralActionsOnly]="true">
+</cd-hosts>

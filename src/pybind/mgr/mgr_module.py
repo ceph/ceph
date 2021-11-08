@@ -79,6 +79,7 @@ PG_STATES = [
     "wait",
 ]
 
+NFS_GANESHA_SUPPORTED_FSALS = ['CEPH', 'RGW']
 NFS_POOL_NAME = '.nfs'
 
 

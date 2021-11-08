@@ -2,10 +2,10 @@
 from __future__ import absolute_import
 
 from ..api.doc import SchemaType
-from ..controllers import APIDoc, APIRouter, Endpoint, EndpointDoc, RESTController
+from ..controllers import ENDPOINT_MAP, APIDoc, APIRouter, Endpoint, EndpointDoc, RESTController
 from ..controllers._version import APIVersion
 from ..controllers.docs import Docs
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase
 
 
 # Dummy controller and endpoint that can be assigned with @EndpointDoc and @GroupDoc
@@ -66,6 +66,7 @@ class DocDecoratorsTest(ControllerTestCase):
 class DocsTest(ControllerTestCase):
     @classmethod
     def setup_server(cls):
+        ENDPOINT_MAP.clear()
         cls.setup_controllers([DecoratedController, Docs], "/test")
 
     def test_type_to_str(self):
@@ -120,5 +121,5 @@ class DocsTest(ControllerTestCase):
             self.assertTrue(any(base in key.split('/')[1] for base in ['api', 'ui-api']))
 
     def test_gen_tags(self):
-        outcome = Docs()._gen_tags(False)[0]
-        self.assertEqual({'description': 'Group description', 'name': 'FooGroup'}, outcome)
+        outcome = Docs._gen_tags(False)
+        self.assertEqual([{'description': 'Group description', 'name': 'FooGroup'}], outcome)

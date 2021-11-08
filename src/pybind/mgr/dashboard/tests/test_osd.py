@@ -9,8 +9,8 @@ from ceph.deployment.service_spec import PlacementSpec  # type: ignore
 
 from .. import mgr
 from ..controllers.osd import Osd
+from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
 from .helper import update_dict  # pylint: disable=import-error
 
 
@@ -191,7 +191,6 @@ class OsdHelper(object):
 class OsdTest(ControllerTestCase):
     @classmethod
     def setup_server(cls):
-        Osd._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
         cls.setup_controllers([Osd])
         NotificationQueue.start_queue()
         TaskManager.init()
