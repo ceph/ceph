@@ -1638,6 +1638,7 @@ Context* AbstractWriteLog<I>::construct_flush_entry(std::shared_ptr<GenericLogEn
     m_lowest_flushing_sync_gen = log_entry->ram_entry.sync_gen_number;
   }
   m_flush_ops_in_flight += 1;
+  m_flush_ops_will_send += 1;
   /* For write same this is the bytes affected by the flush op, not the bytes transferred */
   m_flush_bytes_in_flight += log_entry->ram_entry.write_bytes;
 
@@ -1708,6 +1709,11 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
         /* Do flush complete only when all flush ops are finished */
         all_clean = !m_flush_ops_in_flight;
         break;
+      }
+
+      if (m_flush_ops_will_send) {
+	ldout(cct, 20) << "Previous flush-ops is still not sent" << dendl;
+	break;
       }
       auto candidate = m_dirty_log_entries.front();
       bool flushable = can_flush_entry(candidate);
