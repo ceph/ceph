@@ -164,15 +164,24 @@ int LRemDBIoCtxImpl::create(LRemTransactionStateRef& trans, bool exclusive,
   auto cct = m_client->cct();
   ldout(cct, 20) << "snapc=" << snapc << dendl;
 
-  std::unique_lock l{m_pool->file_lock};
-  ObjFileRef file = get_file(trans, false, CEPH_NOSNAP, {});
-  bool exists = (file != NULL && file->exists);
-  if (exists) {
-    return (exclusive ? -EEXIST : 0);
+  uint64_t new_epoch;
+
+  ObjFileRef new_file;
+  {
+    std::unique_lock l{m_pool->file_lock};
+    ObjFileRef file = get_file(trans, false, CEPH_NOSNAP, {});
+    bool exists = (file != NULL && file->exists);
+    if (exists) {
+      return (exclusive ? -EEXIST : 0);
+    }
+    new_file = get_file(trans, true, CEPH_NOSNAP, snapc);
+    new_epoch = ++m_pool->epoch;
+
   }
 
-  auto new_file = get_file(trans, true, CEPH_NOSNAP, snapc);
-  new_file->meta.epoch = ++m_pool->epoch;
+  std::unique_lock l{*new_file->lock};
+
+  new_file->meta.epoch = new_epoch;
 
   int r = new_file->obj->write_meta(new_file->meta);
   if (r < 0) {
