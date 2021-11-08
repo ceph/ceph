@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14.0)
 project(dbstore-tests)
 
-set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} gtest)
+set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} librados gtest)
 
 set(dbstore_tests_srcs
     dbstore_tests.cc)

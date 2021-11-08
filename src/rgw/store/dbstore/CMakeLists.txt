@@ -54,7 +54,7 @@ target_link_libraries(dbstore ${CMAKE_LINK_LIBRARIES})
 set(dbstore_main_srcs
     dbstore_main.cc)
 
-set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} dbstore)
+set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} dbstore librados)
 add_executable(dbstore-bin ${dbstore_main_srcs})
 add_dependencies(dbstore-bin dbstore)
 target_link_libraries(dbstore-bin ${CMAKE_LINK_LIBRARIES})

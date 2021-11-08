@@ -17,7 +17,6 @@
 #include "LRemClassHandler.h"
 #include "LRemIoCtxImpl.h"
 #include "LRemRadosClient.h"
-#include "mod/db/LRemDBCluster.h"
 #include "objclass/objclass.h"
 #include "osd/osd_types.h"
 #include <arpa/inet.h>
@@ -38,22 +37,7 @@ using namespace std;
 
 namespace librados_stub {
 
-LRemClusterRef &cluster() {
-  static LRemClusterRef s_cluster;
-  return s_cluster;
-}
-
-void set_cluster(LRemClusterRef cluster_ref) {
-  cluster() = cluster_ref;
-}
-
-LRemClusterRef get_cluster() {
-  auto &cluster_ref = cluster();
-  if (cluster_ref.get() == nullptr) {
-    cluster_ref.reset(new librados::LRemDBCluster(g_ceph_context));
-  }
-  return cluster_ref;
-}
+LRemClusterRef get_cluster();
 
 librados::LRemClassHandler *get_class_handler() {
   static boost::shared_ptr<librados::LRemClassHandler> s_class_handler;

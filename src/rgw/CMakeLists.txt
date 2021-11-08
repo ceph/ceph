@@ -198,7 +198,6 @@ target_link_libraries(rgw_common
     cls_timeindex_client
     cls_user_client
     cls_version_client
-    librados_stub
     rt
     fmt::fmt
     ICU::uc
@@ -355,7 +354,7 @@ set_target_properties(radosgw PROPERTIES OUTPUT_NAME radosgw VERSION 2.0.0
 install(TARGETS radosgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 add_executable(radosgwd radosgw.cc)
-target_link_libraries(radosgwd radosgw librados_stub
+target_link_libraries(radosgwd radosgw librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
@@ -366,12 +365,25 @@ target_link_libraries(radosgwd radosgw librados_stub
 set_target_properties(radosgwd PROPERTIES OUTPUT_NAME radosgw)
 install(TARGETS radosgwd DESTINATION bin)
 
+add_executable(radosgwd_sqlite radosgw.cc)
+target_link_libraries(radosgwd_sqlite radosgw librados_sqlite
+  cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
+  cls_log_client cls_timeindex_client neorados_cls_fifo
+  cls_version_client cls_user_client
+  global
+  ${LIB_RESOLV}
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
+  ${ALLOC_LIBS})
+set_target_properties(radosgwd_sqlite PROPERTIES OUTPUT_NAME radosgw-sqlite)
+install(TARGETS radosgwd_sqlite DESTINATION bin)
+
 set(radosgw_admin_srcs
   rgw_admin.cc
   rgw_sync_checkpoint.cc
   rgw_orphan.cc)
+
 add_executable(radosgw-admin ${radosgw_admin_srcs})
-target_link_libraries(radosgw-admin ${rgw_libs} librados_stub
+target_link_libraries(radosgw-admin ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
@@ -380,10 +392,20 @@ target_link_libraries(radosgw-admin ${rgw_libs} librados_stub
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-admin DESTINATION bin)
 
+add_executable(radosgw-admin-sqlite ${radosgw_admin_srcs})
+target_link_libraries(radosgw-admin-sqlite ${rgw_libs} librados_sqlite
+  cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
+  cls_log_client cls_timeindex_client neorados_cls_fifo
+  cls_version_client cls_user_client
+  global ${LIB_RESOLV}
+  OATH::OATH
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+install(TARGETS radosgw-admin-sqlite DESTINATION bin)
+
 set(radosgw_es_srcs
   rgw_es_main.cc)
 add_executable(radosgw-es ${radosgw_es_srcs})
-target_link_libraries(radosgw-es ${rgw_libs} librados_stub
+target_link_libraries(radosgw-es ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
@@ -394,14 +416,14 @@ install(TARGETS radosgw-es DESTINATION bin)
 set(radosgw_token_srcs
   rgw_token.cc)
 add_executable(radosgw-token ${radosgw_token_srcs})
-target_link_libraries(radosgw-token librados_stub
+target_link_libraries(radosgw-token librados
   global ${ALLOC_LIBS})
 install(TARGETS radosgw-token DESTINATION bin)
 
 set(radosgw_object_expirer_srcs
   rgw_object_expirer.cc)
 add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
-target_link_libraries(radosgw-object-expirer ${rgw_libs} librados_stub
+target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
@@ -416,7 +438,7 @@ add_library(rgw SHARED ${librgw_srcs})
 target_link_libraries(rgw
   PRIVATE
   ${rgw_libs}
-  librados_stub
+  librados
   cls_rgw_client
   cls_otp_client
   cls_lock_client
@@ -453,12 +475,14 @@ if(WITH_TESTS)
     rgw_jsonparser.cc)
   target_link_libraries(ceph_rgw_jsonparser
     ${rgw_libs}
+    librados
     global)
 
   add_executable(ceph_rgw_multiparser
     rgw_multiparser.cc)
   target_link_libraries(ceph_rgw_multiparser
     ${rgw_libs}
+    librados
     global)
 
   install(TARGETS
