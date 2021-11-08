@@ -1170,7 +1170,8 @@ HugePagePoolOfPools HugePagePoolOfPools::from_desc(const std::string& desc) {
 // create a buffer basing on user-configurable. it's intended to make
 // our buffers THP-able.
 ceph::unique_leakable_ptr<buffer::raw> KernelDevice::create_custom_aligned(
-  const size_t len) const
+  const size_t len,
+  IOContext* const ioc) const
 {
   // just to preserve the logic of create_small_page_aligned().
   if (len < CEPH_PAGE_SIZE) {
@@ -1185,6 +1186,7 @@ ceph::unique_leakable_ptr<buffer::raw> KernelDevice::create_custom_aligned(
 	       << " bdev_read_preallocated_huge_buffers="
 	       << cct->_conf.get_val<std::string>("bdev_read_preallocated_huge_buffers")
 	       << dendl;
+      ioc->flags |= IOContext::FLAG_DONT_CACHE;
       return lucky_raw;
     } else {
       // fallthrough due to empty buffer pool. this can happen also
@@ -1214,7 +1216,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 
   auto start1 = mono_clock::now();
 
-  auto p = ceph::buffer::ptr_node::create(create_custom_aligned(len));
+  auto p = ceph::buffer::ptr_node::create(create_custom_aligned(len, ioc));
   int r = ::pread(choose_fd(buffered,  WRITE_LIFE_NOT_SET),
 		  p->c_str(), len, off);
   auto age = cct->_conf->bdev_debug_aio_log_age;
@@ -1266,7 +1268,7 @@ int KernelDevice::aio_read(
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     aio.bl.push_back(
-      ceph::buffer::ptr_node::create(create_custom_aligned(len)));
+      ceph::buffer::ptr_node::create(create_custom_aligned(len, ioc)));
     aio.bl.prepare_iov(&aio.iov);
     aio.preadv(off, len);
     dout(30) << aio << dendl;
