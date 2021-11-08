@@ -247,33 +247,20 @@ class CephadmServe:
             if self.mgr.inventory._inventory[host].get("status", "").lower() == "maintenance":
                 return
 
-            if self.mgr.use_agent and self.mgr.agent_helpers._agent_down(host):
-                agents_down.append(host)
-                self.mgr.cache.metadata_up_to_date[host] = False
-                if host in self.mgr.offline_hosts:
-                    return
-
-                # In case host is actually offline, it's best to reset the connection to avoid
-                # a long timeout trying to use an existing connection to an offline host
-                # REVISIT AFTER https://github.com/ceph/ceph/pull/42919
-                # self.mgr.ssh._reset_con(host)
-
-                try:
-                    # try to schedule redeploy of agent in case it is individually down
-                    agent = [a for a in self.mgr.cache.get_daemons_by_host(
-                        host) if a.hostname == host][0]
-                    self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
-                except Exception as e:
-                    self.log.debug(
-                        f'Failed to find entry for agent deployed on host {host}. Agent possibly never deployed: {e}')
-                return
+            if self.mgr.use_agent:
+                if self.mgr.agent_helpers._check_agent(host):
+                    agents_down.append(host)
 
             if self.mgr.cache.host_needs_check(host):
                 r = self._check_host(host)
                 if r is not None:
                     bad_hosts.append(r)
 
-            if not self.mgr.use_agent or host not in [h.hostname for h in self.mgr.cache.get_non_draining_hosts()]:
+            if (
+                not self.mgr.use_agent
+                or host not in [h.hostname for h in self.mgr.cache.get_non_draining_hosts()]
+                or host in agents_down
+            ):
                 if self.mgr.cache.host_needs_daemon_refresh(host):
                     self.log.debug('refreshing %s daemons' % host)
                     r = self._refresh_host_daemons(host)
@@ -295,6 +282,13 @@ class CephadmServe:
                 if self.mgr.cache.host_needs_device_refresh(host):
                     self.log.debug('refreshing %s devices' % host)
                     r = self._refresh_host_devices(host)
+                    if r:
+                        failures.append(r)
+                self.mgr.cache.metadata_up_to_date[host] = True
+            elif not self.mgr.cache.get_daemons_by_type('agent', host=host):
+                if self.mgr.cache.host_needs_daemon_refresh(host):
+                    self.log.debug('refreshing %s daemons' % host)
+                    r = self._refresh_host_daemons(host)
                     if r:
                         failures.append(r)
                 self.mgr.cache.metadata_up_to_date[host] = True
@@ -876,7 +870,6 @@ class CephadmServe:
         return r
 
     def _check_daemons(self) -> None:
-
         daemons = self.mgr.cache.get_daemons()
         daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
         for dd in daemons:
@@ -901,12 +894,11 @@ class CephadmServe:
 
             if dd.daemon_type == 'agent':
                 try:
-                    assert self.mgr.cherrypy_thread
-                    assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+                    self.mgr.agent_helpers._check_agent(dd.hostname)
                 except Exception:
-                    self.log.info(
-                        f'Delaying checking {dd.name()} until cephadm endpoint finished creating root cert')
-                    continue
+                    self.log.debug(
+                        f'Agent {dd.name()} could not be checked in _check_daemons')
+                continue
 
             # These daemon types require additional configs after creation
             if dd.daemon_type in REQUIRES_POST_ACTIONS:
@@ -1079,6 +1071,7 @@ class CephadmServe:
 
                 if daemon_spec.daemon_type == 'agent':
                     self.mgr.cache.agent_timestamp[daemon_spec.host] = datetime_now()
+                    self.mgr.cache.agent_counter[daemon_spec.host] = 1
 
                 # refresh daemon state?  (ceph daemon reconfig does not need it)
                 if not reconfig or daemon_spec.daemon_type not in CEPH_TYPES:

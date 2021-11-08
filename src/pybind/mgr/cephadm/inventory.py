@@ -817,6 +817,14 @@ class HostCache():
                 r.append(dd)
         return r
 
+    def get_error_daemons(self) -> List[orchestrator.DaemonDescription]:
+        r = []
+        for host, dm in self.daemons.items():
+            for name, dd in dm.items():
+                if dd.status is not None and dd.status == orchestrator.DaemonDescriptionStatus.error:
+                    r.append(dd)
+        return r
+
     def get_daemons_by_host(self, host: str) -> List[orchestrator.DaemonDescription]:
         return list(self.daemons.get(host, {}).values())
 
@@ -864,12 +872,13 @@ class HostCache():
                     result.append(d)
         return result
 
-    def get_daemons_by_type(self, service_type):
-        # type: (str) -> List[orchestrator.DaemonDescription]
+    def get_daemons_by_type(self, service_type: str, host: str = '') -> List[orchestrator.DaemonDescription]:
         assert service_type not in ['keepalived', 'haproxy']
 
         result = []   # type: List[orchestrator.DaemonDescription]
-        for host, dm in self.daemons.items():
+        for h, dm in self.daemons.items():
+            if host and h != host:
+                continue
             for name, d in dm.items():
                 if d.daemon_type in service_to_daemon_types(service_type):
                     result.append(d)
@@ -913,6 +922,8 @@ class HostCache():
             seconds=self.mgr.daemon_cache_timeout)
         if host not in self.last_daemon_update or self.last_daemon_update[host] < cutoff:
             return True
+        if not self.mgr.cache.host_metadata_up_to_date(host):
+            return True
         return False
 
     def host_needs_facts_refresh(self, host):
@@ -923,6 +934,8 @@ class HostCache():
         cutoff = datetime_now() - datetime.timedelta(
             seconds=self.mgr.facts_cache_timeout)
         if host not in self.last_facts_update or self.last_facts_update[host] < cutoff:
+            return True
+        if not self.mgr.cache.host_metadata_up_to_date(host):
             return True
         return False
 
@@ -959,6 +972,8 @@ class HostCache():
             seconds=self.mgr.device_cache_timeout)
         if host not in self.last_device_update or self.last_device_update[host] < cutoff:
             return True
+        if not self.mgr.cache.host_metadata_up_to_date(host):
+            return True
         return False
 
     def host_needs_network_refresh(self, host):
@@ -972,6 +987,8 @@ class HostCache():
         cutoff = datetime_now() - datetime.timedelta(
             seconds=self.mgr.device_cache_timeout)
         if host not in self.last_network_update or self.last_network_update[host] < cutoff:
+            return True
+        if not self.mgr.cache.host_metadata_up_to_date(host):
             return True
         return False
 
