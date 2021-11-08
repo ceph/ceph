@@ -971,7 +971,7 @@ void Replayer<I>::allocate_local_tag() {
     if (local_tag_data.mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID &&
         (local_tag_data.predecessor.commit_valid &&
          local_tag_data.predecessor.mirror_uuid ==
-           librbd::Journal<>::LOCAL_MIRROR_UUID)) {
+           librbd::Journal<>::LOCAL_MIRROR_UUID) && !is_replaying()) {
       dout(15) << "skipping stale demotion event" << dendl;
       handle_process_entry_safe(m_replay_entry, m_replay_bytes,
                                 m_replay_start_time, 0);
