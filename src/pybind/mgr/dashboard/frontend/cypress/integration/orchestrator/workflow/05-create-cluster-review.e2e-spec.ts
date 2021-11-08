@@ -34,39 +34,28 @@ describe('Create Cluster Review page', () => {
       createCluster.getStatusTables().should('contain.text', 'Memory');
     });
 
-    it('should check Hosts by Services and Host Details tables are present', () => {
+    it('should check Host Details table is present', () => {
       // check for there to be two tables
-      createCluster.getDataTables().should('have.length', 2);
-
-      // check for table header 'Hosts by Services'
-      createCluster.getLegends().its(1).should('have.text', 'Hosts by Services');
-
-      // check for table header 'Host Details'
-      createCluster.getLegends().its(2).should('have.text', 'Host Details');
-
-      // verify correct columns on Hosts by Services table
-      createCluster.getDataTableHeaders(0).contains('Services');
-
-      createCluster.getDataTableHeaders(0).contains('Number of Hosts');
+      createCluster.getDataTables().should('have.length', 1);
 
       // verify correct columns on Host Details table
-      createCluster.getDataTableHeaders(1).contains('Hostname');
+      createCluster.getDataTableHeaders(0).contains('Hostname');
 
-      createCluster.getDataTableHeaders(1).contains('Labels');
+      createCluster.getDataTableHeaders(0).contains('Labels');
 
-      createCluster.getDataTableHeaders(1).contains('CPUs');
+      createCluster.getDataTableHeaders(0).contains('CPUs');
 
-      createCluster.getDataTableHeaders(1).contains('Cores');
+      createCluster.getDataTableHeaders(0).contains('Cores');
 
-      createCluster.getDataTableHeaders(1).contains('Total Memory');
+      createCluster.getDataTableHeaders(0).contains('Total Memory');
 
-      createCluster.getDataTableHeaders(1).contains('Raw Capacity');
+      createCluster.getDataTableHeaders(0).contains('Raw Capacity');
 
-      createCluster.getDataTableHeaders(1).contains('HDDs');
+      createCluster.getDataTableHeaders(0).contains('HDDs');
 
-      createCluster.getDataTableHeaders(1).contains('Flash');
+      createCluster.getDataTableHeaders(0).contains('Flash');
 
-      createCluster.getDataTableHeaders(1).contains('NICs');
+      createCluster.getDataTableHeaders(0).contains('NICs');
     });
 
     it('should check default host name is present', () => {
