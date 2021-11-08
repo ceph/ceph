@@ -53,14 +53,17 @@ class ReplicaClient {
 
   void* _local_head_ptr{nullptr};
 
+  Context *_error_handler_context{nullptr};
+
  public:
   ReplicaClient(CephContext *cct, uint64_t size, uint32_t copies, std::string pool_name, std::string image_name, librados::IoCtx& ioctx);
   ~ReplicaClient();
   int write(size_t offset, size_t len);
   int write(const void* addr, size_t len);
   int flush();
-  int init(void *head_ptr, uint64_t size);
+  int init(void *head_ptr, uint64_t size, Context *error_callback);
   void close();
+  void error_handle(int r);
 
  public:
   void shutdown();
@@ -69,6 +72,7 @@ class ReplicaClient {
   int cache_free();
   void disconnect();
   int set_head(void *head_ptr, uint64_t size);
+  void set_error_handler_context();
   int replica_init();
   int replica_close();
 

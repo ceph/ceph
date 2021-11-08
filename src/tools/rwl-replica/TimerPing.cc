@@ -173,7 +173,10 @@ void PrimaryPing::C_Ping::finish(int r) {
     pping->_ping_timer.add_event_after(RBD_RWLCACHE_PRIMARY_PING_TIMEOUT >> 1, new C_Ping(pping));
   } else {
     ldout(pping->_cct, 1) << "Error: shutdown in PrimaryPing" << dendl;
+    pping->_client->close();
     pping->_client->shutdown();
+    // error_handle should stop write and flush cachefile
+    pping->_client->error_handle(-ok);
   }
 }
 

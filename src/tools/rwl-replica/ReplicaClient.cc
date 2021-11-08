@@ -36,6 +36,9 @@ ReplicaClient::~ReplicaClient() {
   ldout(_cct, 20) << dendl;
   shutdown();
   _reactor_thread->join();
+  if (_error_handler_context != nullptr) {
+    delete _error_handler_context;
+  }
 }
 
 void ReplicaClient::shutdown() {
@@ -43,9 +46,20 @@ void ReplicaClient::shutdown() {
   _reactor->shutdown();
 }
 
-int ReplicaClient::init(void *head_ptr, uint64_t size) {
+int ReplicaClient::init(void *head_ptr, uint64_t size, Context *error_callback) {
   ldout(_cct, 20) << dendl;
   int r = 0;
+
+  if (error_callback == nullptr) {
+    //  The default implementation just breaks into the debugger and assert
+    _error_handler_context = new LambdaContext([this, cct = _cct](int r) {
+      lderr(cct) << "Here has error to need to handle!!!" << dendl;
+      ceph_assert(r == 0);
+    });
+  } else {
+    _error_handler_context = error_callback;
+  }
+
   if ((r = init_ioctx()) < 0) {
     lderr(_cct) << "replica: failed to init ioctx" << dendl;
     return r;
@@ -54,6 +68,9 @@ int ReplicaClient::init(void *head_ptr, uint64_t size) {
     lderr(_cct) << "replica: failed to create cache file in remote replica" << dendl;
     return r;
   }
+
+  set_error_handler_context();
+
   if((r = set_head(head_ptr, size)) < 0) {
     lderr(_cct) << "replica: failed to set head" << dendl;
     return r;
@@ -69,6 +86,14 @@ void ReplicaClient::close() {
   replica_close();
   disconnect();
   cache_free();
+}
+
+void ReplicaClient::error_handle(int r) {
+  ldout(_cct, 20) << dendl;
+  if (_error_handler_context != nullptr) {
+    _error_handler_context->complete(r);
+    _error_handler_context = nullptr;
+  }
 }
 
 int ReplicaClient::flush() {
@@ -193,6 +218,22 @@ int ReplicaClient::set_head(void *head_ptr, uint64_t size) {
   }
   _local_head_ptr = head_ptr;
   return 0;
+}
+
+void ReplicaClient::set_error_handler_context() {
+  ldout(_cct, 20) << dendl;
+  for (auto &daemon : _daemons) {
+    if (daemon.client_handler) {
+      daemon.client_handler->set_error_handler_context(new LambdaContext([this](int r){
+        if (r >= 0) {
+          ldout(this->_cct, 20) << "There is no error." << dendl;
+        } else {
+          this->error_handle(r);
+        }
+      }));
+    }
+  }
+  return;
 }
 
 int ReplicaClient::init_ioctx() {

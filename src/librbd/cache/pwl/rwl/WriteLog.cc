@@ -466,7 +466,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     }
 
     ldout(cct, 20) << "ReplicaClient: init()" << dendl;
-    if (m_replica_pool->init(m_log_pool->get_head_addr(), m_log_pool->get_mapped_len()) < 0) {
+    if (m_replica_pool->init(m_log_pool->get_head_addr(), m_log_pool->get_mapped_len(), nullptr) < 0) {
       lderr(cct) << "replica: failed to init" << dendl;
       on_finish->complete(-errno);
       return false;

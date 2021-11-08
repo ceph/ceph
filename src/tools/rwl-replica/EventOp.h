@@ -7,6 +7,7 @@
 #include "RpmaOp.h"
 #include "Types.h"
 #include "include/rados/librados.hpp"
+#include "include/Context.h"
 
 #include <atomic>
 #include <set>
@@ -120,6 +121,9 @@ public:
   bool wait_established();
   bool wait_disconnected();
 
+  void set_error_handler_context(Context *error_callback);
+  void error_handle(int r);
+
 protected:
   // Notice: call this function after peer is initialized.
   void init_send_recv_buffer();
@@ -137,6 +141,8 @@ protected:
 
   Handle _conn_fd;
   Handle _comp_fd;
+
+  Context *_error_handler_context{nullptr};
 
 private:
   std::atomic<bool> connected{false};
