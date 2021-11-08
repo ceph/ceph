@@ -661,6 +661,35 @@ int radosgw_Main(int argc, const char **argv)
   }
 #endif
 
+  RGWUserAdminOpState user_op(store);
+
+  rgw_user uid("yehsad");
+  string dn = "yehuda";
+  string email = "yehuda@redhat.com";
+  string access_key = "bla";
+  string secret = "asd";
+  user_op.set_user_id(uid);
+  user_op.set_display_name(dn);
+  user_op.set_user_email(email);
+  user_op.set_access_key(access_key);
+  user_op.set_secret_key(secret);
+
+  RGWUser ruser;
+  r = ruser.init(&dp, store, user_op, null_yield);
+  if (r < 0) {
+    derr << "user.init failed: " << cpp_strerror(-r) << dendl;
+    return -r;
+  }
+  string err_msg;
+  r = ruser.add(&dp, user_op, null_yield, &err_msg);
+  if (r < 0 && r != -EEXIST) {
+    derr << "could not create user: " << err_msg << dendl;
+    if (r == -ERR_INVALID_TENANT_NAME)
+      r = -EINVAL;
+
+    return -r;
+  }
+
   wait_shutdown();
 
   derr << "shutting down" << dendl;
