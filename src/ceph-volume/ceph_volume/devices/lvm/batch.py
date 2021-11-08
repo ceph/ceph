@@ -319,6 +319,7 @@ class Batch(object):
             nargs='*',
             default=[],
             help='Reuse existing OSD ids',
+            type=common.valid_osd_id
         )
         self.args = parser.parse_args(argv)
         self.parser = parser
