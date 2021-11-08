@@ -83,14 +83,26 @@ public:
   /**
    * submit_record
    *
-   * @param write record and returns offset of first block and seq
+   * write record with the ordering handle
    */
+  struct write_result_t {
+    journal_seq_t start_seq;
+    segment_off_t length;
+
+    journal_seq_t get_end_seq() const {
+      return start_seq.add_offset(length);
+    }
+  };
+  struct submit_result_t {
+    paddr_t record_block_base;
+    write_result_t write_result;
+  };
   using submit_record_ertr = crimson::errorator<
     crimson::ct_error::erange,
     crimson::ct_error::input_output_error
     >;
   using submit_record_ret = submit_record_ertr::future<
-    std::pair<paddr_t, journal_seq_t>
+    submit_result_t
     >;
   submit_record_ret submit_record(
     record_t &&record,
@@ -108,8 +120,7 @@ public:
   using replay_ertr = SegmentManager::read_ertr;
   using replay_ret = replay_ertr::future<>;
   using delta_handler_t = std::function<
-    replay_ret(journal_seq_t seq,
-	       paddr_t record_block_base,
+    replay_ret(const submit_result_t&,
 	       const delta_info_t&)>;
   replay_ret replay(
     std::vector<std::pair<segment_id_t, segment_header_t>>&& segment_headers,
@@ -177,12 +188,8 @@ private:
     using roll_ertr = base_ertr;
     roll_ertr::future<> roll();
 
-    // write the buffer, return the write start
+    // write the buffer, return the write result
     // May be called concurrently, writes may complete in any order.
-    struct write_result_t {
-      journal_seq_t write_start_seq;
-      segment_off_t write_length;
-    };
     using write_ertr = base_ertr;
     using write_ret = write_ertr::future<write_result_t>;
     write_ret write(ceph::bufferlist to_write);
@@ -285,9 +292,8 @@ private:
     //
     // Set write_result_t::write_length to 0 if the record is not the first one
     // in the batch.
-    using add_pending_result_t = JournalSegmentManager::write_result_t;
     using add_pending_ertr = JournalSegmentManager::write_ertr;
-    using add_pending_ret = JournalSegmentManager::write_ret;
+    using add_pending_ret = add_pending_ertr::future<submit_result_t>;
     add_pending_ret add_pending(record_t&&, const record_size_t&);
 
     // Encode the batched records for write.
@@ -297,8 +303,8 @@ private:
         segment_nonce_t segment_nonce);
 
     // Set the write result and reset for reuse
-    using maybe_result_t = std::optional<add_pending_result_t>;
-    void set_result(maybe_result_t maybe_write_result);
+    using maybe_result_t = std::optional<write_result_t>;
+    void set_result(maybe_result_t maybe_write_end_seq);
 
     // The fast path that is equivalent to submit a single record as a batch.
     //
@@ -419,7 +425,7 @@ private:
 
     using submit_pending_ertr = JournalSegmentManager::write_ertr;
     using submit_pending_ret = submit_pending_ertr::future<
-      std::pair<paddr_t, journal_seq_t> >;
+      submit_result_t>;
     submit_pending_ret submit_pending(
         record_t&&, const record_size_t&, OrderingHandle &handle, bool flush);
 

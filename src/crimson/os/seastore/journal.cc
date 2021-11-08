@@ -207,9 +207,15 @@ Journal::replay_segment(
 		     seq.segment_seq)) {
 		  return replay_ertr::now();
 		} else {
-		  return handler(
-		    journal_seq_t{seq.segment_seq, base},
+		  auto offsets = submit_result_t{
 		    base.add_offset(header.mdlength),
+		    write_result_t{
+		      journal_seq_t{seq.segment_seq, base},
+		      static_cast<segment_off_t>(header.mdlength + header.dlength)
+		    }
+		  };
+		  return handler(
+		    offsets,
 		    delta);
 		}
 	      });
@@ -440,41 +446,33 @@ Journal::RecordBatch::add_pending(
   assert(state != state_t::SUBMITTING);
   assert(can_batch(rsize));
 
-  auto record_start_offset = encoded_length;
+  auto block_start_offset = encoded_length + rsize.mdlength;
   records.push_back(std::move(record));
   record_sizes.push_back(rsize);
   auto new_encoded_length = get_encoded_length(rsize);
   assert(new_encoded_length < MAX_SEG_OFF);
   encoded_length = new_encoded_length;
-  bool is_first;
   if (state == state_t::EMPTY) {
     assert(!io_promise.has_value());
     io_promise = seastar::shared_promise<maybe_result_t>();
-    is_first = true;
   } else {
     assert(io_promise.has_value());
-    is_first = false;
   }
   state = state_t::PENDING;
 
   return io_promise->get_shared_future(
-  ).then([record_start_offset, is_first
+  ).then([block_start_offset
          ](auto maybe_write_result) -> add_pending_ret {
     if (!maybe_write_result.has_value()) {
       return crimson::ct_error::input_output_error::make();
     }
-    auto write_result = maybe_write_result.value();
-    if (is_first) {
-      assert(record_start_offset == 0);
-    } else {
-      assert(record_start_offset > 0);
-      write_result.write_start_seq.offset.offset += record_start_offset;
-      // only the first record should update JournalSegmentManager::committed_to
-      write_result.write_length = 0;
-    }
+    auto submit_result = submit_result_t{
+      maybe_write_result->start_seq.offset.add_offset(block_start_offset),
+      *maybe_write_result
+    };
     return add_pending_ret(
       add_pending_ertr::ready_future_marker{},
-      write_result);
+      submit_result);
   });
 }
 
@@ -515,8 +513,9 @@ void Journal::RecordBatch::set_result(
     logger().debug(
       "Journal::RecordBatch::set_result: batches={}, write_start {} + {}",
       records.size(),
-      maybe_write_result->write_start_seq,
-      maybe_write_result->write_length);
+      maybe_write_result->start_seq,
+      maybe_write_result->length);
+    assert(maybe_write_result->length == encoded_length);
   } else {
     logger().error(
       "Journal::RecordBatch::set_result: batches={}, write is failed!",
@@ -673,7 +672,12 @@ Journal::RecordSubmitter::submit_pending(
         journal_segment_manager.get_committed_to(),
         journal_segment_manager.get_nonce());
       return journal_segment_manager.write(to_write
-      ).finally([this] {
+      ).safe_then([rsize](auto write_result) {
+        return submit_result_t{
+          write_result.start_seq.offset.add_offset(rsize.mdlength),
+          write_result
+        };
+      }).finally([this] {
         decrement_io_with_flush();
       });
     } else {
@@ -689,17 +693,12 @@ Journal::RecordSubmitter::submit_pending(
   return handle.enter(write_pipeline->device_submission
   ).then([write_fut=std::move(write_fut)]() mutable {
     return std::move(write_fut);
-  }).safe_then([this, &handle, rsize](auto write_result) {
+  }).safe_then([this, &handle](auto submit_result) {
     return handle.enter(write_pipeline->finalize
-    ).then([this, write_result, rsize] {
-      if (write_result.write_length > 0) {
-        auto committed_to = write_result.write_start_seq;
-        committed_to.offset.offset += write_result.write_length;
-        journal_segment_manager.mark_committed(committed_to);
-      }
-      return std::make_pair(
-        write_result.write_start_seq.offset.add_offset(rsize.mdlength),
-        write_result.write_start_seq);
+    ).then([this, submit_result] {
+      journal_segment_manager.mark_committed(
+          submit_result.write_result.get_end_seq());
+      return submit_result;
     });
   });
 }
