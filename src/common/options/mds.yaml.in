@@ -1409,3 +1409,15 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_sleep_rank_change
+  type: float
+  level: dev
+  default: 0.0
+  flags:
+  - runtime
+- name: mds_connect_bootstrapping
+  type: bool
+  level: dev
+  default: false
+  flags:
+  - runtime
