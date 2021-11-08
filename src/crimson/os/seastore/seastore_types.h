@@ -585,6 +585,10 @@ struct journal_seq_t {
   segment_seq_t segment_seq = 0;
   paddr_t offset;
 
+  journal_seq_t add_offset(segment_off_t o) const {
+    return {segment_seq, offset.add_offset(o)};
+  }
+
   DENC(journal_seq_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.segment_seq, p);

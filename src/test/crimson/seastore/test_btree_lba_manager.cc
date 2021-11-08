@@ -58,9 +58,11 @@ struct btree_test_base :
   {
     auto record = cache->prepare_record(*t);
     return journal->submit_record(std::move(record), t->get_handle()).safe_then(
-      [this, t=std::move(t)](auto p) mutable {
-	auto [addr, seq] = p;
-	cache->complete_commit(*t, addr, seq);
+      [this, t=std::move(t)](auto submit_result) mutable {
+	cache->complete_commit(
+            *t,
+            submit_result.record_block_base,
+            submit_result.write_result.start_seq);
 	complete_commit(*t);
       }).handle_error(crimson::ct_error::assert_all{});
   }
