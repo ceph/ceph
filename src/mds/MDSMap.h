@@ -456,6 +456,9 @@ public:
   }
 
   bool is_boot(mds_rank_t m) const { return get_state(m) == STATE_BOOT; }
+  bool is_bootstrapping(mds_rank_t m) const {
+    return is_creating(m) || is_starting(m) || is_replay(m);
+  }
   bool is_creating(mds_rank_t m) const { return get_state(m) == STATE_CREATING; }
   bool is_starting(mds_rank_t m) const { return get_state(m) == STATE_STARTING; }
   bool is_replay(mds_rank_t m) const   { return get_state(m) == STATE_REPLAY; }
