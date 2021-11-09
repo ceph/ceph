@@ -94,7 +94,6 @@ std::ostream& WriteLogEntry::format(std::ostream &os) const {
   os << ", "
      << "cache_buffer=" << (void*)cache_buffer << ", ";
   os << "cache_bp=" << cache_bp << ", ";
-  os << "cache_bl=" << cache_bl << ", ";
   os << "bl_refs=" << bl_refs;
   return os;
 }
