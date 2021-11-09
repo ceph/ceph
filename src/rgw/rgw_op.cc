@@ -389,7 +389,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   if (!upload_id.empty() && !copy_src) {
     /* multipart upload */
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
-    upload = store->get_multipart_upload(bucket, object->get_name(), upload_id);
+    upload = bucket->get_multipart_upload(object->get_name(), upload_id);
     mpobj = upload->get_meta_obj();
     mpobj->set_in_extra_data(true);
     object = mpobj.get();
@@ -1900,7 +1900,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   }
   s->object->set_obj_size(s->obj_size);
 
-  r = RGWRados::Object::Read::range_to_ofs(s->obj_size, ofs, end);
+  r = s->object->range_to_ofs(s->obj_size, ofs, end);
   if (r < 0) {
     return r;
   }
@@ -2049,7 +2049,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
   s->object->set_obj_size(slo_info.total_size);
   ldpp_dout(this, 20) << "s->obj_size=" << s->obj_size << dendl;
 
-  int r = RGWRados::Object::Read::range_to_ofs(total_len, ofs, end);
+  int r = s->object->range_to_ofs(total_len, ofs, end);
   if (r < 0) {
     return r;
   }
@@ -2827,7 +2827,6 @@ void RGWStatBucket::execute(optional_yield y)
   if (op_ret) {
     return;
   }
-  op_ret = bucket->update_container_stats(s);
 }
 
 int RGWListBucket::verify_permission(optional_yield y)
@@ -3276,7 +3275,7 @@ void RGWCreateBucket::execute(optional_yield y)
 
   /* We're replacing bucket with the newly created one */
   ldpp_dout(this, 10) << "user=" << s->user << " bucket=" << tmp_bucket << dendl;
-  op_ret = store->create_bucket(this, s->user.get(), tmp_bucket, zonegroup_id,
+  op_ret = s->user->create_bucket(this, tmp_bucket, zonegroup_id,
 				placement_rule,
 				info.swift_ver_location,
 				pquota_info, policy, attrs, info, ep_objv,
@@ -3300,7 +3299,7 @@ void RGWCreateBucket::execute(optional_yield y)
     do {
       map<string, bufferlist> battrs;
 
-      op_ret = s->bucket->get_bucket_info(this, y);
+      op_ret = s->bucket->load_bucket(this, y);
       if (op_ret < 0) {
         return;
       } else if (!s->bucket->is_owner(s->user.get())) {
@@ -3492,9 +3491,9 @@ int RGWPutObj::init_processing(optional_yield y) {
       return ret;
     }
 
-    ret = bucket->get_bucket_info(this, y);
+    ret = bucket->load_bucket(this, y);
     if (ret < 0) {
-      ldpp_dout(this, 5) << __func__ << "(): get_bucket_info() returned ret=" << ret << dendl;
+      ldpp_dout(this, 5) << __func__ << "(): load_bucket() returned ret=" << ret << dendl;
       return ret;
     }
     copy_source_bucket_info = bucket->get_info();
@@ -3926,7 +3925,7 @@ void RGWPutObj::execute(optional_yield y)
   if (multipart) {
     s->trace->SetTag(tracing::UPLOAD_ID, multipart_upload_id);
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
-    upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(),
+    upload = s->bucket->get_multipart_upload(s->object->get_name(),
 					 multipart_upload_id);
     op_ret = upload->get_info(this, s->yield, s->obj_ctx, &pdest_placement);
     if (op_ret < 0) {
@@ -6151,7 +6150,7 @@ void RGWInitMultipart::execute(optional_yield y)
   }
 
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
-  upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(),
+  upload = s->bucket->get_multipart_upload(s->object->get_name(),
 				       upload_id);
   op_ret = upload->init(this, s->yield, s->obj_ctx, s->owner, s->dest_placement, attrs);
 
@@ -6278,7 +6277,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(), upload_id);
+  upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
 
   s->trace->SetTag(tracing::UPLOAD_ID, upload_id);
 
@@ -6495,7 +6494,7 @@ void RGWAbortMultipart::execute(optional_yield y)
   if (upload_id.empty() || rgw::sal::Object::empty(s->object.get()))
     return;
 
-  upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(), upload_id);
+  upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
   op_ret = upload->abort(this, s->cct, obj_ctx);
 }
@@ -6523,7 +6522,7 @@ void RGWListMultipart::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(), upload_id);
+  upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
 
   rgw::sal::Attrs attrs;
   op_ret = upload->get_info(this, s->yield, s->obj_ctx, nullptr, &attrs);
@@ -6961,7 +6960,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     goto binfo_fail;
   }
 
-  ret = bucket->get_bucket_info(dpp, s->yield);
+  ret = bucket->load_bucket(dpp, s->yield);
   if (ret < 0) {
     goto binfo_fail;
   }
@@ -7241,7 +7240,7 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
   placement_rule.storage_class = s->info.storage_class;
   forward_req_info(this, s->cct, info, bucket_name);
 
-  op_ret = store->create_bucket(this, s->user.get(), new_bucket,
+  op_ret = s->user->create_bucket(this, new_bucket,
                                 store->get_zone()->get_zonegroup().get_id(),
                                 placement_rule, swift_ver_location,
                                 pquota_info, policy, attrs,

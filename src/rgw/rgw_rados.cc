@@ -3643,8 +3643,27 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
 int RGWRados::rewrite_obj(rgw::sal::Object* obj, const DoutPrefixProvider *dpp, optional_yield y)
 {
   RGWObjectCtx rctx(this->store);
+  rgw::sal::Attrs attrset;
+  uint64_t obj_size;
+  ceph::real_time mtime;
+  RGWRados::Object op_target(this, obj->get_bucket()->get_info(), rctx, obj->get_obj());
+  RGWRados::Object::Read read_op(&op_target);
 
-  return obj->copy_obj_data(rctx, obj->get_bucket(), obj, 0, NULL, dpp, y);
+  read_op.params.attrs = &attrset;
+  read_op.params.obj_size = &obj_size;
+  read_op.params.lastmod = &mtime;
+
+  int ret = read_op.prepare(y, dpp);
+  if (ret < 0)
+    return ret;
+
+  attrset.erase(RGW_ATTR_ID_TAG);
+  attrset.erase(RGW_ATTR_TAIL_TAG);
+
+  return store->getRados()->copy_obj_data(rctx, obj->get_bucket(),
+					  obj->get_bucket()->get_info().placement_rule,
+					  read_op, obj_size - 1, obj, NULL, mtime,
+					  attrset, 0, real_time(), NULL, dpp, y);
 }
 
 struct obj_time_weight {

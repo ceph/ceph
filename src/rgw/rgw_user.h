@@ -57,10 +57,18 @@ struct RGWUID
 };
 WRITE_CLASS_ENCODER(RGWUID)
 
+/** Entry for bucket metadata collection */
+struct bucket_meta_entry {
+  size_t size;
+  size_t size_rounded;
+  ceph::real_time creation_time;
+  uint64_t count;
+};
+
 extern int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw::sal::User* user, optional_yield y);
 extern int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
   rgw::sal::Store* store, rgw::sal::User* user,
-  std::map<std::string, cls_user_bucket_entry>& buckets_usage_map, optional_yield y);
+  std::map<std::string, bucket_meta_entry>& buckets_usage_map, optional_yield y);
 
 /**
  * Get the anonymous (ie, unauthenticated) user info.
