@@ -484,7 +484,7 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
   }
 
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  bucket->get_bucket_stats(s, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
+  int ret =  bucket->read_stats(s, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
     op_ret = ret;
     return;

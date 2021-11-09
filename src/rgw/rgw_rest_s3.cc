@@ -1328,7 +1328,7 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
   formatter->close_section(); // Category
 }
 
-static void dump_usage_bucket_info(Formatter *formatter, const std::string& name, const cls_user_bucket_entry& entry)
+static void dump_usage_bucket_info(Formatter *formatter, const std::string& name, const bucket_meta_entry& entry)
 {
   formatter->open_object_section("Entry");
   encode_json("Bucket", name, formatter);
@@ -1441,7 +1441,7 @@ void RGWGetUsage_ObjStore_S3::send_response()
   formatter->open_object_section("User");
   formatter->open_array_section("Buckets");
   for (const auto& biter : buckets_usage) {
-    const cls_user_bucket_entry& entry = biter.second;
+    const bucket_meta_entry& entry = biter.second;
     dump_usage_bucket_info(formatter, biter.first, entry);
   }
   formatter->close_section(); // Buckets
@@ -2581,7 +2581,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
   int res = 0;
   if (!multipart_upload_id.empty()) {
     std::unique_ptr<rgw::sal::MultipartUpload> upload =
-      store->get_multipart_upload(s->bucket.get(), s->object->get_name(),
+      s->bucket->get_multipart_upload(s->object->get_name(),
 				  multipart_upload_id);
     std::unique_ptr<rgw::sal::Object> obj = upload->get_meta_obj();
     obj->set_in_extra_data(true);
@@ -4023,7 +4023,7 @@ void RGWGetObjLayout_ObjStore_S3::send_response()
   }
 
   f.open_object_section("result");
-  s->object->get_obj_layout(this, s->yield, &f, s->obj_ctx);
+  s->object->dump_obj_layout(this, s->yield, &f, s->obj_ctx);
   f.close_section();
   rgw_flush_formatter(s, &f);
 }

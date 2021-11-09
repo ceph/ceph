@@ -855,7 +855,7 @@ protected:
   std::map<std::string, bool> categories;
   std::map<rgw_user_bucket, rgw_usage_log_entry> usage;
   std::map<std::string, rgw_usage_log_entry> summary_map;
-  std::map<std::string, cls_user_bucket_entry> buckets_usage;
+  std::map<std::string, bucket_meta_entry> buckets_usage;
   cls_user_header header;
   RGWStorageStats stats;
 public:
