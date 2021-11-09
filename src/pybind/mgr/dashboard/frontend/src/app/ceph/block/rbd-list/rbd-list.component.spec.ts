@@ -94,6 +94,43 @@ describe('RbdListComponent', () => {
     });
   });
 
+  describe('handling of provisioned columns', () => {
+    const images = [
+      {
+        name: 'img1',
+        pool_name: 'rbd',
+        features: ['layering', 'exclusive-lock'],
+        disk_usage: null,
+        total_disk_usage: null
+      },
+      {
+        name: 'img2',
+        pool_name: 'rbd',
+        features: ['layering', 'exclusive-lock', 'object-map', 'fast-diff'],
+        disk_usage: 1024,
+        total_disk_usage: 1024
+      }
+    ];
+
+    beforeEach(() => {
+      component.images = images;
+      refresh({ executing_tasks: [], finished_tasks: [] });
+      spyOn(rbdService, 'list').and.callFake(() =>
+        of([{ pool_name: 'rbd', status: 1, value: images }])
+      );
+      fixture.detectChanges();
+    });
+
+    it('should display N/A for Provisioned & Total Provisioned columns if disk usage is null', () => {
+      const spans = fixture.debugElement.nativeElement.querySelectorAll(
+        '.datatable-body-cell-label span'
+      );
+      // check image with disk usage = null
+      expect(spans[6].textContent).toBe('N/A');
+      expect(spans[7].textContent).toBe('N/A');
+    });
+  });
+
   describe('handling of deletion', () => {
     beforeEach(() => {
       fixture.detectChanges();
