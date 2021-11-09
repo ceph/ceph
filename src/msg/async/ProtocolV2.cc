@@ -1083,7 +1083,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r) {
 
   if (r < 0) {
     ldout(cct, 1) << __func__ << " read frame preamble failed r=" << r
-                  << " (" << cpp_strerror(r) << ")" << dendl;
+                  << dendl;
     return _fault();
   }
 
