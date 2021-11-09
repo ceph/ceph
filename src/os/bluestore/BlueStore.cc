@@ -7842,6 +7842,7 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
     bufferlist header;
     map<string, bufferlist> kv;
     {
+      bool inject_bug53062 = cct->_conf.get_val<bool>("bluestore_debug_inject_upgrade_bug53062");
       KeyValueDB::Transaction txn = db->get_transaction();
       uint64_t txn_cost = 0;
       const string& prefix = Onode::calc_omap_prefix(o->onode.flags);
@@ -7865,7 +7866,11 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
 	  txn->set(new_omap_prefix, new_head, header);
 	  txn_cost += new_head.length() + header.length();
 	}
-	it->next();
+	if (inject_bug53062) {
+	  // break for testing purposes
+	} else {
+	  it->next();
+	}
       }
       // tail
       {
@@ -7886,7 +7891,12 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
 	  << " -> " << user_key << dendl;
 
 	final_key.resize(base_key_len);
-	final_key += user_key;
+	if (inject_bug53062) {
+	  // break for testing purposes
+	  final_key += it->key();
+	} else {
+	  final_key += user_key;
+	}
 	auto v = it->value();
 	txn->set(new_omap_prefix, final_key, v);
 	txn_cost += final_key.length() + v.length();
