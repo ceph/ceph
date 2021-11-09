@@ -99,6 +99,20 @@ class TestCephadm(object):
             assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1::4')]
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
+    @pytest.mark.parametrize(
+        "ip_addr",
+        [
+            '127.0.0.1',
+            '127.0.0.2',
+            '127.0.1.1',
+            '::1',
+        ]
+    )
+    def test_host_loopback(self, cephadm_module, ip_addr):
+        with pytest.raises(OrchestratorError, match=f'Cannot add host test: IP {ip_addr} is a loopback address'):
+            with with_host(cephadm_module, 'test', ip_addr):
+                pytest.fail()
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_service_ls(self, cephadm_module):
         with with_host(cephadm_module, 'test'):

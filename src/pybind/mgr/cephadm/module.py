@@ -8,7 +8,7 @@ from configparser import ConfigParser
 from functools import wraps
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 from threading import Event
-
+import ipaddress
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
     Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence, Type
@@ -1291,11 +1291,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return image
 
     def _check_valid_addr(self, host: str, addr: str) -> str:
-        # make sure mgr is not resolving own ip
-        if addr in self.get_mgr_id():
-            raise OrchestratorError(
-                "Can not automatically resolve ip address of host where active mgr is running. Please explicitly provide the address.")
-
         # make sure hostname is resolvable before trying to make a connection
         try:
             ip_addr = utils.resolve_ip(addr)
@@ -1317,6 +1312,11 @@ Then run the following:
 > chmod 0600 ~/cephadm_private_key
 > ssh -F ssh_config -i ~/cephadm_private_key {self.ssh_user}@{addr}'''
             raise OrchestratorError(msg)
+
+        if not addr or host == addr:  # In case we had to deduce the IP ourselves
+            if ipaddress.ip_address(ip_addr).is_loopback:
+                raise OrchestratorError(
+                    f'Cannot add host {host}: IP {ip_addr} is a loopback address')
 
         out, err, code = CephadmServe(self)._run_cephadm(
             host, cephadmNoImage, 'check-host',
