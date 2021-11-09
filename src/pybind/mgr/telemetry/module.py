@@ -141,6 +141,7 @@ class Module(MgrModule):
         self.last_report: Dict[str, Any] = dict()
         self.report_id: Optional[str] = None
         self.salt: Optional[str] = None
+        self.config_update_module_option()
         # for mypy which does not run the code
         if TYPE_CHECKING:
             self.url = ''
@@ -156,12 +157,15 @@ class Module(MgrModule):
             self.channel_device = True
             self.channel_perf = False
 
-    def config_notify(self) -> None:
+    def config_update_module_option(self) -> None:
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
+
+    def config_notify(self) -> None:
+        self.config_update_module_option()
         # wake up serve() thread
         self.event.set()
 
@@ -1162,11 +1166,10 @@ Device report is generated separately. To see it run 'ceph telemetry show-device
 
     def serve(self) -> None:
         self.load()
-        self.config_notify()
         self.run = True
 
         self.log.debug('Waiting for mgr to warm up')
-        self.event.wait(10)
+        time.sleep(10)
 
         while self.run:
             self.event.clear()
