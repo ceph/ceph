@@ -6563,6 +6563,8 @@ int BlueStore::mkfs()
       bufferlist bl;
       if (cct->_conf.get_val<bool>("bluestore_debug_legacy_omap")) {
 	bl.append(stringify(OMAP_BULK));
+      } else if (cct->_conf.get_val<bool>("bluestore_debug_legacy_omap_per_pool")) {
+	bl.append(stringify(OMAP_PER_POOL));
       } else {
 	bl.append(stringify(OMAP_PER_PG));
       }
@@ -15269,7 +15271,7 @@ int BlueStore::_omap_setkeys(TransContext *txc,
     if (o->oid.is_pgmeta()) {
       o->onode.set_omap_flags_pgmeta();
     } else {
-      o->onode.set_omap_flags(per_pool_omap == OMAP_BULK);
+      o->onode.set_omap_flags(get_current_omap_flags());
     }
     txc->write_onode(o);
 
@@ -15314,7 +15316,7 @@ int BlueStore::_omap_setheader(TransContext *txc,
     if (o->oid.is_pgmeta()) {
       o->onode.set_omap_flags_pgmeta();
     } else {
-      o->onode.set_omap_flags(per_pool_omap == OMAP_BULK);
+      o->onode.set_omap_flags(get_current_omap_flags());
     }
     txc->write_onode(o);
 
@@ -15470,7 +15472,7 @@ int BlueStore::_clone(TransContext *txc,
     if (newo->oid.is_pgmeta()) {
       newo->onode.set_omap_flags_pgmeta();
     } else {
-      newo->onode.set_omap_flags(per_pool_omap == OMAP_BULK);
+      newo->onode.set_omap_flags(get_current_omap_flags());
     }
     const string& prefix = newo->get_omap_prefix();
     KeyValueDB::Iterator it = db->get_iterator(prefix);
