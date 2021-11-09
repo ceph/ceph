@@ -189,7 +189,8 @@ public:
   void print(std::ostream& out) const;
 
   bool is_upgradeable() const {
-    return !mds_map.allows_standby_replay() && mds_map.get_num_in_mds() <= 1;
+    return (mds_map.allows_standby_replay() && mds_map.get_num_in_mds() == 0)
+       || (!mds_map.allows_standby_replay() && mds_map.get_num_in_mds() <= 1);
   }
 
   /**
