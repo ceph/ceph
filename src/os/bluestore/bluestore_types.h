@@ -1021,8 +1021,8 @@ struct bluestore_onode_t {
     return has_flag(FLAG_PERPG_OMAP);
   }
 
-  void set_omap_flags(bool legacy) {
-    set_flag(FLAG_OMAP | (legacy ? 0 : (FLAG_PERPOOL_OMAP | FLAG_PERPG_OMAP)));
+  void set_omap_flags(uint8_t omap_flags) {
+    set_flag(FLAG_OMAP | omap_flags);
   }
   void set_omap_flags_pgmeta() {
     set_flag(FLAG_OMAP | FLAG_PGMETA_OMAP);

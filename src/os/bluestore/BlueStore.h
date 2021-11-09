@@ -2239,6 +2239,14 @@ private:
     OMAP_PER_POOL = 1,
     OMAP_PER_PG = 2,
     } per_pool_omap = OMAP_BULK;
+  uint8_t get_current_omap_flags() {
+    if (per_pool_omap == OMAP_PER_PG)
+      return bluestore_onode_t::FLAG_PERPOOL_OMAP
+	   | bluestore_onode_t::FLAG_PERPG_OMAP;
+    if (per_pool_omap == OMAP_PER_POOL)
+      return bluestore_onode_t::FLAG_PERPOOL_OMAP;
+    return 0;
+  }
 
   ///< maximum allocation unit (power of 2)
   std::atomic<uint64_t> max_alloc_size = {0};
