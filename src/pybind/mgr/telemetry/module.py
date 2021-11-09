@@ -204,13 +204,17 @@ class Module(MgrModule):
         self.last_report = dict()
         self.report_id = None
         self.salt = None
+        self.config_update_module_option()
 
-    def config_notify(self):
+    def config_update_module_option(self):
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
+
+    def config_notify(self):
+        self.config_update_module_option()
         # wake up serve() thread
         self.event.set()
 
@@ -823,11 +827,10 @@ class Module(MgrModule):
 
     def serve(self):
         self.load()
-        self.config_notify()
         self.run = True
 
         self.log.debug('Waiting for mgr to warm up')
-        self.event.wait(10)
+        time.sleep(10)
 
         while self.run:
             self.event.clear()
