@@ -8261,9 +8261,9 @@ out_db:
   return r;
 }
 
-int BlueStore::repair_omap_upgrade()
+int BlueStore::repair_omap_upgrade(bool dry_run)
 {
-  dout(1) << __func__  << dendl;
+  dout(1) << __func__  << (dry_run ? " dry run" : "real run") << dendl;
 
   int r = _open_db_and_around(false);
   if (r < 0)
@@ -8287,56 +8287,173 @@ int BlueStore::repair_omap_upgrade()
   }
   if (r < 0)
     goto out_scan;
-
   {
+    // we assume that all entries under PREFIX_PERPG_OMAP are valid, that is
+    // each starts with: u64 pool_id + u32 hash + u64 nid
     auto it = db->get_iterator(PREFIX_PERPG_OMAP);
     if (it) {
+      uint64_t prev_pool = 0;
+      uint32_t prev_hash = 0;
+      uint64_t prev_nid = 0;
+      bool expect_header_copy = false;
       size_t cnt = 0;
+      size_t problems = 0;
       KeyValueDB::Transaction txn = db->get_transaction();
       it->lower_bound(std::string());
       while(it->valid()) {
         auto key = it->key();
         auto val = it->value();
-        it->next();
-        auto p1 = key.find_first_of('.');
-        if (p1 == string::npos || p1 <= 8) {
-          continue;
-        }
-        auto p2 = key.find_first_of('-', p1 + 1);
-        if (p2 == string::npos) {
-          p2 = key.find_first_of('.', p1 + 1);
-        }
-        if (p2 == string::npos || p1 + 8 > p2) {
-          continue;
-        }
-        string s1 = key.substr(p1 - 8, 8);
-        string s2 = key.substr(p2 - 8, 8);
-        if (s1 != s2) {
-          continue;
-        }
-        txn->rmkey(PREFIX_PERPG_OMAP, key);
-        if (key[p2] == '.') {
-          auto new_key = key;
-          new_key.erase(p1, p2 - p1);
-          dout(0) << __func__ << " " << pretty_binary_string(key)
-                  << " -> " << pretty_binary_string(new_key) << dendl;
-          txn->set(PREFIX_PERPG_OMAP, new_key, val);
-        } else {
-          dout(0) << __func__ << " " << pretty_binary_string(key)
-                  << " rm " << dendl;
-        }
-        cnt++;
-        if (cnt >= 1024) {
-          key = it->key();
-          db->submit_transaction_sync(txn);
-          it->lower_bound(key);
-          txn = db->get_transaction();
-          cnt = 0;
-        }
+	dout(20) << __func__ << " key=" << pretty_binary_string(key) << dendl;
+	it->next();
+	if (key.length() < 8 + 4 + 8 + 1) {
+	  derr << __func__ << " key=" << pretty_binary_string(key) << " too short, skipping" << dendl;
+	  continue;
+	}
+	const char* p = key.c_str();
+	uint64_t pool;
+	uint32_t hash;
+	uint64_t nid;
+	p = _key_decode_u64(p, &pool);
+	p = _key_decode_u32(p, &hash);
+	p = _key_decode_u64(p, &nid);
+	if (pool != prev_pool || hash != prev_hash && nid != prev_nid) {
+	  // Walked to other object. Good place to submit transaction.
+	  // We need to wait for next object before writing to DB
+	  // to avoid iterating over keys we just processed.
+	  if (cnt > 1000000) {
+	    if (dry_run) {
+	      dout(10) << __func__ << " dropping DB transaction" << dendl;
+	    } else {
+	      dout(10) << __func__ << " submit DB" << dendl;
+	      db->submit_transaction_sync(txn);
+	    }
+	    it->upper_bound(key);
+	    txn = db->get_transaction();
+	    cnt = 0;
+	  }
+	  expect_header_copy = false;
+	  prev_pool = pool;
+	  prev_hash = hash;
+	  prev_nid = nid;
+	}
+	char c = *p;
+	p++;
+
+	if (expect_header_copy) {
+	  // copy of header should look like:
+	  // pppppppphhhhnnnnnnnn.ppppppppnnnnnnnn-   (for PERPOOL->PERPG failed upgrade)
+	  // pppppppphhhhnnnnnnnn.nnnnnnnn-           (for BULK->PERPG failed upgrade)
+
+	  // we expect copy only right after valid header
+	  expect_header_copy = false;
+	  if (key.length() == 8 + 4 + 8 + 1 + 8 + 8 + 1) {
+	    uint64_t pool_copy;
+	    uint64_t nid_copy;
+	    char c1;
+	    const char* p1 = p;
+	    p1 = _key_decode_u64(p1, &pool_copy);
+	    p1 = _key_decode_u64(p1, &nid_copy);
+	    c1 = *p1;
+	    if (c == '.' && pool_copy == pool && nid_copy == nid && c1 == '-') {
+	      // bingo - delete
+	      dout(15) << __func__ << " rmkey " << pretty_binary_string(key) << dendl;
+	      txn->rmkey(PREFIX_PERPG_OMAP, key);
+	      cnt += 1000;
+	      continue;
+	    }
+	  }
+	  if (key.length() == 8 + 4 + 8 + 1 + 8 + 1) {
+	    uint64_t nid_copy;
+	    char c1;
+	    const char* p1 = _key_decode_u64(p, &nid_copy);
+	    c1 = *p1;
+	    if (c == '.' && nid_copy == nid && c1 == '-') {
+	      // bingo - delete
+	      dout(15) << __func__ << " rmkey " << pretty_binary_string(key) << dendl;
+	      txn->rmkey(PREFIX_PERPG_OMAP, key);
+	      cnt += 1000;
+	      continue;
+	    }
+	  }
+	  dout(10) << __func__ << " expected copy of header. not found" << dendl;
+	  problems++;
+	}
+
+	if (c == '~') {
+	  // Tail key should not have extra chars.
+	  if (key.length() != 8 + 4 + 8 + 1) {
+	    derr << __func__ << " unexpected extra chars in omap tail key "
+		 << pretty_binary_string(key) << dendl;
+	  }
+	  continue;
+	}
+
+	if (c == '-' && key.length() == 8 + 4 + 8 + 1) {
+	  // this is a good omap header key. it is expected to be followed by a copy of it
+	  expect_header_copy = true;
+	  continue;
+	}
+
+	if (c == '.') {
+	  // corrupted DB keys do look like:
+	  // pppppppphhhhnnnnnnnn.ppppppppnnnnnnnn.kkkkk   (for PERPOOL->PERPG failed upgrade)
+	  // pppppppphhhhnnnnnnnn.nnnnnnnn.kkkkk           (for BULK->PERPG failed upgrade)
+	  if (key.length() > 8 + 4 + 8 + 1 + 8 + 8 + 1) {
+	    // can check PERPOOL->PERPG
+	    uint64_t pool_copy;
+	    uint64_t nid_copy;
+	    char c1;
+	    const char* p1 = p;
+	    p1 = _key_decode_u64(p1, &pool_copy);
+	    p1 = _key_decode_u64(p1, &nid_copy);
+	    c1 = *p1;
+	    if (c == '.' && pool_copy == pool && nid_copy == nid && c1 == '.') {
+	      // this is very likely a match
+	      // erase old
+	      txn->rmkey(PREFIX_PERPG_OMAP, key);
+	      // write new
+	      auto new_key = key;
+	      new_key.erase(8 + 4 + 8, 8 + 8 + 1);
+	      txn->set(PREFIX_PERPG_OMAP, new_key, val);
+	      dout(15) << __func__ << " rename " << pretty_binary_string(key)
+		       << " to " << pretty_binary_string(new_key) << dendl;
+	      cnt += 1000 + val.length();
+	      continue;
+	    }
+	  }
+	  if (key.length() > 8 + 4 + 8 + 1 + 8 + 1) {
+	    // can check BULK->PERPG
+	    uint64_t nid_copy;
+	    char c1;
+	    const char* p1 = _key_decode_u64(p, &nid_copy);
+	    c1 = *p1;
+	    if (c == '.' && nid_copy == nid && c1 == '.') {
+	      // this is very likely a match
+	      // erase old
+	      txn->rmkey(PREFIX_PERPG_OMAP, key);
+	      // write new
+	      auto new_key = key;
+	      new_key.erase(8 + 4 + 8, 8 + 1);
+	      txn->set(PREFIX_PERPG_OMAP, new_key, val);
+	      dout(15) << __func__ << " rename " << pretty_binary_string(key)
+		       << " to " << pretty_binary_string(new_key) << dendl;
+	      cnt += 1000 + val.length();
+	      continue;
+	    }
+	  }
+	  problems++;
+	  dout(10) << __func__ << " key " << pretty_binary_string(key) << " not converted" << dendl;
+	}
       }
       if (cnt > 0) {
-        db->submit_transaction_sync(txn);
+	if (dry_run) {
+	  dout(10) << __func__ << " dropping DB transaction" << dendl;
+	} else {
+	  dout(10) << __func__ << " submit DB" << dendl;
+	  db->submit_transaction_sync(txn);
+	}
       }
+      r = problems;
     }
   }
 out_scan:
