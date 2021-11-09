@@ -24,7 +24,6 @@ static ostream& _prefix(std::ostream* _dout, T* t)
 }
 
 using namespace Scrub;
-using Scrub::ScrubMachine;
 
 bool PrimaryLogScrub::get_store_errors(const scrub_ls_arg_t& arg,
 				       scrub_ls_result_t& res_inout) const

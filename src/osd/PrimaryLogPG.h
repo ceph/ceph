@@ -196,7 +196,7 @@ public:
   friend struct CopyFromFinisher;
   friend class PromoteCallback;
   friend struct PromoteFinisher;
-  friend class C_gather;
+  friend struct C_gather;
   
   struct ProxyReadOp {
     OpRequestRef op;

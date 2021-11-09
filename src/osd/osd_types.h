@@ -2179,6 +2179,28 @@ inline bool operator==(const object_stat_collection_t& l,
   return l.sum == r.sum;
 }
 
+enum class scrub_level_t : bool { shallow = false, deep = true };
+enum class scrub_type_t : bool { not_repair = false, do_repair = true };
+
+/// is there a scrub in our future?
+enum class pg_scrub_sched_status_t : uint16_t {
+  unknown,         ///< status not reported yet
+  not_queued,	   ///< not in the OSD's scrub queue. Probably not active.
+  active,          ///< scrubbing
+  scheduled,	   ///< scheduled for a scrub at an already determined time
+  queued	   ///< queued to be scrubbed
+};
+
+struct pg_scrubbing_status_t {
+  utime_t m_scheduled_at{};
+  int32_t m_duration_seconds{0}; // relevant when scrubbing
+  pg_scrub_sched_status_t m_sched_status{pg_scrub_sched_status_t::unknown};
+  bool m_is_active{false};
+  scrub_level_t m_is_deep{scrub_level_t::shallow};
+  bool m_is_periodic{true};
+};
+
+bool operator==(const pg_scrubbing_status_t& l, const pg_scrubbing_status_t& r);
 
 /** pg_stat
  * aggregate stats for a single PG.
@@ -2213,6 +2235,7 @@ struct pg_stat_t {
   utime_t last_scrub_stamp;
   utime_t last_deep_scrub_stamp;
   utime_t last_clean_scrub_stamp;
+  int32_t last_scrub_duration{0};
 
   object_stat_collection_t stats;
 
@@ -2236,8 +2259,10 @@ struct pg_stat_t {
   int32_t acting_primary;
 
   // snaptrimq.size() is 64bit, but let's be serious - anything over 50k is
-  // absurd already, so cap it to 2^32 and save 4 bytes at  the same time
+  // absurd already, so cap it to 2^32 and save 4 bytes at the same time
   uint32_t snaptrimq_len;
+
+  pg_scrubbing_status_t scrub_sched_status;
 
   bool stats_invalid:1;
   /// true if num_objects_dirty is not accurate (because it was not
@@ -2248,8 +2273,6 @@ struct pg_stat_t {
   bool hitset_bytes_stats_invalid:1;
   bool pin_stats_invalid:1;
   bool manifest_stats_invalid:1;
-
-  double scrub_duration;
 
   pg_stat_t()
     : reported_seq(0),
@@ -2268,8 +2291,7 @@ struct pg_stat_t {
       hitset_stats_invalid(false),
       hitset_bytes_stats_invalid(false),
       pin_stats_invalid(false),
-      manifest_stats_invalid(false),
-      scrub_duration(0)
+      manifest_stats_invalid(false)
   { }
 
   epoch_t get_effective_last_epoch_clean() const {
@@ -2329,6 +2351,7 @@ struct pg_stat_t {
   bool is_acting_osd(int32_t osd, bool primary) const;
   void dump(ceph::Formatter *f) const;
   void dump_brief(ceph::Formatter *f) const;
+  std::string dump_scrub_schedule() const;
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   static void generate_test_instances(std::list<pg_stat_t*>& o);
@@ -6081,9 +6104,6 @@ struct PushOp {
 };
 WRITE_CLASS_ENCODER_FEATURES(PushOp)
 std::ostream& operator<<(std::ostream& out, const PushOp &op);
-
-enum class scrub_level_t : bool { shallow = false, deep = true };
-enum class scrub_type_t : bool { not_repair = false, do_repair = true };
 
 /*
  * summarize pg contents for purposes of a scrub
