@@ -236,6 +236,7 @@ int main(int argc, char **argv)
   string empty_sharding(1, '\0');
   string new_sharding = empty_sharding;
   string resharding_ctrl;
+  bool dry_run = false;
   int log_level = 30;
   bool fsck_deep = false;
   po::options_description po_options("Options");
@@ -254,6 +255,7 @@ int main(int argc, char **argv)
     ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'/'bluefs-slow'")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
+    ("dry-run", po::value<bool>(&dry_run), "make a dry run of repair_omap_upgrade")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
@@ -458,7 +460,7 @@ int main(int argc, char **argv)
     } else if (action == "repair") {
       r = bluestore.repair(fsck_deep);
     } else if (action == "repair_omap_upgrade") {
-      r = bluestore.repair_omap_upgrade();
+      r = bluestore.repair_omap_upgrade(dry_run);
     } else {
       r = bluestore.quick_fix();
     }
