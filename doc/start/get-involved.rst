@@ -27,9 +27,9 @@ These are exciting times in the Ceph community! Get involved!
 |                      | IRC channel particularly during daytime hours   | - **Channels:**                               |
 |                      | in the US Pacific Standard Time zone.           |     ``#ceph``,                                |
 |                      | While ``#ceph`` is a good starting point for    |     ``#ceph-devel``,                          |
-|                      | cluster operators and users, there is also      |     ``#ceph-dashboard``                       |
-|                      | ``#ceph-devel`` and ``#ceph-dashboard``         |                                               |
-|                      | dedicated for Ceph developers.                  |                                               |
+|                      | cluster operators and users, there is also      |     ``#ceph-dashboard``,                      |
+|                      | ``#ceph-devel``, ``#ceph-dashboard`` and        |     ``#cephfs``                               |
+|                      | ``#cephfs`` dedicated for Ceph developers.      |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **User List**        | Ask and answer user-related questions by        |                                               |
 |                      | subscribing to the email list at                | - `User Subscribe`_                           |
@@ -41,6 +41,10 @@ These are exciting times in the Ceph community! Get involved!
 |                      | subscribing to the email list at dev@ceph.io.   | - `Devel Subscribe`_                          |
 |                      | You can opt out of the email list at any time by| - `Devel Unsubscribe`_                        |
 |                      | unsubscribing. A simple email is all it takes!  | - `Devel Archives`_                           |
++----------------------+-------------------------------------------------+-----------------------------------------------+
+| **Kernel Client**    | Linux kernel-related traffic, including kernel  | - `Kernel Client Subscribe`_                  |
+|                      | patches and discussion of implementation details| - `Kernel Client Unsubscribe`_                |
+|                      | for the kernel client code.                     | - `Kernel Client Archives`_                   |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **Commit List**      | Subscribe to ceph-commit@ceph.com to get        |                                               |
 |                      | commit notifications via email. You can opt out | - `Commit Subscribe`_                         |
@@ -74,6 +78,8 @@ These are exciting times in the Ceph community! Get involved!
 
 .. _Devel Subscribe: mailto:dev-request@ceph.io?body=subscribe
 .. _Devel Unsubscribe: mailto:dev-request@ceph.io?body=unsubscribe
+.. _Kernel Client Subscribe: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel
+.. _Kernel Client Unsubscribe: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
 .. _User Subscribe: mailto:ceph-users-request@ceph.io?body=subscribe
 .. _User Unsubscribe: mailto:ceph-users-request@ceph.io?body=unsubscribe
 .. _Community Subscribe: mailto:ceph-community-join@lists.ceph.com
@@ -84,6 +90,7 @@ These are exciting times in the Ceph community! Get involved!
 .. _QA Unsubscribe: mailto:ceph-qa-leave@lists.ceph.com
 .. _Devel Archives: https://lists.ceph.io/hyperkitty/list/dev@ceph.io/
 .. _User Archives: https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/
+.. _Kernel Client Archives: https://www.spinics.net/lists/ceph-devel/
 .. _Mailing list archives: http://lists.ceph.com/
 .. _Blog: http://ceph.com/community/blog/
 .. _Tracker: http://tracker.ceph.com/
