@@ -3339,7 +3339,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   return 0;
 
 done_cancel:
-  int ret = index_op->cancel(dpp);
+  int ret = index_op->cancel(dpp, meta.remove_objs);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: index_op.cancel()() returned ret=" << ret << dendl;
   }
@@ -5324,7 +5324,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
     }
     /* other than that, no need to propagate error */
   } else {
-    int ret = index_op.cancel(dpp);
+    int ret = index_op.cancel(dpp, params.remove_objs);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
     }
@@ -6022,7 +6022,7 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucke
                             mtime, etag, content_type, storage_class, &acl_bl,
                             RGWObjCategory::Main, NULL);
     } else {
-      int ret = index_op.cancel(dpp);
+      int ret = index_op.cancel(dpp, nullptr);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
       }
@@ -6327,7 +6327,8 @@ int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
 }
 
 
-int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp)
+int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp,
+                                          list<rgw_obj_index_key> *remove_objs)
 {
   if (blind) {
     return 0;
@@ -6336,7 +6337,7 @@ int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp)
   BucketShard *bs;
 
   int ret = guard_reshard(dpp, &bs, [&](BucketShard *bs) -> int {
-				 return store->cls_obj_complete_cancel(*bs, optag, obj, bilog_flags, zones_trace);
+				 return store->cls_obj_complete_cancel(*bs, optag, obj, remove_objs, bilog_flags, zones_trace);
 			       });
 
   /*
@@ -8415,13 +8416,15 @@ int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
 			     bilog_flags, zones_trace);
 }
 
-int RGWRados::cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace)
+int RGWRados::cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj,
+                                      list<rgw_obj_index_key> *remove_objs,
+                                      uint16_t bilog_flags, rgw_zone_set *zones_trace)
 {
   rgw_bucket_dir_entry ent;
   obj.key.get_index_key(&ent.key);
   return cls_obj_complete_op(bs, obj, CLS_RGW_OP_CANCEL, tag,
 			     -1 /* pool id */, 0, ent,
-			     RGWObjCategory::None, NULL, bilog_flags,
+			     RGWObjCategory::None, remove_objs, bilog_flags,
 			     zones_trace);
 }
 
