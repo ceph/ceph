@@ -993,6 +993,43 @@ static int read_key_entry(cls_method_context_t hctx, const cls_rgw_obj_key& key,
   return 0;
 }
 
+// called by rgw_bucket_complete_op() for each item in op.remove_objs
+static int complete_remove_obj(cls_method_context_t hctx,
+                               rgw_bucket_dir_header& header,
+                               const cls_rgw_obj_key& key, bool log_op)
+{
+  rgw_bucket_dir_entry entry;
+  string idx;
+  int ret = read_key_entry(hctx, key, &idx, &entry);
+  if (ret < 0) {
+    CLS_LOG(1, "%s: read_index_entry name=%s instance=%s failed with %d",
+          __func__, key.name.c_str(), key.instance.c_str(), ret);
+    return ret;
+  }
+  CLS_LOG(10, "%s: read entry name=%s instance=%s category=%d", __func__,
+          entry.key.name.c_str(), entry.key.instance.c_str(),
+          int(entry.meta.category));
+  unaccount_entry(header, entry);
+
+  if (log_op) {
+    ++header.ver; // increment index version, or we'll overwrite keys previously written
+    const std::string tag;
+    ret = log_index_operation(hctx, key, CLS_RGW_OP_DEL, tag, entry.meta.mtime,
+                              entry.ver, CLS_RGW_STATE_COMPLETE, header.ver,
+                              header.max_marker, 0, nullptr, nullptr, nullptr);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  ret = cls_cxx_map_remove_key(hctx, idx);
+  if (ret < 0) {
+    CLS_LOG(1, "%s: cls_cxx_map_remove_key failed with %d", __func__, ret);
+    return ret;
+  }
+  return ret;
+}
+
 int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -1114,7 +1151,8 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     break;
   }
 
-  if (op.log_op && !header.syncstopped) {
+  const bool log_op = (op.log_op && !header.syncstopped);
+  if (log_op) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
 			     entry.ver, CLS_RGW_STATE_COMPLETE, header.ver,
 			     header.max_marker, op.bilog_flags, NULL, NULL,
@@ -1125,47 +1163,11 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   CLS_LOG(20, "rgw_bucket_complete_op(): remove_objs.size()=%d",
-	  int(op.remove_objs.size()));
-
-  for (auto remove_iter = op.remove_objs.begin();
-       remove_iter != op.remove_objs.end();
-       ++remove_iter) {
-    cls_rgw_obj_key& remove_key = *remove_iter;
-    CLS_LOG(1, "rgw_bucket_complete_op(): removing entries, read_index_entry name=%s instance=%s",
-            remove_key.name.c_str(), remove_key.instance.c_str());
-    rgw_bucket_dir_entry remove_entry;
-    std::string k;
-    int ret = read_key_entry(hctx, remove_key, &k, &remove_entry);
-    if (ret < 0) {
-      CLS_LOG(1, "rgw_bucket_complete_op(): removing entries, read_index_entry name=%s instance=%s ret=%d",
-            remove_key.name.c_str(), remove_key.instance.c_str(), ret);
-      continue;
-    }
-    CLS_LOG(0,
-	    "rgw_bucket_complete_op(): entry.name=%s entry.instance=%s entry.meta.category=%d",
-            remove_entry.key.name.c_str(),
-	    remove_entry.key.instance.c_str(),
-	    int(remove_entry.meta.category));
-
-    unaccount_entry(header, remove_entry);
-
-    if (op.log_op && !header.syncstopped) {
-      ++header.ver; // increment index version, or we'll overwrite keys previously written
-      rc = log_index_operation(hctx, remove_key, CLS_RGW_OP_DEL, op.tag,
-			       remove_entry.meta.mtime, remove_entry.ver,
-			       CLS_RGW_STATE_COMPLETE, header.ver,
-			       header.max_marker, op.bilog_flags, NULL,
-			       NULL, &op.zones_trace);
-      if (rc < 0) {
-        continue;
-      }
-    }
-
-    ret = cls_cxx_map_remove_key(hctx, k);
-    if (ret < 0) {
-      CLS_LOG(1, "rgw_bucket_complete_op(): cls_cxx_map_remove_key, failed to remove entry, name=%s instance=%s read_index_entry ret=%d",
-	      remove_key.name.c_str(), remove_key.instance.c_str(), rc);
-      continue;
+          (int)op.remove_objs.size());
+  for (const auto& remove_key : op.remove_objs) {
+    rc = complete_remove_obj(hctx, header, remove_key, log_op);
+    if (rc < 0) {
+      continue; // part cleanup errors are not fatal
     }
   }
 
