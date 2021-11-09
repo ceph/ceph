@@ -199,7 +199,7 @@ read -r -d '' usage <<EOF || true
 usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 NFS=1 $0 -n -d
 options:
 	-d, --debug
-        -t, --trace
+	-t, --trace
 	-s, --standby_mds: Generate standby-replay MDS for each active
 	-l, --localhost: use localhost instead of hostname
 	-i <ip>: bind to specific ip
@@ -236,7 +236,7 @@ options:
 	--msgr2: use msgr2 only
 	--msgr21: use msgr2 and msgr1
 	--crimson: use crimson-osd instead of ceph-osd
-    --crimson-foreground: use crimson-osd, but run it in the foreground
+	--crimson-foreground: use crimson-osd, but run it in the foreground
 	--osd-args: specify any extra osd specific options
 	--bluestore-devs: comma-separated list of blockdevs to use for bluestore
 	--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)
@@ -246,7 +246,8 @@ options:
 	--no-parallel: dont start all OSDs in parallel
 	--jaeger: use jaegertracing for tracing
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
-        --seastore-secondary-des: comma-separated list of secondary blockdevs to use for seastore
+	--seastore-secondary-des: comma-separated list of secondary blockdevs to use for seastore
+\n
 EOF
 
 usage_exit() {
