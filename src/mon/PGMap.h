@@ -460,10 +460,10 @@ public:
   void dump_pool_stats_and_io_rate(int64_t poolid, const OSDMap &osd_map, ceph::Formatter *f,
 				   std::stringstream *ss) const;
 
-  void dump_pg_stats_plain(
+  static void dump_pg_stats_plain(
     std::ostream& ss,
     const mempool::pgmap::unordered_map<pg_t, pg_stat_t>& pg_stats,
-    bool brief) const;
+    bool brief);
   void get_stuck_stats(
     int types, const utime_t cutoff,
     mempool::pgmap::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const;

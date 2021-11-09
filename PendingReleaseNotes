@@ -73,6 +73,11 @@
 
   https://docs.ceph.com/en/latest/rados/operations/placement-groups/
 
+* The ``ceph pg dump`` command now prints two additional columns:
+  `LAST_SCRUB_DURATION` shows the duration (in seconds) of the last completed scrub;
+  `SCRUB_SCHEDULING` conveys whether a PG is scheduled to be scrubbed at a specified
+  time, queued for scrubbing, or being scrubbed.
+
 >=16.0.0
 --------
 * mgr/nfs: ``nfs`` module is moved out of volumes plugin. Prior using the

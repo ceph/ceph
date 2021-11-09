@@ -139,6 +139,12 @@ class ScrubQueue {
 						       : " not-queued";
     }
 
+    /**
+     * a text description of the "scheduling intentions" of this PG:
+     * are we already scheduled for a scrub/deep scrub? when?
+     */
+    std::string scheduling_state(utime_t now_is, bool is_deep_expected) const;
+
     friend std::ostream& operator<<(std::ostream& out, const ScrubJob& pg);
   };
 
