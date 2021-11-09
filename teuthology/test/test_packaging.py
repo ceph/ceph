@@ -650,6 +650,122 @@ class TestShamanProject(TestBuilderProject):
         super(TestShamanProject, self)\
             .test_get_package_sha1_fetched_not_found()
 
+    SHAMAN_SEARCH_RESPONSE = [
+        {
+            "status": "ready",
+            "sha1": "534fc6d936bd506119f9e0921ff8cf8d47caa323",
+            "extra": {
+                "build_url": "https://jenkins.ceph.com/job/ceph-dev-build/ARCH=x86_64,AVAILABLE_ARCH=x86_64,AVAILABLE_DIST=centos8,DIST=centos8,MACHINE_SIZE=gigantic/48556/",
+                "root_build_cause": "SCMTRIGGER",
+                "version": "17.0.0-8856-g534fc6d9",
+                "node_name": "172.21.2.7+braggi07",
+                "job_name": "ceph-dev-build/ARCH=x86_64,AVAILABLE_ARCH=x86_64,AVAILABLE_DIST=centos8,DIST=centos8,MACHINE_SIZE=gigantic",
+                "package_manager_version": "17.0.0-8856.g534fc6d9"
+            },
+            "url": "https://3.chacra.ceph.com/r/ceph/master/534fc6d936bd506119f9e0921ff8cf8d47caa323/centos/8/flavors/default/",
+            "modified": "2021-11-06 21:40:40.669823",
+            "distro_version": "8",
+            "project": "ceph",
+            "flavor": "default",
+            "ref": "master",
+            "chacra_url": "https://3.chacra.ceph.com/repos/ceph/master/534fc6d936bd506119f9e0921ff8cf8d47caa323/centos/8/flavors/default/",
+            "archs": [
+                "x86_64",
+                "arm64",
+                "source"
+            ],
+            "distro": "centos"
+          }
+    ]
+
+    SHAMAN_BUILDS_RESPONSE = [
+        {
+            "status": "completed",
+            "sha1": "534fc6d936bd506119f9e0921ff8cf8d47caa323",
+            "distro_arch": "arm64",
+            "started": "2021-11-06 20:20:15.121203",
+            "completed": "2021-11-06 22:36:27.115950",
+            "extra": {
+                "node_name": "172.21.4.66+confusa04",
+                "version": "17.0.0-8856-g534fc6d9",
+                "build_user": "",
+                "root_build_cause": "SCMTRIGGER",
+
+                "job_name": "ceph-dev-build/ARCH=arm64,AVAILABLE_ARCH=arm64,AVAILABLE_DIST=centos8,DIST=centos8,MACHINE_SIZE=gigantic"
+            },
+            "modified": "2021-11-06 22:36:27.118043",
+            "distro_version": "8",
+            "project": "ceph",
+            "url": "https://jenkins.ceph.com/job/ceph-dev-build/ARCH=arm64,AVAILABLE_ARCH=arm64,AVAILABLE_DIST=centos8,DIST=centos8,MACHINE_SIZE=gigantic/48556/",
+            "log_url": "https://jenkins.ceph.com/job/ceph-dev-build/ARCH=arm64,AVAILABLE_ARCH=arm64,AVAILABLE_DIST=centos8,DIST=centos8,MACHINE_SIZE=gigantic/48556//consoleFull",
+            "flavor": "default",
+            "ref": "master",
+            "distro": "centos"
+        },
+        {
+            "status": "completed",
+            "sha1": "534fc6d936bd506119f9e0921ff8cf8d47caa323",
+            "distro_arch": "x86_64",
+            "started": "2021-11-06 20:20:06.740692",
+            "completed": "2021-11-06 21:43:51.711970",
+            "extra": {
+                "node_name": "172.21.2.7+braggi07",
+                "version": "17.0.0-8856-g534fc6d9",
+                "build_user": "",
+                "root_build_cause": "SCMTRIGGER",
+                "job_name": "ceph-dev-build/ARCH=x86_64,AVAILABLE_ARCH=x86_64,AVAILABLE_DIST=centos8,DIST=centos8,MACHINE_SIZE=gigantic"
+            },
+            "modified": "2021-11-06 21:43:51.713487",
+            "distro_version": "8",
+            "project": "ceph",
+            "url": "https://jenkins.ceph.com/job/ceph-dev-build/ARCH=x86_64,AVAILABLE_ARCH=x86_64,AVAILABLE_DIST=centos8,DIST=centos8,MACHINE_SIZE=gigantic/48556/",
+            "log_url": "https://jenkins.ceph.com/job/ceph-dev-build/ARCH=x86_64,AVAILABLE_ARCH=x86_64,AVAILABLE_DIST=centos8,DIST=centos8,MACHINE_SIZE=gigantic/48556//consoleFull",
+            "flavor": "default",
+            "ref": "master",
+            "distro": "centos"
+        }
+    ]
+
+    def test_build_complete_success(self):
+        config = dict(
+            os_type="centos",
+            os_version="8",
+            branch='master',
+            arch='x86_64',
+            flavor='default',
+        )
+        builder = self.klass("ceph", config)
+
+        search_resp = Mock()
+        search_resp.ok = True
+        search_resp.json.return_value = self.SHAMAN_SEARCH_RESPONSE
+        self.m_get.return_value = search_resp
+        # cause builder to call requests.get and cache search_resp
+        builder.assert_result()
+
+        build_resp = Mock()
+        build_resp.ok = True
+        self.m_get.return_value = build_resp
+
+        # both archs completed, so x86_64 build is complete
+        builds = build_resp.json.return_value = self.SHAMAN_BUILDS_RESPONSE
+        assert builder.build_complete
+
+        # mark the arm64 build failed, x86_64 should still be complete
+        builds[0]['status'] = "failed"
+        build_resp.json.return_value = builds
+        assert builder.build_complete
+
+        # mark the x86_64 build failed, should show incomplete
+        builds[1]['status'] = "failed"
+        build_resp.json.return_value = builds
+        assert not builder.build_complete
+
+        # mark the arm64 build complete again, x86_64 still incomplete
+        builds[0]['status'] = "completed"
+        build_resp.json.return_value = builds
+        assert not builder.build_complete
+
     DISTRO_MATRIX = [
         ('rhel', '7.0', None, 'centos/7'),
         ('centos', '6.5', None, 'centos/6'),
