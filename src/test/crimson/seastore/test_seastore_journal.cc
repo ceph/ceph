@@ -193,11 +193,11 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     replay(
       [&advance,
        &delta_checker]
-      (auto seq, auto base, const auto &di) mutable {
+      (const auto &offsets, const auto &di) mutable {
 	if (!delta_checker) {
 	  EXPECT_FALSE("No Deltas Left");
 	}
-	if (!(*delta_checker)(base, di)) {
+	if (!(*delta_checker)(offsets.record_block_base, di)) {
 	  delta_checker = std::nullopt;
 	  advance();
 	}

@@ -75,11 +75,14 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     [this](auto&& segments) {
     return journal->replay(
       std::move(segments),
-      [this](auto seq, auto paddr, const auto &e) {
-      auto fut = cache->replay_delta(seq, paddr, e);
+      [this](const auto &offsets, const auto &e) {
+      auto start_seq = offsets.write_result.start_seq;
       segment_cleaner->update_journal_tail_target(
-	cache->get_oldest_dirty_from().value_or(seq));
-      return fut;
+          cache->get_oldest_dirty_from().value_or(start_seq));
+      return cache->replay_delta(
+          start_seq,
+          offsets.record_block_base,
+          e);
     });
   }).safe_then([this] {
     return journal->open_for_write();
@@ -273,14 +276,23 @@ TransactionManager::submit_transaction_direct(
     DEBUGT("about to submit to journal", tref);
 
     return journal->submit_record(std::move(record), tref.get_handle()
-    ).safe_then([this, FNAME, &tref](auto p) mutable {
-      auto [addr, journal_seq] = p;
-      DEBUGT("journal commit to {} seq {}", tref, addr, journal_seq);
-      segment_cleaner->set_journal_head(journal_seq);
-      cache->complete_commit(tref, addr, journal_seq, segment_cleaner.get());
+    ).safe_then([this, FNAME, &tref](auto submit_result) mutable {
+      auto start_seq = submit_result.write_result.start_seq;
+      auto end_seq = submit_result.write_result.get_end_seq();
+      DEBUGT("journal commit to record_block_base={}, start_seq={}, end_seq={}",
+             tref,
+             submit_result.record_block_base,
+             start_seq,
+             end_seq);
+      segment_cleaner->set_journal_head(end_seq);
+      cache->complete_commit(
+          tref,
+          submit_result.record_block_base,
+          start_seq,
+          segment_cleaner.get());
       lba_manager->complete_transaction(tref);
       segment_cleaner->update_journal_tail_target(
-	cache->get_oldest_dirty_from().value_or(journal_seq));
+	cache->get_oldest_dirty_from().value_or(start_seq));
       auto to_release = tref.get_segment_to_release();
       if (to_release != NULL_SEG_ID) {
 	return segment_manager.release(to_release
