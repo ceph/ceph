@@ -8264,21 +8264,29 @@ out_db:
 int BlueStore::what_omap_upgrade_recovery(const std::string& key,
 					  std::string& new_key)
 {
-  auto p1 = key.find_first_of('.');
-  if (p1 == string::npos || p1 <= 8) {
+  size_t p1 = 8 + 4 + 8;
+  size_t p2 = p1 + 1 + 8;
+  string s1 = "<"; // assign something just to have s1 != s2D
+  string s2 = ">";
+  if (key.length() < 8 + 4 + 8 + 1 + 8 + 1 ||
+      key[p1] != '.') {
     return 0;
   }
-  auto p2 = key.find_first_of('-', p1 + 1);
-  if (p2 == string::npos) {
-    p2 = key.find_first_of('.', p1 + 1);
+
+  if (key[p2] == '-' || key[p2] == '.') {
+    s1 = key.substr(p1 - 8, 8);
+    s2 = key.substr(p2 - 8, 8);
   }
-  if (p2 == string::npos || p1 + 8 > p2) {
-    return 0;
-  }
-  string s1 = key.substr(p1 - 8, 8);
-  string s2 = key.substr(p2 - 8, 8);
   if (s1 != s2) {
-    return 0;
+    p2 += 8;
+    if (key.length() >= 8 + 4 + 8 + 1 + 8 + 8 + 1 &&
+        (key[p2] == '-' || key[p2] == '.')) {
+      s1 = key.substr(p1 - 8, 8);
+      s2 = key.substr(p2 - 8, 8);
+    }
+    if (s1 != s2) {
+      return 0;
+    }
   }
   if (key[p2] == '.') {
     new_key = key;
