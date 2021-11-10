@@ -11,7 +11,7 @@ from threading import Event
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
-    Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence, Type
+    Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence, Type, Coroutine, Awaitable
 
 import datetime
 import os
@@ -541,6 +541,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         serve = CephadmServe(self)
         serve.serve()
+
+    def wait_async(self, coro: Awaitable[T]) -> T:
+        return self.event_loop.get_result(coro)
 
     def set_container_image(self, entity: str, image: str) -> None:
         self.check_mon_command({
