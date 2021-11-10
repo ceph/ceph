@@ -126,6 +126,7 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
     dd = cephadm_module.cache.get_daemon(f'osd.{osd_id}', host=host)
     assert dd.name() == f'osd.{osd_id}'
     yield dd
+    cephadm_module._remove_daemons([(f'osd.{osd_id}', host)])
 
 
 class TestCephadm(object):
@@ -965,6 +966,17 @@ class TestCephadm(object):
                             OrchestratorEvent(mock.ANY, 'daemon', 'osd.1', 'INFO',
                                               "Removed duplicated daemon on host 'host2'"),
                         ]
+
+                        with pytest.raises(AssertionError):
+                            cephadm_module.assert_issued_mon_command({
+                                'prefix': 'auth rm',
+                                'entity': 'osd.1',
+                            })
+
+                cephadm_module.assert_issued_mon_command({
+                    'prefix': 'auth rm',
+                    'entity': 'osd.1',
+                })
 
     @pytest.mark.parametrize(
         "spec",
