@@ -1353,11 +1353,15 @@ def initialize_config(ctx, config):
     if config.get('roleless', False):
         # mons will be named after hosts
         first_mon = None
+        max_mons = config.get('max_mons', 5)
         for remote, _ in remotes_and_roles:
             ctx.cluster.remotes[remote].append('mon.' + remote.shortname)
             if not first_mon:
                 first_mon = remote.shortname
                 bootstrap_remote = remote
+            max_mons -= 1
+            if not max_mons:
+                break
         log.info('No mon roles; fabricating mons')
 
     roles = [role_list for (remote, role_list) in ctx.cluster.remotes.items()]
