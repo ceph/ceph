@@ -57,7 +57,8 @@ Using modules
 -------------
 
 Use the command ``ceph mgr module ls`` to see which modules are
-available, and which are currently enabled.  Enable or disable modules
+available, and which are currently enabled. Use ``ceph mgr module ls --format=json-pretty``
+to view detailed metadata about disabled modules. Enable or disable modules
 using the commands ``ceph mgr module enable <module>`` and
 ``ceph mgr module disable <module>`` respectively.
 
