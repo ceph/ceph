@@ -568,7 +568,7 @@ class CephadmServe:
             for e in error:
                 assert e.hostname
                 try:
-                    self._remove_daemon(e.name(), e.hostname)
+                    self._remove_daemon(e.name(), e.hostname, no_post_remove=True)
                     self.mgr.events.for_daemon(
                         e.name(), 'INFO', f"Removed duplicated daemon on host '{e.hostname}'")
                 except OrchestratorError as ex:
@@ -1125,7 +1125,7 @@ class CephadmServe:
                     self.mgr.cephadm_services[servict_type].post_remove(dd, is_failed_deploy=True)
                 raise
 
-    def _remove_daemon(self, name: str, host: str) -> str:
+    def _remove_daemon(self, name: str, host: str, no_post_remove: bool = False) -> str:
         """
         Remove a daemon
         """
@@ -1150,8 +1150,9 @@ class CephadmServe:
                 self.mgr.cache.rm_daemon(host, name)
             self.mgr.cache.invalidate_host_daemons(host)
 
-            self.mgr.cephadm_services[daemon_type_to_service(
-                daemon_type)].post_remove(daemon, is_failed_deploy=False)
+            if not no_post_remove:
+                self.mgr.cephadm_services[daemon_type_to_service(
+                    daemon_type)].post_remove(daemon, is_failed_deploy=False)
 
             return "Removed {} from host '{}'".format(name, host)
 
