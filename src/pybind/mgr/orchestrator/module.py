@@ -1019,7 +1019,7 @@ Usage:
         """Remove a service"""
         if service_name in ['mon', 'mgr'] and not force:
             raise OrchestratorError('The mon and mgr services cannot be removed')
-        completion = self.remove_service(service_name)
+        completion = self.remove_service(service_name, force=force)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
