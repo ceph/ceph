@@ -12,7 +12,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 4
+LAST_MIGRATION = 5
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,10 @@ class Migrations:
         if self.mgr.migration_current == 3:
             if self.migrate_3_4():
                 self.set(4)
+
+        if self.mgr.migration_current == 4:
+            if self.migrate_4_5():
+                self.set(5)
 
     def migrate_0_1(self) -> bool:
         """
@@ -277,6 +281,38 @@ class Migrations:
                 entity='client.admin',
                 placement='label:_admin',
             )
+        return True
+
+    def migrate_4_5(self) -> bool:
+        registry_url = self.mgr.get_module_option('registry_url')
+        registry_username = self.mgr.get_module_option('registry_username')
+        registry_password = self.mgr.get_module_option('registry_password')
+        if registry_url and registry_username and registry_password:
+
+            registry_credentials = {'url': registry_url,
+                                    'username': registry_username, 'password': registry_password}
+            self.mgr.set_store('registry_credentials', json.dumps(registry_credentials))
+
+            self.mgr.set_module_option('registry_url', None)
+            self.mgr.check_mon_command({
+                'prefix': 'config rm',
+                'who': 'mgr',
+                'key': 'mgr/cephadm/registry_url',
+            })
+            self.mgr.set_module_option('registry_username', None)
+            self.mgr.check_mon_command({
+                'prefix': 'config rm',
+                'who': 'mgr',
+                'key': 'mgr/cephadm/registry_username',
+            })
+            self.mgr.set_module_option('registry_password', None)
+            self.mgr.check_mon_command({
+                'prefix': 'config rm',
+                'who': 'mgr',
+                'key': 'mgr/cephadm/registry_password',
+            })
+
+            self.mgr.log.info('Done migrating registry login info')
         return True
 
 
