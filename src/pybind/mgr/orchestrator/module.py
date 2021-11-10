@@ -705,61 +705,22 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                    unmanaged: Optional[bool] = None,
                    dry_run: bool = False,
                    no_overwrite: bool = False,
-                   inbuf: Optional[str] = None) -> HandleCommandResult:
+                   inbuf: Optional[str] = None  # deprecated. Was deprecated before Quincy
+                   ) -> HandleCommandResult:
         """
-        Create OSD daemon(s) using a drive group spec
+        Create OSD daemon(s) on all available devices
         """
-        # Apply DriveGroupSpecs to create OSDs
-        usage = """
-usage:
-  ceph orch apply osd -i <json_file/yaml_file> [--dry-run]
-  ceph orch apply osd --all-available-devices [--dry-run] [--unmanaged]
-
-Restrictions:
-
-  Mutexes:
-  * -i, --all-available-devices
-  * -i, --unmanaged (this would overwrite the osdspec loaded from a file)
-
-  Parameters:
-
-  * --unmanaged
-     Only works with --all-available-devices.
-
-Description:
-
-  * -i
-    An inbuf object like a file or a json/yaml blob containing a valid OSDSpec
-
-  * --all-available-devices
-    The most simple OSDSpec there is. Takes all as 'available' marked devices
-    and creates standalone OSDs on them.
-
-  * --unmanaged
-    Set a the unmanaged flag for all--available-devices (default is False)
-
-Examples:
-
-   # ceph orch apply osd -i <file.yml|json>
-
-   Applies one or more OSDSpecs found in <file>
-
-   # ceph orch osd apply --all-available-devices --unmanaged=true
-
-   Creates and applies simple OSDSpec with the unmanaged flag set to <true>
-"""
 
         if inbuf and all_available_devices:
-            # mutually exclusive
-            return HandleCommandResult(-errno.EINVAL, stderr=usage)
+            return HandleCommandResult(-errno.EINVAL, '-i infile and --all-available-devices are mutually exclusive')
 
         if not inbuf and not all_available_devices:
             # one parameter must be present
-            return HandleCommandResult(-errno.EINVAL, stderr=usage)
+            return HandleCommandResult(-errno.EINVAL, '--all-available-devices is required')
 
         if inbuf:
             if unmanaged is not None:
-                return HandleCommandResult(-errno.EINVAL, stderr=usage)
+                return HandleCommandResult(-errno.EINVAL, stderr='-i infile and --unmanaged are mutually exclusive')
 
             try:
                 drivegroups = [_dg for _dg in yaml.safe_load_all(inbuf)]
@@ -791,7 +752,7 @@ Examples:
             ]
             return self._apply_misc(dg_specs, dry_run, format, no_overwrite)
 
-        return HandleCommandResult(-errno.EINVAL, stderr=usage)
+        return HandleCommandResult(-errno.EINVAL, stderr='--all-available-devices is required')
 
     @_cli_write_command('orch daemon add osd')
     def _daemon_add_osd(self,

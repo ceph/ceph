@@ -332,7 +332,7 @@ Alternatively, you can use your OSDSpec file:
 
 .. prompt:: bash #
 
-  ceph orch apply osd -i <osd_spec_file> --dry-run
+  ceph orch apply -i <osd_spec_file> --dry-run
 
 Expected output::
 
@@ -459,7 +459,7 @@ This means :
 
    .. prompt:: bash [monitor.1]#
 
-     ceph orch apply osd -i /path/to/osd_spec.yml
+     ceph orch apply -i /path/to/osd_spec.yml
 
    This instruction will be issued to all the matching hosts, and will deploy
    these OSDs.
@@ -474,7 +474,7 @@ Example
 
 .. prompt:: bash [monitor.1]#
 
-   ceph orch apply osd -i /path/to/osd_spec.yml --dry-run
+   ceph orch apply -i /path/to/osd_spec.yml --dry-run
 
 
 
