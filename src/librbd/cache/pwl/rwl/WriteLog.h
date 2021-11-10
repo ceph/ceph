@@ -70,7 +70,8 @@ private:
   void flush_op_log_entries(pwl::GenericLogOperationsVector &ops);
   template <typename V>
   void flush_pmem_buffer(V& ops);
-
+  void inc_allocated_cached_bytes(
+      std::shared_ptr<pwl::GenericLogEntry> log_entry) override;
 protected:
   using AbstractWriteLog<ImageCtxT>::m_lock;
   using AbstractWriteLog<ImageCtxT>::m_log_entries;
@@ -82,17 +83,17 @@ protected:
   using AbstractWriteLog<ImageCtxT>::m_first_valid_entry;
 
   void process_work() override;
-  void schedule_append_ops(pwl::GenericLogOperations &ops) override;
+  void schedule_append_ops(pwl::GenericLogOperations &ops, C_BlockIORequestT *req) override;
   void append_scheduled_ops(void) override;
   void reserve_cache(C_BlockIORequestT *req,
                      bool &alloc_succeeds, bool &no_space) override;
   void collect_read_extents(
       uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
-      std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+      std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
       std::vector<bufferlist*> &bls_to_read, uint64_t entry_hit_length,
       Extent hit_extent, pwl::C_ReadRequest *read_ctx) override;
   void complete_read(
-      std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+      std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
       std::vector<bufferlist*> &bls_to_read, Context *ctx) override;
   bool retire_entries(const unsigned long int frees_per_tx) override;
   void persist_last_flushed_sync_gen() override;
@@ -101,9 +102,10 @@ protected:
   void setup_schedule_append(
       pwl::GenericLogOperationsVector &ops, bool do_early_flush,
       C_BlockIORequestT *req) override;
-  Context *construct_flush_entry_ctx(
-        const std::shared_ptr<pwl::GenericLogEntry> log_entry) override;
-  void initialize_pool(Context *on_finish, pwl::DeferredContexts &later) override;
+  void construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
+				DeferredContexts &post_unlock,
+				bool has_write_entry) override;
+  bool initialize_pool(Context *on_finish, pwl::DeferredContexts &later) override;
   void write_data_to_buffer(
       std::shared_ptr<pwl::WriteLogEntry> ws_entry,
       pwl::WriteLogCacheEntry *pmem_entry) override;

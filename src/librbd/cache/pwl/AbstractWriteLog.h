@@ -125,8 +125,8 @@ public:
   virtual void setup_schedule_append(
       pwl::GenericLogOperationsVector &ops, bool do_early_flush,
       C_BlockIORequestT *req) = 0;
-  void schedule_append(pwl::GenericLogOperationsVector &ops);
-  void schedule_append(pwl::GenericLogOperationSharedPtr op);
+  void schedule_append(pwl::GenericLogOperationsVector &ops, C_BlockIORequestT *req = nullptr);
+  void schedule_append(pwl::GenericLogOperationSharedPtr op, C_BlockIORequestT *req = nullptr);
   void flush_new_sync_point(C_FlushRequestT *flush_req,
                             pwl::DeferredContexts &later);
 
@@ -234,6 +234,7 @@ private:
 
   void pwl_init(Context *on_finish, pwl::DeferredContexts &later);
   void update_image_cache_state(Context *on_finish);
+  void check_image_cache_state_clean();
 
   void flush_dirty_entries(Context *on_finish);
   bool can_flush_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
@@ -263,8 +264,7 @@ protected:
   ImageCtxT &m_image_ctx;
 
   std::string m_log_pool_name;
-  uint64_t m_log_pool_config_size; /* Configured size of RWL */
-  uint64_t m_log_pool_actual_size = 0; /* Actual size of RWL pool */
+  uint64_t m_log_pool_size;
 
   uint32_t m_total_log_entries = 0;
   uint32_t m_free_log_entries = 0;
@@ -342,7 +342,9 @@ protected:
       std::map<uint64_t, bool> &missing_sync_points,
       std::map<uint64_t,
       std::shared_ptr<pwl::SyncPointLogEntry>> &sync_point_entries,
-      pwl::DeferredContexts &later, uint32_t alloc_size);
+      pwl::DeferredContexts &later);
+  virtual void inc_allocated_cached_bytes(
+      std::shared_ptr<pwl::GenericLogEntry> log_entry) = 0;
   Context *construct_flush_entry(
       const std::shared_ptr<pwl::GenericLogEntry> log_entry, bool invalidating);
   void process_writeback_dirty_entries();
@@ -352,28 +354,26 @@ protected:
   void complete_op_log_entries(pwl::GenericLogOperations &&ops, const int r);
 
   bool check_allocation(
-      C_BlockIORequestT *req,
-      uint64_t &bytes_cached, uint64_t &bytes_dirtied,
-      uint64_t &bytes_allocated,
-      uint64_t &num_lanes, uint64_t &num_log_entries,
-      uint64_t &num_unpublished_reserves, uint64_t bytes_allocated_cap);
+      C_BlockIORequestT *req, uint64_t bytes_cached, uint64_t bytes_dirtied,
+      uint64_t bytes_allocated, uint32_t num_lanes, uint32_t num_log_entries,
+      uint32_t num_unpublished_reserves);
   void append_scheduled(
       pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending,
       bool isRWL=false);
 
   virtual void process_work() = 0;
   virtual void append_scheduled_ops(void) = 0;
-  virtual void schedule_append_ops(pwl::GenericLogOperations &ops) = 0;
+  virtual void schedule_append_ops(pwl::GenericLogOperations &ops, C_BlockIORequestT *req) = 0;
   virtual void remove_pool_file() = 0;
-  virtual void initialize_pool(Context *on_finish,
+  virtual bool initialize_pool(Context *on_finish,
                                pwl::DeferredContexts &later) = 0;
   virtual void collect_read_extents(
       uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
-      std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+      std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
       std::vector<bufferlist*> &bls_to_read, uint64_t entry_hit_length,
       Extent hit_extent, pwl::C_ReadRequest *read_ctx) = 0;
   virtual void complete_read(
-      std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+      std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
       std::vector<bufferlist*> &bls_to_read, Context *ctx) = 0;
   virtual void write_data_to_buffer(
       std::shared_ptr<pwl::WriteLogEntry> ws_entry,
@@ -389,10 +389,9 @@ protected:
   virtual void persist_last_flushed_sync_gen() {}
   virtual void reserve_cache(C_BlockIORequestT *req, bool &alloc_succeeds,
                              bool &no_space) {}
-  virtual Context *construct_flush_entry_ctx(
-      const std::shared_ptr<pwl::GenericLogEntry> log_entry) {
-    return nullptr;
-  }
+  virtual void construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
+					DeferredContexts &post_unlock,
+					bool has_write_entry) = 0;
   virtual uint64_t get_max_extent() {
     return 0;
   }

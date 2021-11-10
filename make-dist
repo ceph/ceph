@@ -109,6 +109,23 @@ download_liburing() {
     rm -rf src/liburing
 }
 
+download_pmdk() {
+    pmdk_version=$1
+    shift
+    pmdk_sha256=$1
+    shift
+    pmdk_fname=pmdk-${pmdk_version}.tar.gz
+    download_from $pmdk_fname $pmdk_sha256 $*
+    tar xzf $pmdk_fname -C src \
+        --exclude="pmdk-${pmdk_version}/doc" \
+        --exclude="pmdk-${pmdk_version}/src/test" \
+        --exclude="pmdk-${pmdk_version}/src/examples" \
+        --exclude="pmdk-${pmdk_version}/src/benchmarks"
+    mv src/pmdk-${pmdk_version} src/pmdk
+    tar cf ${outfile}.pmdk.tar ${outfile}/src/pmdk
+    rm -rf src/pmdk
+}
+
 build_dashboard_frontend() {
   CURR_DIR=`pwd`
   TEMP_DIR=`mktemp -d`
@@ -169,11 +186,15 @@ download_boost $boost_version 4eb3b8d442b426dc35346235c8733b5ae35ba431690e38c6a8
 download_liburing 0.7 8e2842cfe947f3a443af301bdd6d034455536c38a455c7a700d0c1ad165a7543 \
                   https://github.com/axboe/liburing/archive \
                   https://git.kernel.dk/cgit/liburing/snapshot
+pmdk_version=1.10
+download_pmdk $pmdk_version 08dafcf94db5ac13fac9139c92225d9aa5f3724ea74beee4e6ca19a01a2eb20c \
+               https://github.com/pmem/pmdk/releases/download/$pmdk_version
 build_dashboard_frontend
 generate_rook_ceph_client
 for tarball in $outfile.version   \
                $outfile.boost     \
                $outfile.liburing  \
+               $outfile.pmdk  \
                dashboard_frontend \
                rook_ceph_client   \
                $outfile; do

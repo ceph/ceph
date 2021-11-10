@@ -32,8 +32,15 @@ namespace ssd {
 
 using namespace librbd::cache::pwl;
 
-// SSD: this number can be updated later
-const unsigned long int ops_appended_together = MAX_WRITES_PER_SYNC_POINT;
+static bool is_valid_pool_root(const WriteLogPoolRoot& root) {
+  return root.pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
+         root.first_valid_entry >= DATA_RING_BUFFER_OFFSET &&
+         root.first_valid_entry < root.pool_size &&
+         root.first_valid_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
+         root.first_free_entry >= DATA_RING_BUFFER_OFFSET &&
+         root.first_free_entry < root.pool_size &&
+         root.first_free_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0;
+}
 
 template <typename I>
 Builder<AbstractWriteLog<I>>* WriteLog<I>::create_builder() {
@@ -59,52 +66,80 @@ WriteLog<I>::~WriteLog() {
 template <typename I>
 void WriteLog<I>::collect_read_extents(
     uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
-    std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+    std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
     std::vector<bufferlist*> &bls_to_read,
     uint64_t entry_hit_length, Extent hit_extent,
     pwl::C_ReadRequest *read_ctx) {
-    // Make a bl for this hit extent. This will add references to the
-    // write_entry->cache_bl */
-    ldout(m_image_ctx.cct, 5) << dendl;
-    auto write_entry = static_pointer_cast<WriteLogEntry>(map_entry.log_entry);
-    buffer::list hit_bl;
-    hit_bl = write_entry->get_cache_bl();
-    bool writesame = write_entry->is_writesame_entry();
-    auto hit_extent_buf = std::make_shared<ImageExtentBuf>(
-        hit_extent, hit_bl, true, read_buffer_offset, writesame);
-    read_ctx->read_extents.push_back(hit_extent_buf);
+  // Make a bl for this hit extent. This will add references to the
+  // write_entry->cache_bl */
+  ldout(m_image_ctx.cct, 5) << dendl;
+  auto write_entry = static_pointer_cast<WriteLogEntry>(map_entry.log_entry);
+  buffer::list hit_bl;
+  write_entry->copy_cache_bl(&hit_bl);
+  bool writesame = write_entry->is_writesame_entry();
+  auto hit_extent_buf = std::make_shared<ImageExtentBuf>(
+      hit_extent, hit_bl, true, read_buffer_offset, writesame);
+  read_ctx->read_extents.push_back(hit_extent_buf);
 
-    if(!hit_bl.length()) {
-      ldout(m_image_ctx.cct, 5) << "didn't hit RAM" << dendl;
-      auto read_extent = read_ctx->read_extents.back();
-      log_entries_to_read.push_back(&write_entry->ram_entry);
-      bls_to_read.push_back(&read_extent->m_bl);
-    }
+  if (!hit_bl.length()) {
+    ldout(m_image_ctx.cct, 5) << "didn't hit RAM" << dendl;
+    auto read_extent = read_ctx->read_extents.back();
+    write_entry->inc_bl_refs();
+    log_entries_to_read.push_back(std::move(write_entry));
+    bls_to_read.push_back(&read_extent->m_bl);
+  }
 }
 
 template <typename I>
 void WriteLog<I>::complete_read(
-    std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+    std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
     std::vector<bufferlist*> &bls_to_read,
     Context *ctx) {
   if (!log_entries_to_read.empty()) {
-    aio_read_data_block(log_entries_to_read, bls_to_read, ctx);
+    aio_read_data_blocks(log_entries_to_read, bls_to_read, ctx);
   } else {
     ctx->complete(0);
   }
 }
 
 template <typename I>
-void WriteLog<I>::initialize_pool(Context *on_finish,
-                                  pwl::DeferredContexts &later) {
+int WriteLog<I>::create_and_open_bdev() {
   CephContext *cct = m_image_ctx.cct;
+
+  bdev = BlockDevice::create(cct, this->m_log_pool_name, aio_cache_cb,
+                             nullptr, nullptr, nullptr);
+  int r = bdev->open(this->m_log_pool_name);
+  if (r < 0) {
+    lderr(cct) << "failed to open bdev" << dendl;
+    delete bdev;
+    return r;
+  }
+
+  ceph_assert(this->m_log_pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0);
+  if (bdev->get_size() != this->m_log_pool_size) {
+    lderr(cct) << "size mismatch: bdev size " << bdev->get_size()
+               << " (block size " << bdev->get_block_size()
+               << ") != pool size " << this->m_log_pool_size << dendl;
+    bdev->close();
+    delete bdev;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+template <typename I>
+bool WriteLog<I>::initialize_pool(Context *on_finish,
+                                  pwl::DeferredContexts &later) {
+  int r;
+
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   if (access(this->m_log_pool_name.c_str(), F_OK) != 0) {
     int fd = ::open(this->m_log_pool_name.c_str(), O_RDWR|O_CREAT, 0644);
     bool succeed = true;
     if (fd >= 0) {
       if (truncate(this->m_log_pool_name.c_str(),
-                   this->m_log_pool_config_size) != 0) {
+                   this->m_log_pool_size) != 0) {
         succeed = false;
       }
       ::close(fd);
@@ -117,81 +152,59 @@ void WriteLog<I>::initialize_pool(Context *on_finish,
       m_cache_state->empty = true;
       /* TODO: filter/replace errnos that are meaningless to the caller */
       on_finish->complete(-errno);
-      return;
+      return false;
     }
 
-    bdev = BlockDevice::create(cct, this->m_log_pool_name, aio_cache_cb,
-                               nullptr, nullptr, nullptr);
-    int r = bdev->open(this->m_log_pool_name);
+    r = create_and_open_bdev();
     if (r < 0) {
-      delete bdev;
-      on_finish->complete(-1);
-      return;
+      on_finish->complete(r);
+      return false;
     }
     m_cache_state->present = true;
     m_cache_state->clean = true;
     m_cache_state->empty = true;
     /* new pool, calculate and store metadata */
-    size_t small_write_size = MIN_WRITE_ALLOC_SSD_SIZE + sizeof(struct WriteLogCacheEntry);
 
-    uint64_t num_small_writes = (uint64_t)(this->m_log_pool_config_size / small_write_size);
-    if (num_small_writes > MAX_LOG_ENTRIES) {
-      num_small_writes = MAX_LOG_ENTRIES;
-    }
-    assert(num_small_writes > 2);
-    m_log_pool_ring_buffer_size = this->m_log_pool_config_size - DATA_RING_BUFFER_OFFSET;
+    /* Keep ring buffer at least MIN_WRITE_ALLOC_SSD_SIZE bytes free.
+     * In this way, when all ring buffer spaces are allocated,
+     * m_first_free_entry and m_first_valid_entry will not be equal.
+     * Equal only means the cache is empty. */
+    this->m_bytes_allocated_cap = this->m_log_pool_size -
+        DATA_RING_BUFFER_OFFSET - MIN_WRITE_ALLOC_SSD_SIZE;
     /* Log ring empty */
     m_first_free_entry = DATA_RING_BUFFER_OFFSET;
     m_first_valid_entry = DATA_RING_BUFFER_OFFSET;
 
-    pool_size = this->m_log_pool_config_size;
     auto new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
-    new_root->pool_size = this->m_log_pool_config_size;
+    new_root->pool_size = this->m_log_pool_size;
     new_root->flushed_sync_gen = this->m_flushed_sync_gen;
     new_root->block_size = MIN_WRITE_ALLOC_SSD_SIZE;
     new_root->first_free_entry = m_first_free_entry;
     new_root->first_valid_entry = m_first_valid_entry;
-    new_root->num_log_entries = num_small_writes;
+    new_root->num_log_entries = 0;
     pool_root = *new_root;
 
     r = update_pool_root_sync(new_root);
     if (r != 0) {
-      this->m_total_log_entries = 0;
-      this->m_free_log_entries = 0;
       lderr(m_image_ctx.cct) << "failed to initialize pool ("
                              << this->m_log_pool_name << ")" << dendl;
+      bdev->close();
+      delete bdev;
       on_finish->complete(r);
+      return false;
     }
-    this->m_total_log_entries = new_root->num_log_entries;
-    this->m_free_log_entries = new_root->num_log_entries - 1;
-   } else {
-     m_cache_state->present = true;
-     bdev = BlockDevice::create(
-         cct, this->m_log_pool_name, aio_cache_cb,
-         static_cast<void*>(this), nullptr, static_cast<void*>(this));
-     int r = bdev->open(this->m_log_pool_name);
-     if (r < 0) {
-       delete bdev;
-       on_finish->complete(r);
-       return;
-     }
-     load_existing_entries(later);
-     if (m_first_free_entry < m_first_valid_entry) {
-      /* Valid entries wrap around the end of the ring, so first_free is lower
-       * than first_valid.  If first_valid was == first_free+1, the entry at
-       * first_free would be empty. The last entry is never used, so in
-       * that case there would be zero free log entries. */
-       this->m_free_log_entries = this->m_total_log_entries -
-         (m_first_valid_entry - m_first_free_entry) - 1;
-     } else {
-      /* first_valid is <= first_free. If they are == we have zero valid log
-       * entries, and n-1 free log entries */
-       this->m_free_log_entries = this->m_total_log_entries -
-         (m_first_free_entry - m_first_valid_entry) - 1;
-     }
-     m_cache_state->clean = this->m_dirty_log_entries.empty();
-     m_cache_state->empty = m_log_entries.empty();
+  } else {
+    m_cache_state->present = true;
+    r = create_and_open_bdev();
+    if (r < 0) {
+      on_finish->complete(r);
+      return false;
+    }
+    load_existing_entries(later);
+    m_cache_state->clean = this->m_dirty_log_entries.empty();
+    m_cache_state->empty = m_log_entries.empty();
   }
+  return true;
 }
 
 template <typename I>
@@ -229,19 +242,22 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
 
   auto p = bl.cbegin();
   decode(superblock, p);
-  ldout(cct,5) << "Decoded superblock" << dendl;
 
-  WriteLogPoolRoot current_pool_root = superblock.root;
-  uint64_t next_log_pos = pool_root.first_valid_entry;
-  uint64_t first_free_entry =  pool_root.first_free_entry;
-  uint64_t curr_log_pos;
+  pool_root = superblock.root;
+  ldout(cct, 1) << "Decoded root: pool_size=" << pool_root.pool_size
+                << " first_valid_entry=" << pool_root.first_valid_entry
+                << " first_free_entry=" << pool_root.first_free_entry
+                << " flushed_sync_gen=" << pool_root.flushed_sync_gen
+                << dendl;
+  ceph_assert(is_valid_pool_root(pool_root));
 
-  pool_root = current_pool_root;
-  m_first_free_entry = first_free_entry;
-  m_first_valid_entry = next_log_pos;
-  this->m_total_log_entries = current_pool_root.num_log_entries;
-  this->m_flushed_sync_gen = current_pool_root.flushed_sync_gen;
-  this->m_log_pool_actual_size = current_pool_root.pool_size;
+  this->m_log_pool_size = pool_root.pool_size;
+  this->m_flushed_sync_gen = pool_root.flushed_sync_gen;
+  this->m_first_valid_entry = pool_root.first_valid_entry;
+  this->m_first_free_entry = pool_root.first_free_entry;
+
+  this->m_bytes_allocated_cap = this->m_log_pool_size -
+      DATA_RING_BUFFER_OFFSET - MIN_WRITE_ALLOC_SSD_SIZE;
 
   std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> sync_point_entries;
 
@@ -250,7 +266,8 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
   // Iterate through the log_entries and append all the write_bytes
   // of each entry to fetch the pos of next 4k of log_entries. Iterate
   // through the log entries and append them to the in-memory vector
-  while (next_log_pos != first_free_entry) {
+  for (uint64_t next_log_pos = this->m_first_valid_entry;
+       next_log_pos != this->m_first_free_entry; ) {
     // read the entries from SSD cache and decode
     bufferlist bl_entries;
     ::IOContext ioctx_entry(cct, nullptr);
@@ -260,7 +277,7 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
     auto pl = bl_entries.cbegin();
     decode(ssd_log_entries, pl);
     ldout(cct, 5) << "decoded ssd log entries" << dendl;
-    curr_log_pos = next_log_pos;
+    uint64_t curr_log_pos = next_log_pos;
     std::shared_ptr<GenericLogEntry> log_entry = nullptr;
 
     for (auto it = ssd_log_entries.begin(); it != ssd_log_entries.end(); ++it) {
@@ -274,12 +291,26 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
     }
     // along with the write_bytes, add control block size too
     next_log_pos += MIN_WRITE_ALLOC_SSD_SIZE;
-    if (next_log_pos >= this->m_log_pool_actual_size) {
-      next_log_pos = next_log_pos % this->m_log_pool_actual_size + DATA_RING_BUFFER_OFFSET;
+    if (next_log_pos >= this->m_log_pool_size) {
+      next_log_pos = next_log_pos % this->m_log_pool_size + DATA_RING_BUFFER_OFFSET;
     }
- }
-  this->update_sync_points(missing_sync_points, sync_point_entries, later,
-                           MIN_WRITE_ALLOC_SSD_SIZE);
+  }
+  this->update_sync_points(missing_sync_points, sync_point_entries, later);
+  if (m_first_valid_entry > m_first_free_entry) {
+    m_bytes_allocated = this->m_log_pool_size - m_first_valid_entry +
+			  m_first_free_entry - DATA_RING_BUFFER_OFFSET;
+  } else {
+    m_bytes_allocated = m_first_free_entry - m_first_valid_entry;
+  }
+}
+
+// For SSD we don't calc m_bytes_allocated in this
+template <typename I>
+void WriteLog<I>::inc_allocated_cached_bytes(
+    std::shared_ptr<pwl::GenericLogEntry> log_entry) {
+  if (log_entry->is_write_entry()) {
+    this->m_bytes_cached += log_entry->write_bytes();
+  }
 }
 
 template <typename I>
@@ -297,13 +328,17 @@ bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
                               &num_lanes, &num_log_entries,
                               &num_unpublished_reserves);
 
-  bytes_allocated += num_log_entries * MIN_WRITE_ALLOC_SSD_SIZE;
+  ceph_assert(!num_lanes);
+  if (num_log_entries) {
+    bytes_allocated += num_log_entries * MIN_WRITE_ALLOC_SSD_SIZE;
+    num_log_entries = 0;
+  }
+  ceph_assert(!num_unpublished_reserves);
 
   alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied,
                                           bytes_allocated, num_lanes,
                                           num_log_entries,
-                                          num_unpublished_reserves,
-                                          m_log_pool_ring_buffer_size);
+                                          num_unpublished_reserves);
   req->set_allocated(alloc_succeeds);
   return alloc_succeeds;
 }
@@ -334,7 +369,7 @@ void WriteLog<I>::enlist_op_appender() {
  * all prior log entries are persisted everywhere.
  */
 template<typename I>
-void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops) {
+void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops, C_BlockIORequestT *req) {
   bool need_finisher = false;
   GenericLogOperationsVector appending;
 
@@ -352,6 +387,17 @@ void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops) {
       need_finisher = has_sync_point_logs(ops);
     }
     this->m_ops_to_append.splice(this->m_ops_to_append.end(), ops);
+
+    // To preserve the order of overlapping IOs, release_cell() may be
+    // called only after the ops are added to m_ops_to_append.
+    // As soon as m_lock is released, the appended ops can be picked up
+    // by append_scheduled_ops() in another thread and req can be freed.
+    if (req != nullptr) {
+      if (persist_on_flush) {
+        req->complete_user_request(0);
+      }
+      req->release_cell();
+    }
   }
 
   if (need_finisher) {
@@ -367,11 +413,7 @@ template <typename I>
 void WriteLog<I>::setup_schedule_append(pwl::GenericLogOperationsVector &ops,
                                         bool do_early_flush,
                                         C_BlockIORequestT *req) {
-  this->schedule_append(ops);
-  if (this->get_persist_on_flush()) {
-    req->complete_user_request(0);
-  }
-  req->release_cell();
+  this->schedule_append(ops, req);
 }
 
 template <typename I>
@@ -404,8 +446,6 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
   Context *ctx = new LambdaContext([this, ops](int r) {
     assert(r == 0);
     ldout(m_image_ctx.cct, 20) << "Finished root update " << dendl;
-    this->m_async_update_superblock--;
-    this->m_async_op_tracker.finish_op();
 
     auto captured_ops = std::move(ops);
     this->complete_op_log_entries(std::move(captured_ops), r);
@@ -425,6 +465,8 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
     if (need_finisher) {
       this->enlist_op_appender();
     }
+    this->m_async_update_superblock--;
+    this->m_async_op_tracker.finish_op();
   });
   uint64_t *new_first_free_entry = new(uint64_t);
   Context *append_ctx = new LambdaContext(
@@ -437,8 +479,6 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
         for (auto &operation : ops) {
           operation->log_append_comp_time = now;
         }
-        this->m_async_append_ops--;
-        this->m_async_op_tracker.finish_op();
 
         std::lock_guard locker(this->m_log_append_lock);
         std::lock_guard locker1(m_lock);
@@ -450,16 +490,11 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
         delete new_first_free_entry;
         schedule_update_root(new_root, ctx);
       }
-  });
+      this->m_async_append_ops--;
+      this->m_async_op_tracker.finish_op();
+    });
   // Append logs and update first_free_update
-  uint64_t bytes_allocated_updated;
-  append_ops(ops, append_ctx, new_first_free_entry, bytes_allocated_updated);
-
-  {
-    std::lock_guard locker1(m_lock);
-    m_first_free_entry = *new_first_free_entry;
-    m_bytes_allocated -= bytes_allocated_updated;
-  }
+  append_ops(ops, append_ctx, new_first_free_entry);
 
   if (ops.size()) {
     this->dispatch_deferred_writes();
@@ -484,47 +519,87 @@ void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops) {
 }
 
 template <typename I>
-Context* WriteLog<I>::construct_flush_entry_ctx(
-    std::shared_ptr<GenericLogEntry> log_entry) {
+void WriteLog<I>::construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
+					  DeferredContexts &post_unlock,
+					  bool has_write_entry) {
   // snapshot so we behave consistently
   bool invalidating = this->m_invalidating;
 
-  Context *ctx = this->construct_flush_entry(log_entry, invalidating);
+  if (invalidating || !has_write_entry) {
+    for (auto &log_entry : entries_to_flush) {
+      Context *ctx = this->construct_flush_entry(log_entry, invalidating);
 
-  if (invalidating) {
-    return ctx;
-  }
-  if(log_entry->is_write_entry()) {
-      bufferlist *read_bl_ptr = new bufferlist;
-      ctx = new LambdaContext(
-          [this, log_entry, read_bl_ptr, ctx](int r) {
-            bufferlist captured_entry_bl;
-            captured_entry_bl.claim_append(*read_bl_ptr);
-            free(read_bl_ptr);
-            m_image_ctx.op_work_queue->queue(new LambdaContext(
-              [this, log_entry, entry_bl=move(captured_entry_bl), ctx](int r) {
-               auto captured_entry_bl = std::move(entry_bl);
-               ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
-                                          << " " << *log_entry << dendl;
-               log_entry->writeback_bl(this->m_image_writeback, ctx,
-                                       std::move(captured_entry_bl));
-              }), 0);
-      });
-      ctx = new LambdaContext(
-        [this, log_entry, read_bl_ptr, ctx](int r) {
-          aio_read_data_block(&log_entry->ram_entry, read_bl_ptr, ctx);
-      });
-    return ctx;
+      if (!invalidating) {
+        ctx = new LambdaContext(
+        [this, log_entry, ctx](int r) {
+          m_image_ctx.op_work_queue->queue(new LambdaContext(
+	    [this, log_entry, ctx](int r) {
+	      ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
+                                         << " " << *log_entry << dendl;
+	      log_entry->writeback(this->m_image_writeback, ctx);
+	    }), 0);
+	});
+      }
+      post_unlock.add(ctx);
+    }
   } else {
-    return new LambdaContext(
-      [this, log_entry, ctx](int r) {
-        m_image_ctx.op_work_queue->queue(new LambdaContext(
-          [this, log_entry, ctx](int r) {
-            ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
-                                       << " " << *log_entry << dendl;
-            log_entry->writeback(this->m_image_writeback, ctx);
-          }), 0);
+    int count = entries_to_flush.size();
+    std::vector<std::shared_ptr<GenericWriteLogEntry>> log_entries;
+    std::vector<bufferlist *> read_bls;
+    std::vector<Context *> contexts;
+
+    log_entries.reserve(count);
+    read_bls.reserve(count);
+    contexts.reserve(count);
+
+    for (auto &log_entry : entries_to_flush) {
+      // log_entry already removed from m_dirty_log_entries and
+      // in construct_flush_entry() it will inc(m_flush_ops_in_flight).
+      // We call this func here to make ops can track.
+      Context *ctx = this->construct_flush_entry(log_entry, invalidating);
+      if (log_entry->is_write_entry()) {
+	bufferlist *bl = new bufferlist;
+	auto write_entry = static_pointer_cast<WriteLogEntry>(log_entry);
+	write_entry->inc_bl_refs();
+	log_entries.push_back(write_entry);
+	read_bls.push_back(bl);
+      }
+      contexts.push_back(ctx);
+    }
+
+    Context *ctx = new LambdaContext(
+      [this, entries_to_flush, read_bls, contexts](int r) {
+        int i = 0, j = 0;
+
+	for (auto &log_entry : entries_to_flush) {
+          Context *ctx = contexts[j++];
+
+	  if (log_entry->is_write_entry()) {
+	    bufferlist captured_entry_bl;
+
+	    captured_entry_bl.claim_append(*read_bls[i]);
+	    delete read_bls[i++];
+
+	    m_image_ctx.op_work_queue->queue(new LambdaContext(
+	      [this, log_entry, entry_bl=std::move(captured_entry_bl), ctx](int r) {
+		auto captured_entry_bl = std::move(entry_bl);
+		ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
+				           << " " << *log_entry << dendl;
+		log_entry->writeback_bl(this->m_image_writeback, ctx,
+					std::move(captured_entry_bl));
+	      }), 0);
+	  } else {
+	      m_image_ctx.op_work_queue->queue(new LambdaContext(
+		[this, log_entry, ctx](int r) {
+		  ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
+                                             << " " << *log_entry << dendl;
+		  log_entry->writeback(this->m_image_writeback, ctx);
+		}), 0);
+	  }
+	}
       });
+
+    aio_read_data_blocks(log_entries, read_bls, ctx);
   }
 }
 
@@ -533,10 +608,9 @@ void WriteLog<I>::process_work() {
   CephContext *cct = m_image_ctx.cct;
   int max_iterations = 4;
   bool wake_up_requested = false;
-  uint64_t aggressive_high_water_bytes = m_log_pool_ring_buffer_size * AGGRESSIVE_RETIRE_HIGH_WATER;
-  uint64_t aggressive_high_water_entries = this->m_total_log_entries * AGGRESSIVE_RETIRE_HIGH_WATER;
-  uint64_t high_water_bytes = m_log_pool_ring_buffer_size * RETIRE_HIGH_WATER;
-  uint64_t high_water_entries = this->m_total_log_entries * RETIRE_HIGH_WATER;
+  uint64_t aggressive_high_water_bytes =
+      this->m_bytes_allocated_cap * AGGRESSIVE_RETIRE_HIGH_WATER;
+  uint64_t high_water_bytes = this->m_bytes_allocated_cap * RETIRE_HIGH_WATER;
 
   ldout(cct, 20) << dendl;
 
@@ -546,17 +620,13 @@ void WriteLog<I>::process_work() {
       this->m_wake_up_requested = false;
     }
     if (this->m_alloc_failed_since_retire || (this->m_shutting_down) ||
-        this->m_invalidating || m_bytes_allocated > high_water_bytes ||
-        (m_log_entries.size() > high_water_entries)) {
+        this->m_invalidating || m_bytes_allocated > high_water_bytes) {
       ldout(m_image_ctx.cct, 10) << "alloc_fail=" << this->m_alloc_failed_since_retire
                                  << ", allocated > high_water="
                                  << (m_bytes_allocated > high_water_bytes)
-                                 << ", allocated_entries > high_water="
-                                 << (m_log_entries.size() > high_water_entries)
                                  << dendl;
       retire_entries((this->m_shutting_down || this->m_invalidating ||
-                    (m_bytes_allocated > aggressive_high_water_bytes) ||
-                    (m_log_entries.size() > aggressive_high_water_entries))
+                      m_bytes_allocated > aggressive_high_water_bytes)
                     ? MAX_ALLOC_PER_TRANSACTION : MAX_FREE_PER_TRANSACTION);
     }
     this->dispatch_deferred_writes();
@@ -600,8 +670,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     first_valid_entry = m_first_valid_entry;
     while (retiring_entries.size() < frees_per_tx && !m_log_entries.empty()) {
       GenericLogEntriesVector retiring_subentries;
-      auto entry = m_log_entries.front();
-      uint64_t control_block_pos = entry->log_entry_index;
+      uint64_t control_block_pos = m_log_entries.front()->log_entry_index;
       uint64_t data_length = 0;
       for (auto it = m_log_entries.begin(); it != m_log_entries.end(); ++it) {
         if (this->can_retire_entry(*it)) {
@@ -614,8 +683,8 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
             ldout(cct, 20) << "The log entry is " << *(*it) << dendl;
             if ((*it)->log_entry_index < control_block_pos) {
               ceph_assert((*it)->log_entry_index ==
-                (control_block_pos + data_length + MIN_WRITE_ALLOC_SSD_SIZE)
-                % this->m_log_pool_config_size + DATA_RING_BUFFER_OFFSET);
+                  (control_block_pos + data_length + MIN_WRITE_ALLOC_SSD_SIZE) %
+                  this->m_log_pool_size + DATA_RING_BUFFER_OFFSET);
             } else {
               ceph_assert((*it)->log_entry_index == control_block_pos +
                   data_length + MIN_WRITE_ALLOC_SSD_SIZE);
@@ -638,22 +707,36 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
             it != retiring_subentries.end(); it++) {
           ceph_assert(m_log_entries.front() == *it);
           m_log_entries.pop_front();
-          if (entry->is_write_entry()) {
-            auto write_entry = static_pointer_cast<WriteLogEntry>(entry);
-            this->m_blocks_to_log_entries.remove_log_entry(write_entry);
+          if ((*it)->write_bytes() > 0 || (*it)->bytes_dirty() > 0) {
+            auto gen_write_entry = static_pointer_cast<GenericWriteLogEntry>(*it);
+            if (gen_write_entry) {
+                this->m_blocks_to_log_entries.remove_log_entry(gen_write_entry);
+            }
           }
         }
+
+        ldout(cct, 20) << "span with " << retiring_subentries.size()
+                       << " entries: control_block_pos=" << control_block_pos
+                       << " data_length=" << data_length
+                       << dendl;
         retiring_entries.insert(
             retiring_entries.end(), retiring_subentries.begin(),
             retiring_subentries.end());
+
+        first_valid_entry = control_block_pos + data_length +
+            MIN_WRITE_ALLOC_SSD_SIZE;
+        if (first_valid_entry >= this->m_log_pool_size) {
+          first_valid_entry = first_valid_entry % this->m_log_pool_size +
+              DATA_RING_BUFFER_OFFSET;
+        }
       } else {
         break;
       }
     }
   }
   if (retiring_entries.size()) {
-    ldout(cct, 1) << "Retiring " << retiring_entries.size()
-                  << " entries" << dendl;
+    ldout(cct, 20) << "Retiring " << retiring_entries.size() << " entries"
+                   << dendl;
 
     // Advance first valid entry and release buffers
     uint64_t flushed_sync_gen;
@@ -663,18 +746,6 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
       flushed_sync_gen = this->m_flushed_sync_gen;
     }
 
-    //calculate new first_valid_entry based on last entry to retire
-    auto entry = retiring_entries.back();
-    if (entry->is_write_entry() || entry->is_writesame_entry()) {
-      first_valid_entry = entry->ram_entry.write_data_pos +
-        entry->get_aligned_data_size();
-    } else {
-      first_valid_entry = entry->log_entry_index + MIN_WRITE_ALLOC_SSD_SIZE;
-    }
-    if (first_valid_entry >= this->m_log_pool_config_size) {
-        first_valid_entry = first_valid_entry % this->m_log_pool_config_size +
-          DATA_RING_BUFFER_OFFSET;
-    }
     ceph_assert(first_valid_entry != initial_first_valid_entry);
     auto new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
     new_root->flushed_sync_gen = flushed_sync_gen;
@@ -683,53 +754,54 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     pool_root.first_valid_entry = first_valid_entry;
 
     Context *ctx = new LambdaContext(
-          [this, flushed_sync_gen, first_valid_entry,
-          initial_first_valid_entry, retiring_entries](int r) {
-          uint64_t allocated_bytes = 0;
-          uint64_t cached_bytes = 0;
-          uint64_t former_log_pos = 0;
-          for (auto &entry : retiring_entries) {
-            ceph_assert(entry->log_entry_index != 0);
-            if (entry->log_entry_index != former_log_pos ) {
-              // Space for control blocks
-              allocated_bytes  += MIN_WRITE_ALLOC_SSD_SIZE;
-              former_log_pos = entry->log_entry_index;
-            }
-            if (entry->is_write_entry()) {
-              cached_bytes += entry->write_bytes();
-              //space for userdata
-              allocated_bytes += entry->get_aligned_data_size();
-            }
+      [this, first_valid_entry, initial_first_valid_entry,
+       retiring_entries](int r) {
+        uint64_t allocated_bytes = 0;
+        uint64_t cached_bytes = 0;
+        uint64_t former_log_pos = 0;
+        for (auto &entry : retiring_entries) {
+          ceph_assert(entry->log_entry_index != 0);
+          if (entry->log_entry_index != former_log_pos ) {
+            // Space for control blocks
+            allocated_bytes += MIN_WRITE_ALLOC_SSD_SIZE;
+            former_log_pos = entry->log_entry_index;
           }
-          {
-            std::lock_guard locker(m_lock);
-            m_first_valid_entry = first_valid_entry;
-            ceph_assert(m_first_valid_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0);
-            this->m_free_log_entries += retiring_entries.size();
-            ceph_assert(this->m_bytes_cached >= cached_bytes);
-            this->m_bytes_cached -= cached_bytes;
-
-            ldout(m_image_ctx.cct, 20)
-              << "Finished root update: " << "initial_first_valid_entry="
-              << initial_first_valid_entry << ", " << "m_first_valid_entry="
-              << m_first_valid_entry << "," << "release space = "
-              << allocated_bytes << "," << "m_bytes_allocated="
-              << m_bytes_allocated << "," << "release cached space="
-              << allocated_bytes << "," << "m_bytes_cached="
-              << this->m_bytes_cached << dendl;
-
-            this->m_alloc_failed_since_retire = false;
-            this->wake_up();
-            m_async_update_superblock--;
-            this->m_async_op_tracker.finish_op();
+          if (entry->is_write_entry()) {
+            cached_bytes += entry->write_bytes();
+            // space for userdata
+            allocated_bytes += entry->get_aligned_data_size();
           }
+        }
+        {
+          std::lock_guard locker(m_lock);
+          m_first_valid_entry = first_valid_entry;
+          ceph_assert(m_first_valid_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0);
+          ceph_assert(this->m_bytes_allocated >= allocated_bytes);
+          this->m_bytes_allocated -= allocated_bytes;
+          ceph_assert(this->m_bytes_cached >= cached_bytes);
+          this->m_bytes_cached -= cached_bytes;
 
-          this->dispatch_deferred_writes();
-          this->process_writeback_dirty_entries();
-        });
+          ldout(m_image_ctx.cct, 20)
+            << "Finished root update: " << "initial_first_valid_entry="
+            << initial_first_valid_entry << ", " << "m_first_valid_entry="
+            << m_first_valid_entry << "," << "release space = "
+            << allocated_bytes << "," << "m_bytes_allocated="
+            << m_bytes_allocated << "," << "release cached space="
+            << cached_bytes << "," << "m_bytes_cached="
+            << this->m_bytes_cached << dendl;
 
-      std::lock_guard locker(m_lock);
-      schedule_update_root(new_root, ctx);
+          this->m_alloc_failed_since_retire = false;
+          this->wake_up();
+        }
+
+        this->dispatch_deferred_writes();
+        this->process_writeback_dirty_entries();
+        m_async_update_superblock--;
+        this->m_async_op_tracker.finish_op();
+      });
+
+    std::lock_guard locker(m_lock);
+    schedule_update_root(new_root, ctx);
   } else {
     ldout(cct, 20) << "Nothing to retire" << dendl;
     return false;
@@ -739,27 +811,27 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
 
 template <typename I>
 void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
-                             uint64_t* new_first_free_entry,
-                             uint64_t &bytes_allocated) {
+                             uint64_t* new_first_free_entry) {
   GenericLogEntriesVector log_entries;
   CephContext *cct = m_image_ctx.cct;
   uint64_t span_payload_len = 0;
-  bytes_allocated = 0;
+  uint64_t bytes_to_free = 0;
   ldout(cct, 20) << "Appending " << ops.size() << " log entries." << dendl;
 
+  *new_first_free_entry = pool_root.first_free_entry;
   AioTransContext* aio = new AioTransContext(cct, ctx);
 
   utime_t now = ceph_clock_now();
   for (auto &operation : ops) {
-    operation->log_append_time = now;
+    operation->log_append_start_time = now;
     auto log_entry = operation->get_log_entry();
 
     if (log_entries.size() == CONTROL_BLOCK_MAX_LOG_ENTRIES ||
         span_payload_len >= SPAN_MAX_DATA_LEN) {
       if (log_entries.size() > 1) {
-        bytes_allocated += (log_entries.size() - 1) * MIN_WRITE_ALLOC_SSD_SIZE;
+        bytes_to_free += (log_entries.size() - 1) * MIN_WRITE_ALLOC_SSD_SIZE;
       }
-      write_log_entries(log_entries, aio);
+      write_log_entries(log_entries, aio, new_first_free_entry);
       log_entries.clear();
       span_payload_len = 0;
     }
@@ -768,32 +840,41 @@ void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
   }
   if (!span_payload_len || !log_entries.empty()) {
     if (log_entries.size() > 1) {
-      bytes_allocated += (log_entries.size() - 1) * MIN_WRITE_ALLOC_SSD_SIZE;
+      bytes_to_free += (log_entries.size() - 1) * MIN_WRITE_ALLOC_SSD_SIZE;
     }
-    write_log_entries(log_entries, aio);
+    write_log_entries(log_entries, aio, new_first_free_entry);
   }
+
+  {
+    std::lock_guard locker1(m_lock);
+    m_first_free_entry = *new_first_free_entry;
+    m_bytes_allocated -= bytes_to_free;
+  }
+
   bdev->aio_submit(&aio->ioc);
-  *new_first_free_entry = pool_root.first_free_entry;
 }
 
 template <typename I>
 void WriteLog<I>::write_log_entries(GenericLogEntriesVector log_entries,
-                                    AioTransContext *aio) {
+                                    AioTransContext *aio, uint64_t *pos) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(m_image_ctx.cct, 20) << dendl;
-  bufferlist data_bl;
+  ldout(m_image_ctx.cct, 20) << "pos=" << *pos << dendl;
+  ceph_assert(*pos >= DATA_RING_BUFFER_OFFSET &&
+              *pos < this->m_log_pool_size &&
+              *pos % MIN_WRITE_ALLOC_SSD_SIZE == 0);
+
   // The first block is for log entries
-  uint64_t data_pos = pool_root.first_free_entry + MIN_WRITE_ALLOC_SSD_SIZE;
-  ldout(m_image_ctx.cct, 20) << "data_pos: " << data_pos << dendl;
-  if (data_pos == pool_root.pool_size ) {
-    data_pos = data_pos % pool_root.pool_size + DATA_RING_BUFFER_OFFSET;
+  uint64_t control_block_pos = *pos;
+  *pos += MIN_WRITE_ALLOC_SSD_SIZE;
+  if (*pos == this->m_log_pool_size) {
+    *pos = DATA_RING_BUFFER_OFFSET;
   }
 
   std::vector<WriteLogCacheEntry> persist_log_entries;
+  bufferlist data_bl;
   for (auto &log_entry : log_entries) {
-    log_entry->log_entry_index = pool_root.first_free_entry;
+    log_entry->log_entry_index = control_block_pos;
     // Append data buffer for write operations
-    persist_log_entries.push_back(log_entry->ram_entry);
     if (log_entry->is_write_entry()) {
       auto write_entry = static_pointer_cast<WriteLogEntry>(log_entry);
       auto cache_bl = write_entry->get_cache_bl();
@@ -801,12 +882,14 @@ void WriteLog<I>::write_log_entries(GenericLogEntriesVector log_entries,
       data_bl.append(cache_bl);
       data_bl.append_zero(align_size - cache_bl.length());
 
-      write_entry->ram_entry.write_data_pos = data_pos;
-      data_pos += align_size;
-      if (data_pos >= pool_root.pool_size) {
-        data_pos = data_pos % pool_root.pool_size + DATA_RING_BUFFER_OFFSET;
+      write_entry->ram_entry.write_data_pos = *pos;
+      *pos += align_size;
+      if (*pos >= this->m_log_pool_size) {
+        *pos = *pos % this->m_log_pool_size + DATA_RING_BUFFER_OFFSET;
       }
     }
+    // push_back _after_ setting write_data_pos
+    persist_log_entries.push_back(log_entry->ram_entry);
   }
 
   //aio write
@@ -816,38 +899,41 @@ void WriteLog<I>::write_log_entries(GenericLogEntriesVector log_entries,
   bl.append_zero(MIN_WRITE_ALLOC_SSD_SIZE - bl.length());
   bl.append(data_bl);
   ceph_assert(bl.length() % MIN_WRITE_ALLOC_SSD_SIZE == 0);
-  if (pool_root.first_free_entry + bl.length() > pool_root.pool_size) {
+  if (control_block_pos + bl.length() > this->m_log_pool_size) {
     //exceeds border, need to split
     uint64_t size = bl.length();
-    auto end = pool_root.pool_size - pool_root.first_free_entry;
     bufferlist bl1;
-    bl.splice(0, end, &bl1);
+    bl.splice(0, this->m_log_pool_size - control_block_pos, &bl1);
     ceph_assert(bl.length() == (size - bl1.length()));
-    ldout(cct, 20) << "The write on " << pool_root.first_free_entry
-                   << " with length " << size << " is split into two: "
-                   << "pos=" << pool_root.first_free_entry << ", "
-                   << "length=" << bl1.length() << "; "
-                   << "pos=" << DATA_RING_BUFFER_OFFSET << ", "
-                   << "length=" << bl.length() << dendl;
 
-    bdev->aio_write(pool_root.first_free_entry, bl1, &aio->ioc, false,
+    ldout(cct, 20) << "write " << control_block_pos << "~"
+		   << size << " spans boundary, split into "
+		   << control_block_pos << "~" << bl1.length()
+		   << " and " << DATA_RING_BUFFER_OFFSET << "~"
+		   << bl.length() << dendl;
+    bdev->aio_write(control_block_pos, bl1, &aio->ioc, false,
                     WRITE_LIFE_NOT_SET);
     bdev->aio_write(DATA_RING_BUFFER_OFFSET, bl, &aio->ioc, false,
                     WRITE_LIFE_NOT_SET);
   } else {
-    ldout(cct, 20) << "first_free_entry: " << pool_root.first_free_entry
-                   << " bl length: " << bl.length() << dendl;
-    bdev->aio_write(pool_root.first_free_entry, bl, &aio->ioc, false,
+    ldout(cct, 20) << "write " << control_block_pos << "~"
+                   << bl.length() << dendl;
+    bdev->aio_write(control_block_pos, bl, &aio->ioc, false,
                     WRITE_LIFE_NOT_SET);
-    ldout(cct, 20) << "finished aio_write log entries" << dendl;
   }
-  // New first free entry
-  pool_root.first_free_entry = data_pos;
 }
 
 template <typename I>
 void WriteLog<I>::schedule_update_root(
     std::shared_ptr<WriteLogPoolRoot> root, Context *ctx) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 15) << "New root: pool_size=" << root->pool_size
+                 << " first_valid_entry=" << root->first_valid_entry
+                 << " first_free_entry=" << root->first_free_entry
+                 << " flushed_sync_gen=" << root->flushed_sync_gen
+                 << dendl;
+  ceph_assert(is_valid_pool_root(*root));
+
   bool need_finisher;
   {
     ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
@@ -949,41 +1035,32 @@ int WriteLog<I>::update_pool_root_sync(
 }
 
 template <typename I>
-void WriteLog<I>::pre_io_check(WriteLogCacheEntry *log_entry,
-                               uint64_t &length) {
-  assert(log_entry->is_write() || log_entry->is_writesame());
-  ceph_assert(log_entry->write_data_pos <= pool_size);
-
-  length = log_entry->is_write() ? log_entry->write_bytes :
-                                   log_entry->ws_datalen;
-  length = round_up_to(length, MIN_WRITE_ALLOC_SSD_SIZE);
-  ceph_assert(length != 0 && log_entry->write_data_pos + length <= pool_size);
-}
-
-template <typename I>
-void WriteLog<I>::aio_read_data_block(
-  WriteLogCacheEntry *log_entry, bufferlist *bl, Context *ctx) {
-  std::vector<WriteLogCacheEntry*> log_entries {log_entry};
+void WriteLog<I>::aio_read_data_block(std::shared_ptr<GenericWriteLogEntry> log_entry,
+                                      bufferlist *bl, Context *ctx) {
+  std::vector<std::shared_ptr<GenericWriteLogEntry>> log_entries = {std::move(log_entry)};
   std::vector<bufferlist *> bls {bl};
-  aio_read_data_block(log_entries, bls, ctx);
+  aio_read_data_blocks(log_entries, bls, ctx);
 }
 
 template <typename I>
-void WriteLog<I>::aio_read_data_block(
-    std::vector<WriteLogCacheEntry*> &log_entries,
+void WriteLog<I>::aio_read_data_blocks(
+    std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries,
     std::vector<bufferlist *> &bls, Context *ctx) {
   ceph_assert(log_entries.size() == bls.size());
 
   //get the valid part
   Context *read_ctx = new LambdaContext(
-    [this, log_entries, bls, ctx](int r) {
+    [log_entries, bls, ctx](int r) {
       for (unsigned int i = 0; i < log_entries.size(); i++) {
         bufferlist valid_data_bl;
-        auto length = log_entries[i]->is_write() ? log_entries[i]->write_bytes :
-                                                   log_entries[i]->ws_datalen;
+        auto write_entry = static_pointer_cast<WriteLogEntry>(log_entries[i]);
+        auto length = write_entry->ram_entry.is_write() ? write_entry->ram_entry.write_bytes
+                                                        : write_entry->ram_entry.ws_datalen;
+
         valid_data_bl.substr_of(*bls[i], 0, length);
         bls[i]->clear();
         bls[i]->append(valid_data_bl);
+        write_entry->dec_bl_refs();
       }
      ctx->complete(r);
     });
@@ -991,14 +1068,35 @@ void WriteLog<I>::aio_read_data_block(
   CephContext *cct = m_image_ctx.cct;
   AioTransContext *aio = new AioTransContext(cct, read_ctx);
   for (unsigned int i = 0; i < log_entries.size(); i++) {
-    auto log_entry = log_entries[i];
+    WriteLogCacheEntry *log_entry = &log_entries[i]->ram_entry;
 
-    uint64_t length;
-    pre_io_check(log_entry, length);
-    ldout(cct, 20) << "Read at " << log_entry->write_data_pos
-                   << ", length " << length << dendl;
+    ceph_assert(log_entry->is_write() || log_entry->is_writesame());
+    uint64_t len = log_entry->is_write() ? log_entry->write_bytes :
+                                           log_entry->ws_datalen;
+    uint64_t align_len = round_up_to(len, MIN_WRITE_ALLOC_SSD_SIZE);
 
-    bdev->aio_read(log_entry->write_data_pos, length, bls[i], &aio->ioc);
+    ldout(cct, 20) << "entry i=" << i << " " << log_entry->write_data_pos
+                   << "~" << len << dendl;
+    ceph_assert(log_entry->write_data_pos >= DATA_RING_BUFFER_OFFSET &&
+                log_entry->write_data_pos < pool_root.pool_size);
+    ceph_assert(align_len);
+    if (log_entry->write_data_pos + align_len > pool_root.pool_size) {
+      // spans boundary, need to split
+      uint64_t len1 = pool_root.pool_size - log_entry->write_data_pos;
+      uint64_t len2 = align_len - len1;
+
+      ldout(cct, 20) << "read " << log_entry->write_data_pos << "~"
+                     << align_len << " spans boundary, split into "
+                     << log_entry->write_data_pos << "~" << len1
+                     << " and " << DATA_RING_BUFFER_OFFSET << "~"
+                     << len2 << dendl;
+      bdev->aio_read(log_entry->write_data_pos, len1, bls[i], &aio->ioc);
+      bdev->aio_read(DATA_RING_BUFFER_OFFSET, len2, bls[i], &aio->ioc);
+    } else {
+      ldout(cct, 20) << "read " << log_entry->write_data_pos << "~"
+                     << align_len << dendl;
+      bdev->aio_read(log_entry->write_data_pos, align_len, bls[i], &aio->ioc);
+    }
   }
   bdev->aio_submit(&aio->ioc);
 }
