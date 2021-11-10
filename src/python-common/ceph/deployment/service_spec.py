@@ -2,10 +2,11 @@ import fnmatch
 import re
 import enum
 from collections import OrderedDict
+from contextlib import contextmanager
 from functools import wraps
 from ipaddress import ip_network, ip_address
 from typing import Optional, Dict, Any, List, Union, Callable, Iterable, Type, TypeVar, cast, \
-    NamedTuple, Mapping
+    NamedTuple, Mapping, Iterator
 
 import yaml
 
@@ -410,6 +411,22 @@ tPlacementSpec(hostname='host2', network='', name='')])
         return ps
 
 
+_service_spec_from_json_validate = True
+
+
+@contextmanager
+def service_spec_allow_invalid_from_json() -> Iterator[None]:
+    """
+    I know this is evil, but unfortunately `ceph orch ls`
+    may return invalid OSD specs for OSDs not associated to
+    and specs. If you have a better idea, please!
+    """
+    global _service_spec_from_json_validate
+    _service_spec_from_json_validate = False
+    yield
+    _service_spec_from_json_validate = True
+
+
 class ServiceSpec(object):
     """
     Details of service creation.
@@ -552,7 +569,6 @@ class ServiceSpec(object):
 
         :meta private:
         """
-
         if not isinstance(json_spec, dict):
             raise SpecValidationError(
                 f'Service Spec is not an (JSON or YAML) object. got "{str(json_spec)}"')
@@ -603,7 +619,8 @@ class ServiceSpec(object):
                 continue
             args.update({k: v})
         _cls = cls(**args)
-        _cls.validate()
+        if _service_spec_from_json_validate:
+            _cls.validate()
         return _cls
 
     def service_name(self) -> str:
