@@ -1,4 +1,5 @@
 import json
+import logging
 from contextlib import contextmanager
 
 import pytest
@@ -81,17 +82,36 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
         ]
     })
 
-    ceph_volume_lvm_list = ceph_volume_lvm_list or {
-        str(osd_id): [{
-            'tags': {
-                'ceph.cluster_fsid': cephadm_module._cluster_fsid,
-                'ceph.osd_fsid': 'uuid'
-            },
-            'type': 'data'
-        }]
-    }
-    _run_cephadm.return_value = (json.dumps(ceph_volume_lvm_list), '', 0)
-    _run_cephadm.reset_mock()
+    _run_cephadm.reset_mock(return_value=True, side_effect=True)
+    if ceph_volume_lvm_list:
+        _run_cephadm.side_effect = ceph_volume_lvm_list
+    else:
+        def _ceph_volume_list(s, host, entity, cmd, **kwargs):
+            logging.info(f'ceph-volume cmd: {cmd}')
+            if 'raw' in cmd:
+                return json.dumps({
+                    "21a4209b-f51b-4225-81dc-d2dca5b8b2f5": {
+                        "ceph_fsid": cephadm_module._cluster_fsid,
+                        "device": "/dev/loop0",
+                        "osd_id": 21,
+                        "osd_uuid": "21a4209b-f51b-4225-81dc-d2dca5b8b2f5",
+                        "type": "bluestore"
+                    },
+                }), '', 0
+            if 'lvm' in cmd:
+                return json.dumps({
+                    str(osd_id): [{
+                        'tags': {
+                            'ceph.cluster_fsid': cephadm_module._cluster_fsid,
+                            'ceph.osd_fsid': 'uuid'
+                        },
+                        'type': 'data'
+                    }]
+                }), '', 0
+            return '{}', '', 0
+
+        _run_cephadm.side_effect = _ceph_volume_list
+
     assert cephadm_module._osd_activate(
         [host]).stdout == f"Created osd(s) 1 on host '{host}'"
     assert _run_cephadm.mock_calls == [
@@ -1604,37 +1624,8 @@ Traceback (most recent call last):
     def test_osd_activate_datadevice(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.return_value = ('{}', '', 0)
         with with_host(cephadm_module, 'test', refresh_hosts=False):
-            cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
-                'osds': [
-                    {
-                        'osd': 1,
-                        'up_from': 0,
-                        'uuid': 'uuid'
-                    }
-                ]
-            })
-
-            ceph_volume_lvm_list = {
-                '1': [{
-                    'tags': {
-                        'ceph.cluster_fsid': cephadm_module._cluster_fsid,
-                        'ceph.osd_fsid': 'uuid'
-                    },
-                    'type': 'data'
-                }]
-            }
-            _run_cephadm.return_value = (json.dumps(ceph_volume_lvm_list), '', 0)
-            _run_cephadm.reset_mock()
-            assert cephadm_module._osd_activate(
-                ['test']).stdout == "Created osd(s) 1 on host 'test'"
-            assert _run_cephadm.mock_calls == [
-                mock.call('test', 'osd', 'ceph-volume',
-                          ['--', 'lvm', 'list', '--format', 'json'], no_fsid=False, image=''),
-                mock.call('test', 'osd.1', 'deploy',
-                          ['--name', 'osd.1', '--meta-json', mock.ANY,
-                              '--config-json', '-', '--osd-fsid', 'uuid'],
-                          stdin=mock.ANY, image=''),
-            ]
+            with with_osd_daemon(cephadm_module, _run_cephadm, 'test', 1):
+                pass
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_osd_activate_datadevice_fail(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -1680,40 +1671,36 @@ Traceback (most recent call last):
     def test_osd_activate_datadevice_dbdevice(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.return_value = ('{}', '', 0)
         with with_host(cephadm_module, 'test', refresh_hosts=False):
-            cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
-                'osds': [
-                    {
-                        'osd': 1,
-                        'up_from': 0,
-                        'uuid': 'uuid'
-                    }
-                ]
-            })
 
-            ceph_volume_lvm_list = {
-                '1': [{
-                    'tags': {
-                        'ceph.cluster_fsid': cephadm_module._cluster_fsid,
-                        'ceph.osd_fsid': 'uuid'
-                    },
-                    'type': 'data'
-                }, {
-                    'tags': {
-                        'ceph.cluster_fsid': cephadm_module._cluster_fsid,
-                        'ceph.osd_fsid': 'uuid'
-                    },
-                    'type': 'db'
-                }]
-            }
-            _run_cephadm.return_value = (json.dumps(ceph_volume_lvm_list), '', 0)
-            _run_cephadm.reset_mock()
-            assert cephadm_module._osd_activate(
-                ['test']).stdout == "Created osd(s) 1 on host 'test'"
-            assert _run_cephadm.mock_calls == [
-                mock.call('test', 'osd', 'ceph-volume',
-                          ['--', 'lvm', 'list', '--format', 'json'], no_fsid=False, image=''),
-                mock.call('test', 'osd.1', 'deploy',
-                          ['--name', 'osd.1', '--meta-json', mock.ANY,
-                              '--config-json', '-', '--osd-fsid', 'uuid'],
-                          stdin=mock.ANY, image=''),
-            ]
+            def _ceph_volume_list(s, host, entity, cmd, **kwargs):
+                logging.info(f'ceph-volume cmd: {cmd}')
+                if 'raw' in cmd:
+                    return json.dumps({
+                        "21a4209b-f51b-4225-81dc-d2dca5b8b2f5": {
+                            "ceph_fsid": "64c84f19-fe1d-452a-a731-ab19dc144aa8",
+                            "device": "/dev/loop0",
+                            "osd_id": 21,
+                            "osd_uuid": "21a4209b-f51b-4225-81dc-d2dca5b8b2f5",
+                            "type": "bluestore"
+                        },
+                    }), '', 0
+                if 'lvm' in cmd:
+                    return json.dumps({
+                        '1': [{
+                            'tags': {
+                                'ceph.cluster_fsid': cephadm_module._cluster_fsid,
+                                'ceph.osd_fsid': 'uuid'
+                            },
+                            'type': 'data'
+                        }, {
+                            'tags': {
+                                'ceph.cluster_fsid': cephadm_module._cluster_fsid,
+                                'ceph.osd_fsid': 'uuid'
+                            },
+                            'type': 'db'
+                        }]
+                    }), '', 0
+                return '{}', '', 0
+
+            with with_osd_daemon(cephadm_module, _run_cephadm, 'test', 1, ceph_volume_lvm_list=_ceph_volume_list):
+                pass
