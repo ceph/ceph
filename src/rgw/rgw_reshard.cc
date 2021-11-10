@@ -347,15 +347,15 @@ static int create_new_bucket_instance(rgw::sal::RGWRadosStore *store,
   new_bucket_info.new_bucket_instance_id.clear();
   new_bucket_info.reshard_status = cls_rgw_reshard_status::NOT_RESHARDING;
 
-  int ret = store->svc()->bi->init_index(dpp, new_bucket_info);
+  int ret = store->getRados()->put_bucket_instance_info(new_bucket_info, true, real_time(), &attrs, dpp);
   if (ret < 0) {
-    cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
+    cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
     return ret;
   }
 
-  ret = store->getRados()->put_bucket_instance_info(new_bucket_info, true, real_time(), &attrs, dpp);
+  ret = store->svc()->bi->init_index(dpp, new_bucket_info);
   if (ret < 0) {
-    cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
+    cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
     return ret;
   }
 
