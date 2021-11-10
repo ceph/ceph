@@ -325,7 +325,7 @@ echo '{fdata}' | sudo tee /sys/kernel/debug/dynamic_debug/control
         return epoch, barrier
 
     def get_op_read_count(self):
-        buf = self.read_debug_file("metrics")
+        buf = self.read_debug_file("metrics/size")
         if buf is None:
             return 0
         else:
