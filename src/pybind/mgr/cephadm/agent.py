@@ -48,13 +48,12 @@ class CherryPyThread(threading.Thread):
         self.mgr = mgr
         self.cherrypy_shutdown_event = threading.Event()
         self.ssl_certs = SSLCerts(self.mgr)
+        self.server_port = 7150
+        self.server_addr = self.mgr.get_mgr_ip()
         super(CherryPyThread, self).__init__(target=self.run)
 
     def run(self) -> None:
         try:
-            server_addr = self.mgr.get_mgr_ip()
-            server_port = self.mgr.endpoint_port
-
             self.ssl_certs.generate_root_cert()
             cert, key = self.ssl_certs.generate_cert()
 
@@ -70,11 +69,9 @@ class CherryPyThread(threading.Thread):
 
             verify_tls_files(cert_fname, key_fname)
 
-            self.mgr.set_uri('https://{0}:{1}/'.format(server_addr, server_port))
-
             cherrypy.config.update({
-                'server.socket_host': server_addr,
-                'server.socket_port': server_port,
+                'server.socket_host': self.server_addr,
+                'server.socket_port': self.server_port,
                 'engine.autoreload.on': False,
                 'server.ssl_module': 'builtin',
                 'server.ssl_certificate': cert_fname,
@@ -84,7 +81,7 @@ class CherryPyThread(threading.Thread):
                                'tools.response_headers.on': True}}
             cherrypy.tree.mount(Root(self.mgr), '/', root_conf)
             self.mgr.log.info('Starting cherrypy engine...')
-            cherrypy.engine.start()
+            self.start_engine()
             self.mgr.log.info('Cherrypy engine started.')
             agents_down = []
             for h in self.mgr.cache.get_hosts():
@@ -98,6 +95,25 @@ class CherryPyThread(threading.Thread):
             self.mgr.log.info('Cherrypy engine stopped.')
         except Exception as e:
             self.mgr.log.error(f'Failed to run cephadm cherrypy endpoint: {e}')
+
+    def start_engine(self) -> None:
+        port_connect_attempts = 0
+        while port_connect_attempts < 150:
+            try:
+                cherrypy.engine.start()
+                self.mgr.log.info(f'Cephadm endpoint connected to port {self.server_port}')
+                return
+            except cherrypy.process.wspbus.ChannelFailures as e:
+                self.mgr.log.info(
+                    f'{e}. Trying next port.')
+                self.server_port += 1
+                cherrypy.server.httpserver = None
+                cherrypy.config.update({
+                    'server.socket_port': self.server_port
+                })
+                port_connect_attempts += 1
+        self.mgr.log.error(
+            'Cephadm Endpoint could not find free port in range 7150-7300 and failed to start')
 
     def shutdown(self) -> None:
         self.mgr.log.info('Stopping cherrypy engine...')

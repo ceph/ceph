@@ -1022,19 +1022,21 @@ class CephadmAgent(CephService):
         return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        try:
+            assert self.mgr.cherrypy_thread
+            assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+            assert self.mgr.cherrypy_thread.server_port
+        except Exception:
+            raise OrchestratorError(
+                'Cannot deploy agent daemons until cephadm endpoint has finished generating certs')
+
         cfg = {'target_ip': self.mgr.get_mgr_ip(),
-               'target_port': self.mgr.endpoint_port,
+               'target_port': self.mgr.cherrypy_thread.server_port,
                'refresh_period': self.mgr.agent_refresh_rate,
                'listener_port': self.mgr.agent_starting_port,
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.get_module_option('device_enhanced_scan'))}
 
-        try:
-            assert self.mgr.cherrypy_thread
-            assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
-        except Exception:
-            raise OrchestratorError(
-                'Cannot deploy agent daemons until cephadm endpoint has finished generating certs')
         listener_cert, listener_key = self.mgr.cherrypy_thread.ssl_certs.generate_cert(
             self.mgr.inventory.get_addr(daemon_spec.host))
         config = {
@@ -1045,6 +1047,6 @@ class CephadmAgent(CephService):
             'listener.key': listener_key,
         }
 
-        return config, sorted([str(self.mgr.get_mgr_ip()), str(self.mgr.endpoint_port),
+        return config, sorted([str(self.mgr.get_mgr_ip()), str(self.mgr.cherrypy_thread.server_port),
                                self.mgr.cherrypy_thread.ssl_certs.get_root_cert(),
                                str(self.mgr.get_module_option('device_enhanced_scan'))])
