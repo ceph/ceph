@@ -48,4 +48,4 @@ sensible.
     MDS Autoscaler module <mds_autoscaler>
     NFS module <nfs>
     Progress Module <progress>
-    CLI API Commands module <cli_api_commands>
+    CLI API Commands module <cli_api>
