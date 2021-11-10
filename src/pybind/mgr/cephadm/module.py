@@ -1917,7 +1917,7 @@ Then run the following:
         return self._remove_daemons(args)
 
     @handle_orch_error
-    def remove_service(self, service_name: str) -> str:
+    def remove_service(self, service_name: str, force: bool = False) -> str:
         self.log.info('Remove service %s' % service_name)
         self._trigger_preview_refresh(service_name=service_name)
         if service_name in self.spec_store:
@@ -1925,9 +1925,9 @@ Then run the following:
                 return f'Unable to remove {service_name} service.\n' \
                        f'Note, you might want to mark the {service_name} service as "unmanaged"'
 
-        # Report list of affected OSDs
-        osds_msg = {}
-        if service_name.startswith('osd.'):
+        # Report list of affected OSDs?
+        if not force and service_name.startswith('osd.'):
+            osds_msg = {}
             for h, dm in self.cache.get_daemons_with_volatile_status():
                 osds_to_remove = []
                 for name, dd in dm.items():
@@ -1935,23 +1935,17 @@ Then run the following:
                         osds_to_remove.append(str(dd.daemon_id))
                 if osds_to_remove:
                     osds_msg[h] = osds_to_remove
-
-        found = self.spec_store.rm(service_name) or osds_msg
-        if found:
-            self._kick_serve_loop()
             if osds_msg:
-                return f'The service {service_name} will be deleted once the following OSDs: {osds_msg} ' \
-                       f'will be deleted manually.'
-            else:
-                return f'Removed service {service_name}'
-        else:
-            # must be idempotent: still a success.
-            try:
-                self.cache.get_daemon(service_name)
-                return (f'Failed to remove service <{service_name}>. "{service_name}" is the name of a daemon, not a service. '
-                        + 'Running service names can be found with "ceph orch ls"')
-            except OrchestratorError:
-                return f'Failed to remove service. <{service_name}> was not found. Running service names can be found with "ceph orch ls"'
+                msg = ''
+                for h, ls in osds_msg.items():
+                    msg += f'\thost {h}: {" ".join([f"osd.{id}" for id in ls])}'
+                raise OrchestratorError(f'If {service_name} is removed then the following OSDs will remain, --force to proceed anyway\n{msg}')
+
+        found = self.spec_store.rm(service_name)
+        if found and service_name.startswith('osd.'):
+            self.spec_store.finally_rm(service_name)
+        self._kick_serve_loop()
+        return f'Removed service {service_name}'
 
     @handle_orch_error
     def get_inventory(self, host_filter: Optional[orchestrator.InventoryFilter] = None, refresh: bool = False) -> List[orchestrator.InventoryHost]:
