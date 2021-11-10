@@ -1,5 +1,6 @@
 
 import json
+import textwrap
 
 import pytest
 import yaml
@@ -154,6 +155,24 @@ def test_orch_ls(_describe_service):
     r = m._handle_command(None, cmd)
     out = 'NAME  PORTS  RUNNING  REFRESHED  AGE  PLACEMENT  \n' \
           'osd              123  -          -               '
+    assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
+
+    cmd = {
+        'prefix': 'orch ls',
+        'format': 'yaml',
+    }
+    m = OrchestratorCli('orchestrator', 0, 0)
+    r = m._handle_command(None, cmd)
+    out = textwrap.dedent("""
+        service_type: osd
+        service_name: osd
+        spec:
+          filter_logic: AND
+          objectstore: bluestore
+        status:
+          running: 123
+          size: 0
+        """).lstrip()
     assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
 
 
