@@ -55,7 +55,8 @@ class UpgradeState:
         self.error: Optional[str] = error
         self.paused: bool = paused or False
         self.fs_original_max_mds: Optional[Dict[str, int]] = fs_original_max_mds
-        self.fs_original_allow_standby_replay: Optional[Dict[str, bool]] = fs_original_allow_standby_replay
+        self.fs_original_allow_standby_replay: Optional[Dict[str,
+                                                             bool]] = fs_original_allow_standby_replay
 
     def to_json(self) -> dict:
         return {
@@ -442,13 +443,15 @@ class CephadmUpgrade:
                 continue
 
             if not (mdsmap['in'] == [0] and len(mdsmap['up']) <= 1):
-                self.mgr.log.info('Upgrade: Waiting for fs %s to scale down to reach 1 MDS' % (fs_name))
+                self.mgr.log.info(
+                    'Upgrade: Waiting for fs %s to scale down to reach 1 MDS' % (fs_name))
                 time.sleep(10)
                 continue_upgrade = False
                 continue
 
             if len(mdsmap['up']) == 0:
-                self.mgr.log.warning("Upgrade: No mds is up; continuing upgrade procedure to poke things in the right direction")
+                self.mgr.log.warning(
+                    "Upgrade: No mds is up; continuing upgrade procedure to poke things in the right direction")
                 # This can happen because the current version MDS have
                 # incompatible compatsets; the mons will not do any promotions.
                 # We must upgrade to continue.
@@ -531,8 +534,8 @@ class CephadmUpgrade:
             logger.info('Upgrade: First pull of %s' % target_image)
             self.upgrade_info_str: str = 'Doing first pull of %s image' % (target_image)
             try:
-                target_id, target_version, target_digests = CephadmServe(self.mgr)._get_container_image_info(
-                    target_image)
+                target_id, target_version, target_digests = self.mgr.wait_async(CephadmServe(self.mgr)._get_container_image_info(
+                    target_image))
             except OrchestratorError as e:
                 self._fail_upgrade('UPGRADE_FAILED_PULL', {
                     'severity': 'warning',
@@ -703,17 +706,17 @@ class CephadmUpgrade:
                 self._update_upgrade_progress(done / len(daemons))
 
                 # make sure host has latest container image
-                out, errs, code = CephadmServe(self.mgr)._run_cephadm(
+                out, errs, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
                     d.hostname, '', 'inspect-image', [],
-                    image=target_image, no_fsid=True, error_ok=True)
+                    image=target_image, no_fsid=True, error_ok=True))
                 if code or not any(d in target_digests for d in json.loads(''.join(out)).get('repo_digests', [])):
                     logger.info('Upgrade: Pulling %s on %s' % (target_image,
                                                                d.hostname))
                     self.upgrade_info_str = 'Pulling %s image on host %s' % (
                         target_image, d.hostname)
-                    out, errs, code = CephadmServe(self.mgr)._run_cephadm(
+                    out, errs, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
                         d.hostname, '', 'pull', [],
-                        image=target_image, no_fsid=True, error_ok=True)
+                        image=target_image, no_fsid=True, error_ok=True))
                     if code:
                         self._fail_upgrade('UPGRADE_FAILED_PULL', {
                             'severity': 'warning',
