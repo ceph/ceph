@@ -1550,9 +1550,8 @@ class TestCephadm(object):
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_registry_login(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         def check_registry_credentials(url, username, password):
-            assert cephadm_module.get_module_option('registry_url') == url
-            assert cephadm_module.get_module_option('registry_username') == username
-            assert cephadm_module.get_module_option('registry_password') == password
+            assert json.loads(cephadm_module.get_store('registry_credentials')) == {
+                'url': url, 'username': username, 'password': password}
 
         _run_cephadm.return_value = '{}', '', 0
         with with_host(cephadm_module, 'test'):
