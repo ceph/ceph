@@ -242,10 +242,10 @@ class CephadmServe:
                         failures.append(r)
                 self.mgr.cache.metadata_up_to_date[host] = True
 
-            if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
+            if self.mgr.cache.host_needs_registry_login(host) and self.mgr.get_store('registry_credentials'):
                 self.log.debug(f"Logging `{host}` into custom registry")
-                r = self.mgr.wait_async(self._registry_login(host, self.mgr.registry_url,
-                                                             self.mgr.registry_username, self.mgr.registry_password))
+                r = self.mgr.wait_async(self._registry_login(
+                    host, json.loads(str(self.mgr.get_store('registry_credentials')))))
                 if r:
                     bad_hosts.append(r)
 
@@ -1096,8 +1096,7 @@ class CephadmServe:
                     daemon_spec.extra_args.append('--allow-ptrace')
 
                 if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
-                    await self._registry_login(daemon_spec.host, self.mgr.registry_url,
-                                               self.mgr.registry_username, self.mgr.registry_password)
+                    await self._registry_login(daemon_spec.host, json.loads(str(self.mgr.get_store('registry_credentials'))))
 
                 self.log.info('%s daemon %s on %s' % (
                     'Reconfiguring' if reconfig else 'Deploying',
@@ -1326,8 +1325,7 @@ class CephadmServe:
         if not host:
             raise OrchestratorError('no hosts defined')
         if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
-            await self._registry_login(host, self.mgr.registry_url,
-                                       self.mgr.registry_username, self.mgr.registry_password)
+            await self._registry_login(host, json.loads(str(self.mgr.get_store('registry_credentials'))))
 
         pullargs: List[str] = []
         if self.mgr.registry_insecure:
@@ -1344,19 +1342,15 @@ class CephadmServe:
         return r
 
     # function responsible for logging single host into custom registry
-    async def _registry_login(self, host: str, url: Optional[str], username: Optional[str], password: Optional[str]) -> Optional[str]:
-        self.log.debug(f"Attempting to log host {host} into custom registry @ {url}")
+    async def _registry_login(self, host: str, registry_json: Dict[str, str]) -> Optional[str]:
+        self.log.debug(
+            f"Attempting to log host {host} into custom registry @ {registry_json['url']}")
         # want to pass info over stdin rather than through normal list of args
-        args_str = json.dumps({
-            'url': url,
-            'username': username,
-            'password': password,
-        })
         out, err, code = await self._run_cephadm(
             host, 'mon', 'registry-login',
-            ['--registry-json', '-'], stdin=args_str, error_ok=True)
+            ['--registry-json', '-'], stdin=json.dumps(registry_json), error_ok=True)
         if code:
-            return f"Host {host} failed to login to {url} as {username} with given password"
+            return f"Host {host} failed to login to {registry_json['url']} as {registry_json['username']} with given password"
         return None
 
     async def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:

@@ -4862,9 +4862,8 @@ def command_bootstrap(ctx):
         prepare_ssh(ctx, cli, wait_for_mgr_restart)
 
     if ctx.registry_url and ctx.registry_username and ctx.registry_password:
-        cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_url', ctx.registry_url, '--force'])
-        cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_username', ctx.registry_username, '--force'])
-        cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_password', ctx.registry_password, '--force'])
+        registry_credentials = {'url': ctx.registry_url, 'username': ctx.registry_username, 'password': ctx.registry_password}
+        cli(['config-key', 'set', 'mgr/cephadm/registry_credentials', json.dumps(registry_credentials)])
 
     cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
 
