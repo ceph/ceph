@@ -282,7 +282,7 @@ void BlueFS::_init_logger()
 		    "random reads requests going to disk");
   b.add_u64_counter(l_bluefs_read_random_disk_bytes, "read_random_disk_bytes",
 		    "Bytes read from disk in random read mode",
-		    "rrd",
+		    "rrb",
 		    PerfCountersBuilder::PRIO_INTERESTING,
 		    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_read_random_disk_bytes_wal, "read_random_disk_bytes_wal",
@@ -295,7 +295,7 @@ void BlueFS::_init_logger()
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_read_random_disk_bytes_slow, "read_random_disk_bytes_slow",
 		    "random reads requests going to main disk",
-		    "rrds",
+		    "rrsb",
 		    PerfCountersBuilder::PRIO_INTERESTING,
 		    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_read_random_buffer_count, "read_random_buffer_count",
@@ -315,7 +315,7 @@ void BlueFS::_init_logger()
 		    "buffered reads requests going to disk");
   b.add_u64_counter(l_bluefs_read_disk_bytes, "read_disk_bytes",
 		    "Bytes read in buffered mode from disk",
-		    "rd",
+		    "rb",
 		    PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_read_disk_bytes_wal, "read_disk_bytes_wal",
 		    "reads requests going to WAL disk",
@@ -327,7 +327,7 @@ void BlueFS::_init_logger()
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_read_disk_bytes_slow, "read_disk_bytes_slow",
 		    "reads requests going to main disk",
-		    "rds",
+		    "rsb",
 		    PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_read_prefetch_count, "read_prefetch_count",
 		    "prefetch read requests processed");
