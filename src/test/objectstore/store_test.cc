@@ -9462,6 +9462,146 @@ TEST_P(StoreTestSpecificAUSize, OmapUpgradeTest) {
   }
 }
 
+TEST_P(StoreTest, OmapUpgradeRecoveryKeyMatchingTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  string key;
+  string new_key;
+  int d;
+
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d == 0);
+  ASSERT_TRUE(new_key == std::string(""));
+
+  key = "somekey";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d == 0);
+  ASSERT_TRUE(new_key == std::string(""));
+
+  key = "somekey_long_enough";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d == 0);
+  ASSERT_TRUE(new_key == std::string(""));
+
+  key = "somekey . having a dot";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d == 0);
+  ASSERT_TRUE(new_key == std::string(""));
+
+  key = "somekey . having . two dots ";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d == 0);
+  ASSERT_TRUE(new_key == std::string(""));
+
+  key = ".1234567.some leftover";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d == 0);
+  ASSERT_TRUE(new_key == std::string(""));
+
+  key = "some_incomplete4matching_key 12345678.1234567.some leftover";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d == 0);
+  ASSERT_TRUE(new_key == std::string(""));
+
+  key = "98765432109_12345678.12345678.some leftover";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d > 0);
+  ASSERT_EQ(new_key, std::string("98765432109_12345678.some leftover"));
+
+  key = "98765432109_12345678.8765432112345678.some leftover";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d > 0);
+  ASSERT_EQ(new_key, std::string("98765432109_12345678.some leftover"));
+
+  key = "some_nonmatching_header 12345678.987654321234567-";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d == 0);
+  ASSERT_EQ(new_key, std::string(""));
+
+  key = "some_nonmatching_header 12345678.678-";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d == 0);
+  ASSERT_EQ(new_key, std::string(""));
+
+  key = "9876543210_ 12345678.12345678-";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d < 0);
+  ASSERT_EQ(new_key, std::string(""));
+
+  // per-pool format but second dot present at position
+  // matching 'bulk' format
+  key = "98765432109_.2345678.87654321.2345678.some leftover";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d > 0);
+  ASSERT_EQ(new_key, std::string("98765432109_.2345678.some leftover"));
+
+  // false positive, not handled properly atm. unlikely to be faced in
+  // the field.
+  // per-pool format but second dot present at position
+  // matching 'bulk' format and pool part of the old key matches
+  // nid in new key
+  key = "98765432109_.2345678..2345678.8765432.some leftover";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d > 0);
+  ASSERT_EQ(new_key, std::string("98765432109_.2345678.8765432.some leftover"));
+
+  // dots in both matching id
+  key = "98765432109_12345.78.12345.78.leftover";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d > 0);
+  ASSERT_EQ(new_key, std::string("98765432109_12345.78.leftover"));
+
+  // dots at the end in both matching id
+  key = "98765432109_1234567..1234567..leftover";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d > 0);
+  ASSERT_EQ(new_key, std::string("98765432109_1234567..leftover"));
+
+  // dash in both matching id
+  key = "98765432109_1234567-.1234567-.leftover";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d > 0);
+  ASSERT_EQ(new_key, std::string("98765432109_1234567-.leftover"));
+
+  // to long old prefix
+  key = "98765432109_12345678.98765432112345678-";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d == 0);
+  ASSERT_EQ(new_key, std::string(""));
+
+  // too long new prefix
+  key = "some_nonmatching_headerlike key 12345678.8765432112345678-leftover";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d == 0);
+  ASSERT_EQ(new_key, std::string(""));
+
+  // too long new prefix
+  key = "some_nonmatching_headerlike key 12345678.8765432112345678-leftover";
+  new_key = "";
+  d = BlueStore::what_omap_upgrade_recovery(key, new_key);
+  ASSERT_TRUE(d == 0);
+  ASSERT_EQ(new_key, std::string(""));
+}
+
 TEST_P(StoreTestSpecificAUSize, OmapUpgradeRecoveryTest) {
   if (string(GetParam()) != "bluestore")
     return;
