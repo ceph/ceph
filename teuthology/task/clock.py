@@ -30,8 +30,9 @@ def task(ctx, config):
     """
 
     log.info('Syncing clocks and checking initial clock skew...')
-    for rem in ctx.cluster.remotes.keys():
-        rem.run(
+
+    run.wait(
+        ctx.cluster.run(
             args = [
                 'sudo', 'systemctl', 'stop', 'ntp.service', run.Raw('||'),
                 'sudo', 'systemctl', 'stop', 'ntpd.service', run.Raw('||'),
@@ -50,22 +51,26 @@ def task(ctx, config):
                 'true'
             ],
             timeout = 360,
+            wait=False,
         )
+    )
 
     try:
         yield
 
     finally:
         log.info('Checking final clock skew...')
-        for rem in ctx.cluster.remotes.keys():
-            rem.run(
+        run.wait(
+            ctx.cluster.run(
                 args=[
                     'PATH=/usr/bin:/usr/sbin', 'ntpq', '-p', run.Raw('||'),
                     'PATH=/usr/bin:/usr/sbin', 'chronyc', 'sources',
                     run.Raw('||'),
                     'true'
-                    ],
-                )
+                ],
+                wait=False,
+            )
+        )
 
 
 @contextlib.contextmanager
@@ -77,27 +82,31 @@ def check(ctx, config):
     :param config: Configuration
     """
     log.info('Checking initial clock skew...')
-    for rem in ctx.cluster.remotes.keys():
-        rem.run(
+    run.wait(
+        ctx.cluster.run(
             args=[
                 'PATH=/usr/bin:/usr/sbin', 'ntpq', '-p', run.Raw('||'),
                 'PATH=/usr/bin:/usr/sbin', 'chronyc', 'sources',
                 run.Raw('||'),
                 'true'
-                ],
-            )
+            ],
+            wait=False,
+        )
+    )
 
     try:
         yield
 
     finally:
         log.info('Checking final clock skew...')
-        for rem in ctx.cluster.remotes.keys():
-            rem.run(
+        run.wait(
+            ctx.cluster.run(
                 args=[
                     'PATH=/usr/bin:/usr/sbin', 'ntpq', '-p', run.Raw('||'),
                     'PATH=/usr/bin:/usr/sbin', 'chronyc', 'sources',
                     run.Raw('||'),
                     'true'
-                    ],
-                )
+                ],
+                wait=False,
+            )
+        )
