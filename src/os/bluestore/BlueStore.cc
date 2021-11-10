@@ -8261,6 +8261,33 @@ out_db:
   return r;
 }
 
+int BlueStore::what_omap_upgrade_recovery(const std::string& key,
+					  std::string& new_key)
+{
+  auto p1 = key.find_first_of('.');
+  if (p1 == string::npos || p1 <= 8) {
+    return 0;
+  }
+  auto p2 = key.find_first_of('-', p1 + 1);
+  if (p2 == string::npos) {
+    p2 = key.find_first_of('.', p1 + 1);
+  }
+  if (p2 == string::npos || p1 + 8 > p2) {
+    return 0;
+  }
+  string s1 = key.substr(p1 - 8, 8);
+  string s2 = key.substr(p2 - 8, 8);
+  if (s1 != s2) {
+    return 0;
+  }
+  if (key[p2] == '.') {
+    new_key = key;
+    new_key.erase(p1, p2 - p1);
+    return 1;
+  }
+  return -1;
+}
+
 int BlueStore::repair_omap_upgrade()
 {
   dout(1) << __func__  << dendl;
@@ -8298,26 +8325,13 @@ int BlueStore::repair_omap_upgrade()
         auto key = it->key();
         auto val = it->value();
         it->next();
-        auto p1 = key.find_first_of('.');
-        if (p1 == string::npos || p1 <= 8) {
-          continue;
-        }
-        auto p2 = key.find_first_of('-', p1 + 1);
-        if (p2 == string::npos) {
-          p2 = key.find_first_of('.', p1 + 1);
-        }
-        if (p2 == string::npos || p1 + 8 > p2) {
-          continue;
-        }
-        string s1 = key.substr(p1 - 8, 8);
-        string s2 = key.substr(p2 - 8, 8);
-        if (s1 != s2) {
+        string new_key;
+        auto d = what_omap_upgrade_recovery(key, new_key);
+        if (d == 0) {
           continue;
         }
         txn->rmkey(PREFIX_PERPG_OMAP, key);
-        if (key[p2] == '.') {
-          auto new_key = key;
-          new_key.erase(p1, p2 - p1);
+        if (d > 0) {
           dout(0) << __func__ << " " << pretty_binary_string(key)
                   << " -> " << pretty_binary_string(new_key) << dendl;
           txn->set(PREFIX_PERPG_OMAP, new_key, val);

@@ -2665,6 +2665,8 @@ public:
   int quick_fix() override {
     return _fsck(FSCK_SHALLOW, true);
   }
+  static int what_omap_upgrade_recovery(const std::string& key,
+                                        std::string& new_key);
   int repair_omap_upgrade();
 
   void set_cache_shards(unsigned num) override;
