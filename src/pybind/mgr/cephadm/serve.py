@@ -298,8 +298,8 @@ class CephadmServe:
 
             if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
                 self.log.debug(f"Logging `{host}` into custom registry")
-                r = self._registry_login(host, self.mgr.registry_url,
-                                         self.mgr.registry_username, self.mgr.registry_password)
+                r = self.mgr.wait_async(self._registry_login(host, self.mgr.registry_url,
+                                                             self.mgr.registry_username, self.mgr.registry_password))
                 if r:
                     bad_hosts.append(r)
 
@@ -364,9 +364,9 @@ class CephadmServe:
         self.log.debug(' checking %s' % host)
         try:
             addr = self.mgr.inventory.get_addr(host) if host in self.mgr.inventory else host
-            out, err, code = self._run_cephadm(
+            out, err, code = self.mgr.wait_async(self._run_cephadm(
                 host, cephadmNoImage, 'check-host', [],
-                error_ok=True, no_fsid=True)
+                error_ok=True, no_fsid=True))
             self.mgr.cache.update_last_host_check(host)
             self.mgr.cache.save_host(host)
             if code:
@@ -382,7 +382,7 @@ class CephadmServe:
 
     def _refresh_host_daemons(self, host: str) -> Optional[str]:
         try:
-            ls = self._run_cephadm_json(host, 'mon', 'ls', [], no_fsid=True)
+            ls = self.mgr.wait_async(self._run_cephadm_json(host, 'mon', 'ls', [], no_fsid=True))
         except OrchestratorError as e:
             return str(e)
         self.mgr._process_ls_output(host, ls)
@@ -390,7 +390,8 @@ class CephadmServe:
 
     def _refresh_facts(self, host: str) -> Optional[str]:
         try:
-            val = self._run_cephadm_json(host, cephadmNoImage, 'gather-facts', [], no_fsid=True)
+            val = self.mgr.wait_async(self._run_cephadm_json(
+                host, cephadmNoImage, 'gather-facts', [], no_fsid=True))
         except OrchestratorError as e:
             return str(e)
 
@@ -408,14 +409,14 @@ class CephadmServe:
 
         try:
             try:
-                devices = self._run_cephadm_json(host, 'osd', 'ceph-volume',
-                                                 inventory_args)
+                devices = self.mgr.wait_async(self._run_cephadm_json(host, 'osd', 'ceph-volume',
+                                                                     inventory_args))
             except OrchestratorError as e:
                 if 'unrecognized arguments: --filter-for-batch' in str(e):
                     rerun_args = inventory_args.copy()
                     rerun_args.remove('--filter-for-batch')
-                    devices = self._run_cephadm_json(host, 'osd', 'ceph-volume',
-                                                     rerun_args)
+                    devices = self.mgr.wait_async(self._run_cephadm_json(host, 'osd', 'ceph-volume',
+                                                                         rerun_args))
                 else:
                     raise
 
@@ -432,7 +433,8 @@ class CephadmServe:
 
     def _refresh_host_networks(self, host: str) -> Optional[str]:
         try:
-            networks = self._run_cephadm_json(host, 'mon', 'list-networks', [], no_fsid=True)
+            networks = self.mgr.wait_async(self._run_cephadm_json(
+                host, 'mon', 'list-networks', [], no_fsid=True))
         except OrchestratorError as e:
             return str(e)
 
@@ -833,7 +835,7 @@ class CephadmServe:
 
                 try:
                     daemon_spec = svc.prepare_create(daemon_spec)
-                    self._create_daemon(daemon_spec)
+                    self.mgr.wait_async(self._create_daemon(daemon_spec))
                     r = True
                     progress_done += 1
                     update_progress()
@@ -1017,7 +1019,8 @@ class CephadmServe:
         digests: Dict[str, ContainerInspectInfo] = {}
         for container_image_ref in set(settings.values()):
             if not is_repo_digest(container_image_ref):
-                image_info = self._get_container_image_info(container_image_ref)
+                image_info = self.mgr.wait_async(
+                    self._get_container_image_info(container_image_ref))
                 if image_info.repo_digests:
                     # FIXME: we assume the first digest here is the best
                     assert is_repo_digest(image_info.repo_digests[0]), image_info
@@ -1030,11 +1033,11 @@ class CephadmServe:
                     # FIXME: we assume the first digest here is the best
                     self.mgr.set_container_image(entity, image_info.repo_digests[0])
 
-    def _create_daemon(self,
-                       daemon_spec: CephadmDaemonDeploySpec,
-                       reconfig: bool = False,
-                       osd_uuid_map: Optional[Dict[str, Any]] = None,
-                       ) -> str:
+    async def _create_daemon(self,
+                             daemon_spec: CephadmDaemonDeploySpec,
+                             reconfig: bool = False,
+                             osd_uuid_map: Optional[Dict[str, Any]] = None,
+                             ) -> str:
 
         with set_exception_subject('service', orchestrator.DaemonDescription(
                 daemon_type=daemon_spec.daemon_type,
@@ -1075,14 +1078,14 @@ class CephadmServe:
                     daemon_spec.extra_args.append('--allow-ptrace')
 
                 if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
-                    self._registry_login(daemon_spec.host, self.mgr.registry_url,
-                                         self.mgr.registry_username, self.mgr.registry_password)
+                    await self._registry_login(daemon_spec.host, self.mgr.registry_url,
+                                               self.mgr.registry_username, self.mgr.registry_password)
 
                 self.log.info('%s daemon %s on %s' % (
                     'Reconfiguring' if reconfig else 'Deploying',
                     daemon_spec.name(), daemon_spec.host))
 
-                out, err, code = self._run_cephadm(
+                out, err, code = await self._run_cephadm(
                     daemon_spec.host, daemon_spec.name(), 'deploy',
                     [
                         '--name', daemon_spec.name(),
@@ -1154,8 +1157,8 @@ class CephadmServe:
             # we can delete a mon instances data.
             args = ['--name', name, '--force']
             self.log.info('Removing daemon %s from %s' % (name, host))
-            out, err, code = self._run_cephadm(
-                host, name, 'rm-daemon', args)
+            out, err, code = self.mgr.wait_async(self._run_cephadm(
+                host, name, 'rm-daemon', args))
             if not code:
                 # remove item from cache
                 self.mgr.cache.rm_daemon(host, name)
@@ -1167,16 +1170,16 @@ class CephadmServe:
 
             return "Removed {} from host '{}'".format(name, host)
 
-    def _run_cephadm_json(self,
-                          host: str,
-                          entity: Union[CephadmNoImage, str],
-                          command: str,
-                          args: List[str],
-                          no_fsid: Optional[bool] = False,
-                          image: Optional[str] = "",
-                          ) -> Any:
+    async def _run_cephadm_json(self,
+                                host: str,
+                                entity: Union[CephadmNoImage, str],
+                                command: str,
+                                args: List[str],
+                                no_fsid: Optional[bool] = False,
+                                image: Optional[str] = "",
+                                ) -> Any:
         try:
-            out, err, code = self._run_cephadm(
+            out, err, code = await self._run_cephadm(
                 host, entity, command, args, no_fsid=no_fsid, image=image)
             if code:
                 raise OrchestratorError(f'host {host} `cephadm {command}` returned {code}: {err}')
@@ -1189,18 +1192,18 @@ class CephadmServe:
             self.log.exception(f'{msg}: {"".join(out)}')
             raise OrchestratorError(msg)
 
-    def _run_cephadm(self,
-                     host: str,
-                     entity: Union[CephadmNoImage, str],
-                     command: str,
-                     args: List[str],
-                     addr: Optional[str] = "",
-                     stdin: Optional[str] = "",
-                     no_fsid: Optional[bool] = False,
-                     error_ok: Optional[bool] = False,
-                     image: Optional[str] = "",
-                     env_vars: Optional[List[str]] = None,
-                     ) -> Tuple[List[str], List[str], int]:
+    async def _run_cephadm(self,
+                           host: str,
+                           entity: Union[CephadmNoImage, str],
+                           command: str,
+                           args: List[str],
+                           addr: Optional[str] = "",
+                           stdin: Optional[str] = "",
+                           no_fsid: Optional[bool] = False,
+                           error_ok: Optional[bool] = False,
+                           image: Optional[str] = "",
+                           env_vars: Optional[List[str]] = None,
+                           ) -> Tuple[List[str], List[str], int]:
         """
         Run cephadm on the remote host with the given command + args
 
@@ -1209,7 +1212,7 @@ class CephadmServe:
         :env_vars: in format -> [KEY=VALUE, ..]
         """
 
-        self.mgr.ssh.remote_connection(host, addr)
+        await self.mgr.ssh._remote_connection(host, addr)
 
         self.log.debug(f"_run_cephadm : command = {command}")
         self.log.debug(f"_run_cephadm : args = {args}")
@@ -1253,22 +1256,22 @@ class CephadmServe:
                 self.log.debug('stdin: %s' % stdin)
 
             cmd = ['which', 'python3']
-            python = self.mgr.ssh.check_execute_command(host, cmd, addr=addr)
+            python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
             cmd = [python, self.mgr.cephadm_binary_path] + final_args
 
             try:
-                out, err, code = self.mgr.ssh.execute_command(
+                out, err, code = await self.mgr.ssh._execute_command(
                     host, cmd, stdin=stdin, addr=addr)
                 if code == 2:
                     ls_cmd = ['ls', self.mgr.cephadm_binary_path]
-                    out_ls, err_ls, code_ls = self.mgr.ssh.execute_command(host, ls_cmd, addr=addr)
+                    out_ls, err_ls, code_ls = await self.mgr.ssh._execute_command(host, ls_cmd, addr=addr)
                     if code_ls == 2:
-                        self._deploy_cephadm_binary(host, addr)
-                        out, err, code = self.mgr.ssh.execute_command(
+                        await self._deploy_cephadm_binary(host, addr)
+                        out, err, code = await self.mgr.ssh._execute_command(
                             host, cmd, stdin=stdin, addr=addr)
 
             except Exception as e:
-                self.mgr.ssh._reset_con(host)
+                await self.mgr.ssh._reset_con(host)
                 if error_ok:
                     return [], [str(e)], 1
                 raise
@@ -1276,10 +1279,10 @@ class CephadmServe:
         elif self.mgr.mode == 'cephadm-package':
             try:
                 cmd = ['/usr/bin/cephadm'] + final_args
-                out, err, code = self.mgr.ssh.execute_command(
+                out, err, code = await self.mgr.ssh._execute_command(
                     host, cmd, stdin=stdin, addr=addr)
             except Exception as e:
-                self.mgr.ssh._reset_con(host)
+                await self.mgr.ssh._reset_con(host)
                 if error_ok:
                     return [], [str(e)], 1
                 raise
@@ -1296,7 +1299,7 @@ class CephadmServe:
                 f'cephadm exited with an error code: {code}, stderr: {err}')
         return [out], [err], code
 
-    def _get_container_image_info(self, image_name: str) -> ContainerInspectInfo:
+    async def _get_container_image_info(self, image_name: str) -> ContainerInspectInfo:
         # pick a random host...
         host = None
         for host_name in self.mgr.inventory.keys():
@@ -1305,14 +1308,14 @@ class CephadmServe:
         if not host:
             raise OrchestratorError('no hosts defined')
         if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
-            self._registry_login(host, self.mgr.registry_url,
-                                 self.mgr.registry_username, self.mgr.registry_password)
+            await self._registry_login(host, self.mgr.registry_url,
+                                       self.mgr.registry_username, self.mgr.registry_password)
 
         pullargs: List[str] = []
         if self.mgr.registry_insecure:
             pullargs.append("--insecure")
 
-        j = self._run_cephadm_json(host, '', 'pull', pullargs, image=image_name, no_fsid=True)
+        j = await self._run_cephadm_json(host, '', 'pull', pullargs, image=image_name, no_fsid=True)
 
         r = ContainerInspectInfo(
             j['image_id'],
@@ -1323,7 +1326,7 @@ class CephadmServe:
         return r
 
     # function responsible for logging single host into custom registry
-    def _registry_login(self, host: str, url: Optional[str], username: Optional[str], password: Optional[str]) -> Optional[str]:
+    async def _registry_login(self, host: str, url: Optional[str], username: Optional[str], password: Optional[str]) -> Optional[str]:
         self.log.debug(f"Attempting to log host {host} into custom registry @ {url}")
         # want to pass info over stdin rather than through normal list of args
         args_str = json.dumps({
@@ -1331,15 +1334,15 @@ class CephadmServe:
             'username': username,
             'password': password,
         })
-        out, err, code = self._run_cephadm(
+        out, err, code = await self._run_cephadm(
             host, 'mon', 'registry-login',
             ['--registry-json', '-'], stdin=args_str, error_ok=True)
         if code:
             return f"Host {host} failed to login to {url} as {username} with given password"
         return None
 
-    def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
+    async def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
         # Use tee (from coreutils) to create a copy of cephadm on the target machine
         self.log.info(f"Deploying cephadm binary to {host}")
-        self.mgr.ssh.write_remote_file(host, self.mgr.cephadm_binary_path,
-                                       self.mgr._cephadm.encode('utf-8'), addr=addr)
+        await self.mgr.ssh._write_remote_file(host, self.mgr.cephadm_binary_path,
+                                              self.mgr._cephadm.encode('utf-8'), addr=addr)

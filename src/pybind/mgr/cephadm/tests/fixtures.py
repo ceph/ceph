@@ -23,7 +23,7 @@ def get_ceph_option(_, key):
 
 
 def _run_cephadm(ret):
-    def foo(s, host, entity, cmd, e, **kwargs):
+    async def foo(s, host, entity, cmd, e, **kwargs):
         if cmd == 'gather-facts':
             return '{}', '', 0
         return [ret], '', 0
@@ -58,7 +58,7 @@ def receive_agent_metadata(m: CephadmOrchestrator, host: str, ops: List[str] = N
     }
     if ops:
         for op in ops:
-            out = CephadmServe(m)._run_cephadm_json(host, cephadmNoImage, op, [])
+            out = m.wait_async(CephadmServe(m)._run_cephadm_json(host, cephadmNoImage, op, []))
             to_update[op](host, out)
     m.cache.last_daemon_update[host] = datetime_now()
     m.cache.last_facts_update[host] = datetime_now()
