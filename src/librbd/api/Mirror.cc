@@ -212,7 +212,12 @@ int create_bootstrap_peer(CephContext* cct, librados::IoCtx& io_ctx,
     return r;
   }
 
-  if (peers.empty()) {
+  auto peer_it = std::find_if(peers.begin(), peers.end(),
+    [site_name, fsid](const librbd::mirror_peer_site_t& peer) {
+      return peer.site_name == site_name || peer.site_name == fsid;
+  });
+
+  if (peer_it == peers.end()) {
     r = Mirror<>::peer_site_add(io_ctx, &peer_uuid, direction, site_name,
                                 "client." + client_id);
     if (r < 0) {
@@ -220,15 +225,10 @@ int create_bootstrap_peer(CephContext* cct, librados::IoCtx& io_ctx,
                  << cluster2 << " " << "cluster: " << cpp_strerror(r) << dendl;
       return r;
     }
-  } else if (peers[0].site_name != site_name &&
-             peers[0].site_name != fsid) {
-    // only support a single peer
-    lderr(cct) << "multiple peers are not currently supported" << dendl;
-    return -EINVAL;
   } else {
-    peer_uuid = peers[0].uuid;
+    peer_uuid = peer_it->uuid;
 
-    if (peers[0].site_name != site_name) {
+    if (peer_it->site_name != site_name) {
       r = Mirror<>::peer_site_set_name(io_ctx, peer_uuid, site_name);
       if (r < 0) {
         // non-fatal attempt to update site name
