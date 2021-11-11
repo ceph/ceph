@@ -12,3 +12,4 @@ tasks:
       - ceph orch host ls
       - ceph orch device ls
       - ceph orch ls --format yaml
+      - ceph orch ls | grep '^osd '
