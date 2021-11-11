@@ -168,6 +168,7 @@ public:
   static CompatSet get_compat_set_all();
   static CompatSet get_compat_set_default();
   static CompatSet get_compat_set_base(); // pre v0.20
+  static CompatSet get_compat_set_v16_2_4(); // pre-v16.2.5 CompatSet in MDS beacon
 
   static MDSMap create_null_mdsmap() {
     MDSMap null_map;
