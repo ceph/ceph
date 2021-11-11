@@ -789,6 +789,10 @@ class CephIscsi(object):
         # remove extra container args for tcmu container.
         # extra args could cause issue with forking service type
         tcmu_container.container_args = []
+        # set container limits to unlimited as defaults (Docker 4096 / Podman 2048)
+        # prevents the creation of max lun (default 255)
+        pids_unlimited = '-1' if isinstance(self.ctx.container_engine, Podman) else '0'
+        tcmu_container.container_args.extend(['--pids-limit=%s' % pids_unlimited])
         return tcmu_container
 
 ##################################
@@ -2708,6 +2712,8 @@ def get_container(ctx: CephadmContext,
         envs.extend(Keepalived.get_container_envs())
         container_args.extend(['--cap-add=NET_ADMIN', '--cap-add=NET_RAW'])
     elif daemon_type == CephIscsi.daemon_type:
+        # Applies only on rbd-target-api as get_tcmu_runner_container()
+        # removes all tcmu-runner arguments
         entrypoint = CephIscsi.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)
         # So the container can modprobe iscsi_target_mod and have write perms
@@ -2741,6 +2747,8 @@ def get_container(ctx: CephadmContext,
 
     # if using podman, set -d, --conmon-pidfile & --cidfile flags
     # so service can have Type=Forking
+    # set containers limits to unlimited as defaults (Docker 4096 / Podman 2048)
+    # prevents some app customizations from running
     if isinstance(ctx.container_engine, Podman):
         runtime_dir = '/run'
         container_args.extend([
@@ -2749,9 +2757,14 @@ def get_container(ctx: CephadmContext,
             runtime_dir + '/ceph-%s@%s.%s.service-pid' % (fsid, daemon_type, daemon_id),
             '--cidfile',
             runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, daemon_id),
+            '--pids-limit=-1',
         ])
         if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION:
             container_args.append('--cgroups=split')
+    else:
+        container_args.extend([
+            '--pids-limit=0',
+        ])
 
     return CephContainer.for_daemon(
         ctx,
