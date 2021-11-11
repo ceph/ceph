@@ -1485,15 +1485,20 @@ bool PG::verify_periodic_scrub_mode(bool allow_deep_scrub,
 
 std::optional<requested_scrub_t> PG::verify_scrub_mode() const
 {
-  dout(10) << __func__ << " processing pg " << info.pgid << dendl;
-
-  bool allow_deep_scrub = !(get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
-			    pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB));
   bool allow_regular_scrub = !(get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
-			       pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB));
+                               pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB));
+  bool allow_deep_scrub = allow_regular_scrub &&
+                          !(get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
+                            pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB));
   bool has_deep_errors = (info.stats.stats.sum.num_deep_scrub_errors > 0);
-  bool try_to_auto_repair =
-    (cct->_conf->osd_scrub_auto_repair && get_pgbackend()->auto_repair_supported());
+  bool try_to_auto_repair = (cct->_conf->osd_scrub_auto_repair &&
+                             get_pgbackend()->auto_repair_supported());
+
+  dout(10) << __func__ << " pg: " << info.pgid
+           << " allow: " << allow_regular_scrub << "/" << allow_deep_scrub
+           << " deep errs: " << has_deep_errors
+           << " auto-repair: " << try_to_auto_repair << " ("
+           << cct->_conf->osd_scrub_auto_repair << ")" << dendl;
 
   auto upd_flags = m_planned_scrub;
 
