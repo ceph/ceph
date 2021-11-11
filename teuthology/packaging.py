@@ -977,6 +977,9 @@ class ShamanProject(GitbuilderProject):
         except VersionNotFoundError:
             return False
 
+        # self._result has status, project, flavor, distros, arch, and sha1
+        # restrictions, so the only reason for multiples should be "multiple
+        # builds of the same sha1 etc."; the first entry is the newest
         search_result = self._result.json()[0]
 
         # now look for the build complete status
@@ -990,12 +993,17 @@ class ShamanProject(GitbuilderProject):
             resp.raise_for_status()
         except requests.HttpError:
             return False
+        log.debug(f'looking for {self.distro} {self.arch} {self.flavor}')
         for build in resp.json():
+            log.debug(f'build: {build["distro"]}/{build["distro_version"]} {build["distro_arch"]} {build["flavor"]}')
             if (
+                # we must compare build arch to self.arch, since shaman's
+                # results can have multiple arches but we're searching
+                # for precisely one here
                 build['distro'] == search_result['distro'] and
                 build['distro_version'] == search_result['distro_version'] and
                 build['flavor'] == search_result['flavor'] and
-                build['distro_arch'] == 'x86_64'
+                build['distro_arch'] == self.arch
                ):
                 return build['status'] == 'completed'
         return False
