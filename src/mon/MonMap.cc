@@ -42,10 +42,10 @@ void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   uint8_t min_v = 1;
   if (!crush_loc.empty()) {
     // we added crush_loc in version 5, but need to let old clients decode it
-    // so just leave the min_v at version 4. Monitors are protected
+    // so just leave the min_v at version 1. Monitors are protected
     // from misunderstandings about location because setting it is blocked
     // on FEATURE_PINGING
-    min_v = 4;
+    min_v = 1;
   }
   if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 2;
