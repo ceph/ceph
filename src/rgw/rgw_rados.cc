@@ -8097,7 +8097,14 @@ int RGWRados::bi_put(BucketShard& bs, rgw_cls_bi_entry& entry)
 
 int RGWRados::bi_put(const DoutPrefixProvider *dpp, rgw_bucket& bucket, rgw_obj& obj, rgw_cls_bi_entry& entry)
 {
+  // make sure incomplete multipart uploads are hashed correctly
+  if (obj.key.ns == RGW_OBJ_NS_MULTIPART) {
+    RGWMPObj mp;
+    mp.from_meta(obj.key.name);
+    obj.index_hash_source = mp.get_key();
+  }
   BucketShard bs(this);
+
   int ret = bs.init(bucket, obj, nullptr /* no RGWBucketInfo */, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 5) << "bs.init() returned ret=" << ret << dendl;
