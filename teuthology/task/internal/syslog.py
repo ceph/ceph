@@ -169,5 +169,19 @@ def syslog(ctx, config):
                     '--',
                 ],
                 wait=False,
-            ),
+            )
+        )
+
+        log.info('Gathering journactl -b0...')
+        run.wait(
+            ctx.cluster.run(
+                args=[
+                    'sudo', 'journalctl', '-b0',
+                    run.Raw('|'),
+                    'gzip', '-9',
+                    run.Raw('>'),
+                    f'{archive_dir}/syslog/journalctl-b0.gz',
+                ],
+                wait=False,
+            )
         )
