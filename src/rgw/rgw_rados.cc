@@ -8759,8 +8759,9 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
 }
 
 
-// A helper function to retrieve the hash source from an incomplete multipart entry
-// by removing everything from the second last dot to the end.
+// A helper function to retrieve the hash source from an incomplete
+// multipart entry by removing everything from the second to last
+// period on.
 static int parse_index_hash_source(const std::string& oid_wo_ns, std::string *index_hash_source) {
   std::size_t found = oid_wo_ns.rfind('.');
   if (found == std::string::npos || found < 1) {
@@ -8830,7 +8831,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
     rgw_obj_key obj_key;
     bool parsed = rgw_obj_key::parse_raw_oid(start_after.name, &obj_key);
     if (!parsed) {
-      ldpp_dout(dpp, 0) << "ERROR: " << __PRETTY_FUNCTION__ <<
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	" received an invalid start marker: \"" << start_after << "\"" <<
 	dendl;
       return -EINVAL;
@@ -8851,8 +8852,9 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
         string index_hash_source;
         r = parse_index_hash_source(obj_key.name, &index_hash_source);
         if (r < 0) {
-	  ldpp_dout(dpp, 0) << "ERROR: " << __PRETTY_FUNCTION__ <<
-	    " error in parse_index_hash_source, r=" << r << dendl;
+	  ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+	    " parse_index_hash_source unable to parse \"" << obj_key.name <<
+	    "\", r=" << r << dendl;
           return r;
         }
         current_shard = svc.bi_rados->bucket_shard_index(index_hash_source, num_shards);
@@ -8878,7 +8880,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
                            list_versions, &result);
     r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, null_yield);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: " << __PRETTY_FUNCTION__ <<
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	" error in rgw_rados_operate (bucket list op), r=" << r << dendl;
       return r;
     }
@@ -8897,7 +8899,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 	sub_ctx.dup(ioctx);
 	r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent, updates[oid], y);
 	if (r < 0 && r != -ENOENT) {
-	  ldpp_dout(dpp, 0) << "ERROR: " << __PRETTY_FUNCTION__ <<
+	  ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	    " error in check_disk_state, r=" << r << dendl;
 	  return r;
 	}
@@ -8907,7 +8909,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 
       // at this point either r >= 0 or r == -ENOENT
       if (r >= 0) { // i.e., if r != -ENOENT
-	ldpp_dout(dpp, 10) << __PRETTY_FUNCTION__ << ": got " <<
+	ldpp_dout(dpp, 10) << __func__ << ": got " <<
 	  dirent.key << dendl;
 
 	if (count < num_entries) {
@@ -8917,7 +8919,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 	} else {
 	  last_added_entry = dirent.key;
 	  *is_truncated = true;
-	  ldpp_dout(dpp, 10) << "ERROR: " << __PRETTY_FUNCTION__ <<
+	  ldpp_dout(dpp, 10) << "INFO: " << __func__ <<
 	    ": reached max entries (" << num_entries << ") to return at \"" <<
 	    dirent.key << "\"" << dendl;
 	  goto check_updates;
