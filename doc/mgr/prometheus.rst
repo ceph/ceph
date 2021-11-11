@@ -37,6 +37,8 @@ Configuration
 .. confval:: stale_cache_strategy
 .. confval:: rbd_stats_pools
 .. confval:: rbd_stats_pools_refresh_interval
+.. confval:: standby_behaviour
+.. confval:: standby_error_status_code
 
 By default the module will accept HTTP requests on port ``9283`` on all IPv4
 and IPv6 addresses on the host.  The port and listen address are both
@@ -95,6 +97,24 @@ To tell the module to respond with "service unavailable", set it to ``fail``::
 If you are confident that you don't require the cache, you can disable it::
 
     ceph config set mgr mgr/prometheus/cache false
+
+If you are using the prometheus module behind some kind of reverse proxy or
+loadbalancer, you can simplify discovering the active instance by switching
+to ``error``-mode::
+
+    ceph config set mgr mgr/prometheus/standby_behaviour error
+
+If set, the prometheus module will repond with a HTTP error when requesting ``/``
+from the standby instance. The default error code is 500, but you can configure
+the HTTP response code with::
+
+    ceph config set mgr mgr/prometheus/standby_error_status_code 503
+
+Valid error codes are between 400-599.
+
+To switch back to the default behaviour, simply set the config key to ``default``::
+
+    ceph config set mgr mgr/prometheus/standby_behaviour default
 
 .. _prometheus-rbd-io-statistics:
 
