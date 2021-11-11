@@ -210,7 +210,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     r = bdev->read(0, MIN_WRITE_ALLOC_SSD_SIZE, &bl, &ioctx, false);
     if (r < 0) {
       lderr(cct) << "Read ssd cache superblock failed " << dendl;
-      goto error_handle;
+      goto err_close_bdev;
     }
     auto p = bl.cbegin();
     decode(superblock, p);
@@ -226,13 +226,13 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
                  << pool_root.layout_version
                  << " expected " << SSD_LAYOUT_VERSION
                  << dendl;
-      goto error_handle;
+      goto err_close_bdev;
     }
     if (pool_root.block_size != MIN_WRITE_ALLOC_SSD_SIZE) {
       lderr(cct) << "Pool block size is " << pool_root.block_size
                  << " expected " << MIN_WRITE_ALLOC_SSD_SIZE
                  << dendl;
-      goto error_handle;
+      goto err_close_bdev;
     }
 
     this->m_log_pool_size = pool_root.pool_size;
@@ -249,7 +249,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
   }
   return true;
 
-error_handle:
+err_close_bdev:
   bdev->close();
   delete bdev;
   on_finish->complete(-EINVAL);
