@@ -261,6 +261,7 @@ void WriteLog<I>::remove_pool_file() {
 template <typename I>
 bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &later) {
   CephContext *cct = m_image_ctx.cct;
+  int r = -EINVAL;
   TOID(struct WriteLogPoolRoot) pool_root;
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   if (access(this->m_log_pool_name.c_str(), F_OK) != 0) {
@@ -292,8 +293,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     }
     if (num_small_writes <= 2) {
       lderr(cct) << "num_small_writes needs to > 2" << dendl;
-      on_finish->complete(-EINVAL);
-      return false;
+      goto err_close_pool;
     }
     this->m_bytes_allocated_cap = effective_pool_size;
     /* Log ring empty */
@@ -318,8 +318,8 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       this->m_total_log_entries = 0;
       this->m_free_log_entries = 0;
       lderr(cct) << "failed to initialize pool (" << this->m_log_pool_name << ")" << dendl;
-      on_finish->complete(-pmemobj_tx_errno());
-      return false;
+      r = -pmemobj_tx_errno();
+      goto err_close_pool;
     } TX_FINALLY {
     } TX_END;
   } else {
@@ -339,14 +339,12 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       lderr(cct) << "Pool layout version is "
                  << D_RO(pool_root)->header.layout_version
                  << " expected " << RWL_LAYOUT_VERSION << dendl;
-      on_finish->complete(-EINVAL);
-      return false;
+      goto err_close_pool;
     }
     if (D_RO(pool_root)->block_size != MIN_WRITE_ALLOC_SIZE) {
       lderr(cct) << "Pool block size is " << D_RO(pool_root)->block_size
                  << " expected " << MIN_WRITE_ALLOC_SIZE << dendl;
-      on_finish->complete(-EINVAL);
-      return false;
+      goto err_close_pool;
     }
     this->m_log_pool_size = D_RO(pool_root)->pool_size;
     this->m_flushed_sync_gen = D_RO(pool_root)->flushed_sync_gen;
@@ -371,6 +369,11 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     m_cache_state->empty = m_log_entries.empty();
   }
   return true;
+
+err_close_pool:
+  pmemobj_close(m_log_pool);
+  on_finish->complete(r);
+  return false;
 }
 
 /*
