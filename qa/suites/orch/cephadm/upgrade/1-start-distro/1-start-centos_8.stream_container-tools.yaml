@@ -1,21 +1,22 @@
 os_type: centos
-os_version: "8.3"
-overrides:
-  selinux:
-    whitelist:
-      - scontext=system_u:system_r:logrotate_t:s0
+os_version: "8.stream"
 
 tasks:
+- pexec:
+    all:
+    - sudo cp /etc/containers/registries.conf /etc/containers/registries.conf.backup
+    - sudo dnf -y  module reset container-tools
+    - sudo dnf -y  module install container-tools
+    - sudo cp /etc/containers/registries.conf.backup /etc/containers/registries.conf
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:octopus
-    cephadm_branch: octopus
+    image: docker.io/ceph/ceph:v15.2.0
+    cephadm_branch: v15.2.0
     cephadm_git_url: https://github.com/ceph/ceph
     # avoid --cap-add=PTRACE + --privileged for older cephadm versions
     allow_ptrace: false
     # deploy additional mons the "old" (octopus) way
     add_mons_via_daemon_add: true
     avoid_pacific_features: true
-
 
 roles:
 - - mon.a
@@ -26,7 +27,7 @@ roles:
   - osd.2
   - osd.3
   - client.0
-#  - ceph.rgw.realm.zone.a  # CLI change in v16 pacific
+#   - ceph.rgw.realm.zone.a # Disabled, needs 15.2.4 as an upgrade start
   - node-exporter.a
   - alertmanager.a
 - - mon.b
@@ -39,4 +40,4 @@ roles:
   - prometheus.a
   - grafana.a
   - node-exporter.b
-  - ceph.iscsi.iscsi.a
+#  - ceph.iscsi.iscsi.a  # needs later start point
