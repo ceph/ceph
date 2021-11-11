@@ -26,6 +26,9 @@ from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec, HostPlacementSpec
 from ceph.utils import datetime_now
 from ceph.deployment.drive_selection.matchers import SizeMatcher
+from nfs.cluster import create_ganesha_pool
+from nfs.module import Module
+from nfs.export import NFSRados
 from mgr_module import NFS_POOL_NAME
 from mgr_util import merge_dicts
 
@@ -49,7 +52,7 @@ from .rook_client._helper import CrdClass
 import orchestrator
 
 try:
-    from rook.module import RookEnv
+    from rook.module import RookEnv, RookOrchestrator
 except ImportError:
     pass  # just used for type checking.
 
@@ -773,7 +776,7 @@ class RookCluster(object):
                             "osd": ("ceph-osd-id", service_id),
                             "mon": ("mon", service_id),
                             "mgr": ("mgr", service_id),
-                            "ceph_nfs": ("ceph_nfs", service_id),
+                            "nfs": ("nfs", service_id),
                             "rgw": ("ceph_rgw", service_id),
                         }[service_type]
                     except KeyError:
@@ -1027,12 +1030,15 @@ class RookCluster(object):
             cos.CephObjectStore, 'cephobjectstores', name,
             _update_zone, _create_zone)
 
-    def apply_nfsgw(self, spec: NFSServiceSpec) -> str:
+    def apply_nfsgw(self, spec: NFSServiceSpec, mgr: 'RookOrchestrator') -> str:
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
         # TODO Number of pods should be based on the list of hosts in the
         #      PlacementSpec.
+        assert spec.service_id, "service id in NFS service spec cannot be an empty string or None " # for mypy typing
+        service_id = spec.service_id
+        mgr_module = cast(Module, mgr)
         count = spec.placement.count or 1
         def _update_nfs(new: cnfs.CephNFS) -> cnfs.CephNFS:
             new.spec.server.active = count
@@ -1047,7 +1053,7 @@ class RookCluster(object):
                         ),
                     spec=cnfs.Spec(
                         rados=cnfs.Rados(
-                            namespace=self.rook_env.namespace,
+                            namespace=service_id,
                             pool=NFS_POOL_NAME,
                             ),
                         server=cnfs.Server(
@@ -1056,12 +1062,12 @@ class RookCluster(object):
                         )
                     )
 
-            rook_nfsgw.spec.rados.namespace = cast(str, spec.service_id)
 
             return rook_nfsgw
 
-        assert spec.service_id is not None
-        return self._create_or_patch(cnfs.CephNFS, 'cephnfses', spec.service_id,
+        create_ganesha_pool(mgr)
+        NFSRados(mgr_module, service_id).write_obj('', f'conf-nfs.{spec.service_id}')
+        return self._create_or_patch(cnfs.CephNFS, 'cephnfses', service_id,
                 _update_nfs, _create_nfs)
 
     def rm_service(self, rooktype: str, service_id: str) -> str:
