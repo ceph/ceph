@@ -8,6 +8,7 @@ tasks:
       - ceph orch ls
       - ceph orch host ls
       - ceph orch device ls
+      - ceph orch ls | grep '^osd.all-available-devices '
 roles:
 - - host.a
   - client.0
