@@ -1,8 +1,9 @@
 import time
 
-from behave import given, when, then
+from behave import given, when, then  # type: ignore
 from kcli_handler import execute_ssh_cmd
-from validation_util import str_to_list, missing_tokens
+from validation_util import missing_tokens
+
 
 def exec_cmds(context, shell, cmds):
     context.output = ''
@@ -20,6 +21,7 @@ def exec_cmds(context, shell, cmds):
 @given("I log as root into {node}")
 def login_to_node(context, node):
     context.node = node
+
 
 @given("I execute in {shell}")
 @when("I execute in {shell}")

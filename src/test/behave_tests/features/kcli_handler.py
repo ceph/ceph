@@ -1,5 +1,4 @@
 import subprocess
-import time
 import os
 
 
@@ -56,7 +55,8 @@ def execute_ssh_cmd(context, vm_name, shell, command):
     """
     if shell == "cephadm_shell":
         command = f"cephadm shell {command}"
-    cmd = f'ssh -oStrictHostKeyChecking=no -oBatchMode=yes -oConnectTimeout=300 root@{context.available_nodes[vm_name]} {command}'.split(' ')
+    cmd = ('ssh -oStrictHostKeyChecking=no -oBatchMode=yes -oConnectTimeout=300 '
+           f'root@{context.available_nodes[vm_name]} {command}'.split(' '))
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     except Exception as ex:
@@ -65,11 +65,13 @@ def execute_ssh_cmd(context, vm_name, shell, command):
 
     return (proc.stdout, proc.stderr, proc.returncode)
 
+
 def execute_scp_cmd(context, vm_name, script, copy_location):
     """
     Copy a given script onto a vm
     """
-    cmd = f'scp -oStrictHostKeyChecking=no -oBatchMode=yes -oConnectTimeout=300 {script} root@{context.available_nodes[vm_name]}:{copy_location}'.split(' ')
+    cmd = ('scp -oStrictHostKeyChecking=no -oBatchMode=yes -oConnectTimeout=300 '
+           f'{script} root@{context.available_nodes[vm_name]}:{copy_location}'.split(' '))
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     except Exception as ex:
@@ -77,6 +79,7 @@ def execute_scp_cmd(context, vm_name, script, copy_location):
         return ('', str(ex), 1)
 
     return (proc.stdout, proc.stderr, proc.returncode)
+
 
 def execute_local_cmd(context, command):
     """

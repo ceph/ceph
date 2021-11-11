@@ -7,17 +7,15 @@ Behave framework is based on the Behaviour driven development where the test cas
 
 `features/environment.py` file is used to set up environment for testing the scenario using the kcli tool. When behave command is execute before each feature, kcli plan is generated to create the virtual machines.
 
-## Issues
-
-* We can't run the behave test cases via tox command.
-
 ## Executing the behave tests
 
-We can execute all test scenario's by executing `behave` command under `src/test/behave_test` where `features` directory is required.
+We can execute all test scenario's by executing `tox` command under `src/test/behave_test`
 
 ```bash
-$ behave
+$ tox
 ```
+
+This will run the behave tests as well as check the code for typing and formatting errors with mypy and flake8
 
 ## Executing the behave tests with tags
 

@@ -1,11 +1,12 @@
 import logging
 import os
-import re
 import time
 
 from jinja2 import Template
 from kcli_handler import execute_kcli_cmd, execute_scp_cmd, \
     execute_ssh_cmd, execute_local_cmd
+
+from typing import Dict
 
 KCLI_PLANS_DIR = "generated_plans"
 KCLI_PLAN_NAME = "behave_test_plan"
@@ -70,6 +71,7 @@ def _handle_kcli_plan(context, command_type, plan_file_path=None):
         out, err, code = execute_kcli_cmd(context, f"delete plan {KCLI_PLAN_NAME} -y")
     print(out)
 
+
 def _verify_host_ready(context, host) -> bool:
     out, err, code = execute_ssh_cmd(context, host, '', 'ps aux | grep -e "python3 chrony lvm2 podman"')
     for s in ['Connection refused', 'install python3']:
@@ -77,6 +79,7 @@ def _verify_host_ready(context, host) -> bool:
             if s in cmd_output:
                 return False
     return True
+
 
 def _wait_host_ready(context, host) -> None:
     # check every 10 seconds for up to 10 minutes
@@ -88,19 +91,21 @@ def _wait_host_ready(context, host) -> None:
         print('. . .')
         sleep_count += 1
 
+
 def _init_context(context) -> None:
     # setup initial values for context fields we use, typing
-    context.config: Dict[str, Any] = {}
-    context.bootstrap_node: str = ''
-    context.fsid: str = ''
-    context.available_nodes: Dict[str, str] = {} # node -> ip mapping
-    context.cluster_nodes: List[str] = []
-    context.bootstrap_node: str = ''
-    context.last_executed: Dict[str, Any] = {}
+    context.config = {}
+    context.bootstrap_node = ''
+    context.fsid = ''
+    context.available_nodes = {}  # node -> ip mapping
+    context.cluster_nodes = []
+    context.bootstrap_node = ''
+    context.last_executed = {}
 
 
 def _copy_cephadm_binary_to_host(context, host) -> None:
-    out, err, code = execute_scp_cmd(context, host, f'{os.path.join(Kcli_Config["ceph_dev_folder"], "src/cephadm/cephadm")}', '/usr/bin/')
+    binary_path = os.path.join(str(Kcli_Config["ceph_dev_folder"]), "src/cephadm/cephadm")
+    out, err, code = execute_scp_cmd(context, host, f'{binary_path}', '/usr/bin/')
     out, err, code = execute_ssh_cmd(context, host, '', 'chmod +x /usr/bin/cephadm')
 
 
@@ -110,9 +115,12 @@ def _add_host_to_cluster(context, host) -> None:
     _wait_host_ready(context, host)
     print(f'Host {host} ready')
     # copy ceph pub key to host's authorized keys
-    out, err, code = execute_ssh_cmd(context, context.bootstrap_node, '', (f'cat /etc/ceph/ceph.pub | ssh -oStrictHostKeyChecking=no '
-                                + f'root@{context.available_nodes[host]} "cat >> /root/.ssh/authorized_keys"'))
-    out, err, code = execute_ssh_cmd(context, context.bootstrap_node, 'cephadm_shell', f'ceph orch host add {host}')
+    out, err, code = execute_ssh_cmd(context, context.bootstrap_node, '',
+                                     ('cat /etc/ceph/ceph.pub | ssh -oStrictHostKeyChecking=no '
+                                      + f'root@{context.available_nodes[host]} '
+                                      + '"cat >> /root/.ssh/authorized_keys"'))
+    out, err, code = execute_ssh_cmd(context, context.bootstrap_node, 'cephadm_shell',
+                                     f'ceph orch host add {host}')
     _copy_cephadm_binary_to_host(context, host)
     print(f'Host {host} added to cluster')
 
@@ -139,17 +147,16 @@ def _create_initial_ceph_config_file_on_host(context, host) -> bool:
 
 def _create_bootstrap_cmd(context) -> str:
     use_initial_config = _create_initial_ceph_config_file_on_host(context, context.bootstrap_node)
-    bootstrap_cmd = (  'cephadm bootstrap '
-                    + f'--mon-ip {context.available_nodes[context.bootstrap_node]} '
-                    + f'--initial-dashboard-password {Kcli_Config["admin_password"]} '
-                    +  '--allow-fqdn-hostname '
-                    +  '--dashboard-password-noupdate '
-                    + f'--shared_ceph_folder {"/mnt" + Kcli_Config["ceph_dev_folder"]}')
-
+    bootstrap_cmd = ('cephadm bootstrap '
+                     + f'--mon-ip {context.available_nodes[context.bootstrap_node]} '
+                     + f'--initial-dashboard-password {Kcli_Config["admin_password"]} '
+                     + '--allow-fqdn-hostname '
+                     + '--dashboard-password-noupdate '
+                     + f'--shared_ceph_folder {"/mnt" + str(Kcli_Config["ceph_dev_folder"])}')
     for flag, value in context.config['BOOTSTRAP_FLAG'].items():
         bootstrap_cmd += f' --{flag.strip()} {value.strip()}'
     if use_initial_config:
-        bootstrap_cmd += f' --config /root/config.conf'
+        bootstrap_cmd += ' --config /root/config.conf'
     return bootstrap_cmd
 
 
@@ -158,10 +165,6 @@ def _bootstrap_cluster(context) -> None:
     Bootstrap a cluster
     """
     context.cluster_nodes = []
-    kcli_plans_dir_path = os.path.join(
-        os.getcwd(),
-        KCLI_PLANS_DIR,
-    )
     print('Waiting for bootstrap host to start and install deps (python3, podman lvm2, chrony) . . .')
     _wait_host_ready(context, context.bootstrap_node)
     print('Bootstrap host ready.')
@@ -178,7 +181,7 @@ def _bootstrap_cluster(context) -> None:
 
     context.cluster_nodes.append(context.bootstrap_node)
     for host in [h for h in context.available_nodes.keys() if h != context.bootstrap_node]:
-        if len(context.cluster_nodes) >=  context.config['NODES']:
+        if len(context.cluster_nodes) >= context.config['NODES']:
             break
         _add_host_to_cluster(context, host)
         context.cluster_nodes.append(host)
@@ -193,10 +196,11 @@ def _purge_cluster(context) -> None:
         context.fsid = ''
         return
     print('Pausing orchestator . . .')
-    out, err, code = execute_ssh_cmd(context, context.bootstrap_node, 'cephadm_shell', f'ceph orch pause')
+    out, err, code = execute_ssh_cmd(context, context.bootstrap_node, 'cephadm_shell', 'ceph orch pause')
     for host in context.cluster_nodes.copy():
         print(f'Cleaning up cluster daemons and files on host {host} . . .')
-        out, err, code = execute_ssh_cmd(context, host, '', f'cephadm rm-cluster --fsid {context.fsid} --zap-osds --force')
+        out, err, code = execute_ssh_cmd(context, host, '',
+                                         f'cephadm rm-cluster --fsid {context.fsid} --zap-osds --force')
         context.cluster_nodes.remove(host)
     print(f'Cluster with fsid {context.fsid} purged')
     context.config = {}
@@ -214,7 +218,7 @@ def _find_container_engine(context):
         context.container_engine = 'podman'
         return
     raise Exception(('Could not find valid container engine (podman, docker). '
-                   + 'Please install a container engine to run these tests.'))
+                    + 'Please install a container engine to run these tests.'))
 
 
 def _setup_initial_config(context, desc) -> None:
@@ -233,7 +237,7 @@ def _setup_initial_config(context, desc) -> None:
     Ex:
         NODES | 2
     -------------------------------------------------------------------------
-    
+
     -------------------------------------------------------------------------
     BOOTSTRAP_FLAG, for setting miscellaneous bootstrap flags for cluster
 
@@ -265,9 +269,9 @@ def _setup_initial_config(context, desc) -> None:
     """
 
     # initialize known config options
-    context.config['NODES']: int = 1
-    context.config['BOOTSTRAP_FLAG']: Dict[str, str] = {}
-    context.config['CEPH_CONFIG']: Dict[str, List[Tuple[str, str]]] = {}
+    context.config['NODES'] = 1
+    context.config['BOOTSTRAP_FLAG'] = {}
+    context.config['CEPH_CONFIG'] = {}
 
     for line in desc:
         line = line.strip()
@@ -305,7 +309,7 @@ def _create_vms(context):
     print('Creating VMs . . .')
     _handle_kcli_plan(context, "create", os.path.relpath(kcli_plan_path))
 
-    context.available_nodes: Dict[str, str] = {} # node -> ip mapping
+    context.available_nodes: Dict[str, str] = {}  # node -> ip mapping
     context.bootstrap_node = ''
     out, err, code = execute_kcli_cmd(context, 'list vms')
     for line in out.split('\n'):
