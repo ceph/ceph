@@ -910,7 +910,7 @@ class DaemonDescription(object):
         if self.daemon_type == 'osd':
             if self.osdspec_affinity and self.osdspec_affinity != 'None':
                 return self.osdspec_affinity
-            return 'unmanaged'
+            return ''
 
         def _match() -> str:
             assert self.daemon_id is not None
@@ -1056,6 +1056,15 @@ class DaemonDescription(object):
         status_int = c.pop('status', None)
         if 'daemon_name' in c:
             del c['daemon_name']
+        if 'service_name' in c and c['service_name'].startswith('osd.'):
+            # if the service_name is a osd.NNN (numeric osd id) then
+            # ignore it -- it is not a valid service_name and
+            # (presumably) came from an older version of cephadm.
+            try:
+                int(c['service_name'][4:])
+                del c['service_name']
+            except ValueError:
+                pass
         status = DaemonDescriptionStatus(status_int) if status_int is not None else None
         return cls(events=events, status=status, **c)
 
