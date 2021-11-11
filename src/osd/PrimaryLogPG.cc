@@ -12435,7 +12435,7 @@ void PrimaryLogPG::_applied_recovered_object(ObjectContextRef obc)
 
   // requeue an active chunky scrub waiting on recovery ops
   if (!recovery_state.is_deleting() && active_pushes == 0 &&
-      m_scrubber->is_scrub_active()) {
+      is_scrub_active()) {
 
     osd->queue_scrub_pushes_update(this, is_scrub_blocking_ops());
   }
@@ -12449,7 +12449,7 @@ void PrimaryLogPG::_applied_recovered_object_replica()
 
   // requeue an active scrub waiting on recovery ops
   if (!recovery_state.is_deleting() && active_pushes == 0 &&
-      m_scrubber->is_scrub_active()) {
+      is_scrub_active()) {
 
     osd->queue_scrub_replica_pushes(this, m_scrubber->replica_op_priority());
   }
@@ -15407,10 +15407,10 @@ bool PrimaryLogPG::already_complete(eversion_t v)
 
 void PrimaryLogPG::do_replica_scrub_map(OpRequestRef op)
 {
-  dout(15) << __func__ << " is scrub active? " << m_scrubber->is_scrub_active() << dendl;
+  dout(15) << __func__ << " is scrub active? " << is_scrub_active() << dendl;
   op->mark_started();
 
-  if (!m_scrubber->is_scrub_active()) {
+  if (!is_scrub_active()) {
     dout(10) << __func__ << " scrub isn't active" << dendl;
     return;
   }

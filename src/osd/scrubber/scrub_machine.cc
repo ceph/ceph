@@ -458,7 +458,6 @@ sc::result WaitDigestUpdate::react(const DigestUpdate&)
   // - finish the scrubbing of the current chunk, and:
   //  - send NextChunk, or
   //  - send ScrubFinished
-
   scrbr->on_digest_updates();
   return discard_event();
 }
