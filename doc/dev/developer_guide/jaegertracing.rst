@@ -16,19 +16,8 @@ it across the distributed system.
 BASIC ARCHITECTURE AND TERMINOLOGY
 ----------------------------------
 
-* TRACE: A trace shows the data/execution path through a system.
-* SPAN: A single unit of a trace, it is a data structure that stores
-  information like operation name, timestamps, ordering in a trace.
-* JAEGER CLIENT: language-specific implementations of the OpenTracing API.
-* JAEGER AGENT: a daemon that listens for spans sent over User Datagram Protocol.
-  The agent is meant to be placed on the same host as the instrumented
-  application. (acts like a sidecar listener)
-* JAEGER COLLECTOR: Jaeger agent sends the spans to this daemon which then
-  stitches the spans together to form a trace(if enabled, also persists a database
-  for these traces)
-* JAEGER QUERY AND CONSOLE FRONTEND: UI based frontend to checkout the jaeger
-  traces, navigate to http://localhost:16686 (if using default `all-in-one
-  docker <https://www.jaegertracing.io/docs/1.22/getting-started/#all-in-one>`_ to access the Jaeger UI.
+refer to the `Ceph Tracing documentation <../../../jaegertracing/#basic-architecture-and-terminology>`_
+
 
 HOW TO GET STARTED USING TRACING?
 ---------------------------------
@@ -71,4 +60,4 @@ steps needed:
      $ bin/rados -p test bench 5 write --no-cleanup
 
 .. seealso::
- `using-jaeger-cpp-client-for-distributed-tracing-in-ceph <https://medium.com/@deepikaupadhyay/using-jaeger-cpp-client-for-distributed-tracing-in-ceph-8b1f4906ca2>`_
+ `using-jaeger-cpp-client-for-distributed-tracing-in-ceph <https://medium.com/@deepikaupadhyay/using-jaeger-cpp-client-for-distributed-tracing-in-ceph-8b1f4906ca2>`
