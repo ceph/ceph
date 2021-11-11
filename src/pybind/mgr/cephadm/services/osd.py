@@ -1,5 +1,6 @@
 import json
 import logging
+from asyncio import gather
 from threading import Lock
 from typing import List, Dict, Any, Set, Tuple, cast, Optional, TYPE_CHECKING
 
@@ -69,7 +70,9 @@ class OSDService(CephService):
             return ret_msg
 
         async def all_hosts() -> List[Optional[str]]:
-            return [await create_from_spec_one(h, ds) for h, ds in self.prepare_drivegroup(drive_group)]
+            futures = [create_from_spec_one(h, ds)
+                       for h, ds in self.prepare_drivegroup(drive_group)]
+            return await gather(*futures)
 
         ret = self.mgr.wait_async(all_hosts())
         return ", ".join(filter(None, ret))
