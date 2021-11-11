@@ -14,6 +14,7 @@ import errno
 import logging
 import os
 import json
+import pipes
 import time
 import gevent
 import re
@@ -1383,9 +1384,10 @@ def run_daemon(ctx, config, type_):
                 '--cluster', cluster_name,
                 '-i', id_]
 
+            env = config.get('env', {})
             if type_ in config.get('cpu_profile', []):
-                profile_path = '/var/log/ceph/profiling-logger/%s.prof' % (role)
-                run_cmd.extend(['env', 'CPUPROFILE=%s' % profile_path])
+                env['CPUPROFILE'] = \
+                  '/var/log/ceph/profiling-logger/%s.prof' % (role)
 
             vc = config.get('valgrind')
             if vc is not None:
@@ -1397,7 +1399,9 @@ def run_daemon(ctx, config, type_):
                 exit_on_first_error = vc.get('exit_on_first_error', True)
                 run_cmd = get_valgrind_args(testdir, role, run_cmd, valgrind_args,
                     exit_on_first_error=exit_on_first_error)
-
+            if env:
+              run_cmd.extend(
+                ['env'] + [run.Raw(f'{key}={pipes.quote(val)}') for key, val in env.items()])
             run_cmd.extend(run_cmd_tail)
             log_path = f'/var/log/ceph/{cluster_name}-{type_}.{id_}.log'
             create_log_cmd, run_cmd = \
