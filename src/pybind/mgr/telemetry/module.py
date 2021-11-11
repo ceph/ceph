@@ -346,9 +346,9 @@ class Module(MgrModule):
             'active_changed': sorted(list(active)),
         }
 
-    def get_mempool(self, mode: str = 'separated') -> Dict[str, dict]:
+    def get_mempool(self, mode = 'separated'):
         # Initialize result dict
-        result: Dict[str, dict] = defaultdict(lambda: defaultdict(int))
+        result = defaultdict(lambda: defaultdict(int))
 
         # Get list of osd ids from the metadata
         osd_metadata = self.get('osd_metadata')
@@ -382,13 +382,13 @@ class Module(MgrModule):
 
         return result
 
-    def get_osd_histograms(self, mode: str = 'separated') -> List[Dict[str, dict]]:
+    def get_osd_histograms(self, mode = 'separated'):
         # Initialize result dict
-        result: Dict[str, dict] = defaultdict(lambda: defaultdict(
-                                              lambda: defaultdict(
-                                              lambda: defaultdict(
-                                              lambda: defaultdict(
-                                              lambda: defaultdict(int))))))
+        result = defaultdict(lambda: defaultdict(
+                             lambda: defaultdict(
+                             lambda: defaultdict(
+                             lambda: defaultdict(
+                             lambda: defaultdict(int))))))
 
         # Get list of osd ids from the metadata
         osd_metadata = self.get('osd_metadata')
@@ -419,7 +419,7 @@ class Module(MgrModule):
 
                             # This is the dict that contains information for an individual
                             # axis. It will be appended to the 'axes' list at the end.
-                            axis_dict: Dict[str, Any] = defaultdict()
+                            axis_dict = defaultdict()
 
                             # Collecting information for buckets, min, name, etc.
                             axis_dict['buckets'] = axis['buckets']
@@ -495,7 +495,7 @@ class Module(MgrModule):
 
         return list(result.values())
 
-    def get_io_rate(self) -> dict:
+    def get_io_rate(self):
         return self.get('io_rate')
 
     def gather_crashinfo(self):
@@ -520,7 +520,7 @@ class Module(MgrModule):
             crashlist.append(c)
         return crashlist
 
-    def gather_perf_counters(self, mode: str = 'separated') -> Dict[str, dict]:
+    def gather_perf_counters(self, mode = 'separated'):
         # Extract perf counter data with get_all_perf_counters(), a method
         # from mgr/mgr_module.py. This method returns a nested dictionary that
         # looks a lot like perf schema, except with some additional fields.
@@ -540,7 +540,7 @@ class Module(MgrModule):
         all_perf_counters = self.get_all_perf_counters()
 
         # Initialize 'result' dict
-        result: Dict[str, dict] = defaultdict(lambda: defaultdict(
+        result = defaultdict(lambda: defaultdict(
             lambda: defaultdict(lambda: defaultdict(int))))
 
         for daemon in all_perf_counters:
