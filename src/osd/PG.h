@@ -185,6 +185,7 @@ public:
 
   /// flags detailing scheduling/operation characteristics of the next scrub 
   requested_scrub_t m_planned_scrub;
+
   /// scrubbing state for both Primary & replicas
   bool is_scrub_active() const { return m_scrubber->is_scrub_active(); }
 

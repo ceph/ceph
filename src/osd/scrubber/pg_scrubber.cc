@@ -1254,23 +1254,26 @@ Scrub::preemption_t& PgScrubber::get_preemptor()
 }
 
 /*
- * Process note: called for the arriving "give me your map, replica!" request. Unlike
- * the original implementation, we do not requeue the Op waiting for
+ * Process note: called for the arriving "give me your map, replica!" request.
+ * Unlike the original implementation, we do not requeue the Op waiting for
  * updates. Instead - we trigger the FSM.
  */
 void PgScrubber::replica_scrub_op(OpRequestRef op)
 {
   op->mark_started();
   auto msg = op->get_req<MOSDRepScrub>();
-  dout(10) << __func__ << " pg:" << m_pg->pg_id << " Msg: map_epoch:" << msg->map_epoch
-	   << " min_epoch:" << msg->min_epoch << " deep?" << msg->deep << dendl;
+  dout(10) << __func__ << " pg:" << m_pg->pg_id
+           << " Msg: map_epoch:" << msg->map_epoch
+           << " min_epoch:" << msg->min_epoch << " deep?" << msg->deep << dendl;
 
-  // are we still processing a previous scrub-map request without noticing that the
-  // interval changed? won't see it here, but rather at the reservation stage.
+  // are we still processing a previous scrub-map request without noticing that
+  // the interval changed? won't see it here, but rather at the reservation
+  // stage.
 
   if (msg->map_epoch < m_pg->info.history.same_interval_since) {
-    dout(10) << "replica_scrub_op discarding old replica_scrub from " << msg->map_epoch
-	     << " < " << m_pg->info.history.same_interval_since << dendl;
+    dout(10) << "replica_scrub_op discarding old replica_scrub from "
+             << msg->map_epoch << " < "
+             << m_pg->info.history.same_interval_since << dendl;
 
     // is there a general sync issue? are we holding a stale reservation?
     // not checking now - assuming we will actively react to interval change.
@@ -1307,8 +1310,9 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   m_max_end = msg->end;
   m_is_deep = msg->deep;
   m_interval_start = m_pg->info.history.same_interval_since;
-  m_replica_request_priority = msg->high_priority ? Scrub::scrub_prio_t::high_priority
-						  : Scrub::scrub_prio_t::low_priority;
+  m_replica_request_priority = msg->high_priority
+                                 ? Scrub::scrub_prio_t::high_priority
+                                 : Scrub::scrub_prio_t::low_priority;
   m_flags.priority = msg->priority ? msg->priority : m_pg->get_scrub_priority();
 
   preemption_data.reset();
