@@ -1,29 +1,27 @@
 import logging
 import os
 import re
+import time
 
 from jinja2 import Template
-from kcli_handler import is_bootstrap_script_complete, execute_kcli_cmd
+from kcli_handler import execute_kcli_cmd, execute_scp_cmd, \
+    execute_ssh_cmd, execute_local_cmd
 
 KCLI_PLANS_DIR = "generated_plans"
 KCLI_PLAN_NAME = "behave_test_plan"
 
 Kcli_Config = {
-    "nodes": 1,
+    "nodes": 3,
     "pool": "default",
     "network": "default",
-    "domain": "cephlab.com",
     "prefix": "ceph",
     "numcpus": 1,
     "memory": 1024,
     "image": "fedora33",
     "notify": False,
     "admin_password": "password",
-    "disks": [150, 3],
-}
-
-Bootstrap_Config = {
-    "configure_osd": False
+    "disks": "\n" + (" - 150\n" * 3),
+    "ceph_dev_folder": '/'.join(os.getcwd().split('/')[:-3]),
 }
 
 
@@ -39,15 +37,11 @@ def _read_file(file_path):
     return data
 
 
-def _loaded_templates():
+def _kcli_template():
     temp_dir = os.path.join(os.getcwd(), "template")
     logging.info("Loading templates")
     kcli = _read_file(os.path.join(temp_dir, "kcli_plan_template"))
-    script = _read_file(os.path.join(temp_dir, "bootstrap_script_template"))
-    return (
-        Template(kcli),
-        Template(script)
-    )
+    return Template(kcli)
 
 
 def _clean_generated(dir_path):
@@ -57,106 +51,243 @@ def _clean_generated(dir_path):
     os.rmdir(dir_path)
 
 
-def _parse_value(value):
-    if value.isnumeric():
-        return int(value)
-
-    if value.endswith("gb"):
-        return int(value.replace("gb", "")) * 1024
-    elif value.endswith("mb"):
-        return value.replace("mb", "")
-    return value
-
-
-def _parse_to_config_dict(values, config):
-    for key in values.keys():
-        config[key] = _parse_value(values[key])
-
-
-def _parse_vm_description(specs):
-    """
-    Parse's vm specfication description into configuration dictionary
-    """
-    kcli_config = Kcli_Config.copy()
-    parsed_str = re.search(
-        r"(?P<nodes>[\d]+) nodes with (?P<memory>[\w\.-]+) ram",
-        specs.lower(),
-    )
-    if parsed_str:
-        for spec_key in parsed_str.groupdict().keys():
-            kcli_config[spec_key] = _parse_value(parsed_str.group(spec_key))
-    parsed_str = re.search(r"(?P<numcpus>[\d]+) cpus", specs.lower())
-    if parsed_str:
-        kcli_config["numcpus"] = parsed_str.group("numcpus")
-    parsed_str = re.search(
-        r"(?P<disk>[\d]+) storage devices of (?P<volume>[\w\.-]+)Gb each",
-        specs,
-    )
-    if parsed_str:
-        kcli_config["disks"] = [
-            _parse_value(parsed_str.group("volume"))
-        ] * _parse_value(parsed_str.group("disk"))
-    parsed_str = re.search(r"(?P<image>[\w\.-]+) image", specs.lower())
-    if parsed_str:
-        kcli_config["image"] = parsed_str.group("image")
-    return kcli_config
-
-
-def _parse_ceph_description(specs):
-    """
-    Parse the ceph boostrap script configuration descriptions.
-    """
-    bootstrap_script_config = Bootstrap_Config.copy()
-    parsed_str = re.search(
-        r"OSD (?P<osd>[\w\.-]+)", specs
-    )
-    if parsed_str:
-        bootstrap_script_config["configure_osd"] = True if _parse_value(
-            parsed_str.group("osd")
-        ) else False
-    return bootstrap_script_config
-
-
-def _handle_kcli_plan(command_type, plan_file_path=None):
+def _handle_kcli_plan(context, command_type, plan_file_path=None):
     """
     Executes the kcli vm create and delete command according
     to the provided configuration.
     """
-    op = None
+    out = None
     if command_type == "create":
         # TODO : Before creating kcli plan check for exisitng kcli plans
-        op, code = execute_kcli_cmd(
+        out, err, code = execute_kcli_cmd(
+            context,
             f"create plan -f {plan_file_path} {KCLI_PLAN_NAME}"
         )
         if code:
-            print(f"Failed to create kcli plan\n Message: {op}")
+            print(f"Failed to create kcli plan\n Message: {out}\n{err}")
             exit(1)
     elif command_type == "delete":
-        op, code = execute_kcli_cmd(f"delete plan {KCLI_PLAN_NAME} -y")
-    print(op)
+        out, err, code = execute_kcli_cmd(context, f"delete plan {KCLI_PLAN_NAME} -y")
+    print(out)
+
+def _verify_host_ready(context, host) -> bool:
+    out, err, code = execute_ssh_cmd(context, host, '', 'ps aux | grep -e "python3 chrony lvm2 podman"')
+    for s in ['Connection refused', 'install python3']:
+        for cmd_output in [out, err]:
+            if s in cmd_output:
+                return False
+    return True
+
+def _wait_host_ready(context, host) -> None:
+    # check every 10 seconds for up to 10 minutes
+    sleep_count = 0
+    while not _verify_host_ready(context, host):
+        if sleep_count > 60:
+            raise Exception(f'Host {host} failed to start up in and install deps in expected time')
+        time.sleep(10)
+        print('. . .')
+        sleep_count += 1
+
+def _init_context(context) -> None:
+    # setup initial values for context fields we use, typing
+    context.config: Dict[str, Any] = {}
+    context.bootstrap_node: str = ''
+    context.fsid: str = ''
+    context.available_nodes: Dict[str, str] = {} # node -> ip mapping
+    context.cluster_nodes: List[str] = []
+    context.bootstrap_node: str = ''
+    context.last_executed: Dict[str, Any] = {}
 
 
-def has_ceph_configuration(descriptions, config_line):
-    """
-    Checks for ceph cluster configuration in descriptions.
-    """
-    index_config = -1
-    for line in descriptions:
-        if line.lower().startswith(config_line):
-            index_config = descriptions.index(line)
+def _copy_cephadm_binary_to_host(context, host) -> None:
+    out, err, code = execute_scp_cmd(context, host, f'{os.path.join(Kcli_Config["ceph_dev_folder"], "src/cephadm/cephadm")}', '/usr/bin/')
+    out, err, code = execute_ssh_cmd(context, host, '', 'chmod +x /usr/bin/cephadm')
 
-    if index_config != -1:
-        return (
-            descriptions[:index_config],
-            descriptions[index_config:],
-        )
-    return (
-        descriptions,
-        None,
+
+def _add_host_to_cluster(context, host) -> None:
+    print(f'Adding host {host} to the cluster')
+    print(f'Waiting for host {host} to start and install deps (python3, podman lvm2, chrony) . . .')
+    _wait_host_ready(context, host)
+    print(f'Host {host} ready')
+    # copy ceph pub key to host's authorized keys
+    out, err, code = execute_ssh_cmd(context, context.bootstrap_node, '', (f'cat /etc/ceph/ceph.pub | ssh -oStrictHostKeyChecking=no '
+                                + f'root@{context.available_nodes[host]} "cat >> /root/.ssh/authorized_keys"'))
+    out, err, code = execute_ssh_cmd(context, context.bootstrap_node, 'cephadm_shell', f'ceph orch host add {host}')
+    _copy_cephadm_binary_to_host(context, host)
+    print(f'Host {host} added to cluster')
+
+
+def _create_initial_ceph_config_file_on_host(context, host) -> bool:
+    conf_str = ''
+    for section, options in context.config['CEPH_CONFIG'].items():
+        conf_str += f'[{section}]\n'
+        for param, value in options:
+            conf_str += f'{param} = {value}\n'
+    if not conf_str:
+        return False
+    # easiest to just write a copy of the config file into the kcli plans dir
+    # since this directory is cleaned up at the end
+    conf_path = os.path.join(
+        os.getcwd(),
+        KCLI_PLANS_DIR,
+        'config.conf'
     )
+    _write_file(conf_path, conf_str)
+    out, err, code = execute_scp_cmd(context, host, conf_path, '/root/')
+    return True
 
 
-def before_feature(context, feature):
+def _create_bootstrap_cmd(context) -> str:
+    use_initial_config = _create_initial_ceph_config_file_on_host(context, context.bootstrap_node)
+    bootstrap_cmd = (  'cephadm bootstrap '
+                    + f'--mon-ip {context.available_nodes[context.bootstrap_node]} '
+                    + f'--initial-dashboard-password {Kcli_Config["admin_password"]} '
+                    +  '--allow-fqdn-hostname '
+                    +  '--dashboard-password-noupdate '
+                    + f'--shared_ceph_folder {"/mnt" + Kcli_Config["ceph_dev_folder"]}')
+
+    for flag, value in context.config['BOOTSTRAP_FLAG'].items():
+        bootstrap_cmd += f' --{flag.strip()} {value.strip()}'
+    if use_initial_config:
+        bootstrap_cmd += f' --config /root/config.conf'
+    return bootstrap_cmd
+
+
+def _bootstrap_cluster(context) -> None:
+    """
+    Bootstrap a cluster
+    """
+    context.cluster_nodes = []
+    kcli_plans_dir_path = os.path.join(
+        os.getcwd(),
+        KCLI_PLANS_DIR,
+    )
+    print('Waiting for bootstrap host to start and install deps (python3, podman lvm2, chrony) . . .')
+    _wait_host_ready(context, context.bootstrap_node)
+    print('Bootstrap host ready.')
+    _copy_cephadm_binary_to_host(context, context.bootstrap_node)
+    print('Bootstrapping cluster . . .')
+    bootstrap_cmd = _create_bootstrap_cmd(context)
+    out, err, code = execute_ssh_cmd(context, context.bootstrap_node, '', bootstrap_cmd)
+    try:
+        context.fsid = [s for s in (out + '\n' + err).split('\n') if 'Cluster fsid' in s][0].split(' ')[-1]
+    except IndexError:
+        raise Exception(('Failed to find cluster fsid from bootstrap output. Perhaps an error occurred '
+                        + f'during bootstrap.\n\nBootstrap out:\n\n{out}\n\nBootstrap err:\n\n{err}'))
+    print(f'Bootstrapped cluster with fsid {context.fsid}')
+
+    context.cluster_nodes.append(context.bootstrap_node)
+    for host in [h for h in context.available_nodes.keys() if h != context.bootstrap_node]:
+        if len(context.cluster_nodes) >=  context.config['NODES']:
+            break
+        _add_host_to_cluster(context, host)
+        context.cluster_nodes.append(host)
+
+
+def _purge_cluster(context) -> None:
+    print(f'Tearing down cluster with fsid {context.fsid}')
+    if not context.cluster_nodes:
+        print('No known cluster hosts to teardown. Skipping teardown.')
+        context.config = {}
+        context.bootstrap_node = ''
+        context.fsid = ''
+        return
+    print('Pausing orchestator . . .')
+    out, err, code = execute_ssh_cmd(context, context.bootstrap_node, 'cephadm_shell', f'ceph orch pause')
+    for host in context.cluster_nodes.copy():
+        print(f'Cleaning up cluster daemons and files on host {host} . . .')
+        out, err, code = execute_ssh_cmd(context, host, '', f'cephadm rm-cluster --fsid {context.fsid} --zap-osds --force')
+        context.cluster_nodes.remove(host)
+    print(f'Cluster with fsid {context.fsid} purged')
+    context.config = {}
+    context.bootstrap_node = ''
+    context.fsid = ''
+
+
+def _find_container_engine(context):
+    out, err, code = execute_local_cmd(context, 'which docker')
+    if not code:
+        context.container_engine = 'docker'
+        return
+    out, err, code = execute_local_cmd(context, 'which podman')
+    if not code:
+        context.container_engine = 'podman'
+        return
+    raise Exception(('Could not find valid container engine (podman, docker). '
+                   + 'Please install a container engine to run these tests.'))
+
+
+def _setup_initial_config(context, desc) -> None:
+    """
+    Sets up initial cluster configuration from feature description
+    """
+
+    """
+    Curent known feature description formats
+
+    -------------------------------------------------------------------------
+    NODES, used to specify number of nodes in ceph cluster
+
+    NODES | <value>
+
+    Ex:
+        NODES | 2
+    -------------------------------------------------------------------------
+    
+    -------------------------------------------------------------------------
+    BOOTSTRAP_FLAG, for setting miscellaneous bootstrap flags for cluster
+
+    BOOTSTRAP_FLAG | <flag-name> | <value>
+
+    Ex:
+        BOOTSTRAP_FLAG | skip-monitoring-stack | True
+    -------------------------------------------------------------------------
+
+    -------------------------------------------------------------------------
+    CEPH_CONFIG, for setting initial ceph config values to be assimilated
+    during bootstrap
+
+    CEPH_CONFIG | <section> | <param> | <value>
+
+    Ex:
+        CEPH_CONFIG | mgr | mgr/cephadm/use_agent | false
+
+        would translate to
+
+        [mgr]
+        mgr/cephadm/use_agent = false
+    -------------------------------------------------------------------------
+
+    All config option will be added to context.config which is a mapping from
+    strings which correspond to config option types (e.g. CLUSTER, BOOTSTRAP_FLAG)
+    to an Any type that can vary based on the config type. For example,
+    BOOTSTRAP_FLAG would be a str->str mappings (flag name -> value)
+    """
+
+    # initialize known config options
+    context.config['NODES']: int = 1
+    context.config['BOOTSTRAP_FLAG']: Dict[str, str] = {}
+    context.config['CEPH_CONFIG']: Dict[str, List[Tuple[str, str]]] = {}
+
+    for line in desc:
+        line = line.strip()
+        if line.startswith('NODES'):
+            _, node_count = line.split('|')
+            context.config['NODES'] = int(node_count.strip())
+        elif line.startswith('BOOTSTRAP_FLAG'):
+            _, param, value = line.split('|')
+            if value.strip().lower() == 'true':
+                value = ''
+            context.config['BOOTSTRAP_FLAG'][param.strip()] = value.strip()
+        elif line.startswith('CEPH_CONFIG'):
+            _, section, param, value = line.split('|')
+            if section.strip() not in context.config['CEPH_CONFIG']:
+                context.config['CEPH_CONFIG'][section.strip()] = []
+            context.config['CEPH_CONFIG'][section.strip()].append((param.strip(), value.strip()))
+
+
+def _create_vms(context):
+    # initialize VMs for tests
     kcli_plans_dir_path = os.path.join(
         os.getcwd(),
         KCLI_PLANS_DIR,
@@ -164,44 +295,53 @@ def before_feature(context, feature):
     if not os.path.exists(kcli_plans_dir_path):
         os.mkdir(kcli_plans_dir_path)
 
-    vm_description, ceph_description = has_ceph_configuration(
-        feature.description,
-        "- configure ceph cluster",
-    )
-    loaded_kcli, loaded_script = _loaded_templates()
+    loaded_kcli = _kcli_template()
 
-    vm_feature_specs = " ".join(
-        [line for line in vm_description if line.startswith("-")]
-    )
-    vm_config = _parse_vm_description("".join(vm_feature_specs))
     kcli_plan_path = os.path.join(kcli_plans_dir_path, "gen_kcli_plan.yml")
-    print(f"Kcli vm configureaton \n {vm_config}")
     _write_file(
         kcli_plan_path,
-        loaded_kcli.render(vm_config)
+        loaded_kcli.render(Kcli_Config)
     )
+    print('Creating VMs . . .')
+    _handle_kcli_plan(context, "create", os.path.relpath(kcli_plan_path))
 
-    # Checks for ceph description if None set the default configurations
-    ceph_config = _parse_ceph_description(
-        "".join(ceph_description)
-    ) if ceph_description else Bootstrap_Config
+    context.available_nodes: Dict[str, str] = {} # node -> ip mapping
+    context.bootstrap_node = ''
+    out, err, code = execute_kcli_cmd(context, 'list vms')
+    for line in out.split('\n'):
+        info = line.split('|')
+        info = [s.strip() for s in info]
+        if 'behave_test_plan' in info:
+            if not context.bootstrap_node:
+                context.bootstrap_node = info[1]
+            context.available_nodes[info[1]] = info[3]
+    print(f'\n{len(context.available_nodes.keys())} VMs created:')
+    for node, ip in context.available_nodes.items():
+        print(f'| {node} | {ip} |')
+    print('\n')
 
-    print(f"Bootstrap configuraton \n {ceph_config}\n")
-    _write_file(
-        os.path.join(kcli_plans_dir_path, "bootstrap_cluster_dev.sh"),
-        loaded_script.render(ceph_config),
-    )
 
-    _handle_kcli_plan("create", os.path.relpath(kcli_plan_path))
+def _clean_up(context):
+    # clean up VMs and created files
+    if os.path.exists(KCLI_PLANS_DIR):
+        _clean_generated(os.path.abspath(KCLI_PLANS_DIR))
+    _handle_kcli_plan(context, "delete")
 
-    if not is_bootstrap_script_complete():
-        print("Failed to complete bootstrap..")
-        _handle_kcli_plan("delete")
-        exit(1)
-    context.last_executed = {}
+
+def before_all(context):
+    _init_context(context)
+    _find_container_engine(context)
+    _create_vms(context)
+
+
+def before_feature(context, feature):
+    _setup_initial_config(context, feature.description)
+    _bootstrap_cluster(context)
 
 
 def after_feature(context, feature):
-    if os.path.exists(KCLI_PLANS_DIR):
-        _clean_generated(os.path.abspath(KCLI_PLANS_DIR))
-    _handle_kcli_plan("delete")
+    _purge_cluster(context)
+
+
+def after_all(context):
+    _clean_up(context)

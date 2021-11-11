@@ -2,10 +2,9 @@
 Feature: Testing basic ceph shell commands
   In order to be able to provide storage services
   As an system administrator
-  I want to install a Ceph cluster in the following server infrastructure:
-    - 3 nodes with 8Gb RAM, 4 CPUs, and 3 storage devices of 20Gb each.
-    - Using Fedora32 image in each node
-
+  I want to start with a Ceph cluster with:
+    NODES | 1
+    CEPH_CONFIG | mgr | mgr/cephadm/use_agent | false
 
   Scenario: Execute ceph command to check status
     Given I log as root into ceph-node-00
@@ -30,7 +29,7 @@ Feature: Testing basic ceph shell commands
     Then I get results which contain
         """
         HOST    LABELS
-        ceph-node-00.cephlab.com    _admin
+        ceph-node-00    _admin
         """
 
 
@@ -42,9 +41,8 @@ Feature: Testing basic ceph shell commands
         """
     Then I get results which contain
         """
-        Hostname    Path    Type
-        ceph-node-00.cephlab.com    /dev/vdb  hdd
-        ceph-node-00.cephlab.com    /dev/vdc  hdd
+        ceph-node-00    /dev/vdb  hdd
+        ceph-node-00   /dev/vdc  hdd
         """
 
 
@@ -58,7 +56,9 @@ Feature: Testing basic ceph shell commands
         """
         NAME    RUNNING
         grafana 1/1
-        mgr 2/2
+        mgr 1/2
         mon 1/5
+        alertmanager 1/1
+        node-exporter 1/1
         prometheus  1/1
         """
