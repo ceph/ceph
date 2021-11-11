@@ -1209,18 +1209,7 @@ ProtocolV2::server_connect()
       throw std::system_error(
           make_error_code(crimson::net::error::bad_peer_address));
     }
-    // TODO: change peer_addr to entity_addrvec_t
-    entity_addr_t paddr = client_ident.addrs().front();
-    if ((paddr.is_msgr2() || paddr.is_any()) &&
-        paddr.is_same_host(conn.target_addr)) {
-      // good
-    } else {
-      logger().warn("{} peer's address {} is not v2 or not the same host with {}",
-                    conn, paddr, conn.target_addr);
-      throw std::system_error(
-          make_error_code(crimson::net::error::bad_peer_address));
-    }
-    conn.peer_addr = paddr;
+    conn.peer_addr = client_ident.addrs().front();
     logger().debug("{} UPDATE: peer_addr={}", conn, conn.peer_addr);
     conn.target_addr = conn.peer_addr;
     if (!conn.policy.lossy && !conn.policy.server && conn.target_addr.get_port() <= 0) {
