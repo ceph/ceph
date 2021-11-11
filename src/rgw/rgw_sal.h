@@ -553,6 +553,20 @@ class Bucket {
       bool list_versions{false};
       bool allow_unordered{false};
       int shard_id{RGW_NO_SHARD};
+
+      friend std::ostream& operator<<(std::ostream& out, const ListParams& p) {
+	out << "rgw::sal::Bucket::ListParams{ prefix=\"" << p.prefix <<
+	  "\", delim=\"" << p.delim <<
+	  "\", marker=\"" << p.marker <<
+	  "\", end_marker=\"" << p.end_marker <<
+	  "\", ns=\"" << p.ns <<
+	  "\", enforce_ns=" << p.enforce_ns <<
+	  ", list_versions=" << p.list_versions <<
+	  ", allow_unordered=" << p.allow_unordered <<
+	  ", shard_id=" << p.shard_id <<
+	  " }";
+	return out;
+      }
     };
     /**
      * @brief Results from a bucket list operation
