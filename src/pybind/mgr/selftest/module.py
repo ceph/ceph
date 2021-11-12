@@ -215,6 +215,7 @@ class Module(MgrModule):
         self._self_test_store()
         self._self_test_misc()
         self._self_test_perf_counters()
+        self._self_test_osd_command()
 
     def _self_test_getters(self) -> None:
         self.version
@@ -366,6 +367,30 @@ class Module(MgrModule):
         self.get_counter("osd", "0", "osd.op")
         # get_counter
         # get_all_perf_coutners
+
+    def _self_test_osd_command(self) -> None:
+        # The Telemetry module depends on the osd_command function,
+        # as well as the command dicts used in this test function.
+
+        # Test 1: `ceph osd.0 perf histogram dump`
+        cmd_dict = {
+            'prefix': 'perf histogram dump',
+            'id': '0',
+            'format': 'json'
+        }
+        r, outb, outs = self.osd_command(cmd_dict)
+        assert r == 0
+        json.loads(outb)
+
+        # Test 2: `ceph osd.0 dump_mempools`
+        cmd_dict = {
+            'prefix': 'dump_mempools',
+            'id': '0',
+            'format': 'json'
+        }
+        r, outb, outs = self.osd_command(cmd_dict)
+        assert r == 0
+        json.loads(outb)
 
     def _self_test_misc(self) -> None:
         self.set_uri("http://this.is.a.test.com")
