@@ -228,7 +228,7 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
     return;
   }
 
-  op_ret = bucket->remove_bucket(s, delete_children, string(), string(), true, &s->info, s->yield);
+  op_ret = bucket->remove_bucket(s, delete_children, true, &s->info, s->yield);
 }
 
 class RGWOp_Set_Bucket_Quota : public RGWRESTOp {

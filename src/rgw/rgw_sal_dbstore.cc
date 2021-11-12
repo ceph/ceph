@@ -218,7 +218,7 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y)
+  int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y)
   {
     int ret;
 
@@ -460,9 +460,8 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::abort_multiparts(const DoutPrefixProvider *dpp,
-				 CephContext *cct,
-				 string& prefix, string& delim) {
+  int DBBucket::abort_multiparts(const DoutPrefixProvider* dpp,
+				 CephContext* cct) {
     return 0;
   }
 
