@@ -462,10 +462,12 @@ class Schedules:
             if interval is None:
                 schedule = None
             else:
-                schedule.remove(Interval.from_string(interval),
-                                StartTime.from_string(start_time))
-                if schedule:
-                    self.schedules[level_spec.id] = schedule
+                try:
+                    schedule.remove(Interval.from_string(interval),
+                                    StartTime.from_string(start_time))
+                finally:
+                    if schedule:
+                        self.schedules[level_spec.id] = schedule
             if not schedule:
                 del self.level_specs[level_spec.id]
         self.save(level_spec, schedule)
