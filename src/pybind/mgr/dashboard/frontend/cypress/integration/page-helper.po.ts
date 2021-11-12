@@ -52,14 +52,16 @@ export abstract class PageHelper {
   /**
    * Navigates to the edit page
    */
-  navigateEdit(name: string, select = true) {
+  navigateEdit(name: string, select = true, breadcrumb = true) {
     if (select) {
       this.navigateTo();
       this.getFirstTableCell(name).click();
     }
     cy.contains('Creating...').should('not.exist');
     cy.contains('button', 'Edit').click();
-    this.expectBreadcrumbText('Edit');
+    if (breadcrumb) {
+      this.expectBreadcrumbText('Edit');
+    }
   }
 
   /**

@@ -215,10 +215,10 @@
                 <option *ngIf="pools === null"
                         [ngValue]="null"
                         i18n>Loading...</option>
-                <option *ngIf="pools !== null && pools.length === 0"
+                <option *ngIf="pools && pools.length === 0"
                         [ngValue]="null"
                         i18n>-- No pools available --</option>
-                <option *ngIf="pools !== null && pools.length > 0"
+                <option *ngIf="pools && pools.length > 0"
                         [ngValue]="null"
                         i18n>-- Select a pool --</option>
                 <option *ngFor="let pool of pools"

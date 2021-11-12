@@ -10,6 +10,7 @@ export enum OrchestratorFeature {
 
   SERVICE_LIST = 'describe_service',
   SERVICE_CREATE = 'apply',
+  SERVICE_EDIT = 'apply',
   SERVICE_DELETE = 'remove_service',
   SERVICE_RELOAD = 'service_action',
   DAEMON_LIST = 'list_daemons',

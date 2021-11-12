@@ -334,6 +334,9 @@ export class TaskMessageService {
     'service/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.service(metadata)
     ),
+    'service/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.service(metadata)
+    ),
     'service/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.service(metadata)
     )
