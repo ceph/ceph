@@ -965,17 +965,34 @@ CInode *CInode::get_parent_inode()
   return NULL;
 }
 
-bool CInode::is_ancestor_of(const CInode *other) const
+bool CInode::is_ancestor_of(const CInode *other, std::unordered_map<CInode const*,bool>* visited) const
 {
+  std::vector<CInode const*> my_visited = {};
   while (other) {
-    if (other == this)
+    if (visited && other->is_dir()) {
+      if (auto it = visited->find(other); it != visited->end()) {
+        for (auto& in : my_visited) {
+          (*visited)[in] = it->second;
+        }
+        return it->second;
+      }
+      my_visited.push_back(other);  /* N.B.: this being non-empty means visited is assumed non-null */
+    }
+    if (other == this) {
+      for (auto& in : my_visited) {
+        (*visited)[in] = true;
+      }
       return true;
+    }
     const CDentry *pdn = other->get_oldest_parent_dn();
     if (!pdn) {
       ceph_assert(other->is_base());
       break;
     }
     other = pdn->get_dir()->get_inode();
+  }
+  for (auto& in : my_visited) {
+    (*visited)[in] = false;
   }
   return false;
 }
