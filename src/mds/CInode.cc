@@ -3128,8 +3128,8 @@ void CInode::open_snaprealm(bool nosplit)
     SnapRealm *parent = find_snaprealm();
     snaprealm = new SnapRealm(mdcache, this);
     if (parent) {
-      dout(10) << __func__ << " " << snaprealm
-	       << " parent is " << parent
+      dout(10) << __func__ << " " << *snaprealm
+	       << " parent is " << *parent
 	       << dendl;
       dout(30) << " siblings are " << parent->open_children << dendl;
       snaprealm->parent = parent;
