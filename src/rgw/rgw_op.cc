@@ -3415,27 +3415,13 @@ void RGWDeleteBucket::execute(optional_yield y)
     return;
   }
 
-  string prefix, delimiter;
-
-  if (s->prot_flags & RGW_REST_SWIFT) {
-    string path_args;
-    path_args = s->info.args.get("path");
-    if (!path_args.empty()) {
-      if (!delimiter.empty() || !prefix.empty()) {
-        op_ret = -EINVAL;
-        return;
-      }
-      prefix = path_args;
-      delimiter="/";
-    }
-  }
-
-  op_ret = s->bucket->remove_bucket(this, false, prefix, delimiter, false, nullptr, y);
+  op_ret = s->bucket->remove_bucket(this, false, false, nullptr, y);
   if (op_ret < 0 && op_ret == -ECANCELED) {
       // lost a race, either with mdlog sync or another delete bucket operation.
       // in either case, we've already called ctl.bucket->unlink_bucket()
       op_ret = 0;
   }
+
   return;
 }
 
@@ -6987,7 +6973,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
       goto delop_fail;
     }
   } else {
-    ret = bucket->remove_bucket(dpp, false, string(), string(), true, &s->info, s->yield);
+    ret = bucket->remove_bucket(dpp, false, true, &s->info, s->yield);
     if (ret < 0) {
       goto delop_fail;
     }
@@ -6995,7 +6981,6 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
 
   num_deleted++;
   return true;
-
 
 binfo_fail:
     if (-ENOENT == ret) {

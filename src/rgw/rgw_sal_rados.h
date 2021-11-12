@@ -282,7 +282,7 @@ class RadosBucket : public Bucket {
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
     virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) override;
-    virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) override;
+    virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y) override;
     virtual int remove_bucket_bypass_gc(int concurrent_max, bool
 					keep_index_consistent,
 					optional_yield y, const
@@ -330,9 +330,8 @@ class RadosBucket : public Bucket {
 				std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				std::map<std::string, bool> *common_prefixes,
 				bool *is_truncated) override;
-    virtual int abort_multiparts(const DoutPrefixProvider *dpp,
-				 CephContext *cct,
-				 std::string& prefix, std::string& delim) override;
+    virtual int abort_multiparts(const DoutPrefixProvider* dpp,
+				 CephContext* cct) override;
 
   private:
     int link(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
