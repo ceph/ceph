@@ -1697,7 +1697,7 @@ class StandbyModule(MgrStandbyModule):
         class Root(object):
             @cherrypy.expose
             def index(self) -> str:
-                standby_behaviour = module.get_module_option('standby_behaviour')
+                standby_behaviour = module.get_module_option('standby_behaviour', 'default')
                 if standby_behaviour == 'default':
                     active_uri = module.get_active_uri()
                     return '''<!DOCTYPE html>
