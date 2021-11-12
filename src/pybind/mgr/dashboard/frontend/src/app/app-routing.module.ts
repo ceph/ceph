@@ -137,6 +137,11 @@ const routes: Routes = [
             path: URLVerbs.CREATE,
             component: ServiceFormComponent,
             outlet: 'modal'
+          },
+          {
+            path: `${URLVerbs.EDIT}/:type/:name`,
+            component: ServiceFormComponent,
+            outlet: 'modal'
           }
         ]
       },
