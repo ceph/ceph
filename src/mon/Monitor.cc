@@ -931,6 +931,9 @@ int Monitor::init()
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
   mgrmon()->prime_mgr_client();
 
+  // generate list of filestore OSDs
+  osdmon()->get_filestore_osd_list();
+
   state = STATE_PROBING;
   bootstrap();
   // add features of myself into feature_map

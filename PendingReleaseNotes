@@ -1,5 +1,8 @@
 >=17.0.0
 
+* Filestore has been deprecated in Quincy, considering that BlueStore has been
+  the default objectstore for quite some time.
+
 * Critical bug in OMAP format upgrade is fixed. This could cause data corruption
   (improperly formatted OMAP keys) after pre-Pacific cluster upgrade if
   bluestore-quick-fix-on-mount parameter is set to true or ceph-bluestore-tool's
