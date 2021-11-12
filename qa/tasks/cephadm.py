@@ -296,7 +296,7 @@ def ceph_log(ctx, config):
             except OSError:
                 pass
             for remote in ctx.cluster.remotes.keys():
-                sub = os.path.join(path, remote.name)
+                sub = os.path.join(path, remote.shortname)
                 try:
                     os.makedirs(sub)
                 except OSError:
@@ -330,7 +330,7 @@ def ceph_crash(ctx, config):
             except OSError:
                 pass
             for remote in ctx.cluster.remotes.keys():
-                sub = os.path.join(path, remote.name)
+                sub = os.path.join(path, remote.shortname)
                 try:
                     os.makedirs(sub)
                 except OSError:
