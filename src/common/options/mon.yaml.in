@@ -290,6 +290,12 @@ options:
   desc: log health detail to cluster log
   default: true
   with_legacy: true
+- name: mon_warn_on_filestore_osds
+  type: bool
+  level: dev
+  desc: log health warn for filestore OSDs
+  default: true
+  with_legacy: true
 - name: mon_health_max_detail
   type: uint
   level: advanced
