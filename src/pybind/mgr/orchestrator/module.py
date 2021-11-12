@@ -10,7 +10,8 @@ from prettytable import PrettyTable
 
 from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, \
+    SNMPGatewaySpec, SNMPVersion, SNMPAuthType, SNMPPrivacyType
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.utils import datetime_now
 
@@ -60,6 +61,7 @@ class ServiceType(enum.Enum):
     nfs = 'nfs'
     iscsi = 'iscsi'
     cephadm_exporter = 'cephadm-exporter'
+    snmp_gateway = 'snmp-gateway'
 
 
 class ServiceAction(enum.Enum):
@@ -1154,6 +1156,52 @@ Usage:
             unmanaged=unmanaged,
             preview_only=dry_run
         )
+
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
+
+    @_cli_write_command('orch apply snmp-gateway')
+    def _apply_snmp_gateway(self,
+                            snmp_version: SNMPVersion,
+                            destination: str,
+                            port: int = 9464,
+                            engine_id: Optional[str] = None,
+                            auth_protocol: Optional[SNMPAuthType] = None,
+                            privacy_protocol: Optional[SNMPPrivacyType] = None,
+                            placement: Optional[str] = None,
+                            unmanaged: bool = False,
+                            dry_run: bool = False,
+                            format: Format = Format.plain,
+                            no_overwrite: bool = False,
+                            inbuf: Optional[str] = None) -> HandleCommandResult:
+        """Add a Prometheus to SNMP gateway service (cephadm only)"""
+
+        if not inbuf:
+            raise OrchestratorValidationError(
+                'missing credential configuration file. Retry with -i <filename>')
+
+        try:
+            # load inbuf
+            credentials = yaml.safe_load(inbuf)
+        except (OSError, yaml.YAMLError):
+            raise OrchestratorValidationError('credentials file must be valid YAML')
+
+        auth = None if not auth_protocol else auth_protocol.value
+        priv = None if not privacy_protocol else privacy_protocol.value
+
+        spec = SNMPGatewaySpec(
+            snmp_version=snmp_version.value,
+            port=port,
+            credentials=credentials,
+            snmp_destination=destination,
+            engine_id=engine_id,
+            auth_protocol=auth,
+            privacy_protocol=priv,
+            placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
+            preview_only=dry_run
+        )
+
+        spec.validate()  # force any validation exceptions to be caught correctly
 
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
