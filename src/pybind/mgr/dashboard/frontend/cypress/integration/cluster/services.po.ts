@@ -70,6 +70,16 @@ export class ServicesPageHelper extends PageHelper {
     }
   }
 
+  editService(name: string, count: string) {
+    this.navigateEdit(name, true, false);
+    cy.get(`${this.pages.create.id}`).within(() => {
+      cy.get('#service_type').should('be.disabled');
+      cy.get('#service_id').should('be.disabled');
+      cy.get('#count').clear().type(count);
+      cy.get('cd-submit-button').click();
+    });
+  }
+
   checkServiceStatus(daemon: string) {
     this.getTableCell(this.serviceDetailColumnIndex.daemonType, daemon)
       .parent()
@@ -77,6 +87,16 @@ export class ServicesPageHelper extends PageHelper {
       .should(($ele) => {
         const status = $ele.toArray().map((v) => v.innerText);
         expect(status).to.include('running');
+      });
+  }
+
+  expectPlacementCount(serviceName: string, expectedCount: string) {
+    this.getTableCell(this.columnIndex.service_name, serviceName)
+      .parent()
+      .find(`datatable-body-cell:nth-child(${this.columnIndex.placement})`)
+      .should(($ele) => {
+        const running = $ele.text().split(';');
+        expect(running).to.include(`count:${expectedCount}`);
       });
   }
 
