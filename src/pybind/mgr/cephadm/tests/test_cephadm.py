@@ -4,8 +4,6 @@ from contextlib import contextmanager
 
 import pytest
 
-import yaml
-
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
@@ -85,19 +83,19 @@ class TestCephadm(object):
     def test_host(self, cephadm_module):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
         with with_host(cephadm_module, 'test'):
-            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1.2.3.4')]
+            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1::4')]
 
             # Be careful with backward compatibility when changing things here:
             assert json.loads(cephadm_module.get_store('inventory')) == \
-                {"test": {"hostname": "test", "addr": "1.2.3.4", "labels": [], "status": ""}}
+                {"test": {"hostname": "test", "addr": "1::4", "labels": [], "status": ""}}
 
             with with_host(cephadm_module, 'second', '1.2.3.5'):
                 assert wait(cephadm_module, cephadm_module.get_hosts()) == [
-                    HostSpec('test', '1.2.3.4'),
+                    HostSpec('test', '1::4'),
                     HostSpec('second', '1.2.3.5')
                 ]
 
-            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1.2.3.4')]
+            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1::4')]
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
@@ -370,38 +368,6 @@ class TestCephadm(object):
                     + '"keyring": "", "files": {"config": "[mon.test]\\npublic network = 127.0.0.0/8\\n"}}',
                     image='')
 
-    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
-    def test_monitoring_ports(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
-        _run_cephadm.return_value = ('{}', '', 0)
-
-        with with_host(cephadm_module, 'test'):
-
-            yaml_str = """service_type: alertmanager
-service_name: alertmanager
-placement:
-    count: 1
-spec:
-    port: 4200
-"""
-            yaml_file = yaml.safe_load(yaml_str)
-            spec = ServiceSpec.from_json(yaml_file)
-
-            with mock.patch("cephadm.services.monitoring.AlertmanagerService.generate_config", return_value=({}, [])):
-                with with_service(cephadm_module, spec):
-
-                    CephadmServe(cephadm_module)._check_daemons()
-
-                    _run_cephadm.assert_called_with(
-                        'test', 'alertmanager.test', 'deploy', [
-                            '--name', 'alertmanager.test',
-                            '--meta-json', '{"service_name": "alertmanager", "ports": [4200, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null}',
-                            '--config-json', '-',
-                            '--tcp-ports', '4200 9094',
-                            '--reconfig'
-                        ],
-                        stdin='{}',
-                        image='')
-
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
@@ -420,7 +386,7 @@ spec:
                 with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
                     CephadmServe(cephadm_module)._check_daemons()
                     _mon_cmd.assert_any_call(
-                        {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://1.2.3.4:3000'},
+                        {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://[1::4]:3000'},
                         None)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
@@ -899,8 +865,10 @@ spec:
             assert not r
             assert cephadm_module.health_checks.get('CEPHADM_DAEMON_PLACE_FAIL') is not None
             assert cephadm_module.health_checks['CEPHADM_DAEMON_PLACE_FAIL']['count'] == 1
-            assert 'Failed to place 1 daemon(s)' in cephadm_module.health_checks['CEPHADM_DAEMON_PLACE_FAIL']['summary']
-            assert 'Failed while placing mgr.a on test: fail' in cephadm_module.health_checks['CEPHADM_DAEMON_PLACE_FAIL']['detail']
+            assert 'Failed to place 1 daemon(s)' in cephadm_module.health_checks[
+                'CEPHADM_DAEMON_PLACE_FAIL']['summary']
+            assert 'Failed while placing mgr.a on test: fail' in cephadm_module.health_checks[
+                'CEPHADM_DAEMON_PLACE_FAIL']['detail']
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_apply_spec_fail_health_warning(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -913,7 +881,8 @@ spec:
             assert cephadm_module.apply_spec_fails
             assert cephadm_module.health_checks.get('CEPHADM_APPLY_SPEC_FAIL') is not None
             assert cephadm_module.health_checks['CEPHADM_APPLY_SPEC_FAIL']['count'] == 1
-            assert 'Failed to apply 1 service(s)' in cephadm_module.health_checks['CEPHADM_APPLY_SPEC_FAIL']['summary']
+            assert 'Failed to apply 1 service(s)' in cephadm_module.health_checks[
+                'CEPHADM_APPLY_SPEC_FAIL']['summary']
 
     @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -922,11 +891,14 @@ spec:
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
             get_foreign_ceph_option.side_effect = KeyError
-            CephadmServe(cephadm_module)._apply_service_config(ServiceSpec('mgr', placement=ps, config={'test': 'foo'}))
+            CephadmServe(cephadm_module)._apply_service_config(
+                ServiceSpec('mgr', placement=ps, config={'test': 'foo'}))
             assert cephadm_module.health_checks.get('CEPHADM_INVALID_CONFIG_OPTION') is not None
             assert cephadm_module.health_checks['CEPHADM_INVALID_CONFIG_OPTION']['count'] == 1
-            assert 'Ignoring 1 invalid config option(s)' in cephadm_module.health_checks['CEPHADM_INVALID_CONFIG_OPTION']['summary']
-            assert 'Ignoring invalid mgr config option test' in cephadm_module.health_checks['CEPHADM_INVALID_CONFIG_OPTION']['detail']
+            assert 'Ignoring 1 invalid config option(s)' in cephadm_module.health_checks[
+                'CEPHADM_INVALID_CONFIG_OPTION']['summary']
+            assert 'Ignoring invalid mgr config option test' in cephadm_module.health_checks[
+                'CEPHADM_INVALID_CONFIG_OPTION']['detail']
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
@@ -950,7 +922,7 @@ spec:
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("subprocess.run", None)
     @mock.patch("cephadm.module.CephadmOrchestrator.rados", mock.MagicMock())
-    @mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1.2.3.4')
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1::4')
     def test_iscsi(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)

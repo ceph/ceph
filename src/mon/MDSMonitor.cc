@@ -190,7 +190,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // print map iff 'debug mon = 30' or higher
   print_map<30>(pending);
   if (!g_conf()->mon_mds_skip_sanity) {
-    pending.sanity();
+    pending.sanity(true);
   }
 
   // Set 'modified' on maps modified this epoch
@@ -2335,7 +2335,12 @@ void MDSMonitor::tick()
         derr << "could not get version " << v << dendl;
         ceph_abort();
       }
-      fsmap.decode(bl);
+      try {
+        fsmap.decode(bl);
+      } catch (const ceph::buffer::malformed_input& e) {
+        dout(5) << "flushing old fsmap struct because unable to decode FSMap: " << e.what() << dendl;
+      }
+      /* N.B. FSMap::is_struct_old is also true for undecoded (failed to decode) FSMap */
       if (fsmap.is_struct_old()) {
         dout(5) << "fsmap struct is too old; proposing to flush out old versions" << dendl;
         do_propose = true;

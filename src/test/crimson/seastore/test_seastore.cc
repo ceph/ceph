@@ -49,6 +49,7 @@ struct seastore_test_t :
   }
 
   seastar::future<> tear_down_fut() final {
+    coll.reset();
     return tm_teardown();
   }
 

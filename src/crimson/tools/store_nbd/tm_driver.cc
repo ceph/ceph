@@ -137,7 +137,7 @@ void TMDriver::init()
   std::vector<SegmentManager*> sms;
   segment_cleaner->mount(segment_manager->get_device_id(), sms);
   auto journal = std::make_unique<Journal>(*segment_manager, scanner_ref);
-  auto cache = std::make_unique<Cache>(scanner_ref, segment_manager->get_block_size());
+  auto cache = std::make_unique<Cache>(scanner_ref);
   auto lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
 
   auto epm = std::make_unique<ExtentPlacementManager>(*cache, *lba_manager);

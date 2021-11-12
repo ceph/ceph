@@ -21,10 +21,8 @@ using std::string_view;
 namespace crimson::os::seastore {
 
 Cache::Cache(
-  ExtentReader &reader,
-  segment_off_t block_size)
-  : reader(reader),
-    block_size(block_size)
+  ExtentReader &reader)
+  : reader(reader)
 {
   register_metrics();
 }
@@ -947,6 +945,13 @@ record_t Cache::prepare_record(Transaction &t)
     get_by_ext(efforts.retire_by_ext,
                i->get_type()).increment(i->get_length());
     retire_extent(i);
+    if (i->backend_type == device_type_t::RANDOM_BLOCK) {
+      paddr_t paddr = i->get_paddr();
+      rbm_alloc_delta_t delta;
+      delta.op = rbm_alloc_delta_t::op_types_t::CLEAR;
+      delta.alloc_blk_ranges.push_back(std::make_pair(paddr, i->get_length()));
+      t.add_rbm_alloc_info_blocks(delta);
+    }
   }
 
   record.extents.reserve(t.inline_block_list.size());
@@ -979,6 +984,15 @@ record_t Cache::prepare_record(Transaction &t)
       });
   }
 
+  for (auto b : t.rbm_alloc_info_blocks) {
+    bufferlist bl;
+    encode(b, bl);
+    delta_info_t delta;
+    delta.type = extent_types_t::RBM_ALLOC_INFO;
+    delta.bl = bl;
+    record.deltas.push_back(delta);
+  }
+
   for (auto &i: t.ool_block_list) {
     ceph_assert(i->is_valid());
     DEBUGT("fresh ool block {}", t, *i);
@@ -1002,7 +1016,7 @@ record_t Cache::prepare_record(Transaction &t)
   record_header_fullness.ool_stats.total_bytes += ool_stats.header_bytes;
 
   auto record_size = get_encoded_record_length(
-      record, block_size);
+      record, reader.get_block_size());
   auto inline_overhead =
       record_size.mdlength + record_size.dlength - record.get_raw_data_size();
   efforts.inline_record_overhead_bytes += inline_overhead;

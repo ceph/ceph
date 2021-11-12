@@ -1,6 +1,8 @@
 from typing import cast, List, Dict, Any, Optional, TYPE_CHECKING
 from os.path import isabs
 
+from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
+
 from .exception import NFSInvalidOperation, FSNotFound
 from .utils import check_fs
 
@@ -182,17 +184,17 @@ class FSAL(object):
 
     @classmethod
     def from_dict(cls, fsal_dict: Dict[str, Any]) -> 'FSAL':
-        if fsal_dict.get('name') == 'CEPH':
+        if fsal_dict.get('name') == NFS_GANESHA_SUPPORTED_FSALS[0]:
             return CephFSFSAL.from_dict(fsal_dict)
-        if fsal_dict.get('name') == 'RGW':
+        if fsal_dict.get('name') == NFS_GANESHA_SUPPORTED_FSALS[1]:
             return RGWFSAL.from_dict(fsal_dict)
         raise NFSInvalidOperation(f'Unknown FSAL {fsal_dict.get("name")}')
 
     @classmethod
     def from_fsal_block(cls, fsal_block: RawBlock) -> 'FSAL':
-        if fsal_block.values.get('name') == 'CEPH':
+        if fsal_block.values.get('name') == NFS_GANESHA_SUPPORTED_FSALS[0]:
             return CephFSFSAL.from_fsal_block(fsal_block)
-        if fsal_block.values.get('name') == 'RGW':
+        if fsal_block.values.get('name') == NFS_GANESHA_SUPPORTED_FSALS[1]:
             return RGWFSAL.from_fsal_block(fsal_block)
         raise NFSInvalidOperation(f'Unknown FSAL {fsal_block.values.get("name")}')
 
@@ -503,11 +505,11 @@ class Export:
             if client.access_type:
                 self.validate_access_type(client.access_type)
 
-        if self.fsal.name == 'CEPH':
+        if self.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
             fs = cast(CephFSFSAL, self.fsal)
             if not fs.fs_name or not check_fs(mgr, fs.fs_name):
                 raise FSNotFound(fs.fs_name)
-        elif self.fsal.name == 'RGW':
+        elif self.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
             rgw = cast(RGWFSAL, self.fsal)  # noqa
             pass
         else:

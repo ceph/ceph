@@ -2362,3 +2362,62 @@ int decode_bl(bufferlist& bl, T& t)
   }
   return 0;
 }
+
+/* datacache */
+enum CacheLocation {
+  LOCAL_READ_CACHE,
+  WRITE_BACK_CACHE,
+  REMOTE_CACHE,
+  DATALAKE
+};
+
+enum HomeLocation {
+  CACHE,
+  BACKEND
+};
+
+enum BackendProtocol {
+  S3,
+  LIBRADOS,
+  SWIFT
+};
+
+struct cache_obj {
+  string owner; //s3 Object owner who create the object
+  string bucket_name; // s3 bucket name
+  string obj_name; //s3 obj name
+  RGWAccessKey accesskey; // object owner's s3_key
+  uint64_t size_in_bytes; // s3 object size in bytes
+  time_t lastAccessTime; // last access time
+  string etag;
+  BackendProtocol backendProtocol; // protocol used for backend communication
+  HomeLocation home_location; // Home location of S3 Object
+  vector<string> hosts_list; // list of hostnames for multiple backend
+  string acl;  // ACLs of S3 Object
+  time_t aclTimeStamp; // ACLs timestamp
+  time_t creationTime; // Creation time of the S3 Object
+  bool dirty;
+  bool intermediate;
+  string mapping_id;
+  uint64_t offset;
+  bool is_remote_req;
+  bool is_remote_req_put;
+};
+
+struct cache_block {
+  cache_obj c_obj;
+  uint64_t offset; // s3 obj offset
+  uint64_t block_id; // rados obj block id
+  uint64_t size_in_bytes; // block size_in_bytes
+  string etag; //etag for s3 object
+  vector<string> hosts_list; // list of hostnames <ip:post> of block locations
+  int64_t access_count;
+  time_t lastAccessTime;
+  bool cachedOnRemote;
+  //CacheLocation cache_location;  
+ // string host; // hostname of remote cache
+};
+/* datacache */
+
+
+#endif

@@ -296,6 +296,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Custom repository password'
         ),
         Option(
+            'registry_insecure',
+            type='bool',
+            default=False,
+            desc='Registry is to be considered insecure (no TLS available). Only for development purposes.'
+        ),
+        Option(
             'use_repo_digest',
             type='bool',
             default=True,
@@ -402,6 +408,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.registry_url: Optional[str] = None
             self.registry_username: Optional[str] = None
             self.registry_password: Optional[str] = None
+            self.registry_insecure: bool = False
             self.use_repo_digest = True
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0
@@ -728,6 +735,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def offline_hosts_remove(self, host: str) -> None:
         if host in self.offline_hosts:
             self.offline_hosts.remove(host)
+
+    def update_failed_daemon_health_check(self) -> None:
+        self.remove_health_warning('CEPHADM_FAILED_DAEMON')
+        failed_daemons = []
+        for dd in self.cache.get_daemons():
+            if dd.status is not None and dd.status == DaemonDescriptionStatus.error:
+                failed_daemons.append('daemon %s on %s is in %s state' % (
+                    dd.name(), dd.hostname, dd.status_desc
+                ))
+        if failed_daemons:
+            self.set_health_warning('CEPHADM_FAILED_DAEMON', f'{len(failed_daemons)} failed cephadm daemon(s)', len(
+                failed_daemons), failed_daemons)
 
     @staticmethod
     def can_run() -> Tuple[bool, str]:
@@ -1266,6 +1285,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return image
 
     def _check_valid_addr(self, host: str, addr: str) -> str:
+        # make sure mgr is not resolving own ip
+        if addr in self.get_mgr_id():
+            raise OrchestratorError(
+                "Can not automatically resolve ip address of host where active mgr is running. Please explicitly provide the address.")
+
         # make sure hostname is resolvable before trying to make a connection
         try:
             ip_addr = utils.resolve_ip(addr)
@@ -1314,6 +1338,9 @@ Then run the following:
         ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
         if spec.addr == spec.hostname and ip_addr:
             spec.addr = ip_addr
+
+        if spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr:
+            self.cache.refresh_all_host_info(spec.hostname)
 
         # prime crush map?
         if spec.location:
@@ -1516,7 +1543,8 @@ Then run the following:
             self.remove_health_warning('HOST_IN_MAINTENANCE')
         else:
             s = "host is" if len(in_maintenance) == 1 else "hosts are"
-            self.set_health_warning("HOST_IN_MAINTENANCE", f"{len(in_maintenance)} {s} in maintenance mode", 1, [f"{h} is in maintenance" for h in in_maintenance])
+            self.set_health_warning("HOST_IN_MAINTENANCE", f"{len(in_maintenance)} {s} in maintenance mode", 1, [
+                                    f"{h} is in maintenance" for h in in_maintenance])
 
     @handle_orch_error
     @host_exists()
@@ -1954,33 +1982,89 @@ Then run the following:
 
     @handle_orch_error
     def zap_device(self, host: str, path: str) -> str:
+        """Zap a device on a managed host.
+
+        Use ceph-volume zap to return a device to an unused/free state
+
+        Args:
+            host (str): hostname of the cluster host
+            path (str): device path
+
+        Raises:
+            OrchestratorError: host is not a cluster host
+            OrchestratorError: host is in maintenance and therefore unavailable
+            OrchestratorError: device path not found on the host
+            OrchestratorError: device is known to a different ceph cluster
+            OrchestratorError: device holds active osd
+            OrchestratorError: device cache hasn't been populated yet..
+
+        Returns:
+            str: output from the zap command
+        """
+
         self.log.info('Zap device %s:%s' % (host, path))
 
-        out, err, code = CephadmServe(self)._run_cephadm(
-            host, 'osd.', 'ceph-volume',
-            ['--', 'lvm', 'list', path, '--format', 'json'],
-            error_ok=True)
-        if code:
-            raise OrchestratorError('Zap failed: ceph-volume lvm list %s' % '\n'.join(path))
-        osd_info = json.loads('\n'.join(out))
+        if host not in self.inventory.keys():
+            raise OrchestratorError(
+                f"Host '{host}' is not a member of the cluster")
 
-        for osd_id in osd_info.keys():
-            out, err, code = CephadmServe(self)._run_cephadm(
-                host, 'osd.', 'unit',
-                ['is-active', '--name', 'osd.%s' % osd_id],
-                error_ok=True)
-            if code == 0:
-                raise OrchestratorError('The systemctl unit of osd is active. Rm osd first')
+        host_info = self.inventory._inventory.get(host, {})
+        if host_info.get('status', '').lower() == 'maintenance':
+            raise OrchestratorError(
+                f"Host '{host}' is in maintenance mode, which prevents any actions against it.")
+
+        if host not in self.cache.devices:
+            raise OrchestratorError(
+                f"Host '{host} hasn't been scanned yet to determine it's inventory. Please try again later.")
+
+        host_devices = self.cache.devices[host]
+        path_found = False
+        osd_id_list: List[str] = []
+
+        for dev in host_devices:
+            if dev.path == path:
+                # match, so look a little deeper
+                if dev.lvs:
+                    for lv in cast(List[Dict[str, str]], dev.lvs):
+                        if lv.get('osd_id', ''):
+                            lv_fsid = lv.get('cluster_fsid')
+                            if lv_fsid != self._cluster_fsid:
+                                raise OrchestratorError(
+                                    f"device {path} has lv's from a different Ceph cluster ({lv_fsid})")
+                            osd_id_list.append(lv.get('osd_id', ''))
+                path_found = True
+                break
+        if not path_found:
+            raise OrchestratorError(
+                f"Device path '{path}' not found on host '{host}'")
+
+        if osd_id_list:
+            dev_name = os.path.basename(path)
+            active_osds: List[str] = []
+            for osd_id in osd_id_list:
+                metadata = self.get_metadata('osd', str(osd_id))
+                if metadata:
+                    if metadata.get('hostname', '') == host and dev_name in metadata.get('devices', '').split(','):
+                        active_osds.append("osd." + osd_id)
+            if active_osds:
+                raise OrchestratorError(
+                    f"Unable to zap: device '{path}' on {host} has {len(active_osds)} active "
+                    f"OSD{'s' if len(active_osds) > 1 else ''}"
+                    f" ({', '.join(active_osds)}). Use 'ceph orch osd rm' first.")
 
         out, err, code = CephadmServe(self)._run_cephadm(
             host, 'osd', 'ceph-volume',
             ['--', 'lvm', 'zap', '--destroy', path],
             error_ok=True)
+
         self.cache.invalidate_host_devices(host)
         self.cache.invalidate_host_networks(host)
         if code:
             raise OrchestratorError('Zap failed: %s' % '\n'.join(out + err))
-        return '\n'.join(out + err)
+        msg = f'zap successful for {path} on {host}'
+        self.log.info(msg)
+
+        return msg + '\n'
 
     @handle_orch_error
     def blink_device_light(self, ident_fault: str, on: bool, locs: List[orchestrator.DeviceLightLoc]) -> List[str]:
@@ -2132,8 +2216,8 @@ Then run the following:
                 root_cert = self.cherrypy_thread.ssl_certs.get_root_cert()
             except Exception:
                 pass
-            deps = sorted([self.get_mgr_ip(), self.inventory.get_addr(daemon_id), str(self.endpoint_port),
-                           root_cert, str(self.get_module_option('device_enhanced_scan'))])
+            deps = sorted([self.get_mgr_ip(), str(self.endpoint_port), root_cert,
+                           str(self.get_module_option('device_enhanced_scan'))])
         elif daemon_type == 'iscsi':
             deps = [self.get_mgr_ip()]
         else:
@@ -2481,6 +2565,10 @@ Then run the following:
     @handle_orch_error
     def upgrade_status(self) -> orchestrator.UpgradeStatusSpec:
         return self.upgrade.upgrade_status()
+
+    @handle_orch_error
+    def upgrade_ls(self, image: Optional[str], tags: bool) -> Dict[Any, Any]:
+        return self.upgrade.upgrade_ls(image, tags)
 
     @handle_orch_error
     def upgrade_start(self, image: str, version: str) -> str:

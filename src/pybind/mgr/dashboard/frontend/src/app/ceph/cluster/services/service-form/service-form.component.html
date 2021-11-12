@@ -173,50 +173,6 @@
           </div>
         </div>
 
-        <!-- NFS -->
-        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'nfs'">
-          <!-- pool -->
-          <div class="form-group row">
-            <label i18n
-                   class="cd-col-form-label required"
-                   for="pool">Pool</label>
-            <div class="cd-col-form-input">
-              <select id="pool"
-                      name="pool"
-                      class="form-control custom-select"
-                      formControlName="pool">
-                <option *ngIf="pools === null"
-                        [ngValue]="null"
-                        i18n>Loading...</option>
-                <option *ngIf="pools !== null && pools.length === 0"
-                        [ngValue]="null"
-                        i18n>-- No pools available --</option>
-                <option *ngIf="pools !== null && pools.length > 0"
-                        [ngValue]="null"
-                        i18n>-- Select a pool --</option>
-                <option *ngFor="let pool of pools"
-                        [value]="pool.pool_name">{{ pool.pool_name }}</option>
-              </select>
-              <span class="invalid-feedback"
-                    *ngIf="serviceForm.showError('pool', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
-          </div>
-
-          <!-- namespace -->
-          <div class="form-group row">
-            <label i18n
-                   class="cd-col-form-label"
-                   for="namespace">Namespace</label>
-            <div class="cd-col-form-input">
-              <input id="namespace"
-                     class="form-control"
-                     type="text"
-                     formControlName="namespace">
-            </div>
-          </div>
-        </ng-container>
-
         <!-- RGW -->
         <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'rgw'">
           <!-- rgw_frontend_port -->

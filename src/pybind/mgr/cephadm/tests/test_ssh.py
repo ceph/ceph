@@ -40,13 +40,13 @@ class TestWithSSH:
                 assert "Host 'test' not found" in err
 
                 out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-                assert out == HostSpec('test', '1.2.3.4', status='Offline').to_json()
+                assert out == HostSpec('test', '1::4', status='Offline').to_json()
 
                 asyncssh_connect.return_value = mock.MagicMock()
                 asyncssh_connect.side_effect = None
                 assert CephadmServe(cephadm_module)._check_host('test') is None
                 out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-                assert out == HostSpec('test', '1.2.3.4').to_json()
+                assert out == HostSpec('test', '1::4').to_json()
 
 
 @pytest.mark.skipif(ConnectionLost is not None, reason='asyncssh')

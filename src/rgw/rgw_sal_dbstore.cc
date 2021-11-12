@@ -349,7 +349,8 @@ namespace rgw::sal {
     list_op.params.end_marker = params.end_marker;
     list_op.params.ns = params.ns;
     list_op.params.enforce_ns = params.enforce_ns;
-    list_op.params.filter = params.filter;
+    list_op.params.access_list_filter = params.access_list_filter;
+    list_op.params.force_check_filter = params.force_check_filter;
     list_op.params.list_versions = params.list_versions;
     list_op.params.allow_unordered = params.allow_unordered;
 
@@ -521,6 +522,13 @@ namespace rgw::sal {
   /* RGWObjectCtx will be moved out of sal */
   /* XXX: Placeholder. Should not be needed later after Dan's patch */
   void DBObject::set_prefetch_data(RGWObjectCtx* rctx)
+  {
+    return;
+  }
+
+  /* RGWObjectCtx will be moved out of sal */
+  /* XXX: Placeholder. Should not be needed later after Dan's patch */
+  void DBObject::set_compressed(RGWObjectCtx* rctx)
   {
     return;
   }

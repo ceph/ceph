@@ -46,8 +46,8 @@ describe('NfsService', () => {
   });
 
   it('should call update', () => {
-    service.update('cluster_id', 'export_id', 'foo').subscribe();
-    const req = httpTesting.expectOne('api/nfs-ganesha/export/cluster_id/export_id');
+    service.update('cluster_id', 1, 'foo').subscribe();
+    const req = httpTesting.expectOne('api/nfs-ganesha/export/cluster_id/1');
     expect(req.request.body).toEqual('foo');
     expect(req.request.method).toBe('PUT');
   });
@@ -62,29 +62,5 @@ describe('NfsService', () => {
     service.lsDir('a', 'foo_dir').subscribe();
     const req = httpTesting.expectOne('ui-api/nfs-ganesha/lsdir/a?root_dir=foo_dir');
     expect(req.request.method).toBe('GET');
-  });
-
-  it('should call buckets', () => {
-    service.buckets('user_foo').subscribe();
-    const req = httpTesting.expectOne('ui-api/nfs-ganesha/rgw/buckets?user_id=user_foo');
-    expect(req.request.method).toBe('GET');
-  });
-
-  it('should call daemon', () => {
-    service.daemon().subscribe();
-    const req = httpTesting.expectOne('api/nfs-ganesha/daemon');
-    expect(req.request.method).toBe('GET');
-  });
-
-  it('should call start', () => {
-    service.start('host_name').subscribe();
-    const req = httpTesting.expectOne('api/nfs-ganesha/service/host_name/start');
-    expect(req.request.method).toBe('PUT');
-  });
-
-  it('should call stop', () => {
-    service.stop('host_name').subscribe();
-    const req = httpTesting.expectOne('api/nfs-ganesha/service/host_name/stop');
-    expect(req.request.method).toBe('PUT');
   });
 });

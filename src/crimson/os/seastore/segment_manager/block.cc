@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "crimson/common/config_proxy.h"
+#include "crimson/common/errorator-loop.h"
 #include "crimson/common/log.h"
 
 #include "include/buffer.h"
@@ -53,31 +54,43 @@ static write_ertr::future<> do_writev(
   size_t block_size)
 {
   logger().debug(
-    "block: do_writev offset {} len {}",
+    "block: do_writev offset {} len {}, {} buffers",
     offset,
-    bl.length());
+    bl.length(),
+    bl.get_num_buffers());
 
   // writev requires each buffer to be aligned to the disks' block
   // size, we need to rebuild here
   bl.rebuild_aligned(block_size);
 
-  std::vector<iovec> iov;
-  bl.prepare_iov(&iov);
-  return device.dma_write(
-    offset,
-    std::move(iov)
-  ).handle_exception([](auto e) -> write_ertr::future<size_t> {
-      logger().error(
-	"do_writev: dma_write got error {}",
-	e);
-      return crimson::ct_error::input_output_error::make();
-  }).then(
-    [bl=std::move(bl)/* hold the buf until the end of io */](size_t written)
-	       -> write_ertr::future<> {
-    if (written != bl.length()) {
-      return crimson::ct_error::input_output_error::make();
-    }
-    return write_ertr::now();
+  return seastar::do_with(
+    bl.prepare_iovs(),
+    std::move(bl),
+    [&device, offset] (auto& iovs, auto& bl) {
+    return write_ertr::parallel_for_each(
+      iovs,
+      [&device, offset](auto& p) mutable {
+      auto off = offset + p.offset;
+      auto len = p.length;
+      auto& iov = p.iov;
+      logger().debug("do_writev: dma_write to {}, length {}", off, len);
+      return device.dma_write(off, std::move(iov))
+      .handle_exception([](auto e) -> write_ertr::future<size_t> {
+	logger().error(
+	  "do_writev: dma_write got error {}",
+	  e);
+	return crimson::ct_error::input_output_error::make();
+      }).then(
+	[off, len](size_t written) -> write_ertr::future<> {
+	if (written != len) {
+	  logger().error(
+	    "do_writev: dma_write to {}, failed, written {} != iov len {}",
+	    off, written, len);
+	  return crimson::ct_error::input_output_error::make();
+	}
+	return write_ertr::now();
+      });
+    });
   });
 }
 
@@ -96,7 +109,12 @@ static read_ertr::future<> do_read(
     offset,
     bptr.c_str(),
     len
-  ).handle_exception([](auto e) -> read_ertr::future<size_t> {
+  ).handle_exception(
+    //FIXME: this is a little bit tricky, since seastar::future<T>::handle_exception
+    //	returns seastar::future<T>, to return an crimson::ct_error, we have to create
+    //	a seastar::future<T> holding that crimson::ct_error. This is not necessary
+    //	once seastar::future<T>::handle_exception() returns seastar::futurize_t<T>
+    [](auto e) -> read_ertr::future<size_t> {
     logger().error(
       "do_read: dma_read got error {}",
       e);

@@ -408,6 +408,12 @@ options:
 - name: rgw_lc_debug_interval
   type: int
   level: dev
+  desc: The number of seconds that simulate one "day" in order to debug RGW LifeCycle.
+    Do *not* modify for a production cluster.
+  long_desc: For debugging RGW LifeCycle, the number of seconds that are equivalent to
+    one simulated "day". Values less than 1 are ignored and do not change LifeCycle behavior.
+    For example, during debugging if one wanted every 10 minutes to be equivalent to one day,
+    then this would be set to 600, the number of seconds in 10 minutes.
   default: -1
   services:
   - rgw
@@ -3169,7 +3175,7 @@ options:
   type: size
   level: advanced
   desc: datacache maximum size on disk in bytes
-  default: 1048576
+  default: 1_G
   services:
   - rgw
   with_legacy: true

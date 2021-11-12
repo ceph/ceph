@@ -6089,7 +6089,12 @@ out_fm:
 
 void BlueStore::_close_db_and_around(bool read_only)
 {
-  _close_db(read_only);
+  if (db) {
+    _close_db_leave_bluefs();
+  }
+  if (bluefs) {
+    _close_bluefs(read_only);
+  }
   _close_fm();
   _close_alloc();
   _close_bdev();
@@ -6325,6 +6330,13 @@ void BlueStore::_close_db(bool cold_close)
   if (bluefs) {
     _close_bluefs(cold_close);
   }
+}
+
+void BlueStore::_close_db_leave_bluefs()
+{
+  ceph_assert(db);
+  delete db;
+  db = nullptr;
 }
 
 void BlueStore::_dump_alloc_on_failure()
@@ -7274,12 +7286,15 @@ int BlueStore::umount()
     dout(20) << __func__ << " closing" << dendl;
   }
 
+  _close_db_leave_bluefs();
   // GBH - Vault the allocation state
   dout(5) << "NCB::BlueStore::umount->store_allocation_state_on_bluestore() " << dendl;
   if (was_mounted && fm->is_null_manager()) {
     int ret = store_allocator(shared_alloc.a);
     if (ret != 0) {
       derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
+      _close_db_and_around(false);
+      // should we run fsck ???
       return ret;
     }
     dout(5) << __func__ << "::NCB::store_allocator() completed successfully" << dendl;
@@ -17210,6 +17225,9 @@ const unsigned MAX_EXTENTS_IN_BUFFER = 4 * 1024; // 4K extents = 64KB of data
 //-----------------------------------------------------------------------------------
 int BlueStore::store_allocator(Allocator* src_allocator)
 {
+  // when storing allocations to file we must be sure there is no background compactions
+  // the easiest way to achieve it is to make sure db is closed
+  ceph_assert(db == nullptr);
   utime_t  start_time = ceph_clock_now();
   int ret = 0;
 
@@ -17365,7 +17383,7 @@ int calc_allocator_image_trailer_size()
 }
 
 //-----------------------------------------------------------------------------------
-int BlueStore::restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes)
+int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes)
 {
   utime_t start_time = ceph_clock_now();
   BlueFS::FileReader *p_temp_handle = nullptr;
@@ -17516,6 +17534,31 @@ int BlueStore::restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *
   *num   = extent_count;
   *bytes = read_alloc_size;
   return 0;
+}
+
+//-----------------------------------------------------------------------------------
+int BlueStore::restore_allocator(Allocator* dest_allocator, uint64_t *num, uint64_t *bytes)
+{
+  utime_t    start = ceph_clock_now();
+  Allocator *temp_allocator = create_bitmap_allocator(bdev->get_size());
+  if (temp_allocator == nullptr) {
+    derr << "Failed create_bitmap_allocator()" << dendl;
+    return -1;
+  }
+
+  int ret = __restore_allocator(temp_allocator, num, bytes);
+  if (ret != 0) {
+    delete temp_allocator;
+    return ret;
+  }
+
+  uint64_t num_entries = 0;
+  dout(5) << " calling copy_allocator(bitmap_allocator -> shared_alloc.a)" << dendl;  
+  copy_allocator(temp_allocator, dest_allocator, &num_entries);
+  delete temp_allocator;
+  utime_t duration = ceph_clock_now() - start;
+  dout(5) << "restored in " << duration << " seconds, num_entries=" << num_entries << dendl;
+  return ret;
 }
 
 //-------------------------------------------------------------------------
@@ -17989,6 +18032,7 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool(bool test_store_and
   }
 
   if (test_store_and_restore) {
+    _close_db_leave_bluefs();
     dout(5) << "calling store_allocator(shared_alloc.a)" << dendl;
     store_allocator(shared_alloc.a);
     Allocator* alloc2 = create_bitmap_allocator(bdev_size);
@@ -18260,7 +18304,11 @@ static int commit_freelist_type(KeyValueDB *db, const std::string& freelist_type
   bl.append(freelist_type);
   t->set(PREFIX_SUPER, "freelist_type", bl);
 
-  return db->submit_transaction_sync(t);
+  int ret = db->submit_transaction_sync(t);
+  if (ret != 0) {
+    derr << "Failed db->submit_transaction_sync(t)" << dendl;
+  }
+  return ret;
 }
 
 //-------------------------------------------------------------------------------------
@@ -18287,7 +18335,21 @@ int BlueStore::commit_to_real_manager()
   dout(5) << "Set FreelistManager to Real FM..." << dendl;
   ceph_assert(!fm->is_null_manager());
   freelist_type = "bitmap";
-  return commit_freelist_type(db, freelist_type, cct, path);
+  int ret = commit_freelist_type(db, freelist_type, cct, path);
+  if (ret == 0) {
+    //remove the allocation_file
+    invalidate_allocation_file_on_bluefs();
+    ret = bluefs->unlink(allocator_dir, allocator_file);
+    bluefs->sync_metadata(false);
+    if (ret == 0) {
+      dout(5) << "Remove Allocation File successfully" << dendl;
+    }
+    else {
+      derr << "Remove Allocation File ret_code=" << ret << dendl;
+    }
+  }
+
+  return ret;
 }
 
 //================================================================================================================

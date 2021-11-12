@@ -252,14 +252,14 @@ void usage()
   cout << "  orphans list-jobs          deprecated -- list the current job-ids for orphans search\n";
   cout << "                           * the three 'orphans' sub-commands are now deprecated; consider using the `rgw-orphan-list` tool\n";
   cout << "  role create                create a AWS role for use with STS\n";
-  cout << "  role rm                    remove a role\n";
+  cout << "  role delete                remove a role\n";
   cout << "  role get                   get a role\n";
   cout << "  role list                  list roles with specified path prefix\n";
   cout << "  role modify                modify the assume role policy of an existing role\n";
   cout << "  role-policy put            add/update permission policy to role\n";
   cout << "  role-policy list           list policies attached to a role\n";
   cout << "  role-policy get            get the specified inline policy document embedded with the given role\n";
-  cout << "  role-policy rm             remove policy attached to a role\n";
+  cout << "  role-policy delete         remove policy attached to a role\n";
   cout << "  reshard add                schedule a resharding of a bucket\n";
   cout << "  reshard list               list all bucket resharding or scheduled to be resharded\n";
   cout << "  reshard status             read bucket resharding status\n";

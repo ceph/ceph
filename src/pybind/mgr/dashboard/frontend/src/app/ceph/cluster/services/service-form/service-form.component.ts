@@ -115,22 +115,16 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       hosts: [[]],
       count: [null, [CdValidators.number(false), Validators.min(1)]],
       unmanaged: [false],
-      // NFS & iSCSI
+      // iSCSI
       pool: [
         null,
         [
-          CdValidators.requiredIf({
-            service_type: 'nfs',
-            unmanaged: false
-          }),
           CdValidators.requiredIf({
             service_type: 'iscsi',
             unmanaged: false
           })
         ]
       ],
-      // NFS
-      namespace: [null],
       // RGW
       rgw_frontend_port: [
         null,
@@ -327,12 +321,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         serviceSpec['placement']['count'] = values['count'];
       }
       switch (serviceType) {
-        case 'nfs':
-          serviceSpec['pool'] = values['pool'];
-          if (_.isString(values['namespace']) && !_.isEmpty(values['namespace'])) {
-            serviceSpec['namespace'] = values['namespace'];
-          }
-          break;
         case 'rgw':
           if (_.isNumber(values['rgw_frontend_port']) && values['rgw_frontend_port'] > 0) {
             serviceSpec['rgw_frontend_port'] = values['rgw_frontend_port'];
