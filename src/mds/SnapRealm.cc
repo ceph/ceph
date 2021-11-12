@@ -348,12 +348,15 @@ void SnapRealm::split_at(SnapRealm *child)
   }
 
   // split inodes_with_caps
+  std::unordered_map<CInode const*,bool> visited;
   uint64_t count = 0;
+  dout(20) << " reserving space for " << CDir::count() << " dirs" << dendl;
+  visited.reserve(CDir::count()); /* a reasonable starting poing: keep in mind there may be CInode directories without fragments in cache */
   for (auto p = inodes_with_caps.begin(); !p.end(); ) {
     CInode *in = *p;
     ++p;
     // does inode fall within the child realm?
-    if (child->inode->is_ancestor_of(in)) {
+    if (child->inode->is_ancestor_of(in, &visited)) {
       dout(25) << " child gets " << *in << dendl;
       in->move_to_realm(child);
       ++count;
@@ -361,6 +364,7 @@ void SnapRealm::split_at(SnapRealm *child)
       dout(25) << "    keeping " << *in << dendl;
     }
   }
+  dout(20) << " visited " << visited.size() << " directories" << dendl;
 
   dout(10) << __func__ << ": split " << count << " inodes" << dendl;
 }
