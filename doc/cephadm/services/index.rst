@@ -17,6 +17,7 @@ for details on individual services:
     iscsi
     custom-container
     monitoring
+    snmp-gateway
 
 Service Status
 ==============
@@ -25,8 +26,8 @@ Service Status
 To see the status of one
 of the services running in the Ceph cluster, do the following:
 
-#. Use the command line to print a list of services. 
-#. Locate the service whose status you want to check. 
+#. Use the command line to print a list of services.
+#. Locate the service whose status you want to check.
 #. Print the status of the service.
 
 The following command prints a list of services known to the orchestrator. To
@@ -78,7 +79,7 @@ system name:
    .. prompt:: bash #
 
     ceph orch ps --daemon_type osd --daemon_id 0
-    
+
 .. _orchestrator-cli-service-spec:
 
 Service Specification
@@ -147,7 +148,7 @@ the Services Specification, we suggest exporting the running Service Specificati
 following these instructions:
 
    .. prompt:: bash #
-    
+
     ceph orch ls --service-name rgw.<realm>.<zone> --export > rgw.<realm>.<zone>.yaml
     ceph orch ls --service-type mgr --export > mgr.yaml
     ceph orch ls --export > cluster.yaml
@@ -515,12 +516,12 @@ Deploying a daemon on a host manually
 .. note::
 
   This workflow has a very limited use case and should only be used
-  in rare circumstances. 
+  in rare circumstances.
 
 To manually deploy a daemon on a host, follow these steps:
 
-Modify the service spec for a service by getting the 
-existing spec, adding ``unmanaged: true``, and applying the modified spec. 
+Modify the service spec for a service by getting the
+existing spec, adding ``unmanaged: true``, and applying the modified spec.
 
 Then manually deploy the daemon using the following:
 
@@ -534,12 +535,12 @@ For example :
 
      ceph orch daemon add mgr --placement=my_host
 
-.. note:: 
+.. note::
 
-  Removing ``unmanaged: true`` from the service spec will 
+  Removing ``unmanaged: true`` from the service spec will
   enable the reconciliation loop for this service and will
   potentially lead to the removal of the daemon, depending
-  on the placement spec. 
+  on the placement spec.
 
 Removing a daemon from a host manually
 --------------------------------------
@@ -556,13 +557,13 @@ For example:
 
      ceph orch daemon rm mgr.my_host.xyzxyz
 
-.. note:: 
+.. note::
 
   For managed services (``unmanaged=False``), cephadm will automatically
   deploy a new daemon a few seconds later.
 
 See also
 --------
-    
-* See :ref:`cephadm-osd-declarative` for special handling of unmanaged OSDs. 
+
+* See :ref:`cephadm-osd-declarative` for special handling of unmanaged OSDs.
 * See also :ref:`cephadm-pause`
