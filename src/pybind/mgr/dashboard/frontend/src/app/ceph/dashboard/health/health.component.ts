@@ -249,6 +249,6 @@ export class HealthComponent implements OnInit, OnDestroy {
       return 0;
     }
 
-    return Math.round((dividend / divisor) * 100);
+    return Math.ceil((dividend / divisor) * 100 * 100) / 100;
   }
 }
