@@ -2,6 +2,7 @@ import { ServicesPageHelper } from '../cluster/services.po';
 
 describe('Services page', () => {
   const services = new ServicesPageHelper();
+  const serviceName = 'rgw.foo';
 
   beforeEach(() => {
     cy.login();
@@ -14,7 +15,13 @@ describe('Services page', () => {
       services.navigateTo('create');
       services.addService('rgw');
 
-      services.checkExist('rgw.foo', true);
+      services.checkExist(serviceName, true);
+    });
+
+    it('should edit a service', () => {
+      const count = '2';
+      services.editService(serviceName, count);
+      services.expectPlacementCount(serviceName, count);
     });
 
     it('should create and delete an ingress service', () => {
