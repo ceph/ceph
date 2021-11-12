@@ -913,7 +913,7 @@ class TestMaintenance:
     fsid = '0ea8cdd0-1bbf-11ec-a9c7-5254002763fa'
 
     def test_systemd_target_OK(self, tmp_path):
-        base = tmp_path 
+        base = tmp_path
         wants = base / "ceph.target.wants"
         wants.mkdir()
         target = wants / TestMaintenance.systemd_target
@@ -924,7 +924,7 @@ class TestMaintenance:
         assert cd.systemd_target_state(ctx, target.name)
 
     def test_systemd_target_NOTOK(self, tmp_path):
-        base = tmp_path 
+        base = tmp_path
         ctx = cd.CephadmContext()
         ctx.unit_dir = str(base)
         assert not cd.systemd_target_state(ctx, TestMaintenance.systemd_target)
@@ -1675,7 +1675,7 @@ class TestPull:
 
 
 class TestApplySpec:
- 
+
     def test_parse_yaml(self, cephadm_fs):
         yaml = '''service_type: host
 hostname: vm-00
@@ -1699,7 +1699,7 @@ addr: 192.168.122.165'''
         retdic = [{'service_type': 'host', 'hostname': 'vm-00', 'addr': '192.168.122.44', 'labels': '- example1- example2'},
                   {'service_type': 'host', 'hostname': 'vm-01', 'addr': '192.168.122.247', 'labels': '- grafana'},
                   {'service_type': 'host', 'hostname': 'vm-02', 'addr': '192.168.122.165'}]
-      
+
         with open('spec.yml') as f:
             dic = cd.parse_yaml_objs(f)
             assert dic == retdic
@@ -1723,11 +1723,157 @@ addr: 192.168.122.165'''
         assert retval == 1
 
 
+class TestSNMPGateway:
+    V2c_config = {
+        'snmp_community': 'public',
+        'destination': '192.168.1.10:162',
+        'snmp_version': 'V2c',
+    }
+    V3_no_priv_config = {
+        'destination': '192.168.1.10:162',
+        'snmp_version': 'V3',
+        'snmp_v3_auth_username': 'myuser',
+        'snmp_v3_auth_password': 'mypassword',
+        'snmp_v3_auth_protocol': 'SHA',
+        'snmp_v3_engine_id': '8000C53F00000000',
+    }
+    V3_priv_config = {
+        'destination': '192.168.1.10:162',
+        'snmp_version': 'V3',
+        'snmp_v3_auth_username': 'myuser',
+        'snmp_v3_auth_password': 'mypassword',
+        'snmp_v3_auth_protocol': 'SHA',
+        'snmp_v3_priv_protocol': 'DES',
+        'snmp_v3_priv_password': 'mysecret',
+        'snmp_v3_engine_id': '8000C53F00000000',
+    }
+    no_destination_config = {
+        'snmp_version': 'V3',
+        'snmp_v3_auth_username': 'myuser',
+        'snmp_v3_auth_password': 'mypassword',
+        'snmp_v3_auth_protocol': 'SHA',
+        'snmp_v3_priv_protocol': 'DES',
+        'snmp_v3_priv_password': 'mysecret',
+        'snmp_v3_engine_id': '8000C53F00000000',
+    }
+    bad_version_config = {
+        'snmp_community': 'public',
+        'destination': '192.168.1.10:162',
+        'snmp_version': 'V1',
+    }
 
+    def test_unit_run_V2c(self, cephadm_fs):
+        fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
+        with with_cephadm_ctx(['--image=docker.io/maxwo/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
+            import json
+            ctx.config_json = json.dumps(self.V2c_config)
+            ctx.fsid = fsid
+            ctx.tcp_ports = '9464'
+            cd.get_parm.return_value = self.V2c_config
+            c = cd.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
+            cd.make_data_dir(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
+            cd.create_daemon_dirs(ctx, fsid, 'snmp-gateway', 'daemon_id', 0, 0)
+            with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/snmp-gateway.conf', 'r') as f:
+                conf = f.read().rstrip()
+                assert conf == 'SNMP_NOTIFIER_COMMUNITY=public'
 
+            cd.deploy_daemon_units(
+                ctx,
+                fsid,
+                0, 0,
+                'snmp-gateway',
+                'daemon_id',
+                c,
+                True, True
+            )
+            with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/unit.run', 'r') as f:
+                run_cmd = f.readlines()[-1].rstrip()
+                assert run_cmd.endswith('docker.io/maxwo/snmp-notifier:v1.2.1 --web.listen-address=:9464 --snmp.destination=192.168.1.10:162 --snmp.version=V2c --log.level=info --snmp.trap-description-template=/etc/snmp_notifier/description-template.tpl')
 
+    def test_unit_run_V3_noPriv(self, cephadm_fs):
+        fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
+        with with_cephadm_ctx(['--image=docker.io/maxwo/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
+            import json
+            ctx.config_json = json.dumps(self.V3_no_priv_config)
+            ctx.fsid = fsid
+            ctx.tcp_ports = '9465'
+            cd.get_parm.return_value = self.V3_no_priv_config
+            c = cd.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
+            cd.make_data_dir(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
-  
+            cd.create_daemon_dirs(ctx, fsid, 'snmp-gateway', 'daemon_id', 0, 0)
+            with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/snmp-gateway.conf', 'r') as f:
+                conf = f.read()
+                assert conf == 'SNMP_NOTIFIER_AUTH_USERNAME=myuser\nSNMP_NOTIFIER_AUTH_PASSWORD=mypassword\n'
+
+            cd.deploy_daemon_units(
+                ctx,
+                fsid,
+                0, 0,
+                'snmp-gateway',
+                'daemon_id',
+                c,
+                True, True
+            )
+            with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/unit.run', 'r') as f:
+                run_cmd = f.readlines()[-1].rstrip()
+                assert run_cmd.endswith('docker.io/maxwo/snmp-notifier:v1.2.1 --web.listen-address=:9465 --snmp.destination=192.168.1.10:162 --snmp.version=V3 --log.level=info --snmp.trap-description-template=/etc/snmp_notifier/description-template.tpl --snmp.authentication-enabled --snmp.authentication-protocol=SHA --snmp.security-engine-id=8000C53F00000000')
+
+    def test_unit_run_V3_Priv(self, cephadm_fs):
+        fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
+        with with_cephadm_ctx(['--image=docker.io/maxwo/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
+            import json
+            ctx.config_json = json.dumps(self.V3_priv_config)
+            ctx.fsid = fsid
+            ctx.tcp_ports = '9464'
+            cd.get_parm.return_value = self.V3_priv_config
+            c = cd.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
+
+            cd.make_data_dir(ctx, fsid, 'snmp-gateway', 'daemon_id')
+
+            cd.create_daemon_dirs(ctx, fsid, 'snmp-gateway', 'daemon_id', 0, 0)
+            with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/snmp-gateway.conf', 'r') as f:
+                conf = f.read()
+                assert conf == 'SNMP_NOTIFIER_AUTH_USERNAME=myuser\nSNMP_NOTIFIER_AUTH_PASSWORD=mypassword\nSNMP_NOTIFIER_PRIV_PASSWORD=mysecret\n'
+
+            cd.deploy_daemon_units(
+                ctx,
+                fsid,
+                0, 0,
+                'snmp-gateway',
+                'daemon_id',
+                c,
+                True, True
+            )
+            with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/unit.run', 'r') as f:
+                run_cmd = f.readlines()[-1].rstrip()
+                assert run_cmd.endswith('docker.io/maxwo/snmp-notifier:v1.2.1 --web.listen-address=:9464 --snmp.destination=192.168.1.10:162 --snmp.version=V3 --log.level=info --snmp.trap-description-template=/etc/snmp_notifier/description-template.tpl --snmp.authentication-enabled --snmp.authentication-protocol=SHA --snmp.security-engine-id=8000C53F00000000 --snmp.private-enabled --snmp.private-protocol=DES')
+
+    def test_unit_run_no_dest(self, cephadm_fs):
+        fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
+        with with_cephadm_ctx(['--image=docker.io/maxwo/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
+            import json
+            ctx.config_json = json.dumps(self.no_destination_config)
+            ctx.fsid = fsid
+            ctx.tcp_ports = '9464'
+            cd.get_parm.return_value = self.no_destination_config
+
+            with pytest.raises(Exception) as e:
+                c = cd.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
+            assert str(e.value) == "config is missing destination attribute(<ip>:<port>) of the target SNMP listener"
+
+    def test_unit_run_bad_version(self, cephadm_fs):
+        fsid = 'ca734440-3dc6-11ec-9b98-5254002537a6'
+        with with_cephadm_ctx(['--image=docker.io/maxwo/snmp-notifier:v1.2.1'], list_networks={}) as ctx:
+            import json
+            ctx.config_json = json.dumps(self.bad_version_config)
+            ctx.fsid = fsid
+            ctx.tcp_ports = '9464'
+            cd.get_parm.return_value = self.bad_version_config
+
+            with pytest.raises(Exception) as e:
+                c = cd.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
+            assert str(e.value) == 'not a valid snmp version: V1'
