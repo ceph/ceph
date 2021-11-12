@@ -372,6 +372,9 @@ void MonMap::print(ostream& out) const
   if (stretch_mode_enabled) {
     out << "stretch_mode_enabled " << stretch_mode_enabled << "\n";
     out << "tiebreaker_mon " << tiebreaker_mon << "\n";
+  }
+  if (stretch_mode_enabled ||
+      !disallowed_leaders.empty()) {
     out << "disallowed_leaders " << disallowed_leaders << "\n";
   }
   unsigned i = 0;
