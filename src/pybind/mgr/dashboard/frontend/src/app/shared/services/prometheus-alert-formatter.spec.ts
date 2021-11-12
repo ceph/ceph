@@ -1,13 +1,9 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { HttpClientTestingModule } from '@angular/common/http/testing';
-import {
-  configureTestBed,
-  i18nProviders,
-  PrometheusHelper
-} from '../../../testing/unit-test-helper';
+import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
 import { PrometheusCustomAlert } from '../models/prometheus-alerts';
@@ -22,13 +18,13 @@ describe('PrometheusAlertFormatter', () => {
 
   configureTestBed({
     imports: [ToastrModule.forRoot(), SharedModule, HttpClientTestingModule],
-    providers: [PrometheusAlertFormatter, i18nProviders]
+    providers: [PrometheusAlertFormatter]
   });
 
   beforeEach(() => {
     prometheus = new PrometheusHelper();
-    service = TestBed.get(PrometheusAlertFormatter);
-    notificationService = TestBed.get(NotificationService);
+    service = TestBed.inject(PrometheusAlertFormatter);
+    notificationService = TestBed.inject(NotificationService);
     spyOn(notificationService, 'show').and.stub();
   });
 
@@ -55,7 +51,7 @@ describe('PrometheusAlertFormatter', () => {
         {
           status: 'active',
           name: 'Something',
-          summary: 'Something is active',
+          description: 'Something is active',
           url: 'http://Something',
           fingerprint: 'Something'
         } as PrometheusCustomAlert
@@ -70,7 +66,7 @@ describe('PrometheusAlertFormatter', () => {
           fingerprint: false,
           status: 'active',
           name: 'Something',
-          summary: 'Something is firing',
+          description: 'Something is firing',
           url: 'http://Something'
         } as PrometheusCustomAlert
       ]);
@@ -81,7 +77,7 @@ describe('PrometheusAlertFormatter', () => {
     const alert: PrometheusCustomAlert = {
       status: 'active',
       name: 'Some alert',
-      summary: 'Some alert is active',
+      description: 'Some alert is active',
       url: 'http://some-alert',
       fingerprint: '42'
     };

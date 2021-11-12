@@ -61,13 +61,11 @@ def get_tests(ctx, config, role, remote, testdir):
             run.Raw('&&'),
             'if', 'test', '-e', 'Makefile', run.Raw(';'), 'then', 'make', run.Raw(';'), 'fi',
             run.Raw('&&'),
-            'find', '-executable', '-type', 'f', '-printf', r'%P\0'.format(srcdir=srcdir),
+            'find', '-executable', '-type', 'f', '-printf', r'%P\0',
             run.Raw('>{tdir}/restarts.list'.format(tdir=testdir)),
             ],
         )
-    restarts = sorted(teuthology.get_file(
-                        remote,
-                        '{tdir}/restarts.list'.format(tdir=testdir)).split('\0'))
+    restarts = sorted(remote.read_file(f'{testdir}/restarts.list').decode().split('\0'))
     return (srcdir, restarts)
 
 def task(ctx, config):

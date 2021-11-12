@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include "MonClient.h"
 
@@ -34,6 +35,10 @@
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 
+using std::string;
+using std::tuple;
+using std::vector;
+
 namespace {
   seastar::logger& logger()
   {
@@ -45,40 +50,33 @@ namespace crimson::mon {
 
 using crimson::common::local_conf;
 
-class Connection {
+class Connection : public seastar::enable_shared_from_this<Connection> {
 public:
   Connection(const AuthRegistry& auth_registry,
              crimson::net::ConnectionRef conn,
              KeyRing* keyring);
-  enum class AuthResult {
+  enum class auth_result_t {
     success = 0,
     failure,
     canceled
   };
   seastar::future<> handle_auth_reply(Ref<MAuthReply> m);
-  // v1
-  seastar::future<AuthResult> authenticate_v1(
-    epoch_t epoch,
-    const EntityName& name,
-    uint32_t want_keys);
   // v2
-  seastar::future<AuthResult> authenticate_v2();
+  seastar::future<auth_result_t> authenticate_v2();
   auth::AuthClient::auth_request_t
   get_auth_request(const EntityName& name,
                    uint32_t want_keys);
   using secret_t = string;
   tuple<CryptoKey, secret_t, bufferlist>
   handle_auth_reply_more(const ceph::buffer::list& bl);
-  tuple<CryptoKey, secret_t, int>
-  handle_auth_done(uint64_t new_global_id,
-                   const ceph::buffer::list& bl);
   int handle_auth_bad_method(uint32_t old_auth_method,
                              int result,
                              const std::vector<uint32_t>& allowed_methods,
                              const std::vector<uint32_t>& allowed_modes);
-
-  // v1 and v2
-  seastar::future<> close();
+  tuple<CryptoKey, secret_t, int>
+  handle_auth_done(uint64_t new_global_id,
+                   const ceph::buffer::list& bl);
+  void close();
   bool is_my_peer(const entity_addr_t& addr) const;
   AuthAuthorizer* get_authorizer(entity_type_t peer) const;
   KeyStore& get_keys();
@@ -88,8 +86,6 @@ public:
   crimson::net::ConnectionRef get_conn();
 
 private:
-  seastar::future<> setup_session(epoch_t epoch,
-                                  const EntityName& name);
   std::unique_ptr<AuthClientHandler> create_auth(crimson::auth::method_t,
                                                  uint64_t global_id,
                                                  const EntityName& name,
@@ -98,19 +94,17 @@ private:
     rotating,
     general,
   };
-  seastar::future<std::optional<AuthResult>> do_auth_single(request_t);
-  seastar::future<AuthResult> do_auth(request_t);
+  seastar::future<std::optional<auth_result_t>> do_auth_single(request_t);
+  seastar::future<auth_result_t> do_auth(request_t);
 
 private:
   bool closed = false;
-  // v1
-  seastar::shared_promise<Ref<MAuthReply>> reply;
+  seastar::shared_promise<Ref<MAuthReply>> auth_reply;
   // v2
   using clock_t = seastar::lowres_system_clock;
   clock_t::time_point auth_start;
   crimson::auth::method_t auth_method = 0;
-  seastar::promise<AuthResult> auth_done;
-  // v1 and v2
+  std::optional<seastar::promise<auth_result_t>> auth_done;
   const AuthRegistry& auth_registry;
   crimson::net::ConnectionRef conn;
   std::unique_ptr<AuthClientHandler> auth;
@@ -132,16 +126,18 @@ Connection::Connection(const AuthRegistry& auth_registry,
 
 seastar::future<> Connection::handle_auth_reply(Ref<MAuthReply> m)
 {
-  reply.set_value(m);
-  reply = {};
+  logger().info("{}", __func__);
+  ceph_assert(m);
+  auth_reply.set_value(m);
+  auth_reply = {};
   return seastar::now();
 }
 
 seastar::future<> Connection::renew_tickets()
 {
   if (auth->need_tickets()) {
-    return do_auth(request_t::general).then([](AuthResult r) {
-      if (r != AuthResult::success)  {
+    return do_auth(request_t::general).then([](const auth_result_t r) {
+      if (r == auth_result_t::failure)  {
         throw std::system_error(
 	  make_error_code(
 	    crimson::net::error::negotiation_failure));
@@ -165,8 +161,8 @@ seastar::future<> Connection::renew_rotating_keyring()
     return seastar::now();
   }
   last_rotating_renew_sent = now;
-  return do_auth(request_t::rotating).then([](AuthResult r) {
-    if (r != AuthResult::success)  {
+  return do_auth(request_t::rotating).then([](const auth_result_t r) {
+    if (r == auth_result_t::failure)  {
       throw std::system_error(make_error_code(
         crimson::net::error::negotiation_failure));
     }
@@ -192,7 +188,7 @@ Connection::create_auth(crimson::auth::method_t protocol,
                         const EntityName& name,
                         uint32_t want_keys)
 {
-  static CephContext cct;
+  static crimson::common::CephContext cct;
   std::unique_ptr<AuthClientHandler> auth;
   auth.reset(AuthClientHandler::create(&cct,
                                        protocol,
@@ -208,27 +204,10 @@ Connection::create_auth(crimson::auth::method_t protocol,
   return auth;
 }
 
-seastar::future<>
-Connection::setup_session(epoch_t epoch,
-                          const EntityName& name)
-{
-  auto m = ceph::make_message<MAuth>();
-  m->protocol = CEPH_AUTH_UNKNOWN;
-  m->monmap_epoch = epoch;
-  __u8 struct_v = 1;
-  encode(struct_v, m->auth_payload);
-  std::vector<crimson::auth::method_t> auth_methods;
-  auth_registry.get_supported_methods(conn->get_peer_type(), &auth_methods);
-  encode(auth_methods, m->auth_payload);
-  encode(name, m->auth_payload);
-  encode(global_id, m->auth_payload);
-  return conn->send(m);
-}
-
-seastar::future<std::optional<Connection::AuthResult>>
+seastar::future<std::optional<Connection::auth_result_t>>
 Connection::do_auth_single(Connection::request_t what)
 {
-  auto m = make_message<MAuth>();
+  auto m = crimson::make_message<MAuth>();
   m->protocol = auth->get_protocol();
   auth->prepare_build_request();
   switch (what) {
@@ -246,85 +225,55 @@ Connection::do_auth_single(Connection::request_t what)
     assert(0);
   }
   logger().info("sending {}", *m);
-  return conn->send(m).then([this] {
+  return conn->send(std::move(m)).then([this] {
     logger().info("waiting");
-    return reply.get_shared_future();
-  }).then([this] (Ref<MAuthReply> m) {
+    return auth_reply.get_shared_future();
+  }).then([this, life_extender=shared_from_this()] (Ref<MAuthReply> m) {
     if (!m) {
       ceph_assert(closed);
-      logger().info("do_auth: connection closed");
-      return seastar::make_ready_future<std::optional<Connection::AuthResult>>(
-	std::make_optional(AuthResult::canceled));
+      logger().info("do_auth_single: connection closed");
+      return std::make_optional(auth_result_t::canceled);
     }
     logger().info(
-      "do_auth: mon {} => {} returns {}: {}",
+      "do_auth_single: mon {} => {} returns {}: {}",
       conn->get_messenger()->get_myaddr(),
       conn->get_peer_addr(), *m, m->result);
     auto p = m->result_bl.cbegin();
     auto ret = auth->handle_response(m->result, p,
 				     nullptr, nullptr);
-    if (ret != 0 && ret != -EAGAIN) {
+    std::optional<Connection::auth_result_t> auth_result;
+    switch (ret) {
+    case -EAGAIN:
+      auth_result = std::nullopt;
+      break;
+    case 0:
+      auth_result = auth_result_t::success;
+      break;
+    default:
+      auth_result = auth_result_t::failure;
       logger().error(
-	"do_auth: got error {} on mon {}",
-	ret,
-	conn->get_peer_addr());
+        "do_auth_single: got error {} on mon {}",
+        ret, conn->get_peer_addr());
+      break;
     }
-    return seastar::make_ready_future<std::optional<Connection::AuthResult>>(
-      ret == -EAGAIN
-      ? std::nullopt
-      : std::make_optional(ret == 0
-	 ? AuthResult::success
-	 : AuthResult::failure
-      ));
+    return auth_result;
   });
 }
 
-seastar::future<Connection::AuthResult>
+seastar::future<Connection::auth_result_t>
 Connection::do_auth(Connection::request_t what) {
-  return seastar::repeat_until_value([this, what]() {
+  return seastar::repeat_until_value(
+    [this, life_extender=shared_from_this(), what]() {
     return do_auth_single(what);
   });
 }
 
-seastar::future<Connection::AuthResult>
-Connection::authenticate_v1(epoch_t epoch,
-                            const EntityName& name,
-                            uint32_t want_keys)
-{
-  return conn->keepalive().then([epoch, name, this] {
-    return setup_session(epoch, name);
-  }).then([this] {
-    return reply.get_shared_future();
-  }).then([name, want_keys, this](Ref<MAuthReply> m) {
-    if (!m) {
-      logger().error("authenticate_v1 canceled on {}", name);
-      return seastar::make_ready_future<AuthResult>(AuthResult::canceled);
-    }
-    global_id = m->global_id;
-    auth = create_auth(m->protocol, m->global_id, name, want_keys);
-    switch (auto p = m->result_bl.cbegin();
-            auth->handle_response(m->result, p,
-				  nullptr, nullptr)) {
-    case 0:
-      // none
-      return seastar::make_ready_future<AuthResult>(AuthResult::success);
-    case -EAGAIN:
-      // cephx
-      return do_auth(request_t::general);
-    default:
-      ceph_assert_always(0);
-    }
-  }).handle_exception([](auto ep) {
-    logger().error("authenticate_v1 failed with {}", ep);
-    return seastar::make_ready_future<AuthResult>(AuthResult::canceled);
-  });
-}
-
-seastar::future<Connection::AuthResult> Connection::authenticate_v2()
+seastar::future<Connection::auth_result_t> Connection::authenticate_v2()
 {
   auth_start = seastar::lowres_system_clock::now();
-  return conn->send(make_message<MMonGetMap>()).then([this] {
-    return auth_done.get_future();
+  return conn->send(crimson::make_message<MMonGetMap>()).then([this] {
+    auth_done.emplace();
+    return auth_done->get_future();
   });
 }
 
@@ -396,7 +345,10 @@ Connection::handle_auth_done(uint64_t new_global_id,
   secret_t connection_secret;
   int r = auth->handle_response(0, p, &session_key, &connection_secret);
   conn->set_last_keepalive_ack(auth_start);
-  auth_done.set_value(AuthResult::success);
+  if (auth_done) {
+    auth_done->set_value(auth_result_t::success);
+    auth_done.reset();
+  }
   return {session_key, connection_secret, r};
 }
 
@@ -417,7 +369,8 @@ int Connection::handle_auth_bad_method(uint32_t old_auth_method,
   if (p == auth_supported.end()) {
     logger().error("server allowed_methods {} but i only support {}",
                    allowed_methods, auth_supported);
-    auth_done.set_exception(std::system_error(make_error_code(
+    assert(auth_done);
+    auth_done->set_exception(std::system_error(make_error_code(
       crimson::net::error::negotiation_failure)));
     return -EACCES;
   }
@@ -426,16 +379,17 @@ int Connection::handle_auth_bad_method(uint32_t old_auth_method,
   return 0;
 }
 
-seastar::future<> Connection::close()
+void Connection::close()
 {
-  reply.set_value(Ref<MAuthReply>(nullptr));
-  reply = {};
-  auth_done.set_value(AuthResult::canceled);
-  auth_done = {};
+  logger().info("{}", __func__);
+  auth_reply.set_value(Ref<MAuthReply>(nullptr));
+  auth_reply = {};
+  if (auth_done) {
+    auth_done->set_value(auth_result_t::canceled);
+    auth_done.reset();
+  }
   if (conn && !std::exchange(closed, true)) {
-    return conn->close();
-  } else {
-    return seastar::now();
+    conn->mark_down();
   }
 }
 
@@ -448,6 +402,10 @@ bool Connection::is_my_peer(const entity_addr_t& addr) const
 crimson::net::ConnectionRef Connection::get_conn() {
   return conn;
 }
+
+Client::mon_command_t::mon_command_t(ceph::ref_t<MMonCommand> req)
+  : req(req)
+{}
 
 Client::Client(crimson::net::Messenger& messenger,
                crimson::common::AuthHandler& auth_handler)
@@ -497,13 +455,15 @@ seastar::future<> Client::load_keyring()
 
 void Client::tick()
 {
-  (void) seastar::with_gate(tick_gate, [this] {
+  gate.dispatch_in_background(__func__, *this, [this] {
     if (active_con) {
       return seastar::when_all_succeed(active_con->get_conn()->keepalive(),
                                        active_con->renew_tickets(),
-                                       active_con->renew_rotating_keyring());
+                                       active_con->renew_rotating_keyring()).then_unpack([] {});
     } else {
-      return seastar::now();
+      assert(is_hunting());
+      logger().info("{} continuing the hunt", __func__);
+      return authenticate();
     }
   });
 }
@@ -512,53 +472,66 @@ bool Client::is_hunting() const {
   return !active_con;
 }
 
-seastar::future<>
-Client::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
+std::optional<seastar::future<>>
+Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
-  // we only care about these message types
-  switch (m->get_type()) {
-  case CEPH_MSG_MON_MAP:
-    return handle_monmap(conn, boost::static_pointer_cast<MMonMap>(m));
-  case CEPH_MSG_AUTH_REPLY:
-    return handle_auth_reply(
-      conn, boost::static_pointer_cast<MAuthReply>(m));
-  case CEPH_MSG_MON_SUBSCRIBE_ACK:
-    return handle_subscribe_ack(
-      boost::static_pointer_cast<MMonSubscribeAck>(m));
-  case CEPH_MSG_MON_GET_VERSION_REPLY:
-    return handle_get_version_reply(
-      boost::static_pointer_cast<MMonGetVersionReply>(m));
-  case MSG_MON_COMMAND_ACK:
-    return handle_mon_command_ack(
-      boost::static_pointer_cast<MMonCommandAck>(m));
-  case MSG_LOGACK:
-    return handle_log_ack(
-      boost::static_pointer_cast<MLogAck>(m));
-  case MSG_CONFIG:
-    return handle_config(
-      boost::static_pointer_cast<MConfig>(m));
-  default:
-    return seastar::now();
-  }
+  bool dispatched = true;
+  gate.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
+    // we only care about these message types
+    switch (m->get_type()) {
+    case CEPH_MSG_MON_MAP:
+      return handle_monmap(conn, boost::static_pointer_cast<MMonMap>(m));
+    case CEPH_MSG_AUTH_REPLY:
+      return handle_auth_reply(
+	conn, boost::static_pointer_cast<MAuthReply>(m));
+    case CEPH_MSG_MON_SUBSCRIBE_ACK:
+      return handle_subscribe_ack(
+	boost::static_pointer_cast<MMonSubscribeAck>(m));
+    case CEPH_MSG_MON_GET_VERSION_REPLY:
+      return handle_get_version_reply(
+	boost::static_pointer_cast<MMonGetVersionReply>(m));
+    case MSG_MON_COMMAND_ACK:
+      return handle_mon_command_ack(
+	boost::static_pointer_cast<MMonCommandAck>(m));
+    case MSG_LOGACK:
+      return handle_log_ack(
+	boost::static_pointer_cast<MLogAck>(m));
+    case MSG_CONFIG:
+      return handle_config(
+	boost::static_pointer_cast<MConfig>(m));
+    default:
+      dispatched = false;
+      return seastar::now();
+    }
+  });
+  return (dispatched ? std::make_optional(seastar::now()) : std::nullopt);
 }
 
-seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef conn)
+void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool /* is_replace */)
 {
-  auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
-                            [peer_addr = conn->get_peer_addr()](auto& mc) {
-                              return mc->is_my_peer(peer_addr);
-                            });
-  if (found != pending_conns.end()) {
-    logger().warn("pending conn reset by {}", conn->get_peer_addr());
-    return (*found)->close();
-  } else if (active_con && active_con->is_my_peer(conn->get_peer_addr())) {
-    logger().warn("active conn reset {}", conn->get_peer_addr());
-    active_con.reset();
-    return reopen_session(-1);
-  } else {
-    logger().error("unknown reset from {}", conn->get_peer_addr());
-    return seastar::now();
-  }
+  gate.dispatch_in_background(__func__, *this, [this, conn] {
+    auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
+			      [peer_addr = conn->get_peer_addr()](auto& mc) {
+				return mc->is_my_peer(peer_addr);
+			      });
+    if (found != pending_conns.end()) {
+      logger().warn("pending conn reset by {}", conn->get_peer_addr());
+      (*found)->close();
+      pending_conns.erase(found);
+      return seastar::now();
+    } else if (active_con && active_con->is_my_peer(conn->get_peer_addr())) {
+      logger().warn("active conn reset {}", conn->get_peer_addr());
+      return reopen_session(-1).then([this](bool opened) {
+        if (opened) {
+          return on_session_opened();
+        } else {
+          return seastar::now();
+        }
+      });
+    } else {
+      return seastar::now();
+    }
+  });
 }
 
 std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
@@ -614,12 +587,14 @@ int Client::handle_auth_request(crimson::net::ConnectionRef con,
     return -EOPNOTSUPP;
   }
   auto authorizer_challenge = &auth_meta->authorizer_challenge;
-  ceph_assert(active_con);
-  if (!HAVE_FEATURE(active_con->get_conn()->get_features(), CEPHX_V2)) {
-    if (local_conf().get_val<uint64_t>("cephx_service_require_version") >= 2) {
-      return -EACCES;
-    }
+  if (auth_meta->skip_authorizer_challenge) {
+    logger().info("skipping challenge on {}", con);
     authorizer_challenge = nullptr;
+  }
+  if (!active_con) {
+    logger().info("auth request during inactivity period");
+    // let's instruct the client to come back later
+    return -EBUSY;
   }
   bool was_challenge = (bool)auth_meta->authorizer_challenge;
   EntityName name;
@@ -631,7 +606,7 @@ int Client::handle_auth_request(crimson::net::ConnectionRef con,
     auth_meta->get_connection_secret_length(),
     reply,
     &name,
-    &active_con->get_conn()->peer_global_id,
+    &con->peer_global_id,
     &caps_info,
     &auth_meta->session_key,
     &auth_meta->connection_secret,
@@ -717,7 +692,7 @@ ceph::bufferlist Client::handle_auth_reply_more(crimson::net::ConnectionRef conn
 int Client::handle_auth_done(crimson::net::ConnectionRef conn,
                              AuthConnectionMetaRef auth_meta,
                              uint64_t global_id,
-                             uint32_t con_mode,
+                             uint32_t /*con_mode*/,
                              const bufferlist& bl)
 {
   if (conn->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
@@ -772,7 +747,7 @@ int Client::handle_auth_bad_method(crimson::net::ConnectionRef conn,
   }
 }
 
-seastar::future<> Client::handle_monmap(crimson::net::Connection* conn,
+seastar::future<> Client::handle_monmap(crimson::net::ConnectionRef conn,
                                         Ref<MMonMap> m)
 {
   monmap.decode(m->monmapbl);
@@ -787,7 +762,7 @@ seastar::future<> Client::handle_monmap(crimson::net::Connection* conn,
       logger().info("handle_monmap: renewing tickets");
       return seastar::when_all_succeed(
 	active_con->renew_tickets(),
-	active_con->renew_rotating_keyring()).then([](){
+	active_con->renew_rotating_keyring()).then_unpack([](){
 	  logger().info("handle_mon_map: renewed tickets");
 	});
     } else {
@@ -795,12 +770,18 @@ seastar::future<> Client::handle_monmap(crimson::net::Connection* conn,
     }
   } else {
     logger().warn("mon.{} went away", cur_mon);
-    return reopen_session(-1);
+    return reopen_session(-1).then([this](bool opened) {
+      if (opened) {
+        return on_session_opened();
+      } else {
+        return seastar::now();
+      }
+    });
   }
 }
 
-seastar::future<> Client::handle_auth_reply(crimson::net::Connection* conn,
-                                               Ref<MAuthReply> m)
+seastar::future<> Client::handle_auth_reply(crimson::net::ConnectionRef conn,
+                                            Ref<MAuthReply> m)
 {
   logger().info(
     "handle_auth_reply mon {} => {} returns {}: {}",
@@ -828,12 +809,12 @@ seastar::future<> Client::handle_subscribe_ack(Ref<MMonSubscribeAck> m)
 
 Client::get_version_t Client::get_version(const std::string& map)
 {
-  auto m = make_message<MMonGetVersion>();
+  auto m = crimson::make_message<MMonGetVersion>();
   auto tid = ++last_version_req_id;
   m->handle = tid;
   m->what = map;
   auto& req = version_reqs[tid];
-  return active_con->get_conn()->send(m).then([&req] {
+  return send_message(std::move(m)).then([&req] {
     return req.get_future();
   });
 }
@@ -846,7 +827,7 @@ Client::handle_get_version_reply(Ref<MMonGetVersionReply> m)
     auto& result = found->second;
     logger().trace("{}: {} returns {}",
                  __func__, m->handle, m->version);
-    result.set_value(m->version, m->oldest_version);
+    result.set_value(std::make_tuple(m->version, m->oldest_version));
     version_reqs.erase(found);
   } else {
     logger().warn("{}: version request with handle {} not found",
@@ -858,11 +839,15 @@ Client::handle_get_version_reply(Ref<MMonGetVersionReply> m)
 seastar::future<> Client::handle_mon_command_ack(Ref<MMonCommandAck> m)
 {
   const auto tid = m->get_tid();
-  if (auto found = mon_commands.find(tid);
+  if (auto found = std::find_if(mon_commands.begin(),
+                                mon_commands.end(),
+                                [tid](auto& cmd) {
+                                  return cmd.req->get_tid() == tid;
+                                });
       found != mon_commands.end()) {
-    auto& result = found->second;
+    auto& command = *found;
     logger().trace("{} {}", __func__, tid);
-    result.set_value(m->r, m->rs, std::move(m->get_data()));
+    command.result.set_value(std::make_tuple(m->r, m->rs, std::move(m->get_data())));
     mon_commands.erase(found);
   } else {
     logger().warn("{} {} not found", __func__, tid);
@@ -878,7 +863,11 @@ seastar::future<> Client::handle_log_ack(Ref<MLogAck> m)
 
 seastar::future<> Client::handle_config(Ref<MConfig> m)
 {
-  return crimson::common::local_conf().set_mon_vals(m->config);
+  return crimson::common::local_conf().set_mon_vals(m->config).then([this] {
+    if (config_updated) {
+      config_updated->set_value();
+    }
+  });
 }
 
 std::vector<unsigned> Client::get_random_mons(unsigned n) const
@@ -891,10 +880,6 @@ std::vector<unsigned> Client::get_random_mons(unsigned n) const
   }
   vector<unsigned> ranks;
   for (auto [name, info] : monmap.mon_info) {
-    // TODO: #msgr-v2
-    if (info.public_addrs.legacy_addr().is_blank_ip()) {
-      continue;
-    }
     if (info.priority == min_priority) {
       ranks.push_back(monmap.get_rank(name));
     }
@@ -911,24 +896,60 @@ std::vector<unsigned> Client::get_random_mons(unsigned n) const
 
 seastar::future<> Client::authenticate()
 {
-  return reopen_session(-1);
-}
-
-seastar::future<> Client::stop()
-{
-  return tick_gate.close().then([this] {
-    timer.cancel();
-    if (active_con) {
-      return active_con->close();
+  return reopen_session(-1).then([this](bool opened) {
+    if (opened) {
+      return on_session_opened();
     } else {
       return seastar::now();
     }
   });
 }
 
-seastar::future<> Client::reopen_session(int rank)
+seastar::future<> Client::stop()
+{
+  logger().info("{}", __func__);
+  auto fut = gate.close();
+  timer.cancel();
+  ready_to_send = false;
+  for (auto& pending_con : pending_conns) {
+    pending_con->close();
+  }
+  if (active_con) {
+    active_con->close();
+  }
+  return fut;
+}
+
+static entity_addr_t choose_client_addr(
+  const entity_addrvec_t& my_addrs,
+  const entity_addrvec_t& client_addrs)
+{
+  // here is where we decide which of the addrs to connect to.  always prefer
+  // the first one, if we support it.
+  for (const auto& a : client_addrs.v) {
+    if (a.is_msgr2()) {
+      // FIXME: for ipv4 vs ipv6, check whether local host can handle ipv6 before
+      // trying it?  for now, just pick whichever is listed first.
+      return a;
+    }
+  }
+  return entity_addr_t{};
+}
+
+seastar::future<bool> Client::reopen_session(int rank)
 {
   logger().info("{} to mon.{}", __func__, rank);
+  ready_to_send = false;
+  if (active_con) {
+    active_con->close();
+    active_con = nullptr;
+    ceph_assert(pending_conns.empty());
+  } else {
+    for (auto& pending_con : pending_conns) {
+      pending_con->close();
+    }
+    pending_conns.clear();
+  }
   vector<unsigned> mons;
   if (rank >= 0) {
     mons.push_back(rank);
@@ -939,100 +960,122 @@ seastar::future<> Client::reopen_session(int rank)
   }
   pending_conns.reserve(mons.size());
   return seastar::parallel_for_each(mons, [this](auto rank) {
-#warning fixme
-    auto peer = monmap.get_addrs(rank).front();
+    auto peer = choose_client_addr(msgr.get_myaddrs(),
+                                   monmap.get_addrs(rank));
+    if (peer == entity_addr_t{}) {
+      // crimson msgr only uses the first bound addr
+      logger().warn("mon.{} does not have an addr compatible with me", rank);
+      return seastar::now();
+    }
     logger().info("connecting to mon.{}", rank);
-    return msgr.connect(peer, CEPH_ENTITY_TYPE_MON).then(
-      [this] (auto xconn) -> seastar::future<Connection::AuthResult> {
-      // sharded-messenger compatible mode assumes all connections running
-      // in one shard.
-      ceph_assert((*xconn)->shard_id() == seastar::engine().cpu_id());
-      crimson::net::ConnectionRef conn = xconn->release();
-      auto& mc = pending_conns.emplace_back(
-	std::make_unique<Connection>(auth_registry, conn, &keyring));
-      if (conn->get_peer_addr().is_msgr2()) {
-        return mc->authenticate_v2();
-      } else {
-        return mc->authenticate_v1(monmap.get_epoch(), entity_name, want_keys)
-          .handle_exception([conn](auto ep) {
-            return conn->close().then([ep=std::move(ep)](){
-	      return seastar::make_exception_future<Connection::AuthResult>(ep);
-            });
-          });
+    auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
+    auto& mc = pending_conns.emplace_back(
+      seastar::make_shared<Connection>(auth_registry, conn, &keyring));
+    assert(conn->get_peer_addr().is_msgr2());
+    return mc->authenticate_v2().then([peer, this](auto result) {
+      if (result == Connection::auth_result_t::success) {
+        _finish_auth(peer);
       }
-    }).then([peer, this](auto result) {
-      if (result == Connection::AuthResult::canceled) {
-	return seastar::now();
-      }
-
-      if (!is_hunting()) {
-        return seastar::now();
-      }
-      logger().info("found mon.{}", monmap.get_name(peer));
-
-      auto found = std::find_if(
-	pending_conns.begin(), pending_conns.end(),
-	[peer](auto& conn) {
-	  return conn->is_my_peer(peer);
-	});
-      if (found == pending_conns.end()) {
-	// Happens if another connection has won the race
-	ceph_assert(active_con && pending_conns.empty());
-	logger().info(
-	  "no pending connection for mon.{}, peer {}",
-	  monmap.get_name(peer),
-	  peer);
-	return seastar::now();
-      }
-
-      ceph_assert(!active_con && !pending_conns.empty());
-      active_con = std::move(*found);
-      found->reset();
-      auto ret = seastar::do_with(
-	std::move(pending_conns),
-	[](auto &pending_conns) {
-	  return seastar::parallel_for_each(
-	    pending_conns,
-	    [] (auto &conn) {
-	      if (!conn) {
-		return seastar::now();
-	      } else {
-		return conn->close();
-	      }
-	    });
-	});
-      pending_conns.clear();
-      return ret;
-    }).then([]() {
       logger().debug("reopen_session mon connection attempts complete");
     }).handle_exception([](auto ep) {
       logger().error("mon connections failed with ep {}", ep);
       return seastar::make_exception_future(ep);
     });
   }).then([this] {
-    ceph_assert_always(active_con);
-    return active_con->renew_rotating_keyring();
+    if (active_con) {
+      return true;
+    } else {
+      logger().warn("cannot establish the active_con with any mon");
+      return false;
+    }
   });
+}
+
+void Client::_finish_auth(const entity_addr_t& peer)
+{
+  if (!is_hunting()) {
+    return;
+  }
+  logger().info("found mon.{}", monmap.get_name(peer));
+
+  auto found = std::find_if(
+    pending_conns.begin(), pending_conns.end(),
+    [peer](auto& conn) {
+      return conn->is_my_peer(peer);
+  });
+  if (found == pending_conns.end()) {
+    // Happens if another connection has won the race
+    ceph_assert(active_con && pending_conns.empty());
+    logger().info("no pending connection for mon.{}, peer {}",
+      monmap.get_name(peer), peer);
+    return;
+  }
+
+  ceph_assert(!active_con && !pending_conns.empty());
+  // It's too early to toggle the `ready_to_send` flag. It will
+  // be set atfer finishing the MAuth exchange and draining out
+  // the `pending_messages` queue.
+  active_con = std::move(*found);
+  *found = nullptr;
+  for (auto& conn : pending_conns) {
+    if (conn) {
+      conn->close();
+    }
+  }
+  pending_conns.clear();
 }
 
 Client::command_result_t
-Client::run_command(const std::vector<std::string>& cmd,
-                    const bufferlist& bl)
+Client::run_command(std::string&& cmd,
+                    bufferlist&& bl)
 {
-  auto m = make_message<MMonCommand>(monmap.fsid);
+  auto m = crimson::make_message<MMonCommand>(monmap.fsid);
   auto tid = ++last_mon_command_id;
   m->set_tid(tid);
-  m->cmd = cmd;
-  m->set_data(bl);
-  auto& req = mon_commands[tid];
-  return active_con->get_conn()->send(m).then([&req] {
-    return req.get_future();
+  m->cmd = {std::move(cmd)};
+  m->set_data(std::move(bl));
+  auto& command = mon_commands.emplace_back(ceph::make_message<MMonCommand>(*m));
+  return send_message(std::move(m)).then([&result=command.result] {
+    return result.get_future();
   });
 }
 
-seastar::future<> Client::send_message(MessageRef m)
+seastar::future<> Client::send_message(MessageURef m)
 {
-  return active_con->get_conn()->send(m);
+  if (active_con && ready_to_send) {
+    assert(pending_messages.empty());
+    return active_con->get_conn()->send(std::move(m));
+  } else {
+    auto& delayed = pending_messages.emplace_back(std::move(m));
+    return delayed.pr.get_future();
+  }
+}
+
+seastar::future<> Client::on_session_opened()
+{
+  return active_con->renew_rotating_keyring().then([this] {
+    if (!active_con) {
+      // the connection can be closed even in the middle of the opening sequence
+      logger().info("on_session_opened {}: connection closed", __LINE__);
+      return seastar::now();
+    }
+    for (auto& m : pending_messages) {
+      (void) active_con->get_conn()->send(std::move(m.msg));
+      m.pr.set_value();
+    }
+    pending_messages.clear();
+    ready_to_send = true;
+    return sub.reload() ? renew_subs() : seastar::now();
+  }).then([this] {
+    if (!active_con) {
+      logger().info("on_session_opened {}: connection closed", __LINE__);
+      return seastar::now();
+    }
+    return seastar::parallel_for_each(mon_commands,
+      [this](auto &command) {
+      return send_message(crimson::make_message<MMonCommand>(*command.req));
+    });
+  });
 }
 
 bool Client::sub_want(const std::string& what, version_t start, unsigned flags)
@@ -1065,12 +1108,24 @@ seastar::future<> Client::renew_subs()
   }
   logger().trace("{}", __func__);
 
-  auto m = make_message<MMonSubscribe>();
+  auto m = crimson::make_message<MMonSubscribe>();
   m->what = sub.get_subs();
   m->hostname = ceph_get_short_hostname();
-  return active_con->get_conn()->send(m).then([this] {
+  return send_message(std::move(m)).then([this] {
     sub.renewed();
   });
+}
+
+seastar::future<> Client::wait_for_config()
+{
+  assert(!config_updated);
+  config_updated = seastar::promise<>();
+  return config_updated->get_future();
+}
+
+void Client::print(std::ostream& out) const
+{
+  out << "mon." << entity_name;
 }
 
 } // namespace crimson::mon

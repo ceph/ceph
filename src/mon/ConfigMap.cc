@@ -7,6 +7,35 @@
 #include "crush/CrushWrapper.h"
 #include "common/entity_name.h"
 
+using namespace std::literals;
+
+using std::cerr;
+using std::cout;
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::setfill;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+using std::unique_ptr;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::mono_clock;
+using ceph::mono_time;
+using ceph::timespan_str;
+
 int MaskedOption::get_precision(const CrushWrapper *crush)
 {
   // 0 = most precise
@@ -115,7 +144,7 @@ ConfigMap::generate_entity_map(
   vector<pair<string,Section*>> sections = { make_pair("global", &global) };
   auto p = by_type.find(name.get_type_name());
   if (p != by_type.end()) {
-    sections.push_back(make_pair(name.get_type_name(), &p->second));
+    sections.emplace_back(name.get_type_name(), &p->second);
   }
   vector<std::string> name_bits;
   boost::split(name_bits, name.to_str(), [](char c){ return c == '.'; });
@@ -174,6 +203,7 @@ bool ConfigMap::parse_mask(
   for (unsigned j = 0; j < split.size(); ++j) {
     auto& i = split[j];
     if (i == "global") {
+      *section = "global";
       continue;
     }
     size_t delim = i.find(':');
@@ -201,6 +231,23 @@ bool ConfigMap::parse_mask(
     *section = i;
   }
   return true;
+}
+
+void ConfigMap::parse_key(
+  const std::string& key,
+  std::string *name,
+  std::string *who)
+{
+  auto last_slash = key.rfind('/');
+  if (last_slash == std::string::npos) {
+    *name = key;
+  } else if (auto mgrpos = key.find("/mgr/"); mgrpos != std::string::npos) {
+    *name = key.substr(mgrpos + 1);
+    *who = key.substr(0, mgrpos);
+  } else {
+    *name = key.substr(last_slash + 1);
+    *who = key.substr(0, last_slash);
+  }
 }
 
 

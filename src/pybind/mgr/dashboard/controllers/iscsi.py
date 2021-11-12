@@ -1,28 +1,40 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=C0302
 # pylint: disable=too-many-branches
-from __future__ import absolute_import
+# pylint: disable=too-many-lines
 
-from copy import deepcopy
 import json
-import cherrypy
+import re
+from copy import deepcopy
+from typing import Any, Dict, List, no_type_check
 
+import cherrypy
 import rados
 import rbd
 
-from . import ApiController, UiApiController, RESTController, BaseController, Endpoint,\
-    ReadPermission, UpdatePermission, Task
 from .. import mgr
+from ..exceptions import DashboardException
 from ..rest_client import RequestException
 from ..security import Scope
-from ..services.iscsi_client import IscsiClient
+from ..services.exception import handle_request_error
 from ..services.iscsi_cli import IscsiGatewaysConfig
+from ..services.iscsi_client import IscsiClient
+from ..services.iscsi_config import IscsiGatewayDoesNotExist
 from ..services.rbd import format_bitmask
 from ..services.tcmu_service import TcmuService
-from ..exceptions import DashboardException
-from ..tools import str_to_bool, TaskManager
+from ..tools import TaskManager, str_to_bool
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
+    ReadPermission, RESTController, Task, UIRouter, UpdatePermission
+
+ISCSI_SCHEMA = {
+    'user': (str, 'username'),
+    'password': (str, 'password'),
+    'mutual_user': (str, ''),
+    'mutual_password': (str, '')
+}
 
 
-@UiApiController('/iscsi', Scope.ISCSI)
+@UIRouter('/iscsi', Scope.ISCSI)
 class IscsiUi(BaseController):
 
     REQUIRED_CEPH_ISCSI_CONFIG_MIN_VERSION = 10
@@ -30,6 +42,7 @@ class IscsiUi(BaseController):
 
     @Endpoint()
     @ReadPermission
+    @no_type_check
     def status(self):
         status = {'available': False}
         try:
@@ -113,8 +126,6 @@ class IscsiUi(BaseController):
     @Endpoint()
     @ReadPermission
     def overview(self):
-        result_gateways = []
-        result_images = []
         gateways_names = IscsiGatewaysConfig.get_gateways_config()['gateways'].keys()
         config = None
         for gateway_name in gateways_names:
@@ -124,6 +135,43 @@ class IscsiUi(BaseController):
             except RequestException:
                 pass
 
+        result_gateways = self._get_gateways_info(gateways_names, config)
+        result_images = self._get_images_info(config)
+
+        return {
+            'gateways': sorted(result_gateways, key=lambda g: g['name']),
+            'images': sorted(result_images, key=lambda i: '{}/{}'.format(i['pool'], i['image']))
+        }
+
+    def _get_images_info(self, config):
+        # Images info
+        result_images = []
+        if config:
+            tcmu_info = TcmuService.get_iscsi_info()
+            for _, disk_config in config['disks'].items():
+                image = {
+                    'pool': disk_config['pool'],
+                    'image': disk_config['image'],
+                    'backstore': disk_config['backstore'],
+                    'optimized_since': None,
+                    'stats': None,
+                    'stats_history': None
+                }
+                tcmu_image_info = TcmuService.get_image_info(image['pool'],
+                                                             image['image'],
+                                                             tcmu_info)
+                if tcmu_image_info:
+                    if 'optimized_since' in tcmu_image_info:
+                        image['optimized_since'] = tcmu_image_info['optimized_since']
+                    if 'stats' in tcmu_image_info:
+                        image['stats'] = tcmu_image_info['stats']
+                    if 'stats_history' in tcmu_image_info:
+                        image['stats_history'] = tcmu_image_info['stats_history']
+                result_images.append(image)
+        return result_images
+
+    def _get_gateways_info(self, gateways_names, config):
+        result_gateways = []
         # Gateways info
         for gateway_name in gateways_names:
             gateway = {
@@ -147,49 +195,38 @@ class IscsiUi(BaseController):
                 gateway['num_targets'] = len([target for _, target in config['targets'].items()
                                               if gateway_name in target['portals']])
             result_gateways.append(gateway)
-
-        # Images info
-        if config:
-            tcmu_info = TcmuService.get_iscsi_info()
-            for _, disk_config in config['disks'].items():
-                image = {
-                    'pool': disk_config['pool'],
-                    'image': disk_config['image'],
-                    'backstore': disk_config['backstore'],
-                    'optimized_since': None,
-                    'stats': None,
-                    'stats_history': None
-                }
-                tcmu_image_info = TcmuService.get_image_info(image['pool'],
-                                                             image['image'],
-                                                             tcmu_info)
-                if tcmu_image_info:
-                    if 'optimized_since' in tcmu_image_info:
-                        image['optimized_since'] = tcmu_image_info['optimized_since']
-                    if 'stats' in tcmu_image_info:
-                        image['stats'] = tcmu_image_info['stats']
-                    if 'stats_history' in tcmu_image_info:
-                        image['stats_history'] = tcmu_image_info['stats_history']
-                result_images.append(image)
-
-        return {
-            'gateways': sorted(result_gateways, key=lambda g: g['name']),
-            'images': sorted(result_images, key=lambda i: '{}/{}'.format(i['pool'], i['image']))
-        }
+        return result_gateways
 
 
-@ApiController('/iscsi', Scope.ISCSI)
+@APIRouter('/iscsi', Scope.ISCSI)
+@APIDoc("Iscsi Management API", "Iscsi")
 class Iscsi(BaseController):
-
     @Endpoint('GET', 'discoveryauth')
     @ReadPermission
+    @EndpointDoc("Get Iscsi discoveryauth Details",
+                 responses={'200': [ISCSI_SCHEMA]})
     def get_discoveryauth(self):
         gateway = get_available_gateway()
         return self._get_discoveryauth(gateway)
 
-    @Endpoint('PUT', 'discoveryauth')
+    @Endpoint('PUT', 'discoveryauth',
+              query_params=['user', 'password', 'mutual_user', 'mutual_password'])
     @UpdatePermission
+    @EndpointDoc("Set Iscsi discoveryauth",
+                 parameters={
+                     'user': (str, 'Username'),
+                     'password': (str, 'Password'),
+                     'mutual_user': (str, 'Mutual UserName'),
+                     'mutual_password': (str, 'Mutual Password'),
+                 })
     def set_discoveryauth(self, user, password, mutual_user, mutual_password):
+        validate_auth({
+            'user': user,
+            'password': password,
+            'mutual_user': mutual_user,
+            'mutual_password': mutual_password
+        })
+
         gateway = get_available_gateway()
         config = IscsiClient.instance(gateway_name=gateway).get_config()
         gateway_names = list(config['gateways'].keys())
@@ -218,7 +255,8 @@ def iscsi_target_task(name, metadata, wait_for=2.0):
     return Task("iscsi/target/{}".format(name), metadata, wait_for)
 
 
-@ApiController('/iscsi/target', Scope.ISCSI)
+@APIRouter('/iscsi/target', Scope.ISCSI)
+@APIDoc("Get Iscsi Target Details", "IscsiTarget")
 class IscsiTarget(RESTController):
 
     def list(self):
@@ -248,10 +286,6 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target does not exist',
                                      code='target_does_not_exist',
                                      component='iscsi')
-        if target_iqn not in config['targets']:
-            raise DashboardException(msg='Target does not exist',
-                                     code='target_does_not_exist',
-                                     component='iscsi')
         portal_names = list(config['targets'][target_iqn]['portals'].keys())
         validate_rest_api(portal_names)
         if portal_names:
@@ -271,6 +305,10 @@ class IscsiTarget(RESTController):
         disks = disks or []
         clients = clients or []
         groups = groups or []
+
+        validate_auth(auth)
+        for client in clients:
+            validate_auth(client['auth'])
 
         gateway = get_available_gateway()
         config = IscsiClient.instance(gateway_name=gateway).get_config()
@@ -293,6 +331,10 @@ class IscsiTarget(RESTController):
         clients = IscsiTarget._sorted_clients(clients)
         groups = IscsiTarget._sorted_groups(groups)
 
+        validate_auth(auth)
+        for client in clients:
+            validate_auth(client['auth'])
+
         gateway = get_available_gateway()
         config = IscsiClient.instance(gateway_name=gateway).get_config()
         if target_iqn not in config['targets']:
@@ -303,12 +345,15 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target IQN already in use',
                                      code='target_iqn_already_in_use',
                                      component='iscsi')
+
         settings = IscsiClient.instance(gateway_name=gateway).get_settings()
         new_portal_names = {p['host'] for p in portals}
         old_portal_names = set(config['targets'][target_iqn]['portals'].keys())
         deleted_portal_names = list(old_portal_names - new_portal_names)
         validate_rest_api(deleted_portal_names)
         IscsiTarget._validate(new_target_iqn, target_controls, portals, disks, groups, settings)
+        IscsiTarget._validate_delete(gateway, target_iqn, config, new_target_iqn, target_controls,
+                                     disks, clients, groups)
         config = IscsiTarget._delete(target_iqn, config, 0, 50, new_target_iqn, target_controls,
                                      portals, disks, clients, groups)
         IscsiTarget._create(new_target_iqn, target_controls, acl_enabled, auth, portals, disks,
@@ -338,42 +383,25 @@ class IscsiTarget(RESTController):
         task_progress_inc = 0
         if task_progress_steps != 0:
             task_progress_inc = int((task_progress_end - task_progress_begin) / task_progress_steps)
+
         gateway_name = list(target_config['portals'].keys())[0]
-        deleted_groups = []
-        for group_id in list(target_config['groups'].keys()):
-            if IscsiTarget._group_deletion_required(target, new_target_iqn, new_target_controls,
-                                                    new_groups, group_id, new_clients,
-                                                    new_disks):
-                deleted_groups.append(group_id)
-                IscsiClient.instance(gateway_name=gateway_name).delete_group(target_iqn,
-                                                                             group_id)
-            TaskManager.current_task().inc_progress(task_progress_inc)
-        deleted_clients = []
-        for client_iqn in list(target_config['clients'].keys()):
-            if IscsiTarget._client_deletion_required(target, new_target_iqn, new_target_controls,
-                                                     new_clients, client_iqn,
-                                                     new_groups, deleted_groups):
-                deleted_clients.append(client_iqn)
-                IscsiClient.instance(gateway_name=gateway_name).delete_client(target_iqn,
-                                                                              client_iqn)
-            TaskManager.current_task().inc_progress(task_progress_inc)
-        for image_id in target_config['disks']:
-            if IscsiTarget._target_lun_deletion_required(target, new_target_iqn,
-                                                         new_target_controls,
-                                                         new_disks, image_id):
-                all_clients = target_config['clients'].keys()
-                not_deleted_clients = [c for c in all_clients if c not in deleted_clients]
-                for client_iqn in not_deleted_clients:
-                    client_image_ids = target_config['clients'][client_iqn]['luns'].keys()
-                    for client_image_id in client_image_ids:
-                        if image_id == client_image_id:
-                            IscsiClient.instance(gateway_name=gateway_name).delete_client_lun(
-                                target_iqn, client_iqn, client_image_id)
-                IscsiClient.instance(gateway_name=gateway_name).delete_target_lun(target_iqn,
-                                                                                  image_id)
-                pool, image = image_id.split('/', 1)
-                IscsiClient.instance(gateway_name=gateway_name).delete_disk(pool, image)
-            TaskManager.current_task().inc_progress(task_progress_inc)
+        IscsiTarget._delete_groups(target_config, target, new_target_iqn,
+                                   new_target_controls, new_groups, gateway_name,
+                                   target_iqn, task_progress_inc)
+        deleted_clients, deleted_client_luns = IscsiTarget._delete_clients(
+            target_config, target, new_target_iqn, new_target_controls, new_clients,
+            gateway_name, target_iqn, new_groups, task_progress_inc)
+        IscsiTarget._delete_disks(target_config, target, new_target_iqn, new_target_controls,
+                                  new_disks, deleted_clients, new_groups, deleted_client_luns,
+                                  gateway_name, target_iqn, task_progress_inc)
+        IscsiTarget._delete_gateways(target, new_portals, gateway_name, target_iqn)
+        if IscsiTarget._target_deletion_required(target, new_target_iqn, new_target_controls):
+            IscsiClient.instance(gateway_name=gateway_name).delete_target(target_iqn)
+        TaskManager.current_task().set_progress(task_progress_end)
+        return IscsiClient.instance(gateway_name=gateway_name).get_config()
+
+    @staticmethod
+    def _delete_gateways(target, new_portals, gateway_name, target_iqn):
         old_portals_by_host = IscsiTarget._get_portals_by_host(target['portals'])
         new_portals_by_host = IscsiTarget._get_portals_by_host(new_portals)
         for old_portal_host, old_portal_ip_list in old_portals_by_host.items():
@@ -382,10 +410,75 @@ class IscsiTarget(RESTController):
                                                             new_portals_by_host):
                 IscsiClient.instance(gateway_name=gateway_name).delete_gateway(target_iqn,
                                                                                old_portal_host)
-        if IscsiTarget._target_deletion_required(target, new_target_iqn, new_target_controls):
-            IscsiClient.instance(gateway_name=gateway_name).delete_target(target_iqn)
-        TaskManager.current_task().set_progress(task_progress_end)
-        return IscsiClient.instance(gateway_name=gateway_name).get_config()
+
+    @staticmethod
+    def _delete_disks(target_config, target, new_target_iqn, new_target_controls,
+                      new_disks, deleted_clients, new_groups, deleted_client_luns,
+                      gateway_name, target_iqn, task_progress_inc):
+        for image_id in target_config['disks']:
+            if IscsiTarget._target_lun_deletion_required(target, new_target_iqn,
+                                                         new_target_controls, new_disks, image_id):
+                all_clients = target_config['clients'].keys()
+                not_deleted_clients = [c for c in all_clients if c not in deleted_clients
+                                       and not IscsiTarget._client_in_group(target['groups'], c)
+                                       and not IscsiTarget._client_in_group(new_groups, c)]
+                for client_iqn in not_deleted_clients:
+                    client_image_ids = target_config['clients'][client_iqn]['luns'].keys()
+                    for client_image_id in client_image_ids:
+                        if image_id == client_image_id and \
+                                (client_iqn, client_image_id) not in deleted_client_luns:
+                            IscsiClient.instance(gateway_name=gateway_name).delete_client_lun(
+                                target_iqn, client_iqn, client_image_id)
+                IscsiClient.instance(gateway_name=gateway_name).delete_target_lun(target_iqn,
+                                                                                  image_id)
+                pool, image = image_id.split('/', 1)
+                IscsiClient.instance(gateway_name=gateway_name).delete_disk(pool, image)
+            TaskManager.current_task().inc_progress(task_progress_inc)
+
+    @staticmethod
+    def _delete_clients(target_config, target, new_target_iqn, new_target_controls,
+                        new_clients, gateway_name, target_iqn, new_groups, task_progress_inc):
+        deleted_clients = []
+        deleted_client_luns = []
+        for client_iqn, client_config in target_config['clients'].items():
+            if IscsiTarget._client_deletion_required(target, new_target_iqn, new_target_controls,
+                                                     new_clients, client_iqn):
+                deleted_clients.append(client_iqn)
+                IscsiClient.instance(gateway_name=gateway_name).delete_client(target_iqn,
+                                                                              client_iqn)
+            else:
+                for image_id in list(client_config.get('luns', {}).keys()):
+                    if IscsiTarget._client_lun_deletion_required(target, client_iqn, image_id,
+                                                                 new_clients, new_groups):
+                        deleted_client_luns.append((client_iqn, image_id))
+                        IscsiClient.instance(gateway_name=gateway_name).delete_client_lun(
+                            target_iqn, client_iqn, image_id)
+            TaskManager.current_task().inc_progress(task_progress_inc)
+        return deleted_clients, deleted_client_luns
+
+    @staticmethod
+    def _delete_groups(target_config, target, new_target_iqn, new_target_controls,
+                       new_groups, gateway_name, target_iqn, task_progress_inc):
+        for group_id in list(target_config['groups'].keys()):
+            if IscsiTarget._group_deletion_required(target, new_target_iqn, new_target_controls,
+                                                    new_groups, group_id):
+                IscsiClient.instance(gateway_name=gateway_name).delete_group(target_iqn,
+                                                                             group_id)
+            else:
+                group = IscsiTarget._get_group(new_groups, group_id)
+
+                old_group_disks = set(target_config['groups'][group_id]['disks'].keys())
+                new_group_disks = {'{}/{}'.format(x['pool'], x['image']) for x in group['disks']}
+                local_deleted_disks = list(old_group_disks - new_group_disks)
+
+                old_group_members = set(target_config['groups'][group_id]['members'])
+                new_group_members = set(group['members'])
+                local_deleted_members = list(old_group_members - new_group_members)
+
+                if local_deleted_disks or local_deleted_members:
+                    IscsiClient.instance(gateway_name=gateway_name).update_group(
+                        target_iqn, group_id, local_deleted_members, local_deleted_disks)
+            TaskManager.current_task().inc_progress(task_progress_inc)
 
     @staticmethod
     def _get_group(groups, group_id):
@@ -396,28 +489,12 @@ class IscsiTarget(RESTController):
 
     @staticmethod
     def _group_deletion_required(target, new_target_iqn, new_target_controls,
-                                 new_groups, group_id, new_clients, new_disks):
+                                 new_groups, group_id):
         if IscsiTarget._target_deletion_required(target, new_target_iqn, new_target_controls):
             return True
         new_group = IscsiTarget._get_group(new_groups, group_id)
         if not new_group:
             return True
-        old_group = IscsiTarget._get_group(target['groups'], group_id)
-        if new_group != old_group:
-            return True
-        # Check if any client inside this group has changed
-        for client_iqn in new_group['members']:
-            if IscsiTarget._client_deletion_required(target, new_target_iqn, new_target_controls,
-                                                     new_clients, client_iqn,
-                                                     new_groups, []):
-                return True
-        # Check if any disk inside this group has changed
-        for disk in new_group['disks']:
-            image_id = '{}/{}'.format(disk['pool'], disk['image'])
-            if IscsiTarget._target_lun_deletion_required(target, new_target_iqn,
-                                                         new_target_controls,
-                                                         new_disks, image_id):
-                return True
         return False
 
     @staticmethod
@@ -429,24 +506,47 @@ class IscsiTarget(RESTController):
 
     @staticmethod
     def _client_deletion_required(target, new_target_iqn, new_target_controls,
-                                  new_clients, client_iqn, new_groups, deleted_groups):
+                                  new_clients, client_iqn):
         if IscsiTarget._target_deletion_required(target, new_target_iqn, new_target_controls):
             return True
-        new_client = deepcopy(IscsiTarget._get_client(new_clients, client_iqn))
+        new_client = IscsiTarget._get_client(new_clients, client_iqn)
         if not new_client:
             return True
-        # Disks inherited from groups must be considered
-        for group in new_groups:
+        return False
+
+    @staticmethod
+    def _client_in_group(groups, client_iqn):
+        for group in groups:
             if client_iqn in group['members']:
-                new_client['luns'] += group['disks']
-        old_client = IscsiTarget._get_client(target['clients'], client_iqn)
-        if new_client != old_client:
-            return True
-        # Check if client belongs to a groups that has been deleted
-        for group in target['groups']:
-            if group['group_id'] in deleted_groups and client_iqn in group['members']:
                 return True
         return False
+
+    @staticmethod
+    def _client_lun_deletion_required(target, client_iqn, image_id, new_clients, new_groups):
+        new_client = IscsiTarget._get_client(new_clients, client_iqn)
+        if not new_client:
+            return True
+
+        # Disks inherited from groups must be considered
+        was_in_group = IscsiTarget._client_in_group(target['groups'], client_iqn)
+        is_in_group = IscsiTarget._client_in_group(new_groups, client_iqn)
+
+        if not was_in_group and is_in_group:
+            return True
+
+        if is_in_group:
+            return False
+
+        new_lun = IscsiTarget._get_disk(new_client.get('luns', []), image_id)
+        if not new_lun:
+            return True
+
+        old_client = IscsiTarget._get_client(target['clients'], client_iqn)
+        if not old_client:
+            return False
+
+        old_lun = IscsiTarget._get_disk(old_client.get('luns', []), image_id)
+        return new_lun != old_lun
 
     @staticmethod
     def _get_disk(disks, image_id):
@@ -482,9 +582,12 @@ class IscsiTarget(RESTController):
 
     @staticmethod
     def _target_deletion_required(target, new_target_iqn, new_target_controls):
+        gateway = get_available_gateway()
+        settings = IscsiClient.instance(gateway_name=gateway).get_settings()
+
         if target['target_iqn'] != new_target_iqn:
             return True
-        if target['target_controls'] != new_target_controls:
+        if settings['api_version'] < 2 and target['target_controls'] != new_target_controls:
             return True
         return False
 
@@ -509,6 +612,58 @@ class IscsiTarget(RESTController):
         # 'target_controls_limits' was introduced in ceph-iscsi > 3.2
         # When using an older `ceph-iscsi` version these validations will
         # NOT be executed beforehand
+        IscsiTarget._validate_target_controls_limits(settings, target_controls)
+        portal_names = [p['host'] for p in portals]
+        validate_rest_api(portal_names)
+        IscsiTarget._validate_disks(disks, settings)
+        IscsiTarget._validate_initiators(groups)
+
+    @staticmethod
+    def _validate_initiators(groups):
+        initiators = []  # type: List[Any]
+        for group in groups:
+            initiators = initiators + group['members']
+        if len(initiators) != len(set(initiators)):
+            raise DashboardException(msg='Each initiator can only be part of 1 group at a time',
+                                     code='initiator_in_multiple_groups',
+                                     component='iscsi')
+
+    @staticmethod
+    def _validate_disks(disks, settings):
+        for disk in disks:
+            pool = disk['pool']
+            image = disk['image']
+            backstore = disk['backstore']
+            required_rbd_features = settings['required_rbd_features'][backstore]
+            unsupported_rbd_features = settings['unsupported_rbd_features'][backstore]
+            IscsiTarget._validate_image(pool, image, backstore, required_rbd_features,
+                                        unsupported_rbd_features)
+            IscsiTarget._validate_disk_controls_limits(settings, disk, backstore)
+
+    @staticmethod
+    def _validate_disk_controls_limits(settings, disk, backstore):
+        # 'disk_controls_limits' was introduced in ceph-iscsi > 3.2
+        # When using an older `ceph-iscsi` version these validations will
+        # NOT be executed beforehand
+        if 'disk_controls_limits' in settings:
+            for disk_control_name, disk_control_value in disk['controls'].items():
+                limits = settings['disk_controls_limits'][backstore].get(disk_control_name)
+                if limits is not None:
+                    min_value = limits.get('min')
+                    if min_value is not None and disk_control_value < min_value:
+                        raise DashboardException(msg='Disk control {} must be >= '
+                                                     '{}'.format(disk_control_name, min_value),
+                                                 code='disk_control_invalid_min',
+                                                 component='iscsi')
+                    max_value = limits.get('max')
+                    if max_value is not None and disk_control_value > max_value:
+                        raise DashboardException(msg='Disk control {} must be <= '
+                                                     '{}'.format(disk_control_name, max_value),
+                                                 code='disk_control_invalid_max',
+                                                 component='iscsi')
+
+    @staticmethod
+    def _validate_target_controls_limits(settings, target_controls):
         if 'target_controls_limits' in settings:
             for target_control_name, target_control_value in target_controls.items():
                 limits = settings['target_controls_limits'].get(target_control_name)
@@ -525,46 +680,6 @@ class IscsiTarget(RESTController):
                                                      '{}'.format(target_control_name, max_value),
                                                  code='target_control_invalid_max',
                                                  component='iscsi')
-
-        portal_names = [p['host'] for p in portals]
-        validate_rest_api(portal_names)
-
-        for disk in disks:
-            pool = disk['pool']
-            image = disk['image']
-            backstore = disk['backstore']
-            required_rbd_features = settings['required_rbd_features'][backstore]
-            unsupported_rbd_features = settings['unsupported_rbd_features'][backstore]
-            IscsiTarget._validate_image(pool, image, backstore, required_rbd_features,
-                                        unsupported_rbd_features)
-
-            # 'disk_controls_limits' was introduced in ceph-iscsi > 3.2
-            # When using an older `ceph-iscsi` version these validations will
-            # NOT be executed beforehand
-            if 'disk_controls_limits' in settings:
-                for disk_control_name, disk_control_value in disk['controls'].items():
-                    limits = settings['disk_controls_limits'][backstore].get(disk_control_name)
-                    if limits is not None:
-                        min_value = limits.get('min')
-                        if min_value is not None and disk_control_value < min_value:
-                            raise DashboardException(msg='Disk control {} must be >= '
-                                                         '{}'.format(disk_control_name, min_value),
-                                                     code='disk_control_invalid_min',
-                                                     component='iscsi')
-                        max_value = limits.get('max')
-                        if max_value is not None and disk_control_value > max_value:
-                            raise DashboardException(msg='Disk control {} must be <= '
-                                                         '{}'.format(disk_control_name, max_value),
-                                                     code='disk_control_invalid_max',
-                                                     component='iscsi')
-
-        initiators = []
-        for group in groups:
-            initiators = initiators + group['members']
-        if len(initiators) != len(set(initiators)):
-            raise DashboardException(msg='Each initiator can only be part of 1 group at a time',
-                                     code='initiator_in_multiple_groups',
-                                     component='iscsi')
 
     @staticmethod
     def _validate_image(pool, image, backstore, required_rbd_features, unsupported_rbd_features):
@@ -603,6 +718,27 @@ class IscsiTarget(RESTController):
                                      component='iscsi')
 
     @staticmethod
+    def _validate_delete(gateway, target_iqn, config, new_target_iqn=None, new_target_controls=None,
+                         new_disks=None, new_clients=None, new_groups=None):
+        new_target_controls = new_target_controls or {}
+        new_disks = new_disks or []
+        new_clients = new_clients or []
+        new_groups = new_groups or []
+
+        target_config = config['targets'][target_iqn]
+        target = IscsiTarget._config_to_target(target_iqn, config)
+        for client_iqn in list(target_config['clients'].keys()):
+            if IscsiTarget._client_deletion_required(target, new_target_iqn, new_target_controls,
+                                                     new_clients, client_iqn):
+                client_info = IscsiClient.instance(gateway_name=gateway).get_clientinfo(target_iqn,
+                                                                                        client_iqn)
+                if client_info.get('state', {}).get('LOGGED_IN', []):
+                    raise DashboardException(msg="Client '{}' cannot be deleted until it's logged "
+                                             "out".format(client_iqn),
+                                             code='client_logged_in',
+                                             component='iscsi')
+
+    @staticmethod
     def _update_targetauth(config, target_iqn, auth, gateway_name):
         # Target level authentication was introduced in ceph-iscsi config v11
         if config['version'] > 10:
@@ -624,6 +760,14 @@ class IscsiTarget(RESTController):
                                                                              targetauth_action)
 
     @staticmethod
+    def _is_auth_equal(auth_config, auth):
+        return auth['user'] == auth_config['username'] and \
+            auth['password'] == auth_config['password'] and \
+            auth['mutual_user'] == auth_config['mutual_username'] and \
+            auth['mutual_password'] == auth_config['mutual_password']
+
+    @staticmethod
+    @handle_request_error('iscsi')
     def _create(target_iqn, target_controls, acl_enabled,
                 auth, portals, disks, clients, groups,
                 task_progress_begin, task_progress_end, config, settings):
@@ -638,100 +782,144 @@ class IscsiTarget(RESTController):
         task_progress_inc = 0
         if task_progress_steps != 0:
             task_progress_inc = int((task_progress_end - task_progress_begin) / task_progress_steps)
-        try:
-            gateway_name = portals[0]['host']
-            if not target_config:
-                IscsiClient.instance(gateway_name=gateway_name).create_target(target_iqn,
-                                                                              target_controls)
-            for host, ip_list in portals_by_host.items():
-                if not target_config or host not in target_config['portals']:
-                    IscsiClient.instance(gateway_name=gateway_name).create_gateway(target_iqn,
-                                                                                   host,
-                                                                                   ip_list)
-                TaskManager.current_task().inc_progress(task_progress_inc)
+        gateway_name = portals[0]['host']
+        if not target_config:
+            IscsiClient.instance(gateway_name=gateway_name).create_target(target_iqn,
+                                                                          target_controls)
+        IscsiTarget._create_gateways(portals_by_host, target_config,
+                                     gateway_name, target_iqn, task_progress_inc)
 
-            if acl_enabled:
-                IscsiTarget._update_targetauth(config, target_iqn, auth, gateway_name)
-                IscsiTarget._update_targetacl(target_config, target_iqn, acl_enabled, gateway_name)
+        update_acl = not target_config or \
+            acl_enabled != target_config['acl_enabled'] or \
+            not IscsiTarget._is_auth_equal(target_config['auth'], auth)
+        if update_acl:
+            IscsiTarget._update_acl(acl_enabled, config, target_iqn,
+                                    auth, gateway_name, target_config)
 
-            else:
-                IscsiTarget._update_targetacl(target_config, target_iqn, acl_enabled, gateway_name)
-                IscsiTarget._update_targetauth(config, target_iqn, auth, gateway_name)
+        IscsiTarget._create_disks(disks, config, gateway_name, target_config,
+                                  target_iqn, settings, task_progress_inc)
+        IscsiTarget._create_clients(clients, target_config, gateway_name,
+                                    target_iqn, groups, task_progress_inc)
+        IscsiTarget._create_groups(groups, target_config, gateway_name,
+                                   target_iqn, task_progress_inc, target_controls,
+                                   task_progress_end)
 
-            for disk in disks:
-                pool = disk['pool']
-                image = disk['image']
+    @staticmethod
+    def _update_acl(acl_enabled, config, target_iqn, auth, gateway_name, target_config):
+        if acl_enabled:
+            IscsiTarget._update_targetauth(config, target_iqn, auth, gateway_name)
+            IscsiTarget._update_targetacl(target_config, target_iqn, acl_enabled,
+                                          gateway_name)
+        else:
+            IscsiTarget._update_targetacl(target_config, target_iqn, acl_enabled,
+                                          gateway_name)
+            IscsiTarget._update_targetauth(config, target_iqn, auth, gateway_name)
+
+    @staticmethod
+    def _create_gateways(portals_by_host, target_config, gateway_name, target_iqn,
+                         task_progress_inc):
+        for host, ip_list in portals_by_host.items():
+            if not target_config or host not in target_config['portals']:
+                IscsiClient.instance(gateway_name=gateway_name).create_gateway(target_iqn,
+                                                                               host,
+                                                                               ip_list)
+            TaskManager.current_task().inc_progress(task_progress_inc)
+
+    @staticmethod
+    def _create_groups(groups, target_config, gateway_name, target_iqn, task_progress_inc,
+                       target_controls, task_progress_end):
+        for group in groups:
+            group_id = group['group_id']
+            members = group['members']
+            image_ids = []
+            for disk in group['disks']:
+                image_ids.append('{}/{}'.format(disk['pool'], disk['image']))
+
+            if target_config and group_id in target_config['groups']:
+                old_members = target_config['groups'][group_id]['members']
+                old_disks = target_config['groups'][group_id]['disks'].keys()
+
+            if not target_config or group_id not in target_config['groups'] or \
+                    list(set(group['members']) - set(old_members)) or \
+                    list(set(image_ids) - set(old_disks)):
+                IscsiClient.instance(gateway_name=gateway_name).create_group(
+                    target_iqn, group_id, members, image_ids)
+            TaskManager.current_task().inc_progress(task_progress_inc)
+        if target_controls:
+            if not target_config or target_controls != target_config['controls']:
+                IscsiClient.instance(gateway_name=gateway_name).reconfigure_target(
+                    target_iqn, target_controls)
+        TaskManager.current_task().set_progress(task_progress_end)
+
+    @staticmethod
+    def _create_clients(clients, target_config, gateway_name, target_iqn, groups,
+                        task_progress_inc):
+        for client in clients:
+            client_iqn = client['client_iqn']
+            if not target_config or client_iqn not in target_config['clients']:
+                IscsiClient.instance(gateway_name=gateway_name).create_client(target_iqn,
+                                                                              client_iqn)
+            if not target_config or client_iqn not in target_config['clients'] or \
+                    not IscsiTarget._is_auth_equal(target_config['clients'][client_iqn]['auth'],
+                                                   client['auth']):
+                user = client['auth']['user']
+                password = client['auth']['password']
+                m_user = client['auth']['mutual_user']
+                m_password = client['auth']['mutual_password']
+                IscsiClient.instance(gateway_name=gateway_name).create_client_auth(
+                    target_iqn, client_iqn, user, password, m_user, m_password)
+            for lun in client['luns']:
+                pool = lun['pool']
+                image = lun['image']
                 image_id = '{}/{}'.format(pool, image)
-                backstore = disk['backstore']
-                wwn = disk.get('wwn')
-                lun = disk.get('lun')
-                if image_id not in config['disks']:
-                    IscsiClient.instance(gateway_name=gateway_name).create_disk(pool,
-                                                                                image,
-                                                                                backstore,
-                                                                                wwn)
-                if not target_config or image_id not in target_config['disks']:
-                    IscsiClient.instance(gateway_name=gateway_name).create_target_lun(target_iqn,
-                                                                                      image_id,
-                                                                                      lun)
+                # Disks inherited from groups must be considered
+                group_disks = []
+                for group in groups:
+                    if client_iqn in group['members']:
+                        group_disks = ['{}/{}'.format(x['pool'], x['image'])
+                                       for x in group['disks']]
+                if not target_config or client_iqn not in target_config['clients'] or \
+                        (image_id not in target_config['clients'][client_iqn]['luns']
+                         and image_id not in group_disks):
+                    IscsiClient.instance(gateway_name=gateway_name).create_client_lun(
+                        target_iqn, client_iqn, image_id)
+            TaskManager.current_task().inc_progress(task_progress_inc)
 
-                controls = disk['controls']
-                d_conf_controls = {}
-                if image_id in config['disks']:
-                    d_conf_controls = config['disks'][image_id]['controls']
-                    disk_default_controls = settings['disk_default_controls'][backstore]
-                    for old_control in d_conf_controls.keys():
-                        # If control was removed, restore the default value
-                        if old_control not in controls:
-                            controls[old_control] = disk_default_controls[old_control]
+    @staticmethod
+    def _create_disks(disks, config, gateway_name, target_config, target_iqn, settings,
+                      task_progress_inc):
+        for disk in disks:
+            pool = disk['pool']
+            image = disk['image']
+            image_id = '{}/{}'.format(pool, image)
+            backstore = disk['backstore']
+            wwn = disk.get('wwn')
+            lun = disk.get('lun')
+            if image_id not in config['disks']:
+                IscsiClient.instance(gateway_name=gateway_name).create_disk(pool,
+                                                                            image,
+                                                                            backstore,
+                                                                            wwn)
+            if not target_config or image_id not in target_config['disks']:
+                IscsiClient.instance(gateway_name=gateway_name).create_target_lun(target_iqn,
+                                                                                  image_id,
+                                                                                  lun)
 
-                if (image_id not in config['disks'] or d_conf_controls != controls) and controls:
-                    IscsiClient.instance(gateway_name=gateway_name).reconfigure_disk(pool,
-                                                                                     image,
-                                                                                     controls)
-                TaskManager.current_task().inc_progress(task_progress_inc)
-            for client in clients:
-                client_iqn = client['client_iqn']
-                if not target_config or client_iqn not in target_config['clients']:
-                    IscsiClient.instance(gateway_name=gateway_name).create_client(target_iqn,
-                                                                                  client_iqn)
-                    user = client['auth']['user']
-                    password = client['auth']['password']
-                    m_user = client['auth']['mutual_user']
-                    m_password = client['auth']['mutual_password']
-                    IscsiClient.instance(gateway_name=gateway_name).create_client_auth(
-                        target_iqn, client_iqn, user, password, m_user, m_password)
-                for lun in client['luns']:
-                    pool = lun['pool']
-                    image = lun['image']
-                    image_id = '{}/{}'.format(pool, image)
-                    if not target_config or client_iqn not in target_config['clients'] or \
-                            image_id not in target_config['clients'][client_iqn]['luns']:
-                        IscsiClient.instance(gateway_name=gateway_name).create_client_lun(
-                            target_iqn, client_iqn, image_id)
-                TaskManager.current_task().inc_progress(task_progress_inc)
-            for group in groups:
-                group_id = group['group_id']
-                members = group['members']
-                image_ids = []
-                for disk in group['disks']:
-                    image_ids.append('{}/{}'.format(disk['pool'], disk['image']))
-                if not target_config or group_id not in target_config['groups']:
-                    IscsiClient.instance(gateway_name=gateway_name).create_group(
-                        target_iqn, group_id, members, image_ids)
-                TaskManager.current_task().inc_progress(task_progress_inc)
-            if target_controls:
-                if not target_config or target_controls != target_config['controls']:
-                    IscsiClient.instance(gateway_name=gateway_name).reconfigure_target(
-                        target_iqn, target_controls)
-            TaskManager.current_task().set_progress(task_progress_end)
-        except RequestException as e:
-            if e.content:
-                content = json.loads(e.content)
-                content_message = content.get('message')
-                if content_message:
-                    raise DashboardException(msg=content_message, component='iscsi')
-            raise DashboardException(e=e, component='iscsi')
+            controls = disk['controls']
+            d_conf_controls = {}
+            if image_id in config['disks']:
+                d_conf_controls = config['disks'][image_id]['controls']
+                disk_default_controls = settings['disk_default_controls'][backstore]
+                for old_control in d_conf_controls.keys():
+                    # If control was removed, restore the default value
+                    if old_control not in controls:
+                        controls[old_control] = disk_default_controls[old_control]
+
+            if (image_id not in config['disks'] or d_conf_controls != controls) and controls:
+                IscsiClient.instance(gateway_name=gateway_name).reconfigure_disk(pool,
+                                                                                 image,
+                                                                                 controls)
+            TaskManager.current_task().inc_progress(task_progress_inc)
 
     @staticmethod
     def _config_to_target(target_iqn, config):
@@ -848,7 +1036,7 @@ class IscsiTarget(RESTController):
         for portal in target['portals']:
             try:
                 IscsiClient.instance(gateway_name=portal['host']).ping()
-            except RequestException:
+            except (IscsiGatewayDoesNotExist, RequestException):
                 return
         gateway_name = target['portals'][0]['host']
         try:
@@ -894,7 +1082,8 @@ class IscsiTarget(RESTController):
 
     @staticmethod
     def _get_portals_by_host(portals):
-        portals_by_host = {}
+        # type: (List[dict]) -> Dict[str, List[str]]
+        portals_by_host = {}  # type: Dict[str, List[str]]
         for portal in portals:
             host = portal['host']
             ip = portal['ip']
@@ -930,3 +1119,22 @@ def validate_rest_api(gateways):
                                          '{}'.format(gateway),
                                      code='ceph_iscsi_rest_api_not_available_for_gateway',
                                      component='iscsi')
+
+
+def validate_auth(auth):
+    username_regex = re.compile(r'^[\w\.:@_-]{8,64}$')
+    password_regex = re.compile(r'^[\w@\-_\/]{12,16}$')
+    result = True
+
+    if auth['user'] or auth['password']:
+        result = bool(username_regex.match(auth['user'])) and \
+            bool(password_regex.match(auth['password']))
+
+    if auth['mutual_user'] or auth['mutual_password']:
+        result = result and bool(username_regex.match(auth['mutual_user'])) and \
+            bool(password_regex.match(auth['mutual_password'])) and auth['user']
+
+    if not result:
+        raise DashboardException(msg='Bad authentication',
+                                 code='target_bad_auth',
+                                 component='iscsi')

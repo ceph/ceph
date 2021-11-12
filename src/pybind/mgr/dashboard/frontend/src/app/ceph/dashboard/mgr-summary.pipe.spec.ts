@@ -1,18 +1,17 @@
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
-
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { MgrSummaryPipe } from './mgr-summary.pipe';
 
 describe('MgrSummaryPipe', () => {
   let pipe: MgrSummaryPipe;
 
   configureTestBed({
-    providers: [MgrSummaryPipe, i18nProviders]
+    providers: [MgrSummaryPipe]
   });
 
   beforeEach(() => {
-    pipe = TestBed.get(MgrSummaryPipe);
+    pipe = TestBed.inject(MgrSummaryPipe);
   });
 
   it('create an instance', () => {
@@ -24,14 +23,14 @@ describe('MgrSummaryPipe', () => {
   });
 
   it('transforms with active_name undefined', () => {
-    const payload = {
+    const payload: Record<string, any> = {
       active_name: undefined,
       standbys: []
     };
     const expected = [
-      { class: 'mgr-active-name', content: 'n/a active', titleText: '' },
+      { class: 'popover-info', content: 'n/a active', titleText: '' },
       { class: 'card-text-line-break', content: '', titleText: '' },
-      { class: '', content: '0 standby', titleText: '' }
+      { class: 'popover-info', content: '0 standby', titleText: '' }
     ];
 
     expect(pipe.transform(payload)).toEqual(expected);
@@ -39,13 +38,13 @@ describe('MgrSummaryPipe', () => {
 
   it('transforms with 1 active and 2 standbys', () => {
     const payload = {
-      active_name: 'a',
-      standbys: ['b', 'c']
+      active_name: 'x',
+      standbys: [{ name: 'y' }, { name: 'z' }]
     };
     const expected = [
-      { class: 'mgr-active-name', content: '1 active', titleText: 'active daemon: a' },
+      { class: 'popover-info', content: '1 active', titleText: 'active daemon: x' },
       { class: 'card-text-line-break', content: '', titleText: '' },
-      { class: '', content: '2 standby', titleText: '' }
+      { class: 'popover-info', content: '2 standby', titleText: 'standby daemons: y, z' }
     ];
 
     expect(pipe.transform(payload)).toEqual(expected);

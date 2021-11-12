@@ -27,7 +27,7 @@
  *
  */
 
-class MOSDRepOpReply : public MOSDFastDispatchOp {
+class MOSDRepOpReply final : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -88,13 +88,9 @@ public:
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     encode(map_epoch, payload);
-    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
-      header.version = HEAD_VERSION;
-      encode(min_epoch, payload);
-      encode_trace(payload, features);
-    } else {
-      header.version = 1;
-    }
+    header.version = HEAD_VERSION;
+    encode(min_epoch, payload);
+    encode_trace(payload, features);
     encode(reqid, payload);
     encode(pgid, payload);
     encode(ack_type, payload);
@@ -136,7 +132,7 @@ public:
       ack_type(0), result(0),
       final_decode_needed(true) {}
 private:
-  ~MOSDRepOpReply() override {}
+  ~MOSDRepOpReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "osd_repop_reply"; }

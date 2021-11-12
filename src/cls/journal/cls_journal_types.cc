@@ -5,6 +5,9 @@
 #include "include/stringify.h"
 #include "common/Formatter.h"
 
+using ceph::bufferlist;
+using ceph::Formatter;
+
 namespace cls {
 namespace journal {
 

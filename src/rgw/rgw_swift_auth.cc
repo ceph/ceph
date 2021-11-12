@@ -3,8 +3,8 @@
 
 #include <array>
 #include <algorithm>
+#include <string_view>
 
-#include <boost/utility/string_view.hpp>
 #include <boost/container/static_vector.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string.hpp>
@@ -19,6 +19,7 @@
 
 #include "rgw_client_io.h"
 #include "rgw_http_client.h"
+#include "rgw_sal_rados.h"
 #include "include/str_list.h"
 
 #define dout_context g_ceph_context
@@ -26,6 +27,7 @@
 
 #define DEFAULT_SWIFT_PREFIX "/swift"
 
+using namespace std;
 using namespace ceph::crypto;
 
 
@@ -48,7 +50,7 @@ void TempURLApplier::modify_request_state(const DoutPrefixProvider* dpp, req_sta
     s->content_disp.override = "attachment; filename=\"" + fenc + "\"";
   } else {
     std::string fenc;
-    url_encode(s->object.name, fenc);
+    url_encode(s->object->get_name(), fenc);
     s->content_disp.fallback = "attachment; filename=\"" + fenc + "\"";
   }
 
@@ -67,14 +69,14 @@ bool TempURLEngine::is_applicable(const req_state* const s) const noexcept
 }
 
 void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_state* const s,
-                                   RGWUserInfo& owner_info) const
+                                   RGWUserInfo& owner_info, optional_yield y) const
 {
   /* We cannot use req_state::bucket_name because it isn't available
    * now. It will be initialized in RGWHandler_REST_SWIFT::postauth_init(). */
   const string& bucket_name = s->init_state.url_bucket;
 
   /* TempURL requires that bucket and object names are specified. */
-  if (bucket_name.empty() || s->object.empty()) {
+  if (bucket_name.empty() || s->object->empty()) {
     throw -EPERM;
   }
 
@@ -84,46 +86,48 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
    * the access would be limited to accounts with empty tenant. */
   string bucket_tenant;
   if (!s->account_name.empty()) {
-    RGWUserInfo uinfo;
     bool found = false;
+    std::unique_ptr<rgw::sal::User> user;
 
-    const rgw_user uid(s->account_name);
+    rgw_user uid(s->account_name);
     if (uid.tenant.empty()) {
-      const rgw_user tenanted_uid(uid.id, uid.id);
-
-      if (ctl->user->get_info_by_uid(tenanted_uid, &uinfo, s->yield) >= 0) {
-        /* Succeeded. */
-        bucket_tenant = uinfo.user_id.tenant;
-        found = true;
+      rgw_user tenanted_uid(uid.id, uid.id);
+      user = store->get_user(tenanted_uid);
+      if (user->load_user(dpp, s->yield) >= 0) {
+	/* Succeeded */
+	found = true;
       }
     }
 
-    if (!found && ctl->user->get_info_by_uid(uid, &uinfo, s->yield) < 0) {
-      throw -EPERM;
-    } else {
-      bucket_tenant = uinfo.user_id.tenant;
+    if (!found) {
+      user = store->get_user(uid);
+      if (user->load_user(dpp, s->yield) < 0) {
+	throw -EPERM;
+      }
     }
+
+    bucket_tenant = user->get_tenant();
   }
 
   rgw_bucket b;
   b.tenant = std::move(bucket_tenant);
   b.name = std::move(bucket_name);
-
-  /* Need to get user info of bucket owner. */
-  RGWBucketInfo bucket_info;
-  RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj(s->sysobj_ctx);
-  int ret = ctl->bucket->read_bucket_info(b, &bucket_info, null_yield, RGWBucketCtl::BucketInstance::GetParams()
-                                                                       .set_bectx_params(bectx_params));
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = store->get_bucket(dpp, nullptr, b, &bucket, s->yield);
   if (ret < 0) {
     throw ret;
   }
 
-  ldpp_dout(dpp, 20) << "temp url user (bucket owner): " << bucket_info.owner
+  ldpp_dout(dpp, 20) << "temp url user (bucket owner): " << bucket->get_info().owner
                  << dendl;
 
-  if (ctl->user->get_info_by_uid(bucket_info.owner, &owner_info, s->yield) < 0) {
+  std::unique_ptr<rgw::sal::User> user;
+  user = store->get_user(bucket->get_info().owner);
+  if (user->load_user(dpp, s->yield) < 0) {
     throw -EPERM;
   }
+
+  owner_info = user->get_info();
 }
 
 std::string TempURLEngine::convert_from_iso8601(std::string expires) const
@@ -193,8 +197,8 @@ public:
   SignatureHelper() = default;
 
   const char* calc(const std::string& key,
-                   const boost::string_view& method,
-                   const boost::string_view& path,
+                   const std::string_view& method,
+                   const std::string_view& path,
                    const std::string& expires) {
 
     using ceph::crypto::HMACSHA1;
@@ -227,9 +231,9 @@ class TempURLEngine::PrefixableSignatureHelper
     : private TempURLEngine::SignatureHelper {
   using base_t = SignatureHelper;
 
-  const boost::string_view decoded_uri;
-  const boost::string_view object_name;
-  boost::string_view no_obj_uri;
+  const std::string_view decoded_uri;
+  const std::string_view object_name;
+  std::string_view no_obj_uri;
 
   const boost::optional<const std::string&> prefix;
 
@@ -242,7 +246,7 @@ public:
       prefix(prefix) {
     /* Transform: v1/acct/cont/obj - > v1/acct/cont/
      *
-     * NOTE(rzarzynski): we really want to substr() on boost::string_view,
+     * NOTE(rzarzynski): we really want to substr() on std::string_view,
      * not std::string. Otherwise we would end with no_obj_uri referencing
      * a temporary. */
     no_obj_uri = \
@@ -250,8 +254,8 @@ public:
   }
 
   const char* calc(const std::string& key,
-                   const boost::string_view& method,
-                   const boost::string_view& path,
+                   const std::string_view& method,
+                   const std::string_view& path,
                    const std::string& expires) {
     if (!prefix) {
       return base_t::calc(key, method, path, expires);
@@ -275,7 +279,7 @@ public:
 }; /* TempURLEngine::PrefixableSignatureHelper */
 
 TempURLEngine::result_t
-TempURLEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const
+TempURLEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s, optional_yield y) const
 {
   if (! is_applicable(s)) {
     return result_t::deny();
@@ -300,7 +304,7 @@ TempURLEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* cons
 
   RGWUserInfo owner_info;
   try {
-    get_owner_info(dpp, s, owner_info);
+    get_owner_info(dpp, s, owner_info, y);
   } catch (...) {
     ldpp_dout(dpp, 5) << "cannot get user_info of account's owner" << dendl;
     return result_t::reject();
@@ -327,14 +331,14 @@ TempURLEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* cons
 
   /* XXX can we search this ONCE? */
   const size_t pos = g_conf()->rgw_swift_url_prefix.find_last_not_of('/') + 1;
-  const boost::string_view ref_uri = s->decoded_uri;
-  const std::array<boost::string_view, 2> allowed_paths = {
+  const std::string_view ref_uri = s->decoded_uri;
+  const std::array<std::string_view, 2> allowed_paths = {
     ref_uri,
     ref_uri.substr(pos + 1)
   };
 
   /* Account owner calculates the signature also against a HTTP method. */
-  boost::container::static_vector<boost::string_view, 3> allowed_methods;
+  boost::container::static_vector<std::string_view, 3> allowed_methods;
   if (strcmp("HEAD", s->info.method) == 0) {
     /* HEAD requests are specially handled. */
     /* TODO: after getting a newer boost (with static_vector supporting
@@ -351,7 +355,7 @@ TempURLEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* cons
   /* Need to try each combination of keys, allowed path and methods. */
   PrefixableSignatureHelper sig_helper {
     s->decoded_uri,
-    s->object.name,
+    s->object->get_name(),
     temp_url_prefix
   };
 
@@ -402,7 +406,7 @@ bool ExternalTokenEngine::is_applicable(const std::string& token) const noexcept
 ExternalTokenEngine::result_t
 ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
                                   const std::string& token,
-                                  const req_state* const s) const
+                                  const req_state* const s, optional_yield y) const
 {
   if (! is_applicable(token)) {
     return result_t::deny();
@@ -421,7 +425,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   ldpp_dout(dpp, 10) << "rgw_swift_validate_token url=" << url_buf << dendl;
 
-  int ret = validator.process(null_yield);
+  int ret = validator.process(y);
   if (ret < 0) {
     throw ret;
   }
@@ -448,14 +452,14 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   ldpp_dout(dpp, 10) << "swift user=" << swift_user << dendl;
 
-  RGWUserInfo tmp_uinfo;
-  ret = ctl->user->get_info_by_swift(swift_user, &tmp_uinfo, s->yield);
+  std::unique_ptr<rgw::sal::User> user;
+  ret = store->get_user_by_swift(dpp, swift_user, s->yield, &user);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user" << dendl;
     throw ret;
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, tmp_uinfo,
+  auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
                                            extract_swift_subuser(swift_user),
                                            boost::none);
   return result_t::grant(std::move(apl));
@@ -569,16 +573,16 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
     return result_t::deny(-EPERM);
   }
 
-  RGWUserInfo user_info;
-  ret = ctl->user->get_info_by_swift(swift_user, &user_info, s->yield);
+  std::unique_ptr<rgw::sal::User> user;
+  ret = store->get_user_by_swift(dpp, swift_user, s->yield, &user);
   if (ret < 0) {
     throw ret;
   }
 
   ldpp_dout(dpp, 10) << "swift_user=" << swift_user << dendl;
 
-  const auto siter = user_info.swift_keys.find(swift_user);
-  if (siter == std::end(user_info.swift_keys)) {
+  const auto siter = user->get_info().swift_keys.find(swift_user);
+  if (siter == std::end(user->get_info().swift_keys)) {
     return result_t::deny(-EPERM);
   }
 
@@ -609,7 +613,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
     return result_t::deny(-EPERM);
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, user_info,
+  auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
                                            extract_swift_subuser(swift_user),
                                            boost::none);
   return result_t::grant(std::move(apl));
@@ -620,17 +624,17 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 } /* namespace rgw */
 
 
-void RGW_SWIFT_Auth_Get::execute()
+void RGW_SWIFT_Auth_Get::execute(optional_yield y)
 {
   int ret = -EPERM;
 
   const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
-  const char *user = s->info.env->get("HTTP_X_AUTH_USER");
+  const char *user_name = s->info.env->get("HTTP_X_AUTH_USER");
 
   s->prot_flags |= RGW_REST_SWIFT;
 
   string user_str;
-  RGWUserInfo info;
+  std::unique_ptr<rgw::sal::User> user;
   bufferlist bl;
   RGWAccessKey *swift_key;
   map<string, RGWAccessKey>::iterator siter;
@@ -682,19 +686,19 @@ void RGW_SWIFT_Auth_Get::execute()
     }
   }
 
-  if (!key || !user)
+  if (!key || !user_name)
     goto done;
 
-  user_str = user;
+  user_str = user_name;
 
-  if ((ret = store->ctl()->user->get_info_by_swift(user_str, &info, s->yield)) < 0)
-  {
+  ret = store->get_user_by_swift(s, user_str, s->yield, &user);
+  if (ret < 0) {
     ret = -EACCES;
     goto done;
   }
 
-  siter = info.swift_keys.find(user_str);
-  if (siter == info.swift_keys.end()) {
+  siter = user->get_info().swift_keys.find(user_str);
+  if (siter == user->get_info().swift_keys.end()) {
     ret = -EPERM;
     goto done;
   }
@@ -711,7 +715,7 @@ void RGW_SWIFT_Auth_Get::execute()
     tenant_path.append(g_conf()->rgw_swift_tenant_name);
   } else if (g_conf()->rgw_swift_account_in_url) {
     tenant_path = "/AUTH_";
-    tenant_path.append(info.user_id.to_str());
+    tenant_path.append(user->get_id().to_str());
   }
 
   dump_header(s, "X-Storage-Url", swift_url + swift_prefix + "/v1" +
@@ -741,7 +745,7 @@ done:
   end_header(s);
 }
 
-int RGWHandler_SWIFT_Auth::init(rgw::sal::RGWRadosStore *store, struct req_state *state,
+int RGWHandler_SWIFT_Auth::init(rgw::sal::Store* store, struct req_state *state,
 				rgw::io::BasicClient *cio)
 {
   state->dialect = "swift-auth";
@@ -751,7 +755,7 @@ int RGWHandler_SWIFT_Auth::init(rgw::sal::RGWRadosStore *store, struct req_state
   return RGWHandler::init(store, state, cio);
 }
 
-int RGWHandler_SWIFT_Auth::authorize(const DoutPrefixProvider *dpp)
+int RGWHandler_SWIFT_Auth::authorize(const DoutPrefixProvider *dpp, optional_yield)
 {
   return 0;
 }

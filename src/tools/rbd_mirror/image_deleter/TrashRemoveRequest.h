@@ -14,7 +14,10 @@
 
 class Context;
 class ContextWQ;
-namespace librbd { struct ImageCtx; }
+namespace librbd {
+struct ImageCtx;
+namespace asio { struct ContextWQ; }
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
@@ -26,14 +29,15 @@ public:
   static TrashRemoveRequest* create(librados::IoCtx &io_ctx,
                                     const std::string &image_id,
                                     ErrorResult *error_result,
-                                    ContextWQ *op_work_queue,
+                                    librbd::asio::ContextWQ *op_work_queue,
                                     Context *on_finish) {
     return new TrashRemoveRequest(io_ctx, image_id, error_result, op_work_queue,
                                   on_finish);
   }
 
   TrashRemoveRequest(librados::IoCtx &io_ctx, const std::string &image_id,
-                     ErrorResult *error_result, ContextWQ *op_work_queue,
+                     ErrorResult *error_result,
+                     librbd::asio::ContextWQ *op_work_queue,
                      Context *on_finish)
     : m_io_ctx(io_ctx), m_image_id(image_id), m_error_result(error_result),
       m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
@@ -74,7 +78,7 @@ private:
   librados::IoCtx &m_io_ctx;
   std::string m_image_id;
   ErrorResult *m_error_result;
-  ContextWQ *m_op_work_queue;
+  librbd::asio::ContextWQ *m_op_work_queue;
   Context *m_on_finish;
 
   ceph::bufferlist m_out_bl;

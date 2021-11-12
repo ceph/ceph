@@ -26,7 +26,9 @@
 
 class MonClient;
 
-std::string handle_pyerror();
+std::string handle_pyerror(bool generate_crash_dump = false,
+			   std::string module = {},
+			   std::string caller = {});
 
 std::string peek_pyerror();
 
@@ -81,11 +83,12 @@ private:
   int load_commands();
   std::vector<ModuleCommand> commands;
 
+  int register_options(PyObject *cls);
   int load_options();
   std::map<std::string, MgrMap::ModuleOption> options;
 
 public:
-  static std::string config_prefix;
+  static std::string mgr_store_prefix;
 
   SafeThreadState pMyThreadState;
   PyObject *pClass = nullptr;
@@ -108,13 +111,8 @@ public:
     const std::string& value);
 
   int load(PyThreadState *pMainThreadState);
-#if PY_MAJOR_VERSION >= 3
   static PyObject* init_ceph_logger();
   static PyObject* init_ceph_module();
-#else
-  static void init_ceph_logger();
-  static void init_ceph_module();
-#endif
 
   void set_enabled(const bool enabled_)
   {
@@ -180,9 +178,9 @@ public:
   
   ~PyModuleConfig();
 
-  void set_config(
+  std::pair<int, std::string> set_config(
     MonClient *monc,
     const std::string &module_name,
-    const std::string &key, const boost::optional<std::string>& val);
+    const std::string &key, const std::optional<std::string>& val);
 
 };

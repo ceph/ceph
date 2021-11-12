@@ -12,14 +12,15 @@ function run() {
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
+        setup $dir || return 1
         $func $dir || return 1
+        teardown $dir || return 1
     done
 }
 
 function TEST_a_merge_empty() {
     local dir=$1
 
-    setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=3 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
@@ -87,8 +88,7 @@ function TEST_a_merge_empty() {
 function TEST_import_after_merge_and_gap() {
     local dir=$1
 
-    setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
 
@@ -162,8 +162,7 @@ function TEST_import_after_merge_and_gap() {
 function TEST_import_after_split() {
     local dir=$1
 
-    setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
 

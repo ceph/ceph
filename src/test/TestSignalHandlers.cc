@@ -29,7 +29,8 @@
 #include <string>
 
 #define dout_context g_ceph_context
-using std::string;
+
+using namespace std;
 
 // avoid compiler warning about dereferencing NULL pointer
 static int* get_null()
@@ -76,8 +77,7 @@ typedef void (*test_fn_t)(void);
 
 int main(int argc, const char **argv)
 {
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);

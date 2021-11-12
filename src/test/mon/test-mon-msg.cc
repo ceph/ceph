@@ -20,6 +20,7 @@
 
 #include "global/global_init.h"
 #include "global/global_context.h"
+#include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
 #include "common/version.h"
 #include "common/dout.h"
@@ -47,10 +48,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "test-mon-msg "
 
+using namespace std;
+
 class MonClientHelper : public Dispatcher
 {
 protected:
   CephContext *cct;
+  ceph::async::io_context_pool poolctx;
   Messenger *msg;
   MonClient monc;
 
@@ -63,8 +67,9 @@ public:
   explicit MonClientHelper(CephContext *cct_)
     : Dispatcher(cct_),
       cct(cct_),
+      poolctx(1),
       msg(NULL),
-      monc(cct_)
+      monc(cct_, poolctx)
   { }
 
 
@@ -81,7 +86,7 @@ public:
 
     std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf.get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
     msg = Messenger::create(cct, public_msgr_type, entity_name_t::CLIENT(-1),
-                            "test-mon-msg", 0, 0);
+                            "test-mon-msg", 0);
     ceph_assert(msg != NULL);
     msg->set_default_policy(Messenger::Policy::lossy_client(0));
     dout(0) << __func__ << " starting messenger at "
@@ -320,8 +325,7 @@ TEST_F(MonMsgTest, MMonJoin)
 
 int main(int argc, char *argv[])
 {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(nullptr, args,
 			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,

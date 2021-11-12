@@ -55,8 +55,8 @@ public:
     return sent;
   }
 
-  size_t send_header(const boost::string_ref& name,
-                     const boost::string_ref& value) override {
+  size_t send_header(const std::string_view& name,
+                     const std::string_view& value) override {
     const auto sent = DecoratedRestfulClient<T>::send_header(name, value);
     lsubdout(cct, rgw, 30) << "AccountingFilter::send_header: e="
         << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
@@ -386,8 +386,8 @@ protected:
 
   std::vector<std::pair<std::string, std::string>> headers;
 
-  size_t send_header(const boost::string_ref& name,
-                     const boost::string_ref& value) override {
+  size_t send_header(const std::string_view& name,
+                     const std::string_view& value) override {
     switch (phase) {
     case ReorderState::RGW_EARLY_HEADERS:
     case ReorderState::RGW_STATUS_SEEN:

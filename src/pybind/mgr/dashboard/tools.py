@@ -1,35 +1,27 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
-
-import sys
-import inspect
-import json
-import functools
-import ipaddress
-import logging
 
 import collections
+import fnmatch
+import inspect
+import json
+import logging
+import threading
+import time
+import urllib
 from datetime import datetime, timedelta
 from distutils.util import strtobool
-import fnmatch
-import time
-import threading
-import six
-from six.moves import urllib
-import cherrypy
 
-try:
-    from urlparse import urljoin
-except ImportError:
-    from urllib.parse import urljoin
+import cherrypy
+from mgr_util import build_url
 
 from . import mgr
 from .exceptions import ViewCacheNoDataException
-from .settings import Settings
 from .services.auth import JwtManager
+from .settings import Settings
 
 try:
-    from typing import Any, AnyStr, Dict, List  # noqa pylint: disable=unused-import
+    from typing import Any, AnyStr, Callable, DefaultDict, Deque, Dict, List, \
+        Optional, Set, Tuple, Union
 except ImportError:
     pass  # For typing only
 
@@ -73,7 +65,7 @@ class RequestLoggingTool(cherrypy.Tool):
                 for key in keys:
                     params[key] = '***'
                 msg = '{} params=\'{}\''.format(msg, json.dumps(params))
-            mgr.cluster_log('audit', mgr.CLUSTER_LOG_PRIO_INFO, msg)
+            mgr.cluster_log('audit', mgr.ClusterLogPrio.INFO, msg)
 
     def request_error(self):
         self._request_log(self.logger.error)
@@ -251,7 +243,7 @@ class ViewCache(object):
                 rvc = ViewCache.RemoteViewCache(self.timeout)
                 self.cache_by_args[args] = rvc
             return rvc.run(fn, args, kwargs)
-        wrapper.reset = self.reset
+        wrapper.reset = self.reset  # type: ignore
         return wrapper
 
     def reset(self):
@@ -261,10 +253,10 @@ class ViewCache(object):
 
 class NotificationQueue(threading.Thread):
     _ALL_TYPES_ = '__ALL__'
-    _listeners = collections.defaultdict(set)
+    _listeners = collections.defaultdict(set)  # type: DefaultDict[str, Set[Tuple[int, Callable]]]
     _lock = threading.Lock()
     _cond = threading.Condition()
-    _queue = collections.deque()
+    _queue = collections.deque()  # type: Deque[Tuple[str, Any]]
     _running = False
     _instance = None
 
@@ -279,8 +271,8 @@ class NotificationQueue(threading.Thread):
                 return
             cls._running = True
             cls._instance = NotificationQueue()
-        cls.logger = logging.getLogger('notification_queue')
-        cls.logger.debug("starting notification queue")
+        cls.logger = logging.getLogger('notification_queue')  # type: ignore
+        cls.logger.debug("starting notification queue")  # type: ignore
         cls._instance.start()
 
     @classmethod
@@ -294,9 +286,9 @@ class NotificationQueue(threading.Thread):
             cls._running = False
         with cls._cond:
             cls._cond.notify()
-        cls.logger.debug("waiting for notification queue to finish")
+        cls.logger.debug("waiting for notification queue to finish")  # type: ignore
         instance.join()
-        cls.logger.debug("notification queue stopped")
+        cls.logger.debug("notification queue stopped")  # type: ignore
 
     @classmethod
     def _registered_handler(cls, func, n_types):
@@ -327,11 +319,14 @@ class NotificationQueue(threading.Thread):
             for ev_type in n_types:
                 if not cls._registered_handler(func, ev_type):
                     cls._listeners[ev_type].add((priority, func))
-                    cls.logger.debug("function %s was registered for events of"
-                                     " type %s", func, ev_type)
+                    cls.logger.debug(  # type: ignore
+                        "function %s was registered for events of type %s",
+                        func, ev_type
+                    )
 
     @classmethod
     def deregister(cls, func, n_types=None):
+        # type: (Callable, Union[str, list, None]) -> None
         """Removes the listener function from this notification queue
 
         If the second parameter `n_types` is omitted, the function is removed
@@ -358,11 +353,14 @@ class NotificationQueue(threading.Thread):
                         break
                 if to_remove:
                     listeners.discard(to_remove)
-                    cls.logger.debug("function %s was deregistered for events "
-                                     "of type %s", func, ev_type)
+                    cls.logger.debug(  # type: ignore
+                        "function %s was deregistered for events of type %s",
+                        func, ev_type
+                    )
 
     @classmethod
     def new_notification(cls, notify_type, notify_value):
+        # type: (str, Any) -> None
         with cls._cond:
             cls._queue.append((notify_type, notify_value))
             cls._cond.notify()
@@ -379,10 +377,10 @@ class NotificationQueue(threading.Thread):
                 listener[1](notify_value)
 
     def run(self):
-        self.logger.debug("notification queue started")
+        self.logger.debug("notification queue started")  # type: ignore
         while self._running:
             private_buffer = []
-            self.logger.debug("processing queue: %s", len(self._queue))
+            self.logger.debug("processing queue: %s", len(self._queue))  # type: ignore
             try:
                 while True:
                     private_buffer.append(self._queue.popleft())
@@ -393,10 +391,10 @@ class NotificationQueue(threading.Thread):
                 while self._running and not self._queue:
                     self._cond.wait()
         # flush remaining events
-        self.logger.debug("flush remaining events: %s", len(self._queue))
+        self.logger.debug("flush remaining events: %s", len(self._queue))  # type: ignore
         self._notify_listeners(self._queue)
         self._queue.clear()
-        self.logger.debug("notification queue finished")
+        self.logger.debug("notification queue finished")  # type: ignore
 
 
 # pylint: disable=too-many-arguments, protected-access
@@ -407,20 +405,20 @@ class TaskManager(object):
     VALUE_DONE = "done"
     VALUE_EXECUTING = "executing"
 
-    _executing_tasks = set()
-    _finished_tasks = []
+    _executing_tasks = set()  # type: Set[Task]
+    _finished_tasks = []  # type: List[Task]
     _lock = threading.Lock()
 
     _task_local_data = threading.local()
 
     @classmethod
     def init(cls):
-        cls.logger = logging.getLogger('taskmgr')
+        cls.logger = logging.getLogger('taskmgr')  # type: ignore
         NotificationQueue.register(cls._handle_finished_task, 'cd_task_finished')
 
     @classmethod
     def _handle_finished_task(cls, task):
-        cls.logger.info("finished %s", task)
+        cls.logger.info("finished %s", task)  # type: ignore
         with cls._lock:
             cls._executing_tasks.remove(task)
             cls._finished_tasks.append(task)
@@ -438,13 +436,13 @@ class TaskManager(object):
                     exception_handler)
         with cls._lock:
             if task in cls._executing_tasks:
-                cls.logger.debug("task already executing: %s", task)
+                cls.logger.debug("task already executing: %s", task)  # type: ignore
                 for t in cls._executing_tasks:
                     if t == task:
                         return t
-            cls.logger.debug("created %s", task)
+            cls.logger.debug("created %s", task)  # type: ignore
             cls._executing_tasks.add(task)
-        cls.logger.info("running %s", task)
+        cls.logger.info("running %s", task)  # type: ignore
         task._run()
         return task
 
@@ -522,7 +520,7 @@ class TaskExecutor(object):
     def start(self):
         self.logger.debug("executing task %s", self.task)
         try:
-            self.task.fn(*self.task.fn_args, **self.task.fn_kwargs)
+            self.task.fn(*self.task.fn_args, **self.task.fn_kwargs)  # type: ignore
         except Exception as ex:
             self.logger.exception("Error while calling %s", self.task)
             self.finish(None, ex)
@@ -532,7 +530,7 @@ class TaskExecutor(object):
             self.logger.debug("successfully finished task: %s", self.task)
         else:
             self.logger.debug("task finished with exception: %s", self.task)
-        self.task._complete(ret_value, exception)
+        self.task._complete(ret_value, exception)  # type: ignore
 
 
 # pylint: disable=protected-access
@@ -549,7 +547,7 @@ class ThreadedExecutor(TaskExecutor):
         TaskManager._task_local_data.task = self.task
         try:
             self.logger.debug("executing task %s", self.task)
-            val = self.task.fn(*self.task.fn_args, **self.task.fn_kwargs)
+            val = self.task.fn(*self.task.fn_args, **self.task.fn_kwargs)  # type: ignore
         except Exception as ex:
             self.logger.exception("Error while calling %s", self.task)
             self.finish(None, ex)
@@ -571,9 +569,9 @@ class Task(object):
         self.event = threading.Event()
         self.progress = None
         self.ret_value = None
-        self.begin_time = None
-        self.end_time = None
-        self.duration = 0
+        self._begin_time: Optional[float] = None
+        self._end_time: Optional[float] = None
+        self.duration = 0.0
         self.exception = None
         self.logger = logging.getLogger('task')
         self.lock = threading.Lock()
@@ -597,7 +595,7 @@ class Task(object):
             assert not self.running
             self.executor.init(self)
             self.set_progress(0, in_lock=True)
-            self.begin_time = time.time()
+            self._begin_time = time.time()
             self.running = True
         self.executor.start()
 
@@ -611,7 +609,7 @@ class Task(object):
                 exception = ex
         with self.lock:
             assert self.running, "_complete cannot be called before _run"
-            self.end_time = now
+            self._end_time = now
             self.ret_value = ret_value
             self.exception = exception
             self.duration = now - self.begin_time
@@ -648,7 +646,7 @@ class Task(object):
             raise Exception("Progress delta value must be a positive integer")
         if not in_lock:
             self.lock.acquire()
-        prog = self.progress + delta
+        prog = self.progress + delta  # type: ignore
         self.progress = prog if prog <= 100 else 100
         if not in_lock:
             self.lock.release()
@@ -663,56 +661,22 @@ class Task(object):
         if not in_lock:
             self.lock.release()
 
+    @property
+    def end_time(self) -> float:
+        assert self._end_time is not None
+        return self._end_time
 
-def build_url(host, scheme=None, port=None):
-    """
-    Build a valid URL. IPv6 addresses specified in host will be enclosed in brackets
-    automatically.
-
-    >>> build_url('example.com', 'https', 443)
-    'https://example.com:443'
-
-    >>> build_url(host='example.com', port=443)
-    '//example.com:443'
-
-    >>> build_url('fce:9af7:a667:7286:4917:b8d3:34df:8373', port=80, scheme='http')
-    'http://[fce:9af7:a667:7286:4917:b8d3:34df:8373]:80'
-
-    :param scheme: The scheme, e.g. http, https or ftp.
-    :type scheme: str
-    :param host: Consisting of either a registered name (including but not limited to
-                 a hostname) or an IP address.
-    :type host: str
-    :type port: int
-    :rtype: str
-    """
-    try:
-        try:
-            u_host = six.u(host)
-        except TypeError:
-            u_host = host
-
-        ipaddress.IPv6Address(u_host)
-        netloc = '[{}]'.format(host)
-    except ValueError:
-        netloc = host
-    if port:
-        netloc += ':{}'.format(port)
-    pr = urllib.parse.ParseResult(
-        scheme=scheme if scheme else '',
-        netloc=netloc,
-        path='',
-        params='',
-        query='',
-        fragment='')
-    return pr.geturl()
+    @property
+    def begin_time(self) -> float:
+        assert self._begin_time is not None
+        return self._begin_time
 
 
 def prepare_url_prefix(url_prefix):
     """
     return '' if no prefix, or '/prefix' without slash in the end.
     """
-    url_prefix = urljoin('/', url_prefix)
+    url_prefix = urllib.parse.urljoin('/', url_prefix)
     return url_prefix.rstrip('/')
 
 
@@ -735,18 +699,19 @@ def dict_contains_path(dct, keys):
     return True
 
 
-if sys.version_info > (3, 0):
-    wraps = functools.wraps
-    _getargspec = inspect.getfullargspec
-else:
-    def wraps(func):
-        def decorator(wrapper):
-            new_wrapper = functools.wraps(func)(wrapper)
-            new_wrapper.__wrapped__ = func  # set __wrapped__ even for Python 2
-            return new_wrapper
-        return decorator
-
-    _getargspec = inspect.getargspec
+def dict_get(obj, path, default=None):
+    """
+    Get the value at any depth of a nested object based on the path
+    described by `path`. If path doesn't exist, `default` is returned.
+    """
+    current = obj
+    for part in path.split('.'):
+        if not isinstance(current, dict):
+            return default
+        if part not in current.keys():
+            return default
+        current = current.get(part, {})
+    return current
 
 
 def getargspec(func):
@@ -756,7 +721,7 @@ def getargspec(func):
     except AttributeError:
         pass
     # pylint: disable=deprecated-method
-    return _getargspec(func)
+    return inspect.getfullargspec(func)
 
 
 def str_to_bool(val):
@@ -796,7 +761,7 @@ def json_str_to_object(value):  # type: (AnyStr) -> Any
 
     try:
         # json.loads accepts binary input from version >=3.6
-        value = value.decode('utf-8')
+        value = value.decode('utf-8')  # type: ignore
     except AttributeError:
         pass
 
@@ -821,7 +786,7 @@ def get_request_body_params(request):
     :return: A dictionary containing the parameters.
     :rtype: dict
     """
-    params = {}
+    params = {}  # type: dict
     if request.method not in request.methods_with_bodies:
         return params
 
@@ -863,3 +828,13 @@ def find_object_in_list(key, value, iterable):
         if key in obj and obj[key] == value:
             return obj
     return None
+
+
+def merge_list_of_dicts_by_key(target_list: list, source_list: list, key: str):
+    target_list = {d[key]: d for d in target_list}
+    for sdict in source_list:
+        if bool(sdict):
+            if sdict[key] in target_list:
+                target_list[sdict[key]].update(sdict)
+    target_list = [value for value in target_list.values()]
+    return target_list

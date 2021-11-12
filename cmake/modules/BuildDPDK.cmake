@@ -1,8 +1,4 @@
 function(do_build_dpdk dpdk_dir)
-  find_program(MAKE_EXECUTABLE NAMES gmake make)
-  if(NOT MAKE_EXECUTABLE)
-    message(FATAL_ERROR "Can't find make")
-  endif()
   # mk/machine/native/rte.vars.mk
   # rte_cflags are extracted from mk/machine/${machine}/rte.vars.mk
   # only 3 of them have -march=<arch> defined, so copying them here.
@@ -62,6 +58,8 @@ function(do_build_dpdk dpdk_dir)
 
   set(target "${arch}-${machine_tmpl}-${execenv}-${toolchain}")
 
+  include(FindMake)
+  find_make("MAKE_EXECUTABLE" "make_cmd")
   execute_process(
     COMMAND ${MAKE_EXECUTABLE} showconfigs
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/dpdk
@@ -75,13 +73,6 @@ function(do_build_dpdk dpdk_dir)
       "\"${target}\" not listed in ${supported_targets}")
   endif()
 
-  if(CMAKE_MAKE_PROGRAM MATCHES "make")
-    # try to inherit command line arguments passed by parent "make" job
-    set(make_cmd "$(MAKE)")
-  else()
-    set(make_cmd "${MAKE_EXECUTABLE}")
-  endif()
-
   if(Seastar_DPDK AND WITH_SPDK)
     message(FATAL_ERROR "not able to build DPDK with "
       "both Seastar_DPDK and WITH_SPDK enabled")
@@ -91,13 +82,25 @@ function(do_build_dpdk dpdk_dir)
     set(dpdk_source_dir ${CMAKE_SOURCE_DIR}/src/spdk/dpdk)
   endif()
 
+  set(extra_cflags "-fPIC")
+  include(CheckCCompilerFlag)
+  check_c_compiler_flag("-Wno-unused-but-set-variable"
+    HAVE_UNUSED_BUT_SET_VARIABLE)
+  if(HAVE_UNUSED_BUT_SET_VARIABLE)
+    string(APPEND extra_cflags " -Wno-unused-but-set-variable")
+  endif()
+
   include(ExternalProject)
   ExternalProject_Add(dpdk-ext
     SOURCE_DIR ${dpdk_source_dir}
     CONFIGURE_COMMAND ${make_cmd} config O=${dpdk_dir} T=${target}
-    BUILD_COMMAND ${make_cmd} O=${dpdk_dir} CC=${CMAKE_C_COMPILER} EXTRA_CFLAGS=-fPIC
+    BUILD_COMMAND ${make_cmd} O=${dpdk_dir} CC=${CMAKE_C_COMPILER} EXTRA_CFLAGS=${extra_cflags}
     BUILD_IN_SOURCE 1
-    INSTALL_COMMAND "true")
+    INSTALL_COMMAND ""
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_MERGED_STDOUTERR ON
+    LOG_OUTPUT_ON_FAILURE ON)
   if(NUMA_FOUND)
     set(numa "y")
   else()
@@ -127,15 +130,14 @@ function(do_export_dpdk dpdk_dir)
 
   list(APPEND dpdk_components
     bus_pci
-    cmdline
     eal
-    ethdev
     kvargs
     mbuf
     mempool
     mempool_ring
     pci
-    ring)
+    ring
+    telemetry)
   if(Seastar_DPDK)
     list(APPEND dpdk_components
       bus_vdev

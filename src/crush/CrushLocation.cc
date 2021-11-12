@@ -1,19 +1,22 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "include/compat.h"
+#include <vector>
+
 #include "CrushLocation.h"
 #include "CrushWrapper.h"
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "common/SubProcess.h"
+#endif
 #include "common/ceph_context.h"
 #include "common/config.h"
-#include "include/str_list.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/common_fwd.h"
 #include "include/compat.h"
+#include "include/str_list.h"
 
-#include "common/SubProcess.h"
-
-#include <vector>
+namespace TOPNSPC::crush {
 
 int CrushLocation::update_from_conf()
 {
@@ -45,6 +48,9 @@ int CrushLocation::update_from_hook()
   if (cct->_conf->crush_location_hook.length() == 0)
     return 0;
  
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+  ceph_abort_msg("crimson does not support crush_location_hook, it must stay empty");
+#else
   if (0 != access(cct->_conf->crush_location_hook.c_str(), R_OK)) {
     lderr(cct) << "the user define crush location hook: " << cct->_conf->crush_location_hook
                << " may not exist or can not access it" << dendl;
@@ -89,9 +95,10 @@ int CrushLocation::update_from_hook()
     return ret;
 
   std::string out;
-  bl.copy(0, bl.length(), out);
+  bl.begin().copy(bl.length(), out);
   out.erase(out.find_last_not_of(" \n\r\t")+1);
   return _parse(out);
+#endif // WITH_SEASTAR && !WITH_ALIEN
 }
 
 int CrushLocation::init_on_startup()
@@ -105,7 +112,7 @@ int CrushLocation::init_on_startup()
 
   // start with a sane default
   char hostname[HOST_NAME_MAX + 1];
-  int r = gethostname(hostname, sizeof(hostname)-1);
+  int r = gethostname(hostname, sizeof(hostname));
   if (r < 0)
     strcpy(hostname, "unknown_host");
   // use short hostname
@@ -119,7 +126,6 @@ int CrushLocation::init_on_startup()
   loc.clear();
   loc.insert(std::make_pair<std::string,std::string>("host", hostname));
   loc.insert(std::make_pair<std::string,std::string>("root", "default"));
-  lgeneric_dout(cct, 10) << "crush_location is (default) " << loc << dendl;
   return 0;
 }
 
@@ -141,4 +147,6 @@ std::ostream& operator<<(std::ostream& os, const CrushLocation& loc)
     os << '"' << type << '=' << pos << '"';
   }
   return os;
+}
+
 }

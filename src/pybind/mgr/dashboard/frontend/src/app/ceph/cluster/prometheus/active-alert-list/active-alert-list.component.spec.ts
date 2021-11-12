@@ -1,21 +1,18 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
-import {
-  configureTestBed,
-  i18nProviders,
-  PermissionHelper
-} from '../../../../../testing/unit-test-helper';
-import { CoreModule } from '../../../../core/core.module';
-import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
-import { SharedModule } from '../../../../shared/shared.module';
-import { CephModule } from '../../../ceph.module';
-import { DashboardModule } from '../../../dashboard/dashboard.module';
-import { ClusterModule } from '../../cluster.module';
+import { CephModule } from '~/app/ceph/ceph.module';
+import { ClusterModule } from '~/app/ceph/cluster/cluster.module';
+import { DashboardModule } from '~/app/ceph/dashboard/dashboard.module';
+import { CoreModule } from '~/app/core/core.module';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { ActiveAlertListComponent } from './active-alert-list.component';
 
 describe('ActiveAlertListComponent', () => {
@@ -24,8 +21,9 @@ describe('ActiveAlertListComponent', () => {
 
   configureTestBed({
     imports: [
+      BrowserAnimationsModule,
       HttpClientTestingModule,
-      TabsModule.forRoot(),
+      NgbNavModule,
       RouterTestingModule,
       ToastrModule.forRoot(),
       SharedModule,
@@ -33,9 +31,7 @@ describe('ActiveAlertListComponent', () => {
       DashboardModule,
       CephModule,
       CoreModule
-    ],
-    declarations: [],
-    providers: [i18nProviders]
+    ]
   });
 
   beforeEach(() => {

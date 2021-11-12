@@ -14,6 +14,7 @@
 
 #include "mdstypes.h"
 #include "MDSContext.h"
+#include "include/elist.h"
 
 #define MDS_REF_SET      // define me for improved debug output, sanity checking
 //#define MDS_AUTHPIN_SET  // define me for debugging auth pin leaks
@@ -26,6 +27,10 @@ class MLock;
 class SimpleLock;
 class MDSCacheObject;
 class MDSContext;
+
+namespace ceph {
+class Formatter;
+}
 
 struct ClientLease {
   ClientLease(client_t c, MDSCacheObject *p) :
@@ -71,6 +76,7 @@ class MDSCacheObject {
   const static int PIN_TEMPEXPORTING = 1008;  // temp pin between encode_ and finish_export
   static const int PIN_CLIENTLEASE = 1009;
   static const int PIN_DISCOVERBASE = 1010;
+  static const int PIN_SCRUBQUEUE = 1011;     // for scrub of inode and dir
 
   // -- state --
   const static int STATE_AUTH      = (1<<30);
@@ -83,6 +89,8 @@ class MDSCacheObject {
   const static uint64_t WAIT_ORDERED	 = (1ull<<61);
   const static uint64_t WAIT_SINGLEAUTH  = (1ull<<60);
   const static uint64_t WAIT_UNFREEZE    = (1ull<<59); // pka AUTHPINNABLE
+
+  elist<MDSCacheObject*>::item item_scrub;   // for scrub inode or dir
 
   MDSCacheObject() {}
   virtual ~MDSCacheObject() {}
@@ -109,7 +117,7 @@ class MDSCacheObject {
   // --------------------------------------------
   // authority
   virtual mds_authority_t authority() const = 0;
-  bool is_ambiguous_auth() const {
+  virtual bool is_ambiguous_auth() const {
     return authority().second != CDIR_AUTH_UNKNOWN;
   }
 
@@ -191,8 +199,8 @@ class MDSCacheObject {
   }
 #endif
 
-  void dump_states(Formatter *f) const;
-  void dump(Formatter *f) const;
+  void dump_states(ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
 
   // auth pins
   enum {
@@ -263,9 +271,9 @@ class MDSCacheObject {
       seq = ++last_wait_seq;
       mask &= ~WAIT_ORDERED;
     }
-    waiting.insert(pair<uint64_t, pair<uint64_t, MDSContext*> >(
+    waiting.insert(std::pair<uint64_t, std::pair<uint64_t, MDSContext*> >(
 			    mask,
-			    pair<uint64_t, MDSContext*>(seq, c)));
+			    std::pair<uint64_t, MDSContext*>(seq, c)));
 //    pdout(10,g_conf()->debug_mds) << (mdsco_db_line_prefix(this)) 
 //			       << "add_waiter " << hex << mask << dec << " " << c
 //			       << " on " << *this
@@ -280,8 +288,8 @@ class MDSCacheObject {
   // noop unless overloaded.
   virtual SimpleLock* get_lock(int type) { ceph_abort(); return 0; }
   virtual void set_object_info(MDSCacheObjectInfo &info) { ceph_abort(); }
-  virtual void encode_lock_state(int type, bufferlist& bl) { ceph_abort(); }
-  virtual void decode_lock_state(int type, const bufferlist& bl) { ceph_abort(); }
+  virtual void encode_lock_state(int type, ceph::buffer::list& bl) { ceph_abort(); }
+  virtual void decode_lock_state(int type, const ceph::buffer::list& bl) { ceph_abort(); }
   virtual void finish_lock_waiters(int type, uint64_t mask, int r=0) { ceph_abort(); }
   virtual void add_lock_waiter(int type, uint64_t mask, MDSContext *c) { ceph_abort(); }
   virtual bool is_lock_waiting(int type, uint64_t mask) { ceph_abort(); return false; }

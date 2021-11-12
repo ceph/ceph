@@ -357,8 +357,7 @@ void SnapshotRemoveRequest<I>::remove_image_state() {
   I &image_ctx = this->m_image_ctx;
   auto type = cls::rbd::get_snap_namespace_type(m_snap_namespace);
 
-  if (type != cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY &&
-      type != cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY) {
+  if (type != cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
     release_snap_id();
     return;
   }
@@ -383,8 +382,10 @@ void SnapshotRemoveRequest<I>::handle_remove_image_state(int r) {
   if (r < 0) {
     lderr(cct) << "failed to remove image state: " << cpp_strerror(r)
                << dendl;
-    this->complete(r);
-    return;
+    if (r != -ENOENT) {
+      this->complete(r);
+      return;
+    }
   }
 
   release_snap_id();
@@ -480,7 +481,7 @@ int SnapshotRemoveRequest<I>::scan_for_parents(
   ceph_assert(ceph_mutex_is_locked(image_ctx.image_lock));
 
   if (pspec.pool_id != -1) {
-    map<uint64_t, SnapInfo>::iterator it;
+    std::map<uint64_t, SnapInfo>::iterator it;
     for (it = image_ctx.snap_info.begin();
          it != image_ctx.snap_info.end(); ++it) {
       // skip our snap id (if checking base image, CEPH_NOSNAP won't match)

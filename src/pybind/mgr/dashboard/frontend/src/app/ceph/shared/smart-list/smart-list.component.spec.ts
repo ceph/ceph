@@ -2,14 +2,17 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SimpleChange, SimpleChanges } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { TabsetComponent, TabsetConfig, TabsModule } from 'ngx-bootstrap/tabs';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
-import _ = require('lodash');
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { OsdService } from '../../../shared/api/osd.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { HddSmartDataV1, NvmeSmartDataV1, SmartDataResult } from '~/app/shared/models/smart';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { SmartListComponent } from './smart-list.component';
 
 describe('OsdSmartListComponent', () => {
@@ -17,24 +20,8 @@ describe('OsdSmartListComponent', () => {
   let fixture: ComponentFixture<SmartListComponent>;
   let osdService: OsdService;
 
-  const SMART_DATA_VERSION_1_0 = require('./fixtures/smart_data_version_1_0_response.json');
-
-  const spyOnGetSmartData = (fn: (id: number) => any) =>
-    spyOn(osdService, 'getSmartData').and.callFake(fn);
-
-  /**
-   * Initializes the component after it spied upon the `getSmartData()` method of `OsdService`.
-   * @param data The data to be used to return when `getSmartData()` is called.
-   * @param simpleChanges (optional) The changes to be used for `ngOnChanges()` method.
-   */
-  const initializeComponentWithData = (data?: any, simpleChanges?: SimpleChanges) => {
-    spyOnGetSmartData(() => of(data || SMART_DATA_VERSION_1_0));
-    component.ngOnInit();
-    const changes: SimpleChanges = simpleChanges || {
-      osdId: new SimpleChange(null, 0, true)
-    };
-    component.ngOnChanges(changes);
-  };
+  const SMART_DATA_HDD_VERSION_1_0: HddSmartDataV1 = require('./fixtures/smart_data_version_1_0_hdd_response.json');
+  const SMART_DATA_NVME_VERSION_1_0: NvmeSmartDataV1 = require('./fixtures/smart_data_version_1_0_nvme_response.json');
 
   /**
    * Sets attributes for _all_ returned devices according to the given path. The syntax is the same
@@ -51,19 +38,85 @@ describe('OsdSmartListComponent', () => {
    */
   const patchData = (path: string, newValue: any): any => {
     return _.reduce(
-      _.cloneDeep(SMART_DATA_VERSION_1_0),
-      (result, dataObj, deviceId) => {
-        result[deviceId] = _.set(dataObj, path, newValue);
+      _.cloneDeep(SMART_DATA_HDD_VERSION_1_0),
+      (result: object, dataObj, deviceId) => {
+        result[deviceId] = _.set<any>(dataObj, path, newValue);
         return result;
       },
       {}
     );
   };
 
+  /**
+   * Initializes the component after it spied upon the `getSmartData()` method
+   * of `OsdService`. Determines which data is returned.
+   */
+  const initializeComponentWithData = (
+    dataType: 'hdd_v1' | 'nvme_v1',
+    patch: { [path: string]: any } = null,
+    simpleChanges?: SimpleChanges
+  ) => {
+    let data: HddSmartDataV1 | NvmeSmartDataV1;
+    switch (dataType) {
+      case 'hdd_v1':
+        data = SMART_DATA_HDD_VERSION_1_0;
+        break;
+      case 'nvme_v1':
+        data = SMART_DATA_NVME_VERSION_1_0;
+        break;
+    }
+
+    if (_.isObject(patch)) {
+      _.each(patch, (replacement, path) => {
+        data = patchData(path, replacement);
+      });
+    }
+
+    spyOn(osdService, 'getSmartData').and.callFake(() => of(data));
+    component.ngOnInit();
+    const changes: SimpleChanges = simpleChanges || {
+      osdId: new SimpleChange(null, 0, true)
+    };
+    component.ngOnChanges(changes);
+  };
+
+  /**
+   * Verify an alert panel and its attributes.
+   *
+   * @param selector The CSS selector for the alert panel.
+   * @param panelTitle The title should be displayed.
+   * @param panelType Alert level of panel. Can be in `warning` or `info`.
+   * @param panelSize Pass `slim` for slim alert panel.
+   */
+  const verifyAlertPanel = (
+    selector: string,
+    panelTitle: string,
+    panelType: 'warning' | 'info',
+    panelSize?: 'slim'
+  ) => {
+    const alertPanel = fixture.debugElement.query(By.css(selector));
+    expect(component.incompatible).toBe(false);
+    expect(component.loading).toBe(false);
+
+    expect(alertPanel.attributes.type).toBe(panelType);
+    if (panelSize === 'slim') {
+      expect(alertPanel.attributes.title).toBe(panelTitle);
+      expect(alertPanel.attributes.size).toBe(panelSize);
+    } else {
+      const panelText = alertPanel.query(By.css('.alert-panel-text'));
+      expect(panelText.nativeElement.textContent).toBe(panelTitle);
+    }
+  };
+
   configureTestBed({
     declarations: [SmartListComponent],
-    imports: [TabsModule, SharedModule, HttpClientTestingModule],
-    providers: [i18nProviders, TabsetComponent, TabsetConfig]
+    imports: [
+      BrowserAnimationsModule,
+      SharedModule,
+      HttpClientTestingModule,
+      NgbNavModule,
+      NgxPipeFunctionModule
+    ]
   });
 
   beforeEach(() => {
@@ -71,15 +124,15 @@ describe('OsdSmartListComponent', () => {
     component = fixture.componentInstance;
     fixture.detectChanges();
 
-    osdService = TestBed.get(OsdService);
+    osdService = TestBed.inject(OsdService);
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  describe('tests version 1.x', () => {
-    beforeEach(() => initializeComponentWithData());
+  describe('tests HDD version 1.x', () => {
+    beforeEach(() => initializeComponentWithData('hdd_v1'));
 
     it('should return with proper keys', () => {
       _.each(component.data, (smartData, _deviceId) => {
@@ -93,37 +146,93 @@ describe('OsdSmartListComponent', () => {
         'ata_smart_selective_self_test_log',
         'ata_smart_data'
       ];
+      _.each(component.data, (smartData: SmartDataResult, _deviceId) => {
+        _.each(excludes, (exclude) => expect(smartData.info[exclude]).toBeUndefined());
+      });
+    });
+  });
+
+  describe('tests NVMe version 1.x', () => {
+    beforeEach(() => initializeComponentWithData('nvme_v1'));
+
+    it('should return with proper keys', () => {
       _.each(component.data, (smartData, _deviceId) => {
+        expect(_.keys(smartData)).toEqual(['info', 'smart', 'device', 'identifier']);
+      });
+    });
+
+    it('should not contain excluded keys in `info`', () => {
+      const excludes = ['nvme_smart_health_information_log'];
+      _.each(component.data, (smartData: SmartDataResult, _deviceId) => {
         _.each(excludes, (exclude) => expect(smartData.info[exclude]).toBeUndefined());
       });
     });
   });
 
   it('should not work for version 2.x', () => {
-    initializeComponentWithData(patchData('json_format_version', [2, 0]));
+    initializeComponentWithData('nvme_v1', { json_format_version: [2, 0] });
     expect(component.data).toEqual({});
     expect(component.incompatible).toBeTruthy();
   });
 
   it('should display info panel for passed self test', () => {
-    initializeComponentWithData();
+    initializeComponentWithData('hdd_v1');
     fixture.detectChanges();
-    const alertPanel = fixture.debugElement.query(By.css('cd-alert-panel'));
-    expect(component.incompatible).toBe(false);
-    expect(component.loading).toBe(false);
-    expect(alertPanel.attributes.size).toBe('slim');
-    expect(alertPanel.attributes.title).toBe('SMART overall-health self-assessment test result');
-    expect(alertPanel.attributes.type).toBe('info');
+    verifyAlertPanel(
+      'cd-alert-panel#alert-self-test-passed',
+      'SMART overall-health self-assessment test result',
+      'info',
+      'slim'
+    );
   });
 
   it('should display warning panel for failed self test', () => {
-    initializeComponentWithData(patchData('ata_smart_data.self_test.status.passed', false));
+    initializeComponentWithData('hdd_v1', { 'smart_status.passed': false });
     fixture.detectChanges();
-    const alertPanel = fixture.debugElement.query(By.css('cd-alert-panel'));
-    expect(component.incompatible).toBe(false);
-    expect(component.loading).toBe(false);
-    expect(alertPanel.attributes.size).toBe('slim');
-    expect(alertPanel.attributes.title).toBe('SMART overall-health self-assessment test result');
-    expect(alertPanel.attributes.type).toBe('warning');
+    verifyAlertPanel(
+      'cd-alert-panel#alert-self-test-failed',
+      'SMART overall-health self-assessment test result',
+      'warning',
+      'slim'
+    );
+  });
+
+  it('should display warning panel for unknown self test', () => {
+    initializeComponentWithData('hdd_v1', { smart_status: undefined });
+    fixture.detectChanges();
+    verifyAlertPanel(
+      'cd-alert-panel#alert-self-test-unknown',
+      'SMART overall-health self-assessment test result',
+      'warning',
+      'slim'
+    );
+  });
+
+  it('should display info panel for empty device info', () => {
+    initializeComponentWithData('hdd_v1');
+    const deviceId: string = _.keys(component.data)[0];
+    component.data[deviceId]['info'] = {};
+    fixture.detectChanges();
+    component.nav.select(1);
+    fixture.detectChanges();
+    verifyAlertPanel(
+      'cd-alert-panel#alert-device-info-unavailable',
+      'No device information available for this device.',
+      'info'
+    );
+  });
+
+  it('should display info panel for empty SMART data', () => {
+    initializeComponentWithData('hdd_v1');
+    const deviceId: string = _.keys(component.data)[0];
+    component.data[deviceId]['smart'] = {};
+    fixture.detectChanges();
+    component.nav.select(2);
+    fixture.detectChanges();
+    verifyAlertPanel(
+      'cd-alert-panel#alert-device-smart-data-unavailable',
+      'No SMART data available for this device.',
+      'info'
+    );
   });
 });

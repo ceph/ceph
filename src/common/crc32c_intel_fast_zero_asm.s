@@ -39,6 +39,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+default rel
 
 ; crcB3 MACRO to implement crc32 on 3 %%bSize-byte blocks
 %macro  crcB3 3
@@ -199,7 +200,7 @@ proc_block:
 	cmp     len, 240
 	jb      bit8
 
-	lea     crc_init, [mul_table_72 wrt rip]  ;; load table base address
+	lea     crc_init, [mul_table_72]  ;; load table base address
 
 	crcB3   640, 0x1000, 0x0c00     ; 640*3 = 1920 (Tables 1280, 640)
 	crcB3   320, 0x0c00, 0x0800     ; 320*3 =  960 (Tables  640, 320)

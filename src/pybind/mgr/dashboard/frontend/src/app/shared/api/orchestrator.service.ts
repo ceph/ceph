@@ -1,63 +1,46 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
-import { Observable, of as observableOf } from 'rxjs';
-import { mergeMap } from 'rxjs/operators';
+import _ from 'lodash';
+import { Observable } from 'rxjs';
 
-import { InventoryDevice } from '../../ceph/cluster/inventory/inventory-devices/inventory-device.model';
-import { InventoryNode } from '../../ceph/cluster/inventory/inventory-node.model';
-import { ApiModule } from './api.module';
+import { OrchestratorFeature } from '../models/orchestrator.enum';
+import { OrchestratorStatus } from '../models/orchestrator.interface';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class OrchestratorService {
   private url = 'api/orchestrator';
 
+  disableMessages = {
+    noOrchestrator: $localize`The feature is disabled because Orchestrator is not available.`,
+    missingFeature: $localize`The Orchestrator backend doesn't support this feature.`
+  };
+
   constructor(private http: HttpClient) {}
 
-  status() {
-    return this.http.get(`${this.url}/status`);
+  status(): Observable<OrchestratorStatus> {
+    return this.http.get<OrchestratorStatus>(`${this.url}/status`);
   }
 
-  identifyDevice(hostname: string, device: string, duration: number) {
-    return this.http.post(`${this.url}/identify_device`, {
-      hostname,
-      device,
-      duration
-    });
+  hasFeature(status: OrchestratorStatus, features: OrchestratorFeature[]): boolean {
+    return _.every(features, (feature) => _.get(status.features, `${feature}.available`));
   }
 
-  inventoryList(hostname?: string): Observable<InventoryNode[]> {
-    const options = hostname ? { params: new HttpParams().set('hostname', hostname) } : {};
-    return this.http.get<InventoryNode[]>(`${this.url}/inventory`, options);
-  }
-
-  inventoryDeviceList(hostname?: string): Observable<InventoryDevice[]> {
-    return this.inventoryList(hostname).pipe(
-      mergeMap((nodes: InventoryNode[]) => {
-        const devices = _.flatMap(nodes, (node) => {
-          return node.devices.map((device) => {
-            device.hostname = node.name;
-            device.uid = device.device_id ? device.device_id : `${device.hostname}-${device.path}`;
-            return device;
-          });
-        });
-        return observableOf(devices);
-      })
-    );
-  }
-
-  serviceList(hostname?: string) {
-    const options = hostname ? { params: new HttpParams().set('hostname', hostname) } : {};
-    return this.http.get(`${this.url}/service`, options);
-  }
-
-  osdCreate(driveGroup: {}) {
-    const request = {
-      drive_group: driveGroup
-    };
-    return this.http.post(`${this.url}/osd`, request, { observe: 'response' });
+  getTableActionDisableDesc(
+    status: OrchestratorStatus,
+    features: OrchestratorFeature[]
+  ): boolean | string {
+    if (!status) {
+      return false;
+    }
+    if (!status.available) {
+      return this.disableMessages.noOrchestrator;
+    }
+    if (!this.hasFeature(status, features)) {
+      return this.disableMessages.missingFeature;
+    }
+    return false;
   }
 }

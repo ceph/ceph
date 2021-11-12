@@ -4,7 +4,7 @@ import boto3
 import sys
 
 if len(sys.argv) != 4:
-    print 'Usage: ' + sys.argv[0] + ' <bucket> <topic ARN> <notification Id>'
+    print('Usage: ' + sys.argv[0] + ' <bucket> <topic ARN> <notification Id>')
     sys.exit(1)
 
 # bucket name as first argument
@@ -35,10 +35,14 @@ topic_conf_list = [{'Id': notification_id,
 			    'FilterRules': [{'Name': 'x-amz-meta-foo', 'Value': 'bar'},
                                             {'Name': 'x-amz-meta-hello', 'Value': 'world'}]
                          },
+                        'Tags': {
+			    'FilterRules': [{'Name': 'foo', 'Value': 'bar'},
+                                            {'Name': 'hello', 'Value': 'world'}]
+                         },
                          'Key': {
                              'FilterRules': [{'Name': 'regex', 'Value': '([a-z]+)'}]
                          }
                     }}]
 
-print client.put_bucket_notification_configuration(Bucket=bucketname,
-                                                   NotificationConfiguration={'TopicConfigurations': topic_conf_list})
+print(client.put_bucket_notification_configuration(Bucket=bucketname,
+                                                   NotificationConfiguration={'TopicConfigurations': topic_conf_list}))

@@ -27,13 +27,12 @@ public:
 
   static MirrorStatusUpdater* create(librados::IoCtx& io_ctx,
                                      Threads<ImageCtxT> *threads,
-                                     const std::string& site_name,
-                                     const std::string& fsid) {
-    return new MirrorStatusUpdater(io_ctx, threads, site_name, fsid);
+                                     const std::string& local_mirror_uuid) {
+    return new MirrorStatusUpdater(io_ctx, threads, local_mirror_uuid);
   }
 
   MirrorStatusUpdater(librados::IoCtx& io_ctx, Threads<ImageCtxT> *threads,
-                      const std::string& site_name, const std::string& fsid);
+                      const std::string& local_mirror_uuid);
   ~MirrorStatusUpdater();
 
   void init(Context* on_finish);
@@ -45,7 +44,9 @@ public:
       const cls::rbd::MirrorImageSiteStatus& mirror_image_site_status,
       bool immediate_update);
   void remove_mirror_image_status(const std::string& global_image_id,
-                                  Context* on_finish);
+                                  bool immediate_update, Context* on_finish);
+  void remove_refresh_mirror_image_status(const std::string& global_image_id,
+                                          Context* on_finish);
 
 private:
   /**
@@ -71,8 +72,7 @@ private:
 
   librados::IoCtx m_io_ctx;
   Threads<ImageCtxT>* m_threads;
-  std::string m_site_name;
-  std::string m_fsid;
+  std::string m_local_mirror_uuid;
 
   Context* m_timer_task = nullptr;
 
@@ -92,6 +92,7 @@ private:
   GlobalImageIds m_updating_global_image_ids;
 
   bool try_remove_mirror_image_status(const std::string& global_image_id,
+                                      bool queue_update, bool immediate_update,
                                       Context* on_finish);
 
   void init_mirror_status_watcher(Context* on_finish);

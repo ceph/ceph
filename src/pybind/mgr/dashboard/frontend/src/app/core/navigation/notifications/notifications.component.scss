@@ -1,9 +1,27 @@
-@import 'defaults';
+@use './src/styles/vendor/variables' as vv;
 
 .running i {
-  color: $color-primary;
+  color: vv.$primary;
 }
 
 .running:hover i {
-  color: white;
+  color: vv.$white;
+}
+
+a {
+  .dot {
+    background-color: vv.$primary;
+    border: 2px solid vv.$secondary;
+    border-radius: 50%;
+    height: 11px;
+    position: absolute;
+    right: 17px;
+    top: 10px;
+    width: 10px;
+  }
+
+  &:hover .dot {
+    background-color: vv.$white;
+    border-color: vv.$primary;
+  }
 }

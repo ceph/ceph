@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MClientRequestForward : public SafeMessage {
+class MClientRequestForward final : public SafeMessage {
 private:
   int32_t dest_mds;
   int32_t num_fwd;
@@ -34,7 +34,7 @@ protected:
     ceph_assert(client_must_resend);
     header.tid = t;
   }
-  ~MClientRequestForward() override {}
+  ~MClientRequestForward() final {}
 
 public:
   int get_dest_mds() const { return dest_mds; }
@@ -42,7 +42,7 @@ public:
   bool must_resend() const { return client_must_resend; }
 
   std::string_view get_type_name() const override { return "client_request_forward"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "client_request_forward(" << get_tid()
       << " to mds." << dest_mds
       << " num_fwd=" << num_fwd
@@ -58,6 +58,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(dest_mds, p);
     decode(num_fwd, p);
@@ -66,6 +67,8 @@ public:
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+  template<class T, typename... Args>
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 #endif

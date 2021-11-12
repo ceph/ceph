@@ -39,7 +39,7 @@ class PerfCountersControllerTest(DashboardTestCase):
         self._validate_perf(mon, 'mon', data, allow_empty=False)
 
     def test_perf_counters_mgr_get(self):
-        mgr = self.mgr_cluster.mgr_ids[0]
+        mgr = list(self.mgr_cluster.mgr_ids)[0]
         data = self._get('/api/perf_counters/mgr/{}'.format(mgr))
         self.assertStatus(200)
         self._validate_perf(mgr, 'mgr', data, allow_empty=False)

@@ -37,8 +37,6 @@ public:
   void close(Context* on_finish) override;
 
   bool is_disconnected() const override;
-
-  bool is_local_primary() const override;
   bool is_linked() const override;
 
   cls::rbd::MirrorImageMode get_mirror_image_mode() const override;
@@ -48,14 +46,13 @@ public:
   BaseRequest* create_local_image_request(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
-      ImageCtxT* remote_image_ctx,
       const std::string& global_image_id,
+      PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,
       Context* on_finish) override;
 
   BaseRequest* create_prepare_replay_request(
       const std::string& local_mirror_uuid,
-      librbd::mirror::PromotionState remote_promotion_state,
       ProgressContext* progress_ctx,
       bool* resync_requested,
       bool* syncing,
@@ -63,10 +60,12 @@ public:
 
   image_replayer::Replayer* create_replayer(
       Threads<ImageCtxT>* threads,
+      InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& local_mirror_uuid,
+      PoolMetaCache* pool_meta_cache,
       ReplayerListener* replayer_listener) override;
 
-  std::string local_tag_owner;
+  std::string local_primary_mirror_uuid;
 
   Journaler* remote_journaler = nullptr;
   cls::journal::ClientState remote_client_state =

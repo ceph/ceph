@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { LanguageService } from './language.service';
 
 describe('LanguageService', () => {
@@ -14,8 +14,8 @@ describe('LanguageService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(LanguageService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(LanguageService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

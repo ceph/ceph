@@ -3,11 +3,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../../shared/shared.module';
-import { DriveGroup } from '../osd-form/drive-group.model';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { OsdCreationPreviewModalComponent } from './osd-creation-preview-modal.component';
 
 describe('OsdCreationPreviewModalComponent', () => {
@@ -15,15 +15,20 @@ describe('OsdCreationPreviewModalComponent', () => {
   let fixture: ComponentFixture<OsdCreationPreviewModalComponent>;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, ReactiveFormsModule, SharedModule, RouterTestingModule],
-    providers: [BsModalRef, i18nProviders],
+    imports: [
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      SharedModule,
+      RouterTestingModule,
+      ToastrModule.forRoot()
+    ],
+    providers: [NgbActiveModal],
     declarations: [OsdCreationPreviewModalComponent]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(OsdCreationPreviewModalComponent);
     component = fixture.componentInstance;
-    component.driveGroup = new DriveGroup();
     fixture.detectChanges();
   });
 

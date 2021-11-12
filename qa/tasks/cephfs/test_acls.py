@@ -1,7 +1,7 @@
 import logging
-from StringIO import StringIO
 
-from xfstests_dev import XFSTestsDev
+from io import BytesIO
+from tasks.cephfs.xfstests_dev import XFSTestsDev
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +22,6 @@ class TestACLs(XFSTestsDev):
             log.info('client is kernel mounted')
 
         self.mount_a.client_remote.run(args=['sudo', './check',
-            'generic/099'], cwd=self.repo_path, stdout=StringIO(),
-            stderr=StringIO(), timeout=30, check_status=True,
+            'generic/099'], cwd=self.repo_path, stdout=BytesIO(),
+            stderr=BytesIO(), timeout=30, check_status=True,
             label='running tests for ACLs from xfstests-dev')

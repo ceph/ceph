@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  * Copyright (C) 2017 Facebook.  All rights reserved.
  *
@@ -18,8 +19,9 @@
 #ifndef _UAPILINUX_NBD_NETLINK_H
 #define _UAPILINUX_NBD_NETLINK_H
 
-#define NBD_GENL_FAMILY_NAME	"nbd"
-#define NBD_GENL_VERSION	0x1
+#define NBD_GENL_FAMILY_NAME		"nbd"
+#define NBD_GENL_VERSION		0x1
+#define NBD_GENL_MCAST_GROUP_NAME	"nbd_mc_group"
 
 /* Configuration policy attributes, used for CONNECT */
 enum {
@@ -31,9 +33,35 @@ enum {
 	NBD_ATTR_SERVER_FLAGS,
 	NBD_ATTR_CLIENT_FLAGS,
 	NBD_ATTR_SOCKETS,
+	NBD_ATTR_DEAD_CONN_TIMEOUT,
+	NBD_ATTR_DEVICE_LIST,
+	NBD_ATTR_BACKEND_IDENTIFIER,
 	__NBD_ATTR_MAX,
 };
 #define NBD_ATTR_MAX (__NBD_ATTR_MAX - 1)
+
+/*
+ * This is the format for multiple devices with NBD_ATTR_DEVICE_LIST
+ *
+ * [NBD_ATTR_DEVICE_LIST]
+ *   [NBD_DEVICE_ITEM]
+ *     [NBD_DEVICE_INDEX]
+ *     [NBD_DEVICE_CONNECTED]
+ */
+enum {
+	NBD_DEVICE_ITEM_UNSPEC,
+	NBD_DEVICE_ITEM,
+	__NBD_DEVICE_ITEM_MAX,
+};
+#define NBD_DEVICE_ITEM_MAX (__NBD_DEVICE_ITEM_MAX - 1)
+
+enum {
+	NBD_DEVICE_UNSPEC,
+	NBD_DEVICE_INDEX,
+	NBD_DEVICE_CONNECTED,
+	__NBD_DEVICE_MAX,
+};
+#define NBD_DEVICE_ATTR_MAX (__NBD_DEVICE_MAX - 1)
 
 /*
  * This is the format for multiple sockets with NBD_ATTR_SOCKETS
@@ -63,6 +91,8 @@ enum {
 	NBD_CMD_CONNECT,
 	NBD_CMD_DISCONNECT,
 	NBD_CMD_RECONFIGURE,
+	NBD_CMD_LINK_DEAD,
+	NBD_CMD_STATUS,
 	__NBD_CMD_MAX,
 };
 #define NBD_CMD_MAX	(__NBD_CMD_MAX - 1)

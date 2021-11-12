@@ -8,10 +8,10 @@
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
-#include "librbd/MirroringWatcher.h"
 #include "librbd/image/DetachChildRequest.h"
 #include "librbd/image/PreRemoveRequest.h"
 #include "librbd/journal/RemoveRequest.h"
+#include "librbd/journal/TypeTraits.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/operation/TrimRequest.h"
 
@@ -85,7 +85,6 @@ void RemoveRequest<I>::handle_open_image(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
   if (r < 0) {
-    m_image_ctx->destroy();
     m_image_ctx = nullptr;
 
     if (r != -ENOENT) {
@@ -219,6 +218,14 @@ void RemoveRequest<I>::handle_disable_mirror(int r) {
                  << cpp_strerror(r) << dendl;
   }
 
+  // one last chance to ensure all snapshots have been deleted
+  m_image_ctx->image_lock.lock_shared();
+  if (!m_image_ctx->snap_info.empty()) {
+    ldout(m_cct, 5) << "image has snapshots - not removing" << dendl;
+    m_ret_val = -ENOTEMPTY;
+  }
+  m_image_ctx->image_lock.unlock_shared();
+
   send_close_image(r);
 }
 
@@ -243,7 +250,6 @@ void RemoveRequest<I>::handle_send_close_image(int r) {
                  << cpp_strerror(r) << dendl;
   }
 
-  m_image_ctx->destroy();
   m_image_ctx = nullptr;
   if (m_ret_val < 0) {
     r = m_ret_val;
@@ -315,8 +321,11 @@ void RemoveRequest<I>::send_journal_remove() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_journal_remove>(this);
 
+  typename journal::TypeTraits<I>::ContextWQ* context_wq;
+  Journal<I>::get_work_queue(m_cct, &context_wq);
+
   journal::RemoveRequest<I> *req = journal::RemoveRequest<I>::create(
-    m_ioctx, m_image_id, Journal<>::IMAGE_CLIENT_ID, m_op_work_queue, ctx);
+    m_ioctx, m_image_id, Journal<>::IMAGE_CLIENT_ID, context_wq, ctx);
   req->send();
 }
 

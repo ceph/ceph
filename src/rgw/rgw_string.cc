@@ -13,7 +13,7 @@ static bool ci_char_eq(char c1, char c2)
   return tolower(c1) == tolower(c2);
 }
 
-bool match_wildcards(boost::string_view pattern, boost::string_view input,
+bool match_wildcards(std::string_view pattern, std::string_view input,
                      uint32_t flags)
 {
   const auto eq = (flags & MATCH_CASE_INSENSITIVE) ? &ci_char_eq : &char_eq;

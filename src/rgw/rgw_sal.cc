@@ -22,326 +22,119 @@
 #include "common/errno.h"
 
 #include "rgw_sal.h"
-#include "rgw_bucket.h"
-#include "rgw_multi.h"
+#include "rgw_sal_rados.h"
+#include "rgw_d3n_datacache.h"
+
+#ifdef WITH_RADOSGW_DBSTORE
+#include "rgw_sal_dbstore.h"
+#endif
 
 #define dout_subsys ceph_subsys_rgw
 
-namespace rgw::sal {
+extern "C" {
+extern rgw::sal::Store* newStore(void);
+#ifdef WITH_RADOSGW_DBSTORE
+extern rgw::sal::Store* newDBStore(CephContext *cct);
+#endif
+}
 
-int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
-			       uint64_t max, bool need_stats, RGWBucketList &buckets)
+rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache, bool use_gc)
 {
-  RGWUserBuckets ulist;
-  bool is_truncated = false;
-  int ret;
+  if (svc.compare("rados") == 0) {
+    rgw::sal::Store* store = newStore();
+    RGWRados* rados = static_cast<rgw::sal::RadosStore* >(store)->getRados();
 
-  ret = store->ctl()->user->list_buckets(user, marker, end_marker, max, need_stats, &ulist,
-			       &is_truncated);
-  if (ret < 0)
-    return ret;
+    if ((*rados).set_use_cache(use_cache)
+                .set_use_datacache(false)
+                .set_use_gc(use_gc)
+                .set_run_gc_thread(use_gc_thread)
+                .set_run_lc_thread(use_lc_thread)
+                .set_run_quota_threads(quota_threads)
+                .set_run_sync_thread(run_sync_thread)
+                .set_run_reshard_thread(run_reshard_thread)
+                .initialize(cct, dpp) < 0) {
+      delete store; store = nullptr;
+    }
+    return store;
+  }
+  else if (svc.compare("d3n") == 0) {
+    rgw::sal::RadosStore *store = new rgw::sal::RadosStore();
+    RGWRados* rados = new D3nRGWDataCache<RGWRados>;
+    store->setRados(rados);
+    rados->set_store(static_cast<rgw::sal::RadosStore* >(store));
 
-  buckets.set_truncated(is_truncated);
-  for (const auto& ent : ulist.get_buckets()) {
-    RGWRadosBucket *rb = new RGWRadosBucket(this->store, *this, ent.second);
-    buckets.add(rb);
+    if ((*rados).set_use_cache(use_cache)
+                .set_use_datacache(true)
+                .set_run_gc_thread(use_gc_thread)
+                .set_run_lc_thread(use_lc_thread)
+                .set_run_quota_threads(quota_threads)
+                .set_run_sync_thread(run_sync_thread)
+                .set_run_reshard_thread(run_reshard_thread)
+                .initialize(cct, dpp) < 0) {
+      delete store; store = nullptr;
+    }
+    return store;
   }
 
-  return 0;
-}
+  if (svc.compare("dbstore") == 0) {
+#ifdef WITH_RADOSGW_DBSTORE
+    rgw::sal::Store* store = newDBStore(cct);
 
-RGWBucketList::~RGWBucketList()
-{
-  for (auto itr = buckets.begin(); itr != buckets.end(); itr++) {
-    delete itr->second;
-  }
-  buckets.clear();
-}
+    /* Initialize the dbstore with cct & dpp */
+    DB *db = static_cast<rgw::sal::DBStore *>(store)->getDB();
+    db->set_context(cct);
 
-RGWBucket* RGWRadosUser::add_bucket(rgw_bucket& bucket,
-				       ceph::real_time creation_time)
-{
-  return NULL;
-}
+    /* XXX: temporary - create testid user */
+    rgw_user testid_user("", "testid", "");
+    std::unique_ptr<rgw::sal::User> user = store->get_user(testid_user);
+    user->get_info().display_name = "M. Tester";
+    user->get_info().user_email = "tester@ceph.com";
+    RGWAccessKey k1("0555b35654ad1656d804", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==");
+    user->get_info().access_keys["0555b35654ad1656d804"] = k1;
 
-std::string& RGWRadosUser::get_display_name()
-{
-  return info.display_name;
-}
-
-RGWObject *RGWRadosBucket::create_object(const rgw_obj_key &key)
-{
-  if (!object) {
-    object = new RGWRadosObject(store, key);
+    int r = user->store_user(dpp, null_yield, true);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed inserting testid user in dbstore error r=" << r << dendl;
+    }
+    return store;
+#endif
   }
 
-  return object;
+  return nullptr;
 }
 
-int RGWRadosBucket::remove_bucket(bool delete_children, optional_yield y)
+rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc)
 {
-  int ret;
-  map<RGWObjCategory, RGWStorageStats> stats;
-  std::vector<rgw_bucket_dir_entry> objs;
-  map<string, bool> common_prefixes;
-  string bucket_ver, master_ver;
+  rgw::sal::Store* store = nullptr;
+  if (svc.compare("rados") == 0) {
+    store = newStore();
+    RGWRados* rados = static_cast<rgw::sal::RadosStore* >(store)->getRados();
 
-  ret = get_bucket_info(y);
-  if (ret < 0)
-    return ret;
+    rados->set_context(cct);
 
-  ret = get_bucket_stats(info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats);
-  if (ret < 0)
-    return ret;
-
-  RGWRados::Bucket target(store->getRados(), info);
-  RGWRados::Bucket::List list_op(&target);
-  int max = 1000;
-
-  list_op.params.list_versions = true;
-  list_op.params.allow_unordered = true;
-
-  bool is_truncated = false;
-  do {
-    objs.clear();
-
-    ret = list_op.list_objects(max, &objs, &common_prefixes, &is_truncated, null_yield);
-    if (ret < 0)
-      return ret;
-
-    if (!objs.empty() && !delete_children) {
-      lderr(store->ctx()) << "ERROR: could not remove non-empty bucket " << ent.bucket.name << dendl;
-      return -ENOTEMPTY;
+    int ret = rados->init_svc(true, dpp);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
+      delete store; store = nullptr;
+      return store;
     }
 
-    for (const auto& obj : objs) {
-      rgw_obj_key key(obj.key);
-      /* xxx dang */
-      ret = rgw_remove_object(store, info, ent.bucket, key);
-      if (ret < 0 && ret != -ENOENT) {
-        return ret;
-      }
+    if (rados->init_rados() < 0) {
+      delete store; store = nullptr;
     }
-  } while(is_truncated);
-
-  string prefix, delimiter;
-
-  ret = abort_bucket_multiparts(store, store->ctx(), info, prefix, delimiter);
-  if (ret < 0) {
-    return ret;
   }
 
-  ret = store->ctl()->bucket->sync_user_stats(info.owner, info);
-  if ( ret < 0) {
-     ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
+  if (svc.compare("dbstore") == 0) {
+#ifdef WITH_RADOSGW_DBSTORE
+    store = newDBStore(cct);
+#else
+    store = nullptr;
+#endif
   }
-
-  RGWObjVersionTracker objv_tracker;
-
-  // if we deleted children above we will force delete, as any that
-  // remain is detrius from a prior bug
-  ret = store->getRados()->delete_bucket(info, objv_tracker, null_yield, !delete_children);
-  if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: could not remove bucket " <<
-      ent.bucket.name << dendl;
-    return ret;
-  }
-
-  ret = store->ctl()->bucket->unlink_bucket(info.owner, ent.bucket, null_yield, false);
-  if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
-  }
-
-  return ret;
-}
-
-int RGWRadosBucket::get_bucket_info(optional_yield y)
-{
-  return store->getRados()->get_bucket_info(store->svc(), ent.bucket.tenant, ent.bucket.name, info,
-					    NULL, y, &attrs);
-}
-
-int RGWRadosBucket::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id,
-				     std::string *bucket_ver, std::string *master_ver,
-				     std::map<RGWObjCategory, RGWStorageStats>& stats,
-				     std::string *max_marker, bool *syncstopped)
-{
-  return store->getRados()->get_bucket_stats(bucket_info, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
-}
-
-int RGWRadosBucket::read_bucket_stats(optional_yield y)
-{
-      return store->ctl()->bucket->read_bucket_stats(ent.bucket, &ent, y);
-}
-
-int RGWRadosBucket::sync_user_stats()
-{
-      return store->ctl()->bucket->sync_user_stats(user.user, info, &ent);
-}
-
-int RGWRadosBucket::update_container_stats(void)
-{
-  int ret;
-  map<std::string, RGWBucketEnt> m;
-
-  m[ent.bucket.name] = ent;
-  ret = store->getRados()->update_containers_stats(m);
-  if (!ret)
-    return -EEXIST;
-  if (ret < 0)
-    return ret;
-
-  map<string, RGWBucketEnt>::iterator iter = m.find(ent.bucket.name);
-  if (iter == m.end())
-    return -EINVAL;
-
-  ent.count = iter->second.count;
-  ent.size = iter->second.size;
-  ent.size_rounded = iter->second.size_rounded;
-  ent.placement_rule = std::move(iter->second.placement_rule);
-
-  return 0;
-}
-
-int RGWRadosBucket::check_bucket_shards(void)
-{
-      return store->getRados()->check_bucket_shards(info, ent.bucket, get_count());
-}
-
-int RGWRadosBucket::link(RGWUser* new_user, optional_yield y)
-{
-  RGWBucketEntryPoint ep;
-  ep.bucket = ent.bucket;
-  ep.owner = new_user->get_user();
-  ep.creation_time = get_creation_time();
-  ep.linked = true;
-  map<string, bufferlist> ep_attrs;
-  rgw_ep_info ep_data{ep, ep_attrs};
-
-  return store->ctl()->bucket->link_bucket(new_user->get_user(), info.bucket,
-					   ceph::real_time(), y, true, &ep_data);
-}
-
-int RGWRadosBucket::unlink(RGWUser* new_user, optional_yield y)
-{
-  return -1;
-}
-
-int RGWRadosBucket::chown(RGWUser* new_user, RGWUser* old_user, optional_yield y)
-{
-  string obj_marker;
-
-  return store->ctl()->bucket->chown(store, info, new_user->get_user(),
-			   old_user->get_display_name(), obj_marker, y);
-}
-
-bool RGWRadosBucket::is_owner(RGWUser* user)
-{
-  get_bucket_info(null_yield);
-
-  return (info.owner.compare(user->get_user()) == 0);
-}
-
-int RGWRadosBucket::set_acl(RGWAccessControlPolicy &acl, optional_yield y)
-{
-  bufferlist aclbl;
-
-  acls = acl;
-  acl.encode(aclbl);
-
-  return store->ctl()->bucket->set_acl(acl.get_owner(), ent.bucket, info, aclbl, null_yield);
-}
-
-RGWUser *RGWRadosStore::get_user(const rgw_user &u)
-{
-  return new RGWRadosUser(this, u);
-}
-
-//RGWBucket *RGWRadosStore::create_bucket(RGWUser &u, const rgw_bucket &b)
-//{
-  //if (!bucket) {
-    //bucket = new RGWRadosBucket(this, u, b);
-  //}
-//
-  //return bucket;
-//}
-//
-void RGWRadosStore::finalize(void) {
-  if (rados)
-    rados->finalize();
-}
-
-int RGWRadosStore::get_bucket(RGWUser& u, const rgw_bucket& b, RGWBucket** bucket)
-{
-  int ret;
-  RGWBucket* bp;
-
-  *bucket = nullptr;
-
-  bp = new RGWRadosBucket(this, u, b);
-  if (!bp) {
-    return -ENOMEM;
-  }
-  ret = bp->get_bucket_info(null_yield);
-  if (ret < 0) {
-    delete bp;
-    return ret;
-  }
-
-  *bucket = bp;
-  return 0;
-}
-
-} // namespace rgw::sal
-
-rgw::sal::RGWRadosStore *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache)
-{
-  RGWRados *rados = new RGWRados;
-  rgw::sal::RGWRadosStore *store = new rgw::sal::RGWRadosStore();
-
-  store->setRados(rados);
-  rados->set_store(store);
-
-  if ((*rados).set_use_cache(use_cache)
-              .set_run_gc_thread(use_gc_thread)
-              .set_run_lc_thread(use_lc_thread)
-              .set_run_quota_threads(quota_threads)
-              .set_run_sync_thread(run_sync_thread)
-              .set_run_reshard_thread(run_reshard_thread)
-              .initialize(cct) < 0) {
-    delete store;
-    return NULL;
-  }
-
   return store;
 }
 
-rgw::sal::RGWRadosStore *RGWStoreManager::init_raw_storage_provider(CephContext *cct)
-{
-  RGWRados *rados = new RGWRados;
-  rgw::sal::RGWRadosStore *store = new rgw::sal::RGWRadosStore();
-
-  store->setRados(rados);
-  rados->set_store(store);
-
-  rados->set_context(cct);
-
-  int ret = rados->init_svc(true);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
-    delete store;
-    return nullptr;
-  }
-
-  if (rados->init_rados() < 0) {
-    delete store;
-    return nullptr;
-  }
-
-  return store;
-}
-
-void RGWStoreManager::close_storage(rgw::sal::RGWRadosStore *store)
+void StoreManager::close_storage(rgw::sal::Store* store)
 {
   if (!store)
     return;
@@ -349,4 +142,28 @@ void RGWStoreManager::close_storage(rgw::sal::RGWRadosStore *store)
   store->finalize();
 
   delete store;
+}
+
+namespace rgw::sal {
+int Object::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
+{
+  if (ofs < 0) {
+    ofs += obj_size;
+    if (ofs < 0)
+      ofs = 0;
+    end = obj_size - 1;
+  } else if (end < 0) {
+    end = obj_size - 1;
+  }
+
+  if (obj_size > 0) {
+    if (ofs >= (off_t)obj_size) {
+      return -ERANGE;
+    }
+    if (end >= (off_t)obj_size) {
+      end = obj_size - 1;
+    }
+  }
+  return 0;
+}
 }

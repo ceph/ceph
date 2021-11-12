@@ -15,7 +15,7 @@ the Ceph Storage Cluster:
 - The :term:`Ceph Monitor`, which maintains a master copy of the cluster map. 
 - The :term:`Ceph OSD Daemon` (OSD), which stores data as objects on a storage node.
 
-.. ditaa::  
+.. ditaa::
             +---------------------------------+
             |  Ceph Storage Cluster Protocol  |
             |           (librados)            |
@@ -157,7 +157,7 @@ and retrieve data. To interact with OSDs, the client app must invoke
 ``librados``  and connect to a Ceph Monitor. Once connected, ``librados``
 retrieves the  :term:`Cluster Map` from the Ceph Monitor. When the client app
 wants to read or write data, it creates an I/O context and binds to a
-:term:`pool`. The pool has an associated :term:`CRUSH Rule` that defines how it
+:term:`Pool`. The pool has an associated :term:`CRUSH rule` that defines how it
 will place data in the storage cluster. Via the I/O context, the client 
 provides the object name to ``librados``, which takes the object name
 and the cluster map (i.e., the topology of the cluster) and `computes`_ the
@@ -165,7 +165,7 @@ placement group and `OSD`_  for locating the data. Then the client application
 can read or write data. The client app doesn't need to learn about the topology
 of the cluster directly.
 
-.. ditaa:: 
+.. ditaa::
             +--------+  Retrieves  +---------------+
             | Client |------------>|  Cluster Map  |
             +--------+             +---------------+
@@ -217,7 +217,8 @@ these capabilities. The following diagram provides a high-level flow for the
 initial connection.
 
 
-.. ditaa:: +---------+     +---------+
+.. ditaa::
+           +---------+     +---------+
            | Client  |     | Monitor |
            +---------+     +---------+
                 |               |
@@ -421,18 +422,18 @@ into exceptions.
 	try:
 		cluster = rados.Rados(conffile='')
 	except TypeError as e:
-		print 'Argument validation error: ', e
+		print('Argument validation error: {}'.format(e))
 		raise e
 		
-	print "Created cluster handle."
+	print("Created cluster handle.")
 
 	try:
 		cluster.connect()
 	except Exception as e:
-		print "connection error: ", e
+		print("connection error: {}".format(e))
 		raise e
 	finally:
-		print "Connected to the cluster."
+		print("Connected to the cluster.")
 
 
 Execute the example to verify that it connects to your cluster. ::
@@ -521,7 +522,8 @@ functionality includes:
 - Snapshot pools, list snapshots, etc.
 
 
-.. ditaa:: +---------+     +---------+     +---------+
+.. ditaa::
+           +---------+     +---------+     +---------+
            | Client  |     | Monitor |     |   OSD   |
            +---------+     +---------+     +---------+
                 |               |               |
@@ -836,42 +838,43 @@ Python Example
 
 .. code-block:: python
 
-	print "\n\nI/O Context and Object Operations"
-	print "================================="
+	print("\n\nI/O Context and Object Operations")
+	print("=================================")
 	
-	print "\nCreating a context for the 'data' pool"
+	print("\nCreating a context for the 'data' pool")
 	if not cluster.pool_exists('data'):
 		raise RuntimeError('No data pool exists')
 	ioctx = cluster.open_ioctx('data')
 	
-	print "\nWriting object 'hw' with contents 'Hello World!' to pool 'data'."
-	ioctx.write("hw", "Hello World!")
-	print "Writing XATTR 'lang' with value 'en_US' to object 'hw'"
-	ioctx.set_xattr("hw", "lang", "en_US")
+	print("\nWriting object 'hw' with contents 'Hello World!' to pool 'data'.")
+	ioctx.write("hw", b"Hello World!")
+	print("Writing XATTR 'lang' with value 'en_US' to object 'hw'")
+	ioctx.set_xattr("hw", "lang", b"en_US")
 	
 	
-	print "\nWriting object 'bm' with contents 'Bonjour tout le monde!' to pool 'data'."
-	ioctx.write("bm", "Bonjour tout le monde!")
-	print "Writing XATTR 'lang' with value 'fr_FR' to object 'bm'"
-	ioctx.set_xattr("bm", "lang", "fr_FR")
+	print("\nWriting object 'bm' with contents 'Bonjour tout le monde!' to pool
+	'data'.")
+	ioctx.write("bm", b"Bonjour tout le monde!")
+	print("Writing XATTR 'lang' with value 'fr_FR' to object 'bm'")
+	ioctx.set_xattr("bm", "lang", b"fr_FR")
 	
-	print "\nContents of object 'hw'\n------------------------"
-	print ioctx.read("hw")
+	print("\nContents of object 'hw'\n------------------------")
+	print(ioctx.read("hw"))
 	
-	print "\n\nGetting XATTR 'lang' from object 'hw'"
-	print ioctx.get_xattr("hw", "lang")
+	print("\n\nGetting XATTR 'lang' from object 'hw'")
+	print(ioctx.get_xattr("hw", "lang"))
 	
-	print "\nContents of object 'bm'\n------------------------"
-	print ioctx.read("bm")
+	print("\nContents of object 'bm'\n------------------------")
+	print(ioctx.read("bm"))
 	
-	print "Getting XATTR 'lang' from object 'bm'"
-	print ioctx.get_xattr("bm", "lang")
+	print("\n\nGetting XATTR 'lang' from object 'bm'")
+	print(ioctx.get_xattr("bm", "lang"))
 	
 	
-	print "\nRemoving object 'hw'"
+	print("\nRemoving object 'hw'")
 	ioctx.remove_object("hw")
 	
-	print "Removing object 'bm'"
+	print("Removing object 'bm'")
 	ioctx.remove_object("bm")
 
 
@@ -979,10 +982,10 @@ Python Example
 
 .. code-block:: python
 
-	print "\nClosing the connection."
+	print("\nClosing the connection.")
 	ioctx.close()
 	
-	print "Shutting down the handle."
+	print("Shutting down the handle.")
 	cluster.shutdown()
 
 PHP Example

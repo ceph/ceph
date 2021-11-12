@@ -22,6 +22,9 @@
 
 #include <atomic>
 
+#include "rgw/rgw_basic_types.h"
+#include "common/async/yield_context.h"
+
 static inline int64_t rgw_rounded_kb(int64_t bytes)
 {
   return (bytes + 1023) / 1024;
@@ -29,19 +32,11 @@ static inline int64_t rgw_rounded_kb(int64_t bytes)
 
 class JSONObj;
 namespace rgw { namespace sal {
-  class RGWRadosStore;
+  class Store;
 } }
 
 struct RGWQuotaInfo {
   template<class T> friend class RGWQuotaCache;
-protected:
-  /* The quota thresholds after which comparing against cached storage stats
-   * is disallowed. Those fields may be accessed only by the RGWQuotaCache.
-   * They are not intended as tunables but rather as a mean to store results
-   * of repeating calculations in the quota cache subsystem. */
-  int64_t max_size_soft_threshold;
-  int64_t max_objs_soft_threshold;
-
 public:
   int64_t max_size;
   int64_t max_objects;
@@ -51,9 +46,7 @@ public:
   bool check_on_raw;
 
   RGWQuotaInfo()
-    : max_size_soft_threshold(-1),
-      max_objs_soft_threshold(-1),
-      max_size(-1),
+    : max_size(-1),
       max_objects(-1),
       enabled(false),
       check_on_raw(false) {
@@ -103,16 +96,16 @@ public:
   RGWQuotaHandler() {}
   virtual ~RGWQuotaHandler() {
   }
-  virtual int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
+  virtual int check_quota(const DoutPrefixProvider *dpp, const rgw_user& bucket_owner, rgw_bucket& bucket,
                           RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
-			  uint64_t num_objs, uint64_t size) = 0;
+			  uint64_t num_objs, uint64_t size, optional_yield y) = 0;
 
-  virtual void check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
+  virtual void check_bucket_shards(const DoutPrefixProvider *dpp, uint64_t max_objs_per_shard, uint64_t num_shards,
 				   uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards) = 0;
 
   virtual void update_stats(const rgw_user& bucket_owner, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) = 0;
 
-  static RGWQuotaHandler *generate_handler(rgw::sal::RGWRadosStore *store, bool quota_threads);
+  static RGWQuotaHandler *generate_handler(const DoutPrefixProvider *dpp, rgw::sal::Store* store, bool quota_threads);
   static void free_handler(RGWQuotaHandler *handler);
 };
 

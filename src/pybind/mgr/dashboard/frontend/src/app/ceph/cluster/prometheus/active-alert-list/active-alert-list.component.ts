@@ -1,17 +1,19 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
-import { Icons } from '../../../../shared/enum/icons.enum';
-import { CdTableAction } from '../../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { Permission } from '../../../../shared/models/permissions';
-import { CdDatePipe } from '../../../../shared/pipes/cd-date.pipe';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { PrometheusAlertService } from '../../../../shared/services/prometheus-alert.service';
-import { URLBuilderService } from '../../../../shared/services/url-builder.service';
+import { Component, Inject, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-const BASE_URL = 'silence'; // as only silence actions can be used
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { PrometheusListHelper } from '../prometheus-list-helper';
+
+const BASE_URL = 'silences'; // as only silence actions can be used
 
 @Component({
   selector: 'cd-active-alert-list',
@@ -19,7 +21,7 @@ const BASE_URL = 'silence'; // as only silence actions can be used
   templateUrl: './active-alert-list.component.html',
   styleUrls: ['./active-alert-list.component.scss']
 })
-export class ActiveAlertListComponent implements OnInit {
+export class ActiveAlertListComponent extends PrometheusListHelper implements OnInit {
   @ViewChild('externalLinkTpl', { static: true })
   externalLinkTpl: TemplateRef<any>;
   columns: CdTableColumn[];
@@ -38,9 +40,10 @@ export class ActiveAlertListComponent implements OnInit {
     private authStorageService: AuthStorageService,
     public prometheusAlertService: PrometheusAlertService,
     private urlBuilder: URLBuilderService,
-    private i18n: I18n,
-    private cdDatePipe: CdDatePipe
+    private cdDatePipe: CdDatePipe,
+    @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
+    super(prometheusService);
     this.permission = this.authStorageService.getPermissions().prometheus;
     this.tableActions = [
       {
@@ -51,39 +54,40 @@ export class ActiveAlertListComponent implements OnInit {
         icon: Icons.add,
         routerLink: () =>
           '/monitoring' + this.urlBuilder.getCreateFrom(this.selection.first().fingerprint),
-        name: this.i18n('Create Silence')
+        name: $localize`Create Silence`
       }
     ];
   }
 
   ngOnInit() {
+    super.ngOnInit();
     this.columns = [
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'labels.alertname',
         flexGrow: 2
       },
       {
-        name: this.i18n('Job'),
+        name: $localize`Job`,
         prop: 'labels.job',
         flexGrow: 2
       },
       {
-        name: this.i18n('Severity'),
+        name: $localize`Severity`,
         prop: 'labels.severity'
       },
       {
-        name: this.i18n('State'),
+        name: $localize`State`,
         prop: 'status.state',
         cellTransformation: CellTemplate.classAdding
       },
       {
-        name: this.i18n('Started'),
+        name: $localize`Started`,
         prop: 'startsAt',
         pipe: this.cdDatePipe
       },
       {
-        name: this.i18n('URL'),
+        name: $localize`URL`,
         prop: 'generatorURL',
         sortable: false,
         cellTemplate: this.externalLinkTpl

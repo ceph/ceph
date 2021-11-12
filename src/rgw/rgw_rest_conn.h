@@ -3,14 +3,17 @@
 
 #pragma once
 
-#include "rgw_rados.h"
 #include "rgw_rest_client.h"
 #include "common/ceph_json.h"
 #include "common/RefCountedObj.h"
+#include "include/common_fwd.h"
 
 #include <atomic>
 
-class CephContext;
+namespace rgw { namespace sal {
+  class Store;
+} }
+
 class RGWSI_Zone;
 
 template <class T>
@@ -38,14 +41,14 @@ struct rgw_http_param_pair {
 inline void append_param_list(param_vec_t& params, const rgw_http_param_pair* pp)
 {
   while (pp && pp->key) {
-    string k = pp->key;
-    string v = (pp->val ? pp->val : "");
+    std::string k = pp->key;
+    std::string v = (pp->val ? pp->val : "");
     params.emplace_back(make_pair(std::move(k), std::move(v)));
     ++pp;
   }
 }
 
-// copy a null-terminated rgw_http_param_pair list into a list of string pairs
+// copy a null-terminated rgw_http_param_pair list into a list of std::string pairs
 inline param_vec_t make_param_list(const rgw_http_param_pair* pp)
 {
   param_vec_t params;
@@ -53,7 +56,7 @@ inline param_vec_t make_param_list(const rgw_http_param_pair* pp)
   return params;
 }
 
-inline param_vec_t make_param_list(const map<string, string> *pp)
+inline param_vec_t make_param_list(const std::map<std::string, std::string> *pp)
 {
   param_vec_t params;
   if (!pp) {
@@ -68,33 +71,62 @@ inline param_vec_t make_param_list(const map<string, string> *pp)
 class RGWRESTConn
 {
   CephContext *cct;
-  vector<string> endpoints;
+  std::vector<std::string> endpoints;
   RGWAccessKey key;
-  string self_zone_group;
-  string remote_id;
+  std::string self_zone_group;
+  std::string remote_id;
+  std::optional<std::string> api_name;
   HostStyle host_style;
   std::atomic<int64_t> counter = { 0 };
 
 public:
 
-  RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc, const string& _remote_id, const list<string>& endpoints, HostStyle _host_style = PathStyle);
-  RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc, const string& _remote_id, const list<string>& endpoints, RGWAccessKey _cred, HostStyle _host_style = PathStyle);
+  RGWRESTConn(CephContext *_cct,
+              RGWSI_Zone *zone_svc,
+              const std::string& _remote_id,
+              const std::list<std::string>& endpoints,
+              std::optional<std::string> _api_name,
+              HostStyle _host_style = PathStyle);
+  RGWRESTConn(CephContext *_cct,
+              rgw::sal::Store* store,
+              const std::string& _remote_id,
+              const std::list<std::string>& endpoints,
+              std::optional<std::string> _api_name,
+              HostStyle _host_style = PathStyle);
+  RGWRESTConn(CephContext *_cct,
+              RGWSI_Zone *zone_svc,
+              const std::string& _remote_id,
+              const std::list<std::string>& endpoints,
+              RGWAccessKey _cred,
+              std::optional<std::string> _api_name,
+              HostStyle _host_style = PathStyle);
+  RGWRESTConn(CephContext *_cct,
+              rgw::sal::Store* store,
+              const std::string& _remote_id,
+              const std::list<std::string>& endpoints,
+              RGWAccessKey _cred,
+              std::optional<std::string> _api_name,
+              HostStyle _host_style = PathStyle);
 
   // custom move needed for atomic
   RGWRESTConn(RGWRESTConn&& other);
   RGWRESTConn& operator=(RGWRESTConn&& other);
   virtual ~RGWRESTConn() = default;
 
-  int get_url(string& endpoint);
-  string get_url();
-  const string& get_self_zonegroup() {
+  int get_url(std::string& endpoint);
+  std::string get_url();
+  const std::string& get_self_zonegroup() {
     return self_zone_group;
   }
-  const string& get_remote_id() {
+  const std::string& get_remote_id() {
     return remote_id;
   }
   RGWAccessKey& get_key() {
     return key;
+  }
+
+  std::optional<std::string> get_api_name() const {
+    return api_name;
   }
 
   HostStyle get_host_style() {
@@ -106,17 +138,18 @@ public:
   }
   size_t get_endpoint_count() const { return endpoints.size(); }
 
-  virtual void populate_params(param_vec_t& params, const rgw_user *uid, const string& zonegroup);
+  virtual void populate_params(param_vec_t& params, const rgw_user *uid, const std::string& zonegroup);
 
   /* sync request */
-  int forward(const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl);
+  int forward(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
 
 
   /* async requests */
-  int put_obj_send_init(rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
-  int put_obj_async(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
-                    map<string, bufferlist>& attrs, bool send, RGWRESTStreamS3PutObj **req);
-  int complete_request(RGWRESTStreamS3PutObj *req, string& etag, ceph::real_time *mtime);
+  int put_obj_send_init(rgw::sal::Object* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
+  int put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_user& uid, rgw::sal::Object* obj,
+                         std::map<std::string, bufferlist>& attrs, RGWRESTStreamS3PutObj **req);
+  int complete_request(RGWRESTStreamS3PutObj *req, std::string& etag,
+                       ceph::real_time *mtime, optional_yield y);
 
   struct get_obj_params {
     rgw_user uid;
@@ -125,7 +158,7 @@ public:
     const ceph::real_time *unmod_ptr{nullptr};
     bool high_precision_time{true};
 
-    string etag;
+    std::string etag;
 
     uint32_t mod_zone_id{0};
     uint64_t mod_pg_ver{0};
@@ -143,43 +176,49 @@ public:
     uint64_t range_end{0};
   };
 
-  int get_obj(const rgw_obj& obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
+  int get_obj(const DoutPrefixProvider *dpp, const rgw::sal::Object* obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
 
-  int get_obj(const rgw_user& uid, req_info *info /* optional */, const rgw_obj& obj,
+  int get_obj(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info *info /* optional */, const rgw::sal::Object* obj,
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
               bool skip_decrypt, bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
   int complete_request(RGWRESTStreamRWRequest *req,
-                       string *etag,
+                       std::string *etag,
                        ceph::real_time *mtime,
                        uint64_t *psize,
-                       map<string, string> *pattrs,
-                       map<string, string> *pheaders);
+                       std::map<std::string, std::string> *pattrs,
+                       std::map<std::string, std::string> *pheaders,
+                       optional_yield y);
 
-  int get_resource(const string& resource,
+  int get_resource(const DoutPrefixProvider *dpp,
+                   const std::string& resource,
 		   param_vec_t *extra_params,
-                   map<string, string>* extra_headers,
+                   std::map<std::string, std::string>* extra_headers,
                    bufferlist& bl,
-                   bufferlist *send_data = nullptr,
-                   RGWHTTPManager *mgr = nullptr);
+                   bufferlist *send_data,
+                   RGWHTTPManager *mgr,
+                   optional_yield y);
 
   template <class T>
-  int get_json_resource(const string& resource, param_vec_t *params, bufferlist *in_data, T& t);
+  int get_json_resource(const DoutPrefixProvider *dpp, const std::string& resource, param_vec_t *params,
+                        bufferlist *in_data, optional_yield y, T& t);
   template <class T>
-  int get_json_resource(const string& resource, param_vec_t *params, T& t);
+  int get_json_resource(const DoutPrefixProvider *dpp, const std::string& resource, param_vec_t *params,
+                        optional_yield y, T& t);
   template <class T>
-  int get_json_resource(const string& resource, const rgw_http_param_pair *pp, T& t);
+  int get_json_resource(const DoutPrefixProvider *dpp, const std::string& resource, const rgw_http_param_pair *pp,
+                        optional_yield y, T& t);
 
 private:
-  void populate_zonegroup(param_vec_t& params, const string& zonegroup) {
+  void populate_zonegroup(param_vec_t& params, const std::string& zonegroup) {
     if (!zonegroup.empty()) {
       params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", zonegroup));
     }
   }
   void populate_uid(param_vec_t& params, const rgw_user *uid) {
     if (uid) {
-      string uid_str = uid->to_str();
+      std::string uid_str = uid->to_str();
       if (!uid->empty()){
         params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid_str));
       }
@@ -191,14 +230,20 @@ class S3RESTConn : public RGWRESTConn {
 
 public:
 
-  S3RESTConn(CephContext *_cct, RGWSI_Zone *svc_zone, const string& _remote_id, const list<string>& endpoints, HostStyle _host_style = PathStyle) :
-    RGWRESTConn(_cct, svc_zone, _remote_id, endpoints, _host_style) {}
+  S3RESTConn(CephContext *_cct, RGWSI_Zone *svc_zone, const std::string& _remote_id, const std::list<std::string>& endpoints, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle) :
+    RGWRESTConn(_cct, svc_zone, _remote_id, endpoints, _api_name, _host_style) {}
 
-  S3RESTConn(CephContext *_cct, RGWSI_Zone *svc_zone, const string& _remote_id, const list<string>& endpoints, RGWAccessKey _cred, HostStyle _host_style = PathStyle):
-    RGWRESTConn(_cct, svc_zone, _remote_id, endpoints, _cred, _host_style) {}
+  S3RESTConn(CephContext *_cct, rgw::sal::Store* store, const std::string& _remote_id, const std::list<std::string>& endpoints, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle) :
+    RGWRESTConn(_cct, store, _remote_id, endpoints, _api_name, _host_style) {}
+
+  S3RESTConn(CephContext *_cct, RGWSI_Zone *svc_zone, const std::string& _remote_id, const std::list<std::string>& endpoints, RGWAccessKey _cred, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle):
+    RGWRESTConn(_cct, svc_zone, _remote_id, endpoints, _cred, _api_name, _host_style) {}
+
+  S3RESTConn(CephContext *_cct, rgw::sal::Store* store, const std::string& _remote_id, const std::list<std::string>& endpoints, RGWAccessKey _cred, std::optional<std::string> _api_name, HostStyle _host_style = PathStyle):
+    RGWRESTConn(_cct, store, _remote_id, endpoints, _cred, _api_name, _host_style) {}
   ~S3RESTConn() override = default;
 
-  void populate_params(param_vec_t& params, const rgw_user *uid, const string& zonegroup) override {
+  void populate_params(param_vec_t& params, const rgw_user *uid, const std::string& zonegroup) override {
     // do not populate any params in S3 REST Connection.
     return;
   }
@@ -206,10 +251,11 @@ public:
 
 
 template<class T>
-int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, bufferlist *in_data, T& t)
+int RGWRESTConn::get_json_resource(const DoutPrefixProvider *dpp, const std::string& resource, param_vec_t *params,
+                                   bufferlist *in_data, optional_yield y, T& t)
 {
   bufferlist bl;
-  int ret = get_resource(resource, params, nullptr, bl, in_data);
+  int ret = get_resource(dpp, resource, params, nullptr, bl, in_data, nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -223,16 +269,18 @@ int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, 
 }
 
 template<class T>
-int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, T& t)
+int RGWRESTConn::get_json_resource(const DoutPrefixProvider *dpp, const std::string& resource, param_vec_t *params,
+                                   optional_yield y, T& t)
 {
-  return get_json_resource(resource, params, nullptr, t);
+  return get_json_resource(dpp, resource, params, nullptr, y, t);
 }
 
 template<class T>
-int RGWRESTConn::get_json_resource(const string& resource,  const rgw_http_param_pair *pp, T& t)
+int RGWRESTConn::get_json_resource(const DoutPrefixProvider *dpp, const std::string& resource, const rgw_http_param_pair *pp,
+                                   optional_yield y, T& t)
 {
   param_vec_t params = make_param_list(pp);
-  return get_json_resource(resource, &params, t);
+  return get_json_resource(dpp, resource, &params, y, t);
 }
 
 class RGWStreamIntoBufferlist : public RGWHTTPStreamRWRequest::ReceiveCB {
@@ -248,9 +296,9 @@ public:
 class RGWRESTReadResource : public RefCountedObject, public RGWIOProvider {
   CephContext *cct;
   RGWRESTConn *conn;
-  string resource;
+  std::string resource;
   param_vec_t params;
-  map<string, string> headers;
+  std::map<std::string, std::string> headers;
   bufferlist bl;
   RGWStreamIntoBufferlist cb;
 
@@ -261,13 +309,13 @@ class RGWRESTReadResource : public RefCountedObject, public RGWIOProvider {
 
 public:
   RGWRESTReadResource(RGWRESTConn *_conn,
-		      const string& _resource,
+		      const std::string& _resource,
 		      const rgw_http_param_pair *pp,
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
   RGWRESTReadResource(RGWRESTConn *_conn,
-		      const string& _resource,
+		      const std::string& _resource,
 		      param_vec_t& _params,
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
@@ -288,11 +336,11 @@ public:
   template <class T>
   int decode_resource(T *dest);
 
-  int read();
+  int read(const DoutPrefixProvider *dpp, optional_yield y);
 
-  int aio_read();
+  int aio_read(const DoutPrefixProvider *dpp);
 
-  string to_str() {
+  std::string to_str() {
     return req.to_str();
   }
 
@@ -317,7 +365,7 @@ public:
   int wait(T *dest, optional_yield y);
 
   template <class T>
-  int fetch(T *dest);
+  int fetch(const DoutPrefixProvider *dpp, T *dest, optional_yield y);
 };
 
 
@@ -336,9 +384,9 @@ int RGWRESTReadResource::decode_resource(T *dest)
 }
 
 template <class T>
-int RGWRESTReadResource::fetch(T *dest)
+int RGWRESTReadResource::fetch(const DoutPrefixProvider *dpp, T *dest, optional_yield y)
 {
-  int ret = read();
+  int ret = read(dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -368,10 +416,10 @@ int RGWRESTReadResource::wait(T *dest, optional_yield y)
 class RGWRESTSendResource : public RefCountedObject, public RGWIOProvider {
   CephContext *cct;
   RGWRESTConn *conn;
-  string method;
-  string resource;
+  std::string method;
+  std::string resource;
   param_vec_t params;
-  map<string, string> headers;
+  std::map<std::string, std::string> headers;
   bufferlist bl;
   RGWStreamIntoBufferlist cb;
 
@@ -382,15 +430,15 @@ class RGWRESTSendResource : public RefCountedObject, public RGWIOProvider {
 
 public:
   RGWRESTSendResource(RGWRESTConn *_conn,
-                      const string& _method,
-		      const string& _resource,
+                      const std::string& _method,
+		      const std::string& _resource,
 		      const rgw_http_param_pair *pp,
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
   RGWRESTSendResource(RGWRESTConn *_conn,
-                      const string& _method,
-		      const string& _resource,
+                      const std::string& _method,
+		      const std::string& _resource,
 		      param_vec_t& params,
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
@@ -409,11 +457,11 @@ public:
     return req.get_io_user_info();
   }
 
-  int send(bufferlist& bl);
+  int send(const DoutPrefixProvider *dpp, bufferlist& bl, optional_yield y);
 
-  int aio_send(bufferlist& bl);
+  int aio_send(const DoutPrefixProvider *dpp, bufferlist& bl);
 
-  string to_str() {
+  std::string to_str() {
     return req.to_str();
   }
 
@@ -464,14 +512,14 @@ int RGWRESTSendResource::wait(T *dest, optional_yield y, E *err_result)
 class RGWRESTPostResource : public RGWRESTSendResource {
 public:
   RGWRESTPostResource(RGWRESTConn *_conn,
-		      const string& _resource,
+		      const std::string& _resource,
 		      const rgw_http_param_pair *pp,
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "POST", _resource,
                                                                   pp, extra_headers, _mgr) {}
 
   RGWRESTPostResource(RGWRESTConn *_conn,
-		      const string& _resource,
+		      const std::string& _resource,
 		      param_vec_t& params,
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "POST", _resource,
@@ -482,14 +530,14 @@ public:
 class RGWRESTPutResource : public RGWRESTSendResource {
 public:
   RGWRESTPutResource(RGWRESTConn *_conn,
-		     const string& _resource,
+		     const std::string& _resource,
 		     const rgw_http_param_pair *pp,
 		     param_vec_t *extra_headers,
 		     RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "PUT", _resource,
                                                                   pp, extra_headers, _mgr) {}
 
   RGWRESTPutResource(RGWRESTConn *_conn,
-		     const string& _resource,
+		     const std::string& _resource,
 		     param_vec_t& params,
 		     param_vec_t *extra_headers,
 		     RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "PUT", _resource,
@@ -500,14 +548,14 @@ public:
 class RGWRESTDeleteResource : public RGWRESTSendResource {
 public:
   RGWRESTDeleteResource(RGWRESTConn *_conn,
-		     const string& _resource,
+		     const std::string& _resource,
 		     const rgw_http_param_pair *pp,
 		     param_vec_t *extra_headers,
 		     RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "DELETE", _resource,
                                                                   pp, extra_headers, _mgr) {}
 
   RGWRESTDeleteResource(RGWRESTConn *_conn,
-		     const string& _resource,
+		     const std::string& _resource,
 		     param_vec_t& params,
 		     param_vec_t *extra_headers,
 		     RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "DELETE", _resource,

@@ -3,9 +3,9 @@ Configuring the iSCSI Target using Ansible
 ==========================================
 
 The Ceph iSCSI gateway is the iSCSI target node and also a Ceph client
-node. The Ceph iSCSI gateway can be a standalone node or be colocated on
-a Ceph Object Store Disk (OSD) node. Completing the following steps will
-install, and configure the Ceph iSCSI gateway for basic operation.
+node. The Ceph iSCSI gateway can be provisioned on dedicated node
+or be colocated on a Ceph Object Store Disk (OSD) node. The following steps will
+install and configure the Ceph iSCSI gateway for basic operation.
 
 **Requirements:**
 
@@ -15,7 +15,7 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
 -  The ``ceph-iscsi`` package installed on all the iSCSI gateway nodes
 
-**Installing:**
+**Installation:**
 
 #. On the Ansible installer node, which could be either the administration node
    or a dedicated deployment node, perform the following steps:
@@ -38,7 +38,7 @@ install, and configure the Ceph iSCSI gateway for basic operation.
   If co-locating the iSCSI gateway with an OSD node, then add the OSD node to the
   ``[iscsigws]`` section.
 
-**Configuring:**
+**Configuration:**
 
 The ``ceph-ansible`` package places a file in the ``/usr/share/ceph-ansible/group_vars/``
 directory called ``iscsigws.yml.sample``. Create a copy of this sample file named
@@ -94,16 +94,16 @@ advanced variables.
 |                                      | nodes have access.                   |
 +--------------------------------------+--------------------------------------+
 
-**Deploying:**
+**Deployment:**
 
-On the Ansible installer node, perform the following steps.
+Perform the followint steps on the Ansible installer node.
 
 #. As ``root``, execute the Ansible playbook:
 
-   ::
+   .. prompt:: bash #
 
-       # cd /usr/share/ceph-ansible
-       # ansible-playbook site.yml --limit iscsigws
+      cd /usr/share/ceph-ansible
+      ansible-playbook site.yml --limit iscsigws
 
    .. note::
     The Ansible playbook will handle RPM dependencies, setting up daemons,
@@ -114,9 +114,9 @@ On the Ansible installer node, perform the following steps.
 
 #. Verify the configuration from an iSCSI gateway node:
 
-   ::
+   .. prompt:: bash #
 
-       # gwcli ls
+      gwcli ls
 
    .. note::
     See the `Configuring the iSCSI Target using the Command Line Interface`_
@@ -124,10 +124,10 @@ On the Ansible installer node, perform the following steps.
 
    .. important::
     Attempting to use the ``targetcli`` tool to change the configuration will
-    result in the following issues, such as ALUA misconfiguration and path failover
-    problems. There is the potential to corrupt data, to have mismatched
+    cause problems including ALUA misconfiguration and path failover
+    issues. There is the potential to corrupt data, to have mismatched
     configuration across iSCSI gateways, and to have mismatched WWN information,
-    which will lead to client multipath problems.
+    leading to client multipath problems.
 
 **Service Management:**
 
@@ -138,9 +138,9 @@ will restore the Linux IO state. The Ansible playbook disables the
 target service during the deployment. Below are the outcomes of when
 interacting with the ``rbd-target-api`` Systemd service.
 
-::
+.. prompt:: bash #
 
-    # systemctl <start|stop|restart|reload> rbd-target-api
+   systemctl <start|stop|restart|reload> rbd-target-api
 
 -  ``reload``
 
@@ -185,6 +185,8 @@ correct mode is chosen, this operation will delete data.
 .. warning::
   A purge operation will fail, if RBD images have snapshots or clones
   and are exported through the Ceph iSCSI gateway.
+
+.. highlight:: console
 
 ::
 

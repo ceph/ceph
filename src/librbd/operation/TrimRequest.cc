@@ -9,13 +9,12 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include "common/ContextCompletion.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "osdc/Striper.h"
 
-#include <boost/bind.hpp>
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
 #include <boost/scope_exit.hpp>
@@ -31,8 +30,8 @@ template <typename I>
 class C_CopyupObject : public C_AsyncObjectThrottle<I> {
 public:
   C_CopyupObject(AsyncObjectThrottle<I> &throttle, I *image_ctx,
-                 ::SnapContext snapc, uint64_t object_no)
-    : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_snapc(snapc),
+                 IOContext io_context, uint64_t object_no)
+    : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_io_context(io_context),
       m_object_no(object_no)
   {
   }
@@ -43,18 +42,18 @@ public:
     ceph_assert(image_ctx.exclusive_lock == nullptr ||
                 image_ctx.exclusive_lock->is_lock_owner());
 
-    string oid = image_ctx.get_object_name(m_object_no);
+    std::string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
 
     auto object_dispatch_spec = io::ObjectDispatchSpec::create_discard(
       &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, m_object_no, 0,
-      image_ctx.layout.object_size, m_snapc,
+      image_ctx.layout.object_size, m_io_context,
       io::OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE, 0, {}, this);
     object_dispatch_spec->send();
     return 0;
   }
 private:
-  ::SnapContext m_snapc;
+  IOContext m_io_context;
   uint64_t m_object_no;
 };
 
@@ -81,7 +80,7 @@ public:
       }
     }
 
-    string oid = image_ctx.get_object_name(m_object_no);
+    std::string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing " << oid << dendl;
 
     librados::AioCompletion *rados_completion =
@@ -222,13 +221,13 @@ void TrimRequest<I>::send_copyup_objects() {
   I &image_ctx = this->m_image_ctx;
   ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
 
-  ::SnapContext snapc;
+  IOContext io_context;
   bool has_snapshots;
   uint64_t parent_overlap;
   {
     std::shared_lock image_locker{image_ctx.image_lock};
 
-    snapc = image_ctx.snapc;
+    io_context = image_ctx.get_data_io_context();
     has_snapshots = !image_ctx.snaps.empty();
     int r = image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
     ceph_assert(r == 0);
@@ -256,7 +255,7 @@ void TrimRequest<I>::send_copyup_objects() {
   Context *ctx = this->create_callback_context();
   typename AsyncObjectThrottle<I>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_CopyupObject<I> >(),
-      boost::lambda::_1, &image_ctx, snapc, boost::lambda::_2));
+      boost::lambda::_1, &image_ctx, io_context, boost::lambda::_2));
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, image_ctx, context_factory, ctx, &m_prog_ctx, copyup_start,
     copyup_end);
@@ -330,10 +329,10 @@ void TrimRequest<I>::send_clean_boundary() {
 			    << " length=" << delete_len << dendl;
   m_state = STATE_CLEAN_BOUNDARY;
 
-  ::SnapContext snapc;
+  IOContext io_context;
   {
     std::shared_lock image_locker{image_ctx.image_lock};
-    snapc = image_ctx.snapc;
+    io_context = image_ctx.get_data_io_context();
   }
 
   // discard the weird boundary
@@ -344,19 +343,18 @@ void TrimRequest<I>::send_clean_boundary() {
 
   ContextCompletion *completion =
     new ContextCompletion(this->create_async_callback_context(), true);
-  for (vector<ObjectExtent>::iterator p = extents.begin();
-       p != extents.end(); ++p) {
-    ldout(cct, 20) << " ex " << *p << dendl;
+  for (auto& extent : extents) {
+    ldout(cct, 20) << " ex " << extent << dendl;
     Context *req_comp = new C_ContextCompletion(*completion);
 
-    if (p->offset == 0) {
+    if (extent.offset == 0) {
       // treat as a full object delete on the boundary
-      p->length = image_ctx.layout.object_size;
+      extent.length = image_ctx.layout.object_size;
     }
 
     auto object_dispatch_spec = io::ObjectDispatchSpec::create_discard(
-      &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, p->objectno, p->offset,
-      p->length, snapc, 0, 0, {}, req_comp);
+      &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, extent.objectno, extent.offset,
+      extent.length, io_context, 0, 0, {}, req_comp);
     object_dispatch_spec->send();
   }
   completion->finish_adding_requests();

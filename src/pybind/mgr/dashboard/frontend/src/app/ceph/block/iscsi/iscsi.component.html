@@ -40,7 +40,7 @@
              let-row="row"
              let-value="value">
   <span *ngIf="row.backstore === 'user:rbd'">
-    {{ value | relativeDate }}
+    {{ value | relativeDate | notAvailable }}
   </span>
   <span *ngIf="row.backstore !== 'user:rbd'"
         class="text-muted">

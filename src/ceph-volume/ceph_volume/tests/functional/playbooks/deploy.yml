@@ -75,8 +75,8 @@
     - name: install required packages for fedora > 23
       raw: sudo dnf -y install python2-dnf libselinux-python ntp
       when:
-        - ansible_distribution == 'Fedora'
-        - ansible_distribution_major_version|int >= 23
+        - ansible_facts['distribution'] == 'Fedora'
+        - ansible_facts['distribution_major_version']|int >= 23
 
     - name: check if it is atomic host
       stat:
@@ -90,6 +90,8 @@
   tasks:
     - import_role:
         name: ceph-defaults
+    - import_role:
+        name: ceph-facts
     - import_role:
         name: ceph-validate
 
@@ -115,10 +117,10 @@
     - name: rsync ceph-volume to test nodes on centos
       synchronize:
         src: "{{ toxinidir }}/../../../../ceph_volume"
-        dest: "/usr/lib/python2.7/site-packages"
+        dest: "/usr/lib/python3.6/site-packages"
         use_ssh_args: true
       when:
-        - ansible_os_family == "RedHat"
+        - ansible_facts['os_family'] == "RedHat"
         - inventory_hostname in groups.get(osd_group_name, [])
 
     - name: rsync ceph-volume to test nodes on ubuntu
@@ -127,7 +129,7 @@
         dest: "/usr/lib/python2.7/dist-packages"
         use_ssh_args: true
       when:
-        - ansible_os_family == "Debian"
+        - ansible_facts['os_family'] == "Debian"
         - inventory_hostname in groups.get(osd_group_name, [])
 
     - name: run ceph-config role

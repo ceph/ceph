@@ -22,6 +22,9 @@ template <typename I>
 std::ostream& operator<<(std::ostream& os,
                          const typename RenameRequest<I>::State& state) {
   switch(state) {
+  case RenameRequest<I>::STATE_READ_DIRECTORY:
+    os << "READ_DIRECTORY";
+    break;
   case RenameRequest<I>::STATE_READ_SOURCE_HEADER:
     os << "READ_SOURCE_HEADER";
     break;
@@ -55,7 +58,12 @@ RenameRequest<I>::RenameRequest(I &image_ctx, Context *on_finish,
 
 template <typename I>
 void RenameRequest<I>::send_op() {
-  send_read_source_header();
+  I &image_ctx = this->m_image_ctx;
+  if (image_ctx.old_format) {
+    send_read_source_header();
+    return;
+  }
+  send_read_directory();
 }
 
 template <typename I>
@@ -74,7 +82,24 @@ bool RenameRequest<I>::should_complete(int r) {
     return true;
   }
 
-  if (m_state == STATE_UPDATE_DIRECTORY) {
+  if (m_state == STATE_READ_DIRECTORY) {
+    std::string name;
+    auto it = m_source_name_bl.cbegin();
+    r = cls_client::dir_get_name_finish(&it, &name);
+    if (r < 0) {
+      lderr(cct) << "could not read directory: " << cpp_strerror(r) << dendl;
+      return true;
+    }
+    bool update = false;
+    {
+      std::shared_lock image_locker{image_ctx.image_lock};
+      update = image_ctx.name != name;
+    }
+    if (update) {
+      image_ctx.set_image_name(name);
+      m_source_oid = util::id_obj_name(name);
+    }
+  } else if (m_state == STATE_UPDATE_DIRECTORY) {
     // update in-memory name before removing source header
     apply();
   } else if (m_state == STATE_REMOVE_SOURCE_HEADER) {
@@ -83,6 +108,9 @@ bool RenameRequest<I>::should_complete(int r) {
 
   std::shared_lock owner_lock{image_ctx.owner_lock};
   switch (m_state) {
+  case STATE_READ_DIRECTORY:
+    send_read_source_header();
+    break;
   case STATE_READ_SOURCE_HEADER:
     send_write_destination_header();
     break;
@@ -118,6 +146,23 @@ int RenameRequest<I>::filter_return_code(int r) const {
     return 0;
   }
   return r;
+}
+
+template <typename I>
+void RenameRequest<I>::send_read_directory() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << dendl;
+  m_state = STATE_READ_DIRECTORY;
+
+  librados::ObjectReadOperation op;
+  cls_client::dir_get_name_start(&op, image_ctx.id);
+
+  auto comp = this->create_callback_completion();
+  int r = image_ctx.md_ctx.aio_operate(RBD_DIRECTORY, comp, &op,
+                                       &m_source_name_bl);
+  ceph_assert(r == 0);
+  comp->release();
 }
 
 template <typename I>

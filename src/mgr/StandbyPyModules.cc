@@ -20,11 +20,7 @@
 #include "mgr/MgrContext.h"
 #include "mgr/Gil.h"
 
-
-#include <boost/python.hpp>
-#include "include/ceph_assert.h"  // boost clobbers this
-
-// For ::config_prefix
+// For ::mgr_store_prefix
 #include "PyModuleRegistry.h"
 
 #define dout_context g_ceph_context
@@ -79,11 +75,7 @@ void StandbyPyModules::start_one(PyModuleRef py_module)
 {
   std::lock_guard l(lock);
   const auto name = py_module->get_name();
-
-  ceph_assert(modules.count(name) == 0);
-
-  modules[name].reset(new StandbyPyModule(state, py_module, clog));
-  auto standby_module = modules.at(name).get();
+  auto standby_module = new StandbyPyModule(state, py_module, clog);
 
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
@@ -92,9 +84,12 @@ void StandbyPyModules::start_one(PyModuleRef py_module)
     if (r != 0) {
       derr << "Failed to run module in standby mode ('" << name << "')"
            << dendl;
-      std::lock_guard l(lock);
-      modules.erase(name);
+      delete standby_module;
     } else {
+      std::lock_guard l(lock);
+      auto em = modules.emplace(name, standby_module);
+      ceph_assert(em.second); // actually inserted
+
       dout(4) << "Starting thread for " << name << dendl;
       standby_module->thread.create(standby_module->get_thread_name());
     }
@@ -119,7 +114,7 @@ int StandbyPyModule::load()
   Py_DECREF(pArgs);
   if (pClassInstance == nullptr) {
     derr << "Failed to construct class in '" << get_name() << "'" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, get_name(), "StandbyPyModule::load") << dendl;
     return -EINVAL;
   } else {
     dout(1) << "Constructed class from module: " << get_name() << dendl;
@@ -130,8 +125,7 @@ int StandbyPyModule::load()
 bool StandbyPyModule::get_config(const std::string &key,
                                  std::string *value) const
 {
-  const std::string global_key = PyModule::config_prefix
-    + get_name() + "/" + key;
+  const std::string global_key = "mgr/" + get_name() + "/" + key;
 
   dout(4) << __func__ << " key: " << global_key << dendl;
  
@@ -149,7 +143,7 @@ bool StandbyPyModule::get_store(const std::string &key,
                                 std::string *value) const
 {
 
-  const std::string global_key = PyModule::config_prefix
+  const std::string global_key = PyModule::mgr_store_prefix
     + get_name() + "/" + key;
 
   dout(4) << __func__ << " key: " << global_key << dendl;

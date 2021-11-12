@@ -30,8 +30,9 @@
 	mon warn on too few osds = false
 	mon_warn_on_pool_pg_num_not_power_of_two = false
         mon_warn_on_pool_no_redundancy = false
+	mon_allow_pool_size_one = true
 
-        osd pool default erasure code profile = "plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd crush-failure-domain=osd"
+        osd pool default erasure code profile = "plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd"
 
 	osd default data pool replay window = 5
 
@@ -39,6 +40,7 @@
 
 	mon cluster log file level = debug
 	debug asserts on shutdown = true
+	mon health detail to clog = false
 
 [osd]
         osd journal size = 100
@@ -88,6 +90,14 @@
 	mon osd reporter subtree level = osd
 	mon osd prime pg temp = true
 	mon reweight min bytes per osd = 10
+
+	# rotate auth tickets quickly to exercise renewal paths
+	auth mon ticket ttl = 660      # 11m
+	auth service ticket ttl = 240  # 4m
+
+	# don't complain about insecure global_id in the test suite
+	mon_warn_on_insecure_global_id_reclaim = false
+	mon_warn_on_insecure_global_id_reclaim_allowed = false
 
 [client]
 	rgw cache enabled = true

@@ -21,6 +21,7 @@
 #include "rgw_rest_metadata.h"
 #include "rgw_client_io.h"
 #include "rgw_mdlog_types.h"
+#include "rgw_sal_rados.h"
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "rgw/rgw_b64.h"
@@ -28,6 +29,8 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+using namespace std;
 
 static inline void frame_metadata_key(req_state *s, string& out) {
   bool exists;
@@ -48,35 +51,35 @@ static inline void frame_metadata_key(req_state *s, string& out) {
   }
 }
 
-void RGWOp_Metadata_Get::execute() {
+void RGWOp_Metadata_Get::execute(optional_yield y) {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);
 
-  auto meta_mgr = store->ctl()->meta.mgr;
+  auto meta_mgr = static_cast<rgw::sal::RadosStore*>(store)->ctl()->meta.mgr;
 
   /* Get keys */
-  http_ret = meta_mgr->get(metadata_key, s->formatter, s->yield);
-  if (http_ret < 0) {
-    dout(5) << "ERROR: can't get key: " << cpp_strerror(http_ret) << dendl;
+  op_ret = meta_mgr->get(metadata_key, s->formatter, s->yield, s);
+  if (op_ret < 0) {
+    ldpp_dout(s, 5) << "ERROR: can't get key: " << cpp_strerror(op_ret) << dendl;
     return;
   }
 
-  http_ret = 0;
+  op_ret = 0;
 }
 
-void RGWOp_Metadata_Get_Myself::execute() {
+void RGWOp_Metadata_Get_Myself::execute(optional_yield y) {
   string owner_id;
 
   owner_id = s->owner.get_id().to_str();
   s->info.args.append("key", owner_id);
 
-  return RGWOp_Metadata_Get::execute();
+  return RGWOp_Metadata_Get::execute(y);
 }
 
-void RGWOp_Metadata_List::execute() {
+void RGWOp_Metadata_List::execute(optional_yield y) {
   string marker;
-  ldout(s->cct, 16) << __func__
+  ldpp_dout(this, 16) << __func__
 		    << " raw marker " << s->info.args.get("marker")
 		    << dendl;
 
@@ -85,7 +88,7 @@ void RGWOp_Metadata_List::execute() {
     if (!marker.empty()) {
       marker = rgw::from_base64(marker);
     }
-    ldout(s->cct, 16) << __func__
+    ldpp_dout(this, 16) << __func__
 	     << " marker " << marker << dendl;
   } catch (...) {
     marker = std::string("");
@@ -103,8 +106,8 @@ void RGWOp_Metadata_List::execute() {
     string err;
     max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
     if (!err.empty()) {
-      dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
-      http_ret = -EINVAL;
+      ldpp_dout(this, 5) << "Error parsing max-entries " << max_entries_str << dendl;
+      op_ret = -EINVAL;
       return;
     }
   }
@@ -122,9 +125,9 @@ void RGWOp_Metadata_List::execute() {
      marker = "3:bf885d8f:root::sorry_janefonda_665:head";
   */
 
-  http_ret = store->ctl()->meta.mgr->list_keys_init(metadata_key, marker, &handle);
-  if (http_ret < 0) {
-    dout(5) << "ERROR: can't get key: " << cpp_strerror(http_ret) << dendl;
+  op_ret = store->meta_list_keys_init(this, metadata_key, marker, &handle);
+  if (op_ret < 0) {
+    ldpp_dout(this, 5) << "ERROR: can't get key: " << cpp_strerror(op_ret) << dendl;
     return;
   }
 
@@ -137,15 +140,13 @@ void RGWOp_Metadata_List::execute() {
 
   s->formatter->open_array_section("keys");
 
-  auto meta_mgr = store->ctl()->meta.mgr;
-
   uint64_t left;
   do {
     list<string> keys;
     left = (max_entries_specified ? max_entries - count : max);
-    http_ret = meta_mgr->list_keys_next(handle, left, keys, &truncated);
-    if (http_ret < 0) {
-      dout(5) << "ERROR: lists_keys_next(): " << cpp_strerror(http_ret)
+    op_ret = store->meta_list_keys_next(this, handle, left, keys, &truncated);
+    if (op_ret < 0) {
+      ldpp_dout(this, 5) << "ERROR: lists_keys_next(): " << cpp_strerror(op_ret)
 	      << dendl;
       return;
     }
@@ -165,14 +166,14 @@ void RGWOp_Metadata_List::execute() {
     encode_json("count", count, s->formatter);
     if (truncated) {
       string esc_marker =
-	rgw::to_base64(meta_mgr->get_marker(handle));
+	rgw::to_base64(store->meta_get_marker(handle));
       encode_json("marker", esc_marker, s->formatter);
     }
     s->formatter->close_section();
   }
-  meta_mgr->list_keys_complete(handle);
+  store->meta_list_keys_complete(handle);
 
-  http_ret = 0;
+  op_ret = 0;
 }
 
 int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
@@ -189,7 +190,7 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
     }
     read_len = recv_body(s, data, cl);
     if (cl != (size_t)read_len) {
-      dout(10) << "recv_body incomplete" << dendl;
+      ldpp_dout(this, 10) << "recv_body incomplete" << dendl;
     }
     if (read_len < 0) {
       free(data);
@@ -233,20 +234,20 @@ static bool string_to_sync_type(const string& sync_string,
   return true;
 }
 
-void RGWOp_Metadata_Put::execute() {
+void RGWOp_Metadata_Put::execute(optional_yield y) {
   bufferlist bl;
   string metadata_key;
 
-  http_ret = get_data(bl);
-  if (http_ret < 0) {
+  op_ret = get_data(bl);
+  if (op_ret < 0) {
     return;
   }
 
-  http_ret = do_aws4_auth_completion();
-  if (http_ret < 0) {
+  op_ret = do_aws4_auth_completion();
+  if (op_ret < 0) {
     return;
   }
-  
+
   frame_metadata_key(s, metadata_key);
 
   RGWMDLogSyncType sync_type = RGWMDLogSyncType::APPLY_ALWAYS;
@@ -257,29 +258,29 @@ void RGWOp_Metadata_Put::execute() {
     bool parsed = string_to_sync_type(mode_string,
                                       sync_type);
     if (!parsed) {
-      http_ret = -EINVAL;
+      op_ret = -EINVAL;
       return;
     }
   }
 
-  http_ret = store->ctl()->meta.mgr->put(metadata_key, bl, s->yield, sync_type,
-				  &ondisk_version);
-  if (http_ret < 0) {
-    dout(5) << "ERROR: can't put key: " << cpp_strerror(http_ret) << dendl;
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->meta.mgr->put(metadata_key, bl, s->yield, s, sync_type,
+				       false, &ondisk_version);
+  if (op_ret < 0) {
+    ldpp_dout(s, 5) << "ERROR: can't put key: " << cpp_strerror(op_ret) << dendl;
     return;
   }
   // translate internal codes into return header
-  if (http_ret == STATUS_NO_APPLY)
+  if (op_ret == STATUS_NO_APPLY)
     update_status = "skipped";
-  else if (http_ret == STATUS_APPLIED)
+  else if (op_ret == STATUS_APPLIED)
     update_status = "applied";
 }
 
 void RGWOp_Metadata_Put::send_response() {
-  int http_return_code = http_ret;
-  if ((http_ret == STATUS_NO_APPLY) || (http_ret == STATUS_APPLIED))
-    http_return_code = STATUS_NO_CONTENT;
-  set_req_state_err(s, http_return_code);
+  int op_return_code = op_ret;
+  if ((op_ret == STATUS_NO_APPLY) || (op_ret == STATUS_APPLIED))
+    op_return_code = STATUS_NO_CONTENT;
+  set_req_state_err(s, op_return_code);
   dump_errno(s);
   stringstream ver_stream;
   ver_stream << "ver:" << ondisk_version.ver
@@ -289,16 +290,16 @@ void RGWOp_Metadata_Put::send_response() {
   end_header(s);
 }
 
-void RGWOp_Metadata_Delete::execute() {
+void RGWOp_Metadata_Delete::execute(optional_yield y) {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);
-  http_ret = store->ctl()->meta.mgr->remove(metadata_key, s->yield);
-  if (http_ret < 0) {
-    dout(5) << "ERROR: can't remove key: " << cpp_strerror(http_ret) << dendl;
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->meta.mgr->remove(metadata_key, s->yield, s);
+  if (op_ret < 0) {
+    ldpp_dout(s, 5) << "ERROR: can't remove key: " << cpp_strerror(op_ret) << dendl;
     return;
   }
-  http_ret = 0;
+  op_ret = 0;
 }
 
 RGWOp *RGWHandler_Metadata::op_get() {

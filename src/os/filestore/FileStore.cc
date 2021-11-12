@@ -73,7 +73,6 @@
 #include "kv/KeyValueDB.h"
 
 #include "common/ceph_crypto.h"
-using ceph::crypto::SHA1;
 
 #include "include/ceph_assert.h"
 
@@ -108,6 +107,27 @@ using ceph::crypto::SHA1;
 #define XATTR_NO_SPILL_OUT "0"
 #define XATTR_SPILL_OUT "1"
 #define __FUNC__ __func__ << "(" << __LINE__ << ")"
+
+using std::cerr;
+using std::less;
+using std::list;
+using std::make_pair;
+using std::map;
+using std::ostream;
+using std::ostringstream;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
+
+using ceph::crypto::SHA1;
+using ceph::BackTrace;
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+using ceph::JSONFormatter;
 
 //Initial features in new superblock.
 static CompatSet get_fs_initial_compat_set() {
@@ -553,8 +573,10 @@ FileStore::FileStore(CephContext* cct, const std::string &base,
   m_ondisk_finisher_num(cct->_conf->filestore_ondisk_finisher_threads),
   m_apply_finisher_num(cct->_conf->filestore_apply_finisher_threads),
   op_tp(cct, "FileStore::op_tp", "tp_fstore_op", cct->_conf->filestore_op_threads, "filestore_op_threads"),
-  op_wq(this, cct->_conf->filestore_op_thread_timeout,
-	cct->_conf->filestore_op_thread_suicide_timeout, &op_tp),
+  op_wq(this,
+	ceph::make_timespan(cct->_conf->filestore_op_thread_timeout),
+	ceph::make_timespan(cct->_conf->filestore_op_thread_suicide_timeout),
+	&op_tp),
   logger(nullptr),
   trace_endpoint("0.0.0.0", 0, "FileStore"),
   m_filestore_commit_timeout(cct->_conf->filestore_commit_timeout),
@@ -650,11 +672,11 @@ FileStore::FileStore(CephContext* cct, const std::string &base,
 
 FileStore::~FileStore()
 {
-  for (vector<Finisher*>::iterator it = ondisk_finishers.begin(); it != ondisk_finishers.end(); ++it) {
+  for (auto it = ondisk_finishers.begin(); it != ondisk_finishers.end(); ++it) {
     delete *it;
     *it = nullptr;
   }
-  for (vector<Finisher*>::iterator it = apply_finishers.begin(); it != apply_finishers.end(); ++it) {
+  for (auto it = apply_finishers.begin(); it != apply_finishers.end(); ++it) {
     delete *it;
     *it = nullptr;
   }
@@ -3000,7 +3022,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_COLL_HINT:
       {
         const coll_t &cid = i.get_cid(op->cid);
-        uint32_t type = op->hint_type;
+        uint32_t type = op->hint;
         bufferlist hint;
         i.decode_bl(hint);
         auto hiter = hint.cbegin();
@@ -3840,7 +3862,7 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
 
   {
     char buf[2];
-    map<string, bufferptr> aset;
+    map<string, bufferptr, less<>> aset;
     r = _fgetattrs(**o, aset);
     if (r < 0)
       goto out3;
@@ -4113,7 +4135,7 @@ public:
   }
 
   void finish(int r) override {
-    BackTrace *bt = new BackTrace(1);
+    BackTrace *bt = new ClibBackTrace(1);
     generic_dout(-1) << "FileStore: sync_entry timed out after "
 	   << m_commit_timeo << " seconds.\n";
     bt->print(*_dout);
@@ -4250,7 +4272,7 @@ void FileStore::sync_entry()
       dout(10) << __FUNC__ << ": commit took " << lat << ", interval was " << dur << dendl;
       utime_t max_pause_lat = logger->tget(l_filestore_sync_pause_max_lat);
       if (max_pause_lat < utime_t{dur - lat}) {
-        logger->tinc(l_filestore_sync_pause_max_lat, dur - lat);
+        logger->tset(l_filestore_sync_pause_max_lat, utime_t{dur - lat});
       }
 
       logger->inc(l_filestore_commitcycle);
@@ -4435,12 +4457,12 @@ int FileStore::_fgetattr(int fd, const char *name, bufferptr& bp)
   char val[CHAIN_XATTR_MAX_BLOCK_LEN];
   int l = chain_fgetxattr(fd, name, val, sizeof(val));
   if (l >= 0) {
-    bp = buffer::create(l);
+    bp = ceph::buffer::create(l);
     memcpy(bp.c_str(), val, l);
   } else if (l == -ERANGE) {
     l = chain_fgetxattr(fd, name, 0, 0);
     if (l > 0) {
-      bp = buffer::create(l);
+      bp = ceph::buffer::create(l);
       l = chain_fgetxattr(fd, name, bp.c_str(), l);
     }
   }
@@ -4448,7 +4470,7 @@ int FileStore::_fgetattr(int fd, const char *name, bufferptr& bp)
   return l;
 }
 
-int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
+int FileStore::_fgetattrs(int fd, map<string,bufferptr,less<>>& aset)
 {
   // get attr list
   char names1[100];
@@ -4499,7 +4521,7 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
   return 0;
 }
 
-int FileStore::_fsetattrs(int fd, map<string, bufferptr> &aset)
+int FileStore::_fsetattrs(int fd, map<string, bufferptr, less<>> &aset)
 {
   for (map<string, bufferptr>::iterator p = aset.begin();
        p != aset.end();
@@ -4614,7 +4636,9 @@ int FileStore::getattr(CollectionHandle& ch, const ghobject_t& oid, const char *
   }
 }
 
-int FileStore::getattrs(CollectionHandle& ch, const ghobject_t& oid, map<string,bufferptr>& aset)
+int FileStore::getattrs(CollectionHandle& ch,
+			const ghobject_t& oid,
+			std::map<std::string,bufferptr,std::less<>>& aset)
 {
   tracepoint(objectstore, getattrs_enter, ch->cid.c_str());
   const coll_t& cid = !_need_temp_object_collection(ch->cid, oid) ? ch->cid : ch->cid.get_temp();
@@ -4697,8 +4721,8 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
 {
   map<string, bufferlist> omap_set;
   set<string> omap_remove;
-  map<string, bufferptr> inline_set;
-  map<string, bufferptr> inline_to_set;
+  map<string, bufferptr, less<>> inline_set;
+  map<string, bufferptr, less<>> inline_to_set;
   FDRef fd;
   int spill_out = -1;
   bool incomplete_inline = false;
@@ -4841,7 +4865,7 @@ int FileStore::_rmattrs(const coll_t& cid, const ghobject_t& oid,
 {
   dout(15) << __FUNC__ << ": " << cid << "/" << oid << dendl;
 
-  map<string,bufferptr> aset;
+  map<string,bufferptr,less<>> aset;
   FDRef fd;
   set<string> omap_attrs;
   Index index;
@@ -4966,7 +4990,17 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
   }
 
   struct dirent *de = nullptr;
-  while ((de = ::readdir(dir))) {
+  while (true) {
+    errno = 0;
+    de = ::readdir(dir);
+    if (de == nullptr) {
+      if (errno != 0) {
+        r = -errno;
+        derr << "readdir failed " << fn << ": " << cpp_strerror(-r) << dendl;
+        if (r == -EIO && m_filestore_fail_eio) handle_eio();
+      }
+      break;
+    }
     if (de->d_type == DT_UNKNOWN) {
       // d_type not supported (non-ext[234], btrfs), must stat
       struct stat sb;
@@ -6071,6 +6105,8 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_sloppy_crc",
     "filestore_sloppy_crc_block_size",
     "filestore_max_alloc_hint_size",
+    "filestore_op_thread_suicide_timeout",
+    "filestore_op_thread_timeout",
     NULL
   };
   return KEYS;
@@ -6138,6 +6174,12 @@ void FileStore::handle_conf_change(const ConfigProxy& conf,
     } else {
       dump_stop();
     }
+  }
+  if (changed.count("filestore_op_thread_timeout")){
+    op_wq.set_timeout(g_conf().get_val<int64_t>("filestore_op_thread_timeout"));
+  }
+  if (changed.count("filestore_op_thread_suicide_timeout")){
+    op_wq.set_suicide_timeout(g_conf().get_val<int64_t>("filestore_op_thread_suicide_timeout"));
   }
 }
 

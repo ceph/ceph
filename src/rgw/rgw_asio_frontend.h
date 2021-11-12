@@ -6,6 +6,7 @@
 
 #include <memory>
 #include "rgw_frontend.h"
+#define REQUEST_TIMEOUT 65000
 
 class RGWAsioFrontend : public RGWFrontend {
   class Impl;
@@ -21,7 +22,7 @@ public:
   void join() override;
 
   void pause_for_new_config() override;
-  void unpause_with_new_config(rgw::sal::RGWRadosStore *store,
+  void unpause_with_new_config(rgw::sal::Store* store,
                                rgw_auth_registry_ptr_t auth_registry) override;
 };
 

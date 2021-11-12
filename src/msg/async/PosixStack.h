@@ -25,7 +25,7 @@
 #include "Stack.h"
 
 class PosixWorker : public Worker {
-  NetHandler net;
+  ceph::NetHandler net;
   void initialize() override;
  public:
   PosixWorker(CephContext *c, unsigned i)
@@ -38,14 +38,17 @@ class PosixWorker : public Worker {
 };
 
 class PosixNetworkStack : public NetworkStack {
-  vector<std::thread> threads;
+  std::vector<std::thread> threads;
+
+  virtual Worker* create_worker(CephContext *c, unsigned worker_id) override {
+    return new PosixWorker(c, worker_id);
+  }
 
  public:
-  explicit PosixNetworkStack(CephContext *c, const string &t);
+  explicit PosixNetworkStack(CephContext *c);
 
-  void spawn_worker(unsigned i, std::function<void ()> &&func) override {
-    threads.resize(i+1);
-    threads[i] = std::thread(func);
+  void spawn_worker(std::function<void ()> &&func) override {
+    threads.emplace_back(std::move(func));
   }
   void join_worker(unsigned i) override {
     ceph_assert(threads.size() > i && threads[i].joinable());

@@ -28,6 +28,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 namespace {
 
   struct {
@@ -84,12 +86,10 @@ TEST(RGW_LDAP, SHUTDOWN) {
 
 int main(int argc, char *argv[])
 {
-  string val;
-  vector<const char*> args;
-
-  argv_to_vec(argc, const_cast<const char**>(argv), args);
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
+  string val;
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_witharg(args, arg_iter, &val, "--access",
 			      (char*) nullptr)) {

@@ -11,8 +11,8 @@
 #include "common/ceph_argparse.h"
 
 #include "DirectMessenger.h"
-#include "msg/FastStrategy.h"
-#include "msg/QueueStrategy.h"
+#include "FastStrategy.h"
+#include "QueueStrategy.h"
 #include "messages/MPing.h"
 
 
@@ -424,8 +424,7 @@ TEST(DirectMessenger, StartWithoutPeer)
 int main(int argc, char **argv)
 {
   // command-line arguments
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_ANY,
                          CODE_ENVIRONMENT_DAEMON,

@@ -41,4 +41,4 @@ to be defined as ``archive``:
                                 --endpoints={http://fqdn}[,{http://fqdn}]
                                 --tier-type=archive
 
-.. _Multisite Configuration: ./multisite
+.. _Multisite Configuration: ../multisite

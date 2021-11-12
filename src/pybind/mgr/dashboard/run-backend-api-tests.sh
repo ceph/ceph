@@ -35,15 +35,15 @@ get_cmake_variable() {
 
 [ -z "$BUILD_DIR" ] && BUILD_DIR=build
 CURR_DIR=`pwd`
-LOCAL_BUILD_DIR="$CURR_DIR/../../../../$BUILD_DIR"
+LOCAL_BUILD_DIR=$(cd "$CURR_DIR/../../../../$BUILD_DIR"; pwd)
 
 setup_teuthology() {
     TEMP_DIR=`mktemp -d`
     cd $TEMP_DIR
 
-    virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python} venv
+    ${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python3} -m venv venv
     source venv/bin/activate
-    pip install 'setuptools >= 12'
+    pip install -U pip 'setuptools >= 12'
     pip install git+https://github.com/ceph/teuthology#egg=teuthology[test]
     pushd $CURR_DIR
     pip install -r requirements.txt -c constraints.txt
@@ -56,26 +56,38 @@ setup_coverage() {
     # In CI environment we cannot install coverage in system, so we install it in a dedicated venv
     # so only coverage is available when adding this path.
     cd $TEMP_DIR
-    virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python} coverage-venv
+    /usr/bin/python3 -m venv coverage-venv
     source coverage-venv/bin/activate
     cd $CURR_DIR
     pip install coverage==4.5.2
-    COVERAGE_PATH=$(python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+    COVERAGE_PATH=$(python -c "import sysconfig; print(sysconfig.get_paths()['platlib'])")
     deactivate
 }
 
+display_log() {
+    local daemon=$1
+    shift
+    local lines=$1
+    shift
+
+    local log_files=$(find "$CEPH_OUT_DIR" -iname "${daemon}.*.log" | tr '\n' ' ')
+    for log_file in ${log_files[@]}; do
+        printf "\n\nDisplaying last ${lines} lines of: ${log_file}\n\n"
+        tail -n ${lines} $log_file
+        printf "\n\nEnd of: ${log_file}\n\n"
+    done
+    printf "\n\nTEST FAILED.\n\n"
+}
+
 on_tests_error() {
-    if [[ -n "$JENKINS_HOME" ]]; then
+    local ret=$?
+    if [[ -n "$JENKINS_HOME" && -z "$ON_TESTS_ERROR_RUN" ]]; then
         CEPH_OUT_DIR=${CEPH_OUT_DIR:-"$LOCAL_BUILD_DIR"/out}
-        MGR_LOG_FILES=$(find "$CEPH_OUT_DIR" -iname "mgr.*.log" | tr '\n' ' ')
-        MGR_LOG_FILE_LAST_LINES=60000
-        for mgr_log_file in ${MGR_LOG_FILES[@]}; do
-            printf "\n\nDisplaying last ${MGR_LOG_FILE_LAST_LINES} lines of: $mgr_log_file\n\n"
-            tail -n ${MGR_LOG_FILE_LAST_LINES} $mgr_log_file
-            printf "\n\nEnd of: $mgr_log_file\n\n"
-        done
-        printf "\n\nTEST FAILED.\n\n"
+        display_log "mgr" 1500
+        display_log "osd" 1000
+        ON_TESTS_ERROR_RUN=1
     fi
+    return $ret
 }
 
 run_teuthology_tests() {
@@ -107,17 +119,19 @@ run_teuthology_tests() {
     local python_common_dir=$source_dir/src/python-common
     # In CI environment we set python paths inside build (where you find the required frontend build: "dist" dir).
     if [[ -n "$JENKINS_HOME" ]]; then
-        export PYBIND=$LOCAL_BUILD_DIR/src/pybind
-        pybind_dir=$PYBIND
+        pybind_dir+=":$LOCAL_BUILD_DIR/src/pybind"
     fi
     export PYTHONPATH=$source_dir/qa:$LOCAL_BUILD_DIR/lib/cython_modules/lib.3/:$pybind_dir:$python_common_dir:${COVERAGE_PATH}
-    export RGW=${RGW:-1}
+    export DASHBOARD_SSL=1
+    export NFS=0
+    export RGW=1
 
     export COVERAGE_ENABLED=true
     export COVERAGE_FILE=.coverage.mgr.dashboard
     find . -iname "*${COVERAGE_FILE}*" -type f -delete
 
-    python ../qa/tasks/vstart_runner.py --ignore-missing-binaries $OPTIONS $(echo $TEST_CASES)
+    python ../qa/tasks/vstart_runner.py --ignore-missing-binaries --no-verbose $OPTIONS $(echo $TEST_CASES) ||
+      on_tests_error
 
     deactivate
     cd $CURR_DIR
@@ -148,6 +162,8 @@ cleanup_teuthology() {
     unset run_teuthology_tests
     unset cleanup_teuthology
 }
+
+export LC_ALL=en_US.UTF-8
 
 setup_teuthology
 setup_coverage

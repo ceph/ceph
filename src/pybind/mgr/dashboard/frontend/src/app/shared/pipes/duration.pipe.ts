@@ -1,20 +1,10 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
-import * as moment from 'moment';
-
 @Pipe({
   name: 'duration',
   pure: false
 })
 export class DurationPipe implements PipeTransform {
-  transform(date: any, isRelative = false): string {
-    if (isRelative) {
-      return moment(date).fromNow();
-    } else {
-      return this._forHumans(date);
-    }
-  }
-
   /**
    * Translates seconds into human readable format of seconds, minutes, hours, days, and years
    * source: https://stackoverflow.com/a/34270811
@@ -22,7 +12,10 @@ export class DurationPipe implements PipeTransform {
    * @param  {number} seconds The number of seconds to be processed
    * @return {string}         The phrase describing the the amount of time
    */
-  _forHumans(seconds: number): string {
+  transform(seconds: number): string {
+    if (seconds === null || seconds <= 0) {
+      return '';
+    }
     const levels = [
       [`${Math.floor(seconds / 31536000)}`, 'years'],
       [`${Math.floor((seconds % 31536000) / 86400)}`, 'days'],

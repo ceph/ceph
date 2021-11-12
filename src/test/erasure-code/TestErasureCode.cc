@@ -22,6 +22,8 @@
 #include "common/config.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 class ErasureCodeTest : public ErasureCode {
 public:
   map<int, bufferlist> encode_chunks_encoded;
@@ -47,6 +49,12 @@ public:
     encode_chunks_encoded = *encoded;
     return 0;
   }
+  int decode_chunks(const set<int> &want_to_read,
+                    const map<int, bufferlist> &chunks,
+                    map<int, bufferlist> *decoded) override {
+    ceph_abort_msg("ErasureCode::decode_chunks not implemented");
+  }
+
   int create_rule(const string &name,
 		  CrushWrapper &crush,
 		  ostream *ss) const override { return 0; }

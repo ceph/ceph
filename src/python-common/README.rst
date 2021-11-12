@@ -11,11 +11,6 @@ Like for example:
 - ``ceph`` command line interface and other Ceph tools.
 - Also external tools.
 
-Requirements
-============
-
-- ``python-six``
-
 Usage
 =====
 

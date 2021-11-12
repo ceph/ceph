@@ -4,6 +4,17 @@
 #include "os/Transaction.h"
 #include "common/Formatter.h"
 
+using std::less;
+using std::list;
+using std::map;
+using std::ostream;
+using std::set;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+
 void decode_str_str_map_to_bl(bufferlist::const_iterator& p,
 			      bufferlist *out)
 {
@@ -14,10 +25,10 @@ void decode_str_str_map_to_bl(bufferlist::const_iterator& p,
   while (n--) {
     __u32 l;
     decode(l, p);
-    p.advance(l);
+    p += l;
     len += 4 + l;
     decode(l, p);
-    p.advance(l);
+    p += l;
     len += 4 + l;
   }
   start.copy(len, *out);
@@ -33,7 +44,7 @@ void decode_str_set_to_bl(bufferlist::const_iterator& p,
   while (n--) {
     __u32 l;
     decode(l, p);
-    p.advance(l);
+    p += l;
     len += 4 + l;
   }
   start.copy(len, *out);
@@ -249,7 +260,7 @@ void Transaction::dump(ceph::Formatter *f)
       {
 	using ceph::decode;
         coll_t cid = i.get_cid(op->cid);
-        uint32_t type = op->hint_type;
+        uint32_t type = op->hint;
         f->dump_string("op_name", "coll_hint");
         f->dump_stream("collection") << cid;
         f->dump_unsigned("type", type);
@@ -493,7 +504,7 @@ void Transaction::dump(ceph::Formatter *f)
         ghobject_t oid = i.get_oid(op->oid);
         uint64_t expected_object_size = op->expected_object_size;
         uint64_t expected_write_size = op->expected_write_size;
-        uint32_t alloc_hint_flags = op->alloc_hint_flags;
+        uint32_t alloc_hint_flags = op->hint;
         f->dump_string("op_name", "op_setallochint");
         f->dump_stream("collection") << cid;
         f->dump_stream("oid") << oid;
@@ -544,7 +555,7 @@ void Transaction::generate_test_instances(list<Transaction*>& o)
 
   t = new Transaction;
   t->setattr(c, o1, "key", bl);
-  map<string,bufferptr> m;
+  map<string,bufferptr,less<>> m;
   m["a"] = buffer::copy("this", 4);
   m["b"] = buffer::copy("that", 4);
   t->setattrs(c, o1, m);

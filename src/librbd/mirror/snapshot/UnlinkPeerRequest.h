@@ -48,11 +48,14 @@ private:
    *    |                     *  or last)     |
    *    |                     *               |
    *    |\---------------> UNLINK_PEER --> NOTIFY_UPDATE
-   *    |   (peer not last)
-   *    |
+   *    |   (not last peer or
+   *    |    no newer mirror
+   *    |    snap exists)
    *    |
    *    |\---------------> REMOVE_SNAPSHOT
-   *    |   (peer last)       |
+   *    |   (last peer and    |
+   *    |    newer mirror     |
+   *    |    snap exists)     |
    *    |                     |
    *    |(peer not found)     |
    *    v                     |
@@ -65,6 +68,8 @@ private:
   uint64_t m_snap_id;
   std::string m_mirror_peer_uuid;
   Context *m_on_finish;
+
+  bool m_newer_mirror_snapshots = false;
 
   void refresh_image();
   void handle_refresh_image(int r);

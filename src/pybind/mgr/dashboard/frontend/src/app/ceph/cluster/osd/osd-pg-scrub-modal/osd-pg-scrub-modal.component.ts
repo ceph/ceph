@@ -1,16 +1,15 @@
 import { Component, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
-import { ConfigOptionComponent } from '../../../../shared/components/config-option/config-option.component';
-import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { Permissions } from '../../../../shared/models/permissions';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { NotificationService } from '../../../../shared/services/notification.service';
+import { ConfigOptionComponent } from '~/app/shared/components/config-option/config-option.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { OsdPgScrubModalOptions } from './osd-pg-scrub-modal.options';
 
 @Component({
@@ -28,21 +27,20 @@ export class OsdPgScrubModalComponent {
   basicOptionsValues: ConfigOptionComponent;
   basicOptions: Array<string> = OsdPgScrubModalOptions.basicOptions;
 
-  @ViewChild('advancedOptionsValues', { static: false })
+  @ViewChild('advancedOptionsValues')
   advancedOptionsValues: ConfigOptionComponent;
   advancedOptions: Array<string> = OsdPgScrubModalOptions.advancedOptions;
 
   advancedEnabled = false;
 
   constructor(
-    public bsModalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private authStorageService: AuthStorageService,
     private notificationService: NotificationService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
     this.osdPgScrubForm = new CdFormGroup({});
-    this.resource = this.i18n('PG scrub options');
+    this.resource = $localize`PG scrub options`;
     this.action = this.actionLabels.EDIT;
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -58,12 +56,12 @@ export class OsdPgScrubModalComponent {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Updated PG scrub options')
+          $localize`Updated PG scrub options`
         );
-        this.bsModalRef.hide();
+        this.activeModal.close();
       },
       () => {
-        this.bsModalRef.hide();
+        this.activeModal.close();
       }
     );
   }

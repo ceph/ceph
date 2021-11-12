@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from six import StringIO
+from io import StringIO
 
 import json
 
@@ -72,9 +72,7 @@ class SystemObject:
         data and retcode """
         s, r = self.command(cluster, cmd, args or [], **kwargs)
         if r == 0:
-            output = s.decode('utf-8')
-            output = output[output.find('{'):] # trim extra output before json
-            data = json.loads(output)
+            data = json.loads(s)
             self.load_from_json(data)
             self.data = data
         return self.data, r
@@ -164,6 +162,9 @@ class Zone(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, SystemO
     def tier_type(self):
         raise NotImplementedError
 
+    def syncs_from(self, zone_name):
+        return zone_name != self.name
+
     def has_buckets(self):
         return True
 
@@ -183,6 +184,11 @@ class ZoneConn(object):
         if self.zone.gateways is not None:
             self.conn = get_gateway_connection(self.zone.gateways[0], self.credentials)
             self.secure_conn = get_gateway_secure_connection(self.zone.gateways[0], self.credentials)
+            # create connections for the rest of the gateways (if exist)
+            for gw in list(self.zone.gateways):
+                get_gateway_connection(gw, self.credentials)
+                get_gateway_secure_connection(gw, self.credentials)
+
 
     def get_connection(self):
         return self.conn

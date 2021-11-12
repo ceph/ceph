@@ -1,0 +1,29 @@
+tasks:
+
+# stop kernel nfs server, if running
+- vip.exec:
+    all-hosts:
+      - systemctl stop nfs-server
+
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create foofs
+
+- cephadm.wait_for_service:
+    service: mds.foofs
+
+- cephadm.shell:
+    host.a:
+      - ceph nfs cluster create foo --placement=2 || ceph nfs cluster create cephfs foo --placement=2
+      - ceph nfs export create cephfs --fsname foofs --clusterid foo --binding /fake || ceph nfs export create cephfs --fsname foofs --cluster-id foo --pseudo-path /fake 
+
+      # we can't do wait_for_service here because with octopus it's nfs.ganesha-foo not nfs.foo
+      - while ! ceph orch ls | grep nfs | grep 2/2 ; do sleep 1 ; done
+
+- vip.exec:
+    host.a:
+      - mkdir /mnt/foo
+      - while ! mount -t nfs $(hostname):/fake /mnt/foo -o sync ; do sleep 5 ; done
+      - echo test > /mnt/foo/testfile
+      - sync
+

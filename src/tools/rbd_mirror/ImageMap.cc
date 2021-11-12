@@ -4,9 +4,9 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Timer.h"
-#include "common/WorkQueue.h"
 
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "tools/rbd_mirror/Threads.h"
 
 #include "ImageMap.h"
@@ -19,6 +19,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::ImageMap: " << this << " " \
                            << __func__ << ": "
+
+using namespace std;
 
 namespace rbd {
 namespace mirror {
@@ -416,7 +418,7 @@ void ImageMap<I>::update_images_removed(
       to_remove.emplace_back(global_image_id, info.instance_id);
     }
 
-    if (image_mapped && image_removed) {
+    if (image_removed) {
       // local and peer images have been deleted
       if (m_policy->remove_image(global_image_id)) {
         schedule_action(global_image_id);

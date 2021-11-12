@@ -13,7 +13,7 @@
  */
 
 #include "DirectMessenger.h"
-#include "msg/DispatchStrategy.h"
+#include "DispatchStrategy.h"
 
 
 class DirectConnection : public Connection {

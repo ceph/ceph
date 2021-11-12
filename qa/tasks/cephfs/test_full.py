@@ -1,11 +1,13 @@
-
-
 import json
 import logging
 import os
 from textwrap import dedent
-import time
-from teuthology.orchestra.run import CommandFailedError
+try:
+    from typing import Optional
+except:
+    # make it work for python2
+    pass
+from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
@@ -20,31 +22,19 @@ class FullnessTestCase(CephFSTestCase):
     data_only = False
 
     # Subclasses define how many bytes should be written to achieve fullness
-    pool_capacity = None
+    pool_capacity = None  # type: Optional[int]
     fill_mb = None
 
-    # Subclasses define what fullness means to them
     def is_full(self):
-        raise NotImplementedError()
+        return self.fs.is_full()
 
     def setUp(self):
         CephFSTestCase.setUp(self)
 
-        # These tests just use a single active MDS throughout, so remember its ID
-        # for use in mds_asok calls
-        self.active_mds_id = self.fs.get_active_names()[0]
+        mds_status = self.fs.rank_asok(["status"])
 
         # Capture the initial OSD map epoch for later use
-        self.initial_osd_epoch = json.loads(
-            self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json").strip()
-        )['epoch']
-
-        # Check the initial barrier epoch on the MDS: this should be
-        # set to the latest map at MDS startup.  We do this check in
-        # setUp to get in there before subclasses might touch things
-        # in their own setUp functions.
-        self.assertGreaterEqual(self.fs.mds_asok(["status"], mds_id=self.active_mds_id)['osdmap_epoch_barrier'],
-                                self.initial_osd_epoch)
+        self.initial_osd_epoch = mds_status['osdmap_epoch_barrier']
 
     def test_barrier(self):
         """
@@ -53,18 +43,26 @@ class FullnessTestCase(CephFSTestCase):
         epoch.
         """
 
-        # Sync up clients with initial MDS OSD map barrier
-        self.mount_a.open_no_data("foo")
-        self.mount_b.open_no_data("bar")
+        # script that sync up client with MDS OSD map barrier. The barrier should
+        # be updated by cap flush ack message.
+        pyscript = dedent("""
+            import os
+            fd = os.open("{path}", os.O_CREAT | os.O_RDWR, 0O600)
+            os.fchmod(fd, 0O666)
+            os.fsync(fd)
+            os.close(fd)
+            """)
+
+        # Sync up client with initial MDS OSD map barrier.
+        path = os.path.join(self.mount_a.mountpoint, "foo")
+        self.mount_a.run_python(pyscript.format(path=path))
 
         # Grab mounts' initial OSD epochs: later we will check that
         # it hasn't advanced beyond this point.
-        mount_a_initial_epoch = self.mount_a.get_osd_epoch()[0]
-        mount_b_initial_epoch = self.mount_b.get_osd_epoch()[0]
+        mount_a_initial_epoch, mount_a_initial_barrier = self.mount_a.get_osd_epoch()
 
         # Freshly mounted at start of test, should be up to date with OSD map
         self.assertGreaterEqual(mount_a_initial_epoch, self.initial_osd_epoch)
-        self.assertGreaterEqual(mount_b_initial_epoch, self.initial_osd_epoch)
 
         # Set and unset a flag to cause OSD epoch to increment
         self.fs.mon_manager.raw_cluster_cmd("osd", "set", "pause")
@@ -77,43 +75,28 @@ class FullnessTestCase(CephFSTestCase):
         # Do a metadata operation on clients, witness that they end up with
         # the old OSD map from startup time (nothing has prompted client
         # to update its map)
-        self.mount_a.open_no_data("alpha")
-        self.mount_b.open_no_data("bravo1")
-
-        # Sleep long enough that if the OSD map was propagating it would
-        # have done so (this is arbitrary because we are 'waiting' for something
-        # to *not* happen).
-        time.sleep(30)
-
+        path = os.path.join(self.mount_a.mountpoint, "foo")
+        self.mount_a.run_python(pyscript.format(path=path))
         mount_a_epoch, mount_a_barrier = self.mount_a.get_osd_epoch()
         self.assertEqual(mount_a_epoch, mount_a_initial_epoch)
-        mount_b_epoch, mount_b_barrier = self.mount_b.get_osd_epoch()
-        self.assertEqual(mount_b_epoch, mount_b_initial_epoch)
+        self.assertEqual(mount_a_barrier, mount_a_initial_barrier)
 
         # Set a barrier on the MDS
-        self.fs.mds_asok(["osdmap", "barrier", new_epoch.__str__()], mds_id=self.active_mds_id)
+        self.fs.rank_asok(["osdmap", "barrier", new_epoch.__str__()])
 
-        # Do an operation on client B, witness that it ends up with
-        # the latest OSD map from the barrier.  This shouldn't generate any
-        # cap revokes to A because B was already the last one to touch
-        # a file in root.
-        self.mount_b.run_shell(["touch", "bravo2"])
-        self.mount_b.open_no_data("bravo2")
+        # Sync up client with new MDS OSD map barrier
+        path = os.path.join(self.mount_a.mountpoint, "baz")
+        self.mount_a.run_python(pyscript.format(path=path))
+        mount_a_epoch, mount_a_barrier = self.mount_a.get_osd_epoch()
+        self.assertEqual(mount_a_barrier, new_epoch)
 
         # Some time passes here because the metadata part of the operation
         # completes immediately, while the resulting OSD map update happens
         # asynchronously (it's an Objecter::_maybe_request_map) as a result
         # of seeing the new epoch barrier.
-        self.wait_until_equal(
-            lambda: self.mount_b.get_osd_epoch(),
-            (new_epoch, new_epoch),
-            30,
-            lambda x: x[0] > new_epoch or x[1] > new_epoch)
-
-        # ...and none of this should have affected the oblivious mount a,
-        # because it wasn't doing any data or metadata IO
-        mount_a_epoch, mount_a_barrier = self.mount_a.get_osd_epoch()
-        self.assertEqual(mount_a_epoch, mount_a_initial_epoch)
+        self.wait_until_true(
+            lambda: self.mount_a.get_osd_epoch()[0] >= new_epoch,
+            timeout=30)
 
     def _data_pool_name(self):
         data_pool_names = self.fs.get_data_pool_names()
@@ -140,20 +123,20 @@ class FullnessTestCase(CephFSTestCase):
 
         # Fill up the cluster.  This dd may or may not fail, as it depends on
         # how soon the cluster recognises its own fullness
-        self.mount_a.write_n_mb("large_file_a", self.fill_mb / 2)
+        self.mount_a.write_n_mb("large_file_a", self.fill_mb // 2)
         try:
-            self.mount_a.write_n_mb("large_file_b", self.fill_mb / 2)
+            self.mount_a.write_n_mb("large_file_b", (self.fill_mb * 1.1) // 2)
         except CommandFailedError:
             log.info("Writing file B failed (full status happened already)")
             assert self.is_full()
         else:
             log.info("Writing file B succeeded (full status will happen soon)")
             self.wait_until_true(lambda: self.is_full(),
-                                 timeout=osd_mon_report_interval * 5)
+                                 timeout=osd_mon_report_interval * 120)
 
         # Attempting to write more data should give me ENOSPC
         with self.assertRaises(CommandFailedError) as ar:
-            self.mount_a.write_n_mb("large_file_b", 50, seek=self.fill_mb / 2)
+            self.mount_a.write_n_mb("large_file_b", 50, seek=self.fill_mb // 2)
         self.assertEqual(ar.exception.exitstatus, 1)  # dd returns 1 on "No space"
 
         # Wait for the MDS to see the latest OSD map so that it will reliably
@@ -161,7 +144,7 @@ class FullnessTestCase(CephFSTestCase):
         # while in the full state.
         osd_epoch = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['epoch']
         self.wait_until_true(
-            lambda: self.fs.mds_asok(['status'], mds_id=self.active_mds_id)['osdmap_epoch'] >= osd_epoch,
+            lambda: self.fs.rank_asok(['status'])['osdmap_epoch'] >= osd_epoch,
             timeout=10)
 
         if not self.data_only:
@@ -184,13 +167,13 @@ class FullnessTestCase(CephFSTestCase):
         # * The MDS to purge the stray folder and execute object deletions
         #  * The OSDs to inform the mon that they are no longer full
         self.wait_until_true(lambda: not self.is_full(),
-                             timeout=osd_mon_report_interval * 5)
+                             timeout=osd_mon_report_interval * 120)
 
         # Wait for the MDS to see the latest OSD map so that it will reliably
         # be applying the free space policy
         osd_epoch = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['epoch']
         self.wait_until_true(
-            lambda: self.fs.mds_asok(['status'], mds_id=self.active_mds_id)['osdmap_epoch'] >= osd_epoch,
+            lambda: self.fs.rank_asok(['status'])['osdmap_epoch'] >= osd_epoch,
             timeout=10)
 
         # Now I should be able to write again
@@ -227,12 +210,16 @@ class FullnessTestCase(CephFSTestCase):
         # Configs for this test should bring this setting down in order to
         # run reasonably quickly
         if osd_mon_report_interval > 10:
-            log.warn("This test may run rather slowly unless you decrease"
+            log.warning("This test may run rather slowly unless you decrease"
                      "osd_mon_report_interval (5 is a good setting)!")
 
+        # set the object_size to 1MB to make the objects destributed more evenly
+        # among the OSDs to fix Tracker#45434
+        file_layout = "stripe_unit=1048576 stripe_count=1 object_size=1048576"
         self.mount_a.run_python(template.format(
             fill_mb=self.fill_mb,
             file_path=file_path,
+            file_layout=file_layout,
             full_wait=full_wait,
             is_fuse=isinstance(self.mount_a, FuseMount)
         ))
@@ -250,6 +237,7 @@ class FullnessTestCase(CephFSTestCase):
             print("writing some data through which we expect to succeed")
             bytes = 0
             f = os.open("{file_path}", os.O_WRONLY | os.O_CREAT)
+            os.setxattr("{file_path}", 'ceph.file.layout', b'{file_layout}')
             bytes += os.write(f, b'a' * 512 * 1024)
             os.fsync(f)
             print("fsync'ed data successfully, will now attempt to fill fs")
@@ -321,6 +309,7 @@ class FullnessTestCase(CephFSTestCase):
             print("writing some data through which we expect to succeed")
             bytes = 0
             f = os.open("{file_path}", os.O_WRONLY | os.O_CREAT)
+            os.setxattr("{file_path}", 'ceph.file.layout', b'{file_layout}')
             bytes += os.write(f, b'a' * 4096)
             os.fsync(f)
             print("fsync'ed data successfully, will now attempt to fill fs")
@@ -336,8 +325,13 @@ class FullnessTestCase(CephFSTestCase):
                     bytes += os.write(f, b'x' * 1024 * 1024)
                     print("wrote bytes via buffered write, moving on to fsync")
                 except OSError as e:
-                    print("Unexpected error %s from write() instead of fsync()" % e)
-                    raise
+                    if {is_fuse}:
+                        print("Unexpected error %s from write() instead of fsync()" % e)
+                        raise
+                    else:
+                        print("Reached fullness after %.2f MB" % (bytes / (1024.0 * 1024.0)))
+                        full = True
+                        break
 
                 try:
                     os.fsync(f)
@@ -375,8 +369,8 @@ class TestQuotaFull(FullnessTestCase):
     """
     Test per-pool fullness, which indicates quota limits exceeded
     """
-    pool_capacity = 1024 * 1024 * 32   # arbitrary low-ish limit
-    fill_mb = pool_capacity / (1024 * 1024)
+    pool_capacity = 1024 * 1024 * 32  # arbitrary low-ish limit
+    fill_mb = pool_capacity // (1024 * 1024)  # type: ignore
 
     # We are only testing quota handling on the data pool, not the metadata
     # pool.
@@ -388,9 +382,6 @@ class TestQuotaFull(FullnessTestCase):
         pool_name = self.fs.get_data_pool_name()
         self.fs.mon_manager.raw_cluster_cmd("osd", "pool", "set-quota", pool_name,
                                             "max_bytes", "{0}".format(self.pool_capacity))
-
-    def is_full(self):
-        return self.fs.is_full()
 
 
 class TestClusterFull(FullnessTestCase):
@@ -404,13 +395,8 @@ class TestClusterFull(FullnessTestCase):
         super(TestClusterFull, self).setUp()
 
         if self.pool_capacity is None:
-            max_avail = self.fs.get_pool_df(self._data_pool_name())['max_avail']
-            full_ratio = float(self.fs.get_config("mon_osd_full_ratio", service_type="mon"))
-            TestClusterFull.pool_capacity = int(max_avail * full_ratio)
-            TestClusterFull.fill_mb = (self.pool_capacity / (1024 * 1024))
-
-    def is_full(self):
-        return self.fs.is_full()
+            TestClusterFull.pool_capacity = self.fs.get_pool_df(self._data_pool_name())['max_avail']
+            TestClusterFull.fill_mb = (self.pool_capacity // (1024 * 1024))
 
 # Hide the parent class so that unittest.loader doesn't try to run it.
 del globals()['FullnessTestCase']

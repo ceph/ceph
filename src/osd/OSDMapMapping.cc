@@ -8,6 +8,8 @@
 
 #include "common/debug.h"
 
+using std::vector;
+
 MEMPOOL_DEFINE_OBJECT_FACTORY(OSDMapMapping, osdmapmapping,
 			      osdmap_mapping);
 

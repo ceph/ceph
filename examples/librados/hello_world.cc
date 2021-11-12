@@ -156,6 +156,7 @@ int main(int argc, const char **argv)
     if (ret < 0) {
       std::cerr << "couldn't start read object! error " << ret << std::endl;
       ret = EXIT_FAILURE;
+      read_completion->release();
       goto out;
     }
     // wait for the request to complete, and check that it succeeded.
@@ -164,13 +165,15 @@ int main(int argc, const char **argv)
     if (ret < 0) {
       std::cerr << "couldn't read object! error " << ret << std::endl;
       ret = EXIT_FAILURE;
+      read_completion->release();
       goto out;
     }
     std::cout << "we read our object " << object_name
               << ", and got back " << ret << " bytes with contents\n";
     std::string read_string;
-    read_buf.copy(0, ret, read_string);
+    read_buf.begin().copy(ret, read_string);
     std::cout << read_string << std::endl;
+    read_completion->release();
   }
 
   /*

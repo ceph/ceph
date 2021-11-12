@@ -7,8 +7,6 @@
 #include <string>
 #include <cerrno>
 
-using std::string;
-
 #include "common/debug.h"
 #include "common/perf_counters.h"
 
@@ -19,6 +17,15 @@ using std::string;
 #define dout_subsys ceph_subsys_leveldb
 #undef dout_prefix
 #define dout_prefix *_dout << "leveldb: "
+
+using std::list;
+using std::string;
+using std::ostream;
+using std::pair;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
 
 class CephLevelDBLogger : public leveldb::Logger {
   CephContext *cct;
@@ -59,14 +66,14 @@ int LevelDBStore::init(string option_str)
   return 0;
 }
 
-int LevelDBStore::open(ostream &out, const vector<ColumnFamily>& cfs)  {
+int LevelDBStore::open(ostream &out, const std::string& cfs)  {
   if (!cfs.empty()) {
     ceph_abort_msg("Not implemented");
   }
   return do_open(out, false);
 }
 
-int LevelDBStore::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
+int LevelDBStore::create_and_open(ostream &out, const std::string& cfs) {
   if (!cfs.empty()) {
     ceph_abort_msg("Not implemented");
   }
@@ -93,7 +100,7 @@ int LevelDBStore::load_leveldb_options(bool create_if_missing, leveldb::Options 
     filterpolicy.reset(_filterpolicy);
     ldoptions.filter_policy = filterpolicy.get();
 #else
-    ceph_abort_msg(0 == "bloom size set but installed leveldb doesn't support bloom filters");
+    ceph_abort_msg("bloom size set but installed leveldb doesn't support bloom filters");
 #endif
   }
   if (options.compression_enabled)
@@ -170,11 +177,6 @@ int LevelDBStore::_test_init(const string& dir)
 LevelDBStore::~LevelDBStore()
 {
   close();
-  delete logger;
-
-  // Ensure db is destroyed before dependent db_cache and filterpolicy
-  db.reset();
-  delete ceph_logger;
 }
 
 void LevelDBStore::close()
@@ -190,8 +192,15 @@ void LevelDBStore::close()
     compact_queue_lock.unlock();
   }
 
-  if (logger)
+  if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = nullptr;
+  }
+
+  // Ensure db is destroyed before dependent db_cache and filterpolicy
+  db.reset();
+  delete ceph_logger;
 }
 
 int LevelDBStore::repair(std::ostream &out)

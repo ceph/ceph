@@ -66,7 +66,7 @@ then you just add a line saying ::
 
         Signed-off-by: Random J Developer <random@developer.example.org>
 
-using your real name (sorry, no pseudonyms or anonymous contributions.)
+using your real name (sorry, no pseudonyms or anonymous contributions).
 
 Git can sign off on your behalf
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -122,6 +122,12 @@ imperative mood in the commit title. Positive examples include::
      mds: add perf counter for finisher of MDSRank
      osd: make the ClassHandler::mutex private
 
+If the change only touches the files under ``doc`` directory, the title
+should start with "doc". For instance, a commit fixing a typo in
+``doc/mgr/dashboard.rst`` could have a title like::
+
+  doc/mgr/dashboard: fix a typo
+
 More positive examples can be obtained from the git history of the ``master``
 branch::
 
@@ -133,7 +139,7 @@ Some negative examples (how *not* to title a commit message)::
      bug fix for driver X
      fix issue 99999
 
-Further to the last negative example ("fix issue 99999"), see `Fixes line`_.
+Further to the last negative example ("fix issue 99999"), see `Fixes line(s)`_.
 
 Commit message
 ^^^^^^^^^^^^^^
@@ -148,8 +154,6 @@ body to explain not just the "what", but also the "why".
 For positive examples, peruse ``git log`` in the ``master`` branch. A negative
 example would be a commit message that merely states the obvious. For example:
 "this patch includes updates for subsystem X. Please apply."
-
-.. _`fixes line`:
 
 Fixes line(s)
 ^^^^^^^^^^^^^
@@ -203,11 +207,16 @@ PR title
 
 If your PR has only one commit, the PR title can be the same as the commit title
 (and GitHub will suggest this). If the PR has multiple commits, do not accept
-the title GitHub suggest. Either use the title of the most relevant commit, or
+the title GitHub suggests. Either use the title of the most relevant commit, or
 write your own title. In the latter case, use the same "subsystem: short
 description" convention described in `Commit title`_ for the PR title, with
 the following difference: the PR title describes the entire set of changes,
 while the `Commit title`_ describes only the changes in a particular commit. 
+
+If GitHub suggests a PR title based on a very long commit message it will split
+the result with an elipsis (...) and fold the remainder into the PR description.
+In such a case, please edit the title to be more concise and the description to
+remove the elipsis.
 
 Keep in mind that the PR titles feed directly into the script that generates
 release notes and it is tedious to clean up non-conformant PR titles at release

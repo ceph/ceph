@@ -19,6 +19,7 @@
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/dout.h"
+#include "common/hostname.h"
 #include "common/strtol.h"
 #include "common/valgrind.h"
 #include "common/zipkin_trace.h"
@@ -66,12 +67,15 @@ CephContext *common_preinit(const CephInitParameters &iparams,
 
   conf.set_val("no_config_file", iparams.no_config_file ? "true" : "false");
 
+  if (conf->host.empty()) {
+    conf.set_val("host", ceph_get_short_hostname());
+  }
   return cct;
 }
 #endif	// #ifndef WITH_SEASTAR
 
 void complain_about_parse_error(CephContext *cct,
-				const string& parse_error)
+				const std::string& parse_error)
 {
   if (parse_error.empty())
     return;

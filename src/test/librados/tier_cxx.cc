@@ -14,6 +14,7 @@
 #include "test/librados/testcase_cxx.h"
 #include "json_spirit/json_spirit.h"
 #include "cls/cas/cls_cas_ops.h"
+#include "cls/cas/cls_cas_internal.h"
 
 #include "osd/HitSet.h"
 
@@ -22,10 +23,11 @@
 #include <sstream>
 #include <string>
 
+#include "cls/cas/cls_cas_client.h"
+#include "cls/cas/cls_cas_internal.h"
+
+using namespace std;
 using namespace librados;
-using std::map;
-using std::ostringstream;
-using std::string;
 
 typedef RadosTestPP LibRadosTierPP;
 typedef RadosTestECPP LibRadosTierECPP;
@@ -87,6 +89,109 @@ static string _get_required_osd_release(Rados& cluster)
   }
   cerr << "didn't find require_osd_release in " << outstr << std::endl;
   return "";
+}
+
+void manifest_set_chunk(Rados& cluster, librados::IoCtx& src_ioctx, 
+			librados::IoCtx& tgt_ioctx,
+			uint64_t src_offset, uint64_t length, 
+			std::string src_oid, std::string tgt_oid)
+{
+  ObjectReadOperation op;
+  op.set_chunk(src_offset, length, src_ioctx, src_oid, 0,
+      CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+  librados::AioCompletion *completion = cluster.aio_create_completion();
+  ASSERT_EQ(0, tgt_ioctx.aio_operate(tgt_oid, completion, &op,
+	    librados::OPERATION_IGNORE_CACHE, NULL));
+  completion->wait_for_complete();
+  ASSERT_EQ(0, completion->get_return_value());
+  completion->release();
+}
+
+#include "common/ceph_crypto.h"
+using ceph::crypto::SHA1;
+#include "rgw/rgw_common.h"
+
+void check_fp_oid_refcount(librados::IoCtx& ioctx, std::string foid, uint64_t count,
+			   std::string fp_algo = NULL)
+{
+  bufferlist t;
+  int size = foid.length();
+  if (fp_algo == "sha1") {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    sha1_gen.Update((const unsigned char *)foid.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+  } else if (fp_algo.empty()) {
+    ioctx.getxattr(foid, CHUNK_REFCOUNT_ATTR, t);
+  } else if (!fp_algo.empty()) {
+    ceph_assert(0 == "unrecognized fingerprint algorithm");
+  }
+
+  chunk_refs_t refs;
+  try {
+    auto iter = t.cbegin();
+    decode(refs, iter);
+  } catch (buffer::error& err) {
+    ASSERT_TRUE(0);
+  }
+  ASSERT_LE(count, refs.count());
+}
+
+string get_fp_oid(string oid, std::string fp_algo = NULL)
+{
+  if (fp_algo == "sha1") {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    int size = oid.length();
+    sha1_gen.Update((const unsigned char *)oid.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    return string(p_str);
+  } 
+ 
+  return string();
+}
+
+void is_intended_refcount_state(librados::IoCtx& src_ioctx,
+				std::string src_oid,
+				librados::IoCtx& dst_ioctx,
+				std::string dst_oid,
+				int expected_refcount)
+{
+  int src_refcount = 0, dst_refcount = 0;
+  bufferlist t;
+  int r = dst_ioctx.getxattr(dst_oid, CHUNK_REFCOUNT_ATTR, t);
+  if (r == -ENOENT) {
+    dst_refcount = 0;
+  } else {
+    chunk_refs_t refs;
+    try {
+      auto iter = t.cbegin();
+      decode(refs, iter);
+    } catch (buffer::error& err) {
+      ceph_assert(0);
+    }
+    dst_refcount = refs.count();
+  }
+  for (int tries = 0; tries < 15; ++tries) {
+    r = cls_cas_references_chunk(src_ioctx, src_oid, dst_oid);
+    if (r == -ENOENT || r == -ENOLINK) {
+      src_refcount = 0;
+    } else if (r == -EBUSY) {
+      sleep(20);
+      continue;
+    } else {
+      src_refcount = r;
+    }
+    break;
+  }
+  ASSERT_TRUE(src_refcount >= 0);
+  ASSERT_TRUE(src_refcount == expected_refcount);
+  ASSERT_TRUE(src_refcount <= dst_refcount);
 }
 
 class LibRadosTwoPoolsPP : public RadosTestPP
@@ -1399,6 +1504,117 @@ TEST_F(LibRadosTwoPoolsPP, ListSnap){
   ioctx.selfmanaged_snap_remove(my_snaps[0]);
 }
 
+// This test case reproduces https://tracker.ceph.com/issues/49409
+TEST_F(LibRadosTwoPoolsPP, EvictSnapRollbackReadRace) {
+  // create object
+  {
+    bufferlist bl;
+    int len = string("hi there").length() * 2;
+    // append more chrunk data make sure the second promote
+    // op coming before the first promote op finished
+    for (int i=0; i<4*1024*1024/len; ++i)
+      bl.append("hi therehi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  // create two snapshot, a clone
+  vector<uint64_t> my_snaps(2);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[1]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+                                                         my_snaps));
+  {
+    bufferlist bl;
+    bl.append("ciao!");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // read, trigger a promote on the head
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('c', bl[0]);
+  }
+
+  // try more times
+  int retries = 50;
+  for (int i=0; i<retries; ++i)
+  {
+    {
+      librados::AioCompletion * completion = cluster.aio_create_completion();
+      librados::AioCompletion * completion1 = cluster.aio_create_completion();
+
+      // send a snap rollback op and a snap read op parallel
+      // trigger two promote(copy) to the same snap clone obj
+      // the second snap read op is read-ordered make sure
+      // op not wait for objects_blocked_on_snap_promotion
+      ObjectWriteOperation op;
+      op.selfmanaged_snap_rollback(my_snaps[0]);
+      ASSERT_EQ(0, ioctx.aio_operate(
+        "foo", completion, &op));
+
+      ioctx.snap_set_read(my_snaps[1]);
+      std::map<uint64_t, uint64_t> extents;
+      bufferlist read_bl;
+      int rval = -1;
+      ObjectReadOperation op1;
+      op1.sparse_read(0, 8, &extents, &read_bl, &rval);
+      ASSERT_EQ(0, ioctx.aio_operate("foo", completion1, &op1, &read_bl));
+      ioctx.snap_set_read(librados::SNAP_HEAD);
+
+      completion->wait_for_complete();
+      ASSERT_EQ(0, completion->get_return_value());
+      completion->release();
+
+      completion1->wait_for_complete();
+      ASSERT_EQ(0, completion1->get_return_value());
+      completion1->release();
+    }
+
+    // evict foo snap
+    ioctx.snap_set_read(my_snaps[0]);
+    {
+      ObjectReadOperation op;
+      op.cache_evict();
+      librados::AioCompletion *completion = cluster.aio_create_completion();
+      ASSERT_EQ(0, ioctx.aio_operate(
+        "foo", completion, &op,
+        librados::OPERATION_IGNORE_CACHE, NULL));
+      completion->wait_for_complete();
+      ASSERT_EQ(0, completion->get_return_value());
+      completion->release();
+    }
+    ioctx.snap_set_read(librados::SNAP_HEAD);
+  }
+
+  // cleanup
+  ioctx.selfmanaged_snap_remove(my_snaps[0]);
+  ioctx.selfmanaged_snap_remove(my_snaps[1]);
+}
+
 TEST_F(LibRadosTwoPoolsPP, TryFlush) {
   // configure cache
   bufferlist inbl;
@@ -2435,6 +2651,52 @@ static int _get_pg_num(Rados& cluster, string pool_name)
   return -1;
 }
 
+int make_hitset(Rados& cluster, librados::IoCtx& cache_ioctx, int num_pg, 
+    int num, std::map<int, HitSet>& hitsets, std::string& cache_pool_name) 
+{
+  int pg = num_pg;
+  // do a bunch of writes
+  for (int i=0; i<num; ++i) {
+    bufferlist bl;
+    bl.append("a");
+    ceph_assert(0 == cache_ioctx.write(stringify(i), bl, 1, 0));
+  }
+
+  // get HitSets
+  for (int i=0; i<pg; ++i) {
+    list< pair<time_t,time_t> > ls;
+    AioCompletion *c = librados::Rados::aio_create_completion();
+    ceph_assert(0 == cache_ioctx.hit_set_list(i, c, &ls));
+    c->wait_for_complete();
+    c->release();
+    std::cout << "pg " << i << " ls " << ls << std::endl;
+    ceph_assert(!ls.empty());
+
+    // get the latest
+    c = librados::Rados::aio_create_completion();
+    bufferlist bl;
+    ceph_assert(0 == cache_ioctx.hit_set_get(i, c, ls.back().first, &bl));
+    c->wait_for_complete();
+    c->release();
+
+    try {
+      auto p = bl.cbegin();
+      decode(hitsets[i], p);
+    }
+    catch (buffer::error& e) {
+      std::cout << "failed to decode hit set; bl len is " << bl.length() << "\n";
+      bl.hexdump(std::cout);
+      std::cout << std::endl;
+      throw e;
+    }
+
+    // cope with racing splits by refreshing pg_num
+    if (i == pg - 1)
+      pg = _get_pg_num(cluster, cache_pool_name);
+  }
+  return pg;
+}
+
 TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
   int num_pg = _get_pg_num(cluster, pool_name);
   ceph_assert(num_pg > 0);
@@ -2463,46 +2725,11 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
 
   int num = 200;
 
-  // do a bunch of writes
-  for (int i=0; i<num; ++i) {
-    bufferlist bl;
-    bl.append("a");
-    ASSERT_EQ(0, cache_ioctx.write(stringify(i), bl, 1, 0));
-  }
-
-  // get HitSets
   std::map<int,HitSet> hitsets;
-  for (int i=0; i<num_pg; ++i) {
-    list< pair<time_t,time_t> > ls;
-    AioCompletion *c = librados::Rados::aio_create_completion();
-    ASSERT_EQ(0, cache_ioctx.hit_set_list(i, c, &ls));
-    c->wait_for_complete();
-    c->release();
-    std::cout << "pg " << i << " ls " << ls << std::endl;
-    ASSERT_FALSE(ls.empty());
 
-    // get the latest
-    c = librados::Rados::aio_create_completion();
-    bufferlist bl;
-    ASSERT_EQ(0, cache_ioctx.hit_set_get(i, c, ls.back().first, &bl));
-    c->wait_for_complete();
-    c->release();
+  num_pg = make_hitset(cluster, cache_ioctx, num_pg, num, hitsets, cache_pool_name);
 
-    try {
-      auto p = bl.cbegin();
-      decode(hitsets[i], p);
-    }
-    catch (buffer::error& e) {
-      std::cout << "failed to decode hit set; bl len is " << bl.length() << "\n";
-      bl.hexdump(std::cout);
-      std::cout << std::endl;
-      throw e;
-    }
-
-    // cope with racing splits by refreshing pg_num
-    if (i == num_pg - 1)
-      num_pg = _get_pg_num(cluster, cache_pool_name);
-  }
+  int retry = 0;
 
   for (int i=0; i<num; ++i) {
     string n = stringify(i);
@@ -2517,6 +2744,12 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
 	found = true;
 	break;
       }
+    }
+    if (!found && retry < 5) {
+      num_pg = make_hitset(cluster, cache_ioctx, num_pg, num, hitsets, cache_pool_name);
+      i--;
+      retry++;
+      continue;
     }
     ASSERT_TRUE(found);
   }
@@ -2940,14 +3173,6 @@ TEST_F(LibRadosTwoPoolsPP, SetRedirectRead) {
     ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
   }
 
-  // configure tier
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
-
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
 
@@ -2967,82 +3192,6 @@ TEST_F(LibRadosTwoPoolsPP, SetRedirectRead) {
     ASSERT_EQ('t', bl[0]);
   }
 
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
-}
-
-TEST_F(LibRadosTwoPoolsPP, SetChunkRead) {
-  // skip test if not yet mimic
-  if (_get_required_osd_release(cluster) < "mimic") {
-    cout << "cluster is not yet mimic, skipping test" << std::endl;
-    return;
-  }
-
-  // create object
-  {
-    ObjectWriteOperation op;
-    op.create(true);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
-  }
-  {
-    bufferlist bl;
-    bl.append("hi there");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
-  }
-
-  // configure tier
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle
-  cluster.wait_for_latest_osdmap();
-
-  // set_chunk
-  {
-    ObjectWriteOperation op;
-    int len = strlen("hi there");
-    for (int i = 0; i < len; i+=2) {
-      op.set_chunk(i, 2, cache_ioctx, "bar", i);
-    }
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
-
-  // make all chunks dirty --> full flush --> all chunks are evicted
-  {
-    bufferlist bl;
-    bl.append("There hi");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
-  }
-
-  // read and verify the object
-  {
-    bufferlist bl;
-    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
-    ASSERT_EQ('T', bl[0]);
-  }
-
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
 }
@@ -3050,8 +3199,7 @@ TEST_F(LibRadosTwoPoolsPP, SetChunkRead) {
 TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
   // skip test if not yet mimic
   if (_get_required_osd_release(cluster) < "mimic") {
-    cout << "cluster is not yet mimic, skipping test" << std::endl;
-    return;
+    GTEST_SKIP() << "cluster is not yet mimic, skipping test";
   }
 
   // create object
@@ -3084,14 +3232,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
     ASSERT_EQ(0, cache_ioctx.operate("bar-chunk", &op));
   }
 
-  // configure tier
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
-
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
 
@@ -3106,15 +3246,8 @@ TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
     completion->release();
   }
   // set-chunk
-  {
-    ObjectWriteOperation op;
-    op.set_chunk(0, 2, cache_ioctx, "bar-chunk", 0);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 2, "bar-chunk", "foo-chunk");
+
   // promote
   {
     ObjectWriteOperation op;
@@ -3147,11 +3280,6 @@ TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
     ASSERT_EQ(1, ioctx.read("foo-chunk", bl, 1, 0));
     ASSERT_EQ('C', bl[0]);
   }
-
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -3205,39 +3333,40 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
   }
   // set-chunk
   {
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     op.set_chunk(0, 2, cache_ioctx, "bar-chunk", 0, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
+    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op,
+	      librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_complete();
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
   // redirect's refcount 
   {
-    bufferlist in, out;
-    cache_ioctx.exec("bar", "cas", "chunk_read", in, out);
-    cls_chunk_refcount_read_ret read_ret;
+    bufferlist t;
+    cache_ioctx.getxattr("bar", CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
     try {
-      auto iter = out.cbegin();
-      decode(read_ret, iter);
+      auto iter = t.cbegin();
+      decode(refs, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1U, read_ret.refs.size());
+    ASSERT_EQ(1U, refs.count());
   }
   // chunk's refcount 
   {
-    bufferlist in, out;
-    cache_ioctx.exec("bar-chunk", "cas", "chunk_read", in, out);
-    cls_chunk_refcount_read_ret read_ret;
+    bufferlist t;
+    cache_ioctx.getxattr("bar-chunk", CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
     try {
-      auto iter = out.cbegin();
-      decode(read_ret, iter);
+      auto iter = t.cbegin();
+      decode(refs, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1u, read_ret.refs.size());
+    ASSERT_EQ(1u, refs.count());
   }
 
   // wait for maps to settle before next test
@@ -3247,8 +3376,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
 TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   // skip test if not yet nautilus
   if (_get_required_osd_release(cluster) < "nautilus") {
-    cout << "cluster is not yet nautilus, skipping test" << std::endl;
-    return;
+    GTEST_SKIP() << "cluster is not yet nautilus, skipping test";
   }
 
   // create object
@@ -3296,39 +3424,40 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   }
   // set-chunk
   {
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     op.set_chunk(0, 2, cache_ioctx, "bar-chunk", 0, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
+    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op,
+	      librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_complete();
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
   // redirect's refcount 
   {
-    bufferlist in, out;
-    cache_ioctx.exec("bar", "cas", "chunk_read", in, out);
-    cls_chunk_refcount_read_ret read_ret;
+    bufferlist t;
+    cache_ioctx.getxattr("bar", CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
     try {
-      auto iter = out.cbegin();
-      decode(read_ret, iter);
+      auto iter = t.cbegin();
+      decode(refs, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1u, read_ret.refs.size());
+    ASSERT_EQ(1u, refs.count());
   }
   // chunk's refcount 
   {
-    bufferlist in, out;
-    cache_ioctx.exec("bar-chunk", "cas", "chunk_read", in, out);
-    cls_chunk_refcount_read_ret read_ret;
+    bufferlist t;
+    cache_ioctx.getxattr("bar-chunk", CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
     try {
-      auto iter = out.cbegin();
-      decode(read_ret, iter);
+      auto iter = t.cbegin();
+      decode(refs, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1u, read_ret.refs.size());
+    ASSERT_EQ(1u, refs.count());
   }
 
   // unset-manifest for set-redirect
@@ -3354,9 +3483,9 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   }
   // redirect's refcount 
   {
-    bufferlist in, out;
-    cache_ioctx.exec("bar", "cas", "chunk_read", in, out);
-    if (out.length() != 0U) {
+    bufferlist t;
+    cache_ioctx.getxattr("bar-chunk", CHUNK_REFCOUNT_ATTR, t);
+    if (t.length() != 0U) {
       ObjectWriteOperation op;
       op.unset_manifest();
       librados::AioCompletion *completion = cluster.aio_create_completion();
@@ -3368,9 +3497,9 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   }
   // chunk's refcount 
   {
-    bufferlist in, out;
-    cache_ioctx.exec("bar-chunk", "cas", "chunk_read", in, out);
-    if (out.length() != 0U) {
+    bufferlist t;
+    cache_ioctx.getxattr("bar-chunk", CHUNK_REFCOUNT_ATTR, t);
+    if (t.length() != 0U) {
       ObjectWriteOperation op;
       op.unset_manifest();
       librados::AioCompletion *completion = cluster.aio_create_completion();
@@ -3391,8 +3520,7 @@ using ceph::crypto::SHA1;
 TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
   // skip test if not yet nautilus
   if (_get_required_osd_release(cluster) < "nautilus") {
-    cout << "cluster is not yet nautilus, skipping test" << std::endl;
-    return;
+    GTEST_SKIP() << "cluster is not yet nautilus, skipping test";
   }
 
   bufferlist inbl;
@@ -3400,127 +3528,592 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
 	    set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
 	    inbl, NULL, NULL));
   cluster.wait_for_latest_osdmap();
+  string tgt_oid;
+
+  // get fp_oid
+  tgt_oid = get_fp_oid("There hi", "sha1");
 
   // create object
   {
     bufferlist bl;
-    bl.append("hi there");
+    bl.append("There hi");
     ObjectWriteOperation op;
     op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   {
     bufferlist bl;
-    bl.append("hi there");
+    bl.append("There hi");
     ObjectWriteOperation op;
     op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo-dedup", &op));
-  }
-  {
-    bufferlist bl;
-    bl.append("there");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
-  }
-  {
-    bufferlist bl;
-    bl.append("CHUNK");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, cache_ioctx.operate("bar-chunk", &op));
   }
 
-  // wait for maps to settle
-  cluster.wait_for_latest_osdmap();
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("There hi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(tgt_oid, &op));
+  }
 
   // set-chunk (dedup)
-  {
-    ObjectWriteOperation op;
-    int len = strlen("hi there");
-    op.set_chunk(0, len, cache_ioctx, "bar-chunk", 0, 
-		CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo-dedup", completion, &op));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 8, tgt_oid, "foo-dedup");
   // set-chunk (dedup)
-  {
-    ObjectWriteOperation op;
-    int len = strlen("hi there");
-    op.set_chunk(0, len, cache_ioctx, "bar", 0, 
-		CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
-  // make all chunks dirty --> flush 
-  {
-    // make a dirty chunks
-    bufferlist bl;
-    bl.append("There hi");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo-dedup", &op));
-  }
-  {
-    // do flush
-    bufferlist bl;
-    bl.append("There hi");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo-dedup", &op));
-  }
-  {
-    // make a dirty chunks
-    bufferlist bl;
-    bl.append("There hi");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
-  }
-  {
-    // do flush
-    bufferlist bl;
-    bl.append("There hi");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
-  }
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 8, tgt_oid, "foo");
   // chunk's refcount 
   {
-    bufferlist in, out;
-    SHA1 sha1_gen;
-    int size = strlen("There hi");
-    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
-    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
-    sha1_gen.Update((const unsigned char *)"There hi", size);
-    sha1_gen.Final(fingerprint);
-    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.exec(p_str, "cas", "chunk_read", in, out);
-    cls_chunk_refcount_read_ret read_ret;
+    bufferlist t;
+    cache_ioctx.getxattr(tgt_oid, CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
     try {
-      auto iter = out.cbegin();
-      decode(read_ret, iter);
+      auto iter = t.cbegin();
+      decode(refs, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(2u, read_ret.refs.size());
+    ASSERT_LE(2u, refs.count());
   }
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
 }
 
-TEST_F(LibRadosTwoPoolsPP, ManifestFlushRead) {
-  // skip test if not yet octopus 
+TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
+  // skip test if not yet octopus
   if (_get_required_osd_release(cluster) < "octopus") {
     cout << "cluster is not yet octopus, skipping test" << std::endl;
     return;
+  }
+
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("there hi");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hi");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  string er_fp_oid, hi_fp_oid, bb_fp_oid;
+
+  // get fp_oid
+  er_fp_oid = get_fp_oid("er", "sha1");
+  hi_fp_oid = get_fp_oid("hi", "sha1");
+  bb_fp_oid = get_fp_oid("bb", "sha1");
+
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("er");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(er_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("hi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(hi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("bb");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(bb_fp_oid, &op));
+  }
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, er_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, hi_fp_oid, "foo");
+
+  // make all chunks dirty --> flush
+  // foo: [er] [hi]
+
+  // check chunk's refcount
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("er");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"er", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
+    try {
+      auto iter = t.cbegin();
+      decode(refs, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+    ASSERT_LE(1u, refs.count());
+  }
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // foo: [bb] [hi]
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("Thbbe");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+  // make clean
+  {
+    bufferlist bl;
+    bl.append("Thbbe");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, bb_fp_oid, "foo");
+
+  // and another
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // foo: [er] [hi]
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("There");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+  // make clean
+  {
+    bufferlist bl;
+    bl.append("There");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, er_fp_oid, "foo");
+
+  // check chunk's refcount
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("er");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"er", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
+    try {
+      auto iter = t.cbegin();
+      decode(refs, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+    ASSERT_LE(2u, refs.count());
+  }
+  
+  // and another
+  my_snaps.resize(3);
+  my_snaps[2] = my_snaps[1];
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // foo: [bb] [hi]
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("Thbbe");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+  // make clean
+  {
+    bufferlist bl;
+    bl.append("Thbbe");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, bb_fp_oid, "foo");
+
+  /*
+   *  snap[2]: [er] [hi]
+   *  snap[1]: [bb] [hi]
+   *  snap[0]: [er] [hi]
+   *  head:    [bb] [hi]
+   */
+
+  // check chunk's refcount
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("hi");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"hi", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 1);
+  }
+
+  // check chunk's refcount
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("er");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"er", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
+    try {
+      auto iter = t.cbegin();
+      decode(refs, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+    ASSERT_LE(2u, refs.count());
+  }
+
+  // remove snap
+  ioctx.selfmanaged_snap_remove(my_snaps[2]);
+
+  /*
+   *  snap[1]: [bb] [hi]
+   *  snap[0]: [er] [hi]
+   *  head:    [bb] [hi]
+   */
+
+  sleep(10);
+
+  // check chunk's refcount
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("hi");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"hi", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 1);
+  }
+
+  // remove snap
+  ioctx.selfmanaged_snap_remove(my_snaps[0]);
+
+  /*
+   *  snap[1]: [bb] [hi]
+   *  head:    [bb] [hi]
+   */
+
+  sleep(10);
+
+  // check chunk's refcount
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("bb");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"bb", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 1);
+  }
+
+  // remove snap
+  ioctx.selfmanaged_snap_remove(my_snaps[1]);
+
+  /*
+   *  snap[1]: [bb] [hi]
+   */
+
+  sleep(10);
+
+  // check chunk's refcount
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("bb");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"bb", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 1);
+  }
+
+  // check chunk's refcount
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("hi");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"hi", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 1);
+  }
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("Thabe cdHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
+  }
+
+  string ab_fp_oid, cd_fp_oid, ef_fp_oid, BB_fp_oid;
+
+  // get fp_oid
+  ab_fp_oid = get_fp_oid("ab", "sha1");
+  cd_fp_oid = get_fp_oid("cd", "sha1");
+  ef_fp_oid = get_fp_oid("ef", "sha1");
+  BB_fp_oid = get_fp_oid("BB", "sha1");
+
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("ab");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(ab_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("cd");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(cd_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("ef");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(ef_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("BB");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(BB_fp_oid, &op));
+  }
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, ab_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, cd_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, ef_fp_oid, "foo");
+
+
+  // make all chunks dirty --> flush
+  // foo: [ab] [cd] [ef]
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // foo: [BB] [BB] [ef]
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("ThBBe BB");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+  // make clean
+  {
+    bufferlist bl;
+    bl.append("ThBBe BB");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, BB_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, BB_fp_oid, "foo");
+
+  // and another
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // foo: [ab] [cd] [ef]
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("Thabe cd");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+  // make clean
+  {
+    bufferlist bl;
+    bl.append("Thabe cd");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, ab_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, cd_fp_oid, "foo");
+
+  /*
+   *  snap[1]: [ab] [cd] [ef]
+   *  snap[0]: [BB] [BB] [ef]
+   *  head:    [ab] [cd] [ef]
+   */
+
+  // check chunk's refcount
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("ab");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"ab", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
+    try {
+      auto iter = t.cbegin();
+      decode(refs, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+    ASSERT_LE(2u, refs.count());
+  }
+
+  // check chunk's refcount
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("cd");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"cd", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
+    try {
+      auto iter = t.cbegin();
+      decode(refs, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+    ASSERT_LE(2u, refs.count());
+  }
+
+  // check chunk's refcount
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("BB");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"BB", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
+    try {
+      auto iter = t.cbegin();
+      decode(refs, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+    ASSERT_LE(2u, refs.count());
+  }
+
+  // remove snap
+  ioctx.selfmanaged_snap_remove(my_snaps[0]);
+
+  /*
+   *  snap[1]: [ab] [cd] [ef]
+   *  head:    [ab] [cd] [ef]
+   */
+
+  sleep(10);
+
+  // check chunk's refcount
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("BB");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"BB", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 0);
+  }
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestTestSnapCreate) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    GTEST_SKIP() << "cluster is not yet octopus, skipping test";
   }
 
   // create object
@@ -3529,79 +4122,2076 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushRead) {
     bl.append("base chunk");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo-chunk", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   {
     bufferlist bl;
-    bl.append("CHUNKS");
+    bl.append("CHUNKS CHUNKS");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, cache_ioctx.operate("bar-chunk", &op));
+    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
   }
 
-  // configure tier
+  string ba_fp_oid, se_fp_oid, ch_fp_oid;
+
+  // get fp_oid
+  ba_fp_oid = get_fp_oid("ba", "sha1");
+  se_fp_oid = get_fp_oid("se", "sha1");
+  ch_fp_oid = get_fp_oid("ch", "sha1");
+
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("ba");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(ba_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("se");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(se_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("ch");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(ch_fp_oid, &op));
+  }
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 2, ba_fp_oid, "foo");
+
+  // try to create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+							 my_snaps));
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, se_fp_oid, "foo");
+
+  // check whether clone is created
+  ioctx.snap_set_read(librados::SNAP_DIR);
+  {
+    snap_set_t snap_set;
+    int snap_ret;
+    ObjectReadOperation op;
+    op.list_snaps(&snap_set, &snap_ret);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate(
+      "foo", completion, &op,
+      0, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, snap_ret);
+    ASSERT_LT(0u, snap_set.clones.size());
+    ASSERT_EQ(1, snap_set.clones.size());
+  }
+
+  // create a clone
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    bufferlist bl;
+    bl.append("B");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 0));
+  }
+
+  ioctx.snap_set_read(my_snaps[0]);
+  // set-chunk to clone
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, ch_fp_oid, "foo");
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestRedirectAfterPromote) {
+  // skip test if not yet octopus 
+  if (_get_required_osd_release(cluster) < "octopus") {
+    GTEST_SKIP() << "cluster is not yet octopus, skipping test";
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("base chunk");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("BASE CHUNK");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
+  }
+
+  // set-redirect
+  {
+    ObjectWriteOperation op;
+    op.set_redirect("bar", cache_ioctx, 0);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // promote
+  {
+    ObjectWriteOperation op;
+    op.tier_promote();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // write
+  {
+    bufferlist bl;
+    bl.append("a");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 0));
+  }
+
+  // read and verify the object (redirect)
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('a', bl[0]);
+  }
+
+  // read and verify the object (redirect)
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, cache_ioctx.read("bar", bl, 1, 0));
+    ASSERT_EQ('B', bl[0]);
+  }
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestCheckRefcountWhenModification) {
+  // skip test if not yet octopus 
+  if (_get_required_osd_release(cluster) < "octopus") {
+    GTEST_SKIP() << "cluster is not yet octopus, skipping test";
+  }
+
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+	set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  string er_fp_oid, hi_fp_oid, HI_fp_oid, ai_fp_oid, bi_fp_oid,
+	  Er_fp_oid, Hi_fp_oid, Si_fp_oid;
+
+  // get fp_oid
+  er_fp_oid = get_fp_oid("er", "sha1");
+  hi_fp_oid = get_fp_oid("hi", "sha1");
+  HI_fp_oid = get_fp_oid("HI", "sha1");
+  ai_fp_oid = get_fp_oid("ai", "sha1");
+  bi_fp_oid = get_fp_oid("bi", "sha1");
+  Er_fp_oid = get_fp_oid("Er", "sha1");
+  Hi_fp_oid = get_fp_oid("Hi", "sha1");
+  Si_fp_oid = get_fp_oid("Si", "sha1");
+
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("er");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(er_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("hi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(hi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("HI");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(HI_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("ai");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(ai_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("bi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(bi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("Er");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(Er_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("Hi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(Hi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("Si");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(Si_fp_oid, &op));
+  }
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, er_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, hi_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, HI_fp_oid, "foo");
+
+  // foo head: [er] [hi] [HI]
+  
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+
+  // foo snap[0]: [er] [hi] [HI]
+  // foo head   : [er] [ai] [HI]
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("a");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+  // write
+  {
+    bufferlist bl;
+    bl.append("a");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, ai_fp_oid, "foo");
+
+  // foo snap[0]: [er] [hi] [HI]
+  // foo head   : [er] [bi] [HI]
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("b");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+  // write
+  {
+    bufferlist bl;
+    bl.append("b");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, bi_fp_oid, "foo");
+  
+  sleep(10);
+
+  // check chunk's refcount
+  // [ai]'s refcount should be 0
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("ai");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"ai", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 0);
+  }
+
+  // foo snap[0]: [er] [hi] [HI]
+  // foo head   : [Er] [Hi] [Si]
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("thEre HiSi");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  // write
+  {
+    bufferlist bl;
+    bl.append("thEre HiSi");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, Er_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, Hi_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, Si_fp_oid, "foo");
+
+  // foo snap[0]: [er] [hi] [HI]
+  // foo head   : [ER] [HI] [SI]
+  // write
+  {
+    bufferlist bl;
+    bl.append("thERe HISI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  sleep(10);
+
+  // check chunk's refcount
+  // [Er]'s refcount should be 0
+  {
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = strlen("Er");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    sha1_gen.Update((const unsigned char *)"Er", size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    is_intended_refcount_state(ioctx, "foo", cache_ioctx, p_str, 0);
+  }
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestSnapIncCount) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk2", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk3", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk4", &op));
+  }
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
 
-  // set-chunk
-  {
-    ObjectWriteOperation op;
-    op.set_chunk(0, 2, cache_ioctx, "bar-chunk", 0);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
-  // set-chunk
-  {
-    ObjectWriteOperation op;
-    op.set_chunk(2, 2, cache_ioctx, "bar-chunk", 2);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
-  // make chunked object dirty
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
   {
     bufferlist bl;
-    bl.append("DD");
+    bl.append("there hiHI");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk1", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk4", "foo");
+  // foo snap[1]: 
+  // foo snap[0]:  
+  // foo head   : [chunk1]          [chunk4]
+
+  ioctx.snap_set_read(my_snaps[1]);
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, "chunk2", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk4", "foo");
+  // foo snap[1]:          [chunk2] [chunk4]
+  // foo snap[0]:      
+  // foo head   : [chunk1]          [chunk4]
+ 
+  ioctx.snap_set_read(my_snaps[0]);
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, "chunk2", "foo");
+  // foo snap[1]:          [chunk2] [chunk4]
+  // foo snap[0]:          [chunk2]
+  // foo head   : [chunk1]          [chunk4]
+  
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk3", "foo");
+  // foo snap[1]:          [chunk2] [chunk4]
+  // foo snap[0]: [chunk3] [chunk2]
+  // foo head   : [chunk1]          [chunk4]
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk4", "foo");
+  // foo snap[1]:          [chunk2] [chunk4]
+  // foo snap[0]: [chunk3] [chunk2] [chunk4]
+  // foo head   : [chunk1]          [chunk4]
+
+  // check chunk's refcount
+  check_fp_oid_refcount(cache_ioctx, "chunk1", 1u, "");
+
+  // check chunk's refcount
+  check_fp_oid_refcount(cache_ioctx, "chunk2", 1u, "");
+
+  // check chunk's refcount
+  check_fp_oid_refcount(cache_ioctx, "chunk3", 1u, "");
+  sleep(10);
+
+  // check chunk's refcount
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk4", 1);
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestEvict) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
     ObjectWriteOperation op;
-    op.write(0, bl);
-    ASSERT_EQ(0, ioctx.operate("foo-chunk", &op));
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk2", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk3", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk4", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk1", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk4", "foo");
+  // foo snap[1]: 
+  // foo snap[0]:  
+  // foo head   :          [chunk1]                    [chunk4]
+
+  ioctx.snap_set_read(my_snaps[1]);
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 10, "chunk2", "foo");
+  // foo snap[1]: [                  chunk2                   ] 
+  // foo snap[0]:      
+  // foo head   :          [chunk1]                    [chunk4]
+ 
+  ioctx.snap_set_read(my_snaps[0]);
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, "chunk2", "foo");
+  // foo snap[1]: [                  chunk2                   ] 
+  // foo snap[0]:                             [chunk2]
+  // foo head   :           [chunk1]                   [chunk4]
+  
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk3", "foo");
+  // foo snap[1]: [                  chunk2                   ] 
+  // foo snap[0]:	    [chunk3]          [chunk2]
+  // foo head   :	    [chunk1]                   [chunk4]
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk4", "foo");
+  // foo snap[1]: [                  chunk2                   ] 
+  // foo snap[0]:	    [chunk3]          [chunk2] [chunk4]
+  // foo head   :	    [chunk1]                   [chunk4]
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 2, "chunk4", "foo");
+  // foo snap[1]: [                  chunk2                   ] 
+  // foo snap[0]: [chunk4] [chunk3]           [chunk2] [chunk4]
+  // foo head   :          [chunk1]                    [chunk4]
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 4, 2, "chunk1", "foo");
+  // foo snap[1]: [                  chunk2                   ] 
+  // foo snap[0]: [chunk4] [chunk3] [chunk1]  [chunk2] [chunk4]
+  // foo head   :          [chunk1]                    [chunk4]
+
+  {
+    ObjectReadOperation op, stat_op;
+    uint64_t size;
+    op.tier_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate(
+	"foo", completion, &op,
+	librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+
+    stat_op.stat(&size, NULL, NULL);
+    ASSERT_EQ(0, ioctx.operate("foo", &stat_op, NULL));
+    ASSERT_EQ(10, size);
+  }
+
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    ObjectReadOperation op, stat_op;
+    uint64_t size;
+    op.tier_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate(
+	"foo", completion, &op,
+	librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+
+    stat_op.stat(&size, NULL, NULL);
+    ASSERT_EQ(0, ioctx.operate("foo", &stat_op, NULL));
+    ASSERT_EQ(strlen("there hiHI"), size);
+  }
+
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestEvictPromote) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("EREHT hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk2", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("THERE HIHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk3", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("there");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 2, "chunk1", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk2", "foo");
+  // foo snap[0]:  
+  // foo head   :  [chunk1]                           [chunk2]
+
+  ioctx.snap_set_read(my_snaps[0]);
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 10, "chunk3", "foo");
+  // foo snap[0]: [                  chunk3                   ] 
+  // foo head   : [chunk1]                             [chunk2]
+ 
+
+  {
+    ObjectReadOperation op, stat_op;
+    uint64_t size;
+    op.tier_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate(
+	"foo", completion, &op,
+	librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+
+    stat_op.stat(&size, NULL, NULL);
+    ASSERT_EQ(0, ioctx.operate("foo", &stat_op, NULL));
+    ASSERT_EQ(10, size);
+    
+  }
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('T', bl[0]);
+  }
+
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    bufferlist bl;
+    ASSERT_EQ(10, ioctx.read("foo", bl, 10, 0));
+    ASSERT_EQ('H', bl[8]);
+  }
+}
+
+
+TEST_F(LibRadosTwoPoolsPP, ManifestSnapSizeMismatch) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("chunk1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there HIHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("chunk2", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+       my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("There hiHI");
+    ASSERT_EQ(0, cache_ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+       my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("tHere hiHI");
+    ASSERT_EQ(0, cache_ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // set-chunk 
+  manifest_set_chunk(cluster, ioctx, cache_ioctx, 0, 10, "chunk1", "foo");
+
+  cache_ioctx.snap_set_read(my_snaps[1]);
+
+  // set-chunk 
+  manifest_set_chunk(cluster, ioctx, cache_ioctx, 0, 10, "chunk2", "foo");
+
+  // evict
+  {
+    ObjectReadOperation op, stat_op;
+    op.tier_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+       "foo", completion, &op,
+       librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+  }
+
+  uint32_t hash;
+  ASSERT_EQ(0, cache_ioctx.get_object_pg_hash_position2("foo", &hash));
+
+  // scrub
+  {
+    for (int tries = 0; tries < 5; ++tries) {
+      bufferlist inbl;
+      ostringstream ss;
+      ss << "{\"prefix\": \"pg deep-scrub\", \"pgid\": \""
+        << cache_ioctx.get_id() << "."
+        << std::hex << hash
+        << "\"}";
+      int r = cluster.mon_command(ss.str(), inbl, NULL, NULL);
+      if (r == -ENOENT ||  
+         r == -EAGAIN) {
+       sleep(5);
+       continue;
+      }
+      ASSERT_EQ(0, r);
+      break;
+    }
+    cout << "waiting for scrubs..." << std::endl;
+    sleep(20);
+    cout << "done waiting" << std::endl;
+  }
+
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, cache_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('t', bl[0]);
+  }
+}
+
+#include <common/CDC.h>
+TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    GTEST_SKIP() << "cluster is not yet octopus, skipping test";
+  }
+
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_tier", pool_name),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
+	inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  bufferlist gbl;
+  {
+    generate_buffer(1024*8, &gbl);
+    ObjectWriteOperation op;
+    op.write_full(gbl);
+    ASSERT_EQ(0, cache_ioctx.operate("foo-chunk", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("DDse chunk");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("bar-chunk", &op));
+  }
+
+  // set-chunk to set manifest object
+  {
+    ObjectReadOperation op;
+    op.set_chunk(0, 2, ioctx, "bar-chunk", 0,
+		CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo-chunk", completion, &op,
+	      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
   }
   // flush
   {
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     op.tier_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo-chunk", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_complete();
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
+
+  std::unique_ptr<CDC> cdc = CDC::create("fastcdc", cbits(1024)-1);
+  vector<pair<uint64_t, uint64_t>> chunks;
+  bufferlist chunk;
+  cdc->calc_chunks(gbl, &chunks);
+  chunk.substr_of(gbl, chunks[1].first, chunks[1].second);
+  string tgt_oid;
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    int size = chunk.length();
+    sha1_gen.Update((const unsigned char *)chunk.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+  }
+
   // read and verify the chunked object
   {
-    bufferlist bl;
-    ASSERT_EQ(1, cache_ioctx.read("bar-chunk", bl, 1, 0));
-    ASSERT_EQ('D', bl[0]);
+    bufferlist test_bl;
+    ASSERT_EQ(2, ioctx.read(tgt_oid, test_bl, 2, 0));
+    ASSERT_EQ(test_bl[1], chunk[1]);
   }
 
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 512),
+	inbl, NULL, NULL));
   cluster.wait_for_latest_osdmap();
+
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("hi");
+    ASSERT_EQ(0, cache_ioctx.write("foo-chunk", bl, bl.length(), 0));
+  }
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo-chunk", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  cdc = CDC::create("fastcdc", cbits(512)-1);
+  chunks.clear();
+  cdc->calc_chunks(gbl, &chunks);
+  bufferlist chunk_512;
+  chunk_512.substr_of(gbl, chunks[3].first, chunks[3].second);
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    int size = chunk_512.length();
+    sha1_gen.Update((const unsigned char *)chunk_512.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+  }
+
+  // read and verify the chunked object
+  {
+    bufferlist test_bl;
+    ASSERT_EQ(2, ioctx.read(tgt_oid, test_bl, 2, 0));
+    ASSERT_EQ(test_bl[1], chunk_512[1]);
+  }
+
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 16384),
+	inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("hi");
+    ASSERT_EQ(0, cache_ioctx.write("foo-chunk", bl, bl.length(), 0));
+    gbl.begin(0).copy_in(bl.length(), bl);
+  }
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo-chunk", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  cdc = CDC::create("fastcdc", cbits(16384)-1);
+  chunks.clear();
+  cdc->calc_chunks(gbl, &chunks);
+  bufferlist chunk_16384;
+  chunk_16384.substr_of(gbl, chunks[0].first, chunks[0].second);
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    int size = chunk_16384.length();
+    sha1_gen.Update((const unsigned char *)chunk_16384.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+  }
+  // read and verify the chunked object
+  {
+    bufferlist test_bl;
+    ASSERT_EQ(2, ioctx.read(tgt_oid, test_bl, 2, 0));
+    ASSERT_EQ(test_bl[0], chunk_16384[0]);
+  }
+
+  // less than object size
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
+	inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // make a dirty chunks
+  // a chunk_info is deleted by write, which converts the manifest object to non-manifest object
+  {
+    bufferlist bl;
+    bl.append("hi");
+    ASSERT_EQ(0, cache_ioctx.write("foo-chunk", bl, bl.length(), 0));
+  }
+
+  // reset set-chunk
+  {
+    bufferlist bl;
+    bl.append("DDse chunk");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("bar-chunk", &op));
+  }
+  // set-chunk to set manifest object
+  {
+    ObjectReadOperation op;
+    op.set_chunk(0, 2, ioctx, "bar-chunk", 0,
+		CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo-chunk", completion, &op,
+	      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo-chunk", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  cdc = CDC::create("fastcdc", cbits(1024)-1);
+  chunks.clear();
+  cdc->calc_chunks(gbl, &chunks);
+  bufferlist small_chunk;
+  small_chunk.substr_of(gbl, chunks[1].first, chunks[1].second);
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    int size = small_chunk.length();
+    sha1_gen.Update((const unsigned char *)small_chunk.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+  }
+  // read and verify the chunked object
+  {
+    bufferlist test_bl;
+    ASSERT_EQ(2, ioctx.read(tgt_oid, test_bl, 2, 0));
+    ASSERT_EQ(test_bl[0], small_chunk[0]);
+  }
+
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestFlushSnap) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_tier", pool_name),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
+	inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  bufferlist gbl;
+  {
+    //bufferlist bl;
+    //bl.append("there hi");
+    generate_buffer(1024*8, &gbl);
+    ObjectWriteOperation op;
+    op.write_full(gbl);
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hi");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
+  }
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, ioctx, cache_ioctx, 2, 2, "bar", "foo");
+  manifest_set_chunk(cluster, ioctx, cache_ioctx, 6, 2, "bar", "foo");
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("Thbbe");
+    ASSERT_EQ(0, cache_ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // and another
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("Thcce");
+    ASSERT_EQ(0, cache_ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // flush on head (should fail)
+  cache_ioctx.snap_set_read(librados::SNAP_HEAD);
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(-EBUSY, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush on recent snap (should fail)
+  cache_ioctx.snap_set_read(my_snaps[0]);
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(-EBUSY, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush on oldest snap
+  cache_ioctx.snap_set_read(my_snaps[1]);
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush on oldest snap
+  cache_ioctx.snap_set_read(my_snaps[0]);
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush on oldest snap
+  cache_ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // check chunk's refcount
+  std::unique_ptr<CDC> cdc = CDC::create("fastcdc", cbits(1024)-1);
+  vector<pair<uint64_t, uint64_t>> chunks;
+  bufferlist chunk;
+  cdc->calc_chunks(gbl, &chunks);
+  chunk.substr_of(gbl, chunks[1].first, chunks[1].second);
+  string tgt_oid;
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    SHA1 sha1_gen;
+    int size = chunk.length();
+    sha1_gen.Update((const unsigned char *)chunk.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+  }
+  // read and verify the chunked object
+  {
+    bufferlist test_bl;
+    ASSERT_EQ(2, ioctx.read(tgt_oid, test_bl, 2, 0));
+    ASSERT_EQ(test_bl[1], chunk[1]);
+  }
+
+  cache_ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    bufferlist bl;
+    ASSERT_EQ(4, cache_ioctx.read("foo", bl, 4, 0));
+    ASSERT_EQ('c', bl[2]);
+  }
+
+  cache_ioctx.snap_set_read(my_snaps[0]);
+  {
+    bufferlist bl;
+    ASSERT_EQ(4, cache_ioctx.read("foo", bl, 4, 0));
+    ASSERT_EQ('b', bl[2]);
+  }
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_tier", pool_name),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
+	inbl, NULL, NULL));
+
+  // create object
+  bufferlist gbl;
+  {
+    //bufferlist bl;
+    generate_buffer(1024*8, &gbl);
+    ObjectWriteOperation op;
+    op.write_full(gbl);
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // set-chunk to set manifest object
+  {
+    ObjectReadOperation op;
+    op.set_chunk(0, 2, ioctx, "bar", 0,
+		CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op,
+	      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("Thbbe hi");
+    ASSERT_EQ(0, cache_ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // and another
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, cache_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("Thcce hi");
+    ASSERT_EQ(0, cache_ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  //flush on oldest snap
+  cache_ioctx.snap_set_read(my_snaps[1]);
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush on oldest snap
+  cache_ioctx.snap_set_read(my_snaps[0]);
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  cache_ioctx.snap_set_read(librados::SNAP_HEAD);
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  std::unique_ptr<CDC> cdc = CDC::create("fastcdc", cbits(1024)-1);
+  vector<pair<uint64_t, uint64_t>> chunks;
+  bufferlist chunk;
+  cdc->calc_chunks(gbl, &chunks);
+  chunk.substr_of(gbl, chunks[1].first, chunks[1].second);
+  string tgt_oid;
+  // check chunk's refcount
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = chunk.length();
+    sha1_gen.Update((const unsigned char *)chunk.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+    ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
+    try {
+      auto iter = t.cbegin();
+      decode(refs, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+    ASSERT_LE(1u, refs.count());
+  }
+
+  bufferlist chunk2;
+  chunk2.substr_of(gbl, chunks[0].first, chunks[0].second);
+  // check chunk's refcount
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = chunk2.length();
+    sha1_gen.Update((const unsigned char *)chunk2.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    tgt_oid = string(p_str);
+    ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+    chunk_refs_t refs;
+    try {
+      auto iter = t.cbegin();
+      decode(refs, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+    ASSERT_LE(1u, refs.count());
+  }
+
+  // make a dirty chunks
+  {
+    bufferlist bl;
+    bl.append("ThDDe hi");
+    ASSERT_EQ(0, cache_ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  bufferlist tmp;
+  tmp.append("Thcce hi");
+  gbl.begin(0).copy_in(tmp.length(), tmp);
+  bufferlist chunk3;
+  cdc->calc_chunks(gbl, &chunks);
+  chunk3.substr_of(gbl, chunks[0].first, chunks[0].second);
+  // check chunk's refcount
+  {
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = chunk2.length();
+    sha1_gen.Update((const unsigned char *)chunk2.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    is_intended_refcount_state(cache_ioctx, "foo", ioctx, p_str, 0);
+  }
+}
+
+TEST_F(LibRadosTwoPoolsPP, TierFlushDuringFlush) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  bufferlist inbl;
+
+  // create a new pool 
+  std::string temp_pool_name = get_temp_pool_name() + "-test-flush";
+  ASSERT_EQ(0, cluster.pool_create(temp_pool_name.c_str()));
+
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_tier", temp_pool_name),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
+	inbl, NULL, NULL));
+
+  // create object
+  bufferlist gbl;
+  {
+    //bufferlist bl;
+    generate_buffer(1024*8, &gbl);
+    ObjectWriteOperation op;
+    op.write_full(gbl);
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
+  }
+
+  // set-chunk to set manifest object
+  {
+    ObjectReadOperation op;
+    op.set_chunk(0, 2, ioctx, "bar", 0,
+		CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op,
+	      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // delete temp pool, so flushing chunk will fail
+  ASSERT_EQ(0, s_cluster.pool_delete(temp_pool_name.c_str()));
+
+  // flush to check if proper error is returned
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(-ENOENT, completion->get_return_value());
+    completion->release();
+  }
+
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestSnapHasChunk) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("there HIHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  string er_fp_oid, hi_fp_oid, HI_fp_oid, ai_fp_oid, bi_fp_oid,
+	  Er_fp_oid, Hi_fp_oid, SI_fp_oid;
+
+  // get fp_oid
+  er_fp_oid = get_fp_oid("er", "sha1");
+  hi_fp_oid = get_fp_oid("hi", "sha1");
+  HI_fp_oid = get_fp_oid("HI", "sha1");
+  ai_fp_oid = get_fp_oid("ai", "sha1");
+  bi_fp_oid = get_fp_oid("bi", "sha1");
+  Er_fp_oid = get_fp_oid("Er", "sha1");
+  Hi_fp_oid = get_fp_oid("Hi", "sha1");
+  SI_fp_oid = get_fp_oid("SI", "sha1");
+
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("er");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(er_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("hi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(hi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("HI");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(HI_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("ai");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(ai_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("bi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(bi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("Er");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(Er_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("Hi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(Hi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("SI");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(SI_fp_oid, &op));
+  }
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, HI_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, HI_fp_oid, "foo");
+
+  // foo head:     [hi] [HI]
+  
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("a");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+  // write
+  {
+    bufferlist bl;
+    bl.append("a");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+  // write
+  {
+    bufferlist bl;
+    bl.append("S");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 8));
+  }
+
+  // foo snap[0]:      [hi] [HI]
+  // foo head   : [er] [ai] [SI]
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, er_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, ai_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, SI_fp_oid, "foo");
+
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("b");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+  // write
+  {
+    bufferlist bl;
+    bl.append("b");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+
+  // foo snap[1]:      [HI] [HI]
+  // foo snap[0]: [er] [ai] [SI]
+  // foo head   : [er] [bi] [SI]
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, bi_fp_oid, "foo");
+
+  {
+    ASSERT_EQ(1, cls_cas_references_chunk(ioctx, "foo", SI_fp_oid));
+    ASSERT_EQ(1, cls_cas_references_chunk(ioctx, "foo", er_fp_oid));
+    ASSERT_EQ(1, cls_cas_references_chunk(ioctx, "foo", ai_fp_oid));
+    ASSERT_EQ(2, cls_cas_references_chunk(ioctx, "foo", HI_fp_oid));
+    ASSERT_EQ(-ENOLINK, cls_cas_references_chunk(ioctx, "foo", Hi_fp_oid));
+  }
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestRollback) {
+  // skip test if not yet pacific
+  if (_get_required_osd_release(cluster) < "pacific") {
+    cout << "cluster is not yet pacific, skipping test" << std::endl;
+    return;
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("ABere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk2", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("EFere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk3", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("thABe hiEF");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk1", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk3", "foo");
+  // foo snap[1]: 
+  // foo snap[0]:  
+  // foo head   :          [chunk1]                    [chunk3]
+
+  ioctx.snap_set_read(my_snaps[1]);
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 10, "chunk2", "foo");
+  // foo snap[1]: [                  chunk2                   ] 
+  // foo snap[0]:      
+  // foo head   :          [chunk1]                    [chunk3]
+ 
+  // foo snap[1]: [                  chunk2                   ] 
+  // foo snap[0]:                             
+  // foo head   :           [chunk1]                   [chunk3]
+  
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback("foo", my_snaps[0]));
+
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('t', bl[0]);
+  }
+
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback("foo", my_snaps[1]));
+
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('C', bl[0]);
+  }
+
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestRollbackRefcount) {
+  // skip test if not yet pacific
+  if (_get_required_osd_release(cluster) < "pacific") {
+    cout << "cluster is not yet pacific, skipping test" << std::endl;
+    return;
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("ABere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk2", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("EFere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk3", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("DDDDD hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk4", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("EEEEE hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk5", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("thABe hiEF");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk1", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk3", "foo");
+  // foo snap[1]: 
+  // foo snap[0]:  
+  // foo head   :          [chunk1]                    [chunk3]
+
+  ioctx.snap_set_read(my_snaps[1]);
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk4", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, "chunk5", "foo");
+  // foo snap[1]:           [chunk4]          [chunk5]       
+  // foo snap[0]:  
+  // foo head   :           [chunk1]                   [chunk3]
+  
+  ioctx.snap_set_read(my_snaps[0]);
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 10, "chunk2", "foo");
+  // foo snap[1]:           [chunk4]          [chunk5]       
+  // foo snap[0]: [                  chunk2                   ] 
+  // foo head   :          [chunk1]                    [chunk3]
+  
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback("foo", my_snaps[1]));
+  // foo snap[1]:          [chunk4]          [chunk5]       
+  // foo snap[0]: [                  chunk2                   ] 
+  // foo head   :          [chunk4]          [chunk5] <-- will contain these contents
+
+  sleep(10);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk1", 0);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk3", 0);
+
+  ioctx.selfmanaged_snap_remove(my_snaps[1]);
+  sleep(10);
+  // foo snap[1]:          
+  // foo snap[0]: [                  chunk2                   ] 
+  // foo head   :          [chunk4]          [chunk5] 
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk4", 1);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk5", 1);
+
+  {
+    bufferlist bl;
+    bl.append("thABe hiEF");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+  // foo snap[1]:          
+  // foo snap[0]: [                  chunk2                   ] 
+  // foo head   :          
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk1", 0);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk3", 0);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk4", 0);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk5", 0);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk2", 1);
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestEvictRollback) {
+  // skip test if not yet pacific
+  if (_get_required_osd_release(cluster) < "pacific") {
+    cout << "cluster is not yet pacific, skipping test" << std::endl;
+    return;
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("ABere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk2", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("EFere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk3", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  }
+
+
+  // set-chunk 
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, "chunk1", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, "chunk3", "foo");
+  // foo snap[0]:  
+  // foo head   :          [chunk1]                    [chunk3]
+
+  ioctx.snap_set_read(my_snaps[0]);
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 0, 10, "chunk2", "foo");
+  // foo snap[0]: [                  chunk2                   ] 
+  // foo head   :          [chunk1]                    [chunk3]
+  
+  sleep(10);
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk1", 1);
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk3", 1);
+
+
+  ioctx.snap_set_read(my_snaps[0]);
+  // evict--this makes the chunk missing state
+  {
+    ObjectReadOperation op, stat_op;
+    op.tier_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate(
+	"foo", completion, &op,
+	librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+  }
+
+  // rollback to my_snaps[0]
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback("foo", my_snaps[0]));
+
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('C', bl[0]);
+  }
+
+  is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk2", 1);
 }
 
 class LibRadosTwoPoolsECPP : public RadosTestECPP
@@ -6297,62 +8887,45 @@ TEST_F(LibRadosTwoPoolsECPP, SetRedirectRead) {
 TEST_F(LibRadosTwoPoolsECPP, SetChunkRead) {
   // note: require >= mimic
 
-  // create object
-  {
-    ObjectWriteOperation op;
-    op.create(true);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
-  }
   {
     bufferlist bl;
-    bl.append("hi there");
+    bl.append("there hi");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op));
   }
 
-  // configure tier
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle
-  cluster.wait_for_latest_osdmap();
-
-  // set_chunk
-  {
-    ObjectWriteOperation op;
-    op.set_chunk(0, 8, cache_ioctx, "bar", 0);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
-
-  // make all chunks dirty --> full flush --> all chunks are evicted
   {
     bufferlist bl;
     bl.append("There hi");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // set_chunk
+  manifest_set_chunk(cluster, ioctx, cache_ioctx, 0, 4, "bar", "foo");
+
+  // promote
+  {
+    ObjectWriteOperation op;
+    op.tier_promote();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
   }
 
   // read and verify the object
   {
     bufferlist bl;
-    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, cache_ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('T', bl[0]);
   }
-
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -6364,68 +8937,51 @@ TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
   // create object
   {
     bufferlist bl;
-    bl.append("hi there");
+    bl.append("hiaa there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
-  }
-  {
-    ObjectWriteOperation op;
-    op.create(true);
-    ASSERT_EQ(0, ioctx.operate("foo-chunk", &op));
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op));
   }
   {
     bufferlist bl;
-    bl.append("HI there");
+    bl.append("base chunk");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
+    ASSERT_EQ(0, cache_ioctx.operate("foo-chunk", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("HIaa there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
   }
   {
     bufferlist bl;
     bl.append("BASE CHUNK");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, cache_ioctx.operate("bar-chunk", &op));
+    ASSERT_EQ(0, ioctx.operate("bar-chunk", &op));
   }
-
-  // configure tier
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle
-  cluster.wait_for_latest_osdmap();
 
   // set-redirect
   {
     ObjectWriteOperation op;
-    op.set_redirect("bar", cache_ioctx, 0);
+    op.set_redirect("bar", ioctx, 0);
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
     completion->wait_for_complete();
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
   // set-chunk
-  {
-    ObjectWriteOperation op;
-    op.set_chunk(0, 10, cache_ioctx, "bar-chunk", 0);
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
-    completion->wait_for_complete();
-    ASSERT_EQ(0, completion->get_return_value());
-    completion->release();
-  }
+  manifest_set_chunk(cluster, ioctx, cache_ioctx, 0, 10, "bar-chunk", "foo-chunk");
   // promote
   {
     ObjectWriteOperation op;
     op.tier_promote();
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op));
     completion->wait_for_complete();
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
@@ -6433,7 +8989,7 @@ TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
   // read and verify the object (redirect)
   {
     bufferlist bl;
-    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, cache_ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('H', bl[0]);
   }
   // promote
@@ -6441,7 +8997,7 @@ TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
     ObjectWriteOperation op;
     op.tier_promote();
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo-chunk", completion, &op));
     completion->wait_for_complete();
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
@@ -6449,17 +9005,21 @@ TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
   // read and verify the object
   {
     bufferlist bl;
-    ASSERT_EQ(1, ioctx.read("foo-chunk", bl, 1, 0));
+    ASSERT_EQ(1, cache_ioctx.read("foo-chunk", bl, 1, 0));
     ASSERT_EQ('B', bl[0]);
   }
 
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
+}
+
+TEST_F(LibRadosTwoPoolsECPP, TrySetDedupTier) {
+  // note: require >= mimic
+  
+  bufferlist inbl;
+  ASSERT_EQ(-EOPNOTSUPP, cluster.mon_command(
+	set_pool_str(pool_name, "dedup_tier", cache_pool_name),
+	inbl, NULL, NULL));
 }
 
 TEST_F(LibRadosTwoPoolsPP, PropagateBaseTierError) {

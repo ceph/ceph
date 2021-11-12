@@ -3,6 +3,9 @@
    [ngClass]="{ 'running': hasRunningTasks }"
    (click)="toggleSidebar()">
   <i [ngClass]="[icons.bell]"></i>
+  <span class="dot"
+        *ngIf="hasNotifications">
+  </span>
   <span class="d-md-none"
         i18n>Tasks and Notifications</span>
 </a>

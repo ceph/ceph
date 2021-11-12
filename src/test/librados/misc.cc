@@ -17,7 +17,9 @@
 #include "test/librados/TestCase.h"
 #include "gtest/gtest.h"
 #include <sys/time.h>
+#ifndef _WIN32
 #include <sys/resource.h>
+#endif
 
 #include <errno.h>
 #include <map>
@@ -25,10 +27,8 @@
 #include <string>
 #include <regex>
 
+using namespace std;
 using namespace librados;
-using std::map;
-using std::ostringstream;
-using std::string;
 
 typedef RadosTest LibRadosMisc;
 
@@ -318,11 +318,17 @@ static void shutdown_racer_func()
   int i;
 
   for (i = 0; i < niter; ++i) {
-    ASSERT_EQ("", connect_cluster(&rad));
+    auto r = connect_cluster(&rad);
+    if (getenv("ALLOW_TIMEOUTS")) {
+      ASSERT_TRUE(r == "" || r == "rados_connect failed with error -110");
+    } else {
+      ASSERT_EQ("", r);
+    }
     rados_shutdown(rad);
   }
 }
 
+#ifndef _WIN32
 // See trackers #20988 and #42026
 TEST_F(LibRadosMisc, ShutdownRace)
 {
@@ -343,3 +349,4 @@ TEST_F(LibRadosMisc, ShutdownRace)
     threads[i].join();
   ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rold), 0);
 }
+#endif /* _WIN32 */

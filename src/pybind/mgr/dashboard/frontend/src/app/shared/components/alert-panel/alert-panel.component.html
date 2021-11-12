@@ -1,4 +1,6 @@
-<alert type="{{ bootstrapClass }}">
+<ngb-alert type="{{ bootstrapClass }}"
+           [dismissible]="dismissible"
+           (close)="onClose()">
   <table>
     <ng-container *ngIf="size === 'normal'; else slim">
       <tr>
@@ -9,7 +11,8 @@
              class="alert-{{ bootstrapClass }} {{ typeIcon }}"
              aria-hidden="true"></i>
         </td>
-        <td class="alert-panel-title">{{ title }}</td>
+        <td *ngIf="showTitle"
+            class="alert-panel-title">{{ title }}</td>
       </tr>
       <tr>
         <td class="alert-panel-text">
@@ -24,24 +27,16 @@
           <i class="alert-{{ bootstrapClass }} {{ typeIcon }}"
              aria-hidden="true"></i>
         </td>
-        <td class="alert-panel-title">{{ title }}</td>
+        <td *ngIf="showTitle"
+            class="alert-panel-title">{{ title }}</td>
         <td class="alert-panel-text">
           <ng-container *ngTemplateOutlet="content"></ng-container>
         </td>
       </tr>
     </ng-template>
   </table>
-</alert>
+</ngb-alert>
 
 <ng-template #content>
   <ng-content></ng-content>
 </ng-template>
-
-<div class="button-group text-right"
-     *ngIf="backAction.observers.length > 0">
-  <button class="btn btn-light tc_backButton"
-          type="button"
-          (click)="backAction.emit()"
-          autofocus
-          i18n>Back</button>
-</div>

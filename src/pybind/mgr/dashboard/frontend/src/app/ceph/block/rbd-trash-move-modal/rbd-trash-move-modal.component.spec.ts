@@ -3,14 +3,13 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import * as moment from 'moment';
-import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { NgbActiveModal, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
+import moment from 'moment';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal.component';
 
 describe('RbdTrashMoveModalComponent', () => {
@@ -25,16 +24,16 @@ describe('RbdTrashMoveModalComponent', () => {
       RouterTestingModule,
       SharedModule,
       ToastrModule.forRoot(),
-      BsDatepickerModule.forRoot()
+      NgbPopoverModule
     ],
     declarations: [RbdTrashMoveModalComponent],
-    providers: [BsModalRef, BsModalService, i18nProviders]
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RbdTrashMoveModalComponent);
     component = fixture.componentInstance;
-    httpTesting = TestBed.get(HttpTestingController);
+    httpTesting = TestBed.inject(HttpTestingController);
 
     component.poolName = 'foo';
     component.imageName = 'bar';
@@ -52,17 +51,17 @@ describe('RbdTrashMoveModalComponent', () => {
   });
 
   describe('should call moveImage', () => {
-    let notificationService;
+    let notificationService: NotificationService;
 
     beforeEach(() => {
-      notificationService = TestBed.get(NotificationService);
+      notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show').and.stub();
-      spyOn(component.modalRef, 'hide').and.callThrough();
+      spyOn(component.activeModal, 'close').and.callThrough();
     });
 
     afterEach(() => {
       expect(notificationService.show).toHaveBeenCalledTimes(1);
-      expect(component.modalRef.hide).toHaveBeenCalledTimes(1);
+      expect(component.activeModal.close).toHaveBeenCalledTimes(1);
     });
 
     it('with normal delay', () => {
@@ -73,9 +72,7 @@ describe('RbdTrashMoveModalComponent', () => {
     });
 
     it('with delay < 0', () => {
-      const oldDate = moment()
-        .subtract(24, 'hour')
-        .toDate();
+      const oldDate = moment().subtract(24, 'hour').toDate();
       component.moveForm.patchValue({ expiresAt: oldDate });
 
       component.moveImage();
@@ -85,15 +82,13 @@ describe('RbdTrashMoveModalComponent', () => {
     });
 
     it('with delay < 0', () => {
-      const oldDate = moment()
-        .add(24, 'hour')
-        .toISOString();
+      const oldDate = moment().add(24, 'hour').toISOString();
       component.moveForm.patchValue({ expiresAt: oldDate });
 
       component.moveImage();
       const req = httpTesting.expectOne('api/block/image/foo%2Fbar/move_trash');
       req.flush(null);
-      expect(req.request.body.delay).toBeGreaterThan(86390);
+      expect(req.request.body.delay).toBeGreaterThan(76390);
     });
   });
 });

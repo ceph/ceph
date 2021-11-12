@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #pragma once
 
@@ -8,6 +9,10 @@
 #include "common/config_obs.h"
 #include "common/config_obs_mgr.h"
 #include "common/errno.h"
+
+namespace ceph {
+class Formatter;
+}
 
 namespace crimson::common {
 
@@ -67,10 +72,9 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
 
             ObserverMgr<ConfigObserver>::rev_obs_map rev_obs;
             proxy.obs_mgr.for_each_change(proxy.values->changed, proxy,
-                                          [&rev_obs](md_config_obs_t *obs,
-                                                     const std::string &key) {
-                                            rev_obs[obs].insert(key);
-                                          }, nullptr);
+              [&rev_obs](ConfigObserver *obs, const std::string& key) {
+                rev_obs[obs].insert(key);
+              }, nullptr);
             for (auto& obs_keys : rev_obs) {
               obs_keys.first->handle_conf_change(proxy, obs_keys.second);
             }
@@ -84,6 +88,9 @@ public:
   ConfigProxy(const EntityName& name, std::string_view cluster);
   const ConfigValues* operator->() const noexcept {
     return values.get();
+  }
+  const ConfigValues get_config_values() {
+     return *values.get();
   }
   ConfigValues* operator->() noexcept {
     return values.get();
@@ -118,11 +125,11 @@ public:
       }
     });
   }
-  int get_val(const std::string &key, std::string *val) const {
+  int get_val(std::string_view key, std::string *val) const {
     return get_config().get_val(*values, key, val);
   }
   template<typename T>
-  const T get_val(const std::string& key) const {
+  const T get_val(std::string_view key) const {
     return get_config().template get_val<T>(*values, key);
   }
 
@@ -148,6 +155,16 @@ public:
     });
   }
 
+  seastar::future<> inject_args(const std::string& s) {
+    return do_change([s, this](ConfigValues& values) {
+      std::stringstream err;
+      if (get_config().injectargs(values, obs_mgr, s, &err)) {
+        throw std::invalid_argument(err.str());
+      }
+    });
+  }
+  void show_config(ceph::Formatter* f) const;
+
   seastar::future<> parse_argv(std::vector<const char*>& argv) {
     // we could pass whatever is unparsed to seastar, but seastar::app_template
     // is used for driving the seastar application, and
@@ -162,17 +179,15 @@ public:
     });
   }
 
-  seastar::future<> parse_config_files(const std::string& conf_files) {
-    return do_change([this, conf_files](ConfigValues& values) {
-      const char* conf_file_paths =
-	conf_files.empty() ? nullptr : conf_files.c_str();
-      get_config().parse_config_files(values,
-				      obs_mgr,
-				      conf_file_paths,
-				      &std::cerr,
-				      CODE_ENVIRONMENT_DAEMON);
-      });
+  seastar::future<> parse_env() {
+    return do_change([this](ConfigValues& values) {
+      get_config().parse_env(CEPH_ENTITY_TYPE_OSD,
+			     values,
+			     obs_mgr);
+    });
   }
+
+  seastar::future<> parse_config_files(const std::string& conf_files);
 
   using ShardedConfig = seastar::sharded<ConfigProxy>;
 
@@ -188,6 +203,11 @@ inline ConfigProxy& local_conf() {
 
 inline ConfigProxy::ShardedConfig& sharded_conf() {
   return ConfigProxy::sharded_conf;
+}
+
+template<typename T>
+const T get_conf(const std::string& key) {
+  return local_conf().template get_val<T>(key);
 }
 
 }

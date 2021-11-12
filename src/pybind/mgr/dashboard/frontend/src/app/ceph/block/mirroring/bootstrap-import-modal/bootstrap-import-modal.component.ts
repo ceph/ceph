@@ -1,15 +1,17 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormControl, FormGroup, ValidatorFn, Validators } from '@angular/forms';
 
-import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
 import { concat, forkJoin, Observable, Subscription } from 'rxjs';
 import { last } from 'rxjs/operators';
 
-import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { FinishedTask } from '../../../../shared/models/finished-task';
-import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
+import { Pool } from '~/app/ceph/pool/pool';
+import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 @Component({
   selector: 'cd-bootstrap-import-modal',
@@ -31,7 +33,8 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
   ];
 
   constructor(
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private rbdMirroringService: RbdMirroringService,
     private taskWrapper: TaskWrapperService
   ) {
@@ -61,13 +64,9 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
       this.importBootstrapForm.get('siteName').setValue(response.site_name);
     });
 
-    this.subs = this.rbdMirroringService.subscribeSummary((data: any) => {
-      if (!data) {
-        return;
-      }
-
+    this.subs = this.rbdMirroringService.subscribeSummary((data) => {
       const pools = data.content_data.pools;
-      this.pools = pools.reduce((acc, pool) => {
+      this.pools = pools.reduce((acc: any[], pool: Pool) => {
         acc.push({
           name: pool['name'],
           mirror_mode: pool['mirror_mode']
@@ -177,9 +176,12 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
       task: new FinishedTask('rbd/mirroring/bootstrap/import', {}),
       call: apiActionsObs
     });
-    taskObs.subscribe(undefined, finishHandler, () => {
-      finishHandler();
-      this.modalRef.hide();
+    taskObs.subscribe({
+      error: finishHandler,
+      complete: () => {
+        finishHandler();
+        this.activeModal.close();
+      }
     });
   }
 }

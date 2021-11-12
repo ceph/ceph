@@ -4,11 +4,13 @@
 #include "PGStateUtils.h"
 #include "common/Clock.h"
 
+using ceph::Formatter;
+
 /*------NamedState----*/
 NamedState::NamedState(PGStateHistory *pgsh, const char *state_name)
-  : pgsh(pgsh), state_name(state_name) {
+  : pgsh(pgsh), state_name(state_name), enter_time(ceph_clock_now()) {
   if(pgsh) {
-    pgsh->enter(ceph_clock_now(), state_name);
+    pgsh->enter(enter_time, state_name);
   }
 }
 

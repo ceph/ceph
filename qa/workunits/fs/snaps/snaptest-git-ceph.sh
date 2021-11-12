@@ -2,9 +2,17 @@
 
 set -e
 
-ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
-
-git clone git://git.ceph.com/ceph.git
+# try it again if the clone is slow and the second time
+retried=false
+trap -- 'retry' EXIT
+retry() {
+    rm -rf ceph
+    # double the timeout value
+    timeout 3600 git clone git://git.ceph.com/ceph.git
+}
+rm -rf ceph
+timeout 1800 git clone git://git.ceph.com/ceph.git
+trap - EXIT
 cd ceph
 
 versions=`seq 1 21`

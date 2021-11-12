@@ -2,15 +2,27 @@
   "compileOnSave": false,
   "compilerOptions": {
     "downlevelIteration": true,
+    "esModuleInterop": true,
     "importHelpers": true,
-    "module": "esnext",
     "outDir": "./dist/out-tsc",
     "sourceMap": true,
     "declaration": false,
     "moduleResolution": "node",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitThis": true,
+    "noImplicitReturns": true,
+    "noImplicitAny": true,
+    "suppressImplicitAnyIndexErrors": true,
     "target": "es2015",
+    "module": "es2020",
+    "baseUrl": "./",
+    "paths": {
+      "~/*": ["src/*"]
+    },
     "typeRoots": [
       "node_modules/@types"
     ],
@@ -21,9 +33,9 @@
     "allowJs": true
   },
   "exclude": [
-    ".protractor-report",
     "coverage",
     "dist",
-    "node_modules"
+    "node_modules",
+    "cypress"
   ]
 }

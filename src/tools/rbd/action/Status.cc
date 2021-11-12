@@ -1,13 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/errno.h"
+#include "common/Formatter.h"
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/rbd_types.h"
 #include "include/stringify.h"
-#include "common/errno.h"
-#include "common/Formatter.h"
 #include <iostream>
 #include <boost/program_options.hpp>
 
@@ -17,6 +17,12 @@ namespace status {
 
 namespace at = argument_types;
 namespace po = boost::program_options;
+
+namespace {
+
+const std::string IMAGE_CACHE_STATE = ".librbd/image_cache_state";
+
+} // anonymous namespace
 
 static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name,
                           librbd::Image &image, Formatter *f)
@@ -35,6 +41,7 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
   }
 
   librbd::image_migration_status_t migration_status;
+  std::string source_spec;
   std::string source_pool_name;
   std::string dest_pool_name;
   std::string migration_state;
@@ -47,12 +54,20 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
                 << std::endl;
       // not fatal
     } else {
-      librados::IoCtx src_io_ctx;
-      r = librados::Rados(io_ctx).ioctx_create2(migration_status.source_pool_id, src_io_ctx);
-      if (r < 0) {
-        source_pool_name = stringify(migration_status.source_pool_id);
+      if (migration_status.source_pool_id >= 0) {
+        librados::IoCtx src_io_ctx;
+        r = librados::Rados(io_ctx).ioctx_create2(migration_status.source_pool_id, src_io_ctx);
+        if (r < 0) {
+          source_pool_name = stringify(migration_status.source_pool_id);
+        } else {
+          source_pool_name = src_io_ctx.get_pool_name();
+        }
       } else {
-        source_pool_name = src_io_ctx.get_pool_name();
+        r = image.get_migration_source_spec(&source_spec);
+        if (r < 0) {
+          std::cerr << "rbd: getting migration source spec failed: "
+                    << cpp_strerror(r) << std::endl;
+        }
       }
 
       librados::IoCtx dst_io_ctx;
@@ -79,9 +94,22 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       case RBD_IMAGE_MIGRATION_STATE_EXECUTED:
         migration_state = "executed";
         break;
+      case RBD_IMAGE_MIGRATION_STATE_ABORTING:
+        migration_state = "aborting";
+        break;
       default:
         migration_state = "unknown";
       }
+    }
+  }
+
+  std::string image_cache_str;
+  if (features & RBD_FEATURE_DIRTY_CACHE) {
+    r = image.metadata_get(IMAGE_CACHE_STATE, &image_cache_str);
+    if (r < 0) {
+      std::cerr << "rbd: getting image cache state failed: " << cpp_strerror(r)
+                << std::endl;
+      // not fatal
     }
   }
 
@@ -100,11 +128,15 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
     f->close_section(); // watchers
     if (!migration_state.empty()) {
       f->open_object_section("migration");
-      f->dump_string("source_pool_name", source_pool_name);
-      f->dump_string("source_pool_namespace",
-                     migration_status.source_pool_namespace);
-      f->dump_string("source_image_name", migration_status.source_image_name);
-      f->dump_string("source_image_id", migration_status.source_image_id);
+      if (!source_spec.empty()) {
+        f->dump_string("source_spec", source_spec);
+      } else {
+        f->dump_string("source_pool_name", source_pool_name);
+        f->dump_string("source_pool_namespace",
+                       migration_status.source_pool_namespace);
+        f->dump_string("source_image_name", migration_status.source_image_name);
+        f->dump_string("source_image_id", migration_status.source_image_id);
+      }
       f->dump_string("dest_pool_name", dest_pool_name);
       f->dump_string("dest_pool_namespace",
                      migration_status.dest_pool_namespace);
@@ -113,6 +145,9 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       f->dump_string("state", migration_state);
       f->dump_string("state_description", migration_status.state_description);
       f->close_section(); // migration
+    }
+    if (!image_cache_str.empty()) {
+      f->dump_string("image_cache_state", image_cache_str);
     }
   } else {
     if (watchers.size()) {
@@ -133,10 +168,15 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       }
 
       std::cout << "Migration:" << std::endl;
-      std::cout << "\tsource: " << source_pool_name << "/"
-              << migration_status.source_image_name;
-      if (!migration_status.source_image_id.empty()) {
-        std::cout << " (" << migration_status.source_image_id <<  ")";
+      std::cout << "\tsource: ";
+      if (!source_spec.empty()) {
+        std::cout << source_spec;
+      } else {
+        std::cout << source_pool_name << "/"
+                  << migration_status.source_image_name;
+        if (!migration_status.source_image_id.empty()) {
+          std::cout << " (" << migration_status.source_image_id <<  ")";
+        }
       }
       std::cout << std::endl;
       std::cout << "\tdestination: " << dest_pool_name << "/"
@@ -147,6 +187,10 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
         std::cout << " (" << migration_status.state_description <<  ")";
       }
       std::cout << std::endl;
+    }
+
+    if (!image_cache_str.empty()) {
+        std::cout << "Image cache state: " << image_cache_str << std::endl;
     }
   }
 

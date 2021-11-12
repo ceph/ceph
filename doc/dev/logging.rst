@@ -71,7 +71,7 @@ documentation.  Common acronyms are OK -- don't waste screen space
 typing "Rados Object Gateway" instead of RGW.  Do not use internal
 class names like "MDCache" or "Objecter".  It is okay to mention
 internal structures if they are the direct subject of the message,
-for example in a corruption, but use plain english.
+for example in a corruption, but use plain English.
 Example: instead of "Objecter requests" say "OSD client requests"
 Example: it is okay to mention internal structure in the context
 of "Corrupt session table" (but don't say "Corrupt SessionTable")

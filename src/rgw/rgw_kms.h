@@ -11,12 +11,15 @@
 static const std::string RGW_SSE_KMS_BACKEND_TESTING = "testing";
 static const std::string RGW_SSE_KMS_BACKEND_BARBICAN = "barbican";
 static const std::string RGW_SSE_KMS_BACKEND_VAULT = "vault";
+static const std::string RGW_SSE_KMS_BACKEND_KMIP = "kmip";
 
 static const std::string RGW_SSE_KMS_VAULT_AUTH_TOKEN = "token";
 static const std::string RGW_SSE_KMS_VAULT_AUTH_AGENT = "agent";
 
 static const std::string RGW_SSE_KMS_VAULT_SE_TRANSIT = "transit";
 static const std::string RGW_SSE_KMS_VAULT_SE_KV = "kv";
+
+static const std::string RGW_SSE_KMS_KMIP_SE_KV = "kv";
 
 /**
  * Retrieves the actual server-side encryption key from a KMS system given a
@@ -28,9 +31,11 @@ static const std::string RGW_SSE_KMS_VAULT_SE_KV = "kv";
  * TODO
  * \return
  */
-int get_actual_key_from_kms(CephContext *cct,
-                            boost::string_view key_id,
-                            boost::string_view key_selector,
+int make_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
+                            std::map<std::string, bufferlist>& attrs,
+                            std::string& actual_key);
+int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
+                            std::map<std::string, bufferlist>& attrs,
                             std::string& actual_key);
 
 /**
@@ -41,10 +46,7 @@ int get_actual_key_from_kms(CephContext *cct,
 class SecretEngine {
 
 public:
-  virtual int get_key(boost::string_view key_id, std::string& actual_key) = 0;
+  virtual int get_key(const DoutPrefixProvider *dpp, std::string_view key_id, std::string& actual_key) = 0;
   virtual ~SecretEngine(){};
-protected:
-  virtual int send_request(boost::string_view key_id, JSONParser* parser) = 0;
-  virtual int decode_secret(JSONObj* json_obj, std::string& actual_key) = 0;
 };
 #endif

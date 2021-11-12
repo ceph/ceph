@@ -44,13 +44,13 @@ private:
    * GET_MIRROR_INFO  * * * * * * * * * * * * * * * * * * * * * * *
    *    |                                                         *
    *    v                                                         *
-   * SET_MIRROR_IMAGE * * * * * * * * * * * * * * * * * * * * * * *
-   *    |                                                         *
-   *    v                                                         *
-   * NOTIFY_MIRRORING_WATCHER                                     *
+   * IMAGE_STATE_UPDATE * * * * * * * * * * * * * * * * * * * * * *
    *    |                                                         *
    *    v                                                         *
    * PROMOTE_IMAGE (skip if primary)                              *
+   *    |                                                         *
+   *    v                                                         *
+   * REFRESH_IMAGE (skip if necessary)                            *
    *    |                                                         *
    *    v                                                         *
    * GET_CLIENTS <----------------------------------------\ * * * *
@@ -71,9 +71,6 @@ private:
    * REMOVE_MIRROR_IMAGE  * * * * * * * * * * * * * * * * * * * * *
    *    |         (skip if no remove)                             *
    *    v                                                         *
-   * NOTIFY_MIRRORING_WATCHER_REMOVED                             *
-   *    |         (skip if not primary or no remove)              *
-   *    v                                                         *
    * <finish> < * * * * * * * * * * * * * * * * * * * * * * * * * *
    *
    * @endverbatim
@@ -87,6 +84,7 @@ private:
   bool m_is_primary = false;
   cls::rbd::MirrorImage m_mirror_image;
   PromotionState m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
+  std::string m_primary_mirror_uuid;
   std::set<cls::journal::Client> m_clients;
   std::map<std::string, int> m_ret;
   std::map<std::string, int> m_current_ops;
@@ -97,8 +95,8 @@ private:
   void send_get_mirror_info();
   Context *handle_get_mirror_info(int *result);
 
-  void send_set_mirror_image();
-  Context *handle_set_mirror_image(int *result);
+  void send_image_state_update();
+  Context *handle_image_state_update(int *result);
 
   void send_notify_mirroring_watcher();
   Context *handle_notify_mirroring_watcher(int *result);
@@ -106,8 +104,15 @@ private:
   void send_promote_image();
   Context *handle_promote_image(int *result);
 
+  void send_refresh_image();
+  Context* handle_refresh_image(int* result);
+
+  void clean_mirror_state();
+
   void send_get_clients();
   Context *handle_get_clients(int *result);
+
+  void remove_mirror_snapshots();
 
   void send_remove_snap(const std::string &client_id,
                         const cls::rbd::SnapshotNamespace &snap_namespace,

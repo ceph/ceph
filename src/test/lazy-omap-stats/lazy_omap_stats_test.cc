@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "lazy_omap_stats_test.h"
+#include "include/compat.h"
 
 using namespace std;
 namespace bp = boost::process;
@@ -173,13 +174,13 @@ void LazyOmapStatsTest::scrub() const
   cout << "Scrubbing" << endl;
   error_code ec;
   bp::ipstream is;
-  bp::system("ceph osd deep-scrub all --block", bp::std_out > is, ec);
+  bp::child c("ceph osd deep-scrub all --block");
+  c.wait(ec);
   if (ec) {
     cout << "Deep scrub command failed! Error: " << ec.value() << " "
          << ec.message() << endl;
     exit(ec.value());
   }
-  cout << is.rdbuf() << endl;
 }
 
 const int LazyOmapStatsTest::find_matches(string& output, regex& reg) const

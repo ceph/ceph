@@ -7,22 +7,21 @@ import { map } from 'rxjs/operators';
 import { cdEncode } from '../decorators/cd-encode';
 import { RbdConfigurationEntry } from '../models/configuration';
 import { RbdConfigurationService } from '../services/rbd-configuration.service';
-import { ApiModule } from './api.module';
 
 @cdEncode
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class PoolService {
   apiPath = 'api/pool';
 
   constructor(private http: HttpClient, private rbdConfigurationService: RbdConfigurationService) {}
 
-  create(pool) {
+  create(pool: any) {
     return this.http.post(this.apiPath, pool, { observe: 'response' });
   }
 
-  update(pool) {
+  update(pool: any) {
     let name: string;
     if (pool.hasOwnProperty('srcpool')) {
       name = pool.srcpool;
@@ -36,11 +35,11 @@ export class PoolService {
     });
   }
 
-  delete(name) {
+  delete(name: string) {
     return this.http.delete(`${this.apiPath}/${name}`, { observe: 'response' });
   }
 
-  get(poolName) {
+  get(poolName: string) {
     return this.http.get(`${this.apiPath}/${poolName}`);
   }
 
@@ -59,11 +58,11 @@ export class PoolService {
     );
   }
 
-  getInfo(pool_name?: string) {
-    return this.http.get(`${this.apiPath}/_info` + (pool_name ? `?pool_name=${pool_name}` : ''));
+  getInfo() {
+    return this.http.get(`ui-${this.apiPath}/info`);
   }
 
-  list(attrs = []) {
+  list(attrs: string[] = []) {
     const attrsStr = attrs.join(',');
     return this.http
       .get(`${this.apiPath}?attrs=${attrsStr}`)

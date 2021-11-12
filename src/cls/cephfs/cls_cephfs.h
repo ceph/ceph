@@ -36,7 +36,7 @@ class ObjCeiling {
       return id > rhs.id;
     }
 
-    void encode(bufferlist &bl) const
+    void encode(ceph::buffer::list &bl) const
     {
       ENCODE_START(1, 1, bl);
       encode(id, bl);
@@ -44,7 +44,7 @@ class ObjCeiling {
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::const_iterator &p)
+    void decode(ceph::buffer::list::const_iterator &p)
     {
       DECODE_START(1, p);
       decode(id, p);
@@ -83,7 +83,7 @@ public:
     : obj_index(0), obj_size(0), mtime(0)
   {}
 
-  void encode(bufferlist &bl) const
+  void encode(ceph::buffer::list &bl) const
   {
     ENCODE_START(1, 1, bl);
     encode(obj_xattr_name, bl);
@@ -95,7 +95,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator &bl)
+  void decode(ceph::buffer::list::const_iterator &bl)
   {
     DECODE_START(1, bl);
     decode(obj_xattr_name, bl);
@@ -113,14 +113,14 @@ class InodeTagFilterArgs
   public:
     std::string scrub_tag;
 
-  void encode(bufferlist &bl) const
+  void encode(ceph::buffer::list &bl) const
   {
     ENCODE_START(1, 1, bl);
     encode(scrub_tag, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator &bl)
+  void decode(ceph::buffer::list::const_iterator &bl)
   {
     DECODE_START(1, bl);
     decode(scrub_tag, bl);

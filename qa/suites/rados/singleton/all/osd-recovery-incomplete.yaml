@@ -14,7 +14,9 @@ openstack:
 tasks:
 - install:
 - ceph:
-    log-whitelist:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr_pool false --force
+    log-ignorelist:
       - but it is still running
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)

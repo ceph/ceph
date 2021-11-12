@@ -11,17 +11,19 @@ Storage Cluster requires at least one Ceph Monitor, Ceph Manager, and
 Ceph OSD (Object Storage Daemon). The Ceph Metadata Server is also
 required when running Ceph File System clients.
 
-.. ditaa::  +---------------+ +------------+ +------------+ +---------------+
+.. ditaa::
+
+            +---------------+ +------------+ +------------+ +---------------+
             |      OSDs     | | Monitors   | |  Managers  | |      MDSs     |
             +---------------+ +------------+ +------------+ +---------------+
 
 - **Monitors**: A :term:`Ceph Monitor` (``ceph-mon``) maintains maps
   of the cluster state, including the monitor map, manager map, the
-  OSD map, and the CRUSH map.  These maps are critical cluster state
-  required for Ceph daemons to coordinate with each other.  Monitors
-  are also responsible for managing authentication between daemons and
-  clients.  At least three monitors are normally required for
-  redundancy and high availability.
+  OSD map, the MDS map, and the CRUSH map.  These maps are critical 
+  cluster state required for Ceph daemons to coordinate with each other.  
+  Monitors are also responsible for managing authentication between 
+  daemons and clients.  At least three monitors are normally required 
+  for redundancy and high availability.
 
 - **Managers**: A :term:`Ceph Manager` daemon (``ceph-mgr``) is
   responsible for keeping track of runtime metrics and the current
@@ -54,34 +56,34 @@ Ceph Storage Cluster to scale, rebalance, and recover dynamically.
 
 .. _REST API: ../../mgr/restful
 
-.. raw:: html
+.. container:: columns-2
 
-	<style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
-	<table cellpadding="10"><colgroup><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>Recommendations</h3>
-	
-To begin using Ceph in production, you should review our hardware
-recommendations and operating system recommendations. 
+   .. container:: column
 
-.. toctree::
-   :maxdepth: 2
+      .. raw:: html
 
-   Hardware Recommendations <hardware-recommendations>
-   OS Recommendations <os-recommendations>
+          <h3>Recommendations</h3>
 
+      To begin using Ceph in production, you should review our hardware
+      recommendations and operating system recommendations.
 
-.. raw:: html 
+      .. toctree::
+         :maxdepth: 2
 
-	</td><td><h3>Get Involved</h3>
+         Hardware Recommendations <hardware-recommendations>
+         OS Recommendations <os-recommendations>
 
-   You can avail yourself of help or contribute documentation, source 
-   code or bugs by getting involved in the Ceph community.
+   .. container:: column
 
-.. toctree::
-   :maxdepth: 2
+      .. raw:: html
 
-   get-involved
-   documenting-ceph
+          <h3>Get Involved</h3>
 
-.. raw:: html
+      You can avail yourself of help or contribute documentation, source
+      code or bugs by getting involved in the Ceph community.
 
-	</td></tr></tbody></table>
+      .. toctree::
+         :maxdepth: 2
+
+         get-involved
+         documenting-ceph

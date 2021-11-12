@@ -4,11 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of } from 'rxjs';
 
-import {
-  configureTestBed,
-  expectItemTasks,
-  i18nProviders
-} from '../../../testing/unit-test-helper';
+import { configureTestBed, expectItemTasks } from '~/testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { ExecutingTask } from '../models/executing-task';
 import { SummaryService } from './summary.service';
@@ -24,19 +20,19 @@ describe('TaskListService', () => {
   let apiResp: any;
   let tasks: any[];
 
-  const addItem = (name) => {
+  const addItem = (name: string) => {
     apiResp.push({ name: name });
   };
 
   configureTestBed({
-    providers: [TaskListService, TaskMessageService, SummaryService, i18nProviders, RbdService],
+    providers: [TaskListService, TaskMessageService, SummaryService, RbdService],
     imports: [HttpClientTestingModule, RouterTestingModule]
   });
 
   beforeEach(() => {
-    service = TestBed.get(TaskListService);
-    summaryService = TestBed.get(SummaryService);
-    taskMessageService = TestBed.get(TaskMessageService);
+    service = TestBed.inject(TaskListService);
+    summaryService = TestBed.inject(SummaryService);
+    taskMessageService = TestBed.inject(TaskMessageService);
     summaryService['summaryDataSource'].next({ executing_tasks: [] });
 
     taskMessageService.messages['test/create'] = taskMessageService.messages['rbd/create'];
@@ -58,7 +54,7 @@ describe('TaskListService', () => {
       (task) => task.name.startsWith('test'),
       (item, task) => item.name === task.metadata['name'],
       {
-        default: (metadata) => ({ name: metadata['name'] })
+        default: (metadata: object) => ({ name: metadata['name'] })
       }
     );
   });

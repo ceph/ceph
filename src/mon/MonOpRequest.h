@@ -38,28 +38,28 @@ struct MonOpRequest : public TrackedOp {
     forwarded_to_leader = true;
   }
 
-  void mark_svc_event(const string &service, const string &event) {
-    string s = service;
+  void mark_svc_event(const std::string &service, const std::string &event) {
+    std::string s = service;
     s.append(":").append(event);
     mark_event(s);
   }
 
-  void mark_logmon_event(const string &event) {
+  void mark_logmon_event(const std::string &event) {
     mark_svc_event("logm", event);
   }
-  void mark_osdmon_event(const string &event) {
+  void mark_osdmon_event(const std::string &event) {
     mark_svc_event("osdmap", event);
   }
-  void mark_pgmon_event(const string &event) {
+  void mark_pgmon_event(const std::string &event) {
     mark_svc_event("pgmap", event);
   }
-  void mark_mdsmon_event(const string &event) {
+  void mark_mdsmon_event(const std::string &event) {
     mark_svc_event("mdsmap", event);
   }
-  void mark_authmon_event(const string &event) {
+  void mark_authmon_event(const std::string &event) {
     mark_svc_event("auth", event);
   }
-  void mark_paxos_event(const string &event) {
+  void mark_paxos_event(const std::string &event) {
     mark_svc_event("paxos", event);
   }
 
@@ -101,13 +101,25 @@ private:
     }
   }
 
-  void _dump(Formatter *f) const override {
+  void _dump(ceph::Formatter *f) const override {
     {
       f->open_array_section("events");
       std::lock_guard l(lock);
-      for (auto& i : events) {
-	f->dump_object("event", i);
+    for (auto i = events.begin(); i != events.end(); ++i) {
+      f->open_object_section("event");
+      f->dump_string("event", i->str);
+      f->dump_stream("time") << i->stamp;
+
+      auto i_next = i + 1;
+
+      if (i_next < events.end()) {
+	f->dump_float("duration", i_next->stamp - i->stamp);
+      } else {
+	f->dump_float("duration", events.rbegin()->stamp - get_initiated());
       }
+
+      f->close_section();
+    }
       f->close_section();
       f->open_object_section("info");
       f->dump_int("seq", seq);
@@ -119,7 +131,7 @@ private:
   }
 
 protected:
-  void _dump_op_descriptor_unlocked(ostream& stream) const override {
+  void _dump_op_descriptor_unlocked(std::ostream& stream) const override {
     get_req()->print(stream);
   }
 
@@ -167,7 +179,7 @@ public:
   void set_type_paxos() {
     set_op_type(OP_TYPE_PAXOS);
   }
-  void set_type_election() {
+  void set_type_election_or_ping() {
     set_op_type(OP_TYPE_ELECTION);
   }
   void set_type_command() {
@@ -187,7 +199,7 @@ public:
   bool is_type_paxos() {
     return (get_op_type() == OP_TYPE_PAXOS);
   }
-  bool is_type_election() {
+  bool is_type_election_or_ping() {
     return (get_op_type() == OP_TYPE_ELECTION);
   }
   bool is_type_command() {
@@ -215,7 +227,7 @@ struct C_MonOp : public Context
     _finish(r);
   }
 
-  void mark_op_event(const string &event) {
+  void mark_op_event(const std::string &event) {
     if (op)
       op->mark_event(event);
   }

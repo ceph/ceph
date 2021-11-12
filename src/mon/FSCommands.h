@@ -23,7 +23,7 @@
 #include "mds/FSMap.h"
 
 #include <string>
-#include <sstream>
+#include <ostream>
 
 class FileSystemCommandHandler : protected CommandHandler
 {
@@ -38,7 +38,7 @@ protected:
   /**
    * Return 0 if the pool is suitable for use with CephFS, or
    * in case of errors return a negative error code, and populate
-   * the passed stringstream with an explanation.
+   * the passed ostream with an explanation.
    *
    * @param metadata whether the pool will be for metadata (stricter checks)
    */
@@ -47,9 +47,9 @@ protected:
       const int64_t pool_id,
       int type,
       bool force,
-      std::stringstream *ss) const;
+      std::ostream *ss) const;
 
-  virtual std::string const &get_prefix() {return prefix;}
+  virtual std::string const &get_prefix() const {return prefix;}
 
 public:
   FileSystemCommandHandler(const std::string &prefix_)
@@ -59,9 +59,21 @@ public:
   virtual ~FileSystemCommandHandler()
   {}
 
-  bool can_handle(std::string const &prefix_)
+  int is_op_allowed(const MonOpRequestRef& op, const FSMap& fsmap,
+		    const cmdmap_t& cmdmap, std::ostream &ss) const;
+
+  int can_handle(std::string const &prefix_, MonOpRequestRef& op, FSMap& fsmap,
+	         const cmdmap_t& cmdmap, std::ostream &ss) const
   {
-    return get_prefix() == prefix_;
+    if (get_prefix() != prefix_) {
+      return 0;
+    }
+
+    if (get_prefix() == "fs new" || get_prefix() == "fs flag set") {
+      return 1;
+    }
+
+    return is_op_allowed(op, fsmap, cmdmap, ss);
   }
 
   static std::list<std::shared_ptr<FileSystemCommandHandler> > load(Paxos *paxos);
@@ -75,7 +87,7 @@ public:
     FSMap &fsmap,
     MonOpRequestRef op,
     const cmdmap_t& cmdmap,
-    std::stringstream &ss) = 0;
+    std::ostream &ss) = 0;
 };
 
 #endif

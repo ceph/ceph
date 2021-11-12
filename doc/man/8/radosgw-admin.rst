@@ -108,6 +108,11 @@ which are as follows:
 :command:`bucket rewrite`
   Rewrite all objects in the specified bucket.
 
+:command:`bucket radoslist`
+  List the rados objects that contain the data for all objects is
+  the designated bucket, if --bucket=<bucket> is specified, or
+  otherwise all buckets.
+
 :command:`bucket reshard`
   Reshard a bucket.
 
@@ -375,37 +380,47 @@ which are as follows:
   List metadata info.
 
 :command:`mdlog list`
-  List metadata log.
+  List metadata log which is needed for multi-site deployments.
 
 :command:`mdlog trim`
-  Trim metadata log.
+  Trim metadata log manually instead of relying on RGWs integrated log sync.
+  Before trimming, compare the listings and make sure the last sync was
+  complete, otherwise it can reinitiate a sync.
 
 :command:`mdlog status`
   Read metadata log status.
 
 :command:`bilog list`
-  List bucket index log.
+  List bucket index log which is needed for multi-site deployments.
 
 :command:`bilog trim`
-  Trim bucket index log (use start-marker, end-marker).
+  Trim bucket index log (use start-marker, end-marker) manually instead
+  of relying on RGWs integrated log sync.
+  Before trimming, compare the listings and make sure the last sync was
+  complete, otherwise it can reinitiate a sync.
 
 :command:`datalog list`
-  List data log.
+  List data log which is needed for multi-site deployments.
 
 :command:`datalog trim`
-  Trim data log.
+  Trim data log manually instead of relying on RGWs integrated log sync.
+  Before trimming, compare the listings and make sure the last sync was
+  complete, otherwise it can reinitiate a sync.
 
 :command:`datalog status`
   Read data log status.
 
 :command:`orphans find`
-  Init and run search for leaked rados objects
+  Init and run search for leaked rados objects.
+  DEPRECATED. See the "rgw-orphan-list" tool.
 
 :command:`orphans finish`
-  Clean up search for leaked rados objects
+  Clean up search for leaked rados objects.
+  DEPRECATED. See the "rgw-orphan-list" tool.
 
 :command:`orphans list-jobs`
   List the current job-ids for the orphans search.
+  DEPRECATED. See the "rgw-orphan-list" tool.
 
 :command:`role create`
   create a new AWS role for use with STS.
@@ -448,6 +463,28 @@ which are as follows:
 
 :command:`reshard cancel`
   Cancel resharding a bucket
+
+:command:`topic list`
+  List bucket notifications/pubsub topics                                                   
+
+:command:`topic get`
+  Get a bucket notifications/pubsub topic                                                   
+  
+:command:`topic rm`
+  Remove a bucket notifications/pubsub topic                                                
+
+:command:`subscription get`
+  Get a pubsub subscription definition
+
+:command:`subscription rm`
+  Remove a pubsub subscription
+
+:command:`subscription pull`
+  Show events in a pubsub subscription
+             
+:command:`subscription ack`
+  Ack (remove) an events in a pubsub subscription
+
 
 Options
 =======
@@ -570,7 +607,7 @@ Options
 
 .. option:: --max-entries=<entries>
 
-	Optional for listing operations to specify the max entires
+	Optional for listing operations to specify the max entries.
 
 .. option:: --purge-data
 
@@ -728,6 +765,13 @@ Options
 
    Remove the zones from list of zones to sync from.
 
+.. option:: --bucket-index-max-shards
+
+   Override a zone's or zonegroup's default number of bucket index shards. This
+   option is accepted by the 'zone create', 'zone modify', 'zonegroup add',
+   and 'zonegroup modify' commands, and applies to buckets that are created
+   after the zone/zonegroup changes take effect.
+
 .. option:: --fix
 
 	Besides checking bucket index, will also fix it.
@@ -744,6 +788,10 @@ Options
 
 	Option for 'user stats' command. When specified, it will update user stats with
 	the current stats reported by user's buckets indexes.
+
+.. option:: --show-config
+
+	Show configuration.
 
 .. option:: --show-log-entries=<flag>
 
@@ -768,7 +816,7 @@ Options
 
 .. option:: --caps=<caps>
 
-	List of caps (e.g., "usage=read, write; user=read".
+	List of caps (e.g., "usage=read, write; user=read").
 
 .. option:: --compression=<compression-algorithm>
 
@@ -883,6 +931,22 @@ Role Options
 
    The path prefix for filtering the roles.
 
+
+Bucket Notifications/PubSub Options
+===================================
+.. option:: --topic                   
+
+   The bucket notifications/pubsub topic name.
+
+.. option:: --subscription
+
+   The pubsub subscription name.
+
+.. option:: --event-id
+
+   The event id in a pubsub subscription.
+
+
 Examples
 ========
 
@@ -960,7 +1024,7 @@ Availability
 
 :program:`radosgw-admin` is part of Ceph, a massively scalable, open-source,
 distributed storage system.  Please refer to the Ceph documentation at
-http://ceph.com/docs for more information.
+https://docs.ceph.com for more information.
 
 
 See also

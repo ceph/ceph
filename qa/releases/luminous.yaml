@@ -17,5 +17,5 @@ overrides:
     conf:
       mon:
         mon warn on osd down out interval zero: false
-    log-whitelist:
+    log-ignorelist:
       - no active mgr

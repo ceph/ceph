@@ -47,7 +47,9 @@ Journaler::Threads::Threads(CephContext *cct) {
   thread_pool = new ThreadPool(cct, "Journaler::thread_pool", "tp_journal", 1);
   thread_pool->start();
 
-  work_queue = new ContextWQ("Journaler::work_queue", 60, thread_pool);
+  work_queue = new ContextWQ("Journaler::work_queue",
+                             ceph::make_timespan(60),
+                             thread_pool);
 
   timer = new SafeTimer(cct, timer_lock, true);
   timer->init();

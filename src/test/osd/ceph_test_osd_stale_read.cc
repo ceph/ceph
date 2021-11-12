@@ -21,10 +21,8 @@
 #include <sstream>
 #include <string>
 
+using namespace std;
 using namespace librados;
-using std::map;
-using std::ostringstream;
-using std::string;
 
 int get_primary_osd(Rados& rados, const string& pool_name,
 		    const string& oid, int *pprimary)
@@ -36,8 +34,10 @@ int get_primary_osd(Rados& rados, const string& pool_name,
     + oid
     + string("\",\"format\": \"json\"}");
   bufferlist outbl;
-  int r = rados.mon_command(cmd, inbl, &outbl, NULL);
-  assert(r >= 0);
+  if (int r = rados.mon_command(cmd, inbl, &outbl, nullptr);
+      r < 0) {
+    return r;
+  }
   string outstr(outbl.c_str(), outbl.length());
   json_spirit::Value v;
   if (!json_spirit::read(outstr, v)) {
@@ -168,9 +168,8 @@ TEST(OSD, StaleRead) {
 }
 
 int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto args = argv_to_vec(argc, argv);
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);

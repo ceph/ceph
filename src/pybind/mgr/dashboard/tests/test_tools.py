@@ -1,24 +1,25 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import unittest
 
 import cherrypy
 from cherrypy.lib.sessions import RamSession
+
 try:
     from mock import patch
 except ImportError:
     from unittest.mock import patch
 
-from . import ControllerTestCase
+from ..controllers import APIRouter, BaseController, Proxy, RESTController, Router
+from ..controllers._version import APIVersion
 from ..services.exception import handle_rados_error
-from ..controllers import RESTController, ApiController, Controller, \
-                          BaseController, Proxy
-from ..tools import dict_contains_path, json_str_to_object, partial_dict, RequestLoggingTool
+from ..tests import ControllerTestCase
+from ..tools import dict_contains_path, dict_get, json_str_to_object, \
+    merge_list_of_dicts_by_key, partial_dict
 
 
 # pylint: disable=W0613
-@Controller('/foo', secure=False)
+@Router('/foo', secure=False)
 class FooResource(RESTController):
     elems = []
 
@@ -43,20 +44,20 @@ class FooResource(RESTController):
         return dict(key=key, newdata=newdata)
 
 
-@Controller('/foo/:key/:method', secure=False)
+@Router('/foo/:key/:method', secure=False)
 class FooResourceDetail(RESTController):
     def list(self, key, method):
         return {'detail': (key, [method])}
 
 
-@ApiController('/rgw/proxy', secure=False)
+@APIRouter('/rgw/proxy', secure=False)
 class GenerateControllerRoutesController(BaseController):
     @Proxy()
     def __call__(self, path, **params):
         pass
 
 
-@ApiController('/fooargs', secure=False)
+@APIRouter('/fooargs', secure=False)
 class FooArgs(RESTController):
     def set(self, code, name=None, opt1=None, opt2=None):
         return {'code': code, 'name': name, 'opt1': opt1, 'opt2': opt2}
@@ -69,9 +70,8 @@ class FooArgs(RESTController):
         raise cherrypy.NotFound()
 
 
-# pylint: disable=blacklisted-name
 class Root(object):
-    foo = FooResource()
+    foo_resource = FooResource()
     fooargs = FooArgs()
 
 
@@ -87,7 +87,7 @@ class RESTControllerTest(ControllerTestCase):
         self.assertStatus(204)
         self._get("/foo")
         self.assertStatus('200 OK')
-        self.assertHeader('Content-Type', 'application/json')
+        self.assertHeader('Content-Type', APIVersion.DEFAULT.to_mime_type())
         self.assertBody('[]')
 
     def test_fill(self):
@@ -98,16 +98,16 @@ class RESTControllerTest(ControllerTestCase):
                 self._post("/foo", data)
                 self.assertJsonBody(data)
                 self.assertStatus(201)
-                self.assertHeader('Content-Type', 'application/json')
+                self.assertHeader('Content-Type', APIVersion.DEFAULT.to_mime_type())
 
             self._get("/foo")
             self.assertStatus('200 OK')
-            self.assertHeader('Content-Type', 'application/json')
+            self.assertHeader('Content-Type', APIVersion.DEFAULT.to_mime_type())
             self.assertJsonBody([data] * 5)
 
             self._put('/foo/0', {'newdata': 'newdata'})
             self.assertStatus('200 OK')
-            self.assertHeader('Content-Type', 'application/json')
+            self.assertHeader('Content-Type', APIVersion.DEFAULT.to_mime_type())
             self.assertJsonBody({'newdata': 'newdata', 'key': '0'})
 
     def test_not_implemented(self):
@@ -150,10 +150,7 @@ class RESTControllerTest(ControllerTestCase):
 
 class RequestLoggingToolTest(ControllerTestCase):
 
-    def __init__(self, *args, **kwargs):
-        cherrypy.tools.request_logging = RequestLoggingTool()
-        cherrypy.config.update({'tools.request_logging.on': True})
-        super(RequestLoggingToolTest, self).__init__(*args, **kwargs)
+    _request_logging = True
 
     @classmethod
     def setup_server(cls):
@@ -196,3 +193,18 @@ class TestFunctions(unittest.TestCase):
         self.assertRaises(KeyError, partial_dict, {'a': 1, 'b': 2, 'c': 3}, ['d'])
         self.assertRaises(TypeError, partial_dict, None, ['a'])
         self.assertRaises(TypeError, partial_dict, {'a': 1, 'b': 2, 'c': 3}, None)
+
+    def test_dict_get(self):
+        self.assertFalse(dict_get({'foo': {'bar': False}}, 'foo.bar'))
+        self.assertIsNone(dict_get({'foo': {'bar': False}}, 'foo.bar.baz'))
+        self.assertEqual(dict_get({'foo': {'bar': False}, 'baz': 'xyz'}, 'baz'), 'xyz')
+
+    def test_merge_list_of_dicts_by_key(self):
+        expected_result = [{'a': 1, 'b': 2, 'c': 3}, {'a': 4, 'b': 5, 'c': 6}]
+        self.assertEqual(expected_result, merge_list_of_dicts_by_key(
+            [{'a': 1, 'b': 2}, {'a': 4, 'b': 5}], [{'a': 1, 'c': 3}, {'a': 4, 'c': 6}], 'a'))
+
+        expected_result = [{'a': 1, 'b': 2}, {'a': 4, 'b': 5, 'c': 6}]
+        self.assertEqual(expected_result, merge_list_of_dicts_by_key(
+            [{'a': 1, 'b': 2}, {'a': 4, 'b': 5}], [{}, {'a': 4, 'c': 6}], 'a'))
+        self.assertRaises(TypeError, merge_list_of_dicts_by_key, None)

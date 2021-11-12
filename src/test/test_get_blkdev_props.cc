@@ -15,7 +15,6 @@ int main(int argc, char **argv)
 	int fd, ret;
 	int64_t size;
 	bool discard_support;
-	bool nvme;
 	bool rotational;
 	char dev[BUFSIZE];
 	char model[BUFSIZE];

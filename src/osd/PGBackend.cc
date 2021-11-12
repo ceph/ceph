@@ -19,7 +19,7 @@
 #include "common/errno.h"
 #include "common/scrub_types.h"
 #include "ReplicatedBackend.h"
-#include "ScrubStore.h"
+#include "osd/scrubber/ScrubStore.h"
 #include "ECBackend.h"
 #include "PGBackend.h"
 #include "OSD.h"
@@ -29,6 +29,23 @@
 #include "common/LogClient.h"
 #include "messages/MOSDPGRecoveryDelete.h"
 #include "messages/MOSDPGRecoveryDeleteReply.h"
+
+using std::less;
+using std::list;
+using std::make_pair;
+using std::map;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::ErasureCodeProfile;
+using ceph::ErasureCodeInterfaceRef;
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -127,7 +144,7 @@ void PGBackend::handle_recovery_delete(OpRequestRef op)
     get_parent()->remove_missing_object(p.first, p.second, gather.new_sub());
   }
 
-  MOSDPGRecoveryDeleteReply *reply = new MOSDPGRecoveryDeleteReply;
+  auto reply = make_message<MOSDPGRecoveryDeleteReply>();
   reply->from = get_parent()->whoami_shard();
   reply->set_priority(m->get_priority());
   reply->pgid = spg_t(get_parent()->get_info().pgid.pgid, m->from.shard);
@@ -350,13 +367,24 @@ int PGBackend::objects_list_partial(
 
   while (!_next.is_max() && ls->size() < (unsigned)min) {
     vector<ghobject_t> objects;
-    r = store->collection_list(
-      ch,
-      _next,
-      ghobject_t::get_max(),
-      max - ls->size(),
-      &objects,
-      &_next);
+    if (HAVE_FEATURE(parent->min_upacting_features(),
+                     OSD_FIXED_COLLECTION_LIST)) {
+      r = store->collection_list(
+        ch,
+        _next,
+        ghobject_t::get_max(),
+        max - ls->size(),
+        &objects,
+        &_next);
+    } else {
+      r = store->collection_list_legacy(
+        ch,
+        _next,
+        ghobject_t::get_max(),
+        max - ls->size(),
+        &objects,
+        &_next);
+    }
     if (r != 0) {
       derr << __func__ << " list collection " << ch << " got: " << cpp_strerror(r) << dendl;
       break;
@@ -385,13 +413,25 @@ int PGBackend::objects_list_range(
 {
   ceph_assert(ls);
   vector<ghobject_t> objects;
-  int r = store->collection_list(
-    ch,
-    ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    INT_MAX,
-    &objects,
-    NULL);
+  int r;
+  if (HAVE_FEATURE(parent->min_upacting_features(),
+                   OSD_FIXED_COLLECTION_LIST)) {
+    r = store->collection_list(
+      ch,
+      ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      INT_MAX,
+      &objects,
+      NULL);
+  } else {
+    r = store->collection_list_legacy(
+      ch,
+      ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      INT_MAX,
+      &objects,
+      NULL);
+  }
   ls->reserve(objects.size());
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
@@ -428,7 +468,7 @@ int PGBackend::objects_get_attr(
 
 int PGBackend::objects_get_attrs(
   const hobject_t &hoid,
-  map<string, bufferlist> *out)
+  map<string, bufferlist, less<>> *out)
 {
   return store->getattrs(
     ch,
@@ -440,7 +480,7 @@ void PGBackend::rollback_setattrs(
   const hobject_t &hoid,
   map<string, std::optional<bufferlist> > &old_attrs,
   ObjectStore::Transaction *t) {
-  map<string, bufferlist> to_set;
+  map<string, bufferlist, less<>> to_set;
   ceph_assert(!hoid.is_temp());
   for (map<string, std::optional<bufferlist> >::iterator i = old_attrs.begin();
        i != old_attrs.end();

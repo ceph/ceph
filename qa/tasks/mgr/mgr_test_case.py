@@ -1,6 +1,8 @@
 import json
 import logging
 
+from unittest import SkipTest
+
 from teuthology import misc
 from tasks.ceph_test_case import CephTestCase
 
@@ -72,8 +74,8 @@ class MgrTestCase(CephTestCase):
 
         # Unload all non-default plugins
         loaded = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
-                   "mgr", "module", "ls"))['enabled_modules']
-        unload_modules = set(loaded) - {"restful"}
+                   "mgr", "module", "ls", "--format=json-pretty"))['enabled_modules']
+        unload_modules = set(loaded) - {"cephadm", "restful"}
 
         for m in unload_modules:
             cls.mgr_cluster.mon_manager.raw_cluster_cmd(
@@ -99,7 +101,7 @@ class MgrTestCase(CephTestCase):
         assert cls.mgr_cluster is not None
 
         if len(cls.mgr_cluster.mgr_ids) < cls.MGRS_REQUIRED:
-            cls.skipTest(
+            raise SkipTest(
                 "Only have {0} manager daemons, {1} are required".format(
                     len(cls.mgr_cluster.mgr_ids), cls.MGRS_REQUIRED))
 
@@ -109,20 +111,20 @@ class MgrTestCase(CephTestCase):
     def _unload_module(cls, module_name):
         def is_disabled():
             enabled_modules = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
-                'mgr', 'module', 'ls'))['enabled_modules']
+                'mgr', 'module', 'ls', "--format=json-pretty"))['enabled_modules']
             return module_name not in enabled_modules
 
         if is_disabled():
             return
 
-        log.info("Unloading Mgr module %s ...", module_name)
+        log.debug("Unloading Mgr module %s ...", module_name)
         cls.mgr_cluster.mon_manager.raw_cluster_cmd('mgr', 'module', 'disable', module_name)
         cls.wait_until_true(is_disabled, timeout=30)
 
     @classmethod
     def _load_module(cls, module_name):
         loaded = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
-            "mgr", "module", "ls"))['enabled_modules']
+            "mgr", "module", "ls", "--format=json-pretty"))['enabled_modules']
         if module_name in loaded:
             # The enable command is idempotent, but our wait for a restart
             # isn't, so let's return now if it's already loaded
@@ -141,7 +143,7 @@ class MgrTestCase(CephTestCase):
                 if module_name in always_on:
                     return
 
-        log.info("Loading Mgr module %s ...", module_name)
+        log.debug("Loading Mgr module %s ...", module_name)
         initial_gid = initial_mgr_map['active_gid']
         cls.mgr_cluster.mon_manager.raw_cluster_cmd(
             "mgr", "module", "enable", module_name, "--force")
@@ -151,7 +153,7 @@ class MgrTestCase(CephTestCase):
             mgr_map = cls.mgr_cluster.get_mgr_map()
             done = mgr_map['active_gid'] != initial_gid and mgr_map['available']
             if done:
-                log.info("Restarted after module load (new active {0}/{1})".format(
+                log.debug("Restarted after module load (new active {0}/{1})".format(
                     mgr_map['active_name'], mgr_map['active_gid']))
             return done
         cls.wait_until_true(has_restarted, timeout=30)
@@ -172,7 +174,7 @@ class MgrTestCase(CephTestCase):
 
         uri = mgr_map['x']['services'][service_name]
 
-        log.info("Found {0} at {1} (daemon {2}/{3})".format(
+        log.debug("Found {0} at {1} (daemon {2}/{3})".format(
             service_name, uri, mgr_map['x']['active_name'],
             mgr_map['x']['active_gid']))
 
@@ -196,7 +198,7 @@ class MgrTestCase(CephTestCase):
             cls.mgr_cluster.mgr_fail(mgr_id)
 
         for mgr_id in cls.mgr_cluster.mgr_ids:
-            log.info("Using port {0} for {1} on mgr.{2}".format(
+            log.debug("Using port {0} for {1} on mgr.{2}".format(
                 assign_port, module_name, mgr_id
             ))
             cls.mgr_cluster.set_module_localized_conf(module_name, mgr_id,
@@ -212,7 +214,7 @@ class MgrTestCase(CephTestCase):
             mgr_map = cls.mgr_cluster.get_mgr_map()
             done = mgr_map['available']
             if done:
-                log.info("Available after assign ports (new active {0}/{1})".format(
+                log.debug("Available after assign ports (new active {0}/{1})".format(
                     mgr_map['active_name'], mgr_map['active_gid']))
             return done
         cls.wait_until_true(is_available, timeout=30)

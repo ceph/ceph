@@ -256,7 +256,7 @@ function TEST_0_osd() {
 
     # with min_size 3, we can stop only 1 osd
     ceph osd pool set ec min_size 3 || return 1
-    flush_pg_stats || return 1
+    wait_for_clean || return 1
 
     ceph osd ok-to-stop 0 || return 1
     ceph osd ok-to-stop 1 || return 1
@@ -264,20 +264,27 @@ function TEST_0_osd() {
     ceph osd ok-to-stop 3 || return 1
     ! ceph osd ok-to-stop 0 1 || return 1
     ! ceph osd ok-to-stop 2 3 || return 1
+    ceph osd ok-to-stop 0 --max 2 | grep '[0]' || return 1
+    ceph osd ok-to-stop 1 --max 2 | grep '[1]' || return 1
 
     # with min_size 2 we can stop 1 osds
     ceph osd pool set ec min_size 2 || return 1
-    flush_pg_stats || return 1
+    wait_for_clean || return 1
 
     ceph osd ok-to-stop 0 1 || return 1
     ceph osd ok-to-stop 2 3 || return 1
     ! ceph osd ok-to-stop 0 1 2 || return 1
     ! ceph osd ok-to-stop 1 2 3 || return 1
 
+    ceph osd ok-to-stop 0 --max 2 | grep '[0,1]' || return 1
+    ceph osd ok-to-stop 0 --max 20 | grep '[0,1]' || return 1
+    ceph osd ok-to-stop 2 --max 2 | grep '[2,3]' || return 1
+    ceph osd ok-to-stop 2 --max 20 | grep '[2,3]' || return 1
+
     # we should get the same result with one of the osds already down
     kill_daemons $dir TERM osd.0 || return 1
     ceph osd down 0 || return 1
-    flush_pg_stats || return 1
+    wait_for_peered || return 1
 
     ceph osd ok-to-stop 0 || return 1
     ceph osd ok-to-stop 0 1 || return 1

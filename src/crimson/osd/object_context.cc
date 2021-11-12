@@ -3,14 +3,10 @@
 
 #include "crimson/osd/object_context.h"
 
-namespace crimson::osd {
+#include "common/Formatter.h"
+#include "crimson/common/config_proxy.h"
 
-void ObjectContext::dump_detail(Formatter *f) const
-{
-  f->open_object_section("ObjectContext");
-  obs.oi.dump(f);
-  f->close_section();
-}
+namespace crimson::osd {
 
 ObjectContextRegistry::ObjectContextRegistry(crimson::common::ConfigProxy &conf)
 {
@@ -28,7 +24,7 @@ const char** ObjectContextRegistry::get_tracked_conf_keys() const
 }
 
 void ObjectContextRegistry::handle_conf_change(
-  const ConfigProxy& conf,
+  const crimson::common::ConfigProxy& conf,
   const std::set <std::string> &changed)
 {
   obc_lru.set_target_size(conf.get_val<uint64_t>("crimson_osd_obc_lru_size"));

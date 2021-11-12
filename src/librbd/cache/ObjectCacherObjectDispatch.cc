@@ -2,14 +2,16 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
+#include "include/neorados/RADOS.hpp"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/ObjectCacherWriteback.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
+#include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
 #include "librbd/io/Utils.h"
 #include "osd/osd_types.h"
@@ -48,8 +50,8 @@ struct ObjectCacherObjectDispatch<I>::C_InvalidateCache : public Context {
     ceph_assert(ceph_mutex_is_locked(dispatcher->m_cache_lock));
     auto cct = dispatcher->m_image_ctx->cct;
 
-    if (r == -EBLACKLISTED) {
-      lderr(cct) << "blacklisted during flush (purging)" << dendl;
+    if (r == -EBLOCKLISTED) {
+      lderr(cct) << "blocklisted during flush (purging)" << dendl;
       dispatcher->m_object_cacher->purge_set(dispatcher->m_object_set);
     } else if (r < 0 && purge_on_error) {
       lderr(cct) << "failed to invalidate cache (purging): "
@@ -151,7 +153,7 @@ void ObjectCacherObjectDispatch<I>::init() {
   if (m_max_dirty > 0) {
     m_image_ctx->disable_zero_copy = true;
   }
-  m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
+  m_image_ctx->io_object_dispatcher->register_dispatch(this);
 }
 
 template <typename I>
@@ -181,29 +183,59 @@ void ObjectCacherObjectDispatch<I>::shut_down(Context* on_finish) {
 
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::read(
-    uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    librados::snap_t snap_id, int op_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, io::ExtentMap* extent_map,
-    int* object_dispatch_flags, io::DispatchResult* dispatch_result,
-    Context** on_finish, Context* on_dispatched) {
+    uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
+    int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
+    uint64_t* version, int* object_dispatch_flags,
+    io::DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
   // IO chained in reverse order
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
-                 << object_len << dendl;
+  ldout(cct, 20) << "object_no=" << object_no << " " << *extents << dendl;
+
+  if (extents->size() == 0) {
+    ldout(cct, 20) << "no extents to read" << dendl;
+    return false;
+  }
+
+  if (version != nullptr) {
+    // we currently don't cache read versions
+    // and don't support reading more than one extent
+    return false;
+  }
 
   // ensure we aren't holding the cache lock post-read
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
                                                       on_dispatched);
 
+  // embed the RBD-internal read flags in the genenric RADOS op_flags and
+  op_flags = ((op_flags & ~ObjectCacherWriteback::READ_FLAGS_MASK) |
+              ((read_flags << ObjectCacherWriteback::READ_FLAGS_SHIFT) &
+               ObjectCacherWriteback::READ_FLAGS_MASK));
+
+  ceph::bufferlist* bl;
+  if (extents->size() > 1) {
+    auto req = new io::ReadResult::C_ObjectReadMergedExtents(
+            cct, extents, on_dispatched);
+    on_dispatched = req;
+    bl = &req->bl;
+  } else {
+    bl = &extents->front().bl;
+  }
+
   m_image_ctx->image_lock.lock_shared();
-  auto rd = m_object_cacher->prepare_read(snap_id, read_data, op_flags);
+  auto rd = m_object_cacher->prepare_read(
+    io_context->read_snap().value_or(CEPH_NOSNAP), bl, op_flags);
   m_image_ctx->image_lock.unlock_shared();
 
-  ObjectExtent extent(data_object_name(m_image_ctx, object_no), object_no,
-                      object_off, object_len, 0);
-  extent.oloc.pool = m_image_ctx->data_ctx.get_id();
-  extent.buffer_extents.push_back({0, object_len});
-  rd->extents.push_back(extent);
+  uint64_t off = 0;
+  for (auto& read_extent: *extents) {
+    ObjectExtent extent(data_object_name(m_image_ctx, object_no), object_no,
+                        read_extent.offset, read_extent.length, 0);
+    extent.oloc.pool = m_image_ctx->data_ctx.get_id();
+    extent.buffer_extents.push_back({off, read_extent.length});
+    rd->extents.push_back(extent);
+    off += read_extent.length;
+  }
 
   ZTracer::Trace trace(parent_trace);
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
@@ -220,7 +252,7 @@ bool ObjectCacherObjectDispatch<I>::read(
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::discard(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    const ::SnapContext &snapc, int discard_flags,
+    IOContext io_context, int discard_flags,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
@@ -261,7 +293,8 @@ bool ObjectCacherObjectDispatch<I>::discard(
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-    const ::SnapContext &snapc, int op_flags,
+    IOContext io_context, int op_flags, int write_flags,
+    std::optional<uint64_t> assert_version,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
@@ -272,6 +305,31 @@ bool ObjectCacherObjectDispatch<I>::write(
   // ensure we aren't holding the cache lock post-write
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
                                                       on_dispatched);
+
+  // cache layer does not handle version checking
+  if (assert_version.has_value() ||
+      (write_flags & io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE) != 0) {
+    ObjectExtents object_extents;
+    object_extents.emplace_back(data_object_name(m_image_ctx, object_no),
+                                object_no, object_off, data.length(), 0);
+
+    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+
+    // ensure any in-flight writeback is complete before advancing
+    // the write request
+    std::lock_guard locker{m_cache_lock};
+    m_object_cacher->discard_writeback(m_object_set, object_extents,
+                                       on_dispatched);
+    return true;
+  }
+
+  SnapContext snapc;
+  if (io_context->write_snap_context()) {
+    auto write_snap_context = *io_context->write_snap_context();
+    snapc = SnapContext(write_snap_context.first,
+                        {write_snap_context.second.begin(),
+                         write_snap_context.second.end()});
+  }
 
   m_image_ctx->image_lock.lock_shared();
   ObjectCacher::OSDWrite *wr = m_object_cacher->prepare_write(
@@ -296,7 +354,7 @@ template <typename I>
 bool ObjectCacherObjectDispatch<I>::write_same(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     io::LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
-    const ::SnapContext &snapc, int op_flags,
+    IOContext io_context, int op_flags,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
@@ -311,15 +369,15 @@ bool ObjectCacherObjectDispatch<I>::write_same(
   bufferlist ws_data;
   io::util::assemble_write_same_extent(extent, data, &ws_data, true);
 
-  return write(object_no, object_off, std::move(ws_data), snapc, op_flags,
-               parent_trace, object_dispatch_flags, journal_tid,
-               dispatch_result, on_finish, on_dispatched);
+  return write(object_no, object_off, std::move(ws_data), io_context, op_flags,
+               0, std::nullopt, parent_trace, object_dispatch_flags,
+               journal_tid, dispatch_result, on_finish, on_dispatched);
 }
 
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::compare_and_write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
-    ceph::bufferlist&& write_data, const ::SnapContext &snapc, int op_flags,
+    ceph::bufferlist&& write_data, IOContext io_context, int op_flags,
     const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
     int* object_dispatch_flags, uint64_t* journal_tid,
     io::DispatchResult* dispatch_result, Context** on_finish,

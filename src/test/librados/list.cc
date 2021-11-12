@@ -15,6 +15,7 @@
 #include <string>
 #include <stdexcept>
 
+using namespace std;
 using namespace librados;
 
 typedef RadosTestNSCleanup LibRadosList;
@@ -38,6 +39,23 @@ TEST_F(LibRadosList, ListObjects) {
   rados_nobjects_list_close(ctx);
 }
 
+TEST_F(LibRadosList, ListObjectsZeroInName) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_write(ioctx, "foo\0bar", buf, sizeof(buf), 0));
+  rados_list_ctx_t ctx;
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+  const char *entry;
+  size_t entry_size;
+  bool foundit = false;
+  while (rados_nobjects_list_next2(ctx, &entry, NULL, NULL,
+				   &entry_size, NULL, NULL) != -ENOENT) {
+    foundit = true;
+    ASSERT_EQ(std::string(entry, entry_size), "foo\0bar");
+  }
+  ASSERT_TRUE(foundit);
+  rados_nobjects_list_close(ctx);
+}
 
 static void check_list(
   std::set<std::string>& myset,
@@ -463,8 +481,12 @@ TEST_F(LibRadosList, EnumerateObjectsSplit) {
 
   // Ensure a non-power-of-two PG count to avoid only
   // touching the easy path.
-  ASSERT_TRUE(set_pg_num(&s_cluster, pool_name, 11).empty());
-  ASSERT_TRUE(set_pgp_num(&s_cluster, pool_name, 11).empty());
+  if (auto error = set_pg_num(&s_cluster, pool_name, 11); !error.empty()) {
+    GTEST_FAIL() << error;
+  }
+  if (auto error = set_pgp_num(&s_cluster, pool_name, 11); !error.empty()) {
+    GTEST_FAIL() << error;
+  }
 
   rados_object_list_cursor begin = rados_object_list_begin(ioctx);
   rados_object_list_cursor end = rados_object_list_end(ioctx);

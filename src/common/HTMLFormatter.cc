@@ -89,7 +89,7 @@ void HTMLFormatter::output_header() {
 }
 
 template <typename T>
-void HTMLFormatter::dump_template(const char *name, T arg)
+void HTMLFormatter::dump_template(std::string_view name, T arg)
 {
   print_spaces();
   m_ss << "<li>" << name << ": " << arg << "</li>";
@@ -97,27 +97,27 @@ void HTMLFormatter::dump_template(const char *name, T arg)
     m_ss << "\n";
 }
 
-void HTMLFormatter::dump_unsigned(const char *name, uint64_t u)
+void HTMLFormatter::dump_unsigned(std::string_view name, uint64_t u)
 {
   dump_template(name, u);
 }
 
-void HTMLFormatter::dump_int(const char *name, int64_t u)
+void HTMLFormatter::dump_int(std::string_view name, int64_t u)
 {
   dump_template(name, u);
 }
 
-void HTMLFormatter::dump_float(const char *name, double d)
+void HTMLFormatter::dump_float(std::string_view name, double d)
 {
   dump_template(name, d);
 }
 
-void HTMLFormatter::dump_string(const char *name, std::string_view s)
+void HTMLFormatter::dump_string(std::string_view name, std::string_view s)
 {
   dump_template(name, xml_stream_escaper(s));
 }
 
-void HTMLFormatter::dump_string_with_attrs(const char *name, std::string_view s, const FormatterAttrs& attrs)
+void HTMLFormatter::dump_string_with_attrs(std::string_view name, std::string_view s, const FormatterAttrs& attrs)
 {
   std::string e(name);
   std::string attrs_str;
@@ -128,7 +128,7 @@ void HTMLFormatter::dump_string_with_attrs(const char *name, std::string_view s,
     m_ss << "\n";
 }
 
-std::ostream& HTMLFormatter::dump_stream(const char *name)
+std::ostream& HTMLFormatter::dump_stream(std::string_view name)
 {
   print_spaces();
   m_pending_string_name = "li";
@@ -136,7 +136,7 @@ std::ostream& HTMLFormatter::dump_stream(const char *name)
   return m_pending_string;
 }
 
-void HTMLFormatter::dump_format_va(const char* name, const char *ns, bool quoted, const char *fmt, va_list ap)
+void HTMLFormatter::dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
   char buf[LARGE_SIZE];
   size_t len = vsnprintf(buf, LARGE_SIZE, fmt, ap);

@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
+#include "common/bit_vector.hpp"
 #include "common/ceph_mutex.h"
 #include "common/RefCountedObj.h"
 #include "librbd/Types.h"
@@ -13,6 +14,7 @@
 #include <functional>
 #include <map>
 #include <queue>
+#include <set>
 #include <vector>
 #include <boost/optional.hpp>
 
@@ -21,30 +23,35 @@ class Context;
 namespace librbd {
 
 class ImageCtx;
-class ProgressContext;
 
 namespace deep_copy {
+
+class Handler;
 
 template <typename ImageCtxT = ImageCtx>
 class ImageCopyRequest : public RefCountedObject {
 public:
   static ImageCopyRequest* create(ImageCtxT *src_image_ctx,
                                   ImageCtxT *dst_image_ctx,
-                                  librados::snap_t snap_id_start,
-                                  librados::snap_t snap_id_end, bool flatten,
+                                  librados::snap_t src_snap_id_start,
+                                  librados::snap_t src_snap_id_end,
+                                  librados::snap_t dst_snap_id_start,
+                                  bool flatten,
                                   const ObjectNumber &object_number,
                                   const SnapSeqs &snap_seqs,
-                                  ProgressContext *prog_ctx,
+                                  Handler *handler,
                                   Context *on_finish) {
-    return new ImageCopyRequest(src_image_ctx, dst_image_ctx, snap_id_start,
-                                snap_id_end, flatten, object_number, snap_seqs,
-                                prog_ctx, on_finish);
+    return new ImageCopyRequest(src_image_ctx, dst_image_ctx, src_snap_id_start,
+                                src_snap_id_end, dst_snap_id_start, flatten,
+                                object_number, snap_seqs, handler, on_finish);
   }
 
   ImageCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *dst_image_ctx,
-                   librados::snap_t snap_id_start, librados::snap_t snap_id_end,
+                   librados::snap_t src_snap_id_start,
+                   librados::snap_t src_snap_id_end,
+                   librados::snap_t dst_snap_id_start,
                    bool flatten, const ObjectNumber &object_number,
-                   const SnapSeqs &snap_seqs, ProgressContext *prog_ctx,
+                   const SnapSeqs &snap_seqs, Handler *handler,
                    Context *on_finish);
 
   void send();
@@ -55,6 +62,10 @@ private:
    * @verbatim
    *
    * <start>
+   *    |
+   *    v
+   * COMPUTE_DIFF
+   *    |
    *    |      . . . . .
    *    |      .       .  (parallel execution of
    *    v      v       .   multiple objects at once)
@@ -68,12 +79,13 @@ private:
 
   ImageCtxT *m_src_image_ctx;
   ImageCtxT *m_dst_image_ctx;
-  librados::snap_t m_snap_id_start;
-  librados::snap_t m_snap_id_end;
+  librados::snap_t m_src_snap_id_start;
+  librados::snap_t m_src_snap_id_end;
+  librados::snap_t m_dst_snap_id_start;
   bool m_flatten;
   ObjectNumber m_object_number;
   SnapSeqs m_snap_seqs;
-  ProgressContext *m_prog_ctx;
+  Handler *m_handler;
   Context *m_on_finish;
 
   CephContext *m_cct;
@@ -89,8 +101,15 @@ private:
   SnapMap m_snap_map;
   int m_ret_val = 0;
 
+  BitVector<2> m_object_diff_state;
+
+  void map_src_objects(uint64_t dst_object, std::set<uint64_t> *src_objects);
+
+  void compute_diff();
+  void handle_compute_diff(int r);
+
   void send_object_copies();
-  void send_next_object_copy();
+  int send_next_object_copy();
   void handle_object_copy(uint64_t object_no, int r);
 
   void finish(int r);

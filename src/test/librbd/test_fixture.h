@@ -36,6 +36,8 @@ public:
                  const std::string &cookie);
   int unlock_image();
 
+  int flush_writeback_cache(librbd::ImageCtx *image_ctx);
+
   int acquire_exclusive_lock(librbd::ImageCtx &ictx);
 
   static std::string _pool_name;

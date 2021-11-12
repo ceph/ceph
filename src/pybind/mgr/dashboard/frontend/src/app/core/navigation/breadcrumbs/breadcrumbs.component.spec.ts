@@ -4,8 +4,8 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { PerformanceCounterBreadcrumbsResolver } from '../../../app-routing.module';
+import { PerformanceCounterBreadcrumbsResolver } from '~/app/app-routing.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { BreadcrumbsComponent } from './breadcrumbs.component';
 
 describe('BreadcrumbsComponent', () => {
@@ -53,7 +53,7 @@ describe('BreadcrumbsComponent', () => {
 
   beforeEach(() => {
     fixture = TestBed.createComponent(BreadcrumbsComponent);
-    router = TestBed.get(Router);
+    router = TestBed.inject(Router);
     component = fixture.componentInstance;
     fixture.detectChanges();
     expect(component.crumbs).toEqual([]);

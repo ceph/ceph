@@ -1,12 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/lowres_clock.hh>
+#include <seastar/core/shared_ptr.hh>
 #include <seastar/core/timer.hh>
 
 #include "auth/AuthRegistry.h"
@@ -16,6 +19,7 @@
 #include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"
 #include "crimson/common/auth_handler.h"
+#include "crimson/common/gated.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Fwd.h"
 
@@ -33,6 +37,7 @@ class MAuthReply;
 struct MMonMap;
 struct MMonSubscribeAck;
 struct MMonGetVersionReply;
+struct MMonCommand;
 struct MMonCommandAck;
 struct MLogAck;
 struct MConfig;
@@ -50,23 +55,28 @@ class Client : public crimson::net::Dispatcher,
   const uint32_t want_keys;
 
   MonMap monmap;
-  std::unique_ptr<Connection> active_con;
-  std::vector<std::unique_ptr<Connection>> pending_conns;
+  bool ready_to_send = false;
+  seastar::shared_ptr<Connection> active_con;
+  std::vector<seastar::shared_ptr<Connection>> pending_conns;
   seastar::timer<seastar::lowres_clock> timer;
-  seastar::gate tick_gate;
 
   crimson::net::Messenger& msgr;
 
   // commands
-  using get_version_t = seastar::future<version_t, version_t>;
+  using get_version_t = seastar::future<std::tuple<version_t, version_t>>;
 
   ceph_tid_t last_version_req_id = 0;
   std::map<ceph_tid_t, typename get_version_t::promise_type> version_reqs;
 
   ceph_tid_t last_mon_command_id = 0;
   using command_result_t =
-    seastar::future<std::int32_t, string, ceph::bufferlist>;
-  std::map<ceph_tid_t, typename command_result_t::promise_type> mon_commands;
+    seastar::future<std::tuple<std::int32_t, std::string, ceph::bufferlist>>;
+  struct mon_command_t {
+    ceph::ref_t<MMonCommand> req;
+    typename command_result_t::promise_type result;
+    mon_command_t(ceph::ref_t<MMonCommand> req);
+  };
+  std::vector<mon_command_t> mon_commands;
 
   MonSub sub;
 
@@ -81,15 +91,17 @@ public:
     return monmap.fsid;
   }
   get_version_t get_version(const std::string& map);
-  command_result_t run_command(const std::vector<std::string>& cmd,
-			       const bufferlist& bl);
-  seastar::future<> send_message(MessageRef);
+  command_result_t run_command(std::string&& cmd,
+                               bufferlist&& bl);
+  seastar::future<> send_message(MessageURef);
   bool sub_want(const std::string& what, version_t start, unsigned flags);
   void sub_got(const std::string& what, version_t have);
   void sub_unwant(const std::string& what);
   bool sub_want_increment(const std::string& what, version_t start, unsigned flags);
   seastar::future<> renew_subs();
+  seastar::future<> wait_for_config();
 
+  void print(std::ostream&) const;
 private:
   // AuthServer methods
   std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
@@ -106,7 +118,7 @@ private:
 			  const ceph::bufferlist& payload,
 			  ceph::bufferlist *reply) final;
 
-  CephContext cct; // for auth_registry
+  crimson::common::CephContext cct; // for auth_registry
   AuthRegistry auth_registry;
   crimson::common::AuthHandler& auth_handler;
 
@@ -138,13 +150,13 @@ private:
 private:
   void tick();
 
-  seastar::future<> ms_dispatch(crimson::net::Connection* conn,
-				MessageRef m) override;
-  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) override;
+  std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef conn,
+                                               MessageRef m) override;
+  void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
 
-  seastar::future<> handle_monmap(crimson::net::Connection* conn,
+  seastar::future<> handle_monmap(crimson::net::ConnectionRef conn,
 				  Ref<MMonMap> m);
-  seastar::future<> handle_auth_reply(crimson::net::Connection* conn,
+  seastar::future<> handle_auth_reply(crimson::net::ConnectionRef conn,
 				      Ref<MAuthReply> m);
   seastar::future<> handle_subscribe_ack(Ref<MMonSubscribeAck> m);
   seastar::future<> handle_get_version_reply(Ref<MMonGetVersionReply> m);
@@ -152,14 +164,35 @@ private:
   seastar::future<> handle_log_ack(Ref<MLogAck> m);
   seastar::future<> handle_config(Ref<MConfig> m);
 
+  seastar::future<> on_session_opened();
 private:
   seastar::future<> load_keyring();
   seastar::future<> authenticate();
 
   bool is_hunting() const;
-  seastar::future<> reopen_session(int rank);
+  // @param rank, rank of the monitor to be connected, if it is less than 0,
+  //              try to connect to all monitors in monmap, until one of them
+  //              is connected.
+  // @return true if a connection to monitor is established
+  seastar::future<bool> reopen_session(int rank);
   std::vector<unsigned> get_random_mons(unsigned n) const;
   seastar::future<> _add_conn(unsigned rank, uint64_t global_id);
+  void _finish_auth(const entity_addr_t& peer);
+  crimson::common::Gated gate;
+
+  // messages that are waiting for the active_con to be available
+  struct pending_msg_t {
+    pending_msg_t(MessageURef m) : msg(std::move(m)) {}
+    MessageURef msg;
+    seastar::promise<> pr;
+  };
+  std::deque<pending_msg_t> pending_messages;
+  std::optional<seastar::promise<>> config_updated;
 };
+
+inline std::ostream& operator<<(std::ostream& out, const Client& client) {
+  client.print(out);
+  return out;
+}
 
 } // namespace crimson::mon

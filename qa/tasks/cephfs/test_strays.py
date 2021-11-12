@@ -5,7 +5,8 @@ from textwrap import dedent
 import datetime
 import gevent
 
-from teuthology.orchestra.run import CommandFailedError, Raw
+from teuthology.exceptions import CommandFailedError
+from teuthology.orchestra.run import Raw
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 log = logging.getLogger(__name__)
@@ -39,17 +40,17 @@ class TestStrays(CephFSTestCase):
         create_script = dedent("""
             import os
 
-            mount_path = "{mount_path}"
+            mountpoint = "{mountpoint}"
             subdir = "delete_me"
             size = {size}
             file_count = {file_count}
-            os.mkdir(os.path.join(mount_path, subdir))
+            os.mkdir(os.path.join(mountpoint, subdir))
             for i in range(0, file_count):
                 filename = "{{0}}_{{1}}.bin".format(i, size)
-                with open(os.path.join(mount_path, subdir, filename), 'w') as f:
+                with open(os.path.join(mountpoint, subdir, filename), 'w') as f:
                     f.write(size * 'x')
         """.format(
-            mount_path=self.mount_a.mountpoint,
+            mountpoint=self.mount_a.mountpoint,
             size=1024,
             file_count=file_count
         ))
@@ -145,18 +146,18 @@ class TestStrays(CephFSTestCase):
         create_script = dedent("""
             import os
 
-            mount_path = "{mount_path}"
+            mountpoint = "{mountpoint}"
             subdir = "delete_me"
             size_unit = {size_unit}
             file_multiplier = {file_multiplier}
-            os.mkdir(os.path.join(mount_path, subdir))
+            os.mkdir(os.path.join(mountpoint, subdir))
             for i in range(0, file_multiplier):
                 for size in range(0, {size_range}*size_unit, size_unit):
-                    filename = "{{0}}_{{1}}.bin".format(i, size / size_unit)
-                    with open(os.path.join(mount_path, subdir, filename), 'w') as f:
+                    filename = "{{0}}_{{1}}.bin".format(i, size // size_unit)
+                    with open(os.path.join(mountpoint, subdir, filename), 'w') as f:
                         f.write(size * 'x')
         """.format(
-            mount_path=self.mount_a.mountpoint,
+            mountpoint=self.mount_a.mountpoint,
             size_unit=size_unit,
             file_multiplier=file_multiplier,
             size_range=self.throttle_workload_size_range
@@ -194,11 +195,10 @@ class TestStrays(CephFSTestCase):
             num_strays = mdc_stats['num_strays']
             num_strays_purging = pq_stats['pq_executing']
             num_purge_ops = pq_stats['pq_executing_ops']
+            files_high_water = pq_stats['pq_executing_high_water']
+            ops_high_water = pq_stats['pq_executing_ops_high_water']
 
-            self.data_log.append([datetime.datetime.now(), num_strays, num_strays_purging, num_purge_ops])
-
-            files_high_water = max(files_high_water, num_strays_purging)
-            ops_high_water = max(ops_high_water, num_purge_ops)
+            self.data_log.append([datetime.datetime.now(), num_strays, num_strays_purging, num_purge_ops, files_high_water, ops_high_water])
 
             total_strays_created = mdc_stats['strays_created']
             total_strays_purged = pq_stats['pq_executed']
@@ -238,15 +238,22 @@ class TestStrays(CephFSTestCase):
         # insanely fast such that the deletions all pass before we have polled the
         # statistics.
         if throttle_type == self.OPS_THROTTLE:
-            if ops_high_water < mds_max_purge_ops / 2:
+            if ops_high_water < mds_max_purge_ops // 2:
                 raise RuntimeError("Ops in flight high water is unexpectedly low ({0} / {1})".format(
                     ops_high_water, mds_max_purge_ops
                 ))
+            # The MDS may go over mds_max_purge_ops for some items, like a
+            # heavily fragmented directory.  The throttle does not kick in
+            # until *after* we reach or exceed the limit.  This is expected
+            # because we don't want to starve the PQ or never purge a
+            # particularly large file/directory.
+            self.assertLessEqual(ops_high_water, mds_max_purge_ops+64)
         elif throttle_type == self.FILES_THROTTLE:
-            if files_high_water < mds_max_purge_files / 2:
+            if files_high_water < mds_max_purge_files // 2:
                 raise RuntimeError("Files in flight high water is unexpectedly low ({0} / {1})".format(
-                    ops_high_water, mds_max_purge_files
+                    files_high_water, mds_max_purge_files
                 ))
+            self.assertLessEqual(files_high_water, mds_max_purge_files)
 
         # Sanity check all MDC stray stats
         stats = self.fs.mds_asok(['perf', 'dump'])
@@ -367,7 +374,7 @@ class TestStrays(CephFSTestCase):
         self.fs.mds_asok(['flush', 'journal'])
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         # Unlink file_a
         self.mount_a.run_shell(["rm", "-f", "dir_1/file_a"])
@@ -511,34 +518,16 @@ class TestStrays(CephFSTestCase):
 
         return rank_0_id, rank_1_id
 
-    def _force_migrate(self, to_id, path, watch_ino):
+    def _force_migrate(self, path, rank=1):
         """
         :param to_id: MDS id to move it to
         :param path: Filesystem path (string) to move
         :param watch_ino: Inode number to look for at destination to confirm move
         :return: None
         """
-        self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "1", path])
-
-        # Poll the MDS cache dump to watch for the export completing
-        migrated = False
-        migrate_timeout = 60
-        migrate_elapsed = 0
-        while not migrated:
-            data = self.fs.mds_asok(["dump", "cache"], to_id)
-            for inode_data in data:
-                if inode_data['ino'] == watch_ino:
-                    log.debug("Found ino in cache: {0}".format(json.dumps(inode_data, indent=2)))
-                    if inode_data['is_auth'] is True:
-                        migrated = True
-                    break
-
-            if not migrated:
-                if migrate_elapsed > migrate_timeout:
-                    raise RuntimeError("Migration hasn't happened after {0}s!".format(migrate_elapsed))
-                else:
-                    migrate_elapsed += 1
-                    time.sleep(1)
+        self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", str(rank), path])
+        rpath = "/"+path
+        self._wait_subtrees([(rpath, rank)], rank=rank, path=rpath)
 
     def _is_stopped(self, rank):
         mds_map = self.fs.get_mds_map()
@@ -559,8 +548,7 @@ class TestStrays(CephFSTestCase):
 
         self.mount_a.create_n_files("delete_me/file", file_count)
 
-        self._force_migrate(rank_1_id, "delete_me",
-                            self.mount_a.path_to_ino("delete_me/file_0"))
+        self._force_migrate("delete_me")
 
         self.mount_a.run_shell(["rm", "-rf", Raw("delete_me/*")])
         self.mount_a.umount_wait()
@@ -604,26 +592,21 @@ class TestStrays(CephFSTestCase):
 
         # Create a non-purgeable stray in a ~mds1 stray directory
         # by doing a hard link and deleting the original file
-        self.mount_a.run_shell(["mkdir", "dir_1", "dir_2"])
-        self.mount_a.run_shell(["touch", "dir_1/original"])
-        self.mount_a.run_shell(["ln", "dir_1/original", "dir_2/linkto"])
+        self.mount_a.run_shell_payload("""
+mkdir dir_1 dir_2
+touch dir_1/original
+ln dir_1/original dir_2/linkto
+""")
 
-        self._force_migrate(rank_1_id, "dir_1",
-                            self.mount_a.path_to_ino("dir_1/original"))
+        self._force_migrate("dir_1")
+        self._force_migrate("dir_2", rank=0)
 
         # empty mds cache. otherwise mds reintegrates stray when unlink finishes
         self.mount_a.umount_wait()
-        self.fs.mds_asok(['flush', 'journal'], rank_0_id)
         self.fs.mds_asok(['flush', 'journal'], rank_1_id)
-        self.fs.mds_fail_restart()
-        self.fs.wait_for_daemons()
+        self.fs.mds_asok(['cache', 'drop'], rank_1_id)
 
-        active_mds_names = self.fs.get_active_names()
-        rank_0_id = active_mds_names[0]
-        rank_1_id = active_mds_names[1]
-
-        self.mount_a.mount()
-
+        self.mount_a.mount_wait()
         self.mount_a.run_shell(["rm", "-f", "dir_1/original"])
         self.mount_a.umount_wait()
 
@@ -766,7 +749,7 @@ class TestStrays(CephFSTestCase):
         # zero, but there's actually still a stray, so at the very
         # least the StrayManager stats code is slightly off
 
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         # See that the data from the snapshotted revision of the file is still present
         # and correct
@@ -817,111 +800,71 @@ class TestStrays(CephFSTestCase):
     def test_dirfrag_limit(self):
         """
         That the directory fragment size cannot exceed mds_bal_fragment_size_max (using a limit of 50 in all configurations).
-
-        That fragmentation (forced) will allow more entries to be created.
-
-        That unlinking fails when the stray directory fragment becomes too large and that unlinking may continue once those strays are purged.
         """
 
         LOW_LIMIT = 50
-        for mds in self.fs.get_daemon_names():
-            self.fs.mds_asok(["config", "set", "mds_bal_fragment_size_max", str(LOW_LIMIT)], mds)
+        self.config_set('mds', 'mds_bal_fragment_size_max', str(LOW_LIMIT))
+        time.sleep(10) # for config to reach MDS; async create is fast!!
 
         try:
-            self.mount_a.run_python(dedent("""
-                import os
-                path = os.path.join("{path}", "subdir")
-                os.mkdir(path)
-                for n in range(0, {file_count}):
-                    with open(os.path.join(path, "%s" % n), 'w') as f:
-                        f.write(str(n))
-                """.format(
-            path=self.mount_a.mountpoint,
-            file_count=LOW_LIMIT+1
-            )))
+            self.mount_a.create_n_files("subdir/file", LOW_LIMIT+1, finaldirsync=True)
         except CommandFailedError:
-            pass # ENOSPAC
+            pass # ENOSPC
         else:
-            raise RuntimeError("fragment size exceeded")
+            self.fail("fragment size exceeded")
 
-        # Now test that we can go beyond the limit if we fragment the directory
 
-        self.mount_a.run_python(dedent("""
-            import os
-            path = os.path.join("{path}", "subdir2")
-            os.mkdir(path)
-            for n in range(0, {file_count}):
-                with open(os.path.join(path, "%s" % n), 'w') as f:
-                    f.write(str(n))
-            dfd = os.open(path, os.O_DIRECTORY)
-            os.fsync(dfd)
-            """.format(
-        path=self.mount_a.mountpoint,
-        file_count=LOW_LIMIT
-        )))
+    def test_dirfrag_limit_fragmented(self):
+        """
+        That fragmentation (forced) will allow more entries to be created.
+        """
 
-        # Ensure that subdir2 is fragmented
-        mds_id = self.fs.get_active_names()[0]
-        self.fs.mds_asok(["dirfrag", "split", "/subdir2", "0/0", "1"], mds_id)
+        LOW_LIMIT = 50
+        self.config_set('mds', 'mds_bal_fragment_size_max', str(LOW_LIMIT))
+        self.config_set('mds', 'mds_bal_merge_size', 1) # disable merging
+        time.sleep(10) # for config to reach MDS; async create is fast!!
 
-        # remount+flush (release client caps)
-        self.mount_a.umount_wait()
-        self.fs.mds_asok(["flush", "journal"], mds_id)
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        # Test that we can go beyond the limit if we fragment the directory
+        self.mount_a.create_n_files("subdir/file", LOW_LIMIT, finaldirsync=True)
+        self.mount_a.umount_wait() # release client caps
+
+        # Ensure that subdir is fragmented
+        self.fs.rank_asok(["dirfrag", "split", "/subdir", "0/0", "1"])
+        self.fs.rank_asok(["flush", "journal"])
 
         # Create 50% more files than the current fragment limit
-        self.mount_a.run_python(dedent("""
-            import os
-            path = os.path.join("{path}", "subdir2")
-            for n in range({file_count}, ({file_count}*3)//2):
-                with open(os.path.join(path, "%s" % n), 'w') as f:
-                    f.write(str(n))
-            """.format(
-        path=self.mount_a.mountpoint,
-        file_count=LOW_LIMIT
-        )))
+        self.mount_a.mount_wait()
+        self.mount_a.create_n_files("subdir/file", (LOW_LIMIT*3)//2, finaldirsync=True)
+
+    def test_dirfrag_limit_strays(self):
+        """
+        That unlinking fails when the stray directory fragment becomes too
+        large and that unlinking may continue once those strays are purged.
+        """
+
+        LOW_LIMIT = 10
+        # N.B. this test is inherently racy because stray removal may be faster
+        # than slow(er) file creation.
+        self.config_set('mds', 'mds_bal_fragment_size_max', LOW_LIMIT)
+        time.sleep(10) # for config to reach MDS; async create is fast!!
 
         # Now test the stray directory size is limited and recovers
         strays_before = self.get_mdc_stat("strays_created")
         try:
-            self.mount_a.run_python(dedent("""
-                import os
-                path = os.path.join("{path}", "subdir3")
-                os.mkdir(path)
-                for n in range({file_count}):
-                    fpath = os.path.join(path, "%s" % n)
-                    with open(fpath, 'w') as f:
-                        f.write(str(n))
-                    os.unlink(fpath)
-                """.format(
-            path=self.mount_a.mountpoint,
-            file_count=LOW_LIMIT*10 # 10 stray directories, should collide before this count
-            )))
+            # 10 stray directories: expect collisions
+            self.mount_a.create_n_files("subdir/file", LOW_LIMIT*10, finaldirsync=True, unlink=True)
         except CommandFailedError:
-            pass # ENOSPAC
+            pass # ENOSPC
         else:
-            raise RuntimeError("fragment size exceeded")
-
+            self.fail("fragment size exceeded")
         strays_after = self.get_mdc_stat("strays_created")
         self.assertGreaterEqual(strays_after-strays_before, LOW_LIMIT)
 
         self._wait_for_counter("mds_cache", "strays_enqueued", strays_after)
         self._wait_for_counter("purge_queue", "pq_executed", strays_after)
 
-        self.mount_a.run_python(dedent("""
-            import os
-            path = os.path.join("{path}", "subdir4")
-            os.mkdir(path)
-            for n in range({file_count}):
-                fpath = os.path.join(path, "%s" % n)
-                with open(fpath, 'w') as f:
-                    f.write(str(n))
-                os.unlink(fpath)
-            """.format(
-        path=self.mount_a.mountpoint,
-        file_count=LOW_LIMIT
-        )))
+        # verify new files can be created and unlinked
+        self.mount_a.create_n_files("subdir/file", LOW_LIMIT, dirsync=True, unlink=True)
 
     def test_purge_queue_upgrade(self):
         """
@@ -932,7 +875,7 @@ class TestStrays(CephFSTestCase):
 
         self.mds_cluster.mds_stop()
         self.mds_cluster.mds_fail()
-        self.fs.rados(["rm", "500.00000000"])
+        self.fs.radosm(["rm", "500.00000000"])
         self.mds_cluster.mds_restart()
         self.fs.wait_for_daemons()
 
@@ -950,8 +893,7 @@ class TestStrays(CephFSTestCase):
 
         self.mount_a.create_n_files("delete_me/file", file_count)
 
-        self._force_migrate(rank_1_id, "delete_me",
-                            self.mount_a.path_to_ino("delete_me/file_0"))
+        self._force_migrate("delete_me")
 
         begin = datetime.datetime.now()
         self.mount_a.run_shell(["rm", "-rf", Raw("delete_me/*")])
@@ -964,4 +906,3 @@ class TestStrays(CephFSTestCase):
 
         duration = (end - begin).total_seconds()
         self.assertLess(duration, (file_count * tick_period) * 0.25)
-

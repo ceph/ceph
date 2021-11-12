@@ -4,8 +4,8 @@
 #include "librbd/operation/Request.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/asio/ContextWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

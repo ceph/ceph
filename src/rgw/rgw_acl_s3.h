@@ -14,6 +14,7 @@
 #include "rgw_acl.h"
 
 class RGWUserCtl;
+namespace rgw { namespace sal { class Store; } }
 
 class ACLPermission_S3 : public ACLPermission, public XMLObj
 {
@@ -22,7 +23,7 @@ public:
   ~ACLPermission_S3() override {}
 
   bool xml_end(const char *el) override;
-  void to_xml(ostream& out);
+  void to_xml(std::ostream& out);
 };
 
 class ACLGrantee_S3 : public ACLGrantee, public XMLObj
@@ -41,12 +42,12 @@ public:
   ACLGrant_S3() {}
   ~ACLGrant_S3() override {}
 
-  void to_xml(CephContext *cct, ostream& out);
+  void to_xml(CephContext *cct, std::ostream& out);
   bool xml_end(const char *el) override;
   bool xml_start(const char *el, const char **attr);
 
-  static ACLGroupTypeEnum uri_to_group(string& uri);
-  static bool group_to_uri(ACLGroupTypeEnum group, string& uri);
+  static ACLGroupTypeEnum uri_to_group(std::string& uri);
+  static bool group_to_uri(ACLGroupTypeEnum group, std::string& uri);
 };
 
 class RGWAccessControlList_S3 : public RGWAccessControlList, public XMLObj
@@ -56,9 +57,9 @@ public:
   ~RGWAccessControlList_S3() override {}
 
   bool xml_end(const char *el) override;
-  void to_xml(ostream& out);
+  void to_xml(std::ostream& out);
 
-  int create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const string& canned_acl);
+  int create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const std::string& canned_acl);
   int create_from_grants(std::list<ACLGrant>& grants);
 };
 
@@ -69,7 +70,7 @@ public:
   ~ACLOwner_S3() override {}
 
   bool xml_end(const char *el) override;
-  void to_xml(ostream& out);
+  void to_xml(std::ostream& out);
 };
 
 class RGWEnv;
@@ -82,18 +83,23 @@ public:
 
   bool xml_end(const char *el) override;
 
-  void to_xml(ostream& out);
-  int rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
-              std::string &err_msg);
-  bool compare_group_name(string& id, ACLGroupTypeEnum group) override;
+  void to_xml(std::ostream& out);
+  int rebuild(const DoutPrefixProvider *dpp, rgw::sal::Store* store, ACLOwner *owner,
+	      RGWAccessControlPolicy& dest, std::string &err_msg);
+  bool compare_group_name(std::string& id, ACLGroupTypeEnum group) override;
 
-  virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, const string& canned_acl) {
+  virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, const std::string& canned_acl) {
     RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-    int ret = _acl.create_canned(_owner, bucket_owner, canned_acl);
-    owner = _owner;
+    if (_owner.get_id() == rgw_user("anonymous")) {
+      owner = bucket_owner;
+    } else {
+      owner = _owner;
+    }
+    int ret = _acl.create_canned(owner, bucket_owner, canned_acl);
     return ret;
   }
-  int create_from_headers(RGWUserCtl *user_ctl, const RGWEnv *env, ACLOwner& _owner);
+  int create_from_headers(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+			  const RGWEnv *env, ACLOwner& _owner);
 };
 
 /**

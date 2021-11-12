@@ -1,14 +1,11 @@
-<tabset *ngIf="selection?.hasSingleSelection">
-  <tab heading="Details"
-       i18n-heading>
-    <cd-table [data]="scopes_permissions"
-              [columns]="columns"
-              columnMode="flex"
-              [toolHeader]="false"
-              [autoReload]="false"
-              [autoSave]="false"
-              [footer]="false"
-              [limit]="0">
-    </cd-table>
-  </tab>
-</tabset>
+<ng-container *ngIf="selection">
+  <cd-table [data]="scopes_permissions"
+            [columns]="columns"
+            columnMode="flex"
+            [toolHeader]="false"
+            [autoReload]="false"
+            [autoSave]="false"
+            [footer]="false"
+            [limit]="0">
+  </cd-table>
+</ng-container>

@@ -19,7 +19,17 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "snap_mapper."
 
+using std::make_pair;
+using std::map;
+using std::pair;
+using std::set;
 using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::timespan_str;
 
 const string SnapMapper::LEGACY_MAPPING_PREFIX = "MAP_";
 const string SnapMapper::MAPPING_PREFIX = "SNA_";

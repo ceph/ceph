@@ -1,7 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
-import { NgForm, Validators } from '@angular/forms';
+import { NgForm, ValidatorFn, Validators } from '@angular/forms';
 
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 @Component({
   selector: 'cd-iscsi-setting',
@@ -19,7 +19,7 @@ export class IscsiSettingComponent implements OnInit {
   limits: object;
 
   ngOnInit() {
-    const validators = [];
+    const validators: ValidatorFn[] = [];
     if ('min' in this.limits) {
       validators.push(Validators.min(this.limits['min']));
     }

@@ -1,9 +1,9 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
-import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { FinishedTask } from '../models/finished-task';
 import { TaskException } from '../models/task-exception';
@@ -14,12 +14,12 @@ describe('TaskManagerMessageService', () => {
   let finishedTask: FinishedTask;
 
   configureTestBed({
-    providers: [TaskMessageService, i18nProviders, RbdService],
+    providers: [TaskMessageService, RbdService],
     imports: [HttpClientTestingModule]
   });
 
   beforeEach(() => {
-    service = TestBed.get(TaskMessageService);
+    service = TestBed.inject(TaskMessageService);
     finishedTask = new FinishedTask();
     finishedTask.duration = 30;
   });
@@ -126,8 +126,29 @@ describe('TaskManagerMessageService', () => {
       });
     });
 
+    describe('crush rule tasks', () => {
+      beforeEach(() => {
+        const metadata = {
+          name: 'someRuleName'
+        };
+        defaultMsg = `crush rule '${metadata.name}'`;
+        finishedTask.metadata = metadata;
+      });
+
+      it('tests crushRule/create messages', () => {
+        finishedTask.name = 'crushRule/create';
+        testCreate(defaultMsg);
+        testErrorCode(17, `Name is already used by ${defaultMsg}.`);
+      });
+
+      it('tests crushRule/delete messages', () => {
+        finishedTask.name = 'crushRule/delete';
+        testDelete(defaultMsg);
+      });
+    });
+
     describe('rbd tasks', () => {
-      let metadata;
+      let metadata: Record<string, any>;
       let childMsg: string;
       let destinationMsg: string;
       let snapMsg: string;
@@ -168,6 +189,7 @@ describe('TaskManagerMessageService', () => {
       it('tests rbd/delete messages', () => {
         finishedTask.name = 'rbd/delete';
         testDelete(defaultMsg);
+        testErrorCode(16, `${defaultMsg} is busy.`);
         testErrorCode(39, `${defaultMsg} contains snapshots.`);
       });
 
@@ -225,7 +247,7 @@ describe('TaskManagerMessageService', () => {
         finishedTask.name = 'rbd/trash/restore';
         testMessages(
           new TaskMessageOperation('Restoring', 'restore', 'Restored'),
-          `image '${metadata.image_id_spec}' ` + `into '${metadata.new_image_name}'`
+          `image '${metadata.image_id_spec}' into '${metadata.new_image_name}'`
         );
         testErrorCode(17, `Image name '${metadata.new_image_name}' is already in use.`);
       });

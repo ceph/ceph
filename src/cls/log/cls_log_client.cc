@@ -1,9 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #include <errno.h>
 
 #include "cls/log/cls_log_ops.h"
 #include "include/rados/librados.hpp"
 #include "include/compat.h"
 
+
+using std::list;
+using std::string;
+
+using ceph::bufferlist;
 
 using namespace librados;
 
@@ -99,15 +106,15 @@ public:
           *truncated = ret.truncated;
         if (marker)
           *marker = std::move(ret.marker);
-      } catch (buffer::error& err) {
+      } catch (ceph::buffer::error& err) {
         // nothing we can do about it atm
       }
     }
   }
 };
 
-void cls_log_list(librados::ObjectReadOperation& op, utime_t& from, utime_t& to,
-                  const string& in_marker, int max_entries,
+void cls_log_list(librados::ObjectReadOperation& op, const utime_t& from,
+		  const utime_t& to, const string& in_marker, int max_entries,
 		  list<cls_log_entry>& entries,
                   string *out_marker, bool *truncated)
 {
@@ -135,7 +142,7 @@ public:
         decode(ret, iter);
         if (header)
 	  *header = ret.header;
-      } catch (buffer::error& err) {
+      } catch (ceph::buffer::error& err) {
         // nothing we can do about it atm
       }
     }
@@ -151,4 +158,3 @@ void cls_log_info(librados::ObjectReadOperation& op, cls_log_header *header)
 
   op.exec("log", "info", inbl, new LogInfoCtx(header));
 }
-

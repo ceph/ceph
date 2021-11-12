@@ -7,9 +7,9 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Timer.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "tools/rbd_mirror/MirrorStatusWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 
@@ -31,12 +31,12 @@ using librbd::util::create_rados_callback;
 template <typename I>
 MirrorStatusUpdater<I>::MirrorStatusUpdater(
     librados::IoCtx& io_ctx, Threads<I> *threads,
-    const std::string& site_name, const std::string& fsid)
-  : m_io_ctx(io_ctx), m_threads(threads), m_site_name(site_name),
-    m_fsid(fsid), m_lock(ceph::make_mutex("rbd::mirror::MirrorStatusUpdater " +
-                                          stringify(m_io_ctx.get_id()))) {
-  dout(10) << "site_name=" << site_name << ", "
-           << "fsid=" << fsid << ", "
+    const std::string& local_mirror_uuid)
+  : m_io_ctx(io_ctx), m_threads(threads),
+    m_local_mirror_uuid(local_mirror_uuid),
+    m_lock(ceph::make_mutex("rbd::mirror::MirrorStatusUpdater " +
+                              stringify(m_io_ctx.get_id()))) {
+  dout(10) << "local_mirror_uuid=" << local_mirror_uuid << ", "
            << "pool_id=" << m_io_ctx.get_id() << dendl;
 }
 
@@ -190,17 +190,32 @@ void MirrorStatusUpdater<I>::set_mirror_image_status(
 }
 
 template <typename I>
+void MirrorStatusUpdater<I>::remove_refresh_mirror_image_status(
+    const std::string& global_image_id,
+    Context* on_finish) {
+  if (try_remove_mirror_image_status(global_image_id, false, false,
+                                     on_finish)) {
+    m_threads->work_queue->queue(on_finish, 0);
+  }
+}
+
+template <typename I>
 void MirrorStatusUpdater<I>::remove_mirror_image_status(
-    const std::string& global_image_id, Context* on_finish) {
-  if (try_remove_mirror_image_status(global_image_id, on_finish)) {
+    const std::string& global_image_id, bool immediate_update,
+    Context* on_finish) {
+  if (try_remove_mirror_image_status(global_image_id, true, immediate_update,
+                                     on_finish)) {
     m_threads->work_queue->queue(on_finish, 0);
   }
 }
 
 template <typename I>
 bool MirrorStatusUpdater<I>::try_remove_mirror_image_status(
-    const std::string& global_image_id, Context* on_finish) {
-  dout(15) << "global_image_id=" << global_image_id << dendl;
+    const std::string& global_image_id, bool queue_update,
+    bool immediate_update, Context* on_finish) {
+  dout(15) << "global_image_id=" << global_image_id << ", "
+           << "queue_update=" << queue_update << ", "
+           << "immediate_update=" << immediate_update << dendl;
 
   std::unique_lock locker(m_lock);
   if ((m_update_in_flight &&
@@ -209,8 +224,10 @@ bool MirrorStatusUpdater<I>::try_remove_mirror_image_status(
        m_update_global_image_ids.count(global_image_id) > 0)) {
     // if update is scheduled/in-progress, wait for it to complete
     on_finish = new LambdaContext(
-      [this, global_image_id, on_finish](int r) {
-        if (try_remove_mirror_image_status(global_image_id, on_finish)) {
+      [this, global_image_id, queue_update, immediate_update,
+             on_finish](int r) {
+        if (try_remove_mirror_image_status(global_image_id, queue_update,
+                                           immediate_update, on_finish)) {
           on_finish->complete(0);
         }
       });
@@ -219,6 +236,13 @@ bool MirrorStatusUpdater<I>::try_remove_mirror_image_status(
   }
 
   m_global_image_status.erase(global_image_id);
+  if (queue_update) {
+    m_update_global_image_ids.insert(global_image_id);
+    if (immediate_update) {
+      queue_update_task(std::move(locker));
+    }
+  }
+
   return true;
 }
 
@@ -295,18 +319,17 @@ void MirrorStatusUpdater<I>::update_task(int r) {
   Context* ctx = create_context_callback<
     MirrorStatusUpdater<I>,
     &MirrorStatusUpdater<I>::handle_update_task>(this);
+  if (updating_global_image_ids.empty()) {
+    ctx->complete(0);
+    return;
+  }
+
   auto gather = new C_Gather(g_ceph_context, ctx);
 
   auto it = updating_global_image_ids.begin();
   while (it != updating_global_image_ids.end()) {
     librados::ObjectWriteOperation op;
     uint32_t op_count = 0;
-
-    if (!m_site_name.empty()) {
-      // updates to remote sites should include local site name
-      // to ensure status includes this peer
-      librbd::cls_client::mirror_peer_ping(&op, m_site_name, m_fsid);
-    }
 
     while (it != updating_global_image_ids.end() &&
            op_count < MAX_UPDATES_PER_OP) {
@@ -315,10 +338,12 @@ void MirrorStatusUpdater<I>::update_task(int r) {
 
       auto status_it = global_image_status.find(global_image_id);
       if (status_it == global_image_status.end()) {
+        librbd::cls_client::mirror_image_status_remove(&op, global_image_id);
+        ++op_count;
         continue;
       }
 
-      status_it->second.fsid = m_fsid;
+      status_it->second.mirror_uuid = m_local_mirror_uuid;
       librbd::cls_client::mirror_image_status_set(&op, global_image_id,
                                                   status_it->second);
       ++op_count;

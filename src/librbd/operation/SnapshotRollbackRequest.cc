@@ -9,8 +9,8 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
-#include "librbd/io/ImageRequestWQ.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ImageDispatcherInterface.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "osdc/Striper.h"
 #include <boost/lambda/bind.hpp>
@@ -95,7 +95,7 @@ template <typename I>
 SnapshotRollbackRequest<I>::~SnapshotRollbackRequest() {
   I &image_ctx = this->m_image_ctx;
   if (m_blocking_writes) {
-    image_ctx.io_work_queue->unblock_writes();
+    image_ctx.io_image_dispatcher->unblock_writes();
   }
   if (m_object_map) {
     m_object_map->put();
@@ -119,7 +119,7 @@ void SnapshotRollbackRequest<I>::send_block_writes() {
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   m_blocking_writes = true;
-  image_ctx.io_work_queue->block_writes(create_context_callback<
+  image_ctx.io_image_dispatcher->block_writes(create_context_callback<
     SnapshotRollbackRequest<I>,
     &SnapshotRollbackRequest<I>::handle_block_writes>(this));
 }
@@ -379,18 +379,17 @@ Context *SnapshotRollbackRequest<I>::send_invalidate_cache() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  std::shared_lock owner_lock{image_ctx.owner_lock};
   if(m_object_map != nullptr) {
     Context *ctx = create_context_callback<
       SnapshotRollbackRequest<I>,
       &SnapshotRollbackRequest<I>::handle_invalidate_cache>(this, m_object_map);
-    image_ctx.io_object_dispatcher->invalidate_cache(ctx);
+    image_ctx.io_image_dispatcher->invalidate_cache(ctx);
   }
   else {
     Context *ctx = create_context_callback<
       SnapshotRollbackRequest<I>,
       &SnapshotRollbackRequest<I>::handle_invalidate_cache>(this);
-    image_ctx.io_object_dispatcher->invalidate_cache(ctx);
+    image_ctx.io_image_dispatcher->invalidate_cache(ctx);
   }
   return nullptr;
 }

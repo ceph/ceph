@@ -8,12 +8,13 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
-import { RoleService } from '../../../shared/api/role.service';
-import { ScopeService } from '../../../shared/api/scope.service';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { RoleService } from '~/app/shared/api/role.service';
+import { ScopeService } from '~/app/shared/api/scope.service';
+import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { RoleFormComponent } from './role-form.component';
 import { RoleFormModel } from './role-form.model';
 
@@ -24,7 +25,7 @@ describe('RoleFormComponent', () => {
   let httpTesting: HttpTestingController;
   let roleService: RoleService;
   let router: Router;
-  const setUrl = (url) => Object.defineProperty(router, 'url', { value: url });
+  const setUrl = (url: string) => Object.defineProperty(router, 'url', { value: url });
 
   @Component({ selector: 'cd-fake', template: '' })
   class FakeComponent {}
@@ -40,22 +41,21 @@ describe('RoleFormComponent', () => {
         ToastrModule.forRoot(),
         SharedModule
       ],
-      declarations: [RoleFormComponent, FakeComponent],
-      providers: i18nProviders
+      declarations: [RoleFormComponent, FakeComponent]
     },
-    true
+    [LoadingPanelComponent]
   );
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RoleFormComponent);
     component = fixture.componentInstance;
     form = component.roleForm;
-    httpTesting = TestBed.get(HttpTestingController);
-    roleService = TestBed.get(RoleService);
-    router = TestBed.get(Router);
+    httpTesting = TestBed.inject(HttpTestingController);
+    roleService = TestBed.inject(RoleService);
+    router = TestBed.inject(Router);
     spyOn(router, 'navigate');
     fixture.detectChanges();
-    const notify = TestBed.get(NotificationService);
+    const notify = TestBed.inject(NotificationService);
     spyOn(notify, 'show');
   });
 
@@ -175,7 +175,7 @@ describe('RoleFormComponent', () => {
     const scopes = ['osd', 'user'];
     beforeEach(() => {
       spyOn(roleService, 'get').and.callFake(() => of(role));
-      spyOn(TestBed.get(ScopeService), 'list').and.callFake(() => of(scopes));
+      spyOn(TestBed.inject(ScopeService), 'list').and.callFake(() => of(scopes));
       setUrl('/user-management/roles/edit/role1');
       component.ngOnInit();
       const reqScopes = httpTesting.expectOne('ui-api/scope');

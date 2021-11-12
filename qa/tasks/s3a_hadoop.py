@@ -51,7 +51,7 @@ def task(ctx, config):
     # set versions for cloning the repo
     apache_maven = 'apache-maven-{maven_version}-bin.tar.gz'.format(
         maven_version=maven_version)
-    maven_link = 'http://www-us.apache.org/dist/maven/' + \
+    maven_link = 'http://archive.apache.org/dist/maven/' + \
         '{maven_major}/{maven_version}/binaries/'.format(maven_major=maven_major, maven_version=maven_version) + apache_maven
     hadoop_git = 'https://github.com/apache/hadoop'
     hadoop_rel = 'hadoop-{ver} rel/release-{ver}'.format(ver=hadoop_ver)
@@ -136,7 +136,7 @@ def setup_user_bucket(client, dns_name, access_key, secret_key, bucket_name, tes
             'create',
             run.Raw('--uid'),
             's3a',
-            run.Raw('--display-name=s3a cephtests'),
+            run.Raw('--display-name="s3a cephtests"'),
             run.Raw('--access-key={access_key}'.format(access_key=access_key)),
             run.Raw('--secret-key={secret_key}'.format(secret_key=secret_key)),
             run.Raw('--email=s3a@ceph.com'),
@@ -144,7 +144,9 @@ def setup_user_bucket(client, dns_name, access_key, secret_key, bucket_name, tes
     )
     client.run(
         args=[
-            'virtualenv',
+            'python3',
+            '-m',
+            'venv',
             '{testdir}/venv'.format(testdir=testdir),
             run.Raw('&&'),
             run.Raw('{testdir}/venv/bin/pip'.format(testdir=testdir)),
@@ -171,12 +173,7 @@ for bucket in conn.get_all_buckets():
         print(bucket.name + "\t" + bucket.creation_date)
 """.format(access_key=access_key, secret_key=secret_key, dns_name=dns_name, bucket_name=bucket_name)
     py_bucket_file = '{testdir}/create_bucket.py'.format(testdir=testdir)
-    misc.sudo_write_file(
-        remote=client,
-        path=py_bucket_file,
-        data=create_bucket,
-        perms='0744',
-        )
+    client.sudo_write_file(py_bucket_file, create_bucket, mode='0744')
     client.run(
         args=[
             'cat',
@@ -283,10 +280,6 @@ def configure_s3a(client, dns_name, access_key, secret_key, bucket_name, testdir
 </configuration>
 """.format(name=dns_name, bucket_name=bucket_name, access_key=access_key, secret_key=secret_key)
     config_path = testdir + '/hadoop/hadoop-tools/hadoop-aws/src/test/resources/auth-keys.xml'
-    misc.write_file(
-        remote=client,
-        path=config_path,
-        data=config_template,
-    )
+    client.write_file(config_path, config_template)
     # output for debug
     client.run(args=['cat', config_path])

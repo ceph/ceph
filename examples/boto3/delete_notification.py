@@ -13,7 +13,7 @@ elif len(sys.argv) == 2:
     bucketname = sys.argv[1]
     notification_name = ""
 else:
-    print 'Usage: ' + sys.argv[0] + ' <bucket> [notification]'
+    print('Usage: ' + sys.argv[0] + ' <bucket> [notification]')
     sys.exit(1)
 
 # endpoint and keys from vstart
@@ -30,7 +30,7 @@ client = boto3.client('s3',
 # deleting all notification configurations on a bucket (without deleting the bucket itself) are extension to AWS S3 API
 
 if notification_name == "":
-    print client.delete_bucket_notification_configuration(Bucket=bucketname)
+    print(client.delete_bucket_notification_configuration(Bucket=bucketname))
 else:
-    print client.delete_bucket_notification_configuration(Bucket=bucketname,
-                                                          Notification=notification_name)
+    print(client.delete_bucket_notification_configuration(Bucket=bucketname,
+                                                          Notification=notification_name))

@@ -1,0 +1,9 @@
+<ngb-alert class="no-margin-bottom"
+           type="warning"
+           *ngIf="displayNotification"
+           (close)="close($event)">
+  <div i18n>The Ceph community needs your help to continue improving: please
+    <a routerLink="/telemetry"
+       class="btn activate-button alert-link activate-text">Activate</a> the
+  <a href="https://docs.ceph.com/en/latest/mgr/telemetry/">Telemetry</a> module.</div>
+</ngb-alert>

@@ -1,11 +1,12 @@
 import { Component, OnInit } from '@angular/core';
 import { AbstractControl, FormControl } from '@angular/forms';
 
-import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
 
-import { IscsiService } from '../../../shared/api/iscsi.service';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { IscsiService } from '~/app/shared/api/iscsi.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 @Component({
   selector: 'cd-iscsi-target-image-settings-modal',
@@ -23,10 +24,14 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
 
   settingsForm: CdFormGroup;
 
-  constructor(public modalRef: BsModalRef, public iscsiService: IscsiService) {}
+  constructor(
+    public activeModal: NgbActiveModal,
+    public iscsiService: IscsiService,
+    public actionLabels: ActionLabelsI18n
+  ) {}
 
   ngOnInit() {
-    const fg = {
+    const fg: Record<string, FormControl> = {
       backstore: new FormControl(this.imagesSettings[this.image]['backstore']),
       lun: new FormControl(this.imagesSettings[this.image]['lun']),
       wwn: new FormControl(this.imagesSettings[this.image]['wwn'])
@@ -41,7 +46,7 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
     this.settingsForm = new CdFormGroup(fg);
   }
 
-  getDiskControlLimits(backstore, setting) {
+  getDiskControlLimits(backstore: string, setting: string) {
     if (this.disk_controls_limits) {
       return this.disk_controls_limits[backstore][setting];
     }
@@ -77,6 +82,6 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
     this.imagesSettings[this.image][backstore] = settings;
     this.imagesSettings = { ...this.imagesSettings };
     this.control.updateValueAndValidity({ emitEvent: false });
-    this.modalRef.hide();
+    this.activeModal.close();
   }
 }

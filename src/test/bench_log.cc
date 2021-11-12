@@ -11,6 +11,8 @@
 
 #define dout_context g_ceph_context
 
+using namespace std;
+
 struct T : public Thread {
   int num;
   set<int> myset;
@@ -48,8 +50,7 @@ int main(int argc, const char **argv)
 
   cout << threads << " threads, " << num << " lines per thread" << std::endl;
 
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_OSD,
 			 CODE_ENVIRONMENT_UTILITY,

@@ -7,17 +7,16 @@
 #include <map>
 #include <string>
 
+#include "common/RWLock.h"
+
 #include "rgw_request.h"
 #include "rgw_process.h"
 #include "rgw_realm_reloader.h"
 
-#include "rgw_civetweb.h"
-#include "rgw_civetweb_log.h"
-#include "civetweb/civetweb.h"
 #include "rgw_auth_registry.h"
+#include "rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw
 
 namespace rgw::dmclock {
   class SyncScheduler;
@@ -42,6 +41,10 @@ public:
     const int ret = parse_config(config, config_map);
     return ret < 0 ? ret : 0;
   }
+
+  void set_default_config(RGWFrontendConfig& def_conf);
+
+  std::optional<std::string> get_val(const std::string& key);
 
   bool get_val(const std::string& key,
                const std::string& def_val,
@@ -79,77 +82,10 @@ public:
   virtual void join() = 0;
 
   virtual void pause_for_new_config() = 0;
-  virtual void unpause_with_new_config(rgw::sal::RGWRadosStore* store,
+  virtual void unpause_with_new_config(rgw::sal::Store* store,
                                        rgw_auth_registry_ptr_t auth_registry) = 0;
 };
 
-
-struct RGWMongooseEnv : public RGWProcessEnv {
-  // every request holds a read lock, so we need to prioritize write locks to
-  // avoid starving pause_for_new_config()
-  static constexpr bool prioritize_write = true;
-  RWLock mutex;
-
-  explicit RGWMongooseEnv(const RGWProcessEnv &env)
-    : RGWProcessEnv(env),
-      mutex("RGWCivetWebFrontend", false, true, prioritize_write) {
-  }
-};
-
-
-class RGWCivetWebFrontend : public RGWFrontend {
-  RGWFrontendConfig* conf;
-  struct mg_context* ctx;
-  RGWMongooseEnv env;
-
-  std::unique_ptr<rgw::dmclock::SyncScheduler> scheduler;
-  std::unique_ptr<rgw::dmclock::ClientConfig> client_config;
-
-  void set_conf_default(std::multimap<std::string, std::string>& m,
-                        const std::string& key,
-			const std::string& def_val) {
-    if (m.find(key) == std::end(m)) {
-      m.emplace(key, def_val);
-    }
-  }
-
-  CephContext* cct() const { return env.store->ctx(); }
-public:
-  RGWCivetWebFrontend(RGWProcessEnv& env,
-                      RGWFrontendConfig *conf,
-		      rgw::dmclock::SchedulerCtx& sched_ctx);
-
-  int init() override {
-    return 0;
-  }
-
-  int run() override;
-
-  int process(struct mg_connection* conn);
-
-  void stop() override {
-    if (ctx) {
-      mg_stop(ctx);
-    }
-  }
-
-  void join() override {
-    return;
-  }
-
-  void pause_for_new_config() override {
-    // block callbacks until unpause
-    env.mutex.get_write();
-  }
-
-  void unpause_with_new_config(rgw::sal::RGWRadosStore* const store,
-                               rgw_auth_registry_ptr_t auth_registry) override {
-    env.store = store;
-    env.auth_registry = std::move(auth_registry);
-    // unpause callbacks
-    env.mutex.put_write();
-  }
-}; /* RGWCivetWebFrontend */
 
 class RGWProcessFrontend : public RGWFrontend {
 protected:
@@ -185,7 +121,7 @@ public:
     pprocess->pause();
   }
 
-  void unpause_with_new_config(rgw::sal::RGWRadosStore* const store,
+  void unpause_with_new_config(rgw::sal::Store* const store,
                                rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
     env.auth_registry = auth_registry;
@@ -193,22 +129,24 @@ public:
   }
 }; /* RGWProcessFrontend */
 
-class RGWFCGXFrontend : public RGWProcessFrontend {
-public:
-  RGWFCGXFrontend(RGWProcessEnv& pe, RGWFrontendConfig* _conf)
-    : RGWProcessFrontend(pe, _conf) {}
-
-  int init() override {
-    pprocess = new RGWFCGXProcess(g_ceph_context, &env,
-				  g_conf()->rgw_thread_pool_size, conf);
-    return 0;
-  }
-}; /* RGWFCGXFrontend */
-
-class RGWLoadGenFrontend : public RGWProcessFrontend {
+class RGWLoadGenFrontend : public RGWProcessFrontend, public DoutPrefixProvider {
 public:
   RGWLoadGenFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf)
     : RGWProcessFrontend(pe, _conf) {}
+
+  CephContext *get_cct() const { 
+    return env.store->ctx(); 
+  }
+
+  unsigned get_subsys() const
+  {
+    return ceph_subsys_rgw;
+  }
+
+  std::ostream& gen_prefix(std::ostream& out) const
+  {
+    return out << "rgw loadgen frontend: ";
+  }
 
   int init() override {
     int num_threads;
@@ -218,7 +156,7 @@ public:
 
     pprocess = pp;
 
-    string uid_str;
+    std::string uid_str;
     conf->get_val("uid", "", &uid_str);
     if (uid_str.empty()) {
       derr << "ERROR: uid param must be specified for loadgen frontend"
@@ -227,17 +165,17 @@ public:
     }
 
     rgw_user uid(uid_str);
+    std::unique_ptr<rgw::sal::User> user = env.store->get_user(uid);
 
-    RGWUserInfo user_info;
-    int ret = env.store->ctl()->user->get_info_by_uid(uid, &user_info, null_yield);
+    int ret = user->load_user(this, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;
       return ret;
     }
 
-    map<string, RGWAccessKey>::iterator aiter = user_info.access_keys.begin();
-    if (aiter == user_info.access_keys.end()) {
+    auto aiter = user->get_info().access_keys.begin();
+    if (aiter == user->get_info().access_keys.end()) {
       derr << "ERROR: user has no S3 access keys set" << dendl;
       return -EINVAL;
     }
@@ -269,11 +207,11 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
     if (pauser)
       pauser->pause();
   }
-  void resume(rgw::sal::RGWRadosStore *store) override {
+  void resume(rgw::sal::Store* store) override {
     /* Initialize the registry of auth strategies which will coordinate
      * the dynamic reconfiguration. */
     auto auth_registry = \
-      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store->getRados()->pctl);
+      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store);
 
     for (auto frontend : frontends)
       frontend->unpause_with_new_config(store, auth_registry);

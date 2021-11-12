@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-import * as moment from 'moment';
+import moment from 'moment';
 
 import { CdDevice } from '../models/devices';
 
@@ -8,8 +8,6 @@ import { CdDevice } from '../models/devices';
   providedIn: 'root'
 })
 export class DeviceService {
-  constructor() {}
-
   /**
    * Calculates additional data and appends them as new attributes to the given device.
    */

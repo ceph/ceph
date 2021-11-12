@@ -5,6 +5,7 @@
 
 #include "mon/Monitor.h"
 #include "mon/ConfigMonitor.h"
+#include "mon/KVMonitor.h"
 #include "mon/MgrMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "messages/MConfig.h"
@@ -18,16 +19,46 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
-static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
+using namespace TOPNSPC::common;
+
+using namespace std::literals;
+
+using std::cerr;
+using std::cout;
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::setfill;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+using std::unique_ptr;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::mono_clock;
+using ceph::mono_time;
+using ceph::timespan_str;
+static ostream& _prefix(std::ostream *_dout, const Monitor &mon,
                         const ConfigMonitor *hmon) {
-  return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< "(" << mon->get_state_name() << ").config ";
+  return *_dout << "mon." << mon.name << "@" << mon.rank
+		<< "(" << mon.get_state_name() << ").config ";
 }
 
 const string KEY_PREFIX("config/");
 const string HISTORY_PREFIX("config-history/");
 
-ConfigMonitor::ConfigMonitor(Monitor *m, Paxos *p, const string& service_name)
+ConfigMonitor::ConfigMonitor(Monitor &m, Paxos &p, const string& service_name)
   : PaxosService(m, p, service_name) {
 }
 
@@ -65,6 +96,22 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << " " << (version+1) << dendl;
   put_last_committed(t, version+1);
+  // NOTE: caller should have done encode_pending_to_kvmon() and
+  // kvmon->propose_pending() to commit the actual config changes.
+}
+
+void ConfigMonitor::encode_pending_to_kvmon()
+{
+  // we need to pass our data through KVMonitor so that it is properly
+  // versioned and shared with subscribers.
+  for (auto& [key, value] : pending_cleanup) {
+    if (pending.count(key) == 0) {
+      derr << __func__ << " repair: adjusting config key '" << key << "'"
+	   << dendl;
+      pending[key] = value;
+    }
+  }
+  pending_cleanup.clear();
 
   // TODO: record changed sections (osd, mds.foo, rack:bar, ...)
 
@@ -73,7 +120,7 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     bufferlist metabl;
     ::encode(ceph_clock_now(), metabl);
     ::encode(pending_description, metabl);
-    t->put(CONFIG_PREFIX, history, metabl);
+    mon.kvmon()->enqueue_set(history, metabl);
   }
   for (auto& p : pending) {
     string key = KEY_PREFIX + p.first;
@@ -82,17 +129,17 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       if (p.second && *p.second == q->second) {
 	continue;
       }
-      t->put(CONFIG_PREFIX, history + "-" + p.first, q->second);
+      mon.kvmon()->enqueue_set(history + "-" + p.first, q->second);
     } else if (!p.second) {
       continue;
     }
     if (p.second) {
       dout(20) << __func__ << " set " << key << dendl;
-      t->put(CONFIG_PREFIX, key, *p.second);
-      t->put(CONFIG_PREFIX, history + "+" + p.first, *p.second);
-    } else {
+      mon.kvmon()->enqueue_set(key, *p.second);
+      mon.kvmon()->enqueue_set(history + "+" + p.first, *p.second);
+   } else {
       dout(20) << __func__ << " rm " << key << dendl;
-      t->erase(CONFIG_PREFIX, key);
+      mon.kvmon()->enqueue_rm(key);
     }
   }
 }
@@ -114,22 +161,11 @@ bool ConfigMonitor::preprocess_query(MonOpRequestRef op)
       return preprocess_command(op);
     } catch (const bad_cmd_get& e) {
       bufferlist bl;
-      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      mon.reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
     }
   }
   return false;
-}
-
-static string indent_who(const string& who)
-{
-  if (who == "global") {
-    return who;
-  }
-  if (who.find('.') == string::npos) {
-    return "  " + who;
-  }
-  return "    " + who;
 }
 
 bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
@@ -141,24 +177,23 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(op, -EINVAL, rs, get_last_committed());
+    mon.reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
-  string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(cmdmap, "prefix", prefix);
 
   bufferlist odata;
   if (prefix == "config help") {
     stringstream ss;
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "key", name);
+    cmd_getval(cmdmap, "key", name);
     const Option *opt = g_conf().find_option(name);
     if (!opt) {
-      opt = mon->mgrmon()->find_module_option(name);
+      opt = mon.mgrmon()->find_module_option(name);
     }
     if (opt) {
       if (f) {
@@ -188,7 +223,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	ss << i.name << "\n";
       }
     }
-    for (auto& i : mon->mgrmon()->get_mgr_module_options()) {
+    for (auto& i : mon.mgrmon()->get_mgr_module_options()) {
       if (f) {
 	f->dump_string("option", i.first);
       } else {
@@ -231,7 +266,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     for (auto s : sections) {
       for (auto& i : s.second->options) {
 	if (!f) {
-	  tbl << indent_who(s.first);
+	  tbl << s.first;
 	  tbl << i.second.mask.to_str();
 	  tbl << Option::level_to_str(i.second.opt->level);
           tbl << i.first;
@@ -254,7 +289,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     }
   } else if (prefix == "config get") {
     string who, name;
-    cmd_getval(g_ceph_context, cmdmap, "who", who);
+    cmd_getval(cmdmap, "who", who);
 
     EntityName entity;
     if (!entity.from_str(who) &&
@@ -267,9 +302,9 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     map<string,string> crush_location;
     string device_class;
     if (entity.is_osd()) {
-      mon->osdmon()->osdmap.crush->get_full_location(who, &crush_location);
+      mon.osdmon()->osdmap.crush->get_full_location(who, &crush_location);
       int id = atoi(entity.get_id().c_str());
-      const char *c = mon->osdmon()->osdmap.crush->get_item_class(id);
+      const char *c = mon.osdmon()->osdmap.crush->get_item_class(id);
       if (c) {
 	device_class = c;
       }
@@ -281,11 +316,30 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     auto config = config_map.generate_entity_map(
       entity,
       crush_location,
-      mon->osdmon()->osdmap.crush.get(),
+      mon.osdmon()->osdmap.crush.get(),
       device_class,
       &src);
 
-    if (cmd_getval(g_ceph_context, cmdmap, "key", name)) {
+    if (cmd_getval(cmdmap, "key", name)) {
+      const Option *opt = g_conf().find_option(name);
+      if (!opt) {
+	opt = mon.mgrmon()->find_module_option(name);
+      }
+      if (!opt) {
+	err = -ENOENT;
+	goto reply;
+      }
+      if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+	// handle special options
+	if (name == "fsid") {
+	  odata.append(stringify(mon.monmap->get_fsid()));
+	  odata.append("\n");
+	  goto reply;
+	}
+	err = -EINVAL;
+	ss << name << " is special and cannot be stored by the mon";
+	goto reply;
+      }
       // get a single value
       auto p = config.find(name);
       if (p != config.end()) {
@@ -293,16 +347,8 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	odata.append("\n");
 	goto reply;
       }
-      const Option *opt = g_conf().find_option(name);
-      if (!opt) {
-	opt = mon->mgrmon()->find_module_option(name);
-      }
-      if (!opt) {
-	err = -ENOENT;
-	goto reply;
-      }
       if (!entity.is_client() &&
-	  !boost::get<boost::blank>(&opt->daemon_value)) {
+	  opt->daemon_value != Option::value_t{}) {
 	odata.append(Option::to_str(opt->daemon_value));
       } else {
 	odata.append(Option::to_str(opt->value));
@@ -354,7 +400,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     }
   } else if (prefix == "config log") {
     int64_t num = 10;
-    cmd_getval(g_ceph_context, cmdmap, "num", num);
+    cmd_getval(cmdmap, "num", num);
     ostringstream ds;
     if (f) {
       f->open_array_section("changesets");
@@ -376,16 +422,16 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     }
   } else if (prefix == "config generate-minimal-conf") {
     ostringstream conf;
-    conf << "# minimal ceph.conf for " << mon->monmap->get_fsid() << "\n";
+    conf << "# minimal ceph.conf for " << mon.monmap->get_fsid() << "\n";
 
     // the basics
     conf << "[global]\n";
-    conf << "\tfsid = " << mon->monmap->get_fsid() << "\n";
+    conf << "\tfsid = " << mon.monmap->get_fsid() << "\n";
     conf << "\tmon_host = ";
-    for (auto i = mon->monmap->mon_info.begin();
-	 i != mon->monmap->mon_info.end();
+    for (auto i = mon.monmap->mon_info.begin();
+	 i != mon.monmap->mon_info.end();
 	 ++i) {
-      if (i != mon->monmap->mon_info.begin()) {
+      if (i != mon.monmap->mon_info.begin()) {
 	conf << " ";
       }
       if (i->second.public_addrs.size() == 1 &&
@@ -417,7 +463,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   reply:
-  mon->reply_command(op, err, ss.str(), odata, get_last_committed());
+  mon.reply_command(op, err, ss.str(), odata, get_last_committed());
   return true;
 }
 
@@ -426,7 +472,7 @@ void ConfigMonitor::handle_get_config(MonOpRequestRef op)
   auto m = op->get_req<MGetConfig>();
   dout(10) << __func__ << " " << m->name << " host " << m->host << dendl;
 
-  const OSDMap& osdmap = mon->osdmon()->osdmap;
+  const OSDMap& osdmap = mon.osdmon()->osdmap;
   map<string,string> crush_location;
   osdmap.crush->get_full_location(m->host, &crush_location);
   auto out = config_map.generate_entity_map(
@@ -449,7 +495,7 @@ bool ConfigMonitor::prepare_update(MonOpRequestRef op)
       return prepare_command(op);
     } catch (const bad_cmd_get& e) {
       bufferlist bl;
-      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      mon.reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
     }
   }
@@ -462,15 +508,22 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
   std::stringstream ss;
   int err = -EINVAL;
 
+  // make sure kv is writeable.
+  if (!mon.kvmon()->is_writeable()) {
+    dout(10) << __func__ << " waiting for kv mon to be writeable" << dendl;
+    mon.kvmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+    return false;
+  }
+
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(op, -EINVAL, rs, get_last_committed());
+    mon.reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(cmdmap, "prefix", prefix);
   bufferlist odata;
 
   if (prefix == "config set" ||
@@ -478,15 +531,15 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     string who;
     string name, value;
     bool force = false;
-    cmd_getval(g_ceph_context, cmdmap, "who", who);
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
-    cmd_getval(g_ceph_context, cmdmap, "value", value);
-    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    cmd_getval(cmdmap, "who", who);
+    cmd_getval(cmdmap, "name", name);
+    cmd_getval(cmdmap, "value", value);
+    cmd_getval(cmdmap, "force", force);
 
     if (prefix == "config set" && !force) {
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
-	opt = mon->mgrmon()->find_module_option(name);
+	opt = mon.mgrmon()->find_module_option(name);
       }
       if (!opt) {
 	ss << "unrecognized config option '" << name << "'";
@@ -494,14 +547,18 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 	goto reply;
       }
 
-      if (opt) {
-	Option::value_t real_value;
-	string errstr;
-	err = opt->parse_value(value, &real_value, &errstr, &value);
-	if (err < 0) {
-	  ss << "error parsing value: " << errstr;
-	  goto reply;
-	}
+      Option::value_t real_value;
+      string errstr;
+      err = opt->parse_value(value, &real_value, &errstr, &value);
+      if (err < 0) {
+	ss << "error parsing value: " << errstr;
+	goto reply;
+      }
+
+      if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+	err = -EINVAL;
+	ss << name << " is special and cannot be stored by the mon";
+	goto reply;
       }
     }
 
@@ -516,6 +573,8 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     string key;
     if (section.size()) {
       key += section + "/";
+    } else {
+      key += "global/";
     }
     string mask_str = mask.to_str();
     if (mask_str.size()) {
@@ -528,12 +587,12 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       bl.append(value);
       pending[key] = bl;
     } else {
-      pending[key] = boost::none;
+      pending[key].reset();
     }
     goto update;
   } else if (prefix == "config reset") {
     int64_t revert_to = -1;
-    cmd_getval(g_ceph_context, cmdmap, "num", revert_to);
+    cmd_getval(cmdmap, "num", revert_to);
     if (revert_to < 0 ||
         revert_to > (int64_t)version) {
       err = -EINVAL;
@@ -555,7 +614,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 	  bl.append(*i.second.first);
 	  pending[i.first] = bl;
 	} else if (i.second.second) {
-	  pending[i.first] = boost::none;
+	  pending[i.first].reset();
 	}
       }
     }
@@ -583,7 +642,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 	// a known and worthy option?
 	const Option *o = g_conf().find_option(key);
 	if (!o) {
-	  o = mon->mgrmon()->find_module_option(key);
+	  o = mon.mgrmon()->find_module_option(key);
 	}
 	if (!o ||
 	    (o->flags & Option::FLAG_NO_MON_UPDATE) ||
@@ -645,7 +704,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
   }
 
 reply:
-  mon->reply_command(op, err, ss.str(), odata, get_last_committed());
+  mon.reply_command(op, err, ss.str(), odata, get_last_committed());
   return false;
 
 update:
@@ -667,7 +726,12 @@ update:
     err = 0;
     goto reply;
   }
-  force_immediate_propose();  // faster response
+  // immediately propose *with* KV mon
+  encode_pending_to_kvmon();
+  paxos.plug();
+  mon.kvmon()->propose_pending();
+  paxos.unplug();
+  force_immediate_propose();
   wait_for_finished_proposal(
     op,
     new Monitor::C_Command(
@@ -678,12 +742,19 @@ update:
 
 void ConfigMonitor::tick()
 {
-  if (!is_active()) {
+  if (!is_active() || !mon.is_leader()) {
     return;
   }
   dout(10) << __func__ << dendl;
   bool changed = false;
-  if (changed) {
+  if (!pending_cleanup.empty()) {
+    changed = true;
+  }
+  if (changed && mon.kvmon()->is_writeable()) {
+    paxos.plug();
+    encode_pending_to_kvmon();
+    mon.kvmon()->propose_pending();
+    paxos.unplug();
     propose_pending();
   }
 }
@@ -694,11 +765,22 @@ void ConfigMonitor::on_active()
 
 void ConfigMonitor::load_config()
 {
+  std::map<std::string,std::string> renamed_pacific = {
+    { "mon_osd_blacklist_default_expire", "mon_osd_blocklist_default_expire" },
+    { "mon_mds_blacklist_interval", "mon_mds_blocklist_interval" },
+    { "mon_mgr_blacklist_interval", "mon_mgr_blocklist_interval" },
+    { "rbd_blacklist_on_break_lock", "rbd_blocklist_on_break_lock" },
+    { "rbd_blacklist_expire_seconds", "rbd_blocklist_expire_seconds" },
+    { "mds_session_blacklist_on_timeout", "mds_session_blocklist_on_timeout" },
+    { "mds_session_blacklist_on_evict", "mds_session_blocklist_on_evict" },
+  };
+
   unsigned num = 0;
-  KeyValueDB::Iterator it = mon->store->get_iterator(CONFIG_PREFIX);
+  KeyValueDB::Iterator it = mon.store->get_iterator(KV_PREFIX);
   it->lower_bound(KEY_PREFIX);
   config_map.clear();
   current.clear();
+  pending_cleanup.clear();
   while (it->valid() &&
 	 it->key().compare(0, KEY_PREFIX.size(), KEY_PREFIX) == 0) {
     string key = it->key().substr(KEY_PREFIX.size());
@@ -706,27 +788,34 @@ void ConfigMonitor::load_config()
 
     current[key] = it->value();
 
-    auto last_slash = key.rfind('/');
     string name;
     string who;
-    if (last_slash == std::string::npos) {
-      name = key;
-    } else if (auto mgrpos = key.find("/mgr/"); mgrpos != std::string::npos) {
-      name = key.substr(mgrpos + 1);
-      who = key.substr(0, mgrpos);
-    } else {
-      name = key.substr(last_slash + 1);
-      who = key.substr(0, last_slash);
+    config_map.parse_key(key, &name, &who);
+
+    // has this option been renamed?
+    {
+      auto p = renamed_pacific.find(name);
+      if (p != renamed_pacific.end()) {
+	if (mon.monmap->min_mon_release >= ceph_release_t::pacific) {
+	  // schedule a cleanup
+	  pending_cleanup[key].reset();
+	  pending_cleanup[who + "/" + p->second] = it->value();
+	}
+	// continue loading under the new name
+	name = p->second;
+      }
     }
 
     const Option *opt = g_conf().find_option(name);
     if (!opt) {
-      opt = mon->mgrmon()->find_module_option(name);
+      opt = mon.mgrmon()->find_module_option(name);
     }
     if (!opt) {
       dout(10) << __func__ << " unrecognized option '" << name << "'" << dendl;
-      opt = new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN);
-      // FIXME: this will be leaked!
+      config_map.stray_options.push_back(
+	std::unique_ptr<Option>(
+	  new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
+      opt = config_map.stray_options.back().get();
     }
 
     string err;
@@ -741,10 +830,23 @@ void ConfigMonitor::load_config()
     string section_name;
     if (who.size() &&
 	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
-      derr << __func__ << " ignoring key " << key << dendl;
+      derr << __func__ << " invalid mask for key " << key << dendl;
+      pending_cleanup[key].reset();
+    } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+      dout(10) << __func__ << " NO_MON_UPDATE option '"
+	       << name << "' = '" << value << "' for " << name
+	       << dendl;
+      pending_cleanup[key].reset();
     } else {
+      if (section_name.empty()) {
+	// we prefer global/$option instead of just $option
+	derr << __func__ << " adding global/ prefix to key '" << key << "'"
+	     << dendl;
+	pending_cleanup[key].reset();
+	pending_cleanup["global/"s + key] = it->value();
+      }
       Section *section = &config_map.global;;
-      if (section_name.size()) {
+      if (section_name.size() && section_name != "global") {
 	if (section_name.find('.') != std::string::npos) {
 	  section = &config_map.by_id[section_name];
 	} else {
@@ -757,17 +859,10 @@ void ConfigMonitor::load_config()
     it->next();
   }
   dout(10) << __func__ << " got " << num << " keys" << dendl;
-  dout(20) << __func__ << " config map:\n";
-  JSONFormatter jf(true);
-  jf.open_object_section("config_map");
-  config_map.dump(&jf);
-  jf.close_section();
-  jf.flush(*_dout);
-  *_dout << dendl;
 
   // refresh our own config
   {
-    const OSDMap& osdmap = mon->osdmon()->osdmap;
+    const OSDMap& osdmap = mon.osdmon()->osdmap;
     map<string,string> crush_location;
     osdmap.crush->get_full_location(g_conf()->host, &crush_location);
     auto out = config_map.generate_entity_map(
@@ -783,7 +878,7 @@ void ConfigMonitor::load_changeset(version_t v, ConfigChangeSet *ch)
 {
   ch->version = v;
   string prefix = HISTORY_PREFIX + stringify(v) + "/";
-  KeyValueDB::Iterator it = mon->store->get_iterator(CONFIG_PREFIX);
+  KeyValueDB::Iterator it = mon.store->get_iterator(KV_PREFIX);
   it->lower_bound(prefix);
   while (it->valid() && it->key().find(prefix) == 0) {
     if (it->key() == prefix) {
@@ -793,7 +888,7 @@ void ConfigMonitor::load_changeset(version_t v, ConfigChangeSet *ch)
 	decode(ch->stamp, p);
 	decode(ch->name, p);
       }
-      catch (buffer::error& e) {
+      catch (ceph::buffer::error& e) {
 	derr << __func__ << " failure decoding changeset " << v << dendl;
       }
     } else {
@@ -811,7 +906,7 @@ void ConfigMonitor::load_changeset(version_t v, ConfigChangeSet *ch)
 
 bool ConfigMonitor::refresh_config(MonSession *s)
 {
-  const OSDMap& osdmap = mon->osdmon()->osdmap;
+  const OSDMap& osdmap = mon.osdmon()->osdmap;
   map<string,string> crush_location;
   if (s->remote_host.size()) {
     osdmap.crush->get_full_location(s->remote_host, &crush_location);
@@ -840,8 +935,9 @@ bool ConfigMonitor::refresh_config(MonSession *s)
     dout(20) << __func__ << " no change, " << out << dendl;
     return false;
   }
-
-  dout(20) << __func__ << " " << out << dendl;
+  // removing this to hide sensitive data going into logs
+  // leaving this for debugging purposes
+ //  dout(20) << __func__ << " " << out << dendl;
   s->last_config = std::move(out);
   s->any_config = true;
   return true;
@@ -886,7 +982,7 @@ void ConfigMonitor::check_sub(Subscription *sub)
   if (sub->next <= version) {
     maybe_send_config(sub->session);
     if (sub->onetime) {
-      mon->with_session_map([sub](MonSessionMap& session_map) {
+      mon.with_session_map([sub](MonSessionMap& session_map) {
 	  session_map.remove_sub(sub);
 	});
     } else {
@@ -898,8 +994,8 @@ void ConfigMonitor::check_sub(Subscription *sub)
 void ConfigMonitor::check_all_subs()
 {
   dout(10) << __func__ << dendl;
-  auto subs = mon->session_map.subs.find("config");
-  if (subs == mon->session_map.subs.end()) {
+  auto subs = mon.session_map.subs.find("config");
+  if (subs == mon.session_map.subs.end()) {
     return;
   }
   int updated = 0, total = 0;

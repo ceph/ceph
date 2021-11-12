@@ -5,10 +5,10 @@
 #include "librbd/watcher/RewatchRequest.h"
 #include "librbd/Utils.h"
 #include "librbd/TaskFinisher.h"
+#include "librbd/asio/ContextWQ.h"
 #include "include/encoding.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
@@ -16,6 +16,8 @@
 #define dout_subsys ceph_subsys_rbd
 
 namespace librbd {
+
+using namespace boost::placeholders;
 
 using namespace watcher;
 
@@ -87,11 +89,12 @@ void Watcher::C_NotifyAck::finish(int r) {
 #define dout_prefix *_dout << "librbd::Watcher: " << this << " " << __func__ \
                            << ": "
 
-Watcher::Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
+Watcher::Watcher(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
                           const string& oid)
   : m_ioctx(ioctx), m_work_queue(work_queue), m_oid(oid),
     m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
-    m_watch_lock(ceph::make_shared_mutex(util::unique_lock_name("librbd::Watcher::m_watch_lock", this))),
+    m_watch_lock(ceph::make_shared_mutex(
+      util::unique_lock_name("librbd::Watcher::m_watch_lock", this))),
     m_watch_handle(0), m_notifier(work_queue, ioctx, oid),
     m_watch_state(WATCH_STATE_IDLE), m_watch_ctx(*this) {
 }
@@ -107,7 +110,7 @@ void Watcher::register_watch(Context *on_finish) {
   std::unique_lock watch_locker{m_watch_lock};
   ceph_assert(is_unregistered(m_watch_lock));
   m_watch_state = WATCH_STATE_REGISTERING;
-  m_watch_blacklisted = false;
+  m_watch_blocklisted = false;
 
   librados::AioCompletion *aio_comp = create_rados_callback(
     new C_RegisterWatch(this, on_finish));
@@ -139,7 +142,7 @@ void Watcher::handle_register_watch(int r, Context *on_finish) {
       m_watch_state = WATCH_STATE_REWATCHING;
       watch_error = true;
     } else {
-      m_watch_blacklisted = (r == -EBLACKLISTED);
+      m_watch_blocklisted = (r == -EBLOCKLISTED);
     }
   }
 
@@ -174,7 +177,7 @@ void Watcher::unregister_watch(Context *on_finish) {
       aio_comp->release();
 
       m_watch_handle = 0;
-      m_watch_blacklisted = false;
+      m_watch_blocklisted = false;
       return;
     }
   }
@@ -230,8 +233,8 @@ void Watcher::handle_error(uint64_t handle, int err) {
 
   if (is_registered(m_watch_lock)) {
     m_watch_state = WATCH_STATE_REWATCHING;
-    if (err == -EBLACKLISTED) {
-      m_watch_blacklisted = true;
+    if (err == -EBLOCKLISTED) {
+      m_watch_blocklisted = true;
     }
 
     auto ctx = new LambdaContext(
@@ -279,14 +282,14 @@ void Watcher::handle_rewatch(int r) {
     std::unique_lock watch_locker{m_watch_lock};
     ceph_assert(m_watch_state == WATCH_STATE_REWATCHING);
 
-    m_watch_blacklisted = false;
+    m_watch_blocklisted = false;
     if (m_unregister_watch_ctx != nullptr) {
       ldout(m_cct, 10) << "image is closing, skip rewatch" << dendl;
       m_watch_state = WATCH_STATE_IDLE;
       std::swap(unregister_watch_ctx, m_unregister_watch_ctx);
-    } else if (r  == -EBLACKLISTED) {
-      lderr(m_cct) << "client blacklisted" << dendl;
-      m_watch_blacklisted = true;
+    } else if (r  == -EBLOCKLISTED) {
+      lderr(m_cct) << "client blocklisted" << dendl;
+      m_watch_blocklisted = true;
     } else if (r == -ENOENT) {
       ldout(m_cct, 5) << "object does not exist" << dendl;
     } else if (r < 0) {
@@ -324,7 +327,7 @@ void Watcher::handle_rewatch_callback(int r) {
     if (m_unregister_watch_ctx != nullptr) {
       m_watch_state = WATCH_STATE_IDLE;
       std::swap(unregister_watch_ctx, m_unregister_watch_ctx);
-    } else if (r == -ENOENT) {
+    } else if (r == -EBLOCKLISTED || r == -ENOENT) {
       m_watch_state = WATCH_STATE_IDLE;
     } else if (r < 0 || m_watch_error) {
       watch_error = true;

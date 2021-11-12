@@ -12,7 +12,7 @@ openstack:
 
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
       - \(OSD_
@@ -23,4 +23,6 @@ overrides:
 tasks:
 - install:
 - ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr_pool false --force
 - divergent_priors:

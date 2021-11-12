@@ -103,7 +103,7 @@ public:
 
   void complete(int r) override;
 
-  virtual void print(ostream& out) const = 0;
+  virtual void print(std::ostream& out) const = 0;
 
   static bool check_ios_in_flight(ceph::coarse_mono_time cutoff,
 				  std::string& slow_count,
@@ -111,15 +111,14 @@ public:
 private:
   ceph::coarse_mono_time created_at;
   elist<MDSIOContextBase*>::item list_item;
-
-  static elist<MDSIOContextBase*> ctx_list;
-  static ceph::spinlock ctx_list_lock;
+  
+  friend struct MDSIOContextList;
 };
 
 /**
  * Completion for an log operation, takes big MDSRank lock
  * before executing finish function. Update log's safe pos
- * after finish functuon return.
+ * after finish function return.
  */
 class MDSLogContextBase : public MDSIOContextBase
 {
@@ -130,7 +129,7 @@ public:
   void complete(int r) final;
   void set_write_pos(uint64_t wp) { write_pos = wp; }
   virtual void pre_finish(int r) {}
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "log_event(" << write_pos << ")";
   }
 };
@@ -156,7 +155,7 @@ protected:
 public:
   MDSIOContextWrapper(MDSRank *m, Context *c) : MDSHolder(m), fin(c) {}
   void finish(int r) override;
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "io_context_wrapper(" << fin << ")";
   }
 };
@@ -200,7 +199,7 @@ public:
     }
   }
   void complete(int r) final;
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "io_wrapper(" << wrapped << ")";
   }
 };

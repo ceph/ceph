@@ -21,10 +21,8 @@
 #include "test/librados/testcase_cxx.h"
 #include "test/librados/test_cxx.h"
 
+using namespace std;
 using namespace librados;
-using std::map;
-using std::ostringstream;
-using std::string;
 
 typedef RadosTestPP LibRadosMiscPP;
 typedef RadosTestECPP LibRadosMiscECPP;
@@ -707,11 +705,11 @@ public:
 
 typedef ::testing::Types<
     LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_XXHASH32,
-			   Checksummer::xxhash32, uint32_t>,
+			   Checksummer::xxhash32, ceph_le32>,
     LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_XXHASH64,
-			   Checksummer::xxhash64, uint64_t>,
+			   Checksummer::xxhash64, ceph_le64>,
     LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_CRC32C,
-			   Checksummer::crc32c, uint32_t>
+			   Checksummer::crc32c, ceph_le32>
   > LibRadosChecksumTypes;
 
 TYPED_TEST_SUITE(LibRadosChecksum, LibRadosChecksumTypes);

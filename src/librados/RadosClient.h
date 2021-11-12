@@ -14,48 +14,59 @@
 #ifndef CEPH_LIBRADOS_RADOSCLIENT_H
 #define CEPH_LIBRADOS_RADOSCLIENT_H
 
+#include <functional>
+#include <memory>
+#include <string>
+
+#include "msg/Dispatcher.h"
+
+#include "common/async/context_pool.h"
 #include "common/config_fwd.h"
 #include "common/Cond.h"
-#include "common/Timer.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
+#include "common/config_obs.h"
+#include "include/common_fwd.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "mon/MonClient.h"
 #include "mgr/MgrClient.h"
-#include "msg/Dispatcher.h"
 
 #include "IoCtxImpl.h"
 
-struct AuthAuthorizer;
 struct Context;
-class CephContext;
-struct Connection;
 class Message;
 class MLog;
 class Messenger;
 class AioCompletionImpl;
 
-class librados::RadosClient : public Dispatcher
-{
-  std::unique_ptr<CephContext,
-		  std::function<void(CephContext*)> > cct_deleter;
+namespace neorados { namespace detail { class RadosClient; }}
 
+class librados::RadosClient : public Dispatcher,
+			      public md_config_obs_t
+{
+  friend neorados::detail::RadosClient;
 public:
   using Dispatcher::cct;
-  const ConfigProxy& conf;
+private:
+  std::unique_ptr<CephContext,
+		  std::function<void(CephContext*)>> cct_deleter;
+
+public:
+  const ConfigProxy& conf{cct->_conf};
+  ceph::async::io_context_pool poolctx;
 private:
   enum {
     DISCONNECTED,
     CONNECTING,
     CONNECTED,
-  } state;
+  } state{DISCONNECTED};
 
-  MonClient monclient;
-  MgrClient mgrclient;
-  Messenger *messenger;
+  MonClient monclient{cct, poolctx};
+  MgrClient mgrclient{cct, nullptr, &monclient.monmap};
+  Messenger *messenger{nullptr};
 
-  uint64_t instance_id;
+  uint64_t instance_id{0};
 
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m) override;
@@ -65,31 +76,31 @@ private:
   void ms_handle_remote_reset(Connection *con) override;
   bool ms_handle_refused(Connection *con) override;
 
-  Objecter *objecter;
+  Objecter *objecter{nullptr};
 
   ceph::mutex lock = ceph::make_mutex("librados::RadosClient::lock");
   ceph::condition_variable cond;
-  SafeTimer timer;
-  int refcnt;
+  int refcnt{1};
 
-  version_t log_last_version;
-  rados_log_callback_t log_cb;
-  rados_log_callback2_t log_cb2;
-  void *log_cb_arg;
-  string log_watch;
+  version_t log_last_version{0};
+  rados_log_callback_t log_cb{nullptr};
+  rados_log_callback2_t log_cb2{nullptr};
+  void *log_cb_arg{nullptr};
+  std::string log_watch;
 
   bool service_daemon = false;
-  string daemon_name, service_name;
-  map<string,string> daemon_metadata;
+  std::string daemon_name, service_name;
+  std::map<std::string,std::string> daemon_metadata;
+  ceph::timespan rados_mon_op_timeout{};
 
   int wait_for_osdmap();
 
 public:
-  Finisher finisher;
+  boost::asio::io_context::strand finish_strand{poolctx.get_io_context()};
 
-  explicit RadosClient(CephContext *cct_);
+  explicit RadosClient(CephContext *cct);
   ~RadosClient() override;
-  int ping_monitor(string mon_id, string *result);
+  int ping_monitor(std::string mon_id, std::string *result);
   int connect();
   void shutdown();
 
@@ -116,56 +127,56 @@ public:
   int pool_get_name(uint64_t pool_id, std::string *name,
 		    bool wait_latest_map = false);
 
-  int pool_list(std::list<std::pair<int64_t, string> >& ls);
-  int get_pool_stats(std::list<string>& ls, map<string,::pool_stat_t> *result,
+  int pool_list(std::list<std::pair<int64_t, std::string> >& ls);
+  int get_pool_stats(std::list<std::string>& ls, std::map<std::string,::pool_stat_t> *result,
     bool *per_pool);
   int get_fs_stats(ceph_statfs& result);
   bool get_pool_is_selfmanaged_snaps_mode(const std::string& pool);
 
   /*
   -1 was set as the default value and monitor will pickup the right crush rule with below order:
-    a) osd pool default crush replicated ruleset
-    b) the first ruleset in crush ruleset
+    a) osd pool default crush replicated rule
+    b) the first rule
     c) error out if no value find
   */
-  int pool_create(string& name, int16_t crush_rule=-1);
-  int pool_create_async(string& name, PoolAsyncCompletionImpl *c,
+  int pool_create(std::string& name, int16_t crush_rule=-1);
+  int pool_create_async(std::string& name, PoolAsyncCompletionImpl *c,
 			int16_t crush_rule=-1);
   int pool_get_base_tier(int64_t pool_id, int64_t* base_tier);
   int pool_delete(const char *name);
 
   int pool_delete_async(const char *name, PoolAsyncCompletionImpl *c);
 
-  int blacklist_add(const string& client_address, uint32_t expire_seconds);
+  int blocklist_add(const std::string& client_address, uint32_t expire_seconds);
 
-  int mon_command(const vector<string>& cmd, const bufferlist &inbl,
-	          bufferlist *outbl, string *outs);
-  void mon_command_async(const vector<string>& cmd, const bufferlist &inbl,
-                         bufferlist *outbl, string *outs, Context *on_finish);
+  int mon_command(const std::vector<std::string>& cmd, const bufferlist &inbl,
+	          bufferlist *outbl, std::string *outs);
+  void mon_command_async(const std::vector<std::string>& cmd, const bufferlist &inbl,
+                         bufferlist *outbl, std::string *outs, Context *on_finish);
   int mon_command(int rank,
-		  const vector<string>& cmd, const bufferlist &inbl,
-	          bufferlist *outbl, string *outs);
-  int mon_command(string name,
-		  const vector<string>& cmd, const bufferlist &inbl,
-	          bufferlist *outbl, string *outs);
-  int mgr_command(const vector<string>& cmd, const bufferlist &inbl,
-	          bufferlist *outbl, string *outs);
+		  const std::vector<std::string>& cmd, const bufferlist &inbl,
+	          bufferlist *outbl, std::string *outs);
+  int mon_command(std::string name,
+		  const std::vector<std::string>& cmd, const bufferlist &inbl,
+	          bufferlist *outbl, std::string *outs);
+  int mgr_command(const std::vector<std::string>& cmd, const bufferlist &inbl,
+	          bufferlist *outbl, std::string *outs);
   int mgr_command(
-    const string& name,
-    const vector<string>& cmd, const bufferlist &inbl,
-    bufferlist *outbl, string *outs);
-  int osd_command(int osd, vector<string>& cmd, const bufferlist& inbl,
-                  bufferlist *poutbl, string *prs);
-  int pg_command(pg_t pgid, vector<string>& cmd, const bufferlist& inbl,
-	         bufferlist *poutbl, string *prs);
+    const std::string& name,
+    const std::vector<std::string>& cmd, const bufferlist &inbl,
+    bufferlist *outbl, std::string *outs);
+  int osd_command(int osd, std::vector<std::string>& cmd, const bufferlist& inbl,
+                  bufferlist *poutbl, std::string *prs);
+  int pg_command(pg_t pgid, std::vector<std::string>& cmd, const bufferlist& inbl,
+	         bufferlist *poutbl, std::string *prs);
 
   void handle_log(MLog *m);
-  int monitor_log(const string& level, rados_log_callback_t cb,
+  int monitor_log(const std::string& level, rados_log_callback_t cb,
 		  rados_log_callback2_t cb2, void *arg);
 
   void get();
   bool put();
-  void blacklist_self(bool set);
+  void blocklist_self(bool set);
 
   std::string get_addrs() const;
 
@@ -179,6 +190,9 @@ public:
   mon_feature_t get_required_monitor_features() const;
 
   int get_inconsistent_pgs(int64_t pool_id, std::vector<std::string>* pgs);
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed) override;
 };
 
 #endif

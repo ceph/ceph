@@ -29,7 +29,6 @@
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_bilog_rados.h"
-#include "services/svc_datalog_rados.h"
 
 #include "common/errno.h"
 #include "include/ceph_assert.h"
@@ -38,88 +37,69 @@
 #define LOG_CLASS_LIST_MAX_ENTRIES (1000)
 #define dout_subsys ceph_subsys_rgw
 
-static int parse_date_str(string& in, real_time& out) {
-  uint64_t epoch = 0;
-  uint64_t nsec = 0;
+using namespace std;
 
-  if (!in.empty()) {
-    if (utime_t::parse_date(in, &epoch, &nsec) < 0) {
-      dout(5) << "Error parsing date " << in << dendl;
-      return -EINVAL;
-    }
-  }
-  out = utime_t(epoch, nsec).to_real_time();
-  return 0;
-}
-
-void RGWOp_MDLog_List::execute() {
+void RGWOp_MDLog_List::execute(optional_yield y) {
   string   period = s->info.args.get("period");
   string   shard = s->info.args.get("id");
   string   max_entries_str = s->info.args.get("max-entries");
-  string   st = s->info.args.get("start-time"),
-           et = s->info.args.get("end-time"),
-           marker = s->info.args.get("marker"),
+  string   marker = s->info.args.get("marker"),
            err;
-  real_time  ut_st, 
-             ut_et;
   void    *handle;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
+  if (s->info.args.exists("start-time") ||
+      s->info.args.exists("end-time")) {
+    ldpp_dout(this, 5) << "start-time and end-time are no longer accepted" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+
   shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id " << shard << dendl;
-    http_ret = -EINVAL;
-    return;
-  }
-
-  if (parse_date_str(st, ut_st) < 0) {
-    http_ret = -EINVAL;
-    return;
-  }
-
-  if (parse_date_str(et, ut_et) < 0) {
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
   if (!max_entries_str.empty()) {
     max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
     if (!err.empty()) {
-      dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
-      http_ret = -EINVAL;
+      ldpp_dout(this, 5) << "Error parsing max-entries " << max_entries_str << dendl;
+      op_ret = -EINVAL;
       return;
     }
     if (max_entries > LOG_CLASS_LIST_MAX_ENTRIES) {
       max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
     }
-  } 
+  }
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->svc()->zone->get_current_period_id();
+    ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_zone()->get_current_period_id();
     if (period.empty()) {
-      ldout(s->cct, 5) << "Missing period id" << dendl;
-      http_ret = -EINVAL;
+      ldpp_dout(this, 5) << "Missing period id" << dendl;
+      op_ret = -EINVAL;
       return;
     }
   }
 
-  RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone, static_cast<rgw::sal::RadosStore*>(store)->svc()->cls, period};
 
-  meta_log.init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
+  meta_log.init_list_entries(shard_id, {}, {}, marker, &handle);
 
-  http_ret = meta_log.list_entries(handle, max_entries, entries,
+  op_ret = meta_log.list_entries(this, handle, max_entries, entries,
                                    &last_marker, &truncated);
 
   meta_log.complete_list_entries(handle);
 }
 
 void RGWOp_MDLog_List::send_response() {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
-  if (http_ret < 0)
+  if (op_ret < 0)
     return;
 
   s->formatter->open_object_section("log_entries");
@@ -130,7 +110,7 @@ void RGWOp_MDLog_List::send_response() {
     for (list<cls_log_entry>::iterator iter = entries.begin();
 	 iter != entries.end(); ++iter) {
       cls_log_entry& entry = *iter;
-      store->ctl()->meta.mgr->dump_log_entry(entry, s->formatter);
+      static_cast<rgw::sal::RadosStore*>(store)->ctl()->meta.mgr->dump_log_entry(entry, s->formatter);
       flusher.flush();
     }
     s->formatter->close_section();
@@ -139,14 +119,14 @@ void RGWOp_MDLog_List::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_Info::execute() {
+void RGWOp_MDLog_Info::execute(optional_yield y) {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
-  period = store->svc()->mdlog->read_oldest_log_period();
-  http_ret = period.get_error();
+  period = static_cast<rgw::sal::RadosStore*>(store)->svc()->mdlog->read_oldest_log_period(y, s);
+  op_ret = period.get_error();
 }
 
 void RGWOp_MDLog_Info::send_response() {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
@@ -160,35 +140,35 @@ void RGWOp_MDLog_Info::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_ShardInfo::execute() {
+void RGWOp_MDLog_ShardInfo::execute(optional_yield y) {
   string period = s->info.args.get("period");
   string shard = s->info.args.get("id");
   string err;
 
   unsigned shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id " << shard << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->svc()->zone->get_current_period_id();
+    ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_zone()->get_current_period_id();
 
     if (period.empty()) {
-      ldout(s->cct, 5) << "Missing period id" << dendl;
-      http_ret = -EINVAL;
+      ldpp_dout(this, 5) << "Missing period id" << dendl;
+      op_ret = -EINVAL;
       return;
     }
   }
-  RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone, static_cast<rgw::sal::RadosStore*>(store)->svc()->cls, period};
 
-  http_ret = meta_log.get_info(shard_id, &info);
+  op_ret = meta_log.get_info(this, shard_id, &info);
 }
 
 void RGWOp_MDLog_ShardInfo::send_response() {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
@@ -196,61 +176,68 @@ void RGWOp_MDLog_ShardInfo::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_Delete::execute() {
-  string   st = s->info.args.get("start-time"),
-           et = s->info.args.get("end-time"),
-           start_marker = s->info.args.get("start-marker"),
-           end_marker = s->info.args.get("end-marker"),
+void RGWOp_MDLog_Delete::execute(optional_yield y) {
+  string   marker = s->info.args.get("marker"),
            period = s->info.args.get("period"),
            shard = s->info.args.get("id"),
            err;
-  real_time  ut_st, 
-             ut_et;
   unsigned shard_id;
 
-  http_ret = 0;
+
+  if (s->info.args.exists("start-time") ||
+      s->info.args.exists("end-time")) {
+    ldpp_dout(this, 5) << "start-time and end-time are no longer accepted" << dendl;
+    op_ret = -EINVAL;
+  }
+
+  if (s->info.args.exists("start-marker")) {
+    ldpp_dout(this, 5) << "start-marker is no longer accepted" << dendl;
+    op_ret = -EINVAL;
+  }
+
+  if (s->info.args.exists("end-marker")) {
+    if (!s->info.args.exists("marker")) {
+      marker = s->info.args.get("end-marker");
+    } else {
+      ldpp_dout(this, 5) << "end-marker and marker cannot both be provided" << dendl;
+      op_ret = -EINVAL;
+    }
+  }
+
+  op_ret = 0;
 
   shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id " << shard << dendl;
-    http_ret = -EINVAL;
-    return;
-  }
-  if (et.empty() && end_marker.empty()) { /* bounding end */
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
-  if (parse_date_str(st, ut_st) < 0) {
-    http_ret = -EINVAL;
-    return;
-  }
-
-  if (parse_date_str(et, ut_et) < 0) {
-    http_ret = -EINVAL;
+  if (marker.empty()) { /* bounding end */
+    op_ret = -EINVAL;
     return;
   }
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->svc()->zone->get_current_period_id();
+    ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_zone()->get_current_period_id();
 
     if (period.empty()) {
-      ldout(s->cct, 5) << "Missing period id" << dendl;
-      http_ret = -EINVAL;
+      ldpp_dout(this, 5) << "Missing period id" << dendl;
+      op_ret = -EINVAL;
       return;
     }
   }
-  RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone, static_cast<rgw::sal::RadosStore*>(store)->svc()->cls, period};
 
-  http_ret = meta_log.trim(shard_id, ut_st, ut_et, start_marker, end_marker);
+  op_ret = meta_log.trim(this, shard_id, {}, {}, {}, marker);
 }
 
-void RGWOp_MDLog_Lock::execute() {
+void RGWOp_MDLog_Lock::execute(optional_yield y) {
   string period, shard_id_str, duration_str, locker_id, zone_id;
   unsigned shard_id;
 
-  http_ret = 0;
+  op_ret = 0;
 
   period       = s->info.args.get("period");
   shard_id_str = s->info.args.get("id");
@@ -259,8 +246,8 @@ void RGWOp_MDLog_Lock::execute() {
   zone_id      = s->info.args.get("zone-id");
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->svc()->zone->get_current_period_id();
+    ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_zone()->get_current_period_id();
   }
 
   if (period.empty() ||
@@ -268,38 +255,38 @@ void RGWOp_MDLog_Lock::execute() {
       (duration_str.empty()) ||
       locker_id.empty() ||
       zone_id.empty()) {
-    dout(5) << "Error invalid parameter list" << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "Error invalid parameter list" << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
   string err;
   shard_id = (unsigned)strict_strtol(shard_id_str.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id param " << shard_id_str << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "Error parsing shard_id param " << shard_id_str << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
-  RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone, static_cast<rgw::sal::RadosStore*>(store)->svc()->cls, period};
   unsigned dur;
   dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
   if (!err.empty() || dur <= 0) {
-    dout(5) << "invalid length param " << duration_str << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "invalid length param " << duration_str << dendl;
+    op_ret = -EINVAL;
     return;
   }
-  http_ret = meta_log.lock_exclusive(shard_id, make_timespan(dur), zone_id,
+  op_ret = meta_log.lock_exclusive(s, shard_id, make_timespan(dur), zone_id,
 				     locker_id);
-  if (http_ret == -EBUSY)
-    http_ret = -ERR_LOCKED;
+  if (op_ret == -EBUSY)
+    op_ret = -ERR_LOCKED;
 }
 
-void RGWOp_MDLog_Unlock::execute() {
+void RGWOp_MDLog_Unlock::execute(optional_yield y) {
   string period, shard_id_str, locker_id, zone_id;
   unsigned shard_id;
 
-  http_ret = 0;
+  op_ret = 0;
 
   period       = s->info.args.get("period");
   shard_id_str = s->info.args.get("id");
@@ -307,50 +294,50 @@ void RGWOp_MDLog_Unlock::execute() {
   zone_id      = s->info.args.get("zone-id");
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->svc()->zone->get_current_period_id();
+    ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_zone()->get_current_period_id();
   }
 
   if (period.empty() ||
       shard_id_str.empty() ||
       locker_id.empty() ||
       zone_id.empty()) {
-    dout(5) << "Error invalid parameter list" << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "Error invalid parameter list" << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
   string err;
   shard_id = (unsigned)strict_strtol(shard_id_str.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id param " << shard_id_str << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "Error parsing shard_id param " << shard_id_str << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
-  RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
-  http_ret = meta_log.unlock(shard_id, zone_id, locker_id);
+  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone, static_cast<rgw::sal::RadosStore*>(store)->svc()->cls, period};
+  op_ret = meta_log.unlock(s, shard_id, zone_id, locker_id);
 }
 
-void RGWOp_MDLog_Notify::execute() {
+void RGWOp_MDLog_Notify::execute(optional_yield y) {
 #define LARGE_ENOUGH_BUF (128 * 1024)
 
   int r = 0;
   bufferlist data;
-  std::tie(r, data) = rgw_rest_read_all_input(s, LARGE_ENOUGH_BUF);
+  std::tie(r, data) = read_all_input(s, LARGE_ENOUGH_BUF);
   if (r < 0) {
-    http_ret = r;
+    op_ret = r;
     return;
   }
 
   char* buf = data.c_str();
-  ldout(s->cct, 20) << __func__ << "(): read data: " << buf << dendl;
+  ldpp_dout(this, 20) << __func__ << "(): read data: " << buf << dendl;
 
   JSONParser p;
   r = p.parse(buf, data.length());
   if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: failed to parse JSON" << dendl;
-    http_ret = r;
+    ldpp_dout(this, 0) << "ERROR: failed to parse JSON" << dendl;
+    op_ret = r;
     return;
   }
 
@@ -358,57 +345,53 @@ void RGWOp_MDLog_Notify::execute() {
   try {
     decode_json_obj(updated_shards, &p);
   } catch (JSONDecoder::err& err) {
-    ldout(s->cct, 0) << "ERROR: failed to decode JSON" << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 0) << "ERROR: failed to decode JSON" << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
   if (store->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     for (set<int>::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
-      ldout(s->cct, 20) << __func__ << "(): updated shard=" << *iter << dendl;
+      ldpp_dout(this, 20) << __func__ << "(): updated shard=" << *iter << dendl;
     }
   }
 
-  store->getRados()->wakeup_meta_sync_shards(updated_shards);
+  store->wakeup_meta_sync_shards(updated_shards);
 
-  http_ret = 0;
+  op_ret = 0;
 }
 
-void RGWOp_BILog_List::execute() {
+void RGWOp_BILog_List::execute(optional_yield y) {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          marker = s->info.args.get("marker"),
          max_entries_str = s->info.args.get("max-entries"),
          bucket_instance = s->info.args.get("bucket-instance");
-  RGWBucketInfo bucket_info;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name));
   unsigned max_entries;
 
   if (bucket_name.empty() && bucket_instance.empty()) {
-    dout(5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
   int shard_id;
   string bn;
-  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
-  if (http_ret < 0) {
+  op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
+  if (op_ret < 0) {
     return;
   }
 
   if (!bucket_instance.empty()) {
-    rgw_bucket b(rgw_bucket_key(tenant_name, bn, bucket_instance));
-    http_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
-    if (http_ret < 0) {
-      ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
-      return;
-    }
-  } else { /* !bucket_name.empty() */
-    http_ret = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
-    if (http_ret < 0) {
-      ldpp_dout(s, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
-      return;
-    }
+    b.name = bn;
+    b.bucket_id = bucket_instance;
+  }
+  op_ret = store->get_bucket(s, nullptr, b, &bucket, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
+    return;
   }
 
   bool truncated;
@@ -422,11 +405,11 @@ void RGWOp_BILog_List::execute() {
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id,
+    int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_list(s, bucket->get_info(), shard_id,
                                                marker, max_entries - count, 
                                                entries, &truncated);
     if (ret < 0) {
-      ldpp_dout(s, 5) << "ERROR: list_bi_log_entries()" << dendl;
+      ldpp_dout(this, 5) << "ERROR: list_bi_log_entries()" << dendl;
       return;
     }
 
@@ -442,13 +425,13 @@ void RGWOp_BILog_List::send_response() {
   if (sent_header)
     return;
 
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
   sent_header = true;
 
-  if (http_ret < 0)
+  if (op_ret < 0)
     return;
 
   s->formatter->open_array_section("entries");
@@ -470,53 +453,50 @@ void RGWOp_BILog_List::send_response_end() {
   flusher.flush();
 }
       
-void RGWOp_BILog_Info::execute() {
+void RGWOp_BILog_Info::execute(optional_yield y) {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          bucket_instance = s->info.args.get("bucket-instance");
-  RGWBucketInfo bucket_info;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name));
 
   if (bucket_name.empty() && bucket_instance.empty()) {
-    ldpp_dout(s, 5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
   int shard_id;
   string bn;
-  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
-  if (http_ret < 0) {
+  op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
+  if (op_ret < 0) {
     return;
   }
 
   if (!bucket_instance.empty()) {
-    rgw_bucket b(rgw_bucket_key(tenant_name, bn, bucket_instance));
-    http_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
-    if (http_ret < 0) {
-      ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
-      return;
-    }
-  } else { /* !bucket_name.empty() */
-    http_ret = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
-    if (http_ret < 0) {
-      ldpp_dout(s, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
-      return;
-    }
+    b.name = bn;
+    b.bucket_id = bucket_instance;
   }
+  op_ret = store->get_bucket(s, nullptr, b, &bucket, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
+    return;
+  }
+
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  store->getRados()->get_bucket_stats(bucket_info, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
+  int ret =  bucket->read_stats(s, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
-    http_ret = ret;
+    op_ret = ret;
     return;
   }
 }
 
 void RGWOp_BILog_Info::send_response() {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
-  if (http_ret < 0)
+  if (op_ret < 0)
     return;
 
   s->formatter->open_object_section("info");
@@ -529,87 +509,76 @@ void RGWOp_BILog_Info::send_response() {
   flusher.flush();
 }
 
-void RGWOp_BILog_Delete::execute() {
+void RGWOp_BILog_Delete::execute(optional_yield y) {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          start_marker = s->info.args.get("start-marker"),
          end_marker = s->info.args.get("end-marker"),
          bucket_instance = s->info.args.get("bucket-instance");
 
-  RGWBucketInfo bucket_info;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name));
 
-  http_ret = 0;
+  op_ret = 0;
   if ((bucket_name.empty() && bucket_instance.empty()) ||
       end_marker.empty()) {
-    ldpp_dout(s, 5) << "ERROR: one of bucket and bucket instance, and also end-marker is mandatory" << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "ERROR: one of bucket and bucket instance, and also end-marker is mandatory" << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
   int shard_id;
   string bn;
-  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
-  if (http_ret < 0) {
+  op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
+  if (op_ret < 0) {
     return;
   }
 
   if (!bucket_instance.empty()) {
-    rgw_bucket b(rgw_bucket_key(tenant_name, bn, bucket_instance));
-    http_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
-    if (http_ret < 0) {
-      ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
-      return;
-    }
-  } else { /* !bucket_name.empty() */
-    http_ret = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
-    if (http_ret < 0) {
-      ldpp_dout(s, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
-      return;
-    }
+    b.name = bn;
+    b.bucket_id = bucket_instance;
   }
-  http_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, start_marker, end_marker);
-  if (http_ret < 0) {
-    ldpp_dout(s, 5) << "ERROR: trim_bi_log_entries() " << dendl;
+  op_ret = store->get_bucket(s, nullptr, b, &bucket, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
+    return;
+  }
+
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_trim(s, bucket->get_info(), shard_id, start_marker, end_marker);
+  if (op_ret < 0) {
+    ldpp_dout(this, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }
   return;
 }
 
-void RGWOp_DATALog_List::execute() {
+void RGWOp_DATALog_List::execute(optional_yield y) {
   string   shard = s->info.args.get("id");
 
-  string   st = s->info.args.get("start-time"),
-           et = s->info.args.get("end-time"),
-           max_entries_str = s->info.args.get("max-entries"),
+  string   max_entries_str = s->info.args.get("max-entries"),
            marker = s->info.args.get("marker"),
            err;
-  real_time  ut_st, 
-             ut_et;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
+
+  if (s->info.args.exists("start-time") ||
+      s->info.args.exists("end-time")) {
+    ldpp_dout(this, 5) << "start-time and end-time are no longer accepted" << dendl;
+    op_ret = -EINVAL;
+  }
 
   s->info.args.get_bool("extra-info", &extra_info, false);
 
   shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id " << shard << dendl;
-    http_ret = -EINVAL;
-    return;
-  }
-
-  if (parse_date_str(st, ut_st) < 0) {
-    http_ret = -EINVAL;
-    return;
-  }
-
-  if (parse_date_str(et, ut_et) < 0) {
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
   if (!max_entries_str.empty()) {
     max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
     if (!err.empty()) {
-      dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
-      http_ret = -EINVAL;
+      ldpp_dout(this, 5) << "Error parsing max-entries " << max_entries_str << dendl;
+      op_ret = -EINVAL;
       return;
     }
     if (max_entries > LOG_CLASS_LIST_MAX_ENTRIES) {
@@ -619,17 +588,18 @@ void RGWOp_DATALog_List::execute() {
 
   // Note that last_marker is updated to be the marker of the last
   // entry listed
-  http_ret = store->svc()->datalog_rados->list_entries(shard_id, ut_st, ut_et,
-                                                    max_entries, entries, marker,
-                                                    &last_marker, &truncated);
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->list_entries(this, shard_id,
+						     max_entries, entries,
+						     marker, &last_marker,
+						     &truncated);
 }
 
 void RGWOp_DATALog_List::send_response() {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
-  if (http_ret < 0)
+  if (op_ret < 0)
     return;
 
   s->formatter->open_object_section("log_entries");
@@ -637,9 +607,7 @@ void RGWOp_DATALog_List::send_response() {
   s->formatter->dump_bool("truncated", truncated);
   {
     s->formatter->open_array_section("entries");
-    for (list<rgw_data_change_log_entry>::iterator iter = entries.begin();
-	 iter != entries.end(); ++iter) {
-      rgw_data_change_log_entry& entry = *iter;
+    for (const auto& entry : entries) {
       if (!extra_info) {
         encode_json("entry", entry.entry, s->formatter);
       } else {
@@ -654,13 +622,13 @@ void RGWOp_DATALog_List::send_response() {
 }
 
 
-void RGWOp_DATALog_Info::execute() {
+void RGWOp_DATALog_Info::execute(optional_yield y) {
   num_objects = s->cct->_conf->rgw_data_log_num_shards;
-  http_ret = 0;
+  op_ret = 0;
 }
 
 void RGWOp_DATALog_Info::send_response() {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
@@ -670,22 +638,22 @@ void RGWOp_DATALog_Info::send_response() {
   flusher.flush();
 }
 
-void RGWOp_DATALog_ShardInfo::execute() {
+void RGWOp_DATALog_ShardInfo::execute(optional_yield y) {
   string shard = s->info.args.get("id");
   string err;
 
   unsigned shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id " << shard << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
-  http_ret = store->svc()->datalog_rados->get_info(shard_id, &info);
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->get_info(this, shard_id, &info);
 }
 
 void RGWOp_DATALog_ShardInfo::send_response() {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
@@ -693,26 +661,26 @@ void RGWOp_DATALog_ShardInfo::send_response() {
   flusher.flush();
 }
 
-void RGWOp_DATALog_Notify::execute() {
+void RGWOp_DATALog_Notify::execute(optional_yield y) {
   string  source_zone = s->info.args.get("source-zone");
 #define LARGE_ENOUGH_BUF (128 * 1024)
 
   int r = 0;
   bufferlist data;
-  std::tie(r, data) = rgw_rest_read_all_input(s, LARGE_ENOUGH_BUF);
+  std::tie(r, data) = read_all_input(s, LARGE_ENOUGH_BUF);
   if (r < 0) {
-    http_ret = r;
+    op_ret = r;
     return;
   }
 
   char* buf = data.c_str();
-  ldout(s->cct, 20) << __func__ << "(): read data: " << buf << dendl;
+  ldpp_dout(this, 20) << __func__ << "(): read data: " << buf << dendl;
 
   JSONParser p;
   r = p.parse(buf, data.length());
   if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: failed to parse JSON" << dendl;
-    http_ret = r;
+    ldpp_dout(this, 0) << "ERROR: failed to parse JSON" << dendl;
+    op_ret = r;
     return;
   }
 
@@ -720,96 +688,101 @@ void RGWOp_DATALog_Notify::execute() {
   try {
     decode_json_obj(updated_shards, &p);
   } catch (JSONDecoder::err& err) {
-    ldout(s->cct, 0) << "ERROR: failed to decode JSON" << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 0) << "ERROR: failed to decode JSON" << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
   if (store->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     for (map<int, set<string> >::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
-      ldout(s->cct, 20) << __func__ << "(): updated shard=" << iter->first << dendl;
+      ldpp_dout(this, 20) << __func__ << "(): updated shard=" << iter->first << dendl;
       set<string>& keys = iter->second;
       for (set<string>::iterator kiter = keys.begin(); kiter != keys.end(); ++kiter) {
-      ldout(s->cct, 20) << __func__ << "(): modified key=" << *kiter << dendl;
+      ldpp_dout(this, 20) << __func__ << "(): modified key=" << *kiter << dendl;
       }
     }
   }
 
-  store->getRados()->wakeup_data_sync_shards(source_zone, updated_shards);
+  store->wakeup_data_sync_shards(this, source_zone, updated_shards);
 
-  http_ret = 0;
+  op_ret = 0;
 }
 
-void RGWOp_DATALog_Delete::execute() {
-  string   st = s->info.args.get("start-time"),
-           et = s->info.args.get("end-time"),
-           start_marker = s->info.args.get("start-marker"),
-           end_marker = s->info.args.get("end-marker"),
+void RGWOp_DATALog_Delete::execute(optional_yield y) {
+  string   marker = s->info.args.get("marker"),
            shard = s->info.args.get("id"),
            err;
-  real_time  ut_st, 
-             ut_et;
   unsigned shard_id;
 
-  http_ret = 0;
+  op_ret = 0;
+
+  if (s->info.args.exists("start-time") ||
+      s->info.args.exists("end-time")) {
+    ldpp_dout(this, 5) << "start-time and end-time are no longer accepted" << dendl;
+    op_ret = -EINVAL;
+  }
+
+  if (s->info.args.exists("start-marker")) {
+    ldpp_dout(this, 5) << "start-marker is no longer accepted" << dendl;
+    op_ret = -EINVAL;
+  }
+
+  if (s->info.args.exists("end-marker")) {
+    if (!s->info.args.exists("marker")) {
+      marker = s->info.args.get("end-marker");
+    } else {
+      ldpp_dout(this, 5) << "end-marker and marker cannot both be provided" << dendl;
+      op_ret = -EINVAL;
+    }
+  }
 
   shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
-    dout(5) << "Error parsing shard_id " << shard << dendl;
-    http_ret = -EINVAL;
+    ldpp_dout(this, 5) << "Error parsing shard_id " << shard << dendl;
+    op_ret = -EINVAL;
     return;
   }
-  if (et.empty() && end_marker.empty()) { /* bounding end */
-    http_ret = -EINVAL;
-    return;
-  }
-
-  if (parse_date_str(st, ut_st) < 0) {
-    http_ret = -EINVAL;
+  if (marker.empty()) { /* bounding end */
+    op_ret = -EINVAL;
     return;
   }
 
-  if (parse_date_str(et, ut_et) < 0) {
-    http_ret = -EINVAL;
-    return;
-  }
-
-  http_ret = store->svc()->datalog_rados->trim_entries(shard_id, ut_st, ut_et, start_marker, end_marker);
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->trim_entries(this, shard_id, marker);
 }
 
 // not in header to avoid pulling in rgw_sync.h
 class RGWOp_MDLog_Status : public RGWRESTOp {
   rgw_meta_sync_status status;
 public:
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
-  int verify_permission() override {
-    return check_caps(s->user->caps);
+  int verify_permission(optional_yield) override {
+    return check_caps(s->user->get_caps());
   }
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override;
   const char* name() const override { return "get_metadata_log_status"; }
 };
 
-void RGWOp_MDLog_Status::execute()
+void RGWOp_MDLog_Status::execute(optional_yield y)
 {
-  auto sync = store->getRados()->get_meta_sync_manager();
+  auto sync = static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_meta_sync_manager();
   if (sync == nullptr) {
-    ldout(s->cct, 1) << "no sync manager" << dendl;
-    http_ret = -ENOENT;
+    ldpp_dout(this, 1) << "no sync manager" << dendl;
+    op_ret = -ENOENT;
     return;
   }
-  http_ret = sync->read_sync_status(&status);
+  op_ret = sync->read_sync_status(this, &status);
 }
 
 void RGWOp_MDLog_Status::send_response()
 {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
-  if (http_ret >= 0) {
+  if (op_ret >= 0) {
     encode_json("status", status, s->formatter);
   }
   flusher.flush();
@@ -819,54 +792,158 @@ void RGWOp_MDLog_Status::send_response()
 class RGWOp_BILog_Status : public RGWRESTOp {
   std::vector<rgw_bucket_shard_sync_info> status;
 public:
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
-  int verify_permission() override {
-    return check_caps(s->user->caps);
+  int verify_permission(optional_yield y) override {
+    return check_caps(s->user->get_caps());
   }
-  void execute() override;
+  void execute(optional_yield y) override;
   void send_response() override;
   const char* name() const override { return "get_bucket_index_log_status"; }
 };
 
-void RGWOp_BILog_Status::execute()
+void RGWOp_BILog_Status::execute(optional_yield y)
 {
+  const auto options = s->info.args.get("options");
+  bool merge = (options == "merge");
   const auto source_zone = s->info.args.get("source-zone");
-  const auto key = s->info.args.get("bucket");
+  const auto source_key = s->info.args.get("source-bucket");
+  auto key = s->info.args.get("bucket");
   if (key.empty()) {
-    ldpp_dout(s, 4) << "no 'bucket' provided" << dendl;
-    http_ret = -EINVAL;
+    key = source_key;
+  }
+  if (key.empty()) {
+    ldpp_dout(this, 4) << "no 'bucket' provided" << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
-  rgw_bucket bucket;
+  rgw_bucket b;
   int shard_id{-1}; // unused
-  http_ret = rgw_bucket_parse_bucket_key(s->cct, key, &bucket, &shard_id);
-  if (http_ret < 0) {
-    ldpp_dout(s, 4) << "no 'bucket' provided" << dendl;
-    http_ret = -EINVAL;
+  op_ret = rgw_bucket_parse_bucket_key(s->cct, key, &b, &shard_id);
+  if (op_ret < 0) {
+    ldpp_dout(this, 4) << "invalid 'bucket' provided" << dendl;
+    op_ret = -EINVAL;
     return;
   }
 
   // read the bucket instance info for num_shards
-  auto ctx = store->svc()->sysobj->init_obj_ctx();
-  RGWBucketInfo info;
-  http_ret = store->getRados()->get_bucket_instance_info(ctx, bucket, info, nullptr, nullptr, s->yield);
-  if (http_ret < 0) {
-    ldpp_dout(s, 4) << "failed to read bucket info: " << cpp_strerror(http_ret) << dendl;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  op_ret = store->get_bucket(s, nullptr, b, &bucket, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 4) << "failed to read bucket info: " << cpp_strerror(op_ret) << dendl;
     return;
   }
-  http_ret = rgw_bucket_sync_status(this, store, source_zone, info, &status);
+
+  rgw_bucket source_bucket;
+
+  if (source_key.empty() ||
+      source_key == key) {
+    source_bucket = bucket->get_key();
+  } else {
+    op_ret = rgw_bucket_parse_bucket_key(s->cct, source_key, &source_bucket, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 4) << "invalid 'source-bucket' provided (key=" << source_key << ")" << dendl;
+      return;
+    }
+  }
+
+  const auto& local_zone_id = store->get_zone()->get_id();
+
+  if (!merge) {
+    rgw_sync_bucket_pipe pipe;
+    pipe.source.zone = source_zone;
+    pipe.source.bucket = source_bucket;
+    pipe.dest.zone = local_zone_id;
+    pipe.dest.bucket = bucket->get_key();
+
+    ldpp_dout(this, 20) << "RGWOp_BILog_Status::execute(optional_yield y): getting sync status for pipe=" << pipe << dendl;
+
+    op_ret = rgw_bucket_sync_status(this, static_cast<rgw::sal::RadosStore*>(store), pipe, bucket->get_info(), nullptr, &status);
+
+    if (op_ret < 0) {
+      ldpp_dout(this, -1) << "ERROR: rgw_bucket_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
+    }
+    return;
+  }
+
+  rgw_zone_id source_zone_id(source_zone);
+
+  RGWBucketSyncPolicyHandlerRef source_handler;
+  op_ret = store->get_sync_policy_handler(s, source_zone_id, source_bucket, &source_handler, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, -1) << "could not get bucket sync policy handler (r=" << op_ret << ")" << dendl;
+    return;
+  }
+
+  auto local_dests = source_handler->get_all_dests_in_zone(local_zone_id);
+
+  std::vector<rgw_bucket_shard_sync_info> current_status;
+  for (auto& entry : local_dests) {
+    auto pipe = entry.second;
+
+    ldpp_dout(this, 20) << "RGWOp_BILog_Status::execute(optional_yield y): getting sync status for pipe=" << pipe << dendl;
+
+    RGWBucketInfo *pinfo = &bucket->get_info();
+    std::optional<RGWBucketInfo> opt_dest_info;
+
+    if (!pipe.dest.bucket) {
+      /* Uh oh, something went wrong */
+      ldpp_dout(this, 20) << "ERROR: RGWOp_BILog_Status::execute(optional_yield y): BUG: pipe.dest.bucket was not initialized" << pipe << dendl;
+      op_ret = -EIO;
+      return;
+    }
+
+    if (*pipe.dest.bucket != pinfo->bucket) {
+      opt_dest_info.emplace();
+      std::unique_ptr<rgw::sal::Bucket> dest_bucket;
+      op_ret = store->get_bucket(s, nullptr, *pipe.dest.bucket, &dest_bucket, y);
+      if (op_ret < 0) {
+        ldpp_dout(this, 4) << "failed to read target bucket info (bucket=: " << cpp_strerror(op_ret) << dendl;
+        return;
+      }
+
+      *opt_dest_info = dest_bucket->get_info();
+      pinfo = &(*opt_dest_info);
+      pipe.dest.bucket = pinfo->bucket;
+    }
+
+    int r = rgw_bucket_sync_status(this, static_cast<rgw::sal::RadosStore*>(store), pipe, *pinfo, &bucket->get_info(), &current_status);
+    if (r < 0) {
+      ldpp_dout(this, -1) << "ERROR: rgw_bucket_sync_status() on pipe=" << pipe << " returned ret=" << r << dendl;
+      op_ret = r;
+      return;
+    }
+
+    if (status.empty()) {
+      status = std::move(current_status);
+    } else {
+      if (current_status.size() !=
+          status.size()) {
+        op_ret = -EINVAL;
+        ldpp_dout(this, -1) << "ERROR: different number of shards for sync status of buckets syncing from the same source: status.size()= " << status.size() << " current_status.size()=" << current_status.size() << dendl;
+        return;
+      }
+      auto m = status.begin();
+      for (auto& cur_shard_status : current_status) {
+        auto& result_shard_status = *m++;
+        // always take the first marker, or any later marker that's smaller
+        if (cur_shard_status.inc_marker.position < result_shard_status.inc_marker.position) {
+          result_shard_status = std::move(cur_shard_status);
+        }
+      }
+    }
+  }
 }
 
 void RGWOp_BILog_Status::send_response()
 {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
-  if (http_ret >= 0) {
+  if (op_ret >= 0) {
     encode_json("status", status, s->formatter);
   }
   flusher.flush();
@@ -876,36 +953,36 @@ void RGWOp_BILog_Status::send_response()
 class RGWOp_DATALog_Status : public RGWRESTOp {
   rgw_data_sync_status status;
 public:
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
-  int verify_permission() override {
-    return check_caps(s->user->caps);
+  int verify_permission(optional_yield y) override {
+    return check_caps(s->user->get_caps());
   }
-  void execute() override ;
+  void execute(optional_yield y) override ;
   void send_response() override;
   const char* name() const override { return "get_data_changes_log_status"; }
 };
 
-void RGWOp_DATALog_Status::execute()
+void RGWOp_DATALog_Status::execute(optional_yield y)
 {
   const auto source_zone = s->info.args.get("source-zone");
-  auto sync = store->getRados()->get_data_sync_manager(source_zone);
+  auto sync = store->get_data_sync_manager(source_zone);
   if (sync == nullptr) {
-    ldout(s->cct, 1) << "no sync manager for source-zone " << source_zone << dendl;
-    http_ret = -ENOENT;
+    ldpp_dout(this, 1) << "no sync manager for source-zone " << source_zone << dendl;
+    op_ret = -ENOENT;
     return;
   }
-  http_ret = sync->read_sync_status(&status);
+  op_ret = sync->read_sync_status(this, &status);
 }
 
 void RGWOp_DATALog_Status::send_response()
 {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 
-  if (http_ret >= 0) {
+  if (op_ret >= 0) {
     encode_json("status", status, s->formatter);
   }
   flusher.flush();

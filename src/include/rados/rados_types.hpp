@@ -327,5 +327,15 @@ struct inconsistent_snapset_t {
  */
 const std::string all_nspaces(LIBRADOS_ALL_NSPACES);
 
+struct notify_ack_t {
+  uint64_t notifier_id;
+  uint64_t cookie;
+  ceph::bufferlist payload_bl;
+};
+
+struct notify_timeout_t {
+  uint64_t notifier_id;
+  uint64_t cookie;
+};
 }
 #endif

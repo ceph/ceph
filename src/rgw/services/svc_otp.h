@@ -31,7 +31,7 @@ class RGWSI_OTP : public RGWServiceInstance
   RGWSI_OTP_BE_Handler be_handler;
   std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
 
-  int do_start() override;
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
 public:
   struct Svc {
@@ -53,34 +53,40 @@ public:
             RGWSI_MetaBackend *_meta_be_svc);
 
   int read_all(RGWSI_OTP_BE_Ctx& ctx,
-               const string& key,
+               const std::string& key,
                otp_devices_list_t *devices,
                real_time *pmtime,
                RGWObjVersionTracker *objv_tracker,
-               optional_yield y);
+               optional_yield y,
+               const DoutPrefixProvider *dpp);
   int read_all(RGWSI_OTP_BE_Ctx& ctx,
                const rgw_user& uid,
                otp_devices_list_t *devices,
                real_time *pmtime,
                RGWObjVersionTracker *objv_tracker,
-               optional_yield y);
-  int store_all(RGWSI_OTP_BE_Ctx& ctx,
-                const string& key,
+               optional_yield y,
+               const DoutPrefixProvider *dpp);
+  int store_all(const DoutPrefixProvider *dpp, 
+                RGWSI_OTP_BE_Ctx& ctx,
+                const std::string& key,
                 const otp_devices_list_t& devices,
                 real_time mtime,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y);
-  int store_all(RGWSI_OTP_BE_Ctx& ctx,
+  int store_all(const DoutPrefixProvider *dpp, 
+                RGWSI_OTP_BE_Ctx& ctx,
                 const rgw_user& uid,
                 const otp_devices_list_t& devices,
                 real_time mtime,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y);
-  int remove_all(RGWSI_OTP_BE_Ctx& ctx,
-                 const string& key,
+  int remove_all(const DoutPrefixProvider *dpp, 
+                 RGWSI_OTP_BE_Ctx& ctx,
+                 const std::string& key,
                  RGWObjVersionTracker *objv_tracker,
                  optional_yield y);
-  int remove_all(RGWSI_OTP_BE_Ctx& ctx,
+  int remove_all(const DoutPrefixProvider *dpp, 
+                 RGWSI_OTP_BE_Ctx& ctx,
                  const rgw_user& uid,
                  RGWObjVersionTracker *objv_tracker,
                  optional_yield y);

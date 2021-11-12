@@ -1,8 +1,9 @@
 #include "include/utime.h"
-#include "global/global_context.h"
 #include "gtest/gtest.h"
 #include "include/stringify.h"
 #include "common/ceph_context.h"
+
+using namespace std;
 
 TEST(utime_t, localtime)
 {

@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 #include "mon/MgrMap.h"
 
-class MMgrMap : public Message {
+class MMgrMap final : public Message {
 protected:
   MgrMap map;
 
@@ -32,7 +32,7 @@ private:
   MMgrMap(const MgrMap &map_) :
     Message{MSG_MGR_MAP}, map(map_)
   {}
-  ~MMgrMap() override {}
+  ~MMgrMap() final {}
 
 public:
   std::string_view get_type_name() const override { return "mgrmap"; }
@@ -53,6 +53,8 @@ private:
   using RefCountedObject::get;
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+  template<class T, typename... Args>
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 #endif

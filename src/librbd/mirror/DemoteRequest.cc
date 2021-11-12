@@ -36,7 +36,8 @@ void DemoteRequest<I>::get_info() {
   auto ctx = create_context_callback<
     DemoteRequest<I>, &DemoteRequest<I>::handle_get_info>(this);
   auto req = GetInfoRequest<I>::create(m_image_ctx, &m_mirror_image,
-                                       &m_promotion_state, ctx);
+                                       &m_promotion_state,
+                                       &m_primary_mirror_uuid, ctx);
   req->send();
 }
 
@@ -134,7 +135,8 @@ void DemoteRequest<I>::demote() {
   if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
     Journal<I>::demote(&m_image_ctx, ctx);
   } else if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    auto req = mirror::snapshot::DemoteRequest<I>::create(&m_image_ctx, ctx);
+    auto req = mirror::snapshot::DemoteRequest<I>::create(
+      &m_image_ctx, m_mirror_image.global_image_id, ctx);
     req->send();
   } else {
     lderr(cct) << "unknown image mirror mode: " << m_mirror_image.mode << dendl;

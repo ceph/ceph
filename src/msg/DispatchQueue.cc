@@ -20,6 +20,8 @@
 #define dout_subsys ceph_subsys_ms
 #include "common/debug.h"
 
+using ceph::cref_t;
+using ceph::ref_t;
 
 /*******************
  * DispatchQueue
@@ -213,11 +215,9 @@ void DispatchQueue::entry()
 
 void DispatchQueue::discard_queue(uint64_t id) {
   std::lock_guard l{lock};
-  list<QueueItem> removed;
+  std::list<QueueItem> removed;
   mqueue.remove_by_class(id, &removed);
-  for (list<QueueItem>::iterator i = removed.begin();
-       i != removed.end();
-       ++i) {
+  for (auto i = removed.begin(); i != removed.end(); ++i) {
     ceph_assert(!(i->is_code())); // We don't discard id 0, ever!
     const ref_t<Message>& m = i->get_message();
     remove_arrival(m);

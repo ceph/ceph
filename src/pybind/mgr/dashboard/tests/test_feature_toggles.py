@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import unittest
+
 try:
     from mock import Mock, patch
 except ImportError:
     from unittest.mock import Mock, patch
 
-from . import KVStoreMockMixin
-from ..plugins.feature_toggles import FeatureToggles, Features
+from ..plugins.feature_toggles import Actions, Features, FeatureToggles
+from ..tests import KVStoreMockMixin
 
 
 class SettingsTest(unittest.TestCase, KVStoreMockMixin):
@@ -22,8 +22,8 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
         cls.mgr = mgr
 
         # Populate real endpoint map
-        from ..controllers import load_controllers
-        cls.controllers = load_controllers()
+        from ..controllers import BaseController
+        cls.controllers = BaseController.load_controllers()
 
         # Initialize FeatureToggles plugin
         cls.plugin = FeatureToggles()
@@ -55,7 +55,7 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
         import cherrypy
 
         self.plugin.register_commands()['handle_command'](
-            self.mgr, 'disable', ['cephfs'])
+            self.mgr, Actions.DISABLE, [Features.CEPHFS])
 
         with patch.object(self.plugin, '_get_feature_from_request',
                           return_value=Features.CEPHFS):

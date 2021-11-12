@@ -10,6 +10,7 @@
 #include "global/global_context.h"
 #include "common/dout.h"
 
+using namespace std;
 using namespace ceph::logging;
 
 TEST(Log, Simple)
@@ -362,16 +363,15 @@ TEST(Log, GarbleRecovery)
   log.flush();
   log.stop();
   struct stat file_status;
-  ASSERT_EQ(lstat(test_file, &file_status), 0);
+  ASSERT_EQ(stat(test_file, &file_status), 0);
   ASSERT_GT(file_status.st_size, 2000);
 }
 
 int main(int argc, char **argv)
 {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);

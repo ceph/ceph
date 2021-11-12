@@ -3,10 +3,8 @@ import { Injectable } from '@angular/core';
 
 import { Observable } from 'rxjs';
 
-import { ApiModule } from './api.module';
-
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class MgrModuleService {
   private url = 'api/mgr/module';
@@ -36,7 +34,7 @@ export class MgrModuleService {
    * @param {object} config The configuration.
    * @return {Observable<Object>}
    */
-  updateConfig(module: string, config: Object): Observable<Object> {
+  updateConfig(module: string, config: object): Observable<Object> {
     return this.http.put(`${this.url}/${module}`, { config: config });
   }
 

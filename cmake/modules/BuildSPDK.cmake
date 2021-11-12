@@ -9,45 +9,65 @@ macro(build_spdk)
     find_package(aio REQUIRED)
     find_package(uuid REQUIRED)
   endif()
-
-  find_program(MAKE_EXECUTABLE NAMES gmake make)
-  if(NOT MAKE_EXECUTABLE)
-    message(FATAL_ERROR "Can't find make")
-  endif()
-  if(CMAKE_MAKE_PROGRAM MATCHES "make")
-    # try to inherit command line arguments passed by parent "make" job
-    set(make_cmd "$(MAKE)")
-  else()
-    set(make_cmd "${MAKE_EXECUTABLE}")
-  endif()
+  include(FindMake)
+  find_make("MAKE_EXECUTABLE" "make_cmd")
 
   set(spdk_CFLAGS "-fPIC")
   include(CheckCCompilerFlag)
-  check_c_compiler_flag("-Wno-address-of-packed-member" HAS_WARNING_ADDRESS_OF_PACKED_MEMBER)
-  if(HAS_WARNING_ADDRESS_OF_PACKED_MEMBER)
-    set(spdk_CFLAGS "${spdk_CFLAGS} -Wno-address-of-packed-member")
+  check_c_compiler_flag("-Wno-address-of-packed-member" HAVE_WARNING_ADDRESS_OF_PACKED_MEMBER)
+  if(HAVE_WARNING_ADDRESS_OF_PACKED_MEMBER)
+    string(APPEND spdk_CFLAGS " -Wno-address-of-packed-member")
   endif()
+  check_c_compiler_flag("-Wno-unused-but-set-variable"
+    HAVE_UNUSED_BUT_SET_VARIABLE)
+  if(HAVE_UNUSED_BUT_SET_VARIABLE)
+    string(APPEND spdk_CFLAGS " -Wno-unused-but-set-variable")
+  endif()
+
   include(ExternalProject)
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64|AMD64")
+    # a safer option than relying on the build host's arch
+    set(target_arch core2)
+  else()
+    # default arch used by SPDK
+    set(target_arch native)
+  endif()
+
+  set(source_dir "${CMAKE_SOURCE_DIR}/src/spdk")
+  foreach(c lvol env_dpdk sock nvmf bdev nvme conf thread trace notify accel event_accel blob vmd event_vmd event_bdev sock_posix event_sock event rpc jsonrpc json util log)
+    add_library(spdk::${c} STATIC IMPORTED)
+    set(lib_path "${source_dir}/build/lib/${CMAKE_STATIC_LIBRARY_PREFIX}spdk_${c}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    set_target_properties(spdk::${c} PROPERTIES
+      IMPORTED_LOCATION "${lib_path}"
+      INTERFACE_INCLUDE_DIRECTORIES "${source_dir}/include")
+    list(APPEND spdk_libs "${lib_path}")
+    list(APPEND SPDK_LIBRARIES spdk::${c})
+  endforeach()
+
   ExternalProject_Add(spdk-ext
     DEPENDS dpdk-ext
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/spdk
-    CONFIGURE_COMMAND ./configure --with-dpdk=${DPDK_DIR} --without-isal --without-vhost
+    SOURCE_DIR ${source_dir}
+    CONFIGURE_COMMAND ./configure
+      --with-dpdk=${DPDK_DIR}
+      --without-isal
+      --without-vhost
+      --target-arch=${target_arch}
     # unset $CFLAGS, otherwise it will interfere with how SPDK sets
     # its include directory.
     # unset $LDFLAGS, otherwise SPDK will fail to mock some functions.
-    BUILD_COMMAND env -i PATH=$ENV{PATH} CC=${CMAKE_C_COMPILER} ${make_cmd} EXTRA_CFLAGS="${spdk_CFLAGS}"
+    BUILD_COMMAND env -i PATH=$ENV{PATH} CC=${CMAKE_C_COMPILER} ${make_cmd} EXTRA_CFLAGS=${spdk_CFLAGS}
     BUILD_IN_SOURCE 1
-    INSTALL_COMMAND "true")
+    BUILD_BYPRODUCTS ${spdk_libs}
+    INSTALL_COMMAND ""
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_MERGED_STDOUTERR ON
+    LOG_OUTPUT_ON_FAILURE ON)
   unset(make_cmd)
-  ExternalProject_Get_Property(spdk-ext source_dir)
-  foreach(c nvme log lvol env_dpdk sock util)
-    add_library(spdk::${c} STATIC IMPORTED)
-    add_dependencies(spdk::${c} spdk-ext)
-    set_target_properties(spdk::${c} PROPERTIES
-      IMPORTED_LOCATION "${source_dir}/build/lib/${CMAKE_STATIC_LIBRARY_PREFIX}spdk_${c}${CMAKE_STATIC_LIBRARY_SUFFIX}"
-      INTERFACE_INCLUDE_DIRECTORIES "${source_dir}/include")
-    list(APPEND SPDK_LIBRARIES spdk::${c})
+  foreach(spdk_lib ${SPDK_LIBRARIES})
+    add_dependencies(${spdk_lib} spdk-ext)
   endforeach()
+
   set_target_properties(spdk::env_dpdk PROPERTIES
     INTERFACE_LINK_LIBRARIES "dpdk::dpdk;rt")
   set_target_properties(spdk::lvol PROPERTIES

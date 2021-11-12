@@ -15,28 +15,51 @@ It will return a string to indicate disk failure status: "Good", "Warning",
 
 An example code is as follows:
 
->>> model = disk_failure_predictor.RHDiskFailurePredictor()
->>> status = model.initialize("./models")
->>> if status:
->>>     model.predict(disk_days)
-'Bad'
+>>> model = RHDiskFailurePredictor()
+>>> model.initialize(get_diskfailurepredictor_path() + "/models/redhat")
+>>> vendor = list(RHDiskFailurePredictor.MANUFACTURER_MODELNAME_PREFIXES.keys())[0]
+>>> disk_days = [{'vendor': vendor}]
+>>> model.predict(disk_days)
+'Unknown'
 """
 import os
 import json
 import pickle
 import logging
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
-from scipy import stats
 
 
-def get_diskfailurepredictor_path():
+def get_diskfailurepredictor_path() -> str:
     path = os.path.abspath(__file__)
     dir_path = os.path.dirname(path)
     return dir_path
 
 
-class RHDiskFailurePredictor(object):
+DevSmartT = Dict[str, Any]
+AttrNamesT = List[str]
+AttrDiffsT = List[Dict[str, int]]
+
+
+class Predictor:
+    @classmethod
+    def create(cls, name: str) -> Optional['Predictor']:
+        if name == 'prophetstor':
+            return PSDiskFailurePredictor()
+        elif name == 'redhat':
+            return RHDiskFailurePredictor()
+        else:
+            return None
+
+    def initialize(self, model_dir: str) -> None:
+        raise NotImplementedError()
+
+    def predict(self, dataset: Sequence[DevSmartT]) -> str:
+        raise NotImplementedError()
+
+
+class RHDiskFailurePredictor(Predictor):
     """Disk failure prediction module developed at Red Hat
 
     This class implements a disk failure prediction module.
@@ -61,14 +84,14 @@ class RHDiskFailurePredictor(object):
 
     LOGGER = logging.getLogger()
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         This function may throw exception due to wrong file operation.
         """
         self.model_dirpath = ""
-        self.model_context = {}
+        self.model_context: Dict[str, List[str]] = {}
 
-    def initialize(self, model_dirpath):
+    def initialize(self, model_dirpath: str) -> None:
         """Initialize all models. Save paths of all trained model files to list
 
         Arguments:
@@ -80,24 +103,23 @@ class RHDiskFailurePredictor(object):
         # read config file as json, if it exists
         config_path = os.path.join(model_dirpath, self.CONFIG_FILE)
         if not os.path.isfile(config_path):
-            return "Missing config file: " + config_path
-        else:
-            with open(config_path) as f_conf:
-                self.model_context = json.load(f_conf)
+            raise Exception("Missing config file: " + config_path)
+        with open(config_path) as f_conf:
+            self.model_context = json.load(f_conf)
 
         # ensure all manufacturers whose context is defined in config file
         # have models and scalers saved inside model_dirpath
         for manufacturer in self.model_context:
             scaler_path = os.path.join(model_dirpath, manufacturer + "_scaler.pkl")
             if not os.path.isfile(scaler_path):
-                return "Missing scaler file: {}".format(scaler_path)
+                raise Exception(f"Missing scaler file: {scaler_path}")
             model_path = os.path.join(model_dirpath, manufacturer + "_predictor.pkl")
             if not os.path.isfile(model_path):
-                return "Missing model file: {}".format(model_path)
+                raise Exception(f"Missing model file: {model_path}")
 
         self.model_dirpath = model_dirpath
 
-    def __preprocess(self, disk_days, manufacturer):
+    def __preprocess(self, disk_days: Sequence[DevSmartT], manufacturer: str) -> Optional[np.ndarray]:
         """Scales and transforms input dataframe to feed it to prediction model
 
         Arguments:
@@ -113,7 +135,7 @@ class RHDiskFailurePredictor(object):
         # get the attributes that were used to train model for current manufacturer
         try:
             model_smart_attr = self.model_context[manufacturer]
-        except KeyError as e:
+        except KeyError:
             RHDiskFailurePredictor.LOGGER.debug(
                 "No context (SMART attributes on which model has been trained) found for manufacturer: {}".format(
                     manufacturer
@@ -127,7 +149,7 @@ class RHDiskFailurePredictor(object):
             struc_dtypes = [(attr, np.float64) for attr in model_smart_attr]
             values = [tuple(day[attr] for attr in model_smart_attr) for day in disk_days]
             disk_days_sa = np.array(values, dtype=struc_dtypes)
-        except KeyError as e:
+        except KeyError:
             RHDiskFailurePredictor.LOGGER.debug(
                 "Mismatch in SMART attributes used to train model and SMART attributes available"
             )
@@ -136,7 +158,7 @@ class RHDiskFailurePredictor(object):
         # view structured array as 2d array for applying rolling window transforms
         # do not include capacity_bytes in this. only use smart_attrs
         disk_days_attrs = disk_days_sa[[attr for attr in model_smart_attr if 'smart_' in attr]]\
-                            .view(np.float64).reshape(disk_days_sa.shape + (-1,))
+            .view(np.float64).reshape(disk_days_sa.shape + (-1,))
 
         # featurize n (6 to 12) days data - mean,std,coefficient of variation
         # current model is trained on 6 days of data because that is what will be
@@ -146,24 +168,23 @@ class RHDiskFailurePredictor(object):
         roll_window_size = 6
 
         # rolling means generator
-        gen = (disk_days_attrs[i: i + roll_window_size, ...].mean(axis=0) \
-                for i in range(0, disk_days_attrs.shape[0] - roll_window_size + 1))
-        means = np.vstack(gen)
+        dataset_size = disk_days_attrs.shape[0] - roll_window_size + 1
+        gen = (disk_days_attrs[i: i + roll_window_size, ...].mean(axis=0)
+               for i in range(dataset_size))
+        means = np.vstack(gen)  # type: ignore
 
         # rolling stds generator
-        gen = (disk_days_attrs[i: i + roll_window_size, ...].std(axis=0, ddof=1) \
-                for i in range(0, disk_days_attrs.shape[0] - roll_window_size + 1))
-        stds = np.vstack(gen)
+        gen = (disk_days_attrs[i: i + roll_window_size, ...].std(axis=0, ddof=1)
+               for i in range(dataset_size))
+        stds = np.vstack(gen)  # type: ignore
 
         # coefficient of variation
         cvs = stds / means
         cvs[np.isnan(cvs)] = 0
-        featurized = np.hstack((
-                                means,
+        featurized = np.hstack((means,
                                 stds,
                                 cvs,
-                                disk_days_sa['user_capacity'][: disk_days_attrs.shape[0] - roll_window_size + 1].reshape(-1, 1)
-                                ))
+                                disk_days_sa['user_capacity'][: dataset_size].reshape(-1, 1)))
 
         # scale features
         scaler_path = os.path.join(self.model_dirpath, manufacturer + "_scaler.pkl")
@@ -173,7 +194,7 @@ class RHDiskFailurePredictor(object):
         return featurized
 
     @staticmethod
-    def __get_manufacturer(model_name):
+    def __get_manufacturer(model_name: str) -> Optional[str]:
         """Returns the manufacturer name for a given hard drive model name
 
         Arguments:
@@ -184,13 +205,13 @@ class RHDiskFailurePredictor(object):
         """
         for prefix, manufacturer in RHDiskFailurePredictor.MANUFACTURER_MODELNAME_PREFIXES.items():
             if model_name.startswith(prefix):
-                return manufacturer
+                return manufacturer.lower()
         # print error message
         RHDiskFailurePredictor.LOGGER.debug(
-            "Could not infer manufacturer from model name {}".format(model_name)
-        )
+            f"Could not infer manufacturer from model name {model_name}")
+        return None
 
-    def predict(self, disk_days):
+    def predict(self, disk_days: Sequence[DevSmartT]) -> str:
         # get manufacturer preferably as a smartctl attribute
         # if not available then infer using model name
         manufacturer = disk_days[0].get("vendor")
@@ -199,8 +220,7 @@ class RHDiskFailurePredictor(object):
                 '"vendor" field not found in smartctl output. Will try to infer manufacturer from model name.'
             )
             manufacturer = RHDiskFailurePredictor.__get_manufacturer(
-                disk_days[0].get("model_name", "")
-            ).lower()
+                disk_days[0].get("model_name", ""))
 
         # print error message, return Unknown, and continue execution
         if manufacturer is None:
@@ -231,7 +251,7 @@ class RHDiskFailurePredictor(object):
         return RHDiskFailurePredictor.PREDICTION_CLASSES[pred_class_id]
 
 
-class PSDiskFailurePredictor(object):
+class PSDiskFailurePredictor(Predictor):
     """Disk failure prediction developed at ProphetStor
 
     This class implements a disk failure prediction module.
@@ -240,15 +260,15 @@ class PSDiskFailurePredictor(object):
     CONFIG_FILE = "config.json"
     EXCLUDED_ATTRS = ["smart_9_raw", "smart_241_raw", "smart_242_raw"]
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         This function may throw exception due to wrong file operation.
         """
 
         self.model_dirpath = ""
-        self.model_context = {}
+        self.model_context: Dict[str, List[str]] = {}
 
-    def initialize(self, model_dirpath):
+    def initialize(self, model_dirpath: str) -> None:
         """
         Initialize all models.
 
@@ -262,20 +282,19 @@ class PSDiskFailurePredictor(object):
 
         config_path = os.path.join(model_dirpath, self.CONFIG_FILE)
         if not os.path.isfile(config_path):
-            return "Missing config file: " + config_path
-        else:
-            with open(config_path) as f_conf:
-                self.model_context = json.load(f_conf)
+            raise Exception(f"Missing config file: {config_path}")
+        with open(config_path) as f_conf:
+            self.model_context = json.load(f_conf)
 
         for model_name in self.model_context:
             model_path = os.path.join(model_dirpath, model_name)
 
             if not os.path.isfile(model_path):
-                return "Missing model file: " + model_path
+                raise Exception(f"Missing model file: {model_path}")
 
         self.model_dirpath = model_dirpath
 
-    def __preprocess(self, disk_days):
+    def __preprocess(self, disk_days: Sequence[DevSmartT]) -> Sequence[DevSmartT]:
         """
         Preprocess disk attributes.
 
@@ -307,7 +326,7 @@ class PSDiskFailurePredictor(object):
         return new_disk_days
 
     @staticmethod
-    def __get_diff_attrs(disk_days):
+    def __get_diff_attrs(disk_days: Sequence[DevSmartT]) -> Tuple[AttrNamesT, AttrDiffsT]:
         """
         Get 5 days differential attributes.
 
@@ -327,7 +346,6 @@ class PSDiskFailurePredictor(object):
 
         all_attrs = [set(disk_day.keys()) for disk_day in disk_days]
         attr_list = list(set.intersection(*all_attrs))
-        attr_list = disk_days[0].keys()
         prev_days = disk_days[:-1]
         curr_days = disk_days[1:]
         diff_disk_days = []
@@ -339,7 +357,7 @@ class PSDiskFailurePredictor(object):
 
         return attr_list, diff_disk_days
 
-    def __get_best_models(self, attr_list):
+    def __get_best_models(self, attr_list: AttrNamesT) -> Optional[Dict[str, List[str]]]:
         """
         Find the best model from model list according to given attribute list.
 
@@ -368,7 +386,7 @@ class PSDiskFailurePredictor(object):
             print("Too few matched attributes")
             return None
 
-        best_models = {}
+        best_models: Dict[str, List[str]] = {}
         best_model_indices = [
             idx for idx, score in enumerate(scores) if score > max_score - 2
         ]
@@ -382,7 +400,7 @@ class PSDiskFailurePredictor(object):
         # return os.path.join(self.model_dirpath, model_name), model_attrlist
 
     @staticmethod
-    def __get_ordered_attrs(disk_days, model_attrlist):
+    def __get_ordered_attrs(disk_days: Sequence[DevSmartT], model_attrlist: List[str]) -> List[List[float]]:
         """
         Return ordered attributes of given disk days.
 
@@ -411,7 +429,7 @@ class PSDiskFailurePredictor(object):
 
         return ordered_attrs
 
-    def predict(self, disk_days):
+    def predict(self, disk_days: Sequence[DevSmartT]) -> str:
         """
         Predict using given 6-days disk S.M.A.R.T. attributes.
 

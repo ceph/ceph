@@ -96,27 +96,26 @@
 
 /// If someone wants these types, but not ExtentCache, move to another file
 struct bl_split_merge {
-  bufferlist split(
+  ceph::buffer::list split(
     uint64_t offset,
     uint64_t length,
-    bufferlist &bl) const {
-    bufferlist out;
+    ceph::buffer::list &bl) const {
+    ceph::buffer::list out;
     out.substr_of(bl, offset, length);
     return out;
   }
-  bool can_merge(const bufferlist &left, const bufferlist &right) const {
+  bool can_merge(const ceph::buffer::list &left, const ceph::buffer::list &right) const {
     return true;
   }
-  bufferlist merge(bufferlist &&left, bufferlist &&right) const {
-    bufferlist bl;
-    bl.claim(left);
+  ceph::buffer::list merge(ceph::buffer::list &&left, ceph::buffer::list &&right) const {
+    ceph::buffer::list bl{std::move(left)};
     bl.claim_append(right);
     return bl;
   }
-  uint64_t length(const bufferlist &b) const { return b.length(); }
+  uint64_t length(const ceph::buffer::list &b) const { return b.length(); }
 };
 using extent_set = interval_set<uint64_t>;
-using extent_map = interval_map<uint64_t, bufferlist, bl_split_merge>;
+using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge>;
 
 class ExtentCache {
   struct object_extent_set;
@@ -131,7 +130,7 @@ private:
 
     uint64_t offset;
     uint64_t length;
-    std::optional<bufferlist> bl;
+    std::optional<ceph::buffer::list> bl;
 
     uint64_t get_length() const {
       return length;
@@ -151,7 +150,7 @@ private:
       return parent_pin_state->tid;
     }
 
-    extent(uint64_t offset, bufferlist _bl)
+    extent(uint64_t offset, ceph::buffer::list _bl)
       : offset(offset), length(_bl.length()), bl(_bl) {}
 
     extent(uint64_t offset, uint64_t length)
@@ -204,7 +203,7 @@ private:
 	UPDATE_PIN
       };
       type action = NONE;
-      std::optional<bufferlist> bl;
+      std::optional<ceph::buffer::list> bl;
     };
     template <typename F>
     void traverse_update(
@@ -253,7 +252,7 @@ private:
 	      (ext->offset + ext->get_length() > offset)) {
 	    extent *head = nullptr;
 	    if (ext->bl) {
-	      bufferlist bl;
+	      ceph::buffer::list bl;
 	      bl.substr_of(
 		*(ext->bl),
 		0,
@@ -271,7 +270,7 @@ private:
 	      (ext->offset + ext->get_length()) - (offset + length);
 	    extent *tail = nullptr;
 	    if (ext->bl) {
-	      bufferlist bl;
+	      ceph::buffer::list bl;
 	      bl.substr_of(
 		*(ext->bl),
 		ext->get_length() - nlen,
@@ -284,7 +283,7 @@ private:
 	  }
 	  if (action.action == update_action::UPDATE_PIN) {
 	    if (ext->bl) {
-	      bufferlist bl;
+	      ceph::buffer::list bl;
 	      bl.substr_of(
 		*(ext->bl),
 		extoff - ext->offset,
@@ -381,7 +380,7 @@ private:
 
   void release_pin(pin_state &p) {
     for (auto iter = p.pin_list.begin(); iter != p.pin_list.end(); ) {
-      unique_ptr<extent> extent(&*iter); // we now own this
+      std::unique_ptr<extent> extent(&*iter); // we now own this
       iter++; // unlink will invalidate
       ceph_assert(extent->parent_extent_set);
       auto &eset = *(extent->parent_extent_set);
@@ -482,10 +481,9 @@ public:
     release_pin(pin);
   }
 
-  ostream &print(
-    ostream &out) const;
+  std::ostream &print(std::ostream &out) const;
 };
 
-ostream &operator<<(ostream &lhs, const ExtentCache &cache);
+std::ostream &operator <<(std::ostream &lhs, const ExtentCache &cache);
 
 #endif

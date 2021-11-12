@@ -62,7 +62,7 @@ void NotifyLockOwner::handle_notify(int r) {
         return;
       }
       lock_owner_responded = true;
-      response.claim(it.second);
+      response = std::move(it.second);
     }
   }
 
@@ -80,6 +80,7 @@ void NotifyLockOwner::handle_notify(int r) {
     decode(response_message, iter);
 
     r = response_message.result;
+    ldout(cct, 20) << " client responded with r=" << r << dendl;
   } catch (const buffer::error &err) {
     r = -EINVAL;
   }

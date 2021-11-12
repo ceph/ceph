@@ -10,10 +10,9 @@ instructions will help the Ceph project immensely.
 
 The Ceph documentation source resides in the ``ceph/doc`` directory of the Ceph
 repository, and Python Sphinx renders the source into HTML and manpages. The
-http://ceph.com/docs link currently displays the  ``master`` branch by default,
-but you may view documentation for older branches (e.g., ``argonaut``) or future
-branches (e.g., ``next``) as well as work-in-progress branches by substituting
-``master`` with the branch name you prefer.
+https://docs.ceph.com link currently displays the ``master`` branch by default,
+but you may view documentation for older branches (e.g., ``mimic``) by substituting
+``latest`` in the URL with the branch name you prefer.
 
 
 Making Contributions
@@ -43,25 +42,35 @@ see :ref:`Get Involved`.
 The most common way to make contributions is to use the `Fork and Pull`_
 approach. You must:
 
-#. Install git locally. For Debian/Ubuntu, execute::
+#. Install git locally. For Debian/Ubuntu, execute:
+
+   .. prompt:: bash $
 
 	sudo apt-get install git
 
-   For Fedora, execute::
+   For Fedora, execute:
+
+   .. prompt:: bash $
 
 	sudo yum install git
 
-   For CentOS/RHEL, execute::
+   For CentOS/RHEL, execute:
+
+   .. prompt:: bash $
 
 	sudo yum install git
 
-#. Ensure your ``.gitconfig`` file has your name and email address. ::
+#. Ensure your ``.gitconfig`` file has your name and email address. :
+
+   .. code-block:: ini
 
 	[user]
 	   email = {your-email-address}
 	   name = {your-name}
 
-   For example::
+   For example:
+
+   .. prompt:: bash $
 
 	git config --global user.name "John Doe"
 	git config --global user.email johndoe@example.com
@@ -110,12 +119,16 @@ Select a Branch
 When you make small changes to the documentation, such as fixing typographical
 errors or clarifying explanations, use the ``master`` branch (default). You
 should also use the ``master`` branch when making contributions to features that
-are in the current release. ``master`` is the most commonly used branch. ::
+are in the current release. ``master`` is the most commonly used branch. :
+
+.. prompt:: bash $
 
 	git checkout master
 
 When you make changes to documentation that affect an upcoming release, use 
-the ``next`` branch. ``next`` is the second most commonly used branch. ::
+the ``next`` branch. ``next`` is the second most commonly used branch. :
+
+.. prompt:: bash $
 
 	git checkout next
 
@@ -139,11 +152,15 @@ http://tracker.ceph.com/issues/4000.
    describing the relevant changes/options.
 
 Before you create your branch name, ensure that it doesn't already exist in the
-local or remote repository. ::
+local or remote repository. :
+
+.. prompt:: bash $
 
 	git branch -a | grep wip-doc-{your-branch-name}
 
-If it doesn't exist, create your branch::
+If it doesn't exist, create your branch:
+
+.. prompt:: bash $
 
 	git checkout -b wip-doc-{your-branch-name}
 
@@ -151,13 +168,13 @@ If it doesn't exist, create your branch::
 Make a Change
 -------------
 
-Modifying a document involves opening a restructuredText file, changing
+Modifying a document involves opening a reStructuredText file, changing
 its contents, and saving the changes. See `Documentation Style Guide`_ for
 details on syntax requirements.
 
-Adding a document involves creating a new restructuredText file under the
-``doc`` directory or its subdirectories and saving the file with a ``*.rst``
-file extension. You must also include a reference to the  document: a hyperlink
+Adding a document involves creating a new reStructuredText file within the
+``doc`` directory tree with a ``*.rst``
+extension. You must also include a reference to the document: a hyperlink
 or a table of contents entry. The ``index.rst`` file of a top-level directory
 usually contains a TOC, where you can add the new file name. All documents must
 have a title. See `Headings`_ for details.
@@ -166,12 +183,16 @@ Your new document doesn't get tracked by ``git`` automatically. When you want
 to add the document to the repository,  you must use ``git add 
 {path-to-filename}``. For example, from the top level  directory of the
 repository, adding an ``example.rst`` file to the ``rados`` subdirectory would
-look like this::
+look like this:
+
+.. prompt:: bash $
 
 	git add doc/rados/example.rst
 
 Deleting a document involves removing it from the repository with ``git rm
-{path-to-filename}``. For example:: 
+{path-to-filename}``. For example:
+
+.. prompt:: bash $
 
 	git rm doc/rados/example.rst
 
@@ -181,33 +202,49 @@ You must also remove any reference to a deleted document from other documents.
 Build the Source
 ----------------
 
-To build the documentation, navigate to the ``ceph`` repository directory::
+To build the documentation, navigate to the ``ceph`` repository directory:
+
+
+.. prompt:: bash $
 
 	cd ceph
 
-To build the documentation on Debian/Ubuntu, Fedora, or CentOS/RHEL, execute::
+.. note::
+   The directory that contains ``build-doc`` and ``serve-doc`` must be included
+   in the ``PATH`` environment variable in order for these commands to work.
+
+
+To build the documentation on Debian/Ubuntu, Fedora, or CentOS/RHEL, execute:
+
+.. prompt:: bash $
 
 	admin/build-doc
 
-To scan for the reachability of external links, execute::
+To scan for the reachability of external links, execute:
+
+.. prompt:: bash $
 
 	admin/build-doc linkcheck
 
-Executing ``admin/build-doc`` will create a ``build-doc`` directory under ``ceph``.
-You may need to create a directory under ``ceph/build-doc`` for output of Javadoc
-files. ::
+Executing ``admin/build-doc`` will create a ``build-doc`` directory under
+``ceph``.  You may need to create a directory under ``ceph/build-doc`` for
+output of Javadoc files:
+
+.. prompt:: bash $
 
 	mkdir -p output/html/api/libcephfs-java/javadoc
 
 The build script ``build-doc`` will produce an output of errors and warnings.
-You MUST fix errors in documents you modified before committing a change, and you
-SHOULD fix warnings that are related to syntax you modified.
+You MUST fix errors in documents you modified before committing a change, and
+you SHOULD fix warnings that are related to syntax you modified.
 
 .. important:: You must validate ALL HYPERLINKS. If a hyperlink is broken,
    it automatically breaks the build!
 
 Once you build the documentation set, you may start an HTTP server at
-``http://localhost:8080/`` to view it::
+``http://localhost:8080/`` to view it:
+
+.. prompt:: bash $
 
 	admin/serve-doc
 
@@ -233,10 +270,10 @@ the following packages are required:
 	<table cellpadding="10"><colgroup><col width="30%"><col width="30%"><col width="30%"></colgroup><tbody valign="top"><tr><td><h3>Debian/Ubuntu</h3>
 
 - gcc
-- python-dev
-- python-pip
-- python-virtualenv
-- python-sphinx
+- python3-dev
+- python3-pip
+- python3-sphinx
+- pytnon3-venv
 - libxml2-dev
 - libxslt1-dev
 - doxygen
@@ -251,7 +288,6 @@ the following packages are required:
 - gcc
 - python-devel
 - python-pip
-- python-virtualenv
 - python-docutils
 - python-jinja2
 - python-pygments
@@ -270,7 +306,6 @@ the following packages are required:
 - gcc
 - python-devel
 - python-pip
-- python-virtualenv
 - python-docutils
 - python-jinja2
 - python-pygments
@@ -287,14 +322,18 @@ the following packages are required:
 
 
 Install each dependency that is not installed on your host. For Debian/Ubuntu
-distributions, execute the following::
+distributions, execute the following:
 
-	sudo apt-get install gcc python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen graphviz ant ditaa
+.. prompt:: bash $
+
+	sudo apt-get install gcc python-dev python-pip libxml2-dev libxslt-dev doxygen graphviz ant ditaa
 	sudo apt-get install python-sphinx
 
-For Fedora distributions, execute the following::
+For Fedora distributions, execute the following:
 
-   sudo yum install gcc python-devel python-pip python-virtualenv libxml2-devel libxslt-devel doxygen graphviz ant
+.. prompt:: bash $
+
+   sudo yum install gcc python-devel python-pip libxml2-devel libxslt-devel doxygen graphviz ant
    sudo pip install html2text
    sudo yum install python-jinja2 python-pygments python-docutils python-sphinx
    sudo yum install jericho-html ditaa
@@ -302,18 +341,24 @@ For Fedora distributions, execute the following::
 For CentOS/RHEL distributions, it is recommended to have ``epel`` (Extra
 Packages for Enterprise Linux) repository as it provides some extra packages
 which are not available in the default repository. To install ``epel``, execute
-the following::
+the following:
+
+.. prompt:: bash $
 
         sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 
-For CentOS/RHEL distributions, execute the following::
+For CentOS/RHEL distributions, execute the following:
 
-	sudo yum install gcc python-devel python-pip python-virtualenv libxml2-devel libxslt-devel doxygen graphviz ant
+.. prompt:: bash $
+
+	sudo yum install gcc python-devel python-pip libxml2-devel libxslt-devel doxygen graphviz ant
 	sudo pip install html2text
 
-For CentOS/RHEL distributions, the remaining python packages are not available in
-the default and ``epel`` repositories. So, use http://rpmfind.net/ to find the
-packages. Then, download them from a mirror and install them. For example::
+For CentOS/RHEL distributions, the remaining python packages are not available
+in the default and ``epel`` repositories. So, use http://rpmfind.net/ to find
+the packages. Then, download them from a mirror and install them. For example:
+
+.. prompt:: bash $
 
 	wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-jinja2-2.7.2-2.el7.noarch.rpm
 	sudo yum install python-jinja2-2.7.2-2.el7.noarch.rpm
@@ -328,15 +373,17 @@ Ceph documentation makes extensive use of `ditaa`_, which is not presently built
 for CentOS/RHEL7. You must install ``ditaa`` if you are making changes to
 ``ditaa`` diagrams so that you can verify that they render properly before you
 commit new or modified ``ditaa`` diagrams. You may retrieve compatible required
-packages for CentOS/RHEL distributions and install them manually. To run ``ditaa``
-on CentOS/RHEL7, following dependencies are required:
+packages for CentOS/RHEL distributions and install them manually. To run
+``ditaa`` on CentOS/RHEL7, following dependencies are required:
 
 - jericho-html
 - jai-imageio-core
 - batik
 
 Use http://rpmfind.net/ to find compatible ``ditaa`` and the dependencies.
-Then, download them from a mirror and install them. For example::
+Then, download them from a mirror and install them. For example:
+
+.. prompt:: bash $
 
 	wget http://rpmfind.net/linux/fedora/linux/releases/22/Everything/x86_64/os/Packages/j/jericho-html-3.3-4.fc22.noarch.rpm
 	sudo yum install jericho-html-3.3-4.fc22.noarch.rpm
@@ -364,7 +411,7 @@ Ceph documentation commits are simple, but follow a strict convention:
 - The comment summary MUST be one line only. (strict)
 - Additional comments MAY follow a blank line after the summary, 
   but should be terse.
-- A commit MAY include ``Fixes: #{bug number}``.
+- A commit MAY include ``Fixes: https://tracker.ceph.com/issues/{bug number}``.
 - Commits MUST include ``Signed-off-by: Firstname Lastname <email>``. (strict)
 
 .. tip:: Follow the foregoing convention particularly where it says 
@@ -382,7 +429,7 @@ The following comment includes a reference to a bug. ::
 
 	doc: Fixes a spelling error and a broken hyperlink.
 
-	Fixes: #1234
+	Fixes: https://tracker.ceph.com/issues/1234
 	
 	Signed-off-by: John Doe <john.doe@gmail.com>
 
@@ -398,7 +445,9 @@ There is a carriage return between the summary line and the description::
 	Signed-off-by: John Doe <john.doe@gmail.com>
 
 
-To commit changes, execute the following:: 
+To commit changes, execute the following:
+
+.. prompt:: bash $
 
 	git commit -a
 	
@@ -410,15 +459,21 @@ your uncommitted changes, staging them for commit, committing the changes and
 pushing them to your forked Ceph repository.
 
 
-For Debian/Ubuntu, execute::
+For Debian/Ubuntu, execute:
+
+.. prompt:: bash $
 
 	sudo apt-get install gitk git-gui
 
-For Fedora/CentOS/RHEL, execute::
+For Fedora/CentOS/RHEL, execute:
+
+.. prompt:: bash $
 
 	sudo yum install gitk git-gui
 
-Then, execute::
+Then, execute:
+
+.. prompt:: bash $
 
 	cd {git-ceph-repo-path}
 	gitk
@@ -431,11 +486,15 @@ Push the Change
 
 Once you have one or more commits, you must push them from the local copy of the
 repository to ``github``. A graphical tool like ``git-gui`` provides a user
-interface for pushing to the repository. If you created a branch previously::
+interface for pushing to the repository. If you created a branch previously:
+
+.. prompt:: bash $
 
 	git push origin wip-doc-{your-branch-name}
 
-Otherwise::
+Otherwise:
+
+.. prompt:: bash $
 
 	git push
 
@@ -451,9 +510,8 @@ Pull`_ approach.
 Notify Us
 ---------
 
-After you make a pull request, please email ceph-docs@redhat.com.
-
-
+In case The PR did not got a review within in a resonable timeframe, please get in touch
+with the corresponding component lead of the :ref:`clt`.
 
 Documentation Style Guide
 =========================
@@ -463,7 +521,9 @@ the documentation in both native restructuredText format and its rendered
 formats such as HTML. Navigate to your Ceph repository and view a document in
 its native format. You may notice that it is generally as legible in a terminal
 as it is in its rendered HTML format. Additionally, you may also notice that
-diagrams in ``ditaa`` format also render reasonably well in text mode. ::
+diagrams in ``ditaa`` format also render reasonably well in text mode. :
+
+.. prompt:: bash $
 
 	less doc/architecture.rst
 

@@ -19,6 +19,10 @@
 
 #include "PyModule.h"
 
+#include "include/stringify.h"
+#include "common/BackTrace.h"
+#include "global/signal_handler.h"
+
 #include "common/debug.h"
 #include "common/errno.h"
 #define dout_context g_ceph_context
@@ -28,52 +32,97 @@
 #define dout_prefix *_dout << "mgr[py] "
 
 // definition for non-const static member
-std::string PyModule::config_prefix = "mgr/";
+std::string PyModule::mgr_store_prefix = "mgr/";
 
 // Courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
-#include <boost/python.hpp>
+#define BOOST_BIND_GLOBAL_PLACEHOLDERS
+// Boost apparently can't be bothered to fix its own usage of its own
+// deprecated features.
+#include <boost/python/extract.hpp>
+#include <boost/python/import.hpp>
+#include <boost/python/object.hpp>
+#undef BOOST_BIND_GLOBAL_PLACEHOLDERS
 #include <boost/algorithm/string/predicate.hpp>
 #include "include/ceph_assert.h"  // boost clobbers this
-// decode a Python exception into a string
-std::string handle_pyerror()
-{
-    using namespace boost::python;
-    using namespace boost;
 
-    PyObject *exc, *val, *tb;
-    object formatted_list, formatted;
-    PyErr_Fetch(&exc, &val, &tb);
-    handle<> hexc(exc), hval(allow_null(val)), htb(allow_null(tb));
-    object traceback(import("traceback"));
-    if (!tb) {
-        object format_exception_only(traceback.attr("format_exception_only"));
-        try {
-          formatted_list = format_exception_only(hexc, hval);
-        } catch (error_already_set const &) {
-          // error while processing exception object
-          // returning only the exception string value
-          PyObject *name_attr = PyObject_GetAttrString(exc, "__name__");
-          std::stringstream ss;
-          ss << PyUnicode_AsUTF8(name_attr) << ": " << PyUnicode_AsUTF8(val);
-          Py_XDECREF(name_attr);
-          return ss.str();
-        }
-    } else {
-        object format_exception(traceback.attr("format_exception"));
-        try {
-          formatted_list = format_exception(hexc, hval, htb);
-        } catch (error_already_set const &) {
-          // error while processing exception object
-          // returning only the exception string value
-          PyObject *name_attr = PyObject_GetAttrString(exc, "__name__");
-          std::stringstream ss;
-          ss << PyUnicode_AsUTF8(name_attr) << ": " << PyUnicode_AsUTF8(val);
-          Py_XDECREF(name_attr);
-          return ss.str();
-        }
+
+using std::string;
+using std::wstring;
+
+// decode a Python exception into a string
+std::string handle_pyerror(
+  bool crash_dump,
+  std::string module,
+  std::string caller)
+{
+  using namespace boost::python;
+  using namespace boost;
+
+  PyObject *exc, *val, *tb;
+  object formatted_list, formatted;
+  PyErr_Fetch(&exc, &val, &tb);
+  PyErr_NormalizeException(&exc, &val, &tb);
+  handle<> hexc(exc), hval(allow_null(val)), htb(allow_null(tb));
+
+  object traceback(import("traceback"));
+  if (!tb) {
+    object format_exception_only(traceback.attr("format_exception_only"));
+    try {
+      formatted_list = format_exception_only(hexc, hval);
+    } catch (error_already_set const &) {
+      // error while processing exception object
+      // returning only the exception string value
+      PyObject *name_attr = PyObject_GetAttrString(exc, "__name__");
+      std::stringstream ss;
+      ss << PyUnicode_AsUTF8(name_attr) << ": " << PyUnicode_AsUTF8(val);
+      Py_XDECREF(name_attr);
+      ss << "\nError processing exception object: " << peek_pyerror();
+      return ss.str();
     }
-    formatted = str("").join(formatted_list);
-    return extract<std::string>(formatted);
+  } else {
+    object format_exception(traceback.attr("format_exception"));
+    try {
+      formatted_list = format_exception(hexc, hval, htb);
+    } catch (error_already_set const &) {
+      // error while processing exception object
+      // returning only the exception string value
+      PyObject *name_attr = PyObject_GetAttrString(exc, "__name__");
+      std::stringstream ss;
+      ss << PyUnicode_AsUTF8(name_attr) << ": " << PyUnicode_AsUTF8(val);
+      Py_XDECREF(name_attr);
+      ss << "\nError processing exception object: " << peek_pyerror();
+      return ss.str();
+    }
+  }
+  formatted = str("").join(formatted_list);
+
+  if (!module.empty()) {
+    std::list<std::string> bt_strings;
+    std::map<std::string, std::string> extra;
+    
+    extra["mgr_module"] = module;
+    extra["mgr_module_caller"] = caller;
+    PyObject *name_attr = PyObject_GetAttrString(exc, "__name__");
+    extra["mgr_python_exception"] = stringify(PyUnicode_AsUTF8(name_attr));
+    Py_XDECREF(name_attr);
+
+    PyObject *l = get_managed_object(formatted_list, boost::python::tag);
+    if (PyList_Check(l)) {
+      // skip first line, which is: "Traceback (most recent call last):\n"
+      for (unsigned i = 1; i < PyList_Size(l); ++i) {
+	PyObject *val = PyList_GET_ITEM(l, i);
+	std::string s = PyUnicode_AsUTF8(val);
+	s.resize(s.size() - 1);  // strip off newline character
+	bt_strings.push_back(s);
+      }
+    }
+    PyBackTrace bt(bt_strings);
+    
+    char crash_path[PATH_MAX];
+    generate_crash_dump(crash_path, bt, &extra);
+  }
+  
+  return extract<std::string>(formatted);
 }
 
 /**
@@ -118,7 +167,6 @@ namespace {
     {nullptr, nullptr, 0, nullptr}
   };
 
-#if PY_MAJOR_VERSION >= 3
   static PyModuleDef ceph_logger_module = {
     PyModuleDef_HEAD_INIT,
     "ceph_logger",
@@ -126,7 +174,6 @@ namespace {
     -1,
     log_methods,
   };
-#endif
 }
 
 PyModuleConfig::PyModuleConfig() = default;  
@@ -138,13 +185,12 @@ PyModuleConfig::PyModuleConfig(PyModuleConfig &mconfig)
 PyModuleConfig::~PyModuleConfig() = default;
 
 
-void PyModuleConfig::set_config(
+std::pair<int, std::string> PyModuleConfig::set_config(
     MonClient *monc,
     const std::string &module_name,
-    const std::string &key, const boost::optional<std::string>& val)
+    const std::string &key, const std::optional<std::string>& val)
 {
-  const std::string global_key = PyModule::config_prefix
-                                   + module_name + "/" + key;
+  const std::string global_key = "mgr/" + module_name + "/" + key;
   Command set_cmd;
   {
     std::ostringstream cmd_json;
@@ -171,6 +217,7 @@ void PyModuleConfig::set_config(
     } else {
       config.erase(global_key);
     }
+    return {0, ""};
   } else {
     if (val) {
       dout(0) << "`config set mgr " << global_key << " " << val << "` failed: "
@@ -180,6 +227,7 @@ void PyModuleConfig::set_config(
         << cpp_strerror(set_cmd.r) << dendl;
     }
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
+    return {set_cmd.r, set_cmd.outs};
   }
 }
 
@@ -249,7 +297,6 @@ std::string PyModule::get_site_packages()
   return site_packages.str();
 }
 
-#if PY_MAJOR_VERSION >= 3
 PyObject* PyModule::init_ceph_logger()
 {
   auto py_logger = PyModule_Create(&ceph_logger_module);
@@ -257,25 +304,12 @@ PyObject* PyModule::init_ceph_logger()
   PySys_SetObject("stdout", py_logger);
   return py_logger;
 }
-#else
-void PyModule::init_ceph_logger()
-{
-  auto py_logger = Py_InitModule("ceph_logger", log_methods);
-  PySys_SetObject(const_cast<char*>("stderr"), py_logger);
-  PySys_SetObject(const_cast<char*>("stdout"), py_logger);
-}
-#endif
 
-#if PY_MAJOR_VERSION >= 3
 PyObject* PyModule::init_ceph_module()
-#else
-void PyModule::init_ceph_module()
-#endif
 {
   static PyMethodDef module_methods[] = {
     {nullptr, nullptr, 0, nullptr}
   };
-#if PY_MAJOR_VERSION >= 3
   static PyModuleDef ceph_module_def = {
     PyModuleDef_HEAD_INIT,
     "ceph_module",
@@ -288,9 +322,6 @@ void PyModule::init_ceph_module()
     nullptr
   };
   PyObject *ceph_module = PyModule_Create(&ceph_module_def);
-#else
-  PyObject *ceph_module = Py_InitModule("ceph_module", module_methods);
-#endif
   ceph_assert(ceph_module != nullptr);
   std::map<const char*, PyTypeObject*> classes{
     {{"BaseMgrModule", &BaseMgrModuleType},
@@ -308,9 +339,7 @@ void PyModule::init_ceph_module()
 
     PyModule_AddObject(ceph_module, name, (PyObject *)type);
   }
-#if PY_MAJOR_VERSION >= 3
   return ceph_module;
-#endif
 }
 
 int PyModule::load(PyThreadState *pMainThreadState)
@@ -330,26 +359,15 @@ int PyModule::load(PyThreadState *pMainThreadState)
       pMyThreadState.set(thread_state);
       // Some python modules do not cope with an unpopulated argv, so lets
       // fake one.  This step also picks up site-packages into sys.path.
-#if PY_MAJOR_VERSION >= 3
       const wchar_t *argv[] = {L"ceph-mgr"};
       PySys_SetArgv(1, (wchar_t**)argv);
-#else
-      const char *argv[] = {"ceph-mgr"};
-      PySys_SetArgv(1, (char**)argv);
-#endif
       // Configure sys.path to include mgr_module_path
-      string paths = (":" + g_conf().get_val<std::string>("mgr_module_path") +
-		      ":" + get_site_packages());
-#if PY_MAJOR_VERSION >= 3
-      wstring sys_path(Py_GetPath() + wstring(begin(paths), end(paths)));
+      string paths = (g_conf().get_val<std::string>("mgr_module_path") + ':' +
+                      get_site_packages() + ':');
+      wstring sys_path(wstring(begin(paths), end(paths)) + Py_GetPath());
       PySys_SetPath(const_cast<wchar_t*>(sys_path.c_str()));
       dout(10) << "Computed sys.path '"
 	       << string(begin(sys_path), end(sys_path)) << "'" << dendl;
-#else
-      string sys_path(Py_GetPath() + paths);
-      PySys_SetPath(const_cast<char*>(sys_path.c_str()));
-      dout(10) << "Computed sys.path '" << sys_path << "'" << dendl;
-#endif
     }
   }
   // Environment is all good, import the external module
@@ -371,6 +389,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
       return r;
     }
 
+    register_options(pClass);
     r = load_options();
     if (r != 0) {
       derr << "Missing or invalid MODULE_OPTIONS attribute in module '"
@@ -388,6 +407,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
     if (!r) {
       dout(4) << "Standby mode available in module '" << module_name
               << "'" << dendl;
+      register_options(pStandbyClass);
     } else {
       dout(4) << "Standby mode not provided by module '" << module_name
               << "'" << dendl;
@@ -425,7 +445,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
       Py_DECREF(pCanRunTuple);
     } else {
       derr << "Exception calling can_run on " << get_name() << dendl;
-      derr << handle_pyerror() << dendl;
+      derr << handle_pyerror(true, get_name(), "PyModule::load") << dendl;
       can_run = false;
     }
   }
@@ -473,6 +493,22 @@ int PyModule::walk_dict_list(
   return r;
 }
 
+int PyModule::register_options(PyObject *cls)
+{
+  PyObject *pRegCmd = PyObject_CallMethod(
+    cls,
+    const_cast<char*>("_register_options"), const_cast<char*>("(s)"),
+      module_name.c_str());
+  if (pRegCmd != nullptr) {
+    Py_DECREF(pRegCmd);
+  } else {
+    derr << "Exception calling _register_options on " << get_name()
+         << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::register_options") << dendl;
+  }
+  return 0;
+}
+
 int PyModule::load_commands()
 {
   PyObject *pRegCmd = PyObject_CallMethod(pClass,
@@ -483,7 +519,7 @@ int PyModule::load_commands()
   } else {
     derr << "Exception calling _register_commands on " << get_name()
          << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::load_commands") << dendl;
   }
 
   int r = walk_dict_list("COMMANDS", [this](PyObject *pCommand) -> int {
@@ -504,12 +540,9 @@ int PyModule::load_commands()
     command.perm = PyUnicode_AsUTF8(pPerm);
 
     command.polling = false;
-    PyObject *pPoll = PyDict_GetItemString(pCommand, "poll");
-    if (pPoll) {
-      std::string polling = PyUnicode_AsUTF8(pPoll);
-      if (boost::iequals(polling, "true")) {
-        command.polling = true;
-      }
+    if (PyObject *pPoll = PyDict_GetItemString(pCommand, "poll");
+	pPoll && PyObject_IsTrue(pPoll)) {
+      command.polling = true;
     }
 
     command.module_name = module_name;
@@ -569,7 +602,7 @@ int PyModule::load_options()
     }
     p = PyDict_GetItemString(pOption, "enum_allowed");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
-      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+      for (Py_ssize_t i = 0; i < PyList_Size(p); ++i) {
 	auto q = PyList_GetItem(p, i);
 	if (q) {
 	  auto r = PyObject_Str(q);
@@ -580,7 +613,7 @@ int PyModule::load_options()
     }
     p = PyDict_GetItemString(pOption, "see_also");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
-      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+      for (Py_ssize_t i = 0; i < PyList_Size(p); ++i) {
 	auto q = PyList_GetItem(p, i);
 	if (q && PyObject_TypeCheck(q, &PyUnicode_Type)) {
 	  option.see_also.insert(PyUnicode_AsUTF8(q));
@@ -589,7 +622,7 @@ int PyModule::load_options()
     }
     p = PyDict_GetItemString(pOption, "tags");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
-      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+      for (Py_ssize_t i = 0; i < PyList_Size(p); ++i) {
 	auto q = PyList_GetItem(p, i);
 	if (q && PyObject_TypeCheck(q, &PyUnicode_Type)) {
 	  option.tags.insert(PyUnicode_AsUTF8(q));
@@ -640,7 +673,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
   if (!mgr_module) {
     error_string = peek_pyerror();
     derr << "Module not found: 'mgr_module'" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::load_subclass_of") << dendl;
     return -EINVAL;
   }
   auto mgr_module_type = PyObject_GetAttrString(mgr_module, base_class);
@@ -648,7 +681,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
   if (!mgr_module_type) {
     error_string = peek_pyerror();
     derr << "Unable to import MgrModule from mgr_module" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::load_subclass_of") << dendl;
     return -EINVAL;
   }
 
@@ -657,7 +690,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
   if (!plugin_module) {
     error_string = peek_pyerror();
     derr << "Module not found: '" << module_name << "'" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::load_subclass_of") << dendl;
     return -ENOENT;
   }
   auto locals = PyModule_GetDict(plugin_module);

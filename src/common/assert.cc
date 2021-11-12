@@ -15,6 +15,8 @@
 #include "include/compat.h"
 #include "common/debug.h"
 
+using std::ostringstream;
+
 namespace ceph {
   static CephContext *g_assert_context = NULL;
 
@@ -57,7 +59,7 @@ namespace ceph {
 
     // TODO: get rid of this memory allocation.
     ostringstream oss;
-    oss << BackTrace(1);
+    oss << ClibBackTrace(1);
     dout_emergency(oss.str());
 
     if (g_assert_context) {
@@ -124,7 +126,7 @@ namespace ceph {
 		       sizeof(g_assert_thread_name));
 
     BufAppender ba(g_assert_msg, sizeof(g_assert_msg));
-    BackTrace *bt = new BackTrace(1);
+    BackTrace *bt = new ClibBackTrace(1);
     ba.printf("%s: In function '%s' thread %llx time %s\n"
 	     "%s: %d: FAILED ceph_assert(%s)\n",
 	     file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
@@ -156,7 +158,7 @@ namespace ceph {
   }
 
   [[gnu::cold]] void __ceph_abort(const char *file, int line,
-				  const char *func, const string& msg)
+				  const char *func, const std::string& msg)
   {
     ostringstream tss;
     tss << ceph_clock_now();
@@ -169,7 +171,7 @@ namespace ceph {
     ceph_pthread_getname(pthread_self(), g_assert_thread_name,
 		       sizeof(g_assert_thread_name));
 
-    BackTrace *bt = new BackTrace(1);
+    BackTrace *bt = new ClibBackTrace(1);
     snprintf(g_assert_msg, sizeof(g_assert_msg),
              "%s: In function '%s' thread %llx time %s\n"
 	     "%s: %d: ceph_abort_msg(\"%s\")\n", file, func,
@@ -212,7 +214,7 @@ namespace ceph {
 		       sizeof(g_assert_thread_name));
 
     BufAppender ba(g_assert_msg, sizeof(g_assert_msg));
-    BackTrace *bt = new BackTrace(1);
+    BackTrace *bt = new ClibBackTrace(1);
     ba.printf("%s: In function '%s' thread %llx time %s\n"
 	      "%s: %d: abort()\n",
 	      file, func, (unsigned long long)pthread_self(), tss.str().c_str(),

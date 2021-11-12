@@ -24,7 +24,7 @@
 #include "include/encoding.h"
 #include "include/stringify.h"
 
-class MForward : public Message {
+class MForward final : public Message {
 public:
   uint64_t tid;
   uint8_t client_type;
@@ -35,8 +35,8 @@ public:
   EntityName entity_name;
   PaxosServiceMessage *msg;   // incoming or outgoing message
 
-  string msg_desc;  // for operator<< only
-  
+  std::string msg_desc;  // for operator<< only
+
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 4;
 
@@ -55,7 +55,7 @@ public:
     msg = (PaxosServiceMessage*)m->get();
   }
 private:
-  ~MForward() override {
+  ~MForward() final {
     if (msg) {
       // message was unclaimed
       msg->put();
@@ -109,6 +109,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(tid, p);
     if (header.version < 4) {
@@ -138,7 +139,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "forward"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "forward(";
     if (msg) {
       o << *msg;

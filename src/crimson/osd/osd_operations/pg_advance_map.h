@@ -25,7 +25,7 @@ public:
   static constexpr OperationTypeCode type = OperationTypeCode::pg_advance_map;
 
 protected:
-  OrderedPipelinePhase::Handle handle;
+  PipelineHandle handle;
 
   OSD &osd;
   Ref<PG> pg;

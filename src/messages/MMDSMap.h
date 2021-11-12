@@ -20,41 +20,50 @@
 #include "mds/MDSMap.h"
 #include "include/ceph_features.h"
 
-class MMDSMap : public SafeMessage {
+class MMDSMap final : public SafeMessage {
 private:
-  static constexpr int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 public:
   uuid_d fsid;
   epoch_t epoch = 0;
-  bufferlist encoded;
+  ceph::buffer::list encoded;
+  // don't really need map_fs_name. it was accidentally added in 51af2346fdf
+  // set it to empty string.
+  std::string map_fs_name = std::string();
 
   version_t get_epoch() const { return epoch; }
-  const bufferlist& get_encoded() const { return encoded; }
+  const ceph::buffer::list& get_encoded() const { return encoded; }
 
 protected:
   MMDSMap() : 
     SafeMessage{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION} {}
+
   MMDSMap(const uuid_d &f, const MDSMap &mm) :
     SafeMessage{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION},
     fsid(f) {
     epoch = mm.get_epoch();
     mm.encode(encoded, -1);  // we will reencode with fewer features as necessary
   }
-  ~MMDSMap() override {}
+
+  ~MMDSMap() final {}
 
 public:
   std::string_view get_type_name() const override { return "mdsmap"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "mdsmap(e " << epoch << ")";
   }
 
   // marshalling
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(fsid, p);
     decode(epoch, p);
     decode(encoded, p);
+    if (header.version >= 2) {
+      decode(map_fs_name, p);
+    }
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
@@ -71,10 +80,13 @@ public:
       m.encode(encoded, features);
     }
     encode(encoded, payload);
+    encode(map_fs_name, payload);
   }
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+  template<class T, typename... Args>
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 #endif

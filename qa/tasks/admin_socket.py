@@ -1,13 +1,13 @@
 """
 Admin Socket task -- used in rados, powercycle, and smoke testing
 """
-from cStringIO import StringIO
 
 import json
 import logging
 import os
 import time
 
+from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
@@ -84,33 +84,38 @@ def _socket_command(ctx, remote, socket_path, command, args):
 
     :returns: output of command in json format
     """
-    json_fp = StringIO()
     testdir = teuthology.get_testdir(ctx)
     max_tries = 120
-    while True:
-        proc = remote.run(
-            args=[
-                'sudo',
-                'adjust-ulimits',
-                'ceph-coverage',
-                '{tdir}/archive/coverage'.format(tdir=testdir),
-                'ceph',
-                '--admin-daemon', socket_path,
-                ] + command.split(' ') + args,
-            stdout=json_fp,
-            check_status=False,
-            )
-        if proc.exitstatus == 0:
-            break
-        assert max_tries > 0
-        max_tries -= 1
-        log.info('ceph cli returned an error, command not registered yet?')
-        log.info('sleeping and retrying ...')
-        time.sleep(1)
-    out = json_fp.getvalue()
-    json_fp.close()
-    log.debug('admin socket command %s returned %s', command, out)
-    return json.loads(out)
+    sub_commands = [c.strip() for c in command.split('||')]
+    ex = None
+    for _ in range(max_tries):
+        for sub_command in sub_commands:
+            try:
+                out = remote.sh([
+                    'sudo',
+                    'adjust-ulimits',
+                    'ceph-coverage',
+                    '{tdir}/archive/coverage'.format(tdir=testdir),
+                    'ceph',
+                    '--admin-daemon', socket_path,
+                    ] + sub_command.split(' ') + args)
+            except CommandFailedError as e:
+                ex = e
+                log.info('ceph cli "%s" returned an error %s, '
+                         'command not registered yet?', sub_command, e)
+            else:
+                log.debug('admin socket command %s returned %s',
+                          sub_command, out)
+                return json.loads(out)
+        else:
+            # exhausted all commands
+            log.info('sleeping and retrying ...')
+            time.sleep(1)
+    else:
+        # i tried max_tries times..
+        assert ex is not None
+        raise ex
+
 
 def _run_tests(ctx, client, tests):
     """

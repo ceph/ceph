@@ -16,6 +16,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <unistd.h>
 
 #include "common/admin_socket.h"
 #include "common/errno.h"
@@ -34,6 +35,11 @@ const char* get_rand_socket_path()
   if (g_socket_path == NULL) {
     char buf[512];
     const char *tdir = getenv("TMPDIR");
+    #ifdef _WIN32
+    if (tdir == NULL) {
+      tdir = getenv("TEMP");
+    }
+    #endif /* _WIN32 */
     if (tdir == NULL) {
       tdir = "/tmp";
     }
@@ -49,7 +55,7 @@ static std::string asok_connect(const std::string &path, int *fd)
 {
   int socket_fd = socket_cloexec(PF_UNIX, SOCK_STREAM, 0);
   if(socket_fd < 0) {
-    int err = errno;
+    int err = ceph_sock_errno();
     ostringstream oss;
     oss << "socket(PF_UNIX, SOCK_STREAM, 0) failed: " << cpp_strerror(err);
     return oss.str();
@@ -63,32 +69,32 @@ static std::string asok_connect(const std::string &path, int *fd)
 
   if (::connect(socket_fd, (struct sockaddr *) &address, 
 	sizeof(struct sockaddr_un)) != 0) {
-    int err = errno;
+    int err = ceph_sock_errno();
     ostringstream oss;
     oss << "connect(" << socket_fd << ") failed: " << cpp_strerror(err);
-    close(socket_fd);
+    compat_closesocket(socket_fd);
     return oss.str();
   }
 
   struct timeval timer;
   timer.tv_sec = 10;
   timer.tv_usec = 0;
-  if (::setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timer, sizeof(timer))) {
-    int err = errno;
+  if (::setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, (SOCKOPT_VAL_TYPE)&timer, sizeof(timer))) {
+    int err = ceph_sock_errno();
     ostringstream oss;
     oss << "setsockopt(" << socket_fd << ", SO_RCVTIMEO) failed: "
 	<< cpp_strerror(err);
-    close(socket_fd);
+    compat_closesocket(socket_fd);
     return oss.str();
   }
   timer.tv_sec = 10;
   timer.tv_usec = 0;
-  if (::setsockopt(socket_fd, SOL_SOCKET, SO_SNDTIMEO, &timer, sizeof(timer))) {
-    int err = errno;
+  if (::setsockopt(socket_fd, SOL_SOCKET, SO_SNDTIMEO, (SOCKOPT_VAL_TYPE)&timer, sizeof(timer))) {
+    int err = ceph_sock_errno();
     ostringstream oss;
     oss << "setsockopt(" << socket_fd << ", SO_SNDTIMEO) failed: "
 	<< cpp_strerror(err);
-    close(socket_fd);
+    compat_closesocket(socket_fd);
     return oss.str();
   }
 
@@ -98,7 +104,7 @@ static std::string asok_connect(const std::string &path, int *fd)
 
 static std::string asok_request(int socket_fd, std::string request)
 {
-  ssize_t res = safe_write(socket_fd, request.c_str(), request.length() + 1);
+  ssize_t res = safe_send(socket_fd, request.c_str(), request.length() + 1);
   if (res < 0) {
     int err = res;
     ostringstream oss;
@@ -137,30 +143,30 @@ std::string AdminSocketClient::do_request(std::string request, std::string *resu
   if (!err.empty()) {
     goto done;
   }
-  res = safe_read_exact(socket_fd, &message_size_raw,
+  res = safe_recv_exact(socket_fd, &message_size_raw,
 				sizeof(message_size_raw));
   if (res < 0) {
     int e = res;
     ostringstream oss;
-    oss << "safe_read(" << socket_fd << ") failed to read message size: "
+    oss << "safe_recv(" << socket_fd << ") failed to read message size: "
 	<< cpp_strerror(e);
     err = oss.str();
     goto done;
   }
   message_size = ntohl(message_size_raw);
   buffer.resize(message_size, 0);
-  res = safe_read_exact(socket_fd, &buffer[0], message_size);
+  res = safe_recv_exact(socket_fd, &buffer[0], message_size);
   if (res < 0) {
     int e = res;
     ostringstream oss;
-    oss << "safe_read(" << socket_fd << ") failed: " << cpp_strerror(e);
+    oss << "safe_recv(" << socket_fd << ") failed: " << cpp_strerror(e);
     err = oss.str();
     goto done;
   }
   //printf("MESSAGE FROM SERVER: %s\n", buffer.c_str());
   std::swap(*result, buffer);
 done:
-  close(socket_fd);
+  compat_closesocket(socket_fd);
  out:
   return err;
 }

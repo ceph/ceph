@@ -30,6 +30,8 @@
 #include <set>
 #include <vector>
 
+using namespace std::chrono_literals;
+
 using rbd::mirror::ImageId;
 using rbd::mirror::ImageIds;
 using rbd::mirror::PoolWatcher;
@@ -100,7 +102,7 @@ public:
     ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
     ioctx.application_enable("rbd", true);
 
-    m_pool_watcher.reset(new PoolWatcher<>(m_threads, ioctx,
+    m_pool_watcher.reset(new PoolWatcher<>(m_threads, ioctx, "mirror uuid",
                                            m_pool_watcher_listener));
 
     if (enable_mirroring) {
@@ -170,10 +172,11 @@ public:
       librbd::ImageCtx *ictx = new librbd::ImageCtx(parent_image_name.c_str(),
 						    "", "", pioctx, false);
       ictx->state->open(0);
+      librbd::NoOpProgressContext prog_ctx;
       EXPECT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-						 snap_name.c_str()));
+						 snap_name, 0, prog_ctx));
       EXPECT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
-						  snap_name.c_str()));
+						  snap_name));
       ictx->state->close();
     }
 
@@ -217,7 +220,7 @@ public:
   ceph::mutex m_lock = ceph::make_mutex("TestPoolWatcherLock");
   RadosRef m_cluster;
   PoolWatcherListener m_pool_watcher_listener;
-  unique_ptr<PoolWatcher<> > m_pool_watcher;
+  std::unique_ptr<PoolWatcher<> > m_pool_watcher;
 
   set<string> m_pools;
   ImageIds m_mirrored_images;

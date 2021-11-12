@@ -43,12 +43,41 @@ function detect_ceph_dev_pkgs() {
     fi
 
     source /etc/os-release
-    if [[ "$ID" == "ubuntu" ]] && [[ "$VERSION" =~ .*Xenial*. ]]; then 
-        cmake_opts+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=NO"
+    if [[ "$ID" == "ubuntu" ]]; then
+        case "$VERSION" in
+            *Xenial*)
+                cmake_opts+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF";;
+            *Focal*)
+                cmake_opts+=" -DWITH_SYSTEM_ZSTD=ON";;
+        esac
     fi
     echo "$cmake_opts"
 }
 
+function do_install() {
+    local install_cmd
+    local pkgs
+    local ret
+    install_cmd=$1
+    shift
+    pkgs=$@
+    shift
+    ret=0
+    $DRY_RUN sudo $install_cmd $pkgs || ret=$?
+    if test $ret -eq 0 ; then
+        return
+    fi
+    # try harder if apt-get, and it was interrutped
+    if [[ $install_cmd == *"apt-get"* ]]; then
+        if test $ret -eq 100 ; then
+            # dpkg was interrupted
+            $DRY_RUN sudo dpkg --configure -a
+            $DRY_RUN sudo $install_cmd $pkgs
+        else
+            return $ret
+        fi
+    fi
+}
 function prepare() {
     local install_cmd
     local which_pkg="which"
@@ -76,7 +105,7 @@ function prepare() {
         exit 1
     fi
     if [ -n "$install_cmd" ]; then
-        $DRY_RUN sudo $install_cmd ccache $which_pkg
+        do_install "$install_cmd" ccache $which_pkg clang
     else
         echo "WARNING: Don't know how to install packages" >&2
         echo "This probably means distribution $ID is not supported by run-make-check.sh" >&2
@@ -88,7 +117,6 @@ function prepare() {
     fi
 
     if test -f ./install-deps.sh ; then
-	    export WITH_SEASTAR=1
 	    $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
@@ -122,10 +150,14 @@ function configure() {
 
 function build() {
     local targets="$@"
+    if test -n "$targets"; then
+        targets="--target $targets"
+    fi
     $DRY_RUN cd build
     BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     test "$BUILD_MAKEOPTS" && echo "make will run with option(s) $BUILD_MAKEOPTS"
-    $DRY_RUN make $BUILD_MAKEOPTS $targets || return 1
+    # older cmake does not support --parallel or -j, so pass it to underlying generator
+    $DRY_RUN cmake --build . $targets -- $BUILD_MAKEOPTS || return 1
     $DRY_RUN ccache -s # print the ccache statistics to evaluate the efficiency
 }
 

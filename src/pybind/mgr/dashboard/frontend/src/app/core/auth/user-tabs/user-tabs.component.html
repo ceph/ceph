@@ -1,12 +1,14 @@
-<tabset>
-  <tab heading="Users"
-       i18n-heading
-       [active]="url === '/user-management/users'"
-       (selectTab)="navigateTo('/user-management/users')">
-  </tab>
-  <tab heading="Roles"
-       i18n-heading
-       [active]="url === '/user-management/roles'"
-       (selectTab)="navigateTo('/user-management/roles')">
-  </tab>
-</tabset>
+<ul ngbNav
+    #nav="ngbNav"
+    [activeId]="router.url"
+    (navChange)="router.navigate([$event.nextId])"
+    class="nav-tabs">
+  <li ngbNavItem="/user-management/users">
+    <a ngbNavLink
+       i18n>Users</a>
+  </li>
+  <li ngbNavItem="/user-management/roles">
+    <a ngbNavLink
+       i18n>Roles</a>
+  </li>
+</ul>

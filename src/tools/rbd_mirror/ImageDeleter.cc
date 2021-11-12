@@ -18,13 +18,12 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Timer.h"
-#include "common/WorkQueue.h"
 #include "global/global_context.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
-#include "librbd/Journal.h"
 #include "librbd/Operations.h"
+#include "librbd/asio/ContextWQ.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Utils.h"
@@ -142,7 +141,8 @@ template <typename I>
 void ImageDeleter<I>::trash_move(librados::IoCtx& local_io_ctx,
                                  const std::string& global_image_id,
                                  bool resync,
-                                 ContextWQ* work_queue, Context* on_finish) {
+                                 librbd::asio::ContextWQ* work_queue,
+                                 Context* on_finish) {
   dout(10) << "global_image_id=" << global_image_id << ", "
            << "resync=" << resync << dendl;
 
@@ -262,9 +262,9 @@ void ImageDeleter<I>::enqueue_failed_delete(DeleteInfoRef* delete_info,
                                             int error_code,
                                             double retry_delay) {
   dout(20) << "info=" << *delete_info << ", r=" << error_code << dendl;
-  if (error_code == -EBLACKLISTED) {
+  if (error_code == -EBLOCKLISTED) {
     std::lock_guard locker{m_lock};
-    derr << "blacklisted while deleting local image" << dendl;
+    derr << "blocklisted while deleting local image" << dendl;
     complete_active_delete(delete_info, error_code);
     return;
   }

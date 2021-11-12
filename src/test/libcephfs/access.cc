@@ -34,6 +34,7 @@
 #include <sys/xattr.h>
 #endif
 
+using namespace std;
 
 rados_t cluster;
 

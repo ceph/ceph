@@ -1,6 +1,5 @@
-import six
+from io import BytesIO
 import logging
-from StringIO import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 logger = logging.getLogger(__name__)
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 class XFSTestsDev(CephFSTestCase):
 
     def setUp(self):
-        CephFSTestCase.setUp(self)
+        super(XFSTestsDev, self).setUp()
         self.prepare_xfstests_dev()
 
     def prepare_xfstests_dev(self):
@@ -28,11 +27,11 @@ class XFSTestsDev(CephFSTestCase):
         # NOTE: On teuthology machines it's necessary to run "make" as
         # superuser since the repo is cloned somewhere in /tmp.
         self.mount_a.client_remote.run(args=['sudo', 'make'],
-                                       cwd=self.repo_path, stdout=StringIO(),
-                                       stderr=StringIO())
+                                       cwd=self.repo_path, stdout=BytesIO(),
+                                       stderr=BytesIO())
         self.mount_a.client_remote.run(args=['sudo', 'make', 'install'],
                                        cwd=self.repo_path, omit_sudo=False,
-                                       stdout=StringIO(), stderr=StringIO())
+                                       stdout=BytesIO(), stderr=BytesIO())
 
     def get_repo(self):
         """
@@ -51,16 +50,10 @@ class XFSTestsDev(CephFSTestCase):
 
     def get_admin_key(self):
         import configparser
-        from sys import version_info as sys_version_info
 
         cp = configparser.ConfigParser()
-        if sys_version_info.major > 2:
-            cp.read_string(self.fs.mon_manager.raw_cluster_cmd(
-                'auth', 'get-or-create', 'client.admin'))
-        # TODO: remove this part when we stop supporting Python 2
-        elif sys_version_info.major <= 2:
-            cp.read_string(six.text_type(self.fs.mon_manager.raw_cluster_cmd(
-                'auth', 'get-or-create', 'client.admin')))
+        cp.read_string(self.fs.mon_manager.raw_cluster_cmd(
+            'auth', 'get-or-create', 'client.admin'))
 
         return cp['client.admin']['key']
 
@@ -93,29 +86,36 @@ class XFSTestsDev(CephFSTestCase):
     def install_deps(self):
         from teuthology.misc import get_system_type
 
-        args = ['sudo', 'install', '-y']
+        distro, version = get_system_type(self.mount_a.client_remote,
+                                          distro=True, version=True)
+        distro = distro.lower()
+        major_ver_num = int(version.split('.')[0]) # only keep major release
+                                                   # number
 
-        distro = get_system_type(self.mount_a.client_remote,
-                                 distro=True).lower()
-        if distro in ('redhatenterpriseserver', 'redhatenterprise', 'fedora', 'centos'):
+        # we keep fedora here so that right deps are installed when this test
+        # is run locally by a dev.
+        if distro in ('redhatenterpriseserver', 'redhatenterprise', 'fedora',
+                      'centos', 'centosstream'):
             deps = """acl attr automake bc dbench dump e2fsprogs fio \
             gawk gcc indent libtool lvm2 make psmisc quota sed \
             xfsdump xfsprogs \
             libacl-devel libattr-devel libaio-devel libuuid-devel \
-            xfsprogs-devel btrfs-progs-devel python sqlite""".split()
-            deps_for_old_distros = "xfsprogs-qa-devel"
+            xfsprogs-devel btrfs-progs-devel python2 sqlite""".split()
+            deps_old_distros = ['xfsprogs-qa-devel']
 
-            args.insert(1, 'yum')
-            args.extend(deps)
-            args.append(deps_for_old_distros)
+            if distro != 'fedora' and major_ver_num > 7:
+                    deps.remove('btrfs-progs-devel')
+
+            args = ['sudo', 'yum', 'install', '-y'] + deps + deps_old_distros
         elif distro == 'ubuntu':
             deps = """xfslibs-dev uuid-dev libtool-bin \
             e2fsprogs automake gcc libuuid1 quota attr libattr1-dev make \
             libacl1-dev libaio-dev xfsprogs libgdbm-dev gawk fio dbench \
             uuid-runtime python sqlite3""".split()
 
-            args.insert(1, 'apt-get')
-            args.extend(deps)
+            if major_ver_num >= 19:
+                deps[deps.index('python')] ='python2'
+            args = ['sudo', 'apt-get', 'install', '-y'] + deps
         else:
             raise RuntimeError('expected a yum based or a apt based system')
 
@@ -133,7 +133,6 @@ class XFSTestsDev(CephFSTestCase):
     def write_local_config(self):
         from os.path import join
         from textwrap import dedent
-        from teuthology.misc import sudo_write_file
 
         mon_sock = self.fs.mon_manager.get_msgrv1_mon_socks()[0]
         self.test_dev = mon_sock + ':/' + self.test_dirname
@@ -149,8 +148,8 @@ class XFSTestsDev(CephFSTestCase):
             ''').format(self.test_dev, self.test_dirs_mount_path, self.scratch_dev,
                         self.scratch_dirs_mount_path, self.get_admin_key())
 
-        sudo_write_file(self.mount_a.client_remote, join(
-            self.repo_path, 'local.config'), xfstests_config_contents)
+        self.mount_a.client_remote.write_file(join(self.repo_path, 'local.config'),
+                                              xfstests_config_contents, sudo=True)
 
     def tearDown(self):
         self.mount_a.client_remote.run(args=['sudo', 'userdel', '--force',
@@ -165,3 +164,5 @@ class XFSTestsDev(CephFSTestCase):
         self.mount_a.client_remote.run(args=['sudo', 'rm', '-rf',
                                              self.repo_path],
                                        omit_sudo=False, check_status=False)
+
+        super(XFSTestsDev, self).tearDown()

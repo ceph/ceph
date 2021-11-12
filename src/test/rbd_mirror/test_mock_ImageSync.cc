@@ -33,10 +33,11 @@ public:
   static DeepCopyRequest* create(
       librbd::MockTestImageCtx *src_image_ctx,
       librbd::MockTestImageCtx *dst_image_ctx,
-      librados::snap_t snap_id_start, librados::snap_t snap_id_end,
-      bool flatten, const librbd::deep_copy::ObjectNumber &object_number,
-      ContextWQ *work_queue, SnapSeqs *snap_seqs, ProgressContext *prog_ctx,
-      Context *on_finish) {
+      librados::snap_t src_snap_id_start, librados::snap_t src_snap_id_end,
+      librados::snap_t dst_snap_id_start, bool flatten,
+      const librbd::deep_copy::ObjectNumber &object_number,
+      librbd::asio::ContextWQ *work_queue, SnapSeqs *snap_seqs,
+      deep_copy::Handler *handler, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -61,7 +62,6 @@ DeepCopyRequest<librbd::MockTestImageCtx>* DeepCopyRequest<librbd::MockTestImage
 } // namespace librbd
 
 // template definitions
-template class rbd::mirror::ImageSync<librbd::MockTestImageCtx>;
 #include "tools/rbd_mirror/ImageSync.cc"
 
 namespace rbd {
@@ -71,7 +71,7 @@ template <>
 struct Threads<librbd::MockTestImageCtx> {
   ceph::mutex &timer_lock;
   SafeTimer *timer;
-  ContextWQ *work_queue;
+  librbd::asio::ContextWQ *work_queue;
 
   Threads(Threads<librbd::ImageCtx> *threads)
     : timer_lock(threads->timer_lock), timer(threads->timer),

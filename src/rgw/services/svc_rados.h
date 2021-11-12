@@ -7,21 +7,20 @@
 
 #include "include/rados/librados.hpp"
 #include "common/async/yield_context.h"
-#include "common/RWLock.h"
 
 class RGWAsyncRadosProcessor;
 
 class RGWAccessListFilter {
 public:
   virtual ~RGWAccessListFilter() {}
-  virtual bool filter(const string& name, string& key) = 0;
+  virtual bool filter(const std::string& name, std::string& key) = 0;
 };
 
 struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
-  string prefix;
+  std::string prefix;
 
-  explicit RGWAccessListFilterPrefix(const string& _prefix) : prefix(_prefix) {}
-  bool filter(const string& name, string& key) override {
+  explicit RGWAccessListFilterPrefix(const std::string& _prefix) : prefix(_prefix) {}
+  bool filter(const std::string& name, std::string& key) override {
     return (prefix.compare(key.substr(0, prefix.size())) == 0);
   }
 };
@@ -31,7 +30,7 @@ class RGWSI_RADOS : public RGWServiceInstance
   librados::Rados rados;
   std::unique_ptr<RGWAsyncRadosProcessor> async_processor;
 
-  int do_start() override;
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
 public:
   struct OpenParams {
@@ -51,27 +50,31 @@ public:
   };
 
 private:
-  librados::Rados* get_rados_handle();
-  int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx,
+  int open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx& io_ctx,
                     const OpenParams& params = {});
-  int pool_iterate(librados::IoCtx& ioctx,
+  int pool_iterate(const DoutPrefixProvider *dpp,
+                   librados::IoCtx& ioctx,
                    librados::NObjectIterator& iter,
-                   uint32_t num, vector<rgw_bucket_dir_entry>& objs,
+                   uint32_t num, std::vector<rgw_bucket_dir_entry>& objs,
                    RGWAccessListFilter *filter,
                    bool *is_truncated);
 
 public:
   RGWSI_RADOS(CephContext *cct);
   ~RGWSI_RADOS();
+  librados::Rados* get_rados_handle();
 
   void init() {}
   void shutdown() override;
 
   uint64_t instance_id();
+  bool check_secure_mon_conn(const DoutPrefixProvider *dpp) const;
 
   RGWAsyncRadosProcessor *get_async_processor() {
     return async_processor.get();
   }
+
+  int clog_warn(const std::string& msg);
 
   class Handle;
 
@@ -95,10 +98,10 @@ public:
   public:
     Pool() {}
 
-    int create();
-    int create(const std::vector<rgw_pool>& pools, std::vector<int> *retcodes);
+    int create(const DoutPrefixProvider *dpp);
+    int create(const DoutPrefixProvider *dpp, const std::vector<rgw_pool>& pools, std::vector<int> *retcodes);
     int lookup();
-    int open(const OpenParams& params = {});
+    int open(const DoutPrefixProvider *dpp, const OpenParams& params = {});
 
     const rgw_pool& get_pool() {
       return pool;
@@ -121,12 +124,12 @@ public:
       List() {}
       List(Pool *_pool) : pool(_pool) {}
 
-      int init(const string& marker, RGWAccessListFilter *filter = nullptr);
-      int get_next(int max,
-                   std::vector<string> *oids,
+      int init(const DoutPrefixProvider *dpp, const std::string& marker, RGWAccessListFilter *filter = nullptr);
+      int get_next(const DoutPrefixProvider *dpp, int max,
+                   std::vector<std::string> *oids,
                    bool *is_truncated);
 
-      int get_marker(string *marker);
+      int get_marker(std::string *marker);
     };
 
     List op() {
@@ -156,16 +159,17 @@ public:
       init(_obj);
     }
 
-    Obj(Pool& pool, const string& oid);
+    Obj(Pool& pool, const std::string& oid);
 
   public:
     Obj() {}
 
-    int open();
+    int open(const DoutPrefixProvider *dpp);
 
-    int operate(librados::ObjectWriteOperation *op, optional_yield y);
-    int operate(librados::ObjectReadOperation *op, bufferlist *pbl,
-                optional_yield y);
+    int operate(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation *op, optional_yield y,
+		int flags = 0);
+    int operate(const DoutPrefixProvider *dpp, librados::ObjectReadOperation *op, bufferlist *pbl,
+                optional_yield y, int flags = 0);
     int aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op);
     int aio_operate(librados::AioCompletion *c, librados::ObjectReadOperation *op,
                     bufferlist *pbl);
@@ -173,7 +177,7 @@ public:
     int watch(uint64_t *handle, librados::WatchCtx2 *ctx);
     int aio_watch(librados::AioCompletion *c, uint64_t *handle, librados::WatchCtx2 *ctx);
     int unwatch(uint64_t handle);
-    int notify(bufferlist& bl, uint64_t timeout_ms,
+    int notify(const DoutPrefixProvider *dpp, bufferlist& bl, uint64_t timeout_ms,
                bufferlist *pbl, optional_yield y);
     void notify_ack(uint64_t notify_id,
                     uint64_t cookie,
@@ -203,6 +207,11 @@ public:
     }
 
     int watch_flush();
+
+    int mon_command(std::string cmd,
+                    const bufferlist& inbl,
+                    bufferlist *outbl,
+                    std::string *outs);
   };
 
   Handle handle() {
@@ -213,7 +222,7 @@ public:
     return Obj(this, o);
   }
 
-  Obj obj(Pool& pool, const string& oid) {
+  Obj obj(Pool& pool, const std::string& oid) {
     return Obj(pool, oid);
   }
 
@@ -232,6 +241,6 @@ public:
 
 using rgw_rados_ref = RGWSI_RADOS::rados_ref;
 
-inline ostream& operator<<(ostream& out, const RGWSI_RADOS::Obj& obj) {
+inline std::ostream& operator<<(std::ostream& out, const RGWSI_RADOS::Obj& obj) {
   return out << obj.get_raw_obj();
 }

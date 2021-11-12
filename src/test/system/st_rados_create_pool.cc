@@ -13,6 +13,7 @@
 */
 
 #include "cross_process_sem.h"
+#include "include/ceph_assert.h"
 #include "include/rados/librados.h"
 #include "st_rados_create_pool.h"
 #include "systest_runnable.h"

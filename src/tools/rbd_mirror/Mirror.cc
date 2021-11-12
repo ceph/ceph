@@ -14,6 +14,7 @@
 #include "librbd/ImageCtx.h"
 #include "perfglue/heap_profiler.h"
 #include "Mirror.h"
+#include "PoolMetaCache.h"
 #include "ServiceDaemon.h"
 #include "Threads.h"
 
@@ -485,12 +486,8 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_args(args),
   m_local(new librados::Rados()),
   m_cache_manager_handler(new CacheManagerHandler(cct)),
-  m_asok_hook(new MirrorAdminSocketHook(cct, this))
-{
-  m_threads =
-    &(cct->lookup_or_create_singleton_object<Threads<librbd::ImageCtx>>(
-	"rbd_mirror::threads", false, cct));
-  m_service_daemon.reset(new ServiceDaemon<>(m_cct, m_local, m_threads));
+  m_pool_meta_cache(new PoolMetaCache(cct)),
+  m_asok_hook(new MirrorAdminSocketHook(cct, this)) {
 }
 
 Mirror::~Mirror()
@@ -537,6 +534,10 @@ int Mirror::init()
     return r;
   }
 
+  m_threads = &(m_cct->lookup_or_create_singleton_object<
+    Threads<librbd::ImageCtx>>("rbd_mirror::threads", false, m_local));
+  m_service_daemon.reset(new ServiceDaemon<>(m_cct, m_local, m_threads));
+
   r = m_service_daemon->init();
   if (r < 0) {
     derr << "error registering service daemon: " << cpp_strerror(r) << dendl;
@@ -552,6 +553,7 @@ void Mirror::run()
 {
   dout(20) << "enter" << dendl;
 
+  using namespace std::chrono_literals;
   utime_t next_refresh_pools = ceph_clock_now();
 
   while (!m_stopping) {
@@ -712,8 +714,8 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers,
           // TODO: make async
           pool_replayer->shut_down();
           pool_replayer->init(site_name);
-        } else if (pool_replayer->is_blacklisted()) {
-          derr << "restarting blacklisted pool replayer for " << peer << dendl;
+        } else if (pool_replayer->is_blocklisted()) {
+          derr << "restarting blocklisted pool replayer for " << peer << dendl;
           // TODO: make async
           pool_replayer->shut_down();
           pool_replayer->init(site_name);
@@ -727,7 +729,8 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers,
         dout(20) << "starting pool replayer for " << peer << dendl;
         unique_ptr<PoolReplayer<>> pool_replayer(
             new PoolReplayer<>(m_threads, m_service_daemon.get(),
-                               m_cache_manager_handler.get(), kv.first, peer,
+                               m_cache_manager_handler.get(),
+                               m_pool_meta_cache.get(), kv.first, peer,
                                m_args));
 
         // TODO: make async

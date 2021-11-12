@@ -24,10 +24,11 @@
 
 #include "SimpleLock.h"
 #include "Capability.h"
+#include "BatchOp.h"
 
 #include "common/TrackedOp.h"
 #include "messages/MClientRequest.h"
-#include "messages/MMDSSlaveRequest.h"
+#include "messages/MMDSPeerRequest.h"
 #include "messages/MClientReply.h"
 
 class LogSegment;
@@ -80,7 +81,7 @@ public:
     mutable mds_rank_t wrlock_target;
   };
 
-  struct LockOpVec : public vector<LockOp> {
+  struct LockOpVec : public std::vector<LockOp> {
     LockOpVec() {
       reserve(32);
     }
@@ -111,16 +112,16 @@ public:
     void sort_and_merge();
   };
 
-  using lock_set = set<LockOp>;
+  using lock_set = std::set<LockOp>;
   using lock_iterator = lock_set::iterator;
 
   // keep our default values synced with MDRequestParam's
-  MutationImpl() : TrackedOp(nullptr, utime_t()) {}
+  MutationImpl() : TrackedOp(nullptr, ceph_clock_now()) {}
   MutationImpl(OpTracker *tracker, utime_t initiated,
-	       const metareqid_t &ri, __u32 att=0, mds_rank_t slave_to=MDS_RANK_NONE)
+	       const metareqid_t &ri, __u32 att=0, mds_rank_t peer_to=MDS_RANK_NONE)
     : TrackedOp(tracker, initiated),
       reqid(ri), attempt(att),
-      slave_to_mds(slave_to) {}
+      peer_to_mds(peer_to) {}
   ~MutationImpl() override {
     ceph_assert(!locking);
     ceph_assert(!lock_cache);
@@ -158,8 +159,8 @@ public:
     return lock == last_locked;
   }
 
-  bool is_master() const { return slave_to_mds == MDS_RANK_NONE; }
-  bool is_slave() const { return slave_to_mds != MDS_RANK_NONE; }
+  bool is_leader() const { return peer_to_mds == MDS_RANK_NONE; }
+  bool is_peer() const { return peer_to_mds != MDS_RANK_NONE; }
 
   client_t get_client() const {
     if (reqid.name.is_client())
@@ -200,29 +201,34 @@ public:
   void set_remote_auth_pinned(MDSCacheObject* object, mds_rank_t from);
   void _clear_remote_auth_pinned(ObjectState& stat);
 
-  void add_projected_inode(CInode *in);
-  void pop_and_dirty_projected_inodes();
-  void add_projected_fnode(CDir *dir);
-  void pop_and_dirty_projected_fnodes();
+  void add_projected_node(MDSCacheObject* obj) {
+    projected_nodes.insert(obj);
+  }
+  void remove_projected_node(MDSCacheObject* obj) {
+    projected_nodes.erase(obj);
+  }
+  bool is_projected(MDSCacheObject *obj) const {
+    return projected_nodes.count(obj);
+  }
   void add_updated_lock(ScatterLock *lock);
   void add_cow_inode(CInode *in);
   void add_cow_dentry(CDentry *dn);
   void apply();
   void cleanup();
 
-  virtual void print(ostream &out) const {
+  virtual void print(std::ostream &out) const {
     out << "mutation(" << this << ")";
   }
 
-  virtual void dump(Formatter *f) const {}
-  void _dump_op_descriptor_unlocked(ostream& stream) const override;
+  virtual void dump(ceph::Formatter *f) const {}
+  void _dump_op_descriptor_unlocked(std::ostream& stream) const override;
 
   metareqid_t reqid;
   __u32 attempt = 0;      // which attempt for this request
   LogSegment *ls = nullptr;  // the log segment i'm committing to
 
-  // flag mutation as slave
-  mds_rank_t slave_to_mds = MDS_RANK_NONE;  // this is a slave request if >= 0.
+  // flag mutation as peer
+  mds_rank_t peer_to_mds = MDS_RANK_NONE;  // this is a peer request if >= 0.
 
   ceph::unordered_map<MDSCacheObject*, ObjectState> object_states;
   int num_pins = 0;
@@ -255,12 +261,11 @@ public:
   bool killed = false;
 
   // for applying projected inode changes
-  list<CInode*> projected_inodes;
-  std::vector<CDir*> projected_fnodes;
-  list<ScatterLock*> updated_locks;
+  std::set<MDSCacheObject*> projected_nodes;
+  std::list<ScatterLock*> updated_locks;
 
-  list<CInode*> dirty_cow_inodes;
-  list<pair<CDentry*,version_t> > dirty_cow_dentries;
+  std::list<CInode*> dirty_cow_inodes;
+  std::list<std::pair<CDentry*,version_t> > dirty_cow_dentries;
 
 private:
   utime_t mds_stamp; ///< mds-local timestamp (real time)
@@ -281,45 +286,46 @@ struct MDRequestImpl : public MutationImpl {
   struct More {
     More() {}
 
-    int slave_error = 0;
-    set<mds_rank_t> slaves;           // mds nodes that have slave requests to me (implies client_request)
-    set<mds_rank_t> waiting_on_slave; // peers i'm waiting for slavereq replies from. 
+    int peer_error = 0;
+    std::set<mds_rank_t> peers;           // mds nodes that have peer requests to me (implies client_request)
+    std::set<mds_rank_t> waiting_on_peer; // peers i'm waiting for peerreq replies from.
 
     // for rename/link/unlink
-    set<mds_rank_t> witnessed;       // nodes who have journaled a RenamePrepare
-    map<MDSCacheObject*,version_t> pvmap;
+    std::set<mds_rank_t> witnessed;       // nodes who have journaled a RenamePrepare
+    std::map<MDSCacheObject*,version_t> pvmap;
 
-    bool has_journaled_slaves = false;
-    bool slave_update_journaled = false;
-    bool slave_rolling_back = false;
+    bool has_journaled_peers = false;
+    bool peer_update_journaled = false;
+    bool peer_rolling_back = false;
     
     // for rename
-    set<mds_rank_t> extra_witnesses; // replica list from srcdn auth (rename)
+    std::set<mds_rank_t> extra_witnesses; // replica list from srcdn auth (rename)
     mds_rank_t srcdn_auth_mds = MDS_RANK_NONE;
-    bufferlist inode_import;
+    ceph::buffer::list inode_import;
     version_t inode_import_v = 0;
     CInode* rename_inode = nullptr;
     bool is_freeze_authpin = false;
     bool is_ambiguous_auth = false;
     bool is_remote_frozen_authpin = false;
     bool is_inode_exporter = false;
+    bool rdonly_checks = false;
 
-    map<client_t, pair<Session*, uint64_t> > imported_session_map;
-    map<CInode*, map<client_t,Capability::Export> > cap_imports;
+    std::map<client_t, std::pair<Session*, uint64_t> > imported_session_map;
+    std::map<CInode*, std::map<client_t,Capability::Export> > cap_imports;
     
     // for lock/flock
     bool flock_was_waiting = false;
 
     // for snaps
     version_t stid = 0;
-    bufferlist snapidbl;
+    ceph::buffer::list snapidbl;
 
     sr_t *srci_srnode = nullptr;
     sr_t *desti_srnode = nullptr;
 
-    // called when slave commits or aborts
-    Context *slave_commit = nullptr;
-    bufferlist rollback_bl;
+    // called when peer commits or aborts
+    Context *peer_commit = nullptr;
+    ceph::buffer::list rollback_bl;
 
     MDSContext::vec waiting_for_finish;
 
@@ -350,16 +356,16 @@ struct MDRequestImpl : public MutationImpl {
     }
     metareqid_t reqid;
     __u32 attempt = 0;
-    cref_t<MClientRequest> client_req;
-    cref_t<Message> triggering_slave_req;
-    mds_rank_t slave_to = MDS_RANK_NONE;
+    ceph::cref_t<MClientRequest> client_req;
+    ceph::cref_t<Message> triggering_peer_req;
+    mds_rank_t peer_to = MDS_RANK_NONE;
     utime_t initiated;
     utime_t throttled, all_read, dispatched;
     int internal_op = -1;
   };
   MDRequestImpl(const Params* params, OpTracker *tracker) :
     MutationImpl(tracker, params->initiated,
-		 params->reqid, params->attempt, params->slave_to),
+		 params->reqid, params->attempt, params->peer_to),
     item_session_request(this), client_request(params->client_req),
     internal_op(params->internal_op) {}
   ~MDRequestImpl() override;
@@ -367,9 +373,8 @@ struct MDRequestImpl : public MutationImpl {
   More* more();
   bool has_more() const;
   bool has_witnesses();
-  bool slave_did_prepare();
-  bool slave_rolling_back();
-  bool did_ino_allocation() const;
+  bool peer_did_prepare();
+  bool peer_rolling_back();
   bool freeze_auth_pin(CInode *inode);
   void unfreeze_auth_pin(bool clear_inode=false);
   void set_remote_frozen_auth_pin(CInode *inode);
@@ -382,27 +387,32 @@ struct MDRequestImpl : public MutationImpl {
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
   bool is_queued_for_replay() const;
-  bool is_batch_op();
   int compare_paths();
 
-  void print(ostream &out) const override;
-  void dump(Formatter *f) const override;
+  bool can_batch();
+  bool is_batch_head() {
+    return batch_op_map != nullptr;
+  }
+  std::unique_ptr<BatchOp> release_batch_op();
 
-  cref_t<MClientRequest> release_client_request();
-  void reset_slave_request(const cref_t<MMDSSlaveRequest>& req=nullptr);
+  void print(std::ostream &out) const override;
+  void dump(ceph::Formatter *f) const override;
+
+  ceph::cref_t<MClientRequest> release_client_request();
+  void reset_peer_request(const ceph::cref_t<MMDSPeerRequest>& req=nullptr);
 
   Session *session = nullptr;
   elist<MDRequestImpl*>::item item_session_request;  // if not on list, op is aborted.
 
-  // -- i am a client (master) request
-  cref_t<MClientRequest> client_request; // client request (if any)
+  // -- i am a client (leader) request
+  ceph::cref_t<MClientRequest> client_request; // client request (if any)
 
   // tree and depth info of path1 and path2
   inodeno_t dir_root[2] = {0, 0};
   int dir_depth[2] = {-1, -1};
   file_layout_t dir_layout;
   // store up to two sets of dn vectors, inode pointers, for request path1 and path2.
-  vector<CDentry*> dn[2];
+  std::vector<CDentry*> dn[2];
   CInode *in[2] = {};
   CDentry *straydn = nullptr;
   snapid_t snapid = CEPH_NOSNAP;
@@ -420,13 +430,13 @@ struct MDRequestImpl : public MutationImpl {
   bool o_trunc = false;		///< request is an O_TRUNC mutation
   bool has_completed = false;	///< request has already completed
 
-  bufferlist reply_extra_bl;
+  ceph::buffer::list reply_extra_bl;
 
   // inos we did a embedded cap release on, and may need to eval if we haven't since reissued
-  map<vinodeno_t, ceph_seq_t> cap_releases;
+  std::map<vinodeno_t, ceph_seq_t> cap_releases;
 
-  // -- i am a slave request
-  cref_t<MMDSSlaveRequest> slave_request; // slave request (if one is pending; implies slave == true)
+  // -- i am a peer request
+  ceph::cref_t<MMDSPeerRequest> peer_request; // peer request (if one is pending; implies peer == true)
 
   // -- i am an internal op
   int internal_op;
@@ -436,37 +446,32 @@ struct MDRequestImpl : public MutationImpl {
   // indicates how may retries of request have been made
   int retry = 0;
 
-  bool is_batch_head = false;
+  std::map<int, std::unique_ptr<BatchOp> > *batch_op_map = nullptr;
 
   // indicator for vxattr osdmap update
   bool waited_for_osdmap = false;
 
-  std::vector<Ref> batch_reqs;
 protected:
-  void _dump(Formatter *f) const override;
-  void _dump_op_descriptor_unlocked(ostream& stream) const override;
+  void _dump(ceph::Formatter *f) const override;
+  void _dump_op_descriptor_unlocked(std::ostream& stream) const override;
 private:
   mutable ceph::spinlock msg_lock;
 };
 
-struct MDSlaveUpdate {
-  MDSlaveUpdate(int oo, bufferlist &rbl, elist<MDSlaveUpdate*> &list) :
-    origop(oo),
-    item(this) {
-    rollback.claim(rbl);
-    list.push_back(&item);
+struct MDPeerUpdate {
+  MDPeerUpdate(int oo, ceph::buffer::list &rbl) :
+    origop(oo) {
+    rollback = std::move(rbl);
   }
-  ~MDSlaveUpdate() {
-    item.remove_myself();
+  ~MDPeerUpdate() {
     if (waiter)
       waiter->complete(0);
   }
   int origop;
-  bufferlist rollback;
-  elist<MDSlaveUpdate*>::item item;
+  ceph::buffer::list rollback;
   Context *waiter = nullptr;
-  set<CInode*> olddirs;
-  set<CInode*> unlinked;
+  std::set<CInode*> olddirs;
+  std::set<CInode*> unlinked;
 };
 
 struct MDLockCacheItem {
@@ -497,7 +502,8 @@ struct MDLockCache : public MutationImpl {
 
   void attach_locks();
   void attach_dirfrags(std::vector<CDir*>&& dfv);
-  void detach_all();
+  void detach_locks();
+  void detach_dirfrags();
 
   CInode *diri;
   Capability *client_cap;
@@ -520,7 +526,7 @@ struct MDLockCache : public MutationImpl {
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 
-inline ostream& operator<<(ostream &out, const MutationImpl &mut)
+inline std::ostream& operator<<(std::ostream &out, const MutationImpl &mut)
 {
   mut.print(out);
   return out;

@@ -26,10 +26,10 @@ public:
   static constexpr OperationTypeCode type = OperationTypeCode::peering_event;
 
   class PGPipeline {
-    OrderedPipelinePhase await_map = {
+    OrderedExclusivePhase await_map = {
       "PeeringEvent::PGPipeline::await_map"
     };
-    OrderedPipelinePhase process = {
+    OrderedExclusivePhase process = {
       "PeeringEvent::PGPipeline::process"
     };
     friend class PeeringEvent;
@@ -37,13 +37,14 @@ public:
   };
 
 protected:
-  OrderedPipelinePhase::Handle handle;
+  PipelineHandle handle;
   PGPipeline &pp(PG &pg);
 
   ShardServices &shard_services;
   PeeringCtx ctx;
   pg_shard_t from;
   spg_t pgid;
+  float delay = 0;
   PGPeeringEvent evt;
 
   const pg_shard_t get_from() const {
@@ -59,7 +60,7 @@ protected:
   }
 
   virtual void on_pg_absent();
-  virtual seastar::future<> complete_rctx(Ref<PG>);
+  virtual PeeringEvent::interruptible_future<> complete_rctx(Ref<PG>);
   virtual seastar::future<Ref<PG>> get_pg() = 0;
 
 public:
@@ -68,12 +69,20 @@ public:
     ShardServices &shard_services, const pg_shard_t &from, const spg_t &pgid,
     Args&&... args) :
     shard_services(shard_services),
-    ctx{ceph_release_t::octopus},
     from(from),
     pgid(pgid),
     evt(std::forward<Args>(args)...)
   {}
-
+  template <typename... Args>
+  PeeringEvent(
+    ShardServices &shard_services, const pg_shard_t &from, const spg_t &pgid,
+    float delay, Args&&... args) :
+    shard_services(shard_services),
+    from(from),
+    pgid(pgid),
+    delay(delay),
+    evt(std::forward<Args>(args)...)
+  {}
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
@@ -86,15 +95,21 @@ protected:
   crimson::net::ConnectionRef conn;
 
   void on_pg_absent() final;
-  seastar::future<> complete_rctx(Ref<PG> pg) override;
+  PeeringEvent::interruptible_future<> complete_rctx(Ref<PG> pg) override;
   seastar::future<Ref<PG>> get_pg() final;
 
 public:
+  class OSDPipeline {
+    OrderedExclusivePhase await_active = {
+      "PeeringRequest::OSDPipeline::await_active"
+    };
+    friend class RemotePeeringEvent;
+  };
   class ConnectionPipeline {
-    OrderedPipelinePhase await_map = {
+    OrderedExclusivePhase await_map = {
       "PeeringRequest::ConnectionPipeline::await_map"
     };
-    OrderedPipelinePhase get_pg = {
+    OrderedExclusivePhase get_pg = {
       "PeeringRequest::ConnectionPipeline::get_pg"
     };
     friend class RemotePeeringEvent;
@@ -109,6 +124,7 @@ public:
 
 private:
   ConnectionPipeline &cp();
+  OSDPipeline &op();
 };
 
 class LocalPeeringEvent final : public PeeringEvent {

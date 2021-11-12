@@ -19,6 +19,18 @@ TEST(TestURL, SimpleAuthority)
     EXPECT_STREQ(host.c_str(), "example.com"); 
 }
 
+TEST(TestURL, SimpleAuthority_1)
+{
+    std::string host;
+    std::string user;
+    std::string password;
+    const std::string url = "http://example.com/";
+    ASSERT_TRUE(parse_url_authority(url, host, user, password));
+    ASSERT_TRUE(user.empty());
+    ASSERT_TRUE(password.empty());
+    EXPECT_STREQ(host.c_str(), "example.com");
+}
+
 TEST(TestURL, IPAuthority)
 {
     std::string host;
@@ -48,7 +60,7 @@ TEST(TestURL, AuthorityWithUserinfo)
     std::string host;
     std::string user;
     std::string password;
-    const std::string url = "http://user:password@example.com";
+    const std::string url = "https://user:password@example.com";
     ASSERT_TRUE(parse_url_authority(url, host, user, password));
     EXPECT_STREQ(host.c_str(), "example.com"); 
     EXPECT_STREQ(user.c_str(), "user"); 
@@ -86,5 +98,14 @@ TEST(TestURL, InvalidHost)
     std::string password;
     const std::string url = "http://exa_mple.com";
     ASSERT_FALSE(parse_url_authority(url, host, user, password));
+}
+
+TEST(TestURL, WithPath)
+{
+    std::string host;
+    std::string user;
+    std::string password;
+    const std::string url = "amqps://www.example.com:1234/vhost_name";
+    ASSERT_TRUE(parse_url_authority(url, host, user, password));
 }
 

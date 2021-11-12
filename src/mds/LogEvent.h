@@ -31,9 +31,10 @@
 #define EVENT_SESSIONS     12
 
 #define EVENT_UPDATE       20
-#define EVENT_SLAVEUPDATE  21
+#define EVENT_PEERUPDATE   21
 #define EVENT_OPEN         22
 #define EVENT_COMMITTED    23
+#define EVENT_PURGED       24
 
 #define EVENT_TABLECLIENT  42
 #define EVENT_TABLESERVER  43
@@ -88,7 +89,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  virtual void print(ostream& out) const { 
+  virtual void print(std::ostream& out) const {
     out << "event(" << _type << ")";
   }
 
@@ -124,7 +125,7 @@ private:
   LogSegment *_segment = nullptr;
 };
 
-inline ostream& operator<<(ostream& out, const LogEvent &le) {
+inline std::ostream& operator<<(std::ostream& out, const LogEvent &le) {
   le.print(out);
   return out;
 }

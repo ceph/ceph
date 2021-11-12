@@ -1,7 +1,7 @@
-@import 'defaults';
+@use './src/styles/vendor/variables' as vv;
 
 i {
-  color: $color-helper-bg;
+  color: vv.$primary;
   cursor: pointer;
   padding-left: 4px;
 }

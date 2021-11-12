@@ -2,15 +2,13 @@ from contextlib import contextmanager
 from datetime import datetime
 from threading import Event, Thread
 from itertools import chain
-from six import next
-from six.moves import queue
-from six.moves import xrange as range
+import queue
 import json
 import errno
-import six
 import time
+from typing import cast, Any, Dict, Iterator, List, Optional, Tuple, Union
 
-from mgr_module import MgrModule
+from mgr_module import CLICommand, CLIReadCommand, CLIWriteCommand, MgrModule, Option, OptionValue
 
 try:
     from influxdb import InfluxDBClient
@@ -22,50 +20,50 @@ except ImportError:
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
-            {
-                'name': 'hostname',
-                'default': None
-            },
-            {
-                'name': 'port',
-                'default': 8086
-            },
-            {
-                'name': 'database',
-                'default': 'ceph'
-            },
-            {
-                'name': 'username',
-                'default': None
-            },
-            {
-                'name': 'password',
-                'default': None
-            },
-            {
-                'name': 'interval',
-                'default': 30
-            },
-            {
-                'name': 'ssl',
-                'default': 'false'
-            },
-            {
-                'name': 'verify_ssl',
-                'default': 'true'
-            },
-            {
-                'name': 'threads',
-                'default': 5
-            },
-            {
-                'name': 'batch_size',
-                'default': 5000
-            }
+        Option(name='hostname',
+               default=None,
+               desc='InfluxDB server hostname'),
+        Option(name='port',
+               type='int',
+               default=8086,
+               desc='InfluxDB server port'),
+        Option(name='database',
+               default='ceph',
+               desc=('InfluxDB database name. You will need to create this '
+                     'database and grant write privileges to the configured '
+                     'username or the username must have admin privileges to '
+                     'create it.')),
+        Option(name='username',
+               default=None,
+               desc='username of InfluxDB server user'),
+        Option(name='password',
+               default=None,
+               desc='password of InfluxDB server user'),
+        Option(name='interval',
+               type='secs',
+               min=5,
+               default=30,
+               desc='Time between reports to InfluxDB.  Default 30 seconds.'),
+        Option(name='ssl',
+               default='false',
+               desc='Use https connection for InfluxDB server. Use "true" or "false".'),
+        Option(name='verify_ssl',
+               default='true',
+               desc='Verify https cert for InfluxDB server. Use "true" or "false".'),
+        Option(name='threads',
+               type='int',
+               min=1,
+               max=32,
+               default=5,
+               desc='How many worker threads should be spawned for sending data to InfluxDB.'),
+        Option(name='batch_size',
+               type='int',
+               default=5000,
+               desc='How big batches of data points should be when sending to InfluxDB.'),
     ]
 
     @property
-    def config_keys(self):
+    def config_keys(self) -> Dict[str, OptionValue]:
         return dict((o['name'], o.get('default', None))
                 for o in self.MODULE_OPTIONS)
 
@@ -88,31 +86,31 @@ class Module(MgrModule):
         }
     ]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
         self.event = Event()
         self.run = True
-        self.config = dict()
-        self.workers = list()
-        self.queue = queue.Queue(maxsize=100)
-        self.health_checks = dict()
+        self.config: Dict[str, OptionValue] = dict()
+        self.workers: List[Thread] = list()
+        self.queue: 'queue.Queue[Optional[List[Dict[str, str]]]]' = queue.Queue(maxsize=100)
+        self.health_checks: Dict[str, Dict[str, Any]] = dict()
 
-    def get_fsid(self):
+    def get_fsid(self) -> str:
         return self.get('mon_map')['fsid']
 
     @staticmethod
-    def can_run():
+    def can_run() -> Tuple[bool, str]:
         if InfluxDBClient is not None:
             return True, ""
         else:
             return False, "influxdb python module not found"
 
     @staticmethod
-    def get_timestamp():
+    def get_timestamp() -> str:
         return datetime.utcnow().isoformat() + 'Z'
 
     @staticmethod
-    def chunk(l, n):
+    def chunk(l: Iterator[Dict[str, str]], n: int) -> Iterator[List[Dict[str, str]]]:
         try:
             while True:
                 xs = []
@@ -122,11 +120,11 @@ class Module(MgrModule):
         except StopIteration:
             yield xs
 
-    def queue_worker(self):
+    def queue_worker(self) -> None:
         while True:
             try:
                 points = self.queue.get()
-                if points is None:
+                if not points:
                     self.log.debug('Worker shutting down')
                     break
 
@@ -137,15 +135,14 @@ class Module(MgrModule):
                 self.log.debug('Writing points %d to Influx took %.3f seconds',
                                len(points), runtime)
             except RequestException as e:
-                self.log.exception("Failed to connect to Influx host %s:%d",
-                                   self.config['hostname'], self.config['port'])
+                hostname = self.config['hostname']
+                port = self.config['port']
+                self.log.exception(f"Failed to connect to Influx host {hostname}:{port}")
                 self.health_checks.update({
                     'MGR_INFLUX_SEND_FAILED': {
                         'severity': 'warning',
                         'summary': 'Failed to send data to InfluxDB server '
-                                   'at %s:%d due to an connection error'
-                                   % (self.config['hostname'],
-                                      self.config['port']),
+                                   f'at {hostname}:{port} due to an connection error',
                         'detail': [str(e)]
                     }
                 })
@@ -165,14 +162,14 @@ class Module(MgrModule):
             finally:
                 self.queue.task_done()
 
-    def get_latest(self, daemon_type, daemon_name, stat):
+    def get_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
         if data:
             return data[-1][1]
 
         return 0
 
-    def get_df_stats(self, now):
+    def get_df_stats(self, now) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
         df = self.get("df")
         data = []
         pool_info = {}
@@ -211,10 +208,10 @@ class Module(MgrModule):
                 pool_info.update({str(pool['id']):pool['name']})
         return data, pool_info
 
-    def get_pg_summary_osd(self, pool_info, now):
+    def get_pg_summary_osd(self, pool_info: Dict[str, str], now: str) -> Iterator[Dict[str, Any]]:
         pg_sum = self.get('pg_summary')
         osd_sum = pg_sum['by_osd']
-        for osd_id, stats in six.iteritems(osd_sum):
+        for osd_id, stats in osd_sum.items():
             metadata = self.get_metadata('osd', "%s" % osd_id)
             if not metadata:
                 continue
@@ -233,9 +230,9 @@ class Module(MgrModule):
                     }
                 }
 
-    def get_pg_summary_pool(self, pool_info, now):
+    def get_pg_summary_pool(self, pool_info: Dict[str, str], now: str) -> Iterator[Dict[str, Any]]:
         pool_sum = self.get('pg_summary')['by_pool']
-        for pool_id, stats in six.iteritems(pool_sum):
+        for pool_id, stats in pool_sum.items():
             for stat in stats:
                 yield {
                     "measurement": "ceph_pg_summary_pool",
@@ -250,10 +247,14 @@ class Module(MgrModule):
                     }
                 }
 
-    def get_daemon_stats(self, now):
-        for daemon, counters in six.iteritems(self.get_all_perf_counters()):
+    def get_daemon_stats(self, now: str) -> Iterator[Dict[str, Any]]:
+        for daemon, counters in self.get_all_perf_counters().items():
             svc_type, svc_id = daemon.split(".", 1)
             metadata = self.get_metadata(svc_type, svc_id)
+            if metadata is not None:
+                hostname = metadata['hostname']
+            else:
+                hostname = 'N/A'
 
             for path, counter_info in counters.items():
                 if counter_info['type'] & self.PERFCOUNTER_HISTOGRAM:
@@ -266,7 +267,7 @@ class Module(MgrModule):
                     "tags": {
                         "ceph_daemon": daemon,
                         "type_instance": path,
-                        "host": metadata['hostname'],
+                        "host": hostname,
                         "fsid": self.get_fsid()
                     },
                     "time": now,
@@ -275,35 +276,11 @@ class Module(MgrModule):
                     }
                 }
 
-    def set_config_option(self, option, value):
-        if option not in self.config_keys.keys():
-            raise RuntimeError('{0} is a unknown configuration '
-                               'option'.format(option))
-
-        if option in ['port', 'interval', 'threads', 'batch_size']:
-            try:
-                value = int(value)
-            except (ValueError, TypeError):
-                raise RuntimeError('invalid {0} configured. Please specify '
-                                   'a valid integer'.format(option))
-
-        if option == 'interval' and value < 5:
-            raise RuntimeError('interval should be set to at least 5 seconds')
-
-        if option in ['ssl', 'verify_ssl']:
-            value = value.lower() == 'true'
-
-        if option == 'threads':
-            if 1 > value > 32:
-                raise RuntimeError('threads should be in range 1-32')
-
-        self.config[option] = value
-
-    def init_module_config(self):
+    def init_module_config(self) -> None:
         self.config['hostname'] = \
             self.get_module_option("hostname", default=self.config_keys['hostname'])
         self.config['port'] = \
-            int(self.get_module_option("port", default=self.config_keys['port']))
+            cast(int, self.get_module_option("port", default=self.config_keys['port']))
         self.config['database'] = \
             self.get_module_option("database", default=self.config_keys['database'])
         self.config['username'] = \
@@ -311,21 +288,21 @@ class Module(MgrModule):
         self.config['password'] = \
             self.get_module_option("password", default=self.config_keys['password'])
         self.config['interval'] = \
-            int(self.get_module_option("interval",
-                                default=self.config_keys['interval']))
+            cast(int, self.get_module_option("interval",
+                                             default=self.config_keys['interval']))
         self.config['threads'] = \
-            int(self.get_module_option("threads",
-                                default=self.config_keys['threads']))
+            cast(int, self.get_module_option("threads",
+                                             default=self.config_keys['threads']))
         self.config['batch_size'] = \
-            int(self.get_module_option("batch_size",
-                                default=self.config_keys['batch_size']))
-        ssl = self.get_module_option("ssl", default=self.config_keys['ssl'])
+            cast(int, self.get_module_option("batch_size",
+                                             default=self.config_keys['batch_size']))
+        ssl = cast(str, self.get_module_option("ssl", default=self.config_keys['ssl']))
         self.config['ssl'] = ssl.lower() == 'true'
         verify_ssl = \
-            self.get_module_option("verify_ssl", default=self.config_keys['verify_ssl'])
+            cast(str, self.get_module_option("verify_ssl", default=self.config_keys['verify_ssl']))
         self.config['verify_ssl'] = verify_ssl.lower() == 'true'
 
-    def gather_statistics(self):
+    def gather_statistics(self) -> Iterator[Dict[str, str]]:
         now = self.get_timestamp()
         df_stats, pools = self.get_df_stats(now)
         return chain(df_stats, self.get_daemon_stats(now),
@@ -333,7 +310,7 @@ class Module(MgrModule):
                      self.get_pg_summary_pool(pools, now))
 
     @contextmanager
-    def get_influx_client(self):
+    def get_influx_client(self) -> Iterator['InfluxDBClient']:
         client = InfluxDBClient(self.config['hostname'],
                                 self.config['port'],
                                 self.config['username'],
@@ -350,7 +327,7 @@ class Module(MgrModule):
                 # influxdb older than v5.0.0
                 pass
 
-    def send_to_influx(self):
+    def send_to_influx(self) -> bool:
         if not self.config['hostname']:
             self.log.error("No Influx server configured, please set one using: "
                            "ceph influx config-set hostname <hostname>")
@@ -386,11 +363,12 @@ class Module(MgrModule):
 
             self.log.debug('Gathering statistics')
             points = self.gather_statistics()
-            for chunk in self.chunk(points, self.config['batch_size']):
+            for chunk in self.chunk(points, cast(int, self.config['batch_size'])):
                 self.queue.put(chunk, block=False)
 
             self.log.debug('Queue currently contains %d items',
                            self.queue.qsize())
+            return True
         except queue.Full:
             self.health_checks.update({
                 'MGR_INFLUX_QUEUE_FULL': {
@@ -401,6 +379,7 @@ class Module(MgrModule):
                 }
             })
             self.log.error('Queue is full, failed to add chunk')
+            return False
         except (RequestException, InfluxDBClientError) as e:
             self.health_checks.update({
                 'MGR_INFLUX_DB_LIST_FAILED': {
@@ -414,21 +393,21 @@ class Module(MgrModule):
         finally:
             self.set_health_checks(self.health_checks)
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         self.log.info('Stopping influx module')
         self.run = False
         self.event.set()
         self.log.debug('Shutting down queue workers')
 
         for _ in self.workers:
-            self.queue.put(None)
+            self.queue.put([])
 
         self.queue.join()
 
         for worker in self.workers:
             worker.join()
 
-    def self_test(self):
+    def self_test(self) -> Optional[str]:
         now = self.get_timestamp()
         daemon_stats = list(self.get_daemon_stats(now))
         assert len(daemon_stats)
@@ -441,27 +420,35 @@ class Module(MgrModule):
 
         return json.dumps(result, indent=2, sort_keys=True)
 
-    def handle_command(self, inbuf, cmd):
-        if cmd['prefix'] == 'influx config-show':
-            return 0, json.dumps(self.config, sort_keys=True), ''
-        elif cmd['prefix'] == 'influx config-set':
-            key = cmd['key']
-            value = cmd['value']
-            if not value:
-                return -errno.EINVAL, '', 'Value should not be empty or None'
+    @CLIReadCommand('influx config-show')
+    def config_show(self) -> Tuple[int, str, str]:
+        """
+        Show current configuration
+        """
+        return 0, json.dumps(self.config, sort_keys=True), ''
 
-            self.log.debug('Setting configuration option %s to %s', key, value)
-            self.set_config_option(key, value)
+    @CLIWriteCommand('influx config-set')
+    def config_set(self, key: str, value: str) -> Tuple[int, str, str]:
+        if not value:
+            return -errno.EINVAL, '', 'Value should not be empty'
+
+        self.log.debug('Setting configuration option %s to %s', key, value)
+        try:
             self.set_module_option(key, value)
+            self.config[key] = self.get_module_option(key)
             return 0, 'Configuration option {0} updated'.format(key), ''
-        elif cmd['prefix'] == 'influx send':
-            self.send_to_influx()
-            return 0, 'Sending data to Influx', ''
+        except ValueError as e:
+            return -errno.EINVAL, '', str(e)
 
-        return (-errno.EINVAL, '',
-                "Command not found '{0}'".format(cmd['prefix']))
+    @CLICommand('influx send')
+    def send(self) -> Tuple[int, str, str]:
+        """
+        Force sending data to Influx
+        """
+        self.send_to_influx()
+        return 0, 'Sending data to Influx', ''
 
-    def serve(self):
+    def serve(self) -> None:
         if InfluxDBClient is None:
             self.log.error("Cannot transmit statistics: influxdb python "
                            "module not found.  Did you install it?")
@@ -473,7 +460,7 @@ class Module(MgrModule):
 
         self.log.debug('Starting %d queue worker threads',
                        self.config['threads'])
-        for i in range(self.config['threads']):
+        for i in range(cast(int, self.config['threads'])):
             worker = Thread(target=self.queue_worker, args=())
             worker.setDaemon(True)
             worker.start()
@@ -486,4 +473,4 @@ class Module(MgrModule):
             self.log.debug('Finished sending data to Influx in %.3f seconds',
                            runtime)
             self.log.debug("Sleeping for %d seconds", self.config['interval'])
-            self.event.wait(self.config['interval'])
+            self.event.wait(cast(float, self.config['interval']))

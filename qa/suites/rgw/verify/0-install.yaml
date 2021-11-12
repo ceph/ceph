@@ -1,0 +1,19 @@
+tasks:
+- install:
+      # extra packages added for the rgw-datacache task
+      extra_packages:
+        deb: ['s3cmd']
+        rpm: ['s3cmd']
+- ceph:
+- openssl_keys:
+- rgw:
+    client.0:
+
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_min_pg_log_entries: 10
+        osd_max_pg_log_entries: 10
+      client:
+        rgw lc debug interval: 10

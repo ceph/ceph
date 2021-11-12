@@ -18,6 +18,10 @@
 #include "PoolDump.h"
 
 using namespace librados;
+using std::cerr;
+using std::less;
+using std::map;
+using std::string;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
@@ -70,6 +74,7 @@ int PoolDump::dump(IoCtx *io_ctx)
     const uint32_t op_size = 4096 * 1024;
     uint64_t offset = 0;
     io_ctx->set_namespace(i->get_nspace());
+    io_ctx->locator_set_key(i->get_locator());
     while (true) {
       bufferlist outdata;
       r = io_ctx->read(oid, outdata, op_size, offset);
@@ -95,7 +100,7 @@ int PoolDump::dump(IoCtx *io_ctx)
     // Compose TYPE_ATTRS chunk
     // ========================
     std::map<std::string, bufferlist> raw_xattrs;
-    std::map<std::string, bufferlist> xattrs;
+    std::map<std::string, bufferlist,less<>> xattrs;
     r = io_ctx->getxattrs(oid, raw_xattrs);
     if (r < 0) {
       cerr << "error getting xattr set " << oid << ": " << cpp_strerror(r)

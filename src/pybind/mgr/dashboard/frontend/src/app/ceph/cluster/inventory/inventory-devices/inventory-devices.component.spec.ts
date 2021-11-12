@@ -1,168 +1,194 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { By } from '@angular/platform-browser';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { RouterTestingModule } from '@angular/router/testing';
 
-import { getterForProp } from '@swimlane/ngx-datatable/release/utils';
-import * as _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 
-import {
-  configureTestBed,
-  FixtureHelper,
-  i18nProviders
-} from '../../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../../shared/shared.module';
-import { InventoryDevice } from './inventory-device.model';
+import { HostService } from '~/app/shared/api/host.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
+import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { InventoryDevicesComponent } from './inventory-devices.component';
 
 describe('InventoryDevicesComponent', () => {
   let component: InventoryDevicesComponent;
   let fixture: ComponentFixture<InventoryDevicesComponent>;
-  let fixtureHelper: FixtureHelper;
-  const devices: InventoryDevice[] = [
-    {
-      hostname: 'node0',
-      uid: '1',
-      path: 'sda',
-      sys_api: {
-        vendor: 'AAA',
-        model: 'aaa',
-        size: 1024,
-        rotational: 'false',
-        human_readable_size: '1 KB'
-      },
-      available: false,
-      rejected_reasons: [''],
-      device_id: 'AAA-aaa-id0',
-      human_readable_type: 'nvme/ssd',
-      osd_ids: []
-    },
-    {
-      hostname: 'node0',
-      uid: '2',
-      path: 'sdb',
-      sys_api: {
-        vendor: 'AAA',
-        model: 'aaa',
-        size: 1024,
-        rotational: 'false',
-        human_readable_size: '1 KB'
-      },
-      available: true,
-      rejected_reasons: [''],
-      device_id: 'AAA-aaa-id1',
-      human_readable_type: 'nvme/ssd',
-      osd_ids: []
-    },
-    {
-      hostname: 'node0',
-      uid: '3',
-      path: 'sdc',
-      sys_api: {
-        vendor: 'BBB',
-        model: 'bbb',
-        size: 2048,
-        rotational: 'true',
-        human_readable_size: '2 KB'
-      },
-      available: true,
-      rejected_reasons: [''],
-      device_id: 'BBB-bbbb-id0',
-      human_readable_type: 'hdd',
-      osd_ids: []
-    },
-    {
-      hostname: 'node1',
-      uid: '4',
-      path: 'sda',
-      sys_api: {
-        vendor: 'CCC',
-        model: 'ccc',
-        size: 1024,
-        rotational: 'true',
-        human_readable_size: '1 KB'
-      },
-      available: false,
-      rejected_reasons: [''],
-      device_id: 'CCC-cccc-id0',
-      human_readable_type: 'hdd',
-      osd_ids: []
+  let orchService: OrchestratorService;
+  let hostService: HostService;
+
+  const fakeAuthStorageService = {
+    getPermissions: () => {
+      return new Permissions({ osd: ['read', 'update', 'create', 'delete'] });
     }
-  ];
+  };
+
+  const mockOrchStatus = (available: boolean, features?: OrchestratorFeature[]) => {
+    const orchStatus: OrchestratorStatus = { available: available, message: '', features: {} };
+    if (features) {
+      features.forEach((feature: OrchestratorFeature) => {
+        orchStatus.features[feature] = { available: true };
+      });
+    }
+    component.orchStatus = orchStatus;
+  };
 
   configureTestBed({
-    imports: [FormsModule, HttpClientTestingModule, SharedModule, ToastrModule.forRoot()],
-    providers: [i18nProviders],
+    imports: [
+      BrowserAnimationsModule,
+      FormsModule,
+      HttpClientTestingModule,
+      SharedModule,
+      RouterTestingModule,
+      ToastrModule.forRoot()
+    ],
+    providers: [
+      { provide: AuthStorageService, useValue: fakeAuthStorageService },
+      TableActionsComponent
+    ],
     declarations: [InventoryDevicesComponent]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(InventoryDevicesComponent);
-    fixtureHelper = new FixtureHelper(fixture);
     component = fixture.componentInstance;
+    hostService = TestBed.inject(HostService);
+    orchService = TestBed.inject(OrchestratorService);
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  describe('without device data', () => {
-    beforeEach(() => {
-      fixture.detectChanges();
-    });
-
-    it('should have columns that are sortable', () => {
-      expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
-    });
-
-    it('should have filters', () => {
-      const labelTexts = fixtureHelper.getTextAll('.tc_filter span:first-child');
-      const filterLabels = _.map(component.filters, 'label');
-      expect(labelTexts).toEqual(filterLabels);
-
-      const optionTexts = fixtureHelper.getTextAll('.tc_filter option');
-      expect(optionTexts).toEqual(_.map(component.filters, 'initValue'));
-    });
+  it('should have columns that are sortable', () => {
+    expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
   });
 
-  describe('with device data', () => {
+  it('should call inventoryDataList only when showOnlyAvailableData is true', () => {
+    const hostServiceSpy = spyOn(hostService, 'inventoryDeviceList').and.callThrough();
+    component.getDevices();
+    expect(hostServiceSpy).toBeCalledTimes(0);
+    component.showAvailDeviceOnly = true;
+    component.getDevices();
+    expect(hostServiceSpy).toBeCalledTimes(1);
+  });
+
+  describe('table actions', () => {
+    const fakeDevices = require('./fixtures/inventory_list_response.json');
+
     beforeEach(() => {
-      component.devices = devices;
+      component.devices = fakeDevices;
+      component.selectionType = 'single';
       fixture.detectChanges();
     });
 
-    it('should have filters', () => {
-      for (let i = 0; i < component.filters.length; i++) {
-        const optionTexts = fixtureHelper.getTextAll(`.tc_filter:nth-child(${i + 1}) option`);
-        const optionTextsSet = new Set(optionTexts);
-
-        const filter = component.filters[i];
-        const columnValues = devices.map((device: InventoryDevice) => {
-          const valueGetter = getterForProp(filter.prop);
-          const value = valueGetter(device, filter.prop);
-          const formatValue = filter.pipe ? filter.pipe.transform(value) : value;
-          return `${formatValue}`;
-        });
-        const expectedOptionsSet = new Set(['*', ...columnValues]);
-        expect(optionTextsSet).toEqual(expectedOptionsSet);
+    const verifyTableActions = async (
+      tableActions: CdTableAction[],
+      expectResult: {
+        [action: string]: { disabled: boolean; disableDesc: string };
       }
+    ) => {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
+      // There is actually only one action for now
+      const actions = {};
+      tableActions.forEach((action) => {
+        const actionElement = tableActionElement.query(By.css('button'));
+        actions[action.name] = {
+          disabled: actionElement.classes.disabled,
+          disableDesc: actionElement.properties.title
+        };
+      });
+      expect(actions).toEqual(expectResult);
+    };
+
+    const testTableActions = async (
+      orch: boolean,
+      features: OrchestratorFeature[],
+      tests: { selectRow?: number; expectResults: any }[]
+    ) => {
+      mockOrchStatus(orch, features);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      for (const test of tests) {
+        if (test.selectRow) {
+          component.selection = new CdTableSelection();
+          component.selection.selected = [test.selectRow];
+        }
+        await verifyTableActions(component.tableActions, test.expectResults);
+      }
+    };
+
+    it('should have correct states when Orchestrator is enabled', async () => {
+      const tests = [
+        {
+          expectResults: {
+            Identify: { disabled: true, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeDevices[0],
+          expectResults: {
+            Identify: { disabled: false, disableDesc: '' }
+          }
+        }
+      ];
+
+      const features = [OrchestratorFeature.DEVICE_BLINK_LIGHT];
+      await testTableActions(true, features, tests);
     });
 
-    it('should filter a single column', () => {
-      spyOn(component.filterChange, 'emit');
-      fixtureHelper.selectElement('.tc_filter:nth-child(1) select', 'node1');
-      expect(component.filterInDevices.length).toBe(1);
-      expect(component.filterInDevices[0]).toEqual(devices[3]);
-      expect(component.filterChange.emit).toHaveBeenCalled();
+    it('should have correct states when Orchestrator is disabled', async () => {
+      const resultNoOrchestrator = {
+        disabled: true,
+        disableDesc: orchService.disableMessages.noOrchestrator
+      };
+      const tests = [
+        {
+          expectResults: {
+            Identify: { disabled: true, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeDevices[0],
+          expectResults: {
+            Identify: resultNoOrchestrator
+          }
+        }
+      ];
+      await testTableActions(false, [], tests);
     });
 
-    it('should filter multiple columns', () => {
-      spyOn(component.filterChange, 'emit');
-      fixtureHelper.selectElement('.tc_filter:nth-child(2) select', 'hdd');
-      fixtureHelper.selectElement('.tc_filter:nth-child(1) select', 'node0');
-      expect(component.filterInDevices.length).toBe(1);
-      expect(component.filterInDevices[0].uid).toBe('3');
-      expect(component.filterChange.emit).toHaveBeenCalledTimes(2);
+    it('should have correct states when Orchestrator features are missing', async () => {
+      const resultMissingFeatures = {
+        disabled: true,
+        disableDesc: orchService.disableMessages.missingFeature
+      };
+      const expectResults = [
+        {
+          expectResults: {
+            Identify: { disabled: true, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeDevices[0],
+          expectResults: {
+            Identify: resultMissingFeatures
+          }
+        }
+      ];
+      await testTableActions(true, [], expectResults);
     });
   });
 });

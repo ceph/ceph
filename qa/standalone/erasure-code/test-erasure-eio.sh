@@ -26,6 +26,7 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--osd-mclock-profile=high_recovery_ops "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -524,6 +525,7 @@ function TEST_ec_backfill_unfound() {
     ceph pg dump pgs
 
     rados_put $dir $poolname $objname || return 1
+    local primary=$(get_primary $poolname $objname)
 
     local -a initial_osds=($(get_osds $poolname $objname))
     local last_osd=${initial_osds[-1]}
@@ -547,7 +549,7 @@ function TEST_ec_backfill_unfound() {
 
     sleep 15
 
-    for tmp in $(seq 1 100); do
+    for tmp in $(seq 1 240); do
       state=$(get_state 2.0)
       echo $state | grep backfill_unfound
       if [ "$?" = "0" ]; then
@@ -558,7 +560,25 @@ function TEST_ec_backfill_unfound() {
     done
 
     ceph pg dump pgs
+    kill_daemons $dir TERM osd.${last_osd} 2>&2 < /dev/null || return 1
+    sleep 5
+
+    ceph pg dump pgs
+    ceph pg 2.0 list_unfound
+    ceph pg 2.0 query
+
     ceph pg 2.0 list_unfound | grep -q $testobj || return 1
+
+    check=$(ceph pg 2.0 list_unfound | jq ".available_might_have_unfound")
+    test "$check" == "true" || return 1
+
+    eval check=$(ceph pg 2.0 list_unfound | jq .might_have_unfound[0].status)
+    test "$check" == "osd is down" || return 1
+
+    eval check=$(ceph pg 2.0 list_unfound | jq .might_have_unfound[0].osd)
+    test "$check" == "2(4)" || return 1
+
+    activate_osd $dir ${last_osd} || return 1
 
     # Command should hang because object is unfound
     timeout 5 rados -p $poolname get $testobj $dir/CHECK
@@ -638,7 +658,16 @@ function TEST_ec_recovery_unfound() {
     done
 
     ceph pg dump pgs
+    ceph pg 2.0 list_unfound
+    ceph pg 2.0 query
+
     ceph pg 2.0 list_unfound | grep -q $testobj || return 1
+
+    check=$(ceph pg 2.0 list_unfound | jq ".available_might_have_unfound")
+    test "$check" == "true" || return 1
+
+    check=$(ceph pg 2.0 list_unfound | jq ".might_have_unfound |  length")
+    test $check == 0 || return 1
 
     # Command should hang because object is unfound
     timeout 5 rados -p $poolname get $testobj $dir/CHECK

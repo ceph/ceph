@@ -19,11 +19,11 @@
 
 #include "include/types.h"
 
-class MMonGetMap : public Message {
+class MMonGetMap final : public Message {
 public:
   MMonGetMap() : Message{CEPH_MSG_MON_GET_MAP} { }
 private:
-  ~MMonGetMap() override {}
+  ~MMonGetMap() final {}
 
 public:
   std::string_view get_type_name() const override { return "mon_getmap"; }

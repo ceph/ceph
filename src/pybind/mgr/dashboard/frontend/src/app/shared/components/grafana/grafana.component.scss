@@ -1,6 +1,6 @@
 .grafana {
-  width: 100%;
   height: 600px;
+  width: 100%;
   z-index: 0;
 }
 
@@ -16,6 +16,10 @@
   height: 900px;
 }
 
+.grafana_four {
+  height: 1160px;
+}
+
 .timepicker {
   label {
     font-weight: 700;
@@ -23,7 +27,7 @@
 }
 
 .dropdown-menu {
-  top: 20px;
-  right: 20px;
   left: auto;
+  right: 20px;
+  top: 20px;
 }

@@ -19,7 +19,7 @@
 #include "mds/FSMapUser.h"
 #include "include/ceph_features.h"
 
-class MFSMapUser : public Message {
+class MFSMapUser final : public Message {
 public:
   epoch_t epoch;
 
@@ -36,16 +36,17 @@ public:
 private:
   FSMapUser fsmap;
 
-  ~MFSMapUser() override {}
+  ~MFSMapUser() final {}
 
 public:
   std::string_view get_type_name() const override { return "fsmap.user"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "fsmap.user(e " << epoch << ")";
   }
 
   // marshalling
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(epoch, p);
     decode(fsmap, p);

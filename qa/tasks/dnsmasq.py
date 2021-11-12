@@ -8,7 +8,7 @@ from teuthology import misc
 from teuthology.exceptions import ConfigError
 from teuthology import contextutil
 from teuthology import packaging
-from util import get_remote_for_role
+from tasks.util import get_remote_for_role
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def replace_resolv(remote, path):
     """
     Update resolv.conf to point the nameserver at localhost.
     """
-    misc.write_file(remote, path, "nameserver 127.0.0.1\n")
+    remote.write_file(path, "nameserver 127.0.0.1\n")
     try:
         # install it
         if remote.os.package_type == "rpm":
@@ -72,7 +72,7 @@ def setup_dnsmasq(remote, testdir, cnames):
 
     # write to temporary dnsmasq file
     dnsmasq_tmp = '/'.join((testdir, 'ceph.tmp'))
-    misc.write_file(remote, dnsmasq_tmp, dnsmasq)
+    remote.write_file(dnsmasq_tmp, dnsmasq)
 
     # move into /etc/dnsmasq.d/
     dnsmasq_path = '/etc/dnsmasq.d/ceph'
@@ -83,7 +83,7 @@ def setup_dnsmasq(remote, testdir, cnames):
     # restart dnsmasq
     remote.run(args=['sudo', 'systemctl', 'restart', 'dnsmasq'])
     # verify dns name is set
-    remote.run(args=['ping', '-c', '4', cnames.keys()[0]])
+    remote.run(args=['ping', '-c', '4', next(iter(cnames.keys()))])
 
     try:
         yield

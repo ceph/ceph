@@ -32,19 +32,10 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import hmac
-
-from hashlib import sha1 as sha
-
-py3k = False
-try:
-    from urlparse import urlparse, unquote
-    from base64 import encodestring
-except ImportError:
-    py3k = True
-    from urllib.parse import urlparse, unquote
-    from base64 import encodebytes as encodestring
-
+from base64 import encodebytes as encodestring
 from email.utils import formatdate
+from hashlib import sha1 as sha
+from urllib.parse import unquote, urlparse
 
 from requests.auth import AuthBase
 
@@ -78,20 +69,15 @@ class S3Auth(AuthBase):
                 localtime=False,
                 usegmt=True)
         signature = self.get_signature(r)
-        if py3k:
-            signature = signature.decode('utf-8')
+        signature = signature.decode('utf-8')
         r.headers['Authorization'] = 'AWS %s:%s' % (self.access_key, signature)
         return r
 
     def get_signature(self, r):
         canonical_string = self.get_canonical_string(
             r.url, r.headers, r.method)
-        if py3k:
-            key = self.secret_key.encode('utf-8')
-            msg = canonical_string.encode('utf-8')
-        else:
-            key = self.secret_key
-            msg = canonical_string
+        key = self.secret_key.encode('utf-8')
+        msg = canonical_string.encode('utf-8')
         h = hmac.new(key, msg, digestmod=sha)
         return encodestring(h.digest()).strip()
 
@@ -121,12 +107,8 @@ class S3Auth(AuthBase):
                 interesting_headers[lk] = headers[key].strip()
 
         # If x-amz-date is used it supersedes the date header.
-        if not py3k:
-            if 'x-amz-date' in interesting_headers:
-                interesting_headers['date'] = ''
-        else:
-            if 'x-amz-date' in interesting_headers:
-                interesting_headers['date'] = ''
+        if 'x-amz-date' in interesting_headers:
+            interesting_headers['date'] = ''
 
         buf = '%s\n' % method
         for key in sorted(interesting_headers.keys()):

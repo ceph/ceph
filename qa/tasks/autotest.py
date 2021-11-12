@@ -5,8 +5,6 @@ import json
 import logging
 import os
 
-import six
-
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
 from teuthology.orchestra import run
@@ -50,7 +48,7 @@ def task(ctx, config):
 
     log.info('Making a separate scratch dir for every client...')
     for role in config.keys():
-        assert isinstance(role, six.string_types)
+        assert isinstance(role, str)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
@@ -105,7 +103,7 @@ def _run_tests(testdir, remote, role, tests):
     """
     Spawned to run test on remote site
     """
-    assert isinstance(role, six.string_types)
+    assert isinstance(role, str)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     id_ = role[len(PREFIX):]
@@ -122,8 +120,7 @@ def _run_tests(testdir, remote, role, tests):
             id=id_,
             )
         control = '{tdir}/control.{tag}'.format(tdir=testdir, tag=tag)
-        teuthology.write_file(
-            remote=remote,
+        remote.write_file(
             path=control,
             data='import json; data=json.loads({data!r}); job.run_test(**data)'.format(
                 data=json.dumps(dict(

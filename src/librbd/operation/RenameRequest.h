@@ -27,6 +27,9 @@ public:
    * <start>
    *    |
    *    v
+   * STATE_READ_DIRECTORY
+   *    |
+   *    v
    * STATE_READ_SOURCE_HEADER
    *    |
    *    v
@@ -45,6 +48,7 @@ public:
    *
    */
   enum State {
+    STATE_READ_DIRECTORY,
     STATE_READ_SOURCE_HEADER,
     STATE_WRITE_DEST_HEADER,
     STATE_UPDATE_DIRECTORY,
@@ -69,10 +73,12 @@ private:
   std::string m_source_oid;
   std::string m_dest_oid;
 
-  State m_state = STATE_READ_SOURCE_HEADER;
+  State m_state = STATE_READ_DIRECTORY;
 
+  bufferlist m_source_name_bl;
   bufferlist m_header_bl;
 
+  void send_read_directory();
   void send_read_source_header();
   void send_write_destination_header();
   void send_update_directory();

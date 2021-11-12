@@ -1,20 +1,26 @@
-def format_string(key):
+from typing import Union
+
+ValueType = Union[str, bool, int, float]
+
+
+def format_string(key: ValueType) -> str:
     if isinstance(key, str):
-        key = key.replace(',', r'\,')
-        key = key.replace(' ', r'\ ')
-        key = key.replace('=', r'\=')
-    return key
+        return key.replace(',', r'\,') \
+                  .replace(' ', r'\ ') \
+                  .replace('=', r'\=')
+    else:
+        return str(key)
 
 
-def format_value(value):
+def format_value(value: ValueType) -> str:
     if isinstance(value, str):
         value = value.replace('"', '\"')
-        value = u'"{0}"'.format(value)
+        return f'"{value}"'
     elif isinstance(value, bool):
-        value = str(value)
+        return str(value)
     elif isinstance(value, int):
-        value = "{0}i".format(value)
+        return f"{value}i"
     elif isinstance(value, float):
-        value = str(value)
-    return value
-
+        return str(value)
+    else:
+        raise ValueError()

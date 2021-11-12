@@ -18,6 +18,7 @@ recreate_pool() {
     PG_NUM=100
     ceph osd pool delete $POOL_NAME $POOL_NAME --yes-i-really-really-mean-it
     ceph osd pool create $POOL_NAME $PG_NUM
+    rbd pool init $POOL_NAME
 }
 
 run_cli_tests() {
@@ -27,6 +28,8 @@ run_cli_tests() {
     $CEPH_SRC/../qa/workunits/rbd/cli_generic.sh
     recreate_pool rbd
     $CEPH_SRC/../qa/workunits/rbd/journal.sh
+    recreate_pool rbd
+    $CEPH_SRC/../qa/workunits/rbd/luks-encryption.sh
 }
 
 # tests that do not depend on image format / features

@@ -1,7 +1,7 @@
 import { Directive, HostListener } from '@angular/core';
 import { NgControl } from '@angular/forms';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
 @Directive({
   selector: '[cdTrim]'
@@ -10,7 +10,7 @@ export class TrimDirective {
   constructor(private ngControl: NgControl) {}
 
   @HostListener('input', ['$event.target.value'])
-  onInput(value) {
+  onInput(value: string) {
     this.setValue(value);
   }
 

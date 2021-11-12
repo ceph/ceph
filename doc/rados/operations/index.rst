@@ -1,3 +1,5 @@
+.. _rados-operations:
+
 ====================
  Cluster Operations
 ====================
@@ -41,6 +43,8 @@ CRUSH algorithm.
 	upmap
 	crush-map
 	crush-map-edits
+	stretch-mode
+	change-mon-elections
 
 
 

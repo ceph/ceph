@@ -4,11 +4,7 @@
 
 This guide describes installing Ceph packages manually. This procedure
 is only for users who are not installing with a deployment tool such as
-``ceph-deploy``, ``chef``, ``juju``, etc. 
-
-.. tip:: You can also use ``ceph-deploy`` to install Ceph packages, which may
-   be more convenient since you can install ``ceph`` on multiple hosts with
-   a single command.
+``cephadm``, ``chef``, ``juju``, etc. 
 
 
 Installing with APT
@@ -82,9 +78,9 @@ Installing a Build
 If you build Ceph from source code, you may install Ceph in user space
 by executing the following:: 
 
-	sudo make install
+	sudo ninja install
 
-If you install Ceph locally, ``make`` will place the executables in
+If you install Ceph locally, ``ninja`` will place the executables in
 ``usr/local/bin``. You may add the Ceph configuration file to the
 ``usr/local/bin`` directory to run Ceph from a single directory.
 

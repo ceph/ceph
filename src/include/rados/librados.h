@@ -49,12 +49,15 @@ extern "C" {
 
 #define LIBRADOS_SUPPORTS_WATCH 1
 #define LIBRADOS_SUPPORTS_SERVICES 1
+#define LIBRADOS_SUPPORTS_GETADDRS 1
 #define LIBRADOS_SUPPORTS_APP_METADATA 1
 
 /* RADOS lock flags
  * They are also defined in cls_lock_types.h. Keep them in sync!
  */
-#define LIBRADOS_LOCK_FLAG_RENEW 0x1
+#define LIBRADOS_LOCK_FLAG_RENEW       (1u<<0)
+#define LIBRADOS_LOCK_FLAG_MAY_RENEW   LIBRADOS_LOCK_FLAG_RENEW
+#define LIBRADOS_LOCK_FLAG_MUST_RENEW  (1u<<1)
 
 /*
  * Constants for rados_write_op_create().
@@ -164,15 +167,15 @@ typedef enum {
 /*
  * snap id contants
  */
-#define LIBRADOS_SNAP_HEAD  ((uint64_t)(-2))
-#define LIBRADOS_SNAP_DIR   ((uint64_t)(-1))
+#define LIBRADOS_SNAP_HEAD  UINT64_C(-2)
+#define LIBRADOS_SNAP_DIR   UINT64_C(-1)
 
 /**
  * @typedef rados_t
  *
  * A handle for interacting with a RADOS cluster. It encapsulates all
  * RADOS client configuration, including username, key for
- * authentication, logging, and debugging. Talking different clusters
+ * authentication, logging, and debugging. Talking to different clusters
  * -- or to the same cluster with different users -- requires
  * different cluster handles.
  */
@@ -221,7 +224,7 @@ typedef void *rados_ioctx_t;
  *
  * An iterator for listing the objects in a pool.
  * Used with rados_nobjects_list_open(),
- * rados_nobjects_list_next(), and
+ * rados_nobjects_list_next(), rados_nobjects_list_next2(), and
  * rados_nobjects_list_close().
  */
 typedef void *rados_list_ctx_t;
@@ -240,7 +243,7 @@ typedef void * rados_object_list_cursor;
  * The item populated by rados_object_list in
  * the results array.
  */
-typedef struct rados_object_list_item {
+typedef struct {
 
   /// oid length
   size_t oid_length;
@@ -464,10 +467,10 @@ CEPH_RADOS_API int rados_create_with_context(rados_t *cluster,
  * buffer and length pointers can be NULL, in which case they are
  * not filled in.
  *
- * @param      cluster    cluster handle
- * @param[in]  mon_id     ID of the monitor to ping
- * @param[out] outstr     double pointer with the resulting reply
- * @param[out] outstrlen  pointer with the size of the reply in outstr
+ * @param cluster         cluster handle
+ * @param mon_id [in]     ID of the monitor to ping
+ * @param outstr [out]    double pointer with the resulting reply
+ * @param outstrlen [out] pointer with the size of the reply in outstr
  */
 CEPH_RADOS_API int rados_ping_monitor(rados_t cluster, const char *mon_id,
                                       char **outstr, size_t *outstrlen);
@@ -741,7 +744,7 @@ CEPH_RADOS_API uint64_t rados_get_instance_id(rados_t cluster);
  * Gets the minimum compatible OSD version
  *
  * @param cluster cluster handle
- * @param[out] require_osd_release minimum compatible OSD version
+ * @param require_osd_release [out] minimum compatible OSD version
  *  based upon the current features
  * @returns 0 on sucess, negative error code on failure
  */
@@ -752,9 +755,9 @@ CEPH_RADOS_API int rados_get_min_compatible_osd(rados_t cluster,
  * Gets the minimum compatible client version
  *
  * @param cluster cluster handle
- * @param[out] min_compat_client minimum compatible client version
+ * @param min_compat_client [out] minimum compatible client version
  *  based upon the current features
- * @param[out] require_min_compat_client required minimum client version
+ * @param require_min_compat_client [out] required minimum client version
  *  based upon explicit setting
  * @returns 0 on success, negative error code on failure
  */
@@ -921,7 +924,7 @@ CEPH_RADOS_API int rados_pool_create_with_all(rados_t cluster,
  *
  * @param cluster the cluster the pool is in
  * @param pool ID of the pool to query
- * @param[out] base_tier base tier, or \c pool if tiering is not configured
+ * @param base_tier [out] base tier, or \c pool if tiering is not configured
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_pool_get_base_tier(rados_t cluster, int64_t pool,
@@ -1135,6 +1138,32 @@ CEPH_RADOS_API int rados_nobjects_list_next(rados_list_ctx_t ctx,
                                             const char **entry,
 	                                    const char **key,
                                             const char **nspace);
+
+/**
+ * Get the next object name, locator and their sizes in the pool
+ *
+ * The sizes allow to list objects with \0 (the NUL character)
+ * in .e.g *entry. Is is unusual see such object names but a bug
+ * in a client has risen the need to handle them as well.
+ * *entry and *key are valid until next call to rados_nobjects_list_*
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param entry where to store the name of the entry
+ * @param key where to store the object locator (set to NULL to ignore)
+ * @param nspace where to store the object namespace (set to NULL to ignore)
+ * @param entry_size where to store the size of name of the entry
+ * @param key_size where to store the size of object locator (set to NULL to ignore)
+ * @param nspace_size where to store the size of object namespace (set to NULL to ignore)
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT when there are no more objects to list
+ */
+CEPH_RADOS_API int rados_nobjects_list_next2(rados_list_ctx_t ctx,
+                                             const char **entry,
+                                             const char **key,
+                                             const char **nspace,
+                                             size_t *entry_size,
+                                             size_t *key_size,
+                                             size_t *nspace_size);
 
 /**
  * Close the object listing handle.
@@ -2352,7 +2381,7 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
  * @param handle the watcher handle we are notifying
  * @param notifier_id the unique client id for the notifier
  * @param data payload from the notifier
- * @param datalen length of payload buffer
+ * @param data_len length of payload buffer
  */
 typedef void (*rados_watchcb2_t)(void *arg,
 				 uint64_t notify_id,
@@ -2371,6 +2400,7 @@ typedef void (*rados_watchcb2_t)(void *arg,
  * we may have missed notify events.
  *
  * @param pre opaque user-defined value provided to rados_watch2()
+ * @param cookie the internal id assigned to the watch session
  * @param err error code
  */
   typedef void (*rados_watcherrcb_t)(void *pre, uint64_t cookie, int err);
@@ -2642,6 +2672,36 @@ CEPH_RADOS_API int rados_notify2(rados_ioctx_t io, const char *o,
 				 char **reply_buffer, size_t *reply_buffer_len);
 
 /**
+ * Decode a notify response
+ *
+ * Decode a notify response (from rados_aio_notify() call) into acks and
+ * timeout arrays.
+ *
+ * @param reply_buffer buffer from rados_aio_notify() call
+ * @param reply_buffer_len reply_buffer length
+ * @param acks pointer to struct notify_ack_t pointer
+ * @param nr_acks pointer to ack count
+ * @param timeouts pointer to notify_timeout_t pointer
+ * @param nr_timeouts pointer to timeout count
+ * @returns 0 on success
+ */
+CEPH_RADOS_API int rados_decode_notify_response(char *reply_buffer, size_t reply_buffer_len,
+                                                struct notify_ack_t **acks, size_t *nr_acks,
+                                                struct notify_timeout_t **timeouts, size_t *nr_timeouts);
+
+/**
+ * Free notify allocated buffer
+ *
+ * Release memory allocated by rados_decode_notify_response() call
+ *
+ * @param acks notify_ack_t struct (from rados_decode_notify_response())
+ * @param nr_acks ack count
+ * @param timeouts notify_timeout_t struct (from rados_decode_notify_response())
+ */
+CEPH_RADOS_API void rados_free_notify_response(struct notify_ack_t *acks, size_t nr_acks,
+                                               struct notify_timeout_t *timeouts);
+
+/**
  * Acknolwedge receipt of a notify
  *
  * @param io the pool the object is in
@@ -2773,6 +2833,10 @@ CEPH_RADOS_API int rados_set_alloc_hint2(rados_ioctx_t io, const char *o,
  * Create a new rados_write_op_t write operation. This will store all actions
  * to be performed atomically. You must call rados_release_write_op when you are
  * finished with it.
+ *
+ * @note the ownership of a write operartion is passed to the function
+ *       performing the operation, so the same instance of @c rados_write_op_t
+ *       cannot be used again after being performed.
  *
  * @returns non-NULL on success, NULL on memory allocation error.
  */
@@ -3157,10 +3221,14 @@ CEPH_RADOS_API int rados_aio_write_op_operate(rados_write_op_t write_op,
 			                      int flags);
 
 /**
- * Create a new rados_read_op_t write operation. This will store all
+ * Create a new rados_read_op_t read operation. This will store all
  * actions to be performed atomically. You must call
  * rados_release_read_op when you are finished with it (after it
  * completes, or you decide not to send it in the first place).
+ *
+ * @note the ownership of a read operartion is passed to the function
+ *       performing the operation, so the same instance of @c rados_read_op_t
+ *       cannot be used again after being performed.
  *
  * @returns non-NULL on success, NULL on memory allocation error.
  */
@@ -3655,19 +3723,23 @@ CEPH_RADOS_API int rados_break_lock(rados_ioctx_t io, const char *o,
                                     const char *cookie);
 
 /**
- * Blacklists the specified client from the OSDs
+ * Blocklists the specified client from the OSDs
  *
  * @param cluster cluster handle
  * @param client_address client address
- * @param expire_seconds number of seconds to blacklist (0 for default)
+ * @param expire_seconds number of seconds to blocklist (0 for default)
  * @returns 0 on success, negative error code on failure
  */
-CEPH_RADOS_API int rados_blacklist_add(rados_t cluster,
+CEPH_RADOS_API int rados_blocklist_add(rados_t cluster,
 				       char *client_address,
 				       uint32_t expire_seconds);
+CEPH_RADOS_API int rados_blacklist_add(rados_t cluster,
+				       char *client_address,
+				       uint32_t expire_seconds)
+  __attribute__((deprecated));
 
 /**
- * Gets addresses of the RADOS session, suitable for blacklisting.
+ * Gets addresses of the RADOS session, suitable for blocklisting.
  *
  * @param cluster cluster handle
  * @param addrs the output string.

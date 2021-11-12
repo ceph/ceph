@@ -12,7 +12,7 @@ target_link_libraries(radostest PUBLIC
   GTest::GTest
   ceph-common
   json_spirit
-  ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES} ${EXTRALIBS})
+  ${GSSAPI_LIBRARIES} ${EXTRALIBS})
 add_library(radostest-cxx STATIC
   testcase_cxx.cc
   test_cxx.cc
@@ -60,10 +60,7 @@ target_link_libraries(ceph_test_rados_api_aio_pp
 
 add_executable(ceph_test_rados_api_asio asio.cc)
 target_link_libraries(ceph_test_rados_api_asio global
-  librados ${UNITTEST_LIBS})
-if(WITH_BOOST_CONTEXT)
-  target_link_libraries(ceph_test_rados_api_asio Boost::coroutine Boost::context)
-endif()
+  librados ${UNITTEST_LIBS} Boost::coroutine Boost::context)
 
 add_executable(ceph_test_rados_api_list
   list.cc
@@ -132,10 +129,8 @@ add_executable(ceph_test_rados_api_tier_pp
   tier_cxx.cc
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(ceph_test_rados_api_tier_pp
-  librados global ${UNITTEST_LIBS} Boost::system radostest-cxx)
-if(WITH_BOOST_CONTEXT)
-  target_link_libraries(ceph_test_rados_api_tier_pp spawn)
-endif()
+  librados global ${UNITTEST_LIBS} Boost::system radostest-cxx cls_cas_internal
+  cls_cas_client spawn)
 
 add_executable(ceph_test_rados_api_snapshots
   snapshots.cc)
@@ -145,6 +140,12 @@ add_executable(ceph_test_rados_api_snapshots_pp
   snapshots_cxx.cc)
 target_link_libraries(ceph_test_rados_api_snapshots_pp
   librados ${UNITTEST_LIBS} radostest-cxx)
+
+add_executable(ceph_test_rados_api_cls_remote_reads
+  cls_remote_reads.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(ceph_test_rados_api_cls_remote_reads
+  librados global ${UNITTEST_LIBS} radostest-cxx)
 
 install(TARGETS
   ceph_test_rados_api_aio
@@ -171,6 +172,7 @@ install(TARGETS
   ceph_test_rados_api_tier_pp
   ceph_test_rados_api_watch_notify
   ceph_test_rados_api_watch_notify_pp
+  ceph_test_rados_api_cls_remote_reads
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # unittest_librados
@@ -179,7 +181,7 @@ add_executable(unittest_librados
   )
 add_ceph_unittest(unittest_librados)
 target_link_libraries(unittest_librados librados ${BLKID_LIBRARIES}
-	${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES})
+	${GSSAPI_LIBRARIES})
 
 # unittest_librados_config
 add_executable(unittest_librados_config
@@ -188,5 +190,17 @@ add_executable(unittest_librados_config
 add_ceph_unittest(unittest_librados_config)
 target_link_libraries(unittest_librados_config
   librados
-  ${BLKID_LIBRARIES} ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES})
+  ${BLKID_LIBRARIES} ${GSSAPI_LIBRARIES})
 
+# Removing this test. We can't shove it into Finisher as it's not a
+# Context any more, and wrapping it to adapt it would be less fair.
+
+#add_executable(ceph_test_rados_completion_speed
+#  completion_speed.cc)
+#target_link_libraries(ceph_test_rados_completion_speed
+#  librados ${UNITTEST_LIBS} radostest-cxx)
+
+add_executable(ceph_test_rados_op_speed
+  op_speed.cc)
+target_link_libraries(ceph_test_rados_op_speed
+  librados ${UNITTEST_LIBS} radostest-cxx)

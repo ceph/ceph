@@ -12,6 +12,12 @@
 
 #include "mds/flock.h"
 
+using std::dec;
+using std::list;
+using std::oct;
+using std::ostream;
+using std::string;
+
 Inode::~Inode()
 {
   delay_cap_item.remove_myself();
@@ -40,7 +46,7 @@ ostream& operator<<(ostream &out, const Inode &in)
 {
   out << in.vino() << "("
       << "faked_ino=" << in.faked_ino
-      << " ref=" << in._ref
+      << " nref=" << in.get_nref()
       << " ll_ref=" << in.ll_ref
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
@@ -95,9 +101,19 @@ void Inode::make_long_path(filepath& p)
     dn->dir->parent_inode->make_long_path(p);
     p.push_dentry(dn->name);
   } else if (snapdir_parent) {
-    snapdir_parent->make_nosnap_relative_path(p);
-    string empty;
-    p.push_dentry(empty);
+    make_nosnap_relative_path(p);
+  } else
+    p = filepath(ino);
+}
+
+void Inode::make_short_path(filepath& p)
+{
+  if (!dentries.empty()) {
+    Dentry *dn = get_first_parent();
+    ceph_assert(dn->dir && dn->dir->parent_inode);
+    p = filepath(dn->name, dn->dir->parent_inode->ino);
+  } else if (snapdir_parent) {
+    make_nosnap_relative_path(p);
   } else
     p = filepath(ino);
 }
@@ -127,6 +143,10 @@ void Inode::make_nosnap_relative_path(filepath& p)
 
 void Inode::get_open_ref(int mode)
 {
+  client->inc_opened_files();
+  if (open_by_mode[mode] == 0) {
+    client->inc_opened_inodes();
+  }
   open_by_mode[mode]++;
   break_deleg(!(mode & CEPH_FILE_MODE_WR));
 }
@@ -136,8 +156,11 @@ bool Inode::put_open_ref(int mode)
   //cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
   auto& ref = open_by_mode.at(mode);
   ceph_assert(ref > 0);
-  if (--ref == 0)
+  client->dec_opened_files();
+  if (--ref == 0) {
+    client->dec_opened_inodes();
     return true;
+  }
   return false;
 }
 
@@ -198,8 +221,7 @@ int Inode::caps_issued(int *implemented) const
 {
   int c = snap_caps;
   int i = 0;
-  for (const auto &pair : caps) {
-    const Cap &cap = pair.second;
+  for (const auto &[mds, cap] : caps) {
     if (cap_is_valid(cap)) {
       c |= cap.issued;
       i |= cap.implemented;
@@ -232,6 +254,7 @@ void Inode::try_touch_cap(mds_rank_t mds)
  * This is the bog standard "check whether we have the required caps" operation.
  * Typically, we only check against the capset that is currently "issued".
  * In other words, we ignore caps that have been revoked but not yet released.
+ * Also account capability hit/miss stats.
  *
  * Some callers (particularly those doing attribute retrieval) can also make
  * use of the full set of "implemented" caps to satisfy requests from the
@@ -252,6 +275,7 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
       cap_is_valid(*auth_cap) &&
       (auth_cap->issued & mask) == mask) {
     auth_cap->touch();
+    client->cap_hit();
     return true;
   }
   // try any cap
@@ -260,6 +284,7 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
     if (cap_is_valid(cap)) {
       if ((cap.issued & mask) == mask) {
         cap.touch();
+	client->cap_hit();
 	return true;
       }
       c |= cap.issued;
@@ -275,30 +300,29 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
     for (auto &pair : caps) {
       pair.second.touch();
     }
+    client->cap_hit();
     return true;
   }
+
+  client->cap_miss();
   return false;
 }
 
 int Inode::caps_used()
 {
   int w = 0;
-  for (map<int,int>::iterator p = cap_refs.begin();
-       p != cap_refs.end();
-       ++p)
-    if (p->second)
-      w |= p->first;
+  for (const auto &[cap, cnt] : cap_refs)
+    if (cnt)
+      w |= cap;
   return w;
 }
 
 int Inode::caps_file_wanted()
 {
   int want = 0;
-  for (map<int,int>::iterator p = open_by_mode.begin();
-       p != open_by_mode.end();
-       ++p)
-    if (p->second)
-      want |= ceph_caps_for_mode(p->first);
+  for (const auto &[mode, cnt] : open_by_mode)
+    if (cnt)
+      want |= ceph_caps_for_mode(mode);
   return want;
 }
 
@@ -362,7 +386,7 @@ Dir *Inode::open_dir()
     ceph_assert(dentries.size() < 2); // dirs can't be hard-linked
     if (!dentries.empty())
       get_first_parent()->get();      // pin dentry
-    get();                  // pin inode
+    iget();                  // pin inode
   }
   return dir;
 }
@@ -379,22 +403,6 @@ bool Inode::check_mode(const UserPerm& perms, unsigned want)
 
   return (mode & want) == want;
 }
-
-void Inode::get() {
-  _ref++;
-  lsubdout(client->cct, client, 15) << "inode.get on " << this << " " <<  ino << '.' << snapid
-				    << " now " << _ref << dendl;
-}
-
-//private method to put a reference; see Client::put_inode()
-int Inode::_put(int n) {
-  _ref -= n;
-  lsubdout(client->cct, client, 15) << "inode.put on " << this << " " << ino << '.' << snapid
-				    << " now " << _ref << dendl;
-  ceph_assert(_ref >= 0);
-  return _ref;
-}
-
 
 void Inode::dump(Formatter *f) const
 {
@@ -445,12 +453,29 @@ void Inode::dump(Formatter *f) const
   if (is_dir()) {
     f->dump_int("dir_hashed", (int)dir_hashed);
     f->dump_int("dir_replicated", (int)dir_replicated);
+    if (dir_replicated) {
+      f->open_array_section("dirfrags");
+      for (const auto &frag : frag_repmap) {
+        f->open_object_section("frags");
+        CachedStackStringStream css;
+        *css << std::hex << frag.first.value() << "/" << std::dec << frag.first.bits();
+        f->dump_string("frag", css->strv());
+
+        f->open_array_section("repmap");
+        for (const auto &mds : frag.second) {
+          f->dump_int("mds", mds);
+        }
+        f->close_section();
+
+        f->close_section();
+      }
+      f->close_section();
+    }
   }
 
   f->open_array_section("caps");
   for (const auto &pair : caps) {
     f->open_object_section("cap");
-    f->dump_int("mds", pair.first);
     if (&pair.second == auth_cap)
       f->dump_int("auth", 1);
     pair.second.dump(f);
@@ -523,12 +548,12 @@ void Inode::dump(Formatter *f) const
   if (requested_max_size != max_size)
     f->dump_unsigned("requested_max_size", requested_max_size);
 
-  f->dump_int("ref", _ref);
+  f->dump_int("nref", get_nref());
   f->dump_int("ll_ref", ll_ref);
 
   if (!dentries.empty()) {
     f->open_array_section("parents");
-    for (const auto &dn : dentries) {
+    for (const auto &&dn : dentries) {
       f->open_object_section("dentry");
       f->dump_stream("dir_ino") << dn->dir->parent_inode->ino;
       f->dump_string("name", dn->name);
@@ -662,13 +687,13 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
    * allow it, with an unusual error to make it clear.
    */
   if (!client->get_deleg_timeout())
-    return -ETIME;
+    return -CEPHFS_ETIME;
 
   // Just say no if we have any recalled delegs still outstanding
   if (has_recalled_deleg()) {
     lsubdout(client->cct, client, 10) << __func__ <<
 	  ": has_recalled_deleg" << dendl;
-    return -EAGAIN;
+    return -CEPHFS_EAGAIN;
   }
 
   // check vs. currently open files on this inode
@@ -677,17 +702,17 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
     if (open_count_for_write()) {
       lsubdout(client->cct, client, 10) << __func__ <<
 	    ": open for write" << dendl;
-      return -EAGAIN;
+      return -CEPHFS_EAGAIN;
     }
     break;
   case CEPH_DELEGATION_WR:
     if (open_count() > 1) {
       lsubdout(client->cct, client, 10) << __func__ << ": open" << dendl;
-      return -EAGAIN;
+      return -CEPHFS_EAGAIN;
     }
     break;
   default:
-    return -EINVAL;
+    return -CEPHFS_EINVAL;
   }
 
   /*
@@ -708,7 +733,7 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
   if (!caps_issued_mask(need)) {
     lsubdout(client->cct, client, 10) << __func__ << ": cap mismatch, have="
       << ccap_string(caps_issued()) << " need=" << ccap_string(need) << dendl;
-    return -EAGAIN;
+    return -CEPHFS_EAGAIN;
   }
 
   for (list<Delegation>::iterator d = delegations.begin();
@@ -755,7 +780,7 @@ void Inode::mark_caps_dirty(int caps)
   lsubdout(client->cct, client, 10) << __func__ << " " << *this << " " << ccap_string(dirty_caps) << " -> "
            << ccap_string(dirty_caps | caps) << dendl;
   if (caps && !caps_dirty())
-    get();
+    iget();
   dirty_caps |= caps;
   client->get_dirty_list().push_back(&dirty_cap_item);
 }

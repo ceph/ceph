@@ -333,6 +333,14 @@ struct OSDPerfMetricQuery {
 };
 WRITE_CLASS_DENC(OSDPerfMetricQuery)
 
+struct OSDPerfCollector : PerfCollector {
+  std::map<OSDPerfMetricKey, PerformanceCounters> counters;
+
+  OSDPerfCollector(MetricQueryID query_id)
+    : PerfCollector(query_id) {
+  }
+};
+
 std::ostream& operator<<(std::ostream& os, const OSDPerfMetricQuery &query);
 
 struct OSDPerfMetricReport {

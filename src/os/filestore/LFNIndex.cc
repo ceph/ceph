@@ -34,13 +34,22 @@
 #include "chain_xattr.h"
 
 #include "LFNIndex.h"
-using ceph::crypto::SHA1;
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "LFNIndex(" << get_base_path() << ") "
 
+using std::map;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
+
+using ceph::crypto::SHA1;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
 
 const string LFNIndex::LFN_ATTR = "user.cephos.lfn";
 const string LFNIndex::PHASH_ATTR_PREFIX = "user.cephos.phash.";
@@ -420,7 +429,18 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
   int r = 0;
   int listed = 0;
   bool end = true;
-  while ((de = ::readdir(dir))) {
+  while (true) {
+    errno = 0;
+    de = ::readdir(dir);
+    if (de == nullptr) {
+      if (errno != 0) {
+        r = -errno;
+        dout(0) << "readdir failed " << to_list_path << ": "
+                << cpp_strerror(-r) << dendl;
+        goto cleanup;
+      }
+      break;
+    }
     end = false;
     if (max_objs > 0 && listed >= max_objs) {
       break;
@@ -468,7 +488,18 @@ int LFNIndex::list_subdirs(const vector<string> &to_list,
     return -errno;
 
   struct dirent *de = nullptr;
-  while ((de = ::readdir(dir))) {
+  int r = 0;
+  while (true) {
+    errno = 0;
+    de = ::readdir(dir);
+    if (de == nullptr) {
+      if (errno != 0) {
+        r = -errno;
+        dout(0) << "readdir failed " << to_list_path << ": "
+                << cpp_strerror(-r) << dendl;
+      }
+      break;
+    }
     string short_name(de->d_name);
     string demangled_name;
     if (lfn_is_subdir(short_name, &demangled_name)) {
@@ -477,7 +508,7 @@ int LFNIndex::list_subdirs(const vector<string> &to_list,
   }
 
   ::closedir(dir);
-  return 0;
+  return r;
 }
 
 int LFNIndex::create_path(const vector<string> &to_create)

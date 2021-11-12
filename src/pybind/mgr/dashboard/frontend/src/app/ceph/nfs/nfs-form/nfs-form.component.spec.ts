@@ -4,16 +4,17 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TypeaheadModule } from 'ngx-bootstrap/typeahead';
+import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
+import { Observable, of } from 'rxjs';
 
-import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { SharedModule } from '../../../shared/shared.module';
-import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
-import { NfsFormComponent } from './nfs-form.component';
+import { NfsFormClientComponent } from '~/app/ceph/nfs/nfs-form-client/nfs-form-client.component';
+import { NfsFormComponent } from '~/app/ceph/nfs/nfs-form/nfs-form.component';
+import { Directory } from '~/app/shared/api/nfs.service';
+import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { ActivatedRouteStub } from '~/testing/activated-route-stub';
+import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
 
 describe('NfsFormComponent', () => {
   let component: NfsFormComponent;
@@ -30,60 +31,29 @@ describe('NfsFormComponent', () => {
         RouterTestingModule,
         SharedModule,
         ToastrModule.forRoot(),
-        TypeaheadModule.forRoot()
+        NgbTypeaheadModule
       ],
       providers: [
         {
           provide: ActivatedRoute,
           useValue: new ActivatedRouteStub({ cluster_id: undefined, export_id: undefined })
-        },
-        i18nProviders,
-        SummaryService,
-        CephReleaseNamePipe
+        }
       ]
     },
-    true
+    [LoadingPanelComponent]
   );
 
   beforeEach(() => {
-    const summaryService = TestBed.get(SummaryService);
-    spyOn(summaryService, 'refresh').and.callFake(() => true);
-    spyOn(summaryService, 'getCurrentSummary').and.callFake(() => {
-      return {
-        version: 'master'
-      };
-    });
-
     fixture = TestBed.createComponent(NfsFormComponent);
     component = fixture.componentInstance;
-    httpTesting = TestBed.get(HttpTestingController);
-    activatedRoute = TestBed.get(ActivatedRoute);
+    httpTesting = TestBed.inject(HttpTestingController);
+    activatedRoute = <ActivatedRouteStub>TestBed.inject(ActivatedRoute);
+    RgwHelper.selectDaemon();
     fixture.detectChanges();
 
-    httpTesting.expectOne('api/summary').flush([]);
-    httpTesting
-      .expectOne('api/nfs-ganesha/daemon')
-      .flush([
-        { daemon_id: 'node1', cluster_id: 'cluster1' },
-        { daemon_id: 'node2', cluster_id: 'cluster1' },
-        { daemon_id: 'node5', cluster_id: 'cluster2' }
-      ]);
     httpTesting.expectOne('ui-api/nfs-ganesha/fsals').flush(['CEPH', 'RGW']);
-    httpTesting.expectOne('ui-api/nfs-ganesha/cephx/clients').flush(['admin', 'fs', 'rgw']);
     httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
-    httpTesting.expectOne('api/rgw/user').flush(['test', 'dev']);
-    const user_dev = {
-      suspended: 0,
-      user_id: 'dev',
-      keys: ['a']
-    };
-    httpTesting.expectOne('api/rgw/user/dev').flush(user_dev);
-    const user_test = {
-      suspended: 1,
-      user_id: 'test',
-      keys: ['a']
-    };
-    httpTesting.expectOne('api/rgw/user/test').flush(user_test);
+    httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
     httpTesting.verify();
   });
 
@@ -92,56 +62,46 @@ describe('NfsFormComponent', () => {
   });
 
   it('should process all data', () => {
-    expect(component.allDaemons).toEqual({ cluster1: ['node1', 'node2'], cluster2: ['node5'] });
-    expect(component.isDefaultCluster).toEqual(false);
     expect(component.allFsals).toEqual([
-      { descr: 'CephFS', value: 'CEPH' },
-      { descr: 'Object Gateway', value: 'RGW' }
+      { descr: 'CephFS', value: 'CEPH', disabled: false },
+      { descr: 'Object Gateway', value: 'RGW', disabled: false }
     ]);
-    expect(component.allCephxClients).toEqual(['admin', 'fs', 'rgw']);
     expect(component.allFsNames).toEqual([{ id: 1, name: 'a' }]);
-    expect(component.allRgwUsers).toEqual(['dev']);
+    expect(component.allClusters).toEqual([{ cluster_id: 'mynfs' }]);
   });
 
   it('should create the form', () => {
     expect(component.nfsForm.value).toEqual({
       access_type: 'RW',
       clients: [],
-      cluster_id: '',
-      daemons: [],
-      fsal: { fs_name: 'a', name: '', rgw_user_id: '', user_id: '' },
-      path: '',
-      protocolNfsv3: true,
+      cluster_id: 'mynfs',
+      fsal: { fs_name: 'a', name: 'CEPH' },
+      path: '/',
       protocolNfsv4: true,
       pseudo: '',
       sec_label_xattr: 'security.selinux',
       security_label: false,
-      squash: '',
-      tag: '',
+      squash: 'no_root_squash',
       transportTCP: true,
       transportUDP: true
     });
+    expect(component.nfsForm.get('cluster_id').disabled).toBeFalsy();
   });
 
   it('should prepare data when selecting an cluster', () => {
-    expect(component.allDaemons).toEqual({ cluster1: ['node1', 'node2'], cluster2: ['node5'] });
-    expect(component.daemonsSelections).toEqual([]);
-
     component.nfsForm.patchValue({ cluster_id: 'cluster1' });
-    component.onClusterChange();
 
-    expect(component.daemonsSelections).toEqual([
-      { description: '', name: 'node1', selected: false, enabled: true },
-      { description: '', name: 'node2', selected: false, enabled: true }
-    ]);
+    component.nfsForm.patchValue({ cluster_id: 'cluster2' });
   });
 
-  it('should clean data when changing cluster', () => {
-    component.nfsForm.patchValue({ cluster_id: 'cluster1', daemons: ['node1'] });
-    component.nfsForm.patchValue({ cluster_id: 'node2' });
-    component.onClusterChange();
+  it('should not allow changing cluster in edit mode', () => {
+    component.isEdit = true;
+    component.ngOnInit();
+    expect(component.nfsForm.get('cluster_id').disabled).toBeTruthy();
+  });
 
-    expect(component.nfsForm.getValue('daemons')).toEqual([]);
+  it('should mark NFSv4 protocol as enabled always', () => {
+    expect(component.nfsForm.get('protocolNfsv4')).toBeTruthy();
   });
 
   describe('should submit request', () => {
@@ -150,27 +110,14 @@ describe('NfsFormComponent', () => {
         access_type: 'RW',
         clients: [],
         cluster_id: 'cluster1',
-        daemons: ['node2'],
-        fsal: { name: 'CEPH', user_id: 'fs', fs_name: 1, rgw_user_id: '' },
+        fsal: { name: 'CEPH', fs_name: 1 },
         path: '/foo',
-        protocolNfsv3: true,
         protocolNfsv4: true,
         pseudo: '/baz',
         squash: 'no_root_squash',
-        tag: 'bar',
         transportTCP: true,
         transportUDP: true
       });
-    });
-
-    it('should remove "pseudo" requirement when NFS v4 disabled', () => {
-      component.nfsForm.patchValue({
-        protocolNfsv4: false,
-        pseudo: ''
-      });
-
-      component.nfsForm.updateValueAndValidity({ emitEvent: false });
-      expect(component.nfsForm.valid).toBeTruthy();
     });
 
     it('should call update', () => {
@@ -187,15 +134,13 @@ describe('NfsFormComponent', () => {
         access_type: 'RW',
         clients: [],
         cluster_id: 'cluster1',
-        daemons: ['node2'],
-        export_id: '1',
-        fsal: { fs_name: 1, name: 'CEPH', sec_label_xattr: null, user_id: 'fs' },
+        export_id: 1,
+        fsal: { fs_name: 1, name: 'CEPH', sec_label_xattr: null },
         path: '/foo',
-        protocols: [3, 4],
+        protocols: [4],
         pseudo: '/baz',
         security_label: false,
         squash: 'no_root_squash',
-        tag: 'bar',
         transports: ['TCP', 'UDP']
       });
     });
@@ -210,21 +155,55 @@ describe('NfsFormComponent', () => {
         access_type: 'RW',
         clients: [],
         cluster_id: 'cluster1',
-        daemons: ['node2'],
         fsal: {
           fs_name: 1,
           name: 'CEPH',
-          sec_label_xattr: null,
-          user_id: 'fs'
+          sec_label_xattr: null
         },
         path: '/foo',
-        protocols: [3, 4],
+        protocols: [4],
         pseudo: '/baz',
         security_label: false,
         squash: 'no_root_squash',
-        tag: 'bar',
         transports: ['TCP', 'UDP']
       });
+    });
+  });
+
+  describe('pathExistence', () => {
+    beforeEach(() => {
+      component['nfsService']['lsDir'] = jest.fn(
+        (): Observable<Directory> => of({ paths: ['/path1'] })
+      );
+      component.nfsForm.get('name').setValue('CEPH');
+      component.setPathValidation();
+    });
+
+    const testValidator = (pathName: string, valid: boolean, expectedError?: string) => {
+      const path = component.nfsForm.get('path');
+      path.setValue(pathName);
+      path.markAsDirty();
+      path.updateValueAndValidity();
+
+      if (valid) {
+        expect(path.errors).toBe(null);
+      } else {
+        expect(path.hasError(expectedError)).toBeTruthy();
+      }
+    };
+
+    it('path cannot be empty', () => {
+      testValidator('', false, 'required');
+    });
+
+    it('path that does not exist should be invalid', () => {
+      testValidator('/path2', false, 'pathNameNotAllowed');
+      expect(component['nfsService']['lsDir']).toHaveBeenCalledTimes(1);
+    });
+
+    it('path that exists should be valid', () => {
+      testValidator('/path1', true);
+      expect(component['nfsService']['lsDir']).toHaveBeenCalledTimes(1);
     });
   });
 });

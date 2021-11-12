@@ -25,8 +25,8 @@
 
 class LRUObject {
 public:
-  LRUObject() : lru(), lru_link(this), lru_pinned(false) { }
-  ~LRUObject();
+  LRUObject() : lru_link(this) {}
+  virtual ~LRUObject();
 
   // pin/unpin item in cache
   void lru_pin();
@@ -35,15 +35,13 @@ public:
 
   friend class LRU;
 private:
-  class LRU *lru;
+  class LRU *lru{};
   xlist<LRUObject *>::item lru_link;
-  bool lru_pinned;
+  bool lru_pinned = false;
 };
 
 class LRU {
 public:
-  LRU() : num_pinned(0), midpoint(0.6) {}
-
   uint64_t lru_get_size() const { return lru_get_top()+lru_get_bot()+lru_get_pintail(); }
   uint64_t lru_get_top() const { return top.size(); }
   uint64_t lru_get_bot() const{ return bottom.size(); }
@@ -206,12 +204,12 @@ protected:
     }
   }
 
-  uint64_t num_pinned;
-  double midpoint;
+  uint64_t num_pinned = 0;
+  double midpoint = 0.6;
 
   friend class LRUObject;
 private:
-  typedef xlist<LRUObject *> LRUList;
+  using LRUList = xlist<LRUObject*>;
   LRUList top, bottom, pintail;
 };
 

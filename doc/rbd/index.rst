@@ -4,20 +4,22 @@
 
 .. index:: Ceph Block Device; introduction
 
-A block is a sequence of bytes (for example, a 512-byte block of data).
-Block-based storage interfaces are the most common way to store data with
-rotating media such as hard disks, CDs, floppy disks, and even traditional
-9-track tape. The ubiquity of block device interfaces makes a virtual block
-device an ideal candidate to interact with a mass data storage system like Ceph.
+A block is a sequence of bytes (often 512).
+Block-based storage interfaces are a mature and common way to store data on
+media including HDDs, SSDs, CDs, floppy disks, and even tape.
+The ubiquity of block device interfaces is a perfect fit for interacting
+with mass data storage including Ceph.
 
-Ceph block devices are thin-provisioned, resizable and store data striped over
-multiple OSDs in a Ceph cluster.  Ceph block devices leverage
+Ceph block devices are thin-provisioned, resizable, and store data striped over
+multiple OSDs.  Ceph block devices leverage
 :abbr:`RADOS (Reliable Autonomic Distributed Object Store)` capabilities
-such as snapshotting, replication and consistency. Ceph's
-:abbr:`RADOS (Reliable Autonomic Distributed Object Store)` Block Devices (RBD)
-interact with OSDs using kernel modules or the ``librbd`` library.
+including snapshotting, replication and strong consistency. Ceph block
+storage clients communicate with Ceph clusters through kernel modules or
+the ``librbd`` library.
 
-.. ditaa::  +------------------------+ +------------------------+
+.. ditaa::
+
+            +------------------------+ +------------------------+
             |     Kernel Module      | |        librbd          |
             +------------------------+-+------------------------+
             |                   RADOS Protocol                  |
@@ -28,7 +30,7 @@ interact with OSDs using kernel modules or the ``librbd`` library.
 .. note:: Kernel modules can use Linux page caching. For ``librbd``-based
    applications, Ceph supports `RBD Caching`_.
 
-Ceph's block devices deliver high performance with infinite scalability to
+Ceph's block devices deliver high performance with vast scalability to
 `kernel modules`_, or to :abbr:`KVMs (kernel virtual machines)` such as `QEMU`_, and
 cloud-based computing systems like `OpenStack`_ and `CloudStack`_ that rely on
 libvirt and QEMU to integrate with Ceph block devices. You can use the same cluster

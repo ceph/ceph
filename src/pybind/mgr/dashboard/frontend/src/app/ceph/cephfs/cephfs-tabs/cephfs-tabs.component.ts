@@ -1,13 +1,13 @@
 import { Component, Input, NgZone, OnChanges, OnDestroy } from '@angular/core';
 
-import * as _ from 'lodash';
-import { timer } from 'rxjs';
+import _ from 'lodash';
+import { Subscription, timer } from 'rxjs';
 
-import { CephfsService } from '../../../shared/api/cephfs.service';
-import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { Permission } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
+import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-cephfs-tabs',
@@ -16,8 +16,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 })
 export class CephfsTabsComponent implements OnChanges, OnDestroy {
   @Input()
-  selection: CdTableSelection;
-  selectedItem: any;
+  selection: any;
 
   // Grafana tab
   grafanaId: any;
@@ -25,13 +24,13 @@ export class CephfsTabsComponent implements OnChanges, OnDestroy {
 
   // Client tab
   id: number;
-  clients = {
+  clients: Record<string, any> = {
     data: [],
-    status: ViewCacheStatus.ValueNone
+    status: new TableStatusViewCache(ViewCacheStatus.ValueNone)
   };
 
   // Details tab
-  details = {
+  details: Record<string, any> = {
     standbys: '',
     pools: [],
     ranks: [],
@@ -40,7 +39,7 @@ export class CephfsTabsComponent implements OnChanges, OnDestroy {
   };
 
   private data: any;
-  private reloadSubscriber;
+  private reloadSubscriber: Subscription;
 
   constructor(
     private ngZone: NgZone,
@@ -51,19 +50,18 @@ export class CephfsTabsComponent implements OnChanges, OnDestroy {
   }
 
   ngOnChanges() {
-    this.selectedItem = this.selection.first();
-    if (!this.selectedItem) {
+    if (!this.selection) {
       this.unsubscribeInterval();
       return;
     }
-    if (this.selectedItem.id !== this.id) {
-      this.setupSelected(this.selectedItem.id, this.selectedItem.mdsmap.info);
+    if (this.selection.id !== this.id) {
+      this.setupSelected(this.selection.id, this.selection.mdsmap.info);
     }
   }
 
-  private setupSelected(id, mdsInfo) {
+  private setupSelected(id: number, mdsInfo: any) {
     this.id = id;
-    const firstMds = _.first(Object.values(mdsInfo));
+    const firstMds: any = _.first(Object.values(mdsInfo));
     this.grafanaId = firstMds && firstMds['name'];
     this.details = {
       standbys: '',
@@ -74,7 +72,7 @@ export class CephfsTabsComponent implements OnChanges, OnDestroy {
     };
     this.clients = {
       data: [],
-      status: ViewCacheStatus.ValueNone
+      status: new TableStatusViewCache(ViewCacheStatus.ValueNone)
     };
     this.updateInterval();
   }
@@ -106,7 +104,7 @@ export class CephfsTabsComponent implements OnChanges, OnDestroy {
         this.softRefresh();
       },
       () => {
-        this.clients.status = ViewCacheStatus.ValueException;
+        this.clients.status = new TableStatusViewCache(ViewCacheStatus.ValueException);
       }
     );
   }
@@ -115,6 +113,7 @@ export class CephfsTabsComponent implements OnChanges, OnDestroy {
     const data = _.cloneDeep(this.data); // Forces update of tab tables on tab switch
     // Clients tab
     this.clients = data.clients;
+    this.clients.status = new TableStatusViewCache(this.clients.status);
     // Details tab
     this.details = {
       standbys: data.standbys,

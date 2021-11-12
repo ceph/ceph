@@ -53,7 +53,7 @@ public:
 
   void expect_init_journaler(::journal::MockJournaler &mock_journaler, int r) {
     EXPECT_CALL(mock_journaler, init(_))
-                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
+                  .WillOnce(CompleteContext(r, static_cast<asio::ContextWQ*>(NULL)));
   }
 
   void expect_get_journaler_cached_client(::journal::MockJournaler &mock_journaler,

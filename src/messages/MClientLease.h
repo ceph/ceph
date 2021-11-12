@@ -20,7 +20,7 @@
 
 #include "msg/Message.h"
 
-class MClientLease : public SafeMessage {
+class MClientLease final : public SafeMessage {
 public:
   struct ceph_mds_lease h;
   std::string dname;
@@ -59,11 +59,11 @@ protected:
     h.last = sl;
     h.duration_ms = 0;
   }
-  ~MClientLease() override {}
+  ~MClientLease() final {}
 
 public:
   std::string_view get_type_name() const override { return "client_lease"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "client_lease(a=" << ceph_lease_op_name(get_action())
 	<< " seq " << get_seq()
 	<< " mask " << get_mask();
@@ -74,8 +74,9 @@ public:
       out << "/" << dname;
     out << ")";
   }
-  
+
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(h, p);
     decode(dname, p);
@@ -89,6 +90,8 @@ public:
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+  template<class T, typename... Args>
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 #endif

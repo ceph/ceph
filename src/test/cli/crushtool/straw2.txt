@@ -16,25 +16,23 @@ type 2 default
 # buckets
 host host0 {
 	id -1		# do not change unnecessarily
-	# weight 1.000
+	# weight 1.00000
 	alg straw2
 	hash 0	# rjenkins1
-	item device0 weight 1.000
+	item device0 weight 1.00000
 }
 default default {
 	id -2		# do not change unnecessarily
-	# weight 1.000
+	# weight 1.00000
 	alg straw2
 	hash 0	# rjenkins1
-	item host0 weight 1.000
+	item host0 weight 1.00000
 }
 
 # rules
-rule replicated_ruleset {
+rule replicated_rule {
 	id 0
 	type replicated
-	min_size 1
-	max_size 10
 	step take default
 	step chooseleaf firstn 0 type host
 	step emit

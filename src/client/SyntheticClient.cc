@@ -36,13 +36,14 @@
 
 #include "common/errno.h"
 #include "include/ceph_assert.h"
-#include "include/cephfs/ceph_statx.h"
+#include "include/cephfs/ceph_ll_client.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_client
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << (whoami >= 0 ? whoami:client->get_nodeid()) << " "
 
+using namespace std;
 // traces
 //void trace_include(SyntheticClient *syn, Client *cl, string& prefix);
 //void trace_openssh(SyntheticClient *syn, Client *cl, string& prefix);

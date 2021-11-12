@@ -23,7 +23,6 @@
 #include "librbd/api/Namespace.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/Types.h"
 #include "librbd/mirror/snapshot/GetImageStateRequest.h"
 #include "librbd/mirror/snapshot/RemoveImageStateRequest.h"
@@ -36,6 +35,8 @@
 #include <boost/assign/list_of.hpp>
 #include <utility>
 #include <vector>
+
+using namespace std;
 
 void register_test_mirroring() {
 }
@@ -87,7 +88,8 @@ public:
     auto it = std::find_if(status.site_statuses.begin(),
                            status.site_statuses.end(),
                            [](auto& site_status) {
-        return (site_status.fsid == RBD_MIRROR_IMAGE_STATUS_LOCAL_FSID);
+        return (site_status.mirror_uuid ==
+                  RBD_MIRROR_IMAGE_STATUS_LOCAL_MIRROR_UUID);
       });
     if (it == status.site_statuses.end()) {
       return -ENOENT;
@@ -1134,12 +1136,16 @@ TEST_F(TestMirroring, Snapshot)
   ASSERT_EQ(0, m_rbd.mirror_peer_site_add(m_ioctx, &peer_uuid,
                                           RBD_MIRROR_PEER_DIRECTION_RX_TX,
                                           "cluster", "client"));
+  // The mirroring was enabled when no peer was configured. Therefore, the
+  // initial snapshot has no peers linked and will be removed after the
+  // creation of a new mirror snapshot.
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
   vector<librbd::snap_info_t> snaps;
   ASSERT_EQ(0, image.snap_list(snaps));
   ASSERT_EQ(1U, snaps.size());
   ASSERT_EQ(snaps[0].id, snap_id);
 
+  ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
   snaps.clear();
@@ -1153,15 +1159,15 @@ TEST_F(TestMirroring, Snapshot)
   ASSERT_EQ(0, image.snap_list(snaps1));
   ASSERT_EQ(3U, snaps1.size());
   ASSERT_EQ(snaps1[0].id, snaps[0].id);
-  ASSERT_EQ(snaps1[1].id, snaps[2].id);
+  ASSERT_EQ(snaps1[1].id, snaps[1].id);
   ASSERT_EQ(snaps1[2].id, snap_id);
 
   librbd::snap_namespace_type_t snap_ns_type;
   ASSERT_EQ(0, image.snap_get_namespace_type(snap_id, &snap_ns_type));
-  ASSERT_EQ(RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY, snap_ns_type);
-  librbd::snap_mirror_primary_namespace_t mirror_snap;
-  ASSERT_EQ(0, image.snap_get_mirror_primary_namespace(snap_id, &mirror_snap,
-                                                       sizeof(mirror_snap)));
+  ASSERT_EQ(RBD_SNAP_NAMESPACE_TYPE_MIRROR, snap_ns_type);
+  librbd::snap_mirror_namespace_t mirror_snap;
+  ASSERT_EQ(0, image.snap_get_mirror_namespace(snap_id, &mirror_snap,
+                                               sizeof(mirror_snap)));
   ASSERT_EQ(1U, mirror_snap.mirror_peer_uuids.size());
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer_uuid));
 
@@ -1198,8 +1204,8 @@ TEST_F(TestMirroring, SnapshotRemoveOnDisable)
 
   vector<librbd::snap_info_t> snaps;
   ASSERT_EQ(0, image.snap_list(snaps));
-  ASSERT_EQ(1U, snaps.size());
-  ASSERT_EQ(snaps[0].id, snap_id);
+  ASSERT_EQ(2U, snaps.size());
+  ASSERT_EQ(snaps[1].id, snap_id);
 
   ASSERT_EQ(0, image.mirror_image_disable(false));
 
@@ -1241,9 +1247,11 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
   ASSERT_EQ(0, image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
   uint64_t snap_id;
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
-  librbd::snap_mirror_primary_namespace_t mirror_snap;
-  ASSERT_EQ(0, image.snap_get_mirror_primary_namespace(snap_id, &mirror_snap,
-                                                       sizeof(mirror_snap)));
+  uint64_t snap_id2;
+  ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id2));
+  librbd::snap_mirror_namespace_t mirror_snap;
+  ASSERT_EQ(0, image.snap_get_mirror_namespace(snap_id, &mirror_snap,
+                                               sizeof(mirror_snap)));
   ASSERT_EQ(3U, mirror_snap.mirror_peer_uuids.size());
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer1_uuid));
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
@@ -1263,8 +1271,8 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
   req->send();
   ASSERT_EQ(0, cond1.wait());
 
-  ASSERT_EQ(0, image.snap_get_mirror_primary_namespace(snap_id, &mirror_snap,
-                                                       sizeof(mirror_snap)));
+  ASSERT_EQ(0, image.snap_get_mirror_namespace(snap_id, &mirror_snap,
+                                               sizeof(mirror_snap)));
   ASSERT_EQ(2U, mirror_snap.mirror_peer_uuids.size());
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer3_uuid));
@@ -1282,22 +1290,22 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
   ASSERT_EQ(0, ns_image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
   uint64_t ns_snap_id;
   ASSERT_EQ(0, ns_image.mirror_image_create_snapshot(&ns_snap_id));
-  ASSERT_EQ(0, ns_image.snap_get_mirror_primary_namespace(
-              ns_snap_id, &mirror_snap, sizeof(mirror_snap)));
+  ASSERT_EQ(0, ns_image.snap_get_mirror_namespace(ns_snap_id, &mirror_snap,
+                                                  sizeof(mirror_snap)));
   ASSERT_EQ(3U, mirror_snap.mirror_peer_uuids.size());
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer1_uuid));
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer3_uuid));
-  
+
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer3_uuid));
 
-  ASSERT_EQ(0, image.snap_get_mirror_primary_namespace(snap_id, &mirror_snap,
-                                                       sizeof(mirror_snap)));
+  ASSERT_EQ(0, image.snap_get_mirror_namespace(snap_id, &mirror_snap,
+                                               sizeof(mirror_snap)));
   ASSERT_EQ(1U, mirror_snap.mirror_peer_uuids.size());
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
 
-  ASSERT_EQ(0, ns_image.snap_get_mirror_primary_namespace(
-              ns_snap_id, &mirror_snap, sizeof(mirror_snap)));
+  ASSERT_EQ(0, ns_image.snap_get_mirror_namespace(ns_snap_id, &mirror_snap,
+                                                  sizeof(mirror_snap)));
   ASSERT_EQ(2U, mirror_snap.mirror_peer_uuids.size());
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer1_uuid));
   ASSERT_EQ(1, mirror_snap.mirror_peer_uuids.count(peer2_uuid));
@@ -1308,8 +1316,8 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
   req->send();
   ASSERT_EQ(0, cond2.wait());
 
-  ASSERT_EQ(-ENOENT, image.snap_get_mirror_primary_namespace(snap_id, &mirror_snap,
-                                                             sizeof(mirror_snap)));
+  ASSERT_EQ(-ENOENT, image.snap_get_mirror_namespace(snap_id, &mirror_snap,
+                                                     sizeof(mirror_snap)));
   ictx->state->close();
   ictx = nullptr;
   ASSERT_EQ(0, image.close());
@@ -1328,6 +1336,8 @@ TEST_F(TestMirroring, SnapshotImageState)
 {
   REQUIRE_FORMAT_V2();
 
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+
   uint64_t features;
   ASSERT_TRUE(get_features(&features));
   int order = 20;
@@ -1337,6 +1347,11 @@ TEST_F(TestMirroring, SnapshotImageState)
   librbd::Image image;
   ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
   ASSERT_EQ(0, image.snap_create("snap"));
+  ASSERT_EQ(0, image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+  std::vector<librbd::snap_info_t> snaps;
+  ASSERT_EQ(0, image.snap_list(snaps));
+  ASSERT_EQ(2U, snaps.size());
+  auto snap_id = snaps[1].id;
 
   auto ictx = new librbd::ImageCtx(image_name, "", nullptr, m_ioctx, false);
   ASSERT_EQ(0, ictx->state->open(0));
@@ -1349,7 +1364,7 @@ TEST_F(TestMirroring, SnapshotImageState)
   {
     C_SaferCond cond;
     auto req = librbd::mirror::snapshot::SetImageStateRequest<>::create(
-      ictx, 123, &cond);
+      ictx, snap_id, &cond);
     req->send();
     ASSERT_EQ(0, cond.wait());
   }
@@ -1358,22 +1373,22 @@ TEST_F(TestMirroring, SnapshotImageState)
   {
     C_SaferCond cond;
     auto req = librbd::mirror::snapshot::GetImageStateRequest<>::create(
-      ictx, 123, &image_state, &cond);
+      ictx, snap_id, &image_state, &cond);
     req->send();
     ASSERT_EQ(0, cond.wait());
   }
 
   ASSERT_EQ(image_name, image_state.name);
   ASSERT_EQ(0, image.features(&features));
-  ASSERT_EQ(features, image_state.features);
+  ASSERT_EQ(features & ~RBD_FEATURES_IMPLICIT_ENABLE, image_state.features);
   ASSERT_EQ(1U, image_state.snapshots.size());
   ASSERT_EQ("snap", image_state.snapshots.begin()->second.name);
-  ASSERT_TRUE(image_state.metadata.empty());
+  uint8_t original_pairs_num = image_state.metadata.size();
 
   {
     C_SaferCond cond;
     auto req = librbd::mirror::snapshot::RemoveImageStateRequest<>::create(
-      ictx, 123, &cond);
+      ictx, snap_id, &cond);
     req->send();
     ASSERT_EQ(0, cond.wait());
   }
@@ -1389,7 +1404,7 @@ TEST_F(TestMirroring, SnapshotImageState)
   {
     C_SaferCond cond;
     auto req = librbd::mirror::snapshot::SetImageStateRequest<>::create(
-      ictx, 123, &cond);
+      ictx, snap_id, &cond);
     req->send();
     ASSERT_EQ(0, cond.wait());
   }
@@ -1397,14 +1412,14 @@ TEST_F(TestMirroring, SnapshotImageState)
   {
     C_SaferCond cond;
     auto req = librbd::mirror::snapshot::GetImageStateRequest<>::create(
-      ictx, 123, &image_state, &cond);
+      ictx, snap_id, &image_state, &cond);
     req->send();
     ASSERT_EQ(0, cond.wait());
   }
 
   ASSERT_EQ(image_name, image_state.name);
-  ASSERT_EQ(features, image_state.features);
-  ASSERT_EQ(10U, image_state.metadata.size());
+  ASSERT_EQ(features & ~RBD_FEATURES_IMPLICIT_ENABLE, image_state.features);
+  ASSERT_EQ(original_pairs_num + 10, image_state.metadata.size());
   for (int i = 0; i < 10; i++) {
     auto &bl = image_state.metadata[stringify(i)];
     ASSERT_EQ(0, strncmp(std::string(1024, 'A' + i).c_str(), bl.c_str(),
@@ -1414,7 +1429,7 @@ TEST_F(TestMirroring, SnapshotImageState)
   {
     C_SaferCond cond;
     auto req = librbd::mirror::snapshot::RemoveImageStateRequest<>::create(
-      ictx, 123, &cond);
+      ictx, snap_id, &cond);
     req->send();
     ASSERT_EQ(0, cond.wait());
   }
@@ -1458,6 +1473,69 @@ TEST_F(TestMirroring, SnapshotPromoteDemote)
 
   ASSERT_EQ(0, image.close());
   ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
+}
+
+TEST_F(TestMirroring, AioSnapshotCreate)
+{
+  REQUIRE_FORMAT_V2();
+
+  std::list<std::string> image_names;
+  for (size_t idx = 0; idx < 10; ++idx) {
+    image_names.push_back(get_temp_image_name());
+  }
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+  std::string peer_uuid;
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_add(m_ioctx, &peer_uuid,
+                                          RBD_MIRROR_PEER_DIRECTION_RX_TX,
+                                          "cluster", "client"));
+  // create mirror images
+  uint64_t features;
+  ASSERT_TRUE(get_features(&features));
+  int order = 20;
+  std::list<librbd::Image> images;
+  for (auto &image_name : image_names) {
+    ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 2048, features,
+                               &order));
+    images.emplace_back();
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, images.back(), image_name.c_str()));
+    ASSERT_EQ(0, images.back().mirror_image_enable2(
+                RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+  }
+
+  // create snapshots
+  std::list<uint64_t> snap_ids;
+  std::list<librbd::RBD::AioCompletion *> aio_comps;
+  for (auto &image : images) {
+    snap_ids.emplace_back();
+    aio_comps.push_back(new librbd::RBD::AioCompletion(nullptr, nullptr));
+    ASSERT_EQ(0, image.aio_mirror_image_create_snapshot(0, &snap_ids.back(),
+                                                        aio_comps.back()));
+  }
+  for (auto aio_comp : aio_comps) {
+    ASSERT_EQ(0, aio_comp->wait_for_complete());
+    ASSERT_EQ(1, aio_comp->is_complete());
+    ASSERT_EQ(0, aio_comp->get_return_value());
+    aio_comp->release();
+  }
+  aio_comps.clear();
+
+  // verify
+  for (auto &image : images) {
+    vector<librbd::snap_info_t> snaps;
+    ASSERT_EQ(0, image.snap_list(snaps));
+    ASSERT_EQ(2U, snaps.size());
+    ASSERT_EQ(snaps[1].id, snap_ids.front());
+
+    std::string image_name;
+    ASSERT_EQ(0, image.get_name(&image_name));
+    ASSERT_EQ(0, image.close());
+    ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+    snap_ids.pop_front();
+  }
+
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
   ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
 }

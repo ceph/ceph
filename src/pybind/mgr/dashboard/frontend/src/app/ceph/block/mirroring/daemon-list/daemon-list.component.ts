@@ -1,10 +1,10 @@
 import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { Subscription } from 'rxjs';
 
-import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
-import { CephShortVersionPipe } from '../../../../shared/pipes/ceph-short-version.pipe';
+import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
+import { CephShortVersionPipe } from '~/app/shared/pipes/ceph-short-version.pipe';
 
 @Component({
   selector: 'cd-mirroring-daemons',
@@ -20,36 +20,35 @@ export class DaemonListComponent implements OnInit, OnDestroy {
   data: [];
   columns: {};
 
+  tableStatus = new TableStatusViewCache();
+
   constructor(
     private rbdMirroringService: RbdMirroringService,
-    private cephShortVersionPipe: CephShortVersionPipe,
-    private i18n: I18n
+    private cephShortVersionPipe: CephShortVersionPipe
   ) {}
 
   ngOnInit() {
     this.columns = [
-      { prop: 'instance_id', name: this.i18n('Instance'), flexGrow: 2 },
-      { prop: 'id', name: this.i18n('ID'), flexGrow: 2 },
-      { prop: 'server_hostname', name: this.i18n('Hostname'), flexGrow: 2 },
+      { prop: 'instance_id', name: $localize`Instance`, flexGrow: 2 },
+      { prop: 'id', name: $localize`ID`, flexGrow: 2 },
+      { prop: 'server_hostname', name: $localize`Hostname`, flexGrow: 2 },
       {
         prop: 'version',
-        name: this.i18n('Version'),
+        name: $localize`Version`,
         pipe: this.cephShortVersionPipe,
         flexGrow: 2
       },
       {
         prop: 'health',
-        name: this.i18n('Health'),
+        name: $localize`Health`,
         cellTemplate: this.healthTmpl,
         flexGrow: 1
       }
     ];
 
-    this.subs = this.rbdMirroringService.subscribeSummary((data: any) => {
-      if (!data) {
-        return;
-      }
+    this.subs = this.rbdMirroringService.subscribeSummary((data) => {
       this.data = data.content_data.daemons;
+      this.tableStatus = new TableStatusViewCache(data.status);
     });
   }
 

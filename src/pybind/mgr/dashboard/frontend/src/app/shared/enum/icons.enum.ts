@@ -24,8 +24,10 @@ export enum Icons {
   left = 'fa fa-arrow-left', // Mark out
   right = 'fa fa-arrow-right', // Mark in
   down = 'fa fa-arrow-down', // Mark Down
-  erase = 'fa fa-eraser', // Purge
+  erase = 'fa fa-eraser', // Purge  color: bd.$white;
+
   user = 'fa fa-user', // User, Initiators
+  users = 'fa fa-users', // Users, Groups
   share = 'fa fa-share-alt', // share
   key = 'fa fa-key-modern', // S3 Keys, Swift Keys, Authentication
   warning = 'fa fa-exclamation-triangle', // Notification warning
@@ -60,6 +62,12 @@ export enum Icons {
   clearFilters = 'fa fa-window-close', // Clear filters, solid x
   download = 'fa fa-download', // Download
   upload = 'fa fa-upload', // Upload
+  close = 'fa fa-times', // Close
+  json = 'fa fa-file-code-o', // JSON file
+  text = 'fa fa-file-text', // Text file
+  wrench = 'fa fa-wrench', // Configuration Error
+  enter = 'fa fa-sign-in', // Enter
+  exit = 'fa fa-sign-out', // Exit
 
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger

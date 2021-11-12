@@ -46,6 +46,7 @@
 #define MSG_MON_PROBE              67
 #define MSG_MON_JOIN               68
 #define MSG_MON_SYNC		   69
+#define MSG_MON_PING               140
 
 /* monitor <-> mon admin tool */
 #define MSG_MON_COMMAND            50
@@ -65,6 +66,8 @@
 
 #define MSG_CONFIG           62
 #define MSG_GET_CONFIG       63
+
+#define MSG_KV_DATA          54
 
 #define MSG_MON_GET_PURGED_SNAPS 76
 #define MSG_MON_GET_PURGED_SNAPS_REPLY 77
@@ -146,12 +149,13 @@
 // *** MDS ***
 
 #define MSG_MDS_BEACON             100  // to monitor
-#define MSG_MDS_SLAVE_REQUEST      101
+#define MSG_MDS_PEER_REQUEST       101
 #define MSG_MDS_TABLE_REQUEST      102
+#define MSG_MDS_SCRUB              135
 
                                 // 150 already in use (MSG_OSD_RECOVERY_RESERVE)
 
-#define MSG_MDS_RESOLVE            0x200
+#define MSG_MDS_RESOLVE            0x200 // 0x2xx are for mdcache of mds
 #define MSG_MDS_RESOLVEACK         0x201
 #define MSG_MDS_CACHEREJOIN        0x202
 #define MSG_MDS_DISCOVER           0x203
@@ -169,10 +173,10 @@
 #define MSG_MDS_OPENINOREPLY       0x210
 #define MSG_MDS_SNAPUPDATE         0x211
 #define MSG_MDS_FRAGMENTNOTIFYACK  0x212
-#define MSG_MDS_LOCK               0x300
+#define MSG_MDS_LOCK               0x300 // 0x3xx are for locker of mds
 #define MSG_MDS_INODEFILECAPS      0x301
 
-#define MSG_MDS_EXPORTDIRDISCOVER     0x449
+#define MSG_MDS_EXPORTDIRDISCOVER     0x449 // 0x4xx are for migrator of mds
 #define MSG_MDS_EXPORTDIRDISCOVERACK  0x450
 #define MSG_MDS_EXPORTDIRCANCEL       0x451
 #define MSG_MDS_EXPORTDIRPREP         0x452
@@ -190,6 +194,9 @@
 #define MSG_MDS_GATHERCAPS            0x472
 
 #define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
+#define MSG_MDS_METRICS            0x501  // for mds metric aggregator
+#define MSG_MDS_PING               0x502  // for mds pinger
+#define MSG_MDS_SCRUB_STATS        0x503  // for mds scrub stack
 
 // *** generic ***
 #define MSG_TIMECHECK             0x600
@@ -315,8 +322,6 @@ public:
     header.type = t;
     header.version = version;
     header.compat_version = compat_version;
-    header.priority = 0;  // undef
-    header.data_off = 0;
     memset(&footer, 0, sizeof(footer));
   }
 
@@ -396,7 +401,7 @@ public:
   void set_payload(ceph::buffer::list& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
-    payload.claim(bl, ceph::buffer::list::CLAIM_ALLOW_NONSHAREABLE);
+    payload = std::move(bl);
     if (byte_throttler)
       byte_throttler->take(payload.length());
   }
@@ -404,7 +409,7 @@ public:
   void set_middle(ceph::buffer::list& bl) {
     if (byte_throttler)
       byte_throttler->put(middle.length());
-    middle.claim(bl, ceph::buffer::list::CLAIM_ALLOW_NONSHAREABLE);
+    middle = std::move(bl);
     if (byte_throttler)
       byte_throttler->take(middle.length());
   }
@@ -420,13 +425,12 @@ public:
 
   const ceph::buffer::list& get_data() const { return data; }
   ceph::buffer::list& get_data() { return data; }
-  void claim_data(ceph::buffer::list& bl,
-		  unsigned int flags = ceph::buffer::list::CLAIM_DEFAULT) {
+  void claim_data(ceph::buffer::list& bl) {
     if (byte_throttler)
       byte_throttler->put(data.length());
-    bl.claim(data, flags);
+    bl = std::move(data);
   }
-  off_t get_data_len() const { return data.length(); }
+  uint32_t get_data_len() const { return data.length(); }
 
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
   const utime_t& get_recv_stamp() const { return recv_stamp; }
@@ -549,4 +553,10 @@ ceph::ref_t<T> make_message(Args&&... args) {
 }
 }
 
+namespace crimson {
+template<class T, typename... Args>
+MURef<T> make_message(Args&&... args) {
+  return {new T(std::forward<Args>(args)...), TOPNSPC::common::UniquePtrDeleter{}};
+}
+}
 #endif

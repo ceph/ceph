@@ -6,6 +6,7 @@
 
 #include "mgr/MetricCollector.h"
 #include "mgr/OSDPerfMetricTypes.h"
+#include "mgr/MDSPerfMetricTypes.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -114,11 +115,10 @@ void MetricCollector<Query, Limit, Key, Report>::remove_all_queries() {
 }
 
 template <typename Query, typename Limit, typename Key, typename Report>
-int MetricCollector<Query, Limit, Key, Report>::get_counters(
+int MetricCollector<Query, Limit, Key, Report>::get_counters_generic(
     MetricQueryID query_id, std::map<Key, PerformanceCounters> *c) {
   dout(20) << dendl;
-
-  std::lock_guard locker(lock);
+  ceph_assert(ceph_mutex_is_locked(lock));
 
   auto it = counters.find(query_id);
   if (it == counters.end()) {
@@ -181,3 +181,5 @@ void MetricCollector<Query, Limit, Key, Report>::process_reports_generic(
 
 template class
 MetricCollector<OSDPerfMetricQuery, OSDPerfMetricLimit, OSDPerfMetricKey, OSDPerfMetricReport>;
+template class
+MetricCollector<MDSPerfMetricQuery, MDSPerfMetricLimit, MDSPerfMetricKey, MDSPerfMetrics>;

@@ -1,20 +1,19 @@
-<cd-modal [modalRef]="bsModalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title"
                 i18n>OSD Recovery Priority</ng-container>
 
   <ng-container class="modal-content">
     <form #formDir="ngForm"
           [formGroup]="osdRecvSpeedForm"
-          novalidate>
+          novalidate
+          cdFormScope="osd">
       <div class="modal-body">
         <!-- Priority -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-6"
-                 for="priority">
-            <ng-container i18n>Priority</ng-container>
-            <span class="required"></span>
-          </label>
-          <div class="col-sm-6">
+          <label class="cd-col-form-label required"
+                 for="priority"
+                 i18n>Priority</label>
+          <div class="cd-col-form-input">
             <select class="form-control custom-select"
                     formControlName="priority"
                     id="priority"
@@ -32,7 +31,7 @@
 
         <!-- Customize priority -->
         <div class="form-group row">
-          <div class="offset-sm-6 col-sm-6">
+          <div class="cd-col-form-offset">
             <div class="custom-control custom-checkbox">
               <input formControlName="customizePriority"
                      class="custom-control-input"
@@ -50,13 +49,14 @@
         <!-- Priority values -->
         <div class="form-group row"
              *ngFor="let attr of priorityAttrs | keyvalue">
-          <label class="col-form-label col-sm-6"
-                 [for]="attr.key">{{ attr.value.text }}
+          <label class="cd-col-form-label"
+                 [for]="attr.key">
+            <span [ngClass]="{'required': osdRecvSpeedForm.getValue('customizePriority')}">
+              {{ attr.value.text }}
+            </span>
             <cd-helper *ngIf="attr.value.desc">{{ attr.value.desc }}</cd-helper>
-            <span class="required"
-                  *ngIf="osdRecvSpeedForm.getValue('customizePriority')"></span>
           </label>
-          <div class="col-sm-6">
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="number"
                    [id]="attr.key"
@@ -82,16 +82,10 @@
         </div>
       </div>
       <div class="modal-footer">
-        <div class="button-group text-right">
-          <cd-submit-button *ngIf="permissions.configOpt.update"
-                            (submitAction)="submitAction()"
-                            [form]="osdRecvSpeedForm"
-                            i18n>Submit</cd-submit-button>
-          <cd-back-button [back]="bsModalRef.hide"
-                          name="Cancel"
-                          i18n-name>
-          </cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="submitAction()"
+                              [form]="osdRecvSpeedForm"
+                              [submitText]="actionLabels.UPDATE"
+                              [showSubmit]="permissions.configOpt.update"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

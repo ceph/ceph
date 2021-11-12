@@ -22,6 +22,10 @@
 
 using std::deque;
 using std::string;
+using std::unique_ptr;
+using std::cerr;
+using std::cout;
+using std::vector;
 
 static void usage(std::ostream& out)
 {
@@ -55,6 +59,7 @@ FLAGS
   [--format plain|json|json-pretty]
                                   dump variables in plain text, json or pretty
                                   json
+  [--pid <pid>]                   Override the $pid when expanding options
 
 If there is no action given, the action will default to --lookup.
 
@@ -117,11 +122,10 @@ static int list_sections(const std::string &prefix,
 static int lookup(const std::deque<std::string> &sections,
 		  const std::string &key, bool resolve_search)
 {
-  std::vector <std::string> my_sections;
-  for (deque<string>::const_iterator s = sections.begin(); s != sections.end(); ++s) {
-    my_sections.push_back(*s);
+  std::vector<std::string> my_sections{sections.begin(), sections.end()};
+  for (auto& section : g_conf().get_my_sections()) {
+    my_sections.push_back(section);
   }
-  g_conf().get_my_sections(my_sections);
   std::string val;
   int ret = g_conf().get_val_from_conf_file(my_sections, key.c_str(), val, true);
   if (ret == -ENOENT)
@@ -164,9 +168,19 @@ static int dump_all(const string& format)
   }
 }
 
+static void maybe_override_pid(vector<const char*>& args)
+{
+  for (auto i = args.begin(); i != args.end(); ++i) {
+    string val;
+    if (ceph_argparse_witharg(args, i, &val, "--pid", (char*)NULL)) {
+      setenv("PID", val.c_str(), 1);
+      break;
+    }
+  }
+}
+
 int main(int argc, const char **argv)
 {
-  vector<const char*> args;
   deque<std::string> sections;
   bool resolve_search = false;
   std::string action;
@@ -176,9 +190,12 @@ int main(int argc, const char **argv)
   std::map<string,string> filter_key_value;
   std::string dump_format;
 
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
+
   auto orig_args = args;
   auto cct = [&args] {
+    // override the PID before options are expanded
+    maybe_override_pid(args);
     std::map<std::string,std::string> defaults = {{"log_to_file", "false"}};
     return global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 		       CODE_ENVIRONMENT_DAEMON,
@@ -234,7 +251,7 @@ int main(int argc, const char **argv)
 	cerr << "unable to parse option: '" << *i << "'" << std::endl;
 	cerr << "args:";
 	for (auto arg : orig_args) {
-	  cerr << " " << quoted(arg);
+	  cerr << " " << std::quoted(arg);
 	}
 	cerr << std::endl;
 	usage(cerr);

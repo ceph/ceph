@@ -16,7 +16,6 @@
 #include "include/rados/librados.hpp"
 
 #include "rgw_aio_throttle.h"
-#include "rgw_rados.h"
 
 namespace rgw {
 
@@ -110,8 +109,6 @@ AioResultList BlockingAioThrottle::drain()
   return std::move(completed);
 }
 
-#ifdef HAVE_BOOST_CONTEXT
-
 template <typename CompletionToken>
 auto YieldingAioThrottle::async_wait(CompletionToken&& token)
 {
@@ -202,6 +199,4 @@ AioResultList YieldingAioThrottle::drain()
   }
   return std::move(completed);
 }
-#endif // HAVE_BOOST_CONTEXT
-
 } // namespace rgw

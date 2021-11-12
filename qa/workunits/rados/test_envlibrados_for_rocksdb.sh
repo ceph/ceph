@@ -19,29 +19,17 @@ CURRENT_PATH=`pwd`
 # install prerequisites
 # for rocksdb
 case $(distro_id) in
-	ubuntu|debian|devuan)
-		install git g++ libsnappy-dev zlib1g-dev libbz2-dev libradospp-dev
-        case $(distro_version) in
-            *Xenial*)
-                install_cmake3_on_xenial
-                ;;
-            *)
-                install cmake
-                ;;
-        esac
+	ubuntu|debian|devuan|softiron)
+		install git g++ libsnappy-dev zlib1g-dev libbz2-dev libradospp-dev cmake
 		;;
 	centos|fedora|rhel)
         case $(distro_id) in
-            centos)
-                # centos needs PowerTools repo for snappy-devel
-                test -x /usr/bin/dnf && sudo dnf config-manager --set-enabled PowerTools || true
-                ;;
             rhel)
                 # RHEL needs CRB repo for snappy-devel
                 sudo subscription-manager repos --enable "codeready-builder-for-rhel-8-x86_64-rpms"
                 ;;
         esac
-        install git gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64 cmake
+        install git gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64 cmake libarchive-3.3.3
         ;;
 	opensuse*|suse|sles)
 		install git gcc-c++ snappy-devel zlib-devel libbz2-devel libradospp-devel
@@ -68,7 +56,11 @@ echo "Compile rocksdb"
 if [ -e rocksdb ]; then
 	rm -fr rocksdb
 fi
-git clone https://github.com/facebook/rocksdb.git --depth 1
+
+pushd $(dirname /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/bash.sh)/../../../
+git submodule update --init src/rocksdb
+popd
+git clone $(dirname /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/bash.sh)/../../../src/rocksdb rocksdb
 
 # compile code
 cd rocksdb

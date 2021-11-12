@@ -1,5 +1,6 @@
 import argparse
 import os
+import math
 from ceph_volume import terminal
 from ceph_volume import decorators
 from ceph_volume.util import disk
@@ -12,11 +13,23 @@ class ValidDevice(object):
         self.as_string = as_string
         self.gpt_ok = gpt_ok
 
-    def __call__(self, string):
-        device = Device(string)
+    def __call__(self, dev_path):
+        device = self._is_valid_device(dev_path)
+        return self._format_device(device)
+
+    def _format_device(self, device):
+        if self.as_string:
+            if device.is_lv:
+                # all codepaths expect an lv path to be returned in this format
+                return "{}/{}".format(device.vg_name, device.lv_name)
+            return device.path
+        return device
+
+    def _is_valid_device(self, dev_path):
+        device = Device(dev_path)
         error = None
         if not device.exists:
-            error = "Unable to proceed with non-existing device: %s" % string
+            error = "Unable to proceed with non-existing device: %s" % dev_path
         # FIXME this is not a nice API, this validator was meant to catch any
         # non-existing devices upfront, not check for gpt headers. Now this
         # needs to optionally skip checking gpt headers which is beyond
@@ -24,17 +37,24 @@ class ValidDevice(object):
         # configure this with a list of checks that can be excluded/included on
         # __init__
         elif device.has_gpt_headers and not self.gpt_ok:
-            error = "GPT headers found, they must be removed on: %s" % string
+            error = "GPT headers found, they must be removed on: %s" % dev_path
 
         if error:
             raise argparse.ArgumentError(None, error)
 
-        if self.as_string:
-            if device.is_lv:
-                # all codepaths expect an lv path to be returned in this format
-                return "{}/{}".format(device.vg_name, device.lv_name)
-            return string
         return device
+
+
+class ValidBatchDevice(ValidDevice):
+
+    def __call__(self, dev_path):
+        dev = self._is_valid_device(dev_path)
+        if dev.is_partition:
+            raise argparse.ArgumentError(
+                None,
+                '{} is a partition, please pass '
+                'LVs or raw block devices'.format(dev_path))
+        return self._format_device(dev)
 
 
 class OSDPath(object):
@@ -129,3 +149,14 @@ def exclude_group_options(parser, groups, argv=None):
                     terminal.warning(msg)
             last_group = group_name
         last_flag = flag
+
+class ValidFraction(object):
+    """
+    Validate fraction is in (0, 1.0]
+    """
+
+    def __call__(self, fraction):
+        fraction_float = float(fraction)
+        if math.isnan(fraction_float) or fraction_float <= 0.0 or fraction_float > 1.0:
+            raise argparse.ArgumentError(None, 'Fraction %f not in (0,1.0]' % fraction_float)
+        return fraction_float

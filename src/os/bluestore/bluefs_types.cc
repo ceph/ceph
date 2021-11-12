@@ -7,6 +7,12 @@
 #include "include/uuid.h"
 #include "include/stringify.h"
 
+using std::list;
+using std::ostream;
+
+using ceph::bufferlist;
+using ceph::Formatter;
+
 // bluefs_extent_t
 void bluefs_extent_t::dump(Formatter *f) const
 {
@@ -204,7 +210,7 @@ void bluefs_transaction_t::decode(bufferlist::const_iterator& p)
   DECODE_FINISH(p);
   uint32_t actual = op_bl.crc32c(-1);
   if (actual != crc)
-    throw buffer::malformed_input("bad crc " + stringify(actual)
+    throw ceph::buffer::malformed_input("bad crc " + stringify(actual)
 				  + " expected " + stringify(crc));
 }
 
@@ -222,8 +228,6 @@ void bluefs_transaction_t::generate_test_instances(
   ls.push_back(new bluefs_transaction_t);
   ls.push_back(new bluefs_transaction_t);
   ls.back()->op_init();
-  ls.back()->op_alloc_add(0, 0, 123123211);
-  ls.back()->op_alloc_rm(1, 0, 123);
   ls.back()->op_dir_create("dir");
   ls.back()->op_dir_create("dir2");
   bluefs_fnode_t fnode;

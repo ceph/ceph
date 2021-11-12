@@ -10,11 +10,10 @@ import {
   AlertmanagerNotification,
   PrometheusRuleGroup
 } from '../models/prometheus-alerts';
-import { ApiModule } from './api.module';
 import { SettingsService } from './settings.service';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class PrometheusService {
   private baseURL = 'api/prometheus';
@@ -25,7 +24,7 @@ export class PrometheusService {
 
   constructor(private http: HttpClient, private settingsService: SettingsService) {}
 
-  ifAlertmanagerConfigured(fn, elseFn?): void {
+  ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
     this.settingsService.ifSettingConfigured(this.settingsKey.alertmanager, fn, elseFn);
   }
 
@@ -33,7 +32,7 @@ export class PrometheusService {
     this.settingsService.disableSetting(this.settingsKey.alertmanager);
   }
 
-  ifPrometheusConfigured(fn, elseFn?): void {
+  ifPrometheusConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
     this.settingsService.ifSettingConfigured(this.settingsKey.prometheus, fn, elseFn);
   }
 
@@ -65,7 +64,7 @@ export class PrometheusService {
   }
 
   setSilence(silence: AlertmanagerSilence) {
-    return this.http.post(`${this.baseURL}/silence`, silence, { observe: 'response' });
+    return this.http.post<object>(`${this.baseURL}/silence`, silence, { observe: 'response' });
   }
 
   expireSilence(silenceId: string) {

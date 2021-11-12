@@ -5,5 +5,5 @@ endif()
 
 if(WITH_TESTS)
   include(AddCephTest)
-  add_tox_test(qa flake8-py2 flake8-py3)
+  add_tox_test(qa TOX_ENVS py3 flake8 mypy deadsymlinks)
 endif()

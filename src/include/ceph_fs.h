@@ -47,9 +47,15 @@
 #define CEPH_MONC_PROTOCOL   15 /* server/client */
 
 
-#define CEPH_INO_ROOT   1
-#define CEPH_INO_CEPH   2       /* hidden .ceph dir */
-#define CEPH_INO_LOST_AND_FOUND 4	/* reserved ino for use in recovery */
+#define CEPH_INO_ROOT             1
+/*
+ * hidden .ceph dir, which is no longer created but
+ * recognised in existing filesystems so that we
+ * don't try to fragment it.
+ */
+#define CEPH_INO_CEPH             2
+#define CEPH_INO_GLOBAL_SNAPREALM 3
+#define CEPH_INO_LOST_AND_FOUND   4 /* reserved ino for use in recovery */
 
 /* arbitrary limit on max # of monitors (cluster of 3 is typical) */
 #define CEPH_MAX_MON   31
@@ -71,7 +77,7 @@ struct ceph_file_layout {
 
 	/* object -> pg layout */
 	__le32 fl_unused;       /* unused; used to be preferred primary for pg (-1 for none) */
-	__le32 fl_pg_pool;      /* namespace, crush ruleset, rep level */
+	__le32 fl_pg_pool;      /* namespace, crush rule, rep level */
 } __attribute__ ((packed));
 
 #define CEPH_MIN_STRIPE_UNIT 65536
@@ -151,6 +157,7 @@ extern const char *ceph_con_mode_name(int con_mode);
 #define CEPH_MSG_CLIENT_REPLY           26
 #define CEPH_MSG_CLIENT_RECLAIM		27
 #define CEPH_MSG_CLIENT_RECLAIM_REPLY   28
+#define CEPH_MSG_CLIENT_METRICS         29
 #define CEPH_MSG_CLIENT_CAPS            0x310
 #define CEPH_MSG_CLIENT_LEASE           0x311
 #define CEPH_MSG_CLIENT_SNAP            0x312
@@ -414,7 +421,7 @@ enum {
 	CEPH_MDS_OP_ENQUEUE_SCRUB  = 0x01503,
 	CEPH_MDS_OP_REPAIR_FRAGSTATS = 0x01504,
 	CEPH_MDS_OP_REPAIR_INODESTATS = 0x01505,
-	CEPH_MDS_OP_UPGRADE_SNAPREALM = 0x01506
+	CEPH_MDS_OP_RDLOCK_FRAGSSTATS = 0x01507
 };
 
 extern const char *ceph_mds_op_name(int op);
@@ -526,6 +533,7 @@ union ceph_mds_request_args_legacy {
 
 #define CEPH_MDS_FLAG_REPLAY        1  /* this is a replayed op */
 #define CEPH_MDS_FLAG_WANT_DENTRY   2  /* want dentry in reply */
+#define CEPH_MDS_FLAG_ASYNC         4  /* request is async */
 
 struct ceph_mds_request_head_legacy {
 	__le64 oldest_client_tid;
@@ -881,20 +889,19 @@ struct ceph_mds_caps_head {
 	__le64 xattr_version;
 } __attribute__ ((packed));
 
-struct ceph_mds_caps_body_legacy {
-	union {
-		/* all except export */
-		struct {
-			/* filelock */
-			__le64 size, max_size, truncate_size;
-			__le32 truncate_seq;
-			struct ceph_timespec mtime, atime, ctime;
-			struct ceph_file_layout layout;
-			__le32 time_warp_seq;
-		} __attribute__ ((packed));
-		/* export message */
-		struct ceph_mds_cap_peer peer;
-	} __attribute__ ((packed));
+struct ceph_mds_caps_non_export_body {
+    /* all except export */
+    /* filelock */
+    __le64 size, max_size, truncate_size;
+    __le32 truncate_seq;
+    struct ceph_timespec mtime, atime, ctime;
+    struct ceph_file_layout layout;
+    __le32 time_warp_seq;
+} __attribute__ ((packed));
+
+struct ceph_mds_caps_export_body {
+    /* export message */
+    struct ceph_mds_cap_peer peer;
 } __attribute__ ((packed));
 
 /* cap release msg head */

@@ -7,9 +7,12 @@
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
+#include "rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+using namespace std;
 
 struct es_index_obj_response {
   string bucket;
@@ -140,12 +143,12 @@ public:
     es_module = static_cast<RGWElasticSyncModuleInstance *>(sync_module_ref.get());
   }
 
-  int verify_permission() override {
+  int verify_permission(optional_yield) override {
     return 0;
   }
   virtual int get_params() = 0;
   void pre_exec() override;
-  void execute() override;
+  void execute(optional_yield y) override;
 
   const char* name() const override { return "metadata_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_METADATA_SEARCH; }
@@ -157,7 +160,7 @@ void RGWMetadataSearchOp::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWMetadataSearchOp::execute()
+void RGWMetadataSearchOp::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0)
@@ -165,8 +168,8 @@ void RGWMetadataSearchOp::execute()
 
   list<pair<string, string> > conds;
 
-  if (!s->user->system) {
-    conds.push_back(make_pair("permissions", s->user->user_id.to_str()));
+  if (!s->user->get_info().system) {
+    conds.push_back(make_pair("permissions", s->user->get_id().to_str()));
   }
 
   if (!s->bucket_name.empty()) {
@@ -208,7 +211,7 @@ void RGWMetadataSearchOp::execute()
   es_query.set_restricted_fields(&restricted_fields);
 
   map<string, ESEntityTypeMap::EntityType> custom_map;
-  for (auto& i : s->bucket_info.mdsearch_config) {
+  for (auto& i : s->bucket->get_info().mdsearch_config) {
     custom_map[i.first] = (ESEntityTypeMap::EntityType)i.second;
   }
 
@@ -217,7 +220,7 @@ void RGWMetadataSearchOp::execute()
 
   bool valid = es_query.compile(&err);
   if (!valid) {
-    ldout(s->cct, 10) << "invalid query, failed generating request json" << dendl;
+    ldpp_dout(this, 10) << "invalid query, failed generating request json" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -244,19 +247,20 @@ void RGWMetadataSearchOp::execute()
   if (marker > 0) {
     params.push_back(param_pair_t("from", marker_str.c_str()));
   }
-  ldout(s->cct, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
+  ldpp_dout(this, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
   auto& extra_headers = es_module->get_request_headers();
-  op_ret = conn->get_resource(resource, &params, &extra_headers, out, &in);
+  op_ret = conn->get_resource(s, resource, &params, &extra_headers,
+                              out, &in, nullptr, y);
   if (op_ret < 0) {
-    ldout(s->cct, 0) << "ERROR: failed to fetch resource (r=" << resource << ", ret=" << op_ret << ")" << dendl;
+    ldpp_dout(this, 0) << "ERROR: failed to fetch resource (r=" << resource << ", ret=" << op_ret << ")" << dendl;
     return;
   }
 
-  ldout(s->cct, 20) << "response: " << string(out.c_str(), out.length()) << dendl;
+  ldpp_dout(this, 20) << "response: " << string(out.c_str(), out.length()) << dendl;
 
   JSONParser jparser;
   if (!jparser.parse(out.c_str(), out.length())) {
-    ldout(s->cct, 0) << "ERROR: failed to parse elasticsearch response" << dendl;
+    ldpp_dout(this, 0) << "ERROR: failed to parse elasticsearch response" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -264,7 +268,7 @@ void RGWMetadataSearchOp::execute()
   try {
     decode_json_obj(response, &jparser);
   } catch (const JSONDecoder::err& e) {
-    ldout(s->cct, 0) << "ERROR: failed to decode JSON input: " << e.what() << dendl;
+    ldpp_dout(this, 0) << "ERROR: failed to decode JSON input: " << e.what() << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -338,7 +342,7 @@ public:
       string instance = (!e.key.instance.empty() ? e.key.instance : "null");
       s->formatter->dump_string("Instance", instance.c_str());
       s->formatter->dump_int("VersionedEpoch", e.versioned_epoch);
-      dump_time(s, "LastModified", &e.meta.mtime);
+      dump_time(s, "LastModified", e.meta.mtime);
       s->formatter->dump_int("Size", e.meta.size);
       s->formatter->dump_format("ETag", "\"%s\"", e.meta.etag.c_str());
       s->formatter->dump_string("ContentType", e.meta.content_type.c_str());
@@ -379,7 +383,7 @@ class RGWHandler_REST_MDSearch_S3 : public RGWHandler_REST_S3 {
 protected:
   RGWOp *op_get() override {
     if (s->info.args.exists("query")) {
-      return new RGWMetadataSearch_ObjStore_S3(store->getRados()->get_sync_module());
+      return new RGWMetadataSearch_ObjStore_S3(store->get_sync_module());
     }
     if (!s->init_state.url_bucket.empty() &&
         s->info.args.exists("mdsearch")) {
@@ -399,24 +403,25 @@ public:
 };
 
 
-RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(struct req_state* const s,
+RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::Store* store,
+						     struct req_state* const s,
                                                      const rgw::auth::StrategyRegistry& auth_registry,
                                                      const std::string& frontend_prefix)
 {
   int ret =
-    RGWHandler_REST_S3::init_from_header(s,
+    RGWHandler_REST_S3::init_from_header(store, s,
 					RGW_FORMAT_XML, true);
   if (ret < 0) {
     return nullptr;
   }
 
-  if (!s->object.empty()) {
+  if (!s->object->empty()) {
     return nullptr;
   }
 
   RGWHandler_REST *handler = new RGWHandler_REST_MDSearch_S3(auth_registry);
 
-  ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name()
+  ldpp_dout(s, 20) << __func__ << " handler=" << typeid(*handler).name()
 		    << dendl;
   return handler;
 }

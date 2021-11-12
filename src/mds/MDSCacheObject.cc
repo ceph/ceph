@@ -18,6 +18,7 @@ std::string_view MDSCacheObject::generic_pin_name(int p) const {
     case PIN_TEMPEXPORTING: return "tempexporting";
     case PIN_CLIENTLEASE: return "clientlease";
     case PIN_DISCOVERBASE: return "discoverbase";
+    case PIN_SCRUBQUEUE: return "scrubqueue";
     default: ceph_abort(); return std::string_view();
   }
 }
@@ -28,7 +29,7 @@ void MDSCacheObject::finish_waiting(uint64_t mask, int result) {
   finish_contexts(g_ceph_context, finished, result);
 }
 
-void MDSCacheObject::dump(Formatter *f) const
+void MDSCacheObject::dump(ceph::Formatter *f) const
 {
   f->dump_bool("is_auth", is_auth());
 
@@ -37,9 +38,9 @@ void MDSCacheObject::dump(Formatter *f) const
   {
     f->open_object_section("replicas");
     for (const auto &it : get_replicas()) {
-      std::ostringstream rank_str;
-      rank_str << it.first;
-      f->dump_int(rank_str.str().c_str(), it.second);
+      CachedStackStringStream css;
+      *css << it.first;
+      f->dump_int(css->strv(), it.second);
     }
     f->close_section();
   }
@@ -63,7 +64,7 @@ void MDSCacheObject::dump(Formatter *f) const
 #ifdef MDS_REF_SET
     f->open_object_section("pins");
     for(const auto& p : ref_map) {
-      f->dump_int(pin_name(p.first).data(), p.second);
+      f->dump_int(pin_name(p.first), p.second);
     }
     f->close_section();
 #endif
@@ -74,7 +75,7 @@ void MDSCacheObject::dump(Formatter *f) const
  * Use this in subclasses when printing their specialized
  * states too.
  */
-void MDSCacheObject::dump_states(Formatter *f) const
+void MDSCacheObject::dump_states(ceph::Formatter *f) const
 {
   if (state_test(STATE_AUTH)) f->dump_string("state", "auth");
   if (state_test(STATE_DIRTY)) f->dump_string("state", "dirty");

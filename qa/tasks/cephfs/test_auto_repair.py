@@ -6,7 +6,7 @@ Exercise the MDS's auto repair functions
 import logging
 import time
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 
@@ -36,23 +36,21 @@ class TestMDSAutoRepair(CephFSTestCase):
 
         # Restart the MDS to drop the metadata cache (because we expired the journal,
         # nothing gets replayed into cache on restart)
-        self.fs.mds_stop()
-        self.fs.mds_fail_restart()
+        self.fs.rank_fail()
         self.fs.wait_for_daemons()
 
         # remove testdir1's backtrace
-        self.fs.rados(["rmxattr", dir_objname, "parent"])
+        self.fs.radosm(["rmxattr", dir_objname, "parent"])
 
         # readdir (fetch dirfrag) should fix testdir1's backtrace
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         self.mount_a.run_shell(["ls", "testdir1"])
 
         # flush journal entries to dirfrag objects
         self.fs.mds_asok(['flush', 'journal'])
 
         # check if backtrace exists
-        self.fs.rados(["getxattr", dir_objname, "parent"])
+        self.fs.radosm(["getxattr", dir_objname, "parent"])
 
     def test_mds_readonly(self):
         """

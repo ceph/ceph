@@ -48,7 +48,6 @@ set(components
   mbuf
   mempool
   mempool_ring
-  mempool_stack
   net
   pci
   pmd_af_packet
@@ -66,14 +65,15 @@ set(components
   pmd_ring
   pmd_sfc_efx
   pmd_vmxnet3_uio
+  pmd_hns3
+  pmd_hinic
   ring
   timer)
 
 # for collecting dpdk library targets, it will be used when defining dpdk::dpdk
 set(_dpdk_libs)
 # for list of dpdk library archive paths
-set(dpdk_LIBRARIES)
-
+set(dpdk_LIBRARIES "")
 foreach(c ${components})
   set(dpdk_lib dpdk::${c})
   if(TARGET ${dpdk_lib})
@@ -132,7 +132,8 @@ if(dpdk_FOUND)
     find_package(Threads QUIET)
     list(APPEND _dpdk_libs
       Threads::Threads
-      dpdk::cflags)
+      dpdk::cflags
+      numa)
     set_target_properties(dpdk::dpdk PROPERTIES
       INTERFACE_LINK_LIBRARIES "${_dpdk_libs}"
       INTERFACE_INCLUDE_DIRECTORIES "${dpdk_INCLUDE_DIRS}")

@@ -16,8 +16,9 @@ tasks:
         acceptable:
           bandwidth: '(or (greater) (near 0.05))'
           iops_avg: '(or (greater) (near 0.05))'
-          iops_stddev: '(or (less) (near 0.05))'
+          iops_stddev: '(or (less) (near 2.00))'
           latency_avg: '(or (less) (near 0.05))'
+          cpu_cycles_per_op: '(or (less) (near 0.05))'
     monitoring_profiles:
       perf:
         nodes:

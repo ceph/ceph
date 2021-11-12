@@ -34,7 +34,7 @@ public:
     using namespace librbd::watch_notify;
     NotifyMessage notify_message;
     if (bl.length() == 0) {
-      notify_message = NotifyMessage(HeaderUpdatePayload());
+      notify_message = NotifyMessage(new HeaderUpdatePayload());
     } else {
       try {
         auto iter = bl.cbegin();

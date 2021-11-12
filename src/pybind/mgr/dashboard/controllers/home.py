@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
-import os
-import re
 import json
 import logging
+import os
+import re
+
 try:
     from functools import lru_cache
 except ImportError:
@@ -13,20 +13,24 @@ except ImportError:
 import cherrypy
 from cherrypy.lib.static import serve_file
 
-from . import Controller, UiApiController, BaseController, Proxy, Endpoint
 from .. import mgr
-
+from . import BaseController, Endpoint, Proxy, Router, UIRouter
 
 logger = logging.getLogger("controllers.home")
 
 
 class LanguageMixin(object):
     def __init__(self):
-        self.LANGUAGES = {
-            f
-            for f in os.listdir(mgr.get_frontend_path())
-            if os.path.isdir(os.path.join(mgr.get_frontend_path(), f))
-        }
+        try:
+            self.LANGUAGES = {
+                f
+                for f in os.listdir(mgr.get_frontend_path())
+                if os.path.isdir(os.path.join(mgr.get_frontend_path(), f))
+            }
+        except FileNotFoundError:
+            logger.exception("Build directory missing")
+            self.LANGUAGES = {}
+
         self.LANGUAGES_PATH_MAP = {
             f.lower(): {
                 'lang': f,
@@ -41,20 +45,20 @@ class LanguageMixin(object):
                     'lang': self.LANGUAGES_PATH_MAP[lang]['lang'],
                     'path': self.LANGUAGES_PATH_MAP[lang]['path']
                 }
-        with open("{}/../package.json".format(mgr.get_frontend_path()),
+        with open(os.path.normpath("{}/../package.json".format(mgr.get_frontend_path())),
                   "r") as f:
             config = json.load(f)
         self.DEFAULT_LANGUAGE = config['config']['locale']
         self.DEFAULT_LANGUAGE_PATH = os.path.join(mgr.get_frontend_path(),
                                                   self.DEFAULT_LANGUAGE)
-        super(LanguageMixin, self).__init__()
+        super().__init__()
 
 
-@Controller("/", secure=False)
+@Router("/", secure=False)
 class HomeController(BaseController, LanguageMixin):
     LANG_TAG_SEQ_RE = re.compile(r'\s*([^,]+)\s*,?\s*')
     LANG_TAG_RE = re.compile(
-        r'^(?P<locale>[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})?)(;q=(?P<weight>[01]\.\d{0,3}))?$')
+        r'^(?P<locale>[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*|\*)(;q=(?P<weight>[01]\.\d{0,3}))?$')
     MAX_ACCEPTED_LANGS = 10
 
     @lru_cache()
@@ -82,7 +86,7 @@ class HomeController(BaseController, LanguageMixin):
         result.sort(key=lambda l: l[0])
         result.sort(key=lambda l: l[1], reverse=True)
         logger.debug("language preference: %s", result)
-        return [l[0] for l in result]
+        return [r[0] for r in result]
 
     def _language_dir(self, langs):
         for lang in langs:
@@ -115,6 +119,11 @@ class HomeController(BaseController, LanguageMixin):
 
         base_dir = self._language_dir(langs)
         full_path = os.path.join(base_dir, path)
+
+        # Block uplevel attacks
+        if not os.path.normpath(full_path).startswith(os.path.normpath(base_dir)):
+            raise cherrypy.HTTPError(403)  # Forbidden
+
         logger.debug("serving static content: %s", full_path)
         if 'Vary' in cherrypy.response.headers:
             cherrypy.response.headers['Vary'] = "{}, Accept-Language"
@@ -125,7 +134,7 @@ class HomeController(BaseController, LanguageMixin):
         return serve_file(full_path)
 
 
-@UiApiController("/langs", secure=False)
+@UIRouter("/langs", secure=False)
 class LangsController(BaseController, LanguageMixin):
     @Endpoint('GET')
     def __call__(self):

@@ -35,6 +35,9 @@ struct ObjectPosition {
             tag_tid == rhs.tag_tid &&
             entry_tid == rhs.entry_tid);
   }
+  inline bool operator!=(const ObjectPosition& rhs) const {
+    return !(*this == rhs);
+  }
 
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& iter);

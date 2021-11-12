@@ -1,0 +1,17 @@
+/* Vendor specific variables
+
+Example:
+$my-accent-color: #a18fff
+*/
+
+/* Bootstrap variables that are already defined can be overridden using configuration:
+https://sass-lang.com/documentation/at-rules/forward#configuring-modules
+
+Example:
+@forward '../defaults/bootstrap-defaults' with (
+  $theme-colors: (
+    'accent': $my-accent-color
+  )
+);
+*/
+@forward '../defaults/bootstrap-defaults';

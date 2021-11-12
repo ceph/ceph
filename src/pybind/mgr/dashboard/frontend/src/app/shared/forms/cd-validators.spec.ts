@@ -1,19 +1,32 @@
 import { fakeAsync, tick } from '@angular/core/testing';
 import { FormControl, Validators } from '@angular/forms';
 
+import _ from 'lodash';
 import { of as observableOf } from 'rxjs';
 
-import { FormHelper } from '../../../testing/unit-test-helper';
-import { CdFormGroup } from './cd-form-group';
-import { CdValidators } from './cd-validators';
+import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { FormHelper } from '~/testing/unit-test-helper';
+
+let mockBucketExists = observableOf(true);
+jest.mock('~/app/shared/api/rgw-bucket.service', () => {
+  return {
+    RgwBucketService: jest.fn().mockImplementation(() => {
+      return {
+        exists: () => mockBucketExists
+      };
+    })
+  };
+});
 
 describe('CdValidators', () => {
   let formHelper: FormHelper;
   let form: CdFormGroup;
 
-  const expectValid = (value) => formHelper.expectValidChange('x', value);
-  const expectPatternError = (value) => formHelper.expectErrorChange('x', value, 'pattern');
-  const updateValidity = (controlName) => form.get(controlName).updateValueAndValidity();
+  const expectValid = (value: any) => formHelper.expectValidChange('x', value);
+  const expectPatternError = (value: any) => formHelper.expectErrorChange('x', value, 'pattern');
+  const updateValidity = (controlName: string) => form.get(controlName).updateValueAndValidity();
 
   beforeEach(() => {
     form = new CdFormGroup({
@@ -117,7 +130,7 @@ describe('CdValidators', () => {
   });
 
   describe('uuid validator', () => {
-    const expectUuidError = (value) =>
+    const expectUuidError = (value: string) =>
       formHelper.expectErrorChange('x', value, 'invalidUuid', true);
     beforeEach(() => {
       form.get('x').setValidators(CdValidators.uuid());
@@ -249,6 +262,8 @@ describe('CdValidators', () => {
   describe('requiredIf', () => {
     beforeEach(() => {
       form = new CdFormGroup({
+        a: new FormControl(''),
+        b: new FormControl('xyz'),
         x: new FormControl(true),
         y: new FormControl('abc'),
         z: new FormControl('')
@@ -302,7 +317,7 @@ describe('CdValidators', () => {
     });
 
     it('should error because of successful condition', () => {
-      const conditionFn = (value) => {
+      const conditionFn = (value: string) => {
         return value === 'abc';
       };
       // Define prereqs that force the validator to validate the value of
@@ -316,15 +331,81 @@ describe('CdValidators', () => {
       );
       expect(validatorFn(form.get('y'))).toEqual({ required: true });
     });
+
+    it('should process extended prerequisites (1)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        y: { op: '!empty' }
+      });
+      expect(validatorFn(form.get('z'))).toEqual({ required: true });
+    });
+
+    it('should process extended prerequisites (2)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        y: { op: '!empty' }
+      });
+      expect(validatorFn(form.get('b'))).toBeNull();
+    });
+
+    it('should process extended prerequisites (3)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        y: { op: 'minLength', arg1: 2 }
+      });
+      expect(validatorFn(form.get('z'))).toEqual({ required: true });
+    });
+
+    it('should process extended prerequisites (4)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        z: { op: 'empty' }
+      });
+      expect(validatorFn(form.get('a'))).toEqual({ required: true });
+    });
+
+    it('should process extended prerequisites (5)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        z: { op: 'empty' }
+      });
+      expect(validatorFn(form.get('y'))).toBeNull();
+    });
+
+    it('should process extended prerequisites (6)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        y: { op: 'empty' }
+      });
+      expect(validatorFn(form.get('z'))).toBeNull();
+    });
+
+    it('should process extended prerequisites (7)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        y: { op: 'minLength', arg1: 4 }
+      });
+      expect(validatorFn(form.get('z'))).toBeNull();
+    });
+
+    it('should process extended prerequisites (8)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        x: { op: 'equal', arg1: true }
+      });
+      expect(validatorFn(form.get('z'))).toEqual({ required: true });
+    });
+
+    it('should process extended prerequisites (9)', () => {
+      const validatorFn = CdValidators.requiredIf({
+        b: { op: '!equal', arg1: 'abc' }
+      });
+      expect(validatorFn(form.get('z'))).toEqual({ required: true });
+    });
   });
 
   describe('custom validation', () => {
     beforeEach(() => {
       form = new CdFormGroup({
-        x: new FormControl(3, CdValidators.custom('odd', (x) => x % 2 === 1)),
+        x: new FormControl(
+          3,
+          CdValidators.custom('odd', (x: number) => x % 2 === 1)
+        ),
         y: new FormControl(
           5,
-          CdValidators.custom('not-dividable-by-x', (y) => {
+          CdValidators.custom('not-dividable-by-x', (y: number) => {
             const x = (form && form.get('x').value) || 1;
             return y % x !== 0;
           })
@@ -352,8 +433,8 @@ describe('CdValidators', () => {
         y: new FormControl(5)
       });
       CdValidators.validateIf(form.get('x'), () => ((form && form.get('y').value) || 0) > 10, [
-        CdValidators.custom('min', (x) => x < 7),
-        CdValidators.custom('max', (x) => x > 12)
+        CdValidators.custom('min', (x: number) => x < 7),
+        CdValidators.custom('max', (x: number) => x > 12)
       ]);
       formHelper = new FormHelper(form);
     });
@@ -608,5 +689,218 @@ describe('CdValidators', () => {
       tick(500);
       expect(callbackCalled).toBeTruthy();
     }));
+
+    describe('sslCert validator', () => {
+      beforeEach(() => {
+        form.get('x').setValidators(CdValidators.sslCert());
+      });
+
+      it('should not error because of empty input', () => {
+        expectValid('');
+      });
+
+      it('should accept SSL certificate', () => {
+        expectValid(
+          '-----BEGIN CERTIFICATE-----\n' +
+            'MIIC1TCCAb2gAwIBAgIJAM33ZCMvOLVdMA0GCSqGSIb3DQEBBQUAMBoxGDAWBgNV\n' +
+            '...\n' +
+            '3Ztorm2A5tFB\n' +
+            '-----END CERTIFICATE-----\n' +
+            '\n'
+        );
+      });
+
+      it('should error on invalid SSL certificate (1)', () => {
+        expectPatternError(
+          'MIIC1TCCAb2gAwIBAgIJAM33ZCMvOLVdMA0GCSqGSIb3DQEBBQUAMBoxGDAWBgNV\n' +
+            '...\n' +
+            '3Ztorm2A5tFB\n' +
+            '-----END CERTIFICATE-----\n' +
+            '\n'
+        );
+      });
+
+      it('should error on invalid SSL certificate (2)', () => {
+        expectPatternError(
+          '-----BEGIN CERTIFICATE-----\n' +
+            'MIIC1TCCAb2gAwIBAgIJAM33ZCMvOLVdMA0GCSqGSIb3DQEBBQUAMBoxGDAWBgNV\n'
+        );
+      });
+    });
+
+    describe('sslPrivKey validator', () => {
+      beforeEach(() => {
+        form.get('x').setValidators(CdValidators.sslPrivKey());
+      });
+
+      it('should not error because of empty input', () => {
+        expectValid('');
+      });
+
+      it('should accept SSL private key', () => {
+        expectValid(
+          '-----BEGIN RSA PRIVATE KEY-----\n' +
+            'MIIEpQIBAAKCAQEA5VwkMK63D7AoGJVbVpgiV3XlEC1rwwOEpHPZW9F3ZW1fYS1O\n' +
+            '...\n' +
+            'SA4Jbana77S7adg919vNBCLWPAeoN44lI2+B1Ub5DxSnOpBf+zKiScU=\n' +
+            '-----END RSA PRIVATE KEY-----\n' +
+            '\n'
+        );
+      });
+
+      it('should error on invalid SSL private key (1)', () => {
+        expectPatternError(
+          'MIIEpQIBAAKCAQEA5VwkMK63D7AoGJVbVpgiV3XlEC1rwwOEpHPZW9F3ZW1fYS1O\n' +
+            '...\n' +
+            'SA4Jbana77S7adg919vNBCLWPAeoN44lI2+B1Ub5DxSnOpBf+zKiScU=\n' +
+            '-----END RSA PRIVATE KEY-----\n' +
+            '\n'
+        );
+      });
+
+      it('should error on invalid SSL private key (2)', () => {
+        expectPatternError(
+          '-----BEGIN RSA PRIVATE KEY-----\n' +
+            'MIIEpQIBAAKCAQEA5VwkMK63D7AoGJVbVpgiV3XlEC1rwwOEpHPZW9F3ZW1fYS1O\n' +
+            '...\n' +
+            'SA4Jbana77S7adg919vNBCLWPAeoN44lI2+B1Ub5DxSnOpBf+zKiScU=\n'
+        );
+      });
+    });
+  });
+  describe('bucket', () => {
+    const testValidator = (name: string, valid: boolean, expectedError?: string) => {
+      formHelper.setValue('x', name, true);
+      tick();
+      if (valid) {
+        formHelper.expectValid('x');
+      } else {
+        formHelper.expectError('x', expectedError);
+      }
+    };
+
+    describe('bucketName', () => {
+      beforeEach(() => {
+        form = new CdFormGroup({
+          x: new FormControl('', null, CdValidators.bucketName())
+        });
+        formHelper = new FormHelper(form);
+      });
+
+      it('bucket name cannot be empty', fakeAsync(() => {
+        testValidator('', false, 'required');
+      }));
+
+      it('bucket names cannot be formatted as IP address', fakeAsync(() => {
+        const testIPs = ['1.1.1.01', '001.1.1.01', '127.0.0.1'];
+        for (const ip of testIPs) {
+          testValidator(ip, false, 'ipAddress');
+        }
+      }));
+
+      it('bucket name must be >= 3 characters long (1/2)', fakeAsync(() => {
+        testValidator('ab', false, 'shouldBeInRange');
+      }));
+
+      it('bucket name must be >= 3 characters long (2/2)', fakeAsync(() => {
+        testValidator('abc', true);
+      }));
+
+      it('bucket name must be <= than 63 characters long (1/2)', fakeAsync(() => {
+        testValidator(_.repeat('a', 64), false, 'shouldBeInRange');
+      }));
+
+      it('bucket name must be <= than 63 characters long (2/2)', fakeAsync(() => {
+        testValidator(_.repeat('a', 63), true);
+      }));
+
+      it('bucket names must not contain uppercase characters or underscores (1/2)', fakeAsync(() => {
+        testValidator('iAmInvalid', false, 'bucketNameInvalid');
+      }));
+
+      it('bucket names can only contain lowercase letters, numbers, periods and hyphens', fakeAsync(() => {
+        testValidator('bk@2', false, 'bucketNameInvalid');
+      }));
+
+      it('bucket names must not contain uppercase characters or underscores (2/2)', fakeAsync(() => {
+        testValidator('i_am_invalid', false, 'bucketNameInvalid');
+      }));
+
+      it('bucket names must start and end with letters or numbers', fakeAsync(() => {
+        testValidator('abcd-', false, 'lowerCaseOrNumber');
+      }));
+
+      it('bucket labels cannot be empty', fakeAsync(() => {
+        testValidator('bk.', false, 'onlyLowerCaseAndNumbers');
+      }));
+
+      it('bucket names with invalid labels (1/3)', fakeAsync(() => {
+        testValidator('abc.1def.Ghi2', false, 'bucketNameInvalid');
+      }));
+
+      it('bucket names with invalid labels (2/3)', fakeAsync(() => {
+        testValidator('abc.1_xy', false, 'bucketNameInvalid');
+      }));
+
+      it('bucket names with invalid labels (3/3)', fakeAsync(() => {
+        testValidator('abc.*def', false, 'bucketNameInvalid');
+      }));
+
+      it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (1/3)', fakeAsync(() => {
+        testValidator('xyz.abc', true);
+      }));
+
+      it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (2/3)', fakeAsync(() => {
+        testValidator('abc.1-def', true);
+      }));
+
+      it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (3/3)', fakeAsync(() => {
+        testValidator('abc.ghi2', true);
+      }));
+
+      it('bucket names must be unique', fakeAsync(() => {
+        testValidator('bucket-name-is-unique', true);
+      }));
+
+      it('bucket names must not contain spaces', fakeAsync(() => {
+        testValidator('bucket name  with   spaces', false, 'bucketNameInvalid');
+      }));
+    });
+
+    describe('bucketExistence', () => {
+      const rgwBucketService = new RgwBucketService(undefined, undefined);
+
+      beforeEach(() => {
+        form = new CdFormGroup({
+          x: new FormControl('', null, CdValidators.bucketExistence(false, rgwBucketService))
+        });
+        formHelper = new FormHelper(form);
+      });
+
+      it('bucket name cannot be empty', fakeAsync(() => {
+        testValidator('', false, 'required');
+      }));
+
+      it('bucket name should not exist but it does', fakeAsync(() => {
+        testValidator('testName', false, 'bucketNameNotAllowed');
+      }));
+
+      it('bucket name should not exist and it does not', fakeAsync(() => {
+        mockBucketExists = observableOf(false);
+        testValidator('testName', true);
+      }));
+
+      it('bucket name should exist but it does not', fakeAsync(() => {
+        form.get('x').setAsyncValidators(CdValidators.bucketExistence(true, rgwBucketService));
+        mockBucketExists = observableOf(false);
+        testValidator('testName', false, 'bucketNameNotAllowed');
+      }));
+
+      it('bucket name should exist and it does', fakeAsync(() => {
+        form.get('x').setAsyncValidators(CdValidators.bucketExistence(true, rgwBucketService));
+        mockBucketExists = observableOf(true);
+        testValidator('testName', true);
+      }));
+    });
   });
 });

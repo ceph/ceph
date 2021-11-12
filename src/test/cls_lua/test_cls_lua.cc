@@ -7,6 +7,8 @@
 #include "cls/lua/cls_lua_client.h"
 #include "cls/lua/cls_lua.h"
 
+using namespace std;
+
 /*
  * JSON script to test JSON I/O protocol with cls_lua
  */
@@ -291,7 +293,7 @@ objclass.register(bl_concat_immut)
 -- RunError
 --
 function runerr_a()
-  error('WTF')
+  error('error_a')
 end
 
 function runerr_b()

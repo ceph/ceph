@@ -23,11 +23,16 @@ namespace po = boost::program_options;
                   const std::vector<std::string> &ceph_global_args);    \
   int execute_unmap(const po::variables_map &vm,                        \
                     const std::vector<std::string> &ceph_global_args);  \
+  int execute_attach(const po::variables_map &vm,                       \
+                     const std::vector<std::string> &ceph_global_args); \
+  int execute_detach(const po::variables_map &vm,                       \
+                     const std::vector<std::string> &ceph_global_args); \
   }
 
 DECLARE_DEVICE_OPERATIONS(ggate);
 DECLARE_DEVICE_OPERATIONS(kernel);
 DECLARE_DEVICE_OPERATIONS(nbd);
+DECLARE_DEVICE_OPERATIONS(wnbd);
 
 namespace device {
 
@@ -40,30 +45,49 @@ struct DeviceOperations {
                      const std::vector<std::string> &ceph_global_args);
   int (*execute_unmap)(const po::variables_map &vm,
                        const std::vector<std::string> &ceph_global_args);
+  int (*execute_attach)(const po::variables_map &vm,
+                        const std::vector<std::string> &ceph_global_args);
+  int (*execute_detach)(const po::variables_map &vm,
+                        const std::vector<std::string> &ceph_global_args);
 };
 
 const DeviceOperations ggate_operations = {
   ggate::execute_list,
   ggate::execute_map,
   ggate::execute_unmap,
+  ggate::execute_attach,
+  ggate::execute_detach,
 };
 
 const DeviceOperations krbd_operations = {
   kernel::execute_list,
   kernel::execute_map,
   kernel::execute_unmap,
+  kernel::execute_attach,
+  kernel::execute_detach,
 };
 
 const DeviceOperations nbd_operations = {
   nbd::execute_list,
   nbd::execute_map,
   nbd::execute_unmap,
+  nbd::execute_attach,
+  nbd::execute_detach,
+};
+
+const DeviceOperations wnbd_operations = {
+  wnbd::execute_list,
+  wnbd::execute_map,
+  wnbd::execute_unmap,
+  wnbd::execute_attach,
+  wnbd::execute_detach,
 };
 
 enum device_type_t {
   DEVICE_TYPE_GGATE,
   DEVICE_TYPE_KRBD,
   DEVICE_TYPE_NBD,
+  DEVICE_TYPE_WNBD,
 };
 
 struct DeviceType {};
@@ -72,12 +96,18 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               DeviceType *target_type, int) {
   po::validators::check_first_occurrence(v);
   const std::string &s = po::validators::get_single_string(values);
-  if (s == "ggate") {
+
+  #ifdef _WIN32
+  if (s == "wnbd") {
+    v = boost::any(DEVICE_TYPE_WNBD);
+  #else
+  if (s == "nbd") {
+     v = boost::any(DEVICE_TYPE_NBD);
+  } else if (s == "ggate") {
     v = boost::any(DEVICE_TYPE_GGATE);
   } else if (s == "krbd") {
     v = boost::any(DEVICE_TYPE_KRBD);
-  } else if (s == "nbd") {
-    v = boost::any(DEVICE_TYPE_NBD);
+  #endif /* _WIN32 */
   } else {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
@@ -86,7 +116,11 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 void add_device_type_option(po::options_description *options) {
   options->add_options()
     ("device-type,t", po::value<DeviceType>(),
+#ifdef _WIN32
+     "device type [wnbd]");
+#else
      "device type [ggate, krbd (default), nbd]");
+#endif
 }
 
 void add_device_specific_options(po::options_description *options) {
@@ -99,7 +133,11 @@ device_type_t get_device_type(const po::variables_map &vm) {
   if (vm.count("device-type")) {
     return vm["device-type"].as<device_type_t>();
   }
+  #ifndef _WIN32
   return DEVICE_TYPE_KRBD;
+  #else
+  return DEVICE_TYPE_WNBD;
+  #endif
 }
 
 const DeviceOperations *get_device_operations(const po::variables_map &vm) {
@@ -110,6 +148,8 @@ const DeviceOperations *get_device_operations(const po::variables_map &vm) {
     return &krbd_operations;
   case DEVICE_TYPE_NBD:
     return &nbd_operations;
+  case DEVICE_TYPE_WNBD:
+    return &wnbd_operations;
   default:
     ceph_abort();
     return nullptr;
@@ -135,8 +175,12 @@ void get_map_arguments(po::options_description *positional,
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
+    ("show-cookie", po::bool_switch(), "show device cookie")
+    ("cookie", po::value<std::string>(), "specify device cookie")
     ("read-only", po::bool_switch(), "map read-only")
-    ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions");
+    ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions")
+    ("quiesce", po::bool_switch(), "use quiesce hooks")
+    ("quiesce-hook", po::value<std::string>(), "quiesce hook path");
   add_device_specific_options(options);
 }
 
@@ -151,7 +195,7 @@ void get_unmap_arguments(po::options_description *positional,
   positional->add_options()
     ("image-or-snap-or-device-spec",
      "image, snapshot, or device specification\n"
-     "[<pool-name>/]<image-name>[@<snapshot-name>] or <device-path>");
+     "[<pool-name>/]<image-name>[@<snap-name>] or <device-path>");
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
@@ -161,6 +205,46 @@ void get_unmap_arguments(po::options_description *positional,
 int execute_unmap(const po::variables_map &vm,
                   const std::vector<std::string> &ceph_global_init_args) {
   return (*get_device_operations(vm)->execute_unmap)(vm, ceph_global_init_args);
+}
+
+void get_attach_arguments(po::options_description *positional,
+                          po::options_description *options) {
+  add_device_type_option(options);
+  at::add_image_or_snap_spec_options(positional, options,
+                                     at::ARGUMENT_MODIFIER_NONE);
+  options->add_options()
+    ("device", po::value<std::string>()->required(), "specify device path")
+    ("show-cookie", po::bool_switch(), "show device cookie")
+    ("cookie", po::value<std::string>(), "specify device cookie")
+    ("read-only", po::bool_switch(), "attach read-only")
+    ("force", po::bool_switch(), "force attach")
+    ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions")
+    ("quiesce", po::bool_switch(), "use quiesce hooks")
+    ("quiesce-hook", po::value<std::string>(), "quiesce hook path");
+  add_device_specific_options(options);
+}
+
+int execute_attach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+  return (*get_device_operations(vm)->execute_attach)(vm, ceph_global_init_args);
+}
+
+void get_detach_arguments(po::options_description *positional,
+                          po::options_description *options) {
+  add_device_type_option(options);
+  positional->add_options()
+    ("image-or-snap-or-device-spec",
+     "image, snapshot, or device specification\n"
+     "[<pool-name>/]<image-name>[@<snap-name>] or <device-path>");
+  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
+  add_device_specific_options(options);
+}
+
+int execute_detach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+  return (*get_device_operations(vm)->execute_detach)(vm, ceph_global_init_args);
 }
 
 Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
@@ -179,6 +263,14 @@ Shell::Action action_map(
 Shell::Action action_unmap(
   {"device", "unmap"}, {"unmap"}, "Unmap a rbd device.", "",
   &get_unmap_arguments, &execute_unmap);
+
+Shell::Action action_attach(
+  {"device", "attach"}, {}, "Attach image to device.", "",
+  &get_attach_arguments, &execute_attach);
+
+Shell::Action action_detach(
+  {"device", "detach"}, {}, "Detach image from device.", "",
+  &get_detach_arguments, &execute_detach);
 
 } // namespace device
 } // namespace action

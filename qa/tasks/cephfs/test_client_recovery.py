@@ -10,7 +10,8 @@ import distutils.version as version
 import re
 import os
 
-from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
+from teuthology.orchestra import run
+from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.packaging import get_package_version
@@ -24,7 +25,6 @@ MDS_RESTART_GRACE = 60
 
 
 class TestClientNetworkRecovery(CephFSTestCase):
-    REQUIRE_KCLIENT_REMOTE = True
     REQUIRE_ONE_CLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
 
@@ -84,7 +84,6 @@ class TestClientNetworkRecovery(CephFSTestCase):
 
 
 class TestClientRecovery(CephFSTestCase):
-    REQUIRE_KCLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
 
     LOAD_SETTINGS = ["mds_reconnect_timeout", "ms_max_backoff"]
@@ -102,8 +101,7 @@ class TestClientRecovery(CephFSTestCase):
 
         self.mount_b.check_files()
 
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         # Check that the admin socket interface is correctly reporting
         # two sessions
@@ -135,13 +133,14 @@ class TestClientRecovery(CephFSTestCase):
         # =================
         # Check that if I stop an MDS and a client goes away, the MDS waits
         # for the reconnect period
-        self.fs.mds_stop()
-        self.fs.mds_fail()
 
         mount_a_client_id = self.mount_a.get_global_id()
+
+        self.fs.fail()
+
         self.mount_a.umount_wait(force=True)
 
-        self.fs.mds_restart()
+        self.fs.set_joinable()
 
         self.fs.wait_for_state('up:reconnect', reject='up:active', timeout=MDS_RESTART_GRACE)
         # Check that the MDS locally reports its state correctly
@@ -159,7 +158,7 @@ class TestClientRecovery(CephFSTestCase):
         in_reconnect_for = self.fs.wait_for_state('up:active', timeout=self.mds_reconnect_timeout * 2)
         # Check that the period we waited to enter active is within a factor
         # of two of the reconnect timeout.
-        self.assertGreater(in_reconnect_for, self.mds_reconnect_timeout / 2,
+        self.assertGreater(in_reconnect_for, self.mds_reconnect_timeout // 2,
                            "Should have been in reconnect phase for {0} but only took {1}".format(
                                self.mds_reconnect_timeout, in_reconnect_for
                            ))
@@ -168,8 +167,7 @@ class TestClientRecovery(CephFSTestCase):
 
         # Check that the client that timed out during reconnect can
         # mount again and do I/O
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         self.mount_a.create_destroy()
 
         self.assert_session_count(2)
@@ -179,8 +177,7 @@ class TestClientRecovery(CephFSTestCase):
         # =========================
         mount_a_client_id = self.mount_a.get_global_id()
 
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # The mount goes away while the MDS is offline
         self.mount_a.kill()
@@ -188,7 +185,7 @@ class TestClientRecovery(CephFSTestCase):
         # wait for it to die
         time.sleep(5)
 
-        self.fs.mds_restart()
+        self.fs.set_joinable()
 
         # Enter reconnect phase
         self.fs.wait_for_state('up:reconnect', reject='up:active', timeout=MDS_RESTART_GRACE)
@@ -211,8 +208,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.kill_cleanup()
 
         # Bring the client back
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         self.mount_a.create_destroy()
 
     def _test_stale_caps(self, write):
@@ -225,8 +221,7 @@ class TestClientRecovery(CephFSTestCase):
         else:
             self.mount_a.run_shell(["touch", "background_file"])
             self.mount_a.umount_wait()
-            self.mount_a.mount()
-            self.mount_a.wait_until_mounted()
+            self.mount_a.mount_wait()
             cap_holder = self.mount_a.open_background(write=False)
 
         self.assert_session_count(2)
@@ -237,7 +232,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.wait_for_visible()
 
         # Simulate client death
-        self.mount_a.kill()
+        self.mount_a.suspend_netns()
 
         # wait for it to die so it doesn't voluntarily release buffer cap
         time.sleep(5)
@@ -266,18 +261,10 @@ class TestClientRecovery(CephFSTestCase):
                                 cap_waited, session_timeout
                             ))
 
-            cap_holder.stdin.close()
-            try:
-                cap_holder.wait()
-            except (CommandFailedError, ConnectionLostError):
-                # We killed it (and possibly its node), so it raises an error
-                pass
+            self.mount_a._kill_background(cap_holder)
         finally:
             # teardown() doesn't quite handle this case cleanly, so help it out
-            self.mount_a.kill_cleanup()
-
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+            self.mount_a.resume_netns()
 
     def test_stale_read_caps(self):
         self._test_stale_caps(False)
@@ -301,7 +288,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.wait_for_visible()
 
         # Simulate client death
-        self.mount_a.kill()
+        self.mount_a.suspend_netns()
 
         # wait for it to die so it doesn't voluntarily release buffer cap
         time.sleep(5)
@@ -328,17 +315,9 @@ class TestClientRecovery(CephFSTestCase):
                                 cap_waited, session_timeout / 2.0
                             ))
 
-            cap_holder.stdin.close()
-            try:
-                cap_holder.wait()
-            except (CommandFailedError, ConnectionLostError):
-                # We killed it (and possibly its node), so it raises an error
-                pass
+            self.mount_a._kill_background(cap_holder)
         finally:
-            self.mount_a.kill_cleanup()
-
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+            self.mount_a.resume_netns()
 
     def test_trim_caps(self):
         # Trim capability when reconnecting MDS
@@ -405,12 +384,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.check_filelock(do_flock=flockable)
 
         # Tear down the background process
-        lock_holder.stdin.close()
-        try:
-            lock_holder.wait()
-        except (CommandFailedError, ConnectionLostError):
-            # We killed it, so it raises an error
-            pass
+        self.mount_a._kill_background(lock_holder)
 
     def test_filelock_eviction(self):
         """
@@ -438,13 +412,15 @@ class TestClientRecovery(CephFSTestCase):
             # succeed
             self.wait_until_true(lambda: lock_taker.finished, timeout=10)
         finally:
+            # Tear down the background process
+            self.mount_a._kill_background(lock_holder)
+
             # teardown() doesn't quite handle this case cleanly, so help it out
             self.mount_a.kill()
             self.mount_a.kill_cleanup()
 
         # Bring the client back
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
     def test_dir_fsync(self):
         self._test_fsync(True);
@@ -490,13 +466,12 @@ class TestClientRecovery(CephFSTestCase):
         )
 
         # Immediately kill the MDS and then client A
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
         self.mount_a.kill()
         self.mount_a.kill_cleanup()
 
         # Restart the MDS.  Wait for it to come up, it'll have to time out in clientreplay
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         log.info("Waiting for reconnect...")
         self.fs.wait_for_state("up:reconnect")
         log.info("Waiting for active...")
@@ -504,8 +479,7 @@ class TestClientRecovery(CephFSTestCase):
         log.info("Reached active...")
 
         # Is the child dentry visible from mount B?
-        self.mount_b.mount()
-        self.mount_b.wait_until_mounted()
+        self.mount_b.mount_wait()
         self.mount_b.run_shell(["ls", "subdir/childfile"])
 
     def test_unmount_for_evicted_client(self):
@@ -514,6 +488,30 @@ class TestClientRecovery(CephFSTestCase):
         self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
 
         self.mount_a.umount_wait(require_clean=True, timeout=30)
+
+    def test_mount_after_evicted_client(self):
+        """Test if a new mount of same fs works after client eviction."""
+
+        # trash this : we need it to use same remote as mount_a
+        self.mount_b.umount_wait()
+
+        cl = self.mount_a.__class__
+
+        # create a new instance of mount_a's class with most of the
+        # same settings, but mounted on mount_b's mountpoint.
+        m = cl(self.mount_a.ctx, self.mount_a.test_dir, self.mount_a.client_id,
+               self.mount_a.client_remote, self.mount_a.client_keyring_path,
+               self.mount_b.hostfs_mntpt, self.mount_a.cephfs_name,
+               self.mount_a.cephfs_mntpt, self.mount_a.ceph_brx_net)
+
+        # evict mount_a
+        mount_a_client_id = self.mount_a.get_global_id()
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
+
+        m.mount_wait()
+        m.create_files()
+        m.check_files()
+        m.umount_wait(require_clean=True)
 
     def test_stale_renew(self):
         if not isinstance(self.mount_a, FuseMount):
@@ -534,9 +532,8 @@ class TestClientRecovery(CephFSTestCase):
         self.assertEqual(current_readdirs, initial_readdirs);
 
         mount_b_gid = self.mount_b.get_global_id()
-        mount_b_pid = self.mount_b.get_client_pid()
         # stop ceph-fuse process of mount_b
-        self.mount_b.client_remote.run(args=["sudo", "kill", "-STOP", mount_b_pid])
+        self.mount_b.suspend_netns()
 
         self.assert_session_state(mount_b_gid, "open")
         time.sleep(session_timeout * 1.5)  # Long enough for MDS to consider session stale
@@ -545,7 +542,7 @@ class TestClientRecovery(CephFSTestCase):
         self.assert_session_state(mount_b_gid, "stale")
 
         # resume ceph-fuse process of mount_b
-        self.mount_b.client_remote.run(args=["sudo", "kill", "-CONT", mount_b_pid])
+        self.mount_b.resume_netns()
         # Is the new file visible from mount_b? (caps become invalid after session stale)
         self.mount_b.run_shell(["ls", "testdir/file2"])
 
@@ -629,3 +626,95 @@ class TestClientRecovery(CephFSTestCase):
         self.assert_session_count(1)
 
         self.mount_a.kill_cleanup()
+
+    def test_reconnect_after_blocklisted(self):
+        """
+        Test reconnect after blocklisted.
+        - writing to a fd that was opened before blocklist should return -EBADF
+        - reading/writing to a file with lost file locks should return -EIO
+        - readonly fd should continue to work
+        """
+
+        self.mount_a.umount_wait()
+
+        if isinstance(self.mount_a, FuseMount):
+            self.mount_a.mount_wait(mntopts=['--client_reconnect_stale=1', '--fuse_disable_pagecache=1'])
+        else:
+            try:
+                self.mount_a.mount_wait(mntopts=['recover_session=clean'])
+            except CommandFailedError:
+                self.mount_a.kill_cleanup()
+                self.skipTest("Not implemented in current kernel")
+
+        self.mount_a.wait_until_mounted()
+
+        path = os.path.join(self.mount_a.mountpoint, 'testfile_reconnect_after_blocklisted')
+        pyscript = dedent("""
+            import os
+            import sys
+            import fcntl
+            import errno
+            import time
+
+            fd1 = os.open("{path}.1", os.O_RDWR | os.O_CREAT, 0O666)
+            fd2 = os.open("{path}.1", os.O_RDONLY)
+            fd3 = os.open("{path}.2", os.O_RDWR | os.O_CREAT, 0O666)
+            fd4 = os.open("{path}.2", os.O_RDONLY)
+
+            os.write(fd1, b'content')
+            os.read(fd2, 1);
+
+            os.write(fd3, b'content')
+            os.read(fd4, 1);
+            fcntl.flock(fd4, fcntl.LOCK_SH | fcntl.LOCK_NB)
+
+            print("blocklist")
+            sys.stdout.flush()
+
+            sys.stdin.readline()
+
+            # wait for mds to close session
+            time.sleep(10);
+
+            # trigger 'open session' message. kclient relies on 'session reject' message
+            # to detect if itself is blocklisted
+            try:
+                os.stat("{path}.1")
+            except:
+                pass
+
+            # wait for auto reconnect
+            time.sleep(10);
+
+            try:
+                os.write(fd1, b'content')
+            except OSError as e:
+                if e.errno != errno.EBADF:
+                    raise
+            else:
+                raise RuntimeError("write() failed to raise error")
+
+            os.read(fd2, 1);
+
+            try:
+                os.read(fd4, 1)
+            except OSError as e:
+                if e.errno != errno.EIO:
+                    raise
+            else:
+                raise RuntimeError("read() failed to raise error")
+            """).format(path=path)
+        rproc = self.mount_a.client_remote.run(
+                    args=['python3', '-c', pyscript],
+                    wait=False, stdin=run.PIPE, stdout=run.PIPE)
+
+        rproc.stdout.readline()
+
+        mount_a_client_id = self.mount_a.get_global_id()
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
+
+        rproc.stdin.writelines(['done\n'])
+        rproc.stdin.flush()
+
+        rproc.wait()
+        self.assertEqual(rproc.exitstatus, 0)

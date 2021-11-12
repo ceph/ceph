@@ -1,3 +1,10 @@
+======
+Hammer
+======
+
+Hammer is the 8th stable release of Ceph.  It is named after the
+hammer octopus (Octopus australis).
+
 v0.94.10 Hammer
 ===============
 

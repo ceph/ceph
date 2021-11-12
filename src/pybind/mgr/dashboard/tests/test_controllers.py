@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
-from . import ControllerTestCase
-from ..controllers import BaseController, RESTController, Controller, \
-                          ApiController, Endpoint
+from ..controllers import APIRouter, BaseController, Endpoint, RESTController, Router
+from ..tests import ControllerTestCase
 
 
-@Controller("/btest/{key}", base_url="/ui", secure=False)
+@Router("/btest/{key}", base_url="/ui", secure=False)
 class BTest(BaseController):
     @Endpoint()
     def test1(self, key, opt=1):
@@ -38,7 +36,7 @@ class BTest(BaseController):
         return {'key': key, 'opt': opt}
 
 
-@ApiController("/rtest/{key}", secure=False)
+@APIRouter("/rtest/{key}", secure=False)
 class RTest(RESTController):
     RESOURCE_ID = 'skey/ekey'
 
@@ -72,7 +70,7 @@ class RTest(RESTController):
         return {'key': key, 'skey': skey, 'ekey': ekey, 'opt': opt}
 
 
-@Controller("/", secure=False)
+@Router("/", secure=False)
 class Root(BaseController):
     @Endpoint(json_response=False)
     def __call__(self):

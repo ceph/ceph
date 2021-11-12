@@ -32,6 +32,7 @@
 
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include "include/btree_map.h"
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "common/ceph_releases.h"
 #include "osd_types.h"
@@ -40,7 +41,6 @@
 #include "crush/CrushWrapper.h"
 
 // forward declaration
-class CephContext;
 class CrushWrapper;
 class health_check_map_t;
 
@@ -51,7 +51,7 @@ class health_check_map_t;
  * bound on the actual osd death.  down_at (if it is > up_from) is an
  * upper bound on the actual osd death.
  *
- * the second is the last_clean interval [first,last].  in that case,
+ * the second is the last_clean interval [begin,end).  in that case,
  * the last interval is the last epoch known to have been either
  * _finished_, or during which the osd cleanly shut down.  when
  * possible, we push this forward to the epoch the osd was eventually
@@ -142,7 +142,7 @@ struct PGTempMap {
       offsets[i].second = p.get_off() - start_off;
       uint32_t vn;
       decode(vn, p);
-      p.advance(vn * sizeof(int32_t));
+      p += vn * sizeof(int32_t);
     }
     size_t len = p.get_off() - start_off;
     pstart.copy(len, data);
@@ -364,6 +364,12 @@ public:
     int64_t new_pool_max; //incremented by the OSDMonitor on each pool create
     int32_t new_flags;
     ceph_release_t new_require_osd_release{0xff};
+    uint32_t new_stretch_bucket_count{0};
+    uint32_t new_degraded_stretch_mode{0};
+    uint32_t new_recovering_stretch_mode{0};
+    int32_t new_stretch_mode_bucket{0};
+    bool stretch_mode_enabled{false};
+    bool change_stretch_mode{false};
 
     // full (rare)
     ceph::buffer::list fullmap;  // in lieu of below.
@@ -389,8 +395,8 @@ public:
     mempool::osdmap::map<int32_t,uuid_d> new_uuid;
     mempool::osdmap::map<int32_t,osd_xinfo_t> new_xinfo;
 
-    mempool::osdmap::map<entity_addr_t,utime_t> new_blacklist;
-    mempool::osdmap::vector<entity_addr_t> old_blacklist;
+    mempool::osdmap::map<entity_addr_t,utime_t> new_blocklist;
+    mempool::osdmap::vector<entity_addr_t> old_blocklist;
     mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_back_up;
     mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_front_up;
 
@@ -459,8 +465,8 @@ public:
       return new_erasure_code_profiles;
     }
 
-    /// propagate update pools' snap metadata to any of their tiers
-    int propagate_snaps_to_tiers(CephContext *cct, const OSDMap &base);
+    /// propagate update pools' (snap and other) metadata to any of their tiers
+    int propagate_base_properties_to_tiers(CephContext *cct, const OSDMap &base);
 
     /// filter out osds with any pending state changing
     size_t get_pending_state_osds(std::vector<int> *osds) {
@@ -571,12 +577,12 @@ private:
   mempool::osdmap::map<int64_t,pg_pool_t> pools;
   mempool::osdmap::map<int64_t,std::string> pool_name;
   mempool::osdmap::map<std::string, std::map<std::string,std::string>> erasure_code_profiles;
-  mempool::osdmap::map<std::string,int64_t> name_pool;
+  mempool::osdmap::map<std::string,int64_t, std::less<>> name_pool;
 
   std::shared_ptr< mempool::osdmap::vector<uuid_d> > osd_uuid;
   mempool::osdmap::vector<osd_xinfo_t> osd_xinfo;
 
-  mempool::osdmap::unordered_map<entity_addr_t,utime_t> blacklist;
+  mempool::osdmap::unordered_map<entity_addr_t,utime_t> blocklist;
 
   /// queue of snaps to remove
   mempool::osdmap::map<int64_t, snap_interval_set_t> removed_snaps_queue;
@@ -589,7 +595,7 @@ private:
 
   epoch_t cluster_snapshot_epoch;
   std::string cluster_snapshot;
-  bool new_blacklist_entries;
+  bool new_blocklist_entries;
 
   float full_ratio = 0, backfillfull_ratio = 0, nearfull_ratio = 0;
 
@@ -613,6 +619,11 @@ private:
   uint32_t get_crc() const { return crc; }
 
   std::shared_ptr<CrushWrapper> crush;       // hierarchical map
+  bool stretch_mode_enabled; // we are in stretch mode, requiring multiple sites
+  uint32_t stretch_bucket_count; // number of sites we expect to be in
+  uint32_t degraded_stretch_mode; // 0 if not degraded; else count of up sites
+  uint32_t recovering_stretch_mode; // 0 if not recovering; else 1
+  int32_t stretch_mode_bucket; // the bucket type we're stretched across
 private:
   uint32_t crush_version = 1;
 
@@ -629,10 +640,12 @@ private:
 	     primary_temp(std::make_shared<mempool::osdmap::map<pg_t,int32_t>>()),
 	     osd_uuid(std::make_shared<mempool::osdmap::vector<uuid_d>>()),
 	     cluster_snapshot_epoch(0),
-	     new_blacklist_entries(false),
+	     new_blocklist_entries(false),
 	     cached_up_osd_features(0),
 	     crc_defined(false), crc(0),
-	     crush(std::make_shared<CrushWrapper>()) {
+	     crush(std::make_shared<CrushWrapper>()),
+	     stretch_mode_enabled(false), stretch_bucket_count(0),
+	     degraded_stretch_mode(0), recovering_stretch_mode(0), stretch_mode_bucket(0) {
   }
 
 private:
@@ -680,10 +693,10 @@ public:
   const utime_t& get_created() const { return created; }
   const utime_t& get_modified() const { return modified; }
 
-  bool is_blacklisted(const entity_addr_t& a) const;
-  bool is_blacklisted(const entity_addrvec_t& a) const;
-  void get_blacklist(std::list<std::pair<entity_addr_t,utime_t > > *bl) const;
-  void get_blacklist(std::set<entity_addr_t> *bl) const;
+  bool is_blocklisted(const entity_addr_t& a) const;
+  bool is_blocklisted(const entity_addrvec_t& a) const;
+  void get_blocklist(std::list<std::pair<entity_addr_t,utime_t > > *bl) const;
+  void get_blocklist(std::set<entity_addr_t> *bl) const;
 
   std::string get_cluster_snapshot() const {
     if (cluster_snapshot_epoch == epoch)
@@ -1054,17 +1067,17 @@ public:
    */
   uint64_t get_up_osd_features() const;
 
-  void get_upmap_pgs(vector<pg_t> *upmap_pgs) const;
+  void get_upmap_pgs(std::vector<pg_t> *upmap_pgs) const;
   bool check_pg_upmaps(
     CephContext *cct,
-    const vector<pg_t>& to_check,
-    vector<pg_t> *to_cancel,
-    map<pg_t, mempool::osdmap::vector<pair<int,int>>> *to_remap) const;
+    const std::vector<pg_t>& to_check,
+    std::vector<pg_t> *to_cancel,
+    std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>> *to_remap) const;
   void clean_pg_upmaps(
     CephContext *cct,
     Incremental *pending_inc,
-    const vector<pg_t>& to_cancel,
-    const map<pg_t, mempool::osdmap::vector<pair<int,int>>>& to_remap) const;
+    const std::vector<pg_t>& to_cancel,
+    const std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>>& to_remap) const;
   bool clean_pg_upmaps(CephContext *cct, Incremental *pending_inc) const;
 
   int apply_incremental(const Incremental &inc);
@@ -1299,7 +1312,7 @@ public:
     return new_purged_snaps;
   }
 
-  int64_t lookup_pg_pool_name(const std::string& name) const {
+  int64_t lookup_pg_pool_name(std::string_view name) const {
     auto p = name_pool.find(name);
     if (p == name_pool.end())
       return -ENOENT;
@@ -1427,7 +1440,7 @@ public:
       pg_upmap_items.count(pg);
   }
 
-  bool check_full(const set<pg_shard_t> &missing_on) const {
+  bool check_full(const std::set<pg_shard_t> &missing_on) const {
     for (auto shard : missing_on) {
       if (get_state(shard.osd) & CEPH_OSD_FULL)
 	return true;
@@ -1520,7 +1533,7 @@ public:
   void dump_osd(int id, ceph::Formatter *f) const;
   void dump_osds(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<OSDMap*>& o);
-  bool check_new_blacklist_entries() const { return new_blacklist_entries; }
+  bool check_new_blocklist_entries() const { return new_blocklist_entries; }
 
   void check_health(CephContext *cct, health_check_map_t *checks) const;
 

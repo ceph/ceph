@@ -28,7 +28,7 @@ The other dimension to MDS performance is the available RAM for caching. The
 MDS necessarily manages a distributed and cooperative metadata cache among all
 clients and other active MDSs. Therefore it is essential to provide the MDS
 with sufficient RAM to enable faster metadata access and mutation. The default
-MDS cache size (see also :doc:`/cephfs/cache-size-limits`) is 4GB. It is
+MDS cache size (see also :doc:`/cephfs/cache-configuration`) is 4GB. It is
 recommended to provision at least 8GB of RAM for the MDS to support this cache
 size.
 
@@ -64,17 +64,22 @@ Adding an MDS
 
 #. Create an mds data point ``/var/lib/ceph/mds/ceph-${id}``. The daemon only uses this directory to store its keyring.
 
-#. Create the authentication key, if you use CephX. ::
+#. Create the authentication key, if you use CephX: ::
 
 	$ sudo ceph auth get-or-create mds.${id} mon 'profile mds' mgr 'profile mds' mds 'allow *' osd 'allow *' > /var/lib/ceph/mds/ceph-${id}/keyring
 
-#. Start the service. ::
+#. Start the service: ::
 
 	$ sudo systemctl start ceph-mds@${id}
 
 #. The status of the cluster should show: ::
 
 	mds: ${id}:1 {0=${id}=up:active} 2 up:standby
+
+#. Optionally, configure the file system the MDS should join (:ref:`mds-join-fs`): ::
+
+    $ ceph config set mds.${id} mds_join_fs ${fs}
+
 
 Removing an MDS
 ===============

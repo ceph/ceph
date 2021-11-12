@@ -43,8 +43,8 @@ def bash(cmd, **kwargs):
     check_retcode = kwargs.pop('check_retcode', True)
     kwargs['stdout'] = subprocess.PIPE
     process = subprocess.Popen(cmd, **kwargs)
-    s = process.communicate()[0]
-    log.debug('command returned status=%d stdout=%s', process.returncode, s.decode('utf-8'))
+    s = process.communicate()[0].decode('utf-8')
+    log.debug('command returned status=%d stdout=%s', process.returncode, s)
     if check_retcode:
         assert(process.returncode == 0)
     return (s, process.returncode)
@@ -61,10 +61,10 @@ class Cluster(multisite.Cluster):
         cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', self.cluster_id]
         if args:
             cmd += args
-        cmd += ['--debug-rgw', str(kwargs.pop('debug_rgw', 0))]
-        cmd += ['--debug-ms', str(kwargs.pop('debug_ms', 0))]
+        cmd += ['--debug-rgw=' + str(kwargs.pop('debug_rgw', 0))]
+        cmd += ['--debug-ms=' + str(kwargs.pop('debug_ms', 0))]
         if kwargs.pop('read_only', False):
-            cmd += ['--rgw-cache-enabled', 'false']
+            cmd += ['--rgw-cache-enabled=false']
         return bash(cmd, **kwargs)
 
     def start(self):
@@ -108,7 +108,7 @@ class Gateway(multisite.Gateway):
     def stop(self):
         """ stop the gateway """
         assert(self.cluster)
-        cmd = [mstart_path + 'mstop.sh', self.cluster.cluster_id, 'radosgw', self.id]
+        cmd = [mstart_path + 'mstop.sh', self.cluster.cluster_id, 'radosgw', str(self.port)]
         bash(cmd)
 
 def gen_access_key():

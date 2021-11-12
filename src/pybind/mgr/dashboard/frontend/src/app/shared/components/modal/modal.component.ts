@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Router } from '@angular/router';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 @Component({
   selector: 'cd-modal',
@@ -9,7 +10,9 @@ import { BsModalRef } from 'ngx-bootstrap/modal';
 })
 export class ModalComponent {
   @Input()
-  modalRef: BsModalRef;
+  modalRef: NgbActiveModal;
+  @Input()
+  pageURL: string;
 
   /**
    * Should be a function that is triggered when the modal is hidden.
@@ -17,12 +20,12 @@ export class ModalComponent {
   @Output()
   hide = new EventEmitter();
 
-  constructor() {}
+  constructor(private router: Router) {}
 
   close() {
-    if (this.modalRef) {
-      this.modalRef.hide();
-    }
+    this.pageURL
+      ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
+      : this.modalRef?.close();
     this.hide.emit();
   }
 }

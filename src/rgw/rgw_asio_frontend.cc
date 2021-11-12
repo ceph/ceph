@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <atomic>
+#include <ctime>
 #include <thread>
 #include <vector>
 
@@ -13,12 +14,22 @@
 
 #include "common/async/shared_mutex.h"
 #include "common/errno.h"
+#include "common/strtol.h"
 
 #include "rgw_asio_client.h"
 #include "rgw_asio_frontend.h"
 
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
 #include <boost/asio/ssl.hpp>
+#include <boost/beast/ssl/ssl_stream.hpp>
+
+#include "common/split.h"
+
+#include "services/svc_config_key.h"
+#include "services/svc_zone.h"
+
+#include "rgw_zone.h"
+
 #endif
 
 #include "rgw_dmclock_async_scheduler.h"
@@ -40,34 +51,47 @@ auto make_stack_allocator() {
   return boost::context::protected_fixedsize_stack{512*1024};
 }
 
+using namespace std;
+
 template <typename Stream>
 class StreamIO : public rgw::asio::ClientIO {
   CephContext* const cct;
   Stream& stream;
   spawn::yield_context yield;
   parse_buffer& buffer;
+  ceph::timespan request_timeout;
  public:
   StreamIO(CephContext *cct, Stream& stream, rgw::asio::parser_type& parser,
            spawn::yield_context yield,
            parse_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
-           const tcp::endpoint& remote_endpoint)
+           const tcp::endpoint& remote_endpoint,
+           ceph::timespan request_timeout)
       : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
-        cct(cct), stream(stream), yield(yield), buffer(buffer)
+        cct(cct), stream(stream), yield(yield), buffer(buffer), request_timeout(request_timeout)
   {}
 
   size_t write_data(const char* buf, size_t len) override {
     boost::system::error_code ec;
+    auto& timeout = get_lowest_layer(stream);
+    if (request_timeout.count()) {
+      timeout.expires_after(request_timeout);
+    }
     auto bytes = boost::asio::async_write(stream, boost::asio::buffer(buf, len),
                                           yield[ec]);
     if (ec) {
       ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
+      if (ec==boost::asio::error::broken_pipe) {
+        boost::system::error_code ec_ignored;
+        timeout.socket().shutdown(tcp::socket::shutdown_both, ec_ignored);
+      }
       throw rgw::io::Exception(ec.value(), std::system_category());
     }
     return bytes;
   }
 
   size_t recv_body(char* buf, size_t max) override {
+    auto& timeout = get_lowest_layer(stream);
     auto& message = parser.get();
     auto& body_remaining = message.body();
     body_remaining.data = buf;
@@ -75,9 +99,11 @@ class StreamIO : public rgw::asio::ClientIO {
 
     while (body_remaining.size && !parser.is_done()) {
       boost::system::error_code ec;
+      if (request_timeout.count()) {
+        timeout.expires_after(request_timeout);
+      }
       http::async_read_some(stream, buffer, parser, yield[ec]);
-      if (ec == http::error::partial_message ||
-          ec == http::error::need_buffer) {
+      if (ec == http::error::need_buffer) {
         break;
       }
       if (ec) {
@@ -89,6 +115,57 @@ class StreamIO : public rgw::asio::ClientIO {
   }
 };
 
+// output the http version as a string, ie 'HTTP/1.1'
+struct http_version {
+  unsigned major_ver;
+  unsigned minor_ver;
+  explicit http_version(unsigned version)
+    : major_ver(version / 10), minor_ver(version % 10) {}
+};
+std::ostream& operator<<(std::ostream& out, const http_version& v) {
+  return out << "HTTP/" << v.major_ver << '.' << v.minor_ver;
+}
+
+// log an http header value or '-' if it's missing
+struct log_header {
+  const http::fields& fields;
+  http::field field;
+  std::string_view quote;
+  log_header(const http::fields& fields, http::field field,
+             std::string_view quote = "")
+    : fields(fields), field(field), quote(quote) {}
+};
+std::ostream& operator<<(std::ostream& out, const log_header& h) {
+  auto p = h.fields.find(h.field);
+  if (p == h.fields.end()) {
+    return out << '-';
+  }
+  return out << h.quote << p->value() << h.quote;
+}
+
+// log fractional seconds in milliseconds
+struct log_ms_remainder {
+  ceph::coarse_real_time t;
+  log_ms_remainder(ceph::coarse_real_time t) : t(t) {}
+};
+std::ostream& operator<<(std::ostream& out, const log_ms_remainder& m) {
+  using namespace std::chrono;
+  return out << std::setfill('0') << std::setw(3)
+      << duration_cast<milliseconds>(m.t.time_since_epoch()).count() % 1000;
+}
+
+// log time in apache format: day/month/year:hour:minute:second zone
+struct log_apache_time {
+  ceph::coarse_real_time t;
+  log_apache_time(ceph::coarse_real_time t) : t(t) {}
+};
+std::ostream& operator<<(std::ostream& out, const log_apache_time& a) {
+  const auto t = ceph::coarse_real_clock::to_time_t(a.t);
+  const auto local = std::localtime(&t);
+  return out << std::put_time(local, "%d/%b/%Y:%T.") << log_ms_remainder{a.t}
+      << std::put_time(local, " %z");
+};
+
 using SharedMutex = ceph::async::SharedMutex<boost::asio::io_context::executor_type>;
 
 template <typename Stream>
@@ -98,7 +175,8 @@ void handle_connection(boost::asio::io_context& context,
                        SharedMutex& pause_mutex,
                        rgw::dmclock::Scheduler *scheduler,
                        boost::system::error_code& ec,
-                       spawn::yield_context yield)
+                       spawn::yield_context yield,
+                       ceph::timespan request_timeout)
 {
   // limit header to 4k, since we read it all into a single flat_buffer
   static constexpr size_t header_limit = 4096;
@@ -113,7 +191,10 @@ void handle_connection(boost::asio::io_context& context,
     rgw::asio::parser_type parser;
     parser.header_limit(header_limit);
     parser.body_limit(body_limit);
-
+    auto& timeout = get_lowest_layer(stream);
+    if (request_timeout.count()) {
+      timeout.expires_after(request_timeout);
+    }
     // parse the header
     http::async_read_header(stream, buffer, parser, yield[ec]);
     if (ec == boost::asio::error::connection_reset ||
@@ -126,13 +207,16 @@ void handle_connection(boost::asio::io_context& context,
       ldout(cct, 20) << "failed to read header: " << ec.message() << dendl;
       return;
     }
+    auto& message = parser.get();
     if (ec) {
       ldout(cct, 1) << "failed to read header: " << ec.message() << dendl;
-      auto& message = parser.get();
       http::response<http::empty_body> response;
       response.result(http::status::bad_request);
       response.version(message.version() == 10 ? 10 : 11);
       response.prepare_payload();
+      if (request_timeout.count()) {
+        timeout.expires_after(request_timeout);
+      }
       http::async_write(stream, response, yield[ec]);
       if (ec) {
         ldout(cct, 5) << "failed to write response: " << ec.message() << dendl;
@@ -151,9 +235,9 @@ void handle_connection(boost::asio::io_context& context,
       }
 
       // process the request
-      RGWRequest req{env.store->getRados()->get_new_req_id()};
+      RGWRequest req{env.store->get_new_req_id()};
 
-      auto& socket = stream.lowest_layer();
+      auto& socket = get_lowest_layer(stream).socket();
       const auto& remote_endpoint = socket.remote_endpoint(ec);
       if (ec) {
         ldout(cct, 1) << "failed to connect client: " << ec.message() << dendl;
@@ -162,7 +246,7 @@ void handle_connection(boost::asio::io_context& context,
 
       StreamIO real_client{cct, stream, parser, yield, buffer, is_ssl,
                            socket.local_endpoint(),
-                           remote_endpoint};
+                           remote_endpoint,request_timeout};
 
       auto real_client_io = rgw::io::add_reordering(
                               rgw::io::add_buffering(cct,
@@ -170,9 +254,31 @@ void handle_connection(boost::asio::io_context& context,
                                   rgw::io::add_conlen_controlling(
                                     &real_client))));
       RGWRestfulIO client(cct, &real_client_io);
-      auto y = optional_yield{context, yield};
+      optional_yield y = null_yield;
+      if (cct->_conf->rgw_beast_enable_async) {
+        y = optional_yield{context, yield};
+      }
+      int http_ret = 0;
+      string user = "-";
+      const auto started = ceph::coarse_real_clock::now();
+      ceph::coarse_real_clock::duration latency{};
+
       process_request(env.store, env.rest, &req, env.uri_prefix,
-                      *env.auth_registry, &client, env.olog, y, scheduler);
+                      *env.auth_registry, &client, env.olog, y,
+                      scheduler, &user, &latency, &http_ret);
+
+      if (cct->_conf->subsys.should_gather(dout_subsys, 1)) {
+        // access log line elements begin per Apache Combined Log Format with additions following
+        ldout(cct, 1) << "beast: " << std::hex << &req << std::dec << ": "
+            << remote_endpoint.address() << " - " << user << " [" << log_apache_time{started} << "] \""
+            << message.method_string() << ' ' << message.target() << ' '
+            << http_version{message.version()} << "\" " << http_ret << ' '
+            << client.get_bytes_sent() + client.get_bytes_received() << ' '
+            << log_header{message, http::field::referer, "\""} << ' '
+            << log_header{message, http::field::user_agent, "\""} << ' '
+            << log_header{message, http::field::range} << " latency="
+            << latency << dendl;
+      }
     }
 
     if (!parser.keep_alive()) {
@@ -188,6 +294,9 @@ void handle_connection(boost::asio::io_context& context,
       body.size = discard_buffer.size();
       body.data = discard_buffer.data();
 
+      if (request_timeout.count()) {
+        timeout.expires_after(request_timeout);
+      }
       http::async_read_some(stream, buffer, parser, yield[ec]);
       if (ec == http::error::need_buffer) {
         continue;
@@ -247,8 +356,14 @@ class AsioFrontend {
   RGWProcessEnv env;
   RGWFrontendConfig* conf;
   boost::asio::io_context context;
+  ceph::timespan request_timeout = std::chrono::milliseconds(REQUEST_TIMEOUT);
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   boost::optional<ssl::context> ssl_context;
+  int get_config_key_val(string name,
+                         const string& type,
+                         bufferlist *pbl);
+  int ssl_set_private_key(const string& name, bool is_ssl_cert);
+  int ssl_set_certificate_chain(const string& name);
   int init_ssl();
 #endif
   SharedMutex pause_mutex;
@@ -309,7 +424,7 @@ class AsioFrontend {
   void stop();
   void join();
   void pause();
-  void unpause(rgw::sal::RGWRadosStore* store, rgw_auth_registry_ptr_t);
+  void unpause(rgw::sal::Store* store, rgw_auth_registry_ptr_t);
 };
 
 unsigned short parse_port(const char *input, boost::system::error_code& ec)
@@ -401,6 +516,18 @@ int AsioFrontend::init()
   boost::system::error_code ec;
   auto& config = conf->get_config_map();
 
+// Setting global timeout
+  auto timeout = config.find("request_timeout_ms");
+  if (timeout != config.end()) {
+    auto timeout_number = ceph::parse<uint64_t>(timeout->second.data());
+    if (timeout_number) {
+      request_timeout =  std::chrono::milliseconds(*timeout_number);
+    } else {
+      lderr(ctx()) << "WARNING: invalid value for request_timeout_ms: "
+      << timeout->second.data() << " setting it to the default value: "
+      << REQUEST_TIMEOUT << dendl;
+    }
+  } 
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   int r = init_ssl();
   if (r < 0) {
@@ -474,7 +601,17 @@ int AsioFrontend::init()
       return -ec.value();
     }
 
-    l.acceptor.listen(boost::asio::socket_base::max_connections);
+    auto it = config.find("max_connection_backlog");
+    auto max_connection_backlog = boost::asio::socket_base::max_listen_connections;
+    if (it != config.end()) {
+      string err;
+      max_connection_backlog = strict_strtol(it->second.c_str(), 10, &err);
+      if (!err.empty()) {
+        ldout(ctx(), 0) << "WARNING: invalid value for max_connection_backlog=" << it->second << dendl;
+        max_connection_backlog = boost::asio::socket_base::max_listen_connections;
+      }
+    }
+    l.acceptor.listen(max_connection_backlog);
     l.acceptor.async_accept(l.socket,
                             [this, &l] (boost::system::error_code ec) {
                               accept(l, ec);
@@ -492,53 +629,272 @@ int AsioFrontend::init()
 }
 
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
+
+static string config_val_prefix = "config://";
+
+namespace {
+
+class ExpandMetaVar {
+  map<string, string> meta_map;
+
+public:
+  ExpandMetaVar(rgw::sal::Zone* zone_svc) {
+    meta_map["realm"] = zone_svc->get_realm().get_name();
+    meta_map["realm_id"] = zone_svc->get_realm().get_id();
+    meta_map["zonegroup"] = zone_svc->get_zonegroup().get_name();
+    meta_map["zonegroup_id"] = zone_svc->get_zonegroup().get_id();
+    meta_map["zone"] = zone_svc->get_name();
+    meta_map["zone_id"] = zone_svc->get_id().id;
+  }
+
+  string process_str(const string& in);
+};
+
+string ExpandMetaVar::process_str(const string& in)
+{
+  if (meta_map.empty()) {
+    return in;
+  }
+
+  auto pos = in.find('$');
+  if (pos == std::string::npos) {
+    return in;
+  }
+
+  string out;
+  decltype(pos) last_pos = 0;
+
+  while (pos != std::string::npos) {
+    if (pos > last_pos) {
+      out += in.substr(last_pos, pos - last_pos);
+    }
+
+    string var;
+    const char *valid_chars = "abcdefghijklmnopqrstuvwxyz_";
+
+    size_t endpos = 0;
+    if (in[pos+1] == '{') {
+      // ...${foo_bar}...
+      endpos = in.find_first_not_of(valid_chars, pos + 2);
+      if (endpos != std::string::npos &&
+	  in[endpos] == '}') {
+	var = in.substr(pos + 2, endpos - pos - 2);
+	endpos++;
+      }
+    } else {
+      // ...$foo...
+      endpos = in.find_first_not_of(valid_chars, pos + 1);
+      if (endpos != std::string::npos)
+	var = in.substr(pos + 1, endpos - pos - 1);
+      else
+	var = in.substr(pos + 1);
+    }
+    string var_source = in.substr(pos, endpos - pos);
+    last_pos = endpos;
+
+    auto iter = meta_map.find(var);
+    if (iter != meta_map.end()) {
+      out += iter->second;
+    } else {
+      out += var_source;
+    }
+    pos = in.find('$', last_pos);
+  }
+  if (last_pos != std::string::npos) {
+    out += in.substr(last_pos);
+  }
+
+  return out;
+}
+
+} /* anonymous namespace */
+
+int AsioFrontend::get_config_key_val(string name,
+                                     const string& type,
+                                     bufferlist *pbl)
+{
+  if (name.empty()) {
+    lderr(ctx()) << "bad " << type << " config value" << dendl;
+    return -EINVAL;
+  }
+
+  int r = env.store->get_config_key_val(name, pbl);
+  if (r < 0) {
+    lderr(ctx()) << type << " was not found: " << name << dendl;
+    return r;
+  }
+  return 0;
+}
+
+int AsioFrontend::ssl_set_private_key(const string& name, bool is_ssl_certificate)
+{
+  boost::system::error_code ec;
+
+  if (!boost::algorithm::starts_with(name, config_val_prefix)) {
+    ssl_context->use_private_key_file(name, ssl::context::pem, ec);
+  } else {
+    bufferlist bl;
+    int r = get_config_key_val(name.substr(config_val_prefix.size()),
+                               "ssl_private_key",
+                               &bl);
+    if (r < 0) {
+      return r;
+    }
+    ssl_context->use_private_key(boost::asio::buffer(bl.c_str(), bl.length()),
+                                 ssl::context::pem, ec);
+  }
+
+  if (ec) {
+    if (!is_ssl_certificate) {
+      lderr(ctx()) << "failed to add ssl_private_key=" << name
+        << ": " << ec.message() << dendl;
+    } else {
+      lderr(ctx()) << "failed to use ssl_certificate=" << name
+        << " as a private key: " << ec.message() << dendl;
+    }
+    return -ec.value();
+  }
+
+  return 0;
+}
+
+int AsioFrontend::ssl_set_certificate_chain(const string& name)
+{
+  boost::system::error_code ec;
+
+  if (!boost::algorithm::starts_with(name, config_val_prefix)) {
+    ssl_context->use_certificate_chain_file(name, ec);
+  } else {
+    bufferlist bl;
+    int r = get_config_key_val(name.substr(config_val_prefix.size()),
+                               "ssl_certificate",
+                               &bl);
+    if (r < 0) {
+      return r;
+    }
+    ssl_context->use_certificate_chain(boost::asio::buffer(bl.c_str(), bl.length()),
+                                 ec);
+  }
+
+  if (ec) {
+    lderr(ctx()) << "failed to use ssl_certificate=" << name
+      << ": " << ec.message() << dendl;
+    return -ec.value();
+  }
+
+  return 0;
+}
+
 int AsioFrontend::init_ssl()
 {
   boost::system::error_code ec;
   auto& config = conf->get_config_map();
 
   // ssl configuration
-  auto cert = config.find("ssl_certificate");
-  const bool have_cert = cert != config.end();
-  if (have_cert) {
+  std::optional<string> cert = conf->get_val("ssl_certificate");
+  if (cert) {
     // only initialize the ssl context if it's going to be used
     ssl_context = boost::in_place(ssl::context::tls);
   }
 
-  auto key = config.find("ssl_private_key");
-  const bool have_private_key = key != config.end();
-  if (have_private_key) {
-    if (!have_cert) {
-      lderr(ctx()) << "no ssl_certificate configured for ssl_private_key" << dendl;
+  std::optional<string> key = conf->get_val("ssl_private_key");
+  bool have_cert = false;
+
+  if (key && !cert) {
+    lderr(ctx()) << "no ssl_certificate configured for ssl_private_key" << dendl;
+    return -EINVAL;
+  }
+
+  std::optional<string> options = conf->get_val("ssl_options");
+  if (options) {
+    if (!cert) {
+      lderr(ctx()) << "no ssl_certificate configured for ssl_options" << dendl;
       return -EINVAL;
     }
-    ssl_context->use_private_key_file(key->second, ssl::context::pem, ec);
-    if (ec) {
-      lderr(ctx()) << "failed to add ssl_private_key=" << key->second
-          << ": " << ec.message() << dendl;
-      return -ec.value();
-    }
+  } else if (cert) {
+    options = "no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1";
   }
-  if (have_cert) {
-    ssl_context->use_certificate_chain_file(cert->second, ec);
-    if (ec) {
-      lderr(ctx()) << "failed to use ssl_certificate=" << cert->second
-          << ": " << ec.message() << dendl;
-      return -ec.value();
-    }
-    if (!have_private_key) {
-      // attempt to use it as a private key if a separate one wasn't provided
-      ssl_context->use_private_key_file(cert->second, ssl::context::pem, ec);
-      if (ec) {
-        lderr(ctx()) << "failed to use ssl_certificate=" << cert->second
-            << " as a private key: " << ec.message() << dendl;
-        return -ec.value();
+
+  if (options) {
+    for (auto &option : ceph::split(*options, ":")) {
+      if (option == "default_workarounds") {
+        ssl_context->set_options(ssl::context::default_workarounds);
+      } else if (option == "no_compression") {
+        ssl_context->set_options(ssl::context::no_compression);
+      } else if (option == "no_sslv2") {
+        ssl_context->set_options(ssl::context::no_sslv2);
+      } else if (option == "no_sslv3") {
+        ssl_context->set_options(ssl::context::no_sslv3);
+      } else if (option == "no_tlsv1") {
+        ssl_context->set_options(ssl::context::no_tlsv1);
+      } else if (option == "no_tlsv1_1") {
+        ssl_context->set_options(ssl::context::no_tlsv1_1);
+      } else if (option == "no_tlsv1_2") {
+        ssl_context->set_options(ssl::context::no_tlsv1_2);
+      } else if (option == "single_dh_use") {
+        ssl_context->set_options(ssl::context::single_dh_use);
+      } else {
+        lderr(ctx()) << "ignoring unknown ssl option '" << option << "'" << dendl;
       }
     }
   }
 
-  // parse ssl endpoints
+  std::optional<string> ciphers = conf->get_val("ssl_ciphers");
+  if (ciphers) {
+    if (!cert) {
+      lderr(ctx()) << "no ssl_certificate configured for ssl_ciphers" << dendl;
+      return -EINVAL;
+    }
+
+    int r = SSL_CTX_set_cipher_list(ssl_context->native_handle(),
+                                    ciphers->c_str());
+    if (r == 0) {
+      lderr(ctx()) << "no cipher could be selected from ssl_ciphers: "
+                   << *ciphers << dendl;
+      return -EINVAL;
+    }
+  }
+
   auto ports = config.equal_range("ssl_port");
+  auto endpoints = config.equal_range("ssl_endpoint");
+
+  /*
+   * don't try to config certificate if frontend isn't configured for ssl
+   */
+  if (ports.first == ports.second &&
+      endpoints.first == endpoints.second) {
+    return 0;
+  }
+
+  bool key_is_cert = false;
+
+  if (cert) {
+    if (!key) {
+      key = cert;
+      key_is_cert = true;
+    }
+
+    ExpandMetaVar emv(env.store->get_zone());
+
+    cert = emv.process_str(*cert);
+    key = emv.process_str(*key);
+
+    int r = ssl_set_private_key(*key, key_is_cert);
+    bool have_private_key = (r >= 0);
+    if (r < 0) {
+      if (!key_is_cert) {
+        r = ssl_set_private_key(*cert, true);
+        have_private_key = (r >= 0);
+      }
+    }
+
+    if (have_private_key) {
+      int r = ssl_set_certificate_chain(*cert);
+      have_cert = (r >= 0);
+    }
+  }
+
+  // parse ssl endpoints
   for (auto i = ports.first; i != ports.second; ++i) {
     if (!have_cert) {
       lderr(ctx()) << "no ssl_certificate configured for ssl_port" << dendl;
@@ -558,7 +914,6 @@ int AsioFrontend::init_ssl()
     listeners.back().use_ssl = true;
   }
 
-  auto endpoints = config.equal_range("ssl_endpoint");
   for (auto i = endpoints.first; i != endpoints.second; ++i) {
     if (!have_cert) {
       lderr(ctx()) << "no ssl_certificate configured for ssl_endpoint" << dendl;
@@ -594,19 +949,23 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
                           [this, &l] (boost::system::error_code ec) {
                             accept(l, ec);
                           });
-
+  
+  boost::beast::tcp_stream stream(std::move(socket));
   // spawn a coroutine to handle the connection
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   if (l.use_ssl) {
     spawn::spawn(context,
-      [this, s=std::move(socket)] (spawn::yield_context yield) mutable {
-        Connection conn{s};
+      [this, s=std::move(stream)] (spawn::yield_context yield) mutable {
+        Connection conn{s.socket()};
         auto c = connections.add(conn);
-        // wrap the socket in an ssl stream
-        ssl::stream<tcp::socket&> stream{s, *ssl_context};
+        // wrap the tcp_stream in an ssl stream
+        boost::beast::ssl_stream<boost::beast::tcp_stream&> stream{s, *ssl_context};
         auto buffer = std::make_unique<parse_buffer>();
         // do ssl handshake
         boost::system::error_code ec;
+        if (request_timeout.count()) {
+          get_lowest_layer(stream).expires_after(request_timeout);
+        }
         auto bytes = stream.async_handshake(ssl::stream_base::server,
                                             buffer->data(), yield[ec]);
         if (ec) {
@@ -615,26 +974,26 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         }
         buffer->consume(bytes);
         handle_connection(context, env, stream, *buffer, true, pause_mutex,
-                          scheduler.get(), ec, yield);
+                          scheduler.get(), ec, yield, request_timeout);
         if (!ec) {
           // ssl shutdown (ignoring errors)
           stream.async_shutdown(yield[ec]);
         }
-        s.shutdown(tcp::socket::shutdown_both, ec);
+        s.socket().shutdown(tcp::socket::shutdown_both, ec);
       }, make_stack_allocator());
   } else {
 #else
   {
 #endif // WITH_RADOSGW_BEAST_OPENSSL
     spawn::spawn(context,
-      [this, s=std::move(socket)] (spawn::yield_context yield) mutable {
-        Connection conn{s};
+      [this, s=std::move(stream)] (spawn::yield_context yield) mutable {
+        Connection conn{s.socket()};
         auto c = connections.add(conn);
         auto buffer = std::make_unique<parse_buffer>();
         boost::system::error_code ec;
         handle_connection(context, env, s, *buffer, false, pause_mutex,
-                          scheduler.get(), ec, yield);
-        s.shutdown(tcp::socket::shutdown_both, ec);
+                          scheduler.get(), ec, yield, request_timeout);
+        s.socket().shutdown(tcp::socket::shutdown_both, ec);
       }, make_stack_allocator());
   }
 }
@@ -652,11 +1011,12 @@ int AsioFrontend::run()
   work.emplace(boost::asio::make_work_guard(context));
 
   for (int i = 0; i < thread_count; i++) {
-    threads.emplace_back([=] {
+    threads.emplace_back([=]() noexcept {
       // request warnings on synchronous librados calls in this thread
       is_asio_thread = true;
-      boost::system::error_code ec;
-      context.run(ec);
+      // Have uncaught exceptions kill the process and give a
+      // stacktrace, not be swallowed.
+      context.run();
     });
   }
   return 0;
@@ -712,7 +1072,7 @@ void AsioFrontend::pause()
   }
 }
 
-void AsioFrontend::unpause(rgw::sal::RGWRadosStore* const store,
+void AsioFrontend::unpause(rgw::sal::Store* const store,
                            rgw_auth_registry_ptr_t auth_registry)
 {
   env.store = store;
@@ -776,7 +1136,7 @@ void RGWAsioFrontend::pause_for_new_config()
 }
 
 void RGWAsioFrontend::unpause_with_new_config(
-  rgw::sal::RGWRadosStore* const store,
+  rgw::sal::Store* const store,
   rgw_auth_registry_ptr_t auth_registry
 ) {
   impl->unpause(store, std::move(auth_registry));

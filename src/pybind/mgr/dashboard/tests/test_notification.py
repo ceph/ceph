@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import random
 import time
 import unittest
-
 
 from ..tools import NotificationQueue
 

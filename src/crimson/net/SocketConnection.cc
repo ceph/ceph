@@ -14,8 +14,6 @@
 
 #include "SocketConnection.h"
 
-#include "Config.h"
-#include "ProtocolV1.h"
 #include "ProtocolV2.h"
 #include "SocketMessenger.h"
 
@@ -23,19 +21,15 @@
 #include "Interceptor.h"
 #endif
 
+using std::ostream;
 using namespace crimson::net;
+using crimson::common::local_conf;
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
-                                   Dispatcher& dispatcher,
-                                   bool is_msgr2)
-  : messenger(messenger)
+                                   ChainedDispatchers& dispatchers)
+  : messenger(messenger),
+    protocol(std::make_unique<ProtocolV2>(dispatchers, *this, messenger))
 {
-  ceph_assert(&messenger.container().local() == &messenger);
-  if (is_msgr2) {
-    protocol = std::make_unique<ProtocolV2>(dispatcher, *this, messenger);
-  } else {
-    protocol = std::make_unique<ProtocolV1>(dispatcher, *this, messenger);
-  }
 #ifdef UNIT_TESTS_BUILT
   if (messenger.interceptor) {
     interceptor = messenger.interceptor;
@@ -53,15 +47,21 @@ SocketConnection::get_messenger() const {
 
 bool SocketConnection::is_connected() const
 {
-  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   return protocol->is_connected();
 }
 
 #ifdef UNIT_TESTS_BUILT
 bool SocketConnection::is_closed() const
 {
-  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   return protocol->is_closed();
+}
+
+bool SocketConnection::is_closed_clean() const
+{
+  assert(seastar::this_shard_id() == shard_id());
+  return protocol->is_closed_clean;
 }
 
 #endif
@@ -70,38 +70,34 @@ bool SocketConnection::peer_wins() const
   return (messenger.get_myaddr() > peer_addr || policy.server);
 }
 
-seastar::future<> SocketConnection::send(MessageRef msg)
+seastar::future<> SocketConnection::send(MessageURef msg)
 {
-  // Cannot send msg from another core now, its ref counter can be contaminated!
-  ceph_assert(seastar::engine().cpu_id() == shard_id());
-  return seastar::smp::submit_to(shard_id(), [this, msg=std::move(msg)] {
-    return protocol->send(std::move(msg));
-  });
+  assert(seastar::this_shard_id() == shard_id());
+  return protocol->send(std::move(msg));
 }
 
 seastar::future<> SocketConnection::keepalive()
 {
-  return seastar::smp::submit_to(shard_id(), [this] {
-    return protocol->keepalive();
-  });
+  assert(seastar::this_shard_id() == shard_id());
+  return protocol->keepalive();
 }
 
-seastar::future<> SocketConnection::close()
+void SocketConnection::mark_down()
 {
-  ceph_assert(seastar::engine().cpu_id() == shard_id());
-  return protocol->close();
+  assert(seastar::this_shard_id() == shard_id());
+  protocol->close(false);
 }
 
 bool SocketConnection::update_rx_seq(seq_num_t seq)
 {
   if (seq <= in_seq) {
     if (HAVE_FEATURE(features, RECONNECT_SEQ) &&
-        conf.ms_die_on_old_message) {
+        local_conf()->ms_die_on_old_message) {
       ceph_abort_msg("old msgs despite reconnect_seq feature");
     }
     return false;
   } else if (seq > in_seq + 1) {
-    if (conf.ms_die_on_skipped_message) {
+    if (local_conf()->ms_die_on_skipped_message) {
       ceph_abort_msg("skipped incoming seq");
     }
     return false;
@@ -113,16 +109,22 @@ bool SocketConnection::update_rx_seq(seq_num_t seq)
 
 void
 SocketConnection::start_connect(const entity_addr_t& _peer_addr,
-                                const entity_type_t& _peer_type)
+                                const entity_name_t& _peer_name)
 {
-  protocol->start_connect(_peer_addr, _peer_type);
+  protocol->start_connect(_peer_addr, _peer_name);
 }
 
 void
-SocketConnection::start_accept(SocketFRef&& sock,
+SocketConnection::start_accept(SocketRef&& sock,
                                const entity_addr_t& _peer_addr)
 {
   protocol->start_accept(std::move(sock), _peer_addr);
+}
+
+seastar::future<>
+SocketConnection::close_clean(bool dispatch_reset)
+{
+  return protocol->close_clean(dispatch_reset);
 }
 
 seastar::shard_id SocketConnection::shard_id() const {
@@ -131,13 +133,13 @@ seastar::shard_id SocketConnection::shard_id() const {
 
 void SocketConnection::print(ostream& out) const {
     messenger.print(out);
-    if (side == side_t::none) {
+    if (!protocol->socket) {
       out << " >> " << get_peer_name() << " " << peer_addr;
-    } else if (side == side_t::acceptor) {
+    } else if (protocol->socket->get_side() == Socket::side_t::acceptor) {
       out << " >> " << get_peer_name() << " " << peer_addr
-          << "@" << ephemeral_port;
-    } else { // side == side_t::connector
-      out << "@" << ephemeral_port
+          << "@" << protocol->socket->get_ephemeral_port();
+    } else { // protocol->socket->get_side() == Socket::side_t::connector
+      out << "@" << protocol->socket->get_ephemeral_port()
           << " >> " << get_peer_name() << " " << peer_addr;
     }
 }

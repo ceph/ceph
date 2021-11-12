@@ -28,7 +28,7 @@
 #include <boost/lexical_cast.hpp>
 
 
-using std::string;
+using namespace std;
 
 TEST(DaemonConfig, SimpleSet) {
   int ret;
@@ -131,8 +131,7 @@ TEST(DaemonConfig, ArgV) {
   const char *argv[] = { "foo", "--log-graylog-port", "22",
 			 "--key", "my-key", NULL };
   size_t argc = (sizeof(argv) / sizeof(argv[0])) - 1;
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   g_ceph_context->_conf.parse_argv(args);
   g_ceph_context->_conf.apply_changes(nullptr);
 

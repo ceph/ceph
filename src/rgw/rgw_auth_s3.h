@@ -7,12 +7,11 @@
 #include <array>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <tuple>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/container/static_vector.hpp>
-#include <boost/utility/string_ref.hpp>
-#include <boost/utility/string_view.hpp>
 
 #include "common/sstring.hh"
 #include "rgw_common.h"
@@ -36,7 +35,7 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                         public rgw::auth::LocalApplier::Factory,
                         public rgw::auth::RoleApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
-  RGWCtl* const ctl;
+  rgw::sal::Store* store;
   rgw::auth::ImplicitTenants& implicit_tenant_context;
 
   STSEngine  sts_engine;
@@ -46,8 +45,8 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
                              const rgw::auth::RemoteApplier::AuthInfo &info
                             ) const override {
-    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::RemoteApplier(cct, ctl, std::move(acl_alg), info,
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
 			       implicit_tenant_context,
                                rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_S3));
     return aplptr_t(new decltype(apl)(std::move(apl)));
@@ -58,29 +57,28 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
                             const boost::optional<uint32_t>& perm_mask) const override {
-    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
   aplptr_t create_apl_role(CephContext* const cct,
                             const req_state* const s,
-                            const string& role_name,
-                            const rgw_user& user_id,
-                            const vector<std::string>& role_policies) const override {
-    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::RoleApplier(cct, role_name, user_id, role_policies));
+                            const rgw::auth::RoleApplier::Role& role,
+                            const rgw::auth::RoleApplier::TokenAttrs& token_attrs) const override {
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::RoleApplier(cct, role, token_attrs));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
 public:
   STSAuthStrategy(CephContext* const cct,
-                       RGWCtl* const ctl,
+                       rgw::sal::Store* store,
                        rgw::auth::ImplicitTenants& implicit_tenant_context,
                        AWSEngine::VersionAbstractor* const ver_abstractor)
-    : ctl(ctl),
+    : store(store),
       implicit_tenant_context(implicit_tenant_context),
-      sts_engine(cct, ctl, *ver_abstractor,
+      sts_engine(cct, store, *ver_abstractor,
                   static_cast<rgw::auth::LocalApplier::Factory*>(this),
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this),
                   static_cast<rgw::auth::RoleApplier::Factory*>(this)) {
@@ -97,7 +95,7 @@ public:
 class ExternalAuthStrategy : public rgw::auth::Strategy,
                              public rgw::auth::RemoteApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
-  RGWCtl* const ctl;
+  rgw::sal::Store* store;
   rgw::auth::ImplicitTenants& implicit_tenant_context;
 
   using keystone_config_t = rgw::keystone::CephCtxConfig;
@@ -113,8 +111,8 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
                              const rgw::auth::RemoteApplier::AuthInfo &info
                             ) const override {
-    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::RemoteApplier(cct, ctl, std::move(acl_alg), info,
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
                                implicit_tenant_context,
                                rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_S3));
     /* TODO(rzarzynski): replace with static_ptr. */
@@ -123,12 +121,12 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
 
 public:
   ExternalAuthStrategy(CephContext* const cct,
-                       RGWCtl* const ctl,
+                       rgw::sal::Store* store,
                        rgw::auth::ImplicitTenants& implicit_tenant_context,
                        AWSEngine::VersionAbstractor* const ver_abstractor)
-    : ctl(ctl),
+    : store(store),
       implicit_tenant_context(implicit_tenant_context),
-      ldap_engine(cct, ctl, *ver_abstractor,
+      ldap_engine(cct, store, *ver_abstractor,
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this)) {
 
     if (cct->_conf->rgw_s3_auth_use_keystone &&
@@ -164,7 +162,7 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
                                 AbstractorT>::value,
                 "AbstractorT must be a subclass of rgw::auth::s3::VersionAbstractor");
 
-  RGWCtl* const ctl;
+  rgw::sal::Store* store;
   AbstractorT ver_abstractor;
 
   S3AnonymousEngine anonymous_engine;
@@ -177,7 +175,7 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
                             const boost::optional<uint32_t>& perm_mask) const override {
-    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
@@ -222,14 +220,14 @@ public:
 
   AWSAuthStrategy(CephContext* const cct,
                   rgw::auth::ImplicitTenants& implicit_tenant_context,
-                  RGWCtl* const ctl)
-    : ctl(ctl),
+                  rgw::sal::Store* store)
+    : store(store),
       ver_abstractor(cct),
       anonymous_engine(cct,
                        static_cast<rgw::auth::LocalApplier::Factory*>(this)),
-      external_engines(cct, ctl, implicit_tenant_context, &ver_abstractor),
-      sts_engine(cct, ctl, implicit_tenant_context, &ver_abstractor),
-      local_engine(cct, ctl, ver_abstractor,
+      external_engines(cct, store, implicit_tenant_context, &ver_abstractor),
+      sts_engine(cct, store, implicit_tenant_context, &ver_abstractor),
+      local_engine(cct, store, ver_abstractor,
                    static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
     /* The anonymous auth. */
     if (AllowAnonAccessT) {
@@ -270,8 +268,8 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
   CephContext* const cct;
 
-  const boost::string_view date;
-  const boost::string_view credential_scope;
+  const std::string_view date;
+  const std::string_view credential_scope;
   const signing_key_t signing_key;
 
   class ChunkMeta {
@@ -281,14 +279,14 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
     ChunkMeta(const size_t data_starts_in_stream,
               const size_t data_length,
-              const boost::string_ref signature)
+              const std::string_view signature)
       : data_offset_in_stream(data_starts_in_stream),
         data_length(data_length),
-        signature(signature.to_string()) {
+        signature(std::string(signature)) {
     }
 
-    explicit ChunkMeta(const boost::string_view& signature)
-      : signature(signature.to_string()) {
+    explicit ChunkMeta(const std::string_view& signature)
+      : signature(std::string(signature)) {
     }
 
   public:
@@ -314,7 +312,7 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
     /* Factory: create an object representing metadata of first, initial chunk
      * in a stream. */
-    static ChunkMeta create_first(const boost::string_view& seed_signature) {
+    static ChunkMeta create_first(const std::string_view& seed_signature) {
       return ChunkMeta(seed_signature);
     }
 
@@ -339,9 +337,9 @@ public:
   /* We need the constructor to be public because of the std::make_shared that
    * is employed by the create() method. */
   AWSv4ComplMulti(const req_state* const s,
-                  boost::string_view date,
-                  boost::string_view credential_scope,
-                  boost::string_view seed_signature,
+                  std::string_view date,
+                  std::string_view credential_scope,
+                  std::string_view seed_signature,
                   const signing_key_t& signing_key)
     : io_base_t(nullptr),
       cct(s->cct),
@@ -371,9 +369,9 @@ public:
 
   /* Factories. */
   static cmplptr_t create(const req_state* s,
-                          boost::string_view date,
-                          boost::string_view credential_scope,
-                          boost::string_view seed_signature,
+                          std::string_view date,
+                          std::string_view credential_scope,
+                          std::string_view seed_signature,
                           const boost::optional<std::string>& secret_key);
 
 };
@@ -417,25 +415,27 @@ public:
 } /* namespace rgw */
 
 void rgw_create_s3_canonical_header(
+  const DoutPrefixProvider *dpp,
   const char *method,
   const char *content_md5,
   const char *content_type,
   const char *date,
-  const std::map<std::string, std::string>& meta_map,
-  const std::map<std::string, std::string>& qs_map,
+  const meta_map_t& meta_map,
+  const meta_map_t& qs_map,
   const char *request_uri,
   const std::map<std::string, std::string>& sub_resources,
   std::string& dest_str);
-bool rgw_create_s3_canonical_header(const req_info& info,
+bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
+                                    const req_info& info,
                                     utime_t *header_time,       /* out */
                                     std::string& dest,          /* out */
                                     bool qsr);
 static inline std::tuple<bool, std::string, utime_t>
-rgw_create_s3_canonical_header(const req_info& info, const bool qsr) {
+rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp, const req_info& info, const bool qsr) {
   std::string dest;
   utime_t header_time;
 
-  const bool ok = rgw_create_s3_canonical_header(info, &header_time, dest, qsr);
+  const bool ok = rgw_create_s3_canonical_header(dpp, info, &header_time, dest, qsr);
   return std::make_tuple(ok, dest, header_time);
 }
 
@@ -454,14 +454,21 @@ static constexpr char AWS4_UNSIGNED_PAYLOAD_HASH[] = "UNSIGNED-PAYLOAD";
 static constexpr char AWS4_STREAMING_PAYLOAD_HASH[] = \
   "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
 
+bool is_non_s3_op(RGWOpType op_type);
+
 int parse_v4_credentials(const req_info& info,                     /* in */
-			 boost::string_view& access_key_id,        /* out */
-			 boost::string_view& credential_scope,     /* out */
-			 boost::string_view& signedheaders,        /* out */
-			 boost::string_view& signature,            /* out */
-			 boost::string_view& date,                 /* out */
-			 boost::string_view& session_token,        /* out */
-			 const bool using_qs);                     /* in */
+			 std::string_view& access_key_id,        /* out */
+			 std::string_view& credential_scope,     /* out */
+			 std::string_view& signedheaders,        /* out */
+			 std::string_view& signature,            /* out */
+			 std::string_view& date,                 /* out */
+			 std::string_view& session_token,        /* out */
+			 const bool using_qs,                    /* in  */
+                         const DoutPrefixProvider *dpp);         /* in */
+
+string gen_v4_scope(const ceph::real_time& timestamp,
+                    const string& region,
+                    const string& service);
 
 static inline bool char_needs_aws4_escaping(const char c, bool encode_slash)
 {
@@ -500,7 +507,7 @@ static inline std::string aws4_uri_encode(const std::string& src, bool encode_sl
   return result;
 }
 
-static inline std::string aws4_uri_recode(const boost::string_view& src, bool encode_slash)
+static inline std::string aws4_uri_recode(const std::string_view& src, bool encode_slash)
 {
   std::string decoded = url_decode(src);
   return aws4_uri_encode(decoded, encode_slash);
@@ -512,6 +519,22 @@ static inline std::string get_v4_canonical_uri(const req_info& info) {
    * approach that boto library. See auth.py:canonical_uri(...). */
 
   std::string canonical_uri = aws4_uri_recode(info.request_uri_aws4, false);
+
+  if (canonical_uri.empty()) {
+    canonical_uri = "/";
+  } else {
+    boost::replace_all(canonical_uri, "+", "%20");
+  }
+
+  return canonical_uri;
+}
+
+static inline std::string gen_v4_canonical_uri(const req_info& info) {
+  /* The code should normalize according to RFC 3986 but S3 does NOT do path
+   * normalization that SigV4 typically does. This code follows the same
+   * approach that boto library. See auth.py:canonical_uri(...). */
+
+  std::string canonical_uri = aws4_uri_recode(info.request_uri, false);
 
   if (canonical_uri.empty()) {
     canonical_uri = "/";
@@ -578,33 +601,42 @@ static inline bool is_v4_payload_streamed(const char* const exp_payload_hash)
 
 std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
 
+std::string gen_v4_canonical_qs(const req_info& info);
+
 boost::optional<std::string>
 get_v4_canonical_headers(const req_info& info,
-                         const boost::string_view& signedheaders,
+                         const std::string_view& signedheaders,
                          bool using_qs,
                          bool force_boto2_compat);
 
+std::string gen_v4_canonical_headers(const req_info& info,
+                                     const std::map<std::string, std::string>& extra_headers,
+                                     string *signed_hdrs);
+
 extern sha256_digest_t
 get_v4_canon_req_hash(CephContext* cct,
-                      const boost::string_view& http_verb,
+                      const std::string_view& http_verb,
                       const std::string& canonical_uri,
                       const std::string& canonical_qs,
                       const std::string& canonical_hdrs,
-                      const boost::string_view& signed_hdrs,
-                      const boost::string_view& request_payload_hash);
+                      const std::string_view& signed_hdrs,
+                      const std::string_view& request_payload_hash,
+                      const DoutPrefixProvider *dpp);
 
 AWSEngine::VersionAbstractor::string_to_sign_t
 get_v4_string_to_sign(CephContext* cct,
-                      const boost::string_view& algorithm,
-                      const boost::string_view& request_date,
-                      const boost::string_view& credential_scope,
-                      const sha256_digest_t& canonreq_hash);
+                      const std::string_view& algorithm,
+                      const std::string_view& request_date,
+                      const std::string_view& credential_scope,
+                      const sha256_digest_t& canonreq_hash,
+                      const DoutPrefixProvider *dpp);
 
 extern AWSEngine::VersionAbstractor::server_signature_t
-get_v4_signature(const boost::string_view& credential_scope,
+get_v4_signature(const std::string_view& credential_scope,
                  CephContext* const cct,
-                 const boost::string_view& secret_key,
-                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
+                 const std::string_view& secret_key,
+                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign,
+                 const DoutPrefixProvider *dpp);
 
 extern AWSEngine::VersionAbstractor::server_signature_t
 get_v2_signature(CephContext*,

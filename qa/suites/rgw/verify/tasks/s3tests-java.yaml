@@ -1,8 +1,6 @@
-# for now, s3-tests requires py2
-os_type: ubuntu
 tasks:
 - s3tests-java:
     client.0:
-        force-branch: master
+        force-branch: ceph-master
         force-repo: https://github.com/ceph/java_s3tests.git 
 

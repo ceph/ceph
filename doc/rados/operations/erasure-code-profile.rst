@@ -8,10 +8,12 @@ Erasure code is defined by a **profile** and is used when creating an
 erasure coded pool and the associated CRUSH rule.
 
 The **default** erasure code profile (which is created when the Ceph
-cluster is initialized) provides the same level of redundancy as two
-copies but requires 25% less disk space. It is described as a profile
-with **k=2** and **m=1**, meaning the information is spread over three
-OSD (k+m == 3) and one of them can be lost.
+cluster is initialized) will split the data into 2 equal-sized chunks,
+and have 2 parity chunks of the same size. It will take as much space
+in the cluster as a 2-replica pool but can sustain the data loss of 2
+chunks out of 4. It is described as a profile with **k=2** and **m=2**,
+meaning the information is spread over four OSD (k+m == 4) and two of
+them can be lost.
 
 To improve redundancy without increasing raw storage requirements, a
 new profile can be created. For instance, a profile with **k=10** and

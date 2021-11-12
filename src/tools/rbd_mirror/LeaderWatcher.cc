@@ -9,6 +9,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "include/stringify.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/watcher/Types.h"
 #include "Threads.h"
 
@@ -35,9 +36,9 @@ LeaderWatcher<I>::LeaderWatcher(Threads<I> *threads, librados::IoCtx &io_ctx,
 			    io_ctx.get_pool_name())),
     m_notifier_id(librados::Rados(io_ctx).get_instance_id()),
     m_instance_id(stringify(m_notifier_id)),
-    m_leader_lock(new LeaderLock(m_ioctx, m_work_queue, m_oid, this, true,
-                                 m_cct->_conf.get_val<uint64_t>(
-                                   "rbd_blacklist_expire_seconds"))) {
+    m_leader_lock(new LeaderLock(m_ioctx, *m_threads->asio_engine, m_oid, this,
+                                 true, m_cct->_conf.get_val<uint64_t>(
+                                   "rbd_blocklist_expire_seconds"))) {
 }
 
 template <typename I>
@@ -246,6 +247,12 @@ void LeaderWatcher<I>::handle_wait_for_tasks() {
       on_finish->complete(0);
     });
   m_work_queue->queue(ctx, 0);
+}
+
+template <typename I>
+bool LeaderWatcher<I>::is_blocklisted() const {
+  std::lock_guard locker{m_lock};
+  return m_blocklisted;
 }
 
 template <typename I>
@@ -940,7 +947,7 @@ void LeaderWatcher<I>::handle_heartbeat(Context *on_notify_ack) {
     std::scoped_lock locker{m_threads->timer_lock, m_lock};
     if (is_leader(m_lock)) {
       dout(5) << "got another leader heartbeat, ignoring" << dendl;
-    } else {
+    } else if (!m_locker.cookie.empty()) {
       cancel_timer_task();
       m_acquire_attempts = 0;
       schedule_acquire_leader_lock(1);
@@ -1003,7 +1010,7 @@ void LeaderWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
     auto iter = bl.cbegin();
     decode(notify_message, iter);
   } catch (const buffer::error &err) {
-    derr << ": error decoding image notification: " << err.what() << dendl;
+    derr << "error decoding image notification: " << err.what() << dendl;
     ctx->complete(0);
     return;
   }
@@ -1015,9 +1022,13 @@ template <typename I>
 void LeaderWatcher<I>::handle_rewatch_complete(int r) {
   dout(5) << "r=" << r << dendl;
 
-  if (r != -EBLACKLISTED) {
-    m_leader_lock->reacquire_lock(nullptr);
+  if (r == -EBLOCKLISTED) {
+    dout(1) << "blocklisted detected" << dendl;
+    m_blocklisted = true;
+    return;
   }
+
+  m_leader_lock->reacquire_lock(nullptr);
 }
 
 template <typename I>

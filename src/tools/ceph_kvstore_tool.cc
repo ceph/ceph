@@ -26,6 +26,8 @@
 
 #include "kvstore_tool.h"
 
+using namespace std;
+
 void usage(const char *pname)
 {
   std::cout << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
@@ -48,13 +50,13 @@ void usage(const char *pname)
     << "  compact-range <prefix> <start> <end>\n"
     << "  destructive-repair  (use only as last resort! may corrupt healthy data)\n"
     << "  stats\n"
+    << "  histogram [prefix]\n"
     << std::endl;
 }
 
 int main(int argc, const char *argv[])
 {
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
@@ -97,9 +99,9 @@ int main(int argc, const char *argv[])
     return 1;
   }
 
-  bool need_open_db = (cmd != "destructive-repair");
+  bool to_repair = (cmd == "destructive-repair");
   bool need_stats = (cmd == "stats");
-  StoreTool st(type, path, need_open_db, need_stats);
+  StoreTool st(type, path, to_repair, need_stats);
 
   if (cmd == "destructive-repair") {
     int ret = st.destructive_repair();
@@ -347,6 +349,11 @@ int main(int argc, const char *argv[])
     st.compact_range(prefix, start, end);
   } else if (cmd == "stats") {
     st.print_stats();
+  } else if (cmd == "histogram") {
+    string prefix;
+    if (argc > 4)
+      prefix = url_unescape(argv[4]);
+    st.build_size_histogram(prefix);
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     return 1;

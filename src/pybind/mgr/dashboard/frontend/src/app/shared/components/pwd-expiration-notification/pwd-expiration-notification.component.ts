@@ -1,18 +1,19 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 
-import { SettingsService } from '../../api/settings.service';
-import { CdPwdExpirationSettings } from '../../models/cd-pwd-expiration-settings';
-import { AuthStorageService } from '../../services/auth-storage.service';
+import { SettingsService } from '~/app/shared/api/settings.service';
+import { CdPwdExpirationSettings } from '~/app/shared/models/cd-pwd-expiration-settings';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-pwd-expiration-notification',
   templateUrl: './pwd-expiration-notification.component.html',
   styleUrls: ['./pwd-expiration-notification.component.scss']
 })
-export class PwdExpirationNotificationComponent implements OnInit {
+export class PwdExpirationNotificationComponent implements OnInit, OnDestroy {
   alertType: string;
   expirationDays: number;
   pwdExpirationSettings: CdPwdExpirationSettings;
+  displayNotification = false;
 
   constructor(
     private settingsService: SettingsService,
@@ -20,7 +21,7 @@ export class PwdExpirationNotificationComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    this.settingsService.pwdExpirationSettings().subscribe((pwdExpirationSettings) => {
+    this.settingsService.getStandardSettings().subscribe((pwdExpirationSettings) => {
       this.pwdExpirationSettings = new CdPwdExpirationSettings(pwdExpirationSettings);
       const pwdExpirationDate = this.authStorageService.getPwdExpirationDate();
       if (pwdExpirationDate) {
@@ -30,15 +31,25 @@ export class PwdExpirationNotificationComponent implements OnInit {
         } else {
           this.alertType = 'warning';
         }
+        this.displayNotification =
+          this.expirationDays <= this.pwdExpirationSettings.pwdExpirationWarning1;
+        this.authStorageService.isPwdDisplayedSource.next(this.displayNotification);
       }
     });
   }
 
+  ngOnDestroy() {
+    this.authStorageService.isPwdDisplayedSource.next(false);
+  }
+
   private getExpirationDays(pwdExpirationDate: number): number {
-    if (pwdExpirationDate) {
-      const current = new Date();
-      const expiration = new Date(pwdExpirationDate * 1000);
-      return Math.floor((expiration.valueOf() - current.valueOf()) / (1000 * 3600 * 24));
-    }
+    const current = new Date();
+    const expiration = new Date(pwdExpirationDate * 1000);
+    return Math.floor((expiration.valueOf() - current.valueOf()) / (1000 * 3600 * 24));
+  }
+
+  close() {
+    this.authStorageService.isPwdDisplayedSource.next(false);
+    this.displayNotification = false;
   }
 }

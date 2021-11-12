@@ -21,7 +21,7 @@ source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 getjson="no"
 
 jqfilter='.inconsistents'
-sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
+sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print ( json.dumps(ud, sort_keys=True, indent=2) )'
 
 function run() {
     local dir=$1
@@ -101,11 +101,13 @@ function create_scenario() {
     OBJ5SAVE="$JSON"
     # Starts with a snapmap
     ceph-kvstore-tool bluestore-kv $dir/${osd} list 2> /dev/null > $dir/drk.log
-    grep "^m.*SNA_.*[.]1[.]obj5[.][.]$" $dir/drk.log || return 1
+    grep SNA_ $dir/drk.log
+    grep "^[pm].*SNA_.*[.]1[.]obj5[.][.]$" $dir/drk.log || return 1
     ceph-objectstore-tool --data-path $dir/${osd} --rmtype nosnapmap "$JSON" remove || return 1
     # Check that snapmap is stil there
     ceph-kvstore-tool bluestore-kv $dir/${osd} list 2> /dev/null > $dir/drk.log
-    grep "^m.*SNA_.*[.]1[.]obj5[.][.]$" $dir/drk.log || return 1
+    grep SNA_ $dir/drk.log
+    grep "^[pm].*SNA_.*[.]1[.]obj5[.][.]$" $dir/drk.log || return 1
     rm -f $dir/drk.log
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":4)"
@@ -121,12 +123,14 @@ function create_scenario() {
 
     # Starts with a snapmap
     ceph-kvstore-tool bluestore-kv $dir/${osd} list 2> /dev/null > $dir/drk.log
-    grep "^m.*SNA_.*[.]7[.]obj16[.][.]$" $dir/drk.log || return 1
+    grep SNA_ $dir/drk.log
+    grep "^[pm].*SNA_.*[.]7[.]obj16[.][.]$" $dir/drk.log || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj16 | grep \"snapid\":7)"
     ceph-objectstore-tool --data-path $dir/${osd} --rmtype snapmap "$JSON" remove || return 1
     # Check that snapmap is now removed
     ceph-kvstore-tool bluestore-kv $dir/${osd} list 2> /dev/null > $dir/drk.log
-    ! grep "^m.*SNA_.*[.]7[.]obj16[.][.]$" $dir/drk.log || return 1
+    grep SNA_ $dir/drk.log
+    ! grep "^[pm].*SNA_.*[.]7[.]obj16[.][.]$" $dir/drk.log || return 1
     rm -f $dir/drk.log
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj2)"
@@ -690,7 +694,7 @@ EOF
     err_strings[18]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj11:1 : is an unexpected clone"
     err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj14:1 : size 1032 != clone_size 1033"
     err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 20 errors"
-    err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj15:head : can't decode 'snapset' attr buffer"
+    err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj15:head : can't decode 'snapset' attr "
     err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : osd[.][0-9]* found snap mapper error on pg 1.0 oid 1:461f8b5e:::obj16:7 snaps missing in mapper, should be: 1,2,3,4,5,6,7 was  r -2...repaired"
 
     for err_string in "${err_strings[@]}"

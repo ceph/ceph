@@ -5,7 +5,6 @@
 #include "common/Throttle.h"
 #include "common/WorkQueue.h"
 
-#include "rgw_rados.h"
 #include "rgw_rest.h"
 #include "rgw_frontend.h"
 #include "rgw_request.h"
@@ -16,6 +15,8 @@
 #include <atomic>
 
 #define dout_subsys ceph_subsys_rgw
+
+using namespace std;
 
 extern void signal_shutdown();
 
@@ -107,14 +108,14 @@ void RGWLoadGenProcess::gen_request(const string& method,
 				    int content_length, std::atomic<bool>* fail_flag)
 {
   RGWLoadGenRequest* req =
-    new RGWLoadGenRequest(store->getRados()->get_new_req_id(), method, resource,
+    new RGWLoadGenRequest(store->get_new_req_id(), method, resource,
 			  content_length, fail_flag);
   dout(10) << "allocated request req=" << hex << req << dec << dendl;
   req_throttle.get(1);
   req_wq.queue(req);
 } /* RGWLoadGenProcess::gen_request */
 
-void RGWLoadGenProcess::handle_request(RGWRequest* r)
+void RGWLoadGenProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest* r)
 {
   RGWLoadGenRequest* req = static_cast<RGWLoadGenRequest*>(r);
 
@@ -128,14 +129,14 @@ void RGWLoadGenProcess::handle_request(RGWRequest* r)
   env.request_method = req->method;
   env.uri = req->resource;
   env.set_date(tm);
-  env.sign(access_key);
+  env.sign(dpp, access_key);
 
   RGWLoadGenIO real_client_io(&env);
   RGWRestfulIO client_io(cct, &real_client_io);
 
   int ret = process_request(store, rest, req, uri_prefix,
                             *auth_registry, &client_io, olog,
-                            null_yield, nullptr);
+                            null_yield, nullptr, nullptr, nullptr);
   if (ret < 0) {
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;

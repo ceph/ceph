@@ -1,8 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <charconv>
+
 #include "hobject.h"
 #include "common/Formatter.h"
+
+using std::list;
+using std::ostream;
+using std::set;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::Formatter;
 
 static void append_escaped(const string &in, string *out)
 {
@@ -202,14 +212,18 @@ void hobject_t::generate_test_instances(list<hobject_t*>& o)
 
 static void append_out_escaped(const string &in, string *out)
 {
-  for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
-    if (*i == '%' || *i == ':' || *i == '/' || *i < 32 || *i >= 127) {
-      out->push_back('%');
-      char buf[3];
-      snprintf(buf, sizeof(buf), "%02x", (int)(unsigned char)*i);
+  for (auto c : in) {
+    int i = (int)(unsigned char)(c);
+    if (i <= 0x0f) {
+      char buf[4] = {'%', '0'};
+      std::to_chars(buf + 2, buf + 3, i, 16);
+      out->append(buf);
+    } else if (i < 32 || i >= 127 || i == '%' || i == ':' || i == '/') {
+      char buf[4] = {'%'};
+      std::to_chars(buf + 1, buf + 3, i, 16);
       out->append(buf);
     } else {
-      out->push_back(*i);
+      out->push_back(c);
     }
   }
 }

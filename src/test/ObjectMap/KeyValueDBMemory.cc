@@ -234,7 +234,7 @@ int KeyValueDBMemory::rm_range_keys(const string &prefix, const string &start, c
   return 0;
 }
 
-KeyValueDB::WholeSpaceIterator KeyValueDBMemory::get_wholespace_iterator() {
+KeyValueDB::WholeSpaceIterator KeyValueDBMemory::get_wholespace_iterator(IteratorOpts opts) {
   return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
     new WholeSpaceMemIterator(this)
   );

@@ -13,6 +13,9 @@
 #include <iostream>
 #include <climits>
 
+using std::string;
+using std::map;
+using std::set;
 
 /**
  * finds the index_data where a key belongs.
@@ -390,7 +393,7 @@ static int omap_insert(cls_method_context_t hctx,
   int new_size_int = old_size_int + omap.size() - (assert_bound - bound);
   CLS_LOG(20, "old size is %d, new size is %d", old_size_int, new_size_int);
   bufferlist new_size;
-  stringstream s;
+  std::stringstream s;
   s << new_size_int;
   new_size.append(s.str());
 
@@ -435,7 +438,7 @@ static int create_with_omap(cls_method_context_t hctx,
   int new_size_int = omap.size();
   CLS_LOG(20, "omap insert: new size is %d", new_size_int);
   bufferlist new_size;
-  stringstream s;
+  std::stringstream s;
   s << new_size_int;
   new_size.append(s.str());
 
@@ -533,7 +536,7 @@ static int omap_remove(cls_method_context_t hctx,
   int new_size_int = old_size_int - omap.size();
   CLS_LOG(20, "old size is %d, new size is %d", old_size_int, new_size_int);
   bufferlist new_size;
-  stringstream s;
+  std::stringstream s;
   s << new_size_int;
   new_size.append(s.str());
 

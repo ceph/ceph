@@ -64,7 +64,7 @@ typedef std::pair<std::string, std::string> Object;
 class ObjBencher {
   bool show_time;
   Formatter *formatter = NULL;
-  ostream *outstream = NULL;
+  std::ostream *outstream = NULL;
 public:
   CephContext *cct;
 protected:
@@ -77,7 +77,7 @@ protected:
   int fetch_bench_metadata(const std::string& metadata_file, uint64_t* op_size,
 			   uint64_t* object_size, int* num_ops, int* num_objects, int* prev_pid);
 
-  int write_bench(int secondsToRun, int concurrentios, const string& run_name_meta, unsigned max_objects, int prev_pid);
+  int write_bench(int secondsToRun, int concurrentios, const std::string& run_name_meta, unsigned max_objects, int prev_pid);
   int seq_read_bench(int secondsToRun, int num_ops, int num_objects, int concurrentios, int writePid, bool no_verify=false);
   int rand_read_bench(int secondsToRun, int num_ops, int num_objects, int concurrentios, int writePid, bool no_verify=false);
 
@@ -104,8 +104,8 @@ protected:
   virtual bool get_objects(std::list< std::pair<std::string, std::string> >* objects, int num) = 0;
   virtual void set_namespace(const std::string&) {}
 
-  ostream& out(ostream& os);
-  ostream& out(ostream& os, utime_t& t);
+  std::ostream& out(std::ostream& os);
+  std::ostream& out(std::ostream& os, utime_t& t);
 public:
   explicit ObjBencher(CephContext *cct_) : show_time(false), cct(cct_), data() {}
   virtual ~ObjBencher() {}
@@ -121,7 +121,7 @@ public:
   void set_formatter(Formatter *f) {
     formatter = f;
   }
-  void set_outstream(ostream& os) {
+  void set_outstream(std::ostream& os) {
     outstream = &os;
   }
   int clean_up_slow(const std::string& prefix, int concurrentios);

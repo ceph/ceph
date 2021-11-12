@@ -6,12 +6,11 @@
 
 #include <exception>
 #include <string>
+#include <string_view>
 #include <streambuf>
 #include <istream>
 #include <stdlib.h>
 #include <system_error>
-
-#include <boost/utility/string_ref.hpp>
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -103,9 +102,9 @@ public:
   /* Generate header. On success returns number of bytes generated for a direct
    * client of RadosGW. On failure throws rgw::io::Exception containing errno.
    *
-   * boost::string_ref is being used because of length it internally carries. */
-  virtual size_t send_header(const boost::string_ref& name,
-                             const boost::string_ref& value) = 0;
+   * std::string_view is being used because of length it internally carries. */
+  virtual size_t send_header(const std::string_view& name,
+                             const std::string_view& value) = 0;
 
   /* Inform a client about a content length. Takes number of bytes as @len.
    * On success returns number of bytes generated for a direct client of RadosGW.
@@ -215,8 +214,8 @@ public:
     return get_decoratee().send_100_continue();
   }
 
-  size_t send_header(const boost::string_ref& name,
-                     const boost::string_ref& value) override {
+  size_t send_header(const std::string_view& name,
+                     const std::string_view& value) override {
     return get_decoratee().send_header(name, value);
   }
 
@@ -255,7 +254,7 @@ public:
 } /* rgw::io::DecoratedRestfulClient */;
 
 
-/* Interface that should be provided by a front-end class wanting to to use
+/* Interface that should be provided by a front-end class wanting to use
  * the low-level buffering offered by i.e. StaticOutputBufferer. */
 class BuffererSink {
 public:
@@ -432,7 +431,7 @@ class RGWClientIOStream : private RGWClientIOStreamBuf, public std::istream {
 public:
   explicit RGWClientIOStream(RGWRestfulIO &s)
     : RGWClientIOStreamBuf(s, 1, 2),
-      istream(static_cast<RGWClientIOStreamBuf *>(this)) {
+      std::istream(static_cast<RGWClientIOStreamBuf *>(this)) {
   }
 };
 

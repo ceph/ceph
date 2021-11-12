@@ -23,7 +23,7 @@ Synopsis
 
 | **ceph** **df** *{detail}*
 
-| **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* ] ...
+| **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* \| *authorize* ] ...
 
 | **ceph** **fsid**
 
@@ -37,9 +37,7 @@ Synopsis
 
 | **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
 
-| **ceph** **mon_status**
-
-| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *ls* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
+| **ceph** **osd** [ *blocklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *ls* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
 
 | **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *rename-bucket* \| *reweight* \| *reweight-all* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
@@ -387,6 +385,13 @@ Usage::
 
 	ceph fs rm <fs_name> {--yes-i-really-mean-it}
 
+Subcommand ``authorize`` creates a new client that will be authorized for the
+given path in ``<fs_name>``. Pass ``/`` to authorize for the entire FS.
+``<perms>`` below can be ``r``, ``rw`` or ``rwp``.
+
+Usage::
+
+    ceph fs authorize <fs_name> client.<client_id> <path> <perms> [<path> <perms>...]
 
 fsid
 ----
@@ -551,15 +556,6 @@ Usage::
 
 	ceph mon stat
 
-mon_status
-----------
-
-Reports status of monitors.
-
-Usage::
-
-	ceph mon_status
-
 mgr
 ---
 
@@ -624,27 +620,27 @@ osd
 Manage OSD configuration and administration. It uses some additional
 subcommands.
 
-Subcommand ``blacklist`` manage blacklisted clients. It uses some additional
+Subcommand ``blocklist`` manage blocklisted clients. It uses some additional
 subcommands.
 
-Subcommand ``add`` add <addr> to blacklist (optionally until <expire> seconds
+Subcommand ``add`` add <addr> to blocklist (optionally until <expire> seconds
 from now)
 
 Usage::
 
-	ceph osd blacklist add <EntityAddr> {<float[0.0-]>}
+	ceph osd blocklist add <EntityAddr> {<float[0.0-]>}
 
-Subcommand ``ls`` show blacklisted clients
-
-Usage::
-
-	ceph osd blacklist ls
-
-Subcommand ``rm`` remove <addr> from blacklist
+Subcommand ``ls`` show blocklisted clients
 
 Usage::
 
-	ceph osd blacklist rm <EntityAddr>
+	ceph osd blocklist ls
+
+Subcommand ``rm`` remove <addr> from blocklist
+
+Usage::
+
+	ceph osd blocklist rm <EntityAddr>
 
 Subcommand ``blocked-by`` prints a histogram of which OSDs are blocking their peers
 
@@ -996,11 +992,16 @@ data should remain readable and writeable, although data redundancy
 may be reduced as some PGs may end up in a degraded (but active)
 state.  It will return a success code if it is okay to stop the
 OSD(s), or an error code and informative message if it is not or if no
-conclusion can be drawn at the current time.
+conclusion can be drawn at the current time.  When ``--max <num>`` is
+provided, up to <num> OSDs IDs will return (including the provided
+OSDs) that can all be stopped simultaneously.  This allows larger sets
+of stoppable OSDs to be generated easily by providing a single
+starting OSD and a max.  Additional OSDs are drawn from adjacent locations
+in the CRUSH hierarchy.
 
 Usage::
 
-  ceph osd ok-to-stop <id> [<ids>...]
+  ceph osd ok-to-stop <id> [<ids>...] [--max <num>]
 
 Subcommand ``pause`` pauses osd.
 
@@ -1036,7 +1037,7 @@ Subcommand ``create`` creates pool.
 Usage::
 
 	ceph osd pool create <poolname> {<int[0-]>} {<int[0-]>} {replicated|erasure}
-	{<erasure_code_profile>} {<rule>} {<int>}
+	{<erasure_code_profile>} {<rule>} {<int>} {--autoscale-mode=<on,off,warn>}
 
 Subcommand ``delete`` deletes pool.
 
@@ -1156,7 +1157,7 @@ Usage::
 
         ceph osd pool application rm <pool-name> <app> <key>
 
-Subcommand ``set`` assosciates or updates, if it already exists, a key-value
+Subcommand ``set`` associates or updates, if it already exists, a key-value
 pair with the given application for the given pool.
 
 Usage::
@@ -1197,12 +1198,14 @@ Usage::
 	ceph osd reweight-by-pg {<int[100-]>} {<poolname> [<poolname...]}
 	{--no-increasing}
 
-Subcommand ``reweight-by-utilization`` reweight OSDs by utilization
-[overload-percentage-for-consideration, default 120].
+Subcommand ``reweight-by-utilization`` reweights OSDs by utilization.  It only reweights
+outlier OSDs whose utilization exceeds the average, eg. the default 120%
+limits reweight to those OSDs that are more than 20% over the average.
+[overload-threshold, default 120 [max_weight_change, default 0.05 [max_osds_to_adjust, default 4]]] 
 
 Usage::
 
-	ceph osd reweight-by-utilization {<int[100-]>}
+	ceph osd reweight-by-utilization {<int[100-]> {<float[0.0-]> {<int[0-]>}}}
 	{--no-increasing}
 
 Subcommand ``rm`` removes osd(s) <id> [<id>...] from the OSD map.
@@ -1311,8 +1314,7 @@ Subcommand ``cache-mode`` specifies the caching mode for cache tier <pool>.
 
 Usage::
 
-	ceph osd tier cache-mode <poolname> none|writeback|forward|readonly|
-	readforward|readproxy
+	ceph osd tier cache-mode <poolname> writeback|readproxy|readonly|none
 
 Subcommand ``remove`` removes the tier <tierpool> (the second one) from base pool
 <pool> (the first one).
@@ -1575,7 +1577,11 @@ Options
 
 .. option:: -w, --watch
 
-	Watch live cluster changes.
+	Watch live cluster changes on the default 'cluster' channel
+
+.. option:: -W, --watch-channel
+
+	Watch live cluster changes on any channel (cluster, audit, cephadm, or * for all)
 
 .. option:: --watch-debug
 
@@ -1632,7 +1638,7 @@ Availability
 ============
 
 :program:`ceph` is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
-the Ceph documentation at http://ceph.com/docs for more information.
+the Ceph documentation at https://docs.ceph.com for more information.
 
 
 See also

@@ -23,7 +23,7 @@
 #include "msg/MessageRef.h"
 #include "messages/PaxosServiceMessage.h"
 
-class MAuth : public PaxosServiceMessage {
+class MAuth final : public PaxosServiceMessage {
 public:
   __u32 protocol;
   ceph::buffer::list auth_payload;
@@ -33,7 +33,7 @@ public:
 
   MAuth() : PaxosServiceMessage{CEPH_MSG_AUTH, 0}, protocol(0), monmap_epoch(0) { }
 private:
-  ~MAuth() override {}
+  ~MAuth() final {}
 
 public:
   std::string_view get_type_name() const override { return "auth"; }

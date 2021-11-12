@@ -1,7 +1,0 @@
-overrides:
-  ceph:
-    log-whitelist:
-      - but it is still running
-      - objects unfound and apparently lost
-tasks:
-- thrashosds:

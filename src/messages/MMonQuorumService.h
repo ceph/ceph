@@ -25,7 +25,7 @@ protected:
   MMonQuorumService(int type, int head)
     : Message{type, head, 1}
   {}
-  ~MMonQuorumService() override { }
+  ~MMonQuorumService() override {}
 
 public:
   void set_epoch(epoch_t e) {
@@ -50,7 +50,8 @@ public:
     encode(round, payload);
   }
 
-  void service_decode(bufferlist::const_iterator &p) {
+  void service_decode(ceph::buffer::list::const_iterator &p) {
+    using ceph::decode;
     decode(epoch, p);
     decode(round, p);
   }

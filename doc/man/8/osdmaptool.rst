@@ -17,8 +17,8 @@ Synopsis
 | **osdmaptool** *mapfilename* [--export-crush *crushmap*]
 | **osdmaptool** *mapfilename* [--upmap *file*] [--upmap-max *max-optimizations*]
   [--upmap-deviation *max-deviation*] [--upmap-pool *poolname*]
-  [--upmap-save *file*] [--upmap-save *newosdmap*] [--upmap-active]
-| **osdmaptool** *mapfilename* [--upmap-cleanup] [--upmap-save *newosdmap*]
+  [--save] [--upmap-active]
+| **osdmaptool** *mapfilename* [--upmap-cleanup] [--upmap *file*]
 
 
 Description
@@ -123,6 +123,14 @@ Options
 
    mark an osd as out (but do not persist)
 
+.. option:: --mark-up <osdid>
+
+   mark an osd as up (but do not persist)
+
+.. option:: --mark-in <osdid>
+
+   mark an osd as in (but do not persist)
+
 .. option:: --tree
 
    Displays a hierarchical tree of the map.
@@ -130,6 +138,10 @@ Options
 .. option:: --clear-temp
 
    clears pg_temp and primary_temp variables.
+
+.. option:: --clean-temps
+
+   clean pg_temps.
 
 .. option:: --health
 
@@ -159,14 +171,17 @@ Options
 
    restrict upmap balancing to 1 pool or the option can be repeated for multiple pools
 
-.. option:: --upmap-save
-
-   write modified OSDMap with upmap changes
-
 .. option:: --upmap-active
 
    Act like an active balancer, keep applying changes until balanced
 
+.. option:: --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>]
+
+   Change CRUSH weight of <osdid>
+
+.. option:: --save
+
+   write modified osdmap with upmap or crush-adjust changes
 
 Example
 =======
@@ -183,7 +198,7 @@ To view the mappings of placement groups for pool 1::
 
         osdmaptool osdmap --test-map-pgs-dump --pool 1
 
-        pool 0 pg_num 8
+        pool 1 pg_num 8
         1.0     [0,2,1] 0
         1.1     [2,0,1] 2
         1.2     [0,1,2] 0
@@ -250,7 +265,7 @@ placement group distribution, whose standard deviation is 1.41421::
         size 20
         size 364
 
-   To simulate the active balancer in upmap mode::
+To simulate the active balancer in upmap mode::
 
         osdmaptool --upmap upmaps.out --upmap-active --upmap-deviation 6 --upmap-max 11 osdmap
 
@@ -305,7 +320,7 @@ Availability
 ============
 
 **osdmaptool** is part of Ceph, a massively scalable, open-source, distributed storage system.  Please
-refer to the Ceph documentation at http://ceph.com/docs for more
+refer to the Ceph documentation at https://docs.ceph.com for more
 information.
 
 

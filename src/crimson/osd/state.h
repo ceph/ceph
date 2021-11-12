@@ -6,6 +6,8 @@
 #include <string_view>
 #include <ostream>
 
+#include <seastar/core/shared_future.hh>
+
 class OSDMap;
 
 class OSDState {
@@ -15,11 +17,13 @@ class OSDState {
     PREBOOT,
     BOOTING,
     ACTIVE,
+    PRESTOP,
     STOPPING,
     WAITING_FOR_HEALTHY,
   };
 
   State state = State::INITIALIZING;
+  mutable seastar::shared_promise<> wait_for_active;
 
 public:
   bool is_initializing() const {
@@ -33,6 +37,13 @@ public:
   }
   bool is_active() const {
     return state == State::ACTIVE;
+  }
+  seastar::future<> when_active() const {
+    return is_active() ? seastar::now()
+                       : wait_for_active.get_shared_future();
+  };
+  bool is_prestop() const {
+    return state == State::PRESTOP;
   }
   bool is_stopping() const {
     return state == State::STOPPING;
@@ -48,9 +59,16 @@ public:
   }
   void set_active() {
     state = State::ACTIVE;
+    wait_for_active.set_value();
+    wait_for_active = {};
+  }
+  void set_prestop() {
+    state = State::PRESTOP;
   }
   void set_stopping() {
     state = State::STOPPING;
+    wait_for_active.set_exception(crimson::common::system_shutdown_exception{});
+    wait_for_active = {};
   }
   std::string_view to_string() const {
     switch (state) {
@@ -58,6 +76,7 @@ public:
     case State::PREBOOT: return "preboot";
     case State::BOOTING: return "booting";
     case State::ACTIVE: return "active";
+    case State::PRESTOP: return "prestop";
     case State::STOPPING: return "stopping";
     case State::WAITING_FOR_HEALTHY: return "waiting_for_healthy";
     default: return "???";

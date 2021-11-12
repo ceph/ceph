@@ -4,11 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { Observable, of } from 'rxjs';
 
-import {
-  configureTestBed,
-  i18nProviders,
-  PrometheusHelper
-} from '../../../testing/unit-test-helper';
+import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
 import { PrometheusService } from '../api/prometheus.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
@@ -27,7 +23,7 @@ describe('PrometheusAlertService', () => {
 
   configureTestBed({
     imports: [ToastrModule.forRoot(), SharedModule, HttpClientTestingModule],
-    providers: [PrometheusAlertService, PrometheusAlertFormatter, i18nProviders]
+    providers: [PrometheusAlertService, PrometheusAlertFormatter]
   });
 
   beforeEach(() => {
@@ -35,16 +31,16 @@ describe('PrometheusAlertService', () => {
   });
 
   it('should create', () => {
-    expect(TestBed.get(PrometheusAlertService)).toBeTruthy();
+    expect(TestBed.inject(PrometheusAlertService)).toBeTruthy();
   });
 
   describe('test failing status codes and verify disabling of the alertmanager', () => {
-    const isDisabledByStatusCode = (statusCode: number, expectedStatus: boolean, done) => {
-      service = TestBed.get(PrometheusAlertService);
-      prometheusService = TestBed.get(PrometheusService);
+    const isDisabledByStatusCode = (statusCode: number, expectedStatus: boolean, done: any) => {
+      service = TestBed.inject(PrometheusAlertService);
+      prometheusService = TestBed.inject(PrometheusService);
       spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
       spyOn(prometheusService, 'getAlerts').and.returnValue(
-        Observable.create((observer) => observer.error({ status: statusCode, error: {} }))
+        new Observable((observer: any) => observer.error({ status: statusCode, error: {} }))
       );
       const disableFn = spyOn(prometheusService, 'disableAlertmanagerConfig').and.callFake(() => {
         expect(expectedStatus).toBe(true);
@@ -73,8 +69,8 @@ describe('PrometheusAlertService', () => {
   });
 
   it('should flatten the response of getRules()', () => {
-    service = TestBed.get(PrometheusAlertService);
-    prometheusService = TestBed.get(PrometheusService);
+    service = TestBed.inject(PrometheusAlertService);
+    prometheusService = TestBed.inject(PrometheusService);
 
     spyOn(service['prometheusService'], 'ifPrometheusConfigured').and.callFake((fn) => fn());
     spyOn(prometheusService, 'getRules').and.returnValue(
@@ -108,16 +104,16 @@ describe('PrometheusAlertService', () => {
 
   describe('refresh', () => {
     beforeEach(() => {
-      service = TestBed.get(PrometheusAlertService);
+      service = TestBed.inject(PrometheusAlertService);
       service['alerts'] = [];
       service['canAlertsBeNotified'] = false;
 
       spyOn(window, 'setTimeout').and.callFake((fn: Function) => fn());
 
-      notificationService = TestBed.get(NotificationService);
+      notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show').and.stub();
 
-      prometheusService = TestBed.get(PrometheusService);
+      prometheusService = TestBed.inject(PrometheusService);
       spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
       spyOn(prometheusService, 'getAlerts').and.callFake(() => of(alerts));
 
@@ -135,17 +131,23 @@ describe('PrometheusAlertService', () => {
     });
 
     it('should notify on alert change', () => {
-      alerts = [prometheus.createAlert('alert0', 'suppressed')];
+      alerts = [prometheus.createAlert('alert0', 'resolved')];
       service.refresh();
       expect(notificationService.show).toHaveBeenCalledWith(
         new CdNotificationConfig(
-          NotificationType.info,
-          'alert0 (suppressed)',
-          'alert0 is suppressed ' + prometheus.createLink('http://alert0'),
+          NotificationType.success,
+          'alert0 (resolved)',
+          'alert0 is resolved ' + prometheus.createLink('http://alert0'),
           undefined,
           'Prometheus'
         )
       );
+    });
+
+    it('should not notify on change to suppressed', () => {
+      alerts = [prometheus.createAlert('alert0', 'suppressed')];
+      service.refresh();
+      expect(notificationService.show).not.toHaveBeenCalled();
     });
 
     it('should notify on a new alert', () => {
@@ -185,6 +187,28 @@ describe('PrometheusAlertService', () => {
       alerts = [alert1, prometheus.createAlert('alert2')];
       service.refresh();
       expect(notificationService.show).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('alert badge', () => {
+    beforeEach(() => {
+      service = TestBed.inject(PrometheusAlertService);
+
+      prometheusService = TestBed.inject(PrometheusService);
+      spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
+      spyOn(prometheusService, 'getAlerts').and.callFake(() => of(alerts));
+
+      alerts = [
+        prometheus.createAlert('alert0', 'active'),
+        prometheus.createAlert('alert1', 'suppressed'),
+        prometheus.createAlert('alert2', 'suppressed')
+      ];
+      service.refresh();
+    });
+
+    it('should count active alerts', () => {
+      service.refresh();
+      expect(service.activeAlerts).toBe(1);
     });
   });
 });

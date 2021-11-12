@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=protected-access
 import time
+
 try:
     import mock
 except ImportError:
     import unittest.mock as mock
 
-from . import ControllerTestCase
 from ..controllers.pool import Pool
 from ..controllers.task import Task
+from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 
 
@@ -22,8 +23,6 @@ class MockTask(object):
 class PoolControllerTest(ControllerTestCase):
     @classmethod
     def setup_server(cls):
-        Task._cp_config['tools.authenticate.on'] = False
-        Pool._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([Pool, Task])
 
     @mock.patch('dashboard.services.progress.get_progress_tasks')

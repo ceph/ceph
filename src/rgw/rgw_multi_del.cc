@@ -12,7 +12,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-
+using namespace std;
 
 bool RGWMultiDelObject::xml_end(const char *el)
 {

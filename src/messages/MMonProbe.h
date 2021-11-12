@@ -21,9 +21,9 @@
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 
-class MMonProbe : public Message {
+class MMonProbe final : public Message {
 public:
-  static constexpr int HEAD_VERSION = 7;
+  static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 5;
 
   enum {
@@ -49,9 +49,10 @@ public:
   
   uuid_d fsid;
   int32_t op = 0;
-  string name;
-  set<int32_t> quorum;
-  bufferlist monmap_bl;
+  std::string name;
+  std::set<int32_t> quorum;
+  int leader = -1;
+  ceph::buffer::list monmap_bl;
   version_t paxos_first_version = 0;
   version_t paxos_last_version = 0;
   bool has_ever_joined = 0;
@@ -60,7 +61,7 @@ public:
 
   MMonProbe()
     : Message{MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION} {}
-  MMonProbe(const uuid_d& f, int o, const string& n, bool hej, ceph_release_t mr)
+  MMonProbe(const uuid_d& f, int o, const std::string& n, bool hej, ceph_release_t mr)
     : Message{MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION},
       fsid(f),
       op(o),
@@ -71,14 +72,15 @@ public:
       required_features(0),
       mon_release{mr} {}
 private:
-  ~MMonProbe() override {}
+  ~MMonProbe() final {}
 
-public:  
+public:
   std::string_view get_type_name() const override { return "mon_probe"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "mon_probe(" << get_opname(op) << " " << fsid << " name " << name;
     if (quorum.size())
       out << " quorum " << quorum;
+    out << " leader " << leader;
     if (op == OP_REPLY) {
       out << " paxos("
 	<< " fc " << paxos_first_version
@@ -93,7 +95,7 @@ public:
       out << " mon_release " << mon_release;
     out << ")";
   }
-  
+
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     if (monmap_bl.length() &&
@@ -116,8 +118,10 @@ public:
     encode(paxos_last_version, payload);
     encode(required_features, payload);
     encode(mon_release, payload);
+    encode(leader, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(fsid, p);
     decode(op, p);
@@ -135,6 +139,11 @@ public:
       decode(mon_release, p);
     else
       mon_release = ceph_release_t::unknown;
+    if (header.version >= 8) {
+      decode(leader, p);
+    } else if (quorum.size()) {
+      leader = *quorum.begin();
+    }
   }
 private:
   template<class T, typename... Args>

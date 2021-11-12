@@ -44,7 +44,7 @@ static std::string maybe_quote_string(const std::string& str) {
 
 #define dout_subsys ceph_subsys_mgr
 
-ostream& operator<<(ostream& out, const mgr_rwxa_t& p) {
+std::ostream& operator<<(std::ostream& out, const mgr_rwxa_t& p) {
   if (p == MGR_CAP_ANY)
     return out << "*";
 
@@ -57,7 +57,7 @@ ostream& operator<<(ostream& out, const mgr_rwxa_t& p) {
   return out;
 }
 
-ostream& operator<<(ostream& out, const MgrCapGrantConstraint& c) {
+std::ostream& operator<<(std::ostream& out, const MgrCapGrantConstraint& c) {
   switch (c.match_type) {
   case MgrCapGrantConstraint::MATCH_TYPE_EQUAL:
     out << "=";
@@ -75,7 +75,7 @@ ostream& operator<<(ostream& out, const MgrCapGrantConstraint& c) {
   return out;
 }
 
-ostream& operator<<(ostream& out, const MgrCapGrant& m) {
+std::ostream& operator<<(std::ostream& out, const MgrCapGrant& m) {
   if (!m.profile.empty()) {
     out << "profile " << maybe_quote_string(m.profile);
   } else {
@@ -186,7 +186,7 @@ void MgrCapGrant::expand_profile(std::ostream *err) const {
       perms = mgr_rwxa_t{MGR_CAP_R | MGR_CAP_W};
     }
 
-    // whitelist all 'rbd_support' commands (restricted by optional
+    // allow all 'rbd_support' commands (restricted by optional
     // pool/namespace constraints)
     profile_grants.push_back({{}, "rbd_support", {}, {},
                               std::move(filtered_arguments), perms});
@@ -280,7 +280,7 @@ mgr_rwxa_t MgrCapGrant::get_allowed(
   return allow;
 }
 
-ostream& operator<<(ostream&out, const MgrCap& m) {
+std::ostream& operator<<(std::ostream&out, const MgrCap& m) {
   bool first = true;
   for (auto& grant : m.grants) {
     if (!first) {
@@ -365,14 +365,14 @@ bool MgrCap::is_capable(
   return false;
 }
 
-void MgrCap::encode(bufferlist& bl) const {
+void MgrCap::encode(ceph::buffer::list& bl) const {
   // remain backwards compatible w/ MgrCap
   ENCODE_START(4, 4, bl);
   encode(text, bl);
   ENCODE_FINISH(bl);
 }
 
-void MgrCap::decode(bufferlist::const_iterator& bl) {
+void MgrCap::decode(ceph::buffer::list::const_iterator& bl) {
   // remain backwards compatible w/ MgrCap
   std::string s;
   DECODE_START(4, bl);
@@ -381,11 +381,11 @@ void MgrCap::decode(bufferlist::const_iterator& bl) {
   parse(s, NULL);
 }
 
-void MgrCap::dump(Formatter *f) const {
+void MgrCap::dump(ceph::Formatter *f) const {
   f->dump_string("text", text);
 }
 
-void MgrCap::generate_test_instances(list<MgrCap*>& ls) {
+void MgrCap::generate_test_instances(std::list<MgrCap*>& ls) {
   ls.push_back(new MgrCap);
   ls.push_back(new MgrCap);
   ls.back()->parse("allow *");
@@ -462,7 +462,7 @@ struct MgrCapParser : qi::grammar<Iterator, MgrCap()> {
                              >> qi::attr(std::string())
                              >> qi::attr(std::string())
                              >> qi::attr(std::string())
-                             >> qi::attr(map<std::string, MgrCapGrantConstraint>())
+                             >> qi::attr(std::map<std::string, MgrCapGrantConstraint>())
                              >> spaces >> rwxa
                              >> -(spaces >> lit("network") >> spaces >> network_str);
 
@@ -537,7 +537,7 @@ struct MgrCapParser : qi::grammar<Iterator, MgrCap()> {
   qi::rule<Iterator, MgrCap()> mgrcap;
 };
 
-bool MgrCap::parse(const std::string& str, ostream *err) {
+bool MgrCap::parse(const std::string& str, std::ostream *err) {
   auto iter = str.begin();
   auto end = str.end();
 

@@ -16,8 +16,7 @@
 #define CEPH_KEYRING_H
 
 #include "auth/Auth.h"
-
-class CephContext;
+#include "include/common_fwd.h"
 
 class KeyRing : public KeyStore {
   std::map<EntityName, EntityAuth> keys;
@@ -92,7 +91,7 @@ public:
   }
   void import(CephContext *cct, KeyRing& other);
 
-  // encoders
+  // decode as plaintext
   void decode(ceph::buffer::list::const_iterator& bl);
 
   void encode_plaintext(ceph::buffer::list& bl);

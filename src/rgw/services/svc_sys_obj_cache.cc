@@ -13,16 +13,19 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 class RGWSI_SysObj_Cache_CB : public RGWSI_Notify::CB
 {
   RGWSI_SysObj_Cache *svc;
 public:
   RGWSI_SysObj_Cache_CB(RGWSI_SysObj_Cache *_svc) : svc(_svc) {}
-  int watch_cb(uint64_t notify_id,
+  int watch_cb(const DoutPrefixProvider *dpp,
+               uint64_t notify_id,
                uint64_t cookie,
                uint64_t notifier_id,
                bufferlist& bl) {
-    return svc->watch_cb(notify_id, cookie, notifier_id, bl);
+    return svc->watch_cb(dpp, notify_id, cookie, notifier_id, bl);
   }
 
   void set_enabled(bool status) {
@@ -30,19 +33,19 @@ public:
   }
 };
 
-int RGWSI_SysObj_Cache::do_start()
+int RGWSI_SysObj_Cache::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
   int r = asocket.start();
   if (r < 0) {
     return r;
   }
 
-  r = RGWSI_SysObj_Core::do_start();
+  r = RGWSI_SysObj_Core::do_start(y, dpp);
   if (r < 0) {
     return r;
   }
 
-  r = notify_svc->start();
+  r = notify_svc->start(y, dpp);
   if (r < 0) {
     return r;
   }
@@ -81,7 +84,8 @@ void RGWSI_SysObj_Cache::normalize_pool_and_obj(const rgw_pool& src_pool, const 
 }
 
 
-int RGWSI_SysObj_Cache::remove(RGWSysObjectCtxBase& obj_ctx,
+int RGWSI_SysObj_Cache::remove(const DoutPrefixProvider *dpp, 
+                               RGWSysObjectCtxBase& obj_ctx,
                                RGWObjVersionTracker *objv_tracker,
                                const rgw_raw_obj& obj,
                                optional_yield y)
@@ -92,18 +96,19 @@ int RGWSI_SysObj_Cache::remove(RGWSysObjectCtxBase& obj_ctx,
   normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
 
   string name = normal_name(pool, oid);
-  cache.remove(name);
+  cache.invalidate_remove(dpp, name);
 
   ObjectCacheInfo info;
-  int r = distribute_cache(name, obj, info, REMOVE_OBJ, y);
+  int r = distribute_cache(dpp, name, obj, info, INVALIDATE_OBJ, y);
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to distribute cache: r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to distribute cache: r=" << r << dendl;
   }
 
-  return RGWSI_SysObj_Core::remove(obj_ctx, objv_tracker, obj, y);
+  return RGWSI_SysObj_Core::remove(dpp, obj_ctx, objv_tracker, obj, y);
 }
 
-int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
+int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
+                             RGWSysObjectCtxBase& obj_ctx,
                              RGWSI_SysObj_Obj_GetObjState& read_state,
                              RGWObjVersionTracker *objv_tracker,
                              const rgw_raw_obj& obj,
@@ -117,7 +122,7 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
   rgw_pool pool;
   string oid;
   if (ofs != 0) {
-    return RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
+    return RGWSI_SysObj_Core::read(dpp, obj_ctx, read_state, objv_tracker,
                                    obj, obl, ofs, end, attrs, raw_attrs,
                                    cache_info, refresh_version, y);
   }
@@ -132,8 +137,9 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     flags |= CACHE_FLAG_OBJV;
   if (attrs)
     flags |= CACHE_FLAG_XATTRS;
-
-  if ((cache.get(name, info, flags, cache_info) == 0) &&
+  
+  int r = cache.get(dpp, name, info, flags, cache_info);
+  if (r == 0 &&
       (!refresh_version || !info.version.compare(&(*refresh_version)))) {
     if (info.status < 0)
       return info.status;
@@ -156,9 +162,11 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     }
     return obl->length();
   }
+  if(r == -ENODATA)
+    return -ENOENT;
 
   map<string, bufferlist> unfiltered_attrset;
-  int r = RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
+  r = RGWSI_SysObj_Core::read(dpp, obj_ctx, read_state, objv_tracker,
                          obj, obl, ofs, end,
 			 (attrs ? &unfiltered_attrset : nullptr),
 			 true, /* cache unfiltered attrs */
@@ -167,7 +175,7 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
   if (r < 0) {
     if (r == -ENOENT) { // only update ENOENT, we'd rather retry other errors
       info.status = r;
-      cache.put(name, info, cache_info);
+      cache.put(dpp, name, info, cache_info);
     }
     return r;
   }
@@ -196,11 +204,12 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
       rgw_filter_attrset(info.xattrs, RGW_ATTR_PREFIX, attrs);
     }
   }
-  cache.put(name, info, cache_info);
+  cache.put(dpp, name, info, cache_info);
   return r;
 }
 
-int RGWSI_SysObj_Cache::get_attr(const rgw_raw_obj& obj,
+int RGWSI_SysObj_Cache::get_attr(const DoutPrefixProvider *dpp,
+                                 const rgw_raw_obj& obj,
                                  const char *attr_name,
                                  bufferlist *dest,
                                  optional_yield y)
@@ -215,7 +224,8 @@ int RGWSI_SysObj_Cache::get_attr(const rgw_raw_obj& obj,
 
   uint32_t flags = CACHE_FLAG_XATTRS;
 
-  if (cache.get(name, info, flags, nullptr) == 0) {
+  int r = cache.get(dpp, name, info, flags, nullptr);
+  if (r == 0) {
     if (info.status < 0)
       return info.status;
 
@@ -226,12 +236,15 @@ int RGWSI_SysObj_Cache::get_attr(const rgw_raw_obj& obj,
 
     *dest = iter->second;
     return dest->length();
+  } else if (r == -ENODATA) {
+    return -ENOENT;
   }
   /* don't try to cache this one */
-  return RGWSI_SysObj_Core::get_attr(obj, attr_name, dest, y);
+  return RGWSI_SysObj_Core::get_attr(dpp, obj, attr_name, dest, y);
 }
 
-int RGWSI_SysObj_Cache::set_attrs(const rgw_raw_obj& obj, 
+int RGWSI_SysObj_Cache::set_attrs(const DoutPrefixProvider *dpp, 
+                                  const rgw_raw_obj& obj, 
                                   map<string, bufferlist>& attrs,
                                   map<string, bufferlist> *rmattrs,
                                   RGWObjVersionTracker *objv_tracker,
@@ -247,25 +260,26 @@ int RGWSI_SysObj_Cache::set_attrs(const rgw_raw_obj& obj,
   }
   info.status = 0;
   info.flags = CACHE_FLAG_MODIFY_XATTRS;
-  if (objv_tracker) {
-    info.version = objv_tracker->write_version;
-    info.flags |= CACHE_FLAG_OBJV;
-  }
-  int ret = RGWSI_SysObj_Core::set_attrs(obj, attrs, rmattrs, objv_tracker, y);
+  int ret = RGWSI_SysObj_Core::set_attrs(dpp, obj, attrs, rmattrs, objv_tracker, y);
   string name = normal_name(pool, oid);
   if (ret >= 0) {
-    cache.put(name, info, NULL);
-    int r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
+    if (objv_tracker && objv_tracker->read_version.ver) {
+      info.version = objv_tracker->read_version;
+      info.flags |= CACHE_FLAG_OBJV;
+    }
+    cache.put(dpp, name, info, NULL);
+    int r = distribute_cache(dpp, name, obj, info, UPDATE_OBJ, y);
     if (r < 0)
-      ldout(cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
-    cache.remove(name);
+    cache.invalidate_remove(dpp, name);
   }
 
   return ret;
 }
 
-int RGWSI_SysObj_Cache::write(const rgw_raw_obj& obj,
+int RGWSI_SysObj_Cache::write(const DoutPrefixProvider *dpp, 
+                             const rgw_raw_obj& obj,
                              real_time *pmtime,
                              map<std::string, bufferlist>& attrs,
                              bool exclusive,
@@ -282,42 +296,34 @@ int RGWSI_SysObj_Cache::write(const rgw_raw_obj& obj,
   info.status = 0;
   info.data = data;
   info.flags = CACHE_FLAG_XATTRS | CACHE_FLAG_DATA | CACHE_FLAG_META;
-  if (objv_tracker) {
-    info.version = objv_tracker->write_version;
-    info.flags |= CACHE_FLAG_OBJV;
-  }
   ceph::real_time result_mtime;
-  int ret = RGWSI_SysObj_Core::write(obj, &result_mtime, attrs,
+  int ret = RGWSI_SysObj_Core::write(dpp, obj, &result_mtime, attrs,
                                      exclusive, data,
                                      objv_tracker, set_mtime, y);
   if (pmtime) {
     *pmtime = result_mtime;
   }
+  if (objv_tracker && objv_tracker->read_version.ver) {
+    info.version = objv_tracker->read_version;
+    info.flags |= CACHE_FLAG_OBJV;
+  }
   info.meta.mtime = result_mtime;
   info.meta.size = data.length();
   string name = normal_name(pool, oid);
   if (ret >= 0) {
-    cache.put(name, info, NULL);
-    // Only distribute the cache information if we did not just create
-    // the object with the exclusive flag. Note: PUT_OBJ_EXCL implies
-    // PUT_OBJ_CREATE. Generally speaking, when successfully creating
-    // a system object with the exclusive flag it is not necessary to
-    // call distribute_cache, as a) it's unclear whether other RGWs
-    // will need that system object in the near-term and b) it
-    // generates additional network traffic.
-    if (!exclusive) {
-      int r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
-      if (r < 0)
-	ldout(cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
-    }
+    cache.put(dpp, name, info, NULL);
+    int r = distribute_cache(dpp, name, obj, info, UPDATE_OBJ, y);
+    if (r < 0)
+      ldpp_dout(dpp, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
-    cache.remove(name);
+    cache.invalidate_remove(dpp, name);
   }
 
   return ret;
 }
 
-int RGWSI_SysObj_Cache::write_data(const rgw_raw_obj& obj,
+int RGWSI_SysObj_Cache::write_data(const DoutPrefixProvider *dpp, 
+                                   const rgw_raw_obj& obj,
                                    const bufferlist& data,
                                    bool exclusive,
                                    RGWObjVersionTracker *objv_tracker,
@@ -333,25 +339,25 @@ int RGWSI_SysObj_Cache::write_data(const rgw_raw_obj& obj,
   info.status = 0;
   info.flags = CACHE_FLAG_DATA;
 
-  if (objv_tracker) {
-    info.version = objv_tracker->write_version;
-    info.flags |= CACHE_FLAG_OBJV;
-  }
-  int ret = RGWSI_SysObj_Core::write_data(obj, data, exclusive, objv_tracker, y);
+  int ret = RGWSI_SysObj_Core::write_data(dpp, obj, data, exclusive, objv_tracker, y);
   string name = normal_name(pool, oid);
   if (ret >= 0) {
-    cache.put(name, info, NULL);
-    int r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
+    if (objv_tracker && objv_tracker->read_version.ver) {
+      info.version = objv_tracker->read_version;
+      info.flags |= CACHE_FLAG_OBJV;
+    }
+    cache.put(dpp, name, info, NULL);
+    int r = distribute_cache(dpp, name, obj, info, UPDATE_OBJ, y);
     if (r < 0)
-      ldout(cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
-    cache.remove(name);
+    cache.invalidate_remove(dpp, name);
   }
 
   return ret;
 }
 
-int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *pepoch,
+int RGWSI_SysObj_Cache::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *pepoch,
                                  map<string, bufferlist> *attrs, bufferlist *first_chunk,
                                  RGWObjVersionTracker *objv_tracker,
                                  optional_yield y)
@@ -370,7 +376,7 @@ int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_t
   uint32_t flags = CACHE_FLAG_META | CACHE_FLAG_XATTRS;
   if (objv_tracker)
     flags |= CACHE_FLAG_OBJV;
-  int r = cache.get(name, info, flags, NULL);
+  int r = cache.get(dpp, name, info, flags, NULL);
   if (r == 0) {
     if (info.status < 0)
       return info.status;
@@ -382,12 +388,15 @@ int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_t
       objv_tracker->read_version = info.version;
     goto done;
   }
-  r = RGWSI_SysObj_Core::raw_stat(obj, &size, &mtime, &epoch, &info.xattrs,
+  if (r == -ENODATA) {
+    return -ENOENT;
+  }
+  r = RGWSI_SysObj_Core::raw_stat(dpp, obj, &size, &mtime, &epoch, &info.xattrs,
                                   first_chunk, objv_tracker, y);
   if (r < 0) {
     if (r == -ENOENT) {
       info.status = r;
-      cache.put(name, info, NULL);
+      cache.put(dpp, name, info, NULL);
     }
     return r;
   }
@@ -400,7 +409,7 @@ int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_t
     info.flags |= CACHE_FLAG_OBJV;
     info.version = objv_tracker->read_version;
   }
-  cache.put(name, info, NULL);
+  cache.put(dpp, name, info, NULL);
 done:
   if (psize)
     *psize = size;
@@ -413,7 +422,8 @@ done:
   return 0;
 }
 
-int RGWSI_SysObj_Cache::distribute_cache(const string& normal_name,
+int RGWSI_SysObj_Cache::distribute_cache(const DoutPrefixProvider *dpp, 
+                                         const string& normal_name,
                                          const rgw_raw_obj& obj,
                                          ObjectCacheInfo& obj_info, int op,
                                          optional_yield y)
@@ -422,12 +432,11 @@ int RGWSI_SysObj_Cache::distribute_cache(const string& normal_name,
   info.op = op;
   info.obj_info = obj_info;
   info.obj = obj;
-  bufferlist bl;
-  encode(info, bl);
-  return notify_svc->distribute(normal_name, bl, y);
+  return notify_svc->distribute(dpp, normal_name, info, y);
 }
 
-int RGWSI_SysObj_Cache::watch_cb(uint64_t notify_id,
+int RGWSI_SysObj_Cache::watch_cb(const DoutPrefixProvider *dpp,
+                                 uint64_t notify_id,
                                  uint64_t cookie,
                                  uint64_t notifier_id,
                                  bufferlist& bl)
@@ -438,10 +447,10 @@ int RGWSI_SysObj_Cache::watch_cb(uint64_t notify_id,
     auto iter = bl.cbegin();
     decode(info, iter);
   } catch (buffer::end_of_buffer& err) {
-    ldout(cct, 0) << "ERROR: got bad notification" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: got bad notification" << dendl;
     return -EIO;
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: buffer::error" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: buffer::error" << dendl;
     return -EIO;
   }
 
@@ -452,13 +461,13 @@ int RGWSI_SysObj_Cache::watch_cb(uint64_t notify_id,
   
   switch (info.op) {
   case UPDATE_OBJ:
-    cache.put(name, info.obj_info, NULL);
+    cache.put(dpp, name, info.obj_info, NULL);
     break;
-  case REMOVE_OBJ:
-    cache.remove(name);
+  case INVALIDATE_OBJ:
+    cache.invalidate_remove(dpp, name);
     break;
   default:
-    ldout(cct, 0) << "WARNING: got unknown notification op: " << info.op << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: got unknown notification op: " << info.op << dendl;
     return -EINVAL;
   }
 
@@ -470,10 +479,11 @@ void RGWSI_SysObj_Cache::set_enabled(bool status)
   cache.set_enabled(status);
 }
 
-bool RGWSI_SysObj_Cache::chain_cache_entry(std::initializer_list<rgw_cache_entry_info *> cache_info_entries,
+bool RGWSI_SysObj_Cache::chain_cache_entry(const DoutPrefixProvider *dpp,
+                                           std::initializer_list<rgw_cache_entry_info *> cache_info_entries,
                                            RGWChainedCache::Entry *chained_entry)
 {
-  return cache.chain_cache_entry(cache_info_entries, chained_entry);
+  return cache.chain_cache_entry(dpp, cache_info_entries, chained_entry);
 }
 
 void RGWSI_SysObj_Cache::register_chained_cache(RGWChainedCache *cc)
@@ -499,9 +509,8 @@ static void cache_list_dump_helper(Formatter* f,
 class RGWSI_SysObj_Cache_ASocketHook : public AdminSocketHook {
   RGWSI_SysObj_Cache *svc;
 
-  static constexpr const char* admin_commands[4][3] = {
-    { "cache list",
-      "cache list name=filter,type=CephString,req=false",
+  static constexpr std::string_view admin_commands[][2] = {
+    { "cache list name=filter,type=CephString,req=false",
       "cache list [filter_str]: list object cache, possibly matching substrings" },
     { "cache inspect name=target,type=CephString,req=true",
       "cache inspect target: print cache element" },
@@ -581,7 +590,7 @@ int RGWSI_SysObj_Cache_ASocketHook::call(
   return -ENOSYS;
 }
 
-RGWSI_SysObj_Cache::ASocketHandler::ASocketHandler(RGWSI_SysObj_Cache *_svc) : svc(_svc)
+RGWSI_SysObj_Cache::ASocketHandler::ASocketHandler(const DoutPrefixProvider *_dpp, RGWSI_SysObj_Cache *_svc) : dpp(_dpp), svc(_svc)
 {
   hook.reset(new RGWSI_SysObj_Cache_ASocketHook(_svc));
 }
@@ -613,7 +622,7 @@ void RGWSI_SysObj_Cache::ASocketHandler::call_list(const std::optional<std::stri
 
 int RGWSI_SysObj_Cache::ASocketHandler::call_inspect(const std::string& target, Formatter* f)
 {
-  if (const auto entry = svc->cache.get(target)) {
+  if (const auto entry = svc->cache.get(dpp, target)) {
     f->open_object_section("cache_entry");
     f->dump_string("name", target.c_str());
     entry->dump(f);
@@ -626,7 +635,7 @@ int RGWSI_SysObj_Cache::ASocketHandler::call_inspect(const std::string& target, 
 
 int RGWSI_SysObj_Cache::ASocketHandler::call_erase(const std::string& target)
 {
-  return svc->cache.remove(target);
+  return svc->cache.invalidate_remove(dpp, target);
 }
 
 int RGWSI_SysObj_Cache::ASocketHandler::call_zap()

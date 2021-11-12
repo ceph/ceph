@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../shared/shared.module';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { AdministrationComponent } from './administration.component';
 
 describe('AdministrationComponent', () => {

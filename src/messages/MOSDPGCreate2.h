@@ -10,7 +10,7 @@
  * PGCreate2 - instruct an OSD to create some pgs
  */
 
-class MOSDPGCreate2 : public Message {
+class MOSDPGCreate2 final : public Message {
 public:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -25,13 +25,13 @@ public:
     : Message{MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION},
       epoch(e) { }
 private:
-  ~MOSDPGCreate2() override {}
+  ~MOSDPGCreate2() final {}
 
 public:
   std::string_view get_type_name() const override {
     return "pg_create2";
   }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "pg_create2(e" << epoch << " " << pgs << ")";
   }
 

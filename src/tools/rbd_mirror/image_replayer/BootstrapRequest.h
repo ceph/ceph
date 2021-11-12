@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "common/ceph_mutex.h"
+#include "common/Timer.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/mirror/Types.h"
 #include "tools/rbd_mirror/CancelableRequest.h"
@@ -14,8 +15,6 @@
 #include <string>
 
 class Context;
-class ContextWQ;
-class SafeTimer;
 
 namespace journal { class CacheManagerHandler; }
 namespace librbd { class ImageCtx; }
@@ -27,6 +26,7 @@ class ProgressContext;
 
 template <typename> class ImageSync;
 template <typename> class InstanceWatcher;
+struct PoolMetaCache;
 template <typename> struct Threads;
 
 namespace image_replayer {
@@ -45,15 +45,17 @@ public:
       InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& global_image_id,
       const std::string& local_mirror_uuid,
+      const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler* cache_manager_handler,
+      PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>** state_builder,
       bool* do_resync,
       Context* on_finish) {
     return new BootstrapRequest(
       threads, local_io_ctx, remote_io_ctx, instance_watcher, global_image_id,
-      local_mirror_uuid,  cache_manager_handler, progress_ctx, state_builder,
-      do_resync, on_finish);
+      local_mirror_uuid, remote_pool_meta, cache_manager_handler,
+      pool_meta_cache, progress_ctx, state_builder, do_resync, on_finish);
   }
 
   BootstrapRequest(
@@ -63,12 +65,13 @@ public:
       InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& global_image_id,
       const std::string& local_mirror_uuid,
+      const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler* cache_manager_handler,
+      PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>** state_builder,
       bool* do_resync,
       Context* on_finish);
-  ~BootstrapRequest() override;
 
   bool is_syncing() const;
 
@@ -92,10 +95,7 @@ private:
    *    v                                           (error) *
    * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * * * *
    *    |                                                   *
-   *    v                                                   *
-   * GET_REMOTE_MIRROR_INFO * * * * * * * * * * * * * * *   *
-   *    |                                               *   *
-   *    |                                               *   *
+   *    |                                                   *
    *    \----> CREATE_LOCAL_IMAGE * * * * * * * * * * * *   *
    *    |         |       ^                             *   *
    *    |         |       .                             *   *
@@ -127,7 +127,9 @@ private:
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
   std::string m_global_image_id;
   std::string m_local_mirror_uuid;
+  RemotePoolMeta m_remote_pool_meta;
   ::journal::CacheManagerHandler *m_cache_manager_handler;
+  PoolMetaCache* m_pool_meta_cache;
   ProgressContext *m_progress_ctx;
   StateBuilder<ImageCtxT>** m_state_builder;
   bool *m_do_resync;
@@ -135,10 +137,6 @@ private:
   mutable ceph::mutex m_lock;
   bool m_canceled = false;
 
-  ImageCtxT *m_remote_image_ctx = nullptr;
-  cls::rbd::MirrorImage m_mirror_image;
-  librbd::mirror::PromotionState m_promotion_state =
-    librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
   int m_ret_val = 0;
 
   std::string m_local_image_name;
@@ -155,9 +153,6 @@ private:
 
   void open_remote_image();
   void handle_open_remote_image(int r);
-
-  void get_remote_mirror_info();
-  void handle_get_remote_mirror_info(int r);
 
   void open_local_image();
   void handle_open_local_image(int r);

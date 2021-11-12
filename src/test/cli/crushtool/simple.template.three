@@ -12,23 +12,23 @@ type 2 cluster
 # buckets
 host host0 {
 	id -2		# do not change unnecessarily
-	# weight 2.000
+	# weight 2.00000
 	alg straw
 	hash 0	# rjenkins1
-	item device0 weight 1.000
-	item device1 weight 1.000
+	item device0 weight 1.00000
+	item device1 weight 1.00000
 }
 cluster cluster0 {
 	id -1		# do not change unnecessarily
-	# weight 2.000
+	# weight 2.00000
 	alg straw
 	hash 0	# rjenkins1
-	item host0 weight 2.000
+	item host0 weight 2.00000
 }
 
 # rules
 rule data {
-	ruleset 0
+	id 0
 	type replicated
 	min_size 1
 	max_size 10
@@ -37,7 +37,7 @@ rule data {
 	step emit
 }
 rule metadata {
-	ruleset 1
+	id 1
 	type replicated
 	min_size 1
 	max_size 10
@@ -46,7 +46,7 @@ rule metadata {
 	step emit
 }
 rule rbd {
-	ruleset 2
+	id 2
 	type replicated
 	min_size 1
 	max_size 10

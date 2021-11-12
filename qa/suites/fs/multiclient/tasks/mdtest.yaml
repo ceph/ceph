@@ -14,7 +14,7 @@ tasks:
 - mpi:
     exec: $TESTDIR/mdtest-1.9.3/mdtest -d $TESTDIR/gmnt -I 20 -z 5 -b 2 -R
 - pexec:
-    all:
+    clients:
       - rm -f $TESTDIR/gmnt
       - rm -rf $TESTDIR/mdtest-1.9.3
       - rm -rf $TESTDIR/._mdtest-1.9.3

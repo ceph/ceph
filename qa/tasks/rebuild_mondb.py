@@ -8,7 +8,7 @@ import os.path
 import shutil
 import tempfile
 
-import ceph_manager
+from tasks import ceph_manager
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
@@ -66,6 +66,10 @@ def _nuke_mons(manager, mons, mon_id):
                 # the its store.db with the recovered one
                 store_dir = os.path.join(mon_data, 'store.db')
                 remote.run(args=['sudo', 'rm', '-r', store_dir])
+                # we need to remove the external_log_to file too, since it
+                # references a version number inside store.db
+                remote.run(args=['sudo', 'rm', '-r', os.path.join(mon_data,
+                                                                  'external_log_to')])
             else:
                 remote.run(args=['sudo', 'rm', '-r', mon_data])
 

@@ -4,7 +4,6 @@
 #define CEPH_LIBRBD_OPERATION_FLATTEN_REQUEST_H
 
 #include "librbd/operation/Request.h"
-#include "common/snap_types.h"
 
 namespace librbd {
 
@@ -18,11 +17,9 @@ class FlattenRequest : public Request<ImageCtxT>
 {
 public:
   FlattenRequest(ImageCtxT &image_ctx, Context *on_finish,
-                 uint64_t overlap_objects, const ::SnapContext &snapc,
-                 ProgressContext &prog_ctx)
+                 uint64_t overlap_objects, ProgressContext &prog_ctx)
     : Request<ImageCtxT>(image_ctx, on_finish),
-      m_overlap_objects(overlap_objects),
-      m_snapc(snapc), m_prog_ctx(prog_ctx) {
+      m_overlap_objects(overlap_objects), m_prog_ctx(prog_ctx) {
   }
 
 protected:
@@ -55,7 +52,6 @@ private:
    */
 
   uint64_t m_overlap_objects;
-  ::SnapContext m_snapc;
   ProgressContext &m_prog_ctx;
 
   void flatten_objects();

@@ -5,14 +5,16 @@
 # require the admin ceph user, as there's no way to pass the ceph user
 # to qemu-iotests currently.
 
-testlist='001 002 003 004 005 008 009 010 011 021 025 032 033 055'
+testlist='001 002 003 004 005 008 009 010 011 021 025 032 033'
 
 git clone https://github.com/qemu/qemu.git
 cd qemu
-if lsb_release -da 2>&1 | grep -iq 'bionic'; then
+
+
+if grep -iqE '(bionic|focal)' /etc/os-release; then
     # Bionic requires a matching test harness
     git checkout v2.11.0
-elif lsb_release -da 2>&1 | grep -iq 'xenial'; then
+elif grep -iqE '(xenial|platform:el8)' /etc/os-release; then
     # Xenial requires a recent test harness
     git checkout v2.3.0
 else
@@ -34,10 +36,6 @@ then
     ln -s /usr/bin/qemu-nbd
 else
     QEMU='/usr/libexec/qemu-kvm'
-
-    # disable test 055 since qemu-kvm (RHEL/CentOS) doesn't support the
-    # required QMP commands
-    testlist=$(echo ${testlist} | sed "s/ 055//g")
 fi
 ln -s $QEMU bin/qemu
 

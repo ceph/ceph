@@ -109,7 +109,7 @@ setup_osd_data
 
 POOL="alloc_hint-rep"
 ceph osd pool create "${POOL}" "${NUM_PG}"
-ceph osd pool set "${POOL}" size "${NUM_OSDS}"
+ceph osd pool set "${POOL}" size "${NUM_OSDS}" --yes-i-really-mean-it
 ceph osd pool application enable "${POOL}" rados
 
 OBJ="foo"

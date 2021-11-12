@@ -1,10 +1,10 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { ToastrService } from 'ngx-toastr';
 
-import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
@@ -26,15 +26,14 @@ describe('NotificationService', () => {
       NotificationService,
       TaskMessageService,
       { provide: ToastrService, useValue: toastFakeService },
-      { provide: CdDatePipe, useValue: { transform: (d) => d } },
-      i18nProviders,
+      { provide: CdDatePipe, useValue: { transform: (d: any) => d } },
       RbdService
     ],
     imports: [HttpClientTestingModule]
   });
 
   beforeEach(() => {
-    service = TestBed.get(NotificationService);
+    service = TestBed.inject(NotificationService);
     service.removeAll();
   });
 
@@ -64,7 +63,7 @@ describe('NotificationService', () => {
   }));
 
   describe('Saved notifications', () => {
-    const expectSavedNotificationToHave = (expected: {}) => {
+    const expectSavedNotificationToHave = (expected: object) => {
       tick(510);
       expect(service['dataSource'].getValue().length).toBe(1);
       const notification = service['dataSource'].getValue()[0];
@@ -73,7 +72,7 @@ describe('NotificationService', () => {
       });
     };
 
-    const addNotifications = (quantity) => {
+    const addNotifications = (quantity: number) => {
       for (let index = 0; index < quantity; index++) {
         service.show(NotificationType.info, `${index}`);
         tick(510);
@@ -82,7 +81,7 @@ describe('NotificationService', () => {
 
     beforeEach(() => {
       spyOn(service, 'show').and.callThrough();
-      service.cancel(service['justShownTimeoutId']);
+      service.cancel((<any>service)['justShownTimeoutId']);
     });
 
     it('should create a success notification and save it', fakeAsync(() => {
@@ -186,7 +185,7 @@ describe('NotificationService', () => {
     const n1 = new CdNotificationConfig(NotificationType.success, 'Some success');
     const n2 = new CdNotificationConfig(NotificationType.info, 'Some info');
 
-    const showArray = (arr) => arr.forEach((n) => service.show(n));
+    const showArray = (arr: any[]) => arr.forEach((n) => service.show(n));
 
     beforeEach(() => {
       spyOn(service, 'save').and.stub();
@@ -233,7 +232,7 @@ describe('NotificationService', () => {
       spyOn(global, 'Date').and.returnValue(baseTime);
       spyOn(window, 'setTimeout').and.callFake((fn) => fn());
 
-      toastr = TestBed.get(ToastrService);
+      toastr = TestBed.inject(ToastrService);
       // spyOn needs to know the methods before spying and can't read the array for clarification
       ['error', 'info', 'success'].forEach((method: 'error' | 'info' | 'success') =>
         spyOn(toastr, method).and.stub()

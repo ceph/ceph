@@ -15,6 +15,7 @@ PyObject *get_python_typed_option_value(
   case Option::TYPE_SIZE:
     return PyLong_FromString((char *)value.c_str(), nullptr, 0);
   case Option::TYPE_SECS:
+  case Option::TYPE_MILLISECS:
   case Option::TYPE_FLOAT:
     {
       PyObject *s = PyUnicode_FromString(value.c_str());

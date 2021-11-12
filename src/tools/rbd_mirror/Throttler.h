@@ -13,8 +13,8 @@
 
 #include "common/ceph_mutex.h"
 #include "common/config_obs.h"
+#include "include/common_fwd.h"
 
-class CephContext;
 class Context;
 
 namespace ceph { class Formatter; }

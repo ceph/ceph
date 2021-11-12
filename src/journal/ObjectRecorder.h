@@ -10,14 +10,13 @@
 #include "common/ceph_mutex.h"
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
+#include "common/Timer.h"
 #include "journal/FutureImpl.h"
 #include <list>
 #include <map>
 #include <set>
 #include <boost/noncopyable.hpp>
 #include "include/ceph_assert.h"
-
-class SafeTimer;
 
 namespace journal {
 
@@ -143,7 +142,7 @@ private:
 
   bufferlist m_prefetch_bl;
 
-  bool m_in_flight_callbacks = false;
+  uint32_t m_in_flight_callbacks = 0;
   ceph::condition_variable m_in_flight_callbacks_cond;
   uint64_t m_in_flight_bytes = 0;
 

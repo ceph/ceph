@@ -1,49 +1,35 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../../shared/shared.module';
-import { InventoryDeviceFiltersChangeEvent } from '../../inventory/inventory-devices/inventory-device-filters-change-event.interface';
-import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
-import { InventoryDevicesComponent } from '../../inventory/inventory-devices/inventory-devices.component';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
+import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, Mocks } from '~/testing/unit-test-helper';
 import { OsdDevicesSelectionModalComponent } from './osd-devices-selection-modal.component';
 
 describe('OsdDevicesSelectionModalComponent', () => {
   let component: OsdDevicesSelectionModalComponent;
   let fixture: ComponentFixture<OsdDevicesSelectionModalComponent>;
-  const devices: InventoryDevice[] = [
-    {
-      hostname: 'node0',
-      uid: '1',
-      path: 'sda',
-      sys_api: {
-        vendor: 'AAA',
-        model: 'aaa',
-        size: 1024,
-        rotational: 'false',
-        human_readable_size: '1 KB'
-      },
-      available: false,
-      rejected_reasons: [''],
-      device_id: 'AAA-aaa-id0',
-      human_readable_type: 'nvme/ssd',
-      osd_ids: []
-    }
-  ];
+  let timeoutFn: Function;
+
+  const devices: InventoryDevice[] = [Mocks.getInventoryDevice('node0', '1')];
 
   const expectSubmitButton = (enabled: boolean) => {
     const nativeElement = fixture.debugElement.nativeElement;
-    const button = nativeElement.querySelector('.modal-footer button');
+    const button = nativeElement.querySelector('.modal-footer .tc_submitButton');
     expect(button.disabled).toBe(!enabled);
   };
 
   configureTestBed({
     imports: [
+      BrowserAnimationsModule,
       FormsModule,
       HttpClientTestingModule,
       SharedModule,
@@ -51,14 +37,33 @@ describe('OsdDevicesSelectionModalComponent', () => {
       RouterTestingModule,
       ToastrModule.forRoot()
     ],
-    providers: [BsModalRef, i18nProviders],
+    providers: [NgbActiveModal],
     declarations: [OsdDevicesSelectionModalComponent, InventoryDevicesComponent]
   });
 
   beforeEach(() => {
+    spyOn(window, 'setTimeout').and.callFake((fn) => (timeoutFn = fn));
+
     fixture = TestBed.createComponent(OsdDevicesSelectionModalComponent);
     component = fixture.componentInstance;
     component.devices = devices;
+
+    // Mocks InventoryDeviceComponent
+    component.inventoryDevices = {
+      columns: [
+        { name: 'Device path', prop: 'path' },
+        {
+          name: 'Type',
+          prop: 'human_readable_type'
+        },
+        {
+          name: 'Available',
+          prop: 'available'
+        }
+      ]
+    } as InventoryDevicesComponent;
+    // Mocks the update from the above component
+    component.filterColumns = ['path', 'human_readable_type'];
     fixture.detectChanges();
   });
 
@@ -70,24 +75,32 @@ describe('OsdDevicesSelectionModalComponent', () => {
     expectSubmitButton(false);
   });
 
+  it(
+    'should update requiredFilters after ngAfterViewInit is called to prevent ' +
+      'ExpressionChangedAfterItHasBeenCheckedError',
+    () => {
+      expect(component.requiredFilters).toEqual([]);
+      timeoutFn();
+      expect(component.requiredFilters).toEqual(['Device path', 'Type']);
+    }
+  );
+
   it('should enable submit button after filtering some devices', () => {
-    const event: InventoryDeviceFiltersChangeEvent = {
+    const event: CdTableColumnFiltersChange = {
       filters: [
         {
-          label: 'hostname',
+          name: 'hostname',
           prop: 'hostname',
-          value: 'node0',
-          formatValue: 'node0'
+          value: { raw: 'node0', formatted: 'node0' }
         },
         {
-          label: 'size',
+          name: 'size',
           prop: 'size',
-          value: '1024',
-          formatValue: '1KiB'
+          value: { raw: '1024', formatted: '1KiB' }
         }
       ],
-      filterInDevices: devices,
-      filterOutDevices: []
+      data: devices,
+      dataOut: []
     };
     component.onFilterChange(event);
     fixture.detectChanges();

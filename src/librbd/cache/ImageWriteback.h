@@ -6,6 +6,7 @@
 
 #include "include/buffer_fwd.h"
 #include "include/int_types.h"
+#include "librbd/io/Types.h"
 #include <vector>
 
 class Context;
@@ -16,13 +17,35 @@ struct ImageCtx;
 
 namespace cache {
 
+class ImageWritebackInterface {
+public:
+  typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
+  virtual ~ImageWritebackInterface() {
+  }
+  virtual void aio_read(Extents &&image_extents, ceph::bufferlist *bl,
+                        int fadvise_flags, Context *on_finish) = 0;
+  virtual void aio_write(Extents &&image_extents, ceph::bufferlist&& bl,
+                         int fadvise_flags, Context *on_finish) = 0;
+  virtual void aio_discard(uint64_t offset, uint64_t length,
+                           uint32_t discard_granularity_bytes, Context *on_finish) = 0;
+  virtual void aio_flush(io::FlushSource flush_source, Context *on_finish) = 0 ;
+  virtual void aio_writesame(uint64_t offset, uint64_t length,
+                             ceph::bufferlist&& bl,
+                             int fadvise_flags, Context *on_finish) = 0;
+  virtual void aio_compare_and_write(Extents &&image_extents,
+                                     ceph::bufferlist&& cmp_bl,
+                                     ceph::bufferlist&& bl,
+                                     uint64_t *mismatch_offset,
+                                     int fadvise_flags, Context *on_finish) = 0;
+};
+
 /**
  * client-side, image extent cache writeback handler
  */
 template <typename ImageCtxT = librbd::ImageCtx>
-class ImageWriteback {
+class ImageWriteback : public ImageWritebackInterface {
 public:
-  typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
+  using ImageWritebackInterface::Extents;
 
   explicit ImageWriteback(ImageCtxT &image_ctx);
 
@@ -32,7 +55,7 @@ public:
                  int fadvise_flags, Context *on_finish);
   void aio_discard(uint64_t offset, uint64_t length,
                    uint32_t discard_granularity_bytes, Context *on_finish);
-  void aio_flush(Context *on_finish);
+  void aio_flush(io::FlushSource flush_source, Context *on_finish);
   void aio_writesame(uint64_t offset, uint64_t length,
                      ceph::bufferlist&& bl,
                      int fadvise_flags, Context *on_finish);

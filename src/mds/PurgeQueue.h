@@ -16,6 +16,7 @@
 #define PURGE_QUEUE_H_
 
 #include "include/compact_set.h"
+#include "common/Finisher.h"
 #include "mds/MDSMap.h"
 #include "osdc/Journaler.h"
 
@@ -72,7 +73,7 @@ public:
   inodeno_t ino = 0;
   uint64_t size = 0;
   file_layout_t layout;
-  compact_set<int64_t> old_pools;
+  std::vector<int64_t> old_pools;
   SnapContext snapc;
   fragtree_t fragtree;
 private:
@@ -85,10 +86,34 @@ enum {
 
   // How many items have been finished by PurgeQueue
   l_pq_executing_ops,
+  l_pq_executing_ops_high_water,
   l_pq_executing,
+  l_pq_executing_high_water,
   l_pq_executed,
   l_pq_item_in_journal,
   l_pq_last
+};
+
+struct PurgeItemCommitOp {
+public:
+  enum PurgeType : uint8_t {
+    PURGE_OP_RANGE = 0,
+    PURGE_OP_REMOVE = 1,
+    PURGE_OP_ZERO
+  };
+
+  PurgeItemCommitOp(PurgeItem _item, PurgeType _type, int _flags)
+    : item(_item), type(_type), flags(_flags) {}
+
+  PurgeItemCommitOp(PurgeItem _item, PurgeType _type, int _flags,
+                    object_t _oid, object_locator_t _oloc)
+    : item(_item), type(_type), flags(_flags), oid(_oid), oloc(_oloc) {}
+
+  PurgeItem item;
+  PurgeType type;
+  int flags;
+  object_t oid;
+  object_locator_t oloc;
 };
 
 /**
@@ -128,6 +153,8 @@ public:
   // to the queue (there is no callback for when it is executed)
   void push(const PurgeItem &pi, Context *completion);
 
+  void _commit_ops(int r, const std::vector<PurgeItemCommitOp>& ops_vec, uint64_t expire_to);
+
   // If the on-disk queue is empty and we are not currently processing
   // anything.
   bool is_idle() const;
@@ -152,7 +179,7 @@ public:
 
   void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
 
-protected:
+private:
   uint32_t _calculate_ops(const PurgeItem &item) const;
 
   bool _can_consume();
@@ -215,5 +242,8 @@ protected:
   std::vector<Context*> waiting_for_recovery;
 
   size_t purge_item_journal_size;
+
+  uint64_t ops_high_water = 0;
+  uint64_t files_high_water = 0;
 };
 #endif

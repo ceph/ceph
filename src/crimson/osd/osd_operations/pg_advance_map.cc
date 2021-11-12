@@ -76,14 +76,19 @@ seastar::future<> PGAdvanceMap::start()
 	  handle.exit();
 	  if (do_init) {
 	    osd.pg_map.pg_created(pg->get_pgid(), pg);
+	    osd.shard_services.inc_pg_num();
 	    logger().info("PGAdvanceMap::start new pg {}", *pg);
 	  }
 	  return seastar::when_all_succeed(
-	    pg->get_need_up_thru() ? osd._send_alive() : seastar::now(),
+	    pg->get_need_up_thru() \
+              ? osd.shard_services.send_alive(pg->get_same_interval_since())
+              : seastar::now(),
 	    osd.shard_services.dispatch_context(
 	      pg->get_collection_ref(),
 	      std::move(rctx)));
-	});
+	}).then_unpack([this] {
+          return osd.shard_services.send_pg_temp();
+        });
     }).then([this, ref=std::move(ref)] {
       logger().debug("{}: complete", *this);
     });

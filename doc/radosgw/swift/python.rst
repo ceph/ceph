@@ -54,7 +54,7 @@ This gets a list of containers that you own, and prints out the container name:
 .. code-block:: python
 
 	for container in conn.get_account()[1]:
-		print container['name']
+		print(container['name'])
 
 The output will look something like this::
 
@@ -71,7 +71,7 @@ object's name, the file size, and last modified date:
 .. code-block:: python
 
 	for data in conn.get_container(container_name)[1]:
-		print '{0}\t{1}\t{2}'.format(data['name'], data['bytes'], data['last_modified'])
+		print('{0}\t{1}\t{2}'.format(data['name'], data['bytes'], data['last_modified']))
 
 The output will look something like this::
 

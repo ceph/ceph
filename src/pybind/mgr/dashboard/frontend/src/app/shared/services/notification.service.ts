@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { IndividualConfig, ToastrService } from 'ngx-toastr';
 import { BehaviorSubject, Subject } from 'rxjs';
 
@@ -219,7 +219,7 @@ export class NotificationService {
    * Prevent the notification from being shown.
    * @param {number} timeoutId A number representing the ID of the timeout to be canceled.
    */
-  cancel(timeoutId) {
+  cancel(timeoutId: number) {
     window.clearTimeout(timeoutId);
   }
 

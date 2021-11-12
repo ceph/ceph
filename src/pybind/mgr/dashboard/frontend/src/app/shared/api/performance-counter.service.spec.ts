@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { PerformanceCounterService } from './performance-counter.service';
 
 describe('PerformanceCounterService', () => {
@@ -14,8 +14,8 @@ describe('PerformanceCounterService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(PerformanceCounterService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(PerformanceCounterService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

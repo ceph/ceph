@@ -16,8 +16,8 @@
 #ifndef CEPH_MDISCOVERREPLY_H
 #define CEPH_MDISCOVERREPLY_H
 
-#include "msg/Message.h"
 #include "include/filepath.h"
+#include "messages/MMDSOp.h"
 
 #include <string>
 
@@ -63,7 +63,7 @@
  * 
  */
 
-class MDiscoverReply : public SafeMessage {
+class MDiscoverReply final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
@@ -85,7 +85,7 @@ private:
 
  public:
   __u8 starts_with = 0;
-  bufferlist trace;
+  ceph::buffer::list trace;
 
   enum { DIR, DENTRY, INODE };
 
@@ -110,9 +110,9 @@ private:
   void set_base_dir_frag(frag_t df) { base_dir_frag = df; }
 
 protected:
-  MDiscoverReply() : SafeMessage{MSG_MDS_DISCOVERREPLY, HEAD_VERSION, COMPAT_VERSION} { }
+  MDiscoverReply() : MMDSOp{MSG_MDS_DISCOVERREPLY, HEAD_VERSION, COMPAT_VERSION} { }
   MDiscoverReply(const MDiscover &dis) :
-    SafeMessage{MSG_MDS_DISCOVERREPLY, HEAD_VERSION, COMPAT_VERSION},
+    MMDSOp{MSG_MDS_DISCOVERREPLY, HEAD_VERSION, COMPAT_VERSION},
     base_ino(dis.get_base_ino()),
     base_dir_frag(dis.get_base_dir_frag()),
     wanted_base_dir(dis.wants_base_dir()),
@@ -127,7 +127,7 @@ protected:
     header.tid = dis.get_tid();
   }
   MDiscoverReply(dirfrag_t df) :
-    SafeMessage{MSG_MDS_DISCOVERREPLY, HEAD_VERSION, COMPAT_VERSION},
+    MMDSOp{MSG_MDS_DISCOVERREPLY, HEAD_VERSION, COMPAT_VERSION},
     base_ino(df.ino),
     base_dir_frag(df.frag),
     wanted_base_dir(false),
@@ -141,14 +141,14 @@ protected:
   {
     header.tid = 0;
   }
-  ~MDiscoverReply() override {}
+  ~MDiscoverReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "discover_reply"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "discover_reply(" << header.tid << " " << base_ino << ")";
   }
-  
+
   // builders
   bool is_empty() const {
     return trace.length() == 0 &&
@@ -159,11 +159,11 @@ public:
 
   //  void set_flag_forward() { flag_forward = true; }
   void set_flag_error_dn(std::string_view dn) { 
-    flag_error_dn = true; 
-    error_dentry = dn; 
+    flag_error_dn = true;
+    error_dentry = dn;
   }
-  void set_flag_error_dir() { 
-    flag_error_dir = true; 
+  void set_flag_error_dir() {
+    flag_error_dir = true;
   }
   void set_dir_auth_hint(int a) {
     dir_auth_hint = a;
@@ -175,6 +175,7 @@ public:
 
   // ...
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(base_ino, p);
     decode(base_dir_frag, p);
@@ -209,6 +210,8 @@ public:
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+  template<class T, typename... Args>
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 #endif

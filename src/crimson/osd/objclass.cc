@@ -18,6 +18,9 @@
 #include "auth/Crypto.h"
 #include "common/armor.h"
 
+using std::map;
+using std::string;
+
 static inline int execute_osd_op(cls_method_context_t hctx, OSDOp& op)
 {
   // we can expect the memory under `ret` will be still fine after
@@ -25,7 +28,8 @@ static inline int execute_osd_op(cls_method_context_t hctx, OSDOp& op)
   // created for us by `seastar::async` in `::do_op_call()`.
   int ret = 0;
   using osd_op_errorator = crimson::osd::OpsExecuter::osd_op_errorator;
-  reinterpret_cast<crimson::osd::OpsExecuter*>(hctx)->execute_osd_op(op).handle_error(
+  reinterpret_cast<crimson::osd::OpsExecuter*>(hctx)->execute_op(op)
+  .handle_error_interruptible(
     osd_op_errorator::all_same_way([&ret] (const std::error_code& err) {
       assert(err.value() > 0);
       ret = -err.value();
@@ -138,7 +142,7 @@ int cls_cxx_read2(cls_method_context_t hctx,
   if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
     return ret;
   }
-  outbl->claim(op.outdata);
+  *outbl = std::move(op.outdata);
   return outbl->length();
 }
 
@@ -148,7 +152,7 @@ int cls_cxx_write2(cls_method_context_t hctx,
                    bufferlist *inbl,
                    uint32_t op_flags)
 {
-  OSDOp op{ CEPH_OSD_OP_WRITE };
+  OSDOp op{CEPH_OSD_OP_WRITE};
   op.op.extent.offset = ofs;
   op.op.extent.length = len;
   op.op.flags = op_flags;
@@ -199,6 +203,14 @@ int cls_cxx_truncate(cls_method_context_t hctx, int ofs)
   return execute_osd_op(hctx, op);
 }
 
+int cls_cxx_write_zero(cls_method_context_t hctx, int offset, int len)
+{
+  OSDOp op{CEPH_OSD_OP_ZERO};
+  op.op.extent.offset = offset;
+  op.op.extent.length = len;
+  return execute_osd_op(hctx, op);
+}
+
 int cls_cxx_getxattr(cls_method_context_t hctx,
                      const char *name,
                      bufferlist *outbl)
@@ -209,7 +221,7 @@ int cls_cxx_getxattr(cls_method_context_t hctx,
   if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
     return ret;
   }
-  outbl->claim(op.outdata);
+  *outbl = std::move(op.outdata);
   return outbl->length();
 }
 
@@ -251,7 +263,7 @@ int cls_cxx_map_get_keys(cls_method_context_t hctx,
                          std::set<std::string>* const keys,
                          bool* const more)
 {
-  OSDOp op{ CEPH_OSD_OP_OMAPGETKEYS };
+  OSDOp op{CEPH_OSD_OP_OMAPGETKEYS};
   encode(start_obj, op.indata);
   encode(max_to_get, op.indata);
   if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
@@ -274,7 +286,7 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx,
                          std::map<std::string, ceph::bufferlist> *vals,
                          bool* const more)
 {
-  OSDOp op{ CEPH_OSD_OP_OMAPGETVALS };
+  OSDOp op{CEPH_OSD_OP_OMAPGETVALS};
   encode(start_obj, op.indata);
   encode(max_to_get, op.indata);
   encode(filter_prefix, op.indata);
@@ -291,8 +303,31 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx,
   return vals->size();
 }
 
+int cls_cxx_map_get_vals_by_keys(cls_method_context_t hctx,
+				 const std::set<std::string> &keys,
+				 std::map<std::string, ceph::bufferlist> *vals)
+{
+  OSDOp op{CEPH_OSD_OP_OMAPGETVALSBYKEYS};
+  encode(keys, op.indata);
+  if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
+    return ret;
+  }
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(*vals, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
+  return 0;
+}
+
 int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
 {
+  OSDOp op{CEPH_OSD_OP_OMAPGETHEADER};
+  if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
+    return ret;
+  }
+  *outbl = std::move(op.outdata);
   return 0;
 }
 
@@ -300,7 +335,7 @@ int cls_cxx_map_get_val(cls_method_context_t hctx,
                         const string &key,
                         bufferlist *outbl)
 {
-  OSDOp op{ CEPH_OSD_OP_OMAPGETVALSBYKEYS };
+  OSDOp op{CEPH_OSD_OP_OMAPGETVALSBYKEYS};
   {
     std::set<std::string> k{key};
     encode(k, op.indata);
@@ -327,7 +362,7 @@ int cls_cxx_map_set_val(cls_method_context_t hctx,
                         const string &key,
                         bufferlist *inbl)
 {
-  OSDOp op{ CEPH_OSD_OP_OMAPSETVALS };
+  OSDOp op{CEPH_OSD_OP_OMAPSETVALS};
   {
     std::map<std::string, ceph::bufferlist> m;
     m[key] = *inbl;
@@ -339,7 +374,7 @@ int cls_cxx_map_set_val(cls_method_context_t hctx,
 int cls_cxx_map_set_vals(cls_method_context_t hctx,
                          const std::map<string, ceph::bufferlist> *map)
 {
-  OSDOp op{ CEPH_OSD_OP_OMAPSETVALS };
+  OSDOp op{CEPH_OSD_OP_OMAPSETVALS};
   encode(*map, op.indata);
   return execute_osd_op(hctx, op);
 }
@@ -351,14 +386,19 @@ int cls_cxx_map_clear(cls_method_context_t hctx)
 
 int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl)
 {
-  return 0;
+  OSDOp op{CEPH_OSD_OP_OMAPSETHEADER};
+  op.indata = std::move(*inbl);
+  return execute_osd_op(hctx, op);
 }
 
 int cls_cxx_map_remove_range(cls_method_context_t hctx,
                              const std::string& key_begin,
                              const std::string& key_end)
 {
-  return 0;
+  OSDOp op{CEPH_OSD_OP_OMAPRMKEYRANGE};
+  encode(key_begin, op.indata);
+  encode(key_end, op.indata);
+  return execute_osd_op(hctx, op);
 }
 
 int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key)
@@ -380,7 +420,11 @@ uint64_t cls_current_version(cls_method_context_t hctx)
 
 int cls_current_subop_num(cls_method_context_t hctx)
 {
-  return 0;
+  auto* ox = reinterpret_cast<crimson::osd::OpsExecuter*>(hctx);
+  // in contrast to classical OSD, crimson doesn't count OP_CALL and
+  // OP_STAT which seems fine regarding how the plugins we take care
+  // about use this part of API.
+  return ox->get_processed_rw_ops_num();
 }
 
 uint64_t cls_get_features(cls_method_context_t hctx)
@@ -397,6 +441,12 @@ uint64_t cls_get_client_features(cls_method_context_t hctx)
   } catch (crimson::osd::error& e) {
     return -e.code().value();
   }
+}
+
+uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx)
+{
+  auto* ox = reinterpret_cast<crimson::osd::OpsExecuter*>(hctx);
+  return ox->get_pool_stripe_width();
 }
 
 ceph_release_t cls_get_required_osd_release(cls_method_context_t hctx)
@@ -427,7 +477,7 @@ int cls_cxx_chunk_write_and_set(cls_method_context_t hctx,
   return 0;
 }
 
-bool cls_has_chunk(cls_method_context_t hctx, string fp_oid)
+int cls_get_manifest_ref_count(cls_method_context_t hctx, string fp_oid)
 {
   return 0;
 }
@@ -435,4 +485,15 @@ bool cls_has_chunk(cls_method_context_t hctx, string fp_oid)
 uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
   // FIXME
   return 4096;
+}
+
+int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_objs, const std::string& pool,
+		   const char *cls, const char *method, bufferlist& inbl)
+{
+  return 0;
+}
+
+int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, bufferlist> *results)
+{
+  return 0;
 }

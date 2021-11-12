@@ -36,7 +36,7 @@ class CDentry;
 class Capability;
 class SimpleLock;
 class ScatterLock;
-class LocalLock;
+class LocalLockC;
 
 class Locker {
 public:
@@ -101,7 +101,7 @@ public:
   bool rdlock_try_set(MutationImpl::LockOpVec& lov, MutationRef& mut);
 
   void wrlock_force(SimpleLock *lock, MutationRef& mut);
-  bool wrlock_try(SimpleLock *lock, MutationRef& mut);
+  bool wrlock_try(SimpleLock *lock, const MutationRef& mut, client_t client=-1);
   bool wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut);
   void wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue);
 
@@ -153,7 +153,7 @@ public:
   bool is_revoking_any_caps_from(client_t client);
 
   // local
-  void local_wrlock_grab(LocalLock *lock, MutationRef& mut);
+  void local_wrlock_grab(LocalLockC *lock, MutationRef& mut);
 
   // file
   void file_eval(ScatterLock *lock, bool *need_issue);
@@ -163,7 +163,7 @@ public:
 
   // -- file i/o --
   version_t issue_file_data_version(CInode *in);
-  Capability* issue_new_caps(CInode *in, int mode, Session *session, SnapRealm *conrealm, bool is_replay);
+  Capability* issue_new_caps(CInode *in, int mode, MDRequestRef& mdr, SnapRealm *conrealm);
   int issue_caps(CInode *in, Capability *only_cap=0);
   void issue_caps_set(std::set<CInode*>& inset);
   void issue_truncate(CInode *in);
@@ -174,9 +174,9 @@ public:
 
   void request_inode_file_caps(CInode *in);
 
-  void calc_new_client_ranges(CInode *in, uint64_t size, bool update,
-			      CInode::mempool_inode::client_range_map* new_ranges,
-			      bool *max_increased);
+  bool check_client_ranges(CInode *in, uint64_t size);
+  bool calc_new_client_ranges(CInode *in, uint64_t size,
+			      bool *max_increased=nullptr);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,
                             uint64_t newmax=0, uint64_t newsize=0,
 			    utime_t mtime=utime_t());
@@ -224,9 +224,9 @@ protected:
   void _do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id, ceph_seq_t mseq, ceph_seq_t seq);
   void caps_tick();
 
-  bool local_wrlock_start(LocalLock *lock, MDRequestRef& mut);
+  bool local_wrlock_start(LocalLockC *lock, MDRequestRef& mut);
   void local_wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut);
-  bool local_xlock_start(LocalLock *lock, MDRequestRef& mut);
+  bool local_xlock_start(LocalLockC *lock, MDRequestRef& mut);
   void local_xlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut);
 
   void handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m);
@@ -259,7 +259,7 @@ private:
   friend class LockerLogContext;
 
   bool any_late_revoking_caps(xlist<Capability*> const &revoking, double timeout) const;
-  uint64_t calc_new_max_size(CInode::mempool_inode *pi, uint64_t size);
+  uint64_t calc_new_max_size(const CInode::inode_const_ptr& pi, uint64_t size);
 
   MDSRank *mds;
   MDCache *mdcache;

@@ -22,6 +22,8 @@
 #include "common/config_proxy.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
@@ -58,7 +60,7 @@ TEST(ErasureCodePlugin, factory)
       EXPECT_TRUE(erasure_code.get());
     }
   }
-#ifdef HAVE_BETTER_YASM_ELF64
+#ifdef WITH_EC_ISA_PLUGIN
   //check clay plugin with scalar_mds=isa
   {
     const char *techniques[] = {

@@ -4,7 +4,7 @@ Setup
 
   $ RO_KEY=$(ceph auth get-or-create-key client.ro mon 'profile rbd' mgr 'profile rbd' osd 'profile rbd-read-only')
   $ rbd create --size 10 img
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
   $ rbd clone img@snap cloneimg
   $ rbd create --size 1 imgpart
@@ -15,7 +15,7 @@ Setup
   > /dev/rbd0p2 : start=       1024, size=    512, Id=83
   > EOF
   $ sudo rbd unmap $DEV
-  $ rbd snap create imgpart@snap
+  $ rbd snap create --no-progress imgpart@snap
 
 
 Image HEAD
@@ -146,9 +146,7 @@ R/O, unpartitioned:
   $ blockdev --setrw $DEV
   .*BLKROSET: Permission denied (re)
   [1]
-  $ sudo blockdev --setrw $DEV
-  .*BLKROSET: Read-only file system (re)
-  [1]
+  $ sudo blockdev --setrw $DEV  # succeeds but effectively ignored
   $ blockdev --getro $DEV
   1
   $ dd if=/dev/urandom of=$DEV bs=1k seek=1 count=1 status=none
@@ -182,15 +180,11 @@ R/O, partitioned:
   $ blockdev --setrw ${DEV}p1
   .*BLKROSET: Permission denied (re)
   [1]
-  $ sudo blockdev --setrw ${DEV}p1
-  .*BLKROSET: Read-only file system (re)
-  [1]
+  $ sudo blockdev --setrw ${DEV}p1  # succeeds but effectively ignored
   $ blockdev --setrw ${DEV}p2
   .*BLKROSET: Permission denied (re)
   [1]
-  $ sudo blockdev --setrw ${DEV}p2
-  .*BLKROSET: Read-only file system (re)
-  [1]
+  $ sudo blockdev --setrw ${DEV}p2  # succeeds but effectively ignored
   $ blockdev --getro ${DEV}p1
   1
   $ blockdev --getro ${DEV}p2
@@ -227,9 +221,7 @@ Unpartitioned:
   $ blockdev --setrw $DEV
   .*BLKROSET: Permission denied (re)
   [1]
-  $ sudo blockdev --setrw $DEV
-  .*BLKROSET: Read-only file system (re)
-  [1]
+  $ sudo blockdev --setrw $DEV  # succeeds but effectively ignored
   $ blockdev --getro $DEV
   1
   $ dd if=/dev/urandom of=$DEV bs=1k seek=1 count=1 status=none
@@ -263,15 +255,11 @@ Partitioned:
   $ blockdev --setrw ${DEV}p1
   .*BLKROSET: Permission denied (re)
   [1]
-  $ sudo blockdev --setrw ${DEV}p1
-  .*BLKROSET: Read-only file system (re)
-  [1]
+  $ sudo blockdev --setrw ${DEV}p1  # succeeds but effectively ignored
   $ blockdev --setrw ${DEV}p2
   .*BLKROSET: Permission denied (re)
   [1]
-  $ sudo blockdev --setrw ${DEV}p2
-  .*BLKROSET: Read-only file system (re)
-  [1]
+  $ sudo blockdev --setrw ${DEV}p2  # succeeds but effectively ignored
   $ blockdev --getro ${DEV}p1
   1
   $ blockdev --getro ${DEV}p2
@@ -340,6 +328,15 @@ rw -> ro with open_count > 0
   [1-9]\d*\+0 records in (re)
   [1-9]\d*\+0 records out (re)
   [1]
+  $ sudo rbd unmap $DEV
+
+
+"-o rw --read-only" should result in read-only mapping
+======================================================
+
+  $ DEV=$(sudo rbd map -o rw --read-only img)
+  $ blockdev --getro $DEV
+  1
   $ sudo rbd unmap $DEV
 
 

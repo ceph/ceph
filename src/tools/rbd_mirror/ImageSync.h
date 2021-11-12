@@ -12,9 +12,7 @@
 #include "tools/rbd_mirror/image_sync/Types.h"
 
 class Context;
-class ContextWQ;
 namespace journal { class Journaler; }
-namespace librbd { class ProgressContext; }
 namespace librbd { template <typename> class DeepCopyRequest; }
 
 namespace rbd {
@@ -90,7 +88,7 @@ private:
    * @endverbatim
    */
 
-  class ImageCopyProgressContext;
+  class ImageCopyProgressHandler;
 
   Threads<ImageCtxT>* m_threads;
   ImageCtxT *m_local_image_ctx;
@@ -104,7 +102,7 @@ private:
   bool m_canceled = false;
 
   librbd::DeepCopyRequest<ImageCtxT> *m_image_copy_request = nullptr;
-  librbd::ProgressContext *m_image_copy_prog_ctx = nullptr;
+  ImageCopyProgressHandler *m_image_copy_prog_handler = nullptr;
 
   bool m_updating_sync_point = false;
   Context *m_update_sync_ctx = nullptr;

@@ -18,14 +18,16 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
-class MClientSession : public SafeMessage {
+class MClientSession final : public SafeMessage {
 private:
-  static constexpr int HEAD_VERSION = 4;
+  static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
   ceph_mds_session_head head;
+  static constexpr unsigned SESSION_BLOCKLISTED = (1<<0);
 
+  unsigned flags = 0;
   std::map<std::string, std::string> metadata;
   feature_bitset_t supported_features;
   metric_spec_t metric_spec;
@@ -38,8 +40,9 @@ public:
 
 protected:
   MClientSession() : SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} { }
-  MClientSession(int o, version_t s=0) : 
-    SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} {
+  MClientSession(int o, version_t s=0, unsigned msg_flags=0) :
+    SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION},
+    flags(msg_flags) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = s;
@@ -51,11 +54,11 @@ protected:
     head.seq = 0;
     st.encode_timeval(&head.stamp);
   }
-  ~MClientSession() override {}
+  ~MClientSession() final {}
 
 public:
   std::string_view get_type_name() const override { return "client_session"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "client_session(" << ceph_session_op_name(get_op());
     if (get_seq())
       out << " seq " << get_seq();
@@ -64,7 +67,8 @@ public:
     out << ")";
   }
 
-  void decode_payload() override { 
+  void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(head, p);
     if (header.version >= 2)
@@ -73,6 +77,9 @@ public:
       decode(supported_features, p);
     if (header.version >= 4) {
       decode(metric_spec, p);
+    }
+    if (header.version >= 5) {
+      decode(flags, p);
     }
   }
   void encode_payload(uint64_t features) override { 
@@ -87,12 +94,15 @@ public:
       header.version = HEAD_VERSION;
       encode(metadata, payload);
       encode(supported_features, payload);
+      encode(metric_spec, payload);
+      encode(flags, payload);
     }
-    encode(metric_spec, payload);
   }
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+  template<class T, typename... Args>
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 #endif

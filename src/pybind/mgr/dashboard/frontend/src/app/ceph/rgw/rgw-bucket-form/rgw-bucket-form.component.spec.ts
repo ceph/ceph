@@ -1,26 +1,32 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { ComponentFixture, fakeAsync, TestBed } from '@angular/core/testing';
+import { ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
-import { RgwSiteService } from '../../../shared/api/rgw-site.service';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
+import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
+import { RgwUserService } from '~/app/shared/api/rgw-user.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
+import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
+import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 import { RgwBucketFormComponent } from './rgw-bucket-form.component';
 
 describe('RgwBucketFormComponent', () => {
   let component: RgwBucketFormComponent;
   let fixture: ComponentFixture<RgwBucketFormComponent>;
   let rgwBucketService: RgwBucketService;
-  let getPlacementTargetsSpy;
+  let getPlacementTargetsSpy: jasmine.Spy;
+  let rgwBucketServiceGetSpy: jasmine.Spy;
+  let enumerateSpy: jasmine.Spy;
+  let formHelper: FormHelper;
 
   configureTestBed({
     declarations: [RgwBucketFormComponent],
@@ -30,15 +36,17 @@ describe('RgwBucketFormComponent', () => {
       RouterTestingModule,
       SharedModule,
       ToastrModule.forRoot()
-    ],
-    providers: [i18nProviders]
+    ]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwBucketFormComponent);
     component = fixture.componentInstance;
-    rgwBucketService = TestBed.get(RgwBucketService);
-    getPlacementTargetsSpy = spyOn(TestBed.get(RgwSiteService), 'getPlacementTargets');
+    rgwBucketService = TestBed.inject(RgwBucketService);
+    rgwBucketServiceGetSpy = spyOn(rgwBucketService, 'get');
+    getPlacementTargetsSpy = spyOn(TestBed.inject(RgwSiteService), 'get');
+    enumerateSpy = spyOn(TestBed.inject(RgwUserService), 'enumerate');
+    formHelper = new FormHelper(component.bucketForm);
   });
 
   it('should create', () => {
@@ -46,97 +54,14 @@ describe('RgwBucketFormComponent', () => {
   });
 
   describe('bucketNameValidator', () => {
-    const testValidator = (name, valid) => {
-      const validatorFn = component.bucketNameValidator();
-      const ctrl = new FormControl(name);
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          if (valid) {
-            expect(resp).toBe(null);
-          } else {
-            expect(resp instanceof Object).toBeTruthy();
-            expect(resp.bucketNameInvalid).toBeTruthy();
-          }
-        });
-      }
-    };
+    it('should validate empty name', fakeAsync(() => {
+      formHelper.expectErrorChange('bid', '', 'required', true);
+    }));
+  });
 
-    it('should validate empty name', () => {
-      testValidator('', true);
-    });
-
-    it('bucket names cannot be formatted as IP address', () => {
-      testValidator('172.10.4.51', false);
-    });
-
-    it('bucket name must be >= 3 characters long (1/2)', () => {
-      testValidator('ab', false);
-    });
-
-    it('bucket name must be >= 3 characters long (2/2)', () => {
-      testValidator('abc', true);
-    });
-
-    it('bucket name must be <= than 63 characters long (1/2)', () => {
-      testValidator(_.repeat('a', 64), false);
-    });
-
-    it('bucket name must be <= than 63 characters long (2/2)', () => {
-      testValidator(_.repeat('a', 63), true);
-    });
-
-    it('bucket names must not contain uppercase characters or underscores (1/2)', () => {
-      testValidator('iAmInvalid', false);
-    });
-
-    it('bucket names must not contain uppercase characters or underscores (2/2)', () => {
-      testValidator('i_am_invalid', false);
-    });
-
-    it('bucket names with invalid labels (1/3)', () => {
-      testValidator('abc.1def.Ghi2', false);
-    });
-
-    it('bucket names with invalid labels (2/3)', () => {
-      testValidator('abc.1-xy', false);
-    });
-
-    it('bucket names with invalid labels (3/3)', () => {
-      testValidator('abc.*def', false);
-    });
-
-    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (1/3)', () => {
-      testValidator('xyz.abc', true);
-    });
-
-    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (2/3)', () => {
-      testValidator('abc.1-def', true);
-    });
-
-    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (3/3)', () => {
-      testValidator('abc.ghi2', true);
-    });
-
-    it('bucket names must be unique', () => {
-      spyOn(rgwBucketService, 'enumerate').and.returnValue(observableOf(['abcd']));
-      const validatorFn = component.bucketNameValidator();
-      const ctrl = new FormControl('abcd');
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp instanceof Object).toBeTruthy();
-          expect(resp.bucketNameExists).toBeTruthy();
-        });
-      }
-    });
-
+  describe('zonegroup and placement targets', () => {
     it('should get zonegroup and placement targets', () => {
-      const payload = {
+      const payload: Record<string, any> = {
         zonegroup: 'default',
         placement_targets: [
           {
@@ -150,6 +75,7 @@ describe('RgwBucketFormComponent', () => {
         ]
       };
       getPlacementTargetsSpy.and.returnValue(observableOf(payload));
+      enumerateSpy.and.returnValue(observableOf([]));
       fixture.detectChanges();
 
       expect(component.zonegroup).toBe(payload.zonegroup);
@@ -168,8 +94,8 @@ describe('RgwBucketFormComponent', () => {
     let notificationService: NotificationService;
 
     beforeEach(() => {
-      spyOn(TestBed.get(Router), 'navigate').and.stub();
-      notificationService = TestBed.get(NotificationService);
+      spyOn(TestBed.inject(Router), 'navigate').and.stub();
+      notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show');
     });
 
@@ -194,7 +120,7 @@ describe('RgwBucketFormComponent', () => {
       component.submit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Created Object Gateway bucket ""'
+        `Created Object Gateway bucket 'null'`
       );
     });
 
@@ -205,8 +131,170 @@ describe('RgwBucketFormComponent', () => {
       component.submit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Updated Object Gateway bucket "".'
+        `Updated Object Gateway bucket 'null'.`
       );
+    });
+  });
+
+  describe('mfa credentials', () => {
+    const checkMfaCredentialsVisibility = (
+      fakeResponse: object,
+      versioningChecked: boolean,
+      mfaDeleteChecked: boolean,
+      expectedVisibility: boolean
+    ) => {
+      component['route'].params = observableOf({ bid: 'bid' });
+      component.editing = true;
+      rgwBucketServiceGetSpy.and.returnValue(observableOf(fakeResponse));
+      enumerateSpy.and.returnValue(observableOf([]));
+      component.ngOnInit();
+      component.bucketForm.patchValue({
+        versioning: versioningChecked,
+        'mfa-delete': mfaDeleteChecked
+      });
+      fixture.detectChanges();
+
+      const mfaTokenSerial = fixture.debugElement.nativeElement.querySelector('#mfa-token-serial');
+      const mfaTokenPin = fixture.debugElement.nativeElement.querySelector('#mfa-token-pin');
+      if (expectedVisibility) {
+        expect(mfaTokenSerial).toBeTruthy();
+        expect(mfaTokenPin).toBeTruthy();
+      } else {
+        expect(mfaTokenSerial).toBeFalsy();
+        expect(mfaTokenPin).toBeFalsy();
+      }
+    };
+
+    it('inputs should be visible when required', () => {
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.SUSPENDED,
+          mfa_delete: RgwBucketMfaDelete.DISABLED
+        },
+        false,
+        false,
+        false
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.SUSPENDED,
+          mfa_delete: RgwBucketMfaDelete.DISABLED
+        },
+        true,
+        false,
+        false
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.ENABLED,
+          mfa_delete: RgwBucketMfaDelete.DISABLED
+        },
+        false,
+        false,
+        false
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.ENABLED,
+          mfa_delete: RgwBucketMfaDelete.ENABLED
+        },
+        true,
+        true,
+        false
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.SUSPENDED,
+          mfa_delete: RgwBucketMfaDelete.DISABLED
+        },
+        false,
+        true,
+        true
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.SUSPENDED,
+          mfa_delete: RgwBucketMfaDelete.ENABLED
+        },
+        false,
+        false,
+        true
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.SUSPENDED,
+          mfa_delete: RgwBucketMfaDelete.ENABLED
+        },
+        true,
+        true,
+        true
+      );
+      checkMfaCredentialsVisibility(
+        {
+          versioning: RgwBucketVersioning.ENABLED,
+          mfa_delete: RgwBucketMfaDelete.ENABLED
+        },
+        false,
+        true,
+        true
+      );
+    });
+  });
+
+  describe('object locking', () => {
+    const expectPatternLockError = (value: string) => {
+      formHelper.setValue('lock_enabled', true, true);
+      formHelper.setValue('lock_retention_period_days', value);
+      formHelper.expectError('lock_retention_period_days', 'pattern');
+    };
+
+    const expectValidLockInputs = (enabled: boolean, mode: string, days: string) => {
+      formHelper.setValue('lock_enabled', enabled);
+      formHelper.setValue('lock_mode', mode);
+      formHelper.setValue('lock_retention_period_days', days);
+      ['lock_enabled', 'lock_mode', 'lock_retention_period_days'].forEach((name) => {
+        const control = component.bucketForm.get(name);
+        expect(control.valid).toBeTruthy();
+        expect(control.errors).toBeNull();
+      });
+    };
+
+    it('should check lock enabled checkbox [mode=create]', () => {
+      component.createForm();
+      const control = component.bucketForm.get('lock_enabled');
+      expect(control.disabled).toBeFalsy();
+    });
+
+    it('should check lock enabled checkbox [mode=edit]', () => {
+      component.editing = true;
+      component.createForm();
+      const control = component.bucketForm.get('lock_enabled');
+      expect(control.disabled).toBeTruthy();
+    });
+
+    it('should have the "lockDays" error', () => {
+      formHelper.setValue('lock_enabled', true);
+      const control = component.bucketForm.get('lock_retention_period_days');
+      control.updateValueAndValidity();
+      expect(control.value).toBe(0);
+      expect(control.invalid).toBeTruthy();
+      formHelper.expectError(control, 'lockDays');
+    });
+
+    it('should have the "pattern" error [1]', () => {
+      expectPatternLockError('-1');
+    });
+
+    it('should have the "pattern" error [2]', () => {
+      expectPatternLockError('1.2');
+    });
+
+    it('should have valid values [1]', () => {
+      expectValidLockInputs(true, 'Governance', '1');
+    });
+
+    it('should have valid values [2]', () => {
+      expectValidLockInputs(false, 'Compliance', '2');
     });
   });
 });

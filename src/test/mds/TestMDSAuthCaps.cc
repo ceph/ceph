@@ -19,8 +19,7 @@
 
 #include "gtest/gtest.h"
 
-using std::string;
-using std::cout;
+using namespace std;
 
 entity_addr_t addr;
 
@@ -46,6 +45,11 @@ const char *parse_good[] = {
   "allow r uid=1 gids=1,2,3, allow * uid=2",
   "allow r network 1.2.3.4/8",
   "allow rw path=/foo uid=1 gids=1,2,3 network 2.3.4.5/16",
+  "allow r root_squash",
+  "allow rw path=/foo root_squash",
+  "allow rw fsname=a root_squash",
+  "allow rw fsname=a path=/foo root_squash",
+  "allow rw fsname=a root_squash, allow rwp fsname=a path=/volumes",
   0
 };
 
@@ -232,6 +236,17 @@ TEST(MDSAuthCaps, AllowPathCharsQuoted) {
   ASSERT_FALSE(quo_cap.is_capable("foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr));
 }
 
+TEST(MDSAuthCaps, RootSquash) {
+  MDSAuthCaps rs_cap;
+  ASSERT_TRUE(rs_cap.parse(g_ceph_context, "allow rw root_squash, allow rw path=/sandbox", NULL));
+  ASSERT_TRUE(rs_cap.is_capable("foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, addr));
+  ASSERT_TRUE(rs_cap.is_capable("foo", 0, 0, 0777, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr));
+  ASSERT_FALSE(rs_cap.is_capable("foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr));
+  ASSERT_TRUE(rs_cap.is_capable("sandbox", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr));
+  ASSERT_TRUE(rs_cap.is_capable("sandbox/foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr));
+  ASSERT_TRUE(rs_cap.is_capable("sandbox/foo", 0, 0, 0777, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr));
+}
+
 TEST(MDSAuthCaps, OutputParsed) {
   struct CapsTest {
     const char *input;
@@ -256,6 +271,12 @@ TEST(MDSAuthCaps, OutputParsed) {
      "MDSAuthCaps[allow * path=\"/foo\"]"},
     {"allow * path=\"/foo\"",
      "MDSAuthCaps[allow * path=\"/foo\"]"},
+    {"allow rw root_squash",
+     "MDSAuthCaps[allow rw root_squash]"},
+    {"allow rw fsname=a root_squash",
+     "MDSAuthCaps[allow rw fsname=a root_squash]"},
+    {"allow * path=\"/foo\" root_squash",
+     "MDSAuthCaps[allow * path=\"/foo\" root_squash]"},
     {"allow * path=\"/foo\" uid=1",
      "MDSAuthCaps[allow * path=\"/foo\" uid=1]"},
     {"allow * path=\"/foo\" uid=1 gids=1,2,3",
@@ -264,6 +285,8 @@ TEST(MDSAuthCaps, OutputParsed) {
      "MDSAuthCaps[allow r uid=1 gids=1,2,3, allow * uid=2]"},
     {"allow r uid=1 gids=1,2,3, allow * uid=2 network 10.0.0.0/8",
      "MDSAuthCaps[allow r uid=1 gids=1,2,3, allow * uid=2 network 10.0.0.0/8]"},
+    {"allow rw fsname=b, allow rw fsname=a root_squash",
+     "MDSAuthCaps[allow rw fsname=b, allow rw fsname=a root_squash]"},
   };
   size_t num_tests = sizeof(test_values) / sizeof(*test_values);
   for (size_t i = 0; i < num_tests; ++i) {

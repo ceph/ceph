@@ -232,7 +232,7 @@ Empty clone:
 
   $ xfs_io -c 'pwrite -S 0xab -w 0 4M' $DEV >/dev/null
   $ sudo rbd unmap $DEV
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
 
   $ rbd clone img@snap cloneimg1

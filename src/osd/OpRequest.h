@@ -17,7 +17,7 @@
 #include "osd/osd_op_util.h"
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
-
+#include "common/tracer.h"
 /**
  * The OpRequest takes in a Message* and takes over a single reference
  * to it, which it puts() when destroyed.
@@ -88,6 +88,7 @@ public:
   epoch_t min_epoch = 0;      ///< min epoch needed to handle this msg
 
   bool hitset_inserted;
+  jspan osd_parent_span;
 
   template<class T>
   const T* get_req() const { return static_cast<const T*>(request); }

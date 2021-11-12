@@ -35,20 +35,22 @@
 
 #define MINIMUM_TO_RECOVER 2u
 
+using namespace std;
+
 class ErasureCodeExample final : public ErasureCode {
 public:
   ~ErasureCodeExample() override {}
 
-  int create_rule(const string &name,
+  int create_rule(const std::string &name,
 			     CrushWrapper &crush,
 			     ostream *ss) const override {
     return crush.add_simple_rule(name, "default", "host", "",
 				 "indep", pg_pool_t::TYPE_ERASURE, ss);
   }
 
-  int minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                          const map<int, int> &available,
-                                          set<int> *minimum) override {
+  int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
+                                          const std::map<int, int> &available,
+                                          std::set<int> *minimum) override {
     //
     // If one chunk is more expensive to fetch than the others,
     // recover it instead. For instance, if the cost reflects the
@@ -56,7 +58,7 @@ public:
     // OSD and if CPU is cheap, it could make sense to recover
     // instead of fetching the chunk.
     //
-    map<int, int> c2c(available);
+    std::map<int, int> c2c(available);
     if (c2c.size() > DATA_CHUNKS) {
       if (c2c[FIRST_DATA_CHUNK] > c2c[SECOND_DATA_CHUNK] &&
 	  c2c[FIRST_DATA_CHUNK] > c2c[CODING_CHUNK])
@@ -69,7 +71,7 @@ public:
 	c2c.erase(CODING_CHUNK);
     }
     set <int> available_chunks;
-    for (map<int, int>::const_iterator i = c2c.begin();
+    for (std::map<int, int>::const_iterator i = c2c.begin();
 	 i != c2c.end();
 	 ++i)
       available_chunks.insert(i->first);
@@ -88,9 +90,9 @@ public:
     return ( object_size / DATA_CHUNKS ) + 1;
   }
 
-  int encode(const set<int> &want_to_encode,
+  int encode(const std::set<int> &want_to_encode,
                      const bufferlist &in,
-                     map<int, bufferlist> *encoded) override {
+                     std::map<int, bufferlist> *encoded) override {
     //
     // make sure all data chunks have the same length, allocating
     // padding if necessary.
@@ -126,20 +128,20 @@ public:
     return 0;
   }
 
-  int encode_chunks(const set<int> &want_to_encode,
-			    map<int, bufferlist> *encoded) override {
+  int encode_chunks(const std::set<int> &want_to_encode,
+			    std::map<int, bufferlist> *encoded) override {
     ceph_abort();
     return 0;
   }
 
-  int _decode(const set<int> &want_to_read,
-	      const map<int, bufferlist> &chunks,
-	      map<int, bufferlist> *decoded) {
+  int _decode(const std::set<int> &want_to_read,
+	      const std::map<int, bufferlist> &chunks,
+	      std::map<int, bufferlist> *decoded) {
     //
     // All chunks have the same size
     //
     unsigned chunk_length = (*chunks.begin()).second.length();
-    for (set<int>::iterator i = want_to_read.begin();
+    for (std::set<int>::iterator i = want_to_read.begin();
          i != want_to_read.end();
          ++i) {
       if (chunks.find(*i) != chunks.end()) {
@@ -159,7 +161,7 @@ public:
 	// No matter what the missing chunk is, XOR of the other
 	// two recovers it.
 	//
-        map<int, bufferlist>::const_iterator k = chunks.begin();
+        std::map<int, bufferlist>::const_iterator k = chunks.begin();
         const char *a = k->second.front().c_str();
         ++k;
         const char *b = k->second.front().c_str();
@@ -178,15 +180,15 @@ public:
     return 0;
   }
 
-  int decode_chunks(const set<int> &want_to_read,
-			    const map<int, bufferlist> &chunks,
-			    map<int, bufferlist> *decoded) override {
+  int decode_chunks(const std::set<int> &want_to_read,
+			    const std::map<int, bufferlist> &chunks,
+			    std::map<int, bufferlist> *decoded) override {
     ceph_abort();
     return 0;
   }
 
-  const vector<int> &get_chunk_mapping() const override {
-    static vector<int> mapping;
+  const std::vector<int> &get_chunk_mapping() const override {
+    static std::vector<int> mapping;
     return mapping;
   }
 

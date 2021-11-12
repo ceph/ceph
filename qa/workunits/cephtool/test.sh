@@ -345,20 +345,24 @@ function test_tiering_1()
   ceph osd tier add slow cache
   ceph osd tier add slow cache2
   expect_false ceph osd tier add slow2 cache
+  # application metadata should propagate to the tiers
+  ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "slow") | .application_metadata["rados"]' | grep '{}'
+  ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "slow2") | .application_metadata["rados"]' | grep '{}'
+  ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "cache") | .application_metadata["rados"]' | grep '{}'
+  ceph osd pool ls detail -f json | jq '.[] | select(.pool_name == "cache2") | .application_metadata["rados"]' | grep '{}'
+  # forward and proxy are removed/deprecated
+  expect_false ceph osd tier cache-mode cache forward
+  expect_false ceph osd tier cache-mode cache forward --yes-i-really-mean-it
+  expect_false ceph osd tier cache-mode cache proxy
+  expect_false ceph osd tier cache-mode cache proxy --yes-i-really-mean-it
   # test some state transitions
   ceph osd tier cache-mode cache writeback
-  # forward is removed/deprecated
-  expect_false ceph osd tier cache-mode cache forward
-  expect_false ceph osd tier cache-mode cache forward --yes-i-really-mean-it
   expect_false ceph osd tier cache-mode cache readonly
-  ceph osd tier cache-mode cache proxy
+  expect_false ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
+  ceph osd tier cache-mode cache readproxy
   ceph osd tier cache-mode cache none
   ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
-  expect_false ceph osd tier cache-mode cache forward
-  expect_false ceph osd tier cache-mode cache forward --yes-i-really-mean-it
   ceph osd tier cache-mode cache none
-  ceph osd tier cache-mode cache writeback
-  ceph osd tier cache-mode cache proxy
   ceph osd tier cache-mode cache writeback
   expect_false ceph osd tier cache-mode cache none
   expect_false ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
@@ -367,7 +371,7 @@ function test_tiering_1()
   rados -p cache put /etc/passwd /etc/passwd
   flush_pg_stats
   # 1 dirty object in pool 'cache'
-  ceph osd tier cache-mode cache proxy
+  ceph osd tier cache-mode cache readproxy
   expect_false ceph osd tier cache-mode cache none
   expect_false ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
   ceph osd tier cache-mode cache writeback
@@ -376,7 +380,7 @@ function test_tiering_1()
   rados -p cache cache-flush-evict-all
   flush_pg_stats
   # no dirty objects in pool 'cache'
-  ceph osd tier cache-mode cache proxy
+  ceph osd tier cache-mode cache readproxy
   ceph osd tier cache-mode cache none
   ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
   TRIES=0
@@ -752,6 +756,7 @@ function test_mon_misc()
   ceph log last 100 | grep "$mymsg"
   ceph_watch_wait "$mymsg"
 
+  ceph mgr stat
   ceph mgr dump
   ceph mgr module ls
   ceph mgr module enable restful
@@ -1108,7 +1113,7 @@ function test_mon_mds()
 
   # Removing tier should be permitted because the underlying pool is
   # replicated (#11504 case)
-  ceph osd tier cache-mode mds-tier proxy
+  ceph osd tier cache-mode mds-tier readproxy
   ceph osd tier remove-overlay fs_metadata
   ceph osd tier remove fs_metadata mds-tier
   ceph osd pool delete mds-tier mds-tier --yes-i-really-really-mean-it
@@ -1166,6 +1171,20 @@ function test_mon_mon()
   ceph mon feature set kraken --yes-i-really-mean-it
   expect_false ceph mon feature set abcd
   expect_false ceph mon feature set abcd --yes-i-really-mean-it
+
+  # test elector
+  expect_failure $TEMP_DIR ceph mon add disallowed_leader $first
+  ceph mon set election_strategy disallow
+  ceph mon add disallowed_leader $first
+  ceph mon set election_strategy connectivity
+  ceph mon rm disallowed_leader $first
+  ceph mon set election_strategy classic
+  expect_failure $TEMP_DIR ceph mon rm disallowed_leader $first
+
+  # test mon stat
+  # don't check output, just ensure it does not fail.
+  ceph mon stat
+  ceph mon stat -f json | jq '.'
 }
 
 function test_mon_priority_and_weight()
@@ -1387,34 +1406,37 @@ function test_mon_config_key()
 function test_mon_osd()
 {
   #
-  # osd blacklist
+  # osd blocklist
   #
   bl=192.168.0.1:0/1000
-  ceph osd blacklist add $bl
-  ceph osd blacklist ls | grep $bl
-  ceph osd blacklist ls --format=json-pretty  | sed 's/\\\//\//' | grep $bl
+  ceph osd blocklist add $bl
+  ceph osd blocklist ls | grep $bl
+  ceph osd blocklist ls --format=json-pretty  | sed 's/\\\//\//' | grep $bl
   ceph osd dump --format=json-pretty | grep $bl
   ceph osd dump | grep $bl
-  ceph osd blacklist rm $bl
-  ceph osd blacklist ls | expect_false grep $bl
+  ceph osd blocklist rm $bl
+  ceph osd blocklist ls | expect_false grep $bl
 
   bl=192.168.0.1
   # test without nonce, invalid nonce
-  ceph osd blacklist add $bl
-  ceph osd blacklist ls | grep $bl
-  ceph osd blacklist rm $bl
-  ceph osd blacklist ls | expect_false grep $bl
-  expect_false "ceph osd blacklist $bl/-1"
-  expect_false "ceph osd blacklist $bl/foo"
+  ceph osd blocklist add $bl
+  ceph osd blocklist ls | grep $bl
+  ceph osd blocklist rm $bl
+  ceph osd blocklist ls | expect_false grep $bl
+  expect_false "ceph osd blocklist $bl/-1"
+  expect_false "ceph osd blocklist $bl/foo"
 
   # test with wrong address
-  expect_false "ceph osd blacklist 1234.56.78.90/100"
+  expect_false "ceph osd blocklist 1234.56.78.90/100"
 
   # Test `clear`
-  ceph osd blacklist add $bl
-  ceph osd blacklist ls | grep $bl
-  ceph osd blacklist clear
-  ceph osd blacklist ls | expect_false grep $bl
+  ceph osd blocklist add $bl
+  ceph osd blocklist ls | grep $bl
+  ceph osd blocklist clear
+  ceph osd blocklist ls | expect_false grep $bl
+
+  # deprecated syntax?
+  ceph osd blacklist ls
 
   #
   # osd crush
@@ -1435,7 +1457,6 @@ function test_mon_osd()
   #
   # require-min-compat-client
   expect_false ceph osd set-require-min-compat-client dumpling  # firefly tunables
-  ceph osd set-require-min-compat-client luminous
   ceph osd get-require-min-compat-client | grep luminous
   ceph osd dump | grep 'require_min_compat_client luminous'
 
@@ -1479,11 +1500,10 @@ function test_mon_osd()
 	expect_false ceph osd set $f
 	expect_false ceph osd unset $f
   done
-  ceph osd require-osd-release octopus
+  ceph osd require-osd-release quincy
   # can't lower
-  expect_false ceph osd require-osd-release nautilus
-  expect_false ceph osd require-osd-release mimic
-  expect_false ceph osd require-osd-release luminous
+  expect_false ceph osd require-osd-release pacific
+  expect_false ceph osd require-osd-release octopus
   # these are no-ops but should succeed.
 
   ceph osd set noup
@@ -1529,7 +1549,13 @@ function test_mon_osd()
   ceph osd info
   info_json=$(ceph osd info --format=json | jq -cM '.')
   dump_json=$(ceph osd dump --format=json | jq -cM '.osds')
-  [[ "${info_json}" == "${dump_json}" ]]
+  if [[ "${info_json}" != "${dump_json}" ]]; then
+    echo "waiting for OSDs to settle"
+    sleep 10
+    info_json=$(ceph osd info --format=json | jq -cM '.')
+    dump_json=$(ceph osd dump --format=json | jq -cM '.osds')
+    [[ "${info_json}" == "${dump_json}" ]]
+  fi
 
   info_json=$(ceph osd info 0 --format=json | jq -cM '.')
   dump_json=$(ceph osd dump --format=json | \
@@ -1945,6 +1971,16 @@ function test_mon_osd_pool()
   ceph osd crush rule rm foo
   ceph osd erasure-code-profile rm foo
 
+  # autoscale mode
+  ceph osd pool create modeon --autoscale-mode=on
+  ceph osd dump | grep modeon | grep 'autoscale_mode on'
+  ceph osd pool create modewarn --autoscale-mode=warn
+  ceph osd dump | grep modewarn | grep 'autoscale_mode warn'
+  ceph osd pool create modeoff --autoscale-mode=off
+  ceph osd dump | grep modeoff | grep 'autoscale_mode off'
+  ceph osd pool delete modeon modeon --yes-i-really-really-mean-it
+  ceph osd pool delete modewarn modewarn --yes-i-really-really-mean-it
+  ceph osd pool delete modeoff modeoff --yes-i-really-really-mean-it
 }
 
 function test_mon_osd_pool_quota()
@@ -2164,9 +2200,9 @@ function test_mon_osd_pool_set()
 
   old_size=$(ceph osd pool get $TEST_POOL_GETSET size | sed -e 's/size: //')
   (( new_size = old_size + 1 ))
-  ceph osd pool set $TEST_POOL_GETSET size $new_size
+  ceph osd pool set $TEST_POOL_GETSET size $new_size --yes-i-really-mean-it
   ceph osd pool get $TEST_POOL_GETSET size | grep "size: $new_size"
-  ceph osd pool set $TEST_POOL_GETSET size $old_size
+  ceph osd pool set $TEST_POOL_GETSET size $old_size --yes-i-really-mean-it
 
   ceph osd pool create pool_erasure 1 1 erasure
   ceph osd pool application enable pool_erasure rados
@@ -2176,6 +2212,7 @@ function test_mon_osd_pool_set()
   check_response 'not change the size'
   set -e
   ceph osd pool get pool_erasure erasure_code_profile
+  ceph osd pool rm pool_erasure pool_erasure --yes-i-really-really-mean-it
 
   for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
       ceph osd pool set $TEST_POOL_GETSET $flag false
@@ -2428,7 +2465,7 @@ function test_mon_osd_erasure_code()
   ceph osd erasure-code-profile set fooprofile a=b c=d e=f --force
   ceph osd erasure-code-profile set fooprofile a=b c=d e=f
   expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f g=h
-  # make sure ruleset-foo doesn't work anymore
+  # make sure rule-foo doesn't work anymore
   expect_false ceph osd erasure-code-profile set barprofile ruleset-failure-domain=host
   ceph osd erasure-code-profile set barprofile crush-failure-domain=host
   # clean up
@@ -2663,7 +2700,9 @@ function test_mon_pool_application()
 
 function test_mon_tell_help_command()
 {
-  ceph tell mon.a help
+  ceph tell mon.a help | grep sync_force
+  ceph tell mon.a -h | grep sync_force
+  ceph tell mon.a config -h | grep 'config diff get'
 
   # wrong target
   expect_false ceph tell mon.zzz help

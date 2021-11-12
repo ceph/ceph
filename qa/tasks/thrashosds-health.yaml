@@ -1,6 +1,9 @@
 overrides:
   ceph:
-    log-whitelist:
+    conf:
+      osd:
+        osd max markdown count: 1000
+    log-ignorelist:
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
       - \(OSD_
@@ -12,4 +15,4 @@ overrides:
       - \(SLOW_OPS\)
       - \(REQUEST_SLOW\)
       - \(TOO_FEW_PGS\)
-      - slow requests
+      - slow request

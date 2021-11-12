@@ -21,6 +21,7 @@
 #include "common/common_init.h"
 #include "common/TracepointProvider.h"
 #include "common/hobject.h"
+#include "common/async/waiter.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
@@ -53,11 +54,13 @@
 #define tracepoint(...)
 #endif
 
-using std::string;
-using std::map;
-using std::set;
-using std::vector;
 using std::list;
+using std::map;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
@@ -155,10 +158,11 @@ void librados::ObjectOperation::assert_exists()
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
-  o->stat(NULL, (ceph::real_time*) NULL, NULL);
+  o->stat(nullptr, nullptr, nullptr);
 }
 
-void librados::ObjectOperation::exec(const char *cls, const char *method, bufferlist& inbl)
+void librados::ObjectOperation::exec(const char *cls, const char *method,
+				     bufferlist& inbl)
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
@@ -629,6 +633,20 @@ void librados::ObjectReadOperation::cache_evict()
   o->cache_evict();
 }
 
+void librados::ObjectReadOperation::tier_flush()
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->tier_flush();
+}
+
+void librados::ObjectReadOperation::tier_evict()
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->tier_evict();
+}
+
 void librados::ObjectWriteOperation::set_redirect(const std::string& tgt_obj, 
 						  const IoCtx& tgt_ioctx,
 						  uint64_t tgt_version,
@@ -640,7 +658,7 @@ void librados::ObjectWriteOperation::set_redirect(const std::string& tgt_obj,
 			  tgt_ioctx.io_ctx_impl->oloc, tgt_version, flag);
 }
 
-void librados::ObjectWriteOperation::set_chunk(uint64_t src_offset,
+void librados::ObjectReadOperation::set_chunk(uint64_t src_offset,
 					       uint64_t src_length,
 					       const IoCtx& tgt_ioctx,
 					       string tgt_oid,
@@ -665,13 +683,6 @@ void librados::ObjectWriteOperation::unset_manifest()
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
   o->unset_manifest();
-}
-
-void librados::ObjectWriteOperation::tier_flush()
-{
-  ceph_assert(impl);
-  ::ObjectOperation *o = &impl->o;
-  o->tier_flush();
 }
 
 void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
@@ -841,22 +852,24 @@ void librados::NObjectIteratorImpl::set_filter(const bufferlist &bl)
 void librados::NObjectIteratorImpl::get_next()
 {
   const char *entry, *key, *nspace;
+  size_t entry_size, key_size, nspace_size;
   if (ctx->nlc->at_end())
     return;
-  int ret = rados_nobjects_list_next(ctx.get(), &entry, &key, &nspace);
+  int ret = rados_nobjects_list_next2(ctx.get(), &entry, &key, &nspace,
+                                      &entry_size, &key_size, &nspace_size);
   if (ret == -ENOENT) {
     return;
   }
   else if (ret) {
     throw std::system_error(-ret, std::system_category(),
-                            "rados_nobjects_list_next");
+                            "rados_nobjects_list_next2");
   }
 
   if (cur_obj.impl == NULL)
     cur_obj.impl = new ListObjectImpl();
-  cur_obj.impl->nspace = nspace;
-  cur_obj.impl->oid = entry;
-  cur_obj.impl->locator = key ? key : string();
+  cur_obj.impl->nspace = string{nspace, nspace_size};
+  cur_obj.impl->oid = string{entry, entry_size};
+  cur_obj.impl->locator = key ? string(key, key_size) : string();
 }
 
 uint32_t librados::NObjectIteratorImpl::get_pg_hash_position() const
@@ -1513,12 +1526,28 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperat
   return io_ctx_impl->operate(obj, &o->impl->o, (ceph::real_time *)o->impl->prt);
 }
 
+int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o, int flags)
+{
+  object_t obj(oid);
+  if (unlikely(!o->impl))
+    return -EINVAL;
+  return io_ctx_impl->operate(obj, &o->impl->o, (ceph::real_time *)o->impl->prt, translate_flags(flags));
+}
+
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperation *o, bufferlist *pbl)
 {
   object_t obj(oid);
   if (unlikely(!o->impl))
     return -EINVAL;
   return io_ctx_impl->operate_read(obj, &o->impl->o, pbl);
+}
+
+int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperation *o, bufferlist *pbl, int flags)
+{
+  object_t obj(oid);
+  if (unlikely(!o->impl))
+    return -EINVAL;
+  return io_ctx_impl->operate_read(obj, &o->impl->o, pbl, translate_flags(flags));
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -1738,7 +1767,7 @@ int librados::IoCtx::lock_exclusive(const std::string &oid, const std::string &n
   if (duration)
     dur.set_from_timeval(duration);
 
-  return rados::cls::lock::lock(this, oid, name, LOCK_EXCLUSIVE, cookie, "",
+  return rados::cls::lock::lock(this, oid, name, ClsLockType::EXCLUSIVE, cookie, "",
 		  		description, dur, flags);
 }
 
@@ -1751,7 +1780,7 @@ int librados::IoCtx::lock_shared(const std::string &oid, const std::string &name
   if (duration)
     dur.set_from_timeval(duration);
 
-  return rados::cls::lock::lock(this, oid, name, LOCK_SHARED, cookie, tag,
+  return rados::cls::lock::lock(this, oid, name, ClsLockType::SHARED, cookie, tag,
 		  		description, dur, flags);
 }
 
@@ -1819,7 +1848,7 @@ int librados::IoCtx::list_lockers(const std::string &oid, const std::string &nam
   if (tag)
     *tag = tmp_tag;
   if (exclusive) {
-    if (tmp_type == LOCK_EXCLUSIVE)
+    if (tmp_type == ClsLockType::EXCLUSIVE)
       *exclusive = 1;
     else
       *exclusive = 0;
@@ -1992,7 +2021,7 @@ struct AioGetxattrDataPP {
   AioGetxattrDataPP(librados::AioCompletionImpl *c, bufferlist *_bl) :
     bl(_bl), completion(c) {}
   bufferlist *bl;
-  struct librados::C_AioCompleteAndSafe completion;
+  struct librados::CB_AioCompleteAndSafe completion;
 };
 
 static void rados_aio_getxattr_completepp(rados_completion_t c, void *arg) {
@@ -2001,7 +2030,7 @@ static void rados_aio_getxattr_completepp(rados_completion_t c, void *arg) {
   if (rc >= 0) {
     rc = cdata->bl->length();
   }
-  cdata->completion.finish(rc);
+  cdata->completion(rc);
   delete cdata;
 }
 
@@ -2134,6 +2163,25 @@ int librados::IoCtx::aio_notify(const string& oid, AioCompletion *c,
                                  NULL);
 }
 
+void librados::IoCtx::decode_notify_response(bufferlist &bl,
+                                             std::vector<librados::notify_ack_t> *acks,
+                                             std::vector<librados::notify_timeout_t> *timeouts)
+{
+  map<pair<uint64_t,uint64_t>,bufferlist> acked;
+  set<pair<uint64_t,uint64_t>> missed;
+
+  auto iter = bl.cbegin();
+  decode(acked, iter);
+  decode(missed, iter);
+
+  for (auto &[who, payload] : acked) {
+    acks->emplace_back(librados::notify_ack_t{who.first, who.second, payload});
+  }
+  for (auto &[notifier_id, cookie] : missed) {
+    timeouts->emplace_back(librados::notify_timeout_t{notifier_id, cookie});
+  }
+}
+
 void librados::IoCtx::notify_ack(const std::string& o,
 				 uint64_t notify_id, uint64_t handle,
 				 bufferlist& bl)
@@ -2262,22 +2310,27 @@ librados::IoCtx::IoCtx(IoCtxImpl *io_ctx_impl_)
 
 void librados::IoCtx::set_osdmap_full_try()
 {
-  io_ctx_impl->objecter->set_pool_full_try();
+  io_ctx_impl->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
 }
 
 void librados::IoCtx::unset_osdmap_full_try()
 {
-  io_ctx_impl->objecter->unset_pool_full_try();
+  io_ctx_impl->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
+}
+
+bool librados::IoCtx::get_pool_full_try()
+{
+  return (io_ctx_impl->extra_op_flags & CEPH_OSD_FLAG_FULL_TRY) != 0;
 }
 
 void librados::IoCtx::set_pool_full_try()
 {
-  io_ctx_impl->objecter->set_pool_full_try();
+  io_ctx_impl->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
 }
 
 void librados::IoCtx::unset_pool_full_try()
 {
-  io_ctx_impl->objecter->unset_pool_full_try();
+  io_ctx_impl->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
 }
 
 ///////////////////////////// Rados //////////////////////////////
@@ -2607,9 +2660,9 @@ int librados::Rados::ioctx_create2(int64_t pool_id, IoCtx &io)
   return 0;
 }
 
-void librados::Rados::test_blacklist_self(bool set)
+void librados::Rados::test_blocklist_self(bool set)
 {
-  client->blacklist_self(set);
+  client->blocklist_self(set);
 }
 
 int librados::Rados::get_pool_stats(std::list<string>& v,
@@ -2792,10 +2845,14 @@ int librados::Rados::wait_for_latest_osdmap()
   return client->wait_for_latest_osdmap();
 }
 
-int librados::Rados::blacklist_add(const std::string& client_address,
+int librados::Rados::blocklist_add(const std::string& client_address,
 				   uint32_t expire_seconds)
 {
-  return client->blacklist_add(client_address, expire_seconds);
+  return client->blocklist_add(client_address, expire_seconds);
+}
+
+std::string librados::Rados::get_addrs() const {
+  return client->get_addrs();
 }
 
 librados::PoolAsyncCompletion *librados::Rados::pool_async_create_completion()
@@ -3024,29 +3081,27 @@ int librados::IoCtx::object_list(const ObjectCursor &start,
   ceph_assert(next != nullptr);
   result->clear();
 
-  C_SaferCond cond;
-  hobject_t next_hash;
-  std::list<librados::ListObjectImpl> obj_result;
-  io_ctx_impl->objecter->enumerate_objects(
+  ceph::async::waiter<boost::system::error_code,
+		      std::vector<librados::ListObjectImpl>,
+		      hobject_t>  w;
+  io_ctx_impl->objecter->enumerate_objects<librados::ListObjectImpl>(
       io_ctx_impl->poolid,
       io_ctx_impl->oloc.nspace,
       *((hobject_t*)start.c_cursor),
       *((hobject_t*)finish.c_cursor),
       result_item_count,
       filter,
-      &obj_result,
-      &next_hash,
-      &cond);
+      w);
 
-  int r = cond.wait();
-  if (r < 0) {
+  auto [ec, obj_result, next_hash] = w.wait();
+  if (ec) {
     next->set((rados_object_list_cursor)(new hobject_t(hobject_t::get_max())));
-    return r;
+    return ceph::from_error_code(ec);
   }
 
   next->set((rados_object_list_cursor)(new hobject_t(next_hash)));
 
-  for (std::list<librados::ListObjectImpl>::iterator i = obj_result.begin();
+  for (auto i = obj_result.begin();
        i != obj_result.end(); ++i) {
     ObjectItem oi;
     oi.oid = i->oid;

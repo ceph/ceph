@@ -79,9 +79,6 @@ namespace ceph {
                        const bufferlist &in,
                        std::map<int, bufferlist> *encoded) override;
 
-    int encode_chunks(const std::set<int> &want_to_encode,
-                              std::map<int, bufferlist> *encoded) override;
-
     int decode(const std::set<int> &want_to_read,
                 const std::map<int, bufferlist> &chunks,
                 std::map<int, bufferlist> *decoded, int chunk_size) override;
@@ -89,10 +86,6 @@ namespace ceph {
     virtual int _decode(const std::set<int> &want_to_read,
 			const std::map<int, bufferlist> &chunks,
 			std::map<int, bufferlist> *decoded);
-
-    int decode_chunks(const std::set<int> &want_to_read,
-                              const std::map<int, bufferlist> &chunks,
-                              std::map<int, bufferlist> *decoded) override;
 
     const std::vector<int> &get_chunk_mapping() const override;
 

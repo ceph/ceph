@@ -8,7 +8,10 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "deep_copy/Types.h"
 #include <map>
+#include <memory>
 #include <string>
+
+namespace neorados { class IOContext; }
 
 namespace librbd {
 
@@ -55,6 +58,8 @@ enum {
   l_librbd_last,
 };
 
+typedef std::shared_ptr<neorados::IOContext> IOContext;
+
 typedef std::map<uint64_t, uint64_t> SnapSeqs;
 
 /// Full information about an image's parent.
@@ -94,11 +99,23 @@ enum {
   OPEN_FLAG_IGNORE_MIGRATING = 1 << 2
 };
 
+enum ImageReadOnlyFlag {
+  IMAGE_READ_ONLY_FLAG_USER        = 1 << 0,
+  IMAGE_READ_ONLY_FLAG_NON_PRIMARY = 1 << 1,
+};
+
+enum SnapCreateFlag {
+  SNAP_CREATE_FLAG_SKIP_OBJECT_MAP             = 1 << 0,
+  SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE         = 1 << 1,
+  SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR = 1 << 2,
+};
+
 struct MigrationInfo {
   int64_t pool_id = -1;
   std::string pool_namespace;
   std::string image_name;
   std::string image_id;
+  std::string source_spec;
   deep_copy::SnapMap snap_map;
   uint64_t overlap = 0;
   bool flatten = false;
@@ -107,15 +124,16 @@ struct MigrationInfo {
   }
   MigrationInfo(int64_t pool_id, const std::string& pool_namespace,
                 const std::string& image_name, const std::string& image_id,
+                const std::string& source_spec,
                 const deep_copy::SnapMap &snap_map, uint64_t overlap,
                 bool flatten)
     : pool_id(pool_id), pool_namespace(pool_namespace), image_name(image_name),
-      image_id(image_id), snap_map(snap_map), overlap(overlap),
-      flatten(flatten) {
+      image_id(image_id), source_spec(source_spec), snap_map(snap_map),
+      overlap(overlap), flatten(flatten) {
   }
 
   bool empty() const {
-    return pool_id == -1;
+    return (pool_id == -1 && source_spec.empty());
   }
 };
 

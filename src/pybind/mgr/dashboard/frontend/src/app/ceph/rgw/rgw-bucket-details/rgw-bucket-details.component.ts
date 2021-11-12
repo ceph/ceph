@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges } from '@angular/core';
 
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 
 @Component({
   selector: 'cd-rgw-bucket-details',
@@ -8,16 +8,17 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
   styleUrls: ['./rgw-bucket-details.component.scss']
 })
 export class RgwBucketDetailsComponent implements OnChanges {
-  bucket: any;
-
   @Input()
-  selection: CdTableSelection;
+  selection: any;
 
-  constructor() {}
+  constructor(private rgwBucketService: RgwBucketService) {}
 
   ngOnChanges() {
-    if (this.selection.hasSelection) {
-      this.bucket = this.selection.first();
+    if (this.selection) {
+      this.rgwBucketService.get(this.selection.bid).subscribe((bucket: object) => {
+        bucket['lock_retention_period_days'] = this.rgwBucketService.getLockDays(bucket);
+        this.selection = bucket;
+      });
     }
   }
 }

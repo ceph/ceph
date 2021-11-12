@@ -16,27 +16,31 @@
 #define CEPH_TIMER_H
 
 #include <map>
+#include "include/common_fwd.h"
 #include "ceph_time.h"
 #include "ceph_mutex.h"
+#include "fair_mutex.h"
+#include <condition_variable>
 
-class CephContext;
 class Context;
-class SafeTimerThread;
 
-class SafeTimer
+template <class Mutex> class CommonSafeTimerThread;
+
+template <class Mutex>
+class CommonSafeTimer
 {
   CephContext *cct;
-  ceph::mutex& lock;
-  ceph::condition_variable cond;
+  Mutex& lock;
+  std::condition_variable_any cond;
   bool safe_callbacks;
 
-  friend class SafeTimerThread;
-  SafeTimerThread *thread;
+  friend class CommonSafeTimerThread<Mutex>;
+  class CommonSafeTimerThread<Mutex> *thread;
 
   void timer_thread();
   void _shutdown();
 
-  using clock_t = ceph::real_clock;
+  using clock_t = ceph::mono_clock;
   using scheduled_map_t = std::multimap<clock_t::time_point, Context*>;
   scheduled_map_t schedule;
   using event_lookup_map_t = std::map<Context*, scheduled_map_t::iterator>;
@@ -47,8 +51,8 @@ class SafeTimer
 
 public:
   // This class isn't supposed to be copied
-  SafeTimer(const SafeTimer&) = delete;
-  SafeTimer& operator=(const SafeTimer&) = delete;
+  CommonSafeTimer(const CommonSafeTimer&) = delete;
+  CommonSafeTimer& operator=(const CommonSafeTimer&) = delete;
 
   /* Safe callbacks determines whether callbacks are called with the lock
    * held.
@@ -60,8 +64,8 @@ public:
    * If you are able to relax requirements on cancelled callbacks, then
    * setting safe_callbacks = false eliminates the lock cycle issue.
    * */
-  SafeTimer(CephContext *cct, ceph::mutex &l, bool safe_callbacks=true);
-  virtual ~SafeTimer();
+  CommonSafeTimer(CephContext *cct, Mutex &l, bool safe_callbacks=true);
+  virtual ~CommonSafeTimer();
 
   /* Call with the event_lock UNLOCKED.
    *
@@ -74,9 +78,10 @@ public:
 
   /* Schedule an event in the future
    * Call with the event_lock LOCKED */
+  Context* add_event_after(ceph::timespan duration, Context *callback);
   Context* add_event_after(double seconds, Context *callback);
   Context* add_event_at(clock_t::time_point when, Context *callback);
-
+  Context* add_event_at(ceph::real_clock::time_point when, Context *callback);
   /* Cancel an event.
    * Call with the event_lock LOCKED
    *
@@ -94,5 +99,9 @@ public:
   void cancel_all_events();
 
 };
+
+extern template class CommonSafeTimer<ceph::mutex>;
+extern template class CommonSafeTimer<ceph::fair_mutex>;
+using SafeTimer = class CommonSafeTimer<ceph::mutex>;
 
 #endif

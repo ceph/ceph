@@ -11,6 +11,7 @@
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/core/semaphore.hh>
+#include <seastar/core/smp.hh>
 
 #include "common/ceph_time.h"
 #include "messages/MOSDOp.h"
@@ -21,6 +22,9 @@
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
 
+using namespace std;
+using namespace std::chrono_literals;
+
 namespace bpo = boost::program_options;
 
 namespace {
@@ -30,6 +34,23 @@ using Ref = boost::intrusive_ptr<Message>;
 
 seastar::logger& logger() {
   return crimson::get_logger(ceph_subsys_ms);
+}
+
+template <typename T, typename... Args>
+seastar::future<T*> create_sharded(Args... args) {
+  // seems we should only construct/stop shards on #0
+  return seastar::smp::submit_to(0, [=] {
+    auto sharded_obj = seastar::make_lw_shared<seastar::sharded<T>>();
+    return sharded_obj->start(args...).then([sharded_obj]() {
+      seastar::engine().at_exit([sharded_obj]() {
+          return sharded_obj->stop().then([sharded_obj] {});
+        });
+      return sharded_obj.get();
+    });
+  }).then([] (seastar::sharded<T> *ptr_shard) {
+    // return the pointer valid for the caller CPU
+    return &ptr_shard->local();
+  });
 }
 
 enum class perf_mode_t {
@@ -114,34 +135,28 @@ static seastar::future<> run(
     const server_config& server_conf)
 {
   struct test_state {
+    struct Server;
+    using ServerFRef = seastar::foreign_ptr<std::unique_ptr<Server>>;
+
     struct Server final
-        : public crimson::net::Dispatcher,
-          public seastar::peering_sharded_service<Server> {
-      crimson::net::Messenger *msgr = nullptr;
+        : public crimson::net::Dispatcher {
+      crimson::net::MessengerRef msgr;
       crimson::auth::DummyAuthClientServer dummy_auth;
-      const seastar::shard_id sid;
       const seastar::shard_id msgr_sid;
       std::string lname;
       unsigned msg_len;
       bufferlist msg_data;
 
-      Server(unsigned msgr_core, unsigned msg_len)
-        : sid{seastar::engine().cpu_id()},
-          msgr_sid{msgr_core},
+      Server(unsigned msg_len)
+        : msgr_sid{seastar::this_shard_id()},
           msg_len{msg_len} {
         lname = "server#";
-        lname += std::to_string(sid);
+        lname += std::to_string(msgr_sid);
         msg_data.append_zero(msg_len);
       }
 
-      Dispatcher* get_local_shard() override {
-        return &(container().local());
-      }
-      seastar::future<> stop() {
-        return seastar::make_ready_future<>();
-      }
-      seastar::future<> ms_dispatch(crimson::net::Connection* c,
-                                    MessageRef m) override {
+      std::optional<seastar::future<>> ms_dispatch(
+          crimson::net::ConnectionRef c, MessageRef m) override {
         ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
 
         // server replies with MOSDOp to generate server-side write workload
@@ -150,42 +165,53 @@ static seastar::future<> run(
         const static hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
                                     pgid.pool(), oloc.nspace);
         static spg_t spgid(pgid);
-        auto rep = make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0);
+        auto rep = crimson::make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0);
         bufferlist data(msg_data);
         rep->write(0, msg_len, data);
         rep->set_tid(m->get_tid());
-        return c->send(std::move(rep));
+        std::ignore = c->send(std::move(rep));
+        return {seastar::now()};
       }
 
       seastar::future<> init(bool v1_crc_enabled, const entity_addr_t& addr) {
-        return container().invoke_on(msgr_sid, [v1_crc_enabled, addr] (auto& server) {
+        return seastar::smp::submit_to(msgr_sid, [v1_crc_enabled, addr, this] {
           // server msgr is always with nonce 0
-          auto&& fut = crimson::net::Messenger::create(entity_name_t::OSD(server.sid), server.lname, 0, server.sid);
-          return fut.then(
-            [&server, addr, v1_crc_enabled](crimson::net::Messenger *messenger) {
-              return server.container().invoke_on_all(
-                [messenger, v1_crc_enabled](auto& server) {
-                  server.msgr = messenger->get_local_shard();
-                  server.msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
-                  server.msgr->set_auth_client(&server.dummy_auth);
-                  server.msgr->set_auth_server(&server.dummy_auth);
-                  if (v1_crc_enabled) {
-                    server.msgr->set_crc_header();
-                    server.msgr->set_crc_data();
-                  }
-                }).then([messenger, addr] {
-                  return messenger->bind(entity_addrvec_t{addr});
-                }).then([&server, messenger] {
-                  return messenger->start(&server);
-                });
-            });
+          msgr = crimson::net::Messenger::create(entity_name_t::OSD(msgr_sid), lname, 0);
+          msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
+          msgr->set_auth_client(&dummy_auth);
+          msgr->set_auth_server(&dummy_auth);
+          if (v1_crc_enabled) {
+            msgr->set_crc_header();
+            msgr->set_crc_data();
+          }
+          return msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
+            return msgr->start({this});
+          }, crimson::net::Messenger::bind_ertr::all_same_way(
+              [addr] (const std::error_code& e) {
+            logger().error("Server: "
+                           "there is another instance running at {}", addr);
+            ceph_abort();
+          }));
         });
       }
       seastar::future<> shutdown() {
         logger().info("{} shutdown...", lname);
-        return container().invoke_on(msgr_sid, [] (auto& server) {
-          ceph_assert(server.msgr);
-          return server.msgr->shutdown();
+        return seastar::smp::submit_to(msgr_sid, [this] {
+          ceph_assert(msgr);
+          msgr->stop();
+          return msgr->shutdown();
+        });
+      }
+      seastar::future<> wait() {
+        return seastar::smp::submit_to(msgr_sid, [this] {
+          ceph_assert(msgr);
+          return msgr->wait();
+        });
+      }
+
+      static seastar::future<ServerFRef> create(seastar::shard_id msgr_sid, unsigned msg_len) {
+        return seastar::smp::submit_to(msgr_sid, [msg_len] {
+          return seastar::make_foreign(std::make_unique<Server>(msg_len));
         });
       }
     };
@@ -250,7 +276,7 @@ static seastar::future<> run(
       std::string lname;
 
       const unsigned jobs;
-      crimson::net::Messenger *msgr = nullptr;
+      crimson::net::MessengerRef msgr;
       const unsigned msg_len;
       bufferlist msg_data;
       const unsigned nr_depth;
@@ -265,7 +291,7 @@ static seastar::future<> run(
       seastar::promise<> stopped_send_promise;
 
       Client(unsigned jobs, unsigned msg_len, unsigned depth)
-        : sid{seastar::engine().cpu_id()},
+        : sid{seastar::this_shard_id()},
           jobs{jobs},
           msg_len{msg_len},
           nr_depth{depth/jobs},
@@ -281,18 +307,11 @@ static seastar::future<> run(
         return nr_depth - depth.current();
       }
 
-      Dispatcher* get_local_shard() override {
-        return &(container().local());
-      }
-      seastar::future<> stop() {
-        return seastar::now();
-      }
-      seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) override {
+      void ms_handle_connect(crimson::net::ConnectionRef conn) override {
         conn_stats.connected_time = mono_clock::now();
-        return seastar::now();
       }
-      seastar::future<> ms_dispatch(crimson::net::Connection* c,
-                                    MessageRef m) override {
+      std::optional<seastar::future<>> ms_dispatch(
+          crimson::net::ConnectionRef, MessageRef m) override {
         // server replies with MOSDOp to generate server-side write workload
         ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
 
@@ -311,31 +330,28 @@ static seastar::future<> run(
         ++(conn_stats.received_count);
         depth.signal(1);
 
-        return seastar::now();
+        return {seastar::now()};
       }
 
       // should start messenger at this shard?
       bool is_active() {
-        ceph_assert(seastar::engine().cpu_id() == sid);
+        ceph_assert(seastar::this_shard_id() == sid);
         return sid != 0 && sid <= jobs;
       }
 
       seastar::future<> init(bool v1_crc_enabled) {
         return container().invoke_on_all([v1_crc_enabled] (auto& client) {
           if (client.is_active()) {
-            return crimson::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid, client.sid)
-            .then([&client, v1_crc_enabled] (crimson::net::Messenger *messenger) {
-              client.msgr = messenger;
-              client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
-              client.msgr->set_require_authorizer(false);
-              client.msgr->set_auth_client(&client.dummy_auth);
-              client.msgr->set_auth_server(&client.dummy_auth);
-              if (v1_crc_enabled) {
-                client.msgr->set_crc_header();
-                client.msgr->set_crc_data();
-              }
-              return client.msgr->start(&client);
-            });
+            client.msgr = crimson::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid);
+            client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
+            client.msgr->set_require_authorizer(false);
+            client.msgr->set_auth_client(&client.dummy_auth);
+            client.msgr->set_auth_server(&client.dummy_auth);
+            if (v1_crc_enabled) {
+              client.msgr->set_crc_header();
+              client.msgr->set_crc_data();
+            }
+            return client.msgr->start({&client});
           }
           return seastar::now();
         });
@@ -346,6 +362,7 @@ static seastar::future<> run(
           if (client.is_active()) {
             logger().info("{} shutdown...", client.lname);
             ceph_assert(client.msgr);
+            client.msgr->stop();
             return client.msgr->shutdown().then([&client] {
               return client.stop_dispatch_messages();
             });
@@ -359,12 +376,9 @@ static seastar::future<> run(
           // start clients in active cores (#1 ~ #jobs)
           if (client.is_active()) {
             mono_time start_time = mono_clock::now();
-            return client.msgr->connect(peer_addr, entity_name_t::TYPE_OSD)
-            .then([&client] (auto conn) {
-              client.active_conn = conn->release();
-              // make sure handshake won't hurt the performance
-              return seastar::sleep(1s);
-            }).then([&client, start_time] {
+            client.active_conn = client.msgr->connect(peer_addr, entity_name_t::TYPE_OSD);
+            // make sure handshake won't hurt the performance
+            return seastar::sleep(1s).then([&client, start_time] {
               if (client.conn_stats.connected_time == mono_clock::zero()) {
                 logger().error("\n{} not connected after 1s!\n", client.lname);
                 ceph_assert(false);
@@ -521,7 +535,7 @@ static seastar::future<> run(
           if (client.is_active()) {
             client.do_dispatch_messages(client.active_conn.get());
           }
-        }).then([this, ramptime] {
+        }).then([ramptime] {
           logger().info("[all clients]: ramping up {} seconds...", ramptime);
           return seastar::sleep(std::chrono::seconds(ramptime));
         }).then([this] {
@@ -565,14 +579,14 @@ static seastar::future<> run(
 
      private:
       seastar::future<> send_msg(crimson::net::Connection* conn) {
-        ceph_assert(seastar::engine().cpu_id() == sid);
+        ceph_assert(seastar::this_shard_id() == sid);
         return depth.wait(1).then([this, conn] {
           const static pg_t pgid;
           const static object_locator_t oloc;
           const static hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
                                       pgid.pool(), oloc.nspace);
           static spg_t spgid(pgid);
-          auto m = make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0);
+          auto m = crimson::make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0);
           bufferlist data(msg_data);
           m->write(0, msg_len, data);
           // use tid as the identity of each round
@@ -598,7 +612,7 @@ static seastar::future<> run(
       }
 
       void do_dispatch_messages(crimson::net::Connection* conn) {
-        ceph_assert(seastar::engine().cpu_id() == sid);
+        ceph_assert(seastar::this_shard_id() == sid);
         ceph_assert(sent_count == 0);
         conn_stats.start_time = mono_clock::now();
         // forwarded to stopped_send_promise
@@ -610,7 +624,7 @@ static seastar::future<> run(
           }
         ).handle_exception_type([] (const DepthBroken& e) {
           // ok, stopped by stop_dispatch_messages()
-        }).finally([this, conn] {
+        }).then([this, conn] {
           std::chrono::duration<double> dur_conn = conn_stats.connected_time - conn_stats.connecting_time;
           std::chrono::duration<double> dur_msg = mono_clock::now() - conn_stats.start_time;
           unsigned ops = conn_stats.received_count - conn_stats.start_count;
@@ -637,58 +651,59 @@ static seastar::future<> run(
     };
   };
 
-  return seastar::when_all_succeed(
-      crimson::net::create_sharded<test_state::Server>(server_conf.core, server_conf.block_size),
-      crimson::net::create_sharded<test_state::Client>(client_conf.jobs,
-						       client_conf.block_size, client_conf.depth))
-    .then([=](test_state::Server *server,
-              test_state::Client *client) {
-      if (mode == perf_mode_t::both) {
-          logger().info("\nperf settings:\n  {}\n  {}\n",
-                        client_conf.str(), server_conf.str());
-          ceph_assert(seastar::smp::count >= 1+client_conf.jobs);
-          ceph_assert(client_conf.jobs > 0);
-          ceph_assert(seastar::smp::count >= 1+server_conf.core);
-          ceph_assert(server_conf.core == 0 || server_conf.core > client_conf.jobs);
-          return seastar::when_all_succeed(
-              server->init(server_conf.v1_crc_enabled, server_conf.addr),
-              client->init(client_conf.v1_crc_enabled))
-            .then([client, addr = client_conf.server_addr] {
-              return client->connect_wait_verify(addr);
-            }).then([client, ramptime = client_conf.ramptime,
-                     msgtime = client_conf.msgtime] {
-              return client->dispatch_with_timer(ramptime, msgtime);
-            }).finally([client] {
-              return client->shutdown();
-            }).finally([server] {
-              return server->shutdown();
-            });
-      } else if (mode == perf_mode_t::client) {
-          logger().info("\nperf settings:\n  {}\n", client_conf.str());
-          ceph_assert(seastar::smp::count >= 1+client_conf.jobs);
-          ceph_assert(client_conf.jobs > 0);
-          return client->init(client_conf.v1_crc_enabled)
-            .then([client, addr = client_conf.server_addr] {
-              return client->connect_wait_verify(addr);
-            }).then([client, ramptime = client_conf.ramptime,
-                     msgtime = client_conf.msgtime] {
-              return client->dispatch_with_timer(ramptime, msgtime);
-            }).finally([client] {
-              return client->shutdown();
-            });
-      } else { // mode == perf_mode_t::server
-          ceph_assert(seastar::smp::count >= 1+server_conf.core);
-          logger().info("\nperf settings:\n  {}\n", server_conf.str());
-          return server->init(server_conf.v1_crc_enabled, server_conf.addr)
-          // dispatch ops
-            .then([server] {
-              return server->msgr->wait();
-          // shutdown
-            }).finally([server] {
-              return server->shutdown();
-            });
-      }
-    });
+  return seastar::when_all(
+      test_state::Server::create(server_conf.core, server_conf.block_size),
+      create_sharded<test_state::Client>(client_conf.jobs, client_conf.block_size, client_conf.depth)
+  ).then([=](auto&& ret) {
+    auto fp_server = std::move(std::get<0>(ret).get0());
+    auto client = std::move(std::get<1>(ret).get0());
+    test_state::Server* server = fp_server.get();
+    if (mode == perf_mode_t::both) {
+      logger().info("\nperf settings:\n  {}\n  {}\n",
+                    client_conf.str(), server_conf.str());
+      ceph_assert(seastar::smp::count >= 1+client_conf.jobs);
+      ceph_assert(client_conf.jobs > 0);
+      ceph_assert(seastar::smp::count >= 1+server_conf.core);
+      ceph_assert(server_conf.core == 0 || server_conf.core > client_conf.jobs);
+      return seastar::when_all_succeed(
+        server->init(server_conf.v1_crc_enabled, server_conf.addr),
+        client->init(client_conf.v1_crc_enabled)
+      ).then_unpack([client, addr = client_conf.server_addr] {
+        return client->connect_wait_verify(addr);
+      }).then([client, ramptime = client_conf.ramptime,
+               msgtime = client_conf.msgtime] {
+        return client->dispatch_with_timer(ramptime, msgtime);
+      }).then([client] {
+        return client->shutdown();
+      }).then([server, fp_server = std::move(fp_server)] () mutable {
+        return server->shutdown().then([cleanup = std::move(fp_server)] {});
+      });
+    } else if (mode == perf_mode_t::client) {
+      logger().info("\nperf settings:\n  {}\n", client_conf.str());
+      ceph_assert(seastar::smp::count >= 1+client_conf.jobs);
+      ceph_assert(client_conf.jobs > 0);
+      return client->init(client_conf.v1_crc_enabled
+      ).then([client, addr = client_conf.server_addr] {
+        return client->connect_wait_verify(addr);
+      }).then([client, ramptime = client_conf.ramptime,
+               msgtime = client_conf.msgtime] {
+        return client->dispatch_with_timer(ramptime, msgtime);
+      }).then([client] {
+        return client->shutdown();
+      });
+    } else { // mode == perf_mode_t::server
+      ceph_assert(seastar::smp::count >= 1+server_conf.core);
+      logger().info("\nperf settings:\n  {}\n", server_conf.str());
+      return server->init(server_conf.v1_crc_enabled, server_conf.addr
+      // dispatch ops
+      ).then([server] {
+        return server->wait();
+      // shutdown
+      }).then([server, fp_server = std::move(fp_server)] () mutable {
+        return server->shutdown().then([cleanup = std::move(fp_server)] {});
+      });
+    }
+  });
 }
 
 }

@@ -1,10 +1,14 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_CLS_RGW_CONST_H
-#define CEPH_CLS_RGW_CONST_H
+#pragma once
 
 #define RGW_CLASS "rgw"
+
+/* Special error code returned by cls bucket list operation if it was
+ * unable to skip past enough not visibile entries to return any
+ * entries in the call. */
+constexpr int RGWBIAdvanceAndRetryError = -EFBIG;
 
 /* bucket index */
 #define RGW_BUCKET_INIT_INDEX "bucket_init_index"
@@ -71,5 +75,3 @@
 #define RGW_CLEAR_BUCKET_RESHARDING "clear_bucket_resharding"
 #define RGW_GUARD_BUCKET_RESHARDING "guard_bucket_resharding"
 #define RGW_GET_BUCKET_RESHARDING "get_bucket_resharding"
-
-#endif

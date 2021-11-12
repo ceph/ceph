@@ -25,7 +25,7 @@ case "$1" in
        # 1. create user if not existing
        if ! getent passwd | grep -q "^cephadm:"; then
          echo -n "Adding system user cephadm.."
-         adduser --quiet --system --disabled-password --gecos 'Ceph-dameon user for cephadm' --shell /bin/bash cephadm 2>/dev/null || true
+         adduser --quiet --system --disabled-password --gecos 'cephadm user for mgr/cephadm' --shell /bin/bash cephadm 2>/dev/null || true
          echo "..done"
        fi
 

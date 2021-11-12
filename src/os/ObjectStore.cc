@@ -17,47 +17,53 @@
 #include "common/Formatter.h"
 #include "common/safe_io.h"
 
+#ifndef  WITH_SEASTAR
 #include "filestore/FileStore.h"
+#endif
 #include "memstore/MemStore.h"
 #if defined(WITH_BLUESTORE)
 #include "bluestore/BlueStore.h"
 #endif
+#ifndef WITH_SEASTAR
 #include "kstore/KStore.h"
+#endif
 
-ObjectStore *ObjectStore::create(CephContext *cct,
-				 const string& type,
-				 const string& data,
-				 const string& journal,
-				 osflagbits_t flags)
+using std::string;
+
+std::unique_ptr<ObjectStore> ObjectStore::create(
+  CephContext *cct,
+  const string& type,
+  const string& data)
 {
-  if (type == "filestore") {
-    return new FileStore(cct, data, journal, flags);
-  }
   if (type == "memstore") {
-    return new MemStore(cct, data);
+    return std::make_unique<MemStore>(cct, data);
   }
 #if defined(WITH_BLUESTORE)
-  if (type == "bluestore") {
-    return new BlueStore(cct, data);
-  }
-  if (type == "random") {
-    if (rand() % 2) {
-      return new FileStore(cct, data, journal, flags);
-    } else {
-      return new BlueStore(cct, data);
-    }
-  }
-#else
-  if (type == "random") {
-    return new FileStore(cct, data, journal, flags);
+  if (type == "bluestore" || type == "random") {
+    return std::make_unique<BlueStore>(cct, data);
   }
 #endif
+  return nullptr;
+}
+
+#ifndef WITH_SEASTAR
+std::unique_ptr<ObjectStore> ObjectStore::create(
+  CephContext *cct,
+  const string& type,
+  const string& data,
+  const string& journal,
+  osflagbits_t flags)
+{
+  if (type == "filestore" || (type == "random" && rand() % 2)) {
+    return std::make_unique<FileStore>(cct, data, journal, flags);
+  }
   if (type == "kstore" &&
       cct->check_experimental_feature_enabled("kstore")) {
-    return new KStore(cct, data);
+    return std::make_unique<KStore>(cct, data);
   }
-  return NULL;
+  return create(cct, type, data);
 }
+#endif
 
 int ObjectStore::probe_block_device_fsid(
   CephContext *cct,
@@ -77,6 +83,7 @@ int ObjectStore::probe_block_device_fsid(
   }
 #endif
 
+#ifndef WITH_SEASTAR
   // okay, try FileStore (journal).
   r = FileStore::get_block_device_fsid(cct, path, fsid);
   if (r == 0) {
@@ -84,6 +91,7 @@ int ObjectStore::probe_block_device_fsid(
 			  << *fsid << dendl;
     return r;
   }
+#endif
 
   return -EINVAL;
 }

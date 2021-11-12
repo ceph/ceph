@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TimeDiffService } from './time-diff.service';
 
 describe('TimeDiffService', () => {
@@ -12,7 +12,7 @@ describe('TimeDiffService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(TimeDiffService);
+    service = TestBed.inject(TimeDiffService);
   });
 
   it('should be created', () => {
@@ -49,7 +49,7 @@ describe('TimeDiffService', () => {
     const days = 24 * hours;
 
     it('should allow different writings', () => {
-      const expectDurationToBeMs = (duration, ms) =>
+      const expectDurationToBeMs = (duration: string, ms: number) =>
         expect(service['getDurationMs'](duration)).toBe(ms);
       expectDurationToBeMs('2h', 2 * hours);
       expectDurationToBeMs('4 Days', 4 * days);
@@ -59,7 +59,7 @@ describe('TimeDiffService', () => {
     });
 
     it('should create duration string from ms', () => {
-      const expectMsToBeDuration = (ms, duration) =>
+      const expectMsToBeDuration = (ms: number, duration: string) =>
         expect(service['getDuration'](ms)).toBe(duration);
       expectMsToBeDuration(2 * hours, '2h');
       expectMsToBeDuration(4 * days, '4d');

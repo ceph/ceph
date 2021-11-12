@@ -18,6 +18,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 using Svc = RGWSI_MDLog::Svc;
 using Cursor = RGWPeriodHistory::Cursor;
 
@@ -38,7 +40,7 @@ int RGWSI_MDLog::init(RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc, RGWSI_SysO
   return 0;
 }
 
-int RGWSI_MDLog::do_start()
+int RGWSI_MDLog::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
   auto& current_period = svc.zone->get_current_period();
 
@@ -51,19 +53,21 @@ int RGWSI_MDLog::do_start()
   if (run_sync &&
       svc.zone->need_to_sync()) {
     // initialize the log period history
-    svc.mdlog->init_oldest_log_period();
+    svc.mdlog->init_oldest_log_period(y, dpp);
   }
   return 0;
 }
 
 int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
-                              RGWObjVersionTracker *objv_tracker) const
+                              RGWObjVersionTracker *objv_tracker,
+			      optional_yield y,
+                              const DoutPrefixProvider *dpp) const
 {
   auto obj_ctx = svc.sysobj->init_obj_ctx();
   auto& pool = svc.zone->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
   bufferlist bl;
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, objv_tracker, nullptr, null_yield);
+  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, objv_tracker, nullptr, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -71,9 +75,9 @@ int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
     /* bad history object, remove it */
     rgw_raw_obj obj(pool, oid);
     auto sysobj = obj_ctx.get_obj(obj);
-    ret = sysobj.wop().remove(null_yield);
+    ret = sysobj.wop().remove(dpp, y);
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
       return ret;
     }
     return -ENOENT;
@@ -82,16 +86,17 @@ int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
     auto p = bl.cbegin();
     state->decode(p);
   } catch (buffer::error& e) {
-    ldout(cct, 1) << "failed to decode the mdlog history: "
+    ldpp_dout(dpp, 1) << "failed to decode the mdlog history: "
         << e.what() << dendl;
     return -EIO;
   }
   return 0;
 }
 
-int RGWSI_MDLog::write_history(const RGWMetadataLogHistory& state,
+int RGWSI_MDLog::write_history(const DoutPrefixProvider *dpp, 
+                               const RGWMetadataLogHistory& state,
                                RGWObjVersionTracker *objv_tracker,
-                               bool exclusive)
+                               optional_yield y, bool exclusive)
 {
   bufferlist bl;
   state.encode(bl);
@@ -99,8 +104,8 @@ int RGWSI_MDLog::write_history(const RGWMetadataLogHistory& state,
   auto& pool = svc.zone->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
   auto obj_ctx = svc.sysobj->init_obj_ctx();
-  return rgw_put_system_obj(obj_ctx, pool, oid, bl,
-                            exclusive, objv_tracker, real_time{});
+  return rgw_put_system_obj(dpp, obj_ctx, pool, oid, bl,
+                            exclusive, objv_tracker, real_time{}, y);
 }
 
 namespace mdlog {
@@ -109,6 +114,7 @@ using Cursor = RGWPeriodHistory::Cursor;
 
 /// read the mdlog history and use it to initialize the given cursor
 class ReadHistoryCR : public RGWCoroutine {
+  const DoutPrefixProvider *dpp;
   Svc svc;
   Cursor *cursor;
   RGWObjVersionTracker *objv_tracker;
@@ -116,16 +122,17 @@ class ReadHistoryCR : public RGWCoroutine {
   RGWAsyncRadosProcessor *async_processor;
 
  public:
-  ReadHistoryCR(const Svc& svc,
+  ReadHistoryCR(const DoutPrefixProvider *dpp, 
+                const Svc& svc,
                 Cursor *cursor,
                 RGWObjVersionTracker *objv_tracker)
-    : RGWCoroutine(svc.zone->ctx()), svc(svc),
+    : RGWCoroutine(svc.zone->ctx()), dpp(dpp), svc(svc),
       cursor(cursor),
       objv_tracker(objv_tracker),
       async_processor(svc.rados->get_async_processor())
   {}
 
-  int operate() {
+  int operate(const DoutPrefixProvider *dpp) {
     reenter(this) {
       yield {
         rgw_raw_obj obj{svc.zone->get_zone_params().log_pool,
@@ -133,11 +140,11 @@ class ReadHistoryCR : public RGWCoroutine {
         constexpr bool empty_on_enoent = false;
 
         using ReadCR = RGWSimpleRadosReadCR<RGWMetadataLogHistory>;
-        call(new ReadCR(async_processor, svc.sysobj, obj,
+        call(new ReadCR(dpp, async_processor, svc.sysobj, obj,
                         &state, empty_on_enoent, objv_tracker));
       }
       if (retcode < 0) {
-        ldout(cct, 1) << "failed to read mdlog history: "
+        ldpp_dout(dpp, 1) << "failed to read mdlog history: "
             << cpp_strerror(retcode) << dendl;
         return set_cr_error(retcode);
       }
@@ -146,7 +153,7 @@ class ReadHistoryCR : public RGWCoroutine {
         return set_cr_error(cursor->get_error());
       }
 
-      ldout(cct, 10) << "read mdlog history with oldest period id="
+      ldpp_dout(dpp, 10) << "read mdlog history with oldest period id="
           << state.oldest_period_id << " realm_epoch="
           << state.oldest_realm_epoch << dendl;
       return set_cr_done();
@@ -157,6 +164,7 @@ class ReadHistoryCR : public RGWCoroutine {
 
 /// write the given cursor to the mdlog history
 class WriteHistoryCR : public RGWCoroutine {
+  const DoutPrefixProvider *dpp;
   Svc svc;
   Cursor cursor;
   RGWObjVersionTracker *objv;
@@ -164,15 +172,16 @@ class WriteHistoryCR : public RGWCoroutine {
   RGWAsyncRadosProcessor *async_processor;
 
  public:
-  WriteHistoryCR(Svc& svc,
+  WriteHistoryCR(const DoutPrefixProvider *dpp, 
+                 Svc& svc,
                  const Cursor& cursor,
                  RGWObjVersionTracker *objv)
-    : RGWCoroutine(svc.zone->ctx()), svc(svc),
+    : RGWCoroutine(svc.zone->ctx()), dpp(dpp), svc(svc),
       cursor(cursor), objv(objv),
       async_processor(svc.rados->get_async_processor())
   {}
 
-  int operate() {
+  int operate(const DoutPrefixProvider *dpp) {
     reenter(this) {
       state.oldest_period_id = cursor.get_period().get_id();
       state.oldest_realm_epoch = cursor.get_epoch();
@@ -182,15 +191,15 @@ class WriteHistoryCR : public RGWCoroutine {
                         RGWMetadataLogHistory::oid};
 
         using WriteCR = RGWSimpleRadosWriteCR<RGWMetadataLogHistory>;
-        call(new WriteCR(async_processor, svc.sysobj, obj, state, objv));
+        call(new WriteCR(dpp, async_processor, svc.sysobj, obj, state, objv));
       }
       if (retcode < 0) {
-        ldout(cct, 1) << "failed to write mdlog history: "
+        ldpp_dout(dpp, 1) << "failed to write mdlog history: "
             << cpp_strerror(retcode) << dendl;
         return set_cr_error(retcode);
       }
 
-      ldout(cct, 10) << "wrote mdlog history with oldest period id="
+      ldpp_dout(dpp, 10) << "wrote mdlog history with oldest period id="
           << state.oldest_period_id << " realm_epoch="
           << state.oldest_realm_epoch << dendl;
       return set_cr_done();
@@ -201,6 +210,7 @@ class WriteHistoryCR : public RGWCoroutine {
 
 /// update the mdlog history to reflect trimmed logs
 class TrimHistoryCR : public RGWCoroutine {
+  const DoutPrefixProvider *dpp;
   Svc svc;
   const Cursor cursor; //< cursor to trimmed period
   RGWObjVersionTracker *objv; //< to prevent racing updates
@@ -208,27 +218,27 @@ class TrimHistoryCR : public RGWCoroutine {
   Cursor existing; //< existing cursor read from disk
 
  public:
-  TrimHistoryCR(const Svc& svc, Cursor cursor, RGWObjVersionTracker *objv)
-    : RGWCoroutine(svc.zone->ctx()), svc(svc),
+  TrimHistoryCR(const DoutPrefixProvider *dpp, const Svc& svc, Cursor cursor, RGWObjVersionTracker *objv)
+    : RGWCoroutine(svc.zone->ctx()), dpp(dpp), svc(svc),
       cursor(cursor), objv(objv), next(cursor) {
     next.next(); // advance past cursor
   }
 
-  int operate() {
+  int operate(const DoutPrefixProvider *dpp) {
     reenter(this) {
       // read an existing history, and write the new history if it's newer
-      yield call(new ReadHistoryCR(svc, &existing, objv));
+      yield call(new ReadHistoryCR(dpp, svc, &existing, objv));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
       // reject older trims with ECANCELED
       if (cursor.get_epoch() < existing.get_epoch()) {
-        ldout(cct, 4) << "found oldest log epoch=" << existing.get_epoch()
+        ldpp_dout(dpp, 4) << "found oldest log epoch=" << existing.get_epoch()
             << ", rejecting trim at epoch=" << cursor.get_epoch() << dendl;
         return set_cr_error(-ECANCELED);
       }
       // overwrite with updated history
-      yield call(new WriteHistoryCR(svc, next, objv));
+      yield call(new WriteHistoryCR(dpp, svc, next, objv));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
@@ -242,7 +252,7 @@ class TrimHistoryCR : public RGWCoroutine {
 
 // traverse all the way back to the beginning of the period history, and
 // return a cursor to the first period in a fully attached history
-Cursor RGWSI_MDLog::find_oldest_period()
+Cursor RGWSI_MDLog::find_oldest_period(const DoutPrefixProvider *dpp, optional_yield y)
 {
   auto cursor = period_history->get_current();
 
@@ -252,13 +262,13 @@ Cursor RGWSI_MDLog::find_oldest_period()
       auto& predecessor = cursor.get_period().get_predecessor();
       if (predecessor.empty()) {
         // this is the first period, so our logs must start here
-        ldout(cct, 10) << "find_oldest_period returning first "
+        ldpp_dout(dpp, 10) << "find_oldest_period returning first "
             "period " << cursor.get_period().get_id() << dendl;
         return cursor;
       }
       // pull the predecessor and add it to our history
       RGWPeriod period;
-      int r = period_puller->pull(predecessor, period);
+      int r = period_puller->pull(dpp, predecessor, period, y);
       if (r < 0) {
         return cursor;
       }
@@ -266,27 +276,27 @@ Cursor RGWSI_MDLog::find_oldest_period()
       if (!prev) {
         return prev;
       }
-      ldout(cct, 20) << "find_oldest_period advancing to "
+      ldpp_dout(dpp, 20) << "find_oldest_period advancing to "
           "predecessor period " << predecessor << dendl;
       ceph_assert(cursor.has_prev());
     }
     cursor.prev();
   }
-  ldout(cct, 10) << "find_oldest_period returning empty cursor" << dendl;
+  ldpp_dout(dpp, 10) << "find_oldest_period returning empty cursor" << dendl;
   return cursor;
 }
 
-Cursor RGWSI_MDLog::init_oldest_log_period()
+Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp)
 {
   // read the mdlog history
   RGWMetadataLogHistory state;
   RGWObjVersionTracker objv;
-  int ret = read_history(&state, &objv);
+  int ret = read_history(&state, &objv, y, dpp);
 
   if (ret == -ENOENT) {
     // initialize the mdlog history and write it
-    ldout(cct, 10) << "initializing mdlog history" << dendl;
-    auto cursor = find_oldest_period();
+    ldpp_dout(dpp, 10) << "initializing mdlog history" << dendl;
+    auto cursor = find_oldest_period(dpp, y);
     if (!cursor) {
       return cursor;
     }
@@ -295,15 +305,15 @@ Cursor RGWSI_MDLog::init_oldest_log_period()
     state.oldest_period_id = cursor.get_period().get_id();
 
     constexpr bool exclusive = true; // don't overwrite
-    int ret = write_history(state, &objv, exclusive);
+    int ret = write_history(dpp, state, &objv, y, exclusive);
     if (ret < 0 && ret != -EEXIST) {
-      ldout(cct, 1) << "failed to write mdlog history: "
+      ldpp_dout(dpp, 1) << "failed to write mdlog history: "
           << cpp_strerror(ret) << dendl;
       return Cursor{ret};
     }
     return cursor;
   } else if (ret < 0) {
-    ldout(cct, 1) << "failed to read mdlog history: "
+    ldpp_dout(dpp, 1) << "failed to read mdlog history: "
         << cpp_strerror(ret) << dendl;
     return Cursor{ret};
   }
@@ -313,13 +323,13 @@ Cursor RGWSI_MDLog::init_oldest_log_period()
   if (cursor) {
     return cursor;
   } else {
-    cursor = find_oldest_period();
+    cursor = find_oldest_period(dpp, y);
     state.oldest_realm_epoch = cursor.get_epoch();
     state.oldest_period_id = cursor.get_period().get_id();
-    ldout(cct, 10) << "rewriting mdlog history" << dendl;
-    ret = write_history(state, &objv);
+    ldpp_dout(dpp, 10) << "rewriting mdlog history" << dendl;
+    ret = write_history(dpp, state, &objv, y);
     if (ret < 0 && ret != -ECANCELED) {
-    ldout(cct, 1) << "failed to write mdlog history: "
+    ldpp_dout(dpp, 1) << "failed to write mdlog history: "
           << cpp_strerror(ret) << dendl;
     return Cursor{ret};
     }
@@ -328,50 +338,50 @@ Cursor RGWSI_MDLog::init_oldest_log_period()
 
   // pull the oldest period by id
   RGWPeriod period;
-  ret = period_puller->pull(state.oldest_period_id, period);
+  ret = period_puller->pull(dpp, state.oldest_period_id, period, y);
   if (ret < 0) {
-    ldout(cct, 1) << "failed to read period id=" << state.oldest_period_id
+    ldpp_dout(dpp, 1) << "failed to read period id=" << state.oldest_period_id
         << " for mdlog history: " << cpp_strerror(ret) << dendl;
     return Cursor{ret};
   }
   // verify its realm_epoch
   if (period.get_realm_epoch() != state.oldest_realm_epoch) {
-    ldout(cct, 1) << "inconsistent mdlog history: read period id="
+    ldpp_dout(dpp, 1) << "inconsistent mdlog history: read period id="
         << period.get_id() << " with realm_epoch=" << period.get_realm_epoch()
         << ", expected realm_epoch=" << state.oldest_realm_epoch << dendl;
     return Cursor{-EINVAL};
   }
   // attach the period to our history
-  return period_history->attach(std::move(period));
+  return period_history->attach(dpp, std::move(period), y);
 }
 
-Cursor RGWSI_MDLog::read_oldest_log_period() const
+Cursor RGWSI_MDLog::read_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp) const
 {
   RGWMetadataLogHistory state;
-  int ret = read_history(&state, nullptr);
+  int ret = read_history(&state, nullptr, y, dpp);
   if (ret < 0) {
-    ldout(cct, 1) << "failed to read mdlog history: "
+    ldpp_dout(dpp, 1) << "failed to read mdlog history: "
         << cpp_strerror(ret) << dendl;
     return Cursor{ret};
   }
 
-  ldout(cct, 10) << "read mdlog history with oldest period id="
+  ldpp_dout(dpp, 10) << "read mdlog history with oldest period id="
       << state.oldest_period_id << " realm_epoch="
       << state.oldest_realm_epoch << dendl;
 
   return period_history->lookup(state.oldest_realm_epoch);
 }
 
-RGWCoroutine* RGWSI_MDLog::read_oldest_log_period_cr(Cursor *period,
-        RGWObjVersionTracker *objv) const
+RGWCoroutine* RGWSI_MDLog::read_oldest_log_period_cr(const DoutPrefixProvider *dpp, 
+        Cursor *period, RGWObjVersionTracker *objv) const
 {
-  return new mdlog::ReadHistoryCR(svc, period, objv);
+  return new mdlog::ReadHistoryCR(dpp, svc, period, objv);
 }
 
-RGWCoroutine* RGWSI_MDLog::trim_log_period_cr(Cursor period,
-        RGWObjVersionTracker *objv) const
+RGWCoroutine* RGWSI_MDLog::trim_log_period_cr(const DoutPrefixProvider *dpp, 
+        Cursor period, RGWObjVersionTracker *objv) const
 {
-  return new mdlog::TrimHistoryCR(svc, period, objv);
+  return new mdlog::TrimHistoryCR(dpp, svc, period, objv);
 }
 
 RGWMetadataLog* RGWSI_MDLog::get_log(const std::string& period)
@@ -383,10 +393,10 @@ RGWMetadataLog* RGWSI_MDLog::get_log(const std::string& period)
   return &insert.first->second;
 }
 
-int RGWSI_MDLog::add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl)
+int RGWSI_MDLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl)
 {
   ceph_assert(current_log); // must have called init()
-  return current_log->add_entry(hash_key, section, key, bl);
+  return current_log->add_entry(dpp, hash_key, section, key, bl);
 }
 
 int RGWSI_MDLog::get_shard_id(const string& hash_key, int *shard_id)
@@ -395,8 +405,9 @@ int RGWSI_MDLog::get_shard_id(const string& hash_key, int *shard_id)
   return current_log->get_shard_id(hash_key, shard_id);
 }
 
-int RGWSI_MDLog::pull_period(const std::string& period_id, RGWPeriod& period)
+int RGWSI_MDLog::pull_period(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period,
+			     optional_yield y)
 {
-  return period_puller->pull(period_id, period);
+  return period_puller->pull(dpp, period_id, period, y);
 }
 

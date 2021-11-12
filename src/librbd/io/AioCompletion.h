@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_IO_AIO_COMPLETION_H
 
 #include "common/ceph_time.h"
+#include "include/common_fwd.h"
 #include "include/Context.h"
 #include "include/utime.h"
 #include "include/rbd/librbd.hpp"
@@ -18,11 +19,10 @@
 #include <condition_variable>
 #include <mutex>
 
-class CephContext;
+struct Context;
 
 namespace librbd {
 namespace io {
-
 
 /**
  * AioCompletion is the overall completion for a single
@@ -71,6 +71,8 @@ struct AioCompletion {
   bool event_notify = false;
   bool was_armed = false;
   bool external_callback = false;
+
+  Context* image_dispatcher_ctx = nullptr;
 
   template <typename T, void (T::*MF)(int)>
   static void callback_adapter(completion_t cb, void *arg) {
@@ -178,7 +180,8 @@ struct AioCompletion {
 private:
   void queue_complete();
   void complete_external_callback();
-
+  void complete_event_socket();
+  void notify_callbacks_complete();
 };
 
 class C_AioRequest : public Context {

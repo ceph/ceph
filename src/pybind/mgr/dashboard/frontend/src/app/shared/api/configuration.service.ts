@@ -1,23 +1,22 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { ConfigFormCreateRequestModel } from '../../ceph/cluster/configuration/configuration-form/configuration-form-create-request.model';
-import { ApiModule } from './api.module';
+import { ConfigFormCreateRequestModel } from '~/app/ceph/cluster/configuration/configuration-form/configuration-form-create-request.model';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class ConfigurationService {
   constructor(private http: HttpClient) {}
 
-  private findValue(config, section: string) {
+  private findValue(config: any, section: string) {
     if (!config.value) {
       return undefined;
     }
-    return config.value.find((v) => v.section === section);
+    return config.value.find((v: any) => v.section === section);
   }
 
-  getValue(config, section: string) {
+  getValue(config: any, section: string) {
     let val = this.findValue(config, section);
     if (!val) {
       const indexOfDot = section.indexOf('.');
@@ -54,7 +53,7 @@ export class ConfigurationService {
     return this.http.delete(`api/cluster_conf/${configOption}?section=${section}`);
   }
 
-  bulkCreate(configOptions: Object) {
+  bulkCreate(configOptions: object) {
     return this.http.put('api/cluster_conf/', configOptions);
   }
 }

@@ -11,9 +11,13 @@
  * Foundation.  See file COPYING.
  */
 
+#include "PyModuleRegistry.h"
+
+#include <filesystem>
 
 #include "include/stringify.h"
 #include "common/errno.h"
+#include "common/split.h"
 
 #include "BaseMgrModule.h"
 #include "PyOSDMap.h"
@@ -24,41 +28,39 @@
 
 #include "ActivePyModules.h"
 
-#include "PyModuleRegistry.h"
-
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr[py] "
 
+namespace fs = std::filesystem;
 
+std::set<std::string> obsolete_modules = {
+  "orchestrator_cli",
+};
 
 void PyModuleRegistry::init()
 {
   std::lock_guard locker(lock);
 
   // Set up global python interpreter
-#if PY_MAJOR_VERSION >= 3
 #define WCHAR(s) L ## #s
   Py_SetProgramName(const_cast<wchar_t*>(WCHAR(MGR_PYTHON_EXECUTABLE)));
 #undef WCHAR
-#else
-  Py_SetProgramName(const_cast<char*>(MGR_PYTHON_EXECUTABLE));
-#endif
   // Add more modules
   if (g_conf().get_val<bool>("daemonize")) {
     PyImport_AppendInittab("ceph_logger", PyModule::init_ceph_logger);
   }
   PyImport_AppendInittab("ceph_module", PyModule::init_ceph_module);
   Py_InitializeEx(0);
-
+#if PY_VERSION_HEX < 0x03090000
   // Let CPython know that we will be calling it back from other
   // threads in future.
   if (! PyEval_ThreadsInitialized()) {
     PyEval_InitThreads();
   }
-
+#endif
   // Drop the GIL and remember the main thread state (current
   // thread state becomes NULL)
   pMainThreadState = PyEval_SaveThread();
@@ -67,7 +69,7 @@ void PyModuleRegistry::init()
   std::list<std::string> failed_modules;
 
   const std::string module_path = g_conf().get_val<std::string>("mgr_module_path");
-  std::set<std::string> module_names = probe_modules(module_path);
+  auto module_names = probe_modules(module_path);
   // Load python code
   for (const auto& module_name : module_names) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
@@ -175,6 +177,7 @@ void PyModuleRegistry::standby_start(MonClient &mc, Finisher &f)
 void PyModuleRegistry::active_start(
             DaemonStateIndex &ds, ClusterState &cs,
             const std::map<std::string, std::string> &kv_store,
+	    bool mon_provides_kv_sub,
             MonClient &mc, LogChannelRef clog_, LogChannelRef audit_clog_,
             Objecter &objecter_, Client &client_, Finisher &f,
             DaemonServer &server)
@@ -194,10 +197,13 @@ void PyModuleRegistry::active_start(
     standby_modules.reset();
   }
 
-  active_modules.reset(new ActivePyModules(
-              module_config, kv_store, ds, cs, mc,
-              clog_, audit_clog_, objecter_, client_, f, server,
-              *this));
+  active_modules.reset(
+    new ActivePyModules(
+      module_config,
+      kv_store, mon_provides_kv_sub,
+      ds, cs, mc,
+      clog_, audit_clog_, objecter_, client_, f, server,
+      *this));
 
   for (const auto &i : modules) {
     // Anything we're skipping because of !can_run will be flagged
@@ -258,31 +264,27 @@ void PyModuleRegistry::shutdown()
   Py_Finalize();
 }
 
-std::set<std::string> PyModuleRegistry::probe_modules(const std::string &path) const
+std::vector<std::string> PyModuleRegistry::probe_modules(const std::string &path) const
 {
-  DIR *dir = opendir(path.c_str());
-  if (!dir) {
-    return {};
-  }
+  const auto opt = g_conf().get_val<std::string>("mgr_disabled_modules");
+  const auto disabled_modules = ceph::split(opt);
 
-  std::set<std::string> modules_out;
-  struct dirent *entry = NULL;
-  while ((entry = readdir(dir)) != NULL) {
-    string n(entry->d_name);
-    string fn = path + "/" + n;
-    struct stat st;
-    int r = ::stat(fn.c_str(), &st);
-    if (r == 0 && S_ISDIR(st.st_mode)) {
-      string initfn = fn + "/module.py";
-      r = ::stat(initfn.c_str(), &st);
-      if (r == 0) {
-	modules_out.insert(n);
-      }
+  std::vector<std::string> modules;
+  for (const auto& entry: fs::directory_iterator(path)) {
+    if (!fs::is_directory(entry)) {
+      continue;
+    }
+    const std::string name = entry.path().filename();
+    if (std::count(disabled_modules.begin(), disabled_modules.end(), name)) {
+      dout(10) << "ignoring disabled module " << name << dendl;
+      continue;
+    }
+    auto module_path = entry.path() / "module.py";
+    if (fs::exists(module_path)) {
+      modules.push_back(name);
     }
   }
-  closedir(dir);
-
-  return modules_out;
+  return modules;
 }
 
 int PyModuleRegistry::handle_command(
@@ -370,6 +372,12 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
 
     // report failed always_on modules as health errors
     for (const auto& name : mgr_map.get_always_on_modules()) {
+      if (obsolete_modules.count(name)) {
+	continue;
+      }
+      if (active_modules->is_pending(name)) {
+	continue;
+      }
       if (!active_modules->module_exists(name)) {
         if (failed_modules.find(name) == failed_modules.end() &&
             dependency_modules.find(name) == dependency_modules.end()) {
@@ -421,7 +429,10 @@ void PyModuleRegistry::handle_config(const std::string &k, const std::string &v)
   std::lock_guard l(module_config.lock);
 
   if (!v.empty()) {
-    dout(10) << "Loaded module_config entry " << k << ":" << v << dendl;
+    // removing value to hide sensitive data going into mgr logs
+    // leaving this for debugging purposes
+    // dout(10) << "Loaded module_config entry " << k << ":" << v << dendl;
+    dout(10) << "Loaded module_config entry " << k << ":" << dendl;
     module_config.config[k] = v;
   } else {
     module_config.config.erase(k);
@@ -435,83 +446,3 @@ void PyModuleRegistry::handle_config_notify()
     active_modules->config_notify();
   }
 }
-
-void PyModuleRegistry::upgrade_config(
-    MonClient *monc,
-    const std::map<std::string, std::string> &old_config)
-{
-  // Only bother doing anything if we didn't already have
-  // some new-style config.
-  if (module_config.config.empty()) {
-    dout(1) << "Upgrading module configuration for Mimic" << dendl;
-    // Upgrade luminous->mimic: migrate config-key configuration
-    // into main configuration store
-    for (auto &i : old_config) {
-      auto last_slash = i.first.rfind('/');
-      const std::string module_name = i.first.substr(4, i.first.substr(4).find('/'));
-      const std::string key = i.first.substr(last_slash + 1);
-
-      const auto &value = i.second;
-
-      // Heuristic to skip things that look more like stores
-      // than configs.
-      bool is_config = true;
-      for (const auto &c : value) {
-        if (c == '\n' || c == '\r' || c < 0x20) {
-          is_config = false;
-          break;
-        }
-      }
-
-      if (value.size() > 256) {
-        is_config = false;
-      }
-
-      if (!is_config) {
-        dout(1) << "Not migrating config module:key "
-                << module_name << " : " << key << dendl;
-        continue;
-      }
-
-      // Check that the named module exists
-      auto module_iter = modules.find(module_name);
-      if (module_iter == modules.end()) {
-        dout(1) << "KV store contains data for unknown module '"
-                << module_name << "'" << dendl;
-        continue;
-      }
-      PyModuleRef module = module_iter->second;
-
-      // Parse option name out of key
-      std::string option_name;
-      auto slash_loc = key.find("/");
-      if (slash_loc != std::string::npos) {
-        if (key.size() > slash_loc + 1) {
-          // Localized option
-          option_name = key.substr(slash_loc + 1);
-        } else {
-          // Trailing slash: garbage.
-          derr << "Invalid mgr store key: '" << key << "'" << dendl;
-          continue;
-        }
-      } else {
-        option_name = key;
-      }
-
-      // Consult module schema to see if this is really
-      // a configuration value
-      if (!option_name.empty() && module->is_option(option_name)) {
-        module_config.set_config(monc, module_name, key, i.second);
-        dout(4) << "Rewrote configuration module:key "
-                << module_name << ":" << key << dendl;
-      } else {
-        dout(4) << "Leaving store module:key " << module_name
-                << ":" << key << " in store, not config" << dendl;
-      }
-    }
-  } else {
-    dout(10) << "Module configuration contains "
-             << module_config.config.size() << " keys" << dendl;
-  }
-}
-

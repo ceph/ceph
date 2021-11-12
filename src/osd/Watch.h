@@ -188,10 +188,8 @@ public:
 
   /// note receipt of a ping
   void got_ping(utime_t t);
-  utime_t get_last_ping() const {
-    return last_ping;
-  }
 
+  /// True if currently connected
   bool is_connected() const {
     return conn.get() != NULL;
   }
@@ -226,9 +224,6 @@ public:
 
   /// Generates context for use if watch timeout is delayed by scrub or recovery
   Context *get_delayed_cb();
-
-  /// True if currently connected
-  bool connected();
 
   /// Transitions Watch to connected, unregister_cb, resends pending Notifies
   void connect(

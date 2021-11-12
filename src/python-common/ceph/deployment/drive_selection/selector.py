@@ -5,9 +5,7 @@ try:
 except ImportError:
     pass
 
-from ceph.deployment.inventory import Device
-
-from ..inventory import Devices
+from ..inventory import Device
 from ..drive_group import DriveGroupSpec, DeviceSelection
 
 from .filter import FilterGenerator
@@ -18,15 +16,17 @@ logger = logging.getLogger(__name__)
 class DriveSelection(object):
     def __init__(self,
                  spec,  # type: DriveGroupSpec
-                 disks,  # type: Devices
+                 disks,  # type: List[Device]
+                 existing_daemons=None,  # type: Optional[int]
                  ):
         self.disks = disks.copy()
         self.spec = spec
+        self.existing_daemons = existing_daemons or 0
 
         self._data = self.assign_devices(self.spec.data_devices)
         self._wal = self.assign_devices(self.spec.wal_devices)
         self._db = self.assign_devices(self.spec.db_devices)
-        self._jornal = self.assign_devices(self.spec.journal_devices)
+        self._journal = self.assign_devices(self.spec.journal_devices)
 
     def data_devices(self):
         # type: () -> List[Device]
@@ -42,10 +42,9 @@ class DriveSelection(object):
 
     def journal_devices(self):
         # type: () -> List[Device]
-        return self._jornal
+        return self._journal
 
-    @staticmethod
-    def _limit_reached(device_filter, len_devices,
+    def _limit_reached(self, device_filter, len_devices,
                        disk_path):
         # type: (DeviceSelection, int, str) -> bool
         """ Check for the <limit> property and apply logic
@@ -62,7 +61,7 @@ class DriveSelection(object):
         """
         limit = device_filter.limit or 0
 
-        if limit > 0 and len_devices >= limit:
+        if limit > 0 and (len_devices + self.existing_daemons >= limit):
             logger.info("Refuse to add {} due to limit policy of <{}>".format(
                 disk_path, limit))
             return True
@@ -71,7 +70,7 @@ class DriveSelection(object):
     @staticmethod
     def _has_mandatory_idents(disk):
         # type: (Device) -> bool
-        """ Check for mandatory indentification fields
+        """ Check for mandatory identification fields
         """
         if disk.path:
             logger.debug("Found matching disk: {}".format(disk.path))
@@ -95,47 +94,58 @@ class DriveSelection(object):
 
         return a sorted(by path) list of devices
         """
-        if device_filter is None:
+
+        if not device_filter:
             logger.debug('device_filter is None')
             return []
+
+        if not self.spec.data_devices:
+            logger.debug('data_devices is None')
+            return []
+
+        if device_filter.paths:
+            logger.debug('device filter is using explicit paths')
+            return device_filter.paths
+
         devices = list()  # type: List[Device]
-        for _filter in FilterGenerator(device_filter):
-            if not _filter.is_matchable:
+        for disk in self.disks:
+            logger.debug("Processing disk {}".format(disk.path))
+
+            if not self._has_mandatory_idents(disk):
                 logger.debug(
-                    "Ignoring disk {}. Filter is not matchable".format(
-                        device_filter))
+                    "Ignoring disk {}. Missing mandatory idents".format(
+                        disk.path))
                 continue
 
-            for disk in self.disks.devices:
-                logger.debug("Processing disk {}".format(disk.path))
+            # break on this condition.
+            if self._limit_reached(device_filter, len(devices), disk.path):
+                logger.debug("Ignoring disk {}. Limit reached".format(
+                    disk.path))
+                break
 
-                # continue criterias
-                assert _filter.matcher is not None
-                if not _filter.matcher.compare(disk):
+            if disk in devices:
+                continue
+
+            if self.spec.filter_logic == 'AND':
+                if not all(m.compare(disk) for m in FilterGenerator(device_filter)):
                     logger.debug(
-                        "Ignoring disk {}. Filter did not match".format(
+                        "Ignoring disk {}. Not all filter did match the disk".format(
                             disk.path))
                     continue
 
-                if not self._has_mandatory_idents(disk):
+            if self.spec.filter_logic == 'OR':
+                if not any(m.compare(disk) for m in FilterGenerator(device_filter)):
                     logger.debug(
-                        "Ignoring disk {}. Missing mandatory idents".format(
+                        "Ignoring disk {}. No filter matched the disk".format(
                             disk.path))
                     continue
 
-                # break on this condition.
-                if self._limit_reached(device_filter, len(devices), disk.path):
-                    logger.debug("Ignoring disk {}. Limit reached".format(
-                        disk.path))
-                    break
-
-                if disk not in devices:
-                    logger.debug('Adding disk {}'.format(disk.path))
-                    devices.append(disk)
+            logger.debug('Adding disk {}'.format(disk.path))
+            devices.append(disk)
 
         # This disk is already taken and must not be re-assigned.
         for taken_device in devices:
-            if taken_device in self.disks.devices:
-                self.disks.devices.remove(taken_device)
+            if taken_device in self.disks:
+                self.disks.remove(taken_device)
 
         return sorted([x for x in devices], key=lambda dev: dev.path)

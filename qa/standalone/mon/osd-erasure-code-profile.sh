@@ -222,6 +222,17 @@ function TEST_profile_k_sanity() {
         m=1 || return 1
 }
 
+function TEST_invalid_crush_failure_domain() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+
+    local profile=ec_profile
+    local crush_failure_domain=invalid_failure_domain
+
+    ! ceph osd erasure-code-profile set $profile k=4 m=2 crush-failure-domain=$crush_failure_domain 2>&1 || return 1
+}
+
 main osd-erasure-code-profile "$@"
 
 # Local Variables:

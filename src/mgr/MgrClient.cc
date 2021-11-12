@@ -33,6 +33,9 @@ using std::string;
 using std::vector;
 
 using ceph::bufferlist;
+using ceph::make_message;
+using ceph::ref_cast;
+using ceph::ref_t;
 
 #define dout_subsys ceph_subsys_mgrc
 #undef dout_prefix
@@ -181,6 +184,7 @@ void MgrClient::reconnect()
   if (service_daemon) {
     daemon_dirty_status = true;
   }
+  task_dirty_status = true;
 
   // Don't send an open if we're just a client (i.e. doing
   // command-sending, not stats etc)
@@ -400,9 +404,7 @@ void MgrClient::_send_report()
 			    &last_config_bl_version);
 
   if (get_perf_report_cb) {
-    MetricPayload payload = get_perf_report_cb();
-    MetricReportMessage message(payload);
-    report->metric_report_message = message;
+    report->metric_report_message = MetricReportMessage(get_perf_report_cb());
   }
 
   session->con->send_message2(report);
@@ -549,7 +551,7 @@ bool MgrClient::handle_command_reply(
 
   auto &op = command_table.get_command(tid);
   if (op.outbl) {
-    op.outbl->claim(data);
+    *op.outbl = std::move(data);
   }
 
   if (op.outs) {

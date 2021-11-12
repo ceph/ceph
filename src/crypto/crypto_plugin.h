@@ -22,7 +22,7 @@
 #include "crypto/crypto_accel.h"
 // -----------------------------------------------------------------------------
 
-class CryptoPlugin : public Plugin {
+class CryptoPlugin : public ceph::Plugin {
 
 public:
   CryptoAccelRef cryptoaccel;

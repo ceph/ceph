@@ -7,12 +7,11 @@
 #include "include/rados/librados.hpp"
 #include "librbd/ImageCtx.h"
 #include "librbd/image/TypeTraits.h"
+#include "common/Timer.h"
 
 #include <list>
 
 class Context;
-class ContextWQ;
-class SafeTimer;
 
 namespace librbd {
 

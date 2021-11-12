@@ -32,6 +32,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".snap "
 
+using namespace std;
 
 void SnapServer::reset_state()
 {
@@ -109,7 +110,7 @@ void SnapServer::_prepare(const bufferlist& bl, uint64_t reqid, mds_rank_t bymds
       // bump last_snap... we use it as a version value on the snaprealm.
       ++last_snap;
 
-      pending_destroy[version] = pair<snapid_t,snapid_t>(snapid, last_snap);
+      pending_destroy[version] = {snapid, last_snap};
       dout(10) << "prepare v" << version << " destroy " << snapid << " seq " << last_snap << dendl;
 
       encode(last_snap, out);
@@ -418,9 +419,9 @@ void SnapServer::dump(Formatter *f) const
 
   f->open_object_section("need_to_purge");
   for (map<int, set<snapid_t> >::const_iterator i = need_to_purge.begin(); i != need_to_purge.end(); ++i) {
-    stringstream pool_id;
-    pool_id << i->first;
-    f->open_array_section(pool_id.str().c_str());
+    CachedStackStringStream css;
+    *css << i->first;
+    f->open_array_section(css->strv());
     for (set<snapid_t>::const_iterator s = i->second.begin(); s != i->second.end(); ++s) {
       f->dump_unsigned("snapid", s->val);
     }

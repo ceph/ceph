@@ -9,8 +9,10 @@
 #include <boost/logic/tribool.hpp>
 #include <boost/optional.hpp>
 
+#include "rgw_service.h"
 #include "rgw_common.h"
 #include "rgw_auth.h"
+#include "rgw_user.h"
 
 namespace rgw {
 namespace auth {
@@ -76,6 +78,10 @@ public:
     return get_decoratee().is_owner_of(uid);
   }
 
+  bool is_anonymous() const override {
+    return get_decoratee().is_anonymous();
+  }
+
   uint32_t get_perm_mask() const override {
     return get_decoratee().get_perm_mask();
   }
@@ -84,8 +90,12 @@ public:
     return get_decoratee().get_identity_type();
   }
 
-  string get_acct_name() const override {
+  std::string get_acct_name() const override {
     return get_decoratee().get_acct_name();
+  }
+
+  std::string get_subuser() const override {
+    return get_decoratee().get_subuser();
   }
 
   bool is_identity(
@@ -95,6 +105,10 @@ public:
 
   void to_str(std::ostream& out) const override {
     get_decoratee().to_str(out);
+  }
+
+  std::string get_role_tenant() const override {     /* in/out */
+    return get_decoratee().get_role_tenant();
   }
 
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override {  /* out */
@@ -109,7 +123,7 @@ public:
 
 template <typename T>
 class ThirdPartyAccountApplier : public DecoratedApplier<T> {
-  /* const */RGWCtl* const ctl;
+  rgw::sal::Store* store;
   const rgw_user acct_user_override;
 
 public:
@@ -119,11 +133,11 @@ public:
   static const rgw_user UNKNOWN_ACCT;
 
   template <typename U>
-  ThirdPartyAccountApplier(RGWCtl* const ctl,
+  ThirdPartyAccountApplier(rgw::sal::Store* store,
                            const rgw_user &acct_user_override,
                            U&& decoratee)
     : DecoratedApplier<T>(std::move(decoratee)),
-      ctl(ctl),
+      store(store),
       acct_user_override(acct_user_override) {
   }
 
@@ -155,19 +169,31 @@ void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, 
     /* The override has been specified but the account belongs to the authenticated
      * identity. We may safely forward the call to a next stage. */
     DecoratedApplier<T>::load_acct_info(dpp, user_info);
+  } else if (this->is_anonymous()) {
+    /* If the user was authed by the anonymous engine then scope the ANON user
+     * to the correct tenant */
+    if (acct_user_override.tenant.empty())
+      user_info.user_id = rgw_user(acct_user_override.id, RGW_USER_ANON_ID);
+    else
+      user_info.user_id = rgw_user(acct_user_override.tenant, RGW_USER_ANON_ID);
   } else {
     /* Compatibility mechanism for multi-tenancy. For more details refer to
      * load_acct_info method of rgw::auth::RemoteApplier. */
+    std::unique_ptr<rgw::sal::User> user;
+
     if (acct_user_override.tenant.empty()) {
       const rgw_user tenanted_uid(acct_user_override.id, acct_user_override.id);
+      user = store->get_user(tenanted_uid);
 
-      if (ctl->user->get_info_by_uid(tenanted_uid, &user_info, null_yield) >= 0) {
+      if (user->load_user(dpp, null_yield) >= 0) {
+	user_info = user->get_info();
         /* Succeeded. */
         return;
       }
     }
 
-    const int ret = ctl->user->get_info_by_uid(acct_user_override, &user_info, null_yield);
+    user = store->get_user(acct_user_override);
+    const int ret = user->load_user(dpp, null_yield);
     if (ret < 0) {
       /* We aren't trying to recover from ENOENT here. It's supposed that creating
        * someone else's account isn't a thing we want to support in this filter. */
@@ -177,15 +203,15 @@ void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, 
         throw ret;
       }
     }
-
+    user_info = user->get_info();
   }
 }
 
 template <typename T> static inline
-ThirdPartyAccountApplier<T> add_3rdparty(RGWCtl* const ctl,
+ThirdPartyAccountApplier<T> add_3rdparty(rgw::sal::Store* store,
                                          const rgw_user &acct_user_override,
                                          T&& t) {
-  return ThirdPartyAccountApplier<T>(ctl, acct_user_override,
+  return ThirdPartyAccountApplier<T>(store, acct_user_override,
                                      std::forward<T>(t));
 }
 
@@ -193,19 +219,19 @@ ThirdPartyAccountApplier<T> add_3rdparty(RGWCtl* const ctl,
 template <typename T>
 class SysReqApplier : public DecoratedApplier<T> {
   CephContext* const cct;
-  /*const*/ RGWCtl* const ctl;
+  rgw::sal::Store* store;
   const RGWHTTPArgs& args;
   mutable boost::tribool is_system;
 
 public:
   template <typename U>
   SysReqApplier(CephContext* const cct,
-                /*const*/ RGWCtl* const ctl,
+		rgw::sal::Store* store,
                 const req_state* const s,
                 U&& decoratee)
     : DecoratedApplier<T>(std::forward<T>(decoratee)),
       cct(cct),
-      ctl(ctl),
+      store(store),
       args(s->info.args),
       is_system(boost::logic::indeterminate) {
   }
@@ -236,12 +262,12 @@ void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo
       /* We aren't writing directly to user_info for consistency and security
        * reasons. rgw_get_user_info_by_uid doesn't trigger the operator=() but
        * calls ::decode instead. */
-      RGWUserInfo euser_info;
-      if (ctl->user->get_info_by_uid(effective_uid, &euser_info, null_yield) < 0) {
+      std::unique_ptr<rgw::sal::User> user = store->get_user(effective_uid);
+      if (user->load_user(dpp, null_yield) < 0) {
         //ldpp_dout(dpp, 0) << "User lookup failed!" << dendl;
         throw -EACCES;
       }
-      user_info = euser_info;
+      user_info = user->get_info();
     }
   }
 }
@@ -263,10 +289,10 @@ void SysReqApplier<T>::modify_request_state(const DoutPrefixProvider* dpp, req_s
 
 template <typename T> static inline
 SysReqApplier<T> add_sysreq(CephContext* const cct,
-                            /* const */ RGWCtl* const ctl,
+			    rgw::sal::Store* store,
                             const req_state* const s,
                             T&& t) {
-  return SysReqApplier<T>(cct, ctl, s, std::forward<T>(t));
+  return SysReqApplier<T>(cct, store, s, std::forward<T>(t));
 }
 
 } /* namespace auth */

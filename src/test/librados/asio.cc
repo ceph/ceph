@@ -19,16 +19,16 @@
 #include "common/errno.h"
 #include "global/global_init.h"
 
-#ifdef HAVE_BOOST_CONTEXT
 #define BOOST_COROUTINES_NO_DEPRECATION_WARNING
 #include <boost/range/begin.hpp>
 #include <boost/range/end.hpp>
 #include <boost/asio/spawn.hpp>
-#endif
 #include <boost/asio/use_future.hpp>
 
 #define dout_subsys ceph_subsys_rados
 #define dout_context g_ceph_context
+
+using namespace std;
 
 // test fixture for global setup/teardown
 class AsioRados : public ::testing::Test {
@@ -109,7 +109,6 @@ TEST_F(AsioRados, AsyncReadFuture)
   EXPECT_THROW(f2.get(), boost::system::system_error);
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 TEST_F(AsioRados, AsyncReadYield)
 {
   boost::asio::io_service service;
@@ -131,7 +130,6 @@ TEST_F(AsioRados, AsyncReadYield)
 
   service.run();
 }
-#endif
 
 TEST_F(AsioRados, AsyncWriteCallback)
 {
@@ -173,7 +171,6 @@ TEST_F(AsioRados, AsyncWriteFuture)
   EXPECT_THROW(f2.get(), boost::system::system_error);
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 TEST_F(AsioRados, AsyncWriteYield)
 {
   boost::asio::io_service service;
@@ -200,7 +197,6 @@ TEST_F(AsioRados, AsyncWriteYield)
 
   service.run();
 }
-#endif
 
 TEST_F(AsioRados, AsyncReadOperationCallback)
 {
@@ -251,7 +247,6 @@ TEST_F(AsioRados, AsyncReadOperationFuture)
   EXPECT_THROW(f2.get(), boost::system::system_error);
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 TEST_F(AsioRados, AsyncReadOperationYield)
 {
   boost::asio::io_service service;
@@ -279,7 +274,6 @@ TEST_F(AsioRados, AsyncReadOperationYield)
 
   service.run();
 }
-#endif
 
 TEST_F(AsioRados, AsyncWriteOperationCallback)
 {
@@ -334,7 +328,6 @@ TEST_F(AsioRados, AsyncWriteOperationFuture)
   EXPECT_THROW(f2.get(), boost::system::system_error);
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 TEST_F(AsioRados, AsyncWriteOperationYield)
 {
   boost::asio::io_service service;
@@ -362,12 +355,10 @@ TEST_F(AsioRados, AsyncWriteOperationYield)
 
   service.run();
 }
-#endif
 
 int main(int argc, char **argv)
 {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,

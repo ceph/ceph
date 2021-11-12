@@ -16,12 +16,12 @@ typedef RadosTestEC LibRadosWatchNotifyEC;
 int notify_sleep = 0;
 
 // notify
-static sem_t *sem;
+static sem_t sem;
 
 static void watch_notify_test_cb(uint8_t opcode, uint64_t ver, void *arg)
 {
   std::cout << __func__ << std::endl;
-  sem_post(sem);
+  sem_post(&sem);
 }
 
 class LibRadosWatchNotify : public RadosTest
@@ -85,38 +85,54 @@ class WatchNotifyTestCtx2;
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 TEST_F(LibRadosWatchNotify, WatchNotify) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   uint64_t handle;
   ASSERT_EQ(0,
       rados_watch(ioctx, "foo", 0, &handle, watch_notify_test_cb, NULL));
-  ASSERT_EQ(0, rados_notify(ioctx, "foo", 0, NULL, 0));
+  for (unsigned i=0; i<10; ++i) {
+    int r = rados_notify(ioctx, "foo", 0, NULL, 0);
+    if (r == 0) {
+      break;
+    }
+    if (!getenv("ALLOW_TIMEOUTS")) {
+      ASSERT_EQ(0, r);
+    }
+  }
   TestAlarm alarm;
-  sem_wait(sem);
+  sem_wait(&sem);
   rados_unwatch(ioctx, "foo", handle);
 
   // when dne ...
   ASSERT_EQ(-ENOENT,
       rados_watch(ioctx, "dne", 0, &handle, watch_notify_test_cb, NULL));
 
-  sem_close(sem);
+  sem_destroy(&sem);
 }
 
 TEST_F(LibRadosWatchNotifyEC, WatchNotify) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   uint64_t handle;
   ASSERT_EQ(0,
       rados_watch(ioctx, "foo", 0, &handle, watch_notify_test_cb, NULL));
-  ASSERT_EQ(0, rados_notify(ioctx, "foo", 0, NULL, 0));
+  for (unsigned i=0; i<10; ++i) {
+    int r = rados_notify(ioctx, "foo", 0, NULL, 0);
+    if (r == 0) {
+      break;
+    }
+    if (!getenv("ALLOW_TIMEOUTS")) {
+      ASSERT_EQ(0, r);
+    }
+  }
   TestAlarm alarm;
-  sem_wait(sem);
+  sem_wait(&sem);
   rados_unwatch(ioctx, "foo", handle);
-  sem_close(sem);
+  sem_destroy(&sem);
 }
 
 #pragma GCC diagnostic pop
@@ -310,20 +326,19 @@ TEST_F(LibRadosWatchNotify, AioNotify) {
   ASSERT_EQ(0, rados_aio_get_return_value(comp));
   rados_aio_release(comp);
 
-  bufferlist reply;
-  reply.append(reply_buf, reply_buf_len);
-  std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
-  std::set<std::pair<uint64_t,uint64_t> > missed_map;
-  auto reply_p = reply.cbegin();
-  decode(reply_map, reply_p);
-  decode(missed_map, reply_p);
-  ASSERT_EQ(1u, reply_map.size());
-  ASSERT_EQ(0u, missed_map.size());
+  size_t nr_acks, nr_timeouts;
+  notify_ack_t *acks = nullptr;
+  notify_timeout_t *timeouts = nullptr;
+  ASSERT_EQ(0, rados_decode_notify_response(reply_buf, reply_buf_len,
+                                            &acks, &nr_acks, &timeouts, &nr_timeouts));
+  ASSERT_EQ(1u, nr_acks);
+  ASSERT_EQ(0u, nr_timeouts);
   ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_EQ(1u, notify_cookies.count(handle));
-  ASSERT_EQ(5u, reply_map.begin()->second.length());
-  ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
+  ASSERT_EQ(5u, acks[0].payload_len);
+  ASSERT_EQ(0, strncmp("reply", acks[0].payload, acks[0].payload_len));
   ASSERT_GT(rados_watch_check(ioctx, handle), 0);
+  rados_free_notify_response(acks, nr_acks, timeouts);
   rados_buffer_free(reply_buf);
 
   // try it on a non-existent object ... our buffer pointers
@@ -478,7 +493,7 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
   rados_conf_set(cluster, "objecter_inject_no_watch_ping", "true");
   // allow a long time here since an osd peering event will renew our
   // watch.
-  int left = 16 * timeout;
+  int left = 256 * timeout;
   std::cout << "waiting up to " << left << " for osd to time us out ..."
 	    << std::endl;
   while (notify_err == 0 && --left) {
@@ -574,7 +589,10 @@ TEST_F(LibRadosWatchNotify, AioWatchDelete2) {
   }
   ASSERT_TRUE(left > 0);
   ASSERT_EQ(-ENOTCONN, notify_err);
-  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+  int rados_watch_check_err = rados_watch_check(ioctx, handle);
+  // We may hit ENOENT due to socket failure injection and a forced reconnect
+  EXPECT_TRUE(rados_watch_check_err == -ENOTCONN || rados_watch_check_err == -ENOENT)
+    << "Where rados_watch_check_err = " << rados_watch_check_err;
   ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &comp));
   rados_aio_unwatch(ioctx, handle, comp);
   ASSERT_EQ(0, rados_aio_wait_for_complete(comp));

@@ -3,10 +3,10 @@
 
 #include "include/stringify.h"
 #include "common/Timer.h"
-#include "common/WorkQueue.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "InstanceWatcher.h"
 #include "Instances.h"
 #include "Threads.h"
@@ -130,7 +130,7 @@ void Instances<I>::handle_acked(const InstanceIds& instance_ids) {
 
 template <typename I>
 void Instances<I>::notify_instances_added(const InstanceIds& instance_ids) {
-  std::lock_guard locker{m_lock};
+  std::unique_lock locker{m_lock};
   InstanceIds added_instance_ids;
   for (auto& instance_id : instance_ids) {
     auto it = m_instances.find(instance_id);
@@ -144,9 +144,9 @@ void Instances<I>::notify_instances_added(const InstanceIds& instance_ids) {
   }
 
   dout(5) << "instance_ids=" << added_instance_ids << dendl;
-  m_lock.unlock();
+  locker.unlock();
   m_listener.handle_added(added_instance_ids);
-  m_lock.lock();
+  locker.lock();
 
   for (auto& instance_id : added_instance_ids) {
     auto it = m_instances.find(instance_id);
@@ -262,7 +262,7 @@ void Instances<I>::remove_instances(const Instances<I>::clock_t::time_point& tim
 
   auto gather_ctx = new C_Gather(m_cct, ctx);
   for (auto& instance_id : instance_ids) {
-    InstanceWatcher<I>::remove_instance(m_ioctx, m_threads->work_queue,
+    InstanceWatcher<I>::remove_instance(m_ioctx, *m_threads->asio_engine,
                                         instance_id, gather_ctx->new_sub());
   }
 
@@ -278,7 +278,7 @@ void Instances<I>::handle_remove_instances(
   dout(10) << "r=" << r << ", instance_ids=" << instance_ids << dendl;
   ceph_assert(r == 0);
 
-  // fire removed notification now that instances have been blacklisted
+  // fire removed notification now that instances have been blocklisted
   m_threads->work_queue->queue(
     new C_NotifyInstancesRemoved(this, instance_ids), 0);
 

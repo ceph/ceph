@@ -17,6 +17,8 @@
 
 #include <string>
 
+#include <boost/intrusive_ptr.hpp>
+
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/radosstriper/libradosstriper.h"
@@ -26,6 +28,7 @@
 #include "librados/IoCtxImpl.h"
 #include "librados/AioCompletionImpl.h"
 #include "common/RefCountedObj.h"
+#include "common/ceph_context.h"
 
 namespace libradosstriper {
 
@@ -61,7 +64,7 @@ struct RadosStriperImpl {
   // xattrs
   int getxattr(const object_t& soid, const char *name, bufferlist& bl);
   int setxattr(const object_t& soid, const char *name, bufferlist& bl);
-  int getxattrs(const object_t& soid, map<string, bufferlist>& attrset);
+  int getxattrs(const object_t& soid, std::map<std::string, bufferlist>& attrset);
   int rmxattr(const object_t& soid, const char *name);
 
   // io

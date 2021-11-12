@@ -33,7 +33,9 @@ markup supported by Breathe_.
 .. _Doxygen: http://www.doxygen.nl/
 .. _Breathe: https://github.com/michaeljones/breathe
 
-The general format for function documentation is::
+The general format for function documentation is
+
+.. code-block:: c
 
   /**
    * Short description
@@ -50,6 +52,14 @@ This should be in the header where the function is declared, and
 functions should be grouped into logical categories. The `librados C
 API`_ provides a complete example. It is pulled into Sphinx by
 `librados.rst`_, which is rendered at :doc:`/rados/api/librados`.
+
+To generate the doxygen documentation in HTML format use:
+
+::
+
+   # cmake --build . --target doxygen
+
+HTML output will be under: ``build-doc/doxygen/html`` 
 
 .. _`librados C API`: https://github.com/ceph/ceph/blob/master/src/include/rados/librados.h
 .. _`librados.rst`: https://github.com/ceph/ceph/raw/master/doc/rados/api/librados.rst

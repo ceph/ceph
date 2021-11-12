@@ -10,24 +10,34 @@
 
 #include "msg/async/AsyncMessenger.h"
 
-Messenger *Messenger::create_client_messenger(CephContext *cct, string lname)
+Messenger *Messenger::create_client_messenger(CephContext *cct, std::string lname)
 {
   std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf.get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
-  auto nonce = ceph::util::generate_random_number<uint64_t>();
+  auto nonce = get_random_nonce();
   return Messenger::create(cct, public_msgr_type, entity_name_t::CLIENT(),
-			   std::move(lname), nonce, 0);
+			   std::move(lname), nonce);
 }
 
-Messenger *Messenger::create(CephContext *cct, const string &type,
-			     entity_name_t name, string lname,
-			     uint64_t nonce, uint64_t cflags)
+uint64_t Messenger::get_pid_nonce()
 {
-  int r = -1;
-  if (type == "random") {
-    r = 0;
-    //r = ceph::util::generate_random_number(0, 1);
+  uint64_t nonce = getpid();
+  if (nonce == 1 || getenv("CEPH_USE_RANDOM_NONCE")) {
+    // we're running in a container; use a random number instead!
+    nonce = ceph::util::generate_random_number<uint64_t>();
   }
-  if (r == 0 || type.find("async") != std::string::npos)
+  return nonce;
+}
+
+uint64_t Messenger::get_random_nonce()
+{
+  return ceph::util::generate_random_number<uint64_t>();
+}
+
+Messenger *Messenger::create(CephContext *cct, const std::string &type,
+			     entity_name_t name, std::string lname,
+			     uint64_t nonce)
+{
+  if (type == "random" || type.find("async") != std::string::npos)
     return new AsyncMessenger(cct, name, type, std::move(lname), nonce);
   lderr(cct) << "unrecognized ms_type '" << type << "'" << dendl;
   return nullptr;
@@ -48,9 +58,11 @@ Messenger::Messenger(CephContext *cct_, entity_name_t w)
     socket_priority(-1),
     cct(cct_),
     crcflags(get_default_crc_flags(cct->_conf)),
-    auth_registry(cct)
+    auth_registry(cct),
+    comp_registry(cct)
 {
   auth_registry.refresh_config();
+  comp_registry.refresh_config();
 }
 
 void Messenger::set_endpoint_addr(const entity_addr_t& a,

@@ -58,13 +58,21 @@ private:
   /**
    * Discover python modules from local disk
    */
-  std::set<std::string> probe_modules(const std::string &path) const;
+  std::vector<std::string> probe_modules(const std::string &path) const;
 
   PyModuleConfig module_config;
 
 public:
   void handle_config(const std::string &k, const std::string &v);
   void handle_config_notify();
+
+  void update_kv_data(
+    const std::string prefix,
+    bool incremental,
+    const map<std::string, std::optional<bufferlist>, std::less<>>& data) {
+    ceph_assert(active_modules);
+    active_modules->update_kv_data(prefix, incremental, data);
+  }
 
   /**
    * Get references to all modules (whether they have loaded and/or
@@ -90,6 +98,10 @@ public:
    */
   bool handle_mgr_map(const MgrMap &mgr_map_);
 
+  bool have_standby_modules() const {
+    return !!standby_modules;
+  }
+
   void init();
 
   void upgrade_config(
@@ -99,6 +111,7 @@ public:
   void active_start(
                 DaemonStateIndex &ds, ClusterState &cs,
                 const std::map<std::string, std::string> &kv_store,
+		bool mon_provides_kv_sub,
                 MonClient &mc, LogChannelRef clog_, LogChannelRef audit_clog_,
                 Objecter &objecter_, Client &client_, Finisher &f,
                 DaemonServer &server);
@@ -193,7 +206,8 @@ public:
     auto itp = clients.equal_range(std::string(name));
     for (auto it = itp.first; it != itp.second; ++it) {
       if (it->second == addrs) {
-        it = clients.erase(it);
+        clients.erase(it);
+        return;
       }
     }
   }

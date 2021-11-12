@@ -10,12 +10,13 @@ import {
 } from '@angular/core';
 
 import * as Chart from 'chart.js';
-import * as _ from 'lodash';
+import _ from 'lodash';
+import { PluginServiceGlobalRegistrationAndOptions } from 'ng2-charts';
 
-import { ChartTooltip } from '../../../shared/models/chart-tooltip';
-import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { HealthPieColor } from './health-pie-color.enum';
+import { CssHelper } from '~/app/shared/classes/css-helper';
+import { ChartTooltip } from '~/app/shared/models/chart-tooltip';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 
 @Component({
   selector: 'cd-health-pie',
@@ -42,67 +43,110 @@ export class HealthPieComponent implements OnChanges, OnInit {
   prepareFn = new EventEmitter();
 
   chartConfig: any = {
-    chartType: 'pie',
+    chartType: 'doughnut',
     dataset: [
       {
         label: null,
         borderWidth: 0
       }
     ],
+    colors: [
+      {
+        backgroundColor: [
+          this.cssHelper.propertyValue('chart-color-green'),
+          this.cssHelper.propertyValue('chart-color-yellow'),
+          this.cssHelper.propertyValue('chart-color-orange'),
+          this.cssHelper.propertyValue('chart-color-red'),
+          this.cssHelper.propertyValue('chart-color-blue')
+        ]
+      }
+    ],
     options: {
+      cutoutPercentage: 90,
+      events: ['click', 'mouseout', 'touchstart'],
       legend: {
         display: true,
         position: 'right',
-        labels: { usePointStyle: true },
-        onClick: (event, legendItem) => {
-          this.onLegendClick(event, legendItem);
+        labels: {
+          boxWidth: 10,
+          usePointStyle: false
         }
       },
-      animation: { duration: 0 },
+      plugins: {
+        center_text: true
+      },
       tooltips: {
-        enabled: false
+        enabled: true,
+        displayColors: false,
+        backgroundColor: this.cssHelper.propertyValue('chart-color-tooltip-background'),
+        cornerRadius: 0,
+        bodyFontSize: 14,
+        bodyFontStyle: '600',
+        position: 'nearest',
+        xPadding: 12,
+        yPadding: 12,
+        callbacks: {
+          label: (item: Record<string, any>, data: Record<string, any>) => {
+            let text = data.labels[item.index];
+            if (!text.includes('%')) {
+              text = `${text} (${data.datasets[item.datasetIndex].data[item.index]}%)`;
+            }
+            return text;
+          }
+        }
       },
       title: {
         display: false
       }
     }
   };
-  private hiddenSlices = [];
 
-  constructor(private dimlessBinary: DimlessBinaryPipe, private dimless: DimlessPipe) {}
-
-  ngOnInit() {
-    // An extension to Chart.js to enable rendering some
-    // text in the middle of a doughnut
-    Chart.pluginService.register({
-      beforeDraw: function(chart: any) {
-        if (!chart.options.center_text) {
+  public doughnutChartPlugins: PluginServiceGlobalRegistrationAndOptions[] = [
+    {
+      id: 'center_text',
+      beforeDraw(chart: Chart) {
+        const cssHelper = new CssHelper();
+        const defaultFontFamily = 'Helvetica Neue, Helvetica, Arial, sans-serif';
+        Chart.defaults.global.defaultFontFamily = defaultFontFamily;
+        const ctx = chart.ctx;
+        if (!chart.options.plugins.center_text || !chart.data.datasets[0].label) {
           return;
         }
 
-        const width = chart.chart.width,
-          height = chart.chart.height,
-          ctx = chart.chart.ctx;
+        ctx.save();
+        const label = chart.data.datasets[0].label.split('\n');
 
-        ctx.restore();
-        const fontSize = (height / 114).toFixed(2);
-        ctx.font = fontSize + 'em sans-serif';
+        const centerX = (chart.chartArea.left + chart.chartArea.right) / 2;
+        const centerY = (chart.chartArea.top + chart.chartArea.bottom) / 2;
+        ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        const text = chart.options.center_text,
-          textX = Math.round((width - ctx.measureText(text).width) / 2),
-          textY = height / 2;
+        ctx.font = `24px ${defaultFontFamily}`;
+        ctx.fillStyle = cssHelper.propertyValue('chart-color-center-text');
+        ctx.fillText(label[0], centerX, centerY - 10);
 
-        ctx.fillText(text, textX, textY);
-        ctx.save();
+        if (label.length > 1) {
+          ctx.font = `14px ${defaultFontFamily}`;
+          ctx.fillStyle = cssHelper.propertyValue('chart-color-center-text-description');
+          ctx.fillText(label[1], centerX, centerY + 10);
+        }
+        ctx.restore();
       }
-    });
+    }
+  ];
 
-    const getStyleTop = (tooltip, positionY) => {
+  constructor(
+    private dimlessBinary: DimlessBinaryPipe,
+    private dimless: DimlessPipe,
+    private cssHelper: CssHelper
+  ) {}
+
+  ngOnInit() {
+    const getStyleTop = (tooltip: any, positionY: number) => {
       return positionY + tooltip.caretY - tooltip.height - 10 + 'px';
     };
 
-    const getStyleLeft = (tooltip, positionX) => {
+    const getStyleLeft = (tooltip: any, positionX: number) => {
       return positionX + tooltip.caretX + 'px';
     };
 
@@ -113,27 +157,9 @@ export class HealthPieComponent implements OnChanges, OnInit {
       getStyleTop
     );
 
-    const getBody = (body) => {
+    chartTooltip.getBody = (body: any) => {
       return this.getChartTooltipBody(body);
     };
-
-    chartTooltip.getBody = getBody;
-
-    this.chartConfig.options.tooltips.custom = (tooltip) => {
-      chartTooltip.customTooltips(tooltip);
-    };
-
-    this.chartConfig.colors = [
-      {
-        backgroundColor: [
-          HealthPieColor.DEFAULT_RED,
-          HealthPieColor.DEFAULT_BLUE,
-          HealthPieColor.DEFAULT_ORANGE,
-          HealthPieColor.DEFAULT_GREEN,
-          HealthPieColor.DEFAULT_MAGENTA
-        ]
-      }
-    ];
 
     _.merge(this.chartConfig, this.config);
 
@@ -142,11 +168,10 @@ export class HealthPieComponent implements OnChanges, OnInit {
 
   ngOnChanges() {
     this.prepareFn.emit([this.chartConfig, this.data]);
-    this.hideSlices();
     this.setChartSliceBorderWidth();
   }
 
-  private getChartTooltipBody(body) {
+  private getChartTooltipBody(body: string[]) {
     const bodySplit = body[0].split(': ');
 
     if (this.showLabelAsTooltip) {
@@ -162,26 +187,12 @@ export class HealthPieComponent implements OnChanges, OnInit {
 
   private setChartSliceBorderWidth() {
     let nonZeroValueSlices = 0;
-    _.forEach(this.chartConfig.dataset[0].data, function(slice) {
+    _.forEach(this.chartConfig.dataset[0].data, function (slice) {
       if (slice > 0) {
         nonZeroValueSlices += 1;
       }
     });
 
     this.chartConfig.dataset[0].borderWidth = nonZeroValueSlices > 1 ? 1 : 0;
-  }
-
-  private onLegendClick(event, legendItem) {
-    event.stopPropagation();
-    this.hiddenSlices[legendItem.index] = !legendItem.hidden;
-    this.ngOnChanges();
-  }
-
-  private hideSlices() {
-    _.forEach(this.chartConfig.dataset[0].data, (_slice, sliceIndex) => {
-      if (this.hiddenSlices[sliceIndex]) {
-        this.chartConfig.dataset[0].data[sliceIndex] = undefined;
-      }
-    });
   }
 }

@@ -8,6 +8,7 @@
 
 #include "rgw_torrent.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "include/str_list.h"
 #include "include/rados/librados.hpp"
 
@@ -15,7 +16,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using ceph::crypto::MD5;
+using namespace std;
 using namespace librados;
 using namespace boost;
 using ceph::crypto::SHA1;
@@ -36,13 +37,13 @@ seed::~seed()
   store = NULL;
 }
 
-void seed::init(struct req_state *p_req, rgw::sal::RGWRadosStore *p_store)
+void seed::init(struct req_state *p_req, rgw::sal::Store* p_store)
 {
   s = p_req;
   store = p_store;
 }
 
-int seed::get_torrent_file(RGWRados::Object::Read &read_op,
+int seed::get_torrent_file(rgw::sal::Object* object,
                            uint64_t &total_len,
                            ceph::bufferlist &bl_data,
                            rgw_obj &obj)
@@ -65,17 +66,17 @@ int seed::get_torrent_file(RGWRados::Object::Read &read_op,
 
   string oid, key;
   get_obj_bucket_and_oid_loc(obj, oid, key);
-  ldout(s->cct, 20) << "NOTICE: head obj oid= " << oid << dendl;
+  ldpp_dout(s, 20) << "NOTICE: head obj oid= " << oid << dendl;
 
   const set<string> obj_key{RGW_OBJ_TORRENT};
   map<string, bufferlist> m;
-  const int r = read_op.state.cur_ioctx->omap_get_vals_by_keys(oid, obj_key, &m);
+  const int r = object->omap_get_vals_by_keys(s, oid, obj_key, &m);
   if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
+    ldpp_dout(s, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
     return r;
   }
   if (m.size() != 1) {
-    ldout(s->cct, 0) << "ERROR: omap key " RGW_OBJ_TORRENT " not found" << dendl;
+    ldpp_dout(s, 0) << "ERROR: omap key " RGW_OBJ_TORRENT " not found" << dendl;
     return -EINVAL;
   }
   bl.append(std::move(m.begin()->second));
@@ -101,7 +102,7 @@ void seed::update(bufferlist &bl)
   sha1(&h, bl, bl.length());
 }
 
-int seed::complete()
+int seed::complete(optional_yield y)
 {
   uint64_t remain = info.len%info.piece_length;
   uint8_t  remain_len = ((remain > 0)? 1 : 0);
@@ -112,10 +113,10 @@ int seed::complete()
   do_encode();
 
   /* save torrent data into OMAP */
-  ret = save_torrent_file();
+  ret = save_torrent_file(y);
   if (0 != ret)
   {
-    ldout(s->cct, 0) << "ERROR: failed to save_torrent_file() ret= "<< ret << dendl;
+    ldpp_dout(s, 0) << "ERROR: failed to save_torrent_file() ret= "<< ret << dendl;
     return ret;
   }
 
@@ -203,7 +204,7 @@ void seed::set_announce()
 
   if (announce_list.empty())
   {
-    ldout(s->cct, 5) << "NOTICE: announce_list is empty " << dendl;    
+    ldpp_dout(s, 5) << "NOTICE: announce_list is empty " << dendl;    
     return;
   }
 
@@ -244,22 +245,15 @@ void seed::do_encode()
   dencode.bencode_end(bl);
 }
 
-int seed::save_torrent_file()
+int seed::save_torrent_file(optional_yield y)
 {
   int op_ret = 0;
   string key = RGW_OBJ_TORRENT;
-  rgw_obj obj(s->bucket, s->object.name);    
 
-  rgw_raw_obj raw_obj;
-  store->getRados()->obj_to_raw(s->bucket_info.placement_rule, obj, &raw_obj);
-
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(raw_obj);
-
-  op_ret = sysobj.omap().set(key, bl, null_yield);
+  op_ret = s->object->omap_set_val_by_key(s, key, bl, false, y);
   if (op_ret < 0)
   {
-    ldout(s->cct, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;
+    ldpp_dout(s, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;
     return op_ret;
   }
 

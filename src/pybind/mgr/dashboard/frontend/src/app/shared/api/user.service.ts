@@ -1,11 +1,13 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { UserFormModel } from '../../core/auth/user-form/user-form.model';
-import { ApiModule } from './api.module';
+import { Observable, of as observableOf } from 'rxjs';
+import { catchError, mapTo } from 'rxjs/operators';
+
+import { UserFormModel } from '~/app/core/auth/user-form/user-form.model';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class UserService {
   constructor(private http: HttpClient) {}
@@ -30,7 +32,7 @@ export class UserService {
     return this.http.put(`api/user/${user.username}`, user);
   }
 
-  changePassword(username, oldPassword, newPassword) {
+  changePassword(username: string, oldPassword: string, newPassword: string) {
     // Note, the specified user MUST be logged in to be able to change
     // the password. The backend ensures that the password of another
     // user can not be changed, otherwise an error will be thrown.
@@ -40,15 +42,21 @@ export class UserService {
     });
   }
 
+  validateUserName(user_name: string): Observable<boolean> {
+    return this.get(user_name).pipe(
+      mapTo(true),
+      catchError((error) => {
+        error.preventDefault();
+        return observableOf(false);
+      })
+    );
+  }
+
   validatePassword(password: string, username: string = null, oldPassword: string = null) {
-    let params = new HttpParams();
-    params = params.append('password', password);
-    if (username) {
-      params = params.append('username', username);
-    }
-    if (oldPassword) {
-      params = params.append('old_password', oldPassword);
-    }
-    return this.http.post('api/user/validate_password', null, { params });
+    return this.http.post('api/user/validate_password', {
+      password: password,
+      username: username,
+      old_password: oldPassword
+    });
   }
 }

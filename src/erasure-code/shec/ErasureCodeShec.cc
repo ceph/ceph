@@ -179,6 +179,10 @@ int ErasureCodeShec::_decode(const set<int> &want_to_read,
   if (!decoded || !decoded->empty()){
     return -EINVAL;
   }
+  if (!want_to_read.empty() && chunks.empty()) {
+    // i need to get the blocksize from the first element of chunks
+    return -1;
+  }
 
   have.reserve(chunks.size());
   for (map<int, bufferlist>::const_iterator i = chunks.begin();
@@ -693,7 +697,7 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
 
 
   if (mindup == k+1) {
-    fprintf(stderr, "shec_make_decoding_matrix(): can't find recover matrix.\n");
+    dout(10) << __func__ << ": can't find recover matrix." << dendl;
     return -1;
   }
 

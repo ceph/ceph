@@ -3,15 +3,23 @@
 ============
 
 You can get Ceph software by retrieving Ceph source code and building it yourself.
-To build Ceph, you need to set up a development environment, compile Ceph, 
-and then either install in user space or build packages and install the packages. 
+To build Ceph, you need to set up a development environment, compile Ceph,
+and then either install in user space or build packages and install the packages.
 
 Build Prerequisites
 ===================
 
 
-.. tip:: Check this section to see if there are specific prerequisites for your 
+.. tip:: Check this section to see if there are specific prerequisites for your
    Linux/Unix distribution.
+
+A debug build of Ceph may take around 40 gigabytes. If you want to build Ceph in
+a virtual machine (VM) please make sure total disk space on the VM is at least
+60 gigabytes.
+
+Please also be aware that some distributions of Linux, like CentOS, use Linux
+Volume Manager (LVM) for the default installation. LVM may reserve a large
+portion of disk space of a typical sized virtual disk for the operating system.
 
 Before you can build Ceph source code, you need to install several libraries
 and tools::
@@ -30,19 +38,10 @@ repository and execute the following::
     cd ceph
     ./do_cmake.sh
     cd build
-    make
+    ninja
 
-.. note:: By default do_cmake.sh will build a debug version of ceph that may
-   perform up to 5 times slower with certain workloads. Pass 
-   '-DCMAKE_BUILD_TYPE=RelWithDebInfo' to do_cmake.sh if you would like to
-   build a release version of the ceph executables instead.
-
-.. topic:: Hyperthreading
-
-	You can use ``make -j`` to execute multiple jobs depending upon your system. For 
-	example, ``make -j4`` for a dual core processor may build faster.
-
-See `Installing a Build`_ to install a build in user space.
+See `Installing a Build`_ to install a build in user space and `Ceph README.md`_
+doc for more details on build.
 
 Build Ceph Packages
 ===================
@@ -105,3 +104,4 @@ For multi-processor CPUs use the ``-j`` option to accelerate the build.
 
 .. _Ceph: ../clone-source
 .. _Installing a Build: ../install-storage-cluster#installing-a-build
+.. _Ceph README.md: https://github.com/ceph/ceph#building-ceph

@@ -17,7 +17,6 @@
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "include/utime.h"
-#include "global/global_context.h"
 #include "common/ceph_argparse.h"
 #include "test/omap_bench.h"
 
@@ -32,8 +31,7 @@ using ceph::bufferlist;
 
 int OmapBench::setup(int argc, const char** argv) {
   //parse key_value_store_bench args
-  vector<const char*> args;
-  argv_to_vec(argc,argv,args);
+  auto args = argv_to_vec(argc, argv);
   for (unsigned i = 0; i < args.size(); i++) {
     if(i < args.size() - 1) {
       if (strcmp(args[i], "-t") == 0) {

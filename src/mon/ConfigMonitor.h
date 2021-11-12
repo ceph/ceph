@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <boost/optional.hpp>
+#include <optional>
 
 #include "ConfigMap.h"
 #include "mon/PaxosService.h"
@@ -14,13 +14,16 @@ class ConfigMonitor : public PaxosService
 {
   version_t version = 0;
   ConfigMap config_map;
-  map<string,boost::optional<bufferlist>> pending;
-  string pending_description;
+  std::map<std::string,std::optional<ceph::buffer::list>> pending;
+  std::string pending_description;
+  std::map<std::string,std::optional<ceph::buffer::list>> pending_cleanup;
 
-  map<string,bufferlist> current;
+  std::map<std::string,ceph::buffer::list> current;
+
+  void encode_pending_to_kvmon();
 
 public:
-  ConfigMonitor(Monitor *m, Paxos *p, const string& service_name);
+  ConfigMonitor(Monitor &m, Paxos &p, const std::string& service_name);
 
   void init() override;
 

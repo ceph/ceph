@@ -60,8 +60,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << name << ' '
 
+using std::string;
+using std::vector;
+using TOPNSPC::common::cmd_getval;
+
 // cons/des
-MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
+MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc,
+		     boost::asio::io_context& ioctx) :
   Dispatcher(m->cct),
   timer(m->cct, mds_lock),
   gss_ktfile_client(m->cct->_conf.get_val<std::string>("gss_ktab_client_file")),
@@ -69,6 +74,7 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   name(n),
   messenger(m),
   monc(mc),
+  ioctx(ioctx),
   mgrc(m->cct, m, &mc->monmap),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   starttime(mono_clock::now())
@@ -113,7 +119,7 @@ public:
     Formatter *f,
     std::ostream& errss,
     ceph::buffer::list& out) override {
-    ceph_abort("shoudl go to call_async");
+    ceph_abort("should go to call_async");
   }
   void call_async(
     std::string_view command,
@@ -135,9 +141,10 @@ void MDSDaemon::asok_command(
   dout(1) << "asok_command: " << command << " " << cmdmap
 	  << " (starting...)" << dendl;
 
-  int r = -ENOSYS;
+  int r = -CEPHFS_ENOSYS;
   bufferlist outbl;
-  stringstream ss;
+  CachedStackStringStream css;
+  auto& ss = *css;
   if (command == "status") {
     dump_status(f);
     r = 0;
@@ -166,24 +173,26 @@ void MDSDaemon::asok_command(
   } else if (command == "heap") {
     if (!ceph_using_tcmalloc()) {
       ss << "not using tcmalloc";
-      r = -EOPNOTSUPP;
+      r = -CEPHFS_EOPNOTSUPP;
     } else {
       string heapcmd;
-      cmd_getval(cct, cmdmap, "heapcmd", heapcmd);
+      cmd_getval(cmdmap, "heapcmd", heapcmd);
       vector<string> heapcmd_vec;
       get_str_vec(heapcmd, heapcmd_vec);
       string value;
-      if (cmd_getval(cct, cmdmap, "value", value)) {
+      if (cmd_getval(cmdmap, "value", value)) {
 	heapcmd_vec.push_back(value);
       }
       ceph_heap_profiler_handle_command(heapcmd_vec, ss);
+      r = 0;
     }
   } else if (command == "cpu_profiler") {
     string arg;
-    cmd_getval(cct, cmdmap, "arg", arg);
+    cmd_getval(cmdmap, "arg", arg);
     vector<string> argvec;
     get_str_vec(arg, argvec);
     cpu_profiler_handle_command(argvec, ss);
+    r = 0;
   } else {
     if (mds_rank == NULL) {
       dout(1) << "Can't run that command on an inactive MDS!" << dendl;
@@ -192,9 +201,9 @@ void MDSDaemon::asok_command(
       try {
 	mds_rank->handle_asok_command(command, cmdmap, f, inbl, on_finish);
 	return;
-      } catch (const bad_cmd_get& e) {
+      } catch (const TOPNSPC::common::bad_cmd_get& e) {
 	ss << e.what();
-	r = -EINVAL;
+	r = -CEPHFS_EINVAL;
       }
     }
   }
@@ -306,7 +315,9 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "migrate a subtree to named MDS");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump cache name=path,type=CephString,req=false",
+  r = admin_socket->register_command("dump cache "
+				     "name=path,type=CephString,req=false "
+				     "name=timeout,type=CephInt,range=0,req=false",
                                      asok_hook,
                                      "dump metadata cache (optionally to a file)");
   ceph_assert(r == 0);
@@ -333,11 +344,15 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "dump snapshots");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session ls name=filters,type=CephString,n=N,req=false",
+  r = admin_socket->register_command("session ls "
+				     "name=cap_dump,type=CephBool,req=false "
+		                     "name=filters,type=CephString,n=N,req=false ",
 				     asok_hook,
 				     "List client sessions based on a filter");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("client ls name=filters,type=CephString,n=N,req=false",
+  r = admin_socket->register_command("client ls "
+				     "name=cap_dump,type=CephBool,req=false "
+		                     "name=filters,type=CephString,n=N,req=false ",
 				     asok_hook,
 				     "List client sessions based on a filter");
   ceph_assert(r == 0);
@@ -353,7 +368,7 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "Evict a client session by id");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session ls",
+  r = admin_socket->register_command("session ls name=cap_dump,type=CephBool,req=false",
 				     asok_hook,
 				     "Enumerate connected CephFS clients");
   ceph_assert(r == 0);
@@ -363,23 +378,23 @@ void MDSDaemon::set_up_admin_socket()
 				     "name=value,type=CephString,req=false ",
 				     asok_hook,
 				     "Config a CephFS client session");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("client config "
 				     "name=client_id,type=CephInt,req=true "
 				     "name=option,type=CephString,req=true "
 				     "name=value,type=CephString,req=false ",
 				     asok_hook,
 				     "Config a CephFS client session");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("damage ls",
 				     asok_hook,
 				     "List detected metadata damage");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("damage rm "
 				     "name=damage_id,type=CephInt",
 				     asok_hook,
 				     "Remove a damage table entry");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("osdmap barrier name=target_epoch,type=CephInt",
 				     asok_hook,
 				     "Wait until the MDS has this OSD map epoch");
@@ -455,25 +470,36 @@ void MDSDaemon::clean_up_admin_socket()
 
 int MDSDaemon::init()
 {
+#ifdef _WIN32
+  // Some file related flags and types are stubbed on Windows. In order to avoid
+  // incorrect behavior, we're going to prevent the MDS from running on Windows
+  // until those limitations are addressed. MDS clients, however, are allowed
+  // to run on Windows.
+  derr << "The Ceph MDS does not support running on Windows at the moment."
+       << dendl;
+  return -CEPHFS_ENOSYS;
+#endif // _WIN32
+
+  dout(10) << "Dumping misc struct sizes:" << dendl;
   dout(10) << sizeof(MDSCacheObject) << "\tMDSCacheObject" << dendl;
   dout(10) << sizeof(CInode) << "\tCInode" << dendl;
-  dout(10) << sizeof(elist<void*>::item) << "\t elist<>::item   *7=" << 7*sizeof(elist<void*>::item) << dendl;
-  dout(10) << sizeof(CInode::mempool_inode) << "\t inode  " << dendl;
-  dout(10) << sizeof(CInode::mempool_old_inode) << "\t old_inode " << dendl;
-  dout(10) << sizeof(nest_info_t) << "\t  nest_info_t " << dendl;
-  dout(10) << sizeof(frag_info_t) << "\t  frag_info_t " << dendl;
-  dout(10) << sizeof(SimpleLock) << "\t SimpleLock   *5=" << 5*sizeof(SimpleLock) << dendl;
-  dout(10) << sizeof(ScatterLock) << "\t ScatterLock  *3=" << 3*sizeof(ScatterLock) << dendl;
+  dout(10) << sizeof(elist<void*>::item) << "\telist<>::item" << dendl;
+  dout(10) << sizeof(CInode::mempool_inode) << "\tinode" << dendl;
+  dout(10) << sizeof(CInode::mempool_old_inode) << "\told_inode" << dendl;
+  dout(10) << sizeof(nest_info_t) << "\tnest_info_t" << dendl;
+  dout(10) << sizeof(frag_info_t) << "\tfrag_info_t" << dendl;
+  dout(10) << sizeof(SimpleLock) << "\tSimpleLock" << dendl;
+  dout(10) << sizeof(ScatterLock) << "\tScatterLock" << dendl;
   dout(10) << sizeof(CDentry) << "\tCDentry" << dendl;
-  dout(10) << sizeof(elist<void*>::item) << "\t elist<>::item" << dendl;
-  dout(10) << sizeof(SimpleLock) << "\t SimpleLock" << dendl;
-  dout(10) << sizeof(CDir) << "\tCDir " << dendl;
-  dout(10) << sizeof(elist<void*>::item) << "\t elist<>::item   *2=" << 2*sizeof(elist<void*>::item) << dendl;
-  dout(10) << sizeof(fnode_t) << "\t fnode_t " << dendl;
-  dout(10) << sizeof(nest_info_t) << "\t  nest_info_t *2" << dendl;
-  dout(10) << sizeof(frag_info_t) << "\t  frag_info_t *2" << dendl;
-  dout(10) << sizeof(Capability) << "\tCapability " << dendl;
-  dout(10) << sizeof(xlist<void*>::item) << "\t xlist<>::item   *2=" << 2*sizeof(xlist<void*>::item) << dendl;
+  dout(10) << sizeof(elist<void*>::item) << "\telist<>::item" << dendl;
+  dout(10) << sizeof(SimpleLock) << "\tSimpleLock" << dendl;
+  dout(10) << sizeof(CDir) << "\tCDir" << dendl;
+  dout(10) << sizeof(elist<void*>::item) << "\telist<>::item" << dendl;
+  dout(10) << sizeof(fnode_t) << "\tfnode_t" << dendl;
+  dout(10) << sizeof(nest_info_t) << "\tnest_info_t" << dendl;
+  dout(10) << sizeof(frag_info_t) << "\tfrag_info_t" << dendl;
+  dout(10) << sizeof(Capability) << "\tCapability" << dendl;
+  dout(10) << sizeof(xlist<void*>::item) << "\txlist<>::item" << dendl;
 
   messenger->add_dispatcher_tail(&beacon);
   messenger->add_dispatcher_tail(this);
@@ -521,7 +547,7 @@ int MDSDaemon::init()
          << "maximum retry time reached." << dendl;
     std::lock_guard locker{mds_lock};
     suicide();
-    return -ETIMEDOUT;
+    return -CEPHFS_ETIMEDOUT;
   }
 
   mds_lock.lock();
@@ -589,8 +615,8 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 
   int r = 0;
   cmdmap_t cmdmap;
-  std::stringstream ss;
-  std::string outs;
+  CachedStackStringStream css;
+  auto& ss = *css;
   bufferlist outbl;
 
   // If someone is using a closed session for sending commands (e.g.
@@ -615,31 +641,22 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
       << *m->get_connection()->peer_addrs << dendl;
 
     ss << "permission denied";
-    r = -EACCES;
+    r = -CEPHFS_EACCES;
   } else if (m->cmd.empty()) {
-    r = -EINVAL;
+    r = -CEPHFS_EINVAL;
     ss << "no command given";
-    outs = ss.str();
-  } else if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
-    r = -EINVAL;
-    outs = ss.str();
+  } else if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    r = -CEPHFS_EINVAL;
   } else {
     cct->get_admin_socket()->queue_tell_command(m);
     return;
   }
 
-  auto reply = make_message<MCommandReply>(r, outs);
+  auto reply = make_message<MCommandReply>(r, ss.str());
   reply->set_tid(m->get_tid());
   reply->set_data(outbl);
   m->get_connection()->send_message2(reply);
 }
-
-const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
-{
-  static const std::vector<MDSCommand> commands = {
-  };
-  return commands;
-};
 
 void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 {
@@ -751,7 +768,8 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
       mds_rank = new MDSRankDispatcher(whoami, mds_lock, clog,
           timer, beacon, mdsmap, messenger, monc, &mgrc,
           new LambdaContext([this](int r){respawn();}),
-          new LambdaContext([this](int r){suicide();}));
+          new LambdaContext([this](int r){suicide();}),
+	  ioctx);
       dout(10) <<  __func__ << ": initializing MDS rank "
                << mds_rank->get_nodeid() << dendl;
       mds_rank->init();
@@ -835,6 +853,11 @@ void MDSDaemon::respawn()
    * be removed from the MDSMap leading to respawn. */
   g_ceph_context->_log->dump_recent();
 
+  /* valgrind can't handle execve; just exit and let QA infra restart */
+  if (g_conf().get_val<bool>("mds_valgrind_exit")) {
+    _exit(0);
+  }
+
   char *new_argv[orig_argc+1];
   dout(1) << " e: '" << orig_argv[0] << "'" << dendl;
   for (int i=0; i<orig_argc; i++) {
@@ -911,6 +934,17 @@ bool MDSDaemon::ms_dispatch2(const ref_t<Message> &m)
 /*
  * high priority messages we always process
  */
+
+#define ALLOW_MESSAGES_FROM(peers)                                      \
+  do {                                                                  \
+    if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
+      dout(0) << __FILE__ << "." << __LINE__ << ": filtered out request, peer=" \
+              << m->get_connection()->get_peer_type() << " allowing="   \
+              << #peers << " message=" << *m << dendl;                  \
+      return true;                                                      \
+    }                                                                   \
+  } while (0)
+
 bool MDSDaemon::handle_core_message(const cref_t<Message> &m)
 {
   switch (m->get_type()) {

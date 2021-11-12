@@ -8,12 +8,6 @@ import os
 import time
 import sys
 
-if sys.version_info[0] == 2:
-    range = xrange # noqa
-
-elif sys.version_info[0] == 3:
-    range = range
-
 import rados as rados
 import cephfs as cephfs
 

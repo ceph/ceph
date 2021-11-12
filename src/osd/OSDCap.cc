@@ -24,6 +24,7 @@
 #include "include/ipaddr.h"
 
 using std::ostream;
+using std::string;
 using std::vector;
 
 ostream& operator<<(ostream& out, const osd_rwxa_t& p)
@@ -295,8 +296,8 @@ bool OSDCapGrant::is_capable(
             (*class_allowed)[i] = true;
             continue;
           }
-          // check 'allow x | class-{rw}': must be on whitelist
-          if (!classes[i].whitelisted) {
+          // check 'allow x | class-{rw}': must be on allow list
+          if (!classes[i].allowed) {
             continue;
           }
           if ((classes[i].read && !(allow & OSD_CAP_CLS_R)) ||
@@ -332,6 +333,8 @@ void OSDCapGrant::expand_profile()
 
   if (profile.name == "rbd") {
     // RBD read-write grant
+    profile_grants.emplace_back(OSDCapMatch(string(), "rbd_info"),
+                                OSDCapSpec(osd_rwxa_t(OSD_CAP_R)));
     profile_grants.emplace_back(OSDCapMatch(string(), "rbd_children"),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_CLS_R)));
     profile_grants.emplace_back(OSDCapMatch(string(), "rbd_mirroring"),

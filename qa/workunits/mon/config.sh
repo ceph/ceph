@@ -82,7 +82,7 @@ while ! ceph config show osd.0 | grep debug_asok | grep 99
 do
     sleep 1
 done
-ceph config show osd.0 | grep debug_asok | grep 'override mon'
+ceph config show osd.0 | grep debug_asok | grep 'override  mon'
 ceph tell osd.0 config unset debug_asok
 ceph tell osd.0 config unset debug_asok
 
@@ -93,12 +93,12 @@ do
 done
 ceph config show osd.0 | grep -c debug_asok | grep 0
 
-ceph config set osd.0 osd_data testorama
-while ! ceph config show osd.0 | grep osd_data | grep mon
+ceph config set osd.0 osd_scrub_cost 123
+while ! ceph config show osd.0 | grep osd_scrub_cost | grep mon
 do
     sleep 1
 done
-ceph config rm osd.0 osd_data
+ceph config rm osd.0 osd_scrub_cost
 
 # show-with-defaults
 ceph config show-with-defaults osd.0 | grep debug_asok

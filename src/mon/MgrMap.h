@@ -238,7 +238,7 @@ public:
   /// features
   uint64_t active_mgr_features = 0;
 
-  std::vector<entity_addrvec_t> clients; // for blacklist
+  std::vector<entity_addrvec_t> clients; // for blocklist
 
   std::map<uint64_t, StandbyInfo> standbys;
 
@@ -259,11 +259,12 @@ public:
 
   epoch_t get_epoch() const { return epoch; }
   epoch_t get_last_failure_osd_epoch() const { return last_failure_osd_epoch; }
-  entity_addrvec_t get_active_addrs() const { return active_addrs; }
+  const entity_addrvec_t& get_active_addrs() const { return active_addrs; }
   uint64_t get_active_gid() const { return active_gid; }
   bool get_available() const { return available; }
   const std::string &get_active_name() const { return active_name; }
   const utime_t& get_active_change() const { return active_change; }
+  int get_num_standby() const { return standbys.size(); }
 
   bool all_support_module(const std::string& module) {
     if (!have_module(module)) {
@@ -352,9 +353,19 @@ public:
   }
 
   std::set<std::string> get_always_on_modules() const {
-    auto it = always_on_modules.find(ceph::to_integer<uint32_t>(ceph_release()));
-    if (it == always_on_modules.end())
-      return {};
+    unsigned rnum = to_integer<uint32_t>(ceph_release());
+    auto it = always_on_modules.find(rnum);
+    if (it == always_on_modules.end()) {
+      // ok, try the most recent release
+      if (always_on_modules.empty()) {
+	return {}; // ugh
+      }
+      --it;
+      if (it->first < rnum) {
+	return it->second;
+      }
+      return {};      // wth
+    }
     return it->second;
   }
 

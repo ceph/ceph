@@ -4,10 +4,10 @@
 #ifndef CEPH_LIBRBD_API_CONFIG_H
 #define CEPH_LIBRBD_API_CONFIG_H
 
+#include "common/config_fwd.h"
+#include "include/common_fwd.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rados/librados_fwd.hpp"
-
-struct ConfigProxy;
 
 namespace librbd {
 

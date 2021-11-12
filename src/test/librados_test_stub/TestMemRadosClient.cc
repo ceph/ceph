@@ -42,15 +42,15 @@ void TestMemRadosClient::object_list(int64_t pool_id,
 }
 
 int TestMemRadosClient::pool_create(const std::string &pool_name) {
-  if (is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
   return m_mem_cluster->pool_create(pool_name);
 }
 
 int TestMemRadosClient::pool_delete(const std::string &pool_name) {
-  if (is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
   return m_mem_cluster->pool_delete(pool_name);
 }
@@ -78,14 +78,14 @@ int TestMemRadosClient::watch_flush() {
   return 0;
 }
 
-bool TestMemRadosClient::is_blacklisted() const {
-  return m_mem_cluster->is_blacklisted(m_nonce);
+bool TestMemRadosClient::is_blocklisted() const {
+  return m_mem_cluster->is_blocklisted(m_nonce);
 }
 
-int TestMemRadosClient::blacklist_add(const std::string& client_address,
+int TestMemRadosClient::blocklist_add(const std::string& client_address,
 				      uint32_t expire_seconds) {
-  if (is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   // extract the nonce to use as a unique key to the client
@@ -101,7 +101,7 @@ int TestMemRadosClient::blacklist_add(const std::string& client_address,
     return -EINVAL;
   }
 
-  m_mem_cluster->blacklist(nonce);
+  m_mem_cluster->blocklist(nonce);
   return 0;
 }
 

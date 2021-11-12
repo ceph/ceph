@@ -10,6 +10,7 @@
 #include "librbd/Operations.h"
 #include "librbd/image/AttachChildRequest.h"
 #include "librbd/image/RefreshRequest.h"
+#include "librbd/internal.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
@@ -72,8 +73,9 @@ public:
     TestMockFixture::SetUp();
 
     ASSERT_EQ(0, open_image(m_image_name, &image_ctx));
+    NoOpProgressContext prog_ctx;
     ASSERT_EQ(0, image_ctx->operations->snap_create(
-                   cls::rbd::UserSnapshotNamespace{}, "snap"));
+                   cls::rbd::UserSnapshotNamespace{}, "snap", 0, prog_ctx));
     if (is_feature_enabled(RBD_FEATURE_LAYERING)) {
       ASSERT_EQ(0, image_ctx->operations->snap_protect(
                      cls::rbd::UserSnapshotNamespace{}, "snap"));
@@ -90,7 +92,8 @@ public:
 
   void expect_add_child(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(RBD_CHILDREN, _, StrEq("rbd"), StrEq("add_child"), _, _, _))
+                exec(RBD_CHILDREN, _, StrEq("rbd"), StrEq("add_child"), _, _, _,
+                     _))
       .WillOnce(Return(r));
   }
 
@@ -117,7 +120,7 @@ public:
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(util::header_name(mock_image_ctx.id), _, StrEq("rbd"),
-                     StrEq("op_features_set"), ContentsEqual(bl), _, _))
+                     StrEq("op_features_set"), ContentsEqual(bl), _, _, _))
       .WillOnce(Return(r));
   }
 
@@ -129,7 +132,7 @@ public:
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                     StrEq("child_attach"), ContentsEqual(bl), _, _))
+                     StrEq("child_attach"), ContentsEqual(bl), _, _, _))
       .WillOnce(Return(r));
   }
 

@@ -35,7 +35,7 @@
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
-ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
+std::ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
   return *_dout << "-- " << async_msgr->get_myaddrs() << " >> "
 		<< *peer_addrs << " conn(" << this
 		<< (msgr2 ? " msgr2=" : " legacy=")
@@ -168,8 +168,8 @@ void AsyncConnection::maybe_start_delay_thread()
   if (!delay_state) {
     async_msgr->cct->_conf.with_val<std::string>(
       "ms_inject_delay_type",
-      [this](const string& s) {
-	if (s.find(ceph_entity_type_name(peer_type)) != string::npos) {
+      [this](const std::string& s) {
+	if (s.find(ceph_entity_type_name(peer_type)) != std::string::npos) {
 	  ldout(msgr->cct, 1) << __func__ << " setting up a delay queue"
 			      << dendl;
 	  delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue,
@@ -289,7 +289,7 @@ ssize_t AsyncConnection::read_bulk(char *buf, unsigned len)
       goto again;
     } else {
       ldout(async_msgr->cct, 1) << __func__ << " reading from fd=" << cs.fd()
-                          << " : "<< strerror(nread) << dendl;
+                          << " : "<< nread << " " << strerror(nread) << dendl;
       return -1;
     }
   } else if (nread == 0) {
@@ -300,7 +300,7 @@ ssize_t AsyncConnection::read_bulk(char *buf, unsigned len)
   return nread;
 }
 
-ssize_t AsyncConnection::write(bufferlist &bl,
+ssize_t AsyncConnection::write(ceph::buffer::list &bl,
                                std::function<void(ssize_t)> callback,
                                bool more) {
 
@@ -384,8 +384,10 @@ void AsyncConnection::process() {
       // clear timer (if any) since we are connecting/re-connecting
       if (last_tick_id) {
         center->delete_time_event(last_tick_id);
-        last_tick_id = 0;
       }
+      last_connect_started = ceph::coarse_mono_clock::now();
+      last_tick_id = center->create_time_event(
+          connect_timeout_us, tick_handler);
 
       if (cs) {
         center->delete_file_event(cs.fd(), EVENT_READABLE | EVENT_WRITABLE);
@@ -432,11 +434,6 @@ void AsyncConnection::process() {
       ldout(async_msgr->cct, 10)
           << __func__ << " connect successfully, ready to send banner" << dendl;
       state = STATE_CONNECTION_ESTABLISHED;
-      ceph_assert(last_tick_id == 0);
-      // exclude TCP nonblock connect time
-      last_connect_started = ceph::coarse_mono_clock::now();
-      last_tick_id = center->create_time_event(
-        connect_timeout_us, tick_handler);
       break;
     }
 

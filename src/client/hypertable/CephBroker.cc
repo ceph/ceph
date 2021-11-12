@@ -152,7 +152,7 @@ void CephBroker::create(ResponseCallbackOpen *cb, const char *fname, uint32_t fl
   String directory = abspath.substr(0, abspath.rfind('/'));
   int r;
   HT_INFOF("Calling mkdirs on %s", directory.c_str());
-  if((r=ceph_mkdirs(cmount, directory.c_str(), 0644)) < 0 && r!=-EEXIST) {
+  if((r=ceph_mkdirs(cmount, directory.c_str(), 0644)) < 0 && r!=-CEPHFS_EEXIST) {
     HT_ERRORF("create failed on mkdirs: dname='%s' - %d", directory.c_str(), -r);
     report_error(cb, -r);
     return;
@@ -360,7 +360,7 @@ void CephBroker::mkdirs(ResponseCallback *cb, const char *dname) {
 
   make_abs_path(dname, absdir);
   int r;
-  if((r=ceph_mkdirs(cmount, absdir.c_str(), 0644)) < 0 && r!=-EEXIST) {
+  if((r=ceph_mkdirs(cmount, absdir.c_str(), 0644)) < 0 && r!=-CEPHFS_EEXIST) {
     HT_ERRORF("mkdirs failed: dname='%s' - %d", absdir.c_str(), -r);
     report_error(cb, -r);
     return;
@@ -459,7 +459,7 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname) {
   int bufpos;
   while (1) {
     r = ceph_getdnames(cmount, dirp, buf, buflen);
-    if (r==-ERANGE) { //expand the buffer
+    if (r==-CEPHFS_ERANGE) { //expand the buffer
       delete [] buf;
       buflen *= 2;
       buf = new char[buflen];

@@ -26,7 +26,8 @@ static const uint64_t NOTIFY_TIMEOUT_MS = 5000;
 } // anonymous namespace
 
 template <typename I>
-TrashWatcher<I>::TrashWatcher(librados::IoCtx &io_ctx, ContextWQ *work_queue)
+TrashWatcher<I>::TrashWatcher(librados::IoCtx &io_ctx,
+                              asio::ContextWQ *work_queue)
   : Watcher(io_ctx, work_queue, RBD_TRASH) {
 }
 

@@ -2,7 +2,6 @@
 import os
 import time
 from textwrap import dedent
-from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 class TestCapFlush(CephFSTestCase):
@@ -14,9 +13,6 @@ class TestCapFlush(CephFSTestCase):
         corresponding inode does not exist because the client request which
         creates inode hasn't been replayed.
         """
-
-        if not isinstance(self.mount_a, FuseMount):
-            self.skipTest("Require FUSE client to inject client release failure")
 
         dir_path = os.path.join(self.mount_a.mountpoint, "testdir")
         py_script = dedent("""
@@ -45,16 +41,15 @@ class TestCapFlush(CephFSTestCase):
             fd = os.open("{1}", os.O_CREAT | os.O_RDWR, 0o644)
             os.fchmod(fd, 0o640)
             """).format(dir_path, file_name)
-        self.mount_a.run_python(py_script)
+        self.mount_a.run_python(py_script, sudo=True)
 
         # Modify file mode by different user. ceph-fuse will send a setattr request
-        self.mount_a.run_shell(["chmod", "600", file_path], wait=False)
+        self.mount_a.run_shell(["chmod", "600", file_path], wait=False, sudo=True)
 
         time.sleep(10)
 
         # Restart mds. Client will re-send the unsafe request and cap flush
-        self.fs.mds_stop()
-        self.fs.mds_fail_restart()
+        self.fs.rank_fail()
         self.fs.wait_for_daemons()
 
         mode = self.mount_a.run_shell(['stat', '-c' '%a', file_path]).stdout.getvalue().strip()

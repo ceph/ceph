@@ -2,8 +2,8 @@ import { Task } from './task';
 import { TaskException } from './task-exception';
 
 export class FinishedTask extends Task {
-  begin_time: number;
-  end_time: number;
+  begin_time: string;
+  end_time: string;
   exception: TaskException;
   latency: number;
   progress: number;

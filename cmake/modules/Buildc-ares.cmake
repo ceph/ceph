@@ -14,7 +14,7 @@ function(build_c_ares)
   add_library(c-ares::c-ares STATIC IMPORTED)
   add_dependencies(c-ares::c-ares c-ares_ext)
   set_target_properties(c-ares::c-ares PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "${C-ARES_SOURCE_DIR}"
+    INTERFACE_INCLUDE_DIRECTORIES "${C-ARES_SOURCE_DIR};${C-ARES_BINARY_DIR}"
     IMPORTED_LINK_INTERFACE_LANGUAGES "C"
     IMPORTED_LOCATION "${C-ARES_BINARY_DIR}/lib/libcares.a")
   # to appease find_package()

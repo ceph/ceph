@@ -15,12 +15,12 @@
 #ifndef CEPH_MEXPORTDIRFINISH_H
 #define CEPH_MEXPORTDIRFINISH_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-class MExportDirFinish : public SafeMessage {
+class MExportDirFinish final : public MMDSOp {
 private:
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   dirfrag_t dirfrag;
   bool last;
@@ -31,16 +31,16 @@ private:
   
 protected:
   MExportDirFinish() :
-    SafeMessage{MSG_MDS_EXPORTDIRFINISH, HEAD_VERSION, COMPAT_VERSION}, last(false) {}
+    MMDSOp{MSG_MDS_EXPORTDIRFINISH, HEAD_VERSION, COMPAT_VERSION}, last(false) {}
   MExportDirFinish(dirfrag_t df, bool l, uint64_t tid) :
-    SafeMessage{MSG_MDS_EXPORTDIRFINISH, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), last(l) {
+    MMDSOp{MSG_MDS_EXPORTDIRFINISH, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), last(l) {
     set_tid(tid);
   }
-  ~MExportDirFinish() override {}
+  ~MExportDirFinish() final {}
 
 public:
   std::string_view get_type_name() const override { return "ExFin"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "export_finish(" << dirfrag << (last ? " last" : "") << ")";
   }
   
@@ -50,6 +50,7 @@ public:
     encode(last, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(last, p);
@@ -57,6 +58,8 @@ public:
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+  template<class T, typename... Args>
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 #endif

@@ -1,3 +1,4 @@
+
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
@@ -75,7 +76,7 @@ protected:
 
   CommandTable<MgrCommand> command_table;
 
-  using clock_t = ceph::real_clock;
+  using clock_t = ceph::mono_clock;
   clock_t::time_point last_connect_attempt;
 
   uint64_t last_config_bl_version = 0;
@@ -126,7 +127,7 @@ public:
   bool handle_mgr_close(ceph::ref_t<MMgrClose> m);
   bool handle_command_reply(
     uint64_t tid,
-    bufferlist& data,
+    ceph::buffer::list& data,
     const std::string& rs,
     int r);
 
@@ -151,7 +152,7 @@ public:
     ceph::buffer::list *outbl, std::string *outs,
     Context *onfinish);
   int start_tell_command(
-    const string& name,
+    const std::string& name,
     const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
     ceph::buffer::list *outbl, std::string *outs,
     Context *onfinish);
@@ -170,6 +171,12 @@ public:
 
 private:
   void handle_config_payload(const OSDConfigPayload &payload) {
+    if (set_perf_queries_cb) {
+      set_perf_queries_cb(payload);
+    }
+  }
+
+  void handle_config_payload(const MDSConfigPayload &payload) {
     if (set_perf_queries_cb) {
       set_perf_queries_cb(payload);
     }

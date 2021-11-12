@@ -31,8 +31,8 @@
 <!-- templates -->
 <ng-template #poolUsageTpl
              let-row="row">
-  <cd-usage-bar [totalBytes]="row.size"
-                [usedBytes]="row.used"></cd-usage-bar>
+  <cd-usage-bar [total]="row.size"
+                [used]="row.used"></cd-usage-bar>
 </ng-template>
 
 <ng-template #activityTmpl

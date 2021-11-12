@@ -56,6 +56,13 @@
 #define ALIGNED(x, by) (!((x) % (by)))
 #define ALIGN_UP(x, by) (ALIGNED((x), (by)) ? (x) : (ALIGN_DOWN((x), (by)) + (by)))
 
+using std::ostream;
+using std::ostringstream;
+using std::string;
+
+using ceph::bufferptr;
+using ceph::bufferlist;
+
 GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
   FileStoreBackend(fs),
   ioctl_fiemap(false),
@@ -371,12 +378,12 @@ int GenericFileStoreBackend::_crc_load_or_init(int fd, SloppyCRCMap *cm)
     return 0;
   }
   if (l >= 0) {
-    bp = buffer::create(l);
+    bp = ceph::buffer::create(l);
     memcpy(bp.c_str(), buf, l);
   } else if (l == -ERANGE) {
     l = chain_fgetxattr(fd, SLOPPY_CRC_XATTR, 0, 0);
     if (l > 0) {
-      bp = buffer::create(l);
+      bp = ceph::buffer::create(l);
       l = chain_fgetxattr(fd, SLOPPY_CRC_XATTR, bp.c_str(), l);
     }
   }
@@ -386,7 +393,7 @@ int GenericFileStoreBackend::_crc_load_or_init(int fd, SloppyCRCMap *cm)
   try {
     decode(*cm, p);
   }
-  catch (buffer::error &e) {
+  catch (ceph::buffer::error &e) {
     r = -EIO;
   }
   if (r < 0)

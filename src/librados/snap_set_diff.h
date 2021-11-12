@@ -4,7 +4,7 @@
 #ifndef __CEPH_OSDC_SNAP_SET_DIFF_H
 #define __CEPH_OSDC_SNAP_SET_DIFF_H
 
-class CephContext;
+#include "include/common_fwd.h"
 #include "include/rados/rados_types.hpp"
 #include "include/interval_set.h"
 

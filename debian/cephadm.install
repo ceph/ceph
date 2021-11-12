@@ -1,2 +1,2 @@
 usr/sbin/cephadm
-etc/sudoers.d/cephadm
+usr/share/man/man8/cephadm.8

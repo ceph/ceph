@@ -3,7 +3,6 @@ Thrash mds by simulating failures
 """
 import logging
 import contextlib
-import ceph_manager
 import itertools
 import random
 import time
@@ -13,7 +12,8 @@ from gevent.greenlet import Greenlet
 from gevent.event import Event
 from teuthology import misc as teuthology
 
-from tasks.cephfs.filesystem import MDSCluster, Filesystem
+from tasks import ceph_manager
+from tasks.cephfs.filesystem import MDSCluster, Filesystem, FSMissing
 from tasks.thrasher import Thrasher
 
 log = logging.getLogger(__name__)
@@ -122,6 +122,8 @@ class MDSThrasher(Thrasher, Greenlet):
     def _run(self):
         try:
             self.do_thrash()
+        except FSMissing:
+            pass
         except Exception as e:
             # Log exceptions here so we get the full backtrace (gevent loses them).
             # Also allow successful completion as gevent exception handling is a broken mess:
@@ -186,10 +188,11 @@ class MDSThrasher(Thrasher, Greenlet):
             status = self.fs.status()
             max_mds = status.get_fsmap(self.fs.id)['mdsmap']['max_mds']
             ranks = list(status.get_ranks(self.fs.id))
-            stopping = filter(lambda info: "up:stopping" == info['state'], ranks)
-            actives = filter(lambda info: "up:active" == info['state'] and "laggy_since" not in info, ranks)
+            stopping = sum(1 for _ in ranks if "up:stopping" == _['state'])
+            actives = sum(1 for _ in ranks
+                          if "up:active" == _['state'] and "laggy_since" not in _)
 
-            if not bool(self.config.get('thrash_while_stopping', False)) and len(stopping) > 0:
+            if not bool(self.config.get('thrash_while_stopping', False)) and stopping > 0:
                 if itercount % 5 == 0:
                     self.log('cluster is considered unstable while MDS are in up:stopping (!thrash_while_stopping)')
             else:
@@ -201,13 +204,14 @@ class MDSThrasher(Thrasher, Greenlet):
                             return status
                     except:
                         pass # no rank present
-                    if len(actives) >= max_mds:
+                    if actives >= max_mds:
                         # no replacement can occur!
-                        self.log("cluster has %d actives (max_mds is %d), no MDS can replace rank %d".format(len(actives), max_mds, rank))
+                        self.log("cluster has {actives} actives (max_mds is {max_mds}), no MDS can replace rank {rank}".format(
+                            actives=actives, max_mds=max_mds, rank=rank))
                         return status
                 else:
-                    if len(actives) == max_mds:
-                        self.log('mds cluster has {count} alive and active, now stable!'.format(count = len(actives)))
+                    if actives == max_mds:
+                        self.log('mds cluster has {count} alive and active, now stable!'.format(count = actives))
                         return status, None
             if itercount > 300/2: # 5 minutes
                  raise RuntimeError('timeout waiting for cluster to stabilize')
@@ -244,10 +248,9 @@ class MDSThrasher(Thrasher, Greenlet):
 
             if random.random() <= self.thrash_max_mds:
                 max_mds = status.get_fsmap(self.fs.id)['mdsmap']['max_mds']
-                options = range(1, max_mds)+range(max_mds+1, self.max_mds+1)
+                options = [i for i in range(1, self.max_mds + 1) if i != max_mds]
                 if len(options) > 0:
-                    sample = random.sample(options, 1)
-                    new_max_mds = sample[0]
+                    new_max_mds = random.choice(options)
                     self.log('thrashing max_mds: %d -> %d' % (max_mds, new_max_mds))
                     self.fs.set_max_mds(new_max_mds)
                     stats['max_mds'] += 1
@@ -269,7 +272,7 @@ class MDSThrasher(Thrasher, Greenlet):
                 weight = 1.0
                 if 'thrash_weights' in self.config:
                     weight = self.config['thrash_weights'].get(label, '0.0')
-                skip = random.randrange(0.0, 1.0)
+                skip = random.random()
                 if weight <= skip:
                     self.log('skipping thrash iteration with skip ({skip}) > weight ({weight})'.format(skip=skip, weight=weight))
                     continue
@@ -303,7 +306,7 @@ class MDSThrasher(Thrasher, Greenlet):
                     self.log(
                         '{label} reported laggy/crashed since: {since}'.format(label=label, since=last_laggy_since))
                 else:
-                    self.log('{label} down, removed from mdsmap'.format(label=label, since=last_laggy_since))
+                    self.log('{label} down, removed from mdsmap'.format(label=label))
 
                 # wait for a standby mds to takeover and become active
                 status = self.wait_for_stable(rank, gid)
@@ -415,7 +418,7 @@ def task(ctx, config):
         config['cluster'] = 'ceph'
 
     for fs in status.get_filesystems():
-        thrasher = MDSThrasher(ctx, manager, config, Filesystem(ctx, fs['id']), fs['mdsmap']['max_mds'])
+        thrasher = MDSThrasher(ctx, manager, config, Filesystem(ctx, fscid=fs['id']), fs['mdsmap']['max_mds'])
         thrasher.start()
         ctx.ceph[config['cluster']].thrashers.append(thrasher)
 

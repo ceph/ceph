@@ -25,7 +25,7 @@ class OpenSSLCryptoPlugin : public CryptoPlugin {
 public:
   explicit OpenSSLCryptoPlugin(CephContext* cct) : CryptoPlugin(cct)
   {}
-  int factory(CryptoAccelRef *cs, ostream *ss) override {
+  int factory(CryptoAccelRef *cs, std::ostream *ss) override {
     if (cryptoaccel == nullptr)
       cryptoaccel = CryptoAccelRef(new OpenSSLCryptoAccel);
 

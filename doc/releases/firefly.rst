@@ -1,3 +1,10 @@
+=======
+Firefly
+=======
+
+Firefly is the 6th stable release of Ceph. It is named after the
+firefly squid (Watasenia scintillans).
+
 v0.80.11 Firefly
 ================
 

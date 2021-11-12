@@ -18,6 +18,7 @@
 #include "include/utime.h"
 #include "common/AsyncOpTracker.h"
 #include "common/ceph_mutex.h"
+#include "common/Timer.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_deleter/Types.h"
 #include <atomic>
@@ -29,9 +30,10 @@
 
 class AdminSocketHook;
 class Context;
-class ContextWQ;
-class SafeTimer;
-namespace librbd { struct ImageCtx; }
+namespace librbd {
+struct ImageCtx;
+namespace asio { struct ContextWQ; }
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
@@ -66,7 +68,8 @@ public:
 
   static void trash_move(librados::IoCtx& local_io_ctx,
                          const std::string& global_image_id, bool resync,
-                         ContextWQ* work_queue, Context* on_finish);
+                         librbd::asio::ContextWQ* work_queue,
+                         Context* on_finish);
 
   void init(Context* on_finish);
   void shut_down(Context* on_finish);

@@ -1,0 +1,18 @@
+arch: x86_64
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - client.0
+tasks:
+- install:
+    extra_system_packages:
+      rpm:
+        - perf
+      deb:
+        - linux-tools-generic
+- workunit:
+    basedir: qa/standalone
+    clients:
+      all:
+        - c2c

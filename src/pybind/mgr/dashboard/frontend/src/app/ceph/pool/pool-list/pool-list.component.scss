@@ -1,17 +1,19 @@
-@import 'defaults';
+@use './src/styles/vendor/variables' as vv;
 
-::ng-deep .pg-clean {
-  color: $color-bright-green;
-}
+::ng-deep cd-pool-list {
+  .pg-clean {
+    color: vv.$success;
+  }
 
-::ng-deep .pg-working {
-  color: $color-primary;
-}
+  .pg-working {
+    color: vv.$primary;
+  }
 
-::ng-deep .pg-warning {
-  color: $color-bright-yellow;
-}
+  .pg-warning {
+    color: vv.$warning;
+  }
 
-::ng-deep .pg-unknown {
-  color: $color-solid-red;
+  .pg-unknown {
+    color: vv.$danger;
+  }
 }

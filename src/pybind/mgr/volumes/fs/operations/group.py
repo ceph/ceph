@@ -6,11 +6,13 @@ from contextlib import contextmanager
 import cephfs
 
 from .snapshot_util import mksnap, rmsnap
+from .pin_util import pin
 from .template import GroupTemplate
-from ..fs_util import listdir, get_ancestor_xattr
+from ..fs_util import listdir, listsnaps, get_ancestor_xattr, create_base_dir
 from ..exception import VolumeException
 
 log = logging.getLogger(__name__)
+
 
 class Group(GroupTemplate):
     # Reserved subvolume group name which we use in paths for subvolumes
@@ -30,16 +32,20 @@ class Group(GroupTemplate):
         return os.path.join(self.vol_spec.base_dir.encode('utf-8'), self.groupname.encode('utf-8'))
 
     @property
-    def uid(self):
-        return self.user_id
+    def group_name(self):
+        return self.groupname
 
     @property
-    def gid(self):
-        return self.group_id
+    def uid(self):
+        return self.user_id
 
     @uid.setter
     def uid(self, val):
         self.user_id = val
+
+    @property
+    def gid(self):
+        return self.group_id
 
     @gid.setter
     def gid(self, val):
@@ -57,6 +63,9 @@ class Group(GroupTemplate):
                 return []
             raise
 
+    def pin(self, pin_type, pin_setting):
+        return pin(self.fs, self.path, pin_type, pin_setting)
+
     def create_snapshot(self, snapname):
         snappath = os.path.join(self.path,
                                 self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
@@ -73,11 +82,12 @@ class Group(GroupTemplate):
         try:
             dirpath = os.path.join(self.path,
                                    self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
-            return listdir(self.fs, dirpath)
+            return listsnaps(self.fs, self.vol_spec, dirpath, filter_inherited_snaps=True)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:
                 return []
             raise
+
 
 def create_group(fs, vol_spec, groupname, pool, mode, uid, gid):
     """
@@ -94,7 +104,11 @@ def create_group(fs, vol_spec, groupname, pool, mode, uid, gid):
     """
     group = Group(fs, vol_spec, groupname)
     path = group.path
-    fs.mkdirs(path, mode)
+    vol_spec_base_dir = group.vol_spec.base_dir.encode('utf-8')
+
+    # create vol_spec base directory with default mode(0o755) if it doesn't exist
+    create_base_dir(fs, vol_spec_base_dir, vol_spec.DEFAULT_MODE)
+    fs.mkdir(path, mode)
     try:
         if not pool:
             pool = get_ancestor_xattr(fs, path, "ceph.dir.layout.pool")
@@ -128,10 +142,11 @@ def create_group(fs, vol_spec, groupname, pool, mode, uid, gid):
             log.debug("cleaning up subvolume group path: {0}".format(path))
             fs.rmdir(path)
         except cephfs.Error as ce:
-            log.debug("failed to clean up subvolume group {0} with path: {0} ({1})".format(groupname, path, ce))
+            log.debug("failed to clean up subvolume group {0} with path: {1} ({2})".format(groupname, path, ce))
         if isinstance(e, cephfs.Error):
             e = VolumeException(-e.args[0], e.args[1])
         raise e
+
 
 def remove_group(fs, vol_spec, groupname):
     """
@@ -149,6 +164,7 @@ def remove_group(fs, vol_spec, groupname):
         if e.args[0] == errno.ENOENT:
             raise VolumeException(-errno.ENOENT, "subvolume group '{0}' does not exist".format(groupname))
         raise VolumeException(-e.args[0], e.args[1])
+
 
 @contextmanager
 def open_group(fs, vol_spec, groupname):
@@ -172,3 +188,12 @@ def open_group(fs, vol_spec, groupname):
         else:
             raise VolumeException(-e.args[0], e.args[1])
     yield group
+
+
+@contextmanager
+def open_group_unique(fs, vol_spec, groupname, c_group, c_groupname):
+    if groupname == c_groupname:
+        yield c_group
+    else:
+        with open_group(fs, vol_spec, groupname) as group:
+            yield group

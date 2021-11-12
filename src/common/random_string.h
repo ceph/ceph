@@ -17,8 +17,7 @@
 #pragma once
 
 #include <string>
-
-class CephContext;
+#include "include/common_fwd.h"
 
 /* size should be the required string size + 1 */
 int gen_rand_base64(CephContext *cct, char *dest, size_t size);

@@ -26,6 +26,7 @@
 #define dout_prefix *_dout << objecter->messenger->get_myname() \
   << ".journaler." << name << (readonly ? "(ro) ":"(rw) ")
 
+using namespace std;
 using std::chrono::seconds;
 
 
@@ -417,6 +418,13 @@ void Journaler::_finish_reread_head_and_probe(int r, C_OnFinisher *onfinish)
     return;
   }
 
+  // Let the caller know that the operation has failed or was intentionally
+  // failed since the caller has been blocklisted.
+  if (r == -EBLOCKLISTED) {
+    onfinish->complete(r);
+    return;
+  }
+
   ceph_assert(!r); //if we get an error, we're boned
   _reprobe(onfinish);
 }
@@ -697,7 +705,8 @@ void Journaler::wait_for_flush(Context *onsafe)
 {
   lock_guard l(lock);
   if (is_stopping()) {
-    onsafe->complete(-EAGAIN);
+    if (onsafe)
+      onsafe->complete(-EAGAIN);
     return;
   }
   _wait_for_flush(onsafe);
@@ -730,7 +739,8 @@ void Journaler::flush(Context *onsafe)
 {
   lock_guard l(lock);
   if (is_stopping()) {
-    onsafe->complete(-EAGAIN);
+    if (onsafe)
+      onsafe->complete(-EAGAIN);
     return;
   }
   _flush(wrap_finisher(onsafe));

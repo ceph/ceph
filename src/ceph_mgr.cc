@@ -30,8 +30,8 @@
 
 static void usage()
 {
-  cout << "usage: ceph-mgr -i <ID> [flags]\n"
-       << std::endl;
+  std::cout << "usage: ceph-mgr -i <ID> [flags]\n"
+	    << std::endl;
   generic_server_usage();
 }
 
@@ -43,10 +43,9 @@ int main(int argc, const char **argv)
 {
   ceph_pthread_setname(pthread_self(), "ceph-mgr");
 
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
-    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    std::cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
   }
   if (ceph_argparse_need_usage(args)) {
@@ -54,12 +53,11 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-  map<string,string> defaults = {
+  std::map<std::string,std::string> defaults = {
     { "keyring", "$mgr_data/keyring" }
   };
   auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_MGR,
-			 CODE_ENVIRONMENT_DAEMON, 0,
-			 "mgr_data");
+			 CODE_ENVIRONMENT_DAEMON, 0);
 
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 

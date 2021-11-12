@@ -6,7 +6,6 @@ import logging
 import gevent
 from teuthology import misc as teuthology
 
-import six
 
 from teuthology.orchestra import run
 
@@ -153,6 +152,10 @@ def task(ctx, config):
         args.extend(['--enable_dedup'])
     if config.get('low_tier_pool', None):
         args.extend(['--low_tier_pool', config.get('low_tier_pool', None)])
+    if config.get('dedup_chunk_size', False):
+        args.extend(['--dedup_chunk_size', config.get('dedup_chunk_size', None)] )
+    if config.get('dedup_chunk_algo', False):
+        args.extend(['--dedup_chunk_algo', config.get('dedup_chunk_algo', None)])
     if config.get('pool_snaps', False):
         args.extend(['--pool-snaps'])
     if config.get('balance_reads', False):
@@ -164,8 +167,8 @@ def task(ctx, config):
         '--objects', str(config.get('objects', 500)),
         '--max-in-flight', str(config.get('max_in_flight', 16)),
         '--size', str(object_size),
-        '--min-stride-size', str(config.get('min_stride_size', object_size / 10)),
-        '--max-stride-size', str(config.get('max_stride_size', object_size / 5)),
+        '--min-stride-size', str(config.get('min_stride_size', object_size // 10)),
+        '--max-stride-size', str(config.get('max_stride_size', object_size // 5)),
         '--max-seconds', str(config.get('max_seconds', 0))
         ])
 
@@ -194,18 +197,23 @@ def task(ctx, config):
         "append",
         "write",
         "read",
-        "delete"
+        "delete",
+        "set_chunk",
+        "tier_promote",
+        "tier_evict",
+        "tier_promote",
+        "tier_flush"
         ]:
         if field in op_weights:
             weights[field] = op_weights[field]
 
     if config.get('write_append_excl', True):
         if 'write' in weights:
-            weights['write'] = weights['write'] / 2
+            weights['write'] = weights['write'] // 2
             weights['write_excl'] = weights['write']
 
         if 'append' in weights:
-            weights['append'] = weights['append'] / 2
+            weights['append'] = weights['append'] // 2
             weights['append_excl'] = weights['append']
 
     for op, weight in weights.items():
@@ -231,7 +239,7 @@ def task(ctx, config):
             existing_pools = config.get('pools', [])
             created_pools = []
             for role in config.get('clients', clients):
-                assert isinstance(role, six.string_types)
+                assert isinstance(role, str)
                 PREFIX = 'client.'
                 assert role.startswith(PREFIX)
                 id_ = role[len(PREFIX):]
@@ -263,7 +271,7 @@ def task(ctx, config):
                     wait=False
                     )
                 tests[id_] = proc
-            run.wait(tests.itervalues())
+            run.wait(tests.values())
 
             for pool in created_pools:
                 manager.wait_snap_trimming_complete(pool);

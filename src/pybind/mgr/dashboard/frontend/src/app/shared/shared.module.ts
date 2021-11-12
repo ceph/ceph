@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 
-import { ApiModule } from './api/api.module';
+import { CssHelper } from '~/app/shared/classes/css-helper';
 import { ComponentsModule } from './components/components.module';
 import { DataTableModule } from './datatable/datatable.module';
 import { DirectivesModule } from './directives/directives.module';
@@ -11,16 +11,9 @@ import { AuthStorageService } from './services/auth-storage.service';
 import { FormatterService } from './services/formatter.service';
 
 @NgModule({
-  imports: [
-    CommonModule,
-    PipesModule,
-    ComponentsModule,
-    DataTableModule,
-    ApiModule,
-    DirectivesModule
-  ],
+  imports: [CommonModule, PipesModule, ComponentsModule, DataTableModule, DirectivesModule],
   declarations: [],
-  exports: [ComponentsModule, PipesModule, DataTableModule, ApiModule, DirectivesModule],
-  providers: [AuthStorageService, AuthGuardService, FormatterService]
+  exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule],
+  providers: [AuthStorageService, AuthGuardService, FormatterService, CssHelper]
 })
 export class SharedModule {}

@@ -22,7 +22,7 @@
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
-class MOSDRepOp : public MOSDFastDispatchOp {
+class MOSDRepOp final : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
@@ -124,13 +124,10 @@ public:
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     encode(map_epoch, payload);
-    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
-      header.version = HEAD_VERSION;
-      encode(min_epoch, payload);
-      encode_trace(payload, features);
-    } else {
-      header.version = 1;
-    }
+    assert(HAVE_FEATURE(features, SERVER_OCTOPUS));
+    header.version = HEAD_VERSION;
+    encode(min_epoch, payload);
+    encode_trace(payload, features);
     encode(reqid, payload);
     encode(pgid, payload);
     encode(poid, payload);
@@ -172,7 +169,7 @@ public:
     min_last_complete_ondisk = rollback_to;
   }
 private:
-  ~MOSDRepOp() override {}
+  ~MOSDRepOp() final {}
 
 public:
   std::string_view get_type_name() const override { return "osd_repop"; }

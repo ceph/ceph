@@ -20,15 +20,17 @@
 #include <string_view>
 #include <boost/optional.hpp>
 #include "include/ceph_assert.h"    // boost clobbers this
+#include "include/common_fwd.h"
 #include "include/buffer.h"
 #include "include/int_types.h"
 #ifdef HAVE_QATZIP
   #include "QatAccel.h"
 #endif
 
+namespace TOPNSPC {
+
 class Compressor;
 typedef std::shared_ptr<Compressor> CompressorRef;
-class CephContext;
 
 class Compressor {
 public:
@@ -74,10 +76,10 @@ public:
 #endif
 
   static const char* get_comp_alg_name(int a);
-  static boost::optional<CompressionAlgorithm> get_comp_alg_type(const std::string &s);
+  static boost::optional<CompressionAlgorithm> get_comp_alg_type(std::string_view s);
 
   static const char *get_comp_mode_name(int m);
-  static boost::optional<CompressionMode> get_comp_mode_type(const std::string &s);
+  static boost::optional<CompressionMode> get_comp_mode_type(std::string_view s);
 
   Compressor(CompressionAlgorithm a, const char* t) : alg(a), type(t) {
   }
@@ -88,11 +90,11 @@ public:
   CompressionAlgorithm get_type() const {
     return alg;
   }
-  virtual int compress(const ceph::bufferlist &in, ceph::bufferlist &out) = 0;
-  virtual int decompress(const ceph::bufferlist &in, ceph::bufferlist &out) = 0;
+  virtual int compress(const ceph::bufferlist &in, ceph::bufferlist &out, boost::optional<int32_t> &compressor_message) = 0;
+  virtual int decompress(const ceph::bufferlist &in, ceph::bufferlist &out, boost::optional<int32_t> compressor_message) = 0;
   // this is a bit weird but we need non-const iterator to be in
   // alignment with decode methods
-  virtual int decompress(ceph::bufferlist::const_iterator &p, size_t compressed_len, ceph::bufferlist &out) = 0;
+  virtual int decompress(ceph::bufferlist::const_iterator &p, size_t compressed_len, ceph::bufferlist &out, boost::optional<int32_t> compressor_message) = 0;
 
   static CompressorRef create(CephContext *cct, const std::string &type);
   static CompressorRef create(CephContext *cct, int alg);
@@ -103,4 +105,5 @@ protected:
 
 };
 
+} // namespace TOPNSPC
 #endif

@@ -1,0 +1,5 @@
+# https://tracker.ceph.com/issues/45802
+overrides:
+  ceph:
+    log-ignorelist:
+    - \(PG_AVAILABILITY\)

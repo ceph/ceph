@@ -21,7 +21,7 @@
 #include "include/types.h"
 #include "osd/osd_types.h"
 
-class MOSDBoot : public PaxosServiceMessage {
+class MOSDBoot final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 7;
@@ -31,14 +31,14 @@ private:
   entity_addrvec_t hb_back_addrs, hb_front_addrs;
   entity_addrvec_t cluster_addrs;
   epoch_t boot_epoch;  // last epoch this daemon was added to the map (if any)
-  map<string,string> metadata; ///< misc metadata about this osd
+  std::map<std::string,std::string> metadata; ///< misc metadata about this osd
   uint64_t osd_features;
 
   MOSDBoot()
     : PaxosServiceMessage{MSG_OSD_BOOT, 0, HEAD_VERSION, COMPAT_VERSION},
       boot_epoch(0), osd_features(0)
   { }
-  MOSDBoot(OSDSuperblock& s, epoch_t e, epoch_t be,
+  MOSDBoot(const OSDSuperblock& s, epoch_t e, epoch_t be,
 	   const entity_addrvec_t& hb_back_addr_ref,
 	   const entity_addrvec_t& hb_front_addr_ref,
            const entity_addrvec_t& cluster_addr_ref,
@@ -53,33 +53,22 @@ private:
   { }
   
 private:
-  ~MOSDBoot() override { }
+  ~MOSDBoot() final { }
 
 public:
   std::string_view get_type_name() const override { return "osd_boot"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_boot(osd." << sb.whoami << " booted " << boot_epoch
 	<< " features " << osd_features
 	<< " v" << version << ")";
   }
-  
+
   void encode_payload(uint64_t features) override {
     header.version = HEAD_VERSION;
     header.compat_version = COMPAT_VERSION;
     using ceph::encode;
     paxos_encode();
-    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
-      header.version = 6;
-      header.compat_version = 6;
-      encode(sb, payload);
-      hb_back_addrs.legacy_addr().encode(payload, features);
-      cluster_addrs.legacy_addr().encode(payload, features);
-      encode(boot_epoch, payload);
-      hb_front_addrs.legacy_addr().encode(payload, features);
-      encode(metadata, payload);
-      encode(osd_features, payload);
-      return;
-    }
+    assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
     encode(sb, payload);
     encode(hb_back_addrs, payload, features);
     encode(cluster_addrs, payload, features);
@@ -90,21 +79,9 @@ public:
   }
   void decode_payload() override {
     auto p = payload.cbegin();
+    using ceph::decode;
     paxos_decode(p);
-    if (header.version < 7) {
-      entity_addr_t a;
-      decode(sb, p);
-      decode(a, p);
-      hb_back_addrs = entity_addrvec_t(a);
-      decode(a, p);
-      cluster_addrs = entity_addrvec_t(a);
-      decode(boot_epoch, p);
-      decode(a, p);
-      hb_front_addrs = entity_addrvec_t(a);
-      decode(metadata, p);
-      decode(osd_features, p);
-      return;
-    }
+    assert(header.version >= 7);
     decode(sb, p);
     decode(hb_back_addrs, p);
     decode(cluster_addrs, p);

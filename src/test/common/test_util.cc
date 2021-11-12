@@ -12,16 +12,20 @@
  *
  */
 
+#include <filesystem>
+
+#include "gtest/gtest.h"
 #include "common/ceph_context.h"
 #include "include/util.h"
-#include "gtest/gtest.h"
 
-#include <experimental/filesystem>
+using namespace std;
+
+namespace fs = std::filesystem;
 
 #if defined(__linux__)
 TEST(util, collect_sys_info)
 {
-  if (!std::experimental::filesystem::exists("/etc/os-release")) {
+  if (!fs::exists("/etc/os-release")) {
     GTEST_SKIP() << "skipping as '/etc/os-release' does not exist";
   }
 

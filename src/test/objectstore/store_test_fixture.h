@@ -1,6 +1,6 @@
 #include <string>
 #include <stack>
-#include <boost/scoped_ptr.hpp>
+#include <memory>
 #include <gtest/gtest.h>
 #include "common/config_fwd.h"
 
@@ -13,8 +13,10 @@ class StoreTestFixture : virtual public ::testing::Test {
   std::stack<std::pair<std::string, std::string>> saved_settings;
   ConfigProxy* conf = nullptr;
 
+  std::string orig_death_test_style;
+
 public:
-  boost::scoped_ptr<ObjectStore> store;
+  std::unique_ptr<ObjectStore> store;
   ObjectStore::CollectionHandle ch;
 
   explicit StoreTestFixture(const std::string& type)
@@ -23,6 +25,13 @@ public:
 
   void SetUp() override;
   void TearDown() override;
+  void SetDeathTestStyle(const char* new_style) {
+    if (orig_death_test_style.empty()) {
+      orig_death_test_style = ::testing::FLAGS_gtest_death_test_style;
+    }
+    ::testing::FLAGS_gtest_death_test_style = new_style;
+  }
+
   void SetVal(ConfigProxy& conf, const char* key, const char* val);
   struct SettingsBookmark {
     StoreTestFixture& s;
@@ -39,4 +48,5 @@ public:
     return SettingsBookmark(*this, saved_settings.size());
   }
   void PopSettings(size_t);
+  void CloseAndReopen();
 };

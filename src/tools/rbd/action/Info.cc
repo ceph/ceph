@@ -382,12 +382,12 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
       }
       f->close_section();
     } else {
-      std::cout << "\tmirroring mode: "
-                << utils::mirror_image_mode(mirror_mode) << std::endl;
       std::cout << "\tmirroring state: "
                 << utils::mirror_image_state(mirror_image.state) << std::endl;
       if (mirror_image.state != RBD_MIRROR_IMAGE_DISABLED) {
-        std::cout << "\tmirroring global id: " << mirror_image.global_id
+        std::cout << "\tmirroring mode: "
+                  << utils::mirror_image_mode(mirror_mode) << std::endl
+                  << "\tmirroring global id: " << mirror_image.global_id
                   << std::endl
                   << "\tmirroring primary: "
                   << (mirror_image.primary ? "true" : "false") <<std::endl;

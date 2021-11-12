@@ -18,7 +18,7 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGUpdateLogMissing : public MOSDFastDispatchOp {
+class MOSDPGUpdateLogMissing final : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
@@ -73,11 +73,11 @@ public:
   {}
 
 private:
-  ~MOSDPGUpdateLogMissing() override {}
+  ~MOSDPGUpdateLogMissing() final {}
 
 public:
   std::string_view get_type_name() const override { return "PGUpdateLogMissing"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "pg_update_log_missing(" << pgid << " epoch " << map_epoch
 	<< "/" << min_epoch
 	<< " rep_tid " << rep_tid
@@ -99,6 +99,7 @@ public:
     encode(pg_roll_forward_to, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(map_epoch, p);
     decode(pgid, p);

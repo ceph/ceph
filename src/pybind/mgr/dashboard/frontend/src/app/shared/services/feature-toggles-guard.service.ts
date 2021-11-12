@@ -1,21 +1,22 @@
 import { Injectable } from '@angular/core';
-import { ActivatedRouteSnapshot, CanActivate, CanActivateChild, Router } from '@angular/router';
+import { ActivatedRouteSnapshot, CanActivate, CanActivateChild } from '@angular/router';
 
 import { map } from 'rxjs/operators';
 
+import { DashboardNotFoundError } from '~/app/core/error/error';
 import { FeatureTogglesMap, FeatureTogglesService } from './feature-toggles.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class FeatureTogglesGuardService implements CanActivate, CanActivateChild {
-  constructor(private router: Router, private featureToggles: FeatureTogglesService) {}
+  constructor(private featureToggles: FeatureTogglesService) {}
 
   canActivate(route: ActivatedRouteSnapshot) {
     return this.featureToggles.get().pipe(
       map((enabledFeatures: FeatureTogglesMap) => {
         if (enabledFeatures[route.routeConfig.path] === false) {
-          this.router.navigate(['404']);
+          throw new DashboardNotFoundError();
           return false;
         }
         return true;

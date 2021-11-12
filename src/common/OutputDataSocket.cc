@@ -255,7 +255,7 @@ bool OutputDataSocket::do_accept()
 
 void OutputDataSocket::handle_connection(int fd)
 {
-  bufferlist bl;
+  ceph::buffer::list bl;
 
   m_lock.lock();
   init_connection(bl);
@@ -294,13 +294,13 @@ void OutputDataSocket::handle_connection(int fd)
 int OutputDataSocket::dump_data(int fd)
 {
   m_lock.lock();
-  vector<buffer::list> l = std::move(data);
+  auto l = std::move(data);
   data.clear();
   data_size = 0;
   m_lock.unlock();
 
   for (auto iter = l.begin(); iter != l.end(); ++iter) {
-    bufferlist& bl = *iter;
+    ceph::buffer::list& bl = *iter;
     int ret = safe_write(fd, bl.c_str(), bl.length());
     if (ret >= 0) {
       ret = safe_write(fd, delim.c_str(), delim.length());
@@ -308,7 +308,7 @@ int OutputDataSocket::dump_data(int fd)
     if (ret < 0) {
       std::scoped_lock lock(m_lock);
       for (; iter != l.end(); ++iter) {
-        bufferlist& bl = *iter;
+        ceph::buffer::list& bl = *iter;
 	data.push_back(bl);
 	data_size += bl.length();
       }
@@ -384,7 +384,7 @@ void OutputDataSocket::shutdown()
   m_path.clear();
 }
 
-void OutputDataSocket::append_output(bufferlist& bl)
+void OutputDataSocket::append_output(ceph::buffer::list& bl)
 {
   std::lock_guard l(m_lock);
 

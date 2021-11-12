@@ -2,8 +2,8 @@
 OSD Throttles
 =============
 
-There are three significant throttles in the filestore: wbthrottle,
-op_queue_throttle, and a throttle based on journal usage.
+There are three significant throttles in the FileStore OSD back end:
+wbthrottle, op_queue_throttle, and a throttle based on journal usage.
 
 WBThrottle
 ----------
@@ -17,7 +17,7 @@ flushing and block in FileStore::_do_op if we have exceeded any hard
 limits until the background flusher catches up.
 
 The relevant config options are filestore_wbthrottle*.  There are
-different defaults for xfs and btrfs.  Each set has hard and soft
+different defaults for XFS and Btrfs.  Each set has hard and soft
 limits on bytes (total dirty bytes), ios (total dirty ios), and
 inodes (total dirty fds).  The WBThrottle will begin flushing
 when any of these hits the soft limit and will block in throttle()

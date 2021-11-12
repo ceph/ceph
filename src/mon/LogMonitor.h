@@ -18,6 +18,9 @@
 #include <map>
 #include <set>
 
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+
 #include "include/types.h"
 #include "PaxosService.h"
 
@@ -27,48 +30,50 @@
 
 class MLog;
 
-static const string LOG_META_CHANNEL = "$channel";
+static const std::string LOG_META_CHANNEL = "$channel";
 
 namespace ceph {
 namespace logging {
   class Graylog;
+  class JournaldClusterLogger;
 }
 }
 
 class LogMonitor : public PaxosService,
                    public md_config_obs_t {
 private:
-  multimap<utime_t,LogEntry> pending_log;
-  LogSummary pending_summary, summary;
+  std::multimap<utime_t,LogEntry> pending_log;
+  unordered_set<LogEntryKey> pending_keys;
+
+  LogSummary summary;
+
+  version_t external_log_to = 0;
+  std::map<std::string, int> channel_fds;
+
+  fmt::memory_buffer file_log_buffer;
 
   struct log_channel_info {
 
-    map<string,string> log_to_syslog;
-    map<string,string> syslog_level;
-    map<string,string> syslog_facility;
-    map<string,string> log_file;
-    map<string,string> expanded_log_file;
-    map<string,string> log_file_level;
-    map<string,string> log_to_graylog;
-    map<string,string> log_to_graylog_host;
-    map<string,string> log_to_graylog_port;
+    std::map<std::string,std::string> log_to_syslog;
+    std::map<std::string,std::string> syslog_level;
+    std::map<std::string,std::string> syslog_facility;
+    std::map<std::string,std::string> log_file;
+    std::map<std::string,std::string> expanded_log_file;
+    std::map<std::string,std::string> log_file_level;
+    std::map<std::string,std::string> log_to_graylog;
+    std::map<std::string,std::string> log_to_graylog_host;
+    std::map<std::string,std::string> log_to_graylog_port;
+    std::map<std::string,std::string> log_to_journald;
 
-    map<string, shared_ptr<ceph::logging::Graylog>> graylogs;
+    std::map<std::string, std::shared_ptr<ceph::logging::Graylog>> graylogs;
+    std::unique_ptr<ceph::logging::JournaldClusterLogger> journald;
     uuid_d fsid;
-    string host;
+    std::string host;
 
-    void clear() {
-      log_to_syslog.clear();
-      syslog_level.clear();
-      syslog_facility.clear();
-      log_file.clear();
-      expanded_log_file.clear();
-      log_file_level.clear();
-      log_to_graylog.clear();
-      log_to_graylog_host.clear();
-      log_to_graylog_port.clear();
-      graylogs.clear();
-    }
+    log_channel_info();
+    ~log_channel_info();
+
+    void clear();
 
     /** expands $channel meta variable on all maps *EXCEPT* log_file
      *
@@ -81,50 +86,42 @@ private:
       expand_channel_meta(syslog_facility);
       expand_channel_meta(log_file_level);
     }
-    void expand_channel_meta(map<string,string> &m);
-    string expand_channel_meta(const string &input,
-                               const string &change_to);
+    void expand_channel_meta(std::map<std::string,std::string> &m);
+    std::string expand_channel_meta(const std::string &input,
+				    const std::string &change_to);
 
-    bool do_log_to_syslog(const string &channel);
+    bool do_log_to_syslog(const std::string &channel);
 
-    string get_facility(const string &channel) {
+    std::string get_facility(const std::string &channel) {
       return get_str_map_key(syslog_facility, channel,
                              &CLOG_CONFIG_DEFAULT_KEY);
     }
 
-    string get_level(const string &channel) {
+    std::string get_level(const std::string &channel) {
       return get_str_map_key(syslog_level, channel,
                              &CLOG_CONFIG_DEFAULT_KEY);
     }
 
-    string get_log_file(const string &channel) {
-      generic_dout(25) << __func__ << " for channel '"
-                       << channel << "'" << dendl;
+    std::string get_log_file(const std::string &channel);
 
-      if (expanded_log_file.count(channel) == 0) {
-        string fname = expand_channel_meta(
-            get_str_map_key(log_file, channel, &CLOG_CONFIG_DEFAULT_KEY),
-            channel);
-        expanded_log_file[channel] = fname;
-
-        generic_dout(20) << __func__ << " for channel '"
-                         << channel << "' expanded to '"
-                         << fname << "'" << dendl;
-      }
-      return expanded_log_file[channel];
-    }
-
-    string get_log_file_level(const string &channel) {
+    std::string get_log_file_level(const std::string &channel) {
       return get_str_map_key(log_file_level, channel,
                              &CLOG_CONFIG_DEFAULT_KEY);
     }
 
-    bool do_log_to_graylog(const string &channel) {
+    bool do_log_to_graylog(const std::string &channel) {
       return (get_str_map_key(log_to_graylog, channel,
 			      &CLOG_CONFIG_DEFAULT_KEY) == "true");
     }
 
-    shared_ptr<ceph::logging::Graylog> get_graylog(const string &channel);
+    std::shared_ptr<ceph::logging::Graylog> get_graylog(const std::string &channel);
+
+    bool do_log_to_journald(const std::string &channel) {
+      return (get_str_map_key(log_to_journald, channel,
+			      &CLOG_CONFIG_DEFAULT_KEY) == "true");
+    }
+
+    ceph::logging::JournaldClusterLogger &get_journald();
   } channels;
 
   void update_log_channels();
@@ -133,6 +130,7 @@ private:
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;  // prepare a new pending
   // propose pending update to peers
+  void generate_logentry_key(const std::string& channel, version_t v, std::string *out);
   void encode_pending(MonitorDBStore::TransactionRef t) override;
   void encode_full(MonitorDBStore::TransactionRef t) override;
   version_t get_trim_to() const override;
@@ -145,10 +143,7 @@ private:
 
   bool should_propose(double& delay) override;
 
-  bool should_stash_full() override {
-    // commit a LogSummary on every commit
-    return true;
-  }
+  bool should_stash_full() override;
 
   struct C_Log;
 
@@ -158,7 +153,7 @@ private:
   void _create_sub_incremental(MLog *mlog, int level, version_t sv);
 
  public:
-  LogMonitor(Monitor *mn, Paxos *p, const string& service_name) 
+  LogMonitor(Monitor &mn, Paxos &p, const std::string& service_name)
     : PaxosService(mn, p, service_name) { }
 
   void init() override {
@@ -172,13 +167,17 @@ private:
   void check_subs();
   void check_sub(Subscription *s);
 
+  void log_external_close_fds();
+  void log_external(const LogEntry& le);
+  void log_external_backlog();
+
   /**
    * translate log sub name ('log-info') to integer id
    *
    * @param n name
    * @return id, or -1 if unrecognized
    */
-  int sub_name_to_id(const string& n);
+  int sub_name_to_id(const std::string& n);
 
   void on_shutdown() override {
     g_conf().remove_observer(this);
@@ -194,6 +193,7 @@ private:
       "mon_cluster_log_to_graylog",
       "mon_cluster_log_to_graylog_host",
       "mon_cluster_log_to_graylog_port",
+      "mon_cluster_log_to_journald",
       NULL
     };
     return KEYS;

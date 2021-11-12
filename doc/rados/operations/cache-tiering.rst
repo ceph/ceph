@@ -13,7 +13,7 @@ tier. So the cache tier and the backing storage tier are completely transparent
 to Ceph clients.
 
 
-.. ditaa:: 
+.. ditaa::
            +-------------+
            | Ceph Client |
            +------+------+
@@ -185,7 +185,7 @@ scenario, but with this difference: the drives for the cache tier are typically
 high performance drives that reside in their own servers and have their own
 CRUSH rule.  When setting up such a rule, it should take account of the hosts
 that have the high performance drives while omitting the hosts that don't. See
-`Placing Different Pools on Different OSDs`_ for details.
+:ref:`CRUSH Device Class<crush-map-device-class>` for details.
 
 
 In subsequent examples, we will refer to the cache pool as ``hot-storage`` and
@@ -469,7 +469,6 @@ disable and remove it.
 
 .. _Create a Pool: ../pools#create-a-pool
 .. _Pools - Set Pool Values: ../pools#set-pool-values
-.. _Placing Different Pools on Different OSDs: ../crush-map-edits/#placing-different-pools-on-different-osds
 .. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter
 .. _CRUSH Maps: ../crush-map
 .. _Absolute Sizing: #absolute-sizing

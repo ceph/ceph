@@ -13,6 +13,7 @@
  */
 
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <boost/scoped_ptr.hpp>
 #include "os/filestore/FileStore.h"
@@ -24,6 +25,8 @@
 #include "kv/KeyValueDB.h"
 #include "os/ObjectStore.h"
 
+using namespace std;
+
 void usage(const string &name) {
   std::cerr << "Usage: " << name << " [new|continue] store_path store_journal db_path"
 	    << std::endl;
@@ -31,20 +34,14 @@ void usage(const string &name) {
 
 template <typename T>
 typename T::iterator rand_choose(T &cont) {
-  if (cont.size() == 0) {
-    return cont.end();
+  if (std::empty(cont)) {
+    return std::end(cont);
   }
-  int index = rand() % cont.size();
-  typename T::iterator retval = cont.begin();
-
-  for (; index > 0; --index) ++retval;
-  return retval;
+  return std::next(std::begin(cont), rand() % cont.size());
 }
 
 int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
+  auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);

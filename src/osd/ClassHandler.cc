@@ -5,8 +5,7 @@
 #include "ClassHandler.h"
 #include "common/errno.h"
 #include "common/ceph_context.h"
-
-#include <dlfcn.h>
+#include "include/dlfcn_compat.h"
 
 #include <map>
 
@@ -23,7 +22,13 @@
 
 
 #define CLS_PREFIX "libcls_"
-#define CLS_SUFFIX ".so"
+#define CLS_SUFFIX SHARED_LIB_SUFFIX
+
+using std::map;
+using std::set;
+using std::string;
+
+using ceph::bufferlist;
 
 
 int ClassHandler::open_class(const string& cname, ClassData **pcls)
@@ -121,7 +126,7 @@ ClassHandler::ClassData *ClassHandler::_get_class(const string& cname,
     ldout(cct, 10) << "_get_class adding new class name " << cname << " " << cls << dendl;
     cls->name = cname;
     cls->handler = this;
-    cls->whitelisted = in_class_list(cname, cct->_conf->osd_class_default_list);
+    cls->allowed = in_class_list(cname, cct->_conf->osd_class_default_list);
   }
   return cls;
 }
@@ -319,7 +324,7 @@ int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata
       ret = method(ctx, indata.c_str(), indata.length(), &out, &olen);
       if (out) {
         // assume *out was allocated via cls_alloc (which calls malloc!)
-        buffer::ptr bp = buffer::claim_malloc(olen, out);
+	ceph::buffer::ptr bp = ceph::buffer::claim_malloc(olen, out);
         outdata.push_back(bp);
       }
     } else {

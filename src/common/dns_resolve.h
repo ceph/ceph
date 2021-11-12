@@ -15,7 +15,9 @@
 #define CEPH_DNS_RESOLVE_H
 
 #include <netinet/in.h>
+#ifndef _WIN32
 #include <resolv.h>
+#endif
 
 #include "common/ceph_mutex.h"
 #include "msg/msg_types.h"		// for entity_addr_t
@@ -139,11 +141,13 @@ class DNSResolver {
     void put_state(res_state s);
 #endif
 
+#ifndef _WIN32
     /* this private function allows to reuse the res_state structure used
      * by other function of this class
      */
     int resolve_ip_addr(CephContext *cct, res_state *res,
         const std::string& hostname, entity_addr_t *addr);
+#endif
 
     std::string srv_protocol_to_str(SRV_Protocol proto) {
       switch (proto) {

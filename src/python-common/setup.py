@@ -17,8 +17,8 @@ setup(
     keywords='ceph',
     url="https://github.com/ceph/ceph",
     zip_safe = False,
-    install_requires=(
-        'six',
+    install_requires=(	
+        'pyyaml',	
     ),
     classifiers = [
         'Intended Audience :: Developer',

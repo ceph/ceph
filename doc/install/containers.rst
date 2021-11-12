@@ -1,13 +1,28 @@
+.. _containers:
+
 Ceph Container Images
 =====================
+
+.. important::
+
+   Using the ``:latest`` tag is discouraged. If you use the ``:latest`` 
+   tag, there is no guarantee that the same image will be on each of 
+   your hosts.  Under these conditions, upgrades might not work 
+   properly. Remember that ``:latest`` is a relative tag, and a moving
+   target.
+
+   Instead of the ``:latest`` tag, use explicit tags or image IDs. For
+   example:
+
+   ``podman pull ceph/ceph:v15.2.0``
 
 Official Releases
 -----------------
 
-Ceph Container images are available from Docker Hub at::
+Ceph Container images are available from both Quay and Docker Hub::
 
+  https://quay.io/repository/ceph/ceph
   https://hub.docker.com/r/ceph
-
 
 ceph/ceph
 ^^^^^^^^^
@@ -26,6 +41,13 @@ ceph/ceph
 +----------------------+--------------------------------------------------------------+
 | vRELNUM.Y.Z-YYYYMMDD | A specific build (e.g., *v14.2.4-20191203*)                  |
 +----------------------+--------------------------------------------------------------+
+
+Legacy container images
+-----------------------
+
+Legacy container images are available from Docker Hub at::
+  
+  https://hub.docker.com/r/ceph
 
 ceph/daemon-base
 ^^^^^^^^^^^^^^^^

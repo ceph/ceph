@@ -1,15 +1,18 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import _ from 'lodash';
+import { ReplaySubject } from 'rxjs';
+
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import {
   RbdConfigurationEntry,
   RbdConfigurationSourceField,
   RbdConfigurationType
-} from '../../../shared/models/configuration';
-import { FormatterService } from '../../../shared/services/formatter.service';
-import { RbdConfigurationService } from '../../../shared/services/rbd-configuration.service';
+} from '~/app/shared/models/configuration';
+import { FormatterService } from '~/app/shared/services/formatter.service';
+import { RbdConfigurationService } from '~/app/shared/services/rbd-configuration.service';
 
 @Component({
   selector: 'cd-rbd-configuration-form',
@@ -20,10 +23,10 @@ export class RbdConfigurationFormComponent implements OnInit {
   @Input()
   form: CdFormGroup;
   @Input()
-  initializeData: EventEmitter<{
+  initializeData = new ReplaySubject<{
     initialData: RbdConfigurationEntry[];
     sourceType: RbdConfigurationSourceField;
-  }>;
+  }>(1);
   @Output()
   changes = new EventEmitter<any>();
 
@@ -49,12 +52,13 @@ export class RbdConfigurationFormComponent implements OnInit {
     });
 
     if (this.initializeData) {
-      this.initializeData.subscribe((data) => {
+      this.initializeData.subscribe((data: Record<string, any>) => {
         this.initialData = data.initialData;
         const dataType = data.sourceType;
-
         this.rbdConfigurationService.getWritableOptionFields().forEach((option) => {
-          const optionData = data.initialData.filter((entry) => entry.name === option.name).pop();
+          const optionData = data.initialData
+            .filter((entry: Record<string, any>) => entry.name === option.name)
+            .pop();
           if (optionData && optionData['source'] === dataType) {
             this.form.get(`configuration.${option.name}`).setValue(optionData['value']);
           }
@@ -77,7 +81,7 @@ export class RbdConfigurationFormComponent implements OnInit {
     const result = {};
 
     this.rbdConfigurationService.getWritableOptionFields().forEach((config) => {
-      const control = this.form.get('configuration').get(config.name);
+      const control: any = this.form.get('configuration').get(config.name);
       const dirty = control.dirty;
 
       if (this.initialData && this.initialData[config.name] === control.value) {
@@ -115,7 +119,13 @@ export class RbdConfigurationFormComponent implements OnInit {
         c.type === RbdConfigurationType.iops ||
         c.type === RbdConfigurationType.bps
       ) {
-        control = new FormControl(0, Validators.min(0));
+        let initialValue = 0;
+        _.forEach(this.initialData, (configList) => {
+          if (configList['name'] === c.name) {
+            initialValue = configList['value'];
+          }
+        });
+        control = new FormControl(initialValue, Validators.min(0));
       } else {
         throw new Error(
           `Type ${c.type} is unknown, you may need to add it to RbdConfiguration class`
@@ -131,7 +141,7 @@ export class RbdConfigurationFormComponent implements OnInit {
    * Reset the value. The inherited value will be used instead.
    */
   reset(optionName: string) {
-    const formControl = this.form.get('configuration').get(optionName);
+    const formControl: any = this.form.get('configuration').get(optionName);
     if (formControl.disabled) {
       formControl.setValue(formControl['previousValue'] || 0);
       formControl.enable();
@@ -150,7 +160,7 @@ export class RbdConfigurationFormComponent implements OnInit {
     return this.form.get('configuration').get(optionName).disabled;
   }
 
-  toggleSectionVisibility(className) {
+  toggleSectionVisibility(className: string) {
     this.sectionVisibility[className] = !this.sectionVisibility[className];
   }
 }

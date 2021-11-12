@@ -22,6 +22,11 @@
 
 #define dout_subsys ceph_subsys_monc
 
+using std::map;
+using std::ostream;
+using std::ostringstream;
+using std::string;
+
 int parse_log_client_options(CephContext *cct,
 			     map<string,string> &log_to_monitors,
 			     map<string,string> &log_to_syslog,
@@ -126,6 +131,14 @@ LogClient::LogClient(CephContext *cct, Messenger *m, MonMap *mm,
   : cct(cct), messenger(m), monmap(mm), is_mon(flags & FLAG_MON),
     last_log_sent(0), last_log(0)
 {
+}
+
+void LogChannel::set_log_to_monitors(bool v)
+{
+  if (log_to_monitors != v) {
+    parent->reset();
+    log_to_monitors = v;
+  }
 }
 
 void LogChannel::update_config(map<string,string> &log_to_monitors,
@@ -323,6 +336,15 @@ version_t LogClient::queue(LogEntry &entry)
   return entry.seq;
 }
 
+void LogClient::reset()
+{
+  std::lock_guard l(log_lock);
+  if (log_queue.size()) {
+    log_queue.clear();
+  }
+  last_log_sent = last_log;
+}
+
 uint64_t LogClient::get_next_seq()
 {
   std::lock_guard l(log_lock);
@@ -351,7 +373,7 @@ bool LogClient::handle_log_ack(MLogAck *m)
 
   version_t last = m->last;
 
-  deque<LogEntry>::iterator q = log_queue.begin();
+  auto q = log_queue.begin();
   while (q != log_queue.end()) {
     const LogEntry &entry(*q);
     if (entry.seq > last)
@@ -361,4 +383,3 @@ bool LogClient::handle_log_ack(MLogAck *m)
   }
   return true;
 }
-

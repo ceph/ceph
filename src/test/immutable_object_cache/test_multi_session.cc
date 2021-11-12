@@ -12,6 +12,7 @@
 #include "tools/immutable_object_cache/CacheClient.h"
 #include "tools/immutable_object_cache/CacheServer.h"
 
+using namespace std;
 using namespace ceph::immutable_obj_cache;
 
 class TestMultiSession : public ::testing::Test {
@@ -126,7 +127,7 @@ public:
       });
       m_send_request_index++;
       // here just for concurrently testing register + lookup, so fix object id.
-      m_cache_client_vec[index]->lookup_object(pool_nspace, 1, 2, "1234", std::move(ctx));
+      m_cache_client_vec[index]->lookup_object(pool_nspace, 1, 2, 3, "1234", std::move(ctx));
     }
 
     if (is_last) {

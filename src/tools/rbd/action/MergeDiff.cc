@@ -18,6 +18,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
 
+using std::string;
+
 namespace rbd {
 namespace action {
 namespace merge_diff {
@@ -173,7 +175,7 @@ static int do_merge_diff(const char *first, const char *second,
   if (first_stdin) {
     fd = STDIN_FILENO;
   } else {
-    fd = open(first, O_RDONLY);
+    fd = open(first, O_RDONLY|O_BINARY);
     if (fd < 0) {
       r = -errno;
       std::cerr << "rbd: error opening " << first << std::endl;
@@ -181,7 +183,7 @@ static int do_merge_diff(const char *first, const char *second,
     }
   }
 
-  sd = open(second, O_RDONLY);
+  sd = open(second, O_RDONLY|O_BINARY);
   if (sd < 0) {
     r = -errno;
     std::cerr << "rbd: error opening " << second << std::endl;
@@ -191,7 +193,7 @@ static int do_merge_diff(const char *first, const char *second,
   if (strcmp(path, "-") == 0) {
     pd = 1;
   } else {
-    pd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    pd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0644);
     if (pd < 0) {
       r = -errno;
       std::cerr << "rbd: error create " << path << std::endl;
@@ -438,7 +440,7 @@ int execute(const po::variables_map &vm,
   r = do_merge_diff(first_diff.c_str(), second_diff.c_str(), path.c_str(),
                     vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
-    cerr << "rbd: merge-diff error" << std::endl;
+    std::cerr << "rbd: merge-diff error" << std::endl;
     return -r;
   }
 

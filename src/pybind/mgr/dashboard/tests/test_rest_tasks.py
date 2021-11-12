@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=blacklisted-name
 
 import time
 
@@ -8,14 +7,14 @@ try:
 except ImportError:
     import unittest.mock as mock
 
-from . import ControllerTestCase
-from ..controllers import Controller, RESTController, Task
+from ..controllers import RESTController, Router, Task
 from ..controllers.task import Task as TaskController
 from ..services import progress
+from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 
 
-@Controller('/test/task', secure=False)
+@Router('/test/task', secure=False)
 class TaskTest(RESTController):
     sleep_time = 0.0
 
@@ -35,13 +34,13 @@ class TaskTest(RESTController):
         time.sleep(TaskTest.sleep_time)
 
     @Task('task/foo', ['{param}'])
-    @RESTController.Collection('POST')
-    def foo(self, param):
+    @RESTController.Collection('POST', path='/foo')
+    def foo_post(self, param):
         return {'my_param': param}
 
     @Task('task/bar', ['{key}', '{param}'])
-    @RESTController.Resource('PUT')
-    def bar(self, key, param=None):
+    @RESTController.Resource('PUT', path='/bar')
+    def bar_put(self, key, param=None):
         return {'my_param': param, 'key': key}
 
     @Task('task/query', ['{param}'])
@@ -59,8 +58,6 @@ class TaskControllerTest(ControllerTestCase):
 
         NotificationQueue.start_queue()
         TaskManager.init()
-        TaskTest._cp_config['tools.authenticate.on'] = False
-        TaskController._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([TaskTest, TaskController])
 
     @classmethod

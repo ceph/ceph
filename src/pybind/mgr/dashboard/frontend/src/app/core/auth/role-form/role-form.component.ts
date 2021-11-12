@@ -2,19 +2,18 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import _ from 'lodash';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
-import { RoleService } from '../../../shared/api/role.service';
-import { ScopeService } from '../../../shared/api/scope.service';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { CdValidators } from '../../../shared/forms/cd-validators';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { NotificationService } from '../../../shared/services/notification.service';
+import { RoleService } from '~/app/shared/api/role.service';
+import { ScopeService } from '~/app/shared/api/scope.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { RoleFormMode } from './role-form-mode.enum';
 import { RoleFormModel } from './role-form.model';
 
@@ -23,15 +22,13 @@ import { RoleFormModel } from './role-form.model';
   templateUrl: './role-form.component.html',
   styleUrls: ['./role-form.component.scss']
 })
-export class RoleFormComponent implements OnInit {
+export class RoleFormComponent extends CdForm implements OnInit {
   @ViewChild('headerPermissionCheckboxTpl', { static: true })
   headerPermissionCheckboxTpl: TemplateRef<any>;
   @ViewChild('cellScopeCheckboxTpl', { static: true })
   cellScopeCheckboxTpl: TemplateRef<any>;
   @ViewChild('cellPermissionCheckboxTpl', { static: true })
   cellPermissionCheckboxTpl: TemplateRef<any>;
-
-  modalRef: BsModalRef;
 
   roleForm: CdFormGroup;
   response: RoleFormModel;
@@ -52,10 +49,10 @@ export class RoleFormComponent implements OnInit {
     private roleService: RoleService,
     private scopeService: ScopeService,
     private notificationService: NotificationService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
-    this.resource = this.i18n('role');
+    super();
+    this.resource = $localize`role`;
     this.createForm();
     this.listenToChanges();
   }
@@ -75,14 +72,14 @@ export class RoleFormComponent implements OnInit {
     this.columns = [
       {
         prop: 'scope',
-        name: this.i18n('All'),
+        name: $localize`All`,
         flexGrow: 2,
         cellTemplate: this.cellScopeCheckboxTpl,
         headerTemplate: this.headerPermissionCheckboxTpl
       },
       {
         prop: 'read',
-        name: this.i18n('Read'),
+        name: $localize`Read`,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.cellPermissionCheckboxTpl,
@@ -90,7 +87,7 @@ export class RoleFormComponent implements OnInit {
       },
       {
         prop: 'create',
-        name: this.i18n('Create'),
+        name: $localize`Create`,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.cellPermissionCheckboxTpl,
@@ -98,7 +95,7 @@ export class RoleFormComponent implements OnInit {
       },
       {
         prop: 'update',
-        name: this.i18n('Update'),
+        name: $localize`Update`,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.cellPermissionCheckboxTpl,
@@ -106,7 +103,7 @@ export class RoleFormComponent implements OnInit {
       },
       {
         prop: 'delete',
-        name: this.i18n('Delete'),
+        name: $localize`Delete`,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.cellPermissionCheckboxTpl,
@@ -131,6 +128,8 @@ export class RoleFormComponent implements OnInit {
     this.scopeService.list().subscribe((scopes: Array<string>) => {
       this.scopes = scopes;
       this.roleForm.get('scopes_permissions').setValue({});
+
+      this.loadingReady();
     });
   }
 
@@ -147,6 +146,8 @@ export class RoleFormComponent implements OnInit {
         ['name', 'description', 'scopes_permissions'].forEach((key) =>
           this.roleForm.get(key).setValue(resp[1][key])
         );
+
+        this.loadingReady();
       });
     });
   }
@@ -155,10 +156,10 @@ export class RoleFormComponent implements OnInit {
     // Create/Update the data which is used by the data table to display the
     // scopes/permissions every time the form field value has been changed.
     this.roleForm.get('scopes_permissions').valueChanges.subscribe((value) => {
-      const scopes_permissions = [];
+      const scopes_permissions: any[] = [];
       _.each(this.scopes, (scope) => {
         // Set the defaults values.
-        const scope_permission = { read: false, create: false, update: false, delete: false };
+        const scope_permission: any = { read: false, create: false, update: false, delete: false };
         scope_permission['scope'] = scope;
         // Apply settings from the given value if they exist.
         if (scope in value) {
@@ -214,7 +215,7 @@ export class RoleFormComponent implements OnInit {
     });
   }
 
-  onClickCellCheckbox(scope: string, property: string, event: Event = null) {
+  onClickCellCheckbox(scope: string, property: string, event: any = null) {
     // Use a copy of the form field data to do not trigger the redrawing of the
     // data table with every change.
     const scopes_permissions = _.cloneDeep(this.roleForm.getValue('scopes_permissions'));
@@ -241,7 +242,7 @@ export class RoleFormComponent implements OnInit {
     this.roleForm.get('scopes_permissions').setValue(scopes_permissions);
   }
 
-  onClickHeaderCheckbox(property: 'scope' | 'read' | 'create' | 'update' | 'delete', event: Event) {
+  onClickHeaderCheckbox(property: 'scope' | 'read' | 'create' | 'update' | 'delete', event: any) {
     // Use a copy of the form field data to do not trigger the redrawing of the
     // data table with every change.
     const scopes_permissions = _.cloneDeep(this.roleForm.getValue('scopes_permissions'));
@@ -278,7 +279,7 @@ export class RoleFormComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n(`Created role '{{role_name}}'`, { role_name: roleFormModel.name })
+          $localize`Created role '${roleFormModel.name}'`
         );
         this.router.navigate(['/user-management/roles']);
       },
@@ -294,7 +295,7 @@ export class RoleFormComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n(`Updated role '{{role_name}}'`, { role_name: roleFormModel.name })
+          $localize`Updated role '${roleFormModel.name}'`
         );
         this.router.navigate(['/user-management/roles']);
       },

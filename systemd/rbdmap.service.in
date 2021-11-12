@@ -1,9 +1,8 @@
 [Unit]
 Description=Map RBD devices
-
-After=network-online.target
+After=network-online.target ceph.target
 Before=remote-fs-pre.target
-Wants=network-online.target remote-fs-pre.target
+Wants=network-online.target remote-fs-pre.target ceph.target
 
 [Service]
 EnvironmentFile=-@SYSTEMD_ENV_FILE@

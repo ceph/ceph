@@ -6,9 +6,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
-import { ConfigFormModel } from '../../../../shared/components/config-option/config-option.model';
-import { SharedModule } from '../../../../shared/shared.module';
+import { ConfigFormModel } from '~/app/shared/components/config-option/config-option.model';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ConfigurationFormComponent } from './configuration-form.component';
 
 describe('ConfigurationFormComponent', () => {
@@ -27,8 +27,7 @@ describe('ConfigurationFormComponent', () => {
     providers: [
       {
         provide: ActivatedRoute
-      },
-      i18nProviders
+      }
     ]
   });
 

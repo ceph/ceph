@@ -5,7 +5,7 @@ export class ChartTooltip {
   chartEl: any;
   getStyleLeft: Function;
   getStyleTop: Function;
-  customColors = {
+  customColors: Record<string, any> = {
     backgroundColor: undefined,
     borderColor: undefined
   };
@@ -37,7 +37,7 @@ export class ChartTooltip {
    * @param {any} tooltip
    * @memberof ChartTooltip
    */
-  customTooltips(tooltip) {
+  customTooltips(tooltip: any) {
     // Hide if no tooltip
     if (tooltip.opacity === 0) {
       this.tooltipEl.style.opacity = 0;
@@ -55,18 +55,18 @@ export class ChartTooltip {
     // Set Text
     if (tooltip.body) {
       const titleLines = tooltip.title || [];
-      const bodyLines = tooltip.body.map((bodyItem) => {
+      const bodyLines = tooltip.body.map((bodyItem: any) => {
         return bodyItem.lines;
       });
 
       let innerHtml = '<thead>';
 
-      titleLines.forEach((title) => {
+      titleLines.forEach((title: string) => {
         innerHtml += '<tr><th>' + this.getTitle(title) + '</th></tr>';
       });
       innerHtml += '</thead><tbody>';
 
-      bodyLines.forEach((body, i) => {
+      bodyLines.forEach((body: string, i: number) => {
         const colors = tooltip.labelColors[i];
         let style = 'background:' + (this.customColors.backgroundColor || colors.backgroundColor);
         style += '; border-color:' + (this.customColors.borderColor || colors.borderColor);
@@ -105,11 +105,11 @@ export class ChartTooltip {
     this.tooltipEl.style.padding = tooltip.yPadding + 'px ' + tooltip.xPadding + 'px';
   }
 
-  getBody(body) {
+  getBody(body: string) {
     return body;
   }
 
-  getTitle(title) {
+  getTitle(title: string) {
     return title;
   }
 }

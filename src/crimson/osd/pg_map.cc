@@ -12,6 +12,8 @@ namespace {
   }
 }
 
+using std::make_pair;
+
 namespace crimson::osd {
 
 PGMap::PGCreationState::PGCreationState(spg_t pgid) : pgid(pgid) {}
@@ -23,17 +25,24 @@ void PGMap::PGCreationState::dump_detail(Formatter *f) const
   f->dump_bool("creating", creating);
 }
 
-std::pair<blocking_future<Ref<PG>>, bool> PGMap::get_pg(spg_t pgid, bool wait)
+std::pair<blocking_future<Ref<PG>>, bool> PGMap::wait_for_pg(spg_t pgid)
 {
-  if (auto pg = pgs.find(pgid); pg != pgs.end()) {
-    return make_pair(make_ready_blocking_future<Ref<PG>>(pg->second), true);
-  } else if (!wait) {
-    return make_pair(make_ready_blocking_future<Ref<PG>>(nullptr), true);
+  if (auto pg = get_pg(pgid)) {
+    return make_pair(make_ready_blocking_future<Ref<PG>>(pg), true);
   } else {
     auto &state = pgs_creating.emplace(pgid, pgid).first->second;
     return make_pair(
       state.make_blocking_future(state.promise.get_shared_future()),
       state.creating);
+  }
+}
+
+Ref<PG> PGMap::get_pg(spg_t pgid)
+{
+  if (auto pg = pgs.find(pgid); pg != pgs.end()) {
+    return pg->second;
+  } else {
+    return nullptr;
   }
 }
 

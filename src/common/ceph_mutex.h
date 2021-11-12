@@ -14,7 +14,7 @@
 // and make_recursive_mutex() factory methods, which take a string
 // naming the mutex for the purposes of the lockdep debug variant.
 
-#ifdef WITH_SEASTAR
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 
 namespace ceph {
   // an empty class satisfying the mutex concept
@@ -58,7 +58,7 @@ namespace ceph {
   #define ceph_mutex_is_locked_by_me(m) true
 }
 
-#else  // WITH_SEASTAR
+#else  // defined (WITH_SEASTAR) && !defined(WITH_ALIEN)
 //
 // For legacy Mutex users that passed recursive=true, use
 // ceph::make_recursive_mutex.  For legacy Mutex users that passed

@@ -6,7 +6,7 @@
 #include "PaxosServiceMessage.h"
 #include "include/types.h"
 
-class MMonGetPurgedSnaps : public PaxosServiceMessage {
+class MMonGetPurgedSnaps final : public PaxosServiceMessage {
 public:
   epoch_t start, last;
 
@@ -15,7 +15,7 @@ public:
       start(s),
       last(l) {}
 private:
-  ~MMonGetPurgedSnaps() override {}
+  ~MMonGetPurgedSnaps() final {}
 
 public:
   std::string_view get_type_name() const override {

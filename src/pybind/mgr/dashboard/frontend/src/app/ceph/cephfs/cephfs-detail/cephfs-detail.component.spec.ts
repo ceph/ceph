@@ -1,8 +1,8 @@
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../shared/shared.module';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsDetailComponent } from './cephfs-detail.component';
 
 @Component({ selector: 'cd-cephfs-chart', template: '' })
@@ -15,7 +15,13 @@ describe('CephfsDetailComponent', () => {
   let component: CephfsDetailComponent;
   let fixture: ComponentFixture<CephfsDetailComponent>;
 
-  const updateDetails = (standbys, pools, ranks, mdsCounters, name) => {
+  const updateDetails = (
+    standbys: string,
+    pools: any[],
+    ranks: any[],
+    mdsCounters: object,
+    name: string
+  ) => {
     component.data = {
       standbys,
       pools,
@@ -28,8 +34,7 @@ describe('CephfsDetailComponent', () => {
 
   configureTestBed({
     imports: [SharedModule],
-    declarations: [CephfsDetailComponent, CephfsChartStubComponent],
-    providers: i18nProviders
+    declarations: [CephfsDetailComponent, CephfsChartStubComponent]
   });
 
   beforeEach(() => {

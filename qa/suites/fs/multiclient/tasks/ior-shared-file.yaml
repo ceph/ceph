@@ -17,7 +17,7 @@ tasks:
 - mpi:
     exec: $TESTDIR/binary/usr/local/bin/ior -e -w -r -W -b 10m -a POSIX -o $TESTDIR/gmnt/ior.testfile
 - pexec:
-    all:
+    clients:
       - rm -f $TESTDIR/gmnt/ior.testfile
       - rm -f $TESTDIR/gmnt
       - rm -rf $TESTDIR/binary

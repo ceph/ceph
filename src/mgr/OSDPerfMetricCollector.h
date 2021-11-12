@@ -17,6 +17,7 @@ public:
   OSDPerfMetricCollector(MetricListener &listener);
 
   void process_reports(const MetricPayload &payload) override;
+  int get_counters(PerfCollector *collector) override;
 };
 
 #endif // OSD_PERF_METRIC_COLLECTOR_H_

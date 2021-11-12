@@ -15,16 +15,16 @@
 #ifndef CEPH_BUFFER_RAW_H
 #define CEPH_BUFFER_RAW_H
 
-#include <atomic>
 #include <map>
 #include <utility>
 #include <type_traits>
+#include "common/ceph_atomic.h"
 #include "include/buffer.h"
 #include "include/mempool.h"
 #include "include/spinlock.h"
 
 namespace ceph::buffer {
-inline namespace v14_2_0 {
+inline namespace v15_2_0 {
 
   class raw {
   public:
@@ -32,9 +32,11 @@ inline namespace v14_2_0 {
     // embedded slots. This would allow to avoid the "if" in dtor of ptr_node.
     std::aligned_storage<sizeof(ptr_node),
 			 alignof(ptr_node)>::type bptr_storage;
+  protected:
     char *data;
     unsigned len;
-    std::atomic<unsigned> nref { 0 };
+  public:
+    ceph::atomic<unsigned> nref { 0 };
     int mempool;
 
     std::pair<size_t, size_t> last_crc_offset {std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()};
@@ -84,20 +86,17 @@ private:
     raw(const raw &other) = delete;
     const raw& operator=(const raw &other) = delete;
 public:
-    char *get_data() {
+    char *get_data() const {
       return data;
+    }
+    unsigned get_len() const {
+      return len;
     }
     virtual raw* clone_empty() = 0;
     ceph::unique_leakable_ptr<raw> clone() {
       raw* const c = clone_empty();
       memcpy(c->data, data, len);
       return ceph::unique_leakable_ptr<raw>(c);
-    }
-    virtual bool is_shareable() const {
-      // true if safe to reference/share the existing buffer copy
-      // false if it is not safe to share the buffer, e.g., due to special
-      // and/or registered memory that is scarce
-      return true;
     }
     bool get_crc(const std::pair<size_t, size_t> &fromto,
 		 std::pair<uint32_t, uint32_t> *crc) const {
@@ -121,7 +120,7 @@ public:
     }
   };
 
-} // inline namespace v14_2_0
+} // inline namespace v15_2_0
 } // namespace ceph::buffer
 
 #endif // CEPH_BUFFER_RAW_H

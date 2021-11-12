@@ -24,6 +24,8 @@
 
 #include <atomic>
 
+using namespace std;
+
 // XXX: Only tests default namespace
 struct op_data {
   op_data(const std::string &oid, uint64_t offset, uint64_t len, bool read)
@@ -93,7 +95,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
     // no zero-length operations
     uint64_t length = random() % (std::max<uint64_t>(max_len - 1, 1)) + 1;
     std::string oid = "test" + stringify(random() % num_objs);
-    bool is_read = random() < percent_reads * RAND_MAX;
+    bool is_read = random() < percent_reads * float(RAND_MAX);
     std::shared_ptr<op_data> op(new op_data(oid, offset, length, is_read));
     ops.push_back(op);
     std::cout << "op " << i << " " << (is_read ? "read" : "write")
@@ -351,9 +353,8 @@ int correctness_test(uint64_t delay_ns)
 
 int main(int argc, const char **argv)
 {
-  std::vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto args = argv_to_vec(argc, argv);
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 

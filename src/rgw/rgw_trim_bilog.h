@@ -18,25 +18,27 @@
 #define RGW_SYNC_LOG_TRIM_H
 
 #include <memory>
-#include <boost/utility/string_view.hpp>
+#include <string_view>
+
+#include "include/common_fwd.h"
 #include "include/encoding.h"
 #include "common/ceph_time.h"
+#include "common/dout.h"
 
-class CephContext;
 class RGWCoroutine;
 class RGWHTTPManager;
 
 namespace rgw {
 
 namespace sal {
-  class RGWRadosStore;
+  class RadosStore;
 }
 
 /// Interface to inform the trim process about which buckets are most active
 struct BucketChangeObserver {
   virtual ~BucketChangeObserver() = default;
 
-  virtual void on_bucket_changed(const boost::string_view& bucket_instance) = 0;
+  virtual void on_bucket_changed(const std::string_view& bucket_instance) = 0;
 };
 
 /// Configuration for BucketTrimManager
@@ -68,23 +70,27 @@ void configure_bucket_trim(CephContext *cct, BucketTrimConfig& config);
 /// input: the frequency of entries read from the data changes log, and a global
 /// listing of the bucket.instance metadata. This allows us to trim active
 /// buckets quickly, while also ensuring that all buckets will eventually trim
-class BucketTrimManager : public BucketChangeObserver {
+class BucketTrimManager : public BucketChangeObserver, public DoutPrefixProvider {
   class Impl;
   std::unique_ptr<Impl> impl;
  public:
-  BucketTrimManager(sal::RGWRadosStore *store, const BucketTrimConfig& config);
+  BucketTrimManager(sal::RadosStore *store, const BucketTrimConfig& config);
   ~BucketTrimManager();
 
   int init();
 
   /// increment a counter for the given bucket instance
-  void on_bucket_changed(const boost::string_view& bucket_instance) override;
+  void on_bucket_changed(const std::string_view& bucket_instance) override;
 
   /// create a coroutine to run the bucket trim process every trim interval
   RGWCoroutine* create_bucket_trim_cr(RGWHTTPManager *http);
 
   /// create a coroutine to trim buckets directly via radosgw-admin
   RGWCoroutine* create_admin_bucket_trim_cr(RGWHTTPManager *http);
+
+  CephContext *get_cct() const override;
+  unsigned get_subsys() const;
+  std::ostream& gen_prefix(std::ostream& out) const;
 };
 
 /// provides persistent storage for the trim manager's current position in the

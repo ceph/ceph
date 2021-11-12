@@ -5,11 +5,13 @@
 #include <list>
 #include <map>
 #include <set>
+#include <stack>
 #include <random>
 
 #ifndef OBJECT_H
 #define OBJECT_H
 
+/// describes an object
 class ContDesc {
 public:
   int objnum;
@@ -78,6 +80,10 @@ public:
       _ret.push_back(ret);
       return _ret;
     }
+    /// walk through given @c bl
+    ///
+    /// @param[out] off the offset of the first byte which does not match
+    /// @returns true if @c bl matches with the content, false otherwise
     virtual bool check_bl_advance(bufferlist &bl, uint64_t *off = nullptr) {
       uint64_t _off = 0;
       for (bufferlist::iterator i = bl.begin();
@@ -310,10 +316,10 @@ class ObjectDesc {
 public:
   ObjectDesc()
     : exists(false), dirty(false),
-      version(0) {}
+      version(0), flushed(false) {}
   ObjectDesc(const ContDesc &init, ContentsGenerator *cont_gen)
     : exists(false), dirty(false),
-      version(0) {
+      version(0), flushed(false) {
     layers.push_front(std::pair<std::shared_ptr<ContentsGenerator>, ContDesc>(std::shared_ptr<ContentsGenerator>(cont_gen), init));
   }
 
@@ -364,14 +370,16 @@ public:
 	  std::numeric_limits<uint64_t>::max();
       }
     };
-    std::list<ContState> layers;
+    // from latest to earliest
+    using layers_t = std::vector<ContState>;
+    layers_t layers;
 
     struct StackState {
       const uint64_t next;
       const uint64_t size;
     };
-    std::list<std::pair<std::list<ContState>::iterator, StackState> > stack;
-    std::list<ContState>::iterator current;
+    std::stack<std::pair<layers_t::iterator, StackState> > stack;
+    layers_t::iterator current;
 
     explicit iterator(ObjectDesc &obj) :
       pos(0),
@@ -407,6 +415,7 @@ public:
       return pos >= size;
     }
 
+    // advance @c pos to given position
     void seek(uint64_t _pos) {
       if (_pos < pos) {
 	ceph_abort();
@@ -424,6 +433,9 @@ public:
       ceph_assert(pos == _pos);
     }
 
+    // grab the bytes in the range of [pos, pos+s), and advance @c pos
+    //
+    // @returns the bytes in the specified range
     bufferlist gen_bl_advance(uint64_t s) {
       bufferlist ret;
       while (s > 0) {
@@ -447,6 +459,11 @@ public:
       return ret;
     }
 
+    // compare the range of [pos, pos+bl.length()) with given @c bl, and
+    // advance @pos if all bytes in the range match
+    //
+    // @param error_at the offset of the first byte which does not match
+    // @returns true if all bytes match, false otherwise
     bool check_bl_advance(bufferlist &bl, uint64_t *error_at = nullptr) {
       uint64_t off = 0;
       while (off < bl.length()) {
@@ -515,6 +532,7 @@ public:
   uint64_t version;
   std::string redirect_target;
   std::map<uint64_t, ChunkDesc> chunk_info;
+  bool flushed;
 private:
   std::list<std::pair<std::shared_ptr<ContentsGenerator>, ContDesc> > layers;
 };

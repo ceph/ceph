@@ -22,14 +22,14 @@
  * instruct an OSD initiate a replica scrub on a specific PG
  */
 
-class MOSDRepScrub : public MOSDFastDispatchOp {
+class MOSDRepScrub final : public MOSDFastDispatchOp {
 public:
   static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 6;
 
   spg_t pgid;             // PG to scrub
   eversion_t scrub_from; // only scrub log entries after scrub_from
-  eversion_t scrub_to;   // last_update_applied when message sent
+  eversion_t scrub_to;   // last_update_applied when message sent (not used)
   epoch_t map_epoch = 0, min_epoch = 0;
   bool chunky;           // true for chunky scrubs
   hobject_t start;       // lower bound of scrub, inclusive
@@ -72,11 +72,11 @@ public:
 
 
 private:
-  ~MOSDRepScrub() override {}
+  ~MOSDRepScrub() final {}
 
 public:
   std::string_view get_type_name() const override { return "replica scrub"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "replica_scrub(pg: "	<< pgid
 	<< ",from:" << scrub_from
 	<< ",to:" << scrub_to
@@ -109,6 +109,7 @@ public:
     encode(high_priority, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(scrub_from, p);

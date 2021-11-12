@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# -*- mode:python; tab-width:4; indent-tabs-mode:t; coding:utf-8 -*-
+# -*- mode:python; tab-width:4; indent-tabs-mode:nil; coding:utf-8 -*-
 # vim: ts=4 sw=4 smarttab expandtab fileencoding=utf-8
 #
 # Ceph - scalable distributed file system
@@ -15,25 +15,33 @@
 #  version 2.1 of the License, or (at your option) any later version.
 #
 
-from nose.tools import eq_ as eq
-from nose.tools import *
+from nose.tools import assert_equal, assert_raises, \
+    assert_not_in, assert_in, \
+    assert_regexp_matches, \
+    nottest
+from unittest import TestCase
 
-from ceph_argparse import validate_command, parse_json_funcsigs
+from ceph_argparse import validate_command, parse_json_funcsigs, validate, \
+    parse_funcsig, ArgumentError, ArgumentTooFew, ArgumentMissing, \
+    ArgumentNumber, ArgumentValid
 
 import os
+import random
 import re
+import string
 import sys
-import json
 try:
     from StringIO import StringIO
 except ImportError:
     from io import StringIO
+
 
 def get_command_descriptions(what):
     CEPH_BIN = os.environ['CEPH_BIN']
     if CEPH_BIN == "":
         CEPH_BIN = "."
     return os.popen(CEPH_BIN + "/get_command_descriptions " + "--" + what).read()
+
 
 def test_parse_json_funcsigs():
     commands = get_command_descriptions("all")
@@ -42,6 +50,7 @@ def test_parse_json_funcsigs():
     # syntax error https://github.com/ceph/ceph/pull/585
     commands = get_command_descriptions("pull585")
     assert_raises(TypeError, parse_json_funcsigs, commands, 'cli')
+
 
 sigdict = parse_json_funcsigs(get_command_descriptions("all"), 'cli')
 
@@ -137,17 +146,26 @@ class TestPG(TestArgparse):
         self.assert_valid_command(['pg', 'getmap'])
 
     def test_dump(self):
-        self.assert_valid_command(['pg', 'dump'])
-        self.assert_valid_command(['pg', 'dump',
-                                   'all',
-                                   'summary',
-                                   'sum',
-                                   'delta',
-                                   'pools',
-                                   'osds',
-                                   'pgs',
-                                   'pgs_brief'])
-        assert_equal({}, validate_command(sigdict, ['pg', 'dump', 'invalid']))
+        valid_commands = {
+            'pg dump': {'prefix': 'pg dump'},
+            'pg dump all summary sum delta pools osds pgs pgs_brief':
+            {'prefix': 'pg dump',
+             'dumpcontents':
+             'all summary sum delta pools osds pgs pgs_brief'.split()
+             },
+            'pg dump --dumpcontents summary,sum':
+            {'prefix': 'pg dump',
+             'dumpcontents': 'summary,sum'.split(',')
+             }
+        }
+        for command, expected_result in valid_commands.items():
+            actual_result = validate_command(sigdict, command.split())
+            expected_result['target'] = ('mon-mgr', '')
+            assert_equal(expected_result, actual_result)
+        invalid_commands = ['pg dump invalid']
+        for command in invalid_commands:
+            actual_result = validate_command(sigdict, command.split())
+            assert_equal({}, actual_result)
 
     def test_dump_json(self):
         self.assert_valid_command(['pg', 'dump_json'])
@@ -249,6 +267,21 @@ class TestAuth(TestArgparse):
 
     def test_get_or_create_key(self):
         self.check_1_or_more_string_args('auth', 'get-or-create-key')
+        prefix = 'auth get-or-create-key'
+        entity = 'client.test'
+        caps = ['mon',
+                'allow r',
+                'osd',
+                'allow rw pool=nfs-ganesha namespace=test, allow rw tag cephfs data=user_test_fs',
+                'mds',
+                'allow rw path=/']
+        cmd = prefix.split() + [entity] + caps
+        assert_equal(
+            {
+                'prefix': prefix,
+                'entity': entity,
+                'caps': caps
+            }, validate_command(sigdict, cmd))
 
     def test_get_or_create(self):
         self.check_1_or_more_string_args('auth', 'get-or-create')
@@ -272,9 +305,6 @@ class TestMonitor(TestArgparse):
 
     def test_compact(self):
         self.assert_valid_command(['compact'])
-
-    def test_scrub(self):
-        self.assert_valid_command(['scrub'])
 
     def test_fsid(self):
         self.assert_valid_command(['fsid'])
@@ -463,9 +493,6 @@ class TestMon(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['mon', 'add',
                                                     'name',
                                                     '400.500.600.700']))
-        assert_equal({}, validate_command(sigdict, ['mon', 'add', 'name',
-                                                    '1.2.3.4:1234',
-                                                    'toomany']))
 
     def test_remove(self):
         self.assert_valid_command(['mon', 'remove', 'name'])
@@ -484,6 +511,12 @@ class TestOSD(TestArgparse):
 
     def test_osd_tree(self):
         self.check_0_or_1_natural_arg('osd', 'tree')
+        cmd = 'osd tree down,out'
+        assert_equal(
+            {
+                'prefix': 'osd tree',
+                'states': ['down', 'out']
+            }, validate_command(sigdict, cmd.split()))
 
     def test_osd_ls(self):
         self.check_0_or_1_natural_arg('osd', 'ls')
@@ -529,10 +562,10 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'lspools',
                                                     'toomany']))
 
-    def test_blacklist_ls(self):
-        self.assert_valid_command(['osd', 'blacklist', 'ls'])
-        assert_equal({}, validate_command(sigdict, ['osd', 'blacklist']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+    def test_blocklist_ls(self):
+        self.assert_valid_command(['osd', 'blocklist', 'ls'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'blocklist']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'blocklist',
                                                     'ls', 'toomany']))
 
     def test_crush_rule(self):
@@ -873,25 +906,25 @@ class TestOSD(TestArgparse):
                                                     uuid,
                                                     'toomany']))
 
-    def test_blacklist(self):
+    def test_blocklist(self):
         for action in ('add', 'rm'):
-            self.assert_valid_command(['osd', 'blacklist', action,
+            self.assert_valid_command(['osd', 'blocklist', action,
                                        '1.2.3.4/567'])
-            self.assert_valid_command(['osd', 'blacklist', action,
+            self.assert_valid_command(['osd', 'blocklist', action,
                                        '1.2.3.4'])
-            self.assert_valid_command(['osd', 'blacklist', action,
+            self.assert_valid_command(['osd', 'blocklist', action,
                                        '1.2.3.4/567', '600.40'])
-            self.assert_valid_command(['osd', 'blacklist', action,
+            self.assert_valid_command(['osd', 'blocklist', action,
                                        '1.2.3.4', '600.40'])
-            assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+            assert_equal({}, validate_command(sigdict, ['osd', 'blocklist',
                                                         action,
                                                         'invalid',
                                                         '600.40']))
-            assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+            assert_equal({}, validate_command(sigdict, ['osd', 'blocklist',
                                                         action,
                                                         '1.2.3.4/567',
                                                         '-1.0']))
-            assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+            assert_equal({}, validate_command(sigdict, ['osd', 'blocklist',
                                                         action,
                                                         '1.2.3.4/567',
                                                         '600.40',
@@ -1027,7 +1060,7 @@ class TestOSD(TestArgparse):
                                    'replicated'])
         self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128', '128',
-                                   'erasure', 'A-Za-z0-9-_.', 'ruleset^^'])
+                                   'erasure', 'A-Za-z0-9-_.', 'rule^^'])
         self.assert_valid_command(['osd', 'pool', 'create', 'poolname'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create']))
         # invalid pg_num and pgp_num, like "-1", could spill over to
@@ -1038,23 +1071,23 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '-1', '-1',
-                                                    'ruleset']))
+                                                    'rule']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
                                                     'erasure', '^^^',
-                                                    'ruleset']))
+                                                    'rule']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
                                                     'erasure', 'profile',
-                                                    'ruleset',
+                                                    'rule',
                                                     'toomany']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
                                                     'INVALID', 'profile',
-                                                    'ruleset']))
+                                                    'rule']))
 
     def test_pool_delete(self):
         self.assert_valid_command(['osd', 'pool', 'delete',
@@ -1165,7 +1198,7 @@ class TestOSD(TestArgparse):
                                                         'toomany']))
 
     def test_tier_cache_mode(self):
-        for mode in ('none', 'writeback', 'forward', 'readonly', 'readforward', 'readproxy'):
+        for mode in ('none', 'writeback', 'readonly', 'readproxy'):
             self.assert_valid_command(['osd', 'tier', 'cache-mode',
                                        'poolname', mode])
         assert_equal({}, validate_command(sigdict, ['osd', 'tier',
@@ -1229,6 +1262,75 @@ class TestConfigKey(TestArgparse):
 
     def test_list(self):
         self.check_no_arg('config-key', 'list')
+
+
+class TestValidate(TestCase):
+
+    ARGS = 0
+    KWARGS = 1
+    KWARGS_EQ = 2
+    MIXED = 3
+
+    def setUp(self):
+        self.prefix = ['some', 'random', 'cmd']
+        self.args_dict = [
+            {'name': 'variable_one', 'type': 'CephString'},
+            {'name': 'variable_two', 'type': 'CephString'},
+            {'name': 'variable_three', 'type': 'CephString'},
+            {'name': 'variable_four', 'type': 'CephInt'},
+            {'name': 'variable_five', 'type': 'CephString'}]
+        self.args = []
+        for d in self.args_dict:
+            if d['type'] == 'CephInt':
+                val = "{}".format(random.randint(0, 100))
+            elif d['type'] == 'CephString':
+                letters = string.ascii_letters
+                str_len = random.randint(5, 10)
+                val = ''.join(random.choice(letters) for _ in range(str_len))
+            else:
+                self.skipTest()
+
+            self.args.append((d['name'], val))
+
+        self.sig = parse_funcsig(self.prefix + self.args_dict)
+
+    @nottest
+    def arg_kwarg_test(self, prefix, args, sig, arg_type=0):
+        """
+        Runs validate in different arg/kargs ways.
+
+        :param prefix: List of prefix commands (that can't be kwarged)
+        :param args: a list of kwarg, arg pairs: [(k1, v1), (k2, v2), ...]
+        :param sig: The sig to match
+        :param arg_type: how to build the args to send. As positional args (ARGS),
+                     as long kwargs (KWARGS [--k v]), other style long kwargs
+                     (KWARGS_EQ (--k=v]), and mixed (MIXED) where there will be
+                     a random mix of the above.
+        :return: None, the method will assert.
+        """
+        final_args = list(prefix)
+        for k, v in args:
+            a_type = arg_type
+            if a_type == self.MIXED:
+                a_type = random.choice((self.ARGS,
+                                        self.KWARGS,
+                                        self.KWARGS_EQ))
+            if a_type == self.ARGS:
+                final_args.append(v)
+            elif a_type == self.KWARGS:
+                final_args.extend(["--{}".format(k), v])
+            else:
+                final_args.append("--{}={}".format(k, v))
+
+        try:
+            validate(final_args, sig)
+        except (ArgumentError, ArgumentMissing,
+                ArgumentNumber, ArgumentTooFew, ArgumentValid) as ex:
+            self.fail("Validation failed: {}".format(str(ex)))
+
+    def test_args_and_kwargs_validate(self):
+        for arg_type in (self.ARGS, self.KWARGS, self.KWARGS_EQ, self.MIXED):
+            self.arg_kwarg_test(self.prefix, self.args, self.sig, arg_type)
 
 # Local Variables:
 # compile-command: "cd ../../..; cmake --build build --target get_command_descriptions -j4 &&

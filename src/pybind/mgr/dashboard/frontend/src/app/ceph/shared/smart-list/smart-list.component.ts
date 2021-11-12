@@ -1,14 +1,18 @@
-import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
-import { HostService } from '../../../shared/api/host.service';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, ViewChild } from '@angular/core';
+
+import { NgbNav } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
+
+import { HostService } from '~/app/shared/api/host.service';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import {
-  OsdService,
-  SmartAttribute,
-  SmartDataV1,
-  SmartError
-} from '../../../shared/api/osd.service';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
+  HddSmartDataV1,
+  NvmeSmartDataV1,
+  SmartDataResult,
+  SmartError,
+  SmartErrorResult
+} from '~/app/shared/models/smart';
 
 @Component({
   selector: 'cd-smart-list',
@@ -16,6 +20,9 @@ import { CdTableColumn } from '../../../shared/models/cd-table-column';
   styleUrls: ['./smart-list.component.scss']
 })
 export class SmartListComponent implements OnInit, OnChanges {
+  @ViewChild('innerNav')
+  nav: NgbNav;
+
   @Input()
   osdId: number = null;
   @Input()
@@ -23,48 +30,42 @@ export class SmartListComponent implements OnInit, OnChanges {
 
   loading = false;
   incompatible = false;
+  error = false;
 
-  data: {
-    [deviceId: string]: {
-      info: { [key: string]: number | string | boolean };
-      smart: {
-        revision: number;
-        table: SmartAttribute[];
-      };
-    };
-  } = {};
+  data: { [deviceId: string]: SmartDataResult | SmartErrorResult } = {};
 
-  columns: CdTableColumn[];
+  smartDataColumns: CdTableColumn[];
 
-  constructor(
-    private i18n: I18n,
-    private osdService: OsdService,
-    private hostService: HostService
-  ) {}
+  isEmpty = _.isEmpty;
 
-  private isSmartError(data: SmartDataV1 | SmartError): data is SmartError {
-    return (data as SmartError).error !== undefined;
+  constructor(private osdService: OsdService, private hostService: HostService) {}
+
+  isSmartError(data: any): data is SmartError {
+    return _.get(data, 'error') !== undefined;
   }
 
-  private fetchData(data) {
-    const result = {};
+  isNvmeSmartData(data: any): data is NvmeSmartDataV1 {
+    return _.get(data, 'device.protocol', '').toLowerCase() === 'nvme';
+  }
+
+  isHddSmartData(data: any): data is HddSmartDataV1 {
+    return _.get(data, 'device.protocol', '').toLowerCase() === 'ata';
+  }
+
+  private fetchData(data: any) {
+    const result: { [deviceId: string]: SmartDataResult | SmartErrorResult } = {};
     _.each(data, (smartData, deviceId) => {
       if (this.isSmartError(smartData)) {
         let userMessage = '';
         if (smartData.smartctl_error_code === -22) {
-          userMessage = this.i18n(
-            'Smartctl has received an unknown argument (error code ' +
-              '{{code}}). You may be using an ' +
-              'incompatible version of smartmontools. Version >= 7.0 of ' +
-              'smartmontools is required to successfully retrieve data.',
-            { code: smartData.smartctl_error_code }
-          );
+          userMessage = $localize`Smartctl has received an unknown argument \
+(error code ${smartData.smartctl_error_code}). \
+You may be using an incompatible version of smartmontools. Version >= 7.0 of \
+smartmontools is required to successfully retrieve data.`;
         } else {
-          userMessage = this.i18n('An error with error code {{code}} occurred.', {
-            code: smartData.smartctl_error_code
-          });
+          userMessage = $localize`An error with error code ${smartData.smartctl_error_code} occurred.`;
         }
-        result[deviceId] = {
+        const _result: SmartErrorResult = {
           error: smartData.error,
           smartctl_error_code: smartData.smartctl_error_code,
           smartctl_output: smartData.smartctl_output,
@@ -72,28 +73,19 @@ export class SmartListComponent implements OnInit, OnChanges {
           device: smartData.dev,
           identifier: smartData.nvme_vendor
         };
+        result[deviceId] = _result;
         return;
       }
 
       // Prepare S.M.A.R.T data
       if (smartData.json_format_version[0] === 1) {
         // Version 1.x
-        const excludes = [
-          'ata_smart_attributes',
-          'ata_smart_selective_self_test_log',
-          'ata_smart_data'
-        ];
-        const info = _.pickBy(smartData, (_value, key) => !excludes.includes(key));
-        // Build result
-        result[deviceId] = {
-          info: info,
-          smart: {
-            attributes: smartData.ata_smart_attributes,
-            data: smartData.ata_smart_data
-          },
-          device: info.device.name,
-          identifier: info.serial_number
-        };
+        if (this.isHddSmartData(smartData)) {
+          result[deviceId] = this.extractHddData(smartData);
+        } else if (this.isNvmeSmartData(smartData)) {
+          result[deviceId] = this.extractNvmeData(smartData);
+        }
+        return;
       } else {
         this.incompatible = true;
       }
@@ -102,25 +94,68 @@ export class SmartListComponent implements OnInit, OnChanges {
     this.loading = false;
   }
 
+  private extractNvmeData(smartData: NvmeSmartDataV1): SmartDataResult {
+    const info = _.omitBy(smartData, (_value, key) =>
+      ['nvme_smart_health_information_log'].includes(key)
+    );
+    return {
+      info: info,
+      smart: {
+        nvmeData: smartData.nvme_smart_health_information_log
+      },
+      device: smartData.device.name,
+      identifier: smartData.serial_number
+    };
+  }
+
+  private extractHddData(smartData: HddSmartDataV1): SmartDataResult {
+    const info = _.omitBy(smartData, (_value, key) =>
+      ['ata_smart_attributes', 'ata_smart_selective_self_test_log', 'ata_smart_data'].includes(key)
+    );
+    return {
+      info: info,
+      smart: {
+        attributes: smartData.ata_smart_attributes,
+        data: smartData.ata_smart_data
+      },
+      device: info.device.name,
+      identifier: info.serial_number
+    };
+  }
+
   private updateData() {
     this.loading = true;
 
     if (this.osdId !== null) {
-      this.osdService.getSmartData(this.osdId).subscribe(this.fetchData.bind(this));
+      this.osdService.getSmartData(this.osdId).subscribe({
+        next: this.fetchData.bind(this),
+        error: (error) => {
+          error.preventDefault();
+          this.error = error;
+          this.loading = false;
+        }
+      });
     } else if (this.hostname !== null) {
-      this.hostService.getSmartData(this.hostname).subscribe(this.fetchData.bind(this));
+      this.hostService.getSmartData(this.hostname).subscribe({
+        next: this.fetchData.bind(this),
+        error: (error) => {
+          error.preventDefault();
+          this.error = error;
+          this.loading = false;
+        }
+      });
     }
   }
 
   ngOnInit() {
-    this.columns = [
-      { prop: 'id', name: this.i18n('ID') },
-      { prop: 'name', name: this.i18n('Name') },
-      { prop: 'raw.value', name: this.i18n('Raw') },
-      { prop: 'thresh', name: this.i18n('Threshold') },
-      { prop: 'value', name: this.i18n('Value') },
-      { prop: 'when_failed', name: this.i18n('When Failed') },
-      { prop: 'worst', name: this.i18n('Worst') }
+    this.smartDataColumns = [
+      { prop: 'id', name: $localize`ID` },
+      { prop: 'name', name: $localize`Name` },
+      { prop: 'raw.value', name: $localize`Raw` },
+      { prop: 'thresh', name: $localize`Threshold` },
+      { prop: 'value', name: $localize`Value` },
+      { prop: 'when_failed', name: $localize`When Failed` },
+      { prop: 'worst', name: $localize`Worst` }
     ];
   }
 

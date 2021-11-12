@@ -5,11 +5,11 @@
 #include "common/debug.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/journal/Types.h"
 #include <boost/variant.hpp>
 
@@ -33,7 +33,7 @@ EventPreprocessor<I>::EventPreprocessor(I &local_image_ctx,
                                         Journaler &remote_journaler,
                                         const std::string &local_mirror_uuid,
                                         MirrorPeerClientMeta *client_meta,
-                                        ContextWQ *work_queue)
+                                        librbd::asio::ContextWQ *work_queue)
   : m_local_image_ctx(local_image_ctx), m_remote_journaler(remote_journaler),
     m_local_mirror_uuid(local_mirror_uuid), m_client_meta(client_meta),
     m_work_queue(work_queue) {

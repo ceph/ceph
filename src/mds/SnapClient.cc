@@ -26,6 +26,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".snapclient "
 
+using namespace std;
+
 void SnapClient::resend_queries()
 {
   if (!waiting_for_version.empty() || (!synced && sync_reqid > 0)) {
@@ -280,7 +282,7 @@ int SnapClient::dump_cache(Formatter *f) const
 {
   if (!is_synced()) {
     dout(5) << "dump_cache: not synced" << dendl;
-    return -EINVAL;
+    return -CEPHFS_EINVAL;
   }
 
   map<snapid_t, const SnapInfo*> snaps;

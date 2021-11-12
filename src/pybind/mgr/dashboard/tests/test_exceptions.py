@@ -1,20 +1,19 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import time
 
 import rados
 
-from . import ControllerTestCase
+from ..controllers import Endpoint, RESTController, Router, Task
 from ..services.ceph_service import SendCommandError
-from ..controllers import RESTController, Controller, Task, Endpoint
-from ..services.exception import handle_rados_error, handle_send_command_error, \
-    serialize_dashboard_exception
-from ..tools import ViewCache, TaskManager, NotificationQueue
+from ..services.exception import handle_rados_error, \
+    handle_send_command_error, serialize_dashboard_exception
+from ..tests import ControllerTestCase
+from ..tools import NotificationQueue, TaskManager, ViewCache
 
 
 # pylint: disable=W0613
-@Controller('foo', secure=False)
+@Router('foo', secure=False)
 class FooResource(RESTController):
 
     @Endpoint()
@@ -87,6 +86,10 @@ class RESTControllerTest(ControllerTestCase):
         NotificationQueue.start_queue()
         TaskManager.init()
         cls.setup_controllers([FooResource])
+
+    @classmethod
+    def tearDownClass(cls):
+        NotificationQueue.stop()
 
     def test_no_exception(self):
         self._get('/foo/no_exception/a/b')

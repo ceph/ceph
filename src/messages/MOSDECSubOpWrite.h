@@ -50,6 +50,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);
@@ -73,7 +74,7 @@ public:
 
   std::string_view get_type_name() const override { return "MOSDECSubOpWrite"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "MOSDECSubOpWrite(" << pgid
 	<< " " << map_epoch << "/" << min_epoch
 	<< " " << op;

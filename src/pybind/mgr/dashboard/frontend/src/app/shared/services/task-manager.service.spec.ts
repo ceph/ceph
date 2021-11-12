@@ -1,13 +1,13 @@
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { BehaviorSubject } from 'rxjs';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { SummaryService } from './summary.service';
 import { TaskManagerService } from './task-manager.service';
 
-const summary = {
+const summary: Record<string, any> = {
   executing_tasks: [],
   health_status: 'HEALTH_OK',
   mgr_id: 'x',
@@ -25,7 +25,7 @@ export class SummaryServiceMock {
   refresh() {
     this.summaryDataSource.next(summary);
   }
-  subscribe(call) {
+  subscribe(call: any) {
     return this.summaryData$.subscribe(call);
   }
 }
@@ -35,16 +35,13 @@ describe('TaskManagerService', () => {
   let summaryService: any;
   let called: boolean;
 
-  configureTestBed(
-    {
-      providers: [TaskManagerService, { provide: SummaryService, useClass: SummaryServiceMock }]
-    },
-    true
-  );
+  configureTestBed({
+    providers: [TaskManagerService, { provide: SummaryService, useClass: SummaryServiceMock }]
+  });
 
   beforeEach(() => {
-    taskManagerService = TestBed.get(TaskManagerService);
-    summaryService = TestBed.get(SummaryService);
+    taskManagerService = TestBed.inject(TaskManagerService);
+    summaryService = TestBed.inject(SummaryService);
     called = false;
     taskManagerService.subscribe('foo', {}, () => (called = true));
   });
@@ -57,6 +54,7 @@ describe('TaskManagerService', () => {
     expect(taskManagerService.subscriptions.length).toBe(1);
     summaryService.refresh();
     tick();
+    taskManagerService.init(summaryService);
     expect(called).toEqual(true);
     expect(taskManagerService.subscriptions).toEqual([]);
   }));

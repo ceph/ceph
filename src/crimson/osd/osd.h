@@ -3,9 +3,6 @@
 
 #pragma once
 
-#include <map>
-#include <tuple>
-#include <optional>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/gate.hh>
@@ -15,11 +12,12 @@
 
 #include "crimson/common/type_helpers.h"
 #include "crimson/common/auth_handler.h"
+#include "crimson/common/gated.h"
+#include "crimson/admin/admin_socket.h"
 #include "crimson/common/simple_lru.h"
 #include "crimson/common/shared_lru.h"
 #include "crimson/mgr/client.h"
 #include "crimson/net/Dispatcher.h"
-#include "crimson/osd/chained_dispatchers.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/state.h"
 #include "crimson/osd/shard_services.h"
@@ -27,15 +25,17 @@
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 
+#include "messages/MOSDOp.h"
 #include "osd/PeeringState.h"
 #include "osd/osd_types.h"
 #include "osd/osd_perf_counters.h"
 #include "osd/PGPeeringEvent.h"
 
+class MCommand;
 class MOSDMap;
-class MOSDOp;
 class MOSDRepOpReply;
 class MOSDRepOp;
+class MOSDScrub2;
 class OSDMap;
 class OSDMeta;
 class Heartbeat;
@@ -63,15 +63,13 @@ class OSD final : public crimson::net::Dispatcher,
 		  private OSDMapService,
 		  private crimson::common::AuthHandler,
 		  private crimson::mgr::WithStats {
-  seastar::gate gate;
   const int whoami;
   const uint32_t nonce;
   seastar::timer<seastar::lowres_clock> beacon_timer;
   // talk with osd
-  crimson::net::Messenger& cluster_msgr;
+  crimson::net::MessengerRef cluster_msgr;
   // talk with client/mon/mgr
-  crimson::net::Messenger& public_msgr;
-  ChainedDispatchers dispatchers;
+  crimson::net::MessengerRef public_msgr;
   std::unique_ptr<crimson::mon::Client> monc;
   std::unique_ptr<crimson::mgr::Client> mgrc;
 
@@ -79,7 +77,7 @@ class OSD final : public crimson::net::Dispatcher,
   SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
   cached_map_t osdmap;
   // TODO: use a wrapper for ObjectStore
-  std::unique_ptr<crimson::os::FuturizedStore> store;
+  crimson::os::FuturizedStore& store;
   std::unique_ptr<OSDMeta> meta_coll;
 
   OSDState state;
@@ -98,30 +96,36 @@ class OSD final : public crimson::net::Dispatcher,
   OSDSuperblock superblock;
 
   // Dispatcher methods
-  seastar::future<> ms_dispatch(crimson::net::Connection* conn, MessageRef m) final;
-  seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) final;
-  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) final;
-  seastar::future<> ms_handle_remote_reset(crimson::net::ConnectionRef conn) final;
+  std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef, MessageRef) final;
+  void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) final;
+  void ms_handle_remote_reset(crimson::net::ConnectionRef conn) final;
 
   // mgr::WithStats methods
-  MessageRef get_stats() final;
+  // pg statistics including osd ones
+  osd_stat_t osd_stat;
+  uint32_t osd_stat_seq = 0;
+  void update_stats();
+  MessageURef get_stats() const final;
 
   // AuthHandler methods
   void handle_authentication(const EntityName& name,
 			     const AuthCapsInfo& caps) final;
 
   crimson::osd::ShardServices shard_services;
-  std::unordered_map<spg_t, Ref<PG>> pgs;
 
   std::unique_ptr<Heartbeat> heartbeat;
-  seastar::timer<seastar::lowres_clock> heartbeat_timer;
+  seastar::timer<seastar::lowres_clock> tick_timer;
+
+  // admin-socket
+  seastar::lw_shared_ptr<crimson::admin::AdminSocket> asok;
 
 public:
   OSD(int id, uint32_t nonce,
-      crimson::net::Messenger& cluster_msgr,
-      crimson::net::Messenger& client_msgr,
-      crimson::net::Messenger& hb_front_msgr,
-      crimson::net::Messenger& hb_back_msgr);
+      crimson::os::FuturizedStore& store,
+      crimson::net::MessengerRef cluster_msgr,
+      crimson::net::MessengerRef client_msgr,
+      crimson::net::MessengerRef hb_front_msgr,
+      crimson::net::MessengerRef hb_back_msgr);
   ~OSD() final;
 
   seastar::future<> mkfs(uuid_d osd_uuid, uuid_d cluster_fsid);
@@ -129,18 +133,29 @@ public:
   seastar::future<> start();
   seastar::future<> stop();
 
+  void dump_status(Formatter*) const;
+  void dump_pg_state_history(Formatter*) const;
+  void print(std::ostream&) const;
+
+  seastar::future<> send_incremental_map(crimson::net::ConnectionRef conn,
+					 epoch_t first);
+
+  /// @return the seq id of the pg stats being sent
+  uint64_t send_pg_stats();
+
 private:
+  seastar::future<> _write_superblock();
+  seastar::future<> _write_key_meta();
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
   seastar::future<> _send_boot();
   seastar::future<> _add_me_to_crush();
 
-  seastar::future<Ref<PG>> make_pg(cached_map_t create_map, spg_t pgid);
+  seastar::future<Ref<PG>> make_pg(cached_map_t create_map,
+				   spg_t pgid,
+				   bool do_create);
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
   seastar::future<> load_pgs();
-
-  epoch_t up_thru_wanted = 0;
-  seastar::future<> _send_alive();
 
   // OSDMapService methods
   epoch_t get_up_epoch() const final {
@@ -150,6 +165,8 @@ private:
   cached_map_t get_map() const final;
   seastar::future<std::unique_ptr<OSDMap>> load_map(epoch_t e);
   seastar::future<bufferlist> load_map_bl(epoch_t e);
+  seastar::future<std::map<epoch_t, bufferlist>>
+  load_map_bls(epoch_t first, epoch_t last);
   void store_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
   seastar::future<> store_maps(ceph::os::Transaction& t,
@@ -164,22 +181,32 @@ private:
   seastar::future<Ref<PG>> handle_pg_create_info(
     std::unique_ptr<PGCreateInfo> info);
 
-  seastar::future<> handle_osd_map(crimson::net::Connection* conn,
+  seastar::future<> handle_osd_map(crimson::net::ConnectionRef conn,
                                    Ref<MOSDMap> m);
-  seastar::future<> handle_osd_op(crimson::net::Connection* conn,
+  seastar::future<> handle_osd_op(crimson::net::ConnectionRef conn,
 				  Ref<MOSDOp> m);
-  seastar::future<> handle_rep_op(crimson::net::Connection* conn,
+  seastar::future<> handle_rep_op(crimson::net::ConnectionRef conn,
 				  Ref<MOSDRepOp> m);
-  seastar::future<> handle_rep_op_reply(crimson::net::Connection* conn,
+  seastar::future<> handle_rep_op_reply(crimson::net::ConnectionRef conn,
 					Ref<MOSDRepOpReply> m);
-  seastar::future<> handle_peering_op(crimson::net::Connection* conn,
+  seastar::future<> handle_peering_op(crimson::net::ConnectionRef conn,
 				      Ref<MOSDPeeringOp> m);
+  seastar::future<> handle_recovery_subreq(crimson::net::ConnectionRef conn,
+					   Ref<MOSDFastDispatchOp> m);
+  seastar::future<> handle_scrub(crimson::net::ConnectionRef conn,
+				 Ref<MOSDScrub2> m);
+  seastar::future<> handle_mark_me_down(crimson::net::ConnectionRef conn,
+					Ref<MOSDMarkMeDown> m);
 
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,
                                        Ref<MOSDMap> m);
 
-  void check_osdmap_features();
+  seastar::future<> check_osdmap_features();
+
+  seastar::future<> handle_command(crimson::net::ConnectionRef conn,
+				   Ref<MCommand> m);
+  seastar::future<> start_asok_admin();
 
 public:
   OSDMapGate osdmap_gate;
@@ -192,6 +219,21 @@ public:
 
 private:
   PGMap pg_map;
+  crimson::common::Gated gate;
+
+  seastar::promise<> stop_acked;
+  void got_stop_ack() {
+    stop_acked.set_value();
+  }
+  seastar::future<> prepare_to_stop();
+  bool should_restart() const;
+  seastar::future<> restart();
+  seastar::future<> shutdown();
+  void update_heartbeat_peers();
+  friend class PGAdvanceMap;
+
+  RemotePeeringEvent::OSDPipeline peering_request_osd_pipeline;
+  friend class RemotePeeringEvent;
 
 public:
   blocking_future<Ref<PG>> get_or_create_pg(
@@ -200,15 +242,13 @@ public:
     std::unique_ptr<PGCreateInfo> info);
   blocking_future<Ref<PG>> wait_for_pg(
     spg_t pgid);
-
-  bool should_restart() const;
-  seastar::future<> restart();
-  seastar::future<> shutdown();
-
+  Ref<PG> get_pg(spg_t pgid);
   seastar::future<> send_beacon();
-  seastar::future<> update_heartbeat_peers();
-
-  friend class PGAdvanceMap;
 };
+
+inline std::ostream& operator<<(std::ostream& out, const OSD& osd) {
+  osd.print(out);
+  return out;
+}
 
 }

@@ -27,7 +27,7 @@ public:
   ///* dtor
   ~TimeindexListCtx() {}
 
-  void handle_completion(int r, bufferlist& bl) override {
+  void handle_completion(int r, ceph::buffer::list& bl) override {
     if (r >= 0) {
       cls_timeindex_list_ret ret;
       try {
@@ -39,7 +39,7 @@ public:
           *truncated = ret.truncated;
         if (marker)
           *marker = ret.marker;
-      } catch (buffer::error& err) {
+      } catch (ceph::buffer::error& err) {
         // nothing we can do about it atm
       }
     }
@@ -50,7 +50,7 @@ void cls_timeindex_add_prepare_entry(
   cls_timeindex_entry& entry,
   const utime_t& key_timestamp,
   const std::string& key_ext,
-  bufferlist& bl);
+  ceph::buffer::list& bl);
 
 void cls_timeindex_add(
   librados::ObjectWriteOperation& op,
@@ -64,7 +64,7 @@ void cls_timeindex_add(
   librados::ObjectWriteOperation& op,
   const utime_t& timestamp,
   const std::string& name,
-  const bufferlist& bl);
+  const ceph::buffer::list& bl);
 
 void cls_timeindex_list(
   librados::ObjectReadOperation& op,

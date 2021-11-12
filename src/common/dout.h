@@ -19,7 +19,8 @@
 #include <type_traits>
 
 #include "include/ceph_assert.h"
-#ifdef WITH_SEASTAR
+#include "include/common_fwd.h"
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 #include <seastar/util/log.hh>
 #include "crimson/common/log.h"
 #include "crimson/common/config_proxy.h"
@@ -117,7 +118,7 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 // generic macros
 #define dout_prefix *_dout
 
-#ifdef WITH_SEASTAR
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 #define dout_impl(cct, sub, v)                                          \
   do {                                                                  \
     if (crimson::common::local_conf()->subsys.should_gather(sub, v)) {  \
@@ -128,8 +129,18 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #define dendl_impl                              \
      "";                                        \
       _logger.log(crimson::to_log_level(_lv),   \
-                  _out.str().c_str());          \
+                  "{}", _out.str().c_str());    \
     }                                           \
+  } while (0)
+#elif defined(WITH_SEASTAR) && defined(WITH_ALIEN)
+#define dout_impl(cct, sub, v)						\
+  do {									\
+  if (0) {							\
+    ceph::logging::MutableEntry _dout_e(v, sub);                        \
+    std::ostream* _dout = &_dout_e.get_ostream();
+
+#define dendl_impl std::flush;                                          \
+  }                                                                     \
   } while (0)
 #else
 #define dout_impl(cct, sub, v)						\
@@ -163,6 +174,11 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #define lsubdout(cct, sub, v)  dout_impl(cct, ceph_subsys_##sub, v) dout_prefix
 #define ldout(cct, v)  dout_impl(cct, dout_subsys, v) dout_prefix
 #define lderr(cct) dout_impl(cct, ceph_subsys_, -1) dout_prefix
+
+#define ldpp_subdout(dpp, sub, v) 						\
+  if (decltype(auto) pdpp = (dpp); pdpp) /* workaround -Wnonnull-compare for 'this' */ \
+    dout_impl(pdpp->get_cct(), ceph_subsys_##sub, v) \
+      pdpp->gen_prefix(*_dout)
 
 #define ldpp_dout(dpp, v) 						\
   if (decltype(auto) pdpp = (dpp); pdpp) /* workaround -Wnonnull-compare for 'this' */ \

@@ -5,15 +5,14 @@ import logging
 import pipes
 import os
 import re
+import shlex
 
-import six
-
-from util import get_remote_for_role
-from util.workunit import get_refspec_after_overrides
+from tasks.util import get_remote_for_role
+from tasks.util.workunit import get_refspec_after_overrides
 
 from teuthology import misc
 from teuthology.config import config as teuth_config
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from teuthology.parallel import parallel
 from teuthology.orchestra import run
 
@@ -62,6 +61,14 @@ def task(ctx, config):
               BAZ: quux
             timeout: 3h
 
+    You can also pass optional arguments to the found workunits:
+
+        tasks:
+        - workunit:
+            clients:
+              all:
+                - test-ceph-helpers.sh test_get_config
+
     This task supports roles that include a ceph cluster, e.g.::
 
         tasks:
@@ -105,7 +112,7 @@ def task(ctx, config):
     # Create scratch dirs for any non-all workunits
     log.info('Making a separate scratch dir for every client...')
     for role in clients.keys():
-        assert isinstance(role, six.string_types)
+        assert isinstance(role, str)
         if role == "all":
             continue
 
@@ -122,7 +129,10 @@ def task(ctx, config):
                 p.spawn(_run_tests, ctx, refspec, role, tests,
                         config.get('env'),
                         basedir=config.get('basedir','qa/workunits'),
-                        timeout=timeout,cleanup=cleanup)
+                        subdir=config.get('subdir'),
+                        timeout=timeout,
+                        cleanup=cleanup,
+                        coverage_and_limits=not config.get('no_coverage_and_limits', None))
 
     if cleanup:
         # Clean up dirs from any non-all workunits
@@ -294,7 +304,8 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=Non
 
 
 def _run_tests(ctx, refspec, role, tests, env, basedir,
-               subdir=None, timeout=None, cleanup=True):
+               subdir=None, timeout=None, cleanup=True,
+               coverage_and_limits=True):
     """
     Run the individual test. Create a scratch directory and then extract the
     workunits from git. Make the executables, and then run the tests.
@@ -313,7 +324,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     to False is passed, the 'timeout' command is not used.
     """
     testdir = misc.get_testdir(ctx)
-    assert isinstance(role, six.string_types)
+    assert isinstance(role, str)
     cluster, type_, id_ = misc.split_role(role)
     assert type_ == 'client'
     remote = get_remote_for_role(ctx, role)
@@ -355,21 +366,24 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
             run.Raw('&&'),
             'if', 'test', '-e', 'Makefile', run.Raw(';'), 'then', 'make', run.Raw(';'), 'fi',
             run.Raw('&&'),
-            'find', '-executable', '-type', 'f', '-printf', r'%P\0'.format(srcdir=srcdir),
+            'find', '-executable', '-type', 'f', '-printf', r'%P\0',
             run.Raw('>{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)),
         ],
     )
 
     workunits_file = '{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)
-    workunits = sorted(misc.get_file(remote, workunits_file).split('\0'))
+    workunits = sorted(remote.read_file(workunits_file).decode().split('\0'))
     assert workunits
 
     try:
         assert isinstance(tests, list)
         for spec in tests:
-            log.info('Running workunits matching %s on %s...', spec, role)
-            prefix = '{spec}/'.format(spec=spec)
-            to_run = [w for w in workunits if w == spec or w.startswith(prefix)]
+            dir_or_fname, *optional_args = shlex.split(spec)
+            log.info('Running workunits matching %s on %s...', dir_or_fname, role)
+            # match executables named "foo" or "foo/*" with workunit named
+            # "foo"
+            to_run = [w for w in workunits
+                      if os.path.commonpath([w, dir_or_fname]) == dir_or_fname]
             if not to_run:
                 raise RuntimeError('Spec did not match any workunits: {spec!r}'.format(spec=spec))
             for workunit in to_run:
@@ -387,16 +401,18 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     run.Raw('PATH=$PATH:/usr/sbin'),
                     run.Raw('CEPH_BASE={dir}'.format(dir=clonedir)),
                     run.Raw('CEPH_ROOT={dir}'.format(dir=clonedir)),
+                    run.Raw('CEPH_MNT={dir}'.format(dir=mnt)),
                 ]
                 if env is not None:
                     for var, val in env.items():
                         quoted_val = pipes.quote(val)
                         env_arg = '{var}={val}'.format(var=var, val=quoted_val)
                         args.append(run.Raw(env_arg))
-                args.extend([
-                    'adjust-ulimits',
-                    'ceph-coverage',
-                    '{tdir}/archive/coverage'.format(tdir=testdir)])
+                if coverage_and_limits:
+                    args.extend([
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        '{tdir}/archive/coverage'.format(tdir=testdir)])
                 if timeout and timeout != '0':
                     args.extend(['timeout', timeout])
                 args.extend([
@@ -407,7 +423,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                 ])
                 remote.run(
                     logger=log.getChild(role),
-                    args=args,
+                    args=args + optional_args,
                     label="workunit test {workunit}".format(workunit=workunit)
                 )
                 if cleanup:

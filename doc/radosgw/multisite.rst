@@ -82,6 +82,9 @@ of the master zone group.
 See `Pools`_ for instructions on creating and tuning pools for Ceph
 Object Storage.
 
+See `Sync Policy Config`_ for instructions on defining fine grained bucket sync
+policy rules.
+
 .. _master-zone-label:
 
 Configuring a Master Zone
@@ -176,7 +179,7 @@ the zone group configuration. For example:
             "http:\/\/rgw1:80"
         ],
         "hostnames": [],
-        "hostnames_s3webzone": [],
+        "hostnames_s3website": [],
         "master_zone": "",
         "zones": [],
         "placement_targets": [],
@@ -500,6 +503,17 @@ example:
           If the master zone is down, bucket operations executed on the
           secondary zone will fail, but object operations should succeed.
 
+Verification of an Object
+-------------------------
+
+By default, the objects are not verified again after the synchronization of an
+object was successful. To enable that, you can set :confval:`rgw_sync_obj_etag_verify`
+to ``true``. After enabling the optional objects that will be synchronized
+going forward, an additional MD5 checksum will verify that it is computed on
+the source and the destination. This is to ensure the integrity of the objects
+fetched from a remote server over HTTP including multisite sync. This option
+can decrease the performance of your RGW as more computation is needed.
+
 
 Maintenance
 ===========
@@ -528,6 +542,25 @@ Information about the replication status of a zone can be queried with::
                           full sync: 0/128 shards
                           incremental sync: 128/128 shards
                           data is caught up with source
+
+The output can differ depending on the sync status. The shards are described
+as two different types during sync:
+
+- **Behind shards** are shards that need a full data sync and shards needing
+  an incremental data sync because they are not up-to-date.
+
+- **Recovery shards** are shards that encountered an error during sync and marked
+  for retry. The error mostly occurs on minor issues like acquiring a lock on
+  a bucket. This will typically resolve itself.
+
+Check the logs
+--------------
+
+For multi-site only, you can check out the metadata log (``mdlog``),
+the bucket index log (``bilog``) and the data log (``datalog``).
+You can list them and also trim them which is not needed in most cases as
+:confval:`rgw_sync_log_trim_interval` is set to 20 minutes as default. If it isn't manually
+set to 0, you shouldn't have to trim it at any time as it could cause side effects otherwise.
 
 Changing the Metadata Master Zone
 ---------------------------------
@@ -638,6 +671,8 @@ If the former master zone recovers, revert the operation.
 
        # systemctl restart ceph-radosgw@rgw.`hostname -s`
 
+.. _rgw-multisite-migrate-from-single-site:
+
 Migrating a Single Site System to Multi-Site
 ============================================
 
@@ -709,6 +744,13 @@ Multi-Site Configuration Reference
 The following sections provide additional details and command-line
 usage for realms, periods, zone groups and zones.
 
+For more details on every available configuration option, please check out
+``src/common/options/rgw.yaml.in`` or go to the more comfortable :ref:`mgr-dashboard`
+configuration page (found under `Cluster`) where you can view and set all
+options easily. On the page, set the level to ``advanced`` and search for RGW,
+to see all basic and advanced configuration options with a short description.
+Expand the details of an option to reveal a longer description.
+
 Realms
 ------
 
@@ -765,17 +807,17 @@ realm. Alternatively, to change which realm is the default, execute:
 Delete a Realm
 ~~~~~~~~~~~~~~
 
-To delete a realm, execute ``realm delete`` and specify the realm name.
+To delete a realm, execute ``realm rm`` and specify the realm name.
 
 ::
 
-    # radosgw-admin realm delete --rgw-realm={realm-name}
+    # radosgw-admin realm rm --rgw-realm={realm-name}
 
 For example:
 
 ::
 
-    # radosgw-admin realm delete --rgw-realm=movies
+    # radosgw-admin realm rm --rgw-realm=movies
 
 Get a Realm
 ~~~~~~~~~~~
@@ -1382,7 +1424,7 @@ Set a Zone
 Configuring a zone involves specifying a series of Ceph Object Gateway
 pools. For consistency, we recommend using a pool prefix that is the
 same as the zone name. See
-`Pools <http://docs.ceph.com/docs/master/rados/operations/pools/#pools>`__
+`Pools <http://docs.ceph.com/en/latest/rados/operations/pools/#pools>`__
 for details of configuring pools.
 
 To set a zone, create a JSON object consisting of the pools, save the
@@ -1448,3 +1490,4 @@ instance.
 
 
 .. _`Pools`: ../pools
+.. _`Sync Policy Config`: ../multisite-sync-policy

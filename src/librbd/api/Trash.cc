@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "common/Cond.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -33,7 +34,7 @@ namespace librbd {
 namespace api {
 
 template <typename I>
-const typename Trash<I>::TrashImageSources Trash<I>::RESTORE_SOURCE_WHITELIST {
+const typename Trash<I>::TrashImageSources Trash<I>::ALLOWED_RESTORE_SOURCES {
     cls::rbd::TRASH_IMAGE_SOURCE_USER,
     cls::rbd::TRASH_IMAGE_SOURCE_MIRRORING,
     cls::rbd::TRASH_IMAGE_SOURCE_USER_PARENT
@@ -43,25 +44,12 @@ namespace {
 
 template <typename I>
 int disable_mirroring(I *ictx) {
-  cls::rbd::MirrorImage mirror_image;
-  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id, &mirror_image);
-  if (r == -ENOENT) {
-    ldout(ictx->cct, 10) << "mirroring is not enabled for this image" << dendl;
-    return 0;
-  }
-
-  if (r < 0) {
-    lderr(ictx->cct) << "failed to retrieve mirror image: " << cpp_strerror(r)
-                     << dendl;
-    return r;
-  }
-
   ldout(ictx->cct, 10) << dendl;
 
   C_SaferCond ctx;
   auto req = mirror::DisableRequest<I>::create(ictx, false, true, &ctx);
   req->send();
-  r = ctx.wait();
+  int r = ctx.wait();
   if (r < 0) {
     lderr(ictx->cct) << "failed to disable mirroring: " << cpp_strerror(r)
                      << dendl;
@@ -103,13 +91,12 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
 
   ldout(cct, 10) << dendl;
 
-  ThreadPool *thread_pool;
-  ContextWQ *op_work_queue;
-  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+  AsioEngine asio_engine(io_ctx);
+
   C_SaferCond ctx;
-  auto req = mirror::EnableRequest<I>::create(io_ctx, image_id,
-                                              RBD_MIRROR_IMAGE_MODE_JOURNAL, "",
-                                              op_work_queue, &ctx);
+  auto req = mirror::EnableRequest<I>::create(
+    io_ctx, image_id, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", false,
+    asio_engine.get_work_queue(), &ctx);
   req->send();
   r = ctx.wait();
   if (r < 0) {
@@ -117,6 +104,48 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
                << dendl;
     return r;
   }
+
+  return 0;
+}
+
+int list_trash_image_specs(
+    librados::IoCtx &io_ctx,
+    std::map<std::string, cls::rbd::TrashImageSpec>* trash_image_specs,
+    bool exclude_user_remove_source) {
+  CephContext *cct((CephContext *)io_ctx.cct());
+  ldout(cct, 20) << "list_trash_image_specs " << &io_ctx << dendl;
+
+  bool more_entries;
+  uint32_t max_read = 1024;
+  std::string last_read;
+  do {
+    std::map<std::string, cls::rbd::TrashImageSpec> trash_entries;
+    int r = cls_client::trash_list(&io_ctx, last_read, max_read,
+                                   &trash_entries);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error listing rbd trash entries: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    } else if (r == -ENOENT) {
+      break;
+    }
+
+    if (trash_entries.empty()) {
+      break;
+    }
+
+    for (const auto &entry : trash_entries) {
+      if (exclude_user_remove_source &&
+          entry.second.source == cls::rbd::TRASH_IMAGE_SOURCE_REMOVING) {
+        continue;
+      }
+
+      trash_image_specs->insert({entry.first, entry.second});
+    }
+
+    last_read = trash_entries.rbegin()->first;
+    more_entries = (trash_entries.size() >= max_read);
+  } while (more_entries);
 
   return 0;
 }
@@ -141,6 +170,26 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
   }
 
   if (r == 0) {
+    cls::rbd::MirrorImage mirror_image;
+    int mirror_r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+                                                &mirror_image);
+    if (mirror_r == -ENOENT) {
+      ldout(ictx->cct, 10) << "mirroring is not enabled for this image"
+                           << dendl;
+    } else if (mirror_r < 0) {
+      lderr(ictx->cct) << "failed to retrieve mirror image: "
+                       << cpp_strerror(mirror_r) << dendl;
+      return mirror_r;
+    } else if (mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+      // a remote rbd-mirror might own the exclusive-lock on this image
+      // and therefore we need to disable mirroring so that it closes the image
+      r = disable_mirroring<I>(ictx);
+      if (r < 0) {
+        ictx->state->close();
+        return r;
+      }
+    }
+
     if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
       std::unique_lock image_locker{ictx->image_lock};
       ictx->set_journal_policy(new journal::DisabledPolicy());
@@ -151,7 +200,7 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
       ictx->exclusive_lock->block_requests(0);
 
       r = ictx->operations->prepare_image_update(
-        exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, false);
+        exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, true);
       if (r < 0) {
         lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
         ictx->owner_lock.unlock_shared();
@@ -170,10 +219,13 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
     }
     ictx->image_lock.unlock_shared();
 
-    r = disable_mirroring<I>(ictx);
-    if (r < 0) {
-      ictx->state->close();
-      return r;
+    if (mirror_r >= 0 &&
+        mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+      r = disable_mirroring<I>(ictx);
+      if (r < 0) {
+        ictx->state->close();
+        return r;
+      }
     }
 
     ictx->state->close();
@@ -236,15 +288,38 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
       return -EOPNOTSUPP;
     }
 
-    // image doesn't exist -- perhaps already in the trash since removing
-    // from the directory is the last step
-    return -ENOENT;
+    // search for an interrupted trash move request
+    std::map<std::string, cls::rbd::TrashImageSpec> trash_image_specs;
+    int r = list_trash_image_specs(io_ctx, &trash_image_specs, true);
+    if (r < 0) {
+      return r;
+    }
+    if (auto found_image =
+        std::find_if(
+          trash_image_specs.begin(), trash_image_specs.end(),
+          [&](const auto& pair) {
+            const auto& spec = pair.second;
+            return (spec.source == cls::rbd::TRASH_IMAGE_SOURCE_USER &&
+                    spec.state == cls::rbd::TRASH_IMAGE_STATE_MOVING &&
+                    spec.name == image_name);
+          });
+        found_image != trash_image_specs.end()) {
+      image_id = found_image->first;
+    } else {
+      return -ENOENT;
+    }
+    ldout(cct, 15) << "derived image id " << image_id << " from existing "
+                   << "trash entry" << dendl;
   } else if (r < 0) {
     lderr(cct) << "failed to retrieve image id: " << cpp_strerror(r) << dendl;
     return r;
   }
 
-  ceph_assert(!image_name.empty() && !image_id.empty());
+  if (image_name.empty() || image_id.empty()) {
+    lderr(cct) << "invalid image name/id" << dendl;
+    return -EINVAL;
+  }
+
   return Trash<I>::move(io_ctx, source, image_name, image_id, delay);
 }
 
@@ -272,44 +347,26 @@ int Trash<I>::get(IoCtx &io_ctx, const std::string &id,
 }
 
 template <typename I>
-int Trash<I>::list(IoCtx &io_ctx, vector<trash_image_info_t> &entries,
+int Trash<I>::list(IoCtx &io_ctx, std::vector<trash_image_info_t> &entries,
                    bool exclude_user_remove_source) {
   CephContext *cct((CephContext *)io_ctx.cct());
-  ldout(cct, 20) << "trash_list " << &io_ctx << dendl;
+  ldout(cct, 20) << __func__ << " " << &io_ctx << dendl;
 
-  bool more_entries;
-  uint32_t max_read = 1024;
-  std::string last_read = "";
-  do {
-    map<string, cls::rbd::TrashImageSpec> trash_entries;
-    int r = cls_client::trash_list(&io_ctx, last_read, max_read,
-                                   &trash_entries);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error listing rbd trash entries: " << cpp_strerror(r)
-                 << dendl;
-      return r;
-    } else if (r == -ENOENT) {
-      break;
-    }
+  std::map<std::string, cls::rbd::TrashImageSpec> trash_image_specs;
+  int r = list_trash_image_specs(io_ctx, &trash_image_specs,
+                                 exclude_user_remove_source);
+  if (r < 0) {
+    return r;
+  }
 
-    if (trash_entries.empty()) {
-      break;
-    }
-
-    for (const auto &entry : trash_entries) {
-      rbd_trash_image_source_t source =
-          static_cast<rbd_trash_image_source_t>(entry.second.source);
-      if (exclude_user_remove_source &&
-          source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
-        continue;
-      }
-      entries.push_back({entry.first, entry.second.name, source,
-                         entry.second.deletion_time.sec(),
-                         entry.second.deferment_end_time.sec()});
-    }
-    last_read = trash_entries.rbegin()->first;
-    more_entries = (trash_entries.size() >= max_read);
-  } while (more_entries);
+  entries.reserve(trash_image_specs.size());
+  for (const auto& [image_id, spec] : trash_image_specs) {
+    rbd_trash_image_source_t source =
+        static_cast<rbd_trash_image_source_t>(spec.source);
+    entries.push_back({image_id, spec.name, source,
+                       spec.deletion_time.sec(),
+                       spec.deferment_end_time.sec()});
+  }
 
   return 0;
 }
@@ -472,28 +529,48 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
 
   NoOpProgressContext remove_pctx;
   uint64_t list_size = to_be_removed.size(), i = 0;
-  for (const auto &entry_id : to_be_removed) {
-    r = librbd::api::Trash<I>::remove(io_ctx, entry_id, true, remove_pctx);
-    if (r < 0) {
-      if (r == -ENOTEMPTY) {
-        ldout(cct, 5) << "image has snapshots - these must be deleted "
-                      << "with 'rbd snap purge' before the image can be "
-                      << "removed." << dendl;
-      } else if (r == -EBUSY) {
-        ldout(cct, 5) << "error: image still has watchers" << std::endl
-                      << "This means the image is still open or the client "
-                      << "using it crashed. Try again after closing/unmapping "
-                      << "it or waiting 30s for the crashed client to timeout."
-                      << dendl;
-      } else if (r == -EMLINK) {
-        ldout(cct, 5) << "Remove the image from the group and try again."
-                      << dendl;
-      } else {
-        lderr(cct) << "remove error: " << cpp_strerror(r) << dendl;
+  int remove_err = 1;
+  while (!to_be_removed.empty() && remove_err == 1) {
+    remove_err = 0;
+    for (auto it = to_be_removed.begin(); it != to_be_removed.end(); ) {
+      trash_image_info_t trash_info;
+      r = Trash<I>::get(io_ctx, *it, &trash_info);
+      if (r == -ENOENT) {
+        // likely RBD_TRASH_IMAGE_SOURCE_USER_PARENT image removed as a side
+        // effect of a preceeding remove (last child detach)
+        pctx.update_progress(++i, list_size);
+        it = to_be_removed.erase(it);
+        continue;
+      } else if (r < 0) {
+        lderr(cct) << "error getting image id " << *it
+                   << " info: " << cpp_strerror(r) << dendl;
+        return r;
       }
-      return r;
+
+      r = Trash<I>::remove(io_ctx, *it, true, remove_pctx);
+      if (r == -ENOTEMPTY || r == -EBUSY || r == -EMLINK || r == -EUCLEAN) {
+        if (!remove_err) {
+          remove_err = r;
+        }
+        ++it;
+        continue;
+      } else if (r < 0) {
+        lderr(cct) << "error removing image id " << *it
+                   << ": " << cpp_strerror(r) << dendl;
+        return r;
+      }
+      pctx.update_progress(++i, list_size);
+      it = to_be_removed.erase(it);
+      remove_err = 1;
     }
-    pctx.update_progress(++i, list_size);
+    ldout(cct, 20) << "remove_err=" << remove_err << dendl;
+  }
+
+  if (!to_be_removed.empty()) {
+    ceph_assert(remove_err < 0);
+    ldout(cct, 10) << "couldn't remove " << to_be_removed.size()
+                   << " expired images" << dendl;
+    return remove_err;
   }
 
   return 0;
@@ -519,19 +596,21 @@ int Trash<I>::remove(IoCtx &io_ctx, const std::string &image_id, bool force,
     lderr(cct) << "error: deferment time has not expired." << dendl;
     return -EPERM;
   }
-  if (trash_spec.state != cls::rbd::TRASH_IMAGE_STATE_NORMAL &&
-      trash_spec.state != cls::rbd::TRASH_IMAGE_STATE_REMOVING) {
+  if (trash_spec.state == cls::rbd::TRASH_IMAGE_STATE_MOVING) {
+    lderr(cct) << "error: image is pending moving to the trash."
+               << dendl;
+    return -EUCLEAN;
+  } else if (trash_spec.state != cls::rbd::TRASH_IMAGE_STATE_NORMAL &&
+             trash_spec.state != cls::rbd::TRASH_IMAGE_STATE_REMOVING) {
     lderr(cct) << "error: image is pending restoration." << dendl;
     return -EBUSY;
   }
 
-  ThreadPool *thread_pool;
-  ContextWQ *op_work_queue;
-  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+  AsioEngine asio_engine(io_ctx);
 
   C_SaferCond cond;
   auto req = librbd::trash::RemoveRequest<I>::create(
-      io_ctx, image_id, op_work_queue, force, prog_ctx, &cond);
+      io_ctx, image_id, asio_engine.get_work_queue(), force, prog_ctx, &cond);
   req->send();
 
   r = cond.wait();

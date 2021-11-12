@@ -6,6 +6,8 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_future.hh>
 
+#include "crimson/common/gated.h"
+#include "crimson/common/log.h"
 #include "Fwd.h"
 #include "SocketConnection.h"
 
@@ -22,28 +24,39 @@ class Protocol {
   Protocol(Protocol&&) = delete;
   virtual ~Protocol();
 
-  bool is_connected() const;
+  virtual bool is_connected() const = 0;
 
+#ifdef UNIT_TESTS_BUILT
+  bool is_closed_clean = false;
   bool is_closed() const { return closed; }
+#endif
 
   // Reentrant closing
-  seastar::future<> close();
+  void close(bool dispatch_reset, std::optional<std::function<void()>> f_accept_new=std::nullopt);
+  seastar::future<> close_clean(bool dispatch_reset) {
+    close(dispatch_reset);
+    // it can happen if close_clean() is called inside Dispatcher::ms_handle_reset()
+    // which will otherwise result in deadlock
+    assert(close_ready.valid());
+    return close_ready.get_future();
+  }
 
   virtual void start_connect(const entity_addr_t& peer_addr,
-                             const entity_type_t& peer_type) = 0;
+                             const entity_name_t& peer_name) = 0;
 
-  virtual void start_accept(SocketFRef&& socket,
+  virtual void start_accept(SocketRef&& socket,
                             const entity_addr_t& peer_addr) = 0;
 
+  virtual void print(std::ostream&) const = 0;
  protected:
   Protocol(proto_t type,
-           Dispatcher& dispatcher,
+           ChainedDispatchers& dispatchers,
            SocketConnection& conn);
 
   virtual void trigger_close() = 0;
 
   virtual ceph::bufferlist do_sweep_messages(
-      const std::deque<MessageRef>& msgs,
+      const std::deque<MessageURef>& msgs,
       size_t num_msgs,
       bool require_keepalive,
       std::optional<utime_t> keepalive_ack,
@@ -51,15 +64,23 @@ class Protocol {
 
   virtual void notify_write() {};
 
+  virtual void on_closed() {}
+ 
+ private:
+  ceph::bufferlist sweep_messages_and_move_to_sent(
+      size_t num_msgs,
+      bool require_keepalive,
+      std::optional<utime_t> keepalive_ack,
+      bool require_ack); 
+
  public:
   const proto_t proto_type;
+  SocketRef socket;
 
  protected:
-  Dispatcher &dispatcher;
+  ChainedDispatchers& dispatchers;
   SocketConnection &conn;
 
-  SocketFRef socket;
-  seastar::gate pending_dispatch;
   AuthConnectionMetaRef auth_meta;
 
  private:
@@ -69,7 +90,7 @@ class Protocol {
 
 // the write state-machine
  public:
-  seastar::future<> send(MessageRef msg);
+  seastar::future<> send(MessageURef msg);
   seastar::future<> keepalive();
 
 // TODO: encapsulate a SessionedSender class
@@ -129,6 +150,7 @@ class Protocol {
   }
 
   void ack_writes(seq_num_t seq);
+  crimson::common::Gated gate;
 
  private:
   write_state_t write_state = write_state_t::none;
@@ -148,5 +170,11 @@ class Protocol {
   seastar::future<> do_write_dispatch_sweep();
   void write_event();
 };
+
+inline std::ostream& operator<<(std::ostream& out, const Protocol& proto) {
+  proto.print(out);
+  return out;
+}
+
 
 } // namespace crimson::net

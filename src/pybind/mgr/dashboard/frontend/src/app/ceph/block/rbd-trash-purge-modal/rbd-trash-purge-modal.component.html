@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="modalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container i18n
                 class="modal-title">Purge Trash</ng-container>
 
@@ -9,10 +9,10 @@
           [formGroup]="purgeForm"
           novalidate>
       <div class="modal-body">
-        <p>
-          <ng-container i18n>To purge, select one or All images and click</ng-container>&nbsp;
-          <kbd i18n>Purge Trash</kbd>.&nbsp;
-        </p>
+        <p i18n>To purge, select&nbsp;
+          <kbd>All</kbd>&nbsp;
+          or one pool and click&nbsp;
+          <kbd>Purge</kbd>.&nbsp;</p>
 
         <div class="form-group">
           <label class="col-form-label mx-auto"
@@ -37,16 +37,9 @@
       </div>
 
       <div class="modal-footer">
-        <div class="button-group text-right">
-          <cd-submit-button id="purgeFormButton"
-                            [form]="purgeForm"
-                            (submitAction)="purge()"
-                            i18n>Purge Trash</cd-submit-button>
-          <cd-back-button [back]="modalRef.hide"
-                          name="Cancel"
-                          i18n-name>
-          </cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="purge()"
+                              [form]="purgeForm"
+                              [submitText]="actionLabels.PURGE"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

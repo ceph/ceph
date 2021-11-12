@@ -17,7 +17,7 @@ public:
       pgid(pgid)
   {}
   std::string_view get_type_name() const override { return "pg_created"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_pg_created(" << pgid << ")";
   }
   void encode_payload(uint64_t features) override {
@@ -26,6 +26,7 @@ public:
     encode(pgid, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(pgid, p);

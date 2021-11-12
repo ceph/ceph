@@ -12,8 +12,95 @@
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
 releases:
-  nautilus:
+  pacific:
+    target_eol: 2023-06-01
     releases:
+      - version: 16.2.6
+        released: 2021-09-16
+      - version: 16.2.5
+        released: 2021-07-08
+      - version: 16.2.4
+        released: 2021-05-13
+      - version: 16.2.3
+        released: 2021-05-06
+      - version: 16.2.2
+        released: 2021-05-05
+      - version: 16.2.1
+        released: 2021-04-19
+      - version: 16.2.0
+        released: 2021-03-31
+
+  octopus:
+    target_eol: 2022-06-01
+    releases:
+      - version: 15.2.15  
+        released: 2021-10-20
+      - version: 15.2.14
+        released: 2021-08-05
+      - version: 15.2.13
+        released: 2021-05-26
+      - version: 15.2.12
+        released: 2021-05-13
+      - version: 15.2.11
+        released: 2021-04-19
+      - version: 15.2.10
+        released: 2021-03-18
+      - version: 15.2.9
+        released: 2021-02-23
+      - version: 15.2.8
+        released: 2020-12-16
+      - version: 15.2.7
+        released: 2020-11-30
+      - version: 15.2.6
+        released: 2020-11-18
+      - version: 15.2.5
+        released: 2020-09-16
+      - version: 15.2.4
+        released: 2020-06-30
+      - version: 15.2.3
+        released: 2020-05-29
+      - version: 15.2.2
+        released: 2020-05-18
+      - version: 15.2.1
+        released: 2020-04-09
+      - version: 15.2.0
+        released: 2020-03-23
+
+  nautilus:
+    target_eol: 2021-06-01
+    releases:
+      - version: 14.2.22
+        released: 2021-06-30
+      - version: 14.2.21
+        released: 2021-05-13
+      - version: 14.2.20
+        released: 2021-04-19
+      - version: 14.2.19
+        released: 2021-03-30
+      - version: 14.2.18
+        released: 2021-03-15
+      - version: 14.2.17
+        released: 2021-03-11
+      - version: 14.2.16
+        released: 2020-12-16
+      - version: 14.2.15
+        released: 2020-11-23
+      - version: 14.2.14
+        released: 2020-11-18
+      - version: 14.2.13
+        released: 2020-11-02
+      - version: 14.2.12
+        released: 2020-09-21
+      - version: 14.2.11
+        released: 2020-08-11
+      - version: 14.2.10
+        released: 2020-06-26
+      - version: 14.2.9
+        released: 2020-04-15
+      - version: 14.2.8
+        released: 2020-03-03
+      - version: 14.2.7
+        released: 2020-01-31
       - version: 14.2.6
         released: 2020-01-09
       - version: 14.2.5
@@ -30,7 +117,13 @@ releases:
         released: 2019-03-19
 
   mimic:
+    target_eol: 2020-06-01
+    actual_eol: 2020-07-22
     releases:
+      - version: 13.2.10
+        released: 2020-04-23
+      - version: 13.2.9
+        released: 2020-04-16
       - version: 13.2.8
         released: 2019-12-13
       - version: 13.2.7
@@ -49,10 +142,13 @@ releases:
         released: 2018-07-01
       - version: 13.2.0
         released: 2018-06-01
-    target_eol: 2020-06-01
   
   luminous:
+    target_eol: 2019-06-01
+    actual_eol: 2020-03-01
     releases:
+      - version: 12.2.13
+        released: 2020-01-31
       - version: 12.2.12
         released: 2019-04-12
       - version: 12.2.11
@@ -79,7 +175,6 @@ releases:
         released: 2017-09-01
       - version: 12.2.0
         released: 2017-08-01
-    target_eol: 2019-06-01
   
   kraken:
     target_eol: 2017-08-01
@@ -234,6 +329,12 @@ releases:
 
 development:
   releases:
+    - version: 15.1.1
+      released: 2020-03-13
+      skip_ref: true
+    - version: 15.1.0
+      released: 2020-01-29
+      skip_ref: true
     - version: 15.0.0
       released: 2019-04-03
       skip_ref: true        

@@ -10,7 +10,7 @@ overrides:
         mon osdmap full prune txsize: 100
       osd:
         osd beacon report interval: 10
-    log-whitelist:
+    log-ignorelist:
       # setting/unsetting noup will trigger health warns,
       # causing tests to fail due to health warns, even if
       # the tests themselves are successful.

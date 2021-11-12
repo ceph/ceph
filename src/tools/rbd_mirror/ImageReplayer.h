@@ -24,6 +24,7 @@ namespace mirror {
 
 template <typename> struct InstanceWatcher;
 template <typename> struct MirrorStatusUpdater;
+struct PoolMetaCache;
 template <typename> struct Threads;
 
 namespace image_replayer {
@@ -45,10 +46,11 @@ public:
       const std::string &global_image_id, Threads<ImageCtxT> *threads,
       InstanceWatcher<ImageCtxT> *instance_watcher,
       MirrorStatusUpdater<ImageCtxT>* local_status_updater,
-      journal::CacheManagerHandler *cache_manager_handler) {
+      journal::CacheManagerHandler *cache_manager_handler,
+      PoolMetaCache* pool_meta_cache) {
     return new ImageReplayer(local_io_ctx, local_mirror_uuid, global_image_id,
                              threads, instance_watcher, local_status_updater,
-                             cache_manager_handler);
+                             cache_manager_handler, pool_meta_cache);
   }
   void destroy() {
     delete this;
@@ -60,7 +62,8 @@ public:
                 Threads<ImageCtxT> *threads,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
                 MirrorStatusUpdater<ImageCtxT>* local_status_updater,
-                journal::CacheManagerHandler *cache_manager_handler);
+                journal::CacheManagerHandler *cache_manager_handler,
+                PoolMetaCache* pool_meta_cache);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
@@ -82,15 +85,14 @@ public:
     m_finished = finished;
   }
 
-  inline bool is_blacklisted() const {
+  inline bool is_blocklisted() const {
     std::lock_guard locker{m_lock};
-    return (m_last_r == -EBLACKLISTED);
+    return (m_last_r == -EBLOCKLISTED);
   }
 
   image_replayer::HealthState get_health_state() const;
 
-  void add_peer(const std::string &peer_uuid, librados::IoCtx &remote_io_ctx,
-                MirrorStatusUpdater<ImageCtxT>* remote_status_updater);
+  void add_peer(const Peer<ImageCtxT>& peer);
 
   inline int64_t get_local_pool_id() const {
     return m_local_io_ctx.get_id();
@@ -99,9 +101,10 @@ public:
     return m_global_image_id;
   }
 
-  void start(Context *on_finish = nullptr, bool manual = false);
+  void start(Context *on_finish = nullptr, bool manual = false,
+             bool restart = false);
   void stop(Context *on_finish = nullptr, bool manual = false,
-	    int r = 0, const std::string& desc = "");
+            bool restart = false);
   void restart(Context *on_finish = nullptr);
   void flush();
 
@@ -137,11 +140,11 @@ protected:
    * @endverbatim
    */
 
-  virtual void on_start_fail(int r, const std::string &desc);
-  virtual bool on_start_interrupted();
-  virtual bool on_start_interrupted(ceph::mutex& lock);
+  void on_start_fail(int r, const std::string &desc);
+  bool on_start_interrupted();
+  bool on_start_interrupted(ceph::mutex& lock);
 
-  virtual void on_stop_journal_replay(int r = 0, const std::string &desc = "");
+  void on_stop_journal_replay(int r = 0, const std::string &desc = "");
 
   bool on_replay_interrupted();
 
@@ -156,16 +159,6 @@ private:
     STATE_STOPPED,
   };
 
-  struct RemoteImage {
-    librados::IoCtx io_ctx;
-    MirrorStatusUpdater<ImageCtxT>* mirror_status_updater = nullptr;
-
-    RemoteImage() {
-    }
-    RemoteImage(const Peer<ImageCtxT>& peer)
-      : io_ctx(peer.io_ctx), mirror_status_updater(peer.mirror_status_updater) {
-    }
-  };
   struct ReplayerListener;
 
   typedef boost::optional<State> OptionalState;
@@ -192,9 +185,10 @@ private:
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
   MirrorStatusUpdater<ImageCtxT>* m_local_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
+  PoolMetaCache* m_pool_meta_cache;
 
   Peers m_peers;
-  RemoteImage m_remote_image;
+  Peer<ImageCtxT> m_remote_image_peer;
 
   std::string m_local_image_name;
   std::string m_image_spec;
@@ -210,8 +204,12 @@ private:
   BootstrapProgressContext m_progress_cxt;
 
   bool m_finished = false;
+  bool m_delete_in_progress = false;
   bool m_delete_requested = false;
   bool m_resync_requested = false;
+  bool m_restart_requested = false;
+
+  bool m_status_removed = false;
 
   image_replayer::StateBuilder<ImageCtxT>* m_state_builder = nullptr;
   image_replayer::Replayer* m_replayer = nullptr;
@@ -228,6 +226,8 @@ private:
 
   AsyncOpTracker m_in_flight_op_tracker;
 
+  Context* m_update_status_task = nullptr;
+
   static std::string to_string(const State state);
 
   bool is_stopped_() const {
@@ -239,6 +239,10 @@ private:
   bool is_replaying_() const {
     return (m_state == STATE_REPLAYING);
   }
+
+  void schedule_update_mirror_image_replay_status();
+  void handle_update_mirror_image_replay_status(int r);
+  void cancel_update_mirror_image_replay_status();
 
   void update_mirror_image_status(bool force, const OptionalState &state);
   void set_mirror_image_status_update(bool force, const OptionalState &state);
@@ -257,6 +261,9 @@ private:
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
   void reregister_admin_socket_hook();
+  void remove_image_status(bool force, Context *on_finish);
+  void remove_image_status_remote(bool force, Context *on_finish);
+
 };
 
 } // namespace mirror

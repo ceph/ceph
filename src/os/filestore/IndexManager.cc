@@ -31,6 +31,13 @@
 
 #include "chain_xattr.h"
 
+using std::string;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::decode;
+using ceph::encode;
+
 static int set_version(const char *path, uint32_t version) {
   bufferlist bl;
   encode(version, bl);

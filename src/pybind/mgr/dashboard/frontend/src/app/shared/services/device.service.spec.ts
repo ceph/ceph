@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
-import * as moment from 'moment';
+import moment from 'moment';
 
 import { CdDevice } from '../models/devices';
 import { DeviceService } from './device.service';
@@ -10,7 +10,7 @@ describe('DeviceService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
-    service = TestBed.get(DeviceService);
+    service = TestBed.inject(DeviceService);
   });
 
   it('should be created', () => {
@@ -18,7 +18,7 @@ describe('DeviceService', () => {
   });
 
   describe('should test getDevices pipe', () => {
-    let now = null;
+    let now: jasmine.Spy = null;
 
     const newDevice = (data: object): CdDevice => {
       const device: CdDevice = {

@@ -39,6 +39,7 @@ public:
 
   void SetUp() override {
     TestMockFixture::SetUp();
+    m_ioctx.remove(RBD_INFO);
     ASSERT_EQ(0, open_image(m_image_name, &image_ctx));
   }
 
@@ -52,7 +53,8 @@ public:
 
   void expect_read_rbd_info(librados::MockTestMemIoCtxImpl &mock_io_ctx,
                             const std::string& data, int r) {
-    auto& expect = EXPECT_CALL(mock_io_ctx, read(StrEq(RBD_INFO), 0, 0, _));
+    auto& expect = EXPECT_CALL(
+            mock_io_ctx, read(StrEq(RBD_INFO), 0, 0, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -108,8 +110,7 @@ TEST_F(TestMockImageValidatePoolRequest, Success) {
   expect_write_rbd_info(mock_io_ctx, "overwrite validated", 0);
 
   C_SaferCond ctx;
-  auto req = new MockValidatePoolRequest(m_ioctx, image_ctx->op_work_queue,
-                                         &ctx);
+  auto req = new MockValidatePoolRequest(m_ioctx, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -122,8 +123,7 @@ TEST_F(TestMockImageValidatePoolRequest, AlreadyValidated) {
   expect_read_rbd_info(mock_io_ctx, "overwrite validated", 0);
 
   C_SaferCond ctx;
-  auto req = new MockValidatePoolRequest(m_ioctx, image_ctx->op_work_queue,
-                                         &ctx);
+  auto req = new MockValidatePoolRequest(m_ioctx, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -137,8 +137,7 @@ TEST_F(TestMockImageValidatePoolRequest, SnapshotsValidated) {
   expect_write_rbd_info(mock_io_ctx, "overwrite validated", 0);
 
   C_SaferCond ctx;
-  auto req = new MockValidatePoolRequest(m_ioctx, image_ctx->op_work_queue,
-                                         &ctx);
+  auto req = new MockValidatePoolRequest(m_ioctx, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -151,8 +150,7 @@ TEST_F(TestMockImageValidatePoolRequest, ReadError) {
   expect_read_rbd_info(mock_io_ctx, "", -EPERM);
 
   C_SaferCond ctx;
-  auto req = new MockValidatePoolRequest(m_ioctx, image_ctx->op_work_queue,
-                                         &ctx);
+  auto req = new MockValidatePoolRequest(m_ioctx, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
 }
@@ -166,8 +164,7 @@ TEST_F(TestMockImageValidatePoolRequest, CreateSnapshotError) {
   expect_allocate_snap_id(mock_io_ctx, -EPERM);
 
   C_SaferCond ctx;
-  auto req = new MockValidatePoolRequest(m_ioctx, image_ctx->op_work_queue,
-                                         &ctx);
+  auto req = new MockValidatePoolRequest(m_ioctx, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
 }
@@ -183,8 +180,7 @@ TEST_F(TestMockImageValidatePoolRequest, WriteError) {
   expect_release_snap_id(mock_io_ctx, -EINVAL);
 
   C_SaferCond ctx;
-  auto req = new MockValidatePoolRequest(m_ioctx, image_ctx->op_work_queue,
-                                         &ctx);
+  auto req = new MockValidatePoolRequest(m_ioctx, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
 }
@@ -201,8 +197,7 @@ TEST_F(TestMockImageValidatePoolRequest, RemoveSnapshotError) {
   expect_write_rbd_info(mock_io_ctx, "overwrite validated", 0);
 
   C_SaferCond ctx;
-  auto req = new MockValidatePoolRequest(m_ioctx, image_ctx->op_work_queue,
-                                         &ctx);
+  auto req = new MockValidatePoolRequest(m_ioctx, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -219,8 +214,7 @@ TEST_F(TestMockImageValidatePoolRequest, OverwriteError) {
   expect_write_rbd_info(mock_io_ctx, "overwrite validated", -EOPNOTSUPP);
 
   C_SaferCond ctx;
-  auto req = new MockValidatePoolRequest(m_ioctx, image_ctx->op_work_queue,
-                                         &ctx);
+  auto req = new MockValidatePoolRequest(m_ioctx, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }

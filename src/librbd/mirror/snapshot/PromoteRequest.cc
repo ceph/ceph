@@ -11,6 +11,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/image/ListWatchersRequest.h"
 #include "librbd/mirror/snapshot/CreateNonPrimaryRequest.h"
 #include "librbd/mirror/snapshot/CreatePrimaryRequest.h"
@@ -27,69 +28,46 @@ namespace snapshot {
 
 using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
+using librbd::util::create_rados_callback;
 
 template <typename I>
 void PromoteRequest<I>::send() {
-  refresh_image();
-}
-
-template <typename I>
-void PromoteRequest<I>::refresh_image() {
-  if (!m_image_ctx->state->is_refresh_required()) {
-    create_promote_snapshot();
-    return;
-  }
-
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
-
-  auto ctx = create_context_callback<
-    PromoteRequest<I>, &PromoteRequest<I>::handle_refresh_image>(this);
-  m_image_ctx->state->refresh(ctx);
-}
-
-template <typename I>
-void PromoteRequest<I>::handle_refresh_image(int r) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(cct) << "failed to refresh image: " << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
-  if (!util::can_create_primary_snapshot(m_image_ctx, false, m_force,
+  bool requires_orphan = false;
+  if (!util::can_create_primary_snapshot(m_image_ctx, false, true,
+                                         &requires_orphan,
                                          &m_rollback_snap_id)) {
     lderr(cct) << "cannot promote" << dendl;
     finish(-EINVAL);
     return;
-  } else if (m_rollback_snap_id == CEPH_NOSNAP) {
+  } else if (m_rollback_snap_id == CEPH_NOSNAP && !requires_orphan) {
     create_promote_snapshot();
     return;
   }
 
+  ldout(cct, 15) << "requires_orphan=" << requires_orphan << ", "
+                 << "rollback_snap_id=" << m_rollback_snap_id << dendl;
   create_orphan_snapshot();
 }
 
 template <typename I>
 void PromoteRequest<I>::create_orphan_snapshot() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   auto ctx = create_context_callback<
     PromoteRequest<I>,
     &PromoteRequest<I>::handle_create_orphan_snapshot>(this);
 
-  auto req = CreateNonPrimaryRequest<I>::create(m_image_ctx, "", CEPH_NOSNAP,
-                                                {}, nullptr, ctx);
+  auto req = CreateNonPrimaryRequest<I>::create(
+    m_image_ctx, false, "", CEPH_NOSNAP, {}, {}, nullptr, ctx);
   req->send();
 }
 
 template <typename I>
 void PromoteRequest<I>::handle_create_orphan_snapshot(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to create orphan snapshot: " << cpp_strerror(r)
@@ -104,7 +82,7 @@ void PromoteRequest<I>::handle_create_orphan_snapshot(int r) {
 template <typename I>
 void PromoteRequest<I>::list_watchers() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   auto ctx = create_context_callback<
     PromoteRequest<I>,
@@ -121,7 +99,7 @@ void PromoteRequest<I>::list_watchers() {
 template <typename I>
 void PromoteRequest<I>::handle_list_watchers(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to list watchers: " << cpp_strerror(r)
@@ -141,7 +119,7 @@ void PromoteRequest<I>::handle_list_watchers(int r) {
 template <typename I>
 void PromoteRequest<I>::wait_update_notify() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   ImageCtx::get_timer_instance(cct, &m_timer, &m_timer_lock);
 
@@ -157,14 +135,14 @@ void PromoteRequest<I>::wait_update_notify() {
     finish(r);
     return;
   }
-  
+
   scheduler_unregister_update_watcher();
 }
 
 template <typename I>
 void PromoteRequest<I>::handle_update_notify() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   std::lock_guard timer_lock{*m_timer_lock};
   m_scheduler_ticks = 0;
@@ -175,7 +153,7 @@ void PromoteRequest<I>::scheduler_unregister_update_watcher() {
   ceph_assert(ceph_mutex_is_locked(*m_timer_lock));
 
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "scheduler_ticks=" << m_scheduler_ticks << dendl;
+  ldout(cct, 15) << "scheduler_ticks=" << m_scheduler_ticks << dendl;
 
   if (m_scheduler_ticks > 0) {
     m_scheduler_ticks--;
@@ -193,7 +171,7 @@ void PromoteRequest<I>::scheduler_unregister_update_watcher() {
 template <typename I>
 void PromoteRequest<I>::unregister_update_watcher() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   auto ctx = create_context_callback<
     PromoteRequest<I>,
@@ -205,7 +183,7 @@ void PromoteRequest<I>::unregister_update_watcher() {
 template <typename I>
 void PromoteRequest<I>::handle_unregister_update_watcher(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to unregister update watcher: " << cpp_strerror(r)
@@ -224,7 +202,7 @@ void PromoteRequest<I>::acquire_exclusive_lock() {
     if (m_image_ctx->exclusive_lock != nullptr &&
         !m_image_ctx->exclusive_lock->is_lock_owner()) {
       CephContext *cct = m_image_ctx->cct;
-      ldout(cct, 20) << dendl;
+      ldout(cct, 15) << dendl;
 
       m_lock_acquired = true;
       m_image_ctx->exclusive_lock->block_requests(0);
@@ -244,7 +222,7 @@ void PromoteRequest<I>::acquire_exclusive_lock() {
 template <typename I>
 void PromoteRequest<I>::handle_acquire_exclusive_lock(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to acquire exclusive lock: " << cpp_strerror(r)
@@ -259,6 +237,7 @@ void PromoteRequest<I>::handle_acquire_exclusive_lock(int r) {
       r = m_image_ctx->exclusive_lock->get_unlocked_op_error();
       locker.unlock();
       finish(r);
+      return;
     }
   }
 
@@ -273,7 +252,7 @@ void PromoteRequest<I>::rollback() {
   }
 
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   std::shared_lock owner_locker{m_image_ctx->owner_lock};
   std::shared_lock image_locker{m_image_ctx->image_lock};
@@ -296,7 +275,7 @@ void PromoteRequest<I>::rollback() {
 template <typename I>
 void PromoteRequest<I>::handle_rollback(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to rollback: " << cpp_strerror(r) << dendl;
@@ -310,25 +289,62 @@ void PromoteRequest<I>::handle_rollback(int r) {
 template <typename I>
 void PromoteRequest<I>::create_promote_snapshot() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   auto ctx = create_context_callback<
     PromoteRequest<I>,
     &PromoteRequest<I>::handle_create_promote_snapshot>(this);
 
-  auto req = CreatePrimaryRequest<I>::create(m_image_ctx, false, true, nullptr,
-                                             ctx);
+  auto req = CreatePrimaryRequest<I>::create(
+    m_image_ctx, m_global_image_id, CEPH_NOSNAP,
+    SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE,
+    (snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS |
+     snapshot::CREATE_PRIMARY_FLAG_FORCE), nullptr, ctx);
   req->send();
 }
 
 template <typename I>
 void PromoteRequest<I>::handle_create_promote_snapshot(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to create promote snapshot: " << cpp_strerror(r)
                << dendl;
+    finish(r);
+    return;
+  }
+
+  disable_non_primary_feature();
+}
+
+template <typename I>
+void PromoteRequest<I>::disable_non_primary_feature() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << dendl;
+
+  // remove the non-primary feature flag so that the image can be
+  // R/W by standard RBD clients
+  librados::ObjectWriteOperation op;
+  cls_client::set_features(&op, 0U, RBD_FEATURE_NON_PRIMARY);
+
+  auto aio_comp = create_rados_callback<
+    PromoteRequest<I>,
+    &PromoteRequest<I>::handle_disable_non_primary_feature>(this);
+  int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, aio_comp,
+                                          &op);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void PromoteRequest<I>::handle_disable_non_primary_feature(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to disable non-primary feature: "
+               << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -342,7 +358,7 @@ void PromoteRequest<I>::release_exclusive_lock() {
     std::unique_lock locker{m_image_ctx->owner_lock};
     if (m_image_ctx->exclusive_lock != nullptr) {
       CephContext *cct = m_image_ctx->cct;
-      ldout(cct, 20) << dendl;
+      ldout(cct, 15) << dendl;
 
       m_image_ctx->exclusive_lock->unblock_requests();
 
@@ -361,7 +377,7 @@ void PromoteRequest<I>::release_exclusive_lock() {
 template <typename I>
 void PromoteRequest<I>::handle_release_exclusive_lock(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to release exclusive lock: " << cpp_strerror(r)
@@ -376,7 +392,7 @@ void PromoteRequest<I>::handle_release_exclusive_lock(int r) {
 template <typename I>
 void PromoteRequest<I>::finish(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
   delete this;

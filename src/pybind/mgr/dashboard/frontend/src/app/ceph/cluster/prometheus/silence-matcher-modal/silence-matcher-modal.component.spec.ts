@@ -3,17 +3,17 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
-import { TypeaheadModule } from 'ngx-bootstrap/typeahead';
+import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
+import { of } from 'rxjs';
 
+import { SharedModule } from '~/app/shared/shared.module';
 import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
-  i18nProviders,
   PrometheusHelper
-} from '../../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../../shared/shared.module';
+} from '~/testing/unit-test-helper';
 import { SilenceMatcherModalComponent } from './silence-matcher-modal.component';
 
 describe('SilenceMatcherModalComponent', () => {
@@ -29,11 +29,11 @@ describe('SilenceMatcherModalComponent', () => {
     imports: [
       HttpClientTestingModule,
       SharedModule,
-      TypeaheadModule.forRoot(),
+      NgbTypeaheadModule,
       RouterTestingModule,
       ReactiveFormsModule
     ],
-    providers: [BsModalRef, i18nProviders]
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {
@@ -78,7 +78,7 @@ describe('SilenceMatcherModalComponent', () => {
   });
 
   describe('test rule matching', () => {
-    const expectMatch = (name, value, helpText) => {
+    const expectMatch = (name: string, value: string, helpText: string) => {
       component.preFillControls({
         name: name,
         value: value,
@@ -154,10 +154,56 @@ describe('SilenceMatcherModalComponent', () => {
       isRegex: false
     };
     component.preFillControls(controlValues);
-    component.submitAction.subscribe((resp) => {
+    component.submitAction.subscribe((resp: object) => {
       expect(resp).toEqual(controlValues);
       done();
     });
     component.onSubmit();
+  });
+
+  describe('typeahead', () => {
+    let equality: { [key: string]: boolean };
+    let expectations: { [key: string]: string[] };
+
+    const search = (s: string) => {
+      Object.keys(expectations).forEach((key) => {
+        formH.setValue('name', key);
+        component.search(of(s)).subscribe((result) => {
+          // Expect won't fail the test inside subscribe
+          equality[key] = _.isEqual(result, expectations[key]);
+        });
+        expect(equality[key]).toBeTruthy();
+      });
+    };
+
+    beforeEach(() => {
+      equality = {
+        alertname: false,
+        instance: false,
+        job: false,
+        severity: false
+      };
+      expectations = {
+        alertname: ['alert0', 'alert1'],
+        instance: ['someInstance'],
+        job: ['someJob'],
+        severity: ['someSeverity']
+      };
+    });
+
+    it('should show all values on name switch', () => {
+      search('');
+    });
+
+    it('should search for "some"', () => {
+      expectations['alertname'] = [];
+      search('some');
+    });
+
+    it('should search for "er"', () => {
+      expectations['instance'] = [];
+      expectations['job'] = [];
+      search('er');
+    });
   });
 });

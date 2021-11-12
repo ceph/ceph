@@ -1,43 +1,24 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import {
-  configureTestBed,
-  FixtureHelper,
-  i18nProviders
-} from '../../../../../testing/unit-test-helper';
-import { SharedModule } from '../../../../shared/shared.module';
-import { InventoryDevicesComponent } from '../../inventory/inventory-devices/inventory-devices.component';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, FixtureHelper, Mocks } from '~/testing/unit-test-helper';
 import { OsdDevicesSelectionGroupsComponent } from './osd-devices-selection-groups.component';
 
 describe('OsdDevicesSelectionGroupsComponent', () => {
   let component: OsdDevicesSelectionGroupsComponent;
   let fixture: ComponentFixture<OsdDevicesSelectionGroupsComponent>;
   let fixtureHelper: FixtureHelper;
-  const devices = [
-    {
-      hostname: 'node0',
-      uid: '1',
-      path: 'sda',
-      sys_api: {
-        vendor: 'AAA',
-        model: 'aaa',
-        size: 1024,
-        rotational: 'false',
-        human_readable_size: '1 KB'
-      },
-      available: false,
-      rejected_reasons: [''],
-      device_id: 'AAA-aaa-id0',
-      human_readable_type: 'nvme/ssd',
-      osd_ids: []
-    }
-  ];
+  const devices: InventoryDevice[] = [Mocks.getInventoryDevice('node0', '1')];
 
-  const buttonSelector = '.col-sm-9 button';
+  const buttonSelector = '.cd-col-form-input button';
   const getButton = () => {
     const debugElement = fixtureHelper.getElementByCss(buttonSelector);
     return debugElement.nativeElement;
@@ -49,8 +30,14 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
   };
 
   configureTestBed({
-    imports: [FormsModule, HttpClientTestingModule, SharedModule, ToastrModule.forRoot()],
-    providers: [i18nProviders],
+    imports: [
+      BrowserAnimationsModule,
+      FormsModule,
+      HttpClientTestingModule,
+      SharedModule,
+      ToastrModule.forRoot(),
+      RouterTestingModule
+    ],
     declarations: [OsdDevicesSelectionGroupsComponent, InventoryDevicesComponent]
   });
 
@@ -107,8 +94,10 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
 
   describe('with devices selected', () => {
     beforeEach(() => {
+      component.isOsdPage = true;
       component.availDevices = [];
       component.devices = devices;
+      component.ngOnInit();
       fixture.detectChanges();
     });
 
@@ -126,7 +115,7 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
       spyOn(component.cleared, 'emit');
       fixtureHelper.clickElement(clearTextSelector);
       fixtureHelper.expectElementVisible('cd-inventory-devices', false);
-      const event = {
+      const event: Record<string, any> = {
         type: undefined,
         clearedDevices: devices
       };

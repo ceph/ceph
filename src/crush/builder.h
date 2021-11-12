@@ -37,16 +37,7 @@ extern void crush_finalize(struct crush_map *map);
 /** @ingroup API
  *
  * Allocate an empty crush_rule structure large enough to store __len__ steps.
- * Steps can be added to a rule via crush_rule_set_step(). The __ruleset__
- * is a user defined integer, not used by __libcrush__ and stored in
- * the allocated rule at __rule->mask.ruleset__.
- *
- * The rule is designed to allow crush_do_rule() to get at least __minsize__ items
- * and at most __maxsize__ items.
- *
- * The __type__ is defined by the caller and will be used by
- * crush_find_rule() when looking for a rule and by
- * __CRUSH_RULE_CHOOSE*__ steps when looking for items.
+ * Steps can be added to a rule via crush_rule_set_step().
  *
  * The caller is responsible for deallocating the returned pointer via
  * crush_destroy_rule().
@@ -54,14 +45,11 @@ extern void crush_finalize(struct crush_map *map);
  * If __malloc(3)__ fails, return NULL.
  *
  * @param len number of steps in the rule
- * @param ruleset user defined value
  * @param type user defined value
- * @param minsize minimum number of items the rule can map
- * @param maxsize maximum number of items the rule can map
  *
  * @returns a pointer to the newly created rule or NULL
  */
-extern struct crush_rule *crush_make_rule(int len, int ruleset, int type, int minsize, int maxsize);
+extern struct crush_rule *crush_make_rule(int len, int type);
 /** @ingroup API
  *
  * Set the __pos__ step of the __rule__ to an operand and up to two arguments.

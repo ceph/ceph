@@ -24,7 +24,7 @@ public:
                                   "0"));
 
     CephContext *cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
-    std::string policy_type = cct->_conf.get_val<string>("rbd_mirror_image_policy_type");
+    std::string policy_type = cct->_conf.get_val<std::string>("rbd_mirror_image_policy_type");
 
     if (policy_type == "none" || policy_type == "simple") {
       m_policy = image_map::SimplePolicy::create(m_local_io_ctx);
@@ -223,7 +223,7 @@ TEST_F(TestImageMapPolicy, MapFailureAndUnmap) {
                              &shuffle_global_image_ids);
   ASSERT_TRUE(shuffle_global_image_ids.empty());
 
-  ASSERT_TRUE(m_policy->finish_action(global_image_id, -EBLACKLISTED));
+  ASSERT_TRUE(m_policy->finish_action(global_image_id, -EBLOCKLISTED));
 
   ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, -ENOENT));
@@ -278,7 +278,7 @@ TEST_F(TestImageMapPolicy, ReshuffleWithMapFailure) {
   m_policy->remove_instances({"9876"}, &shuffle_global_image_ids);
   ASSERT_TRUE(shuffle_global_image_ids.empty());
 
-  ASSERT_TRUE(m_policy->finish_action(global_image_id, -EBLACKLISTED));
+  ASSERT_TRUE(m_policy->finish_action(global_image_id, -EBLOCKLISTED));
 
   ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
@@ -325,7 +325,7 @@ TEST_F(TestImageMapPolicy, ShuffleFailureAndRemove) {
   m_policy->remove_instances({"9876"}, &shuffle_global_image_ids);
   ASSERT_TRUE(shuffle_global_image_ids.empty());
 
-  ASSERT_TRUE(m_policy->finish_action(global_image_id, -EBLACKLISTED));
+  ASSERT_TRUE(m_policy->finish_action(global_image_id, -EBLOCKLISTED));
 
   ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));

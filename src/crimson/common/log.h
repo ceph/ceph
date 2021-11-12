@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #pragma once
 
 #include <seastar/util/log.hh>
@@ -10,7 +13,7 @@ static inline seastar::log_level to_log_level(int level) {
     return seastar::log_level::error;
   } else if (level < 1) {
     return seastar::log_level::warn;
-  } else if (level < 5) {
+  } else if (level <= 5) {
     return seastar::log_level::info;
   } else if (level <= 20) {
     return seastar::log_level::debug;

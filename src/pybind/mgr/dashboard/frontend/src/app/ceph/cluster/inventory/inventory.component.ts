@@ -1,9 +1,11 @@
-import { Component, Input, OnChanges, OnInit } from '@angular/core';
+import { Component, Input, NgZone, OnChanges, OnDestroy, OnInit } from '@angular/core';
 
-import { OrchestratorService } from '../../../shared/api/orchestrator.service';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
-import { SummaryService } from '../../../shared/services/summary.service';
+import { Subscription, timer as observableTimer } from 'rxjs';
+
+import { HostService } from '~/app/shared/api/host.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { InventoryDevice } from './inventory-devices/inventory-device.model';
 
 @Component({
@@ -11,75 +13,78 @@ import { InventoryDevice } from './inventory-devices/inventory-device.model';
   templateUrl: './inventory.component.html',
   styleUrls: ['./inventory.component.scss']
 })
-export class InventoryComponent implements OnChanges, OnInit {
+export class InventoryComponent implements OnChanges, OnInit, OnDestroy {
   // Display inventory page only for this hostname, ignore to display all.
   @Input() hostname?: string;
 
+  private reloadSubscriber: Subscription;
+  private reloadInterval = 5000;
+  private firstRefresh = true;
+
   icons = Icons;
 
-  checkingOrchestrator = true;
-  orchestratorExist = false;
-  docsUrl: string;
+  orchStatus: OrchestratorStatus;
+  showDocPanel = false;
 
   devices: Array<InventoryDevice> = [];
-  isLoadingDevices = false;
 
   constructor(
-    private cephReleaseNamePipe: CephReleaseNamePipe,
     private orchService: OrchestratorService,
-    private summaryService: SummaryService
+    private hostService: HostService,
+    private ngZone: NgZone
   ) {}
 
   ngOnInit() {
-    // duplicated code with grafana
-    const subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
-
-      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/orchestrator_cli/`;
-
-      setTimeout(() => {
-        subs.unsubscribe();
-      }, 0);
-    });
-
-    this.orchService.status().subscribe((data: { available: boolean }) => {
-      this.orchestratorExist = data.available;
-      this.checkingOrchestrator = false;
-
-      if (this.orchestratorExist) {
-        this.getInventory();
+    this.orchService.status().subscribe((status) => {
+      this.orchStatus = status;
+      this.showDocPanel = !status.available;
+      if (status.available) {
+        // Create a timer to get cached inventory from the orchestrator.
+        // Do not ask the orchestrator frequently to refresh its cache data because it's expensive.
+        this.ngZone.runOutsideAngular(() => {
+          // start after first pass because the embedded table calls refresh at init.
+          this.reloadSubscriber = observableTimer(
+            this.reloadInterval,
+            this.reloadInterval
+          ).subscribe(() => {
+            this.ngZone.run(() => {
+              this.getInventory(false);
+            });
+          });
+        });
       }
     });
+  }
+
+  ngOnDestroy() {
+    this.reloadSubscriber?.unsubscribe();
   }
 
   ngOnChanges() {
-    if (this.orchestratorExist) {
+    if (this.orchStatus?.available) {
       this.devices = [];
-      this.getInventory();
+      this.getInventory(false);
     }
   }
 
-  getInventory() {
-    if (this.isLoadingDevices) {
-      return;
-    }
-    this.isLoadingDevices = true;
+  getInventory(refresh: boolean) {
     if (this.hostname === '') {
-      this.isLoadingDevices = false;
       return;
     }
-    this.orchService.inventoryDeviceList(this.hostname).subscribe(
+    this.hostService.inventoryDeviceList(this.hostname, refresh).subscribe(
       (devices: InventoryDevice[]) => {
         this.devices = devices;
-        this.isLoadingDevices = false;
       },
       () => {
         this.devices = [];
-        this.isLoadingDevices = false;
       }
     );
+  }
+
+  refresh() {
+    // Make the first reload (triggered by table) use cached data, and
+    // the remaining reloads (triggered by users) ask orchestrator to refresh inventory.
+    this.getInventory(!this.firstRefresh);
+    this.firstRefresh = false;
   }
 }

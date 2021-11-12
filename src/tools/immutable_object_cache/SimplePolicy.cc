@@ -74,7 +74,7 @@ cache_status_t SimplePolicy::lookup_object(std::string file_name) {
 
   Entry* entry = entry_it->second;
 
-  if (entry->status == OBJ_CACHE_PROMOTED) {
+  if (entry->status == OBJ_CACHE_PROMOTED || entry->status == OBJ_CACHE_DNE) {
     // bump pos in lru on hit
     m_promoted_lru.lru_touch(entry);
   }
@@ -106,7 +106,8 @@ void SimplePolicy::update_status(std::string file_name,
   }
 
   // promoting done
-  if (entry->status == OBJ_CACHE_SKIP && new_status== OBJ_CACHE_PROMOTED) {
+  if (entry->status == OBJ_CACHE_SKIP && (new_status== OBJ_CACHE_PROMOTED ||
+                                          new_status== OBJ_CACHE_DNE)) {
     m_promoted_lru.lru_insert_top(entry);
     entry->status = new_status;
     entry->size = size;
@@ -128,7 +129,8 @@ void SimplePolicy::update_status(std::string file_name,
   }
 
   // to evict
-  if (entry->status == OBJ_CACHE_PROMOTED && new_status== OBJ_CACHE_NONE) {
+  if ((entry->status == OBJ_CACHE_PROMOTED || entry->status == OBJ_CACHE_DNE) &&
+      new_status== OBJ_CACHE_NONE) {
     // mark this entry as free
     uint64_t size = entry->size;
     entry->file_name = "";
@@ -168,7 +170,7 @@ void SimplePolicy::get_evict_list(std::list<std::string>* obj_list) {
 
   std::unique_lock locker{m_cache_map_lock};
   // check free ratio, pop entries from LRU
-  if ((double)m_cache_size / m_max_cache_size > (1 - m_watermark)) {
+  if ((double)m_cache_size > m_max_cache_size * m_watermark) {
     // TODO(dehao): make this configurable
     int evict_num = m_cache_map.size() * 0.1;
     for (int i = 0; i < evict_num; i++) {

@@ -15,11 +15,11 @@
 #ifndef CEPH_STRIPER_H
 #define CEPH_STRIPER_H
 
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "osd/osd_types.h"
 #include "osdc/StriperTypes.h"
 
-class CephContext;
 
 //namespace ceph {
 
@@ -73,6 +73,9 @@ class CephContext;
 
     static uint64_t get_num_objects(const file_layout_t& layout,
 				    uint64_t size);
+
+    static uint64_t get_file_offset(CephContext *cct,
+            const file_layout_t *layout, uint64_t objectno, uint64_t off);
     /*
      * helper to assemble a striped result
      */
@@ -103,9 +106,10 @@ class CephContext;
 	const std::map<uint64_t, uint64_t>& bl_map, uint64_t bl_off,
 	const std::vector<std::pair<uint64_t,uint64_t> >& buffer_extents);
       void add_partial_sparse_result(
-	  CephContext *cct, ceph::buffer::list& bl,
-	  const std::map<uint64_t, uint64_t>& bl_map, uint64_t bl_off,
-	  const striper::LightweightBufferExtents& buffer_extents);
+	  CephContext *cct, ceph::buffer::list&& bl,
+	  const std::vector<std::pair<uint64_t, uint64_t>>& bl_map,
+          uint64_t bl_off,
+          const striper::LightweightBufferExtents& buffer_extents);
 
       void assemble_result(CephContext *cct, ceph::buffer::list& bl,
                            bool zero_tail);
@@ -116,16 +120,9 @@ class CephContext;
        */
       void assemble_result(CephContext *cct, char *buffer, size_t len);
 
-      void assemble_result(CephContext *cct,
-                           std::map<uint64_t, uint64_t> *extent_map,
-                           ceph::buffer::list *bl);
-
-    private:
-      void add_partial_sparse_result(
-          CephContext *cct, bufferlist& bl,
-          std::map<uint64_t, uint64_t>::const_iterator* it,
-          const std::map<uint64_t, uint64_t>::const_iterator& end_it,
-          uint64_t* bl_off, uint64_t tofs, uint64_t tlen);
+      uint64_t assemble_result(CephContext *cct,
+                               std::map<uint64_t, uint64_t> *extent_map,
+                               ceph::buffer::list *bl);
     };
 
   };

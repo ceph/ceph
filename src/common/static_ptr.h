@@ -33,7 +33,7 @@ namespace _mem {
 // of the same arguments (which is not true for function type erasure)
 // it's a pretty good one.
 enum class op {
-  copy, move, destroy, size
+  move, destroy, size
 };
 template<typename T>
 static std::size_t op_fun(op oper, void* p1, void* p2)
@@ -41,15 +41,6 @@ static std::size_t op_fun(op oper, void* p1, void* p2)
   auto me = static_cast<T*>(p1);
 
   switch (oper) {
-  case op::copy:
-    // One conspicuous downside is that immovable/uncopyable functions
-    // kill compilation right here, even if nobody ever calls the move
-    // or copy methods. Working around this is a pain, since we'd need
-    // four operator functions and a top-level class to
-    // provide/withhold copy/move operations as appropriate.
-    new (p2) T(*me);
-    break;
-
   case op::move:
     new (p2) T(std::move(*me));
     break;
@@ -137,12 +128,6 @@ public:
   // Set from another static pointer.
   //
   // Since the templated versions don't count for overriding the defaults
-  static_ptr(const static_ptr& rhs)
-    noexcept(std::is_nothrow_copy_constructible_v<Base>) : operate(rhs.operate) {
-    if (operate) {
-      operate(_mem::op::copy, &rhs.buf, &buf);
-    }
-  }
   static_ptr(static_ptr&& rhs)
     noexcept(std::is_nothrow_move_constructible_v<Base>) : operate(rhs.operate) {
     if (operate) {
@@ -150,14 +135,6 @@ public:
     }
   }
 
-  template<typename U, std::size_t S>
-  static_ptr(const static_ptr<U, S>& rhs)
-    noexcept(std::is_nothrow_copy_constructible_v<U>) : operate(rhs.operate) {
-    create_ward<U, S>();
-    if (operate) {
-      operate(_mem::op::copy, &rhs.buf, &buf);
-    }
-  }
   template<typename U, std::size_t S>
   static_ptr(static_ptr<U, S>&& rhs)
     noexcept(std::is_nothrow_move_constructible_v<U>) : operate(rhs.operate) {
@@ -167,16 +144,6 @@ public:
     }
   }
 
-  static_ptr& operator =(const static_ptr& rhs)
-    noexcept(std::is_nothrow_copy_constructible_v<Base>) {
-    reset();
-    if (rhs) {
-      operate = rhs.operate;
-      operate(_mem::op::copy,
-	      const_cast<void*>(static_cast<const void*>(&rhs.buf)), &buf);
-    }
-    return *this;
-  }
   static_ptr& operator =(static_ptr&& rhs)
     noexcept(std::is_nothrow_move_constructible_v<Base>) {
     reset();
@@ -187,18 +154,6 @@ public:
     return *this;
   }
 
-  template<typename U, std::size_t S>
-  static_ptr& operator =(const static_ptr<U, S>& rhs)
-    noexcept(std::is_nothrow_copy_constructible_v<U>) {
-    create_ward<U, S>();
-    reset();
-    if (rhs) {
-      operate = rhs.operate;
-      operate(_mem::op::copy,
-	      const_cast<void*>(static_cast<const void*>(&rhs.buf)), &buf);
-    }
-    return *this;
-  }
   template<typename U, std::size_t S>
   static_ptr& operator =(static_ptr<U, S>&& rhs)
     noexcept(std::is_nothrow_move_constructible_v<U>) {
@@ -300,20 +255,6 @@ public:
 // nice idiom. Having to release and reconstruct is obnoxious.
 //
 template<typename U, std::size_t Z, typename T, std::size_t S>
-static_ptr<U, Z> static_pointer_cast(const static_ptr<T, S>& p) {
-  static_assert(Z >= S,
-                "Value too large.");
-  static_ptr<U, Z> r;
-  // Really, this is always true because static_cast either succeeds
-  // or fails to compile, but it prevents an unused variable warning
-  // and should be optimized out.
-  if (static_cast<U*>(p.get())) {
-    p.operate(_mem::op::copy, &p.buf, &r.buf);
-    r.operate = p.operate;
-  }
-  return r;
-}
-template<typename U, std::size_t Z, typename T, std::size_t S>
 static_ptr<U, Z> static_pointer_cast(static_ptr<T, S>&& p) {
   static_assert(Z >= S,
                 "Value too large.");
@@ -329,17 +270,6 @@ static_ptr<U, Z> static_pointer_cast(static_ptr<T, S>&& p) {
 // same behavior as dynamic_cast.
 //
 template<typename U, std::size_t Z, typename T, std::size_t S>
-static_ptr<U, Z> dynamic_pointer_cast(const static_ptr<T, S>& p) {
-  static_assert(Z >= S,
-                "Value too large.");
-  static_ptr<U, Z> r;
-  if (dynamic_cast<U*>(p.get())) {
-    p.operate(_mem::op::copy, &p.buf, &r.buf);
-    r.operate = p.operate;
-  }
-  return r;
-}
-template<typename U, std::size_t Z, typename T, std::size_t S>
 static_ptr<U, Z> dynamic_pointer_cast(static_ptr<T, S>&& p) {
   static_assert(Z >= S,
                 "Value too large.");
@@ -351,17 +281,6 @@ static_ptr<U, Z> dynamic_pointer_cast(static_ptr<T, S>&& p) {
   return r;
 }
 
-template<typename U, std::size_t Z, typename T, std::size_t S>
-static_ptr<U, Z> const_pointer_cast(const static_ptr<T, S>& p) {
-  static_assert(Z >= S,
-                "Value too large.");
-  static_ptr<U, Z> r;
-  if (const_cast<U*>(p.get())) {
-    p.operate(_mem::op::copy, &p.buf, &r.buf);
-    r.operate = p.operate;
-  }
-  return r;
-}
 template<typename U, std::size_t Z, typename T, std::size_t S>
 static_ptr<U, Z> const_pointer_cast(static_ptr<T, S>&& p) {
   static_assert(Z >= S,
@@ -377,15 +296,6 @@ static_ptr<U, Z> const_pointer_cast(static_ptr<T, S>&& p) {
 // I'm not sure if anyone will ever use this. I can imagine situations
 // where they might. It works, though!
 //
-template<typename U, std::size_t Z, typename T, std::size_t S>
-static_ptr<U, Z> reinterpret_pointer_cast(const static_ptr<T, S>& p) {
-  static_assert(Z >= S,
-                "Value too large.");
-  static_ptr<U, Z> r;
-  p.operate(_mem::op::copy, &p.buf, &r.buf);
-  r.operate = p.operate;
-  return r;
-}
 template<typename U, std::size_t Z, typename T, std::size_t S>
 static_ptr<U, Z> reinterpret_pointer_cast(static_ptr<T, S>&& p) {
   static_assert(Z >= S,
@@ -404,17 +314,6 @@ static_ptr<U, Z> reinterpret_pointer_cast(static_ptr<T, S>&& p) {
 // I follow cast semantics. Since this is a pointer-like type, it
 // returns a null value rather than throwing.
 template<typename U, std::size_t Z, typename T, std::size_t S>
-static_ptr<U, Z> resize_pointer_cast(const static_ptr<T, S>& p) {
-  static_assert(std::is_same_v<U, T>,
-                "resize_pointer_cast only changes size, not type.");
-  static_ptr<U, Z> r;
-  if (Z >= p.operate(_mem::op::size, &p.buf, nullptr)) {
-    p.operate(_mem::op::copy, &p.buf, &r.buf);
-    r.operate = p.operate;
-  }
-  return r;
-}
-template<typename U, std::size_t Z, typename T, std::size_t S>
 static_ptr<U, Z> resize_pointer_cast(static_ptr<T, S>&& p) {
   static_assert(std::is_same_v<U, T>,
                 "resize_pointer_cast only changes size, not type.");
@@ -427,11 +326,19 @@ static_ptr<U, Z> resize_pointer_cast(static_ptr<T, S>&& p) {
 }
 
 template<typename Base, std::size_t Size>
-bool operator ==(static_ptr<Base, Size> s, std::nullptr_t) {
+bool operator ==(const static_ptr<Base, Size>& s, std::nullptr_t) {
   return !s;
 }
 template<typename Base, std::size_t Size>
-bool operator ==(std::nullptr_t, static_ptr<Base, Size> s) {
+bool operator ==(std::nullptr_t, const static_ptr<Base, Size>& s) {
+  return !s;
+}
+template<typename Base, std::size_t Size>
+bool operator ==(static_ptr<Base, Size>& s, std::nullptr_t) {
+  return !s;
+}
+template<typename Base, std::size_t Size>
+bool operator ==(std::nullptr_t, static_ptr<Base, Size>& s) {
   return !s;
 }
 

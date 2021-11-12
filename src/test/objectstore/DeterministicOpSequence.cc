@@ -34,6 +34,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "deterministic_seq "
 
+using namespace std;
+
 DeterministicOpSequence::DeterministicOpSequence(ObjectStore *store,
 						 std::string status)
   : TestObjectStoreState(store),

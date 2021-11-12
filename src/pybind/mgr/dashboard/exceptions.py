@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 
 class ViewCacheNoDataException(Exception):
@@ -43,6 +42,13 @@ class DashboardException(Exception):
         if self._code:
             return str(self._code)
         return str(abs(self.errno)) if self.errno is not None else 'Error'
+
+
+class InvalidCredentialsError(DashboardException):
+    def __init__(self):
+        super().__init__(msg='Invalid credentials',
+                         code='invalid_credentials',
+                         component='auth')
 
 
 # access control module exceptions

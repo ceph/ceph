@@ -9,7 +9,7 @@ find_path(NUMA_INCLUDE_DIR numa.h)
 find_library(NUMA_LIBRARIES numa)
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(numa DEFAULT_MSG NUMA_LIBRARIES NUMA_INCLUDE_DIR)
+find_package_handle_standard_args(NUMA DEFAULT_MSG NUMA_LIBRARIES NUMA_INCLUDE_DIR)
 
 mark_as_advanced(
   NUMA_LIBRARIES

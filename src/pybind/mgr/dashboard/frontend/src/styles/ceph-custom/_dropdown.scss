@@ -1,0 +1,35 @@
+@use './src/styles/vendor/variables' as vv;
+
+/* Dropdown */
+.dropdown-menu {
+  min-width: 50px;
+  z-index: 999999;
+
+  button.dropdown-item:focus {
+    outline: none;
+  }
+}
+
+.dropdown-menu > li > a {
+  cursor: pointer;
+}
+
+.dropdown-menu > li > a > i.fa {
+  /** Add space between icon and text */
+  margin-right: 5px;
+}
+
+.dropdown-menu > .active > a {
+  background-color: vv.$primary;
+  color: vv.$gray-200;
+
+  &,
+  &:hover,
+  &:focus {
+    background-color: darken(vv.$primary, 10);
+  }
+}
+
+.dataTables_wrapper .dropdown-menu > li.dropdown-divider {
+  cursor: auto;
+}

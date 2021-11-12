@@ -28,7 +28,6 @@ public:
   std::string cluster;
   ceph::logging::SubsystemMap subsys;
   bool no_mon_config = false;
-  bool log_early = false;
   // Set of configuration options that have changed since the last
   // apply_changes
   using changed_set_t = std::set<std::string>;
@@ -57,7 +56,7 @@ public:
 #define SAFE_OPTION(name, ty)       \
   protected:                        \
     OPTION_##ty(name)               
-#include "common/legacy_config_opts.h"
+#include "common/options/legacy_config_opts.h"
 #undef OPTION_OPT_INT
 #undef OPTION_OPT_LONGLONG
 #undef OPTION_OPT_STR

@@ -49,12 +49,11 @@ function TEST_balancer() {
     wait_for_clean || return 1
 
     ceph pg dump pgs
-    ceph osd set-require-min-compat-client luminous
     ceph balancer status || return 1
     eval MODE=$(ceph balancer status | jq '.mode')
-    test $MODE = "none" || return 1
+    test $MODE = "upmap" || return 1
     ACTIVE=$(ceph balancer status | jq '.active')
-    test $ACTIVE = "false" || return 1
+    test $ACTIVE = "true" || return 1
 
     ceph balancer ls || return 1
     PLANS=$(ceph balancer ls)
@@ -80,6 +79,7 @@ function TEST_balancer() {
     ceph balancer status || return 1
     eval MODE=$(ceph balancer status | jq '.mode')
     test $MODE = "crush-compat" || return 1
+    ceph balancer off || return 1
     ! ceph balancer optimize plan_crush $TEST_POOL1 || return 1
     ceph balancer status || return 1
     eval RESULT=$(ceph balancer status | jq '.optimize_result')
@@ -163,7 +163,8 @@ function TEST_balancer2() {
     done
     test $OK = "yes" || return 1
     # Plan is found, but PGs still need to move
-    sleep 30
+    sleep 10
+    wait_for_clean || return 1
     ceph osd df
 
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[0].pgs')
@@ -193,13 +194,14 @@ function TEST_balancer2() {
     done
     test $OK = "yes" || return 1
     # Plan is found, but PGs still need to move
-    sleep 30
+    sleep 10
+    wait_for_clean || return 1
     ceph osd df
 
-    # We should be with plue or minus 1 of FINAL_PER_OSD2
+    # We should be with plus or minus 2 of FINAL_PER_OSD2
     # This is because here each pool is balanced independently
-    MIN=$(expr $FINAL_PER_OSD2 - 1)
-    MAX=$(expr $FINAL_PER_OSD2 + 1)
+    MIN=$(expr $FINAL_PER_OSD2 - 2)
+    MAX=$(expr $FINAL_PER_OSD2 + 2)
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[0].pgs')
     test $PGS -ge $MIN -a $PGS -le $MAX || return 1
     PGS=$(ceph osd df --format=json-pretty | jq '.nodes[1].pgs')

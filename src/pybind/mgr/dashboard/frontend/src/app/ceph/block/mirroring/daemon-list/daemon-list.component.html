@@ -1,8 +1,9 @@
 <cd-table [data]="data"
           columnMode="flex"
           [columns]="columns"
-          [autoReload]="0"
-          (fetchData)="refresh()">
+          [autoReload]="-1"
+          (fetchData)="refresh()"
+          [status]="tableStatus">
 </cd-table>
 
 <ng-template #healthTmpl

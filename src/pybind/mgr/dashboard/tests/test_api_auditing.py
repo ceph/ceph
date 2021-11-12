@@ -1,22 +1,20 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
-import re
 import json
-import cherrypy
+import re
+
 try:
     import mock
 except ImportError:
     import unittest.mock as mock
 
-from . import ControllerTestCase, KVStoreMockMixin
-from ..controllers import RESTController, Controller
-from ..tools import RequestLoggingTool
 from .. import mgr
+from ..controllers import RESTController, Router
+from ..tests import ControllerTestCase, KVStoreMockMixin
 
 
 # pylint: disable=W0613
-@Controller('/foo', secure=False)
+@Router('/foo', secure=False)
 class FooResource(RESTController):
     def create(self, password):
         pass
@@ -33,10 +31,7 @@ class FooResource(RESTController):
 
 class ApiAuditingTest(ControllerTestCase, KVStoreMockMixin):
 
-    def __init__(self, *args, **kwargs):
-        cherrypy.tools.request_logging = RequestLoggingTool()
-        cherrypy.config.update({'tools.request_logging.on': True})
-        super(ApiAuditingTest, self).__init__(*args, **kwargs)
+    _request_logging = True
 
     @classmethod
     def setup_server(cls):

@@ -47,18 +47,39 @@ item), so this is really 2x2 = 4 tests, which are
   a + b2 + c + d1
   a + b2 + c + d2
 
-A directory with a magic '$' file represents a test where one of the other
-items is chosen randomly. For example,
+A directory with a magic '$' file, or a directory whose name ends with '$',
+represents a test where one of the non-magic items is chosen randomly.  For
+example, both
 
-suites/foo/$
-suites/foo/a.yaml
-suites/foo/b.yaml
-suites/foo/c.yaml
+ suites/foo/$
+ suites/foo/a.yaml
+ suites/foo/b.yaml
+ suites/foo/c.yaml
 
-is a single test.  It will be either a.yaml, b.yaml or c.yaml.  This can be
-used in conjunction with the '%' file in other directories to run a series of
-tests without causing an unwanted increase in the total number of jobs run.
+and
+
+ suites/foo$/a.yaml
+ suites/foo$/b.yaml
+ suites/foo$/c.yaml
+
+is a single test, either a, b or c.  This can be used in conjunction with the
+'%' file in the same (see below) or other directories to run a series of tests
+without causing an unwanted increase in the total number of jobs run.
 
 Symlinks are okay.
+
+One particular use of symlinks is to combine '%' and the latter form of '$'
+feature.  Consider supported_distros directory containing fragments that define
+os_type and os_version:
+
+ supported_distros/%
+ supported_distros/centos.yaml
+ supported_distros/rhel.yaml
+ supported_distros/ubuntu.yaml
+
+A test that links supported_distros as distros (a name that doesn't end with
+'$') will be run three times: on centos, rhel and ubuntu.  A test that links
+supported_distros as distros$ will be run just once: either on centos, rhel or
+ubuntu, chosen randomly.
 
 The teuthology code can be found in https://github.com/ceph/teuthology.git

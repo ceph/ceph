@@ -15,9 +15,8 @@ A push notification mechanism exists too, currently supporting HTTP,
 AMQP0.9.1 and Kafka endpoints. In this case, the events are pushed to an endpoint on top of storing them in Ceph. If events should only be pushed to an endpoint
 and do not need to be stored in Ceph, the `Bucket Notification`_ mechanism should be used instead of pubsub sync module. 
 
-A user can create different topics. A topic entity is defined by its user and its name. A
-user can only manage its own topics, and can only subscribe to events published by buckets
-it owns.
+A user can create different topics. A topic entity is defined by its name and is per tenant. A
+user can only associate its topics (via notification configuration) with buckets it owns.
 
 In order to publish events for specific bucket a notification entity needs to be created. A
 notification can be created on a subset of event types, or for all event types (default).
@@ -31,7 +30,7 @@ mechanisms. This API has two flavors, one is S3-compatible and one is not. The t
 together, although it is recommended to use the S3-compatible one. 
 The S3-compatible API is similar to the one used in the bucket notification mechanism.
 
-Events are stored as RGW objects in a special bucket, under a special user. Events cannot
+Events are stored as RGW objects in a special bucket, under a special user (pubsub control user). Events cannot
 be accessed directly, but need to be pulled and acked using the new REST API.
 
 .. toctree::
@@ -39,10 +38,12 @@ be accessed directly, but need to be pulled and acked using the new REST API.
 
    S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
+.. note:: To enable bucket notifications API, the `rgw_enable_apis` configuration parameter should contain: "notifications".
+
 PubSub Zone Configuration
 -------------------------
 
-The pubsub sync module requires the creation of a new zone in a `Multisite`_ environment.
+The pubsub sync module requires the creation of a new zone in a :ref:`multisite` environment...
 First, a master zone must exist (see: :ref:`master-zone-label`), 
 then a secondary zone should be created (see :ref:`secondary-zone-label`).
 In the creation of the secondary zone, its tier type must be set to ``pubsub``:
@@ -112,6 +113,58 @@ the ``val`` specifies its new value. For example, setting the pubsub control use
 
 A configuration field can be removed by using ``--tier-config-rm={key}``.
 
+
+Topic and Subscription Management via CLI
+-----------------------------------------
+
+Configuration of all topics, associated with a tenant, could be fetched using the following command:
+   
+::
+   
+   # radosgw-admin topic list [--tenant={tenant}]
+
+
+Configuration of a specific topic could be fetched using:
+
+::
+   
+   # radosgw-admin topic get --topic={topic-name} [--tenant={tenant}]
+
+
+And removed using:
+
+::
+   
+   # radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
+
+
+Configuration of a subscription could be fetched using:
+
+::
+   
+   # radosgw-admin subscription get --subscription={topic-name} [--tenant={tenant}]
+
+And removed using:
+
+::
+   
+   # radosgw-admin subscription rm --subscription={topic-name} [--tenant={tenant}]
+
+
+To fetch all of the events stored in a subcription, use:
+
+::
+   
+   # radosgw-admin subscription pull --subscription={topic-name} [--marker={last-marker}] [--tenant={tenant}]
+
+
+To ack (and remove) an event from a subscription, use:
+
+::
+   
+   # radosgw-admin subscription ack --subscription={topic-name} --event-id={event-id} [--tenant={tenant}]
+
+
 PubSub Performance Stats
 -------------------------
 Same counters are shared between the pubsub sync module and the notification mechanism.
@@ -137,6 +190,8 @@ PubSub REST API
 Topics
 ~~~~~~
  
+.. _radosgw-create-a-topic:
+
 Create a Topic
 ``````````````
 
@@ -150,11 +205,12 @@ To update a topic, use the same command used for topic creation, with the topic 
 
 ::
 
-   PUT /topics/<topic-name>[?push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=none|broker][&verify-ssl=true|false][&kafka-ack-level=none|broker][&use-ssl=true|false][&ca-location=<file path>]]
+   PUT /topics/<topic-name>[?OpaqueData=<opaque data>][&push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=none|broker|routable][&verify-ssl=true|false][&kafka-ack-level=none|broker][&use-ssl=true|false][&ca-location=<file path>]]
 
 Request parameters:
 
 - push-endpoint: URI of an endpoint to send push notification to
+- OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic
 
 The endpoint URI may include parameters depending with the type of endpoint:
 
@@ -166,16 +222,21 @@ The endpoint URI may include parameters depending with the type of endpoint:
 
 - AMQP0.9.1 endpoint
 
- - URI: ``amqp://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
+ - URI: ``amqp[s]://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
  - user/password defaults to: guest/guest
  - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
- - port defaults to: 5672
+ - port defaults to: 5672/5671 for unencrypted/SSL-encrypted connections
  - vhost defaults to: "/"
- - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1)
- - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
+ - verify-ssl: indicate whether the server certificate is validated by the client or not ("true" by default)
+ - if ``ca-location`` is provided, and secure connection is used, the specified CA will be used, instead of the default one, to authenticate the broker
+ - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1). Different topics pointing to the same endpoint must use the same exchange
+ - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Three ack methods exist:
 
   - "none": message is considered "delivered" if sent to broker
   - "broker": message is considered "delivered" if acked by broker (default)
+  - "routable": message is considered "delivered" if broker can route to a consumer
+
+.. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the AMQP topic ("routing key" for a topic exchange)
 
 - Kafka endpoint 
 
@@ -218,9 +279,12 @@ Response will have the following format (JSON):
                "oid_prefix":"",
                "push_endpoint":"",
                "push_endpoint_args":"",
-               "push_endpoint_topic":""
+               "push_endpoint_topic":"",
+               "stored_secret":"",
+               "persistent":""
            },
            "arn":""
+           "opaqueData":""
        },
        "subs":[]
    }             
@@ -248,7 +312,7 @@ Delete the specified topic.
 List Topics
 ```````````
 
-List all topics that user defined.
+List all topics associated with a tenant.
 
 ::
 
@@ -270,6 +334,7 @@ Detailed under: `Bucket Operations`_.
       the associated subscription will not be deleted automatically (any events of the deleted bucket could still be access),
       and will have to be deleted explicitly with the subscription deletion API
     - Filtering based on metadata (which is an extension to S3) is not supported, and such rules will be ignored
+    - Filtering based on tags (which is an extension to S3) is not supported, and such rules will be ignored
 
 
 Non S3-Compliant Notifications
@@ -345,7 +410,7 @@ Creates a new subscription.
 
 ::
 
-   PUT /subscriptions/<sub-name>?topic=<topic-name>[?push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=none|broker][&verify-ssl=true|false][&kafka-ack-level=none|broker][&ca-location=<file path>]]
+   PUT /subscriptions/<sub-name>?topic=<topic-name>[?push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=none|broker|routable][&verify-ssl=true|false][&kafka-ack-level=none|broker][&ca-location=<file path>]]
 
 Request parameters:
 
@@ -367,10 +432,11 @@ The endpoint URI may include parameters depending with the type of endpoint:
  - port defaults to: 5672
  - vhost defaults to: "/"
  - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1)
- - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
+ - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Three ack methods exist:
 
   - "none": message is considered "delivered" if sent to broker
   - "broker": message is considered "delivered" if acked by broker (default)
+  - "routable": message is considered "delivered" if broker can route to a consumer
 
 - Kafka endpoint 
 
@@ -496,10 +562,12 @@ the events will have an S3-compatible record format (JSON):
                    "eTag":"",
                    "versionId":"",
                    "sequencer":"",
-                   "metadata":[]
+                   "metadata":[],
+                   "tags":[]
                }
            },
            "eventId":"",
+           "opaqueData":"",
        }
    ]}
 
@@ -520,7 +588,9 @@ the events will have an S3-compatible record format (JSON):
 - s3.object.version: object version in case of versioned bucket
 - s3.object.sequencer: monotonically increasing identifier of the change per object (hexadecimal format)
 - s3.object.metadata: not supported (an extension to the S3 notification API)
+- s3.object.tags: not supported (an extension to the S3 notification API)
 - s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
+- s3.opaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic (an extension to the S3 notification API)
 
 In case that the subscription was not created via a non S3-compatible notification, 
 the events will have the following event format (JSON):
@@ -572,6 +642,5 @@ Request parameters:
 
 - event-id: id of event to be acked
 
-.. _Multisite : ../multisite
 .. _Bucket Notification : ../notifications
 .. _Bucket Operations: ../s3/bucketops

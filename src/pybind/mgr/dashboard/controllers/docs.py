@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
-
 import logging
+from typing import Any, Dict, List, Optional, Union
+
 import cherrypy
 
-from . import Controller, BaseController, Endpoint, ENDPOINT_MAP
 from .. import mgr
+from ..api.doc import Schema, SchemaInput, SchemaType
+from . import ENDPOINT_MAP, BaseController, Endpoint, Router
+from ._version import APIVersion
 
-from ..tools import str_to_bool
-
+NO_DESCRIPTION_AVAILABLE = "*No description available*"
 
 logger = logging.getLogger('controllers.docs')
 
 
-@Controller('/docs', secure=False)
+@Router('/docs', secure=False)
 class Docs(BaseController):
 
     @classmethod
@@ -31,7 +32,7 @@ class Docs(BaseController):
                 if endpoint.is_api or all_endpoints:
                     list_of_ctrl.add(endpoint.ctrl)
 
-        tag_map = {}
+        tag_map: Dict[str, str] = {}
         for ctrl in list_of_ctrl:
             tag_name = ctrl.__name__
             tag_descr = ""
@@ -42,7 +43,7 @@ class Docs(BaseController):
             if tag_name not in tag_map or not tag_map[tag_name]:
                 tag_map[tag_name] = tag_descr
 
-        tags = [{'name': k, 'description': v if v else "*No description available*"}
+        tags = [{'name': k, 'description': v if v else NO_DESCRIPTION_AVAILABLE}
                 for k, v in tag_map.items()]
         tags.sort(key=lambda e: e['name'])
         return tags
@@ -70,35 +71,35 @@ class Docs(BaseController):
         param_name = param['name']
         def_value = param['default'] if 'default' in param else None
         if param_name.startswith("is_"):
-            return "boolean"
+            return str(SchemaType.BOOLEAN)
         if "size" in param_name:
-            return "integer"
+            return str(SchemaType.INTEGER)
         if "count" in param_name:
-            return "integer"
+            return str(SchemaType.INTEGER)
         if "num" in param_name:
-            return "integer"
+            return str(SchemaType.INTEGER)
         if isinstance(def_value, bool):
-            return "boolean"
+            return str(SchemaType.BOOLEAN)
         if isinstance(def_value, int):
-            return "integer"
-        return "string"
+            return str(SchemaType.INTEGER)
+        return str(SchemaType.STRING)
 
     @classmethod
     # isinstance doesn't work: input is always <type 'type'>.
     def _type_to_str(cls, type_as_type):
         """ Used if type is explicitly defined. """
         if type_as_type is str:
-            type_as_str = 'string'
+            type_as_str = str(SchemaType.STRING)
         elif type_as_type is int:
-            type_as_str = 'integer'
+            type_as_str = str(SchemaType.INTEGER)
         elif type_as_type is bool:
-            type_as_str = 'boolean'
+            type_as_str = str(SchemaType.BOOLEAN)
         elif type_as_type is list or type_as_type is tuple:
-            type_as_str = 'array'
+            type_as_str = str(SchemaType.ARRAY)
         elif type_as_type is float:
-            type_as_str = 'number'
+            type_as_str = str(SchemaType.NUMBER)
         else:
-            type_as_str = 'object'
+            type_as_str = str(SchemaType.OBJECT)
         return type_as_str
 
     @classmethod
@@ -142,13 +143,17 @@ class Docs(BaseController):
         return parameters
 
     @classmethod
-    def _gen_schema_for_content(cls, params):
+    def _gen_schema_for_content(cls, params: List[Any]) -> Dict[str, Any]:
         """
         Generates information to the content-object in OpenAPI Spec.
         Used to for request body and responses.
         """
         required_params = []
         properties = {}
+        schema_type = SchemaType.OBJECT
+        if isinstance(params, SchemaInput):
+            schema_type = params.type
+            params = params.params
 
         for param in params:
             if param['required']:
@@ -158,12 +163,12 @@ class Docs(BaseController):
             if 'type' in param:
                 props['type'] = cls._type_to_str(param['type'])
                 if 'nested_params' in param:
-                    if props['type'] == 'array':  # dict in array
+                    if props['type'] == str(SchemaType.ARRAY):  # dict in array
                         props['items'] = cls._gen_schema_for_content(param['nested_params'])
                     else:  # dict in dict
                         props = cls._gen_schema_for_content(param['nested_params'])
-                elif props['type'] == 'object':  # e.g. [int]
-                    props['type'] = 'array'
+                elif props['type'] == str(SchemaType.OBJECT):  # e.g. [int]
+                    props['type'] = str(SchemaType.ARRAY)
                     props['items'] = {'type': cls._type_to_str(param['type'][0])}
             else:
                 props['type'] = cls._gen_type(param)
@@ -173,17 +178,15 @@ class Docs(BaseController):
                 props['default'] = param['default']
             properties[param['name']] = props
 
-        schema = {
-            'type': 'object',
-            'properties': properties,
-        }
-        if required_params:
-            schema['required'] = required_params
-        return schema
+        schema = Schema(schema_type=schema_type, properties=properties,
+                        required=required_params)
+
+        return schema.as_dict()
 
     @classmethod
-    def _gen_responses(cls, method, resp_object=None):
-        resp = {
+    def _gen_responses(cls, method, resp_object=None,
+                       version: Optional[APIVersion] = None):
+        resp: Dict[str, Dict[str, Union[str, Any]]] = {
             '400': {
                 "description": "Operation exception. Please check the "
                                "response body for details."
@@ -200,24 +203,40 @@ class Docs(BaseController):
                                "response body for the stack trace."
             }
         }
+
+        if not version:
+            version = APIVersion.DEFAULT
+
         if method.lower() == 'get':
-            resp['200'] = {'description': "OK"}
+            resp['200'] = {'description': "OK",
+                           'content': {version.to_mime_type():
+                                       {'type': 'object'}}}
         if method.lower() == 'post':
-            resp['201'] = {'description': "Resource created."}
+            resp['201'] = {'description': "Resource created.",
+                           'content': {version.to_mime_type():
+                                       {'type': 'object'}}}
         if method.lower() == 'put':
-            resp['200'] = {'description': "Resource updated."}
+            resp['200'] = {'description': "Resource updated.",
+                           'content': {version.to_mime_type():
+                                       {'type': 'object'}}}
         if method.lower() == 'delete':
-            resp['204'] = {'description': "Resource deleted."}
+            resp['204'] = {'description': "Resource deleted.",
+                           'content': {version.to_mime_type():
+                                       {'type': 'object'}}}
         if method.lower() in ['post', 'put', 'delete']:
             resp['202'] = {'description': "Operation is still executing."
-                                          " Please check the task queue."}
+                                          " Please check the task queue.",
+                           'content': {version.to_mime_type():
+                                       {'type': 'object'}}}
 
         if resp_object:
             for status_code, response_body in resp_object.items():
-                resp[status_code].update({
-                    'content': {
-                        'application/json': {
-                            'schema': cls._gen_schema_for_content(response_body)}}})
+                if status_code in resp:
+                    resp[status_code].update(
+                        {'content':
+                         {version.to_mime_type():
+                          {'schema': cls._gen_schema_for_content(response_body)}
+                          }})
 
         return resp
 
@@ -229,18 +248,15 @@ class Docs(BaseController):
                 _type = cls._type_to_str(param['type'])
             else:
                 _type = cls._gen_type(param)
-            if 'description' in param:
-                descr = param['description']
-            else:
-                descr = "*No description available*"
             res = {
                 'name': param['name'],
                 'in': location,
                 'schema': {
                     'type': _type
                 },
-                'description': descr
             }
+            if param.get('description'):
+                res['description'] = param['description']
             if param['required']:
                 res['required'] = True
             elif param['default'] is None:
@@ -252,7 +268,8 @@ class Docs(BaseController):
         return parameters
 
     @classmethod
-    def _gen_paths(cls, all_endpoints, base_url):
+    def gen_paths(cls, all_endpoints):
+        # pylint: disable=R0912
         method_order = ['get', 'post', 'put', 'delete']
         paths = {}
         for path, endpoints in sorted(list(ENDPOINT_MAP.items()),
@@ -270,9 +287,20 @@ class Docs(BaseController):
                 method = endpoint.method
                 func = endpoint.func
 
-                summary = "No description available"
+                summary = ''
+                version = None
                 resp = {}
                 p_info = []
+
+                if hasattr(func, '__method_map_method__'):
+                    version = func.__method_map_method__['version']
+
+                elif hasattr(func, '__resource_method__'):
+                    version = func.__resource_method__['version']
+
+                elif hasattr(func, '__collection_method__'):
+                    version = func.__collection_method__['version']
+
                 if hasattr(func, 'doc_info'):
                     if func.doc_info['summary']:
                         summary = func.doc_info['summary']
@@ -290,11 +318,12 @@ class Docs(BaseController):
 
                 methods[method.lower()] = {
                     'tags': [cls._get_tag(endpoint)],
-                    'summary': summary,
                     'description': func.__doc__,
                     'parameters': params,
-                    'responses': cls._gen_responses(method, resp)
+                    'responses': cls._gen_responses(method, resp, version)
                 }
+                if summary:
+                    methods[method.lower()]['summary'] = summary
 
                 if method.lower() in ['post', 'put']:
                     if endpoint.body_params:
@@ -304,48 +333,49 @@ class Docs(BaseController):
                                 'application/json': {
                                     'schema': cls._gen_schema_for_content(body_params)}}}
 
+                    if endpoint.query_params:
+                        query_params = cls._add_param_info(endpoint.query_params, p_info)
+                        methods[method.lower()]['requestBody'] = {
+                            'content': {
+                                'application/json': {
+                                    'schema': cls._gen_schema_for_content(query_params)}}}
+
                 if endpoint.is_secure:
                     methods[method.lower()]['security'] = [{'jwt': []}]
 
             if not skip:
-                paths[path[len(base_url):]] = methods
+                paths[path] = methods
 
         return paths
 
-    def _gen_spec(self, all_endpoints=False, base_url=""):
+    @classmethod
+    def _gen_spec(cls, all_endpoints=False, base_url="", offline=False):
         if all_endpoints:
             base_url = ""
 
-        host = cherrypy.request.base
-        host = host[host.index(':')+3:]
+        host = cherrypy.request.base.split('://', 1)[1] if not offline else 'example.com'
         logger.debug("Host: %s", host)
 
-        paths = self._gen_paths(all_endpoints, base_url)
+        paths = cls.gen_paths(all_endpoints)
 
         if not base_url:
             base_url = "/"
 
-        scheme = 'https'
-        ssl = str_to_bool(mgr.get_localized_module_option('ssl', True))
-        if not ssl:
-            scheme = 'http'
+        scheme = 'https' if offline or mgr.get_localized_module_option('ssl') else 'http'
 
         spec = {
             'openapi': "3.0.0",
             'info': {
-                'description': "Please note that this API is not an official "
-                               "Ceph REST API to be used by third-party "
-                               "applications. It's primary purpose is to serve"
-                               " the requirements of the Ceph Dashboard and is"
-                               " subject to change at any time. Use at your "
-                               "own risk.",
+                'description': "This is the official Ceph REST API",
                 'version': "v1",
-                'title': "Ceph-Dashboard REST API"
+                'title': "Ceph REST API"
             },
             'host': host,
             'basePath': base_url,
-            'servers': [{'url': "{}{}".format(cherrypy.request.base, base_url)}],
-            'tags': self._gen_tags(all_endpoints),
+            'servers': [{'url': "{}{}".format(
+                cherrypy.request.base if not offline else '',
+                base_url)}],
+            'tags': cls._gen_tags(all_endpoints),
             'schemes': [scheme],
             'paths': paths,
             'components': {
@@ -361,92 +391,37 @@ class Docs(BaseController):
 
         return spec
 
-    @Endpoint(path="api.json")
-    def api_json(self):
-        return self._gen_spec(False, "/api")
+    @Endpoint(path="openapi.json", version=None)
+    def open_api_json(self):
+        return self._gen_spec(False, "/")
 
-    @Endpoint(path="api-all.json")
+    @Endpoint(path="api-all.json", version=None)
     def api_all_json(self):
-        return self._gen_spec(True, "/api")
+        return self._gen_spec(True, "/")
 
-    def _swagger_ui_page(self, all_endpoints=False, token=None):
-        base = cherrypy.request.base
-        if all_endpoints:
-            spec_url = "{}/docs/api-all.json".format(base)
-        else:
-            spec_url = "{}/docs/api.json".format(base)
 
-        auth_header = cherrypy.request.headers.get('authorization')
-        jwt_token = ""
-        if auth_header is not None:
-            scheme, params = auth_header.split(' ', 1)
-            if scheme.lower() == 'bearer':
-                jwt_token = params
-        else:
-            if token is not None:
-                jwt_token = token
+if __name__ == "__main__":
+    import sys
 
-        api_key_callback = """, onComplete: () => {{
-                        ui.preauthorizeApiKey('jwt', '{}');
-                    }}
-        """.format(jwt_token)
+    import yaml
 
-        page = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="referrer" content="no-referrer" />
-            <link rel="stylesheet" type="text/css"
-                  href="/swagger-ui.css" >
-            <style>
-                html
-                {{
-                    box-sizing: border-box;
-                    overflow: -moz-scrollbars-vertical;
-                    overflow-y: scroll;
-                }}
-                *,
-                *:before,
-                *:after
-                {{
-                    box-sizing: inherit;
-                }}
-                body {{
-                    margin:0;
-                    background: #fafafa;
-                }}
-            </style>
-        </head>
-        <body>
-        <div id="swagger-ui"></div>
-        <script src="/swagger-ui-bundle.js">
-        </script>
-        <script>
-            window.onload = function() {{
-                const ui = SwaggerUIBundle({{
-                    url: '{}',
-                    dom_id: '#swagger-ui',
-                    presets: [
-                        SwaggerUIBundle.presets.apis
-                    ],
-                    layout: "BaseLayout"
-                    {}
-                }})
-                window.ui = ui
-            }}
-        </script>
-        </body>
-        </html>
-        """.format(spec_url, api_key_callback)
+    def fix_null_descr(obj):
+        """
+        A hot fix for errors caused by null description values when generating
+        static documentation: better fix would be default values in source
+        to be 'None' strings: however, decorator changes didn't resolve
+        """
+        return {k: fix_null_descr(v) for k, v in obj.items() if v is not None} \
+            if isinstance(obj, dict) else obj
 
-        return page
-
-    @Endpoint(json_response=False)
-    def __call__(self, all_endpoints=False):
-        return self._swagger_ui_page(all_endpoints)
-
-    @Endpoint('POST', path="/", json_response=False,
-              query_params="{all_endpoints}")
-    def _with_token(self, token, all_endpoints=False):
-        return self._swagger_ui_page(all_endpoints, token)
+    Router.generate_routes("/api")
+    try:
+        with open(sys.argv[1], 'w') as f:
+            # pylint: disable=protected-access
+            yaml.dump(
+                fix_null_descr(Docs._gen_spec(all_endpoints=False, base_url="/", offline=True)),
+                f)
+    except IndexError:
+        sys.exit("Output file name missing; correct syntax is: `cmd <file.yml>`")
+    except IsADirectoryError:
+        sys.exit("Specified output is a directory; correct syntax is: `cmd <file.yml>`")

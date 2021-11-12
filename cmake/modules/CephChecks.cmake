@@ -1,6 +1,6 @@
-if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7)
-    message(FATAL_ERROR "GCC 7+ required due to C++17 requirements")
+if(CMAKE_COMPILER_IS_GNUCXX)
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.1)
+    message(FATAL_ERROR "GCC 8.1+ required due to C++17 requirements")
   endif()
 endif()
 
@@ -9,6 +9,7 @@ include(CheckIncludeFiles)
 include(CheckIncludeFileCXX)
 include(CheckFunctionExists)
 
+check_function_exists(memset_s HAVE_MEMSET_S)
 check_function_exists(fallocate CEPH_HAVE_FALLOCATE)
 check_function_exists(posix_fadvise HAVE_POSIX_FADVISE)
 check_function_exists(posix_fallocate HAVE_POSIX_FALLOCATE)
@@ -24,6 +25,7 @@ check_function_exists(strerror_r HAVE_Strerror_R)
 check_function_exists(name_to_handle_at HAVE_NAME_TO_HANDLE_AT)
 check_function_exists(pipe2 HAVE_PIPE2)
 check_function_exists(accept4 HAVE_ACCEPT4)
+check_function_exists(sigdescr_np HAVE_SIGDESCR_NP)
 
 include(CMakePushCheckState)
 cmake_push_check_state(RESET)
@@ -55,7 +57,7 @@ endif()
 CHECK_INCLUDE_FILES("valgrind/helgrind.h" HAVE_VALGRIND_HELGRIND_H)
 
 include(CheckTypeSize)
-set(CMAKE_EXTRA_INCLUDE_FILES "linux/types.h")
+set(CMAKE_EXTRA_INCLUDE_FILES "linux/types.h" "netinet/in.h")
 CHECK_TYPE_SIZE(__u8 __U8) 
 CHECK_TYPE_SIZE(__u16 __U16) 
 CHECK_TYPE_SIZE(__u32 __U32) 
@@ -63,7 +65,8 @@ CHECK_TYPE_SIZE(__u64 __U64)
 CHECK_TYPE_SIZE(__s8 __S8) 
 CHECK_TYPE_SIZE(__s16 __S16) 
 CHECK_TYPE_SIZE(__s32 __S32) 
-CHECK_TYPE_SIZE(__s64 __S64) 
+CHECK_TYPE_SIZE(__s64 __S64)
+CHECK_TYPE_SIZE(in_addr_t IN_ADDR_T)
 unset(CMAKE_EXTRA_INCLUDE_FILES)
 
 include(CheckSymbolExists)
@@ -92,14 +95,23 @@ CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtim.tv_nsec sys/stat.h
 CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtimespec.tv_nsec sys/stat.h
   HAVE_STAT_ST_MTIMESPEC_TV_NSEC LANGUAGE C)
 
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+if(NOT CMAKE_CROSSCOMPILING)
   include(CheckCXXSourceRuns)
   cmake_push_check_state()
   set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++17")
+  if(WIN32)
+    set(CMAKE_REQUIRED_LIBRARIES ws2_32)
+  endif()
+
   check_cxx_source_runs("
 #include <cstdint>
 #include <iterator>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#else
 #include <arpa/inet.h>
+#endif
 
 uint32_t load(char* p, size_t offset)
 {
@@ -129,9 +141,37 @@ int main(int argc, char **argv)
   if(NOT HAVE_UNALIGNED_ACCESS)
     message(FATAL_ERROR "Unaligned access is required")
   endif()
-else(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+else(NOT CMAKE_CROSSCOMPILING)
   message(STATUS "Assuming unaligned access is supported")
-endif(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+endif(NOT CMAKE_CROSSCOMPILING)
+
+set(version_script_source "v1 { }; v2 { } v1;")
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt "${version_script_source}")
+cmake_push_check_state(RESET)
+set(CMAKE_REQUIRED_FLAGS "-Werror -Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/version_script.txt")
+check_c_source_compiles("
+__attribute__((__symver__ (\"func@v1\"))) void func_v1() {};
+__attribute__((__symver__ (\"func@v2\"))) void func_v2() {};
+
+int main() {}"
+  HAVE_ATTR_SYMVER)
+  if(NOT HAVE_ATTR_SYMVER)
+    if(CMAKE_CXX_FLAGS MATCHES "-flto" AND NOT CMAKE_CXX_FLAGS MATCHES "-flto-partition=none")
+      # https://tracker.ceph.com/issues/40060
+      message(FATAL_ERROR "please pass -flto-partition=none as part of CXXFLAGS")
+    endif()
+  endif()
+set(CMAKE_REQUIRED_FLAGS -Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/version_script.txt)
+check_c_source_compiles("
+void func_v1() {}
+__asm__(\".symver func_v1, func@v1\");
+void func_v2() {}
+__asm__(\".symver func_v2, func@v2\");
+
+int main() {}"
+  HAVE_ASM_SYMVER)
+file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt)
+cmake_pop_check_state()
 
 # should use LINK_OPTIONS instead of LINK_LIBRARIES, if we can use cmake v3.14+
 try_compile(HAVE_LINK_VERSION_SCRIPT

@@ -16,13 +16,13 @@
 #ifndef CEPH_MDISCOVER_H
 #define CEPH_MDISCOVER_H
 
-#include "msg/Message.h"
 #include "include/filepath.h"
+#include "messages/MMDSOp.h"
 
 #include <string>
 
 
-class MDiscover : public SafeMessage {
+class MDiscover final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -50,30 +50,31 @@ private:
   void set_base_dir_frag(frag_t f) { base_dir_frag = f; }
 
 protected:
-  MDiscover() : SafeMessage(MSG_MDS_DISCOVER, HEAD_VERSION, COMPAT_VERSION) { }
+  MDiscover() : MMDSOp(MSG_MDS_DISCOVER, HEAD_VERSION, COMPAT_VERSION) { }
   MDiscover(inodeno_t base_ino_,
 	    frag_t base_frag_,
 	    snapid_t s,
             filepath& want_path_,
             bool want_base_dir_ = true,
 	    bool path_locked_ = false) :
-    SafeMessage{MSG_MDS_DISCOVER},
+    MMDSOp{MSG_MDS_DISCOVER},
     base_ino(base_ino_),
     base_dir_frag(base_frag_),
     snapid(s),
     want(want_path_),
     want_base_dir(want_base_dir_),
     path_locked(path_locked_) { }
-  ~MDiscover() override {}
+  ~MDiscover() final {}
 
 public:
   std::string_view get_type_name() const override { return "Dis"; }
-  void print(ostream &out) const override {
+  void print(std::ostream &out) const override {
     out << "discover(" << header.tid << " " << base_ino << "." << base_dir_frag
 	<< " " << want << ")";
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(base_ino, p);
     decode(base_dir_frag, p);
@@ -94,6 +95,8 @@ public:
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+  template<class T, typename... Args>
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 #endif

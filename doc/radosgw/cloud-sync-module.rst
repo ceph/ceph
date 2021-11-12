@@ -94,7 +94,7 @@ Non Trivial Configuration:
 
 * ``connection`` (container)
 
-Represents a connection to the remote cloud service. Contains ``conection_id`, ``access_key``,
+Represents a connection to the remote cloud service. Contains ``connection_id``, ``access_key``,
 ``secret``, ``endpoint``, and ``host_style``.
 
 * ``access_key`` (string)
@@ -153,7 +153,7 @@ For example: ``target_path = rgwx-${zone}-${sid}/${owner}/${bucket}``
 
 * ``acl_profiles`` (array)
 
-An array of of ``acl_profile``.
+An array of ``acl_profile``.
 
 * ``acl_profile`` (container)
  
@@ -195,7 +195,7 @@ Minimum parts size to use when syncing objects using multipart upload.
 How to Configure
 ~~~~~~~~~~~~~~~~
 
-See `Multisite Configuration`_ for how to multisite config instructions. The cloud sync module requires a creation of a new zone. The zone
+See :ref:`multisite` for how to multisite config instructions. The cloud sync module requires a creation of a new zone. The zone
 tier type needs to be defined as ``cloud``:
 
 ::
@@ -242,6 +242,3 @@ For example, creating a new profile for buckets starting with {prefix}:
 
 
 An entry can be removed by using ``--tier-config-rm={key}``.
-
-
-.. _Multisite Configuration: ./multisite

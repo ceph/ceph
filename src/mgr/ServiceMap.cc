@@ -3,6 +3,8 @@
 
 #include "mgr/ServiceMap.h"
 
+#include <fmt/format.h>
+
 #include "common/Formatter.h"
 
 using ceph::bufferlist;
@@ -64,6 +66,105 @@ void ServiceMap::Daemon::generate_test_instances(std::list<Daemon*>& ls)
 }
 
 // Service
+
+std::string ServiceMap::Service::get_summary() const
+{
+  if (!summary.empty()) {
+    return summary;
+  }
+  if (daemons.empty()) {
+    return "no daemons active";
+  }
+
+  // If "daemon_type" is present, this will be used in place of "daemon" when
+  // reporting the count (e.g., "${N} daemons").
+  //
+  // We will additional break down the count by various groupings, based
+  // on the following keys:
+  //
+  //   "hostname" -> host(s)
+  //   "zone_id" -> zone(s)
+  //
+  // The `ceph -s` will be something likes:
+  //    iscsi: 3 portals active (3 hosts)
+  //      rgw: 3 gateways active (3 hosts, 1 zone)
+
+  std::map<std::string, std::set<std::string>> groupings;
+  std::string type("daemon");
+  int num = 0;
+  for (auto& d : daemons) {
+    ++num;
+    if (auto p = d.second.metadata.find("daemon_type");
+	p != d.second.metadata.end()) {
+      type = p->second;
+    }
+    for (auto k : {std::make_pair("zone", "zone_id"),
+		   std::make_pair("host", "hostname")}) {
+      auto p = d.second.metadata.find(k.second);
+      if (p != d.second.metadata.end()) {
+	groupings[k.first].insert(p->second);
+      }
+    }
+  }
+
+  std::ostringstream ss;
+  ss << num << " " << type << (num > 1 ? "s" : "") << " active";
+  if (groupings.size()) {
+    ss << " (";
+    for (auto i = groupings.begin(); i != groupings.end(); ++i) {
+      if (i != groupings.begin()) {
+	ss << ", ";
+      }
+      ss << i->second.size() << " " << i->first << (i->second.size() ? "s" : "");
+    }
+    ss << ")";
+  }
+
+  return ss.str();
+}
+
+bool ServiceMap::Service::has_running_tasks() const
+{
+  return std::any_of(daemons.begin(), daemons.end(), [](auto& daemon) {
+    return !daemon.second.task_status.empty();
+  });
+}
+
+std::string ServiceMap::Service::get_task_summary(const std::string_view task_prefix) const
+{
+  // contruct a map similar to:
+  //     {"service1 status" -> {"service1.0" -> "running"}}
+  //     {"service2 status" -> {"service2.0" -> "idle"},
+  //                           {"service2.1" -> "running"}}
+  std::map<std::string, std::map<std::string, std::string>> by_task;
+  for (const auto& [service_id, daemon] : daemons) {
+    for (const auto& [task_name, status] : daemon.task_status) {
+      by_task[task_name].emplace(fmt::format("{}.{}", task_prefix, service_id),
+				 status);
+    }
+  }
+  std::stringstream ss;
+  for (const auto &[task_name, status_by_service] : by_task) {
+    ss << "\n    " << task_name << ":";
+    for (auto& [service, status] : status_by_service) {
+      ss << "\n        " << service << ": " << status;
+    }
+  }
+  return ss.str();
+}
+
+void ServiceMap::Service::count_metadata(const std::string& field,
+					std::map<std::string,int> *out) const
+{
+  for (auto& p : daemons) {
+    auto q = p.second.metadata.find(field);
+    if (q == p.second.metadata.end()) {
+      (*out)["unknown"]++;
+    } else {
+      (*out)[q->second]++;
+    }
+  }
+}
 
 void ServiceMap::Service::encode(bufferlist& bl, uint64_t features) const
 {

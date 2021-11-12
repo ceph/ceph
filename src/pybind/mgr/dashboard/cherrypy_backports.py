@@ -43,8 +43,7 @@ def patch_http_connection_init(v):
     # It was fixed in 3.7.0.  Exact lower bound version is probably earlier,
     # but 3.5.0 is what this monkey patch is tested on.
     if StrictVersion("3.5.0") <= v < StrictVersion("3.7.0"):
-        from cherrypy.wsgiserver.wsgiserver2 import \
-            HTTPConnection, CP_fileobject
+        from cherrypy.wsgiserver.wsgiserver2 import CP_fileobject, HTTPConnection
 
         def fixed_init(hc_self, server, sock, makefile=CP_fileobject):
             hc_self.server = server
@@ -95,11 +94,16 @@ def accept_exceptions_from_builtin_ssl(v):
                         # Check if it's one of the known errors
                         # Errors that are caught by PyOpenSSL, but thrown by
                         # built-in ssl
-                        _block_errors = ('unknown protocol', 'unknown ca',
-                                         'unknown_ca', 'inappropriate fallback',
+                        _block_errors = ('unknown protocol', 'unknown ca', 'unknown_ca',
+                                         'unknown error',
+                                         'https proxy request', 'inappropriate fallback',
                                          'wrong version number',
                                          'no shared cipher', 'certificate unknown',
-                                         'ccs received early')
+                                         'ccs received early',
+                                         'certificate verify failed',  # client cert w/o trusted CA
+                                         'version too low',  # caused by SSL3 connections
+                                         'unsupported protocol',  # caused by TLS1 connections
+                                         'sslv3 alert bad certificate')
                         for error_text in _block_errors:
                             if error_text in e.args[1].lower():
                                 # Accepted error, let's pass
@@ -118,12 +122,7 @@ def accept_socket_error_0(v):
         pass
 
     if v < StrictVersion("9.0.0") or cheroot_version < StrictVersion("6.5.5"):
-        import six
-        if six.PY3:
-            generic_socket_error = OSError
-        else:
-            import socket
-            generic_socket_error = socket.error
+        generic_socket_error = OSError
 
         def accept_socket_error_0(func):
             def wrapper(self, sock):
@@ -161,6 +160,7 @@ def patch_request_unique_id(v):
     if v < StrictVersion('11.1.0'):
         import uuid
         from functools import update_wrapper
+
         from cherrypy._cprequest import Request
 
         class LazyUUID4(object):
@@ -174,7 +174,7 @@ def patch_request_unique_id(v):
                 It's evaluated lazily on render.
                 """
                 try:
-                    self._uuid4
+                    self._uuid4  # type: ignore
                 except AttributeError:
                     # evaluate on first access
                     self._uuid4 = uuid.uuid4()
