@@ -911,7 +911,7 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
     auto apl = \
       apl_factory->create_apl_local(cct, s, user_info,
                                     rgw::auth::LocalApplier::NO_SUBUSER,
-                                    boost::none);
+                                    std::nullopt);
     return result_t::grant(std::move(apl));
   }
 }
