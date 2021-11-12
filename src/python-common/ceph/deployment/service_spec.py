@@ -1,5 +1,6 @@
 import fnmatch
 import re
+import enum
 from collections import OrderedDict
 from functools import wraps
 from ipaddress import ip_network, ip_address
@@ -10,6 +11,7 @@ import yaml
 
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.deployment.utils import unwrap_ipv6
+from ceph.utils import is_hex
 
 ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -414,7 +416,7 @@ class ServiceSpec(object):
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw agent ' \
-                          'container ingress cephfs-mirror'.split()
+                          'container ingress cephfs-mirror snmp-gateway'.split()
     REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ingress '.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
@@ -435,6 +437,7 @@ class ServiceSpec(object):
             'grafana': MonitoringSpec,
             'node-exporter': MonitoringSpec,
             'prometheus': MonitoringSpec,
+            'snmp-gateway': SNMPGatewaySpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise SpecValidationError('Spec needs a "service_type" key.')
@@ -1095,3 +1098,142 @@ class MonitoringSpec(ServiceSpec):
             return {'prometheus': 9095,
                     'node-exporter': 9100,
                     'grafana': 3000}[self.service_type]
+
+
+class SNMPGatewaySpec(ServiceSpec):
+    DEFAULT_PORT = 9464
+
+    class SNMPVersion(str, enum.Enum):
+        V2c = 'V2c'
+        V3 = 'V3'
+
+        def to_json(self) -> str:
+            return self.value
+
+    class SNMPAuthType(str, enum.Enum):
+        MD5 = 'MD5'
+        SHA = 'SHA'
+
+        def to_json(self) -> str:
+            return self.value
+
+    class SNMPPrivacyType(str, enum.Enum):
+        DES = 'DES'
+        AES = 'AES'
+
+        def to_json(self) -> str:
+            return self.value
+
+    def __init__(self,
+                 service_type: str,  # = 'snmp-gateway'
+                 snmp_version: SNMPVersion,
+                 credentials: Dict[str, str],
+                 snmp_destination: Optional[str] = None,
+                 engine_id: Optional[str] = None,
+                 auth_protocol: Optional[SNMPAuthType] = None,
+                 privacy_protocol: Optional[SNMPPrivacyType] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 port: Optional[int] = None,
+                 ):
+        assert service_type == 'snmp-gateway'
+
+        super(SNMPGatewaySpec, self).__init__(
+            service_type,
+            placement=placement,
+            unmanaged=unmanaged,
+            preview_only=preview_only)
+
+        self.service_type = service_type
+        self.snmp_version = snmp_version
+        self.snmp_destination = snmp_destination
+        self.port = port
+        self.credentials = credentials
+        self.engine_id = engine_id
+        self.auth_protocol = auth_protocol
+        self.privacy_protocol = privacy_protocol
+
+    @classmethod
+    def _from_json_impl(cls, json_spec: dict) -> 'SNMPGatewaySpec':
+        key_type = {
+            'snmp_version': cls.SNMPVersion,
+            'auth_protocol': cls.SNMPAuthType,
+            'privacy_protocol': cls.SNMPPrivacyType,
+        }
+        try:
+            for k in key_type.keys():
+                if json_spec.get('spec', {}).get(k) is not None:
+                    json_spec[k] = key_type[k](json_spec['spec'][k])
+        except ValueError as e:
+            raise SpecValidationError(f'snmp-gateway: {str(e)}')
+        return super(SNMPGatewaySpec, cls)._from_json_impl(json_spec)
+
+    @property
+    def ports(self) -> List[int]:
+        return [self.port] if self.port else [self.DEFAULT_PORT]
+
+    def get_port_start(self) -> List[int]:
+        return self.ports
+
+    def validate(self) -> None:
+        super(SNMPGatewaySpec, self).validate()
+
+        def _check_type(name: str, value: Optional[str], options: List[str]) -> None:
+            if not value:
+                return
+            if value not in options:
+                raise SpecValidationError(
+                    f'{name} unsupported. Must be one of {", ".join(sorted(options))}'
+                )
+
+        _check_type('auth_protocol', self.auth_protocol,
+                    list(set(opt.value for opt in self.SNMPAuthType)))
+        _check_type('privacy_protocol', self.privacy_protocol,
+                    list(set(opt.value for opt in self.SNMPPrivacyType)))
+
+        creds_requirement = {
+            'V2c': ['snmp_community'],
+            'V3': ['snmp_v3_auth_username', 'snmp_v3_auth_password']
+        }
+        if self.privacy_protocol:
+            creds_requirement['V3'].append('snmp_v3_priv_password')
+
+        missing = [parm for parm in creds_requirement[self.snmp_version]
+                   if parm not in self.credentials]
+        # check that credentials are correct for the version
+        if missing:
+            raise SpecValidationError(
+                f'SNMP {self.snmp_version} credentials are incomplete. Missing {", ".join(missing)}'
+            )
+
+        if self.engine_id:
+            if 10 >= len(self.engine_id) >= 64 or \
+               not is_hex(self.engine_id):
+                raise SpecValidationError(
+                    'engine_id must be a hex string, between 10-64 chars in length'
+                )
+
+        else:
+            if self.snmp_version == 'V3':
+                raise SpecValidationError(
+                    'must provide an engine_id for SNMP V3 notifications'
+                )
+
+        if not self.snmp_destination:
+            raise SpecValidationError(
+                'SNMP destination (snmp_destination) must be provided'
+            )
+        else:
+            dest = self.snmp_destination.split(':')
+            if len(dest) != 2:
+                raise SpecValidationError(
+                    'SNMP destination must be of the form <ip | name>:<port>'
+                )
+            if not dest[1].isdigit():
+                raise SpecValidationError(
+                    f'SNMP destination port must be numeric, {dest[1]} is invalid'
+                )
+
+
+yaml.add_representer(SNMPGatewaySpec, ServiceSpec.yaml_representer)

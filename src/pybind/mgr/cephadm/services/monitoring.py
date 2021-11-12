@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from mgr_module import HandleCommandResult
 
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import AlertManagerSpec, ServiceSpec
+from ceph.deployment.service_spec import AlertManagerSpec, ServiceSpec, SNMPGatewaySpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from cephadm.services.ingress import IngressSpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert, build_url
@@ -126,6 +126,7 @@ class AlertmanagerService(CephadmService):
 
         # dashboard(s)
         dashboard_urls: List[str] = []
+        snmp_gateway_urls: List[str] = []
         mgr_map = self.mgr.get('mgr_map')
         port = None
         proto = None  # http: or https:
@@ -149,9 +150,18 @@ class AlertmanagerService(CephadmService):
             addr = self.mgr.inventory.get_addr(dd.hostname)
             dashboard_urls.append(build_url(scheme=proto, host=addr, port=port))
 
+        for dd in self.mgr.cache.get_daemons_by_service('snmp-gateway'):
+            assert dd.hostname is not None
+            assert dd.ports
+            addr = self.mgr.inventory.get_addr(dd.hostname)
+            deps.append(dd.name())
+            snmp_gateway_urls.append(build_url(scheme='http', host=addr,
+                                     port=dd.ports[0], path='/alerts'))
+
         context = {
             'dashboard_urls': dashboard_urls,
-            'default_webhook_urls': default_webhook_urls
+            'default_webhook_urls': default_webhook_urls,
+            'snmp_gateway_urls': snmp_gateway_urls,
         }
         yml = self.mgr.template.render('services/alertmanager/alertmanager.yml.j2', context)
 
@@ -361,3 +371,66 @@ class NodeExporterService(CephadmService):
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
         out = f'It is presumed safe to stop {names}'
         return HandleCommandResult(0, out, '')
+
+
+class SNMPGatewayService(CephadmService):
+    TYPE = 'snmp-gateway'
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        assert self.TYPE == daemon_spec.daemon_type
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        return daemon_spec
+
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
+        deps: List[str] = []
+
+        # for dd in self.mgr.cache.get_daemons_by_service('alertmanager'):
+        #     assert dd.hostname is not None
+        #     deps.append(dd.name())
+
+        spec = cast(SNMPGatewaySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        # TODO: form the correct credentials file based on the protocol of the service
+        # How to get the service space that defines the credentials?
+        config = {
+            "destination": spec.snmp_destination,
+            "snmp_version": spec.snmp_version,
+        }
+        if spec.snmp_version == 'V2c':
+            community = spec.credentials.get('snmp_community', None)
+            assert community is not None
+
+            config.update({
+                "snmp_community": community
+            })
+        else:
+            # SNMP v3 settings can be either authNoPriv or authPriv
+            auth_protocol = 'SHA' if not spec.auth_protocol else spec.auth_protocol
+
+            auth_username = spec.credentials.get('snmp_v3_auth_username', None)
+            auth_password = spec.credentials.get('snmp_v3_auth_password', None)
+            assert auth_username is not None
+            assert auth_password is not None
+            assert spec.engine_id is not None
+
+            config.update({
+                "snmp_v3_auth_protocol": auth_protocol,
+                "snmp_v3_auth_username": auth_username,
+                "snmp_v3_auth_password": auth_password,
+                "snmp_v3_engine_id": spec.engine_id,
+            })
+            # authPriv adds encryption
+            if spec.privacy_protocol:
+                priv_password = spec.credentials.get('snmp_v3_priv_password', None)
+                assert priv_password is not None
+
+                config.update({
+                    "snmp_v3_priv_protocol": spec.privacy_protocol,
+                    "snmp_v3_priv_password": priv_password,
+                })
+
+        logger.info(
+            f"Generated configuration for '{self.TYPE}' service: config-json='{config}', "
+            f"dependencies={deps}")
+
+        return config, sorted(deps)

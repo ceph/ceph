@@ -276,7 +276,7 @@ class OSD(object):
 class SNMPGateway:
     """Defines an SNMP gateway between Prometheus and SNMP monitoring Frameworks"""
     daemon_type = 'snmp-gateway'
-    SUPPORTED_VERSIONS = ['V2c']
+    SUPPORTED_VERSIONS = ['V2c', 'V3']
     default_image = DEFAULT_SNMP_GATEWAY_IMAGE
     DEFAULT_PORT = 9464
     env_filename = 'snmp-gateway.conf'
@@ -301,9 +301,10 @@ class SNMPGateway:
         self.log_level = config_json.get('log_level', 'info')
         self.snmp_v3_auth_username = config_json.get('snmp_v3_auth_username', '')
         self.snmp_v3_auth_password = config_json.get('snmp_v3_auth_password', '')
+        self.snmp_v3_auth_protocol = config_json.get('snmp_v3_auth_protocol', '')
+        self.snmp_v3_priv_protocol = config_json.get('snmp_v3_priv_protocol', '')
         self.snmp_v3_priv_password = config_json.get('snmp_v3_priv_password', '')
-
-        # TODO Add SNMP V3 parameters
+        self.snmp_v3_engine_id = config_json.get('snmp_v3_engine_id', '')
 
         self.validate()
 
@@ -354,15 +355,30 @@ class SNMPGateway:
                 return self.DEFAULT_PORT
 
     def get_daemon_args(self) -> List[str]:
-        args = [
-            f'--web.listen-address=:{self.ports[0]}',
+        v3_args = []
+        base_args = [
+            f'--web.listen-address=:{self.port}',
             f'--snmp.destination={self.destination}',
             f'--snmp.version={self.snmp_version}',
             f'--log.level={self.log_level}',
             '--snmp.trap-description-template=/etc/snmp_notifier/description-template.tpl'
         ]
 
-        return args
+        if self.snmp_version == 'V3':
+            # common auth settings
+            v3_args.extend([
+                '--snmp.authentication-enabled',
+                f'--snmp.authentication-protocol={self.snmp_v3_auth_protocol}',
+                f'--snmp.security-engine-id={self.snmp_v3_engine_id}'
+            ])
+            # authPriv setting is applied if we have a privacy protocol setting
+            if self.snmp_v3_priv_protocol:
+                v3_args.extend([
+                    '--snmp.private-enabled',
+                    f'--snmp.private-protocol={self.snmp_v3_priv_protocol}'
+                ])
+
+        return base_args + v3_args
 
     @property
     def data_dir(self) -> str:
@@ -378,8 +394,10 @@ class SNMPGateway:
             if self.snmp_version == 'V2c':
                 f.write(f'SNMP_NOTIFIER_COMMUNITY={self.snmp_community}\n')
             else:
-                # add snmp v3 settings here
-                pass
+                f.write(f'SNMP_NOTIFIER_AUTH_USERNAME={self.snmp_v3_auth_username}\n')
+                f.write(f'SNMP_NOTIFIER_AUTH_PASSWORD={self.snmp_v3_auth_password}\n')
+                if self.snmp_v3_priv_password:
+                    f.write(f'SNMP_NOTIFIER_PRIV_PASSWORD={self.snmp_v3_priv_password}\n')
 
     def validate(self) -> None:
         """Validate the settings
@@ -5248,7 +5266,7 @@ def command_deploy(ctx):
         c = get_container(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c,
                       sc.uid, sc.gid,
-                      ports=sc.ports)
+                      ports=daemon_ports)
 
     else:
         raise Error('daemon type {} not implemented in command_deploy function'

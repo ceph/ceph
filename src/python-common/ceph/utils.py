@@ -1,5 +1,6 @@
 import datetime
 import re
+import string
 
 from typing import Optional
 
@@ -105,3 +106,18 @@ def parse_timedelta(delta: str) -> Optional[datetime.timedelta]:
     parts = parts.groupdict()
     args = {name: int(param) for name, param in parts.items() if param}
     return datetime.timedelta(**args)
+
+
+def is_hex(s: str, strict: bool = True) -> bool:
+    """Simple check that a string contains only hex chars"""
+    try:
+        int(s, 16)
+    except ValueError:
+        return False
+
+    # s is multiple chars, but we should catch a '+/-' prefix too.
+    if strict:
+        if s[0] not in string.hexdigits:
+            return False
+
+    return True
