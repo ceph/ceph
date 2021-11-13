@@ -25,7 +25,7 @@ class GenericLogEntry {
 public:
   WriteLogCacheEntry ram_entry;
   WriteLogCacheEntry *cache_entry = nullptr;
-  uint32_t log_entry_index = 0;
+  uint64_t log_entry_index = 0;
   bool completed = false;
   GenericLogEntry(uint64_t image_offset_bytes = 0, uint64_t write_bytes = 0)
     : ram_entry(image_offset_bytes, write_bytes) {
