@@ -2,7 +2,6 @@
 Cluster definition
 part of context, Cluster is used to save connection information.
 """
-import teuthology.misc
 from teuthology.orchestra import run
 
 class Cluster(object):
@@ -115,11 +114,12 @@ class Cluster(object):
         remotes = sorted(self.remotes.keys(), key=lambda rem: rem.name)
         for remote in remotes:
             if sudo:
-                teuthology.misc.sudo_write_file(remote, file_name, content, perms=perms, owner=owner)
+                remote.write_file(file_name, content,
+                                  sudo=True, mode=perms, owner=owner)
             else:
                 if perms is not None or owner is not None:
                     raise ValueError("To specify perms or owner, sudo must be True")
-                teuthology.misc.write_file(remote, file_name, content)
+                remote.write_file(file_name, content)
 
     def only(self, *roles):
         """
