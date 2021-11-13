@@ -8324,6 +8324,7 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
 	  txn->set(new_omap_prefix, new_head, header);
 	  txn_cost += new_head.length() + header.length();
 	}
+	it->next();
       }
       // tail
       {
@@ -8337,7 +8338,6 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
       string final_key;
       Onode::calc_omap_key(new_flags, o.get(), string(), &final_key);
       size_t base_key_len = final_key.size();
-      it->next();
       while (it->valid() && it->key() < tail) {
 	string user_key;
 	o->decode_omap_key(it->key(), &user_key);
