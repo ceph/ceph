@@ -3,7 +3,7 @@ Cluster definition
 part of context, Cluster is used to save connection information.
 """
 import teuthology.misc
-
+from teuthology.orchestra import run
 
 class Cluster(object):
     """
@@ -50,18 +50,47 @@ class Cluster(object):
                 )
         self.remotes[remote] = list(roles)
 
-    def run(self, **kwargs):
+    def run(self, wait=True, parallel=False, **kwargs):
         """
         Run a command on all the nodes in this cluster.
 
         Goes through nodes in alphabetical order.
 
-        If you don't specify wait=False, this will be sequentially.
+        The default usage is when parallel=False and wait=True,
+        which is a sequential run for each node one by one.
+
+        If you specify parallel=True, it will be in parallel.
+
+        If you specify wait=False, it returns immediately.
+        Since it is not possible to run sequentially and
+        do not wait each command run finished, the parallel value
+        is ignored and treated as True.
 
         Returns a list of `RemoteProcess`.
         """
+        # -+-------+----------+----------+------------+---------------
+        #  | wait  | parallel | run.wait | remote.run | comments
+        # -+-------+----------+----------+------------+---------------
+        # 1|*True  |*False    | no       | wait=True  | sequentially
+        # 2| True  | True     | yes      | wait=False | parallel
+        # 3| False | True     | no       | wait=False | parallel
+        # 4| False | False    | no       | wait=False | same as above
+
+        # We always run in parallel if wait=False,
+        # that is why (4) is equivalent to (3).
+
+        # We wait from remote.run only if run sequentially.
+        _wait = (parallel == False and wait == True)
+
         remotes = sorted(self.remotes.keys(), key=lambda rem: rem.name)
-        return [remote.run(**kwargs) for remote in remotes]
+        procs = [remote.run(**kwargs, wait=_wait) for remote in remotes]
+
+        # We do run.wait only if parallel=True, because if parallel=False,
+        # we have run sequentially and all processes are complete.
+
+        if parallel and wait:
+            run.wait(procs)
+        return procs
 
     def sh(self, script, **kwargs):
         """
