@@ -6823,8 +6823,7 @@ INSTANTIATE_TEST_SUITE_P(
 #endif
     "kstore"));
 
-//void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
-void doMany4KWritesTest(ObjectStore* store,
+void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
                         unsigned max_objects,
                         unsigned max_ops,
                         unsigned max_object_size,
