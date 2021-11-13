@@ -133,6 +133,7 @@ template <typename I>
 bool WriteLog<I>::initialize_pool(Context *on_finish,
                                   pwl::DeferredContexts &later) {
   int r;
+  CephContext *cct = m_image_ctx.cct;
 
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   if (access(this->m_log_pool_name.c_str(), F_OK) != 0) {
@@ -177,6 +178,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     m_first_valid_entry = DATA_RING_BUFFER_OFFSET;
 
     auto new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
+    new_root->layout_version = SSD_LAYOUT_VERSION;
     new_root->pool_size = this->m_log_pool_size;
     new_root->flushed_sync_gen = this->m_flushed_sync_gen;
     new_root->block_size = MIN_WRITE_ALLOC_SSD_SIZE;
@@ -187,8 +189,8 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
 
     r = update_pool_root_sync(new_root);
     if (r != 0) {
-      lderr(m_image_ctx.cct) << "failed to initialize pool ("
-                             << this->m_log_pool_name << ")" << dendl;
+      lderr(cct) << "failed to initialize pool ("
+                 << this->m_log_pool_name << ")" << dendl;
       bdev->close();
       delete bdev;
       on_finish->complete(r);
@@ -201,11 +203,57 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
       on_finish->complete(r);
       return false;
     }
+
+    bufferlist bl;
+    SuperBlock superblock;
+    ::IOContext ioctx(cct, nullptr);
+    r = bdev->read(0, MIN_WRITE_ALLOC_SSD_SIZE, &bl, &ioctx, false);
+    if (r < 0) {
+      lderr(cct) << "Read ssd cache superblock failed " << dendl;
+      goto error_handle;
+    }
+    auto p = bl.cbegin();
+    decode(superblock, p);
+    pool_root = superblock.root;
+    ldout(cct, 1) << "Decoded root: pool_size=" << pool_root.pool_size
+                  << " first_valid_entry=" << pool_root.first_valid_entry
+                  << " first_free_entry=" << pool_root.first_free_entry
+                  << " flushed_sync_gen=" << pool_root.flushed_sync_gen
+                  << dendl;
+    ceph_assert(is_valid_pool_root(pool_root));
+    if (pool_root.layout_version != SSD_LAYOUT_VERSION) {
+      lderr(cct) << "Pool layout version is "
+                 << pool_root.layout_version
+                 << " expected " << SSD_LAYOUT_VERSION
+                 << dendl;
+      goto error_handle;
+    }
+    if (pool_root.block_size != MIN_WRITE_ALLOC_SSD_SIZE) {
+      lderr(cct) << "Pool block size is " << pool_root.block_size
+                 << " expected " << MIN_WRITE_ALLOC_SSD_SIZE
+                 << dendl;
+      goto error_handle;
+    }
+
+    this->m_log_pool_size = pool_root.pool_size;
+    this->m_flushed_sync_gen = pool_root.flushed_sync_gen;
+    this->m_first_valid_entry = pool_root.first_valid_entry;
+    this->m_first_free_entry = pool_root.first_free_entry;
+    this->m_bytes_allocated_cap = this->m_log_pool_size -
+                                  DATA_RING_BUFFER_OFFSET -
+                                  MIN_WRITE_ALLOC_SSD_SIZE;
+
     load_existing_entries(later);
     m_cache_state->clean = this->m_dirty_log_entries.empty();
     m_cache_state->empty = m_log_entries.empty();
   }
   return true;
+
+error_handle:
+  bdev->close();
+  delete bdev;
+  on_finish->complete(-EINVAL);
+  return false;
 }
 
 template <typename I>
@@ -235,33 +283,8 @@ void WriteLog<I>::remove_pool_file() {
 
 template <typename I>
 void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
-  bufferlist bl;
   CephContext *cct = m_image_ctx.cct;
-  ::IOContext ioctx(cct, nullptr);
-  bdev->read(0, MIN_WRITE_ALLOC_SSD_SIZE, &bl, &ioctx, false);
-  SuperBlock superblock;
-
-  auto p = bl.cbegin();
-  decode(superblock, p);
-
-  pool_root = superblock.root;
-  ldout(cct, 1) << "Decoded root: pool_size=" << pool_root.pool_size
-                << " first_valid_entry=" << pool_root.first_valid_entry
-                << " first_free_entry=" << pool_root.first_free_entry
-                << " flushed_sync_gen=" << pool_root.flushed_sync_gen
-                << dendl;
-  ceph_assert(is_valid_pool_root(pool_root));
-
-  this->m_log_pool_size = pool_root.pool_size;
-  this->m_flushed_sync_gen = pool_root.flushed_sync_gen;
-  this->m_first_valid_entry = pool_root.first_valid_entry;
-  this->m_first_free_entry = pool_root.first_free_entry;
-
-  this->m_bytes_allocated_cap = this->m_log_pool_size -
-      DATA_RING_BUFFER_OFFSET - MIN_WRITE_ALLOC_SSD_SIZE;
-
   std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> sync_point_entries;
-
   std::map<uint64_t, bool> missing_sync_points;
 
   // Iterate through the log_entries and append all the write_bytes
@@ -662,8 +685,8 @@ template <typename I>
 bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
   CephContext *cct = m_image_ctx.cct;
   GenericLogEntriesVector retiring_entries;
-  uint32_t initial_first_valid_entry;
-  uint32_t first_valid_entry;
+  uint64_t initial_first_valid_entry;
+  uint64_t first_valid_entry;
 
   std::lock_guard retire_locker(this->m_log_retire_lock);
   ldout(cct, 20) << "Look for entries to retire" << dendl;
