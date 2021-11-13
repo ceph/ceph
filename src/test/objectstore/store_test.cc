@@ -272,35 +272,29 @@ public:
     }
   };
 
-  std::string generate_monotonic_name(uint32_t SUM, uint32_t i, double r, double x)
+  std::string generate_monotonic_name(uint32_t items_count, uint32_t i, double r, double x)
   {
+    items_count += 1;
     generator gen{r, x};
-    //std::cout << "r=" << r << " x=" << x << std::endl;
     std::string s;
-    while (SUM > 1) {
+    while (items_count > 1) {
       uint32_t lo = 0;
       uint32_t hi = 1 + gen() * 10;
       uint32_t start = ('z' - 'a' + 1 - hi) * gen();
       while (hi - lo > 0) {
-	uint32_t mid = (lo + hi + 1 + (SUM&1)) / 2; // round up or down, depending on SUM
-	//      std::cout << "SUM=" << SUM << " x=" << gen.x << std::endl;
-	uint32_t mid_val = gen() * (SUM - 1) + 1;
+	uint32_t mid = (lo + hi + 1 + (items_count & 1)) / 2; // round up or down, depending on items_count
+	uint32_t mid_val = gen() * (items_count - 1) + 1;
 	// LEFT  = lo  .. mid - 1
 	// RIGHT = mid .. hi
-	//      std::cout << "lo=" << lo << " hi=" << hi << " mid=" << mid
-	//	<< " SUM=" << SUM << " i=" << i << " x=" << gen.x << " mid_val=" << mid_val << std::endl;
 	if (i < mid_val) {
 	  hi = mid - 1;
-	  SUM = mid_val;
+	  items_count = mid_val;
 	} else {
 	  lo = mid;
-	  SUM = SUM - mid_val;
+	  items_count = items_count - mid_val;
 	  i = i - mid_val;
 	}
       }
-      //std::cout << "lo=" << lo << " hi=" << hi
-      //  	      << " SUM=" << SUM << " i=" << i << std::endl;
-
       s.push_back('a' + lo  + start); // to keep alphabetic order
       uint32_t cnt = gen() * 8;
       for (uint32_t j = 0; j < cnt; j++) {
@@ -385,6 +379,20 @@ public:
 	++it;
       }
     }
+  }
+  void remove_objects(size_t object_count,
+		      int64_t poolid,
+		      coll_t cid) {
+    ObjectStore::Transaction t;
+    ObjectStore::CollectionHandle ch = store->open_collection(cid);
+    for (size_t o = 0; o < object_count; o++)
+    {
+      std::string oid = generate_monotonic_name(object_count, o, 3.71, 0.5);
+      ghobject_t hoid(hobject_t(oid, "", CEPH_NOSNAP, 0, poolid, ""));
+      t.remove(cid, hoid);
+    }
+    int r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
   }
 };
 
@@ -9695,7 +9703,6 @@ TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  //ASSERT_EQ(false, g_conf().get_val<bool>("bluestore_debug_inject_upgrade_bug53062"));
   map<string, bufferlist> attrs;
   bufferlist expected_header;
   expected_header.append("this is a header");
@@ -9718,14 +9725,184 @@ TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
   //checking quick_fix() data
   check_omap_data(object_count, poolid, cid);
 
+  remove_objects(object_count, poolid, cid);
   {
     ObjectStore::Transaction t;
-    for (size_t o = 0; o < object_count; o++)
-    {
-      std::string oid = generate_monotonic_name(object_count, o, 3.71, 0.5);
-      ghobject_t hoid(hobject_t(oid, "", CEPH_NOSNAP, 0, poolid, ""));
-      t.remove(cid, hoid);
-    }
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestOmapUpgrade, LargePoolToPG) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_debug_legacy_omap_per_pool", "true");
+  g_conf().apply_changes(nullptr);
+
+  int64_t poolid;
+  coll_t cid;
+  ghobject_t hoid;
+  ObjectStore::CollectionHandle ch;
+  StartDeferred();
+  poolid = 11;
+  cid = coll_t(spg_t(pg_t(1, poolid), shard_id_t::NO_SHARD));
+  ch = store->create_new_collection(cid);
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  map<string, bufferlist> attrs;
+  bufferlist expected_header;
+  expected_header.append("this is a header");
+
+  size_t object_count = 1000;
+  make_omap_data(object_count, poolid, cid);
+  //checking just written data
+  check_omap_data(object_count, poolid, cid);
+
+  store->umount();
+  ASSERT_EQ(store->fsck(false), 0);
+  SetVal(g_conf(), "bluestore_debug_legacy_omap_per_pool", "false");
+  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_omap", "true");
+  g_conf().apply_changes(nullptr);
+  ASSERT_EQ(store->fsck(false), 1);
+  ASSERT_EQ(store->quick_fix(), 0);
+  store->mount();
+  ch = store->open_collection(cid);
+
+  //checking quick_fix() data
+  check_omap_data(object_count, poolid, cid);
+
+  remove_objects(object_count, poolid, cid);
+  {
+    ObjectStore::Transaction t;
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG_repair53062) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_debug_legacy_omap", "true");
+  SetVal(g_conf(), "bluestore_debug_inject_upgrade_bug53062", "true");
+  g_conf().apply_changes(nullptr);
+
+  int64_t poolid;
+  coll_t cid;
+  ghobject_t hoid;
+  ObjectStore::CollectionHandle ch;
+  StartDeferred();
+  poolid = 11;
+  cid = coll_t(spg_t(pg_t(1, poolid), shard_id_t::NO_SHARD));
+  ch = store->create_new_collection(cid);
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  map<string, bufferlist> attrs;
+  bufferlist expected_header;
+  expected_header.append("this is a header");
+
+  size_t object_count = 1000;
+  make_omap_data(object_count, poolid, cid);
+  //checking just written data
+  check_omap_data(object_count, poolid, cid);
+
+  store->umount();
+  ASSERT_EQ(store->fsck(false), 0);
+  SetVal(g_conf(), "bluestore_debug_legacy_omap", "false");
+  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_omap", "true");
+  g_conf().apply_changes(nullptr);
+  ASSERT_EQ(store->fsck(false), 1001);
+  ASSERT_EQ(store->quick_fix(), 0);
+  SetVal(g_conf(), "bluestore_debug_inject_upgrade_bug53062", "false");
+  BlueStore* bstore = dynamic_cast<BlueStore*>(store.get());
+  ASSERT_NE(bstore, nullptr);
+  ASSERT_EQ(bstore->repair_omap_upgrade(true), 0); // dry-run
+  ASSERT_EQ(bstore->repair_omap_upgrade(false), 0); // actual-run
+  ASSERT_EQ(store->fsck(false), 0);
+
+  store->mount();
+  ch = store->open_collection(cid);
+
+  //checking repaired data
+  check_omap_data(object_count, poolid, cid);
+
+  remove_objects(object_count, poolid, cid);
+  {
+    ObjectStore::Transaction t;
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestOmapUpgrade, LargePoolToPG_repair53062) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_debug_legacy_omap_per_pool", "true");
+  SetVal(g_conf(), "bluestore_debug_inject_upgrade_bug53062", "true");
+  g_conf().apply_changes(nullptr);
+
+  int64_t poolid;
+  coll_t cid;
+  ghobject_t hoid;
+  ObjectStore::CollectionHandle ch;
+  StartDeferred();
+  poolid = 11;
+  cid = coll_t(spg_t(pg_t(1, poolid), shard_id_t::NO_SHARD));
+  ch = store->create_new_collection(cid);
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  map<string, bufferlist> attrs;
+  bufferlist expected_header;
+  expected_header.append("this is a header");
+
+  size_t object_count = 1000;
+  make_omap_data(object_count, poolid, cid);
+  //checking just written data
+  check_omap_data(object_count, poolid, cid);
+
+  store->umount();
+  ASSERT_EQ(store->fsck(false), 0);
+  SetVal(g_conf(), "bluestore_debug_legacy_omap_per_pool", "false");
+  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_omap", "true");
+  g_conf().apply_changes(nullptr);
+  ASSERT_EQ(store->fsck(false), 1);
+  ASSERT_EQ(store->quick_fix(), 0);
+  SetVal(g_conf(), "bluestore_debug_inject_upgrade_bug53062", "false");
+  BlueStore* bstore = dynamic_cast<BlueStore*>(store.get());
+  ASSERT_NE(bstore, nullptr);
+  ASSERT_EQ(bstore->repair_omap_upgrade(true), 0); // dry-run
+  ASSERT_EQ(bstore->repair_omap_upgrade(false), 0); // actual-run
+  ASSERT_EQ(store->fsck(false), 0);
+
+  store->mount();
+  ch = store->open_collection(cid);
+
+  //checking repaired data
+  check_omap_data(object_count, poolid, cid);
+
+  remove_objects(object_count, poolid, cid);
+  {
+    ObjectStore::Transaction t;
     t.remove_collection(cid);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
