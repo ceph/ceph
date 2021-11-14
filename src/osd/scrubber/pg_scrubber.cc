@@ -968,12 +968,14 @@ void PgScrubber::on_init()
 
   m_start = m_pg->info.pgid.pgid.get_hobj_start();
   m_active = true;
+  ++m_sessions_counter;
   m_pg->publish_stats_to_osd();
 }
 
 void PgScrubber::on_replica_init()
 {
   m_active = true;
+  ++m_sessions_counter;
 }
 
 void PgScrubber::_scan_snaps(ScrubMap& smap)
@@ -1975,6 +1977,11 @@ void PgScrubber::dump_scrubber(ceph::Formatter* f,
     f->dump_string("schedule", sched_state);
   }
 
+  if (m_publish_sessions) {
+    f->dump_int("test_sequence",
+                m_sessions_counter);  // an ever-increasing number used by tests
+  }
+
   f->close_section();
 }
 
@@ -2241,6 +2248,7 @@ void PgScrubber::reset_internal_state()
 
   m_active = false;
   clear_queued_or_active();
+  ++m_sessions_counter;
 }
 
 // note that only applicable to the Replica:
@@ -2302,11 +2310,30 @@ int PgScrubber::asok_debug(std::string_view cmd,
   if (cmd == "block") {
     // set a flag that will cause the next 'select_range' to report a blocked object
     m_debug_blockrange = 1;
+
   } else if (cmd == "unblock") {
     // send an 'unblock' event, as if a blocked range was freed
     m_debug_blockrange = 0;
     m_fsm->process_event(Unblocked{});
+
+  } else if ((cmd == "set") || (cmd == "unset")) {
+
+    if (param == "sessions") {
+      // set/reset the inclusion of the scrub sessions counter in 'query' output
+      m_publish_sessions = (cmd == "set");
+
+    } else if (param == "block") {
+      if (cmd == "set") {
+        // set a flag that will cause the next 'select_range' to report a blocked object
+        m_debug_blockrange = 1;
+      } else {
+      // send an 'unblock' event, as if a blocked range was freed
+        m_debug_blockrange = 0;
+        m_fsm->process_event(Unblocked{});
+      }
+    }
   }
+
   return 0;
 }
 // ///////////////////// preemption_data_t //////////////////////////////////
