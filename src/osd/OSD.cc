@@ -4147,7 +4147,7 @@ void OSD::final_init()
   r = admin_socket->register_command(
     "scrubdebug "						\
     "name=pgid,type=CephPgid "	                                \
-    "name=cmd,type=CephChoices,strings=block|unblock "          \
+    "name=cmd,type=CephChoices,strings=block|unblock|set|unset " \
     "name=value,type=CephString,req=false",
     asok_hook,
     "debug the scrubber");
