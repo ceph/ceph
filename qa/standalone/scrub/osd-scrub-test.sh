@@ -441,6 +441,65 @@ function TEST_scrub_permit_time() {
     done
 }
 
+#  a test to recreate the problem described in bug #52901 - setting 'noscrub'
+#  without explicitly preventing deep scrubs made the PG 'unscrubable'.
+#  Fixed by PR#43521
+function TEST_just_deep_scrubs() {
+    local dir=$1
+    local -A cluster_conf=(
+        ['osds_num']="3" 
+        ['pgs_in_pool']="4"
+        ['pool_name']="test"
+    )
+
+    standard_scrub_cluster $dir cluster_conf
+    local poolid=${cluster_conf['pool_id']}
+    local poolname=${cluster_conf['pool_name']}
+    echo "Pool: $poolname : $poolid"
+
+    TESTDATA="testdata.$$"
+    local objects=15
+    dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
+    for i in `seq 1 $objects`
+    do
+        rados -p $poolname put obj${i} $TESTDATA
+    done
+    rm -f $TESTDATA
+
+    # set 'no scrub', then request a deep-scrub.
+    # we do not expect to see the scrub scheduled.
+
+    ceph osd set noscrub || return 1
+    sleep 6 # the 'noscrub' command takes a long time to reach the OSDs
+    local now_is=`date -I"ns"`
+    declare -A sched_data
+    local pgid="${poolid}.2"
+
+    # turn on the publishing of test data in the 'scrubber' section of 'pg query' output
+    set_query_debug $pgid
+
+    extract_published_sch $pgid $now_is $now_is sched_data
+    local saved_last_stamp=${sched_data['query_last_stamp']}
+    local dbg_counter_at_start=${sched_data['query_scrub_seq']}
+    echo "test counter @ start: $dbg_counter_at_start"
+
+    ceph pg $pgid deep_scrub
+
+    sleep 5 # 5s is the 'pg dump' interval
+    declare -A sc_data_2
+    extract_published_sch $pgid $now_is $now_is sc_data_2
+    echo "test counter @ should show no change: " ${sc_data_2['query_scrub_seq']}
+    (( ${sc_data_2['dmp_last_duration']} == 0)) || return 1
+    (( ${sc_data_2['query_scrub_seq']} == $dbg_counter_at_start)) || return 1
+
+    # unset the 'no scrub'. Deep scrubbing should start now.
+    ceph osd unset noscrub || return 1
+    sleep 5
+    declare -A expct_qry_duration=( ['query_last_duration']="0" ['query_last_duration_neg']="not0" )
+    sc_data_2=()
+    echo "test counter @ should be higher than before the unset: " ${sc_data_2['query_scrub_seq']}
+    wait_any_cond $pgid 10 $saved_last_stamp expct_qry_duration "WaitingAfterScrub " sc_data_2 || return 1
+}
 
 function TEST_dump_scrub_schedule() {
     local dir=$1

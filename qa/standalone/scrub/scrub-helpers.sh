@@ -66,9 +66,9 @@ function extract_published_sch() {
         query_last_duration: .info.stats.last_scrub_duration,
         query_last_stamp: .info.history.last_scrub_stamp,
         query_last_scrub: (.info.history.last_scrub| sub($spt;"x") ),
-	query_is_future: .q_when_is_future,
-	query_vs_date: .q_vs_date,
-
+        query_is_future: .q_when_is_future,
+        query_vs_date: .q_vs_date,
+        query_scrub_seq: .scrubber.test_sequence
       }
    '`
   (( extr_dbg >= 1 )) && echo $from_qry " " $from_dmp | jq -s -r 'add | "(",(to_entries | .[] | "["+(.key)+"]="+(.value|@sh)),")"'
@@ -171,7 +171,7 @@ function schedule_against_expected() {
   local -n ep=$2  # the expected results
   local extr_dbg=1
 
-  #turn off '-x' (but remember previous state)
+  # turn off '-x' (but remember previous state)
   local saved_echo_flag=${-//[^x]/}
   set +x
 
@@ -194,3 +194,107 @@ function schedule_against_expected() {
   if [[ -n "$saved_echo_flag" ]]; then set -x; fi
   return 0
 }
+
+
+# Start the cluster "nodes" and create a pool for testing.
+#
+# The OSDs are started with a set of parameters aimed in creating a repeatable
+# and stable scrub sequence:
+#  - no scrub randomizations/backoffs
+#  - no autoscaler
+#
+# $1: the test directory
+# $2: [in/out] an array of configuration values
+#
+# The function adds/updates the configuration dictionary with the name of the
+# pool created, and its ID.
+#
+# Argument 2 might look like this:
+#
+#  declare -A test_conf=( 
+#    ['osds_num']="3"
+#    ['pgs_in_pool']="7"
+#    ['extras']="--extra1 --extra2"
+#    ['pool_name']="testpl"
+#  )
+function standard_scrub_cluster() {
+    local dir=$1
+    local -n args=$2
+
+    local OSDS=${args['osds_num']:-"3"}
+    local pg_num=${args['pgs_in_pool']:-"8"}
+    local poolname="${args['pool_name']:-test}"
+    args['pool_name']=$poolname
+    local extra_pars=${args['extras']}
+    local debug_msg=${args['msg']:-"dbg"}
+
+    # turn off '-x' (but remember previous state)
+    local saved_echo_flag=${-//[^x]/}
+    set +x
+
+    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
+    run_mgr $dir x || return 1
+
+    local ceph_osd_args="--osd_deep_scrub_randomize_ratio=0 \
+            --osd_scrub_interval_randomize_ratio=0 \
+            --osd_scrub_backoff_ratio=0.0 \
+            --osd_pool_default_pg_autoscale_mode=off \
+            $extra_pars"
+
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd $ceph_osd_args || return 1
+    done
+
+    create_pool $poolname $pg_num $pg_num
+    wait_for_clean || return 1
+
+    # update the in/out 'args' with the ID of the new pool
+    sleep 1
+    name_n_id=`ceph osd dump | awk '/^pool.*'$poolname'/ { gsub(/'"'"'/," ",$3); print $3," ", $2}'`
+    echo "standard_scrub_cluster: $debug_msg: test pool is $name_n_id"
+    args['pool_id']="${name_n_id##* }"
+    if [[ -n "$saved_echo_flag" ]]; then set -x; fi
+}
+
+
+# Start the cluster "nodes" and create a pool for testing - wpq version.
+#
+# A variant of standard_scrub_cluster() that selects the wpq scheduler and sets a value to
+# osd_scrub_sleep. To be used when the test is attempting to "catch" the scrubber during an
+# ongoing scrub.
+#
+# See standard_scrub_cluster() for more details.
+#
+# $1: the test directory
+# $2: [in/out] an array of configuration values
+# $3: osd_scrub_sleep
+#
+# The function adds/updates the configuration dictionary with the name of the
+# pool created, and its ID.
+function standard_scrub_wpq_cluster() {
+    local dir=$1
+    local -n conf=$2
+    local osd_sleep=$3
+
+    conf['extras']=" --osd_op_queue=wpq --osd_scrub_sleep=$osd_sleep ${conf['extras']}"
+
+    standard_scrub_cluster $dir conf || return 1
+}
+
+
+# A debug flag is set for the PG specified, causing the 'pg query' command to display
+# an additional 'scrub sessions counter' field.
+#
+# $1: PG id
+#
+function set_query_debug() {
+    local pgid=$1
+    local prim_osd=`ceph pg dump pgs_brief | \
+      awk -v pg="^$pgid" -n -e '$0 ~ pg { print(gensub(/[^0-9]*([0-9]+).*/,"\\\\1","g",$5)); }' `
+
+    echo "Setting scrub debug data. Primary for $pgid is $prim_osd"
+    CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.$prim_osd) \
+          scrubdebug $pgid set sessions
+}
+
