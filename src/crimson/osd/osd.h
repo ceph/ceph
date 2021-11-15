@@ -10,6 +10,7 @@
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/timer.hh>
 
+#include "crimson/common/logclient.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/common/auth_handler.h"
 #include "crimson/common/gated.h"
@@ -244,6 +245,10 @@ public:
     spg_t pgid);
   Ref<PG> get_pg(spg_t pgid);
   seastar::future<> send_beacon();
+
+private:
+  LogClient log_client;
+  LogChannelRef clog;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const OSD& osd) {
