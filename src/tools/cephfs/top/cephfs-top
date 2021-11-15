@@ -545,8 +545,8 @@ if __name__ == '__main__':
     def float_greater_than(x):
         value = float(x)
         if value < MIN_REFRESH_INTERVAL:
-            raise argparse.ArgumentTypeError(f'{value} should be greater than '
-                                             f'{MIN_REFRESH_INTERVAL}')
+            raise argparse.ArgumentTypeError(
+                f'Refresh interval should be greater than or equal to {MIN_REFRESH_INTERVAL}')
         return value
 
     parser = argparse.ArgumentParser(description='Ceph Filesystem top utility')
