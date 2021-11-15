@@ -300,7 +300,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     m_first_valid_entry = 0;
     TX_BEGIN(m_log_pool) {
       TX_ADD(pool_root);
-      D_RW(pool_root)->header.layout_version = RWL_POOL_VERSION;
+      D_RW(pool_root)->header.layout_version = RWL_LAYOUT_VERSION;
       D_RW(pool_root)->log_entries =
         TX_ZALLOC(struct WriteLogCacheEntry,
                   sizeof(struct WriteLogCacheEntry) * num_small_writes);
@@ -333,11 +333,11 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       return false;
     }
     pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
-    if (D_RO(pool_root)->header.layout_version != RWL_POOL_VERSION) {
+    if (D_RO(pool_root)->header.layout_version != RWL_LAYOUT_VERSION) {
       // TODO: will handle upgrading version in the future
       lderr(cct) << "Pool layout version is "
                  << D_RO(pool_root)->header.layout_version
-                 << " expected " << RWL_POOL_VERSION << dendl;
+                 << " expected " << RWL_LAYOUT_VERSION << dendl;
       on_finish->complete(-EINVAL);
       return false;
     }
@@ -591,6 +591,7 @@ void WriteLog<I>::construct_flush_entries(pwl::GenericLogEntries entries_to_flus
 	      ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
 					 << " " << *log_entry << dendl;
 	      log_entry->writeback(this->m_image_writeback, ctx);
+	      this->m_flush_ops_will_send -= 1;
 	    }), 0);
         });
    }

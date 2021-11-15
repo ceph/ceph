@@ -294,6 +294,7 @@ protected:
   std::atomic<int> m_async_flush_ops = {0};
   std::atomic<int> m_async_append_ops = {0};
 
+  std::atomic<int> m_flush_ops_will_send = {0};
   /* Acquire locks in order declared here */
 
   mutable ceph::mutex m_log_retire_lock;
@@ -337,7 +338,7 @@ protected:
       std::map<uint64_t, bool> &missing_sync_points,
       std::map<uint64_t,
       std::shared_ptr<pwl::SyncPointLogEntry>> &sync_point_entries,
-      int entry_index);
+      uint64_t entry_index);
   void update_sync_points(
       std::map<uint64_t, bool> &missing_sync_points,
       std::map<uint64_t,

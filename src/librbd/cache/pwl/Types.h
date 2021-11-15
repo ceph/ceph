@@ -177,7 +177,8 @@ const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
 const uint64_t POOL_SIZE_ALIGN = 1 << 20;
 constexpr double USABLE_SIZE = (7.0 / 10);
 const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
-const uint8_t RWL_POOL_VERSION = 1;
+const uint8_t RWL_LAYOUT_VERSION = 1;
+const uint8_t SSD_LAYOUT_VERSION = 1;
 const uint64_t MAX_LOG_ENTRIES = (1024 * 1024);
 const double AGGRESSIVE_RETIRE_HIGH_WATER = 0.75;
 const double RETIRE_HIGH_WATER = 0.50;
@@ -282,7 +283,7 @@ struct WriteLogPoolRoot {
   #ifdef WITH_RBD_RWL
   union {
     struct {
-      uint8_t layout_version;    /* Version of this structure (RWL_POOL_VERSION) */
+      uint8_t layout_version;    /* Version of this structure (RWL_LAYOUT_VERSION) */
     };
     uint64_t _u64;
   } header;
@@ -297,8 +298,8 @@ struct WriteLogPoolRoot {
                                   * sync gen number are flushed. */
   uint32_t block_size;           /* block size */
   uint32_t num_log_entries;
-  uint32_t first_free_entry;     /* Entry following the newest valid entry */
-  uint32_t first_valid_entry;    /* Index of the oldest valid entry in the log */
+  uint64_t first_free_entry;     /* Entry following the newest valid entry */
+  uint64_t first_valid_entry;    /* Index of the oldest valid entry in the log */
 
   #ifdef WITH_RBD_SSD_CACHE
   DENC(WriteLogPoolRoot, v, p) {
