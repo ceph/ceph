@@ -3533,11 +3533,21 @@ TEST_F(TestLibRBD, TestClone2)
                                            &snap_namespace_type));
   ASSERT_EQ(RBD_SNAP_NAMESPACE_TYPE_TRASH, snap_namespace_type);
 
+  rbd_snap_group_namespace_t group_snap_type;
+  ASSERT_EQ(0, rbd_snap_get_group_namespace(parent, snaps[0].id,
+                                            &group_snap_type,
+                                            sizeof(group_snap_type)));
+
   char original_name[32];
   ASSERT_EQ(0, rbd_snap_get_trash_namespace(parent, snaps[0].id,
                                             original_name,
                                             sizeof(original_name)));
   ASSERT_EQ(0, strcmp("parent_snap", original_name));
+
+  rbd_snap_mirror_namespace_t mirror_snap_type;
+  ASSERT_EQ(0, rbd_snap_get_mirror_namespace(parent, snaps[0].id,
+                                             &mirror_snap_type,
+                                             sizeof(mirror_snap_type)));
 
   ASSERT_EQ(0, rbd_close(child));
   ASSERT_EQ(0, rbd_close(parent));
