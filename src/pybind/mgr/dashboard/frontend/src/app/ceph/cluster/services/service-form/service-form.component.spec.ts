@@ -433,5 +433,22 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         formHelper.expectError('monitor_port', 'pattern');
       });
     });
+
+    describe('check edit fields', () => {
+      beforeEach(() => {
+        component.editing = true;
+      });
+
+      it('should check whether edit field is correctly loaded', () => {
+        const cephServiceSpy = spyOn(cephServiceService, 'list').and.callThrough();
+        component.ngOnInit();
+        expect(cephServiceSpy).toBeCalledTimes(2);
+        expect(component.action).toBe('Edit');
+        const serviceType = fixture.debugElement.query(By.css('#service_type')).nativeElement;
+        const serviceId = fixture.debugElement.query(By.css('#service_id')).nativeElement;
+        expect(serviceType.disabled).toBeTruthy();
+        expect(serviceId.disabled).toBeTruthy();
+      });
+    });
   });
 });

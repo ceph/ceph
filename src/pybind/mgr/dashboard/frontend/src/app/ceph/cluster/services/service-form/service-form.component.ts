@@ -1,6 +1,6 @@
 import { Component, Input, OnInit, ViewChild } from '@angular/core';
 import { AbstractControl, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbActiveModal, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -31,7 +31,13 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
 
-  @Input() public hiddenServices: string[] = [];
+  @Input() hiddenServices: string[] = [];
+
+  @Input() editing = false;
+
+  @Input() serviceName: string;
+
+  @Input() serviceType: string;
 
   serviceForm: CdFormGroup;
   action: string;
@@ -53,6 +59,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     private poolService: PoolService,
     private router: Router,
     private taskWrapperService: TaskWrapperService,
+    private route: ActivatedRoute,
     public activeModal: NgbActiveModal
   ) {
     super();
@@ -213,10 +220,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit(): void {
-    if (this.router.url.includes('services')) {
-      this.pageURL = 'services';
-    }
     this.action = this.actionLabels.CREATE;
+    if (this.router.url.includes('services/(modal:create')) {
+      this.pageURL = 'services';
+    } else if (this.router.url.includes('services/(modal:edit')) {
+      this.editing = true;
+      this.pageURL = 'services';
+      this.route.params.subscribe((params: { type: string; name: string }) => {
+        this.serviceName = params.name;
+        this.serviceType = params.type;
+      });
+    }
     this.cephServiceService.getKnownTypes().subscribe((resp: Array<string>) => {
       // Remove service types:
       // osd       - This is deployed a different way.
@@ -244,6 +258,79 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     this.cephServiceService.list().subscribe((services: CephServiceSpec[]) => {
       this.services = services.filter((service: any) => service.service_type === 'rgw');
     });
+
+    if (this.editing) {
+      this.action = this.actionLabels.EDIT;
+      this.disableForEditing(this.serviceType);
+      this.cephServiceService.list(this.serviceName).subscribe((response: CephServiceSpec[]) => {
+        const formKeys = ['service_type', 'service_id', 'unmanaged'];
+        formKeys.forEach((keys) => {
+          this.serviceForm.get(keys).setValue(response[0][keys]);
+        });
+        if (!response[0]['unmanaged']) {
+          const placementKey = Object.keys(response[0]['placement'])[0];
+          let placementValue: string;
+          ['hosts', 'label'].indexOf(placementKey) >= 0
+            ? (placementValue = placementKey)
+            : (placementValue = 'hosts');
+          this.serviceForm.get('placement').setValue(placementValue);
+          this.serviceForm.get('count').setValue(response[0]['placement']['count']);
+          if (response[0]?.placement[placementValue]) {
+            this.serviceForm.get(placementValue).setValue(response[0]?.placement[placementValue]);
+          }
+        }
+        switch (this.serviceType) {
+          case 'iscsi':
+            const specKeys = ['pool', 'api_password', 'api_user', 'trusted_ip_list', 'api_port'];
+            specKeys.forEach((key) => {
+              this.serviceForm.get(key).setValue(response[0].spec[key]);
+            });
+            this.serviceForm.get('ssl').setValue(response[0].spec?.api_secure);
+            if (response[0].spec?.api_secure) {
+              this.serviceForm.get('ssl_cert').setValue(response[0].spec?.ssl_cert);
+              this.serviceForm.get('ssl_key').setValue(response[0].spec?.ssl_key);
+            }
+            break;
+          case 'rgw':
+            this.serviceForm.get('rgw_frontend_port').setValue(response[0].spec?.rgw_frontend_port);
+            this.serviceForm.get('ssl').setValue(response[0].spec?.ssl);
+            if (response[0].spec?.ssl) {
+              this.serviceForm
+                .get('ssl_cert')
+                .setValue(response[0].spec?.rgw_frontend_ssl_certificate);
+            }
+            break;
+          case 'ingress':
+            const ingressSpecKeys = [
+              'backend_service',
+              'virtual_ip',
+              'frontend_port',
+              'monitor_port',
+              'virtual_interface_networks',
+              'ssl'
+            ];
+            ingressSpecKeys.forEach((key) => {
+              this.serviceForm.get(key).setValue(response[0].spec[key]);
+            });
+            if (response[0].spec?.ssl) {
+              this.serviceForm.get('ssl_cert').setValue(response[0].spec?.ssl_cert);
+              this.serviceForm.get('ssl_key').setValue(response[0].spec?.ssl_key);
+            }
+            break;
+        }
+      });
+    }
+  }
+
+  disableForEditing(serviceType: string) {
+    const disableForEditKeys = ['service_type', 'service_id'];
+    disableForEditKeys.forEach((key) => {
+      this.serviceForm.get(key).disable();
+    });
+    switch (serviceType) {
+      case 'ingress':
+        this.serviceForm.get('backend_service').disable();
+    }
   }
 
   searchLabels = (text$: Observable<string>) => {
@@ -282,8 +369,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
   onSubmit() {
     const self = this;
-    const values: object = this.serviceForm.value;
+    const values: object = this.serviceForm.getRawValue();
     const serviceType: string = values['service_type'];
+    let taskUrl = `service/${URLVerbs.CREATE}`;
+    if (this.editing) {
+      taskUrl = `service/${URLVerbs.EDIT}`;
+    }
     const serviceSpec: object = {
       service_type: serviceType,
       placement: {},
@@ -327,7 +418,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           }
           serviceSpec['ssl'] = values['ssl'];
           if (values['ssl']) {
-            serviceSpec['rgw_frontend_ssl_certificate'] = values['ssl_cert'].trim();
+            serviceSpec['rgw_frontend_ssl_certificate'] = values['ssl_cert']?.trim();
           }
           break;
         case 'iscsi':
@@ -342,8 +433,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['api_password'] = values['api_password'];
           serviceSpec['api_secure'] = values['ssl'];
           if (values['ssl']) {
-            serviceSpec['ssl_cert'] = values['ssl_cert'].trim();
-            serviceSpec['ssl_key'] = values['ssl_key'].trim();
+            serviceSpec['ssl_cert'] = values['ssl_cert']?.trim();
+            serviceSpec['ssl_key'] = values['ssl_key']?.trim();
           }
           break;
         case 'ingress':
@@ -360,16 +451,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           }
           serviceSpec['ssl'] = values['ssl'];
           if (values['ssl']) {
-            serviceSpec['ssl_cert'] = values['ssl_cert'].trim();
-            serviceSpec['ssl_key'] = values['ssl_key'].trim();
+            serviceSpec['ssl_cert'] = values['ssl_cert']?.trim();
+            serviceSpec['ssl_key'] = values['ssl_key']?.trim();
           }
           serviceSpec['virtual_interface_networks'] = values['virtual_interface_networks'];
           break;
       }
     }
+
     this.taskWrapperService
       .wrapTaskAroundCall({
-        task: new FinishedTask(`service/${URLVerbs.CREATE}`, {
+        task: new FinishedTask(taskUrl, {
           service_name: serviceName
         }),
         call: this.cephServiceService.create(serviceSpec)
