@@ -12710,6 +12710,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	if (err) {
 	  goto reply;
 	}
+	if ((addr.is_ipv4() && addr.get_nonce() > 32) ||
+	    (addr.is_ipv6() && addr.get_nonce() > 128)) {
+	  ss << "Too many bits in range for that protocol!";
+	  err = -EINVAL;
+	  goto reply;
+	}
       } else {
 	if (osdmap.require_osd_release >= ceph_release_t::nautilus) {
 	  // always blocklist type ANY
