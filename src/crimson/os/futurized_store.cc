@@ -10,20 +10,20 @@
 
 namespace crimson::os {
 
-std::unique_ptr<FuturizedStore>
+seastar::future<std::unique_ptr<FuturizedStore>>
 FuturizedStore::create(const std::string& type,
                        const std::string& data,
                        const ConfigValues& values)
 {
   if (type == "cyanstore") {
-    return std::make_unique<crimson::os::CyanStore>(data);
+    return seastar::make_ready_future<std::unique_ptr<FuturizedStore>>(std::make_unique<crimson::os::CyanStore>(data));
   } else if (type == "seastore") {
-    return crimson::os::seastore::make_seastore(data, values);
+    return seastar::make_ready_future<std::unique_ptr<FuturizedStore>>(crimson::os::seastore::make_seastore(data, values));
   } else {
 #ifdef WITH_BLUESTORE
     // use AlienStore as a fallback. It adapts e.g. BlueStore.
-    return std::make_unique<crimson::os::AlienStore>(
-      type, data, values);
+    return seastar::make_ready_future<std::unique_ptr<FuturizedStore>>(std::make_unique<crimson::os::AlienStore>(
+      type, data, values));
 #else
     ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
     return {};

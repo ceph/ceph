@@ -55,7 +55,7 @@ private:
   offset_mapping_t map_offset(off_t offset);
 
   seastar::future<> mkfs();
-  void init();
+  seastar::future<> init();
 
   friend void populate_log(
     ceph::os::Transaction &,

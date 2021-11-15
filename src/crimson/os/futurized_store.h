@@ -51,7 +51,7 @@ public:
   };
   using OmapIteratorRef = boost::intrusive_ptr<OmapIterator>;
 
-  static std::unique_ptr<FuturizedStore> create(const std::string& type,
+  static seastar::future<std::unique_ptr<FuturizedStore>> create(const std::string& type,
                                                 const std::string& data,
                                                 const ConfigValues& values);
   FuturizedStore() = default;
