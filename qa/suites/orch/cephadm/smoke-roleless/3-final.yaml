@@ -1,6 +1,7 @@
 tasks:
 - cephadm.shell:
     host.a:
+      - stat -c '%u %g' /var/log/ceph | grep '167 167'
       - ceph orch status
       - ceph orch ps
       - ceph orch ls
