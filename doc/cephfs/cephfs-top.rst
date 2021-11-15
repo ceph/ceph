@@ -72,11 +72,11 @@ By default, `cephfs-top` connects to cluster name `ceph`. To use a non-default c
 
   $ cephfs-top --cluster <cluster>
 
-`cephfs-top` refreshes stats every second by default. To chose a different refresh interval use::
+`cephfs-top` refreshes stats every second by default. To choose a different refresh interval use::
 
   $ cephfs-top -d <seconds>
 
-Interval should be greater or equal to 0.5 second. Fractional seconds are honoured.
+Interval should be greater than or equal to 0.5 seconds. Fractional seconds are honoured.
 
 Sample screenshot running `cephfs-top` with 2 clients:
 
