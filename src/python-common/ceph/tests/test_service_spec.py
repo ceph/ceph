@@ -233,6 +233,17 @@ spec:
   objectstore: bluestore
   wal_devices:
     model: NVME-QQQQ-987
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement: {}
+spec:
+  credentials:
+    snmp_v3_auth_password: p
+    snmp_v3_auth_username: u
+  engine_id: deadbeef
+  snmp_destination: 127.0.0.1:8080
+  snmp_version: V3
 """
 
     for y in y.split('---\n'):
@@ -241,6 +252,23 @@ spec:
 
         assert yaml.dump(object) == y
         assert yaml.dump(ServiceSpec.from_json(object.to_json())) == y
+
+@pytest.mark.parametrize(
+    "spec, err_match",
+    [
+        ("""service_type: snmp-gateway
+service_name: foo
+spec:
+  snmp_version: V4
+  credentials: {}
+  """,
+         "nmp-gateway: 'V4' is not a valid SNMPGatewaySpec.SNMPVersion")
+    ])
+def test_yaml_fail(spec, err_match):
+    data = yaml.safe_load(spec)
+    with pytest.raises(SpecValidationError, match=err_match):
+        ServiceSpec.from_json(data)
+
 
 @pytest.mark.parametrize("spec1, spec2, eq",
                          [

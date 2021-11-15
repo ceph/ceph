@@ -10,7 +10,7 @@ import yaml
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
     IscsiServiceSpec, AlertManagerSpec, HostPlacementSpec, CustomContainerSpec
-
+from ceph.deployment.hostspec import SpecValidationError
 from orchestrator import DaemonDescription, OrchestratorError
 
 
@@ -678,3 +678,189 @@ spec:
     assert spec.virtual_ip == "192.168.20.1/24"
     assert spec.frontend_port == 8080
     assert spec.monitor_port == 8081
+
+
+class YAMLdoc:
+    def __init__(self, text):
+        self.content = yaml.safe_load(text)
+
+
+@pytest.mark.parametrize(
+    "yaml_doc,snmp_type", [
+        (YAMLdoc("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_community: public
+port: 9464
+snmp_destination: 192.168.1.42:162
+snmp_version: V2c
+"""), 'snmp V2c'),
+        (YAMLdoc("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+port: 9464
+engine_id: 8000C53F00000000
+auth_protocol: MD5
+snmp_destination: 192.168.1.42:162
+snmp_version: V3
+"""), 'SNMP V3 authNoPriv'),
+        (YAMLdoc("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+port: 9464
+engine_id: 8000C53F00000000
+privacy_protocol: AES
+snmp_destination: 192.168.1.42:162
+snmp_version: V3
+"""), 'SNMP V3 authPriv'),
+    ])
+def test_valid_snmp_gateway_spec(yaml_doc: YAMLdoc, snmp_type: str):
+    spec = ServiceSpec.from_json(yaml_doc.content)
+    spec.validate()
+
+
+@pytest.mark.parametrize(
+    "yaml_doc,expected_error", [
+        (YAMLdoc("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+port: 9464
+auth_protocol: wah
+snmp_destination: 192.168.1.42:162
+snmp_version: V3
+"""), 'auth_protocol unsupported. Must be one of MD5, SHA'),
+        (YAMLdoc("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+port: 9464
+auth_protocol: SHA
+privacy_protocol: weewah
+snmp_destination: 192.168.1.42:162
+snmp_version: V3
+"""), 'privacy_protocol unsupported. Must be one of AES, DES'),
+        (YAMLdoc("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+port: 9464
+auth_protocol: SHA
+privacy_protocol: AES
+snmp_destination: 192.168.1.42:162
+snmp_version: V3
+"""), 'must provide an engine_id for SNMP V3 notifications'),
+        (YAMLdoc("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+port: 9464
+auth_protocol: SHA
+privacy_protocol: AES
+engine_id: bogus
+snmp_destination: 192.168.1.42:162
+snmp_version: V3
+"""), 'engine_id must be a hex string, between 10-64 chars in length'),
+        (YAMLdoc("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+port: 9464
+auth_protocol: SHA
+engine_id: 8000C53F000000000
+snmp_version: V3
+"""), 'SNMP destination (snmp_destination) must be provided'),
+        (YAMLdoc("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+port: 9464
+auth_protocol: SHA
+privacy_protocol: AES
+engine_id: 8000C53F000000000
+snmp_destination: my.imaginery.snmp-host
+snmp_version: V3
+"""), 'SNMP destination must be of the form <ip | name>:<port>'),
+        (YAMLdoc("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+port: 9464
+auth_protocol: SHA
+privacy_protocol: AES
+engine_id: 8000C53F000000000
+snmp_destination: my.imaginery.snmp-host:fred
+snmp_version: V3
+"""), 'SNMP destination port must be numeric, fred is invalid')
+    ])
+def test_invalid_snmp_gateway_spec(yaml_doc: YAMLdoc, expected_error: str):
+    with pytest.raises(SpecValidationError) as e:
+        ServiceSpec.from_json(yaml_doc.content)
+    assert str(e.value) == expected_error
