@@ -694,14 +694,14 @@ def wait_for_reboot(ctx, need_install, timeout, config, distro=False):
     time.sleep(30)
     starttime = time.time()
     while need_install:
-        teuthology.reconnect(ctx, timeout)
         for client in list(need_install.keys()):
             if 'distro' in str(need_install[client]):
                  distro = True
             log.info('Checking client {client} for new kernel version...'.format(client=client))
             try:
+                (remote,) = ctx.cluster.only(client).remotes.keys()
+                remote.reconnect(timeout=timeout)
                 if distro:
-                    (remote,) = ctx.cluster.only(client).remotes.keys()
                     assert not need_to_install_distro(remote, config[client]), \
                             'failed to install new distro kernel version within timeout'
 
@@ -1230,105 +1230,109 @@ def task(ctx, config):
     validate_config(ctx, config)
     log.info('config %s, timeout %d' % (config, timeout))
 
-    need_install = {}  # sha1 to dl, or path to rpm or deb
-    need_version = {}  # utsrelease or sha1
-    kdb = {}
+    with parallel() as p:
+        for role, role_config in config.items():
+            p.spawn(process_role, ctx, config, timeout, role, role_config)
 
-    for role, role_config in config.items():
-        # gather information about this remote
-        (role_remote,) = ctx.cluster.only(role).remotes.keys()
-        system_type = role_remote.os.name
-        if role_config.get('rpm') or role_config.get('deb'):
-            # We only care about path - deb: vs rpm: is meaningless,
-            # rpm: just happens to be parsed first.  Nothing is stopping
-            # 'deb: /path/to/foo.rpm' and it will work provided remote's
-            # os.package_type is 'rpm' and vice versa.
-            path = role_config.get('rpm')
-            if not path:
-                path = role_config.get('deb')
-            sha1 = get_sha1_from_pkg_name(path)
-            assert sha1, "failed to extract commit hash from path %s" % path
-            if need_to_install(ctx, role, sha1):
-                need_install[role] = path
-                need_version[role] = sha1
-        elif role_config.get('sha1') == 'distro':
-            version = need_to_install_distro(role_remote, role_config)
-            if version:
-                need_install[role] = 'distro'
-                need_version[role] = version
-        elif role_config.get("koji") or role_config.get('koji_task'):
-            # installing a kernel from koji
-            build_id = role_config.get("koji")
-            task_id = role_config.get("koji_task")
-            if role_remote.os.package_type != "rpm":
-                msg = (
-                    "Installing a kernel from koji is only supported "
-                    "on rpm based systems. System type is {system_type}."
-                )
-                msg = msg.format(system_type=system_type)
-                log.error(msg)
-                ctx.summary["failure_reason"] = msg
-                ctx.summary["status"] = "dead"
-                raise ConfigError(msg)
 
-            # FIXME: this install should probably happen somewhere else
-            # but I'm not sure where, so we'll leave it here for now.
-            install_package('koji', role_remote)
+def process_role(ctx, config, timeout, role, role_config):
+    need_install = None  # sha1 to dl, or path to rpm or deb
+    need_version = None  # utsrelease or sha1
 
-            if build_id:
-                # get information about this build from koji
-                build_info = get_koji_build_info(build_id, role_remote, ctx)
-                version = "{ver}-{rel}.x86_64".format(
-                    ver=build_info["version"],
-                    rel=build_info["release"]
-                )
-            elif task_id:
-                # get information about results of this task from koji
-                task_result = get_koji_task_result(task_id, role_remote, ctx)
-                # this is not really 'build_info', it's a dict of information
-                # about the kernel rpm from the task results, but for the sake
-                # of reusing the code below I'll still call it that.
-                build_info = get_koji_task_rpm_info(
-                    'kernel',
-                    task_result['rpms']
-                )
-                # add task_id so we can know later that we're installing
-                # from a task and not a build.
-                build_info["task_id"] = task_id
-                version = build_info["version"]
-
-            if need_to_install(ctx, role, version):
-                need_install[role] = build_info
-                need_version[role] = version
-        else:
-            builder = get_builder_project()(
-                "kernel",
-                role_config,
-                ctx=ctx,
-                remote=role_remote,
+    # gather information about this remote
+    (role_remote,) = ctx.cluster.only(role).remotes.keys()
+    system_type = role_remote.os.name
+    if role_config.get('rpm') or role_config.get('deb'):
+        # We only care about path - deb: vs rpm: is meaningless,
+        # rpm: just happens to be parsed first.  Nothing is stopping
+        # 'deb: /path/to/foo.rpm' and it will work provided remote's
+        # os.package_type is 'rpm' and vice versa.
+        path = role_config.get('rpm')
+        if not path:
+            path = role_config.get('deb')
+        sha1 = get_sha1_from_pkg_name(path)
+        assert sha1, "failed to extract commit hash from path %s" % path
+        if need_to_install(ctx, role, sha1):
+            need_install = path
+            need_version = sha1
+    elif role_config.get('sha1') == 'distro':
+        version = need_to_install_distro(role_remote, role_config)
+        if version:
+            need_install = 'distro'
+            need_version = version
+    elif role_config.get("koji") or role_config.get('koji_task'):
+        # installing a kernel from koji
+        build_id = role_config.get("koji")
+        task_id = role_config.get("koji_task")
+        if role_remote.os.package_type != "rpm":
+            msg = (
+                "Installing a kernel from koji is only supported "
+                "on rpm based systems. System type is {system_type}."
             )
-            sha1 = builder.sha1
-            log.debug('sha1 for {role} is {sha1}'.format(role=role, sha1=sha1))
-            ctx.summary['{role}-kernel-sha1'.format(role=role)] = sha1
+            msg = msg.format(system_type=system_type)
+            log.error(msg)
+            ctx.summary["failure_reason"] = msg
+            ctx.summary["status"] = "dead"
+            raise ConfigError(msg)
 
-            if need_to_install(ctx, role, sha1):
-                if teuth_config.use_shaman:
-                    version = builder.scm_version
-                else:
-                    version = builder.version
-                if not version:
-                    raise VersionNotFoundError(builder.base_url)
-                need_install[role] = sha1
-                need_version[role] = version
+        # FIXME: this install should probably happen somewhere else
+        # but I'm not sure where, so we'll leave it here for now.
+        install_package('koji', role_remote)
 
-        # enable or disable kdb if specified, otherwise do not touch
-        if role_config.get('kdb') is not None:
-            kdb[role] = role_config.get('kdb')
+        if build_id:
+            # get information about this build from koji
+            build_info = get_koji_build_info(build_id, role_remote, ctx)
+            version = "{ver}-{rel}.x86_64".format(
+                ver=build_info["version"],
+                rel=build_info["release"]
+            )
+        elif task_id:
+            # get information about results of this task from koji
+            task_result = get_koji_task_result(task_id, role_remote, ctx)
+            # this is not really 'build_info', it's a dict of information
+            # about the kernel rpm from the task results, but for the sake
+            # of reusing the code below I'll still call it that.
+            build_info = get_koji_task_rpm_info(
+                'kernel',
+                task_result['rpms']
+            )
+            # add task_id so we can know later that we're installing
+            # from a task and not a build.
+            build_info["task_id"] = task_id
+            version = build_info["version"]
+
+        if need_to_install(ctx, role, version):
+            need_install = build_info
+            need_version = version
+    else:
+        builder = get_builder_project()(
+            "kernel",
+            role_config,
+            ctx=ctx,
+            remote=role_remote,
+        )
+        sha1 = builder.sha1
+        log.debug('sha1 for {role} is {sha1}'.format(role=role, sha1=sha1))
+        ctx.summary['{role}-kernel-sha1'.format(role=role)] = sha1
+
+        if need_to_install(ctx, role, sha1):
+            if teuth_config.use_shaman:
+                version = builder.scm_version
+            else:
+                version = builder.version
+            if not version:
+                raise VersionNotFoundError(builder.base_url)
+            need_install = sha1
+            need_version = version
 
     if need_install:
-        install_firmware(ctx, need_install)
-        download_kernel(ctx, need_install)
-        install_and_reboot(ctx, need_install, config)
-        wait_for_reboot(ctx, need_version, timeout, config)
+        install_firmware(ctx, {role: need_install})
+        download_kernel(ctx, {role: need_install})
+        install_and_reboot(ctx, {role: need_install}, config)
+        wait_for_reboot(ctx, {role: need_version}, timeout, config)
 
-    enable_disable_kdb(ctx, kdb)
+    # enable or disable kdb if specified, otherwise do not touch
+    if role_config.get('kdb') is not None:
+        kdb = role_config.get('kdb')
+        enable_disable_kdb(ctx, {role: kdb})
+            
