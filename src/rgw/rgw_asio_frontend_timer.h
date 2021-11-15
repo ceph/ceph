@@ -42,12 +42,16 @@ class basic_timeout_timer {
   basic_timeout_timer& operator=(const basic_timeout_timer&) = delete;
 
   void start() {
-    timer.expires_after(dur);
-    timer.async_wait(timeout_handler{stream});
+    if (dur.count() > 0) {
+      timer.expires_after(dur);
+      timer.async_wait(timeout_handler{stream});
+    }
   }
 
   void cancel() {
-    timer.cancel();
+    if (dur.count() > 0) {
+      timer.cancel();
+    }
   }
 
  private:
