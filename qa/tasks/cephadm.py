@@ -344,6 +344,28 @@ def ceph_crash(ctx, config):
 
 
 @contextlib.contextmanager
+def pull_image(ctx, config):
+    cluster_name = config['cluster']
+    log.info(f'Pulling image {ctx.ceph[cluster_name].image} on all hosts...')
+    run.wait(
+        ctx.cluster.run(
+            args=[
+                'sudo',
+                ctx.cephadm,
+                '--image', ctx.ceph[cluster_name].image,
+                'pull',
+            ],
+            wait=False,
+        )
+    )
+
+    try:
+        yield
+    finally:
+        pass
+
+
+@contextlib.contextmanager
 def ceph_bootstrap(ctx, config):
     """
     Bootstrap ceph cluster.
@@ -1493,6 +1515,7 @@ def task(ctx, config):
                               else download_cephadm(ctx=ctx, config=config, ref=ref),
             lambda: ceph_log(ctx=ctx, config=config),
             lambda: ceph_crash(ctx=ctx, config=config),
+            lambda: pull_image(ctx=ctx, config=config),
             lambda: _bypass() if (ctx.ceph[cluster_name].bootstrapped)\
                               else ceph_bootstrap(ctx, config),
             lambda: crush_setup(ctx=ctx, config=config),
