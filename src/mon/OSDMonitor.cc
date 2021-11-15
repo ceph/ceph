@@ -5253,6 +5253,16 @@ void OSDMonitor::tick()
       do_propose = true;
     }
   }
+  for (auto p = osdmap.range_blocklist.begin();
+       p != osdmap.range_blocklist.end();
+       ++p) {
+    if (p->second < now) {
+      dout(10) << "expiring range_blocklist item " << p->first
+	       << " expired " << p->second << " < now " << now << dendl;
+      pending_inc.old_range_blocklist.push_back(p->first);
+      do_propose = true;
+    }
+  }
 
   if (try_prune_purged_snaps()) {
     do_propose = true;
