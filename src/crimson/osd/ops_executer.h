@@ -163,6 +163,7 @@ private:
 
   size_t num_read = 0;    ///< count read ops
   size_t num_write = 0;   ///< count update ops
+  object_stat_sum_t delta_stats;
 
   // this gizmo could be wrapped in std::optional for the sake of lazy
   // initialization. we don't need it for ops that doesn't have effect
@@ -283,6 +284,10 @@ public:
 
   bool has_seen_write() const {
     return num_write > 0;
+  }
+
+  object_stat_sum_t& get_stats(){
+    return delta_stats;
   }
 };
 
