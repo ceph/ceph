@@ -1085,8 +1085,6 @@ vector<pair<vector<string>, time_t>> RGWObjectDirectory::get_aged_keys(time_t st
   vector<pair<vector<string>, time_t>> keys; //return aged keys
   string key;
   string time;
-  int rep_size = 0;
-
   string startTime = to_string(startTime_t);
   string endTime = to_string(endTime_t);
 

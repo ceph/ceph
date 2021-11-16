@@ -3248,3 +3248,93 @@ options:
   - rgw
   flags:
   - startup
+- name: rgw_directory_address
+  type: str
+  level: advanced
+  desc: One of rgw directory address
+  default: 127.0.0.1
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_directory_address2
+  type: str
+  level: advanced
+  desc: One of rgw directory address
+  default: 127.0.0.1
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_directory_address3
+  type: str
+  level: advanced
+  desc: One of rgw directory address
+  default: 127.0.0.1
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_directory_address4
+  type: str
+  level: advanced
+  desc: One of rgw directory address
+  default: 127.0.0.1
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_directory_port
+  type: int
+  level: advanced
+  desc: One of rgw directory port
+  default: 7000
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_directory_port2
+  type: int
+  level: advanced
+  desc: One of rgw directory port
+  default: 7000
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_directory_port3
+  type: int
+  level: advanced
+  desc: One of rgw directory port
+  default: 7000
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_directory_port4
+  type: int
+  level: advanced
+  desc: One of rgw directory port
+  default: 7000
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: remote_cache_addr
+  type: str
+  level: advanced
+  desc: remote cache address
+  default: localhost:8080
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
