@@ -80,7 +80,7 @@ export class HostsPageHelper extends PageHelper {
     });
   }
 
-  delete(hostname: string) {
+  remove(hostname: string) {
     super.delete(hostname, this.columnIndex.hostname, 'hosts');
   }
 
@@ -172,5 +172,18 @@ export class HostsPageHelper extends PageHelper {
           expect(status).to.include('maintenance');
         });
     }
+  }
+
+  @PageHelper.restrictTo(pages.index.url)
+  drain(hostname: string) {
+    this.getTableCell(this.columnIndex.hostname, hostname).click();
+    this.clickActionButton('start-drain');
+    this.checkLabelExists(hostname, ['_no_schedule'], true);
+
+    this.clickTab('cd-host-details', hostname, 'Daemons');
+    cy.get('cd-host-details').within(() => {
+      cy.wait(10000);
+      this.expectTableCount('total', 0);
+    });
   }
 }

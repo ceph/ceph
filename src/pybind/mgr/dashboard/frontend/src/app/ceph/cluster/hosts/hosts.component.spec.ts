@@ -294,7 +294,8 @@ describe('HostsComponent', () => {
         OrchestratorFeature.HOST_ADD,
         OrchestratorFeature.HOST_LABEL_ADD,
         OrchestratorFeature.HOST_REMOVE,
-        OrchestratorFeature.HOST_LABEL_REMOVE
+        OrchestratorFeature.HOST_LABEL_REMOVE,
+        OrchestratorFeature.HOST_DRAIN
       ];
       await testTableActions(true, features, tests);
     });
