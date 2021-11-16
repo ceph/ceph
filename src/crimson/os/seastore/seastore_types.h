@@ -1262,6 +1262,20 @@ ceph::bufferlist encode_record(
   const journal_seq_t& committed_to,
   segment_nonce_t current_segment_nonce = 0);
 
+struct write_result_t {
+  journal_seq_t start_seq;
+  segment_off_t length;
+
+  journal_seq_t get_end_seq() const {
+    return start_seq.add_offset(length);
+  }
+};
+
+struct record_locator_t {
+  paddr_t record_block_base;
+  write_result_t write_result;
+};
+
 /// scan segment for end incrementally
 struct scan_valid_records_cursor {
   bool last_valid_header_found = false;

@@ -174,7 +174,7 @@ Journal::replay_segment(
   return seastar::do_with(
     scan_valid_records_cursor(seq),
     ExtentReader::found_record_handler_t([=, &handler](
-      paddr_t base,
+      record_locator_t locator,
       const record_header_t& header,
       const bufferlist& mdbuf)
       -> ExtentReader::scan_valid_records_ertr::future<>
@@ -185,7 +185,7 @@ Journal::replay_segment(
         // This should be impossible, we did check the crc on the mdbuf
         logger().error(
           "Journal::replay_segment: unable to decode deltas for record {}",
-          base);
+          locator.record_block_base);
         return crimson::ct_error::input_output_error::make();
       }
 
@@ -193,9 +193,9 @@ Journal::replay_segment(
         std::move(*maybe_record_deltas_list),
         [=](auto &deltas)
       {
-        logger().debug("Journal::replay_segment: decoded {} deltas at base {}",
+        logger().debug("Journal::replay_segment: decoded {} deltas at block_base {}",
                        deltas.size(),
-                       base);
+                       locator.record_block_base);
         return crimson::do_for_each(
           deltas,
           [=](auto &delta)
@@ -216,14 +216,7 @@ Journal::replay_segment(
                seq.segment_seq)) {
             return replay_ertr::now();
           } else {
-            auto offsets = submit_result_t{
-              base.add_offset(header.mdlength),
-              write_result_t{
-                journal_seq_t{seq.segment_seq, base},
-                static_cast<segment_off_t>(header.mdlength + header.dlength)
-              }
-            };
-            return handler(offsets, delta);
+            return handler(locator, delta);
           }
         });
       });
@@ -474,7 +467,7 @@ Journal::RecordBatch::add_pending(
     if (!maybe_write_result.has_value()) {
       return crimson::ct_error::input_output_error::make();
     }
-    auto submit_result = submit_result_t{
+    auto submit_result = record_locator_t{
       maybe_write_result->start_seq.offset.add_offset(block_start_offset),
       *maybe_write_result
     };
@@ -681,7 +674,7 @@ Journal::RecordSubmitter::submit_pending(
         journal_segment_manager.get_nonce());
       return journal_segment_manager.write(to_write
       ).safe_then([rsize](auto write_result) {
-        return submit_result_t{
+        return record_locator_t{
           write_result.start_seq.offset.add_offset(rsize.mdlength),
           write_result
         };

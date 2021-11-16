@@ -56,11 +56,11 @@ public:
     size_t>;
   using found_record_handler_t = std::function<
     scan_valid_records_ertr::future<>(
-      paddr_t record_block_base,
+      record_locator_t record_locator,
       // callee may assume header and bl will remain valid until
       // returned future resolves
       const record_header_t &header,
-      const bufferlist &bl)>;
+      const bufferlist &mdbuf)>;
   scan_valid_records_ret scan_valid_records(
     scan_valid_records_cursor &cursor, ///< [in, out] cursor, updated during call
     segment_nonce_t nonce,             ///< [in] nonce for segment
