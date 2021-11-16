@@ -149,6 +149,13 @@ struct ConfigMap {
     const std::string& in,
     std::string *section,
     OptionMask *mask);
+
+  int add_option(
+    CephContext *cct,
+    const std::string& name,
+    const std::string& who,
+    const std::string& value,
+    std::function<const Option *(const std::string&)> get_opt);
 };
 
 
