@@ -76,6 +76,22 @@ def get_grafana_dashboards(base_dir):
             with open(json_file) as f:
                 dashboard_config = json.load(f)
                 uid = dashboard_config.get('uid')
+                # if it's not a grafana dashboard, skip checks
+                # Fields in a dasbhoard:
+                # https://grafana.com/docs/grafana/latest/dashboards/json-model/#json-fields
+                expected_fields = [
+                    'id', 'uid', 'title', 'tags', 'style', 'timezone', 'editable',
+                    'hideControls', 'graphTooltip', 'panels', 'time', 'timepicker',
+                    'templating', 'annotations', 'refresh', 'schemaVersion', 'version', 'links',
+                ]
+                not_a_dashboard = False
+                for field in expected_fields:
+                    if field not in dashboard_config:
+                        not_a_dashboard = True
+                        break
+                if not_a_dashboard:
+                    continue
+
                 assert dashboard_config['id'] is None, \
                     "'id' not null: '{}'".format(dashboard_config['id'])
 
