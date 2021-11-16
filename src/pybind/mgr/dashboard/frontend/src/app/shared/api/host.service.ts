@@ -69,7 +69,8 @@ export class HostService extends ApiClient {
     updateLabels = false,
     labels: string[] = [],
     maintenance = false,
-    force = false
+    force = false,
+    drain = false
   ) {
     return this.http.put(
       `${this.baseURL}/${hostname}`,
@@ -77,7 +78,8 @@ export class HostService extends ApiClient {
         update_labels: updateLabels,
         labels: labels,
         maintenance: maintenance,
-        force: force
+        force: force,
+        drain: drain
       },
       { headers: { Accept: this.getVersionHeaderValue(0, 1) } }
     );
