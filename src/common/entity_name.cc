@@ -106,7 +106,7 @@ void EntityName::set_name(entity_name_t n)
   set(n.type(), s);
 }
 
-std::string_view EntityName::
+const char* EntityName::
 get_type_str() const
 {
   return ceph_entity_type_name(type);

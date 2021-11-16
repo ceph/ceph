@@ -52,7 +52,7 @@ struct EntityName
   void set_id(std::string_view id_);
   void set_name(entity_name_t n);
 
-  std::string_view get_type_str() const;
+  const char* get_type_str() const;
 
   uint32_t get_type() const { return type; }
   bool is_osd() const { return get_type() == CEPH_ENTITY_TYPE_OSD; }
