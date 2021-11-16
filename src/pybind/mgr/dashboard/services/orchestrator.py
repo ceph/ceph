@@ -83,6 +83,10 @@ class HostManger(ResourceManager):
     def remove_label(self, host: str, label: str) -> OrchResult[str]:
         return self.api.remove_host_label(host, label)
 
+    @wait_api_result
+    def drain(self, hostname: str):
+        return self.api.drain_host(hostname)
+
 
 class InventoryManager(ResourceManager):
     @wait_api_result
@@ -199,6 +203,7 @@ class OrchFeature(object):
     HOST_LABEL_REMOVE = 'remove_host_label'
     HOST_MAINTENANCE_ENTER = 'enter_host_maintenance'
     HOST_MAINTENANCE_EXIT = 'exit_host_maintenance'
+    HOST_DRAIN = 'drain_host'
 
     SERVICE_LIST = 'describe_service'
     SERVICE_CREATE = 'apply'

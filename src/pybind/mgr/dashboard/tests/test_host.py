@@ -332,6 +332,24 @@ class HostControllerTest(ControllerTestCase):
             self._get(inventory_url)
             self.assertStatus(503)
 
+    def test_host_drain(self):
+        mgr.list_servers.return_value = []
+        orch_hosts = [
+            HostSpec('node0')
+        ]
+        with patch_orch(True, hosts=orch_hosts):
+            self._put('{}/node0'.format(self.URL_HOST), {'drain': True},
+                      version=APIVersion(0, 1))
+            self.assertStatus(200)
+            self.assertHeader('Content-Type',
+                              'application/vnd.ceph.api.v0.1+json')
+
+        # maintenance without orchestrator service
+        with patch_orch(False):
+            self._put('{}/node0'.format(self.URL_HOST), {'drain': True},
+                      version=APIVersion(0, 1))
+            self.assertStatus(503)
+
 
 class HostUiControllerTest(ControllerTestCase):
     URL_HOST = '/ui-api/host'
