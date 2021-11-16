@@ -4931,9 +4931,15 @@ void BlueStore::_init_logger()
   // space utilization stats
   //****************************************
   b.add_u64(l_bluestore_allocated, "allocated",
-	    "Sum for allocated bytes");
+	    "Sum for allocated bytes",
+	    "al_b",
+	    PerfCountersBuilder::PRIO_CRITICAL,
+	    unit_t(UNIT_BYTES));
   b.add_u64(l_bluestore_stored, "stored",
-	    "Sum for stored bytes");
+	    "Sum for stored bytes",
+	    "st_b",
+	    PerfCountersBuilder::PRIO_CRITICAL,
+	    unit_t(UNIT_BYTES));
   b.add_u64(l_bluestore_fragmentation, "fragmentation_micros",
             "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000");
   //****************************************
@@ -5031,7 +5037,10 @@ void BlueStore::_init_logger()
   b.add_u64_counter(l_bluestore_write_big, "write_big",
 		    "Large aligned writes into fresh blobs");
   b.add_u64_counter(l_bluestore_write_big_bytes, "write_big_bytes",
-		    "Large aligned writes into fresh blobs (bytes)", NULL, 0, unit_t(UNIT_BYTES));
+		    "Large aligned writes into fresh blobs (bytes)",
+		    NULL,
+		    PerfCountersBuilder::PRIO_DEBUGONLY,
+		    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_write_big_blobs, "write_big_blobs",
 		    "Large aligned writes into fresh blobs (blobs)");
   b.add_u64_counter(l_bluestore_write_big_deferred,
@@ -5041,7 +5050,10 @@ void BlueStore::_init_logger()
   b.add_u64_counter(l_bluestore_write_small, "write_small",
 		    "Small writes into existing or sparse small blobs");
   b.add_u64_counter(l_bluestore_write_small_bytes, "write_small_bytes",
-		    "Small writes into existing or sparse small blobs (bytes)", NULL, 0, unit_t(UNIT_BYTES));
+		    "Small writes into existing or sparse small blobs (bytes)",
+		    NULL,
+		    PerfCountersBuilder::PRIO_DEBUGONLY,
+		    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_write_small_unused,
 		    "write_small_unused",
 		    "Small writes into unused portion of existing blob");
@@ -5051,24 +5063,33 @@ void BlueStore::_init_logger()
 		    "cached) to fill out the block");
 
   b.add_u64_counter(l_bluestore_write_pad_bytes, "write_pad_bytes",
-    "Sum for write-op padded bytes", NULL, 0, unit_t(UNIT_BYTES));
+		    "Sum for write-op padded bytes",
+		    NULL,
+		    PerfCountersBuilder::PRIO_DEBUGONLY,
+		    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_write_penalty_read_ops, "write_penalty_read_ops",
-    "Sum for write penalty read ops");
+		    "Sum for write penalty read ops");
   b.add_u64_counter(l_bluestore_write_new, "write_new",
-    "Write into new blob");
+		    "Write into new blob");
 
   b.add_u64_counter(l_bluestore_issued_deferred_writes,
 		    "issued_deferred_writes",
 		    "Total deferred writes issued");
   b.add_u64_counter(l_bluestore_issued_deferred_write_bytes,
 		    "issued_deferred_write_bytes",
-		    "Total bytes in issued deferred writes");
+		    "Total bytes in issued deferred writes",
+		    NULL,
+		    PerfCountersBuilder::PRIO_DEBUGONLY,
+		    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_submitted_deferred_writes,
 		    "submitted_deferred_writes",
 		    "Total deferred writes submitted to disk");
   b.add_u64_counter(l_bluestore_submitted_deferred_write_bytes,
 		    "submitted_deferred_write_bytes",
-		    "Total bytes submitted to disk by deferred writes");
+		    "Total bytes submitted to disk by deferred writes",
+		    NULL,
+		    PerfCountersBuilder::PRIO_DEBUGONLY,
+		    unit_t(UNIT_BYTES));
   //****************************************
 
   // compressions stats
@@ -5122,11 +5143,20 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_buffers, "buffers",
 	    "Number of buffers in cache");
   b.add_u64(l_bluestore_buffer_bytes, "buffer_bytes",
-	    "Number of buffer bytes in cache", NULL, 0, unit_t(UNIT_BYTES));
+	    "Number of buffer bytes in cache",
+	     NULL,
+	     PerfCountersBuilder::PRIO_DEBUGONLY,
+	     unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_buffer_hit_bytes, "buffer_hit_bytes",
-	    "Sum for bytes of read hit in the cache", NULL, 0, unit_t(UNIT_BYTES));
+	    "Sum for bytes of read hit in the cache",
+	    NULL,
+	    PerfCountersBuilder::PRIO_DEBUGONLY,
+	    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_buffer_miss_bytes, "buffer_miss_bytes",
-	    "Sum for bytes of read missed in the cache", NULL, 0, unit_t(UNIT_BYTES));
+	    "Sum for bytes of read missed in the cache",
+	    NULL,
+	    PerfCountersBuilder::PRIO_DEBUGONLY,
+	    unit_t(UNIT_BYTES));
   //****************************************
 
   // internal stats
