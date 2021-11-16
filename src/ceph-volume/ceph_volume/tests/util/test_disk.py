@@ -124,6 +124,9 @@ class TestHumanReadableSize(object):
         result = disk.human_readable_size(81.2*1024*1024*1024*1024)
         assert result == '81.20 TB'
 
+    def test_petabytes(self):
+        result = disk.human_readable_size(9.23*1024*1024*1024*1024*1024)
+        assert result == '9.23 PB'
 
 class TestSizeFromHumanReadable(object):
 
@@ -143,9 +146,13 @@ class TestSizeFromHumanReadable(object):
         result = disk.size_from_human_readable('2 G')
         assert result == disk.Size(gb=2)
 
-    def test_terrabytes(self):
+    def test_terabytes(self):
         result = disk.size_from_human_readable('2 T')
         assert result == disk.Size(tb=2)
+
+    def test_petabytes(self):
+        result = disk.size_from_human_readable('2 P')
+        assert result == disk.Size(pb=2)
 
     def test_case(self):
         result = disk.size_from_human_readable('2 t')
@@ -182,9 +189,13 @@ class TestSizeParse(object):
         result = disk.Size.parse('2G')
         assert result == disk.Size(gb=2)
 
-    def test_terrabytes(self):
+    def test_terabytes(self):
         result = disk.Size.parse('2T')
         assert result == disk.Size(tb=2)
+
+    def test_petabytes(self):
+        result = disk.Size.parse('2P')
+        assert result == disk.Size(pb=2)
 
     def test_tb(self):
         result = disk.Size.parse('2Tb')
