@@ -121,7 +121,7 @@ Journal::prep_replay_segments(
   } else {
     replay_from = paddr_t::make_seg_paddr(
       from->first,
-      (segment_off_t)journal_segment_manager.get_block_size());
+      journal_segment_manager.get_block_size());
   }
   auto ret = replay_segments_t(segments.end() - from);
   std::transform(
@@ -131,7 +131,8 @@ Journal::prep_replay_segments(
 	p.second.journal_segment_seq,
 	paddr_t::make_seg_paddr(
 	  p.first,
-	  (segment_off_t)journal_segment_manager.get_block_size())};
+	  journal_segment_manager.get_block_size())
+      };
       logger().debug(
 	"Journal::prep_replay_segments: replaying from  {}",
 	ret);
@@ -172,57 +173,61 @@ Journal::replay_segment(
   logger().debug("Journal::replay_segment: starting at {}", seq);
   return seastar::do_with(
     scan_valid_records_cursor(seq),
-    ExtentReader::found_record_handler_t(
-      [=, &handler](paddr_t base,
-		    const record_header_t &header,
-		    const bufferlist &mdbuf) {
-	auto deltas = try_decode_deltas(
-	  header,
-	  mdbuf);
-	if (!deltas) {
-	  // This should be impossible, we did check the crc on the mdbuf
-	  logger().error(
-	    "Journal::replay_segment: unable to decode deltas for record {}",
-	    base);
-	  assert(deltas);
-	}
+    ExtentReader::found_record_handler_t([=, &handler](
+      paddr_t base,
+      const record_header_t& header,
+      const bufferlist& mdbuf)
+      -> ExtentReader::scan_valid_records_ertr::future<>
+    {
+      auto maybe_record_deltas_list = try_decode_deltas(
+        header, mdbuf);
+      if (!maybe_record_deltas_list) {
+        // This should be impossible, we did check the crc on the mdbuf
+        logger().error(
+          "Journal::replay_segment: unable to decode deltas for record {}",
+          base);
+        return crimson::ct_error::input_output_error::make();
+      }
 
-	return seastar::do_with(
-	  std::move(*deltas),
-	  [=](auto &deltas) {
-	    return crimson::do_for_each(
-	      deltas,
-	      [=](auto &delta) {
-		/* The journal may validly contain deltas for extents in
-		 * since released segments.  We can detect those cases by
-		 * checking whether the segment in question currently has a
-		 * sequence number > the current journal segment seq. We can
-		 * safetly skip these deltas because the extent must already
-		 * have been rewritten.
-		 *
-		 * Note, this comparison exploits the fact that
-		 * SEGMENT_SEQ_NULL is a large number.
-		 */
-		auto& seg_addr = delta.paddr.as_seg_paddr();
-		if (delta.paddr != P_ADDR_NULL &&
-		    (segment_provider->get_seq(seg_addr.get_segment_id()) >
-		     seq.segment_seq)) {
-		  return replay_ertr::now();
-		} else {
-		  auto offsets = submit_result_t{
-		    base.add_offset(header.mdlength),
-		    write_result_t{
-		      journal_seq_t{seq.segment_seq, base},
-		      static_cast<segment_off_t>(header.mdlength + header.dlength)
-		    }
-		  };
-		  return handler(
-		    offsets,
-		    delta);
-		}
-	      });
-	  });
-      }),
+      return seastar::do_with(
+        std::move(*maybe_record_deltas_list),
+        [=](auto &deltas)
+      {
+        logger().debug("Journal::replay_segment: decoded {} deltas at base {}",
+                       deltas.size(),
+                       base);
+        return crimson::do_for_each(
+          deltas,
+          [=](auto &delta)
+        {
+          /* The journal may validly contain deltas for extents in
+           * since released segments.  We can detect those cases by
+           * checking whether the segment in question currently has a
+           * sequence number > the current journal segment seq. We can
+           * safetly skip these deltas because the extent must already
+           * have been rewritten.
+           *
+           * Note, this comparison exploits the fact that
+           * SEGMENT_SEQ_NULL is a large number.
+           */
+          auto& seg_addr = delta.paddr.as_seg_paddr();
+          if (delta.paddr != P_ADDR_NULL &&
+              (segment_provider->get_seq(seg_addr.get_segment_id()) >
+               seq.segment_seq)) {
+            return replay_ertr::now();
+          } else {
+            auto offsets = submit_result_t{
+              base.add_offset(header.mdlength),
+              write_result_t{
+                journal_seq_t{seq.segment_seq, base},
+                static_cast<segment_off_t>(header.mdlength + header.dlength)
+              }
+            };
+            return handler(offsets, delta);
+          }
+        });
+      });
+    }),
     [=](auto &cursor, auto &dhandler) {
       return scanner.scan_valid_records(
 	cursor,
@@ -234,8 +239,9 @@ Journal::replay_segment(
 	crimson::ct_error::assert_all{
 	  "shouldn't meet with any other error other replay_ertr"
 	}
-      );;
-    });
+      );
+    }
+  );
 }
 
 Journal::replay_ret Journal::replay(

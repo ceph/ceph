@@ -112,6 +112,13 @@ private:
                                    ///  future resolution
   );
 
+  using consume_record_group_ertr = scan_valid_records_ertr;
+  consume_record_group_ertr::future<> consume_next_records(
+      scan_valid_records_cursor& cursor,
+      found_record_handler_t& handler,
+      std::size_t& budget_used);
+
+
   /// validate embedded metadata checksum
   static bool validate_metadata(const bufferlist &bl);
 
