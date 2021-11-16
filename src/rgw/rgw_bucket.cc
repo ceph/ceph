@@ -1020,7 +1020,7 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Store* store, RGWBucketAdminOpStat
   if (bypass_gc)
     ret = bucket->remove_bucket_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
   else
-    ret = bucket->remove_bucket(dpp, op_state.will_delete_children(), string(), string(),
+    ret = bucket->remove_bucket(dpp, op_state.will_delete_children(),
 				false, nullptr, y);
 
   return ret;
