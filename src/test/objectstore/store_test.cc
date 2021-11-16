@@ -9727,6 +9727,69 @@ TEST_P(StoreTestSpecificAUSize, OmapUpgradeTest) {
   }
 }
 
+TEST_P(StoreTestSpecificAUSize, BluefsWriteInSingleDiskEnvTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(0x1000);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  bstore->inject_bluefs_file("db.slow", "store_test_injection_slow", 1 << 20ul);
+  bstore->inject_bluefs_file("db.wal", "store_test_injection_wal", 1 << 20ul);
+  bstore->inject_bluefs_file("db", "store_test_injection_wal", 1 << 20ul);
+
+  AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
+  ceph_assert(admin_socket);
+
+  ceph::bufferlist in, out;
+  ostringstream err;
+  auto r = admin_socket->execute_command(
+    { "{\"prefix\": \"bluefs stats\"}" },
+    in, err, &out);
+  if (r != 0) {
+    cerr << "failure querying: " << cpp_strerror(r) << std::endl;
+  }  else {
+    std::cout << std::string(out.c_str(), out.length()) << std::endl;
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, BluefsWriteInNoWalDiskEnvTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_block_db_path", "db");
+  SetVal(g_conf(), "bluestore_block_db_size", stringify(1ull << 31).c_str());
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(0x1000);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  bstore->inject_bluefs_file("db.slow", "store_test_injection_slow", 1 << 20ul);
+  bstore->inject_bluefs_file("db.wal", "store_test_injection_wal", 1 << 20ul);
+  bstore->inject_bluefs_file("db", "store_test_injection_wal", 1 << 20ul);
+
+  AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
+  ceph_assert(admin_socket);
+
+  ceph::bufferlist in, out;
+  ostringstream err;
+  auto r = admin_socket->execute_command(
+    { "{\"prefix\": \"bluefs stats\"}" },
+    in, err, &out);
+  if (r != 0) {
+    cerr << "failure querying: " << cpp_strerror(r) << std::endl;
+  }
+  else {
+    std::cout << std::string(out.c_str(), out.length()) << std::endl;
+  }
+}
+
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {

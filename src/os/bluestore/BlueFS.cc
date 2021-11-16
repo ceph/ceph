@@ -3788,10 +3788,9 @@ void* OriginalVolumeSelector::get_hint_by_dir(std::string_view dirname) const {
     // match up with bluestore.  the slow device is always the second
     // one (when a dedicated block.db device is present and used at
     // bdev 0).  the wal device is always last.
-    if (boost::algorithm::ends_with(dirname, ".slow")) {
+    if (boost::algorithm::ends_with(dirname, ".slow") && slow_total) {
       res = BlueFS::BDEV_SLOW;
-    }
-    else if (boost::algorithm::ends_with(dirname, ".wal")) {
+    } else if (boost::algorithm::ends_with(dirname, ".wal") && wal_total) {
       res = BlueFS::BDEV_WAL;
     }
   }
