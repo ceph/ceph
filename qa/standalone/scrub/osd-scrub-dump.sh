@@ -104,7 +104,7 @@ function TEST_recover_unexpected() {
     for i in $(seq 0 300)
     do
 	ceph pg dump pgs
-	if ceph pg dump pgs | grep scrubbing; then
+	if ceph pg dump pgs | grep '+scrubbing'; then
 	    ok=true
 	    break
 	fi
@@ -144,7 +144,7 @@ function TEST_recover_unexpected() {
     # Check that there are no more scrubs
     for i in $(seq 0 5)
     do
-        if ceph pg dump pgs | grep scrubbing; then
+        if ceph pg dump pgs | grep '+scrubbing'; then
 	    echo "ERROR: Extra scrubs after test completion...not expected"
 	    return 1
         fi
