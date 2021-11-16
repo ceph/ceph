@@ -318,9 +318,21 @@ available and unused device:
 
 See :ref:`cephadm-deploy-osds` for more detailed instructions.
 
-In case the cluster runs on hardware that is used exclusively for
-Ceph, it is recommended to enable ``osd_memory_target_autotune``.
-See :ref:`osd_autotune`.
+Enabling OSD memory autotuning
+------------------------------
+
+It is recommended to enable ``osd_memory_target_autotune``. 
+in order to maximise the performance of the cluster. See :ref:`osd_autotune`.
+
+In case the cluster hardware is not exclusively used by Ceph (hyperconverged),
+reduce the memory consuption of Ceph like so:
+
+  .. prompt:: bash #
+
+    # hyperconverged only:
+    ceph config set mgr mgr/cephadm/autotune_memory_target_ratio 0.2
+
+Then enable memory autotuning:
 
   .. prompt:: bash #
 
