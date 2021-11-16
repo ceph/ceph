@@ -294,6 +294,7 @@ void PG::on_activate_complete()
       get_osdmap_epoch(),
       PeeringState::AllReplicasRecovered{});
   }
+  publish_stats_to_osd();
   backend->on_activate_complete();
 }
 
@@ -676,6 +677,7 @@ PG::do_osd_ops_execute(
     logger().debug(
       "do_osd_ops_execute: object {} all operations successful",
       ox->get_target());
+    peering_state.apply_op_stats(ox->get_target(), ox->get_stats());
     return std::move(*ox).flush_changes_n_do_ops_effects(
       Ref<PG>{this},
       [this, &op_info, &ops] (auto&& txn,
