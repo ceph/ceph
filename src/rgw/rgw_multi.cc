@@ -319,9 +319,7 @@ int list_bucket_multiparts(const DoutPrefixProvider* dpp,
 int abort_bucket_multiparts(const DoutPrefixProvider* dpp,
 			    rgw::sal::RGWRadosStore* store,
 			    CephContext* cct,
-			    RGWBucketInfo& bucket_info,
-			    const std::string& prefix,
-			    const std::string& delim)
+			    RGWBucketInfo& bucket_info)
 {
   constexpr int max = 1000;
   int ret, num_deleted = 0;
@@ -330,14 +328,16 @@ int abort_bucket_multiparts(const DoutPrefixProvider* dpp,
   string marker;
   bool is_truncated;
 
+  const std::string empty_delim;
+  const std::string empty_prefix;
+
   do {
-    ret = list_bucket_multiparts(dpp, store, bucket_info, prefix, marker, delim,
+    ret = list_bucket_multiparts(dpp, store, bucket_info, empty_prefix, marker, empty_delim,
 				 max, &objs, nullptr, &is_truncated);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ <<
 	" ERROR : calling list_bucket_multiparts; ret=" << ret <<
-	"; bucket=\"" << bucket_info.bucket << "\"; prefix=\"" <<
-	prefix << "\"; delim=\"" << delim << "\"" << dendl;
+	"; bucket=\"" << bucket_info.bucket << "\"" << dendl;
       return ret;
     }
     ldpp_dout(dpp, 20) << __func__ <<

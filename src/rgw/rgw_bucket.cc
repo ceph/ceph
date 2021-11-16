@@ -385,9 +385,7 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& buck
   if (ret < 0)
     return ret;
 
-  string prefix, delimiter;
-
-  ret = abort_bucket_multiparts(dpp, store, cct, info, prefix, delimiter);
+  ret = abort_bucket_multiparts(dpp, store, cct, info);
   if (ret < 0) {
     return ret;
   }
@@ -1279,7 +1277,7 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdm
   if (bypass_gc)
     ret = rgw_remove_bucket_bypass_gc(store, bucket->get_key(), op_state.get_max_aio(), keep_index_consistent, y, dpp);
   else
-    ret = bucket->remove_bucket(dpp, op_state.will_delete_children(), string(), string(),
+    ret = bucket->remove_bucket(dpp, op_state.will_delete_children(),
 				false, nullptr, y);
 
   return ret;

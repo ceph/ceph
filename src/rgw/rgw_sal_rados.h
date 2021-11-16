@@ -230,7 +230,7 @@ class RGWRadosBucket : public RGWBucket {
     RGWBucketList* list(void) { return new RGWBucketList(); }
     virtual int list(const DoutPrefixProvider *dpp, ListParams&, int, ListResults&, optional_yield y) override;
     RGWObject* create_object(const rgw_obj_key& key /* Attributes */) override;
-    virtual int remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) override;
+    virtual int remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y) override;
     RGWAccessControlPolicy& get_acl(void) { return acls; }
     virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
     virtual int get_bucket_info(const DoutPrefixProvider *dpp, optional_yield y) override;

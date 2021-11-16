@@ -143,7 +143,5 @@ extern int list_bucket_multiparts(const DoutPrefixProvider* dpp,
 extern int abort_bucket_multiparts(const DoutPrefixProvider* dpp,
 				   rgw::sal::RGWRadosStore* store,
 				   CephContext* cct,
-				   RGWBucketInfo& bucket_info,
-				   const std::string& prefix,
-				   const std::string& delim);
+				   RGWBucketInfo& bucket_info);
 #endif
