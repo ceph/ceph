@@ -71,7 +71,7 @@ void ConfigMonitor::create_initial()
 {
   dout(10) << __func__ << dendl;
   version = 0;
-  pending.clear();
+  create_pending();
 }
 
 void ConfigMonitor::update_from_paxos(bool *need_bootstrap)
@@ -89,6 +89,7 @@ void ConfigMonitor::create_pending()
 {
   dout(10) << " " << version << dendl;
   pending.clear();
+  pending_cleanup.clear();
   pending_description.clear();
 }
 
@@ -779,12 +780,12 @@ void ConfigMonitor::load_config()
     { "mds_session_blacklist_on_evict", "mds_session_blocklist_on_evict" },
   };
 
+  config_map.clear();
+  current.clear();
+
   unsigned num = 0;
   KeyValueDB::Iterator it = mon.store->get_iterator(KV_PREFIX);
   it->lower_bound(KEY_PREFIX);
-  config_map.clear();
-  current.clear();
-  pending_cleanup.clear();
   while (it->valid() &&
 	 it->key().compare(0, KEY_PREFIX.size(), KEY_PREFIX) == 0) {
     string key = it->key().substr(KEY_PREFIX.size());
