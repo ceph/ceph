@@ -136,7 +136,7 @@ ConfigMap::generate_entity_map(
   const map<std::string,std::string>& crush_location,
   const CrushWrapper *crush,
   const std::string& device_class,
-  std::map<std::string,pair<std::string,const MaskedOption*>> *src)
+  std::unordered_map<std::string, ValueSource> *src)
 {
   // global, then by type, then by name prefix component(s), then name.
   // name prefix components are .-separated,
@@ -185,7 +185,7 @@ ConfigMap::generate_entity_map(
       }
       out[i.first] = o.raw_value;
       if (src) {
-	(*src)[i.first] = make_pair(s.first, &o);
+	(*src).emplace(i.first, ConfigMap::ValueSource(s.first, &o));
       }
       prev = &o;
     }
