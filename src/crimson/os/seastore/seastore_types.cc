@@ -29,6 +29,36 @@ std::ostream &operator<<(std::ostream &out, const segment_id_t& segment)
     << segment.device_segment_id() << "]";
 }
 
+
+std::ostream &operator<<(std::ostream &out, const block_id_t& block)
+{
+  return out << "[" << (uint64_t)block.device_id() << ","
+    << block.device_block_id() << "]";
+}
+
+std::ostream &block_to_stream(std::ostream &out, const block_id_t &t)
+{
+  if (t == NULL_BLK_ID)
+    return out << "NULL_BLK";
+  else if (t == FAKE_BLK_ID)
+    return out << "FAKE_BLK";
+  else
+    return out << t;
+}
+
+std::ostream &operator<<(std::ostream &out, const block_off_t& offset)
+{
+  return out << offset.off;
+}
+
+std::ostream &block_offset_to_stream(std::ostream &out, const block_off_t &t)
+{
+  if (t == NULL_BLK_OFF)
+    return out << "NULL_OFF";
+  else
+    return out << t;
+}
+
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 {
   out << "paddr_t<";
@@ -47,6 +77,11 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
     segment_to_stream(out, s.get_segment_id());
     out << ", ";
     offset_to_stream(out, s.get_segment_off());
+  } else if (rhs.get_addr_type() == addr_types_t::RANDOM_BLOCK) {
+    const blk_paddr_t& s = rhs.as_blk_paddr();
+    block_to_stream(out, s.get_block_id());
+    out << ", ";
+    block_offset_to_stream(out, s.get_block_off());
   } else {
     out << "INVALID";
   }
@@ -242,24 +277,6 @@ std::string device_type_to_string(device_type_t dtype) {
   default:
     ceph_assert(0 == "impossible");
   }
-}
-paddr_t convert_blk_paddr_to_paddr(blk_paddr_t addr, size_t block_size,
-    uint32_t blocks_per_segment, device_id_t d_id)
-{
-  segment_id_t id = segment_id_t {
-    d_id,
-    (device_segment_id_t)(addr / (block_size * blocks_per_segment))
-  };
-  segment_off_t off = addr % (block_size * blocks_per_segment);
-  return paddr_t::make_seg_paddr(id, off);
-}
-
-blk_paddr_t convert_paddr_to_blk_paddr(paddr_t addr, size_t block_size,
-    uint32_t blocks_per_segment)
-{
-  seg_paddr_t& s = addr.as_seg_paddr();
-  return (blk_paddr_t)(s.get_segment_id().device_segment_id() *
-	  (block_size * blocks_per_segment) + s.get_segment_off());
 }
 
 

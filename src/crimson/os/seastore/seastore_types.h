@@ -377,6 +377,161 @@ private:
   size_t total_segments = 0;
 };
 
+static constexpr uint16_t BLK_ID_LEN_BITS = 36;
+using device_block_id_t = uint64_t;
+constexpr device_block_id_t DEVICE_BLOCK_ID_MAX =
+  (static_cast<device_block_id_t>(1) << BLK_ID_LEN_BITS) - 1;
+
+struct block_id_t {
+private:
+  using internal_block_id_t = uint64_t;
+
+  static constexpr internal_block_id_t BLK_ID_MASK =
+    static_cast<internal_block_id_t>(0xFFFFFFF) << BLK_ID_LEN_BITS;
+  static constexpr internal_block_id_t DEFAULT_INTERNAL_BLK_ID =
+    (std::numeric_limits<internal_block_id_t>::max() >>
+    (std::numeric_limits<internal_block_id_t>::digits - BLK_ID_LEN_BITS))
+    - 1;
+
+  internal_block_id_t block = DEFAULT_INTERNAL_BLK_ID;
+
+  constexpr block_id_t(uint64_t encoded) : block(encoded) {}
+public:
+  block_id_t() = default;
+  constexpr block_id_t(device_id_t id, device_block_id_t block)
+    : block(make_internal(block, id)) {}
+
+  [[gnu::always_inline]]
+  device_id_t device_id() const {
+    return internal_to_device(block);
+  }
+
+  [[gnu::always_inline]]
+  constexpr device_block_id_t device_block_id() const {
+    return internal_to_block(block);
+  }
+
+  bool operator==(const block_id_t& other) const {
+    return block == other.block;
+  }
+  bool operator!=(const block_id_t& other) const {
+    return block != other.block;
+  }
+  bool operator<(const block_id_t& other) const {
+    return block < other.block;
+  }
+  bool operator<=(const block_id_t& other) const {
+    return block <= other.block;
+  }
+  bool operator>(const block_id_t& other) const {
+    return block > other.block;
+  }
+  bool operator>=(const block_id_t& other) const {
+    return block >= other.block;
+  }
+
+private:
+  static constexpr unsigned block_id_bits = (
+    BLK_ID_LEN_BITS
+  );
+
+  static inline device_id_t internal_to_device(internal_block_id_t id) {
+    return (static_cast<device_id_t>(id) & BLK_ID_MASK) >> block_id_bits;
+  }
+
+  constexpr static inline device_block_id_t internal_to_block(
+    internal_block_id_t id) {
+    return id & (~BLK_ID_MASK);
+  }
+
+  constexpr static inline internal_block_id_t make_internal(
+    device_block_id_t id,
+    device_id_t d_id) {
+    return static_cast<internal_block_id_t>(id) |
+      (static_cast<internal_block_id_t>(d_id) << block_id_bits) |
+      (static_cast<internal_block_id_t>(0x1) <<
+      (BLK_ID_LEN_BITS + DEVICE_ID_LEN_BITS - 1));
+  }
+
+  friend struct blk_paddr_t;
+  friend struct paddr_t;
+  friend struct paddr_le_t;
+};
+
+constexpr block_id_t NULL_BLK_ID = block_id_t(DEVICE_ID_NULL, 0);
+constexpr block_id_t FAKE_BLK_ID = block_id_t(DEVICE_ID_FAKE, 0);
+
+using device_block_off_t = int32_t;
+static constexpr uint16_t BLK_OFF_LEN_BITS = 20;
+constexpr device_block_off_t BLK_OFF_MAX = 
+  std::numeric_limits<device_block_off_t>::max() >>
+  (std::numeric_limits<device_block_off_t>::digits - BLK_OFF_LEN_BITS);
+constexpr device_block_off_t BLK_OFF_MIN =
+  std::numeric_limits<device_block_off_t>::min() >>
+  (std::numeric_limits<device_block_off_t>::digits - BLK_OFF_LEN_BITS);
+
+struct block_off_t {
+  using internal_block_off_t = int32_t;
+  internal_block_off_t off = 0;
+  constexpr void check_valid(const internal_block_off_t offset) const {
+    assert(offset <= BLK_OFF_MAX);
+    assert(offset >= BLK_OFF_MIN);   
+  }
+  [[gnu::always_inline]]
+  constexpr device_block_off_t device_block_off() const {
+    return off;
+  }
+  constexpr block_off_t(device_block_off_t offset) : off(offset) {
+    check_valid(offset);
+  }
+  constexpr uint32_t get_raw_bits() const {
+    uint32_t ret = off & 0x8FFFF;
+    ret |= (off < 0 ? 1 << BLK_OFF_LEN_BITS : 0 << BLK_OFF_LEN_BITS);
+    return ret;
+  }
+  bool operator==(const block_off_t& other) const {
+    check_valid(other.off);
+    return off == other.off;
+  }
+  bool operator!=(const block_off_t& other) const {
+    check_valid(other.off);
+    return off != other.off;
+  }
+  bool operator<(const block_off_t& other) const {
+    check_valid(other.off);
+    return off < other.off;
+  }
+  bool operator<=(const block_off_t& other) const {
+    check_valid(other.off);
+    return off <= other.off;
+  }
+  bool operator>(const block_off_t& other) const {
+    check_valid(other.off);
+    return off > other.off;
+  }
+  bool operator>=(const block_off_t& other) const {
+    check_valid(other.off);
+    return off >= other.off;
+  }
+
+  block_off_t operator-(block_off_t rhs) const {
+    check_valid(rhs.off);
+    block_off_t offset = block_off_t(off - rhs.off);
+    check_valid(offset.off);
+    return offset;
+  }
+  block_off_t operator+(block_off_t rhs) const {
+    check_valid(rhs.off);
+    block_off_t offset = block_off_t(off + rhs.off);
+    check_valid(offset.off);
+    return offset;
+  }
+  friend struct blk_paddr_t;
+};
+
+constexpr block_off_t NULL_BLK_OFF = block_off_t{BLK_OFF_MAX};
+constexpr block_off_t MAX_BLK_OFF = block_off_t{BLK_OFF_MAX};
+
 /**
  * paddr_t
  *
@@ -401,6 +556,7 @@ enum class addr_types_t : uint8_t {
   RANDOM_BLOCK = 1
 };
 struct seg_paddr_t;
+struct blk_paddr_t;
 struct paddr_t {
 protected:
   using common_addr_t = uint64_t;
@@ -410,6 +566,9 @@ private:
     : dev_addr((static_cast<common_addr_t>(seg.segment)
 	<< SEG_OFF_LEN_BITS) | static_cast<uint32_t>(offset)) {}
   constexpr paddr_t(common_addr_t val) : dev_addr(val) {}
+  constexpr paddr_t(block_id_t blk, block_off_t offset)
+    : dev_addr((static_cast<common_addr_t>(blk.block)
+	<< BLK_OFF_LEN_BITS) | static_cast<uint32_t>(offset.get_raw_bits())) {}
 public:
   static constexpr paddr_t make_seg_paddr(
     segment_id_t seg, segment_off_t offset) {
@@ -422,6 +581,16 @@ public:
     return paddr_t(segment_id_t(device, seg), offset);
   }
   constexpr paddr_t() : paddr_t(NULL_SEG_ID, 0) {}
+  static constexpr paddr_t make_blk_paddr(
+    device_id_t device,
+    device_block_id_t blk,
+    block_off_t offset) {
+    return paddr_t(block_id_t(device, blk), offset);
+  }
+  static constexpr paddr_t make_blk_paddr(
+    block_id_t blk, block_off_t offset) {
+    return paddr_t(blk, offset);
+  }
 
   // use 1bit in device_id_t for address type
   void set_device_id(device_id_t id, addr_types_t type = addr_types_t::SEGMENT) {
@@ -448,6 +617,8 @@ public:
 
   seg_paddr_t& as_seg_paddr();
   const seg_paddr_t& as_seg_paddr() const;
+  blk_paddr_t& as_blk_paddr();
+  const blk_paddr_t& as_blk_paddr() const;
 
   paddr_t operator-(paddr_t rhs) const;
 
@@ -581,6 +752,91 @@ struct seg_paddr_t : public paddr_t {
       return *this;
   }
 };
+
+struct blk_paddr_t : public paddr_t {
+  static constexpr uint64_t BLK_OFF_MASK = std::numeric_limits<uint32_t>::max() >> 12;
+  // mask for random block manager id
+  static constexpr uint64_t BLK_ID_MASK =
+    static_cast<common_addr_t>(0xFFFFFFFFFFF) << BLK_OFF_LEN_BITS;
+
+  blk_paddr_t(const blk_paddr_t&) = delete;
+  blk_paddr_t(blk_paddr_t&) = delete;
+  blk_paddr_t& operator=(const blk_paddr_t&) = delete;
+  blk_paddr_t& operator=(blk_paddr_t&) = delete;
+  block_id_t get_block_id() const {
+    return block_id_t((dev_addr & BLK_ID_MASK) >> BLK_OFF_LEN_BITS);
+  }
+  block_off_t get_block_off() const {
+    return block_off_t(dev_addr & BLK_OFF_MASK);
+  }
+  void set_block_id(const block_id_t id) {
+    dev_addr &= static_cast<common_addr_t>(
+      std::numeric_limits<device_block_id_t>::max());
+    dev_addr |= static_cast<common_addr_t>(id.block) << BLK_OFF_LEN_BITS;
+  }
+  void set_block_off(const block_off_t off) {
+    dev_addr &= static_cast<common_addr_t>(
+      std::numeric_limits<device_block_id_t>::max()) << BLK_OFF_LEN_BITS;
+    dev_addr |= ((uint32_t)off.get_raw_bits() >> 12);
+  }
+
+  paddr_t add_offset(block_off_t o) const {
+    return paddr_t::make_blk_paddr(get_block_id(), get_block_off() + o);
+  }
+
+  paddr_t add_relative(paddr_t o) const {
+    assert(o.is_relative());
+    blk_paddr_t& s = o.as_blk_paddr();
+    return paddr_t::make_blk_paddr(get_block_id(),
+	    get_block_off() + s.get_block_off());
+  }
+
+  paddr_t add_block_relative(paddr_t o) const {
+    // special version mainly for documentation purposes
+    assert(o.is_block_relative());
+    return add_relative(o);
+  }
+
+  paddr_t add_record_relative(paddr_t o) const {
+    // special version mainly for documentation purposes
+    assert(o.is_record_relative());
+    return add_relative(o);
+  }
+
+  /**
+   * paddr_t::operator-
+   *
+   * Only defined for record_relative paddr_ts.  Yields a
+   * block_relative address.
+   */
+  paddr_t operator-(paddr_t rhs) const {
+    blk_paddr_t& r = rhs.as_blk_paddr();
+    assert(rhs.is_relative() && is_relative());
+    assert(r.get_block_id() == get_block_id());
+    return paddr_t::make_blk_paddr(
+      block_id_t{DEVICE_ID_BLOCK_RELATIVE, 0},
+      get_block_off() - r.get_block_off()
+      );
+  }
+
+  /**
+   * maybe_relative_to
+   *
+   * Helper for the case where an in-memory paddr_t may be
+   * either block_relative or absolute (not record_relative).
+   *
+   * base must be either absolute or record_relative.
+   */
+  paddr_t maybe_relative_to(paddr_t base) const {
+    assert(!base.is_block_relative());
+    blk_paddr_t& s = base.as_blk_paddr();
+    if (is_block_relative())
+      return s.add_block_relative(*this);
+    else
+      return *this;
+  }
+};
+
 constexpr paddr_t P_ADDR_NULL = paddr_t{};
 constexpr paddr_t P_ADDR_MIN = paddr_t::make_seg_paddr(segment_id_t(0, 0), 0);
 constexpr paddr_t P_ADDR_MAX = paddr_t::make_seg_paddr(
@@ -605,6 +861,22 @@ constexpr paddr_t make_fake_paddr(segment_off_t off) {
 constexpr paddr_t delayed_temp_paddr(segment_off_t off) {
   return paddr_t::make_seg_paddr(
     segment_id_t{DEVICE_ID_DELAYED, 0},
+    off);
+}
+
+constexpr paddr_t make_record_relative_paddr(block_off_t off) {
+  return paddr_t::make_blk_paddr(
+    block_id_t{DEVICE_ID_RECORD_RELATIVE, 0},
+    off);
+}
+constexpr paddr_t make_block_relative_paddr(block_off_t off) {
+  return paddr_t::make_blk_paddr(
+    block_id_t{DEVICE_ID_BLOCK_RELATIVE, 0},
+    off);
+}
+constexpr paddr_t delayed_temp_paddr(block_off_t off) {
+  return paddr_t::make_blk_paddr(
+    block_id_t{DEVICE_ID_DELAYED, 0},
     off);
 }
 
@@ -1132,12 +1404,7 @@ struct __attribute__((packed)) root_t {
   }
 };
 
-using blk_id_t = uint64_t;
-constexpr blk_id_t NULL_BLK_ID =
-  std::numeric_limits<blk_id_t>::max();
-
 // use absolute address
-using blk_paddr_t = uint64_t;
 struct rbm_alloc_delta_t {
   enum class op_types_t : uint8_t {
     NONE = 0,
@@ -1156,11 +1423,6 @@ struct rbm_alloc_delta_t {
     DENC_FINISH(p);
   }
 };
-
-paddr_t convert_blk_paddr_to_paddr(blk_paddr_t addr, size_t block_size,
-    uint32_t blocks_per_segment, device_id_t d_id);
-blk_paddr_t convert_paddr_to_blk_paddr(paddr_t addr, size_t block_size,
-	uint32_t blocks_per_segment);
 
 struct extent_info_t {
   extent_types_t type = extent_types_t::NONE;
@@ -1314,6 +1576,16 @@ inline seg_paddr_t& paddr_t::as_seg_paddr() {
   return *static_cast<seg_paddr_t*>(this);
 }
 
+inline const blk_paddr_t& paddr_t::as_blk_paddr() const {
+  assert(get_addr_type() == addr_types_t::RANDOM_BLOCK);
+  return *static_cast<const blk_paddr_t*>(this);
+}
+
+inline blk_paddr_t& paddr_t::as_blk_paddr() {
+  assert(get_addr_type() == addr_types_t::RANDOM_BLOCK);
+  return *static_cast<blk_paddr_t*>(this);
+}
+
 inline paddr_t paddr_t::operator-(paddr_t rhs) const {
   if (get_addr_type() == addr_types_t::SEGMENT) {
     auto& seg_addr = as_seg_paddr();
@@ -1330,30 +1602,35 @@ inline paddr_t paddr_t::operator-(paddr_t rhs) const {
 
 inline paddr_t paddr_t::add_offset(int32_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_offset(o))
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_offset(o))
   ceph_assert(0 == "not supported type");
   return paddr_t{};
 }
 
 inline paddr_t paddr_t::add_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_relative(o))
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_relative(o))
   ceph_assert(0 == "not supported type");
   return paddr_t{};
 }
 
 inline paddr_t paddr_t::add_block_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_block_relative(o))
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_block_relative(o))
   ceph_assert(0 == "not supported type");
   return paddr_t{};
 }
 
 inline paddr_t paddr_t::add_record_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_record_relative(o))
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_record_relative(o))
   ceph_assert(0 == "not supported type");
   return paddr_t{};
 }
 
 inline paddr_t paddr_t::maybe_relative_to(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, maybe_relative_to(o))
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, maybe_relative_to(o))
   ceph_assert(0 == "not supported type");
   return paddr_t{};
 }
