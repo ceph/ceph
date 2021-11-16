@@ -252,8 +252,13 @@ ExtentReader::read_validate_record_metadata(
         std::nullopt);
     }
     auto& seg_addr = start.as_seg_paddr();
-    if (seg_addr.get_segment_off() + header.mdlength >
-        (int64_t)segment_manager.get_segment_size()) {
+    if (header.mdlength < block_size ||
+        header.mdlength % block_size != 0 ||
+        header.dlength % block_size != 0 ||
+        (header.committed_to != journal_seq_t() &&
+         header.committed_to.offset.as_seg_paddr().get_segment_off() % block_size != 0) ||
+        (seg_addr.get_segment_off() + header.mdlength + header.dlength >
+         (int64_t)segment_manager.get_segment_size())) {
       logger().error("read_validate_record_metadata: failed, invalid header");
       return crimson::ct_error::input_output_error::make();
     }
