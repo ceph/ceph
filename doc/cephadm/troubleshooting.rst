@@ -338,3 +338,33 @@ Deploy the daemon::
 
   cephadm --image <container-image> deploy --fsid <fsid> --name mgr.hostname.smfvfd --config-json config-json.json
 
+Analyzing core dumps
+---------------------
+
+In case a Ceph daemon crashes, cephadm supports analyzing core dumps. To enable core dumps, run
+
+.. prompt:: bash #
+
+  ulimit -c unlimited
+
+core dumps will now be written to ``/var/lib/systemd/coredump``.
+
+.. note::
+
+  core dumps are not namespaced by the kernel, which means
+  they will be written to ``/var/lib/systemd/coredump`` on
+  the container host. 
+
+Now, wait for the crash to happen again. (To simulate the crash of a daemon, run e.g. ``killall -3 ceph-mon``)
+
+Install debug packages by entering the cephadm shell and install ``ceph-debuginfo``::
+
+  # cephadm shell --mount /var/lib/systemd/coredump
+  [ceph: root@host1 /]# dnf install ceph-debuginfo gdb zstd
+  [ceph: root@host1 /]# unzstd /mnt/coredump/core.ceph-*.zst
+  [ceph: root@host1 /]# gdb /usr/bin/ceph-mon /mnt/coredump/core.ceph-...
+  (gdb) bt
+  #0  0x00007fa9117383fc in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
+  #1  0x00007fa910d7f8f0 in std::condition_variable::wait(std::unique_lock<std::mutex>&) () from /lib64/libstdc++.so.6
+  #2  0x00007fa913d3f48f in AsyncMessenger::wait() () from /usr/lib64/ceph/libceph-common.so.2
+  #3  0x0000563085ca3d7e in main ()
