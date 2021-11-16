@@ -266,20 +266,32 @@ void BlueFS::_init_logger()
 		    "slwb",
 		    PerfCountersBuilder::PRIO_CRITICAL, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_max_bytes_wal, "max_bytes_wal",
-		    "Maximum bytes allocated from WAL");
+		    "Maximum bytes allocated from WAL",
+		    "mxwb",
+		    PerfCountersBuilder::PRIO_INTERESTING,
+		    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_max_bytes_db, "max_bytes_db",
-		    "Maximum bytes allocated from DB");
+		    "Maximum bytes allocated from DB",
+		    "mxdb",
+		    PerfCountersBuilder::PRIO_INTERESTING,
+		    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_max_bytes_slow, "max_bytes_slow",
-		    "Maximum bytes allocated from SLOW");
-
+		    "Maximum bytes allocated from SLOW",
+		    "mxwb",
+		    PerfCountersBuilder::PRIO_INTERESTING,
+		    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_read_random_count, "read_random_count",
-		    "random read requests processed");
+		    "random read requests processed",
+		    NULL,
+		    PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_bluefs_read_random_bytes, "read_random_bytes",
 		    "Bytes requested in random read mode",
 		    NULL,
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_read_random_disk_count, "read_random_disk_count",
-		    "random reads requests going to disk");
+		    "random reads requests going to disk",
+		    NULL,
+		    PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_bluefs_read_random_disk_bytes, "read_random_disk_bytes",
 		    "Bytes read from disk in random read mode",
 		    "rrb",
@@ -299,20 +311,25 @@ void BlueFS::_init_logger()
 		    PerfCountersBuilder::PRIO_INTERESTING,
 		    unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_read_random_buffer_count, "read_random_buffer_count",
-		    "random read requests processed using prefetch buffer");
+		    "random read requests processed using prefetch buffer",
+		    NULL,
+		    PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_bluefs_read_random_buffer_bytes, "read_random_buffer_bytes",
-		    "Bytes read from prefetch buffer in random read mode", NULL,
+		    "Bytes read from prefetch buffer in random read mode",
+		    NULL,
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
-
   b.add_u64_counter(l_bluefs_read_count, "read_count",
-		    "buffered read requests processed");
+		    "buffered read requests processed",
+		    NULL,
+		    PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_bluefs_read_bytes, "read_bytes",
 		    "Bytes requested in buffered read mode",
 		    NULL,
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
-
   b.add_u64_counter(l_bluefs_read_disk_count, "read_disk_count",
-		    "buffered reads requests going to disk");
+		    "buffered reads requests going to disk",
+		    NULL,
+		    PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_bluefs_read_disk_bytes, "read_disk_bytes",
 		    "Bytes read in buffered mode from disk",
 		    "rb",
@@ -330,9 +347,12 @@ void BlueFS::_init_logger()
 		    "rsb",
 		    PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_read_prefetch_count, "read_prefetch_count",
-		    "prefetch read requests processed");
+		    "prefetch read requests processed",
+		     NULL,
+		    PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_bluefs_read_prefetch_bytes, "read_prefetch_bytes",
-		    "Bytes requested in prefetch read mode", NULL,
+		    "Bytes requested in prefetch read mode",
+		     NULL,
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
   b.add_u64(l_bluefs_read_zeros_candidate, "read_zeros_candidate",
 	    "How many times bluefs read found page with all 0s");
