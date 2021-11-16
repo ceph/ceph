@@ -26,6 +26,11 @@
 
 #define MAX_PORT_NUMBER 65535
 
+#ifdef _WIN32
+// ceph_sockaddr_storage matches the Linux format.
+#define AF_INET6_LINUX 10
+#endif
+
 namespace ceph {
   class Formatter;
 }
@@ -161,6 +166,14 @@ static inline void encode(const sockaddr_storage& a, ceph::buffer::list& bl) {
 				  (unsigned char*)(&ss + 1) - dst);
   ::memcpy(dst, src, copy_size);
   encode(ss, bl);
+#elif defined(_WIN32)
+  ceph_sockaddr_storage ss{};
+  ::memcpy(&ss, &a, std::min(sizeof(ss), sizeof(a)));
+  // The Windows AF_INET6 definition doesn't match the Linux one.
+  if (a.ss_family == AF_INET6) {
+    ss.ss_family = AF_INET6_LINUX;
+  }
+  encode(ss, bl);
 #else
   ceph_sockaddr_storage ss;
   ::memset(&ss, '\0', sizeof(ss));
@@ -186,6 +199,13 @@ static inline void decode(sockaddr_storage& a,
   auto const copy_size = std::min((unsigned char*)(&ss + 1) - src,
 				  (unsigned char*)(&a + 1) - dst);
   ::memcpy(dst, src, copy_size);
+#elif defined(_WIN32)
+  ceph_sockaddr_storage ss{};
+  decode(ss, bl);
+  ::memcpy(&a, &ss, std::min(sizeof(ss), sizeof(a)));
+  if (a.ss_family == AF_INET6_LINUX) {
+    a.ss_family = AF_INET6;
+  }
 #else
   ceph_sockaddr_storage ss{};
   decode(ss, bl);
@@ -463,7 +483,11 @@ struct entity_addr_t {
     encode(elen, bl);
     if (elen) {
       uint16_t ss_family = u.sa.sa_family;
-
+#if defined(_WIN32)
+      if (ss_family == AF_INET6) {
+        ss_family = AF_INET6_LINUX;
+      }
+#endif
       encode(ss_family, bl);
       elen -= sizeof(u.sa.sa_family);
       bl.append(u.sa.sa_data, elen);
@@ -494,6 +518,11 @@ struct entity_addr_t {
 	throw ceph::buffer::malformed_input("elen smaller than family len");
       }
       decode(ss_family, bl);
+#if defined(_WIN32)
+      if (ss_family == AF_INET6_LINUX) {
+        ss_family = AF_INET6;
+      }
+#endif
       u.sa.sa_family = ss_family;
       elen -= sizeof(ss_family);
       if (elen > get_sockaddr_len() - sizeof(u.sa.sa_family)) {
