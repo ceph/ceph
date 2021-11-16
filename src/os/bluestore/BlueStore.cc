@@ -9834,6 +9834,23 @@ void BlueStore::inject_zombie_spanning_blob(coll_t cid, ghobject_t oid,
   db->submit_transaction_sync(txn);
 }
 
+void BlueStore::inject_bluefs_file(std::string_view dir, std::string_view name, size_t new_size)
+{
+  ceph_assert(bluefs);
+
+  BlueFS::FileWriter* p_handle = nullptr;
+  auto ret = bluefs->open_for_write(dir, name, &p_handle, false);
+  ceph_assert(ret == 0);
+
+  std::string s('0', new_size);
+  bufferlist bl;
+  bl.append(s);
+  p_handle->append(bl);
+
+  bluefs->fsync(p_handle);
+  bluefs->close_writer(p_handle);
+}
+
 void BlueStore::collect_metadata(map<string,string> *pm)
 {
   dout(10) << __func__ << dendl;
@@ -17369,8 +17386,13 @@ uint8_t RocksDBBlueFSVolumeSelector::select_prefer_bdev(void* h) {
 
 void RocksDBBlueFSVolumeSelector::get_paths(const std::string& base, paths& res) const
 {
-  res.emplace_back(base, l_totals[LEVEL_DB - LEVEL_FIRST]);
-  res.emplace_back(base + ".slow", l_totals[LEVEL_SLOW - LEVEL_FIRST]);
+  auto db_size = l_totals[LEVEL_DB - LEVEL_FIRST];
+  res.emplace_back(base, db_size);
+  auto slow_size = l_totals[LEVEL_SLOW - LEVEL_FIRST];
+  if (slow_size == 0) {
+    slow_size = db_size;
+  }
+  res.emplace_back(base + ".slow", slow_size);
 }
 
 void* RocksDBBlueFSVolumeSelector::get_hint_by_dir(std::string_view dirname) const {

@@ -3006,6 +3006,10 @@ public:
   void inject_legacy_omap(coll_t cid, ghobject_t oid);
   void inject_stray_omap(uint64_t head, const std::string& name);
 
+  void inject_bluefs_file(std::string_view dir,
+			  std::string_view name,
+			  size_t new_size);
+
   void compact() override {
     ceph_assert(db);
     db->compact();
