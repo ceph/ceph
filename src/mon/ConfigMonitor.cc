@@ -314,7 +314,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	       << " class " << device_class << dendl;
     }
 
-    std::map<std::string,pair<std::string,const MaskedOption*>> src;
+    std::unordered_map<std::string,ConfigMap::ValueSource> src;
     auto config = config_map.generate_entity_map(
       entity,
       crush_location,
@@ -378,20 +378,20 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	  continue;
 	}
 	if (!f) {
-	  tbl << q->second.first;
-	  tbl << q->second.second->mask.to_str();
-	  tbl << Option::level_to_str(q->second.second->opt->level);
+	  tbl << q->second.section;
+	  tbl << q->second.option->mask.to_str();
+	  tbl << Option::level_to_str(q->second.option->opt->level);
 	  tbl << p->first;
 	  tbl << p->second;
-	  tbl << (q->second.second->opt->can_update_at_runtime() ? "" : "*");
+	  tbl << (q->second.option->opt->can_update_at_runtime() ? "" : "*");
 	  tbl << TextTable::endrow;
 	} else {
 	  f->open_object_section(p->first.c_str());
 	  f->dump_string("value", p->second);
-	  f->dump_string("section", q->second.first);
-	  f->dump_object("mask", q->second.second->mask);
+	  f->dump_string("section", q->second.section);
+	  f->dump_object("mask", q->second.option->mask);
 	  f->dump_bool("can_update_at_runtime",
-		       q->second.second->opt->can_update_at_runtime());
+		       q->second.option->opt->can_update_at_runtime());
 	  f->close_section();
 	}
       }

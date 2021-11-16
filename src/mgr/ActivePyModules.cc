@@ -1198,13 +1198,11 @@ PyObject *ActivePyModules::get_foreign_config(
 		 << " class " << device_class << dendl;
       }
 
-      std::map<std::string,pair<std::string,const MaskedOption*>> src;
       config = config_map.generate_entity_map(
 	entity,
 	crush_location,
 	osdmap.crush.get(),
-	device_class,
-	&src);
+	device_class);
     });
 
   // get a single value
