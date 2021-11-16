@@ -2383,22 +2383,22 @@ enum BackendProtocol {
 };
 
 struct cache_obj {
-  string owner; //s3 Object owner who create the object
-  string bucket_name; // s3 bucket name
-  string obj_name; //s3 obj name
+  std::string owner; //s3 Object owner who create the object
+  std::string bucket_name; // s3 bucket name
+  std::string obj_name; //s3 obj name
   RGWAccessKey accesskey; // object owner's s3_key
   uint64_t size_in_bytes; // s3 object size in bytes
   time_t lastAccessTime; // last access time
-  string etag;
+  std::string etag;
   BackendProtocol backendProtocol; // protocol used for backend communication
   HomeLocation home_location; // Home location of S3 Object
-  vector<string> hosts_list; // list of hostnames for multiple backend
-  string acl;  // ACLs of S3 Object
+  std::vector<std::string> hosts_list; // list of hostnames for multiple backend
+  std::string acl;  // ACLs of S3 Object
   time_t aclTimeStamp; // ACLs timestamp
   time_t creationTime; // Creation time of the S3 Object
   bool dirty;
   bool intermediate;
-  string mapping_id;
+  std::string mapping_id;
   uint64_t offset;
   bool is_remote_req;
   bool is_remote_req_put;
@@ -2409,8 +2409,8 @@ struct cache_block {
   uint64_t offset; // s3 obj offset
   uint64_t block_id; // rados obj block id
   uint64_t size_in_bytes; // block size_in_bytes
-  string etag; //etag for s3 object
-  vector<string> hosts_list; // list of hostnames <ip:post> of block locations
+  std::string etag; //etag for s3 object
+  std::vector<std::string> hosts_list; // list of hostnames <ip:post> of block locations
   int64_t access_count;
   time_t lastAccessTime;
   bool cachedOnRemote;
@@ -2418,6 +2418,3 @@ struct cache_block {
  // string host; // hostname of remote cache
 };
 /* datacache */
-
-
-#endif
