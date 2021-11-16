@@ -85,24 +85,12 @@ public:
    *
    * write record with the ordering handle
    */
-  struct write_result_t {
-    journal_seq_t start_seq;
-    segment_off_t length;
-
-    journal_seq_t get_end_seq() const {
-      return start_seq.add_offset(length);
-    }
-  };
-  struct submit_result_t {
-    paddr_t record_block_base;
-    write_result_t write_result;
-  };
   using submit_record_ertr = crimson::errorator<
     crimson::ct_error::erange,
     crimson::ct_error::input_output_error
     >;
   using submit_record_ret = submit_record_ertr::future<
-    submit_result_t
+    record_locator_t
     >;
   submit_record_ret submit_record(
     record_t &&record,
@@ -120,7 +108,7 @@ public:
   using replay_ertr = SegmentManager::read_ertr;
   using replay_ret = replay_ertr::future<>;
   using delta_handler_t = std::function<
-    replay_ret(const submit_result_t&,
+    replay_ret(const record_locator_t&,
 	       const delta_info_t&)>;
   replay_ret replay(
     std::vector<std::pair<segment_id_t, segment_header_t>>&& segment_headers,
@@ -294,7 +282,7 @@ private:
     // Set write_result_t::write_length to 0 if the record is not the first one
     // in the batch.
     using add_pending_ertr = JournalSegmentManager::write_ertr;
-    using add_pending_ret = add_pending_ertr::future<submit_result_t>;
+    using add_pending_ret = add_pending_ertr::future<record_locator_t>;
     add_pending_ret add_pending(record_t&&, const record_size_t&);
 
     // Encode the batched records for write.
@@ -426,7 +414,7 @@ private:
 
     using submit_pending_ertr = JournalSegmentManager::write_ertr;
     using submit_pending_ret = submit_pending_ertr::future<
-      submit_result_t>;
+      record_locator_t>;
     submit_pending_ret submit_pending(
         record_t&&, const record_size_t&, OrderingHandle &handle, bool flush);
 

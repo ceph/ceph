@@ -73,7 +73,7 @@ ExtentReader::scan_extents_ret ExtentReader::scan_extents(
     auto segment_nonce = segment_header.segment_nonce;
     return seastar::do_with(
       found_record_handler_t([extents, this](
-        paddr_t base,
+        record_locator_t locator,
         const record_header_t& header,
         const bufferlist& mdbuf) mutable -> scan_valid_records_ertr::future<>
       {
@@ -82,11 +82,11 @@ ExtentReader::scan_extents_ret ExtentReader::scan_extents(
           // This should be impossible, we did check the crc on the mdbuf
           logger().error(
             "ExtentReader::scan_extents: unable to decode extents for record {}",
-            base);
+            locator.record_block_base);
           return crimson::ct_error::input_output_error::make();
         }
 
-        paddr_t extent_offset = base.add_offset(header.mdlength);
+        paddr_t extent_offset = locator.record_block_base;
         logger().debug("ExtentReader::scan_extents: decoded {} extents",
                        maybe_record_extent_infos->size());
         for (const auto &i : *maybe_record_extent_infos) {
@@ -358,8 +358,18 @@ ExtentReader::consume_next_records(
   auto& next = cursor.pending_records.front();
   auto total_length = next.header.dlength + next.header.mdlength;
   budget_used += total_length;
+  auto locator = record_locator_t{
+    next.offset.add_offset(next.header.mdlength),
+    write_result_t{
+      journal_seq_t{
+        cursor.seq.segment_seq,
+        next.offset
+      },
+      static_cast<segment_off_t>(total_length)
+    }
+  };
   return handler(
-    next.offset,
+    locator,
     next.header,
     next.mdbuffer
   ).safe_then([&cursor] {
