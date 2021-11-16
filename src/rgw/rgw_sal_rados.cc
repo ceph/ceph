@@ -368,8 +368,9 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
 
   // Refresh info
   ret = load_bucket(dpp, y);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   ListParams params;
   params.list_versions = true;
@@ -381,8 +382,9 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
     results.objs.clear();
 
     ret = list(dpp, params, 1000, results, y);
-    if (ret < 0)
+    if (ret < 0) {
       return ret;
+    }
 
     if (!results.objs.empty() && !delete_children) {
       ldpp_dout(dpp, -1) << "ERROR: could not remove non-empty bucket " << info.bucket.name <<
@@ -554,8 +556,8 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
         max_aio = concurrent_max;
       }
       obj_ctx.invalidate(obj->get_obj());
-    } // for all RGW objects
-  }
+    } // for all RGW objects in results
+  } // while is_truncated
 
   ret = handles->drain();
   if (ret < 0) {
