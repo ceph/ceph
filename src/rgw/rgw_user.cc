@@ -1939,9 +1939,8 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
       return -EEXIST; // change to code that maps to 409: conflict
     }
 
-    std::string prefix, delimiter;
     for (auto it = m.begin(); it != m.end(); ++it) {
-      ret = it->second->remove_bucket(dpp, true, prefix, delimiter, false, nullptr, y);
+      ret = it->second->remove_bucket(dpp, true, false, nullptr, y);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;
