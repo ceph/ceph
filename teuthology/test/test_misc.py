@@ -1,5 +1,4 @@
 import argparse
-from datetime import datetime
 
 from unittest.mock import Mock, patch
 from teuthology.orchestra import cluster
@@ -45,9 +44,7 @@ def test_sh_progress(caplog):
     # there must be at least 2 seconds between the log record
     # of the first message and the log record of the second one
     #
-    t1 = datetime.strptime(records[1].asctime.split(',')[0], "%Y-%m-%d %H:%M:%S")
-    t2 = datetime.strptime(records[2].asctime.split(',')[0], "%Y-%m-%d %H:%M:%S")
-    assert (t2 - t1).total_seconds() > 2
+    assert (records[2].created - records[1].created) > 2
 
 
 def test_wait_until_osds_up():
