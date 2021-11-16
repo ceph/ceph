@@ -7,6 +7,10 @@
 #include "crush/CrushWrapper.h"
 #include "common/entity_name.h"
 
+#define dout_subsys ceph_subsys_mon
+#undef dout_prefix
+#include "common/dout.h"
+
 using namespace std::literals;
 
 using std::cerr;
@@ -248,6 +252,58 @@ void ConfigMap::parse_key(
     *name = key.substr(last_slash + 1);
     *who = key.substr(0, last_slash);
   }
+}
+
+int ConfigMap::add_option(
+  CephContext *cct,
+  const std::string& name,
+  const std::string& who,
+  const std::string& orig_value,
+  std::function<const Option *(const std::string&)> get_opt)
+{
+  const Option *opt = get_opt(name);
+  if (!opt) {
+    ldout(cct, 10) << __func__ << " unrecognized option '" << name << "'" << dendl;
+    stray_options.push_back(
+      std::unique_ptr<Option>(
+	new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
+    opt = stray_options.back().get();
+  }
+
+  string err;
+  string value = orig_value;
+  int r = opt->pre_validate(&value, &err);
+  if (r < 0) {
+    ldout(cct, 10) << __func__ << " pre-validate failed on '" << name << "' = '"
+		   << value << "' for " << name << dendl;
+  }
+
+  int ret = 0;
+  MaskedOption mopt(opt);
+  mopt.raw_value = value;
+  string section_name;
+  if (who.size() &&
+      !ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
+    lderr(cct) << __func__ << " invalid mask for option " << name << " mask " << who
+	       << dendl;
+    ret = -EINVAL;
+  } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+    ldout(cct, 10) << __func__ << " NO_MON_UPDATE option '"
+		   << name << "' = '" << value << "' for " << name
+		   << dendl;
+    ret = -EINVAL;
+  } else {
+    Section *section = &global;;
+    if (section_name.size() && section_name != "global") {
+      if (section_name.find('.') != std::string::npos) {
+	section = &by_id[section_name];
+      } else {
+	section = &by_type[section_name];
+      }
+    }
+    section->options.insert(make_pair(name, std::move(mopt)));
+  }
+  return ret;
 }
 
 
