@@ -88,8 +88,6 @@ RGWObject *RGWRadosBucket::create_object(const rgw_obj_key &key)
 
 int RGWRadosBucket::remove_bucket(const DoutPrefixProvider *dpp,
 			       bool delete_children,
-			       std::string prefix,
-			       std::string delimiter,
 			       bool forward_to_master,
 			       req_info* req_info, optional_yield y)
 {
@@ -129,12 +127,9 @@ int RGWRadosBucket::remove_bucket(const DoutPrefixProvider *dpp,
     }
   } while(results.is_truncated);
 
-  /* If there's a prefix, then we are aborting multiparts as well */
-  if (!prefix.empty()) {
-    ret = abort_bucket_multiparts(dpp, store, store->ctx(), info, prefix, delimiter);
-    if (ret < 0) {
-      return ret;
-    }
+  ret = abort_bucket_multiparts(dpp, store, store->ctx(), info);
+  if (ret < 0) {
+    return ret;
   }
 
   ret = store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y);
