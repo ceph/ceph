@@ -43,6 +43,11 @@ std::ostream &operator<<(std::ostream &out, const segment_id_t& segment)
     << segment.device_segment_id() << "]";
 }
 
+std::ostream &block_offset_to_stream(std::ostream &out, const block_off_t &t)
+{
+  return out << t;
+}
+
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 {
   out << "paddr_t<";
@@ -61,6 +66,9 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
     segment_to_stream(out, s.get_segment_id());
     out << ", ";
     offset_to_stream(out, s.get_segment_off());
+  } else if (rhs.get_addr_type() == addr_types_t::RANDOM_BLOCK) {
+    const blk_paddr_t& s = rhs.as_blk_paddr();
+    block_offset_to_stream(out, s.get_block_off());
   } else {
     out << "INVALID";
   }
@@ -537,25 +545,6 @@ std::ostream& operator<<(std::ostream& out, device_type_t t)
   default:
     return out << "INVALID_DEVICE_TYPE!";
   }
-}
-
-paddr_t convert_blk_paddr_to_paddr(blk_paddr_t addr, size_t block_size,
-    uint32_t blocks_per_segment, device_id_t d_id)
-{
-  segment_id_t id = segment_id_t {
-    d_id,
-    (device_segment_id_t)(addr / (block_size * blocks_per_segment))
-  };
-  seastore_off_t off = addr % (block_size * blocks_per_segment);
-  return paddr_t::make_seg_paddr(id, off);
-}
-
-blk_paddr_t convert_paddr_to_blk_paddr(paddr_t addr, size_t block_size,
-    uint32_t blocks_per_segment)
-{
-  seg_paddr_t& s = addr.as_seg_paddr();
-  return (blk_paddr_t)(s.get_segment_id().device_segment_id() *
-	  (block_size * blocks_per_segment) + s.get_segment_off());
 }
 
 std::ostream& operator<<(std::ostream& out, const write_result_t& w)
