@@ -43,8 +43,8 @@ ExtentReader::read_segment_header(segment_id_t segment)
     } catch (ceph::buffer::error &e) {
       logger().debug(
 	"ExtentReader::read_segment_header: segment {} unable to decode "
-	"header, skipping",
-	segment);
+	"header, skipping -- {}",
+	segment, e);
       return crimson::ct_error::enodata::make();
     }
     logger().debug(
@@ -56,6 +56,7 @@ ExtentReader::read_segment_header(segment_id_t segment)
       header);
   });
 }
+
 ExtentReader::scan_extents_ret ExtentReader::scan_extents(
   scan_extents_cursor &cursor,
   extent_len_t bytes_to_read)
@@ -233,17 +234,19 @@ ExtentReader::read_validate_record_metadata(
   auto& seg_addr = start.as_seg_paddr();
   auto& segment_manager = *segment_managers[seg_addr.get_segment_id().device_id()];
   auto block_size = segment_manager.get_block_size();
-  if (seg_addr.get_segment_off() + block_size > 
+  if (seg_addr.get_segment_off() + block_size >
       (int64_t)segment_manager.get_segment_size()) {
+    logger().debug("read_validate_record_metadata: failed, reach segment end");
     return read_validate_record_metadata_ret(
       read_validate_record_metadata_ertr::ready_future_marker{},
       std::nullopt);
   }
+  logger().debug("read_validate_record_metadata: reading header block {}...",
+                 start);
   return segment_manager.read(start, block_size
   ).safe_then(
     [=, &segment_manager](bufferptr bptr) mutable
     -> read_validate_record_metadata_ret {
-      logger().debug("read_validate_record_metadata: reading {}", start);
       auto block_size = segment_manager.get_block_size();
       bufferlist bl;
       bl.append(bptr);
@@ -324,8 +327,11 @@ ExtentReader::read_validate_data(
   const record_header_t &header)
 {
   auto& segment_manager = *segment_managers[record_base.get_device_id()];
+  auto data_addr = record_base.add_offset(header.mdlength);
+  logger().debug("read_validate_data: reading data blocks {}+{}...",
+                 data_addr, header.dlength);
   return segment_manager.read(
-    record_base.add_offset(header.mdlength),
+    data_addr,
     header.dlength
   ).safe_then([=, &header](auto bptr) {
     bufferlist bl;
