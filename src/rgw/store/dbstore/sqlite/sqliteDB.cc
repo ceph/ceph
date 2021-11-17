@@ -274,6 +274,19 @@ enum GetObjectData {
   MultipartPartNum
 };
 
+enum GetLCEntry {
+  LCEntryIndex,
+  LCEntryBucketName,
+  LCEntryStartTime,
+  LCEntryStatus
+};
+
+enum GetLCHead {
+  LCHeadIndex,
+  LCHeadMarker,
+  LCHeadStartDate
+};
+
 static int list_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
   if (!stmt)
     return -1;
@@ -474,6 +487,32 @@ static int get_objectdata(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_s
   return 0;
 }
 
+static int list_lc_entry(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  op.lc_entry.index = (const char*)sqlite3_column_text(stmt, LCEntryIndex);
+  op.lc_entry.entry.bucket = (const char*)sqlite3_column_text(stmt, LCEntryBucketName);
+  op.lc_entry.entry.start_time = sqlite3_column_int(stmt, LCEntryStartTime);
+  op.lc_entry.entry.status = sqlite3_column_int(stmt, LCEntryStatus);
+ 
+  op.lc_entry.list_entries.push_back(op.lc_entry.entry);
+
+  return 0;
+}
+
+static int list_lc_head(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
+  if (!stmt)
+    return -1;
+
+  op.lc_head.index = (const char*)sqlite3_column_text(stmt, LCHeadIndex);
+  op.lc_head.head.marker = (const char*)sqlite3_column_text(stmt, LCHeadMarker);
+ 
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, LCHeadStartDate, op.lc_head.head.start_date, sdb);
+
+  return 0;
+}
+
 int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
 {
   (void)createTables(dpp);
@@ -485,6 +524,13 @@ int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
   dbops.RemoveBucket = new SQLRemoveBucket(&this->db, this->getDBname(), cct);
   dbops.GetBucket = new SQLGetBucket(&this->db, this->getDBname(), cct);
   dbops.ListUserBuckets = new SQLListUserBuckets(&this->db, this->getDBname(), cct);
+  dbops.InsertLCEntry = new SQLInsertLCEntry(&this->db, this->getDBname(), cct);
+  dbops.RemoveLCEntry = new SQLRemoveLCEntry(&this->db, this->getDBname(), cct);
+  dbops.GetLCEntry = new SQLGetLCEntry(&this->db, this->getDBname(), cct);
+  dbops.ListLCEntries = new SQLListLCEntries(&this->db, this->getDBname(), cct);
+  dbops.InsertLCHead = new SQLInsertLCHead(&this->db, this->getDBname(), cct);
+  dbops.RemoveLCHead = new SQLRemoveLCHead(&this->db, this->getDBname(), cct);
+  dbops.GetLCHead = new SQLGetLCHead(&this->db, this->getDBname(), cct);
 
   return 0;
 }
@@ -499,6 +545,13 @@ int SQLiteDB::FreeDBOps(const DoutPrefixProvider *dpp)
   delete dbops.RemoveBucket;
   delete dbops.GetBucket;
   delete dbops.ListUserBuckets;
+  delete dbops.InsertLCEntry;
+  delete dbops.RemoveLCEntry;
+  delete dbops.GetLCEntry;
+  delete dbops.ListLCEntries;
+  delete dbops.InsertLCHead;
+  delete dbops.RemoveLCHead;
+  delete dbops.GetLCHead;
 
   return 0;
 }
@@ -612,7 +665,7 @@ out:
 int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
 {
   int ret = -1;
-  int cu, cb = -1;
+  int cu = 0, cb = 0, cq = 0;
   DBOpParams params = {};
 
   params.user_table = getUserTable();
@@ -624,7 +677,7 @@ int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
   if ((cb = createBucketTable(dpp, &params)))
     goto out;
 
-  if ((cb = createQuotaTable(dpp, &params)))
+  if ((cq = createQuotaTable(dpp, &params)))
     goto out;
 
   ret = 0;
@@ -720,6 +773,35 @@ int SQLiteDB::createObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *p
   return ret;
 }
 
+int SQLiteDB::createLCTables(const DoutPrefixProvider *dpp)
+{
+  int ret = -1;
+  string schema;
+  DBOpParams params = {};
+
+  params.lc_entry_table = getLCEntryTable();
+  params.lc_head_table = getLCHeadTable();
+  params.bucket_table = getBucketTable();
+
+  schema = CreateTableSchema("LCEntry", &params);
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"CreateLCEntryTable failed" << dendl;
+    return ret;
+  }
+  ldpp_dout(dpp, 20)<<"CreateLCEntryTable suceeded" << dendl;
+
+  schema = CreateTableSchema("LCHead", &params);
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"CreateLCHeadTable failed" << dendl;
+    (void)DeleteLCEntryTable(dpp, &params);
+  }
+  ldpp_dout(dpp, 20)<<"CreateLCHeadTable suceeded" << dendl;
+
+  return ret;
+}
+
 int SQLiteDB::DeleteUserTable(const DoutPrefixProvider *dpp, DBOpParams *params)
 {
   int ret = -1;
@@ -780,6 +862,50 @@ int SQLiteDB::DeleteObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *p
     ldpp_dout(dpp, 0)<<"DeleteObjectDataTable failed " << dendl;
 
   ldpp_dout(dpp, 20)<<"DeleteObjectDataTable suceeded " << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::DeleteQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = DeleteTableSchema(params->quota_table);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"DeleteQuotaTable failed " << dendl;
+
+  ldpp_dout(dpp, 20)<<"DeleteQuotaTable suceeded " << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::DeleteLCEntryTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = DeleteTableSchema(params->lc_entry_table);
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"DeleteLCEntryTable failed " << dendl;
+  ldpp_dout(dpp, 20)<<"DeleteLCEntryTable suceeded " << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::DeleteLCHeadTable(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = DeleteTableSchema(params->lc_head_table);
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"DeleteLCHeadTable failed " << dendl;
+  ldpp_dout(dpp, 20)<<"DeleteLCHeadTable suceeded " << dendl;
 
   return ret;
 }
@@ -2310,6 +2436,335 @@ int SQLDeleteObjectData::Execute(const DoutPrefixProvider *dpp, struct DBOpParam
   int ret = -1;
 
   SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLInsertLCEntry::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLInsertLCEntry - no db" << dendl;
+    goto out;
+  }
+
+  p_params.lc_entry_table = params->lc_entry_table;
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertLCEntry");
+
+out:
+  return ret;
+}
+
+int SQLInsertLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.index.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.index.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.status.c_str(), sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.lc_entry.entry.status, sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.start_time.c_str(), sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.lc_entry.entry.start_time, sdb);
+
+out:
+  return rc;
+}
+
+int SQLInsertLCEntry::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveLCEntry::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLRemoveLCEntry - no db" << dendl;
+    goto out;
+  }
+
+  p_params.lc_entry_table = params->lc_entry_table;
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveLCEntry");
+
+out:
+  return ret;
+}
+
+int SQLRemoveLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.index.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.index.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLRemoveLCEntry::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLGetLCEntry::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  sqlite3_stmt** pstmt = NULL; // Prepared statement
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLGetLCEntry - no db" << dendl;
+    goto out;
+  }
+
+  p_params.lc_entry_table = params->lc_entry_table;
+  p_params.op.query_str = params->op.query_str;
+
+  if (params->op.query_str == "get_next_entry") {
+    pstmt = &next_stmt;
+  } else {
+    pstmt = &stmt;
+  }
+  SQL_PREPARE(dpp, p_params, sdb, *pstmt, ret, "PrepareGetLCEntry");
+
+out:
+  return ret;
+}
+
+int SQLGetLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+  sqlite3_stmt** pstmt = NULL; // Prepared statement
+
+  if (params->op.query_str == "get_next_entry") {
+    pstmt = &next_stmt;
+  } else {
+    pstmt = &stmt;
+  }
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.index.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.index.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLGetLCEntry::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  sqlite3_stmt** pstmt = NULL; // Prepared statement
+
+  if (params->op.query_str == "get_next_entry") {
+    pstmt = &next_stmt;
+  } else {
+    pstmt = &stmt;
+  }
+
+  SQL_EXECUTE(dpp, params, *pstmt, list_lc_entry);
+out:
+  return ret;
+}
+
+int SQLListLCEntries::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLListLCEntries - no db" << dendl;
+    goto out;
+  }
+
+  p_params.lc_entry_table = params->lc_entry_table;
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListLCEntries");
+
+out:
+  return ret;
+}
+
+int SQLListLCEntries::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.index.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.index.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.min_marker.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.min_marker.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count.c_str(), sdb);
+  SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
+
+out:
+  return rc;
+}
+
+int SQLListLCEntries::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, list_lc_entry);
+out:
+  return ret;
+}
+
+int SQLInsertLCHead::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLInsertLCHead - no db" << dendl;
+    goto out;
+  }
+
+  p_params.lc_head_table = params->lc_head_table;
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertLCHead");
+
+out:
+  return ret;
+}
+
+int SQLInsertLCHead::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.index.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.index.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.marker.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.head.marker.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.start_date.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.lc_head.head.start_date, sdb);
+
+out:
+  return rc;
+}
+
+int SQLInsertLCHead::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLRemoveLCHead::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLRemoveLCHead - no db" << dendl;
+    goto out;
+  }
+
+  p_params.lc_head_table = params->lc_head_table;
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveLCHead");
+
+out:
+  return ret;
+}
+
+int SQLRemoveLCHead::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.index.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.index.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLRemoveLCHead::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  SQL_EXECUTE(dpp, params, stmt, NULL);
+out:
+  return ret;
+}
+
+int SQLGetLCHead::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (!*sdb) {
+    ldpp_dout(dpp, 0)<<"In SQLGetLCHead - no db" << dendl;
+    goto out;
+  }
+
+  p_params.lc_head_table = params->lc_head_table;
+
+  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetLCHead");
+
+out:
+  return ret;
+}
+
+int SQLGetLCHead::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int index = -1;
+  int rc = 0;
+  struct DBOpPrepareParams p_params = PrepareParams;
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.index.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.index.c_str(), sdb);
+
+out:
+  return rc;
+}
+
+int SQLGetLCHead::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+{
+  int ret = -1;
+
+  // clear the params before fetching the entry
+  params->op.lc_head.head = {};
+  SQL_EXECUTE(dpp, params, stmt, list_lc_head);
 out:
   return ret;
 }

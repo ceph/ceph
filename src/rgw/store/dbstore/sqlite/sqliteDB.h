@@ -55,10 +55,15 @@ class SQLiteDB : public DB, public DBOp{
     int createObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params);
 
+    int createLCTables(const DoutPrefixProvider *dpp) override;
+
     int DeleteBucketTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int DeleteUserTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int DeleteObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int DeleteObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int DeleteQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int DeleteLCEntryTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int DeleteLCHeadTable(const DoutPrefixProvider *dpp, DBOpParams *params);
 
     int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) override;
     int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) override;
@@ -371,4 +376,120 @@ class SQLDeleteObjectData : public SQLiteDB, public DeleteObjectDataOp {
     int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
     int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
+
+class SQLInsertLCEntry : public SQLiteDB, public InsertLCEntryOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+
+  public:
+    SQLInsertLCEntry(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertLCEntry() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveLCEntry : public SQLiteDB, public RemoveLCEntryOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+
+  public:
+    SQLRemoveLCEntry(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveLCEntry() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLGetLCEntry : public SQLiteDB, public GetLCEntryOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+    sqlite3_stmt *next_stmt = NULL; // Prepared statement
+
+  public:
+    SQLGetLCEntry(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLGetLCEntry() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+      if (next_stmt)
+        sqlite3_finalize(next_stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLListLCEntries : public SQLiteDB, public ListLCEntriesOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+
+  public:
+    SQLListLCEntries(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLListLCEntries() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLInsertLCHead : public SQLiteDB, public InsertLCHeadOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+
+  public:
+    SQLInsertLCHead(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLInsertLCHead() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLRemoveLCHead : public SQLiteDB, public RemoveLCHeadOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+
+  public:
+    SQLRemoveLCHead(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLRemoveLCHead() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLGetLCHead : public SQLiteDB, public GetLCHeadOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+
+  public:
+    SQLGetLCHead(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    ~SQLGetLCHead() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
 #endif

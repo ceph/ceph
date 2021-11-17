@@ -80,9 +80,10 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
 #ifdef WITH_RADOSGW_DBSTORE
     rgw::sal::Store* store = newDBStore(cct);
 
-    /* Initialize the dbstore with cct & dpp */
-    DB *db = static_cast<rgw::sal::DBStore *>(store)->getDB();
-    db->set_context(cct);
+    if ((*(rgw::sal::DBStore*)store).set_run_lc_thread(use_lc_thread)
+                                    .initialize(cct, dpp) < 0) {
+      delete store; store = nullptr;
+    }
 
     /* XXX: temporary - create testid user */
     rgw_user testid_user("", "testid", "");

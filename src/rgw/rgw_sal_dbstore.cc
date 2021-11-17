@@ -1176,7 +1176,7 @@ namespace rgw::sal {
 
   std::unique_ptr<Lifecycle> DBStore::get_lifecycle(void)
   {
-    return 0;
+    return std::make_unique<DBLifecycle>(this);
   }
 
   std::unique_ptr<Completions> DBStore::get_completions(void)
@@ -1184,11 +1184,58 @@ namespace rgw::sal {
     return 0;
   }
 
+  int DBLifecycle::get_entry(const std::string& oid, const std::string& marker,
+			      LCEntry& entry)
+  {
+    return store->getDB()->get_entry(oid, marker, entry);
+  }
+
+  int DBLifecycle::get_next_entry(const std::string& oid, std::string& marker,
+				   LCEntry& entry)
+  {
+    return store->getDB()->get_next_entry(oid, marker, entry);
+  }
+
+  int DBLifecycle::set_entry(const std::string& oid, const LCEntry& entry)
+  {
+    return store->getDB()->set_entry(oid, entry);
+  }
+
+  int DBLifecycle::list_entries(const std::string& oid, const std::string& marker,
+  				 uint32_t max_entries, vector<LCEntry>& entries)
+  {
+    return store->getDB()->list_entries(oid, marker, max_entries, entries);
+  }
+
+  int DBLifecycle::rm_entry(const std::string& oid, const LCEntry& entry)
+  {
+    return store->getDB()->rm_entry(oid, entry);
+  }
+
+  int DBLifecycle::get_head(const std::string& oid, LCHead& head)
+  {
+    return store->getDB()->get_head(oid, head);
+  }
+
+  int DBLifecycle::put_head(const std::string& oid, const LCHead& head)
+  {
+    return store->getDB()->put_head(oid, head);
+  }
+
+  LCSerializer* DBLifecycle::get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie)
+  {
+    return new LCDBSerializer(store, oid, lock_name, cookie);
+  }
+
   std::unique_ptr<Notification> DBStore::get_notification(rgw::sal::Object* obj,
       struct req_state* s,
       rgw::notify::EventType event_type, const std::string* object_name)
   {
     return std::make_unique<DBNotification>(obj, event_type);
+  }
+
+  RGWLC* DBStore::get_rgwlc(void) {
+    return lc;
   }
 
   int DBStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info)
@@ -1309,6 +1356,21 @@ namespace rgw::sal {
     return 0;
   }
 
+  int DBStore::initialize(CephContext *_cct, const DoutPrefixProvider *_dpp) {
+    int ret = 0;
+    cct = _cct;
+    dpp = _dpp;
+
+    lc = new RGWLC();
+    lc->initialize(cct, this);
+
+    if (use_lc_thread) {
+      ret = db->createLCTables(dpp);
+      lc->start_processor();
+    }
+
+    return ret;
+  }
 } // namespace rgw::sal
 
 extern "C" {
@@ -1332,6 +1394,7 @@ extern "C" {
       store->setDBStoreManager(dbsm);
       store->setDB(db);
       db->set_store((rgw::sal::Store*)store);
+      db->set_context(cct);
     }
 
     return store;
