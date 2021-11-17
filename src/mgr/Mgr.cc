@@ -267,6 +267,7 @@ void Mgr::init()
   monc->sub_want("servicemap", 0, 0);
   if (mon_allows_kv_sub) {
     monc->sub_want("kv:config/", 0, 0);
+    monc->sub_want("kv:config-profile/", 0, 0);
     monc->sub_want("kv:mgr/", 0, 0);
     monc->sub_want("kv:device/", 0, 0);
   }

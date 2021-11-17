@@ -48,7 +48,7 @@ class ActivePyModules
   PyModuleConfig &module_config;
   bool have_local_config_map = false;
   std::map<std::string, std::string> store_cache;
-  ConfigMap config_map;  ///< derived from store_cache config/ keys
+  ConfigMap config_map;  ///< derived from store_cache config/ and config-profile/ keys
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;

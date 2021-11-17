@@ -840,7 +840,8 @@ void ActivePyModules::update_kv_data(
       dout(20) << " rm " << i.first << dendl;
       store_cache.erase(i.first);
     }
-    if (i.first.find("config/") == 0) {
+    if (i.first.find("config/") == 0 ||
+	i.first.find("config-profile/") == 0) {
       do_config = true;
     }
   }
@@ -853,6 +854,20 @@ void ActivePyModules::_refresh_config_map()
 {
   dout(10) << dendl;
   config_map.clear();
+  for (auto p = store_cache.lower_bound("config-profile/");
+       p != store_cache.end() && p->first.find("config-profile/") == 0;
+       ++p) {
+    string name = p->first.substr(sizeof("config-profile/") - 1);
+    const string& def = p->second;
+    config_map.add_profile(
+      g_ceph_context,
+      name,
+      def,
+      [&](const std::string& name) {
+	// NOTE: for now, ignore mgr options
+	return g_conf().find_option(name);
+      });
+  }
   for (auto p = store_cache.lower_bound("config/");
        p != store_cache.end() && p->first.find("config/") == 0;
        ++p) {
