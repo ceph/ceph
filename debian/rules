@@ -81,8 +81,6 @@ override_dh_auto_install:
 	install -D -m 440 sudoers.d/ceph-smartctl $(DESTDIR)/etc/sudoers.d/ceph-smartctl
 	install -D -m 755 src/tools/rbd_nbd/rbd-nbd_quiesce $(DESTDIR)/usr/libexec/rbd-nbd/rbd-nbd_quiesce
 
-	install -m 755 src/cephadm/cephadm $(DESTDIR)/usr/sbin/cephadm
-
 	install -m 644 -D monitoring/ceph-mixin/prometheus_alerts.yml $(DESTDIR)/etc/prometheus/ceph/ceph_default_alerts.yml
 
 # doc/changelog is a directory, which confuses dh_installchangelogs
