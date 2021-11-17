@@ -579,6 +579,499 @@
                "show": true
             }
          ]
+      },
+      {
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 12,
+            "w": 9,
+            "x": 0,
+            "y": 12
+         },
+         "id": 9,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "RGW Overview - HAProxy Metrics",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "aliasColors": { },
+         "bars": false,
+         "dashLength": 10,
+         "dashes": false,
+         "datasource": "$datasource",
+         "description": "",
+         "fill": 1,
+         "gridPos": {
+            "h": 12,
+            "w": 5,
+            "x": 0,
+            "y": 12
+         },
+         "id": 10,
+         "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "total": false,
+            "values": true
+         },
+         "lines": true,
+         "linewidth": 1,
+         "links": [ ],
+         "nullPointMode": "null",
+         "percentage": false,
+         "pointradius": 5,
+         "points": false,
+         "renderer": "flot",
+         "repeat": null,
+         "seriesOverrides": [
+            [
+               {
+                  "alias": "/.*Back.*/",
+                  "transform": "negative-Y"
+               },
+               {
+                  "alias": "/.*1.*/"
+               },
+               {
+                  "alias": "/.*2.*/"
+               },
+               {
+                  "alias": "/.*3.*/"
+               },
+               {
+                  "alias": "/.*4.*/"
+               },
+               {
+                  "alias": "/.*5.*/"
+               },
+               {
+                  "alias": "/.*other.*/"
+               }
+            ]
+         ],
+         "spaceLength": 10,
+         "stack": false,
+         "steppedLine": false,
+         "targets": [
+            {
+               "expr": "sum(irate(haproxy_frontend_http_responses_total{code=~\"$code\",instance=~\"$ingress_service\",proxy=~\"frontend\"}[5m])) by (code)",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "Frontend {{ code }}",
+               "refId": "A"
+            },
+            {
+               "expr": "sum(irate(haproxy_backend_http_responses_total{code=~\"$code\",instance=~\"$ingress_service\",proxy=~\"backend\"}[5m])) by (code)",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "Backend {{ code }}",
+               "refId": "B"
+            }
+         ],
+         "thresholds": [ ],
+         "timeFrom": null,
+         "timeShift": null,
+         "title": "Total responses by HTTP code",
+         "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+         },
+         "type": "graph",
+         "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": [ ]
+         },
+         "yaxes": [
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            },
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            }
+         ]
+      },
+      {
+         "aliasColors": { },
+         "bars": false,
+         "dashLength": 10,
+         "dashes": false,
+         "datasource": "$datasource",
+         "description": "",
+         "fill": 1,
+         "gridPos": {
+            "h": 12,
+            "w": 5,
+            "x": 5,
+            "y": 12
+         },
+         "id": 11,
+         "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "total": false,
+            "values": true
+         },
+         "lines": true,
+         "linewidth": 1,
+         "links": [ ],
+         "nullPointMode": "null",
+         "percentage": false,
+         "pointradius": 5,
+         "points": false,
+         "renderer": "flot",
+         "repeat": null,
+         "seriesOverrides": [
+            [
+               {
+                  "alias": "/.*Response.*/",
+                  "transform": "negative-Y"
+               },
+               {
+                  "alias": "/.*Backend.*/",
+                  "transform": "negative-Y"
+               }
+            ]
+         ],
+         "spaceLength": 10,
+         "stack": false,
+         "steppedLine": false,
+         "targets": [
+            {
+               "expr": "sum(irate(haproxy_frontend_http_requests_total{proxy=~\"frontend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "Requests",
+               "refId": "A"
+            },
+            {
+               "expr": "sum(irate(haproxy_backend_response_errors_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 2,
+               "legendFormat": "Response errors",
+               "refId": "B"
+            },
+            {
+               "expr": "sum(irate(haproxy_frontend_request_errors_total{proxy=~\"frontend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "Requests errors",
+               "refId": "C"
+            },
+            {
+               "expr": "sum(irate(haproxy_backend_redispatch_warnings_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 2,
+               "legendFormat": "Backend redispatch",
+               "refId": "D"
+            },
+            {
+               "expr": "sum(irate(haproxy_backend_retry_warnings_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 2,
+               "legendFormat": "Backend retry",
+               "refId": "E"
+            },
+            {
+               "expr": "sum(irate(haproxy_frontend_requests_denied_total{proxy=~\"frontend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 2,
+               "legendFormat": "Request denied",
+               "refId": "F"
+            },
+            {
+               "expr": "sum(haproxy_backend_current_queue{proxy=~\"backend\",instance=~\"$ingress_service\"}) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 2,
+               "legendFormat": "Backend Queued",
+               "refId": "G"
+            }
+         ],
+         "thresholds": [ ],
+         "timeFrom": null,
+         "timeShift": null,
+         "title": "Total requests / responses",
+         "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+         },
+         "type": "graph",
+         "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": [ ]
+         },
+         "yaxes": [
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            },
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            }
+         ]
+      },
+      {
+         "aliasColors": { },
+         "bars": false,
+         "dashLength": 10,
+         "dashes": false,
+         "datasource": "$datasource",
+         "description": "",
+         "fill": 1,
+         "gridPos": {
+            "h": 12,
+            "w": 5,
+            "x": 10,
+            "y": 12
+         },
+         "id": 12,
+         "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "total": false,
+            "values": true
+         },
+         "lines": true,
+         "linewidth": 1,
+         "links": [ ],
+         "nullPointMode": "null",
+         "percentage": false,
+         "pointradius": 5,
+         "points": false,
+         "renderer": "flot",
+         "repeat": null,
+         "seriesOverrides": [
+            [
+               {
+                  "alias": "/.*Back.*/",
+                  "transform": "negative-Y"
+               }
+            ]
+         ],
+         "spaceLength": 10,
+         "stack": false,
+         "steppedLine": false,
+         "targets": [
+            {
+               "expr": "sum(irate(haproxy_frontend_connections_total{proxy=~\"frontend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "Front",
+               "refId": "A"
+            },
+            {
+               "expr": "sum(irate(haproxy_backend_connection_attempts_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "Back",
+               "refId": "B"
+            },
+            {
+               "expr": "sum(irate(haproxy_backend_connection_errors_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "Back errors",
+               "refId": "C"
+            }
+         ],
+         "thresholds": [ ],
+         "timeFrom": null,
+         "timeShift": null,
+         "title": "Total number of connections",
+         "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+         },
+         "type": "graph",
+         "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": [ ]
+         },
+         "yaxes": [
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            },
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            }
+         ]
+      },
+      {
+         "aliasColors": { },
+         "bars": false,
+         "dashLength": 10,
+         "dashes": false,
+         "datasource": "$datasource",
+         "description": "",
+         "fill": 1,
+         "gridPos": {
+            "h": 12,
+            "w": 6,
+            "x": 15,
+            "y": 12
+         },
+         "id": 13,
+         "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "total": false,
+            "values": true
+         },
+         "lines": true,
+         "linewidth": 1,
+         "links": [ ],
+         "nullPointMode": "null",
+         "percentage": false,
+         "pointradius": 5,
+         "points": false,
+         "renderer": "flot",
+         "repeat": null,
+         "seriesOverrides": [
+            [
+               {
+                  "alias": "/.*OUT.*/",
+                  "transform": "negative-Y"
+               }
+            ]
+         ],
+         "spaceLength": 10,
+         "stack": false,
+         "steppedLine": false,
+         "targets": [
+            {
+               "expr": "sum(irate(haproxy_frontend_bytes_in_total{proxy=~\"frontend\",instance=~\"$ingress_service\"}[5m])*8) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "IN Front",
+               "refId": "A"
+            },
+            {
+               "expr": "sum(irate(haproxy_frontend_bytes_out_total{proxy=~\"frontend\",instance=~\"$ingress_service\"}[5m])*8) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 2,
+               "legendFormat": "OUT Front",
+               "refId": "B"
+            },
+            {
+               "expr": "sum(irate(haproxy_backend_bytes_in_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])*8) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 2,
+               "legendFormat": "IN Back",
+               "refId": "C"
+            },
+            {
+               "expr": "sum(irate(haproxy_backend_bytes_out_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])*8) by (instance)",
+               "format": "time_series",
+               "intervalFactor": 2,
+               "legendFormat": "OUT Back",
+               "refId": "D"
+            }
+         ],
+         "thresholds": [ ],
+         "timeFrom": null,
+         "timeShift": null,
+         "title": "Current total of incoming / outgoing bytes",
+         "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+         },
+         "type": "graph",
+         "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": [ ]
+         },
+         "yaxes": [
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            },
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            }
+         ]
       }
    ],
    "refresh": "15s",
@@ -601,6 +1094,46 @@
             "name": "rgw_servers",
             "options": [ ],
             "query": "label_values(ceph_rgw_req, ceph_daemon)",
+            "refresh": 1,
+            "regex": "",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": null,
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": true,
+            "label": "HTTP Code",
+            "multi": false,
+            "name": "code",
+            "options": [ ],
+            "query": "label_values(haproxy_server_http_responses_total{instance=~\"$ingress_service\"}, code)",
+            "refresh": 1,
+            "regex": "",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": null,
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Ingress Service",
+            "multi": false,
+            "name": "ingress_service",
+            "options": [ ],
+            "query": "label_values(haproxy_server_status, instance)",
             "refresh": 1,
             "regex": "",
             "sort": 1,
