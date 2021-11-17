@@ -14,9 +14,11 @@ class ConfigMonitor : public PaxosService
 {
   version_t version = 0;
   ConfigMap config_map;
+
   std::map<std::string,std::optional<ceph::buffer::list>> pending;
   std::string pending_description;
   std::map<std::string,std::optional<ceph::buffer::list>> pending_cleanup;
+  std::map<std::string,std::optional<ceph::buffer::list>> pending_profiles;
 
   std::map<std::string,ceph::buffer::list> current;
 
