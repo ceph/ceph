@@ -322,6 +322,11 @@ struct LBAInternalNode
     return get_size() == get_capacity();
   }
 
+  bool at_min_capacity() const {
+    assert(get_size() >= (get_min_capacity() - 1));
+    return get_size() <= get_min_capacity();
+  }
+
   bool below_min_capacity() const {
     assert(get_size() >= (get_min_capacity() - 1));
     return get_size() < get_min_capacity();
@@ -543,6 +548,11 @@ struct LBALeafNode
   bool at_max_capacity() const {
     assert(get_size() <= get_capacity());
     return get_size() == get_capacity();
+  }
+
+  bool at_min_capacity() const {
+    assert(get_size() >= (get_min_capacity() - 1));
+    return get_size() <= get_min_capacity();
   }
 
   bool below_min_capacity() const {
