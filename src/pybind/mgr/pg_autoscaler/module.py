@@ -131,11 +131,11 @@ class PgAutoscaler(MgrModule):
             default='scale-up',
             type='str',
             desc='pg_autoscale profiler',
-            long_desc=('Determines the behavior of the autoscaler algorithm '
+            long_desc=('Determines the behavior of the autoscaler algorithm, '
                        '`scale-up` means that it starts out with minmum pgs '
-                       'and scales up when there is pressure, `scale-down` '
-                       'means starts out with full pgs and scales down when '
-                       'there is pressure '),
+                       'and scales up when there is pressure'
+                       '`scale-down means start out with full pgs and scales'
+                       'down when there is pressure'),
             runtime=True),
     ]
 
