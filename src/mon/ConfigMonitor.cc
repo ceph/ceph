@@ -369,6 +369,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
 	tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
 	tbl.define_column("RO", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("PROFILE", TextTable::LEFT, TextTable::LEFT);
       } else {
 	f->open_object_section("config");
       }
@@ -385,6 +386,13 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	  tbl << p->first;
 	  tbl << p->second;
 	  tbl << (q->second.option->opt->can_update_at_runtime() ? "" : "*");
+	  if (q->second.profile_name.size()) {
+	    ostringstream ss;
+	    ss << q->second.profile_name << "=" << q->second.profile_value;
+	    tbl << ss.str();
+	  } else {
+	    tbl << "";
+	  }
 	  tbl << TextTable::endrow;
 	} else {
 	  f->open_object_section(p->first.c_str());
@@ -393,6 +401,8 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	  f->dump_object("mask", q->second.option->mask);
 	  f->dump_bool("can_update_at_runtime",
 		       q->second.option->opt->can_update_at_runtime());
+	  f->dump_string("profile_name", q->second.profile_name);
+	  f->dump_string("profile_value", q->second.profile_value);
 	  f->close_section();
 	}
       }
