@@ -6620,6 +6620,14 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   extract_by_tag(m_s3select_output, "QuoteFields", output_quote_fields);
   extract_by_tag(m_s3select_output, "RecordDelimiter", output_row_delimiter);
 
+  if (output_row_delimiter.size()==0) {
+    output_row_delimiter='\n';
+  }
+  else if(output_row_delimiter.compare("&#10;") == 0)
+  {//presto change
+    output_row_delimiter='\n';
+  }
+
   if (m_compression_type.length()>0 && m_compression_type.compare("NONE") != 0) {
     ldpp_dout(this, 10) << "RGW supports currently only NONE option for compression type" << dendl;
     return -1;
