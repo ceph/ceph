@@ -57,6 +57,7 @@ static ostream& _prefix(std::ostream *_dout, const Monitor &mon,
 
 const string KEY_PREFIX("config/");
 const string HISTORY_PREFIX("config-history/");
+const string PROFILE_PREFIX("config-profile/");
 
 ConfigMonitor::ConfigMonitor(Monitor &m, Paxos &p, const string& service_name)
   : PaxosService(m, p, service_name) {
@@ -783,8 +784,35 @@ void ConfigMonitor::load_config()
   config_map.clear();
   current.clear();
 
-  unsigned num = 0;
   KeyValueDB::Iterator it = mon.store->get_iterator(KV_PREFIX);
+
+  // load profiles
+  for (it->lower_bound(PROFILE_PREFIX);
+       it->valid() &&
+	 it->key().compare(0, PROFILE_PREFIX.size(), PROFILE_PREFIX) == 0;
+       it->next()) {
+    string name = it->key().substr(PROFILE_PREFIX.size());
+    string def = it->value().to_str();
+    int r = config_map.add_profile(
+      g_ceph_context,
+      name,
+      def,
+      [&](const std::string& name) {
+	const Option *opt = g_conf().find_option(name);
+	if (!opt) {
+	  opt = mon.mgrmon()->find_module_option(name);
+	}
+	return opt;
+      });
+    if (r == -EINVAL) {
+      dout(10) << __func__ << " failed to load profile " << name << ": " << def
+	       << dendl;
+    } else {
+      dout(10) << __func__ << " loaded profile " << name << ": " << def << dendl;
+    }
+  }
+
+  unsigned num = 0;
   for (it->lower_bound(KEY_PREFIX);
        it->valid() &&
 	 it->key().compare(0, KEY_PREFIX.size(), KEY_PREFIX) == 0;
