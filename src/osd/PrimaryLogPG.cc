@@ -6700,13 +6700,14 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	        oi.size - op.extent.truncate_size);
 	      ctx->modified_ranges.union_of(trim);
 	      ctx->clean_regions.mark_data_region_dirty(op.extent.truncate_size, oi.size - op.extent.truncate_size);
-	      oi.clear_data_digest();
 	    }
 	    if (op.extent.truncate_size != oi.size) {
               truncate_update_size_and_usage(ctx->delta_stats,
                                              oi,
                                              op.extent.truncate_size);
 	    }
+	    //truncate modify oi.size, need clear old data_digest and DIGEST flag
+	    oi.clear_data_digest();
 	  } else {
 	    dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
 		     << ", but object is new" << dendl;
@@ -6724,10 +6725,16 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	if (op.extent.length == 0) {
 	  if (op.extent.offset > oi.size) {
-	    t->truncate(
-	      soid, op.extent.offset);
-            truncate_update_size_and_usage(ctx->delta_stats, oi,
-                                           op.extent.offset);
+	    if (seq && (seq > op.extent.truncate_seq)) {
+	      //do nothing
+	      //write arrived after truncate, we should not truncate to offset
+	    } else {
+	      t->truncate(
+	        soid, op.extent.offset);
+	      truncate_update_size_and_usage(ctx->delta_stats, oi,
+	                                     op.extent.offset);
+	      oi.clear_data_digest();
+	    }
 	  } else {
 	    t->nop(soid);
 	  }
