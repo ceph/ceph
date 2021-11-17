@@ -246,10 +246,9 @@ nfs:
   - src/pybind/mgr/nfs/**
   - src/pybind/mgr/cephadm/services/nfs.py
   - src/pybind/mgr/cephadm/templates/services/nfs/ganesha.conf.j2
-  - src/pybind/mgr/dashboard/services/ganesha.py
-  - src/pybind/mgr/dashboard/tests/test_ganesha.py
+  - src/pybind/mgr/dashboard/controllers/nfs.py
+  - src/pybind/mgr/dashboard/tests/test_nfs.py
   - qa/tasks/cephfs/test_nfs.py
-  - qa/tasks/mgr/dashboard/test_ganesha.py
   - doc/mgr/nfs.rst
   - doc/cephfs/nfs.rst
   - doc/cephadm/nfs.rst
