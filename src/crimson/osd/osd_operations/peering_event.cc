@@ -62,13 +62,13 @@ seastar::future<> PeeringEvent::start()
   return maybe_delay.then([this] {
     return get_pg();
   }).then([this](Ref<PG> pg) {
+    if (!pg) {
+      logger().warn("{}: pg absent, did not create", *this);
+      on_pg_absent();
+      handle.exit();
+      return complete_rctx(pg);
+    }
     return interruptor::with_interruption([this, pg] {
-      if (!pg) {
-        logger().warn("{}: pg absent, did not create", *this);
-        on_pg_absent();
-        handle.exit();
-        return complete_rctx(pg);
-      }
       logger().debug("{}: pg present", *this);
       return with_blocking_future_interruptible<interruptor::condition>(
         handle.enter(pp(*pg).await_map)
@@ -111,7 +111,7 @@ void PeeringEvent::on_pg_absent()
   logger().debug("{}: pg absent, dropping", *this);
 }
 
-PeeringEvent::interruptible_future<> PeeringEvent::complete_rctx(Ref<PG> pg)
+seastar::future<> PeeringEvent::complete_rctx(Ref<PG> pg)
 {
   logger().debug("{}: submitting ctx", *this);
   return shard_services.dispatch_context(
@@ -152,7 +152,7 @@ void RemotePeeringEvent::on_pg_absent()
   }
 }
 
-PeeringEvent::interruptible_future<> RemotePeeringEvent::complete_rctx(Ref<PG> pg)
+seastar::future<> RemotePeeringEvent::complete_rctx(Ref<PG> pg)
 {
   if (pg) {
     return PeeringEvent::complete_rctx(pg);
