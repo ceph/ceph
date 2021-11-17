@@ -923,6 +923,11 @@ void FSMap::promote(
   }
   auto& info = mds_map.mds_info.at(standby_gid);
 
+  if (!filesystem.mds_map.compat.writeable(info.compat)) {
+    ceph_assert(filesystem.is_upgradeable());
+    filesystem.mds_map.compat.merge(info.compat);
+  }
+
   if (mds_map.stopped.erase(assigned_rank)) {
     // The cluster is being expanded with a stopped rank
     info.state = MDSMap::STATE_STARTING;
@@ -946,11 +951,6 @@ void FSMap::promote(
   if (!is_standby_replay) {
     standby_daemons.erase(standby_gid);
     standby_epochs.erase(standby_gid);
-  }
-
-  if (!filesystem.mds_map.compat.writeable(info.compat)) {
-    ceph_assert(filesystem.is_upgradeable());
-    filesystem.mds_map.compat.merge(info.compat);
   }
 
   // Indicate that Filesystem has been modified
