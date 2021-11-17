@@ -91,6 +91,7 @@ void ConfigMonitor::create_pending()
   dout(10) << " " << version << dendl;
   pending.clear();
   pending_cleanup.clear();
+  pending_profiles.clear();
   pending_description.clear();
 }
 
@@ -139,8 +140,20 @@ void ConfigMonitor::encode_pending_to_kvmon()
       dout(20) << __func__ << " set " << key << dendl;
       mon.kvmon()->enqueue_set(key, *p.second);
       mon.kvmon()->enqueue_set(history + "+" + p.first, *p.second);
-   } else {
+    } else {
       dout(20) << __func__ << " rm " << key << dendl;
+      mon.kvmon()->enqueue_rm(key);
+    }
+  }
+
+  // profile
+  for (auto& p : pending_profiles) {
+    string key = PROFILE_PREFIX + p.first;
+    if (p.second) {
+      dout(20) << __func__ << " profile set " << key << dendl;
+      mon.kvmon()->enqueue_set(key, *p.second);
+    } else {
+      dout(20) << __func__ << " profile rm " << key << dendl;
       mon.kvmon()->enqueue_rm(key);
     }
   }
