@@ -125,4 +125,7 @@ def test_get_smart_data_from_appropriate_ceph_command(send_command):
     ]
     CephService._get_smart_data_by_device({'devid': '1', 'daemons': ['osd.1', 'mon.1']})
     send_command.assert_has_calls([mock.call('mon', 'osd tree'),
-                                   mock.call('mon', 'device get-health-metrics', '1', devid='1')])
+                                   mock.call('osd', 'smart', '1', devid='1'),
+                                   mock.call('mon', 'osd tree'),
+                                   mock.call('mon', 'device query-daemon-health-metrics',
+                                             who='mon.1')])
