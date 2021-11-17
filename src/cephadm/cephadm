@@ -2214,7 +2214,9 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
                        config=None, keyring=None):
     # type: (CephadmContext, str, str, Union[int, str], int, int, Optional[str], Optional[str]) ->  None
     data_dir = make_data_dir(ctx, fsid, daemon_type, daemon_id, uid=uid, gid=gid)
-    make_log_dir(ctx, fsid, uid=uid, gid=gid)
+
+    if daemon_type in Ceph.daemons:
+        make_log_dir(ctx, fsid, uid=uid, gid=gid)
 
     if config:
         config_path = os.path.join(data_dir, 'config')
@@ -5126,8 +5128,6 @@ def command_shell(ctx):
        cp.get('global', 'fsid') != ctx.fsid:
         raise Error('fsid does not match ceph.conf')
 
-    if ctx.fsid:
-        make_log_dir(ctx, ctx.fsid)
     if ctx.name:
         if '.' in ctx.name:
             (daemon_type, daemon_id) = ctx.name.split('.', 1)
@@ -5137,6 +5137,9 @@ def command_shell(ctx):
     else:
         daemon_type = 'osd'  # get the most mounts
         daemon_id = None
+
+    if ctx.fsid and daemon_type in Ceph.daemons:
+        make_log_dir(ctx, ctx.fsid)
 
     if daemon_id and not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
