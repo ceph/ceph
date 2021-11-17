@@ -3,7 +3,8 @@ import json
 import logging
 import uuid
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Set
+from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Set, \
+    DefaultDict
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
@@ -90,6 +91,8 @@ class CephadmServe:
                     self._check_daemons()
 
                     self._purge_deleted_services()
+
+                    self._check_for_moved_osds()
 
                     if self.mgr.agent_helpers._handle_use_agent_setting():
                         continue
@@ -512,6 +515,33 @@ class CephadmServe:
             if self.mgr.warn_on_stray_daemons and daemon_detail:
                 self.mgr.set_health_warning(
                     'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
+
+    def _check_for_moved_osds(self) -> None:
+        all_osds: DefaultDict[int, List[orchestrator.DaemonDescription]] = defaultdict(list)
+        for dd in self.mgr.cache.get_daemons_by_type('osd'):
+            assert dd.daemon_id
+            all_osds[int(dd.daemon_id)].append(dd)
+        for osd_id, dds in all_osds.items():
+            if len(dds) <= 1:
+                continue
+            running = [dd for dd in dds if dd.status == DaemonDescriptionStatus.running]
+            error = [dd for dd in dds if dd.status == DaemonDescriptionStatus.error]
+            msg = f'Found duplicate OSDs: {", ".join(str(dd) for dd in dds)}'
+            logger.info(msg)
+            if len(running) != 1:
+                continue
+            osd = self.mgr.get_osd_by_id(osd_id)
+            if not osd or not osd['up']:
+                continue
+            for e in error:
+                assert e.hostname
+                try:
+                    self._remove_daemon(e.name(), e.hostname, no_post_remove=True)
+                    self.mgr.events.for_daemon(
+                        e.name(), 'INFO', f"Removed duplicated daemon on host '{e.hostname}'")
+                except OrchestratorError as ex:
+                    self.mgr.events.from_orch_error(ex)
+                    logger.exception(f'failed to remove duplicated daemon {e}')
 
     def _apply_all_services(self) -> bool:
         r = False
@@ -1079,7 +1109,7 @@ class CephadmServe:
                         # prime cached service state with what we (should have)
                         # just created
                         sd = daemon_spec.to_daemon_description(
-                            DaemonDescriptionStatus.running, 'starting')
+                            DaemonDescriptionStatus.starting, 'starting')
                         self.mgr.cache.add_daemon(daemon_spec.host, sd)
                         if daemon_spec.daemon_type in REQUIRES_POST_ACTIONS:
                             self.mgr.requires_post_actions.add(daemon_spec.name())
@@ -1106,7 +1136,7 @@ class CephadmServe:
                     self.mgr.cephadm_services[servict_type].post_remove(dd, is_failed_deploy=True)
                 raise
 
-    def _remove_daemon(self, name: str, host: str) -> str:
+    def _remove_daemon(self, name: str, host: str, no_post_remove: bool = False) -> str:
         """
         Remove a daemon
         """
@@ -1131,8 +1161,9 @@ class CephadmServe:
                 self.mgr.cache.rm_daemon(host, name)
             self.mgr.cache.invalidate_host_daemons(host)
 
-            self.mgr.cephadm_services[daemon_type_to_service(
-                daemon_type)].post_remove(daemon, is_failed_deploy=False)
+            if not no_post_remove:
+                self.mgr.cephadm_services[daemon_type_to_service(
+                    daemon_type)].post_remove(daemon, is_failed_deploy=False)
 
             return "Removed {} from host '{}'".format(name, host)
 
