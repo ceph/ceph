@@ -143,6 +143,20 @@ DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *p
     return dbops.GetBucket;
   if (!Op.compare("ListUserBuckets"))
     return dbops.ListUserBuckets;
+  if (!Op.compare("InsertLCEntry"))
+    return dbops.InsertLCEntry;
+  if (!Op.compare("RemoveLCEntry"))
+    return dbops.RemoveLCEntry;
+  if (!Op.compare("GetLCEntry"))
+    return dbops.GetLCEntry;
+  if (!Op.compare("ListLCEntries"))
+    return dbops.ListLCEntries;
+  if (!Op.compare("InsertLCHead"))
+    return dbops.InsertLCHead;
+  if (!Op.compare("RemoveLCHead"))
+    return dbops.RemoveLCHead;
+  if (!Op.compare("GetLCHead"))
+    return dbops.GetLCHead;
 
   /* Object Operations */
   map<string, class ObjectOp*>::iterator iter;
@@ -240,6 +254,8 @@ int DB::InitializeParams(const DoutPrefixProvider *dpp, string Op, DBOpParams *p
   //reset params here
   params->user_table = user_table;
   params->bucket_table = bucket_table;
+  params->lc_entry_table = lc_entry_table;
+  params->lc_head_table = lc_head_table;
 
   ret = 0;
 out:
@@ -1724,6 +1740,181 @@ int DB::Object::Delete::delete_obj(const DoutPrefixProvider *dpp) {
   ret = store->ProcessOp(dpp, "DeleteObject", &del_params);
   if (ret) {
     ldpp_dout(dpp, 0) << "In DeleteObject failed err:(" <<ret<<")" << dendl;
+    goto out;
+  }
+
+out:
+  return ret;
+}
+
+int DB::get_entry(const std::string& oid, const std::string& marker,
+			      rgw::sal::Lifecycle::LCEntry& entry)
+{
+  int ret = 0;
+  const DoutPrefixProvider *dpp = get_def_dpp();
+
+  DBOpParams params = {};
+  InitializeParams(dpp, "GetLCEntry", &params);
+
+  params.op.lc_entry.index = oid;
+  params.op.lc_entry.entry.bucket = marker;
+
+  params.op.query_str = "get_entry";
+  ret = ProcessOp(dpp, "GetLCEntry", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In GetLCEntry failed err:(" <<ret<<") " << dendl;
+    goto out;
+  }
+
+  if (!params.op.lc_entry.entry.start_time == 0) { //ensure entry found
+    entry = params.op.lc_entry.entry;
+  }
+
+out:
+  return ret;
+}
+
+int DB::get_next_entry(const std::string& oid, std::string& marker,
+				   rgw::sal::Lifecycle::LCEntry& entry)
+{
+  int ret = 0;
+  const DoutPrefixProvider *dpp = get_def_dpp();
+
+  DBOpParams params = {};
+  InitializeParams(dpp, "GetLCEntry", &params);
+
+  params.op.lc_entry.index = oid;
+  params.op.lc_entry.entry.bucket = marker;
+
+  params.op.query_str = "get_next_entry";
+  ret = ProcessOp(dpp, "GetLCEntry", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In GetLCEntry failed err:(" <<ret<<") " << dendl;
+    goto out;
+  }
+
+  if (!params.op.lc_entry.entry.start_time == 0) { //ensure entry found
+    entry = params.op.lc_entry.entry;
+  }
+
+out:
+  return ret;
+}
+
+int DB::set_entry(const std::string& oid, const rgw::sal::Lifecycle::LCEntry& entry)
+{
+  int ret = 0;
+  const DoutPrefixProvider *dpp = get_def_dpp();
+
+  DBOpParams params = {};
+  InitializeParams(dpp, "InsertLCEntry", &params);
+
+  params.op.lc_entry.index = oid;
+  params.op.lc_entry.entry = entry;
+
+  ret = ProcessOp(dpp, "InsertLCEntry", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In InsertLCEntry failed err:(" <<ret<<") " << dendl;
+    goto out;
+  }
+
+out:
+  return ret;
+}
+
+int DB::list_entries(const std::string& oid, const std::string& marker,
+  				 uint32_t max_entries, vector<rgw::sal::Lifecycle::LCEntry>& entries)
+{
+  int ret = 0;
+  const DoutPrefixProvider *dpp = get_def_dpp();
+
+  entries.clear();
+
+  DBOpParams params = {};
+  InitializeParams(dpp, "ListLCEntries", &params);
+
+  params.op.lc_entry.index = oid;
+  params.op.lc_entry.min_marker = marker;
+  params.op.list_max_count = max_entries;
+
+  ret = ProcessOp(dpp, "ListLCEntries", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In ListLCEntries failed err:(" <<ret<<") " << dendl;
+    goto out;
+  }
+
+  for (auto& entry : params.op.lc_entry.list_entries) {
+    entries.push_back(std::move(entry));
+  }
+
+out:
+  return ret;
+}
+
+int DB::rm_entry(const std::string& oid, const rgw::sal::Lifecycle::LCEntry& entry)
+{
+  int ret = 0;
+  const DoutPrefixProvider *dpp = get_def_dpp();
+
+  DBOpParams params = {};
+  InitializeParams(dpp, "RemoveLCEntry", &params);
+
+  params.op.lc_entry.index = oid;
+  params.op.lc_entry.entry = entry;
+
+  ret = ProcessOp(dpp, "RemoveLCEntry", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In RemoveLCEntry failed err:(" <<ret<<") " << dendl;
+    goto out;
+  }
+
+out:
+  return ret;
+}
+
+int DB::get_head(const std::string& oid, rgw::sal::Lifecycle::LCHead& head)
+{
+  int ret = 0;
+  const DoutPrefixProvider *dpp = get_def_dpp();
+
+  DBOpParams params = {};
+  InitializeParams(dpp, "GetLCHead", &params);
+
+  params.op.lc_head.index = oid;
+
+  ret = ProcessOp(dpp, "GetLCHead", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In GetLCHead failed err:(" <<ret<<") " << dendl;
+    goto out;
+  }
+
+  head = params.op.lc_head.head;
+
+out:
+  return ret;
+}
+
+int DB::put_head(const std::string& oid, const rgw::sal::Lifecycle::LCHead& head)
+{
+  int ret = 0;
+  const DoutPrefixProvider *dpp = get_def_dpp();
+
+  DBOpParams params = {};
+  InitializeParams(dpp, "InsertLCHead", &params);
+
+  params.op.lc_head.index = oid;
+  params.op.lc_head.head = head;
+
+  ret = ProcessOp(dpp, "InsertLCHead", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In InsertLCHead failed err:(" <<ret<<") " << dendl;
     goto out;
   }
 

@@ -98,6 +98,19 @@ struct DBOpObjectDataInfo {
   bufferlist data{};
 };
 
+struct DBOpLCHeadInfo {
+  string index;
+  rgw::sal::Lifecycle::LCHead head;
+};
+
+struct DBOpLCEntryInfo {
+  string index;
+  rgw::sal::Lifecycle::LCEntry entry;
+  // used for list query
+  string min_marker;
+  list<rgw::sal::Lifecycle::LCEntry> list_entries;
+};
+
 struct DBOpInfo {
   string name; // Op name
   /* Support only single access_key for now. So store
@@ -110,6 +123,8 @@ struct DBOpInfo {
   DBOpBucketInfo bucket;
   DBOpObjectInfo obj;
   DBOpObjectDataInfo obj_data;
+  DBOpLCHeadInfo lc_head;
+  DBOpLCEntryInfo lc_entry;
   uint64_t list_max_count;
 };
 
@@ -127,6 +142,8 @@ struct DBOpParams {
   /* Below are subject to change */
   string objectdata_table;
   string quota_table;
+  string lc_head_table;
+  string lc_entry_table;
   string obj;
 };
 
@@ -270,12 +287,28 @@ struct DBOpObjectDataPrepareInfo {
   string multipart_part_num = ":multipart_part_num";
 };
 
+struct DBOpLCEntryPrepareInfo {
+  string index = ":index";
+  string bucket_name = ":bucket_name";
+  string start_time = ":start_time";
+  string status = ":status";
+  string min_marker = ":min_marker";
+};
+
+struct DBOpLCHeadPrepareInfo {
+  string index = ":index";
+  string start_date = ":start_date";
+  string marker = ":marker";
+};
+
 struct DBOpPrepareInfo {
   DBOpUserPrepareInfo user;
   string query_str = ":query_str";
   DBOpBucketPrepareInfo bucket;
   DBOpObjectPrepareInfo obj;
   DBOpObjectDataPrepareInfo obj_data;
+  DBOpLCHeadPrepareInfo lc_head;
+  DBOpLCEntryPrepareInfo lc_entry;
   string list_max_count = ":list_max_count";
 };
 
@@ -292,6 +325,8 @@ struct DBOpPrepareParams {
   /* below subject to change */
   string objectdata_table;
   string quota_table;
+  string lc_head_table;
+  string lc_entry_table;
 };
 
 struct DBOps {
@@ -303,6 +338,13 @@ struct DBOps {
   class RemoveBucketOp *RemoveBucket;
   class GetBucketOp *GetBucket;
   class ListUserBucketsOp *ListUserBuckets;
+  class InsertLCEntryOp *InsertLCEntry;
+  class RemoveLCEntryOp *RemoveLCEntry;
+  class GetLCEntryOp *GetLCEntry;
+  class ListLCEntriesOp *ListLCEntries;
+  class InsertLCHeadOp *InsertLCHead;
+  class RemoveLCHeadOp *RemoveLCHead;
+  class GetLCHeadOp *GetLCHead;
 };
 
 class ObjectOp {
@@ -543,6 +585,23 @@ class DBOp {
       Enabled Boolean ,		\
       CheckOnRaw Boolean \n);";
 
+    const string CreateLCEntryTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' ( \
+      LCIndex  TEXT NOT NULL , \
+      BucketName TEXT NOT NULL , \
+      StartTime  INTEGER , \
+      Status     INTEGER , \
+      PRIMARY KEY (LCIndex, BucketName), \
+      FOREIGN KEY (BucketName) \
+      REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
+
+    const string CreateLCHeadTableQ =
+      "CREATE TABLE IF NOT EXISTS '{}' ( \
+      LCIndex  TEXT NOT NULL , \
+      Marker TEXT , \
+      StartDate  INTEGER , \
+      PRIMARY KEY (LCIndex) \n);";
+
     const string DropQ = "DROP TABLE IF EXISTS '{}'";
     const string ListAllQ = "SELECT  * from '{}'";
 
@@ -569,6 +628,13 @@ class DBOp {
       if (!type.compare("Quota"))
         return fmt::format(CreateQuotaTableQ.c_str(),
             params->quota_table.c_str());
+      if (!type.compare("LCHead"))
+        return fmt::format(CreateLCHeadTableQ.c_str(),
+            params->lc_head_table.c_str());
+      if (!type.compare("LCEntry"))
+        return fmt::format(CreateLCEntryTableQ.c_str(),
+            params->lc_entry_table.c_str(),
+            params->bucket_table.c_str());
 
       ldout(params->cct, 0) << "Incorrect table type("<<type<<") specified" << dendl;
 
@@ -1111,6 +1177,122 @@ class DeleteObjectDataOp: public DBOp {
     }
 };
 
+class InsertLCEntryOp: public DBOp {
+  private:
+    const string Query =
+      "INSERT OR REPLACE INTO '{}' \
+      (LCIndex, BucketName, StartTime, Status) \
+      VALUES ({}, {}, {}, {})";
+
+  public:
+    virtual ~InsertLCEntryOp() {}
+
+    string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query.c_str(), params.lc_entry_table.c_str(),
+          params.op.lc_entry.index, params.op.lc_entry.bucket_name,
+          params.op.lc_entry.start_time, params.op.lc_entry.status);
+    }
+};
+
+class RemoveLCEntryOp: public DBOp {
+  private:
+    const string Query =
+      "DELETE from '{}' where LCIndex = {} and BucketName = {}";
+
+  public:
+    virtual ~RemoveLCEntryOp() {}
+
+    string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query.c_str(), params.lc_entry_table.c_str(),
+          params.op.lc_entry.index, params.op.lc_entry.bucket_name);
+    }
+};
+
+class GetLCEntryOp: public DBOp {
+  private:
+    const string Query = "SELECT  \
+                          LCIndex, BucketName, StartTime, Status \
+                          from '{}' where LCIndex = {} and BucketName = {}";
+    const string NextQuery = "SELECT  \
+                          LCIndex, BucketName, StartTime, Status \
+                          from '{}' where LCIndex = {} and BucketName > {} ORDER BY BucketName ASC";
+
+  public:
+    virtual ~GetLCEntryOp() {}
+
+    string Schema(DBOpPrepareParams &params) {
+      if (params.op.query_str == "get_next_entry") {
+        return fmt::format(NextQuery.c_str(), params.lc_entry_table.c_str(),
+            params.op.lc_entry.index, params.op.lc_entry.bucket_name);
+      }
+      // default 
+      return fmt::format(Query.c_str(), params.lc_entry_table.c_str(),
+          params.op.lc_entry.index, params.op.lc_entry.bucket_name);
+    }
+};
+
+class ListLCEntriesOp: public DBOp {
+  private:
+    const string Query = "SELECT  \
+                          LCIndex, BucketName, StartTime, Status \
+                          FROM '{}' WHERE LCIndex = {} AND BucketName > {} ORDER BY BucketName ASC LIMIT {}";
+
+  public:
+    virtual ~ListLCEntriesOp() {}
+
+    string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query.c_str(), params.lc_entry_table.c_str(),
+          params.op.lc_entry.index.c_str(), params.op.lc_entry.min_marker.c_str(),
+          params.op.list_max_count.c_str());
+    }
+};
+
+class InsertLCHeadOp: public DBOp {
+  private:
+    const string Query =
+      "INSERT OR REPLACE INTO '{}' \
+      (LCIndex, Marker, StartDate) \
+      VALUES ({}, {}, {})";
+
+  public:
+    virtual ~InsertLCHeadOp() {}
+
+    string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query.c_str(), params.lc_head_table.c_str(),
+          params.op.lc_head.index, params.op.lc_head.marker,
+          params.op.lc_head.start_date);
+    }
+};
+
+class RemoveLCHeadOp: public DBOp {
+  private:
+    const string Query =
+      "DELETE from '{}' where LCIndex = {}";
+
+  public:
+    virtual ~RemoveLCHeadOp() {}
+
+    string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query.c_str(), params.lc_head_table.c_str(),
+          params.op.lc_head.index);
+    }
+};
+
+class GetLCHeadOp: public DBOp {
+  private:
+    const string Query = "SELECT  \
+                          LCIndex, Marker, StartDate \
+                          from '{}' where LCIndex = {}";
+
+  public:
+    virtual ~GetLCHeadOp() {}
+
+    string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query.c_str(), params.lc_head_table.c_str(),
+          params.op.lc_head.index);
+    }
+};
+
 /* taken from rgw_rados.h::RGWOLHInfo */
 struct DBOLHInfo {
   rgw_obj target;
@@ -1139,6 +1321,8 @@ class DB {
     const string user_table;
     const string bucket_table;
     const string quota_table;
+    const string lc_head_table;
+    const string lc_entry_table;
     static map<string, class ObjectOp*> objectmap;
     pthread_mutex_t mutex; // to protect objectmap and other shared
     // objects if any. This mutex is taken
@@ -1161,6 +1345,8 @@ class DB {
     user_table(db_name+".user.table"),
     bucket_table(db_name+".bucket.table"),
     quota_table(db_name+".quota.table"),
+    lc_head_table(db_name+".lc_head.table"),
+    lc_entry_table(db_name+".lc_entry.table"),
     cct(_cct),
     dp(_cct, dout_subsys, "rgw DBStore backend: ")
   {}
@@ -1170,6 +1356,8 @@ class DB {
     user_table(db_name+".user.table"),
     bucket_table(db_name+".bucket.table"),
     quota_table(db_name+".quota.table"),
+    lc_head_table(db_name+".lc_head.table"),
+    lc_entry_table(db_name+".lc_entry.table"),
     cct(_cct),
     dp(_cct, dout_subsys, "rgw DBStore backend: ")
   {}
@@ -1180,6 +1368,8 @@ class DB {
     const string getUserTable() { return user_table; }
     const string getBucketTable() { return bucket_table; }
     const string getQuotaTable() { return quota_table; }
+    const string getLCHeadTable() { return lc_head_table; }
+    const string getLCEntryTable() { return lc_entry_table; }
     const string getObjectTable(string bucket) {
       return db_name+"."+bucket+".object.table"; }
     const string getObjectDataTable(string bucket) {
@@ -1220,6 +1410,7 @@ class DB {
     virtual int InitializeDBOps(const DoutPrefixProvider *dpp) { return 0; }
     virtual int FreeDBOps(const DoutPrefixProvider *dpp) { return 0; }
     virtual int InitPrepareParams(const DoutPrefixProvider *dpp, DBOpPrepareParams &params) = 0;
+    virtual int createLCTables(const DoutPrefixProvider *dpp) = 0;
 
     virtual int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) = 0;
     virtual int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) = 0;
@@ -1583,6 +1774,17 @@ class DB {
         const raw_obj& read_obj, off_t obj_ofs,
         off_t len, bool is_head_obj,
         RGWObjState *astate, void *arg);
+
+    int get_entry(const std::string& oid, const std::string& marker,
+                  rgw::sal::Lifecycle::LCEntry& entry);
+    int get_next_entry(const std::string& oid, std::string& marker,
+                  rgw::sal::Lifecycle::LCEntry& entry);
+    int set_entry(const std::string& oid, const rgw::sal::Lifecycle::LCEntry& entry);
+    int list_entries(const std::string& oid, const std::string& marker,
+			   uint32_t max_entries, std::vector<rgw::sal::Lifecycle::LCEntry>& entries);
+    int rm_entry(const std::string& oid, const rgw::sal::Lifecycle::LCEntry& entry);
+    int get_head(const std::string& oid, rgw::sal::Lifecycle::LCHead& head);
+    int put_head(const std::string& oid, const rgw::sal::Lifecycle::LCHead& head);
 };
 
 struct db_get_obj_data {
