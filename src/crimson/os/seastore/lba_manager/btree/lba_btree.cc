@@ -675,7 +675,7 @@ LBABtree::handle_merge_ret merge_level(
     auto [liter, riter] = donor_is_left ?
       std::make_pair(donor_iter, iter) : std::make_pair(iter, donor_iter);
 
-    if (donor->below_min_capacity()) {
+    if (donor->at_min_capacity()) {
       auto replacement = l->make_full_merge(c, r);
 
       parent_pos.node->update(
