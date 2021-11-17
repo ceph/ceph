@@ -110,7 +110,7 @@ uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
   uint32_t perm = acl.get_perm(dpp, auth_identity, perm_mask);
 
   if (auth_identity.is_owner_of(owner.get_id())) {
-    perm |= perm_mask & (RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP);
+    perm |= RGW_PERM_FULL_CONTROL;
   }
 
   if (perm == perm_mask) {
