@@ -33,18 +33,19 @@ tasks:
       fail_on_skip: false
       modules:
         - tasks.mgr.test_dashboard
+        - tasks.mgr.dashboard.test_api
         - tasks.mgr.dashboard.test_auth
         - tasks.mgr.dashboard.test_cephfs
-        - tasks.mgr.dashboard.test_cluster_configuration
         - tasks.mgr.dashboard.test_cluster
+        - tasks.mgr.dashboard.test_cluster_configuration
         - tasks.mgr.dashboard.test_crush_rule
         - tasks.mgr.dashboard.test_erasure_code_profile
-        - tasks.mgr.dashboard.test_ganesha
         - tasks.mgr.dashboard.test_health
         - tasks.mgr.dashboard.test_host
         - tasks.mgr.dashboard.test_logs
         - tasks.mgr.dashboard.test_mgr_module
         - tasks.mgr.dashboard.test_monitor
+        - tasks.mgr.dashboard.test_motd
         - tasks.mgr.dashboard.test_orchestrator
         - tasks.mgr.dashboard.test_osd
         - tasks.mgr.dashboard.test_perf_counters
@@ -58,4 +59,3 @@ tasks:
         - tasks.mgr.dashboard.test_summary
         - tasks.mgr.dashboard.test_telemetry
         - tasks.mgr.dashboard.test_user
-        - tasks.mgr.dashboard.test_motd
