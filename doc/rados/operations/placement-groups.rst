@@ -121,24 +121,24 @@ example, a pool that maps to OSDs of class `ssd` and a pool that maps
 to OSDs of class `hdd` will each have optimal PG counts that depend on
 the number of those respective device types.
 
-The autoscaler uses the `scale-down` profile by default, 
-where each pool starts out with a full complements of PGs and only scales 
-down when the usage ratio across the pools is not even. However, it also has 
-a `scale-up` profile, where it starts out each pool with minimal PGs and scales
-up PGs when there is more usage in each pool.
+The autoscaler uses the `scale-up` profile by default,
+where it starts out each pool with minimal PGs and scales
+up PGs when there is more usage in each pool. However, it also has
+a `scale-down` profile, where each pool starts out with a full complements 
+of PGs and only scales down when the usage ratio across the pools is not even.
 
 With only the `scale-down` profile, the autoscaler identifies
 any overlapping roots and prevents the pools with such roots
 from scaling because overlapping roots can cause problems
 with the scaling process.
 
-To use the `scale-up` profile::
-
-  ceph osd pool set autoscale-profile scale-up
-
-To switch back to the default `scale-down` profile::
+To use the `scale-down` profile::
 
   ceph osd pool set autoscale-profile scale-down
+
+To switch back to the default `scale-up` profile::
+
+  ceph osd pool set autoscale-profile scale-up
 
 Existing clusters will continue to use the `scale-up` profile.
 To use the `scale-down` profile, users will need to set autoscale-profile `scale-down`,

@@ -48,7 +48,7 @@ void KVMonitor::create_initial()
   version = 0;
   pending.clear();
   bufferlist bl;
-  bl.append("scale-down");
+  bl.append("scale-up");
   pending["config/mgr/mgr/pg_autoscaler/autoscale_profile"] = bl;
 }
 
