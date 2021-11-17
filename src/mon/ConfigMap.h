@@ -129,6 +129,14 @@ struct ConfigMap {
   std::map<std::string,Profile,std::less<>> profiles;
   std::list<std::unique_ptr<Option>> stray_options;
 
+  const Option *get_profile_option(const std::string& name) {
+    auto p = profiles.find(name);
+    if (p == profiles.end()) {
+      return nullptr;
+    }
+    return p->second.opt;
+  }
+
   const Option *get_option(
     CephContext *cct,
     const std::string& name,

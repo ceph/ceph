@@ -211,6 +211,9 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     if (!opt) {
       opt = mon.mgrmon()->find_module_option(name);
     }
+    if (!opt) {
+      opt = config_map.get_profile_option(name);
+    }
     if (opt) {
       if (f) {
 	f->dump_object("option", *opt);
@@ -231,6 +234,13 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     ostringstream ss;
     if (f) {
       f->open_array_section("options");
+    }
+    for (auto& i : config_map.profiles) {
+      if (f) {
+	f->dump_string("option", i.first);
+      } else {
+	ss << i.first << "\n";
+      }
     }
     for (auto& i : ceph_options) {
       if (f) {
@@ -569,6 +579,9 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	opt = mon.mgrmon()->find_module_option(name);
+      }
+      if (!opt) {
+	opt = config_map.get_profile_option(name);
       }
       if (!opt) {
 	ss << "unrecognized config option '" << name << "'";
