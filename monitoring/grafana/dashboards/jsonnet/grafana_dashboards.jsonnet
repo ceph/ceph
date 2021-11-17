@@ -3,8 +3,8 @@ local g = import 'grafana.libsonnet';
 local dashboardSchema(title, description, uid, time_from, refresh, schemaVersion, tags, timezone, timepicker) =
   g.dashboard.new(title=title, description=description, uid=uid, time_from=time_from, refresh=refresh, schemaVersion=schemaVersion, tags=tags, timezone=timezone, timepicker=timepicker);
 
-local graphPanelSchema(aliasColors, title, description, nullPointMode, stack, formatY1, formatY2, labelY1, labelY2, min, fill, datasource) =
-  g.graphPanel.new(aliasColors=aliasColors, title=title, description=description, nullPointMode=nullPointMode, stack=stack, formatY1=formatY1, formatY2=formatY2, labelY1=labelY1, labelY2=labelY2, min=min, fill=fill, datasource=datasource);
+local graphPanelSchema(aliasColors, title, description, nullPointMode, stack, formatY1, formatY2, labelY1, labelY2, min, fill, datasource, legend_alignAsTable=false, legend_avg=false, legend_min=false, legend_max=false, legend_current=false, legend_values=false) =
+  g.graphPanel.new(aliasColors=aliasColors, title=title, description=description, nullPointMode=nullPointMode, stack=stack, formatY1=formatY1, formatY2=formatY2, labelY1=labelY1, labelY2=labelY2, min=min, fill=fill, datasource=datasource, legend_alignAsTable=legend_alignAsTable, legend_avg=legend_avg, legend_min=legend_min, legend_max=legend_max, legend_current=legend_current, legend_values=legend_values);
 
 local addTargetSchema(expr, intervalFactor, format, legendFormat) =
   g.prometheus.target(expr=expr, intervalFactor=intervalFactor, format=format, legendFormat=legendFormat);
@@ -250,8 +250,8 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
 }
 {
   "radosgw-overview.json":
-    local RgwOverviewPanel(title, description, formatY1, formatY2, expr1, legendFormat1, x, y, w, h) =
-      graphPanelSchema({}, title, description, 'null', false, formatY1, formatY2, null, null, 0, 1, '$datasource')
+    local RgwOverviewPanel(title, description, formatY1, formatY2, expr1, legendFormat1, x, y, w, h, datasource='$datasource', legend_alignAsTable=false, legend_avg=false, legend_min=false, legend_max=false, legend_current=false, legend_values=false) =
+      graphPanelSchema({}, title, description, 'null', false, formatY1, formatY2, null, null, 0, 1, datasource, legend_alignAsTable, legend_avg, legend_min, legend_max, legend_current, legend_values)
       .addTargets(
         [addTargetSchema(expr1, 1, 'time_series', legendFormat1)]) + {gridPos: {x: x, y: y, w: w, h: h}};
 
@@ -272,6 +272,12 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
        addTemplateSchema('rgw_servers', '$datasource', 'label_values(ceph_rgw_req, ceph_daemon)', 1, true, 1, '', '')
     )
     .addTemplate(
+       addTemplateSchema('code', '$datasource', 'label_values(haproxy_server_http_responses_total{instance=~"$ingress_service"}, code)', 1, true, 1, 'HTTP Code', '')
+    )
+    .addTemplate(
+       addTemplateSchema('ingress_service', '$datasource', 'label_values(haproxy_server_status, instance)', 1, true, 1, 'Ingress Service', '')
+    )
+    .addTemplate(
        g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
     )
     .addPanels([
@@ -289,8 +295,72 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
       RgwOverviewPanel(
         'Bandwidth by RGW Instance', 'Total bytes transferred in/out through get/put operations, by radosgw instance', 'bytes', 'short', 'sum by(rgw_host) (\n  (label_replace(rate(ceph_rgw_get_b[30s]), \"rgw_host\",\"$1\",\"ceph_daemon\",\"rgw.(.*)\")) + \n  (label_replace(rate(ceph_rgw_put_b[30s]), \"rgw_host\",\"$1\",\"ceph_daemon\",\"rgw.(.*)\"))\n)', '{{rgw_host}}', 8, 8, 7, 6),
       RgwOverviewPanel(
-        'PUT Latencies by RGW Instance', 'Latencies are shown stacked, without a yaxis to provide a visual indication of PUT latency imbalance across RGW hosts', 's', 'short', 'label_replace(rate(ceph_rgw_put_initial_lat_sum[30s]),\"rgw_host\",\"$1\",\"ceph_daemon\",\"rgw.(.*)\") / \nlabel_replace(rate(ceph_rgw_put_initial_lat_count[30s]),\"rgw_host\",\"$1\",\"ceph_daemon\",\"rgw.(.*)\")', '{{rgw_host}}', 15, 8, 6, 6)
-    ])
+        'PUT Latencies by RGW Instance', 'Latencies are shown stacked, without a yaxis to provide a visual indication of PUT latency imbalance across RGW hosts', 's', 'short', 'label_replace(rate(ceph_rgw_put_initial_lat_sum[30s]),\"rgw_host\",\"$1\",\"ceph_daemon\",\"rgw.(.*)\") / \nlabel_replace(rate(ceph_rgw_put_initial_lat_count[30s]),\"rgw_host\",\"$1\",\"ceph_daemon\",\"rgw.(.*)\")', '{{rgw_host}}', 15, 8, 6, 6),
+   
+      addRowSchema(false, true, 'RGW Overview - HAProxy Metrics') + {gridPos: {x: 0, y: 12, w: 9, h: 12}},
+      RgwOverviewPanel(
+        'Total responses by HTTP code', '', 'short', 'short', 'sum(irate(haproxy_frontend_http_responses_total{code=~"$code",instance=~"$ingress_service",proxy=~"frontend"}[5m])) by (code)', 'Frontend {{ code }}', 0, 12, 5, 12, '$datasource', true, true, true, true, true, true)
+        .addTargets(
+        [addTargetSchema('sum(irate(haproxy_backend_http_responses_total{code=~"$code",instance=~"$ingress_service",proxy=~"backend"}[5m])) by (code)', 1, 'time_series', 'Backend {{ code }}')])
+        .addSeriesOverride([
+          { "alias": "/.*Back.*/",
+            "transform": "negative-Y" },
+          { "alias": "/.*1.*/" },
+          { "alias": "/.*2.*/" },
+          { "alias": "/.*3.*/" },
+          { "alias": "/.*4.*/" },
+          { "alias": "/.*5.*/" },
+          { "alias": "/.*other.*/" }
+        ]),
+      RgwOverviewPanel(
+        'Total requests / responses', '', 'short', 'short',
+        'sum(irate(haproxy_frontend_http_requests_total{proxy=~"frontend",instance=~"$ingress_service"}[5m])) by (instance)', 'Requests', 5, 12, 5, 12, '$datasource', true, true, true, true, true, true)
+        .addTargets(
+        [addTargetSchema('sum(irate(haproxy_backend_response_errors_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 2, 'time_series', 'Response errors'),
+        addTargetSchema('sum(irate(haproxy_frontend_request_errors_total{proxy=~"frontend",instance=~"$ingress_service"}[5m])) by (instance)', 1, 'time_series', 'Requests errors'),
+        addTargetSchema('sum(irate(haproxy_backend_redispatch_warnings_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 2, 'time_series', 'Backend redispatch'),
+        addTargetSchema('sum(irate(haproxy_backend_retry_warnings_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 2, 'time_series', 'Backend retry'),
+        addTargetSchema('sum(irate(haproxy_frontend_requests_denied_total{proxy=~"frontend",instance=~"$ingress_service"}[5m])) by (instance)', 2, 'time_series', 'Request denied'),
+        addTargetSchema('sum(haproxy_backend_current_queue{proxy=~"backend",instance=~"$ingress_service"}) by (instance)', 2, 'time_series', 'Backend Queued'),
+        ])
+        .addSeriesOverride([
+           {
+              "alias": "/.*Response.*/",
+              "transform": "negative-Y"
+            },
+            {
+              "alias": "/.*Backend.*/",
+              "transform": "negative-Y"
+            }
+        ]),
+        RgwOverviewPanel(
+        'Total number of connections', '', 'short', 'short',
+        'sum(irate(haproxy_frontend_connections_total{proxy=~"frontend",instance=~"$ingress_service"}[5m])) by (instance)', 'Front', 10, 12, 5, 12, '$datasource', true, true, true, true, true, true)
+        .addTargets(
+        [addTargetSchema('sum(irate(haproxy_backend_connection_attempts_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 1, 'time_series', 'Back'),
+        addTargetSchema('sum(irate(haproxy_backend_connection_errors_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 1, 'time_series', 'Back errors'),
+        ])
+        .addSeriesOverride([
+           {
+             "alias": "/.*Back.*/",
+             "transform": "negative-Y"
+           }
+        ]),
+        RgwOverviewPanel(
+        'Current total of incoming / outgoing bytes', '', 'short', 'short',
+        'sum(irate(haproxy_frontend_bytes_in_total{proxy=~"frontend",instance=~"$ingress_service"}[5m])*8) by (instance)', 'IN Front', 15, 12, 6, 12, '$datasource', true, true, true, true, true, true)
+        .addTargets(
+        [addTargetSchema('sum(irate(haproxy_frontend_bytes_out_total{proxy=~"frontend",instance=~"$ingress_service"}[5m])*8) by (instance)', 2, 'time_series', 'OUT Front'),
+        addTargetSchema('sum(irate(haproxy_backend_bytes_in_total{proxy=~"backend",instance=~"$ingress_service"}[5m])*8) by (instance)', 2, 'time_series', 'IN Back'),
+        addTargetSchema('sum(irate(haproxy_backend_bytes_out_total{proxy=~"backend",instance=~"$ingress_service"}[5m])*8) by (instance)', 2, 'time_series', 'OUT Back')
+        ])
+        .addSeriesOverride([
+           {
+             "alias": "/.*OUT.*/",
+             "transform": "negative-Y"
+           }
+        ])
+      ])
 }
 {
   "radosgw-detail.json":
