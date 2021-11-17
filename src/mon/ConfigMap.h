@@ -98,19 +98,46 @@ struct Section {
   std::string get_minimal_conf() const;
 };
 
+struct Profile {
+  Option *opt;
+  std::map<std::string, Section> profile;
+
+  Profile(Option *o);
+
+  int parse(
+    CephContext *cct,
+    const std::string& input,
+    std::function<const Option *(const std::string&)> get_opt);
+  void clear() {
+    profile.clear();
+  }
+  void dump(ceph::Formatter *f) const;
+};
+
 struct ConfigMap {
   struct ValueSource {
     std::string section;
     const MaskedOption *option = nullptr;
+    std::string profile_name;
+    std::string profile_value;
     ValueSource() {}
     ValueSource(const std::string& s, const MaskedOption *o)
       : section(s), option(o) {}
+    ValueSource(const std::string& s, const MaskedOption *o,
+		const std::string& pn, const std::string& pv)
+      : section(s), option(o), profile_name(pn), profile_value(pv) {}
   };
 
   Section global;
   std::map<std::string,Section, std::less<>> by_type;
   std::map<std::string,Section, std::less<>> by_id;
+  std::map<std::string,Profile,std::less<>> profiles;
   std::list<std::unique_ptr<Option>> stray_options;
+
+  const Option *get_option(
+    CephContext *cct,
+    const std::string& name,
+    std::function<const Option *(const std::string&)> get_opt);
 
   Section *find_section(const std::string& name) {
     if (name == "global") {
@@ -130,6 +157,7 @@ struct ConfigMap {
     global.clear();
     by_type.clear();
     by_id.clear();
+    profiles.clear();
     stray_options.clear();
   }
   void dump(ceph::Formatter *f) const;
@@ -155,6 +183,12 @@ struct ConfigMap {
     const std::string& name,
     const std::string& who,
     const std::string& value,
+    std::function<const Option *(const std::string&)> get_opt);
+
+  int add_profile(
+    CephContext *cct,
+    const std::string& name,
+    const std::string& def,
     std::function<const Option *(const std::string&)> get_opt);
 };
 

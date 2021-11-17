@@ -151,7 +151,7 @@ struct Option {
     uuid_d>;
   const std::string name;
   const type_t type;
-  const level_t level;
+  level_t level;
 
   std::string desc;
   std::string long_desc;

@@ -6,6 +6,7 @@
 #include "ConfigMap.h"
 #include "crush/CrushWrapper.h"
 #include "common/entity_name.h"
+#include "json_spirit/json_spirit.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -119,6 +120,101 @@ std::string Section::get_minimal_conf() const
 
 // ------------
 
+Profile::Profile(Option *o)
+  : opt(o)
+{
+}
+
+void Profile::dump(Formatter *f) const
+{
+  f->dump_string("level", Option::level_to_str(opt->level));
+  f->dump_string("desc", opt->desc);
+  f->dump_string("fmt_desc", opt->long_desc);
+  f->open_object_section("values");
+  for (auto& i : profile) {
+    f->open_object_section(i.first.c_str());
+    for (auto& j : i.second.options) {
+      f->dump_string(j.first.c_str(), j.second.raw_value);
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+
+int Profile::parse(
+  CephContext *cct,
+  const std::string& input,
+  std::function<const Option *(const std::string&)> get_opt)
+{
+  json_spirit::mValue json;
+  try {
+    // try json parsing first
+    json_spirit::read_or_throw(input, json);
+    if (json.type() != json_spirit::obj_type) {
+      return -EINVAL;
+    }
+    for (auto& i : json.get_obj()) { // profile_value -> {}
+      if (i.first == "level") {
+	if (i.second.type() != json_spirit::str_type) {
+	  return -EINVAL;
+	}
+	if (i.second.get_str() == "basic") {
+	  opt->level = Option::LEVEL_BASIC;
+	} else if (i.second.get_str() == "advanced") {
+	  opt->level = Option::LEVEL_ADVANCED;
+	} else if (i.second.get_str() == "dev") {
+	  opt->level = Option::LEVEL_DEV;
+	}
+      }
+      else if (i.first == "desc") {
+	if (i.second.type() != json_spirit::str_type) {
+	  return -EINVAL;
+	}
+	opt->desc = i.second.get_str();
+      }
+      else if (i.first == "fmt_desc") {
+	if (i.second.type() != json_spirit::str_type) {
+	  return -EINVAL;
+	}
+	opt->long_desc = i.second.get_str();
+      }
+      else if (i.first == "values") {
+	if (i.second.type() != json_spirit::obj_type) {
+	  return -EINVAL;
+	}
+	for (auto& j : i.second.get_obj()) { // profile_value -> {}
+	  if (j.second.type() != json_spirit::obj_type) {
+	    return -EINVAL;
+	  }
+	  ldout(cct, 10) << __func__ << " value " << j.first << dendl;
+	  auto r = profile.insert(make_pair(j.first, Section()));
+	  opt->enum_allowed.push_back(r.first->first.c_str());
+	  for (auto& k : j.second.get_obj()) { // { key -> value }
+	    if (k.second.type() != json_spirit::str_type) {
+	      return -EINVAL;
+	    }
+	    std::string name = k.first;
+	    ldout(cct, 10) << __func__ << "   option " << name << dendl;
+	    const Option *opt = get_opt(name);
+	    ceph_assert(opt);
+	    MaskedOption o(opt);
+	    o.raw_value = k.second.get_str();
+	    profile[j.first].options.insert(make_pair(name, std::move(o)));
+	  }
+	}
+      } else {
+	return -EINVAL;
+      }
+    }
+  } catch (json_spirit::Error_position &e) {
+    return -EINVAL;
+  }
+  return 0;
+}
+
+
+// ------------
+
 void ConfigMap::dump(Formatter *f) const
 {
   f->dump_object("global", global);
@@ -129,6 +225,11 @@ void ConfigMap::dump(Formatter *f) const
   f->close_section();
   f->open_object_section("by_id");
   for (auto& i : by_id) {
+    f->dump_object(i.first.c_str(), i.second);
+  }
+  f->close_section();
+  f->open_object_section("profiles");
+  for (auto& i : profiles) {
     f->dump_object(i.first.c_str(), i.second);
   }
   f->close_section();
@@ -166,9 +267,15 @@ ConfigMap::generate_entity_map(
   std::map<std::string,std::string,std::less<>> out;
   MaskedOption *prev = nullptr;
   for (auto s : sections) {
+    // apply profile content first
     for (auto& i : s.second->options) {
-      auto& o = i.second;
+      auto p = profiles.find(i.first);
+      if (p == profiles.end()) {
+	continue;
+      }
+
       // match against crush location, class
+      auto& o = i.second;
       if (o.mask.device_class.size() &&
 	  o.mask.device_class != device_class) {
 	continue;
@@ -187,10 +294,50 @@ ConfigMap::generate_entity_map(
 	  prev->get_precision(crush) < o.get_precision(crush)) {
 	continue;
       }
+
+      // apply profile options
+      auto q = p->second.profile.find(o.raw_value);
+      if (q != p->second.profile.end()) {
+	for (auto& [opt, v] : q->second.options) {
+	  out[opt] = v.raw_value;
+	  if (src) {
+	    (*src)[opt] = ConfigMap::ValueSource(s.first, &v, i.first, o.raw_value);
+	  }
+	}
+      }
+
+      prev = &o;
+    }
+
+    // ...then apply (all) options
+    prev = nullptr;
+    for (auto& i : s.second->options) {
+      // match against crush location, class
+      auto& o = i.second;
+      if (o.mask.device_class.size() &&
+	  o.mask.device_class != device_class) {
+	continue;
+      }
+      if (o.mask.location_type.size()) {
+	auto p = crush_location.find(o.mask.location_type);
+	if (p == crush_location.end() ||
+	    p->second != o.mask.location_value) {
+	  continue;
+	}
+      }
+      if (prev && prev->opt->name != i.first) {
+	prev = nullptr;
+      }
+      if (prev &&
+	  prev->get_precision(crush) < o.get_precision(crush)) {
+	continue;
+      }
+
       out[i.first] = o.raw_value;
       if (src) {
 	(*src).emplace(i.first, ConfigMap::ValueSource(s.first, &o));
       }
+
       prev = &o;
     }
   }
@@ -261,14 +408,7 @@ int ConfigMap::add_option(
   const std::string& orig_value,
   std::function<const Option *(const std::string&)> get_opt)
 {
-  const Option *opt = get_opt(name);
-  if (!opt) {
-    ldout(cct, 10) << __func__ << " unrecognized option '" << name << "'" << dendl;
-    stray_options.push_back(
-      std::unique_ptr<Option>(
-	new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
-    opt = stray_options.back().get();
-  }
+  const Option *opt = get_option(cct, name, get_opt);
 
   string err;
   string value = orig_value;
@@ -307,6 +447,53 @@ int ConfigMap::add_option(
   return ret;
 }
 
+const Option *ConfigMap::get_option(
+  CephContext *cct,
+  const std::string& name,
+  std::function<const Option *(const std::string&)> get_opt)
+{
+  const Option *opt = get_opt(name);
+  if (!opt) {
+    auto p = profiles.find(name);
+    if (p != profiles.end()) {
+      return p->second.opt;
+    }
+    ldout(cct, 10) << __func__ << " unrecognized option '" << name << "'" << dendl;
+    stray_options.push_back(
+      std::unique_ptr<Option>(
+	new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
+    opt = stray_options.back().get();
+  }
+  return opt;
+}
+
+int ConfigMap::add_profile(
+  CephContext *cct,
+  const std::string& name,
+  const std::string& def,
+  std::function<const Option *(const std::string&)> get_opt)
+{
+  stray_options.push_back(
+    std::unique_ptr<Option>(
+      new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
+  auto it = profiles.emplace(name, Profile(stray_options.back().get()));
+  int r = it.first->second.parse(
+    cct,
+    def,
+    [&](const std::string& name) {
+      return get_option(cct, name, get_opt);
+    }
+  );
+  if (r < 0) {
+    profiles.erase(name);
+    return -1;
+  }
+
+  // mark the profile option as a runtime option, even though it is a string
+  it.first->second.opt->set_flag(Option::FLAG_RUNTIME);
+
+  return 0;
+}
 
 // --------------
 
