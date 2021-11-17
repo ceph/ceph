@@ -134,7 +134,7 @@ class OSDService(CephService):
                 created.append(osd_id)
                 daemon_spec: CephadmDaemonDeploySpec = CephadmDaemonDeploySpec(
                     service_name=service_name,
-                    daemon_id=osd_id,
+                    daemon_id=str(osd_id),
                     host=host,
                     daemon_type='osd',
                 )

@@ -769,9 +769,23 @@ def handle_type_error(method: FuncT) -> FuncT:
 
 
 class DaemonDescriptionStatus(enum.IntEnum):
+    unknown = -2
     error = -1
     stopped = 0
     running = 1
+    starting = 2  #: Daemon is deployed, but not yet running
+
+    @staticmethod
+    def to_str(status: Optional['DaemonDescriptionStatus']) -> str:
+        if status is None:
+            status = DaemonDescriptionStatus.unknown
+        return {
+            DaemonDescriptionStatus.unknown: 'unknown',
+            DaemonDescriptionStatus.error: 'error',
+            DaemonDescriptionStatus.stopped: 'stopped',
+            DaemonDescriptionStatus.running: 'running',
+            DaemonDescriptionStatus.starting: 'starting',
+        }.get(status, '<unknown>')
 
 
 class DaemonDescription(object):
@@ -817,7 +831,7 @@ class DaemonDescription(object):
                  rank_generation: Optional[int] = None,
                  ) -> None:
 
-        # Host is at the same granularity as InventoryHost
+        #: Host is at the same granularity as InventoryHost
         self.hostname: Optional[str] = hostname
 
         # Not everyone runs in containers, but enough people do to
@@ -828,32 +842,32 @@ class DaemonDescription(object):
         self.container_image_name = container_image_name  # image friendly name
         self.container_image_digests = container_image_digests  # reg hashes
 
-        # The type of service (osd, mon, mgr, etc.)
+        #: The type of service (osd, mon, mgr, etc.)
         self.daemon_type = daemon_type
 
-        # The orchestrator will have picked some names for daemons,
-        # typically either based on hostnames or on pod names.
-        # This is the <foo> in mds.<foo>, the ID that will appear
-        # in the FSMap/ServiceMap.
+        #: The orchestrator will have picked some names for daemons,
+        #: typically either based on hostnames or on pod names.
+        #: This is the <foo> in mds.<foo>, the ID that will appear
+        #: in the FSMap/ServiceMap.
         self.daemon_id: Optional[str] = daemon_id
         self.daemon_name = self.name()
 
-        # Some daemon types have a numeric rank assigned
+        #: Some daemon types have a numeric rank assigned
         self.rank: Optional[int] = rank
         self.rank_generation: Optional[int] = rank_generation
 
         self._service_name: Optional[str] = service_name
 
-        # Service version that was deployed
+        #: Service version that was deployed
         self.version = version
 
-        # Service status: -1 error, 0 stopped, 1 running
-        self.status = status
+        # Service status: -2 unknown, -1 error, 0 stopped, 1 running, 2 starting
+        self._status = status
 
-        # Service status description when status == error.
+        #: Service status description when status == error.
         self.status_desc = status_desc
 
-        # datetime when this info was last refreshed
+        #: datetime when this info was last refreshed
         self.last_refresh: Optional[datetime.datetime] = last_refresh
 
         self.created: Optional[datetime.datetime] = created
@@ -861,7 +875,7 @@ class DaemonDescription(object):
         self.last_configured: Optional[datetime.datetime] = last_configured
         self.last_deployed: Optional[datetime.datetime] = last_deployed
 
-        # Affinity to a certain OSDSpec
+        #: Affinity to a certain OSDSpec
         self.osdspec_affinity: Optional[str] = osdspec_affinity
 
         self.events: List[OrchestratorEvent] = events or []
@@ -876,6 +890,15 @@ class DaemonDescription(object):
         self.deployed_by = deployed_by
 
         self.is_active = is_active
+
+    @property
+    def status(self) -> Optional[DaemonDescriptionStatus]:
+        return self._status
+
+    @status.setter
+    def status(self, new: DaemonDescriptionStatus) -> None:
+        self._status = new
+        self.status_desc = DaemonDescriptionStatus.to_str(new)
 
     def get_port_summary(self) -> str:
         if not self.ports:
@@ -964,6 +987,9 @@ class DaemonDescription(object):
     def __repr__(self) -> str:
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
                                                          id=self.daemon_id)
+
+    def __str__(self) -> str:
+        return f"{self.name()} in status {self.status_desc} on {self.hostname}"
 
     def to_json(self) -> dict:
         out: Dict[str, Any] = OrderedDict()
@@ -1371,6 +1397,9 @@ class OrchestratorEvent:
 
         return self.created == other.created and self.kind == other.kind \
             and self.subject == other.subject and self.message == other.message
+
+    def __repr__(self) -> str:
+        return f'OrchestratorEvent.from_json({self.to_json()!r})'
 
 
 def _mk_orch_methods(cls: Any) -> Any:
