@@ -128,14 +128,14 @@ class PgAutoscaler(MgrModule):
             default=60),
         Option(
             'autoscale_profile',
-            default='scale-down',
+            default='scale-up',
             type='str',
             desc='pg_autoscale profiler',
             long_desc=('Determines the behavior of the autoscaler algorithm, '
-                       '`scale-down means start out with full pgs and scales'
-                       'down when there is pressure'
                        '`scale-up` means that it starts out with minmum pgs '
-                       'and scales up when there is pressure'),
+                       'and scales up when there is pressure'
+                       '`scale-down means start out with full pgs and scales'
+                       'down when there is pressure'),
             runtime=True),
         Option(
             name='threshold',
@@ -156,7 +156,7 @@ class PgAutoscaler(MgrModule):
         # to just keep a copy of the pythonized version.
         self._osd_map = None
         if TYPE_CHECKING:
-            self.autoscale_profile: 'ScaleModeT' = 'scale-down'
+            self.autoscale_profile: 'ScaleModeT' = 'scale-up'
             self.sleep_interval = 60
             self.mon_target_pg_per_osd = 0
             self.threshold = 3.0
