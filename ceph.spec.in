@@ -1273,7 +1273,7 @@ env | sort
 # TODO: drop this step once we can use `cmake -B`
 mkdir -p %{_vpath_builddir}
 pushd %{_vpath_builddir}
-cmake .. \
+CC="distcc" cmake .. \
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
     -DCMAKE_INSTALL_LIBEXECDIR:PATH=%{_libexecdir} \
