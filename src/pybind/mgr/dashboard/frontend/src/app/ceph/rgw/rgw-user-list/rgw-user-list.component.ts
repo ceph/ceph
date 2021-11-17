@@ -1,6 +1,5 @@
 import { Component, NgZone, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
