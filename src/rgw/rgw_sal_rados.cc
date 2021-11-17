@@ -3064,7 +3064,7 @@ int RadosOIDCProvider::delete_obj(const DoutPrefixProvider *dpp, optional_yield 
 int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
   using ceph::encode;
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  //auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   std::string oid = get_info_oid_prefix() + id;
 
   bufferlist bl;
@@ -3076,11 +3076,15 @@ int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optiona
     attrs.emplace("tagging", bl_tags);
   }
 
+  RGWSI_MBSObj_PutParams params(bl, &attrs, mtime, exclusive);
+  return store->svc()->meta_be_sobj->put(store->svc()->meta_be_sobj->alloc_ctx(), oid, params, &objv_tracker, y, dpp);
+  #if 0
   if (!attrs.empty()) {
     return rgw_put_system_obj(dpp, obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, mtime, y, &attrs);
   }
 
   return rgw_put_system_obj(dpp, obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, mtime, y);
+  #endif
 }
 
 int RadosRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
@@ -3095,7 +3099,7 @@ int RadosRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optiona
   using ceph::encode;
   encode(nameToId, bl);
 
-  return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y);
+  return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, &objv_tracker, real_time(), y);
 }
 
 int RadosRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
@@ -3105,7 +3109,7 @@ int RadosRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optiona
 
   bufferlist bl;
 
-  return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y);
+  return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, &objv_tracker, real_time(), y);
 }
 
 int RadosRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y)
@@ -3164,7 +3168,7 @@ int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
   std::string oid = get_info_oid_prefix() + id;
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, &objv_tracker, &mtime, null_yield, dpp, &attrs, nullptr, boost::none, true);
+  int ret = rgw_get_system_obj(obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, &objv_tracker, &mtime, null_yield, dpp, &attrs, nullptr, boost::none, true);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role info from Role pool: " << id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
