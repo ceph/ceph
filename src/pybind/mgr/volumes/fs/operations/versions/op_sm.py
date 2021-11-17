@@ -1,9 +1,9 @@
 import errno
 
 from typing import Dict
-
 from ...exception import OpSmException
 from .subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeActions
+
 
 class TransitionKey(object):
     def __init__(self, subvol_type, state, action_type):
@@ -18,8 +18,9 @@ class TransitionKey(object):
     def __neq__(self, other):
         return not(self == other)
 
+
 class SubvolumeOpSm(object):
-    transition_table = {} # type: Dict
+    transition_table = {}  # type: Dict
 
     @staticmethod
     def is_complete_state(state):
@@ -43,9 +44,9 @@ class SubvolumeOpSm(object):
     def get_init_state(stm_type):
         if not isinstance(stm_type, SubvolumeTypes):
             raise OpSmException(-errno.EINVAL, "unknown state machine '{0}'".format(stm_type))
-        init_state =  SubvolumeOpSm.transition_table[TransitionKey(stm_type,
-                                                     SubvolumeStates.STATE_INIT,
-                                                     SubvolumeActions.ACTION_NONE)]
+        init_state = SubvolumeOpSm.transition_table[TransitionKey(stm_type,
+                                                                  SubvolumeStates.STATE_INIT,
+                                                                  SubvolumeActions.ACTION_NONE)]
         if not init_state:
             raise OpSmException(-errno.ENOENT, "initial state for state machine '{0}' not found".format(stm_type))
         return init_state
@@ -65,50 +66,51 @@ class SubvolumeOpSm(object):
 
         return transition
 
+
 SubvolumeOpSm.transition_table = {
     # state transitions for state machine type TYPE_NORMAL
     TransitionKey(SubvolumeTypes.TYPE_NORMAL,
                   SubvolumeStates.STATE_INIT,
-                  SubvolumeActions.ACTION_NONE) : SubvolumeStates.STATE_COMPLETE,
+                  SubvolumeActions.ACTION_NONE): SubvolumeStates.STATE_COMPLETE,
 
     TransitionKey(SubvolumeTypes.TYPE_NORMAL,
                   SubvolumeStates.STATE_COMPLETE,
-                  SubvolumeActions.ACTION_RETAINED) : SubvolumeStates.STATE_RETAINED,
+                  SubvolumeActions.ACTION_RETAINED): SubvolumeStates.STATE_RETAINED,
 
     # state transitions for state machine type TYPE_CLONE
     TransitionKey(SubvolumeTypes.TYPE_CLONE,
                   SubvolumeStates.STATE_INIT,
-                  SubvolumeActions.ACTION_NONE) : SubvolumeStates.STATE_PENDING,
+                  SubvolumeActions.ACTION_NONE): SubvolumeStates.STATE_PENDING,
 
     TransitionKey(SubvolumeTypes.TYPE_CLONE,
                   SubvolumeStates.STATE_PENDING,
-                  SubvolumeActions.ACTION_SUCCESS) : SubvolumeStates.STATE_INPROGRESS,
+                  SubvolumeActions.ACTION_SUCCESS): SubvolumeStates.STATE_INPROGRESS,
 
     TransitionKey(SubvolumeTypes.TYPE_CLONE,
                   SubvolumeStates.STATE_PENDING,
-                  SubvolumeActions.ACTION_CANCELLED) : SubvolumeStates.STATE_CANCELED,
+                  SubvolumeActions.ACTION_CANCELLED): SubvolumeStates.STATE_CANCELED,
 
     TransitionKey(SubvolumeTypes.TYPE_CLONE,
                   SubvolumeStates.STATE_INPROGRESS,
-                  SubvolumeActions.ACTION_SUCCESS) : SubvolumeStates.STATE_COMPLETE,
+                  SubvolumeActions.ACTION_SUCCESS): SubvolumeStates.STATE_COMPLETE,
 
     TransitionKey(SubvolumeTypes.TYPE_CLONE,
                   SubvolumeStates.STATE_INPROGRESS,
-                  SubvolumeActions.ACTION_CANCELLED) : SubvolumeStates.STATE_CANCELED,
+                  SubvolumeActions.ACTION_CANCELLED): SubvolumeStates.STATE_CANCELED,
 
     TransitionKey(SubvolumeTypes.TYPE_CLONE,
                   SubvolumeStates.STATE_INPROGRESS,
-                  SubvolumeActions.ACTION_FAILED) : SubvolumeStates.STATE_FAILED,
+                  SubvolumeActions.ACTION_FAILED): SubvolumeStates.STATE_FAILED,
 
     TransitionKey(SubvolumeTypes.TYPE_CLONE,
                   SubvolumeStates.STATE_COMPLETE,
-                  SubvolumeActions.ACTION_RETAINED) : SubvolumeStates.STATE_RETAINED,
+                  SubvolumeActions.ACTION_RETAINED): SubvolumeStates.STATE_RETAINED,
 
     TransitionKey(SubvolumeTypes.TYPE_CLONE,
                   SubvolumeStates.STATE_CANCELED,
-                  SubvolumeActions.ACTION_RETAINED) : SubvolumeStates.STATE_RETAINED,
+                  SubvolumeActions.ACTION_RETAINED): SubvolumeStates.STATE_RETAINED,
 
     TransitionKey(SubvolumeTypes.TYPE_CLONE,
                   SubvolumeStates.STATE_FAILED,
-                  SubvolumeActions.ACTION_RETAINED) : SubvolumeStates.STATE_RETAINED,
+                  SubvolumeActions.ACTION_RETAINED): SubvolumeStates.STATE_RETAINED,
 }
