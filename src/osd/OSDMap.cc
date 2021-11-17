@@ -1807,6 +1807,12 @@ void OSDMap::clean_temps(CephContext *cct,
       pending_inc->new_pg_temp[pg.first].clear();
       continue;
     }
+    if (!nextmap.pg_exists(pg.first)) {
+      ldout(cct, 10) << __func__ << " removing pg_temp " << pg.first
+                     << " for nonexistent pg " << dendl;
+      pending_inc->new_pg_temp[pg.first].clear();
+      continue;
+    }
     // all osds down?
     unsigned num_up = 0;
     for (auto o : pg.second) {
