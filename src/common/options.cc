@@ -3808,7 +3808,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("Setting this to false makes the OSD do a slower teardown of all state when it receives a SIGINT or SIGTERM or when shutting down for any other reason.  That slow shutdown is primarilyy useful for doing memory leak checking with valgrind."),
 
     Option("osd_fast_shutdown_notify_mon", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    .set_default(true)
     .set_description("Tell mon about OSD shutdown on immediate shutdown")
     .set_long_description("Tell the monitor the OSD is shutting down on immediate shutdown. This helps with cluster log messages from other OSDs reporting it immediately failed.")
     .add_see_also({"osd_fast_shutdown", "osd_mon_shutdown_timeout"}),
