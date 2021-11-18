@@ -12,9 +12,9 @@ describe('Create cluster add host page', () => {
     'ceph-node-02.cephlab.com',
     'ceph-node-[01-02].cephlab.com'
   ];
-  const addHost = (hostname: string, exist?: boolean, pattern?: boolean) => {
+  const addHost = (hostname: string, exist?: boolean, pattern?: boolean, labels: string[] = []) => {
     cy.get('.btn.btn-accent').first().click({ force: true });
-    createClusterHostPage.add(hostname, exist, false);
+    createClusterHostPage.add(hostname, exist, false, labels);
     if (!pattern) {
       createClusterHostPage.checkExist(hostname, true);
     }
@@ -43,9 +43,14 @@ describe('Create cluster add host page', () => {
     addHost(hostnames[3], false, true);
   });
 
-  it('should delete a host and add it back', () => {
+  it('should delete a host', () => {
     createClusterHostPage.delete(hostnames[1]);
-    addHost(hostnames[1], false);
+  });
+
+  it('should add a host with some predefined labels and verify it', () => {
+    const labels = ['mon', 'mgr', 'rgw', 'osd'];
+    addHost(hostnames[1], false, false, labels);
+    createClusterHostPage.checkLabelExists(hostnames[1], labels, true);
   });
 
   it('should verify "_no_schedule" label is added', () => {
