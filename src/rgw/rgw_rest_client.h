@@ -219,6 +219,15 @@ public:
 		param_vec_t *_params, std::optional<std::string> _api_name) : RGWRESTStreamRWRequest(_cct, "HEAD", _url, _cb, _headers, _params, _api_name) {}
 };
 
+class RGWRESTStreamSendRequest : public RGWRESTStreamRWRequest {
+public:
+  RGWRESTStreamSendRequest(CephContext *_cct, const std::string& method,
+                           const std::string& _url,
+                           ReceiveCB *_cb, param_vec_t *_headers, param_vec_t *_params,
+                           std::optional<std::string> _api_name,
+                           HostStyle _host_style = PathStyle) : RGWRESTStreamRWRequest(_cct, method, _url, _cb, _headers, _params, _api_name, _host_style) {}
+};
+
 class RGWRESTStreamS3PutObj : public RGWHTTPStreamRWRequest {
   std::optional<std::string> api_name;
   HostStyle host_style;

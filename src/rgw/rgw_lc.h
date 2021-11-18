@@ -480,6 +480,10 @@ public:
     std::mutex lock;
     std::condition_variable cond;
     WorkPool* workpool{nullptr};
+    /* save the target bucket names created as part of object transition
+     * to cloud. This list is maintained for the duration of each RGWLC::process()
+     * post which it is discarded. */
+    std::set<std::string> cloud_targets;
 
   public:
 
@@ -493,6 +497,7 @@ public:
     void stop();
     bool should_work(utime_t& now);
     int schedule_next_start_time(utime_t& start, utime_t& now);
+    std::set<std::string>& get_cloud_targets() { return cloud_targets; }
     ~LCWorker();
 
     friend class RGWRados;

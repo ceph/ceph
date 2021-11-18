@@ -5009,21 +5009,21 @@ int main(int argc, const char **argv)
     case OPT::ZONEGROUP_PLACEMENT_RM:
     case OPT::ZONEGROUP_PLACEMENT_DEFAULT:
       {
-        if (placement_id.empty()) {
-          cerr << "ERROR: --placement-id not specified" << std::endl;
-          return EINVAL;
-        }
+    if (placement_id.empty()) {
+      cerr << "ERROR: --placement-id not specified" << std::endl;
+      return EINVAL;
+    }
 
-        rgw_placement_rule rule;
-        rule.from_str(placement_id);
+    rgw_placement_rule rule;
+    rule.from_str(placement_id);
 
-        if (!rule.storage_class.empty() && opt_storage_class &&
-            rule.storage_class != *opt_storage_class) {
-          cerr << "ERROR: provided contradicting storage class configuration" << std::endl;
-          return EINVAL;
-        } else if (rule.storage_class.empty()) {
-          rule.storage_class = opt_storage_class.value_or(string());
-        }
+    if (!rule.storage_class.empty() && opt_storage_class &&
+        rule.storage_class != *opt_storage_class) {
+      cerr << "ERROR: provided contradicting storage class configuration" << std::endl;
+      return EINVAL;
+    } else if (rule.storage_class.empty()) {
+      rule.storage_class = opt_storage_class.value_or(string());
+    }
 
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	int ret = zonegroup.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
@@ -5032,52 +5032,114 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-        if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_ADD ||
-            opt_cmd == OPT::ZONEGROUP_PLACEMENT_MODIFY) {
-          RGWZoneGroupPlacementTarget& target = zonegroup.placement_targets[placement_id];
-          if (!tags.empty()) {
-            target.tags.clear();
-            for (auto& t : tags) {
-              target.tags.insert(t);
+    if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_ADD ||
+      opt_cmd == OPT::ZONEGROUP_PLACEMENT_MODIFY) {
+      RGWZoneGroupPlacementTarget& target = zonegroup.placement_targets[placement_id];
+      if (!tags.empty()) {
+        target.tags.clear();
+        for (auto& t : tags) {
+          target.tags.insert(t);
+        }
+      }
+
+      target.name = placement_id;
+      for (auto& t : tags_rm) {
+        target.tags.erase(t);
+      }
+      for (auto& t : tags_add) {
+        target.tags.insert(t);
+      }
+      target.storage_classes.insert(rule.get_storage_class());
+
+      /* Tier options */
+      bool tier_class = false;
+      std::string storage_class = rule.get_storage_class();
+      RGWZoneGroupPlacementTier t{storage_class};
+      RGWZoneGroupPlacementTier *pt = &t;
+
+	  auto ptiter = target.tier_targets.find(storage_class);
+	  if (ptiter != target.tier_targets.end()) {
+        pt = &ptiter->second;
+        tier_class = true;
+      } else if (tier_type_specified) {
+        if (tier_type == "cloud-s3") {
+          /* we support only cloud-s3 tier-type for now.
+           * Once set cant be reset. */
+          tier_class = true;
+          pt->tier_type = tier_type;
+          pt->storage_class = storage_class;
+        } else {
+	      cerr << "ERROR: Invalid tier-type specified" << std::endl;
+	      return EINVAL;
+        }
+      }
+
+      if (tier_class) {
+        if (tier_config_add.size() > 0) {
+          JSONFormattable tconfig;
+          for (auto add : tier_config_add) {
+            int r = tconfig.set(add.first, add.second);
+            if (r < 0) {
+              cerr << "ERROR: failed to set configurable: " << add << std::endl;
+              return EINVAL;
             }
           }
-          target.name = placement_id;
-          for (auto& t : tags_rm) {
-            target.tags.erase(t);
+          int r = pt->update_params(tconfig);
+          if (r < 0) {
+            cerr << "ERROR: failed to update tier_config options"<< std::endl;
           }
-          for (auto& t : tags_add) {
-            target.tags.insert(t);
-          }
-          target.storage_classes.insert(rule.get_storage_class());
-        } else if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_RM) {
-          if (!opt_storage_class ||
-              opt_storage_class->empty()) {
-            zonegroup.placement_targets.erase(placement_id);
-          } else {
-            auto iter = zonegroup.placement_targets.find(placement_id);
-            if (iter != zonegroup.placement_targets.end()) {
-              RGWZoneGroupPlacementTarget& info = zonegroup.placement_targets[placement_id];
-              info.storage_classes.erase(*opt_storage_class);
+        }
+        if (tier_config_rm.size() > 0) {
+          JSONFormattable tconfig;
+          for (auto add : tier_config_rm) {
+            int r = tconfig.set(add.first, add.second);
+            if (r < 0) {
+              cerr << "ERROR: failed to set configurable: " << add << std::endl;
+              return EINVAL;
             }
           }
-        } else if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_DEFAULT) {
-          if (!zonegroup.placement_targets.count(placement_id)) {
-            cerr << "failed to find a zonegroup placement target named '"
-                << placement_id << "'" << std::endl;
-            return -ENOENT;
+          int r = pt->clear_params(tconfig);
+          if (r < 0) {
+            cerr << "ERROR: failed to update tier_config options"<< std::endl;
           }
-          zonegroup.default_placement = rule;
         }
 
-        zonegroup.post_process_params(dpp(), null_yield);
-        ret = zonegroup.update(dpp(), null_yield);
-        if (ret < 0) {
-          cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
+        target.tier_targets.emplace(std::make_pair(storage_class, *pt));
+      }
 
-        encode_json("placement_targets", zonegroup.placement_targets, formatter.get());
-        formatter->flush(cout);
+    } else if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_RM) {
+      if (!opt_storage_class || opt_storage_class->empty()) {
+        zonegroup.placement_targets.erase(placement_id);
+      } else {
+        auto iter = zonegroup.placement_targets.find(placement_id);
+        if (iter != zonegroup.placement_targets.end()) {
+          RGWZoneGroupPlacementTarget& info = zonegroup.placement_targets[placement_id];
+          info.storage_classes.erase(*opt_storage_class);
+
+	      auto ptiter = info.tier_targets.find(*opt_storage_class);
+	      if (ptiter != info.tier_targets.end()) {
+		    info.tier_targets.erase(ptiter);
+	      }
+        }
+      }
+    } else if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_DEFAULT) {
+      if (!zonegroup.placement_targets.count(placement_id)) {
+        cerr << "failed to find a zonegroup placement target named '"
+             << placement_id << "'" << std::endl;
+        return -ENOENT;
+      }
+      zonegroup.default_placement = rule;
+    }
+
+    zonegroup.post_process_params(dpp(), null_yield);
+    ret = zonegroup.update(dpp(), null_yield);
+    if (ret < 0) {
+      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    encode_json("placement_targets", zonegroup.placement_targets, formatter.get());
+    formatter->flush(cout);
       }
       break;
     case OPT::ZONE_CREATE:
@@ -5515,6 +5577,10 @@ int main(int argc, const char **argv)
 	  string storage_class = rgw_placement_rule::get_canonical_storage_class(opt_storage_class.value_or(string()));
 	  if (ptiter->second.storage_classes.find(storage_class) == ptiter->second.storage_classes.end()) {
 	    cerr << "ERROR: storage class '" << storage_class << "' is not defined in zonegroup '" << placement_id << "' placement target" << std::endl;
+	    return EINVAL;
+	  }
+	  if (ptiter->second.tier_targets.find(storage_class) != ptiter->second.tier_targets.end()) {
+	    cerr << "ERROR: storage class '" << storage_class << "' is of tier type in zonegroup '" << placement_id << "' placement target" << std::endl;
 	    return EINVAL;
 	  }
 

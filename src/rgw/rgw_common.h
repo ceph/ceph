@@ -259,6 +259,7 @@ using ceph::crypto::MD5;
 #define ERR_POSITION_NOT_EQUAL_TO_LENGTH                 2219
 #define ERR_OBJECT_NOT_APPENDABLE                        2220
 #define ERR_INVALID_BUCKET_STATE                         2221
+#define ERR_INVALID_OBJECT_STATE			 2222
 
 #define ERR_BUSY_RESHARDING      2300
 #define ERR_NO_SUCH_ENTITY       2301
@@ -1983,6 +1984,8 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
     return "rgw.shadow";
   case RGWObjCategory::MultiMeta:
     return "rgw.multimeta";
+  case RGWObjCategory::CloudTiered:
+    return "rgw.cloudtiered";
   }
 
   return "unknown";

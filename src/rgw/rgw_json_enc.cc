@@ -99,6 +99,13 @@ void RGWObjManifestRule::dump(Formatter *f) const
   encode_json("override_prefix", override_prefix, f);
 }
 
+void RGWObjTier::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("tier_placement", tier_placement, f);
+  encode_json("is_multipart_upload", is_multipart_upload, f);
+}
+
 void rgw_bucket_placement::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
@@ -144,6 +151,11 @@ void RGWObjManifest::dump(Formatter *f) const
   ::encode_json("rules", rules, f);
   ::encode_json("tail_instance", tail_instance, f);
   ::encode_json("tail_placement", tail_placement, f);
+  ::encode_json("tier_type", tier_type, f);
+  
+  if (tier_type == "cloud-s3") {
+    ::encode_json("tier_config", tier_config, f);
+  }
 
   // nullptr being passed into iterators since there
   // is no cct and we aren't doing anything with these
@@ -1402,11 +1414,106 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("redirect_zone", redirect_zone, obj);
 }
 
+void RGWTierACLMapping::dump(Formatter *f) const
+{
+  string s;
+  switch (type) {
+    case ACL_TYPE_EMAIL_USER:
+      s = "email";
+      break;
+    case ACL_TYPE_GROUP:
+      s = "uri";
+      break;
+    default:
+      s = "id";
+      break;
+  }
+  encode_json("type", s, f);
+  encode_json("source_id", source_id, f);
+  encode_json("dest_id", dest_id, f);
+}
+
+void RGWTierACLMapping::decode_json(JSONObj *obj)
+{
+  string s;
+  JSONDecoder::decode_json("type", s, obj);
+  if (s == "email") {
+    type = ACL_TYPE_EMAIL_USER;
+  } else if (s == "uri") {
+    type = ACL_TYPE_GROUP;
+  } else {
+    type = ACL_TYPE_CANON_USER;
+  }
+
+  JSONDecoder::decode_json("source_id", source_id, obj);
+  JSONDecoder::decode_json("dest_id", dest_id, obj);
+}
+
+void RGWZoneGroupPlacementTier::dump(Formatter *f) const
+{
+  encode_json("tier_type", tier_type, f);
+  encode_json("storage_class", storage_class, f);
+  encode_json("retain_head_object", retain_head_object, f);
+
+  if (tier_type == "cloud-s3") {
+    encode_json("s3", t.s3, f);
+  }
+}
+
+void RGWZoneGroupPlacementTierS3::dump(Formatter *f) const
+{
+  encode_json("endpoint", endpoint, f);
+  encode_json("access_key", key.id, f);
+  encode_json("secret", key.key, f);
+  encode_json("region", region, f);
+  string s = (host_style == PathStyle ? "path" : "virtual");
+  encode_json("host_style", s, f);
+  encode_json("target_storage_class", target_storage_class, f);
+  encode_json("target_path", target_path, f);
+  encode_json("acl_mappings", acl_mappings, f);
+  encode_json("multipart_sync_threshold", multipart_sync_threshold, f);
+  encode_json("multipart_min_part_size", multipart_min_part_size, f);
+}
+
+void RGWZoneGroupPlacementTier::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("tier_type", tier_type, obj);
+  JSONDecoder::decode_json("storage_class", storage_class, obj);
+  JSONDecoder::decode_json("retain_head_object", retain_head_object, obj);
+
+  if (tier_type == "cloud-s3") {
+    JSONDecoder::decode_json("s3", t.s3, obj);
+  }
+}
+
+void RGWZoneGroupPlacementTierS3::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("endpoint", endpoint, obj);
+  JSONDecoder::decode_json("access_key", key.id, obj);
+  JSONDecoder::decode_json("secret", key.key, obj);
+  JSONDecoder::decode_json("region", region, obj);
+  string s;
+  JSONDecoder::decode_json("host_style", s, obj);
+  if (s != "virtual") {
+    host_style = PathStyle;
+  } else {
+    host_style = VirtualStyle;
+  }
+  JSONDecoder::decode_json("target_storage_class", target_storage_class, obj);
+  JSONDecoder::decode_json("target_path", target_path, obj);
+  JSONDecoder::decode_json("acl_mappings", acl_mappings, obj);
+  JSONDecoder::decode_json("multipart_sync_threshold", multipart_sync_threshold, obj);
+  JSONDecoder::decode_json("multipart_min_part_size", multipart_min_part_size, obj);
+}
+
 void RGWZoneGroupPlacementTarget::dump(Formatter *f) const
 {
   encode_json("name", name, f);
   encode_json("tags", tags, f);
   encode_json("storage_classes", storage_classes, f);
+  if (!tier_targets.empty()) {
+    encode_json("tier_targets", tier_targets, f);
+  }
 }
 
 void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
@@ -1416,6 +1523,9 @@ void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("storage_classes", storage_classes, obj);
   if (storage_classes.empty()) {
     storage_classes.insert(RGW_STORAGE_CLASS_STANDARD);
+  }
+  if (!tier_targets.empty()) {
+    JSONDecoder::decode_json("tier_targets", tier_targets, obj);
   }
 }
 

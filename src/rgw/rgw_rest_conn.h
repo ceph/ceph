@@ -200,6 +200,16 @@ public:
                    RGWHTTPManager *mgr,
                    optional_yield y);
 
+  int send_resource(const DoutPrefixProvider *dpp,
+                   const std::string& method,
+                   const std::string& resource,
+		           rgw_http_param_pair *extra_params,
+                   std::map<std::string, std::string>* extra_headers,
+                   bufferlist& bl,
+                   bufferlist *send_data,
+                   RGWHTTPManager *mgr,
+                   optional_yield y);
+
   template <class T>
   int get_json_resource(const DoutPrefixProvider *dpp, const std::string& resource, param_vec_t *params,
                         bufferlist *in_data, optional_yield y, T& t);
