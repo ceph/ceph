@@ -159,6 +159,7 @@ def preview_table_osd(data: List) -> str:
     table.align = 'l'
     table.left_padding_width = 0
     table.right_padding_width = 2
+    notes = ''
     for osd_data in data:
         if osd_data.get('service_type') != 'osd':
             continue
@@ -167,6 +168,8 @@ def preview_table_osd(data: List) -> str:
                 if spec.get('error'):
                     return spec.get('message')
                 dg_name = spec.get('osdspec')
+                if spec.get('notes', []):
+                    notes += '\n'.join(spec.get('notes')) + '\n'
                 for osd in spec.get('data', []):
                     db_path = osd.get('block_db', '-')
                     wal_path = osd.get('block_wal', '-')
@@ -174,7 +177,7 @@ def preview_table_osd(data: List) -> str:
                     if not block_data:
                         continue
                     table.add_row(('osd', dg_name, host, block_data, db_path, wal_path))
-    return table.get_string()
+    return notes + table.get_string()
 
 
 def preview_table_services(data: List) -> str:
@@ -847,14 +850,17 @@ Usage:
             out = to_format(report, format, many=True, cls=None)
         else:
             table = PrettyTable(
-                ['OSD_ID', 'HOST', 'STATE', 'PG_COUNT', 'REPLACE', 'FORCE', 'DRAIN_STARTED_AT'],
+                ['OSD', 'HOST', 'STATE', 'PGS', 'REPLACE', 'FORCE', 'ZAP',
+                 'DRAIN STARTED AT'],
                 border=False)
             table.align = 'l'
+            table._align['PGS'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for osd in sorted(report, key=lambda o: o.osd_id):
                 table.add_row([osd.osd_id, osd.hostname, osd.drain_status_human(),
-                               osd.get_pg_count(), osd.replace, osd.force, osd.drain_started_at])
+                               osd.get_pg_count(), osd.replace, osd.force, osd.zap,
+                               osd.drain_started_at or ''])
             out = table.get_string()
 
         return HandleCommandResult(stdout=out)
@@ -1007,7 +1013,7 @@ Usage:
         """Remove a service"""
         if service_name in ['mon', 'mgr'] and not force:
             raise OrchestratorError('The mon and mgr services cannot be removed')
-        completion = self.remove_service(service_name)
+        completion = self.remove_service(service_name, force=force)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 

@@ -104,9 +104,9 @@ class DaemonPlacement(NamedTuple):
         if self.name and self.name != dd.daemon_id:
             return False
         if self.ports:
-            if self.ports != dd.ports:
+            if self.ports != dd.ports and dd.ports:
                 return False
-            if self.ip != dd.ip:
+            if self.ip != dd.ip and dd.ip:
                 return False
         return True
 
@@ -361,8 +361,8 @@ class HostAssignment(object):
     def find_ip_on_host(self, hostname: str, subnets: List[str]) -> Optional[str]:
         for subnet in subnets:
             ips: List[str] = []
-            for iface, ips in self.networks.get(hostname, {}).get(subnet, {}).items():
-                ips.extend(ips)
+            for iface, iface_ips in self.networks.get(hostname, {}).get(subnet, {}).items():
+                ips.extend(iface_ips)
             if ips:
                 return sorted(ips)[0]
         return None

@@ -10,6 +10,7 @@ from mgr_module import HandleCommandResult, MonCommandFailed
 
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
+from mgr_util import build_url
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
 from cephadm import utils
@@ -821,25 +822,27 @@ class RgwService(CephService):
         if ftype == 'beast':
             if spec.ssl:
                 if daemon_spec.ip:
-                    args.append(f"ssl_endpoint={daemon_spec.ip}:{port}")
+                    args.append(
+                        f"ssl_endpoint={build_url(host=daemon_spec.ip, port=port).lstrip('/')}")
                 else:
                     args.append(f"ssl_port={port}")
                 args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}")
             else:
                 if daemon_spec.ip:
-                    args.append(f"endpoint={daemon_spec.ip}:{port}")
+                    args.append(f"endpoint={build_url(host=daemon_spec.ip, port=port).lstrip('/')}")
                 else:
                     args.append(f"port={port}")
         elif ftype == 'civetweb':
             if spec.ssl:
                 if daemon_spec.ip:
-                    args.append(f"port={daemon_spec.ip}:{port}s")  # note the 's' suffix on port
+                    # note the 's' suffix on port
+                    args.append(f"port={build_url(host=daemon_spec.ip, port=port).lstrip('/')}s")
                 else:
                     args.append(f"port={port}s")  # note the 's' suffix on port
                 args.append(f"ssl_certificate=config://rgw/cert/{spec.service_name()}")
             else:
                 if daemon_spec.ip:
-                    args.append(f"port={daemon_spec.ip}:{port}")
+                    args.append(f"port={build_url(host=daemon_spec.ip, port=port).lstrip('/')}")
                 else:
                     args.append(f"port={port}")
         frontend = f'{ftype} {" ".join(args)}'

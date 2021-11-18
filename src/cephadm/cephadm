@@ -31,7 +31,7 @@ from contextlib import redirect_stdout
 import ssl
 from enum import Enum
 
-from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set
+from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set, Iterable
 
 import re
 import uuid
@@ -1999,8 +1999,8 @@ def find_container_engine(ctx: CephadmContext) -> Optional[ContainerEngine]:
         for i in CONTAINER_PREFERENCE:
             try:
                 return i()
-            except Exception as e:
-                logger.debug('Could not locate %s: %s' % (i.EXE, e))
+            except Exception:
+                pass
     return None
 
 
@@ -2315,6 +2315,8 @@ def get_config_and_keyring(ctx):
         d = get_parm(ctx.config_json)
         config = d.get('config')
         keyring = d.get('keyring')
+        if config and keyring:
+            return config, keyring
 
     if 'config' in ctx and ctx.config:
         try:
@@ -4134,6 +4136,65 @@ def finish_bootstrap_config(
     pass
 
 
+# funcs to process spec file for apply spec
+def _parse_yaml_docs(f: Iterable[str]) -> List[List[str]]:
+    docs = []
+    current_doc = []  # type: List[str]
+    for line in f:
+        if '---' in line:
+            if current_doc:
+                docs.append(current_doc)
+            current_doc = []
+        else:
+            current_doc.append(line.rstrip())
+    if current_doc:
+        docs.append(current_doc)
+    return docs
+
+
+def _parse_yaml_obj(doc: List[str]) -> Dict[str, str]:
+    # note: this only parses the first layer of yaml
+    obj = {}  # type: Dict[str, str]
+    current_key = ''
+    for line in doc:
+        if line.startswith(' '):
+            obj[current_key] += line.strip()
+        elif line.endswith(':'):
+            current_key = line.strip(':')
+            obj[current_key] = ''
+        else:
+            current_key, val = line.split(':')
+            obj[current_key] = val.strip()
+    return obj
+
+
+def parse_yaml_objs(f: Iterable[str]) -> List[Dict[str, str]]:
+    objs = []
+    for d in _parse_yaml_docs(f):
+        objs.append(_parse_yaml_obj(d))
+    return objs
+
+
+def _distribute_ssh_keys(ctx: CephadmContext, host_spec: Dict[str, str], bootstrap_hostname: str) -> int:
+    # copy ssh key to hosts in host spec (used for apply spec)
+    ssh_key = '/etc/ceph/ceph.pub'
+    if ctx.ssh_public_key:
+        ssh_key = ctx.ssh_public_key.name
+
+    if bootstrap_hostname != host_spec['hostname']:
+        if 'addr' in host_spec:
+            addr = host_spec['addr']
+        else:
+            addr = host_spec['hostname']
+        out, err, code = call(ctx, ['sudo', '-u', ctx.ssh_user, 'ssh-copy-id', '-f', '-i', ssh_key, '-o StrictHostKeyChecking=no', '%s@%s' % (ctx.ssh_user, addr)])
+        if code:
+            logger.info('\nCopying ssh key to host %s at address %s failed!\n' % (host_spec['hostname'], addr))
+            return 1
+        else:
+            logger.info('Added ssh key to host %s at address %s\n' % (host_spec['hostname'], addr))
+    return 0
+
+
 @default_image
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
@@ -4348,25 +4409,22 @@ def command_bootstrap(ctx):
 
     if ctx.apply_spec:
         logger.info('Applying %s to cluster' % ctx.apply_spec)
-
+        # copy ssh key to hosts in spec file
         with open(ctx.apply_spec) as f:
-            for line in f:
-                if 'hostname:' in line:
-                    line = line.replace('\n', '')
-                    split = line.split(': ')
-                    if split[1] != hostname:
-                        logger.info('Adding ssh key to %s' % split[1])
-
-                        ssh_key = '/etc/ceph/ceph.pub'
-                        if ctx.ssh_public_key:
-                            ssh_key = ctx.ssh_public_key.name
-                        out, err, code = call_throws(ctx, ['sudo', '-u', ctx.ssh_user, 'ssh-copy-id', '-f', '-i', ssh_key, '-o StrictHostKeyChecking=no', '%s@%s' % (ctx.ssh_user, split[1])])
+            try:
+                for spec in parse_yaml_objs(f):
+                    if spec.get('service_type') == 'host':
+                        _distribute_ssh_keys(ctx, spec, hostname)
+            except ValueError:
+                logger.info('Unable to parse %s succesfully' % ctx.apply_spec)
 
         mounts = {}
         mounts[pathify(ctx.apply_spec)] = '/tmp/spec.yml:ro'
-
-        out = cli(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
-        logger.info(out)
+        try:
+            out = cli(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
+            logger.info(out)
+        except Exception:
+            logger.info('\nApplying %s to cluster failed!\n' % ctx.apply_spec)
 
     logger.info('You can access the Ceph CLI with:\n\n'
                 '\tsudo %s shell --fsid %s -c %s -k %s\n' % (
@@ -6506,6 +6564,7 @@ class HostFacts():
     _disk_vendor_workarounds = {
         '0x1af4': 'Virtio Block Device'
     }
+    _excluded_block_devices = ('sr', 'zram', 'dm-')
 
     def __init__(self, ctx: CephadmContext):
         self.ctx: CephadmContext = ctx
@@ -6545,7 +6604,7 @@ class HostFacts():
         # type: () -> List[str]
         """Determine the list of block devices by looking at /sys/block"""
         return [dev for dev in os.listdir('/sys/block')
-                if not dev.startswith('dm')]
+                if not dev.startswith(HostFacts._excluded_block_devices)]
 
     def _get_devs_by_type(self, rota='0'):
         # type: (str) -> List[str]

@@ -391,6 +391,66 @@ class TestCephadm(object):
                         {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://[1::4]:3000'},
                         None)
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1.2.3.4')
+    def test_iscsi_post_actions_with_missing_daemon_in_cache(self, cephadm_module: CephadmOrchestrator):
+        # https://tracker.ceph.com/issues/52866
+        with with_host(cephadm_module, 'test1'):
+            with with_host(cephadm_module, 'test2'):
+                with with_service(cephadm_module, IscsiServiceSpec(service_id='foobar', pool='pool', placement=PlacementSpec(host_pattern='*')), CephadmOrchestrator.apply_iscsi, 'test'):
+
+                    CephadmServe(cephadm_module)._apply_all_services()
+                    assert len(cephadm_module.cache.get_daemons_by_type('iscsi')) == 2
+
+                    # get a deamons from postaction list (ARRGH sets!!)
+                    tempset = cephadm_module.requires_post_actions.copy()
+                    tempdeamon1 = tempset.pop()
+                    tempdeamon2 = tempset.pop()
+
+                    # make sure post actions has 2 daemons in it
+                    assert len(cephadm_module.requires_post_actions) == 2
+
+                    # replicate a host cache that is not in sync when check_daemons is called
+                    tempdd1 = cephadm_module.cache.get_daemon(tempdeamon1)
+                    tempdd2 = cephadm_module.cache.get_daemon(tempdeamon2)
+                    host = 'test1'
+                    if 'test1' not in tempdeamon1:
+                        host = 'test2'
+                    cephadm_module.cache.rm_daemon(host, tempdeamon1)
+
+                    # Make sure, _check_daemons does a redeploy due to monmap change:
+                    cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
+                        'modified': datetime_to_str(datetime_now()),
+                        'fsid': 'foobar',
+                    })
+                    cephadm_module.notify('mon_map', None)
+                    cephadm_module.mock_store_set('_ceph_get', 'mgr_map', {
+                        'modules': ['dashboard']
+                    })
+
+                    with mock.patch("cephadm.module.IscsiService.config_dashboard") as _cfg_db:
+                        CephadmServe(cephadm_module)._check_daemons()
+                        _cfg_db.assert_called_once_with([tempdd2])
+
+                        # post actions still has the other deamon in it and will run next _check_deamons
+                        assert len(cephadm_module.requires_post_actions) == 1
+
+                        # post actions was missed for a daemon
+                        assert tempdeamon1 in cephadm_module.requires_post_actions
+
+                        # put the daemon back in the cache
+                        cephadm_module.cache.add_daemon(host, tempdd1)
+
+                        _cfg_db.reset_mock()
+                        # replicate serve loop running again
+                        CephadmServe(cephadm_module)._check_daemons()
+
+                        # post actions should have been called again
+                        _cfg_db.asset_called()
+
+                        # post actions is now empty
+                        assert len(cephadm_module.requires_post_actions) == 0
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_mon_add(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
@@ -668,6 +728,28 @@ class TestCephadm(object):
             assert out == "Created no osd(s) on host test; already created?"
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch('cephadm.services.osd.OSDService._run_ceph_volume_command')
+    @mock.patch('cephadm.services.osd.OSDService.driveselection_to_ceph_volume')
+    @mock.patch('cephadm.services.osd.OsdIdClaims.refresh', lambda _: None)
+    @mock.patch('cephadm.services.osd.OsdIdClaims.get', lambda _: {})
+    def test_limit_not_reached(self, d_to_cv, _run_cv_cmd, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
+                                data_devices=DeviceSelection(limit=5, rotational=1),
+                                service_id='not_enough')
+
+            disks_found = [
+                '[{"data": "/dev/vdb", "data_size": "50.00 GB", "encryption": "None"}, {"data": "/dev/vdc", "data_size": "50.00 GB", "encryption": "None"}]']
+            d_to_cv.return_value = 'foo'
+            _run_cv_cmd.return_value = (disks_found, '', 0)
+            preview = cephadm_module.osd_service.generate_previews([dg], 'test')
+
+            for osd in preview:
+                assert 'notes' in osd
+                assert osd['notes'] == [
+                    'NOTE: Did not find enough disks matching filter on host test to reach data device limit (Found: 2 | Limit: 5)']
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_prepare_drivegroup(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
@@ -857,6 +939,32 @@ class TestCephadm(object):
                             'prefix': 'auth rm',
                             'entity': entity,
                         })
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_daemon_place_fail_health_warning(self, _run_cephadm, cephadm_module):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test'):
+            _run_cephadm.side_effect = OrchestratorError('fail')
+            ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
+            r = CephadmServe(cephadm_module)._apply_service(ServiceSpec('mgr', placement=ps))
+            assert not r
+            assert cephadm_module.health_checks.get('CEPHADM_DAEMON_PLACE_FAIL') is not None
+            assert cephadm_module.health_checks['CEPHADM_DAEMON_PLACE_FAIL']['count'] == 1
+            assert 'Failed to place 1 daemon(s)' in cephadm_module.health_checks['CEPHADM_DAEMON_PLACE_FAIL']['summary']
+            assert 'Failed while placing mgr.a on test: fail' in cephadm_module.health_checks['CEPHADM_DAEMON_PLACE_FAIL']['detail']
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_spec_fail_health_warning(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test'):
+            CephadmServe(cephadm_module)._apply_all_services()
+            ps = PlacementSpec(hosts=['fail'], count=1)
+            r = CephadmServe(cephadm_module)._apply_service(ServiceSpec('mgr', placement=ps))
+            assert not r
+            assert cephadm_module.apply_spec_fails
+            assert cephadm_module.health_checks.get('CEPHADM_APPLY_SPEC_FAIL') is not None
+            assert cephadm_module.health_checks['CEPHADM_APPLY_SPEC_FAIL']['count'] == 1
+            assert 'Failed to apply 1 service(s)' in cephadm_module.health_checks['CEPHADM_APPLY_SPEC_FAIL']['summary']
 
     @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
