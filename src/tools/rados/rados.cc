@@ -19,6 +19,9 @@
 #include "include/rados/rados_types.hpp"
 
 #include "acconfig.h"
+#ifdef OVERRIDE_NO_LIBRADOSSTRIPER
+#undef WITH_LIBRADOSSTRIPER
+#endif
 #ifdef WITH_LIBRADOSSTRIPER
  #include "include/radosstriper/libradosstriper.hpp"
  using namespace libradosstriper;
