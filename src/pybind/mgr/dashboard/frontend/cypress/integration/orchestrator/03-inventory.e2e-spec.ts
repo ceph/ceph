@@ -12,7 +12,7 @@ describe('Physical Disks page', () => {
   it('should have correct devices', () => {
     cy.fixture('orchestrator/inventory.json').then((hosts) => {
       const totalDiskCount = Cypress._.sumBy(hosts, 'devices.length');
-      inventory.getTableCount('total').should('be.eq', totalDiskCount);
+      inventory.expectTableCount('total', totalDiskCount);
       for (const host of hosts) {
         inventory.filterTable('Hostname', host['name']);
         inventory.getTableCount('found').should('be.eq', host.devices.length);
