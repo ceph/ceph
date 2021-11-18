@@ -17,6 +17,7 @@
 #include "messages/MOSDScrubReserve.h"
 
 #include "osd/OSD.h"
+#include "osd/osd_types_fmt.h"
 #include "ScrubStore.h"
 #include "scrub_machine.h"
 
@@ -186,6 +187,8 @@ void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
     reset_epoch(epoch_queued);
     m_fsm->process_event(StartScrub{});
     dout(10) << "scrubber event --<< StartScrub" << dendl;
+  } else {
+    clear_queued_or_active();
   }
 }
 
@@ -198,6 +201,8 @@ void PgScrubber::initiate_scrub_after_repair(epoch_t epoch_queued)
     reset_epoch(epoch_queued);
     m_fsm->process_event(AfterRepairScrub{});
     dout(10) << "scrubber event --<< AfterRepairScrub" << dendl;
+  } else {
+    clear_queued_or_active();
   }
 }
 
@@ -1249,29 +1254,52 @@ Scrub::preemption_t& PgScrubber::get_preemptor()
 }
 
 /*
- * Process note: called for the arriving "give me your map, replica!" request. Unlike
- * the original implementation, we do not requeue the Op waiting for
+ * Process note: called for the arriving "give me your map, replica!" request.
+ * Unlike the original implementation, we do not requeue the Op waiting for
  * updates. Instead - we trigger the FSM.
  */
 void PgScrubber::replica_scrub_op(OpRequestRef op)
 {
   op->mark_started();
   auto msg = op->get_req<MOSDRepScrub>();
-  dout(10) << __func__ << " pg:" << m_pg->pg_id << " Msg: map_epoch:" << msg->map_epoch
-	   << " min_epoch:" << msg->min_epoch << " deep?" << msg->deep << dendl;
+  dout(10) << __func__ << " pg:" << m_pg->pg_id
+           << " Msg: map_epoch:" << msg->map_epoch
+           << " min_epoch:" << msg->min_epoch << " deep?" << msg->deep << dendl;
 
-  // are we still processing a previous scrub-map request without noticing that the
-  // interval changed? won't see it here, but rather at the reservation stage.
+  // are we still processing a previous scrub-map request without noticing that
+  // the interval changed? won't see it here, but rather at the reservation
+  // stage.
 
   if (msg->map_epoch < m_pg->info.history.same_interval_since) {
-    dout(10) << "replica_scrub_op discarding old replica_scrub from " << msg->map_epoch
-	     << " < " << m_pg->info.history.same_interval_since << dendl;
+    dout(10) << "replica_scrub_op discarding old replica_scrub from "
+             << msg->map_epoch << " < "
+             << m_pg->info.history.same_interval_since << dendl;
 
     // is there a general sync issue? are we holding a stale reservation?
     // not checking now - assuming we will actively react to interval change.
 
     return;
   }
+
+  if (is_queued_or_active()) {
+    // this is bug!
+    // Somehow, we have received a new scrub request from our Primary, before
+    // having finished with the previous one. Did we go through an interval
+    // change without reseting the FSM? Possible responses:
+    // - crashing (the original assert_not_active() implemented that one), or
+    // - trying to recover:
+    //  - (logging enough information to debug this scenario)
+    //  - reset the FSM.
+    m_osds->clog->warn() << fmt::format(
+      "{}: error: a second scrub-op received while handling the previous one",
+      __func__);
+
+    scrub_clear_state();
+    m_osds->clog->warn() << fmt::format(
+      "{}: after a reset. Now handling the new OP", __func__);
+  }
+  // make sure the FSM is at NotActive
+  m_fsm->assert_not_active();
 
   replica_scrubmap = ScrubMap{};
   replica_scrubmap_pos = ScrubMapBuilder{};
@@ -1282,8 +1310,9 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   m_max_end = msg->end;
   m_is_deep = msg->deep;
   m_interval_start = m_pg->info.history.same_interval_since;
-  m_replica_request_priority = msg->high_priority ? Scrub::scrub_prio_t::high_priority
-						  : Scrub::scrub_prio_t::low_priority;
+  m_replica_request_priority = msg->high_priority
+                                 ? Scrub::scrub_prio_t::high_priority
+                                 : Scrub::scrub_prio_t::low_priority;
   m_flags.priority = msg->priority ? msg->priority : m_pg->get_scrub_priority();
 
   preemption_data.reset();
@@ -1291,11 +1320,9 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
 
   replica_scrubmap_pos.reset();
 
-  // make sure the FSM is at NotActive
-  m_fsm->assert_not_active();
-
-  m_osds->queue_for_rep_scrub(m_pg, m_replica_request_priority, m_flags.priority,
-			      m_current_token);
+  set_queued_or_active();
+  m_osds->queue_for_rep_scrub(m_pg, m_replica_request_priority,
+                              m_flags.priority, m_current_token);
 }
 
 void PgScrubber::set_op_parameters(requested_scrub_t& request)
@@ -1674,6 +1701,20 @@ void PgScrubber::clear_reserving_now()
   m_osds->get_scrub_services().clear_reserving_now();
 }
 
+void PgScrubber::set_queued_or_active()
+{
+  m_queued_or_active = true;
+}
+
+void PgScrubber::clear_queued_or_active()
+{
+  m_queued_or_active = false;
+}
+
+bool PgScrubber::is_queued_or_active() const
+{
+  return m_queued_or_active;
+}
 
 [[nodiscard]] bool PgScrubber::scrub_process_inconsistent()
 {
@@ -1726,6 +1767,7 @@ void PgScrubber::scrub_finish()
 	   << ". deep_scrub_on_error: " << m_flags.deep_scrub_on_error << dendl;
 
   ceph_assert(m_pg->is_locked());
+  ceph_assert(is_queued_or_active());
 
   m_pg->m_planned_scrub = requested_scrub_t{};
 
@@ -1881,9 +1923,10 @@ void PgScrubber::scrub_finish()
 
 void PgScrubber::on_digest_updates()
 {
-  dout(10) << __func__ << " #pending: " << num_digest_updates_pending << " pending? "
-	   << num_digest_updates_pending
-	   << (m_end.is_max() ? " <last chunk> " : " <mid chunk> ") << dendl;
+  dout(10) << __func__ << " #pending: " << num_digest_updates_pending
+	   << (m_end.is_max() ? " <last chunk>" : " <mid chunk>")
+           << (is_queued_or_active() ? "" : " ** not marked as scrubbing **")
+           << dendl;
 
   if (num_digest_updates_pending > 0) {
     // do nothing for now. We will be called again when new updates arrive
@@ -1892,10 +1935,7 @@ void PgScrubber::on_digest_updates()
 
   // got all updates, and finished with this chunk. Any more?
   if (m_end.is_max()) {
-
-    scrub_finish();
     m_osds->queue_scrub_is_finished(m_pg);
-
   } else {
     // go get a new chunk (via "requeue")
     preemption_data.reset();
@@ -2200,6 +2240,7 @@ void PgScrubber::reset_internal_state()
   m_sleep_started_at = utime_t{};
 
   m_active = false;
+  clear_queued_or_active();
 }
 
 // note that only applicable to the Replica:
