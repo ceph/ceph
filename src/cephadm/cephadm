@@ -422,6 +422,7 @@ class NFSGanesha(object):
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
         mounts[os.path.join(data_dir, 'etc/ganesha')] = '/etc/ganesha:z'
+        mounts['/etc/localtime'] = '/etc/localtime:ro'
         if self.rgw:
             cluster = self.rgw.get('cluster', 'ceph')
             rgw_user = self.rgw.get('user', 'admin')
@@ -550,6 +551,7 @@ class CephIscsi(object):
     def get_container_mounts(data_dir, log_dir):
         # type: (str, str) -> Dict[str, str]
         mounts = dict()
+        mounts['/etc/localtime'] = '/etc/localtime:ro'
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
         mounts[os.path.join(data_dir, 'iscsi-gateway.cfg')] = '/etc/ceph/iscsi-gateway.cfg:z'
@@ -2382,6 +2384,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
 
     if daemon_type in Ceph.daemons:
         if fsid:
+            mounts['/etc/localtime'] = '/etc/localtime:ro'
             run_path = os.path.join('/var/run/ceph', fsid)
             if os.path.exists(run_path):
                 mounts[run_path] = '/var/run/ceph:z'
