@@ -7,6 +7,7 @@ import expand from 'brace-expansion';
 
 import { HostService } from '~/app/shared/api/host.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
+import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -30,6 +31,7 @@ export class HostFormComponent extends CdForm implements OnInit {
   allLabels: string[];
   pageURL: string;
   hostPattern = false;
+  labelsOption: Array<SelectOption> = [];
 
   messages = new SelectMessages({
     empty: $localize`There are no labels.`,
@@ -59,6 +61,13 @@ export class HostFormComponent extends CdForm implements OnInit {
         return host['hostname'];
       });
       this.loadingReady();
+    });
+
+    this.hostService.getLabels().subscribe((resp: string[]) => {
+      const uniqueLabels = new Set(resp.concat(this.hostService.predefinedLabels));
+      this.labelsOption = Array.from(uniqueLabels).map((label) => {
+        return { enabled: true, name: label, selected: false, description: null };
+      });
     });
   }
 
