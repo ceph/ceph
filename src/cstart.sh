@@ -1,5 +1,13 @@
 #!/bin/bash -e
 
+if [ -e CMakeCache.txt ]; then
+    [ -z "$CEPH_BIN" ] && CEPH_BIN=bin
+fi
+
+if [ -z "$CEPHADM" ]; then
+    CEPHADM="${CEPH_BIN}/cephadm"
+fi
+
 image_base="quay.io/ceph-ci/ceph"
 
 if which podman 2>&1 > /dev/null; then
@@ -55,8 +63,8 @@ if ! sudo $runtime image inspect $image_base:$shortid 1>/dev/null 2>/dev/null; t
     sudo ../src/script/cpatch -t $image_base:$shortid
 fi
 
-sudo ../src/cephadm/cephadm rm-cluster --force --fsid $fsid
-sudo ../src/cephadm/cephadm --image ${image_base}:${shortid} bootstrap \
+sudo $CEPHADM rm-cluster --force --fsid $fsid
+sudo $CEPHADM --image ${image_base}:${shortid} bootstrap \
      --skip-pull \
      --fsid $fsid \
      --mon-addrv "[v2:$ip:$port]" \
@@ -69,7 +77,7 @@ sudo chmod 755 ceph.client.admin.keyring
 echo 'keyring = ceph.client.admin.keyring' >> ceph.conf
 
 # don't use repo digests; this implicitly does a pull and we don't want that
-bin/ceph config set mgr mgr/cephadm/use_repo_digest false
+${CEPH_BIN}/ceph config set mgr mgr/cephadm/use_repo_digest false
 
 echo
 echo "sudo ../src/script/cpatch -t $image_base:$shortid"
