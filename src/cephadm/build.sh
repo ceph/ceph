@@ -9,6 +9,8 @@ clean_up() {
 }
 trap clean_up EXIT
 
+PYTHON=$(which python3)
+
 # Create build directory and install required dependencies
 target_fpath="$(pwd)/cephadm"
 if [ -n "$1" ]; then
@@ -16,13 +18,13 @@ if [ -n "$1" ]; then
 fi
 builddir=$(mktemp -d)
 if [ -e "requirements.txt" ]; then
-    python3 -m pip install -r requirements.txt --target ${builddir}
+    $PYTHON -m pip install -r requirements.txt --target ${builddir}
 fi
 
 # Make sure all newly created source files are copied here as well!
 cp cephadm.py ${builddir}/__main__.py
 
-version=$(python3 --version)
+version=$($PYTHON --version)
 if [[ "$version" =~ ^Python[[:space:]]([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)$ ]]; then
     major=${BASH_REMATCH[1]}
     minor=${BASH_REMATCH[2]}
@@ -33,7 +35,7 @@ if [[ "$version" =~ ^Python[[:space:]]([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:
         compress="--compress"
     fi
 
-    python3 -mzipapp -p python3 ${builddir} ${compress} --output $target_fpath
+    $PYTHON -mzipapp -p $PYTHON ${builddir} ${compress} --output $target_fpath
     echo written to ${target_fpath}
 else
     echo "Couldn't parse Python version"
