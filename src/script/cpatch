@@ -146,7 +146,7 @@ if [ $py -eq 1 ] || [ $all -eq 1 ]; then
 
     # cephadm
     pushd ../src/cephadm > /dev/null
-    cp cephadm $TMP/cephadm
+    build.sh $TMP/cephadm
     dockerfile+=$'ADD cephadm /usr/sbin/cephadm\n'
     popd > /dev/null
 fi
