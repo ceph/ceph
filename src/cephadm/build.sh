@@ -31,8 +31,11 @@ if [[ "$version" =~ ^Python[[:space:]]([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:
 
     compress=""
     if [[ "$major" -ge 3 && "$minor" -ge 7 ]]; then
-        echo "Pyton version compatible with --compress, compressing cephadm binary"
+        echo "Python version compatible with --compress, compressing cephadm binary"
         compress="--compress"
+    elif [[ "$major" -lt 3 || "$major" -eq 3 && "$minor" -lt 5 ]]; then
+	echo "zipapp module requires Python35 or greater"
+	exit 1
     fi
 
     $PYTHON -mzipapp -p $PYTHON ${builddir} ${compress} --output $target_fpath
