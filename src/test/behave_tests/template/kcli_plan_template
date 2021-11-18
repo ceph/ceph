@@ -23,14 +23,8 @@ parameters:
   - {{ network }}
  disks: {{ disks }}
  pool: {{ pool }}
- {% endraw %}
- {% if ceph_dev_folder is defined %}
- sharedfolders: [{{ ceph_dev_folder }}]
- {% endif %}
- {% raw %}
  cmds:
- - hostname ceph-node-0{{ number }}
- - yum -y install python3 chrony lvm2 podman
+ - yum -y install podman python3 chrony lvm2
  - sed -i "s/SELINUX=enforcing/SELINUX=permissive/" /etc/selinux/config
  - setenforce 0
 {% endfor %}

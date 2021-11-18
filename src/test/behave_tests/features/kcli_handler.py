@@ -66,11 +66,12 @@ def execute_ssh_cmd(context, vm_name, shell, command):
     return (proc.stdout, proc.stderr, proc.returncode)
 
 
-def execute_scp_cmd(context, vm_name, script, copy_location):
+def execute_scp_cmd(context, vm_name, script, copy_location, recursive: bool = False):
     """
     Copy a given script onto a vm
     """
-    cmd = ('scp -oStrictHostKeyChecking=no -oBatchMode=yes -oConnectTimeout=300 '
+    r = ' -r' if recursive else ''
+    cmd = (f'scp{r} -oStrictHostKeyChecking=no -oBatchMode=yes -oConnectTimeout=300 '
            f'{script} root@{context.available_nodes[vm_name]}:{copy_location}'.split(' '))
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)

@@ -14,7 +14,7 @@ def exec_cmds(context, shell, cmds):
         context.last_executed["cmd"] = command
         context.last_executed["shell"] = shell
         if code != 0:
-            raise Exception(f"Failed to execute ssh\n Message:{context.output}")
+            raise Exception(f"Failed to execute ssh\nOut:{out}\nErr:{err}")
         context.output += out + '\n' + err + '\n'
 
 

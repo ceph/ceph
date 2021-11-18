@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 import time
 
 from jinja2 import Template
@@ -72,19 +73,22 @@ def _handle_kcli_plan(context, command_type, plan_file_path=None):
     print(out)
 
 
-def _verify_host_ready(context, host) -> bool:
-    out, err, code = execute_ssh_cmd(context, host, '', 'ps aux | grep -e "python3 chrony lvm2 podman"')
-    for s in ['Connection refused', 'install python3']:
+def _verify_host_ready(context, host, deps: bool = True) -> bool:
+    out, err, code = execute_ssh_cmd(context, host, '', 'ps aux | grep -e "podman python3 chrony lvm2"')
+    check_for = ['Connection refused']
+    if deps:
+        check_for.append('install podman')
+    for s in check_for:
         for cmd_output in [out, err]:
             if s in cmd_output:
                 return False
     return True
 
 
-def _wait_host_ready(context, host) -> None:
+def _wait_host_ready(context, host, deps: bool = True) -> None:
     # check every 10 seconds for up to 10 minutes
     sleep_count = 0
-    while not _verify_host_ready(context, host):
+    while not _verify_host_ready(context, host, deps):
         if sleep_count > 60:
             raise Exception(f'Host {host} failed to start up in and install deps in expected time')
         time.sleep(10)
@@ -109,10 +113,64 @@ def _copy_cephadm_binary_to_host(context, host) -> None:
     out, err, code = execute_ssh_cmd(context, host, '', 'chmod +x /usr/bin/cephadm')
 
 
+def _copy_ceph_files_to_host(context, host) -> None:
+    local_base = Kcli_Config['ceph_dev_folder']
+    vm_base = '/root/shared'
+    dirs_to_copy = [
+        '/src/ceph-volume/ceph_volume',
+        '/src/cephadm',
+        '/src/pybind/mgr/cephadm',
+        '/src/pybind/mgr/orchestrator',
+        '/src/pybind/mgr/nfs',
+        '/src/pybind/mgr/prometheus',
+        '/src/python-common/ceph',
+        '/monitoring/grafana/dashboards',
+        '/monitoring/prometheus/alerts',
+    ]
+    for dir in dirs_to_copy:
+        dest = '/'.join(f'{dir}'.split('/')[:-1])
+        out, err, code = execute_ssh_cmd(context, host, '', f'mkdir -p {vm_base}{dir}')
+        out, err, code = execute_scp_cmd(context, host,
+                                         f'{local_base}{dir}', f'{vm_base}{dest}', recursive=True)
+
+
+def _prepare_custom_image(context, host) -> None:
+    file_locations: Dict[str, str] = {
+        '/src/ceph-volume/ceph_volume': '/usr/lib/python3.6/site-packages/ceph_volume',
+        '/src/cephadm/cephadm': '/usr/sbin/cephadm',
+        '/src/pybind/mgr/': '/usr/share/ceph/mgr/',
+        '/src/python-common/ceph': '/usr/lib/python3.6/site-packages/ceph',
+        '/monitoring/grafana/dashboards': '/etc/grafana/dashboards/ceph-dashboard',
+        '/monitoring/prometheus/alerts': '/etc/prometheus/ceph',
+    }
+    dockerfile_str = 'FROM quay.io/ceph/daemon-base:latest-master-devel\n'
+    for local_location, container_location in file_locations.items():
+        dockerfile_str += f'COPY shared{local_location} {container_location}\n'
+    tmp_dockerfile = tempfile.NamedTemporaryFile()
+    tmp_dockerfile.write(dockerfile_str.encode('utf-8'))
+    tmp_dockerfile.flush()
+    dockerfile_fname = tmp_dockerfile.name
+    out, err, code = execute_scp_cmd(context, host,
+                                     f'{dockerfile_fname}', '/root/Dockerfile')
+    out, err, code = execute_ssh_cmd(context, host, '',
+                                     ('podman run -d -p 5000:5000 --restart=always --name reg '
+                                      + '-e REGISTRY_HTTP_ADDR=0.0.0.0:5000 registry:2'))
+    out, err, code = execute_ssh_cmd(context, host, '',
+                                     f'podman build --tag {context.available_nodes[host]}:5000/ceph:testing /root/')
+    out, err, code = execute_ssh_cmd(context, host, '',
+                                     (f'podman push {context.available_nodes[host]}:5000/ceph:testing '
+                                      + '--tls-verify=false'))
+
+
 def _add_host_to_cluster(context, host) -> None:
     print(f'Adding host {host} to the cluster')
     print(f'Waiting for host {host} to start and install deps (python3, podman lvm2, chrony) . . .')
-    _wait_host_ready(context, host)
+    _wait_host_ready(context, host, deps=True)
+    bootstrap_ip = context.available_nodes[context.bootstrap_node]
+    out, err, code = execute_ssh_cmd(context, host, '', f'hostname {host}')
+    out, err, code = execute_ssh_cmd(context, host, '', f'sudo hostnamectl set-hostname {host}')
+    out, err, code = execute_ssh_cmd(context, host, '', ('podman pull '
+                                                         + f'{bootstrap_ip}:5000/ceph:testing --tls-verify=false'))
     print(f'Host {host} ready')
     # copy ceph pub key to host's authorized keys
     out, err, code = execute_ssh_cmd(context, context.bootstrap_node, '',
@@ -147,12 +205,11 @@ def _create_initial_ceph_config_file_on_host(context, host) -> bool:
 
 def _create_bootstrap_cmd(context) -> str:
     use_initial_config = _create_initial_ceph_config_file_on_host(context, context.bootstrap_node)
-    bootstrap_cmd = ('cephadm bootstrap '
+    bootstrap_cmd = (f'cephadm --image {context.available_nodes[context.bootstrap_node]}:5000/ceph:testing bootstrap '
                      + f'--mon-ip {context.available_nodes[context.bootstrap_node]} '
                      + f'--initial-dashboard-password {Kcli_Config["admin_password"]} '
                      + '--allow-fqdn-hostname '
-                     + '--dashboard-password-noupdate '
-                     + f'--shared_ceph_folder {"/mnt" + str(Kcli_Config["ceph_dev_folder"])}')
+                     + '--dashboard-password-noupdate')
     for flag, value in context.config['BOOTSTRAP_FLAG'].items():
         bootstrap_cmd += f' --{flag.strip()} {value.strip()}'
     if use_initial_config:
@@ -289,23 +346,37 @@ def _setup_initial_config(context, desc) -> None:
                 context.config['CEPH_CONFIG'][section.strip()] = []
             context.config['CEPH_CONFIG'][section.strip()].append((param.strip(), value.strip()))
 
+    # Add necessary config options
+    context.config['BOOTSTRAP_FLAG']['skip-pull'] = ''
+    if 'mgr' not in context.config['CEPH_CONFIG']:
+        context.config['CEPH_CONFIG']['mgr'] = []
+    context.config['CEPH_CONFIG']['mgr'].append(('mgr/cephadm/default_registry', 'localhost:5000'))
+    context.config['CEPH_CONFIG']['mgr'].append(('mgr/cephadm/registry_insecure', 'true'))
+    context.config['CEPH_CONFIG']['mgr'].append(('mgr/cephadm/use_repo_digest', 'false'))
 
-def _create_vms(context):
-    # initialize VMs for tests
+
+def _kcli_initial_setup(context) -> str:
     kcli_plans_dir_path = os.path.join(
         os.getcwd(),
         KCLI_PLANS_DIR,
     )
     if not os.path.exists(kcli_plans_dir_path):
         os.mkdir(kcli_plans_dir_path)
-
-    loaded_kcli = _kcli_template()
-
+    if not os.path.exists(os.path.join(str(os.getenv("HOME")), '.kcli')):
+        os.mkdir(os.path.join(str(os.getenv("HOME")), '.kcli'))
     kcli_plan_path = os.path.join(kcli_plans_dir_path, "gen_kcli_plan.yml")
+    loaded_kcli = _kcli_template()
     _write_file(
         kcli_plan_path,
         loaded_kcli.render(Kcli_Config)
     )
+
+    return kcli_plan_path
+
+
+def _create_vms(context):
+    kcli_plan_path = _kcli_initial_setup(context)
+
     print('Creating VMs . . .')
     _handle_kcli_plan(context, "create", os.path.relpath(kcli_plan_path))
 
@@ -323,6 +394,19 @@ def _create_vms(context):
     for node, ip in context.available_nodes.items():
         print(f'| {node} | {ip} |')
     print('\n')
+    print('Waiting for bootstrap node to be running . . .')
+    _wait_host_ready(context, context.bootstrap_node, deps=False)
+    out, err, code = execute_ssh_cmd(context, context.bootstrap_node, '', f'hostname {context.bootstrap_node}')
+    out, err, code = execute_ssh_cmd(context, context.bootstrap_node, '',
+                                     f'sudo hostnamectl set-hostname {context.bootstrap_node}')
+    print('Copying local ceph files to bootstrap node . . .')
+    _copy_ceph_files_to_host(context, context.bootstrap_node)
+    print('Local ceph files successfully copied to bootstrap node.')
+    print('Waiting for bootstrap node to install dependencies . . .')
+    _wait_host_ready(context, context.bootstrap_node, deps=True)
+    print('Preparing custom ceph image on on bootstrap node . . .')
+    _prepare_custom_image(context, context.bootstrap_node)
+    print('Custom image prepared. Starting tests . . .')
 
 
 def _clean_up(context):
