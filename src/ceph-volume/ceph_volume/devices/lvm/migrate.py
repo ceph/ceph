@@ -8,6 +8,7 @@ from ceph_volume.util.device import Device
 from ceph_volume import decorators, terminal, process
 from ceph_volume.api import lvm as api
 from ceph_volume.systemd import systemctl
+from ceph_volume.devices.lvm.common import valid_osd_id
 
 
 logger = logging.getLogger(__name__)
@@ -275,7 +276,7 @@ class Migrate(object):
     # (in the order of precedence, stop on the first match)
     # if source list has DB volume - target device replaces it.
     # if source list has WAL volume - target device replace it.
-    # if source list has slow volume only - operation isn’t permitted,
+    # if source list has slow volume only - operation isn't permitted,
     #  requires explicit allocation via new-db/new-wal command.detects which
     def get_target_type_by_source(self, devices):
         ret = None
@@ -447,6 +448,7 @@ class Migrate(object):
             '--osd-id',
             required=True,
             help='Specify an OSD ID to detect associated devices for zapping',
+            type=valid_osd_id
         )
 
         parser.add_argument(
@@ -545,6 +547,7 @@ class NewVolume(object):
             '--osd-id',
             required=True,
             help='Specify an OSD ID to attach new volume to',
+            type=valid_osd_id,
         )
 
         parser.add_argument(
