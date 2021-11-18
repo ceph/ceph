@@ -268,6 +268,7 @@ void PG::on_activate_complete()
       shard_services,
       pg_whoami,
       pgid,
+      float(0.001),
       get_osdmap_epoch(),
       get_osdmap_epoch(),
       PeeringState::DoRecovery{});
@@ -279,6 +280,7 @@ void PG::on_activate_complete()
       shard_services,
       pg_whoami,
       pgid,
+      float(0.001),
       get_osdmap_epoch(),
       get_osdmap_epoch(),
       PeeringState::RequestBackfill{});
@@ -290,6 +292,7 @@ void PG::on_activate_complete()
       shard_services,
       pg_whoami,
       pgid,
+      float(0.001),
       get_osdmap_epoch(),
       get_osdmap_epoch(),
       PeeringState::AllReplicasRecovered{});
