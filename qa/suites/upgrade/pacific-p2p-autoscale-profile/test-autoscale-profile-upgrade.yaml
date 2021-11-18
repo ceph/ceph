@@ -1,0 +1,43 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+- - client.0
+
+tasks:
+- install:
+  tag: v16.2.5
+- print: "**** done v16.2.5 install"
+- ceph:
+    create_rbd_pool: false
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(OBJECT_
+      - \(SLOW_OPS\)
+      - \(REQUEST_SLOW\)
+      - \(TOO_FEW_PGS\)
+      - slow request
+
+#  upgrade to v16.2.6
+- install.upgrade:
+    mon.a:
+    client.0:
+- ceph.restart:
+    daemons: [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3]
+    wait-for-healthy: true
+    wait-for-osds-up: true
+- print: "**** done upgrade to v16.2.6 ceph.restart all mon/mgr/osd "
+
+- workunit:
+    clients:
+      client.0:
+        - mgr/test_autoscale_profile_create_pool.sh
+- print: "*** done mgr/test_autoscale_profile_create_pool.sh"
