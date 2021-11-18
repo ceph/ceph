@@ -35,10 +35,8 @@ Host *
 class EventLoopThread(Thread):
 
     def __init__(self) -> None:
-
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
-        self._loop.set_debug(True)
 
         super().__init__(target=self._loop.run_forever)
         self.start()
