@@ -1,5 +1,6 @@
 import json
 import errno
+import ipaddress
 import logging
 import re
 import shlex
@@ -1456,11 +1457,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ]
 
     def _check_valid_addr(self, host: str, addr: str) -> str:
-        # make sure mgr is not resolving own ip
-        if addr in self.get_mgr_id():
-            raise OrchestratorError(
-                "Can not automatically resolve ip address of host where active mgr is running. Please explicitly provide the address.")
-
         # make sure hostname is resolvable before trying to make a connection
         try:
             ip_addr = utils.resolve_ip(addr)
@@ -1483,6 +1479,15 @@ Then run the following:
 > ssh -F ssh_config -i ~/cephadm_private_key {self.ssh_user}@{addr}'''
             raise OrchestratorError(msg)
 
+        if ipaddress.ip_address(ip_addr).is_loopback and host == addr:
+            # if this is a re-add, use old address. otherwise error
+            if host not in self.inventory or self.inventory.get_addr(host) == host:
+                raise OrchestratorError(
+                    (f'Cannot automatically resolve ip address of host {host}. Ip resolved to loopback address: {ip_addr}\n'
+                     + f'Please explicitly provide the address (ceph orch host add {host} --addr <ip-addr>)'))
+            self.log.debug(
+                f'Received loopback address resolving ip for {host}: {ip_addr}. Falling back to previous address.')
+            ip_addr = self.inventory.get_addr(host)
         out, err, code = CephadmServe(self)._run_cephadm(
             host, cephadmNoImage, 'check-host',
             ['--expect-hostname', host],
