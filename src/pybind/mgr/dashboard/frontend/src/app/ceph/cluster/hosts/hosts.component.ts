@@ -263,7 +263,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   editAction() {
     this.hostService.getLabels().subscribe((resp: string[]) => {
       const host = this.selection.first();
-      const allLabels = resp.map((label) => {
+      const labels = new Set(resp.concat(this.hostService.predefinedLabels));
+      const allLabels = Array.from(labels).map((label) => {
         return { enabled: true, name: label };
       });
       this.modalService.show(FormModalComponent, {

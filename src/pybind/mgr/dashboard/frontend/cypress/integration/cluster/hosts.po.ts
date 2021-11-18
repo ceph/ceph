@@ -41,7 +41,7 @@ export class HostsPageHelper extends PageHelper {
       });
   }
 
-  add(hostname: string, exist?: boolean, maintenance?: boolean) {
+  add(hostname: string, exist?: boolean, maintenance?: boolean, labels: string[] = []) {
     cy.get(`${this.pages.add.id}`).within(() => {
       cy.get('#hostname').type(hostname);
       if (maintenance) {
@@ -50,10 +50,22 @@ export class HostsPageHelper extends PageHelper {
       if (exist) {
         cy.get('#hostname').should('have.class', 'ng-invalid');
       }
-      cy.get('cd-submit-button').click();
     });
+
+    if (labels.length) {
+      this.selectPredefinedLabels(labels);
+    }
+
+    cy.get('cd-submit-button').click();
     // back to host list
     cy.get(`${this.pages.index.id}`);
+  }
+
+  selectPredefinedLabels(labels: string[]) {
+    cy.get('a[data-testid=select-menu-edit]').click();
+    for (const label of labels) {
+      cy.get('.popover-body div.select-menu-item-content').contains(label).click();
+    }
   }
 
   checkExist(hostname: string, exist: boolean) {
