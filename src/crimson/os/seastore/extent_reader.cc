@@ -72,12 +72,14 @@ ExtentReader::scan_extents_ret ExtentReader::scan_extents(
   ).safe_then([bytes_to_read, extents, &cursor, this](auto segment_header) {
     auto segment_nonce = segment_header.segment_nonce;
     return seastar::do_with(
-      found_record_handler_t([extents, this](
+      found_record_handler_t([extents](
         record_locator_t locator,
-        const record_header_t& header,
+        const record_group_header_t& header,
         const bufferlist& mdbuf) mutable -> scan_valid_records_ertr::future<>
       {
-        auto maybe_record_extent_infos = try_decode_extent_info(header, mdbuf);
+        logger().debug("ExtentReader::scan_extents: decoding {} records",
+                       header.records);
+        auto maybe_record_extent_infos = try_decode_extent_infos(header, mdbuf);
         if (!maybe_record_extent_infos) {
           // This should be impossible, we did check the crc on the mdbuf
           logger().error(
@@ -87,17 +89,19 @@ ExtentReader::scan_extents_ret ExtentReader::scan_extents(
         }
 
         paddr_t extent_offset = locator.record_block_base;
-        logger().debug("ExtentReader::scan_extents: decoded {} extents",
-                       maybe_record_extent_infos->extent_infos.size());
-        for (const auto &i : maybe_record_extent_infos->extent_infos) {
-          extents->emplace_back(extent_offset, i);
-          auto& seg_addr = extent_offset.as_seg_paddr();
-          seg_addr.set_segment_off(
-            seg_addr.get_segment_off() + i.len);
+        for (auto& r: *maybe_record_extent_infos) {
+          logger().debug("ExtentReader::scan_extents: decoded {} extents",
+                         r.extent_infos.size());
+          for (const auto &i : r.extent_infos) {
+            extents->emplace_back(extent_offset, i);
+            auto& seg_addr = extent_offset.as_seg_paddr();
+            seg_addr.set_segment_off(
+              seg_addr.get_segment_off() + i.len);
+          }
         }
         return scan_extents_ertr::now();
       }),
-      [=, &cursor](auto &dhandler) {
+      [bytes_to_read, segment_nonce, &cursor, this](auto &dhandler) {
         return scan_valid_records(
           cursor,
           segment_nonce,
@@ -150,7 +154,7 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
 	      ceph_assert(cursor.last_committed == journal_seq_t() ||
 		          cursor.last_committed <= new_committed_to);
 	      cursor.last_committed = new_committed_to;
-	      cursor.pending_records.emplace_back(
+	      cursor.pending_record_groups.emplace_back(
 		cursor.seq.offset,
 		header,
 		std::move(md_bl));
@@ -164,7 +168,7 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
 	      [=, &budget_used, &cursor, &handler] {
 		logger().debug(
 		  "ExtentReader::scan_valid_records: valid record read, processing queue");
-		if (cursor.pending_records.empty()) {
+		if (cursor.pending_record_groups.empty()) {
 		  /* This is only possible if the segment is empty.
 		   * A record's last_commited must be prior to its own
 		   * location since it itself cannot yet have been committed
@@ -173,7 +177,7 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
 		  return scan_valid_records_ertr::make_ready_future<
 		    seastar::stop_iteration>(seastar::stop_iteration::yes);
 		}
-		auto &next = cursor.pending_records.front();
+		auto &next = cursor.pending_record_groups.front();
 		journal_seq_t next_seq = {cursor.seq.segment_seq, next.offset};
 		if (cursor.last_committed == journal_seq_t() ||
 		    next_seq > cursor.last_committed) {
@@ -188,12 +192,12 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
 	      });
 	  });
 	} else {
-	  assert(!cursor.pending_records.empty());
-	  auto &next = cursor.pending_records.front();
+	  assert(!cursor.pending_record_groups.empty());
+	  auto &next = cursor.pending_record_groups.front();
 	  return read_validate_data(next.offset, next.header
 	  ).safe_then([this, &budget_used, &cursor, &handler](auto valid) {
 	    if (!valid) {
-	      cursor.pending_records.clear();
+	      cursor.pending_record_groups.clear();
 	      return scan_valid_records_ertr::now();
 	    }
             return consume_next_records(cursor, handler, budget_used);
@@ -237,7 +241,7 @@ ExtentReader::read_validate_record_metadata(
         segment_manager.get_block_size());
     bufferlist bl;
     bl.append(bptr);
-    auto maybe_header = try_decode_record_header(bl, nonce);
+    auto maybe_header = try_decode_records_header(bl, nonce);
     if (!maybe_header.has_value()) {
       return read_validate_record_metadata_ret(
         read_validate_record_metadata_ertr::ready_future_marker{},
@@ -275,7 +279,7 @@ ExtentReader::read_validate_record_metadata(
         std::make_pair(std::move(header), std::move(bl)));
     });
   }).safe_then([](auto p) {
-    if (p && validate_record_metadata(p->second)) {
+    if (p && validate_records_metadata(p->second)) {
       return read_validate_record_metadata_ret(
         read_validate_record_metadata_ertr::ready_future_marker{},
         std::move(*p)
@@ -291,7 +295,7 @@ ExtentReader::read_validate_record_metadata(
 ExtentReader::read_validate_data_ret
 ExtentReader::read_validate_data(
   paddr_t record_base,
-  const record_header_t &header)
+  const record_group_header_t &header)
 {
   auto& segment_manager = *segment_managers[record_base.get_device_id()];
   auto data_addr = record_base.add_offset(header.mdlength);
@@ -303,7 +307,7 @@ ExtentReader::read_validate_data(
   ).safe_then([=, &header](auto bptr) {
     bufferlist bl;
     bl.append(bptr);
-    return validate_record_data(header, bl);
+    return validate_records_data(header, bl);
   });
 }
 
@@ -313,7 +317,7 @@ ExtentReader::consume_next_records(
   found_record_handler_t& handler,
   std::size_t& budget_used)
 {
-  auto& next = cursor.pending_records.front();
+  auto& next = cursor.pending_record_groups.front();
   auto total_length = next.header.dlength + next.header.mdlength;
   budget_used += total_length;
   auto locator = record_locator_t{
@@ -331,7 +335,7 @@ ExtentReader::consume_next_records(
     next.header,
     next.mdbuffer
   ).safe_then([&cursor] {
-    cursor.pending_records.pop_front();
+    cursor.pending_record_groups.pop_front();
   });
 }
 

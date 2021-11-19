@@ -327,8 +327,14 @@ private:
     record_group_t pending;
     std::size_t submitting_size = 0;
     segment_off_t submitting_length = 0;
+    segment_off_t submitting_mdlength = 0;
 
-    std::optional<seastar::shared_promise<maybe_result_t> > io_promise;
+    struct promise_result_t {
+      write_result_t write_result;
+      segment_off_t mdlength;
+    };
+    using maybe_promise_result_t = std::optional<promise_result_t>;
+    std::optional<seastar::shared_promise<maybe_promise_result_t> > io_promise;
   };
 
   class RecordSubmitter {
