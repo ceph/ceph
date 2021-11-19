@@ -1255,6 +1255,7 @@ int RocksDBStore::do_open(ostream &out,
       "rocksdb_write_pre_and_post_time", "total time spent on writing a record, excluding write process");
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
+  register_stats_hook();
 
   if (compact_on_mount) {
     derr << "Compacting rocksdb store..." << dendl;
@@ -1277,6 +1278,7 @@ int RocksDBStore::_test_init(const string& dir)
 
 RocksDBStore::~RocksDBStore()
 {
+  unregister_stats_hook();
   close();
   if (priv) {
     delete static_cast<rocksdb::Env*>(priv);
@@ -1298,6 +1300,7 @@ void RocksDBStore::close()
     compact_queue_lock.unlock();
   }
 
+  unregister_stats_hook();
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;
