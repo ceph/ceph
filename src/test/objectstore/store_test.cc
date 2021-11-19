@@ -7655,8 +7655,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
   sleep(2);
   ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
   ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 1u);
-  ASSERT_EQ(logger->get(l_bluestore_write_deferred), 1u);
-  ASSERT_EQ(logger->get(l_bluestore_write_deferred_bytes), block_size);
+  ASSERT_EQ(logger->get(l_bluestore_issued_deferred_writes), 1u);
+  ASSERT_EQ(logger->get(l_bluestore_issued_deferred_write_bytes), block_size);
 
   {
     struct store_statfs_t statfs;
@@ -7719,8 +7719,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
     ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), bl.length());
     ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 3u);
     ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 0u);
-    ASSERT_EQ(logger->get(l_bluestore_write_deferred), 0u);
-    ASSERT_EQ(logger->get(l_bluestore_write_deferred_bytes), 0);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_writes), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_write_bytes), 0);
   }
 
   logger->reset();
@@ -7738,8 +7738,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
     ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), bl.length());
     ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 3u);
     ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 1u);
-    ASSERT_EQ(logger->get(l_bluestore_write_deferred), 1u);
-    ASSERT_EQ(logger->get(l_bluestore_write_deferred_bytes), 57344);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_writes), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_write_bytes), 57344);
   }
 
   {
@@ -7798,8 +7798,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite3) {
     ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), bl.length());
     ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 64u);
     ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 0u);
-    ASSERT_EQ(logger->get(l_bluestore_write_deferred), 0u);
-    ASSERT_EQ(logger->get(l_bluestore_write_deferred_bytes), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_writes), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_write_bytes), 0u);
   }
   logger->reset();
   {
@@ -7816,8 +7816,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite3) {
     ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), bl.length());
     ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 65u);
     ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 1u);
-    ASSERT_EQ(logger->get(l_bluestore_write_deferred), 1u);
-    ASSERT_EQ(logger->get(l_bluestore_write_deferred_bytes), 61440);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_writes), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_issued_deferred_write_bytes), 61440);
   }
   {
     ObjectStore::Transaction t;
