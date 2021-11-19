@@ -6,8 +6,13 @@ CEPHADM_SRC_DIR=${SCRIPT_DIR}/../../../src/cephadm
 CORPUS_COMMIT=9cd9ad020d93b0b420924fec55da307aff8bd422
 
 [ -z "$SUDO" ] && SUDO=sudo
+
+[ -d "$TMPDIR" ] || TMPDIR=$(mktemp -d tmp.$SCRIPT_NAME.XXXXXX)
+trap "$SUDO rm -rf $TMPDIR" EXIT
+
 if [ -z "$CEPHADM" ]; then
-    CEPHADM=${CEPHADM_SRC_DIR}/cephadm
+    CEPHADM=`mktemp -p $TMPDIR tmp.cephadm.XXXXXX`
+    ${CEPHADM_SRC_DIR}/build.sh "$CEPHADM"
 fi
 
 # at this point, we need $CEPHADM set
@@ -22,12 +27,11 @@ CEPHADM="$SUDO $CEPHADM_BIN"
 
 ## adopt
 CORPUS_GIT_SUBMOD="cephadm-adoption-corpus"
-TMPDIR=$(mktemp -d)
-git clone https://github.com/ceph/$CORPUS_GIT_SUBMOD $TMPDIR
-trap "$SUDO rm -rf $TMPDIR" EXIT
+GIT_CLONE_DIR=${TMPDIR}/${CORPUS_GIT_SUBMOD}
+git clone https://github.com/ceph/$CORPUS_GIT_SUBMOD $GIT_CLONE_DIR
 
-git -C $TMPDIR checkout $CORPUS_COMMIT
-CORPUS_DIR=${TMPDIR}/archive
+git -C $GIT_CLONE_DIR checkout $CORPUS_COMMIT
+CORPUS_DIR=${GIT_CLONE_DIR}/archive
 
 for subdir in `ls ${CORPUS_DIR}`; do
     for tarfile in `ls ${CORPUS_DIR}/${subdir} | grep .tgz`; do
