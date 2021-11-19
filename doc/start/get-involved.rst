@@ -96,3 +96,23 @@ These are exciting times in the Ceph community! Get involved!
 .. _Tracker: http://tracker.ceph.com/
 .. _Ceph Source Code: http://github.com/ceph/ceph
 
+==================
+Ceph for Hobbyists
+==================
+
+The links below are not official Ceph content, but provide a good introduction to Ceph.
+
+  #. https://youtu.be/t5UIehZ1oLs - Sage Weil, inventor of Ceph, explains how to get started in Ceph Development.
+
+Reddit
+======
+
+   #. https://www.reddit.com/r/DataHoarder/wiki/ceph - reddit's /r/DataHoarder's Ceph Wiki entry. This is a good plain-language introduction to Ceph. If you don't know much about Ceph but you'd like to learn, start here.
+
+45Drives
+========
+
+   #. https://youtu.be/ZsQp1vmn22M - 45Drives, "The Easiest Way to Deploy a Ceph Cluster"
+   #. https://youtu.be/SLld70mnpbo - 45Drives, "Ceph Deployment Tools"
+   #. https://youtu.be/yeAlzSp6yaE - 45Drives, "Intro to Ceph Clustering Part 1 - When to Consider It"
+   #. https://youtu.be/HJivYTJ9Y54 - 45Drives, "Intro to Ceph Clustering Part 2 - How Ceph Works"
