@@ -44,10 +44,18 @@ enum {
   l_bluefs_read_random_bytes,
   l_bluefs_read_random_disk_count,
   l_bluefs_read_random_disk_bytes,
+  l_bluefs_read_random_disk_bytes_wal,
+  l_bluefs_read_random_disk_bytes_db,
+  l_bluefs_read_random_disk_bytes_slow,
   l_bluefs_read_random_buffer_count,
   l_bluefs_read_random_buffer_bytes,
   l_bluefs_read_count,
   l_bluefs_read_bytes,
+  l_bluefs_read_disk_count,
+  l_bluefs_read_disk_bytes,
+  l_bluefs_read_disk_bytes_wal,
+  l_bluefs_read_disk_bytes_db,
+  l_bluefs_read_disk_bytes_slow,
   l_bluefs_read_prefetch_count,
   l_bluefs_read_prefetch_bytes,
   l_bluefs_read_zeros_candidate,
@@ -656,9 +664,13 @@ public:
 private:
   // Wrappers for BlockDevice::read(...) and BlockDevice::read_random(...)
   // They are used for checking if read values are all 0, and reread if so.
-  int read(uint8_t ndev, uint64_t off, uint64_t len,
+  int _read_and_check(uint8_t ndev, uint64_t off, uint64_t len,
 	   ceph::buffer::list *pbl, IOContext *ioc, bool buffered);
-  int read_random(uint8_t ndev, uint64_t off, uint64_t len, char *buf, bool buffered);
+  int _read_random_and_check(uint8_t ndev, uint64_t off, uint64_t len, char *buf, bool buffered);
+
+  int _bdev_read(uint8_t ndev, uint64_t off, uint64_t len,
+    ceph::buffer::list* pbl, IOContext* ioc, bool buffered);
+  int _bdev_read_random(uint8_t ndev, uint64_t off, uint64_t len, char* buf, bool buffered);
 };
 
 class OriginalVolumeSelector : public BlueFSVolumeSelector {

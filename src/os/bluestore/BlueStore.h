@@ -70,41 +70,91 @@ class BlueStoreRepairer;
 
 enum {
   l_bluestore_first = 732430,
-  l_bluestore_kv_flush_lat,
-  l_bluestore_kv_commit_lat,
-  l_bluestore_kv_sync_lat,
-  l_bluestore_kv_final_lat,
+  // space utilization stats
+  //****************************************
+  l_bluestore_allocated,
+  l_bluestore_stored,
+  l_bluestore_fragmentation,
+  //****************************************
+
+  // Update op processing state latencies
+  //****************************************
   l_bluestore_state_prepare_lat,
   l_bluestore_state_aio_wait_lat,
   l_bluestore_state_io_done_lat,
   l_bluestore_state_kv_queued_lat,
   l_bluestore_state_kv_committing_lat,
   l_bluestore_state_kv_done_lat,
+  l_bluestore_state_finishing_lat,
+  l_bluestore_state_done_lat,
+
   l_bluestore_state_deferred_queued_lat,
   l_bluestore_state_deferred_aio_wait_lat,
   l_bluestore_state_deferred_cleanup_lat,
-  l_bluestore_state_finishing_lat,
-  l_bluestore_state_done_lat,
+
+  l_bluestore_commit_lat,
+  //****************************************
+
+  // Update Transaction stats
+  //****************************************
   l_bluestore_throttle_lat,
   l_bluestore_submit_lat,
-  l_bluestore_commit_lat,
-  l_bluestore_read_lat,
+  l_bluestore_txc,
+  //****************************************
+
+  // Read op stats
+  //****************************************
   l_bluestore_read_onode_meta_lat,
   l_bluestore_read_wait_aio_lat,
-  l_bluestore_compress_lat,
-  l_bluestore_decompress_lat,
   l_bluestore_csum_lat,
-  l_bluestore_compress_success_count,
-  l_bluestore_compress_rejected_count,
+  l_bluestore_read_eio,
+  l_bluestore_reads_with_retries,
+  l_bluestore_read_lat,
+  //****************************************
+
+  // kv_thread latencies
+  //****************************************
+  l_bluestore_kv_flush_lat,
+  l_bluestore_kv_commit_lat,
+  l_bluestore_kv_sync_lat,
+  l_bluestore_kv_final_lat,
+  //****************************************
+
+  // write op stats
+  //****************************************
+  l_bluestore_write_big,
+  l_bluestore_write_big_bytes,
+  l_bluestore_write_big_blobs,
+  l_bluestore_write_big_deferred,
+
+  l_bluestore_write_small,
+  l_bluestore_write_small_bytes,
+  l_bluestore_write_small_unused,
+  l_bluestore_write_small_pre_read,
+
   l_bluestore_write_pad_bytes,
-  l_bluestore_deferred_write_ops,
-  l_bluestore_deferred_write_bytes,
   l_bluestore_write_penalty_read_ops,
-  l_bluestore_allocated,
-  l_bluestore_stored,
+  l_bluestore_write_new,
+
+  l_bluestore_issued_deferred_writes,
+  l_bluestore_issued_deferred_write_bytes,
+  l_bluestore_submitted_deferred_writes,
+  l_bluestore_submitted_deferred_write_bytes,
+  //****************************************
+
+  // compressions stats
+  //****************************************
   l_bluestore_compressed,
   l_bluestore_compressed_allocated,
   l_bluestore_compressed_original,
+  l_bluestore_compress_lat,
+  l_bluestore_decompress_lat,
+  l_bluestore_compress_success_count,
+  l_bluestore_compress_rejected_count,
+  //****************************************
+
+  // onode cache stats
+  //****************************************
   l_bluestore_onodes,
   l_bluestore_pinned_onodes,
   l_bluestore_onode_hits,
@@ -113,29 +163,26 @@ enum {
   l_bluestore_onode_shard_misses,
   l_bluestore_extents,
   l_bluestore_blobs,
+  //****************************************
+
+  // buffer cache stats
+  //****************************************
   l_bluestore_buffers,
   l_bluestore_buffer_bytes,
   l_bluestore_buffer_hit_bytes,
   l_bluestore_buffer_miss_bytes,
-  l_bluestore_write_big,
-  l_bluestore_write_big_bytes,
-  l_bluestore_write_big_blobs,
-  l_bluestore_write_big_deferred,
-  l_bluestore_write_small,
-  l_bluestore_write_small_bytes,
-  l_bluestore_write_small_unused,
-  l_bluestore_write_deferred,
-  l_bluestore_write_deferred_bytes,
-  l_bluestore_write_small_pre_read,
-  l_bluestore_write_new,
-  l_bluestore_txc,
+  //****************************************
+
+  // internal stats
+  //****************************************
   l_bluestore_onode_reshard,
   l_bluestore_blob_split,
   l_bluestore_extent_compress,
   l_bluestore_gc_merged,
-  l_bluestore_read_eio,
-  l_bluestore_reads_with_retries,
-  l_bluestore_fragmentation,
+  //****************************************
+
+  // other client ops latencies
+  //****************************************
   l_bluestore_omap_seek_to_first_lat,
   l_bluestore_omap_upper_bound_lat,
   l_bluestore_omap_lower_bound_lat,
@@ -144,7 +191,12 @@ enum {
   l_bluestore_omap_get_values_lat,
   l_bluestore_clist_lat,
   l_bluestore_remove_lat,
+  //****************************************
+
+  // allocation stats
+  //****************************************
   l_bluestore_allocate_hist,
+  //****************************************
   l_bluestore_last
 };
 
