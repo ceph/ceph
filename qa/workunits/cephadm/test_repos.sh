@@ -24,7 +24,10 @@ function test_install_uninstall() {
 	      sudo yum -y remove cephadm ) || \
 	( sudo dnf -y install cephadm && \
 	      sudo $CEPHADM install && \
-	      sudo dnf -y remove cephadm )
+	      sudo dnf -y remove cephadm ) || \
+	( sudo zypper -n install cephadm && \
+	      sudo $CEPHADM install && \
+	      sudo zypper -n remove cephadm )
 }
 
 sudo $CEPHADM -v add-repo --release octopus
