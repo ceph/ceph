@@ -127,6 +127,7 @@ class CherryPyConfig(object):
         cherrypy.tools.request_logging = RequestLoggingTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
+        cherrypy.tools.mon_connection_checker = MonConnectionChecker()
 
         cherrypy.log.access_log.propagate = False
         cherrypy.log.error_log.propagate = False
@@ -150,6 +151,7 @@ class CherryPyConfig(object):
             'tools.json_in.on': True,
             'tools.json_in.force': True,
             'tools.plugin_hooks_filter_request.on': True,
+            'tools.mon_connection_checker.on': True,
         }
 
         if use_ssl:

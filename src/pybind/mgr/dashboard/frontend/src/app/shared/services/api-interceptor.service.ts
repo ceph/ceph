@@ -48,6 +48,7 @@ export class ApiInterceptorService implements HttpInterceptor {
     }
     return next.handle(reqWithVersion).pipe(
       catchError((resp: CdHttpErrorResponse) => {
+          console.log(resp);
         if (resp instanceof HttpErrorResponse) {
           let timeoutId: number;
           switch (resp.status) {
@@ -78,6 +79,17 @@ export class ApiInterceptorService implements HttpInterceptor {
                   message: $localize`Sorry, you don’t have permission to view this page or resource.`,
                   header: $localize`Access Denied`,
                   icon: 'fa fa-lock',
+                  source: 'forbidden'
+                }
+              });
+              break;
+            case 503:
+              this.router.navigate(['error'], {
+                state: {
+                  // TODO: change with response error message.
+                  message: $localize`The connection with monitor's daemons was compromised.`,
+                  header: $localize`Monitor connection error`,
+                  icon: 'fa fa-warning',
                   source: 'forbidden'
                 }
               });

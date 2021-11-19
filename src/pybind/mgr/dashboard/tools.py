@@ -15,7 +15,7 @@ import cherrypy
 from mgr_util import build_url
 
 from . import mgr
-from .exceptions import ViewCacheNoDataException
+from .exceptions import DashboardException, ViewCacheNoDataException
 from .services.auth import JwtManager
 from .settings import Settings
 
@@ -120,6 +120,23 @@ class RequestLoggingTool(cherrypy.Tool):
             logger_fn("[%s:%s] [%s] [%s] [%s] [%s] [%s] %s", req.remote.ip,
                       req.remote.port, req.method, status,
                       "{0:.3f}s".format(lat), length, getattr(req, 'unique_id', '-'), req.path_info)
+
+
+class MonConnectionChecker(cherrypy.Tool):
+    def __init__(self):
+        cherrypy.Tool.__init__(self, 'before_handler', self.check_connection,
+                               priority=10)
+        self.log = logging.getLogger('mon_connection_checker')
+
+    def check_connection(self):
+        self.log.error(f'Mon connection with mgr is {mgr.have_mon_connection()}')
+        if not mgr.have_mon_connection():
+            self.log.error('Mon connection with mgr is down')
+            # cherrypy.request.handler = None # stop request
+            cherrypy.response.status = 503
+            # cherrypy.response.body = "mon error".encode()
+            # raise DashboardException(http_status_code=503, msg=("The connection with all monitor daemons"
+            #                                        "was compromised."))
 
 
 # pylint: disable=too-many-instance-attributes

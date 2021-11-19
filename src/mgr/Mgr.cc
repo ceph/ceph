@@ -16,6 +16,7 @@
 #include "osdc/Objecter.h"
 #include "client/Client.h"
 #include "common/errno.h"
+#include "common/Clock.h"
 #include "mon/MonClient.h"
 #include "include/stringify.h"
 #include "global/global_context.h"
@@ -633,6 +634,11 @@ bool Mgr::ms_dispatch2(const ref_t<Message>& m)
       py_module_registry->notify_all("service_map", "");
       break;
     case MSG_LOG:
+      // Set the last time we received a message from the monitor.
+      // This isn't exactly the last message because the monitor keeps sending
+      // messages to the mgr even with a broken monitor, so we have to use the timestamp
+      // of the last log. This should be fixed in the monitor itself.
+      cluster_state.set_last_message_time(ref_cast<MLog>(m)->entries.back().stamp);
       handle_log(ref_cast<MLog>(m));
       break;
     case MSG_KV_DATA:

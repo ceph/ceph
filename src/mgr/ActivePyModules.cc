@@ -55,7 +55,7 @@ ActivePyModules::ActivePyModules(
   monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
   client(client_), finisher(f),
   cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
-  server(server), py_module_registry(pmr)
+  mon_connection_status("up"), server(server), py_module_registry(pmr)
 {
   store_cache = std::move(store_data);
   // we can only trust our ConfigMap if the mon cluster has provided
@@ -170,6 +170,16 @@ PyObject *ActivePyModules::get_daemon_status_python(
 PyObject *ActivePyModules::get_python(const std::string &what)
 {
   PyFormatter f;
+
+  // As get_python is the most called function, between prometheus and dashboard let's just
+  // update the monitor connection here.
+  auto ms_since_last_message = (ceph_clock_now() - cluster_state.get_last_message_time()).to_msec();
+  long unsigned int ms = 100000;
+  if (ms_since_last_message >= ms && mon_connection_status == "up") {
+    mon_connection_status = "down";
+  } else if(ms_since_last_message < ms && mon_connection_status == "down") {
+    mon_connection_status = "up";
+  }
 
   // Drop the GIL, as most of the following blocks will block on
   // a mutex -- they are all responsible for re-taking the GIL before

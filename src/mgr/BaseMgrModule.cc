@@ -711,7 +711,7 @@ ceph_set_wear_level(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_have_mon_connection(BaseMgrModule *self, PyObject *args)
 {
-  if (self->py_modules->get_monc().is_connected()) {
+  if (self->py_modules->get_monc().is_connected() && self->py_modules->mon_connection_status == "up") {
     Py_RETURN_TRUE;
   } else {
     Py_RETURN_FALSE;

@@ -14,6 +14,7 @@
 #ifndef CLUSTER_STATE_H_
 #define CLUSTER_STATE_H_
 
+#include "include/utime.h"
 #include "mds/FSMap.h"
 #include "mon/MgrMap.h"
 #include "common/ceph_mutex.h"
@@ -51,6 +52,8 @@ protected:
   bufferlist mon_status_json;
 
   class ClusterSocketHook *asok_hook;
+
+  utime_t last_message_time;
 
 public:
 
@@ -157,6 +160,15 @@ public:
 		    const cmdmap_t& cmdmap,
 		    Formatter *f,
 		    std::ostream& ss);
+
+
+  utime_t get_last_message_time() {
+    return last_message_time;
+  }
+
+  void set_last_message_time(utime_t time) {
+    last_message_time = time;
+  }
 };
 
 #endif

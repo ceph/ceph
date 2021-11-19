@@ -57,6 +57,7 @@ class ActivePyModules
   Finisher &finisher;
 public:
   Finisher cmd_finisher;
+  std::string mon_connection_status;
 private:
   DaemonServer &server;
   PyModuleRegistry &py_module_registry;
@@ -64,6 +65,7 @@ private:
   map<std::string,ProgressEvent> progress_events;
 
   mutable ceph::mutex lock = ceph::make_mutex("ActivePyModules::lock");
+
 
 public:
   ActivePyModules(
