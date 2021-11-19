@@ -44,12 +44,12 @@ protected:
   real_time mtime;
 
 public:
-  virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y, bool addprefix=true) = 0;
   virtual int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
   virtual int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
   virtual int read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y) = 0;
   virtual int read_name(const DoutPrefixProvider *dpp, optional_yield y) = 0;
-  virtual int read_info(const DoutPrefixProvider *dpp, optional_yield y) = 0;
+  virtual int read_info(const DoutPrefixProvider *dpp, optional_yield y, bool addprefix=true) = 0;
   bool validate_input(const DoutPrefixProvider* dpp);
   void extract_name_tenant(const std::string& str);
 
@@ -127,7 +127,7 @@ public:
   void set_id(const std::string& id) { this->id = id; }
   void set_mtime(const real_time& mtime) { this->mtime = mtime; }
 
-  virtual int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y, bool addprefix=true) = 0;
   virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) = 0;
   int get(const DoutPrefixProvider *dpp, optional_yield y);
   int get_by_id(const DoutPrefixProvider *dpp, optional_yield y);
@@ -177,27 +177,12 @@ public:
 class RGWRoleMetadataHandler: public RGWMetadataHandler_GenericMetaBE
 {
 public:
+  public:
   struct Svc {
-    RGWSI_Zone *zone{nullptr};
-    RGWSI_Meta *meta{nullptr};
-    RGWSI_MetaBackend *meta_be{nullptr};
-    RGWSI_SysObj *sysobj{nullptr};
+    RGWSI_Role *role{nullptr};
   } svc;
 
-  void init(RGWSI_Zone *_zone_svc,
-	    RGWSI_Meta *_meta_svc,
-	    RGWSI_MetaBackend *_meta_be_svc,
-	    RGWSI_SysObj *_sysobj_svc);
-
-  RGWSI_MetaBackend_Handler * get_be_handler();
-
-  //int do_start(optional_yield y, const DoutPrefixProvider *dpp);
-
-  RGWRoleMetadataHandler(CephContext *cct, Store* store,
-                          RGWSI_Zone *_zone_svc,
-                          RGWSI_Meta *_meta_svc,
-                          RGWSI_MetaBackend *_meta_be_svc,
-                          RGWSI_SysObj *_sysobj_svc);
+  RGWRoleMetadataHandler(CephContext *cct, Store* store, RGWSI_Role *role_svc);
 
   std::string get_type() final { return "roles";  }
 
@@ -227,8 +212,6 @@ public:
        bool from_remote_zone) override;
 
 private:
-  RGWSI_MetaBackend_Handler *be_handler;
-  std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
   Store* store;
   CephContext *cct;
 };
