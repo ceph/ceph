@@ -77,7 +77,7 @@ ExtentReader::scan_extents_ret ExtentReader::scan_extents(
         const record_header_t& header,
         const bufferlist& mdbuf) mutable -> scan_valid_records_ertr::future<>
       {
-        auto maybe_record_extent_infos = try_decode_extent_infos(header, mdbuf);
+        auto maybe_record_extent_infos = try_decode_extent_info(header, mdbuf);
         if (!maybe_record_extent_infos) {
           // This should be impossible, we did check the crc on the mdbuf
           logger().error(
@@ -88,8 +88,8 @@ ExtentReader::scan_extents_ret ExtentReader::scan_extents(
 
         paddr_t extent_offset = locator.record_block_base;
         logger().debug("ExtentReader::scan_extents: decoded {} extents",
-                       maybe_record_extent_infos->size());
-        for (const auto &i : *maybe_record_extent_infos) {
+                       maybe_record_extent_infos->extent_infos.size());
+        for (const auto &i : maybe_record_extent_infos->extent_infos) {
           extents->emplace_back(extent_offset, i);
           auto& seg_addr = extent_offset.as_seg_paddr();
           seg_addr.set_segment_off(
@@ -237,21 +237,14 @@ ExtentReader::read_validate_record_metadata(
         segment_manager.get_block_size());
     bufferlist bl;
     bl.append(bptr);
-    auto bp = bl.cbegin();
-    record_header_t header;
-    try {
-      decode(header, bp);
-    } catch (ceph::buffer::error &e) {
-      return read_validate_record_metadata_ret(
-        read_validate_record_metadata_ertr::ready_future_marker{},
-        std::nullopt);
-    }
-    if (header.segment_nonce != nonce) {
+    auto maybe_header = try_decode_record_header(bl, nonce);
+    if (!maybe_header.has_value()) {
       return read_validate_record_metadata_ret(
         read_validate_record_metadata_ertr::ready_future_marker{},
         std::nullopt);
     }
     auto& seg_addr = start.as_seg_paddr();
+    auto& header = *maybe_header;
     if (header.mdlength < block_size ||
         header.mdlength % block_size != 0 ||
         header.dlength % block_size != 0 ||
@@ -281,8 +274,8 @@ ExtentReader::read_validate_record_metadata(
         read_validate_record_metadata_ertr::ready_future_marker{},
         std::make_pair(std::move(header), std::move(bl)));
     });
-  }).safe_then([this](auto p) {
-    if (p && validate_metadata(p->second)) {
+  }).safe_then([](auto p) {
+    if (p && validate_record_metadata(p->second)) {
       return read_validate_record_metadata_ret(
         read_validate_record_metadata_ertr::ready_future_marker{},
         std::move(*p)
@@ -293,26 +286,6 @@ ExtentReader::read_validate_record_metadata(
         std::nullopt);
     }
   });
-}
-
-std::optional<std::vector<extent_info_t>>
-ExtentReader::try_decode_extent_infos(
-  record_header_t header,
-  const bufferlist &bl)
-{
-  auto bliter = bl.cbegin();
-  bliter += ceph::encoded_sizeof_bounded<record_header_t>();
-  bliter += sizeof(checksum_t) /* crc */;
-  logger().debug("{}: decoding {} extents", __func__, header.extents);
-  std::vector<extent_info_t> extent_infos(header.extents);
-  for (auto &&i : extent_infos) {
-    try {
-      decode(i, bliter);
-    } catch (ceph::buffer::error &e) {
-      return std::nullopt;
-    }
-  }
-  return extent_infos;
 }
 
 ExtentReader::read_validate_data_ret
@@ -330,23 +303,8 @@ ExtentReader::read_validate_data(
   ).safe_then([=, &header](auto bptr) {
     bufferlist bl;
     bl.append(bptr);
-    return bl.crc32c(-1) == header.data_crc;
+    return validate_record_data(header, bl);
   });
-}
-
-bool ExtentReader::validate_metadata(const bufferlist &bl)
-{
-  auto bliter = bl.cbegin();
-  auto test_crc = bliter.crc32c(
-    ceph::encoded_sizeof_bounded<record_header_t>(),
-    -1);
-  ceph_le32 recorded_crc_le;
-  decode(recorded_crc_le, bliter);
-  uint32_t recorded_crc = recorded_crc_le;
-  test_crc = bliter.crc32c(
-    bliter.get_remaining(),
-    test_crc);
-  return test_crc == recorded_crc;
 }
 
 ExtentReader::consume_record_group_ertr::future<>

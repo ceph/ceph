@@ -977,7 +977,7 @@ record_t Cache::prepare_record(Transaction &t)
     if (i->get_type() == extent_types_t::ROOT) {
       root = t.root;
       DEBUGT("writing out root delta for {}", t, *t.root);
-      record.deltas.push_back(
+      record.push_back(
 	delta_info_t{
 	  extent_types_t::ROOT,
 	  paddr_t{},
@@ -989,7 +989,7 @@ record_t Cache::prepare_record(Transaction &t)
 	  t.root->get_delta()
 	});
     } else {
-      record.deltas.push_back(
+      record.push_back(
 	delta_info_t{
 	  i->get_type(),
 	  i->get_paddr(),
@@ -1047,7 +1047,7 @@ record_t Cache::prepare_record(Transaction &t)
     }
 
     assert(bl.length() == i->get_length());
-    record.extents.push_back(extent_t{
+    record.push_back(extent_t{
 	i->get_type(),
 	i->is_logical()
 	? i->cast<LogicalCachedExtent>()->get_laddr()
@@ -1062,7 +1062,7 @@ record_t Cache::prepare_record(Transaction &t)
     delta_info_t delta;
     delta.type = extent_types_t::RBM_ALLOC_INFO;
     delta.bl = bl;
-    record.deltas.push_back(delta);
+    record.push_back(std::move(delta));
   }
 
   for (auto &i: t.ool_block_list) {
@@ -1087,13 +1087,13 @@ record_t Cache::prepare_record(Transaction &t)
   record_header_fullness.ool_stats.filled_bytes += ool_stats.header_raw_bytes;
   record_header_fullness.ool_stats.total_bytes += ool_stats.header_bytes;
 
-  auto record_size = get_encoded_record_length(
-      record, reader.get_block_size());
+  auto record_size = record_group_size_t(
+      record.size, reader.get_block_size());
   auto inline_overhead =
-      record_size.mdlength + record_size.dlength - record.get_raw_data_size();
+      record_size.get_encoded_length() - record.get_raw_data_size();
   efforts.inline_record_overhead_bytes += inline_overhead;
-  record_header_fullness.inline_stats.filled_bytes += record_size.raw_mdlength;
-  record_header_fullness.inline_stats.total_bytes += record_size.mdlength;
+  record_header_fullness.inline_stats.filled_bytes += record_size.get_raw_mdlength();
+  record_header_fullness.inline_stats.total_bytes += record_size.get_mdlength();
 
   return record;
 }

@@ -2,6 +2,15 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/common/log.h"
+
+namespace {
+
+seastar::logger& logger() {
+  return crimson::get_logger(ceph_subsys_seastore);
+}
+
+}
 
 namespace crimson::os::seastore {
 
@@ -125,38 +134,42 @@ std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs)
 	     << ")";
 }
 
-extent_len_t get_encoded_record_raw_mdlength(
-  const record_t &record,
-  size_t block_size) {
-  extent_len_t metadata =
-    (extent_len_t)ceph::encoded_sizeof_bounded<record_header_t>();
-  metadata += sizeof(checksum_t) /* crc */;
-  metadata += record.extents.size() *
-    ceph::encoded_sizeof_bounded<extent_info_t>();
-  for (const auto &i: record.deltas) {
-    metadata += ceph::encoded_sizeof(i);
-  }
-  return metadata;
+void record_size_t::account_extent(extent_len_t extent_len)
+{
+  assert(extent_len);
+  plain_mdlength += ceph::encoded_sizeof_bounded<extent_info_t>();
+  dlength += extent_len;
 }
 
-record_size_t get_encoded_record_length(
-  const record_t &record,
-  size_t block_size) {
-  extent_len_t raw_mdlength =
-    get_encoded_record_raw_mdlength(record, block_size);
-  extent_len_t mdlength =
-    p2roundup(raw_mdlength, (extent_len_t)block_size);
-  extent_len_t dlength = 0;
-  for (const auto &i: record.extents) {
-    dlength += i.bl.length();
-  }
-  return record_size_t{raw_mdlength, mdlength, dlength};
+void record_size_t::account(const delta_info_t& delta)
+{
+  assert(delta.bl.length());
+  plain_mdlength += ceph::encoded_sizeof(delta);
+}
+
+extent_len_t record_size_t::get_raw_mdlength() const
+{
+  return plain_mdlength +
+         sizeof(checksum_t) +
+         ceph::encoded_sizeof_bounded<record_header_t>();
+}
+
+void record_group_size_t::account(
+    const record_size_t& rsize,
+    extent_len_t _block_size)
+{
+  assert(_block_size > 0);
+  assert(rsize.dlength % _block_size == 0);
+  assert(block_size == 0 || block_size == _block_size);
+  raw_mdlength += rsize.get_raw_mdlength();
+  mdlength += rsize.get_mdlength(_block_size);
+  dlength += rsize.dlength;
+  block_size = _block_size;
 }
 
 ceph::bufferlist encode_record(
-  record_size_t rsize,
-  record_t &&record,
-  size_t block_size,
+  record_t&& record,
+  extent_len_t block_size,
   const journal_seq_t& committed_to,
   segment_nonce_t current_segment_nonce)
 {
@@ -167,17 +180,17 @@ ceph::bufferlist encode_record(
 
   bufferlist bl;
   record_header_t header{
-    rsize.mdlength,
-    rsize.dlength,
-    (uint32_t)record.deltas.size(),
-    (uint32_t)record.extents.size(),
+    record.size.get_mdlength(block_size),
+    record.size.dlength,
+    (extent_len_t)record.deltas.size(),
+    (extent_len_t)record.extents.size(),
     current_segment_nonce,
     committed_to,
     data_bl.crc32c(-1)
   };
   encode(header, bl);
 
-  auto metadata_crc_filler = bl.append_hole(sizeof(uint32_t));
+  auto metadata_crc_filler = bl.append_hole(sizeof(checksum_t));
 
   for (const auto &i: record.extents) {
     encode(extent_info_t(i), bl);
@@ -185,19 +198,19 @@ ceph::bufferlist encode_record(
   for (const auto &i: record.deltas) {
     encode(i, bl);
   }
-  ceph_assert(bl.length() == rsize.raw_mdlength);
+  ceph_assert(bl.length() == record.size.get_raw_mdlength());
 
-  if (bl.length() % block_size != 0) {
-    bl.append_zero(
-      block_size - (bl.length() % block_size));
+  auto aligned_mdlength = record.size.get_mdlength(block_size);
+  if (bl.length() != aligned_mdlength) {
+    assert(bl.length() < aligned_mdlength);
+    bl.append_zero(aligned_mdlength - bl.length());
   }
-  ceph_assert(bl.length() == rsize.mdlength);
 
   auto bliter = bl.cbegin();
   auto metadata_crc = bliter.crc32c(
     ceph::encoded_sizeof_bounded<record_header_t>(),
     -1);
-  bliter += sizeof(checksum_t); /* crc hole again */
+  bliter += sizeof(checksum_t); /* metadata crc hole */
   metadata_crc = bliter.crc32c(
     bliter.get_remaining(),
     metadata_crc);
@@ -208,9 +221,141 @@ ceph::bufferlist encode_record(
     reinterpret_cast<const char *>(&metadata_crc_le));
 
   bl.claim_append(data_bl);
-  ceph_assert(bl.length() == (rsize.dlength + rsize.mdlength));
+  ceph_assert(bl.length() == (record.size.get_encoded_length(block_size)));
 
   return bl;
+}
+
+ceph::bufferlist encode_records(
+  record_group_t& record_group,
+  const journal_seq_t& committed_to,
+  segment_nonce_t current_segment_nonce)
+{
+  assert(record_group.size.block_size > 0);
+  assert(record_group.records.size() > 0);
+
+  bufferlist bl;
+  for (auto& r: record_group.records) {
+    bl.claim_append(
+        encode_record(
+          std::move(r),
+          record_group.size.block_size,
+          committed_to,
+          current_segment_nonce));
+  }
+  ceph_assert(bl.length() == record_group.size.get_encoded_length());
+
+  record_group.clear();
+  return bl;
+}
+
+std::optional<record_header_t>
+try_decode_record_header(
+    const ceph::bufferlist& header_bl,
+    segment_nonce_t expected_nonce)
+{
+  auto bp = header_bl.cbegin();
+  record_header_t header;
+  try {
+    decode(header, bp);
+  } catch (ceph::buffer::error &e) {
+    logger().debug(
+        "try_decode_record_header: failed, "
+        "cannot decode record_header_t, got {}.",
+        e);
+    return std::nullopt;
+  }
+  if (header.segment_nonce != expected_nonce) {
+    logger().debug(
+        "try_decode_record_header: failed, record_header nonce mismatch, "
+        "read {}, expected {}!",
+        header.segment_nonce,
+        expected_nonce);
+    return std::nullopt;
+  }
+  return header;
+}
+
+bool validate_record_metadata(
+    const ceph::bufferlist& md_bl)
+{
+  auto bliter = md_bl.cbegin();
+  auto test_crc = bliter.crc32c(
+    ceph::encoded_sizeof_bounded<record_header_t>(),
+    -1);
+  ceph_le32 recorded_crc_le;
+  decode(recorded_crc_le, bliter);
+  uint32_t recorded_crc = recorded_crc_le;
+  test_crc = bliter.crc32c(
+    bliter.get_remaining(),
+    test_crc);
+  bool success = (test_crc == recorded_crc);
+  if (!success) {
+    logger().debug("validate_record_metadata: failed, metadata crc mismatch.");
+  }
+  return success;
+}
+
+bool validate_record_data(
+    const record_header_t& header,
+    const ceph::bufferlist& data_bl)
+{
+  bool success = (data_bl.crc32c(-1) == header.data_crc);
+  if (!success) {
+    logger().debug("validate_record_data: failed, data crc mismatch!");
+  }
+  return success;
+}
+
+std::optional<record_extent_infos_t>
+try_decode_extent_info(
+    const record_header_t& header,
+    const ceph::bufferlist& md_bl)
+{
+  auto bliter = md_bl.cbegin();
+  bliter += ceph::encoded_sizeof_bounded<record_header_t>();
+  bliter += sizeof(checksum_t) /* metadata crc hole */;
+
+  record_extent_infos_t record_extent_info;
+  record_extent_info.extent_infos.resize(header.extents);
+  for (auto& i: record_extent_info.extent_infos) {
+    try {
+      decode(i, bliter);
+    } catch (ceph::buffer::error &e) {
+      logger().debug(
+          "try_decode_extent_infos: failed, "
+          "cannot decode extent_info_t, got {}.",
+          e);
+      return std::nullopt;
+    }
+  }
+  return record_extent_info;
+}
+
+std::optional<record_deltas_t>
+try_decode_deltas(
+    const record_header_t& header,
+    const ceph::bufferlist& md_bl)
+{
+  auto bliter = md_bl.cbegin();
+  bliter += ceph::encoded_sizeof_bounded<record_header_t>();
+  bliter += sizeof(checksum_t) /* metadata crc hole */;
+  bliter += header.extents  * ceph::encoded_sizeof_bounded<extent_info_t>();
+
+  record_deltas_t record_delta;
+  record_delta.deltas.resize(header.deltas);
+  for (auto& i: record_delta.deltas) {
+    try {
+      decode(i, bliter);
+    } catch (ceph::buffer::error &e) {
+      logger().debug(
+          "try_decode_deltas: failed, "
+          "cannot decode delta_info_t, got {}.",
+          e);
+      return std::nullopt;
+    }
+  }
+  return record_delta;
 }
 
 bool can_delay_allocation(device_type_t type) {

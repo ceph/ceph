@@ -5,7 +5,9 @@
 
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <iostream>
+#include <vector>
 
 #include "include/byteorder.h"
 #include "include/denc.h"
@@ -822,27 +824,6 @@ struct delta_info_t {
 
 std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs);
 
-struct record_t {
-  std::vector<extent_t> extents;
-  std::vector<delta_info_t> deltas;
-
-  std::size_t get_raw_data_size() const {
-    auto extent_size = std::accumulate(
-        extents.begin(), extents.end(), 0,
-        [](uint64_t sum, auto& extent) {
-          return sum + extent.bl.length();
-        }
-    );
-    auto delta_size = std::accumulate(
-        deltas.begin(), deltas.end(), 0,
-        [](uint64_t sum, auto& delta) {
-          return sum + delta.bl.length();
-        }
-    );
-    return extent_size + delta_size;
-  }
-};
-
 class object_data_t {
   laddr_t reserved_data_base = L_ADDR_NULL;
   extent_len_t reserved_data_len = 0;
@@ -1179,6 +1160,7 @@ struct extent_info_t {
     DENC_FINISH(p);
   }
 };
+std::ostream &operator<<(std::ostream &out, const extent_info_t &header);
 
 using segment_nonce_t = uint32_t;
 
@@ -1210,6 +1192,71 @@ struct segment_header_t {
 };
 std::ostream &operator<<(std::ostream &out, const segment_header_t &header);
 
+struct record_size_t {
+  extent_len_t plain_mdlength = 0; // mdlength without the record header
+  extent_len_t dlength = 0;
+
+  void account_extent(extent_len_t extent_len);
+
+  void account(const extent_t& extent) {
+    account_extent(extent.bl.length());
+  }
+
+  void account(const delta_info_t& delta);
+
+  // TODO: remove
+  extent_len_t get_raw_mdlength() const;
+
+  extent_len_t get_mdlength(extent_len_t block_size) const {
+    assert(block_size > 0);
+    return p2roundup(get_raw_mdlength(), block_size);
+  }
+
+  extent_len_t get_encoded_length(extent_len_t block_size) const {
+    assert(block_size > 0);
+    assert(dlength % block_size == 0);
+    return get_mdlength(block_size) + dlength;
+  }
+};
+
+struct record_t {
+  std::vector<extent_t> extents;
+  std::vector<delta_info_t> deltas;
+  record_size_t size;
+
+  record_t() = default;
+  record_t(std::vector<extent_t>&& _extents,
+           std::vector<delta_info_t>&& _deltas) {
+    for (auto& e: _extents) {
+      push_back(std::move(e));
+    }
+    for (auto& d: _deltas) {
+      push_back(std::move(d));
+    }
+  }
+
+  // the size of extents and delta buffers
+  std::size_t get_raw_data_size() const {
+    auto delta_size = std::accumulate(
+        deltas.begin(), deltas.end(), 0,
+        [](uint64_t sum, auto& delta) {
+          return sum + delta.bl.length();
+        }
+    );
+    return size.dlength + delta_size;
+  }
+
+  void push_back(extent_t&& extent) {
+    size.account(extent);
+    extents.push_back(std::move(extent));
+  }
+
+  void push_back(delta_info_t&& delta) {
+    size.account(delta);
+    deltas.push_back(std::move(delta));
+  }
+};
+
 struct record_header_t {
   // Fixed portion
   extent_len_t  mdlength;       // block aligned, length of metadata
@@ -1235,32 +1282,119 @@ struct record_header_t {
   }
 };
 
-std::ostream &operator<<(std::ostream &out, const extent_info_t &header);
-
-struct record_size_t {
+struct record_group_size_t {
   extent_len_t raw_mdlength = 0;
   extent_len_t mdlength = 0;
   extent_len_t dlength = 0;
+  extent_len_t block_size = 0;
+
+  record_group_size_t() = default;
+  record_group_size_t(
+      const record_size_t& rsize,
+      extent_len_t block_size) {
+    account(rsize, block_size);
+  }
+
+  extent_len_t get_raw_mdlength() const {
+    assert(block_size > 0);
+    return raw_mdlength;
+  }
+
+  extent_len_t get_mdlength() const {
+    assert(block_size > 0);
+    assert(mdlength % block_size == 0);
+    return mdlength;
+  }
+
+  extent_len_t get_encoded_length() const {
+    assert(block_size > 0);
+    assert(dlength % block_size == 0);
+    return get_mdlength() + dlength;
+  }
+
+  extent_len_t get_encoded_length_after(
+      const record_size_t& rsize,
+      extent_len_t block_size) const {
+    record_group_size_t tmp = *this;
+    tmp.account(rsize, block_size);
+    return tmp.get_encoded_length();
+  }
+
+  void account(const record_size_t& rsize,
+               extent_len_t block_size);
 };
 
-extent_len_t get_encoded_record_raw_mdlength(
-  const record_t &record,
-  size_t block_size);
+struct record_group_t {
+  std::vector<record_t> records;
+  record_group_size_t size;
 
-/**
- * Return <mdlength, dlength> pair denoting length of
- * metadata and blocks respectively.
- */
-record_size_t get_encoded_record_length(
-  const record_t &record,
-  size_t block_size);
+  record_group_t() = default;
+  record_group_t(
+      record_t&& record,
+      extent_len_t block_size) {
+    push_back(std::move(record), block_size);
+  }
+
+  std::size_t get_size() const {
+    return records.size();
+  }
+
+  void push_back(
+      record_t&& record,
+      extent_len_t block_size) {
+    size.account(record.size, block_size);
+    records.push_back(std::move(record));
+    assert(size.get_encoded_length() < MAX_SEG_OFF);
+  }
+
+  void reserve(std::size_t limit) {
+    records.reserve(limit);
+  }
+
+  void clear() {
+    records.clear();
+    size = {};
+  }
+};
 
 ceph::bufferlist encode_record(
-  record_size_t rsize,
-  record_t &&record,
-  size_t block_size,
+  record_t&& record,
+  extent_len_t block_size,
   const journal_seq_t& committed_to,
-  segment_nonce_t current_segment_nonce = 0);
+  segment_nonce_t current_segment_nonce);
+
+ceph::bufferlist encode_records(
+  record_group_t& record_group,
+  const journal_seq_t& committed_to,
+  segment_nonce_t current_segment_nonce);
+
+std::optional<record_header_t>
+try_decode_record_header(
+    const ceph::bufferlist& header_bl,
+    segment_nonce_t expected_nonce);
+
+bool validate_record_metadata(
+    const ceph::bufferlist& md_bl);
+
+bool validate_record_data(
+    const record_header_t& header,
+    const ceph::bufferlist& data_bl);
+
+struct record_extent_infos_t {
+  std::vector<extent_info_t> extent_infos;
+};
+std::optional<record_extent_infos_t>
+try_decode_extent_info(
+    const record_header_t& header,
+    const ceph::bufferlist& md_bl);
+
+struct record_deltas_t {
+  std::vector<delta_info_t> deltas;
+};
+std::optional<record_deltas_t>
+try_decode_deltas(
+    const record_header_t& header,
+    const ceph::bufferlist& md_bl);
 
 struct write_result_t {
   journal_seq_t start_seq;

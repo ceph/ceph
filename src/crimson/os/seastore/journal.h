@@ -250,19 +250,22 @@ private:
     }
 
     std::size_t get_num_records() const {
-      return records.size();
+      return pending.get_size();
     }
 
     // return the expected write size if allows to batch,
     // otherwise, return 0
-    std::size_t can_batch(const record_size_t& rsize) const {
+    std::size_t can_batch(
+        const record_t& record,
+        extent_len_t block_size) const {
       assert(state != state_t::SUBMITTING);
-      if (records.size() >= batch_capacity ||
-          static_cast<std::size_t>(encoded_length) > batch_flush_size) {
+      if (pending.get_size() >= batch_capacity ||
+          (pending.get_size() > 0 &&
+           pending.size.get_encoded_length() > batch_flush_size)) {
         assert(state == state_t::PENDING);
         return 0;
       }
-      return get_encoded_length(rsize);
+      return get_encoded_length_after(record, block_size);
     }
 
     void initialize(std::size_t i,
@@ -272,8 +275,7 @@ private:
       index = i;
       batch_capacity = _batch_capacity;
       batch_flush_size = _batch_flush_size;
-      records.reserve(batch_capacity);
-      record_sizes.reserve(batch_capacity);
+      pending.reserve(batch_capacity);
     }
 
     // Add to the batch, the future will be resolved after the batch is
@@ -283,11 +285,12 @@ private:
     // in the batch.
     using add_pending_ertr = JournalSegmentManager::write_ertr;
     using add_pending_ret = add_pending_ertr::future<record_locator_t>;
-    add_pending_ret add_pending(record_t&&, const record_size_t&);
+    add_pending_ret add_pending(
+        record_t&&,
+        extent_len_t block_size);
 
     // Encode the batched records for write.
-    ceph::bufferlist encode_records(
-        size_t block_size,
+    ceph::bufferlist encode_batch(
         const journal_seq_t& committed_to,
         segment_nonce_t segment_nonce);
 
@@ -298,31 +301,33 @@ private:
     // The fast path that is equivalent to submit a single record as a batch.
     //
     // Essentially, equivalent to the combined logic of:
-    // add_pending(), encode_records() and set_result() above without
+    // add_pending(), encode_batch() and set_result() above without
     // the intervention of the shared io_promise.
     //
     // Note the current RecordBatch can be reused afterwards.
-    ceph::bufferlist submit_pending_fast(
+    std::pair<ceph::bufferlist, record_group_size_t> submit_pending_fast(
         record_t&&,
-        const record_size_t&,
-        size_t block_size,
+        extent_len_t block_size,
         const journal_seq_t& committed_to,
         segment_nonce_t segment_nonce);
 
   private:
-    std::size_t get_encoded_length(const record_size_t& rsize) const {
-      auto ret = encoded_length + rsize.mdlength + rsize.dlength;
-      assert(ret > 0);
-      return ret;
+    std::size_t get_encoded_length_after(
+        const record_t& record,
+        extent_len_t block_size) const {
+      return pending.size.get_encoded_length_after(
+          record.size, block_size);
     }
 
     state_t state = state_t::EMPTY;
     std::size_t index = 0;
     std::size_t batch_capacity = 0;
     std::size_t batch_flush_size = 0;
-    segment_off_t encoded_length = 0;
-    std::vector<record_t> records;
-    std::vector<record_size_t> record_sizes;
+
+    record_group_t pending;
+    std::size_t submitting_size = 0;
+    segment_off_t submitting_length = 0;
+
     std::optional<seastar::shared_promise<maybe_result_t> > io_promise;
   };
 
@@ -416,11 +421,11 @@ private:
     using submit_pending_ret = submit_pending_ertr::future<
       record_locator_t>;
     submit_pending_ret submit_pending(
-        record_t&&, const record_size_t&, OrderingHandle &handle, bool flush);
+        record_t&&, OrderingHandle &handle, bool flush);
 
     using do_submit_ret = submit_pending_ret;
     do_submit_ret do_submit(
-        record_t&&, const record_size_t&, OrderingHandle&);
+        record_t&&, OrderingHandle&);
 
     state_t state = state_t::IDLE;
     std::size_t num_outstanding_io = 0;
@@ -455,11 +460,6 @@ private:
     replay_segments_t>;
   prep_replay_segments_fut prep_replay_segments(
     std::vector<std::pair<segment_id_t, segment_header_t>> segments);
-
-  /// attempts to decode deltas from bl, return nullopt if unsuccessful
-  std::optional<std::vector<delta_info_t>> try_decode_deltas(
-    record_header_t header,
-    const bufferlist &bl);
 
   /// replays records starting at start through end of segment
   replay_ertr::future<>
