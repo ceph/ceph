@@ -15,6 +15,7 @@
      data-placement="left"
      [ngbTooltip]="usageTooltipTpl">
   <div class="progress-bar bg-info"
+       [ngClass]="{'bg-warning': usedPercentage/100 >= warningThreshold, 'bg-danger': usedPercentage/100 >= errorThreshold}"
        role="progressbar"
        [style.width]="usedPercentage + '%'">
     <span>{{ usedPercentage | number: '1.0-' + decimals }}%</span>
