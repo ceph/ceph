@@ -233,7 +233,7 @@ const string& RGWRole::get_path_oid_prefix()
 {
   return role_path_oid_prefix;
 }
-
+#if 0
 class RGWSI_Role_Module : public RGWSI_MBSObj_Handler_Module {
   RGWRoleMetadataHandler::Svc& svc;
   const std::string prefix;
@@ -302,7 +302,7 @@ void RGWRoleMetadataHandler::init(RGWSI_Zone *_zone_svc,
   base_init(cct, get_be_handler());
 }
 
-#if 0
+
 int RGWRoleMetadataHandler::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
 
@@ -323,14 +323,11 @@ int RGWRoleMetadataHandler::do_start(optional_yield y, const DoutPrefixProvider 
 #endif
 
 RGWRoleMetadataHandler::RGWRoleMetadataHandler(CephContext *cct, Store* store,
-                                              RGWSI_Zone *_zone_svc,
-                                              RGWSI_Meta *_meta_svc,
-                                              RGWSI_MetaBackend *_meta_be_svc,
-                                              RGWSI_SysObj *_sysobj_svc)
+                                              RGWSI_Role *role_svc)
 {
   this->cct = cct;
   this->store = store;
-  init(_zone_svc, _meta_svc, _meta_be_svc, _sysobj_svc);
+  base_init(role_svc->ctx(), role_svc->get_be_handler());
 }
 
 void RGWRoleCompleteInfo::dump(ceph::Formatter *f) const
@@ -370,8 +367,9 @@ int RGWRoleMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
                                    const DoutPrefixProvider *dpp)
 {
   RGWRoleCompleteInfo rci;
-  rci.info = store->get_role(entry).get();
-  int ret = rci.info->read_info(dpp, y);
+  std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(entry);
+  rci.info = role.get();
+  int ret = rci.info->read_info(dpp, y, false);
   if (ret < 0) {
     return ret;
   }
@@ -393,7 +391,7 @@ int RGWRoleMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
                                       const DoutPrefixProvider *dpp)
 {
   std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(entry);
-  int ret = role->read_info(dpp, y);
+  int ret = role->read_info(dpp, y, false);
   if (ret < 0) {
     return ret == -ENOENT? 0 : ret;
   }
@@ -423,7 +421,7 @@ public:
     auto& rci = mdo->get_rci();
     auto mtime = mdo->get_mtime();
     rci.info->set_mtime(mtime);
-    int ret = rci.info->create(dpp, true, y);
+    int ret = rci.info->create(dpp, true, y, false);
     return ret < 0 ? ret : STATUS_APPLIED;
   }
 };

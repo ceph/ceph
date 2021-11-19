@@ -80,7 +80,7 @@ int RGWSI_Role_RADOS::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   bh->set_module(module);
   return 0;
 }
-
+#if 0
 class PutRole
 {
   RGWSI_Role_RADOS* svc_role;
@@ -436,3 +436,4 @@ int RGWSI_Role_RADOS::list_roles_by_path_prefix(RGWSI_MetaBackend::Context *ctx,
   });
   return 0; // meta_be function calls have to return an int
 }
+#endif
