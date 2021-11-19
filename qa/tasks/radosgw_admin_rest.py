@@ -18,10 +18,24 @@ import requests
 import time
 
 from boto.connection import AWSAuthConnection
-from teuthology import misc as teuthology
-from tasks.util.rgw import get_user_summary, get_user_successful_ops, rgwadmin
+
+import pdb
+
+import tasks.vstart_runner
+from tasks.rgw import RGWEndpoint
+
+from teuthology import misc as teuthology_misc
+from tasks.util.rgw import rgwadmin as tasks_util_rgw_rgwadmin
+from tasks.util.rgw import get_user_summary, get_user_successful_ops
 
 log = logging.getLogger(__name__)
+
+def rgwadmin(*args, **kwargs):
+    ctx = args[0]
+    # Is this a local runner?
+    omit_sudo = hasattr(ctx.rgw, 'omit_sudo') and ctx.rgw.omit_sudo == True
+    omit_tdir = hasattr(ctx.rgw, 'omit_tdir') and ctx.rgw.omit_tdir == True
+    return tasks_util_rgw_rgwadmin(*args, **kwargs, omit_sudo=omit_sudo, omit_tdir=omit_tdir)
 
 def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
     """
@@ -113,6 +127,28 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
         log.info(' json result: %s' % result.json())
         return result.status_code, result.json()
 
+def cleanup(ctx, client):
+    # remove objects and buckets
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'list'], check_status=True)
+    try:
+        for bucket in out:
+            (err, out) = rgwadmin(ctx, client, [
+                'bucket', 'rm', '--bucket', bucket, '--purge-objects'],
+                check_status=True)
+    except:
+        pass
+
+    # remove test user(s)
+    users = ['ada', 'foo', 'fud']
+    users.reverse()
+    for user in users:
+        try:
+            (err, out) = rgwadmin(ctx, client, [
+                'user', 'rm', '--uid', user],
+                check_status=True)
+        except:
+            pass
+
 
 def task(ctx, config):
     """
@@ -122,15 +158,24 @@ def task(ctx, config):
         or isinstance(config, dict), \
         "task s3tests only supports a list or dictionary for configuration"
     all_clients = ['client.{id}'.format(id=id_)
-                   for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
+                   for id_ in teuthology_misc.all_roles_of_type(ctx.cluster, 'client')]
     if config is None:
         config = all_clients
     if isinstance(config, list):
         config = dict.fromkeys(config)
+
+    # override w/behavior from radosgw_admin.py
+    assert ctx.rgw.config, \
+        "radosgw_admin task needs a config passed from the rgw task"
+    config = ctx.rgw.config
+
     clients = config.keys()
 
     # just use the first client...
     client = next(iter(clients))
+
+    # cleanup from prior runs
+    cleanup(ctx, client)
 
     ##
     admin_user = 'ada'
@@ -158,6 +203,7 @@ def task(ctx, config):
     # legend (test cases can be easily grep-ed out)
     # TESTCASE 'testname','object','method','operation','assertion'
     # TESTCASE 'create-admin-user','user','create','administrative user','succeeds'
+    pdb.set_trace()
     (err, out) = rgwadmin(ctx, client, [
             'user', 'create',
             '--uid', admin_user,
@@ -183,6 +229,7 @@ def task(ctx, config):
         host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
+    admin_conn.auth_region_name='us-east-1'
 
     # TESTCASE 'info-nosuch','user','info','non-existent user','fails'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {"uid": user1})
@@ -423,6 +470,7 @@ def task(ctx, config):
         host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
+    connection.auth_region_name='us-east-1'
 
     # TESTCASE 'bucket-stats2','bucket','stats','no buckets','succeeds, empty list'
     (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'uid' : user1, 'stats' : True})
@@ -719,3 +767,44 @@ def task(ctx, config):
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
     assert ret == 404
 
+
+from teuthology.config import config
+from teuthology.orchestra import cluster
+
+import argparse;
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--uid')
+    parser.add_argument('--host', required=True)
+    parser.add_argument('--port', type=int)
+
+    args = parser.parse_args()
+    host = args.host
+    if args.port:
+        port = args.port
+    else:
+        port = 80
+
+    client0 = tasks.vstart_runner.LocalRemote()
+    ctx = config
+    ctx.cluster=cluster.Cluster(remotes=[(client0,
+        [ 'ceph.client.rgw.%s' % (port),  ]),])
+    ctx.rgw = argparse.Namespace()
+    endpoints = {}
+    endpoints['ceph.client.rgw.%s' % port] = RGWEndpoint(
+        hostname=host,
+        port=port)
+    ctx.rgw.role_endpoints = endpoints
+    ctx.rgw.realm = None
+    ctx.rgw.regions = {'region0': { 'api name': 'api1',
+        'is master': True, 'master zone': 'r0z0',
+        'zones': ['r0z0', 'r0z1'] }}
+    ctx.rgw.omit_sudo = True
+    ctx.rgw.omit_tdir = True
+    ctx.rgw.config = {'ceph.client.rgw.%s' % port: {'system user': {'name': '%s-system-user' % port}}}
+    task(config, None)
+    exit()
+
+if __name__ == '__main__':
+    main()
