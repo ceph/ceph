@@ -44,6 +44,7 @@
 #include "services/svc_quota.h"
 #include "services/svc_config_key.h"
 #include "services/svc_zone_utils.h"
+#include "services/svc_role_rados.h"
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "rgw_pubsub.h"
@@ -3061,11 +3062,16 @@ int RadosOIDCProvider::delete_obj(const DoutPrefixProvider *dpp, optional_yield 
   return ret;
 }
 
-int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y, bool addprefix)
 {
   using ceph::encode;
-  //auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-  std::string oid = get_info_oid_prefix() + id;
+  std::string oid;
+
+  if (addprefix) {
+    oid = get_info_oid_prefix() + id;
+  } else {
+    oid = id;
+  }
 
   bufferlist bl;
   encode(*this, bl);
@@ -3077,14 +3083,9 @@ int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optiona
   }
 
   RGWSI_MBSObj_PutParams params(bl, &attrs, mtime, exclusive);
-  return store->svc()->meta_be_sobj->put(store->svc()->meta_be_sobj->alloc_ctx(), oid, params, &objv_tracker, y, dpp);
-  #if 0
-  if (!attrs.empty()) {
-    return rgw_put_system_obj(dpp, obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, mtime, y, &attrs);
-  }
-
-  return rgw_put_system_obj(dpp, obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, mtime, y);
-  #endif
+  std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
+  ctx->init(store->svc()->role->get_be_handler());
+  return store->svc()->role->svc.meta_be->put(ctx.get(), oid, params, &objv_tracker, y, dpp);
 }
 
 int RadosRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
@@ -3162,18 +3163,32 @@ int RadosRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
   return 0;
 }
 
-int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
+int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y, bool addprefix)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-  std::string oid = get_info_oid_prefix() + id;
+  //auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  std::string oid;
+  if (addprefix) {
+    oid = get_info_oid_prefix() + id;
+  } else {
+    oid = id;
+  }
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, &objv_tracker, &mtime, null_yield, dpp, &attrs, nullptr, boost::none, true);
+  RGWSI_MBSObj_GetParams params(&bl, &attrs, &mtime);
+  std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
+  ctx->init(store->svc()->role->get_be_handler());
+  int ret = store->svc()->role->svc.meta_be->get_entry(ctx.get(), oid, params, &objv_tracker, y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+#if 0
+  int ret = rgw_get_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, &objv_tracker, &mtime, null_yield, dpp, &attrs, nullptr, boost::none, true);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role info from Role pool: " << id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
-
+#endif
   try {
     using ceph::decode;
     auto iter = bl.cbegin();
@@ -3199,7 +3214,7 @@ int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
   return 0;
 }
 
-int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y, bool addprefix)
 {
   int ret;
 
@@ -3243,7 +3258,7 @@ int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yi
   creation_date.assign(buf, strlen(buf));
 
   auto& pool = store->svc()->zone->get_zone_params().roles_pool;
-  ret = store_info(dpp, exclusive, y);
+  ret = store_info(dpp, exclusive, y, addprefix);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR:  storing role info in Role pool: "
                   << id << ": " << cpp_strerror(-ret) << dendl;

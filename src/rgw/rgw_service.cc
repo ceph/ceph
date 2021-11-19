@@ -77,6 +77,7 @@ int RGWServices_Def::init(CephContext *cct,
   sysobj = std::make_unique<RGWSI_SysObj>(cct);
   sysobj_core = std::make_unique<RGWSI_SysObj_Core>(cct);
   user_rados = std::make_unique<RGWSI_User_RADOS>(cct);
+  role_rados = std::make_unique<RGWSI_Role_RADOS>(cct);
 
   if (have_cache) {
     sysobj_cache = std::make_unique<RGWSI_SysObj_Cache>(dpp, cct);
@@ -116,6 +117,7 @@ int RGWServices_Def::init(CephContext *cct,
   }
   user_rados->init(rados.get(), zone.get(), sysobj.get(), sysobj_cache.get(),
                    meta.get(), meta_be_sobj.get(), sync_modules.get());
+  role_rados->init(zone.get(), meta.get(), meta_be_sobj.get(), sysobj.get());
 
   can_shutdown = true;
 
@@ -248,6 +250,12 @@ int RGWServices_Def::init(CephContext *cct,
       return r;
     }
 
+    r = role_rados->start(y, dpp);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start role_rados service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
   }
 
   /* cache or core services will be started by sysobj */
@@ -317,6 +325,7 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
   cache = _svc.sysobj_cache.get();
   core = _svc.sysobj_core.get();
   user = _svc.user_rados.get();
+  role = _svc.role_rados.get();
 
   return 0;
 }
@@ -364,7 +373,7 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixPr
   }
 
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc());
-  meta.role = std::make_unique<rgw::sal::RGWRoleMetadataHandler>(svc.cct, store, svc.zone, svc.meta, svc.meta_be_sobj, svc.sysobj);
+  meta.role = std::make_unique<rgw::sal::RGWRoleMetadataHandler>(svc.cct, store, svc.role);
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
   bucket.reset(new RGWBucketCtl(svc.zone,
