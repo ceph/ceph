@@ -2,6 +2,7 @@ set(kv_srcs
   KeyValueDB.cc
   MemDB.cc
   RocksDBStore.cc
+  RocksDBStore_stats.cc
   KeyValueHistogram.cc
   rocksdb_cache/ShardedCache.cc
   rocksdb_cache/BinnedLRUCache.cc)
@@ -12,6 +13,8 @@ endif (WITH_LEVELDB)
 
 add_library(kv STATIC ${kv_srcs}
   $<TARGET_OBJECTS:common_prioritycache_obj>)
+
+target_include_directories(kv PRIVATE "${CMAKE_SOURCE_DIR}/src/rocksdb")
 
 target_link_libraries(kv ${LEVELDB_LIBRARIES}
   RocksDB::RocksDB

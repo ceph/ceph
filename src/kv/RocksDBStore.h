@@ -258,6 +258,12 @@ public:
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(ceph::Formatter *f) override;
 
+  int register_stats_hook();
+  void unregister_stats_hook();
+private:
+  class SocketHook;
+  SocketHook* hook = nullptr;
+public:
   PerfCounters *get_perf_counters() override
   {
     return logger;
@@ -524,6 +530,8 @@ public:
   int reshard(const std::string& new_sharding, const resharding_ctrl* ctrl = nullptr);
   bool get_sharding(std::string& sharding);
 
+  class db_stats;
+  friend class db_stats;
 };
 
 #endif
