@@ -16,36 +16,6 @@ if ! [ -x "$CEPHADM" ]; then
     exit 1
 fi
 
-# respawn ourselves with a shebang
-if [ -z "$PYTHON_KLUDGE" ]; then
-    # see which pythons we should test with
-    PYTHONS=""
-    which python3 && PYTHONS="$PYTHONS python3"
-    echo "PYTHONS $PYTHONS"
-    if [ -z "$PYTHONS" ]; then
-	echo "No PYTHONS found!"
-	exit 1
-    fi
-
-    TMPBINDIR=$(mktemp -d)
-    trap "rm -rf $TMPBINDIR" EXIT
-    ORIG_CEPHADM="$CEPHADM"
-    CEPHADM="$TMPBINDIR/cephadm"
-    for p in $PYTHONS; do
-	echo "=== re-running with $p ==="
-	ln -s `which $p` $TMPBINDIR/python
-	echo "#!$TMPBINDIR/python" > $CEPHADM
-	cat $ORIG_CEPHADM >> $CEPHADM
-	chmod 700 $CEPHADM
-	$TMPBINDIR/python --version
-	PYTHON_KLUDGE=1 CEPHADM=$CEPHADM $0
-	rm $TMPBINDIR/python
-    done
-    rm -rf $TMPBINDIR
-    echo "PASS with all of: $PYTHONS"
-    exit 0
-fi
-
 # combine into a single var
 CEPHADM_BIN="$CEPHADM"
 CEPHADM="$SUDO $CEPHADM_BIN"
