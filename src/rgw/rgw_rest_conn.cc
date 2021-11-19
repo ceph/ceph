@@ -376,6 +376,42 @@ int RGWRESTConn::get_resource(const DoutPrefixProvider *dpp,
   return req.complete_request(y);
 }
 
+int RGWRESTConn::send_resource(const DoutPrefixProvider *dpp, const std::string& method,
+                        const std::string& resource, rgw_http_param_pair *extra_params,
+		                std::map<std::string, std::string> *extra_headers, bufferlist& bl,
+                        bufferlist *send_data, RGWHTTPManager *mgr, optional_yield y)
+{
+  std::string url;
+  int ret = get_url(url);
+  if (ret < 0)
+    return ret;
+
+  param_vec_t params;
+
+  if (extra_params) {
+    params = make_param_list(extra_params);
+  }
+
+  populate_params(params, nullptr, self_zone_group);
+
+  RGWStreamIntoBufferlist cb(bl);
+
+  RGWRESTStreamSendRequest req(cct, method, url, &cb, NULL, &params, api_name, host_style);
+
+  std::map<std::string, std::string> headers;
+  if (extra_headers) {
+    headers.insert(extra_headers->begin(), extra_headers->end());
+  }
+
+  ret = req.send_request(dpp, &key, headers, resource, mgr, send_data);
+  if (ret < 0) {
+    ldpp_dout(dpp, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  return req.complete_request(y);
+}
+
 RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
                                          const string& _resource,
 		                         const rgw_http_param_pair *pp,

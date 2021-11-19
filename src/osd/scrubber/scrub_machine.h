@@ -90,7 +90,7 @@ MEV(IntLocalMapDone)
 MEV(DigestUpdate)  ///< external. called upon success of a MODIFY op. See
 		   ///< scrub_snapshot_metadata()
 
-MEV(MapsCompared)  ///< (Crimson) maps_compare_n_cleanup() transactions are done
+MEV(MapsCompared)  ///< maps_compare_n_cleanup() transactions are done
 
 MEV(StartReplica)  ///< initiating replica scrub.
 

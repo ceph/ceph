@@ -172,6 +172,8 @@ enum class RGWObjCategory : uint8_t {
                   // uploads; not currently used in the codebase
 
   MultiMeta = 3,  // b-i entries for multipart upload metadata objs
+
+  CloudTiered = 4, // b-i entries which are tiered to external cloud
 };
 
 

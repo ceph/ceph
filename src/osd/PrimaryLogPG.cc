@@ -12435,7 +12435,7 @@ void PrimaryLogPG::_applied_recovered_object(ObjectContextRef obc)
 
   // requeue an active chunky scrub waiting on recovery ops
   if (!recovery_state.is_deleting() && active_pushes == 0 &&
-      m_scrubber->is_scrub_active()) {
+      is_scrub_active()) {
 
     osd->queue_scrub_pushes_update(this, is_scrub_blocking_ops());
   }
@@ -12449,7 +12449,7 @@ void PrimaryLogPG::_applied_recovered_object_replica()
 
   // requeue an active scrub waiting on recovery ops
   if (!recovery_state.is_deleting() && active_pushes == 0 &&
-      m_scrubber->is_scrub_active()) {
+      is_scrub_active()) {
 
     osd->queue_scrub_replica_pushes(this, m_scrubber->replica_op_priority());
   }
@@ -15407,10 +15407,10 @@ bool PrimaryLogPG::already_complete(eversion_t v)
 
 void PrimaryLogPG::do_replica_scrub_map(OpRequestRef op)
 {
-  dout(15) << __func__ << " is scrub active? " << m_scrubber->is_scrub_active() << dendl;
+  dout(15) << __func__ << " is scrub active? " << is_scrub_active() << dendl;
   op->mark_started();
 
-  if (!m_scrubber->is_scrub_active()) {
+  if (!is_scrub_active()) {
     dout(10) << __func__ << " scrub isn't active" << dendl;
     return;
   }
@@ -15501,7 +15501,7 @@ void PrimaryLogPG::SnapTrimmer::log_exit(const char *state_name, utime_t enter_t
 bool PrimaryLogPG::SnapTrimmer::permit_trim() {
   return
     pg->is_clean() &&
-    !pg->m_scrubber->is_scrub_active() &&
+    !pg->is_scrub_queued_or_active() &&
     !pg->snap_trimq.empty();
 }
 
@@ -15537,7 +15537,7 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
     ldout(pg->cct, 10) << "NotTrimming not clean or nothing to trim" << dendl;
     return discard_event();
   }
-  if (pg->m_scrubber->is_scrub_active()) {
+  if (pg->is_scrub_queued_or_active()) {
     ldout(pg->cct, 10) << " scrubbing, will requeue snap_trimmer after" << dendl;
     return transit< WaitScrub >();
   } else {

@@ -2081,4 +2081,162 @@ void RGWZoneGroupMap::decode(bufferlist::const_iterator& bl) {
   }
 }
 
+static inline int conf_to_uint64(const JSONFormattable& config, const string& key, uint64_t *pval)
+{
+  string sval;
+  if (config.find(key, &sval)) {
+    string err;
+    uint64_t val = strict_strtoll(sval.c_str(), 10, &err);
+    if (!err.empty()) {
+      return -EINVAL;
+    }
+    *pval = val;
+  }
+  return 0;
+}
+
+int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
+{
+  int r = -1;
+
+  if (config.exists("retain_head_object")) {
+    string s = config["retain_head_object"];
+    if (s == "true") {
+      retain_head_object = true;
+    } else {
+      retain_head_object = false;
+    }
+  }
+
+  if (tier_type == "cloud-s3") {
+    r = t.s3.update_params(config);
+  }
+
+  return r;
+}
+
+int RGWZoneGroupPlacementTierS3::update_params(const JSONFormattable& config)
+{
+  int r = -1;
+
+  if (config.exists("endpoint")) {
+    endpoint = config["endpoint"];
+  }
+  if (config.exists("target_path")) {
+    target_path = config["target_path"];
+  }
+  if (config.exists("region")) {
+    region = config["region"];
+  }
+  if (config.exists("host_style")) {
+    string s;
+    s = config["host_style"];
+    if (s != "virtual") {
+      host_style = PathStyle;
+    } else {
+      host_style = VirtualStyle;
+    }
+  }
+  if (config.exists("target_storage_class")) {
+    target_storage_class = config["target_storage_class"];
+  }
+  if (config.exists("access_key")) {
+    key.id = config["access_key"];
+  }
+  if (config.exists("secret")) {
+    key.key = config["secret"];
+  }
+  if (config.exists("multipart_sync_threshold")) {
+    r = conf_to_uint64(config, "multipart_sync_threshold", &multipart_sync_threshold);
+    if (r < 0) {
+      multipart_sync_threshold = DEFAULT_MULTIPART_SYNC_PART_SIZE;
+    }
+  }
+
+  if (config.exists("multipart_min_part_size")) {
+    r = conf_to_uint64(config, "multipart_min_part_size", &multipart_min_part_size);
+    if (r < 0) {
+      multipart_min_part_size = DEFAULT_MULTIPART_SYNC_PART_SIZE;
+    }
+  }
+
+  if (config.exists("acls")) {
+    const JSONFormattable& cc = config["acls"];
+    if (cc.is_array()) {
+      for (auto& c : cc.array()) {
+        RGWTierACLMapping m;
+        m.init(c);
+        if (!m.source_id.empty()) {
+          acl_mappings[m.source_id] = m;
+        }
+      }
+    } else {
+      RGWTierACLMapping m;
+      m.init(cc);
+      if (!m.source_id.empty()) {
+        acl_mappings[m.source_id] = m;
+      }
+    }
+  }
+  return 0;
+}
+int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
+{
+  if (config.exists("retain_head_object")) {
+    retain_head_object = false;
+  }
+
+  if (tier_type == "cloud-s3") {
+    t.s3.clear_params(config);
+  }
+
+  return 0;
+}
+
+int RGWZoneGroupPlacementTierS3::clear_params(const JSONFormattable& config)
+{
+  if (config.exists("endpoint")) {
+    endpoint.clear();
+  }
+  if (config.exists("target_path")) {
+    target_path.clear();
+  }
+  if (config.exists("region")) {
+    region.clear();
+  }
+  if (config.exists("host_style")) {
+    /* default */
+    host_style = PathStyle;
+  }
+  if (config.exists("target_storage_class")) {
+    target_storage_class.clear();
+  }
+  if (config.exists("access_key")) {
+    key.id.clear();
+  }
+  if (config.exists("secret")) {
+    key.key.clear();
+  }
+  if (config.exists("multipart_sync_threshold")) {
+    multipart_sync_threshold = DEFAULT_MULTIPART_SYNC_PART_SIZE;
+  }
+  if (config.exists("multipart_min_part_size")) {
+    multipart_min_part_size = DEFAULT_MULTIPART_SYNC_PART_SIZE;
+  }
+  if (config.exists("acls")) {
+    const JSONFormattable& cc = config["acls"];
+    if (cc.is_array()) {
+      for (auto& c : cc.array()) {
+        RGWTierACLMapping m;
+        m.init(c);
+        acl_mappings.erase(m.source_id);
+      }
+    } else {
+      RGWTierACLMapping m;
+      m.init(cc);
+      acl_mappings.erase(m.source_id);
+    }
+  }
+  return 0;
+}
 

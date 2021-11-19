@@ -9,27 +9,32 @@ from teuthology import misc as teuthology
 log = logging.getLogger(__name__)
 
 def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
-             format='json', decode=True, log_level=logging.DEBUG):
+             omit_sudo=False, omit_tdir=False, format='json', decode=True,
+             log_level=logging.DEBUG):
     log.info('rgwadmin: {client} : {cmd}'.format(client=client,cmd=cmd))
     testdir = teuthology.get_testdir(ctx)
     cluster_name, daemon_type, client_id = teuthology.split_role(client)
     client_with_id = daemon_type + '.' + client_id
     pre = [
         'adjust-ulimits',
-        'ceph-coverage',
-        '{tdir}/archive/coverage'.format(tdir=testdir),
+        'ceph-coverage']
+    if not omit_tdir:
+        pre.append(
+            '{tdir}/archive/coverage'.format(tdir=testdir))
+    pre.extend([
         'radosgw-admin',
         '--log-to-stderr',
         '--format', format,
         '-n',  client_with_id,
         '--cluster', cluster_name,
-        ]
+        ])
     pre.extend(cmd)
     log.log(log_level, 'rgwadmin: cmd=%s' % pre)
     (remote,) = ctx.cluster.only(client).remotes.keys()
     proc = remote.run(
         args=pre,
         check_status=check_status,
+        omit_sudo=omit_sudo,
         stdout=StringIO(),
         stderr=StringIO(),
         stdin=stdin,
