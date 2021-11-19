@@ -36,18 +36,22 @@ def _get_bluestore_info(dev):
         logger.warning('skipping device {} because it is not reported in ceph-bluestore-tool output: {}'.format(dev, out))
         return None
     try:
-        if oj[dev]['description'] != 'main':
-            # ignore non-main devices, for now
-            logger.info('ignoring non-main device {}'.format(dev))
-            return None
-        whoami = oj[dev]['whoami']
-        return {
-            'type': 'bluestore',
-            'osd_id': int(whoami),
+        r = {
             'osd_uuid': oj[dev]['osd_uuid'],
-            'ceph_fsid': oj[dev]['ceph_fsid'],
-            'device': dev
         }
+        if oj[dev]['description'] == 'main':
+            whoami = oj[dev]['whoami']
+            r.update({
+                'type': 'bluestore',
+                'osd_id': int(whoami),
+                'ceph_fsid': oj[dev]['ceph_fsid'],
+                'device': dev,
+            })
+        elif oj[dev]['description'] == 'bluefs db':
+            r['device_db'] = dev
+        elif oj[dev]['description'] == 'bluefs wal':
+            r['device_wal'] = dev
+        return r
     except KeyError as e:
         # this will appear for devices that have a bluestore header but aren't valid OSDs
         # for example, due to incomplete rollback of OSDs: https://tracker.ceph.com/issues/51869
@@ -113,7 +117,10 @@ class List(object):
                 # a BlueStore disk, so be sure to log our assumption that it isn't bluestore
                 logger.info('device {} does not have BlueStore information'.format(dev))
                 continue
-            result[bs_info['osd_uuid']] = bs_info
+            uuid = bs_info['osd_uuid']
+            if uuid not in result:
+                result[uuid] = {}
+            result[uuid].update(bs_info)
 
         return result
 

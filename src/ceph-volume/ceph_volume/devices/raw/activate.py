@@ -35,21 +35,27 @@ def activate_bluestore(meta, tmpfs, systemd, block_wal=None, block_db=None):
     system.chown(osd_path)
     prime_command = [
         'ceph-bluestore-tool',
-        'prime-osd-dir', '--dev', meta['device'],
+        'prime-osd-dir',
         '--path', osd_path,
-        '--no-mon-config']
+        '--no-mon-config',
+        '--dev', meta['device'],
+    ]
     process.run(prime_command)
 
     # always re-do the symlink regardless if it exists, so that the block,
     # block.wal, and block.db devices that may have changed can be mapped
     # correctly every time
-    prepare_utils.link_block( meta['device'], osd_id)
-
-    if block_wal:
-        prepare_utils.link_wal(block_wal, osd_id, osd_uuid)
+    prepare_utils.link_block(meta['device'], osd_id)
 
     if block_db:
         prepare_utils.link_db(block_db, osd_id, osd_uuid)
+    elif 'device_db' in meta:
+        prepare_utils.link_db(meta['device_db'], osd_id, osd_uuid)
+
+    if block_wal:
+        prepare_utils.link_wal(block_wal, osd_id, osd_uuid)
+    elif 'device_wal' in meta:
+        prepare_utils.link_wal(meta['device_wal'], osd_id, osd_uuid)
 
     system.chown(osd_path)
     terminal.success("ceph-volume raw activate successful for osd ID: %s" % osd_id)
