@@ -4,6 +4,7 @@
 ##### **Demo 1 Video Link:** https://drive.google.com/file/d/1gHP5dZ80w4Xn2DuMSbVdR6eSDQE3XQXG/view?usp=sharing
 ##### **Demo 2 Video Link:** https://drive.google.com/file/d/1zKDpXfYASGvzWEACVdQuIBRUEwI-7-e-/view?usp=sharing
 ##### **Demo 3 Video Link:** https://drive.google.com/file/d/1NHp9ZXcn3JnY5Y3MF-aR02Azp3Jncu15/view?usp=sharing
+##### **Demo 4 Video Link:** https://drive.google.com/file/d/1KU6O83Lgywgxp9eTMnjkICGFwyoUqH21/view?usp=sharing
 
 ---
 ### Project Overview
@@ -97,11 +98,20 @@ Accomplishing this goal will lead into the next set of objectives for the team, 
 | ----------- | ----------- |
 | Git setup | The original repository we were working on was not forked from Ceph, which would potentially create issues in the future. As a result, I forked the original Ceph code under our  organization and pushed all the progress we have made thus far. |
 | Get() directed acyclical graphs | The backend team completed DAGs for both the D3N and D4N get() functions in addition to finding the head object's data path for D4N. |
-| Initial set up and understanding of directory | To set up D4N functionality in the current Ceph version built onto our VMs, we had tocherry pick D4N-related commits,  install Redis and start it up, and analyze the D4N code for a better understanding of how it works. |
-| Directory porting | This user story mainly included porting the rgw_directory.cc and rgw_directory.h files into the Ceph directory and adding the former into the CMake file. We are still in the process of debugging the issues that are resulting from this change after attempting to build the Ceph binaries, however. |
+| Initial set up and understanding of directory | To set up D4N functionality in the current Ceph version built onto our VMs, we had to cherry pick D4N-related commits,  install Redis and start it up, and analyze the D4N code for a better understanding of how it works. |
+| Directory porting | This user story mainly included porting the rgw_directory.cc and rgw_directory.h files into the Ceph directory and adding the former into the CMake file. |
 | Backend | Like the directory porting user story, the backend team worked on porting specific D4N files to the upstreamed Ceph available on VM 1 and is working on debugging the build process. |
-| Beginning of testing phase | The directory team finished their tasks for this user story, which consisted of creating a write up with descriptions of each rgw_directory.cc function and meeting with the mentors to set up unit testing steps, practices, and the environment we would be using to test, namely, boto3. |
-| GDB debugging | While this user story is still mostly incomplete, the backend team met with one of the mentors to make more progress on it before the end of the sprint. |
+| Beginning of testing phase | The directory team finished their tasks for this user story, which consisted of creating a write-up with descriptions of each rgw_directory.cc function and meeting with the mentors to set up unit testing steps, practices, and the environment we would be using to test, namely, boto3. |
+| GDB debugging | The backend team met with one of the mentors in order to finish the execution portion of this user story in the following sprint. |
+
+#### Sprint 4 (November 8 to November 21)
+| User Stories | Description |
+| ----------- | ----------- |
+| GDB debugging | The back end team learned how to use GDB to follow Ceph functions during their execution, which provided them with a deeper understanding of the relationships between the functions underlying D3N and D4N. |
+| Understand D4N setup | This user story was mostly completed in sprint 3, but it was added to sprint 4 for us to fully finish. The teams familiarized themselves with the D4N environment and started keeping logs of any errors that resulted from attempting to build Ceph. |
+| Resolve directory D4N porting issues | This user story included looking through the D4N files and comparing it with the analogous D3N files to add proper configurations and definitions to the upstreamed Ceph code that D4N relies on. In particular, the files rgw.yaml.in and rgw_common.h were altered and doing so allowed the radosgw binary to be built. Additionally, D4N was determined to be fully functional in VM2. |
+| Make and build | The back end team is waiting on the directory team to make the ninja vstart command fully functional, as this would mean D4N has been added to Ceph. The former can then start working on I/O directing and the latter can begin testing the D4N functionalities to ensure they are present in Ceph in the next sprint. Currently, this task is still in progress. However, one of our mentors is dedicated to meeting with us and finally fixing these errors before the next sprint. |
+| Back end | The tasks under this user story were not completed due to the corresponding team discussing their progress with the professors and being advised to reconsider how they will achieve their MVP. Instead, the goal has been changed to rethinking the path the back end team will take to move forward. |
 
 ---
 ### Resources
