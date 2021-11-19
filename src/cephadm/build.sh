@@ -1,6 +1,7 @@
-#!/usr/bin/env bash
+#!/bin/bash -ex
 
-set -ex
+SCRIPT_NAME=$(basename ${BASH_SOURCE[0]})
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 clean_up() {
     if [ -e ${buildir} ]; then
@@ -12,7 +13,7 @@ trap clean_up EXIT
 PYTHON=$(which python3)
 
 # Create build directory and install required dependencies
-target_fpath="$(pwd)/cephadm"
+target_fpath=${SCRIPT_DIR}/cephadm
 if [ -n "$1" ]; then
     target_fpath="$1"
 fi
@@ -22,7 +23,7 @@ if [ -e "requirements.txt" ]; then
 fi
 
 # Make sure all newly created source files are copied here as well!
-cp cephadm.py ${builddir}/__main__.py
+cp ${SCRIPT_DIR}/cephadm.py ${builddir}/__main__.py
 
 version=$($PYTHON --version)
 if [[ "$version" =~ ^Python[[:space:]]([[:digit:]]+)\.([[:digit:]]+)\.([[:digit:]]+)$ ]]; then
