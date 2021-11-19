@@ -1095,6 +1095,11 @@ record_t Cache::prepare_record(Transaction &t)
   record_header_fullness.inline_stats.filled_bytes += record_size.get_raw_mdlength();
   record_header_fullness.inline_stats.total_bytes += record_size.get_mdlength();
 
+  // FIXME: prevent submitting empty records
+  if (record.is_empty()) {
+    ERRORT("record is empty!", t);
+  }
+
   return record;
 }
 

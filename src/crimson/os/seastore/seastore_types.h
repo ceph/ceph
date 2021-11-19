@@ -1196,6 +1196,11 @@ struct record_size_t {
   extent_len_t plain_mdlength = 0; // mdlength without the record header
   extent_len_t dlength = 0;
 
+  bool is_empty() const {
+    return plain_mdlength == 0 &&
+           dlength == 0;
+  }
+
   void account_extent(extent_len_t extent_len);
 
   void account(const extent_t& extent) {
@@ -1233,6 +1238,11 @@ struct record_t {
     for (auto& d: _deltas) {
       push_back(std::move(d));
     }
+  }
+
+  bool is_empty() const {
+    return extents.size() == 0 &&
+           deltas.size() == 0;
   }
 
   // the size of extents and delta buffers
