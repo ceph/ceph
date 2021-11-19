@@ -100,5 +100,15 @@ public:
   virtual ~RandomBlockManager() {}
 };
 using RandomBlockManagerRef = std::unique_ptr<RandomBlockManager>;
+using blk_no_t = uint64_t;
+using rbm_abs_addr = uint64_t;
 
+inline rbm_abs_addr convert_paddr_to_abs_addr(paddr_t& paddr) {
+  blk_paddr_t& blk_addr = paddr.as_blk_paddr();
+  return blk_addr.get_block_off();
+}
+
+inline paddr_t convert_abs_addr_to_paddr(rbm_abs_addr addr, device_id_t d_id) {
+  return paddr_t::make_blk_paddr(d_id, addr);
+}
 }
