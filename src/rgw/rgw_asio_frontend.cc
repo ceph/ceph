@@ -55,7 +55,8 @@ using tcp_stream = boost::beast::basic_stream<tcp, executor_type>;
 using timeout_timer = rgw::basic_timeout_timer<ceph::coarse_mono_clock,
       executor_type, Connection>;
 
-using parse_buffer = boost::beast::flat_static_buffer<65536>;
+static constexpr size_t parse_buffer_size = 65536;
+using parse_buffer = boost::beast::flat_static_buffer<parse_buffer_size>;
 
 // use mmap/mprotect to allocate 512k coroutine stacks
 auto make_stack_allocator() {
@@ -185,15 +186,13 @@ using SharedMutex = ceph::async::SharedMutex<boost::asio::io_context::executor_t
 template <typename Stream>
 void handle_connection(boost::asio::io_context& context,
                        RGWProcessEnv& env, Stream& stream,
-                       timeout_timer& timeout,
+                       timeout_timer& timeout, size_t header_limit,
                        parse_buffer& buffer, bool is_ssl,
                        SharedMutex& pause_mutex,
                        rgw::dmclock::Scheduler *scheduler,
                        boost::system::error_code& ec,
                        yield_context yield)
 {
-  // limit header to 4k, since we read it all into a single flat_buffer
-  static constexpr size_t header_limit = 4096;
   // don't impose a limit on the body, since we read it in pieces
   static constexpr size_t body_limit = std::numeric_limits<size_t>::max();
 
@@ -390,6 +389,7 @@ class AsioFrontend {
   RGWFrontendConfig* conf;
   boost::asio::io_context context;
   ceph::timespan request_timeout = std::chrono::milliseconds(REQUEST_TIMEOUT);
+  size_t header_limit = 16384;
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   boost::optional<ssl::context> ssl_context;
   int get_config_key_val(string name,
@@ -552,15 +552,32 @@ int AsioFrontend::init()
 // Setting global timeout
   auto timeout = config.find("request_timeout_ms");
   if (timeout != config.end()) {
-    auto timeout_number = ceph::parse<uint64_t>(timeout->second.data());
+    auto timeout_number = ceph::parse<uint64_t>(timeout->second);
     if (timeout_number) {
       request_timeout =  std::chrono::milliseconds(*timeout_number);
     } else {
       lderr(ctx()) << "WARNING: invalid value for request_timeout_ms: "
-      << timeout->second.data() << " setting it to the default value: "
+      << timeout->second << " setting it to the default value: "
       << REQUEST_TIMEOUT << dendl;
     }
-  } 
+  }
+
+  auto max_header_size = config.find("max_header_size");
+  if (max_header_size != config.end()) {
+    auto limit = ceph::parse<uint64_t>(max_header_size->second);
+    if (!limit) {
+      lderr(ctx()) << "WARNING: invalid value for max_header_size: "
+          << max_header_size->second << ", using the default value: "
+          << header_limit << dendl;
+    } else if (*limit > parse_buffer_size) { // can't exceed parse buffer size
+      header_limit = parse_buffer_size;
+      lderr(ctx()) << "WARNING: max_header_size " << max_header_size->second
+          << " capped at maximum value " << header_limit << dendl;
+    } else {
+      header_limit = *limit;
+    }
+  }
+
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   int r = init_ssl();
   if (r < 0) {
@@ -1004,8 +1021,9 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
           return;
         }
         conn->buffer.consume(bytes);
-        handle_connection(context, env, stream, timeout, conn->buffer, true,
-                          pause_mutex, scheduler.get(), ec, yield);
+        handle_connection(context, env, stream, timeout, header_limit,
+                          conn->buffer, true, pause_mutex, scheduler.get(),
+                          ec, yield);
         if (!ec) {
           // ssl shutdown (ignoring errors)
           stream.async_shutdown(yield[ec]);
@@ -1022,8 +1040,9 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         auto c = connections.add(*conn);
         auto timeout = timeout_timer{context.get_executor(), request_timeout, conn};
         boost::system::error_code ec;
-        handle_connection(context, env, conn->socket, timeout, conn->buffer,
-                          false, pause_mutex, scheduler.get(), ec, yield);
+        handle_connection(context, env, conn->socket, timeout, header_limit,
+                          conn->buffer, false, pause_mutex, scheduler.get(),
+                          ec, yield);
         conn->socket.shutdown(tcp_socket::shutdown_both, ec);
       }, make_stack_allocator());
   }
