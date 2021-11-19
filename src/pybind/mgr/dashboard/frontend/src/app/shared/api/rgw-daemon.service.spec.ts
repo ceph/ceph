@@ -50,7 +50,7 @@ describe('RgwDaemonService', () => {
     expect(service['daemons'].getValue()).toEqual(daemonList);
   });
 
-  it('should get daemon ', () => {
+  it('should call "get daemon"', () => {
     service.get('foo').subscribe();
     const req = httpTesting.expectOne('api/rgw/daemon/foo');
     expect(req.request.method).toBe('GET');
