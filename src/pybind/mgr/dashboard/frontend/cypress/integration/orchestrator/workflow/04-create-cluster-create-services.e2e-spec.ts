@@ -20,11 +20,19 @@ describe('Create cluster create services page', () => {
   });
 
   describe('when Orchestrator is available', () => {
+    const serviceName = 'rgw.foo';
+
     it('should create an rgw service', () => {
       cy.get('.btn.btn-accent').first().click({ force: true });
 
-      createClusterServicePage.addService('rgw', false, '3');
-      createClusterServicePage.checkExist('rgw.foo', true);
+      createClusterServicePage.addService('rgw', false, '2');
+      createClusterServicePage.checkExist(serviceName, true);
+    });
+
+    it('should edit a service', () => {
+      const count = '3';
+      createClusterServicePage.editService(serviceName, count);
+      createClusterServicePage.expectPlacementCount(serviceName, count);
     });
 
     it('should create and delete an ingress service', () => {

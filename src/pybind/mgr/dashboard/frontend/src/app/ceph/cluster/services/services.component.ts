@@ -49,7 +49,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
 
   @Input() hasDetails = true;
 
-  @Input() modal = true;
+  @Input() routedModal = true;
 
   permissions: Permissions;
   tableActions: CdTableAction[];
@@ -59,6 +59,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   orchStatus: OrchestratorStatus;
   actionOrchFeatures = {
     create: [OrchestratorFeature.SERVICE_CREATE],
+    update: [OrchestratorFeature.SERVICE_EDIT],
     delete: [OrchestratorFeature.SERVICE_DELETE]
   };
 
@@ -89,6 +90,13 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         disable: (selection: CdTableSelection) => this.getDisable('create', selection)
       },
       {
+        permission: 'update',
+        icon: Icons.edit,
+        click: () => this.openModal(true),
+        name: this.actionLabels.EDIT,
+        disable: (selection: CdTableSelection) => this.getDisable('update', selection)
+      },
+      {
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deleteAction(),
@@ -98,12 +106,36 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     ];
   }
 
-  openModal() {
-    if (this.modal) {
-      this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.CREATE] } }]);
+  openModal(edit = false) {
+    if (this.routedModal) {
+      edit
+        ? this.router.navigate([
+            BASE_URL,
+            {
+              outlets: {
+                modal: [
+                  URLVerbs.EDIT,
+                  this.selection.first().service_type,
+                  this.selection.first().service_name
+                ]
+              }
+            }
+          ])
+        : this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.CREATE] } }]);
     } else {
-      this.bsModalRef = this.modalService.show(ServiceFormComponent);
-      this.bsModalRef.componentInstance.hiddenServices = this.hiddenServices;
+      let initialState = {};
+      edit
+        ? (initialState = {
+            serviceName: this.selection.first()?.service_name,
+            serviceType: this.selection?.first()?.service_type,
+            hiddenServices: this.hiddenServices,
+            editing: edit
+          })
+        : (initialState = {
+            hiddenServices: this.hiddenServices,
+            editing: edit
+          });
+      this.bsModalRef = this.modalService.show(ServiceFormComponent, initialState, { size: 'lg' });
     }
   }
 
@@ -155,9 +187,18 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     }
   }
 
-  getDisable(action: 'create' | 'delete', selection: CdTableSelection): boolean | string {
+  getDisable(
+    action: 'create' | 'update' | 'delete',
+    selection: CdTableSelection
+  ): boolean | string {
     if (action === 'delete') {
       if (!selection?.hasSingleSelection) {
+        return true;
+      }
+    }
+    if (action === 'update') {
+      const disableEditServices = ['osd', 'container'];
+      if (disableEditServices.indexOf(this.selection.first()?.service_type) >= 0) {
         return true;
       }
     }
