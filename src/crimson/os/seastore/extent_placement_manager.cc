@@ -71,10 +71,9 @@ SegmentedAllocator::Writer::_write(
   Transaction& t,
   ool_record_t& record)
 {
-  record_size_t record_size = record.get_encoded_record_length();
-  allocated_to += record_size.mdlength + record_size.dlength;
+  auto record_size = record.get_encoded_record_length();
+  allocated_to += record_size.get_encoded_length();
   bufferlist bl = record.encode(
-      record_size,
       current_segment->segment->get_segment_id(),
       0);
   seastar::promise<> pr;
@@ -93,8 +92,8 @@ SegmentedAllocator::Writer::_write(
   auto& stats = t.get_ool_write_stats();
   stats.extents.num += record.get_num_extents();
   stats.extents.bytes += record_size.dlength;
-  stats.header_raw_bytes += record_size.raw_mdlength;
-  stats.header_bytes += record_size.mdlength;
+  stats.header_raw_bytes += record_size.get_raw_mdlength();
+  stats.header_bytes += record_size.get_mdlength();
   stats.num_records += 1;
 
   return trans_intr::make_interruptible(

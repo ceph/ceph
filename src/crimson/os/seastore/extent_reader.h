@@ -98,11 +98,6 @@ private:
     paddr_t start,
     segment_nonce_t nonce);
 
-  /// attempts to decode extent infos from bl, return nullopt if unsuccessful
-  std::optional<std::vector<extent_info_t>> try_decode_extent_infos(
-    record_header_t header,
-    const bufferlist &bl);
-
   /// read and validate data
   using read_validate_data_ertr = read_ertr;
   using read_validate_data_ret = read_validate_data_ertr::future<bool>;
@@ -117,10 +112,6 @@ private:
       scan_valid_records_cursor& cursor,
       found_record_handler_t& handler,
       std::size_t& budget_used);
-
-
-  /// validate embedded metadata checksum
-  static bool validate_metadata(const bufferlist &bl);
 
   friend class TransactionManager;
 };
