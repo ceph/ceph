@@ -158,6 +158,8 @@ void record_group_size_t::account(
     const record_size_t& rsize,
     extent_len_t _block_size)
 {
+  // FIXME: prevent submitting empty records
+  // assert(!rsize.is_empty());
   assert(_block_size > 0);
   assert(rsize.dlength % _block_size == 0);
   assert(block_size == 0 || block_size == _block_size);
