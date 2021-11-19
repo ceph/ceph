@@ -1087,6 +1087,7 @@ record_t Cache::prepare_record(Transaction &t)
   record_header_fullness.ool_stats.filled_bytes += ool_stats.header_raw_bytes;
   record_header_fullness.ool_stats.total_bytes += ool_stats.header_bytes;
 
+  // TODO: move to Journal to get accurate result
   auto record_size = record_group_size_t(
       record.size, reader.get_block_size());
   auto inline_overhead =

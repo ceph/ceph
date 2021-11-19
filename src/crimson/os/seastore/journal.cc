@@ -155,12 +155,14 @@ Journal::replay_segment(
     scan_valid_records_cursor(seq),
     ExtentReader::found_record_handler_t([=, &handler](
       record_locator_t locator,
-      const record_header_t& header,
+      const record_group_header_t& header,
       const bufferlist& mdbuf)
       -> ExtentReader::scan_valid_records_ertr::future<>
     {
+      logger().debug("Journal::replay_segment: decoding {} records",
+                     header.records);
       auto maybe_record_deltas_list = try_decode_deltas(
-        header, mdbuf);
+          header, mdbuf, locator.record_block_base);
       if (!maybe_record_deltas_list) {
         // This should be impossible, we did check the crc on the mdbuf
         logger().error(
@@ -171,37 +173,48 @@ Journal::replay_segment(
 
       return seastar::do_with(
         std::move(*maybe_record_deltas_list),
-        [locator,
+        [write_result=locator.write_result,
          this,
-         &handler](record_deltas_t& record_deltas)
+         &handler](auto& record_deltas_list)
       {
-        logger().debug("Journal::replay_segment: decoded {} deltas at block_base {}",
-                       record_deltas.deltas.size(),
-                       locator.record_block_base);
         return crimson::do_for_each(
-          record_deltas.deltas,
-          [locator,
+          record_deltas_list,
+          [write_result,
            this,
-           &handler](delta_info_t& delta)
+           &handler](record_deltas_t& record_deltas)
         {
-          /* The journal may validly contain deltas for extents in
-           * since released segments.  We can detect those cases by
-           * checking whether the segment in question currently has a
-           * sequence number > the current journal segment seq. We can
-           * safetly skip these deltas because the extent must already
-           * have been rewritten.
-           *
-           * Note, this comparison exploits the fact that
-           * SEGMENT_SEQ_NULL is a large number.
-           */
-          auto& seg_addr = delta.paddr.as_seg_paddr();
-          if (delta.paddr != P_ADDR_NULL &&
-              (segment_provider->get_seq(seg_addr.get_segment_id()) >
-               locator.write_result.start_seq.segment_seq)) {
-            return replay_ertr::now();
-          } else {
-            return handler(locator, delta);
-          }
+          logger().debug("Journal::replay_segment: decoded {} deltas at block_base {}",
+                         record_deltas.deltas.size(),
+                         record_deltas.record_block_base);
+          auto locator = record_locator_t{
+            record_deltas.record_block_base,
+            write_result
+          };
+          return crimson::do_for_each(
+            record_deltas.deltas,
+            [locator,
+             this,
+             &handler](delta_info_t& delta)
+          {
+            /* The journal may validly contain deltas for extents in
+             * since released segments.  We can detect those cases by
+             * checking whether the segment in question currently has a
+             * sequence number > the current journal segment seq. We can
+             * safetly skip these deltas because the extent must already
+             * have been rewritten.
+             *
+             * Note, this comparison exploits the fact that
+             * SEGMENT_SEQ_NULL is a large number.
+             */
+            auto& seg_addr = delta.paddr.as_seg_paddr();
+            if (delta.paddr != P_ADDR_NULL &&
+                (segment_provider->get_seq(seg_addr.get_segment_id()) >
+                 locator.write_result.start_seq.segment_seq)) {
+              return replay_ertr::now();
+            } else {
+              return handler(locator, delta);
+            }
+          });
         });
       });
     }),
@@ -432,30 +445,29 @@ Journal::RecordBatch::add_pending(
   assert(state != state_t::SUBMITTING);
   assert(can_batch(record, block_size) == new_encoded_length);
 
-  auto block_start_offset = record.size.get_mdlength(block_size);
-  if (state != state_t::EMPTY) {
-    block_start_offset += pending.size.get_encoded_length();
-  }
+  auto dlength_offset = pending.current_dlength;
   pending.push_back(
       std::move(record), block_size);
   assert(pending.size.get_encoded_length() == new_encoded_length);
   if (state == state_t::EMPTY) {
     assert(!io_promise.has_value());
-    io_promise = seastar::shared_promise<maybe_result_t>();
+    io_promise = seastar::shared_promise<maybe_promise_result_t>();
   } else {
     assert(io_promise.has_value());
   }
   state = state_t::PENDING;
 
   return io_promise->get_shared_future(
-  ).then([block_start_offset
-         ](auto maybe_write_result) -> add_pending_ret {
-    if (!maybe_write_result.has_value()) {
+  ).then([dlength_offset
+         ](auto maybe_promise_result) -> add_pending_ret {
+    if (!maybe_promise_result.has_value()) {
       return crimson::ct_error::input_output_error::make();
     }
+    auto write_result = maybe_promise_result->write_result;
     auto submit_result = record_locator_t{
-      maybe_write_result->start_seq.offset.add_offset(block_start_offset),
-      *maybe_write_result
+      write_result.start_seq.offset.add_offset(
+          maybe_promise_result->mdlength + dlength_offset),
+      write_result
     };
     return add_pending_ret(
       add_pending_ertr::ready_future_marker{},
@@ -478,6 +490,7 @@ ceph::bufferlist Journal::RecordBatch::encode_batch(
   state = state_t::SUBMITTING;
   submitting_size = pending.get_size();
   submitting_length = pending.size.get_encoded_length();
+  submitting_mdlength = pending.size.get_mdlength();
   auto bl = encode_records(pending, committed_to, segment_nonce);
   // Note: pending is cleared here
   assert(bl.length() == (std::size_t)submitting_length);
@@ -487,6 +500,7 @@ ceph::bufferlist Journal::RecordBatch::encode_batch(
 void Journal::RecordBatch::set_result(
   maybe_result_t maybe_write_result)
 {
+  maybe_promise_result_t result;
   if (maybe_write_result.has_value()) {
     logger().debug(
       "Journal::RecordBatch::set_result: batches={}, write_start {} + {}",
@@ -494,6 +508,10 @@ void Journal::RecordBatch::set_result(
       maybe_write_result->start_seq,
       maybe_write_result->length);
     assert(maybe_write_result->length == submitting_length);
+    result = promise_result_t{
+      *maybe_write_result,
+      submitting_mdlength
+    };
   } else {
     logger().error(
       "Journal::RecordBatch::set_result: batches={}, write is failed!",
@@ -505,7 +523,8 @@ void Journal::RecordBatch::set_result(
   state = state_t::EMPTY;
   submitting_size = 0;
   submitting_length = 0;
-  io_promise->set_value(maybe_write_result);
+  submitting_mdlength = 0;
+  io_promise->set_value(result);
   io_promise.reset();
 }
 

@@ -1208,20 +1208,6 @@ struct record_size_t {
   }
 
   void account(const delta_info_t& delta);
-
-  // TODO: remove
-  extent_len_t get_raw_mdlength() const;
-
-  extent_len_t get_mdlength(extent_len_t block_size) const {
-    assert(block_size > 0);
-    return p2roundup(get_raw_mdlength(), block_size);
-  }
-
-  extent_len_t get_encoded_length(extent_len_t block_size) const {
-    assert(block_size > 0);
-    assert(dlength % block_size == 0);
-    return get_mdlength(block_size) + dlength;
-  }
 };
 
 struct record_t {
@@ -1268,23 +1254,33 @@ struct record_t {
 };
 
 struct record_header_t {
-  // Fixed portion
-  extent_len_t  mdlength;       // block aligned, length of metadata
-  extent_len_t  dlength;        // block aligned, length of data
   uint32_t deltas;              // number of deltas
   uint32_t extents;             // number of extents
+
+
+  DENC(record_header_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.deltas, p);
+    denc(v.extents, p);
+    DENC_FINISH(p);
+  }
+};
+
+struct record_group_header_t {
+  uint32_t      records;
+  extent_len_t  mdlength;       // block aligned, length of metadata
+  extent_len_t  dlength;        // block aligned, length of data
   segment_nonce_t segment_nonce;// nonce of containing segment
   journal_seq_t committed_to;   // records prior to committed_to have been
                                 // fully written, maybe in another segment.
   checksum_t data_crc;          // crc of data payload
 
 
-  DENC(record_header_t, v, p) {
+  DENC(record_group_header_t, v, p) {
     DENC_START(1, 1, p);
+    denc(v.records, p);
     denc(v.mdlength, p);
     denc(v.dlength, p);
-    denc(v.deltas, p);
-    denc(v.extents, p);
     denc(v.segment_nonce, p);
     denc(v.committed_to, p);
     denc(v.data_crc, p);
@@ -1293,8 +1289,7 @@ struct record_header_t {
 };
 
 struct record_group_size_t {
-  extent_len_t raw_mdlength = 0;
-  extent_len_t mdlength = 0;
+  extent_len_t plain_mdlength = 0; // mdlength without the group header
   extent_len_t dlength = 0;
   extent_len_t block_size = 0;
 
@@ -1305,15 +1300,11 @@ struct record_group_size_t {
     account(rsize, block_size);
   }
 
-  extent_len_t get_raw_mdlength() const {
-    assert(block_size > 0);
-    return raw_mdlength;
-  }
+  extent_len_t get_raw_mdlength() const;
 
   extent_len_t get_mdlength() const {
     assert(block_size > 0);
-    assert(mdlength % block_size == 0);
-    return mdlength;
+    return p2roundup(get_raw_mdlength(), block_size);
   }
 
   extent_len_t get_encoded_length() const {
@@ -1337,6 +1328,7 @@ struct record_group_size_t {
 struct record_group_t {
   std::vector<record_t> records;
   record_group_size_t size;
+  extent_len_t current_dlength = 0;
 
   record_group_t() = default;
   record_group_t(
@@ -1353,6 +1345,7 @@ struct record_group_t {
       record_t&& record,
       extent_len_t block_size) {
     size.account(record.size, block_size);
+    current_dlength += record.size.dlength;
     records.push_back(std::move(record));
     assert(size.get_encoded_length() < MAX_SEG_OFF);
   }
@@ -1364,6 +1357,7 @@ struct record_group_t {
   void clear() {
     records.clear();
     size = {};
+    current_dlength = 0;
   }
 };
 
@@ -1378,33 +1372,36 @@ ceph::bufferlist encode_records(
   const journal_seq_t& committed_to,
   segment_nonce_t current_segment_nonce);
 
-std::optional<record_header_t>
-try_decode_record_header(
+std::optional<record_group_header_t>
+try_decode_records_header(
     const ceph::bufferlist& header_bl,
     segment_nonce_t expected_nonce);
 
-bool validate_record_metadata(
+bool validate_records_metadata(
     const ceph::bufferlist& md_bl);
 
-bool validate_record_data(
-    const record_header_t& header,
+bool validate_records_data(
+    const record_group_header_t& header,
     const ceph::bufferlist& data_bl);
 
 struct record_extent_infos_t {
+  record_header_t header;
   std::vector<extent_info_t> extent_infos;
 };
-std::optional<record_extent_infos_t>
-try_decode_extent_info(
-    const record_header_t& header,
+std::optional<std::vector<record_extent_infos_t> >
+try_decode_extent_infos(
+    const record_group_header_t& header,
     const ceph::bufferlist& md_bl);
 
 struct record_deltas_t {
+  paddr_t record_block_base;
   std::vector<delta_info_t> deltas;
 };
-std::optional<record_deltas_t>
+std::optional<std::vector<record_deltas_t> >
 try_decode_deltas(
-    const record_header_t& header,
-    const ceph::bufferlist& md_bl);
+    const record_group_header_t& header,
+    const ceph::bufferlist& md_bl,
+    paddr_t record_block_base);
 
 struct write_result_t {
   journal_seq_t start_seq;
@@ -1426,21 +1423,21 @@ struct scan_valid_records_cursor {
   journal_seq_t seq;
   journal_seq_t last_committed;
 
-  struct found_record_t {
+  struct found_record_group_t {
     paddr_t offset;
-    record_header_t header;
+    record_group_header_t header;
     bufferlist mdbuffer;
 
-    found_record_t(
+    found_record_group_t(
       paddr_t offset,
-      const record_header_t &header,
+      const record_group_header_t &header,
       const bufferlist &mdbuffer)
       : offset(offset), header(header), mdbuffer(mdbuffer) {}
   };
-  std::deque<found_record_t> pending_records;
+  std::deque<found_record_group_t> pending_record_groups;
 
   bool is_complete() const {
-    return last_valid_header_found && pending_records.empty();
+    return last_valid_header_found && pending_record_groups.empty();
   }
 
   segment_id_t get_segment_id() const {
@@ -1524,6 +1521,7 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::paddr_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal_seq_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::delta_info_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_header_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_group_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::extent_info_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::rbm_alloc_delta_t)

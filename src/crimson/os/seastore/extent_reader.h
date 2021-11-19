@@ -59,7 +59,7 @@ public:
       record_locator_t record_locator,
       // callee may assume header and bl will remain valid until
       // returned future resolves
-      const record_header_t &header,
+      const record_group_header_t &header,
       const bufferlist &mdbuf)>;
   scan_valid_records_ret scan_valid_records(
     scan_valid_records_cursor &cursor, ///< [in, out] cursor, updated during call
@@ -92,7 +92,7 @@ private:
   using read_validate_record_metadata_ertr = read_ertr;
   using read_validate_record_metadata_ret =
     read_validate_record_metadata_ertr::future<
-      std::optional<std::pair<record_header_t, bufferlist>>
+      std::optional<std::pair<record_group_header_t, bufferlist>>
     >;
   read_validate_record_metadata_ret read_validate_record_metadata(
     paddr_t start,
@@ -103,8 +103,8 @@ private:
   using read_validate_data_ret = read_validate_data_ertr::future<bool>;
   read_validate_data_ret read_validate_data(
     paddr_t record_base,
-    const record_header_t &header  ///< caller must ensure lifetime through
-                                   ///  future resolution
+    const record_group_header_t &header  ///< caller must ensure lifetime through
+                                         ///  future resolution
   );
 
   using consume_record_group_ertr = scan_valid_records_ertr;
