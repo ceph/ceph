@@ -855,9 +855,9 @@ class CephadmServe:
             if dd.daemon_type == 'agent':
                 try:
                     self.mgr.agent_helpers._check_agent(dd.hostname)
-                except Exception:
+                except Exception as e:
                     self.log.debug(
-                        f'Agent {dd.name()} could not be checked in _check_daemons')
+                        f'Agent {dd.name()} could not be checked in _check_daemons: {e}')
                 continue
 
             # These daemon types require additional configs after creation

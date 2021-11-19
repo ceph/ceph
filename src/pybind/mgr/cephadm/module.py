@@ -750,12 +750,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.offline_hosts.remove(host)
 
     def update_failed_daemon_health_check(self) -> None:
-        self.remove_health_warning('CEPHADM_FAILED_DAEMON')
         failed_daemons = []
         for dd in self.cache.get_error_daemons():
             failed_daemons.append('daemon %s on %s is in %s state' % (
                 dd.name(), dd.hostname, dd.status_desc
             ))
+        self.remove_health_warning('CEPHADM_FAILED_DAEMON')
         if failed_daemons:
             self.set_health_warning('CEPHADM_FAILED_DAEMON', f'{len(failed_daemons)} failed cephadm daemon(s)', len(
                 failed_daemons), failed_daemons)
