@@ -17,6 +17,7 @@
 #include "include/function2.hpp"
 #include "common/Formatter.h"
 #include "common/containers.h"
+#include "common/split.h"
 #include <common/errno.h>
 #include "include/random.h"
 #include "cls/lock/cls_lock_client.h"
@@ -54,6 +55,31 @@ const char* LC_STATUS[] = {
 };
 
 using namespace librados;
+
+static inline std::string_view sv_trim(std::string_view str) {
+  while (isspace(str.front())) {
+    str.remove_prefix(1);
+  }
+  while (isspace(str.back())) {
+    str.remove_suffix(1);
+  }
+  return str;
+}
+
+uint32_t LCFilter::recognize_flags(const std::string& flag_expr)
+{
+  uint32_t flags = 0;
+  ceph::split sp_flags(flag_expr); // default separators are ,;=\t\n
+  for (auto it = sp_flags.begin(); it != sp_flags.end(); ++it) {
+    auto token = sv_trim(string_view{*it});
+    for (auto& flag_tok : LCFilter::filter_flags) {
+      if (token == flag_tok.name) {
+	flags |= LCFilter::make_flag(flag_tok.bit);
+      }
+    }
+  }
+  return flags;
+}
 
 bool LCRule::valid() const
 {

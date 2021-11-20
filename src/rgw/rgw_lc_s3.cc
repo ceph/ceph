@@ -139,15 +139,22 @@ void LCFilter_S3::decode_xml(XMLObj *obj)
    * Empty filters are allowed:
    * https://docs.aws.amazon.com/AmazonS3/latest/dev/intro-lifecycle-rules.html
    */
-  XMLObj *o = obj->find_first("And");
+  XMLObj* o = obj->find_first("And");
   if (o == nullptr){
     o = obj;
   }
 
   RGWXMLDecoder::decode_xml("Prefix", prefix, o);
+
+  /* parse optional flags (extension) */
+  auto flags_iter = o->find("Flag");
+  while (auto flag_xml = flags_iter.get_next()){
+    flags |= LCFilter::recognize_flags(flag_xml->get_data());
+  }
+
+  obj_tags.clear(); // why is this needed?
   auto tags_iter = o->find("Tag");
-  obj_tags.clear();
-  while (auto tag_xml =tags_iter.get_next()){
+  while (auto tag_xml = tags_iter.get_next()){
     std::string _key,_val;
     RGWXMLDecoder::decode_xml("Key", _key, tag_xml);
     RGWXMLDecoder::decode_xml("Value", _val, tag_xml);
