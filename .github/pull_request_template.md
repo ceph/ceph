@@ -27,6 +27,7 @@
   - [ ] Very recent bug; references commit where it was introduced
   - [ ] New feature (ticket optional)
   - [ ] Doc update (no ticket needed)
+  - [ ] Code cleanup (no ticket needed)
 - Component impact
   - [ ] Affects [Dashboard](https://tracker.ceph.com/projects/dashboard/issues/new), opened tracker ticket
   - [ ] Affects [Orchestrator](https://tracker.ceph.com/projects/orchestrator/issues/new), opened tracker ticket
