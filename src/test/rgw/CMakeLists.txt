@@ -180,6 +180,14 @@ add_ceph_unittest(unittest_rgw_xml)
 
 target_link_libraries(unittest_rgw_xml ${rgw_libs} ${EXPAT_LIBRARIES})
 
+# unittest_rgw_lc
+add_executable(unittest_rgw_lc test_rgw_lc.cc)
+add_ceph_unittest(unittest_rgw_lc)
+target_include_directories(unittest_rgw_lc SYSTEM PRIVATE
+  "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_lc
+  rgw_common ${rgw_libs} ${EXPAT_LIBRARIES})
+
 # unittest_rgw_arn
 add_executable(unittest_rgw_arn test_rgw_arn.cc)
 add_ceph_unittest(unittest_rgw_arn)
