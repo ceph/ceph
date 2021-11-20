@@ -40,9 +40,6 @@
   - [ ] Includes [integration test(s)](https://docs.ceph.com/en/latest/dev/developer_guide/testing_integration_tests/)
   - [ ] Includes bug reproducer
   - [ ] No tests
-- Teuthology
-  - [ ] Completed teuthology run
-  - [ ] No teuthology test necessary (e.g., documentation)
 
 <details>
 <summary>Show available Jenkins commands</summary>
