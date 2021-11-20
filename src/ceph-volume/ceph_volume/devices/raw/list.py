@@ -68,12 +68,6 @@ class List(object):
 
     def generate(self, devs=None):
         logger.debug('Listing block devices via lsblk...')
-        # in case where we come from `ceph-volume raw activate`
-        # `--device` will call `List.list()` with a string instead of a list
-        # which can lead the logic in this function to a bug. The following lines will basically
-        # convert it to a list with a single element to be sure we don't hit any issue.
-        if isinstance(devs, str):
-            devs = [devs]
         if devs is None or devs == []:
             devs = []
             # If no devs are given initially, we want to list ALL devices including children and

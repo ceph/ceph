@@ -45,7 +45,7 @@ class Activate(object):
         # first try raw
         try:
             RAWActivate([]).activate(
-                device=None,
+                devs=None,
                 start_osd_id=self.args.osd_id,
                 start_osd_uuid=self.args.osd_uuid,
                 tmpfs=not self.args.no_tmpfs,
