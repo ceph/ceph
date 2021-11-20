@@ -702,12 +702,4 @@ class CephadmConfigChecks:
                 self.active_checks.append(health_check.name)
                 health_check.func()
 
-        if self.health_check_raised:
-            self.log.warning("CEPHADM checks have detected configuration anomalies")
-        else:
-            self.log.info(
-                f"CEPHADM {self.active_checks_count}/{self.defined_checks} checks enabled "
-                f"and executed ({self.skipped_checks_count} bypassed, "
-                f"{self.defined_checks - self.active_checks_count} disabled). No issues detected")
-
         self.mgr.set_health_checks(self.mgr.health_checks)
