@@ -6063,6 +6063,12 @@ options:
   default: true
   tags:
   - client
+- name: librados_sqlite_data_dir
+  type: str
+  level: advanced
+  desc: dir to store sqlite data for librados-sqlite
+  tags:
+  - client
 - name: bdev_type
   type: str
   level: advanced

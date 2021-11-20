@@ -419,7 +419,11 @@ LRemDBTransactionState::~LRemDBTransactionState() {
 
 void LRemDBTransactionState::init() {
   auto uuid = cct->_conf.get_val<uuid_d>("fsid");
-  db_name_prefix = string("cluster-") + uuid.to_string();
+  auto dir = cct->_conf.get_val<string>("librados_sqlite_data_dir");
+  if (!dir.empty()) {
+    db_name_prefix = dir + "/";
+  }
+  db_name_prefix += string("cluster-") + uuid.to_string();
   dbc = std::make_shared<LRemDBStore::Cluster>(cct, this);
 }
 
