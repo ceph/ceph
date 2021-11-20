@@ -5,6 +5,7 @@
 #define CEPH_RGW_LC_H
 
 #include <map>
+#include <array>
 #include <string>
 #include <iostream>
 
@@ -159,13 +160,51 @@ public:
 };
 WRITE_CLASS_ENCODER(LCTransition)
 
+enum class LCFlagType : uint16_t
+{
+  none = 0,
+  ArchiveZone,
+};
+
+class LCFlag {
+public:
+  LCFlagType bit;
+  const char* name;
+
+  constexpr LCFlag(LCFlagType ord, const char* name) : bit(ord), name(name)
+    {}
+};
+
 class LCFilter
 {
- protected:
+ public:
+
+  static constexpr uint32_t make_flag(LCFlagType type) {
+    switch (type) {
+    case LCFlagType::none:
+      return 0;
+      break;
+    default:
+      return 1 << (uint32_t(type) - 1);
+    }
+   }
+
+  static constexpr std::array<LCFlag, 2> filter_flags =
+  {
+    LCFlag(LCFlagType::none, "none"),
+    LCFlag(LCFlagType::ArchiveZone, "ArchiveZone"),
+  };
+
+protected:
   std::string prefix;
   RGWObjTags obj_tags;
+  uint32_t flags;
 
- public:
+public:
+static uint32_t recognize_flags(const std::string& flag_expr);
+
+  LCFilter() : flags(make_flag(LCFlagType::none))
+    {}
 
   const std::string& get_prefix() const {
     return prefix;
@@ -173,6 +212,10 @@ class LCFilter
 
   const RGWObjTags& get_tags() const {
     return obj_tags;
+  }
+
+  const uint32_t get_flags() {
+    return flags;
   }
 
   bool empty() const {
@@ -195,16 +238,20 @@ class LCFilter
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(prefix, bl);
     encode(obj_tags, bl);
+    encode(flags, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(prefix, bl);
     if (struct_v >= 2) {
       decode(obj_tags, bl);
+      if (struct_v >= 3) {
+	decode(flags, bl);
+      }
     }
     DECODE_FINISH(bl);
   }
