@@ -1045,7 +1045,7 @@ void DPDKQueuePair::tx_buf::set_cluster_offload_info(const Packet& p, const DPDK
 }
 
 DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(
-        CephContext *cct, Packet&& p, DPDKQueuePair& qp)
+        CephContext *cct, Packet& p, DPDKQueuePair& qp)
 {
   // Too fragmented - linearize
   if (p.nr_frags() > max_frags) {
@@ -1162,7 +1162,7 @@ void DPDKQueuePair::tx_buf::copy_packet_to_cluster(const Packet& p, rte_mbuf* he
   }
 }
 
-DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_copy(Packet&& p, DPDKQueuePair& qp)
+DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_copy(Packet& p, DPDKQueuePair& qp)
 {
   // sanity
   if (!p.len()) {

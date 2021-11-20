@@ -145,7 +145,7 @@ class DPDKQueuePair {
      *         failure
      */
     static tx_buf* from_packet_zc(
-            CephContext *cct, Packet&& p, DPDKQueuePair& qp);
+            CephContext *cct, Packet& p, DPDKQueuePair& qp);
 
     /**
      * Copy the contents of the "packet" into the given cluster of
@@ -168,7 +168,7 @@ class DPDKQueuePair {
      * @return the HEAD tx_buf of the cluster or nullptr in case of a
      *         failure
      */
-    static tx_buf* from_packet_copy(Packet&& p, DPDKQueuePair& qp);
+    static tx_buf* from_packet_copy(Packet& p, DPDKQueuePair& qp);
 
     /**
      * Zero-copy handling of a single fragment.
@@ -540,8 +540,8 @@ class DPDKQueuePair {
 
   uint32_t send(circular_buffer<Packet>& pb) {
     // Zero-copy send
-    return _send(pb, [&] (Packet&& p) {
-      return tx_buf::from_packet_zc(cct, std::move(p), *this);
+    return _send(pb, [&] (Packet& p) {
+      return tx_buf::from_packet_zc(cct, p, *this);
     });
   }
 
@@ -554,11 +554,11 @@ class DPDKQueuePair {
   template <class Func>
   uint32_t _send(circular_buffer<Packet>& pb, Func &&packet_to_tx_buf_p) {
     if (_tx_burst.size() == 0) {
-      for (auto&& p : pb) {
+      for (auto& p : pb) {
         // TODO: ceph_assert() in a fast path! Remove me ASAP!
         ceph_assert(p.len());
 
-        tx_buf* buf = packet_to_tx_buf_p(std::move(p));
+        tx_buf* buf = packet_to_tx_buf_p(p);
         if (!buf) {
           break;
         }
