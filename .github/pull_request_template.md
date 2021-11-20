@@ -26,6 +26,7 @@
   - [ ] References tracker ticket
   - [ ] Very recent bug; references commit where it was introduced
   - [ ] New feature (ticket optional)
+  - [ ] Code Refactor or Cleanup (ticket optional)
   - [ ] Doc update (no ticket needed)
 - Component impact
   - [ ] Affects [Dashboard](https://tracker.ceph.com/projects/dashboard/issues/new), opened tracker ticket
