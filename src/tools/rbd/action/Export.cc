@@ -173,7 +173,7 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
       if (r < 0) {
         return r;
       }
-      len = 8;
+      len = 1;
       encode(len, bl);
       encode(is_protected, bl);
     }
