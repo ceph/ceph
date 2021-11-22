@@ -215,6 +215,7 @@ class LuaScriptManager;
 class RGWOIDCProvider;
 class RGWRole;
 class PlacementTier;
+struct RGWRoleInfo;
 
 enum AttrsMod {
   ATTRSMOD_NONE    = 0,
@@ -412,6 +413,7 @@ class Store {
                 std::multimap<std::string,std::string> tags={}) = 0;
     /** Get an IAM Role by ID */
     virtual std::unique_ptr<RGWRole> get_role(std::string id) = 0;
+    virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) = 0;
     /** Get all IAM Roles optionally filtered by path */
     virtual int get_roles(const DoutPrefixProvider *dpp,
 			  optional_yield y,
