@@ -300,9 +300,6 @@ public:
   bool collect(int *ret, RGWCoroutinesStack *skip_stack, uint64_t *stack_id = nullptr); /* returns true if needs to be called again */
   bool collect_next(int *ret, RGWCoroutinesStack **collected_stack = NULL); /* returns true if found a stack to collect */
 
-  RGWCoroutinesStack *prealloc_stack(); /* prepare a stack that will be used in the next spawn operation */
-  uint64_t prealloc_stack_id(); /* prepare a stack that will be used in the next spawn operation, return its id */
-
   int wait(const utime_t& interval);
   bool drain_children(int num_cr_left,
                       RGWCoroutinesStack *skip_stack = nullptr,
@@ -435,8 +432,6 @@ class RGWCoroutinesStack : public RefCountedObject {
 
   rgw_spawned_stacks spawned;
 
-  RGWCoroutinesStack *preallocated_stack{nullptr};
-
   std::set<RGWCoroutinesStack *> blocked_by_stack;
   std::set<RGWCoroutinesStack *> blocking_stacks;
 
@@ -534,7 +529,6 @@ public:
 
   void call(RGWCoroutine *next_op);
   RGWCoroutinesStack *spawn(RGWCoroutine *next_op, bool wait);
-  RGWCoroutinesStack *prealloc_stack();
   int unwind(int retcode);
 
   int wait(const utime_t& interval);
