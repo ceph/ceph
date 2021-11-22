@@ -62,7 +62,9 @@ class EphemeralSegmentManager final : public SegmentManager {
   std::optional<seastore_meta_t> meta;
 
   size_t get_offset(paddr_t addr) {
-    return (addr.segment.device_segment_id() * config.segment_size) + addr.offset;
+    auto& seg_addr = addr.as_seg_paddr();
+    return (seg_addr.get_segment_id().device_segment_id() * config.segment_size) +
+	     seg_addr.get_segment_off();
   }
 
   std::vector<segment_state_t> segment_state;

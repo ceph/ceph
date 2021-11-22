@@ -206,9 +206,10 @@ private:
   device_id_t device_id = 0;
 
   size_t get_offset(paddr_t addr) {
+    auto& seg_addr = addr.as_seg_paddr();
     return superblock.first_segment_offset +
-      (addr.segment.device_segment_id() * superblock.segment_size) +
-      addr.offset;
+      (seg_addr.get_segment_id().device_segment_id() * superblock.segment_size) +
+      seg_addr.get_segment_off();
   }
 
   const seastore_meta_t &get_meta() const {

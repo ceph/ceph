@@ -322,7 +322,7 @@ public:
       t,
       hint,
       len,
-      zero_paddr());
+      P_ADDR_ZERO);
   }
 
   /* alloc_extents
