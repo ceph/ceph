@@ -50,6 +50,10 @@ ceph osd pool set $TEST_POOL pg_num_min 2
 ceph osd pool get $TEST_POOL pg_num_min | grep 2
 ceph osd pool set $TEST_POOL pg_num_max 33
 ceph osd pool get $TEST_POOL pg_num_max | grep 33
+expect_false ceph osd pool set $TEST_POOL pg_num_min 9
+expect_false ceph osd pool set $TEST_POOL pg_num_max 7
+expect_false ceph osd pool set $TEST_POOL pg_num 1
+expect_false ceph osd pool set $TEST_POOL pg_num 44
 ceph osd pool set $TEST_POOL pg_num_min 0
 expect_false ceph osd pool get $TEST_POOL pg_num_min
 ceph osd pool set $TEST_POOL pg_num_max 0

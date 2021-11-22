@@ -8353,6 +8353,19 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	return -EPERM;
       }
     }
+    int64_t pg_min = 0, pg_max = 0;
+    p.opts.get(pool_opts_t::PG_NUM_MIN, &pg_min);
+    p.opts.get(pool_opts_t::PG_NUM_MAX, &pg_max);
+    if (pg_min && n < pg_min) {
+      ss << "specified pg_num " << n
+	 << " < pg_num_min " << pg_min;
+      return -EINVAL;
+    }
+    if (pg_max && n > pg_max) {
+      ss << "specified pg_num " << n
+	 << " < pg_num_max " << pg_max;
+      return -EINVAL;
+    }
     if (osdmap.require_osd_release < ceph_release_t::nautilus) {
       // pre-nautilus osdmap format; increase pg_num directly
       assert(n > (int)p.get_pg_num());
