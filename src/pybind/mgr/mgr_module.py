@@ -1028,6 +1028,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             'pool': pool,
             'pg_num': 1,
             'pg_num_min': 1,
+            'pg_num_max': 32,
         }
         self.check_mon_command(c)
 
