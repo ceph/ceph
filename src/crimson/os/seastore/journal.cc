@@ -19,27 +19,6 @@ namespace {
 
 namespace crimson::os::seastore {
 
-std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
-{
-  return out << "segment_header_t("
-	     << "segment_seq=" << header.journal_segment_seq
-	     << ", physical_segment_id=" << header.physical_segment_id
-	     << ", journal_tail=" << header.journal_tail
-	     << ", segment_nonce=" << header.segment_nonce
-	     << ", out-of-line=" << header.out_of_line
-	     << ")";
-}
-
-
-std::ostream &operator<<(std::ostream &out, const extent_info_t &info)
-{
-  return out << "extent_info_t("
-	     << " type: " << info.type
-	     << " addr: " << info.addr
-	     << " len: " << info.len
-	     << ")";
-}
-
 segment_nonce_t generate_nonce(
   segment_seq_t seq,
   const seastore_meta_t &meta)
