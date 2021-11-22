@@ -95,41 +95,24 @@ public:
 
   /// Creates empty transaction by source
   TransactionRef create_transaction(
-      Transaction::src_t src) {
+      Transaction::src_t src,
+      const char* name,
+      bool is_weak) {
     LOG_PREFIX(Cache::create_transaction);
 
     ++(get_by_src(stats.trans_created_by_src, src));
 
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
-      false,
+      is_weak,
       src,
       last_commit,
       [this](Transaction& t) {
         return on_transaction_destruct(t);
       }
     );
-    DEBUGT("created source={}", *ret, src);
-    return ret;
-  }
-
-  /// Creates empty weak transaction by source
-  TransactionRef create_weak_transaction(
-      Transaction::src_t src) {
-    LOG_PREFIX(Cache::create_weak_transaction);
-
-    ++(get_by_src(stats.trans_created_by_src, src));
-
-    auto ret = std::make_unique<Transaction>(
-      get_dummy_ordering_handle(),
-      true,
-      src,
-      last_commit,
-      [this](Transaction& t) {
-        return on_transaction_destruct(t);
-      }
-    );
-    DEBUGT("created source={}", *ret, src);
+    DEBUGT("created name={}, source={}, is_weak={}",
+           *ret, name, src, is_weak);
     return ret;
   }
 
