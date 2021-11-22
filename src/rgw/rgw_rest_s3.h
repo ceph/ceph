@@ -1167,7 +1167,7 @@ class STSEngine : public AWSEngine {
   using auth_info_t = rgw::auth::RemoteApplier::AuthInfo;
 
   acl_strategy_t get_acl_strategy() const { return nullptr; };
-  auth_info_t get_creds_info(const STS::SessionToken& token) const noexcept;
+  auth_info_t get_creds_info(const STS::SessionToken& token, const std::string access_key_id) const noexcept;
 
   int get_session_token(const DoutPrefixProvider* dpp, const std::string_view& session_token,
                         STS::SessionToken& token) const;

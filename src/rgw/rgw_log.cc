@@ -294,7 +294,13 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
       formatter->close_section();
     }
   }
-
+  if (!entry.access_key_id.empty()) {
+    formatter->dump_string("access_key_id", entry.access_key_id);
+  }
+  if (!entry.subuser.empty()) {
+    formatter->dump_string("subuser", entry.subuser);
+  }
+  formatter->dump_bool("temp_url", entry.temp_url);
   formatter->close_section();
 }
 
@@ -604,6 +610,9 @@ int rgw_log_op(RGWREST* const rest, struct req_state *s, const string& op_name, 
   entry.error_code = s->err.err_code;
   entry.bucket_id = bucket_id;
   entry.trans_id = s->trans_id;
+  entry.access_key_id = s->access_key_id;
+  entry.subuser = s->subuser;
+  entry.temp_url = s->temp_url;
   if (olog) {
     return olog->log(s, entry);
   }

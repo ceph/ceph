@@ -53,6 +53,8 @@ void TempURLApplier::modify_request_state(const DoutPrefixProvider* dpp, req_sta
     s->content_disp.fallback = "attachment; filename=\"" + fenc + "\"";
   }
 
+  s->temp_url = true;
+
   ldpp_dout(dpp, 20) << "finished applying changes to req_state for TempURL: "
                     << " content_disp override " << s->content_disp.override
                     << " content_disp fallback " << s->content_disp.fallback
@@ -457,7 +459,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   auto apl = apl_factory->create_apl_local(cct, s, tmp_uinfo,
                                            extract_swift_subuser(swift_user),
-                                           boost::none);
+                                           boost::none, rgw::auth::LocalApplier::NO_ACCESS_KEY);
   return result_t::grant(std::move(apl));
 }
 
@@ -611,7 +613,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info,
                                            extract_swift_subuser(swift_user),
-                                           boost::none);
+                                           boost::none, rgw::auth::LocalApplier::NO_ACCESS_KEY);
   return result_t::grant(std::move(apl));
 }
 

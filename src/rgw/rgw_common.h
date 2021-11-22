@@ -1511,6 +1511,11 @@ struct req_state : DoutPrefixProvider {
   string bucket_tenant;
   string bucket_name;
 
+  // access key id used to make the request - empty string if not applicable
+  std::string access_key_id;
+  // subuser that made the request - empty string if not applicable
+  std::string subuser;
+
   std::unique_ptr<rgw::sal::RGWBucket> bucket;
   std::unique_ptr<rgw::sal::RGWObject> object;
   string src_tenant_name;
@@ -1594,6 +1599,8 @@ struct req_state : DoutPrefixProvider {
   } content_disp;
 
   string host_id;
+  // whether this is a temp url request
+  bool temp_url{false};
 
   req_info info;
   req_init_state init_state;

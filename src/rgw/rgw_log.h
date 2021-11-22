@@ -41,8 +41,11 @@ struct rgw_log_entry {
   string trans_id;
   std::vector<string> token_claims;
 
+  std::string access_key_id;
+  std::string subuser;
+  bool temp_url;
   void encode(bufferlist &bl) const {
-    ENCODE_START(11, 5, bl);
+    ENCODE_START(12, 5, bl);
     encode(object_owner.id, bl);
     encode(bucket_owner.id, bl);
     encode(bucket, bl);
@@ -67,6 +70,9 @@ struct rgw_log_entry {
     encode(x_headers, bl);
     encode(trans_id, bl);
     encode(token_claims, bl);
+    encode(access_key_id, bl);
+    encode(subuser, bl);
+    encode(temp_url, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &p) {
@@ -121,6 +127,11 @@ struct rgw_log_entry {
     }
     if (struct_v >= 11) {
       decode(token_claims, p);
+    }
+    if (struct_v >= 12) {
+      decode(access_key_id, p);
+      decode(subuser, p);
+      decode(temp_url, p);
     }
     DECODE_FINISH(p);
   }

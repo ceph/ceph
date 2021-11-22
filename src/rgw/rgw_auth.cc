@@ -458,6 +458,9 @@ bool rgw::auth::WebIdentityApplier::is_identity(const idset_t& ids) const
     return false;
 }
 
+const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
+const std::string rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY;
+
 /* rgw::auth::RemoteAuthApplier */
 uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
 {
@@ -609,6 +612,12 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   }
 }
 
+void rgw::auth::RemoteApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const      /* in/out */
+{
+    s->access_key_id = info.access_key_id;
+    s->subuser = info.subuser;
+}
+
 /* TODO(rzarzynski): we need to handle display_name changes. */
 void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const      /* out */
 {
@@ -664,6 +673,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 /* rgw::auth::LocalApplier */
 /* static declaration */
 const std::string rgw::auth::LocalApplier::NO_SUBUSER;
+const std::string rgw::auth::LocalApplier::NO_ACCESS_KEY;
 
 uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
 {
@@ -740,6 +750,11 @@ void rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWU
   /* Load the account that belongs to the authenticated identity. An extra call
    * to RADOS may be safely skipped in this case. */
   user_info = this->user_info;
+}
+
+void rgw::auth::LocalApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const {
+    s->access_key_id = access_key_id;
+    s->subuser = subuser;
 }
 
 void rgw::auth::RoleApplier::to_str(std::ostream& out) const {
@@ -841,7 +856,8 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
     auto apl = \
       apl_factory->create_apl_local(cct, s, user_info,
                                     rgw::auth::LocalApplier::NO_SUBUSER,
-                                    boost::none);
+                                    boost::none,
+                                    rgw::auth::LocalApplier::NO_ACCESS_KEY);
     return result_t::grant(std::move(apl));
   }
 }
