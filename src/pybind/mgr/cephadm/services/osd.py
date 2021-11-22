@@ -1,5 +1,6 @@
 import json
 import logging
+from asyncio import gather
 from threading import Lock
 from typing import List, Dict, Any, Set, Tuple, cast, Optional, TYPE_CHECKING
 
@@ -12,7 +13,6 @@ from ceph.utils import datetime_to_str, str_to_datetime
 from datetime import datetime
 import orchestrator
 from cephadm.serve import CephadmServe
-from cephadm.utils import forall_hosts
 from ceph.utils import datetime_now
 from orchestrator import OrchestratorError, DaemonDescription
 from mgr_module import MonCommandFailed
@@ -35,8 +35,7 @@ class OSDService(CephService):
             logger.info(
                 f"Found osd claims for drivegroup {drive_group.service_id} -> {osd_id_claims.get()}")
 
-        @forall_hosts
-        def create_from_spec_one(host: str, drive_selection: DriveSelection) -> Optional[str]:
+        async def create_from_spec_one(host: str, drive_selection: DriveSelection) -> Optional[str]:
             # skip this host if there has been no change in inventory
             if not self.mgr.cache.osdspec_needs_apply(host, drive_group):
                 self.mgr.log.debug("skipping apply of %s on %s (no change)" % (
@@ -60,7 +59,7 @@ class OSDService(CephService):
             ))
             start_ts = datetime_now()
             env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
-            ret_msg = self.create_single_host(
+            ret_msg = await self.create_single_host(
                 drive_group, host, cmd,
                 replace_osd_ids=osd_id_claims_for_host, env_vars=env_vars
             )
@@ -70,14 +69,19 @@ class OSDService(CephService):
             self.mgr.cache.save_host(host)
             return ret_msg
 
-        ret = create_from_spec_one(self.prepare_drivegroup(drive_group))
+        async def all_hosts() -> List[Optional[str]]:
+            futures = [create_from_spec_one(h, ds)
+                       for h, ds in self.prepare_drivegroup(drive_group)]
+            return await gather(*futures)
+
+        ret = self.mgr.wait_async(all_hosts())
         return ", ".join(filter(None, ret))
 
-    def create_single_host(self,
-                           drive_group: DriveGroupSpec,
-                           host: str, cmd: str, replace_osd_ids: List[str],
-                           env_vars: Optional[List[str]] = None) -> str:
-        out, err, code = self._run_ceph_volume_command(host, cmd, env_vars=env_vars)
+    async def create_single_host(self,
+                                 drive_group: DriveGroupSpec,
+                                 host: str, cmd: str, replace_osd_ids: List[str],
+                                 env_vars: Optional[List[str]] = None) -> str:
+        out, err, code = await self._run_ceph_volume_command(host, cmd, env_vars=env_vars)
 
         if code == 1 and ', it is already prepared' in '\n'.join(err):
             # HACK: when we create against an existing LV, ceph-volume
@@ -89,18 +93,18 @@ class OSDService(CephService):
             raise RuntimeError(
                 'cephadm exited with an error code: %d, stderr:%s' % (
                     code, '\n'.join(err)))
-        return self.deploy_osd_daemons_for_existing_osds(host, drive_group.service_name(),
-                                                         replace_osd_ids)
+        return await self.deploy_osd_daemons_for_existing_osds(host, drive_group.service_name(),
+                                                               replace_osd_ids)
 
-    def deploy_osd_daemons_for_existing_osds(self, host: str, service_name: str,
-                                             replace_osd_ids: Optional[List[str]] = None) -> str:
+    async def deploy_osd_daemons_for_existing_osds(self, host: str, service_name: str,
+                                                   replace_osd_ids: Optional[List[str]] = None) -> str:
 
         if replace_osd_ids is None:
             replace_osd_ids = OsdIdClaims(self.mgr).filtered_by_host(host)
             assert replace_osd_ids is not None
 
         # check result: lvm
-        osds_elems: dict = CephadmServe(self.mgr)._run_cephadm_json(
+        osds_elems: dict = await CephadmServe(self.mgr)._run_cephadm_json(
             host, 'osd', 'ceph-volume',
             [
                 '--',
@@ -139,12 +143,12 @@ class OSDService(CephService):
                     daemon_type='osd',
                 )
                 daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-                CephadmServe(self.mgr)._create_daemon(
+                await CephadmServe(self.mgr)._create_daemon(
                     daemon_spec,
                     osd_uuid_map=osd_uuid_map)
 
         # check result: raw
-        raw_elems: dict = CephadmServe(self.mgr)._run_cephadm_json(
+        raw_elems: dict = await CephadmServe(self.mgr)._run_cephadm_json(
             host, 'osd', 'ceph-volume',
             [
                 '--',
@@ -176,7 +180,7 @@ class OSDService(CephService):
                 daemon_type='osd',
             )
             daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-            CephadmServe(self.mgr)._create_daemon(
+            await CephadmServe(self.mgr)._create_daemon(
                 daemon_spec,
                 osd_uuid_map=osd_uuid_map)
 
@@ -279,7 +283,7 @@ class OSDService(CephService):
                     continue
 
                 # get preview data from ceph-volume
-                out, err, code = self._run_ceph_volume_command(host, cmd)
+                out, err, code = self.mgr.wait_async(self._run_ceph_volume_command(host, cmd))
                 if out:
                     try:
                         concat_out: Dict[str, Any] = json.loads(' '.join(out))
@@ -322,9 +326,9 @@ class OSDService(CephService):
                 matching_specs.append(spec)
         return matching_specs
 
-    def _run_ceph_volume_command(self, host: str,
-                                 cmd: str, env_vars: Optional[List[str]] = None
-                                 ) -> Tuple[List[str], List[str], int]:
+    async def _run_ceph_volume_command(self, host: str,
+                                       cmd: str, env_vars: Optional[List[str]] = None
+                                       ) -> Tuple[List[str], List[str], int]:
         self.mgr.inventory.assert_host(host)
 
         # get bootstrap key
@@ -341,7 +345,7 @@ class OSDService(CephService):
         split_cmd = cmd.split(' ')
         _cmd = ['--config-json', '-', '--']
         _cmd.extend(split_cmd)
-        out, err, code = CephadmServe(self.mgr)._run_cephadm(
+        out, err, code = await CephadmServe(self.mgr)._run_cephadm(
             host, 'osd', 'ceph-volume',
             _cmd,
             env_vars=env_vars,
@@ -516,10 +520,10 @@ class RemoveUtil(object):
     def zap_osd(self, osd: "OSD") -> str:
         "Zaps all devices that are associated with an OSD"
         if osd.hostname is not None:
-            out, err, code = CephadmServe(self.mgr)._run_cephadm(
+            out, err, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
                 osd.hostname, 'osd', 'ceph-volume',
                 ['--', 'lvm', 'zap', '--destroy', '--osd-id', str(osd.osd_id)],
-                error_ok=True)
+                error_ok=True))
             self.mgr.cache.invalidate_host_devices(osd.hostname)
             if code:
                 raise OrchestratorError('Zap failed: %s' % '\n'.join(out + err))
@@ -556,7 +560,8 @@ class RemoveUtil(object):
         if ret != 0:
             self.mgr.log.debug(f"ran {cmd_args} with mon_command")
             if not error_ok:
-                self.mgr.log.error(f"cmd: {cmd_args.get('prefix')} failed with: {err}. (errno:{ret})")
+                self.mgr.log.error(
+                    f"cmd: {cmd_args.get('prefix')} failed with: {err}. (errno:{ret})")
             return False
         self.mgr.log.debug(f"cmd: {cmd_args.get('prefix')} returns: {out}")
         return True

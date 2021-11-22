@@ -1424,10 +1424,10 @@ class TestCephadm(object):
         assert not retval.result_str()
         assert cephadm_module.inventory._inventory[hostname]['status'] == 'maintenance'
 
-    @mock.patch("cephadm.ssh.SSHManager.remote_connection")
-    @mock.patch("cephadm.ssh.SSHManager.execute_command")
-    @mock.patch("cephadm.ssh.SSHManager.check_execute_command")
-    @mock.patch("cephadm.ssh.SSHManager.write_remote_file")
+    @mock.patch("cephadm.ssh.SSHManager._remote_connection")
+    @mock.patch("cephadm.ssh.SSHManager._execute_command")
+    @mock.patch("cephadm.ssh.SSHManager._check_execute_command")
+    @mock.patch("cephadm.ssh.SSHManager._write_remote_file")
     def test_etc_ceph(self, _write_file, check_execute_command, execute_command, remote_connection, cephadm_module):
         _write_file.return_value = None
         check_execute_command.return_value = ''
@@ -1446,7 +1446,7 @@ class TestCephadm(object):
 
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             _write_file.assert_called_with('test', '/etc/ceph/ceph.conf', b'',
-                                           0o644, 0, 0)
+                                           0o644, 0, 0, None)
 
             assert '/etc/ceph/ceph.conf' in cephadm_module.cache.get_host_client_files('test')
 
@@ -1454,7 +1454,7 @@ class TestCephadm(object):
             cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             _write_file.assert_called_with('test', '/etc/ceph/ceph.conf',
-                                           b'\n\n[mon]\nk=v\n', 0o644, 0, 0)
+                                           b'\n\n[mon]\nk=v\n', 0o644, 0, 0, None)
 
             # reload
             cephadm_module.cache.last_client_files = {}
