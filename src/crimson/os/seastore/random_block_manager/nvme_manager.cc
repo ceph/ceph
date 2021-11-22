@@ -145,7 +145,6 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
 	  super.start_alloc_area + super.alloc_area_size;
 	super.crc = 0;
 	super.feature |= RBM_BITMAP_BLOCK_CRC;
-	super.blocks_per_segment = config.blocks_per_segment;
 	super.device_id = config.device_id;
 
 	logger().debug(" super {} ", super);
