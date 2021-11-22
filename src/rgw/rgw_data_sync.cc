@@ -1225,6 +1225,10 @@ struct rgw_sync_pipe_info_set {
     return handlers.end();
   }
 
+  size_t size() const {
+    return handlers.size();
+  }
+
   bool empty() const {
     return handlers.empty();
   }
@@ -4729,16 +4733,16 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
       return set_cr_done();
     }
 
-    for (siter = pipes.begin(); siter != pipes.end(); ++siter) {
+    shard_progress.resize(pipes.size());
+    cur_shard_progress = shard_progress.begin();
+
+    for (siter = pipes.begin(); siter != pipes.end(); ++siter, ++cur_shard_progress) {
       ldpp_dout(dpp, 20) << __func__ << "(): sync pipe=" << *siter << dendl;
 
       sync_pair.dest_bucket = siter->target.get_bucket();
       sync_pair.handler = siter->handler;
 
       ldpp_dout(dpp, 20) << __func__ << "(): sync_pair=" << sync_pair << dendl;
-
-      shard_progress.resize(1);
-      cur_shard_progress = shard_progress.begin();
 
       yield_spawn_window(sync_bucket_shard_cr(sc, lease_cr, sync_pair,
                                               gen, tn, &*cur_shard_progress),
