@@ -6325,8 +6325,9 @@ def command_check_host(ctx: CephadmContext) -> None:
         if get_hostname().lower() != ctx.expect_hostname.lower():
             errors.append('hostname "%s" does not match expected hostname "%s"' % (
                 get_hostname(), ctx.expect_hostname))
-        logger.info('Hostname "%s" matches what is expected.',
-                    ctx.expect_hostname)
+        else:
+            logger.info('Hostname "%s" matches what is expected.',
+                        ctx.expect_hostname)
 
     if errors:
         raise Error('\nERROR: '.join(errors))
