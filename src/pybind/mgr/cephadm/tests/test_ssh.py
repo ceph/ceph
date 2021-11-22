@@ -22,8 +22,8 @@ from cephadm.tests.fixtures import with_host, wait
 
 @pytest.mark.skipif(ConnectionLost is None, reason='no asyncssh')
 class TestWithSSH:
-    @mock.patch("cephadm.ssh.SSHManager.execute_command")
-    @mock.patch("cephadm.ssh.SSHManager.check_execute_command")
+    @mock.patch("cephadm.ssh.SSHManager._execute_command")
+    @mock.patch("cephadm.ssh.SSHManager._check_execute_command")
     def test_offline(self, check_execute_command, execute_command, cephadm_module):
         check_execute_command.return_value = ''
         execute_command.return_value = '', '', 0
