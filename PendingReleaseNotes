@@ -41,6 +41,13 @@
   quick-fix/repair commands are invoked.
   Relevant tracker: https://tracker.ceph.com/issues/53062
 
+* MGR: The pg_autoscaler will use the 'scale-up' profile as the default profile.
+  16.2.6 changed the default profile to 'scale-down' but we ran into issues
+  with the device_health_metrics pool consuming too many PGs, which is not ideal
+  for performance. So we will continue to use the 'scale-up' profile by default,
+  until we implement a limit on the number of PGs default pools should consume,
+  in combination with the 'scale-down' profile.
+
 >=16.2.6
 --------
 
