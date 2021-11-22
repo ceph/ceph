@@ -88,14 +88,16 @@ public:
 
   /// Creates empty transaction
   TransactionRef create_transaction(
-      Transaction::src_t src) final {
-    return cache->create_transaction(src);
+      Transaction::src_t src,
+      const char* name) final {
+    return cache->create_transaction(src, name, false);
   }
 
   /// Creates empty weak transaction
   TransactionRef create_weak_transaction(
-      Transaction::src_t src) {
-    return cache->create_weak_transaction(src);
+      Transaction::src_t src,
+      const char* name) {
+    return cache->create_transaction(src, name, true);
   }
 
   /// Resets transaction

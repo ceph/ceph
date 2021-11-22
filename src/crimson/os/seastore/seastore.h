@@ -201,12 +201,13 @@ private:
     CollectionRef ch,
     ceph::os::Transaction &&t,
     Transaction::src_t src,
+    const char* tname,
     op_type_t op_type,
     F &&f) {
     return seastar::do_with(
       internal_context_t(
 	ch, std::move(t),
-	transaction_manager->create_transaction(src)),
+	transaction_manager->create_transaction(src, tname)),
       std::forward<F>(f),
       [this, op_type](auto &ctx, auto &f) {
 	return ctx.transaction->get_handle().take_collection_lock(
@@ -234,15 +235,21 @@ private:
     CollectionRef ch,
     const ghobject_t &oid,
     Transaction::src_t src,
+    const char* tname,
     op_type_t op_type,
     F &&f) const {
     auto begin_time = std::chrono::steady_clock::now();
     return seastar::do_with(
-        oid, Ret{}, OnodeRef(), std::forward<F>(f),
-        [this, src, op_type, begin_time](auto &oid, auto &ret, auto &onode, auto &f) {
-      return repeat_eagain([&, this, src] {
+      oid, Ret{}, OnodeRef(), std::forward<F>(f),
+      [this, src, op_type, begin_time, tname
+      ](auto &oid, auto &ret, auto &onode, auto &f)
+    {
+      return repeat_eagain([&, this, src, tname] {
         return transaction_manager->with_transaction_intr(
-            src, [&, this](auto& t) {
+          src,
+          tname,
+          [&, this](auto& t)
+        {
           return onode_manager->get_onode(t, oid
           ).si_then([&](auto onode_ret) {
             onode = std::move(onode_ret);

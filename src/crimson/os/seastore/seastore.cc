@@ -299,7 +299,10 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
       }).safe_then([this] {
         return repeat_eagain([this] {
           return transaction_manager->with_transaction_intr(
-            Transaction::src_t::MUTATE, [this](auto& t) {
+            Transaction::src_t::MUTATE,
+            "mkfs_seastore",
+            [this](auto& t)
+          {
             return onode_manager->mkfs(t
             ).si_then([this, &t] {
               return collection_manager->mkfs(t);
@@ -359,8 +362,10 @@ SeaStore::list_objects(CollectionRef ch,
       [this, start, end, limit] (auto& ret) {
     return repeat_eagain([this, start, end, limit, &ret] {
       return transaction_manager->with_transaction_intr(
-          Transaction::src_t::READ,
-          [this, start, end, limit](auto &t) {
+        Transaction::src_t::READ,
+        "list_objects",
+        [this, start, end, limit](auto &t)
+      {
         return onode_manager->list_onodes(t, start, end, limit);
       }).safe_then([&ret](auto&& _ret) {
         ret = std::move(_ret);
@@ -403,8 +408,10 @@ seastar::future<std::vector<coll_t>> SeaStore::list_collections()
     [this](auto &ret) {
       return repeat_eagain([this, &ret] {
         return transaction_manager->with_transaction_intr(
-            Transaction::src_t::READ,
-            [this, &ret](auto& t) {
+          Transaction::src_t::READ,
+          "list_collections",
+          [this, &ret](auto& t)
+        {
           return transaction_manager->read_collection_root(t
           ).si_then([this, &t](auto coll_root) {
             return collection_manager->list(coll_root, t);
@@ -439,6 +446,7 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
     ch,
     oid,
     Transaction::src_t::READ,
+    "read_obj",
     op_type_t::READ,
     [=](auto &t, auto &onode) -> ObjectDataHandler::read_ret {
       size_t size = onode.get_layout().size;
@@ -485,6 +493,7 @@ SeaStore::get_attr_errorator::future<ceph::bufferlist> SeaStore::get_attr(
     c,
     oid,
     Transaction::src_t::READ,
+    "get_attr",
     op_type_t::GET_ATTR,
     [=](auto &t, auto& onode) -> _omap_get_value_ret {
       auto& layout = onode.get_layout();
@@ -520,6 +529,7 @@ SeaStore::get_attrs_ertr::future<SeaStore::attrs_t> SeaStore::get_attrs(
     c,
     oid,
     Transaction::src_t::READ,
+    "get_addrs",
     op_type_t::GET_ATTRS,
     [=](auto &t, auto& onode) {
       auto& layout = onode.get_layout();
@@ -555,6 +565,7 @@ seastar::future<struct stat> SeaStore::stat(
     c,
     oid,
     Transaction::src_t::READ,
+    "stat",
     op_type_t::STAT,
     [=, &oid](auto &t, auto &onode) {
       struct stat st;
@@ -593,6 +604,7 @@ SeaStore::omap_get_values(
     c,
     oid,
     Transaction::src_t::READ,
+    "omap_get_values",
     op_type_t::OMAP_GET_VALUES,
     [this, keys](auto &t, auto &onode) {
       omap_root_t omap_root = onode.get_layout().omap_root.get(onode.get_hint());
@@ -702,6 +714,7 @@ SeaStore::omap_get_values_ret_t SeaStore::omap_list(
     c,
     oid,
     Transaction::src_t::READ,
+    "omap_list",
     op_type_t::OMAP_LIST,
     [this, config, &start](auto &t, auto &onode) {
       return _omap_list(
@@ -860,6 +873,7 @@ seastar::future<> SeaStore::do_transaction(
     _ch,
     std::move(_t),
     Transaction::src_t::MUTATE,
+    "do_transaction",
     op_type_t::TRANSACTION,
     [this](auto &ctx) {
       return with_trans_intr(*ctx.transaction, [&, this](auto &t) {
@@ -1322,14 +1336,16 @@ seastar::future<> SeaStore::write_meta(const std::string& key,
 	return repeat_eagain([this, FNAME, &key, &value] {
 	  return transaction_manager->with_transaction_intr(
 	    Transaction::src_t::MUTATE,
-	    [this, FNAME, &key, &value](auto& t) {
-	      DEBUGT("Have transaction, key: {}; value: {}", t, key, value);
-	      return transaction_manager->update_root_meta(
-		t, key, value
-	      ).si_then([this, &t] {
-		return transaction_manager->submit_transaction(t);
-	      });
-	    });
+            "write_meta",
+	    [this, FNAME, &key, &value](auto& t)
+          {
+            DEBUGT("Have transaction, key: {}; value: {}", t, key, value);
+            return transaction_manager->update_root_meta(
+              t, key, value
+            ).si_then([this, &t] {
+              return transaction_manager->submit_transaction(t);
+            });
+          });
 	}).safe_then([this, &key, &value] {
 	  return mdstore->write_meta(key, value);
 	});

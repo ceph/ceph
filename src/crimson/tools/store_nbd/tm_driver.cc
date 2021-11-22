@@ -24,8 +24,10 @@ seastar::future<> TMDriver::write(
   return seastar::do_with(ptr, [this, offset](auto& ptr) {
     return repeat_eagain([this, offset, &ptr] {
       return tm->with_transaction_intr(
-          Transaction::src_t::MUTATE,
-          [this, offset, &ptr](auto& t) {
+        Transaction::src_t::MUTATE,
+        "write",
+        [this, offset, &ptr](auto& t)
+      {
         return tm->dec_ref(t, offset
         ).si_then([](auto){}).handle_error_interruptible(
           crimson::ct_error::enoent::handle([](auto) { return seastar::now(); }),
@@ -97,8 +99,10 @@ seastar::future<bufferlist> TMDriver::read(
   auto &blret = *blptrret;
   return repeat_eagain([=, &blret] {
     return tm->with_transaction_intr(
-        Transaction::src_t::READ,
-        [=, &blret](auto& t) {
+      Transaction::src_t::READ,
+      "read",
+      [=, &blret](auto& t)
+    {
       return read_extents(t, offset, size
       ).si_then([=, &blret](auto ext_list) {
         size_t cur = offset;
