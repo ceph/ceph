@@ -22,8 +22,29 @@ from ceph.rgw.rgwam_core import RGWAM, EnvArgs
 from ceph.rgw.types import RGWAMEnvMgr, RGWAMException
 
 class RGWAMCLIMgr(RGWAMEnvMgr):
-    def __init__(self):
-        pass
+    def __init__(self, common_args):
+        args = []
+
+        if common_args.conf_path:
+            args += [ '-c', common_args.conf_path ]
+
+        if common_args.ceph_name:
+            args += [ '-n', common_args.ceph_name ]
+
+        if common_args.ceph_keyring:
+            args += [ '-k', common_args.ceph_keyring ]
+
+        self.args_prefix = args
+
+    def tool_exec(self, prog, args):
+        run_cmd = [ prog ] + self.args_prefix + args
+
+        result = subprocess.run(run_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        stdout = result.stdout.decode('utf-8')
+        stderr = result.stderr.decode('utf-8')
+
+        return run_cmd, result.returncode, stdout, stderr
 
     def apply_rgw(self, svc_id, realm_name, zone_name, port = None):
         return None
@@ -201,10 +222,7 @@ def main():
 
     (cmd, common_args, args)= TopLevelCommand()._parse()
 
-    env = EnvArgs(RGWAMCLIMgr(),
-                  common_args.conf_path,
-                  common_args.ceph_name,
-                  common_args.ceph_keyring)
+    env = EnvArgs(RGWAMCLIMgr(common_args))
 
     try:
         retval, out, err = cmd(env, args)
