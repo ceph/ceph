@@ -1506,6 +1506,7 @@ public:
 			ostream *ss) const;
 
   float pool_raw_used_rate(int64_t poolid) const;
+  std::optional<std::string> pending_require_osd_release() const;
 
 };
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)

@@ -5796,7 +5796,13 @@ void OSDMap::check_health(CephContext *cct,
   }
 
   // OSD_UPGRADE_FINISHED
-  // none of these (yet) since we don't run until luminous upgrade is done.
+  if (auto require_release = pending_require_osd_release()) {
+    ostringstream ss;
+    ss << "all OSDs are running " << *require_release << " or later but"
+       << " require_osd_release < " << *require_release;
+    auto& d = checks->add("OSD_UPGRADE_FINISHED", HEALTH_WARN, ss.str());
+    d.detail.push_back(ss.str());
+  }
 
   // POOL_NEARFULL/BACKFILLFULL/FULL
   {
@@ -6009,4 +6015,14 @@ unsigned OSDMap::get_device_class_flags(int id) const
   if (it != device_class_flags.end())
     flags = it->second;
   return flags;
+}
+
+std::optional<std::string> OSDMap::pending_require_osd_release() const
+{
+  if (HAVE_FEATURE(get_up_osd_features(), SERVER_NAUTILUS) &&
+      require_osd_release < CEPH_RELEASE_NAUTILUS) {
+    return "nautilus";
+  }
+
+  return std::nullopt;
 }
