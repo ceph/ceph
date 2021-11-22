@@ -830,6 +830,7 @@ public:
           std::string max_session_duration_str="",
           std::multimap<std::string,std::string> tags={}) override;
       virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
+      virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) override;
       virtual int get_roles(const DoutPrefixProvider *dpp,
           optional_yield y,
           const std::string& path_prefix,
