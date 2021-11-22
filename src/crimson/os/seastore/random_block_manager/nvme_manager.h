@@ -54,7 +54,6 @@ struct rbm_metadata_header_t {
   uint32_t start_data_area;
   uint64_t flag; // reserved
   uint64_t feature;
-  uint32_t blocks_per_segment; // the number of blocks in segment
   device_id_t device_id;
   checksum_t crc;
 
@@ -72,7 +71,6 @@ struct rbm_metadata_header_t {
     denc(v.start_data_area, p);
     denc(v.flag, p);
     denc(v.feature, p);
-    denc(v.blocks_per_segment, p);
     denc(v.device_id, p);
 
     denc(v.crc, p);
@@ -361,9 +359,6 @@ public:
   void add_free_extent(
       std::vector<rbm_alloc_delta_t>& v, rbm_abs_addr from, size_t len);
 
-  uint32_t get_blocks_per_segment() const final {
-    return super.blocks_per_segment;
-  }
   device_id_t get_device_id() const final {
     return super.device_id;
   }
