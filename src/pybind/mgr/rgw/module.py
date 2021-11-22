@@ -19,6 +19,11 @@ class RGWAMOrchMgr(RGWAMEnvMgr):
     def __init__(self, mgr):
         self.mgr = mgr
 
+    def tool_exec(self, prog, args):
+        cmd = [ prog ] + args
+        rc, stdout, stderr = self.mgr.tool_exec(args = cmd)
+        return cmd, rc, stdout, stderr
+
     def apply_rgw(self, svc_id, realm_name, zone_name, port = None):
         spec = RGWSpec(service_id = svc_id,
                        rgw_realm = realm_name,
@@ -52,10 +57,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         with self.lock:
             self.inited = True
-            self.env = EnvArgs(RGWAMOrchMgr(self),
-                               str(self.get_ceph_conf_path()),
-                               f'mgr.{self.get_mgr_id()}',
-                               str(self.get_ceph_option('keyring')))
+            self.env = EnvArgs(RGWAMOrchMgr(self))
 
         # set up some members to enable the serve() method and shutdown()
         self.run = True
@@ -87,21 +89,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @CLICommand('rgw admin', perm='rw')
     def _cmd_rgw_admin(self, params: Sequence[str]):
         """rgw admin"""
-        run_cmd = [ './bin/radosgw-admin',
-                    '-c', str(self.get_ceph_conf_path()),
-                    '-k', str(self.get_ceph_option('keyring')),
-                    '-n', f'mgr.{self.get_mgr_id()}' ] + (params or [])
+        cmd, returncode, out, err = self.env.mgr.tool_exec('radosgw-admin', params or [])
 
-        result = subprocess.run(run_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        # TODO Extend export creation for rgw.
-        out = result.stdout.decode('utf-8')
-        err = result.stderr.decode('utf-8')
-        self.log.error('retcode=%d' % result.returncode)
+        self.log.error('retcode=%d' % returncode)
         self.log.error('out=%s' % out)
         self.log.error('err=%s' % err)
 
-        return HandleCommandResult(retval=result.returncode, stdout=out, stderr=err)
+        return HandleCommandResult(retval=returncode, stdout=out, stderr=err)
 
     @CLICommand('rgw realm bootstrap', perm='rw')
     def _cmd_rgw_realm_bootstrap(self,

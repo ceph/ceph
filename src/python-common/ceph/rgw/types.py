@@ -24,6 +24,10 @@ class RGWAMCmdRunException(RGWAMException):
 
 class RGWAMEnvMgr:
     @abstractmethod
+    def tool_exec(self, prog, args):
+        pass
+
+    @abstractmethod
     def apply_rgw(self, svc_id, realm_name, zone_name, port = None):
         pass
 

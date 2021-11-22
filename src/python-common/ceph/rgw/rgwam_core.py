@@ -60,11 +60,8 @@ def get_endpoints(endpoints, period = None):
 
 
 class EnvArgs:
-    def __init__(self, mgr, ceph_conf, ceph_name, ceph_keyring):
+    def __init__(self, mgr):
         self.mgr = mgr
-        self.ceph_conf = ceph_conf
-        self.ceph_name = ceph_name
-        self.ceph_keyring = ceph_keyring
 
 class EntityKey:
     def __init__(self, name = None, id = None):
@@ -131,12 +128,10 @@ def opt_arg_bool(params, flag, arg):
 
 class RGWCmdBase:
     def __init__(self, prog, zone_env : ZoneEnv):
-        env = zone_env.env
-        self.cmd_prefix = [ prog ]
+        self.env = zone_env.env
+        self.mgr = self.env.mgr
+        self.prog = prog
         self.cmd_suffix = [ ]
-        opt_arg(self.cmd_prefix, '-c', env.ceph_conf )
-        opt_arg(self.cmd_prefix, '-n', env.ceph_name )
-        opt_arg(self.cmd_prefix, '-k', env.ceph_keyring )
         if zone_env.realm:
             opt_arg(self.cmd_suffix, '--rgw-realm', zone_env.realm.name )
             opt_arg(self.cmd_suffix, '--realm-id', zone_env.realm.id )
@@ -148,20 +143,16 @@ class RGWCmdBase:
             opt_arg(self.cmd_suffix, '--zone-id', zone_env.zone.id )
 
     def run(self, cmd):
-        run_cmd = self.cmd_prefix + cmd + self.cmd_suffix
-        result = subprocess.run(run_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        stdout = result.stdout.decode('utf-8')
-        stderr = result.stderr.decode('utf-8')
+        args = cmd + self.cmd_suffix
+        cmd, returncode, stdout, stderr = self.mgr.tool_exec(self.prog, args)
 
         log.debug('cmd=%s' % str(cmd))
-
         log.debug('stdout=%s' % stdout)
 
-        if result.returncode != 0:
-            cmd_str = ' '.join(run_cmd)
-            log.error('ERROR: command exited with error status (%d): %s\nstdout=%s\nstderr=%s' % (result.returncode, cmd_str, stdout, stderr))
-            raise RGWAMCmdRunException(cmd_str, -result.returncode, stdout, stderr)
+        if returncode != 0:
+            cmd_str = ' '.join(cmd)
+            log.error('ERROR: command exited with error status (%d): %s\nstdout=%s\nstderr=%s' % (returncode, cmd_str, stdout, stderr))
+            raise RGWAMCmdRunException(cmd_str, -returncode, stdout, stderr)
 
         return (stdout, stderr)
 
