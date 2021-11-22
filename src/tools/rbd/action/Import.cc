@@ -4,6 +4,7 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "tools/rbd/ExportImport.h"
 #include "include/Context.h"
 #include "common/blkdev.h"
 #include "common/debug.h"
@@ -459,7 +460,7 @@ int do_import_diff(librados::Rados &rados, librbd::Image &image,
       return r;
     }
   }
-  r = do_import_diff_fd(rados, image, fd, no_progress, 1, sparse_size);
+  r = utils::do_import_diff_fd(rados, image, fd, no_progress, 1, sparse_size);
 
   if (fd != 0)
     close(fd);
@@ -573,127 +574,12 @@ private:
   uint64_t m_offset;
 };
 
-static int decode_and_set_image_option(int fd, uint64_t imageopt, librbd::ImageOptions& opts)
-{
-  int r;
-  char buf[sizeof(uint64_t)];
-
-  r = safe_read_exact(fd, buf, sizeof(buf));
-  if (r < 0) {
-    std::cerr << "rbd: failed to decode image option" << std::endl;
-    return r;
-  }
-
-  bufferlist bl;
-  bl.append(buf, sizeof(buf));
-  auto it = bl.cbegin();
-
-  uint64_t val;
-  decode(val, it);
-
-  if (opts.get(imageopt, &val) != 0) {
-    opts.set(imageopt, val);
-  }
-
-  return 0;
-}
-
-static int do_import_metadata(int import_format, librbd::Image& image,
-                              const std::map<std::string, std::string> &imagemetas)
-{
-  int r = 0;
-
-  //v1 format
-  if (import_format == 1) {
-    return 0;
-  }
-
-  for (std::map<std::string, std::string>::const_iterator it = imagemetas.begin();
-       it != imagemetas.end(); ++it) {
-    r = image.metadata_set(it->first, it->second);
-    if (r < 0)
-      return r;
-  }
-
-  return 0;
-}
-
-static int decode_imagemeta(int fd, uint64_t length, std::map<std::string, std::string>* imagemetas)
-{
-  int r;
-  string key;
-  string value;
-
-  r = utils::read_string(fd, length, &key);
-  if (r < 0) {
-    std::cerr << "rbd: failed to decode metadata key" << std::endl;
-    return r;
-  }
-
-  r = utils::read_string(fd, length, &value);
-  if (r < 0) {
-    std::cerr << "rbd: failed to decode metadata value" << std::endl;
-    return r;
-  }
-
-  (*imagemetas)[key] = value;
-  return 0;
-}
-
-static int do_import_header(int fd, int import_format, librbd::ImageOptions& opts,
-                            std::map<std::string, std::string>* imagemetas)
-{
-  // There is no header in v1 image.
-  if (import_format == 1) {
-    return 0;
-  }
-
-  int r;
-  r = validate_banner(fd, utils::RBD_IMAGE_BANNER_V2);
-  if (r < 0) {
-    return r;
-  }
-
-  // As V1 format for image is already deprecated, import image in V2 by default.
-  uint64_t image_format = 2;
-  if (opts.get(RBD_IMAGE_OPTION_FORMAT, &image_format) != 0) {
-    opts.set(RBD_IMAGE_OPTION_FORMAT, image_format);
-  }
-
-  while (r == 0) {
-    __u8 tag;
-    uint64_t length = 0;
-    r = read_tag(fd, RBD_EXPORT_IMAGE_END, image_format, &tag, &length);
-    if (r < 0 || tag == RBD_EXPORT_IMAGE_END) {
-      break;
-    }
-
-    if (tag == RBD_EXPORT_IMAGE_ORDER) {
-      r = decode_and_set_image_option(fd, RBD_IMAGE_OPTION_ORDER, opts);
-    } else if (tag == RBD_EXPORT_IMAGE_FEATURES) {
-      r = decode_and_set_image_option(fd, RBD_IMAGE_OPTION_FEATURES, opts);
-    } else if (tag == RBD_EXPORT_IMAGE_STRIPE_UNIT) {
-      r = decode_and_set_image_option(fd, RBD_IMAGE_OPTION_STRIPE_UNIT, opts);
-    } else if (tag == RBD_EXPORT_IMAGE_STRIPE_COUNT) {
-      r = decode_and_set_image_option(fd, RBD_IMAGE_OPTION_STRIPE_COUNT, opts);
-    } else if (tag == RBD_EXPORT_IMAGE_META) {
-      r = decode_imagemeta(fd, length, imagemetas);
-    } else {
-      std::cerr << "rbd: invalid tag in image properties zone: " << tag << "Skip it."
-                << std::endl;
-      r = skip_tag(fd, length);
-    }
-  }
-
-  return r;
-}
-
 static int do_import_v2(librados::Rados &rados, int fd, librbd::Image &image,
 			uint64_t size, size_t imgblklen,
 			utils::ProgressContext &pc, size_t sparse_size)
 {
   int r = 0;
-  r = validate_banner(fd, utils::RBD_IMAGE_DIFFS_BANNER_V2);
+  r = utils::validate_banner(fd, utils::RBD_IMAGE_DIFFS_BANNER_V2);
   if (r < 0) {
     return r;
   }
@@ -710,7 +596,7 @@ static int do_import_v2(librados::Rados &rados, int fd, librbd::Image &image,
   uint64_t diff_num;
   decode(diff_num, p);
   for (size_t i = 0; i < diff_num; i++) {
-    r = do_import_diff_fd(rados, image, fd, true, 2, sparse_size);
+    r = utils::do_import_diff_fd(rados, image, fd, true, 2, sparse_size);
     if (r < 0) {
       pc.fail();
       std::cerr << "rbd: import-diff failed: " << cpp_strerror(r) << std::endl;
@@ -882,7 +768,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 #endif
   }
 
-  r = do_import_header(fd, import_format, opts, &imagemetas);
+  r = utils::do_import_header(fd, import_format, opts, &imagemetas);
   if (r < 0) {
     std::cerr << "rbd: import header failed." << std::endl;
     goto done;
@@ -900,7 +786,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
     goto err;
   }
 
-  r = do_import_metadata(import_format, image, imagemetas);
+  r = utils::do_import_metadata(import_format, image, imagemetas);
   if (r < 0) {
     std::cerr << "rbd: failed to import image-meta" << std::endl;
     goto err;

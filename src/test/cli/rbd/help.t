@@ -45,9 +45,13 @@
       flatten                           Fill clone with parent data (make it
                                         independent).
       group create                      Create a group.
+      group export                      Export group to file.
+      group export-diff                 Export group incremental diff to file.
       group image add                   Add an image to a group.
       group image list (... ls)         List images in a group.
       group image remove (... rm)       Remove an image from a group.
+      group import                      Import group from file.
+      group import-diff                 Import group incremental diff from file.
       group list (group ls)             List rbd groups.
       group remove (group rm)           Delete a group.
       group rename                      Rename a group within pool.
@@ -880,6 +884,51 @@
     --namespace arg      namespace name
     --group arg          group name
   
+  rbd help group export
+  usage: rbd group export [--pool <pool>] [--namespace <namespace>] 
+                          [--group <group>] [--path <path>] [--no-progress] 
+                          <source-group-spec> <path-name> 
+  
+  Export group to file.
+  
+  Positional arguments
+    <source-group-spec>  source group specification
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
+    <path-name>          export file (or '-' for stdout)
+  
+  Optional arguments
+    -p [ --pool ] arg    source pool name
+    --namespace arg      source namespace name
+    --group arg          source group name
+    --path arg           export file (or '-' for stdout)
+    --no-progress        disable progress output
+  
+  rbd help group export-diff
+  usage: rbd group export-diff [--pool <pool>] [--namespace <namespace>] 
+                               [--group <group>] [--snap <snap>] 
+                               [--from-snap <from-snap>] [--whole-object] 
+                               [--path <path>] [--no-progress] 
+                               <source-group-or-snap-spec> <path-name> 
+  
+  Export group incremental diff to file.
+  
+  Positional arguments
+    <source-group-or-snap-spec>  source group or snapshot specification
+                                 (example:
+                                 [<pool-name>/[<namespace>/]]<group-name>[@<snap-n
+                                 ame>])
+    <path-name>                  export file (or '-' for stdout)
+  
+  Optional arguments
+    -p [ --pool ] arg            source pool name
+    --namespace arg              source namespace name
+    --group arg                  source group name
+    --snap arg                   source snapshot name
+    --from-snap arg              snapshot starting point
+    --whole-object               compare whole object
+    --path arg                   export file (or '-' for stdout)
+    --no-progress                disable progress output
+  
   rbd help group image add
   usage: rbd group image add [--group-pool <group-pool>] 
                              [--group-namespace <group-namespace>] 
@@ -950,6 +999,96 @@
     --image arg           image name
     -p [ --pool ] arg     pool name unless overridden
     --image-id arg        image id
+  
+  rbd help group import
+  usage: rbd group import [--path <path>] [--dest-pool <dest-pool>] 
+                          [--dest-namespace <dest-namespace>] 
+                          [--dest-group <dest-group>] 
+                          [--image-format <image-format>] [--new-format] 
+                          [--order <order>] [--object-size <object-size>] 
+                          [--image-feature <image-feature>] [--image-shared] 
+                          [--stripe-unit <stripe-unit>] 
+                          [--stripe-count <stripe-count>] 
+                          [--data-pool <data-pool>] 
+                          [--mirror-image-mode <mirror-image-mode>] 
+                          [--journal-splay-width <journal-splay-width>] 
+                          [--journal-object-size <journal-object-size>] 
+                          [--journal-pool <journal-pool>] 
+                          [--sparse-size <sparse-size>] [--no-progress] 
+                          <path-name> <dest-group-spec> 
+  
+  Import group from file.
+  
+  Positional arguments
+    <path-name>               import file (or '-' for stdin)
+    <dest-group-spec>         destination group specification
+                              (example: [<pool-name>/[<namespace>/]]<group-name>)
+  
+  Optional arguments
+    --path arg                import file (or '-' for stdin)
+    --dest-pool arg           destination pool name
+    --dest-namespace arg      destination namespace name
+    --dest-group arg          destination group name
+    --image-format arg        image format [default: 2]
+    --object-size arg         object size in B/K/M [4K <= object size <= 32M]
+    --image-feature arg       image features
+                              [layering(+), exclusive-lock(+*), object-map(+*),
+                              deep-flatten(+-), journaling(*)]
+    --image-shared            shared image
+    --stripe-unit arg         stripe unit in B/K/M
+    --stripe-count arg        stripe count
+    --data-pool arg           data pool
+    --mirror-image-mode arg   mirror image mode [journal or snapshot]
+    --journal-splay-width arg number of active journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
+    --journal-pool arg        pool for journal objects
+    --sparse-size arg         sparse size in B/K/M [default: 4K]
+    --no-progress             disable progress output
+  
+  rbd help group import-diff
+  usage: rbd group import-diff [--path <path>] [--dest-pool <dest-pool>] 
+                               [--dest-namespace <dest-namespace>] 
+                               [--dest-group <dest-group>] 
+                               [--image-format <image-format>] [--new-format] 
+                               [--order <order>] [--object-size <object-size>] 
+                               [--image-feature <image-feature>] 
+                               [--image-shared] [--stripe-unit <stripe-unit>] 
+                               [--stripe-count <stripe-count>] 
+                               [--data-pool <data-pool>] 
+                               [--mirror-image-mode <mirror-image-mode>] 
+                               [--journal-splay-width <journal-splay-width>] 
+                               [--journal-object-size <journal-object-size>] 
+                               [--journal-pool <journal-pool>] 
+                               [--sparse-size <sparse-size>] [--no-progress] 
+                               <path-name> <dest-group-spec> 
+  
+  Import group incremental diff from file.
+  
+  Positional arguments
+    <path-name>               import file (or '-' for stdin)
+    <dest-group-spec>         destination group specification
+                              (example: [<pool-name>/[<namespace>/]]<group-name>)
+  
+  Optional arguments
+    --path arg                import file (or '-' for stdin)
+    --dest-pool arg           destination pool name
+    --dest-namespace arg      destination namespace name
+    --dest-group arg          destination group name
+    --image-format arg        image format [default: 2]
+    --object-size arg         object size in B/K/M [4K <= object size <= 32M]
+    --image-feature arg       image features
+                              [layering(+), exclusive-lock(+*), object-map(+*),
+                              deep-flatten(+-), journaling(*)]
+    --image-shared            shared image
+    --stripe-unit arg         stripe unit in B/K/M
+    --stripe-count arg        stripe count
+    --data-pool arg           data pool
+    --mirror-image-mode arg   mirror image mode [journal or snapshot]
+    --journal-splay-width arg number of active journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
+    --journal-pool arg        pool for journal objects
+    --sparse-size arg         sparse size in B/K/M [default: 4K]
+    --no-progress             disable progress output
   
   rbd help group list
   usage: rbd group list [--pool <pool>] [--namespace <namespace>] 

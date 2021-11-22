@@ -11,6 +11,7 @@ set(rbd_srcs
   Schedule.cc
   Shell.cc
   Utils.cc
+  ExportImport.cc
   action/Bench.cc
   action/Children.cc
   action/Clone.cc
