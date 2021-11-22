@@ -904,6 +904,7 @@ public:
     append_section_from_set(all_sections, "user");
     append_section_from_set(all_sections, "bucket.instance");
     append_section_from_set(all_sections, "bucket");
+    append_section_from_set(all_sections, "roles");
 
     std::move(all_sections.begin(), all_sections.end(),
               std::back_inserter(sections));
