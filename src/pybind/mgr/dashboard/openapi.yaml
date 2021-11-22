@@ -6899,11 +6899,15 @@ paths:
                     options:
                       description: ''
                       properties:
+                        pg_num_max:
+                          description: ''
+                          type: integer
                         pg_num_min:
                           description: ''
                           type: integer
                       required:
                       - pg_num_min
+                      - pg_num_max
                       type: object
                     pg_autoscale_mode:
                       description: ''
