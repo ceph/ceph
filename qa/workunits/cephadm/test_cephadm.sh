@@ -147,7 +147,7 @@ function nfs_stop()
     # stop the running nfs server
     local units="nfs-server nfs-kernel-server"
     for unit in $units; do
-        if systemctl status $unit < /dev/null; then
+        if systemctl --no-pager status $unit > /dev/null; then
             $SUDO systemctl stop $unit
         fi
     done
