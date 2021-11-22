@@ -207,7 +207,7 @@ public:
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
       ret->set_paddr(offset);
-      ret->state = CachedExtent::extent_state_t::CLEAN;
+      ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
       add_extent(ret);
       return read_extent<T>(
 	std::move(ret), std::forward<Func>(extent_init_func));
@@ -218,7 +218,7 @@ public:
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
       ret->set_paddr(offset);
-      ret->state = CachedExtent::extent_state_t::CLEAN;
+      ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
       extents.replace(*ret, *cached);
 
       // replace placeholder in transactions
@@ -911,6 +911,7 @@ private:
     TCachedExtentRef<T>&& extent,
     Func &&func
   ) {
+    assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING);
     extent->set_io_wait();
     return reader.read(
       extent->get_paddr(),
@@ -918,6 +919,7 @@ private:
       extent->get_bptr()
     ).safe_then(
       [extent=std::move(extent), func=std::forward<Func>(func)]() mutable {
+        extent->state = CachedExtent::extent_state_t::CLEAN;
         /* TODO: crc should be checked against LBA manager */
         extent->last_committed_crc = extent->get_crc32c();
 
