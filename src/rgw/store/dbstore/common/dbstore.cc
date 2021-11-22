@@ -185,6 +185,8 @@ DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *p
     return Ob->ListBucketObjects;
   if (!Op.compare("PutObjectData"))
     return Ob->PutObjectData;
+  if (!Op.compare("UpdateObjectData"))
+    return Ob->UpdateObjectData;
   if (!Op.compare("GetObjectData"))
     return Ob->GetObjectData;
   if (!Op.compare("DeleteObjectData"))
@@ -790,13 +792,13 @@ int DB::raw_obj::InitializeParamsfromRawObj(const DoutPrefixProvider *dpp,
   params->op.obj.state.obj.key.instance = obj_instance;
   params->op.obj.state.obj.key.ns = obj_ns;
 
-  if (multipart_partnum != 0) {
+  if (multipart_part_str != "0.0") {
     params->op.obj.is_multipart = true;
   } else {
     params->op.obj.is_multipart = false;
   }
 
-  params->op.obj_data.multipart_part_num = multipart_partnum;
+  params->op.obj_data.multipart_part_str = multipart_part_str;
   params->op.obj_data.part_num = part_num;
 
   return ret;
@@ -889,6 +891,72 @@ int DB::Object::obj_omap_get_vals_by_keys(const DoutPrefixProvider *dpp,
   for (const auto& k :  keys) {
     (*vals)[k] = omap[k];
   }
+
+out:
+  return ret;
+}
+
+int DB::Object::add_mp_part(const DoutPrefixProvider *dpp,
+                            RGWUploadPartInfo info) {
+  int ret = 0;
+
+  DBOpParams params = {};
+
+  store->InitializeParams(dpp, "GetObject", &params);
+  InitializeParamsfromObject(dpp, &params);
+
+  ret = store->ProcessOp(dpp, "GetObject", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0) <<"In GetObject failed err:(" <<ret<<")" << dendl;
+    goto out;
+  }
+
+  /* pick one field check if object exists */
+  if (!params.op.obj.state.exists) {
+    ldpp_dout(dpp, 0)<<"Object(bucket:" << bucket_info.bucket.name << ", Object:"<< obj.key.name << ") doesn't exist" << dendl;
+    return -1;
+  }
+
+  params.op.obj.mp_parts.push_back(info);
+  params.op.query_str = "mp";
+  params.op.obj.state.mtime = real_clock::now();
+
+  ret = store->ProcessOp(dpp, "UpdateObject", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In UpdateObject failed err:(" <<ret<<") " << dendl;
+    goto out;
+  }
+
+out:
+  return ret;
+}
+
+int DB::Object::get_mp_parts_list(const DoutPrefixProvider *dpp,
+                                  std::list<RGWUploadPartInfo>& info)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  std::map<std::string, bufferlist> omap;
+
+  store->InitializeParams(dpp, "GetObject", &params);
+  InitializeParamsfromObject(dpp, &params);
+
+  ret = store->ProcessOp(dpp, "GetObject", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0) <<"In GetObject failed err:(" <<ret<<") " << dendl;
+    goto out;
+  }
+
+  /* pick one field check if object exists */
+  if (!params.op.obj.state.exists) {
+    ldpp_dout(dpp, 0)<<"Object(bucket:" << bucket_info.bucket.name << ", Object:"<< obj.key.name << ") doesn't exist" << dendl;
+    return -1;
+  }
+
+  info = params.op.obj.mp_parts;
 
 out:
   return ret;
@@ -1353,9 +1421,9 @@ int DB::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, const DoutP
 
   /* tail object */
   int part_num = (ofs / max_chunk_size);
-  /* XXX: Handle multipart_num */
+  /* XXX: Handle multipart_str */
   raw_obj read_obj(store, source->get_bucket_info().bucket.name, astate->obj.key.name, 
-      astate->obj.key.instance, astate->obj.key.ns, 0, part_num);
+      astate->obj.key.instance, astate->obj.key.ns, "0.0", part_num);
 
   read_len = len;
 
@@ -1469,9 +1537,9 @@ int DB::Object::iterate_obj(const DoutPrefixProvider *dpp,
     part_num = (ofs / max_chunk_size);
     uint64_t read_len = std::min(len, max_chunk_size);
 
-    /* XXX: Handle multipart_num */
+    /* XXX: Handle multipart_str */
     raw_obj read_obj(store, get_bucket_info().bucket.name, astate->obj.key.name, 
-        astate->obj.key.instance, astate->obj.key.ns, 0, part_num);
+        astate->obj.key.instance, astate->obj.key.ns, "0.0", part_num);
     bool reading_from_head = (ofs < head_data_size);
 
     r = cb(dpp, read_obj, ofs, read_len, reading_from_head, astate, arg);
@@ -1533,14 +1601,14 @@ int DB::Object::Write::write_data(const DoutPrefixProvider* dpp,
   /* XXX: Split into parts each of max_chunk_size. But later make tail
    * object chunk size limit to sqlite blob limit */
   int part_num = 0;
-  uint64_t max_chunk_size, max_head_size;
 
-  max_head_size = store->get_max_head_size();
-  max_chunk_size = store->get_max_chunk_size();
+  uint64_t max_chunk_size = store->get_max_chunk_size();
 
   /* tail_obj ofs should be greater than max_head_size */
-  if (ofs < max_head_size) {
-    return -1;
+  if (mp_part_str == "0.0")  { // ensure not multipart meta object
+    if (ofs < store->get_max_head_size()) {
+      return -1;
+    }
   }
   
   uint64_t end = data.length();
@@ -1552,9 +1620,9 @@ int DB::Object::Write::write_data(const DoutPrefixProvider* dpp,
     part_num = (ofs / max_chunk_size);
     uint64_t len = std::min(end, max_chunk_size);
 
-    /* XXX: Handle multipart_num */
+    /* XXX: Handle multipart_str */
     raw_obj write_obj(store, target->get_bucket_info().bucket.name, obj_state.obj.key.name, 
-        obj_state.obj.key.instance, obj_state.obj.key.ns, 0, part_num);
+        obj_state.obj.key.instance, obj_state.obj.key.ns, mp_part_str, part_num);
 
 
     ldpp_dout(dpp, 20) << "dbstore->write obj-ofs=" << ofs << " write_len=" << len << dendl;
@@ -1712,6 +1780,27 @@ int DB::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t size, 
   /* handle assume_noent */
   int r = _do_write_meta(dpp, size, accounted_size, attrs, assume_noent, meta.modify_tail);
   return r;
+}
+
+int DB::Object::Write::update_mp_parts(const DoutPrefixProvider *dpp, rgw_obj_key new_obj_key)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  DB *store = target->get_store();
+
+  store->InitializeParams(dpp, "UpdateObjectData", &params);
+  target->InitializeParamsfromObject(dpp, &params);
+
+  params.op.obj.new_obj_key = new_obj_key;
+
+  ret = store->ProcessOp(dpp, "UpdateObjectData", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In UpdateObjectData failed err:(" <<ret<<")" << dendl;
+    return ret;
+  }
+
+  return 0;
 }
 
 int DB::Object::Delete::delete_obj(const DoutPrefixProvider *dpp) {

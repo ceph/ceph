@@ -609,9 +609,14 @@ TEST_F(DBStoreTest, PutObject) {
   ret = db->ProcessOp(dpp, "PutObject", &params);
   ASSERT_EQ(ret, 0);
 
-  /* Insert another object */
+  /* Insert another objects */
   params.op.obj.state.obj.key.name = "object2";
   params.op.obj.state.obj.key.instance = "inst2";
+  ret = db->ProcessOp(dpp, "PutObject", &params);
+  ASSERT_EQ(ret, 0);
+
+  params.op.obj.state.obj.key.name = "object3";
+  params.op.obj.state.obj.key.instance = "inst3";
   ret = db->ProcessOp(dpp, "PutObject", &params);
   ASSERT_EQ(ret, 0);
 }
@@ -957,7 +962,7 @@ TEST_F(DBStoreTest, PutObjectData) {
 
   params.op.obj_data.part_num = 1;
   params.op.obj_data.offset = 10;
-  params.op.obj_data.multipart_part_num = 2;
+  params.op.obj_data.multipart_part_str = "2";
   bufferlist b1;
   encode("HELLO WORLD", b1);
   params.op.obj_data.data = b1;
@@ -966,15 +971,29 @@ TEST_F(DBStoreTest, PutObjectData) {
   ASSERT_EQ(ret, 0);
 }
 
+TEST_F(DBStoreTest, UpdateObjectData) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+
+  params.op.obj.new_obj_key.name = "object3";
+  params.op.obj.new_obj_key.instance = "inst3";
+  ret = db->ProcessOp(dpp, "UpdateObjectData", &params);
+  ASSERT_EQ(ret, 0);
+}
+
 TEST_F(DBStoreTest, GetObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
+  params.op.obj.state.obj.key.instance = "inst3";
+  params.op.obj.state.obj.key.name = "object3";
   ret = db->ProcessOp(dpp, "GetObjectData", &params);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(params.op.obj_data.part_num, 1);
   ASSERT_EQ(params.op.obj_data.offset, 10);
-  ASSERT_EQ(params.op.obj_data.multipart_part_num, 2);
+  ASSERT_EQ(params.op.obj_data.multipart_part_str, "2");
+  ASSERT_EQ(params.op.obj.state.obj.key.instance, "inst3");
+  ASSERT_EQ(params.op.obj.state.obj.key.name, "object3");
   string data;
   decode(data, params.op.obj_data.data);
   ASSERT_EQ(data, "HELLO WORLD");
