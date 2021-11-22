@@ -77,6 +77,57 @@ void decode_json_obj(rgw_zone_set& zs, JSONObj *obj)
   decode_json_obj(zs.entries, obj);
 }
 
+std::string_view to_string(RGWModifyOp op)
+{
+  switch (op) {
+    case CLS_RGW_OP_ADD: return "write";
+    case CLS_RGW_OP_DEL: return "del";
+    case CLS_RGW_OP_CANCEL: return "cancel";
+    case CLS_RGW_OP_LINK_OLH: return "link_olh";
+    case CLS_RGW_OP_LINK_OLH_DM: return "link_olh_del";
+    case CLS_RGW_OP_UNLINK_INSTANCE: return "unlink_instance";
+    case CLS_RGW_OP_SYNCSTOP: return "syncstop";
+    case CLS_RGW_OP_RESYNC: return "resync";
+    default:
+    case CLS_RGW_OP_UNKNOWN: return "unknown";
+  }
+}
+
+RGWModifyOp parse_modify_op(std::string_view name)
+{
+  if (name == "write") {
+    return CLS_RGW_OP_ADD;
+  } else if (name == "del") {
+    return CLS_RGW_OP_DEL;
+  } else if (name == "cancel") {
+    return CLS_RGW_OP_CANCEL;
+  } else if (name == "link_olh") {
+    return CLS_RGW_OP_LINK_OLH;
+  } else if (name == "link_olh_del") {
+    return CLS_RGW_OP_LINK_OLH_DM;
+  } else if (name == "unlink_instance") {
+    return CLS_RGW_OP_UNLINK_INSTANCE;
+  } else if (name == "syncstop") {
+    return CLS_RGW_OP_SYNCSTOP;
+  } else if (name == "resync") {
+    return CLS_RGW_OP_RESYNC;
+  } else {
+    return CLS_RGW_OP_UNKNOWN;
+  }
+}
+
+std::string_view to_string(RGWObjCategory c)
+{
+  switch (c) {
+    case RGWObjCategory::None: return "rgw.none";
+    case RGWObjCategory::Main: return "rgw.main";
+    case RGWObjCategory::Shadow: return "rgw.shadow";
+    case RGWObjCategory::MultiMeta: return "rgw.multimeta";
+    case RGWObjCategory::CloudTiered: return "rgw.cloudtiered";
+    default: return "unknown";
+  }
+}
+
 void rgw_bucket_pending_info::generate_test_instances(list<rgw_bucket_pending_info*>& o)
 {
   rgw_bucket_pending_info *i = new rgw_bucket_pending_info;
@@ -436,27 +487,7 @@ void rgw_bi_log_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("op_tag", tag, obj);
   string op_str;
   JSONDecoder::decode_json("op", op_str, obj);
-  if (op_str == "write") {
-    op = CLS_RGW_OP_ADD;
-  } else if (op_str == "del") {
-    op = CLS_RGW_OP_DEL;
-  } else if (op_str == "cancel") {
-    op = CLS_RGW_OP_CANCEL;
-  } else if (op_str == "unknown") {
-    op = CLS_RGW_OP_UNKNOWN;
-  } else if (op_str == "link_olh") {
-    op = CLS_RGW_OP_LINK_OLH;
-  } else if (op_str == "link_olh_del") {
-    op = CLS_RGW_OP_LINK_OLH_DM;
-  } else if (op_str == "unlink_instance") {
-    op = CLS_RGW_OP_UNLINK_INSTANCE;
-  } else if (op_str == "syncstop") {
-    op = CLS_RGW_OP_SYNCSTOP;
-  } else if (op_str == "resync") {
-    op = CLS_RGW_OP_RESYNC;
-  } else {
-    op = CLS_RGW_OP_UNKNOWN;
-  }
+  op = parse_modify_op(op_str);
   JSONDecoder::decode_json("object", object, obj);
   JSONDecoder::decode_json("instance", instance, obj);
   string state_str;
@@ -485,39 +516,7 @@ void rgw_bi_log_entry::dump(Formatter *f) const
 {
   f->dump_string("op_id", id);
   f->dump_string("op_tag", tag);
-  switch (op) {
-    case CLS_RGW_OP_ADD:
-      f->dump_string("op", "write");
-      break;
-    case CLS_RGW_OP_DEL:
-      f->dump_string("op", "del");
-      break;
-    case CLS_RGW_OP_CANCEL:
-      f->dump_string("op", "cancel");
-      break;
-    case CLS_RGW_OP_UNKNOWN:
-      f->dump_string("op", "unknown");
-      break;
-    case CLS_RGW_OP_LINK_OLH:
-      f->dump_string("op", "link_olh");
-      break;
-    case CLS_RGW_OP_LINK_OLH_DM:
-      f->dump_string("op", "link_olh_del");
-      break;
-    case CLS_RGW_OP_UNLINK_INSTANCE:
-      f->dump_string("op", "unlink_instance");
-      break;
-    case CLS_RGW_OP_SYNCSTOP:
-      f->dump_string("op", "syncstop");
-      break;
-    case CLS_RGW_OP_RESYNC:
-      f->dump_string("op", "resync");
-      break;
-    default:
-      f->dump_string("op", "invalid");
-      break;
-  }
-
+  f->dump_string("op", to_string(op));
   f->dump_string("object", object);
   f->dump_string("instance", instance);
 
