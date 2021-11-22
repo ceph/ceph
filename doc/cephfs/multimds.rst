@@ -100,6 +100,8 @@ When a daemon finishes stopping, it will respawn itself and go back to being a
 standby.
 
 
+.. _cephfs-pinning:
+
 Manually pinning directory trees to a particular rank
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -135,6 +137,8 @@ directory's export pin. For example:
     setfattr -n ceph.dir.pin -v 0 a/b
     # a/b is now pinned to rank 0 and a/ and the rest of its children are still pinned to rank 1
 
+
+.. _cephfs-ephemeral-pinning:
 
 Setting subtree partitioning policies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
