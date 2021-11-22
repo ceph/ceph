@@ -7337,7 +7337,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   bool bulk = false;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
-			 0, 0, 0, 0, 0, 0.0,
+			 0, 0, 0, 0, 0, 0, 0.0,
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 &ss);
@@ -7908,6 +7908,8 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
  * @param crush_rule_name The crush rule to use, if crush_rulset <0
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
+ * @param pg_num_min min pg_num
+ * @param pg_num_max max pg_num
  * @param repl_size Replication factor, or 0 for default
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
  * @param pool_type TYPE_ERASURE, or TYPE_REP
@@ -7922,6 +7924,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 const string &crush_rule_name,
                                  unsigned pg_num, unsigned pgp_num,
 				 unsigned pg_num_min,
+				 unsigned pg_num_max,
                                  const uint64_t repl_size,
 				 const uint64_t target_size_bytes,
 				 const float target_size_ratio,
@@ -8099,6 +8102,10 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (osdmap.require_osd_release >= ceph_release_t::nautilus &&
       pg_num_min) {
     pi->opts.set(pool_opts_t::PG_NUM_MIN, static_cast<int64_t>(pg_num_min));
+  }
+  if (osdmap.require_osd_release >= ceph_release_t::pacific &&
+      pg_num_max) {
+    pi->opts.set(pool_opts_t::PG_NUM_MAX, static_cast<int64_t>(pg_num_max));
   }
   if (auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
 	pg_autoscale_mode); m != pg_pool_t::pg_autoscale_mode_t::UNKNOWN) {
@@ -12814,12 +12821,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool create") {
-    int64_t pg_num, pg_num_min;
-    int64_t pgp_num;
+    int64_t pg_num, pgp_num, pg_num_min, pg_num_max;
     cmd_getval(cmdmap, "pg_num", pg_num, int64_t(0));
-    cmd_getval(cmdmap, "pgp_num", pgp_num, pg_num);
     cmd_getval(cmdmap, "pg_num_min", pg_num_min, int64_t(0));
-
+    cmd_getval(cmdmap, "pg_num_max", pg_num_max, int64_t(0));
+    cmd_getval(cmdmap, "pgp_num", pgp_num, int64_t(pg_num));
     string pool_type_str;
     cmd_getval(cmdmap, "pool_type", pool_type_str);
     if (pool_type_str.empty())
@@ -12987,7 +12993,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
-			   pg_num, pgp_num, pg_num_min,
+			   pg_num, pgp_num, pg_num_min, pg_num_max,
                            repl_size, target_size_bytes, target_size_ratio,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
