@@ -101,6 +101,9 @@ int execute_move(const po::variables_map &vm,
               << std::endl;
   }
 
+  if (expires_at != "now") {
+    std::cout << "rbd: image " << image_name << " will expire at " << exp_time << std::endl;
+  }
   return r;
 }
 
