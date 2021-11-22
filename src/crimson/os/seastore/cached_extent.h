@@ -170,6 +170,7 @@ public:
 	<< ", version=" << version
 	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
 	<< ", paddr=" << get_paddr()
+	<< ", length=" << get_length()
 	<< ", state=" << state
 	<< ", last_committed_crc=" << last_committed_crc
 	<< ", refcount=" << use_count();
