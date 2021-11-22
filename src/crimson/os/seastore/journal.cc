@@ -108,7 +108,8 @@ Journal::prep_replay_segments(
       segments.begin(),
       segments.end(),
       [&replay_from](const auto &seg) -> bool {
-	return seg.first == replay_from.segment;
+	auto& seg_addr = replay_from.as_seg_paddr();
+	return seg.first == seg_addr.get_segment_id();
       });
     if (from->second.journal_segment_seq != journal_tail.segment_seq) {
       logger().error(
@@ -118,9 +119,9 @@ Journal::prep_replay_segments(
       assert(0 == "invalid");
     }
   } else {
-    replay_from = paddr_t{
+    replay_from = paddr_t::make_seg_paddr(
       from->first,
-      (segment_off_t)journal_segment_manager.get_block_size()};
+      (segment_off_t)journal_segment_manager.get_block_size());
   }
   auto ret = replay_segments_t(segments.end() - from);
   std::transform(
@@ -128,9 +129,9 @@ Journal::prep_replay_segments(
     [this](const auto &p) {
       auto ret = journal_seq_t{
 	p.second.journal_segment_seq,
-	paddr_t{
+	paddr_t::make_seg_paddr(
 	  p.first,
-	  (segment_off_t)journal_segment_manager.get_block_size()}};
+	  (segment_off_t)journal_segment_manager.get_block_size())};
       logger().debug(
 	"Journal::prep_replay_segments: replaying from  {}",
 	ret);
@@ -202,8 +203,9 @@ Journal::replay_segment(
 		 * Note, this comparison exploits the fact that
 		 * SEGMENT_SEQ_NULL is a large number.
 		 */
+		auto& seg_addr = delta.paddr.as_seg_paddr();
 		if (delta.paddr != P_ADDR_NULL &&
-		    (segment_provider->get_seq(delta.paddr.segment) >
+		    (segment_provider->get_seq(seg_addr.get_segment_id()) >
 		     seq.segment_seq)) {
 		  return replay_ertr::now();
 		} else {
@@ -359,7 +361,7 @@ Journal::JournalSegmentManager::write(ceph::bufferlist to_write)
   logger().debug(
     "JournalSegmentManager::write: write_start {} => {}, length={}",
     write_start_seq,
-    write_start_seq.offset.offset + write_length,
+    write_start_seq.offset.as_seg_paddr().get_segment_off() + write_length,
     write_length);
   assert(write_length > 0);
   assert((write_length % segment_manager.get_block_size()) == 0);

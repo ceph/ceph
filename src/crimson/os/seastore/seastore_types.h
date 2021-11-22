@@ -39,14 +39,29 @@ struct seastore_meta_t {
 // identifies a specific physical device within seastore
 using device_id_t = uint8_t;
 
-// order of device_id_t
-constexpr uint16_t DEVICE_ID_LEN_BITS = 4;
+constexpr uint16_t SEGMENT_ID_LEN_BITS = 24;
 
-// maximum number of devices supported
-constexpr uint16_t DEVICE_ID_MAX = (1 << DEVICE_ID_LEN_BITS);
+// order of device_id_t
+constexpr uint16_t DEVICE_ID_LEN_BITS = 8;
+
+// 1 bit to identify address type
 
 // segment ids without a device id encapsulated
 using device_segment_id_t = uint32_t;
+
+constexpr device_id_t DEVICE_ID_MAX = 
+  (std::numeric_limits<device_id_t>::max() >>
+   (std::numeric_limits<device_id_t>::digits - DEVICE_ID_LEN_BITS + 1));
+constexpr device_id_t DEVICE_ID_RECORD_RELATIVE = DEVICE_ID_MAX - 1;
+constexpr device_id_t DEVICE_ID_BLOCK_RELATIVE = DEVICE_ID_MAX - 2;
+constexpr device_id_t DEVICE_ID_DELAYED = DEVICE_ID_MAX - 3;
+constexpr device_id_t DEVICE_ID_NULL = DEVICE_ID_MAX - 4;
+constexpr device_id_t DEVICE_ID_FAKE = DEVICE_ID_MAX - 5;
+constexpr device_id_t DEVICE_ID_ZERO = DEVICE_ID_MAX - 6;
+constexpr device_id_t DEVICE_ID_MAX_VALID = DEVICE_ID_MAX - 7;
+
+constexpr device_segment_id_t DEVICE_SEGMENT_ID_MAX =
+  (1 << SEGMENT_ID_LEN_BITS) - 1;
 
 // Identifies segment location on disk, see SegmentManager,
 struct segment_id_t {
@@ -62,47 +77,16 @@ private:
     0xF << (std::numeric_limits<internal_segment_id_t>::digits - DEVICE_ID_LEN_BITS);
   // default internal segment id
   static constexpr internal_segment_id_t DEFAULT_INTERNAL_SEG_ID =
-    std::numeric_limits<internal_segment_id_t>::max() - 1;
+    (std::numeric_limits<internal_segment_id_t>::max() >> 1) - 1;
 
   internal_segment_id_t segment = DEFAULT_INTERNAL_SEG_ID;
 
   constexpr segment_id_t(uint32_t encoded) : segment(encoded) {}
+
 public:
-  constexpr static segment_id_t make_max() {
-    return std::numeric_limits<internal_segment_id_t>::max();
-  }
-  constexpr static segment_id_t make_null() {
-    return std::numeric_limits<internal_segment_id_t>::max() - 1;
-  }
-  /* Used to denote relative paddr_t */
-  constexpr static segment_id_t make_record_relative() {
-    return std::numeric_limits<internal_segment_id_t>::max() - 2;
-  }
-  constexpr static segment_id_t make_block_relative() {
-    return std::numeric_limits<internal_segment_id_t>::max() - 3;
-  }
-  // for tests which generate fake paddrs
-  constexpr static segment_id_t make_fake() {
-    return std::numeric_limits<internal_segment_id_t>::max() - 4;
-  }
-
-  /* Used to denote references to notional zero filled segment, mainly
-   * in denoting reserved laddr ranges for unallocated object data.
-   */
-  constexpr static segment_id_t make_zero() {
-    return std::numeric_limits<internal_segment_id_t>::max() - 5;
-  }
-  constexpr static segment_id_t make_delayed() {
-    return std::numeric_limits<internal_segment_id_t>::max() - 6;
-  }
-
   segment_id_t() = default;
-  segment_id_t(device_id_t id, device_segment_id_t segment)
-    : segment(make_internal(segment, id)) {
-    // only lower 4 bits are effective, and we have to reserve 0x0F for
-    // special XXX_SEG_IDs
-    assert(id < DEVICE_ID_MAX);
-  }
+  constexpr segment_id_t(device_id_t id, device_segment_id_t segment)
+    : segment(make_internal(segment, id)) {}
 
   [[gnu::always_inline]]
   device_id_t device_id() const {
@@ -110,7 +94,7 @@ public:
   }
 
   [[gnu::always_inline]]
-  device_segment_id_t device_segment_id() const {
+  constexpr device_segment_id_t device_segment_id() const {
     return internal_to_segment(segment);
   }
 
@@ -145,12 +129,12 @@ private:
     return (static_cast<device_id_t>(id) & SM_ID_MASK) >> segment_bits;
   }
 
-  static inline device_segment_id_t internal_to_segment(
+  constexpr static inline device_segment_id_t internal_to_segment(
     internal_segment_id_t id) {
     return id & (~SM_ID_MASK);
   }
 
-  static inline internal_segment_id_t make_internal(
+  constexpr static inline internal_segment_id_t make_internal(
     device_segment_id_t id,
     device_id_t sm_id) {
     return static_cast<internal_segment_id_t>(id) |
@@ -158,6 +142,9 @@ private:
   }
 
   friend struct segment_id_le_t;
+  friend struct seg_paddr_t;
+  friend struct paddr_t;
+  friend struct paddr_le_t;
 };
 
 // ondisk type of segment_id_t
@@ -172,17 +159,13 @@ struct __attribute((packed)) segment_id_le_t {
   }
 };
 
-constexpr segment_id_t MAX_SEG_ID = segment_id_t::make_max();
-constexpr segment_id_t NULL_SEG_ID = segment_id_t::make_null();
-constexpr segment_id_t RECORD_REL_SEG_ID = segment_id_t::make_record_relative();
-constexpr segment_id_t BLOCK_REL_SEG_ID = segment_id_t::make_block_relative();
+constexpr segment_id_t MAX_SEG_ID = segment_id_t(
+  DEVICE_ID_MAX,
+  DEVICE_SEGMENT_ID_MAX
+);
 // for tests which generate fake paddrs
-constexpr segment_id_t FAKE_SEG_ID = segment_id_t::make_fake();
-/* Used to denote references to notional zero filled segment, mainly
- * in denoting reserved laddr ranges for unallocated object data.
- */
-constexpr segment_id_t ZERO_SEG_ID = segment_id_t::make_zero();
-constexpr segment_id_t DELAYED_TEMP_SEG_ID = segment_id_t::make_delayed();
+constexpr segment_id_t NULL_SEG_ID = segment_id_t(DEVICE_ID_NULL, 0);
+constexpr segment_id_t FAKE_SEG_ID = segment_id_t(DEVICE_ID_FAKE, 0);
 
 std::ostream &operator<<(std::ostream &out, const segment_id_t&);
 
@@ -223,17 +206,17 @@ public:
   segment_map_t() {
     // initializes top vector with 0 length vectors to indicate that they
     // are not yet present
-    device_to_segments.resize(DEVICE_ID_MAX);
+    device_to_segments.resize(DEVICE_ID_MAX_VALID);
   }
   void add_device(device_id_t device, size_t segments, const T& init) {
-    assert(device < DEVICE_ID_MAX);
+    assert(device <= DEVICE_ID_MAX_VALID);
     assert(device_to_segments[device].size() == 0);
     device_to_segments[device].resize(segments, init);
     total_segments += segments;
   }
   void clear() {
     device_to_segments.clear();
-    device_to_segments.resize(DEVICE_ID_MAX);
+    device_to_segments.resize(DEVICE_ID_MAX_VALID);
     total_segments = 0;
   }
 
@@ -282,7 +265,7 @@ private:
       const segment_map_t &,
       segment_map_t &> parent;
 
-    /// points at current device, or DEVICE_ID_MAX if is_end()
+    /// points at current device, or DEVICE_ID_MAX_VALID if is_end()
     device_id_t device_id;
 
     /// segment at which we are pointing, 0 if is_end()
@@ -296,7 +279,7 @@ private:
 	>> current;
 
     bool is_end() const {
-      return device_id == DEVICE_ID_MAX;
+      return device_id == DEVICE_ID_MAX_VALID;
     }
 
     void find_valid() {
@@ -304,7 +287,7 @@ private:
       auto &device_vec = parent.device_to_segments[device_id];
       if (device_vec.size() == 0 ||
 	  device_segment_id == device_vec.size()) {
-	while (++device_id < DEVICE_ID_MAX &&
+	while (++device_id < DEVICE_ID_MAX_VALID &&
 	       parent.device_to_segments[device_id].size() == 0);
 	device_segment_id = 0;
       }
@@ -330,7 +313,7 @@ private:
       decltype(parent) &parent,
       device_id_t device_id,
       device_segment_id_t device_segment_id) {
-      if (device_id == DEVICE_ID_MAX) {
+      if (device_id == DEVICE_ID_MAX_VALID) {
 	return end_iterator(parent);
       } else {
 	auto ret = iterator{parent, device_id, device_segment_id};
@@ -341,7 +324,7 @@ private:
 
     static iterator end_iterator(
       decltype(parent) &parent) {
-      return iterator{parent, DEVICE_ID_MAX, 0};
+      return iterator{parent, DEVICE_ID_MAX_VALID, 0};
     }
 
     iterator<is_const>& operator++() {
@@ -411,38 +394,79 @@ private:
  * Fresh extents during a transaction are refered to by
  * record_relative paddrs.
  */
+constexpr uint16_t DEV_ADDR_LEN_BITS = 64 - DEVICE_ID_LEN_BITS;
+static constexpr uint16_t SEG_OFF_LEN_BITS = 32;
+enum class addr_types_t : uint8_t {
+  SEGMENT = 0,
+  RANDOM_BLOCK = 1
+};
+struct seg_paddr_t;
 struct paddr_t {
-  segment_id_t segment = NULL_SEG_ID;
-  segment_off_t offset = NULL_SEG_OFF;
+protected:
+  using common_addr_t = uint64_t;
+  common_addr_t dev_addr;
+private:
+  constexpr paddr_t(segment_id_t seg, segment_off_t offset)
+    : dev_addr((static_cast<common_addr_t>(seg.segment)
+	<< SEG_OFF_LEN_BITS) | static_cast<uint32_t>(offset)) {}
+  constexpr paddr_t(common_addr_t val) : dev_addr(val) {}
+public:
+  static constexpr paddr_t make_seg_paddr(
+    segment_id_t seg, segment_off_t offset) {
+    return paddr_t(seg, offset);
+  }
+  static constexpr paddr_t make_seg_paddr(
+    device_id_t device,
+    device_segment_id_t seg,
+    segment_off_t offset) {
+    return paddr_t(segment_id_t(device, seg), offset);
+  }
+  constexpr paddr_t() : paddr_t(NULL_SEG_ID, 0) {}
 
-  paddr_t() = default;
-  paddr_t(device_id_t id, device_segment_id_t sgt, segment_off_t offset)
-    : segment(segment_id_t(id, sgt)), offset(offset) {}
-
-  constexpr paddr_t(segment_id_t segment, segment_off_t offset)
-    : segment(segment), offset(offset) {}
-
-  bool is_relative() const {
-    return segment == RECORD_REL_SEG_ID ||
-      segment == BLOCK_REL_SEG_ID;
+  // use 1bit in device_id_t for address type
+  void set_device_id(device_id_t id, addr_types_t type = addr_types_t::SEGMENT) {
+    dev_addr &= static_cast<common_addr_t>(
+      std::numeric_limits<device_segment_id_t>::max());
+    dev_addr |= static_cast<common_addr_t>(id & 0x8) << DEV_ADDR_LEN_BITS;
+    dev_addr |= static_cast<common_addr_t>(type)
+      << (std::numeric_limits<common_addr_t>::digits - 1);
   }
 
-  bool is_record_relative() const {
-    return segment == RECORD_REL_SEG_ID;
+  device_id_t get_device_id() const {
+    return static_cast<device_id_t>(dev_addr >> DEV_ADDR_LEN_BITS);
   }
+  addr_types_t get_addr_type() const {
+    return (addr_types_t)((dev_addr
+	    >> (std::numeric_limits<common_addr_t>::digits - 1)) & 1);
+  }
+
+  paddr_t add_offset(int32_t o) const;
+  paddr_t add_relative(paddr_t o) const;
+  paddr_t add_block_relative(paddr_t o) const;
+  paddr_t add_record_relative(paddr_t o) const;
+  paddr_t maybe_relative_to(paddr_t base) const;
+
+  seg_paddr_t& as_seg_paddr();
+  const seg_paddr_t& as_seg_paddr() const;
+
+  paddr_t operator-(paddr_t rhs) const;
 
   bool is_block_relative() const {
-    return segment == BLOCK_REL_SEG_ID;
+    return get_device_id() == DEVICE_ID_BLOCK_RELATIVE;
   }
-
-  /// Denotes special zero segment addr
-  bool is_zero() const {
-    return segment == ZERO_SEG_ID;
+  bool is_record_relative() const {
+    return get_device_id() == DEVICE_ID_RECORD_RELATIVE;
   }
-
-  /// Denotes special null segment addr
+  bool is_relative() const {
+    return is_block_relative() || is_record_relative();
+  }
+  /// Denotes special null addr
   bool is_null() const {
-    return segment == NULL_SEG_ID;
+    return get_device_id() == DEVICE_ID_NULL;
+  }
+  /// Denotes special zero addr
+  bool is_zero() const {
+    return get_device_id() == DEVICE_ID_ZERO;
   }
 
   /**
@@ -456,13 +480,60 @@ struct paddr_t {
     return !is_zero() && !is_null();
   }
 
+  DENC(paddr_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.dev_addr, p);
+    DENC_FINISH(p);
+  }
+  friend struct paddr_le_t;
+  friend struct seg_paddr_t;
+
+  friend bool operator==(const paddr_t &, const paddr_t&);
+  friend bool operator!=(const paddr_t &, const paddr_t&);
+  friend bool operator<=(const paddr_t &, const paddr_t&);
+  friend bool operator<(const paddr_t &, const paddr_t&);
+  friend bool operator>=(const paddr_t &, const paddr_t&);
+  friend bool operator>(const paddr_t &, const paddr_t&);
+};
+WRITE_EQ_OPERATORS_1(paddr_t, dev_addr);
+WRITE_CMP_OPERATORS_1(paddr_t, dev_addr);
+
+struct seg_paddr_t : public paddr_t {
+  static constexpr uint64_t SEG_OFF_MASK = std::numeric_limits<uint32_t>::max();
+  // mask for segment manager id
+  static constexpr uint64_t SEG_ID_MASK =
+    static_cast<common_addr_t>(0xFFFFFFFF) << SEG_OFF_LEN_BITS;
+
+  seg_paddr_t(const seg_paddr_t&) = delete;
+  seg_paddr_t(seg_paddr_t&) = delete;
+  seg_paddr_t& operator=(const seg_paddr_t&) = delete;
+  seg_paddr_t& operator=(seg_paddr_t&) = delete;
+  segment_id_t get_segment_id() const {
+    return segment_id_t((dev_addr & SEG_ID_MASK) >> SEG_OFF_LEN_BITS);
+  }
+  segment_off_t get_segment_off() const {
+    return segment_off_t(dev_addr & SEG_OFF_MASK);
+  }
+  void set_segment_id(const segment_id_t id) {
+    dev_addr &= static_cast<common_addr_t>(
+      std::numeric_limits<device_segment_id_t>::max());
+    dev_addr |= static_cast<common_addr_t>(id.segment) << SEG_OFF_LEN_BITS;
+  }
+  void set_segment_off(const segment_off_t off) {
+    dev_addr &= static_cast<common_addr_t>(
+      std::numeric_limits<device_segment_id_t>::max()) << SEG_OFF_LEN_BITS;
+    dev_addr |= (uint32_t)off;
+  }
+
   paddr_t add_offset(segment_off_t o) const {
-    return paddr_t{segment, offset + o};
+    return paddr_t::make_seg_paddr(get_segment_id(), get_segment_off() + o);
   }
 
   paddr_t add_relative(paddr_t o) const {
     assert(o.is_relative());
-    return paddr_t{segment, offset + o.offset};
+    seg_paddr_t& s = o.as_seg_paddr();
+    return paddr_t::make_seg_paddr(get_segment_id(),
+	    get_segment_off() + s.get_segment_off());
   }
 
   paddr_t add_block_relative(paddr_t o) const {
@@ -484,12 +555,13 @@ struct paddr_t {
    * block_relative address.
    */
   paddr_t operator-(paddr_t rhs) const {
+    seg_paddr_t& r = rhs.as_seg_paddr();
     assert(rhs.is_relative() && is_relative());
-    assert(rhs.segment == segment);
-    return paddr_t{
-      BLOCK_REL_SEG_ID,
-      offset - rhs.offset
-    };
+    assert(r.get_segment_id() == get_segment_id());
+    return paddr_t::make_seg_paddr(
+      segment_id_t{DEVICE_ID_BLOCK_RELATIVE, 0},
+      get_segment_off() - r.get_segment_off()
+      );
   }
 
   /**
@@ -502,54 +574,49 @@ struct paddr_t {
    */
   paddr_t maybe_relative_to(paddr_t base) const {
     assert(!base.is_block_relative());
+    seg_paddr_t& s = base.as_seg_paddr();
     if (is_block_relative())
-      return base.add_block_relative(*this);
+      return s.add_block_relative(*this);
     else
       return *this;
   }
-
-  DENC(paddr_t, v, p) {
-    DENC_START(1, 1, p);
-    denc(v.segment, p);
-    denc(v.offset, p);
-    DENC_FINISH(p);
-  }
 };
-WRITE_CMP_OPERATORS_2(paddr_t, segment, offset)
-WRITE_EQ_OPERATORS_2(paddr_t, segment, offset)
 constexpr paddr_t P_ADDR_NULL = paddr_t{};
-constexpr paddr_t P_ADDR_MIN = paddr_t{ZERO_SEG_ID, 0};
-constexpr paddr_t P_ADDR_MAX = paddr_t{
-  MAX_SEG_ID,
-  MAX_SEG_OFF
-};
+constexpr paddr_t P_ADDR_MIN = paddr_t::make_seg_paddr(segment_id_t(0, 0), 0);
+constexpr paddr_t P_ADDR_MAX = paddr_t::make_seg_paddr(
+  segment_id_t(DEVICE_ID_MAX, DEVICE_SEGMENT_ID_MAX),
+  std::numeric_limits<segment_off_t>::max());
+constexpr paddr_t P_ADDR_ZERO = paddr_t::make_seg_paddr(
+  DEVICE_ID_ZERO, 0, 0);
+
 constexpr paddr_t make_record_relative_paddr(segment_off_t off) {
-  return paddr_t{RECORD_REL_SEG_ID, off};
+  return paddr_t::make_seg_paddr(
+    segment_id_t{DEVICE_ID_RECORD_RELATIVE, 0},
+    off);
 }
 constexpr paddr_t make_block_relative_paddr(segment_off_t off) {
-  return paddr_t{BLOCK_REL_SEG_ID, off};
+  return paddr_t::make_seg_paddr(
+    segment_id_t{DEVICE_ID_BLOCK_RELATIVE, 0},
+    off);
 }
 constexpr paddr_t make_fake_paddr(segment_off_t off) {
-  return paddr_t{FAKE_SEG_ID, off};
-}
-constexpr paddr_t zero_paddr() {
-  return paddr_t{ZERO_SEG_ID, 0};
+  return paddr_t::make_seg_paddr(FAKE_SEG_ID, off);
 }
 constexpr paddr_t delayed_temp_paddr(segment_off_t off) {
-  return paddr_t{DELAYED_TEMP_SEG_ID, off};
+  return paddr_t::make_seg_paddr(
+    segment_id_t{DEVICE_ID_DELAYED, 0},
+    off);
 }
 
 struct __attribute((packed)) paddr_le_t {
-  segment_id_le_t segment = segment_id_le_t(NULL_SEG_ID);
-  ceph_les32 offset = ceph_les32(NULL_SEG_OFF);
+  ceph_le64 dev_addr =
+    ceph_le64(P_ADDR_NULL.dev_addr);
 
   paddr_le_t() = default;
-  paddr_le_t(segment_id_t segment, segment_off_t offset)
-    : segment(segment), offset(ceph_les32(offset)) {}
-  paddr_le_t(const paddr_t &addr) : paddr_le_t(addr.segment, addr.offset) {}
+  paddr_le_t(const paddr_t &addr) : dev_addr(ceph_le64(addr.dev_addr)) {}
 
   operator paddr_t() const {
-    return paddr_t{segment, offset};
+    return paddr_t{dev_addr};
   }
 };
 
@@ -600,7 +667,7 @@ WRITE_CMP_OPERATORS_2(journal_seq_t, segment_seq, offset)
 WRITE_EQ_OPERATORS_2(journal_seq_t, segment_seq, offset)
 constexpr journal_seq_t JOURNAL_SEQ_MIN{
   0,
-  paddr_t{ZERO_SEG_ID, 0}
+  paddr_t::make_seg_paddr(NULL_SEG_ID, 0)
 };
 constexpr journal_seq_t JOURNAL_SEQ_MAX{
   MAX_SEG_SEQ,
@@ -1219,21 +1286,77 @@ struct scan_valid_records_cursor {
   }
 
   segment_id_t get_segment_id() const {
-    return seq.offset.segment;
+    return seq.offset.as_seg_paddr().get_segment_id();
   }
 
   segment_off_t get_segment_offset() const {
-    return seq.offset.offset;
+    return seq.offset.as_seg_paddr().get_segment_off();
   }
 
   void increment(segment_off_t off) {
-    seq.offset.offset += off;
+    auto& seg_addr = seq.offset.as_seg_paddr();
+    seg_addr.set_segment_off(
+      seg_addr.get_segment_off() + off);
   }
 
   scan_valid_records_cursor(
     journal_seq_t seq)
     : seq(seq) {}
 };
+
+inline const seg_paddr_t& paddr_t::as_seg_paddr() const {
+  assert(get_addr_type() == addr_types_t::SEGMENT);
+  return *static_cast<const seg_paddr_t*>(this);
+}
+
+inline seg_paddr_t& paddr_t::as_seg_paddr() {
+  assert(get_addr_type() == addr_types_t::SEGMENT);
+  return *static_cast<seg_paddr_t*>(this);
+}
+
+inline paddr_t paddr_t::operator-(paddr_t rhs) const {
+  if (get_addr_type() == addr_types_t::SEGMENT) {
+    auto& seg_addr = as_seg_paddr();
+    return seg_addr - rhs;
+  }
+  ceph_assert(0 == "not supported type");
+  return paddr_t{};
+}
+
+#define PADDR_OPERATION(a_type, base, func)        \
+  if (get_addr_type() == a_type) {                 \
+    return static_cast<const base*>(this)->func;   \
+  }
+
+inline paddr_t paddr_t::add_offset(int32_t o) const {
+  PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_offset(o))
+  ceph_assert(0 == "not supported type");
+  return paddr_t{};
+}
+
+inline paddr_t paddr_t::add_relative(paddr_t o) const {
+  PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_relative(o))
+  ceph_assert(0 == "not supported type");
+  return paddr_t{};
+}
+
+inline paddr_t paddr_t::add_block_relative(paddr_t o) const {
+  PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_block_relative(o))
+  ceph_assert(0 == "not supported type");
+  return paddr_t{};
+}
+
+inline paddr_t paddr_t::add_record_relative(paddr_t o) const {
+  PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_record_relative(o))
+  ceph_assert(0 == "not supported type");
+  return paddr_t{};
+}
+
+inline paddr_t paddr_t::maybe_relative_to(paddr_t o) const {
+  PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, maybe_relative_to(o))
+  ceph_assert(0 == "not supported type");
+  return paddr_t{};
+}
 
 }
 

@@ -202,7 +202,8 @@ private:
       assert(current_journal_segment);
       return journal_seq_t{
         get_segment_seq(),
-        {current_journal_segment->get_segment_id(), written_to}
+        paddr_t::make_seg_paddr(current_journal_segment->get_segment_id(),
+	  written_to)
       };
     }
 
