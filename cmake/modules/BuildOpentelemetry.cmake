@@ -13,7 +13,7 @@ function(build_opentelemetry)
                                -DWITH_JAEGER=ON
                                -DBUILD_TESTING=OFF
                                -DWITH_EXAMPLES=OFF
-                               -DBoost_INCLUDE_DIRS=${CMAKE_BINARY_DIR}/boost/include)
+                               -DBoost_INCLUDE_DIR=${CMAKE_BINARY_DIR}/boost/include)
 
   set(opentelemetry_libs
       ${opentelemetry_BINARY_DIR}/sdk/src/trace/libopentelemetry_trace.a

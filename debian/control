@@ -370,7 +370,6 @@ Description: debugging symbols for ceph-mgr
 Package: ceph-mon
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
-         libjaeger <pkg.ceph.jaeger>,
          ${misc:Depends},
          ${shlibs:Depends},
 Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
@@ -628,7 +627,6 @@ Description: debugging symbols for rbd-nbd
 Package: ceph-common
 Architecture: linux-any
 Depends: librbd1 (= ${binary:Version}),
-         libjaeger (= ${binary:Version}) <pkg.ceph.jaeger>,
          python3-cephfs (= ${binary:Version}),
          python3-ceph-argparse (= ${binary:Version}),
          python3-ceph-common (= ${binary:Version}),
@@ -1002,14 +1000,6 @@ Description: debugging symbols for radosgw
  service as well as the OpenStack Object Storage ("Swift") API.
  .
  This package contains debugging symbols for radosgw.
-
-Package: libjaeger
-Architecture: linux-any
-Section: libs
-Depends: ${misc:Depends},
-         ${shlibs:Depends},
-Build-Profiles: <pkg.ceph.jaeger>
-Description: This package provides libraries needed for distributed tracing for Ceph.
 
 Package: ceph-test
 Architecture: linux-any
