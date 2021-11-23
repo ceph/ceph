@@ -21,6 +21,8 @@ export class HostService extends ApiClient {
   baseURL = 'api/host';
   baseUIURL = 'ui-api/host';
 
+  predefinedLabels = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'nfs', 'iscsi', 'rbd', 'grafana'];
+
   constructor(private http: HttpClient, private deviceService: DeviceService) {
     super();
   }
