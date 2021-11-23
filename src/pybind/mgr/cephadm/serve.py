@@ -1099,6 +1099,7 @@ class CephadmServe:
                         }),
                         '--config-json', '-',
                     ] + daemon_spec.extra_args,
+                    env_vars=["CEPH_VOLUME_DEBUG=1"],
                     stdin=json.dumps(daemon_spec.final_config),
                     image=image)
 

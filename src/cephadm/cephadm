@@ -2858,6 +2858,7 @@ def deploy_daemon_units(
                     cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
                     memory_request=ctx.memory_request,
                     memory_limit=ctx.memory_limit,
+                    envs=ctx.env,
                 )
                 _write_container_cmd_to_bash(ctx, f, prestart, 'LVM OSDs use ceph-volume lvm activate')
         elif daemon_type == CephIscsi.daemon_type:
