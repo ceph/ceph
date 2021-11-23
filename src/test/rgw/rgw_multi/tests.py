@@ -1340,6 +1340,38 @@ def test_bucket_reshard_incremental():
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 @attr('bucket_reshard')
+def test_bucket_reshard_during_incremental():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a bucket in first zone
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload some objects just to get every zone into incremental
+    for objname in ('a', 'b', 'c', 'd'):
+        k = new_key(zone, bucket.name, objname)
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # upload more objects to other zones
+    for z in zonegroup_conns.rw_zones[1:]:
+        for objname in ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
+                        'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p'):
+            k = new_key(z, bucket.name, objname)
+            k.set_contents_from_string('foo')
+
+    # reshard in first zone while sync is still in progress (don't wait on bucket checkpoint)
+    zone.zone.cluster.admin(['bucket', 'reshard',
+        '--bucket', bucket.name,
+        '--num-shards', '3',
+        '--yes-i-really-mean-it'])
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+@attr('bucket_reshard')
 def test_bucket_reshard_full():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
