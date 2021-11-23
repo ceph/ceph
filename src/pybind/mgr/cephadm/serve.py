@@ -961,7 +961,7 @@ class CephadmServe:
             elif self.mgr.last_monmap and \
                     self.mgr.last_monmap > last_config and \
                     dd.daemon_type in CEPH_TYPES:
-                self.log.info('Reconfiguring %s (monmap changed)...' % dd.name())
+                self.log.info(f'Reconfiguring {dd.name()} (monmap changed, {self.mgr.last_monmap} > last_config {last_config}, last_deps {last_deps})...')
                 action = 'reconfig'
             elif self.mgr.extra_ceph_conf_is_newer(last_config) and \
                     dd.daemon_type in CEPH_TYPES:
