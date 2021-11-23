@@ -418,8 +418,8 @@ set(libcommon_files
   osdc/error_code.cc
   librbd/Features.cc
   librbd/io/IoOperations.cc
-  ${mds_files}
-  common/tracer.cc)
+  ${mds_files})
+
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
