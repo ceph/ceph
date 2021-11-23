@@ -1029,7 +1029,10 @@ struct bluestore_onode_t {
   }
 
   void clear_omap_flag() {
-    clear_flag(FLAG_OMAP);
+    clear_flag(FLAG_OMAP |
+	       FLAG_PGMETA_OMAP |
+	       FLAG_PERPOOL_OMAP |
+	       FLAG_PERPG_OMAP);
   }
 
   DENC(bluestore_onode_t, v, p) {
