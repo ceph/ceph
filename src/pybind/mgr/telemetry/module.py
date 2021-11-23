@@ -15,6 +15,7 @@ import requests
 import uuid
 import time
 from datetime import datetime, timedelta
+from prettytable import PrettyTable
 from threading import Event, Lock
 from collections import defaultdict
 from typing import cast, Any, DefaultDict, Dict, List, Optional, Tuple, TypeVar, TYPE_CHECKING, Union
@@ -1438,6 +1439,39 @@ To enable, add '--license {LICENSE}' to the 'ceph telemetry on' command.'''
         Disable a list of channels
         '''
         return self.toggle_channel('disable', channels)
+
+    @CLIReadCommand('telemetry channel ls')
+    def channel_ls(self) -> Tuple[int, str, str]:
+        '''
+        List all channels
+        '''
+        table = PrettyTable(
+            [
+                'NAME', 'ENABLED', 'DEFAULT', 'DESC',
+            ],
+            border=False)
+        table.align['NAME'] = 'l'
+        table.align['ENABLED'] = 'l'
+        table.align['DEFAULT'] = 'l'
+        table.align['DESC'] = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 4
+
+        for c in ALL_CHANNELS:
+            enabled = "ON" if getattr(self, f"channel_{c}") else "OFF"
+            for o in self.MODULE_OPTIONS:
+                if o['name'] == f"channel_{c}":
+                    default = "ON" if o.get('default', None) else "OFF"
+                    desc = o.get('desc', None)
+
+            table.add_row((
+                c,
+                enabled,
+                default,
+                desc,
+            ))
+
+        return 0, table.get_string(), ''
 
     @CLICommand('telemetry send')
     def do_send(self,
