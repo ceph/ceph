@@ -1434,7 +1434,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 
 # prometheus alerts
-install -m 644 -D monitoring/prometheus/alerts/ceph_default_alerts.yml %{buildroot}/etc/prometheus/ceph/ceph_default_alerts.yml
+install -m 644 -D monitoring/ceph-mixin/prometheus_alerts.yaml %{buildroot}/etc/prometheus/ceph/ceph_default_alerts.yml
 
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
@@ -2503,8 +2503,6 @@ exit 0
 %endif
 %attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
 %config %{_sysconfdir}/grafana/dashboards/ceph-dashboard/*
-%doc monitoring/grafana/dashboards/README
-%doc monitoring/grafana/README.md
 
 %files prometheus-alerts
 %if 0%{?suse_version}
