@@ -433,19 +433,6 @@ if(WITH_JAEGER)
   build_opentelemetry()
   set(jaeger_base opentelemetry::libopentelemetry thrift::libthrift)
   add_dependencies(common-objs ${jaeger_base})
-  target_link_libraries(jaeger-base INTERFACE
-    yaml-cpp::yaml-cpp
-    opentelemetry::libopentelemetry
-    thrift::libthrift
-    jaegertracing::libjaegertracing)
-
-  list(APPEND jaeger_libs
-    ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0
-    ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0.6.1
-    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1
-    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1.6.0)
-  install(FILES ${jaeger_libs}
-    DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
 
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
