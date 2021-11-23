@@ -248,7 +248,7 @@ pyparsing==2.4.7
     #   packaging
 pyperclip==1.8.2
     # via cmd2
-pytest==3.7.1
+pytest==6.2.5
     # via teuthology
 python-cinderclient==8.0.0
     # via python-openstackclient
