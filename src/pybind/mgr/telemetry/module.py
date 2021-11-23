@@ -1109,16 +1109,25 @@ class Module(MgrModule):
         ceph = 'ceph'
         device = 'device'
 
-    def collection_delta(self) -> List[Collection]:
+    def collection_delta(self, channels: Optional[List[str]] = None) -> List[Collection]:
         '''
         Find collections that are available in the module, but are not in the db
         '''
+        if not channels:
+            channels = ALL_CHANNELS
+        else:
+            for c in channels:
+                if c not in ALL_CHANNELS:
+                    self.log.debug(f"invalid channel name: {c}")
+                    return None
+
         new_collection : List[Collection] = []
 
         for c in MODULE_COLLECTION:
             for k, v in c.items():
                 if k == 'name' and v.name not in self.db_collection:
-                    new_collection.append(v)
+                    if c['channel'] in channels:
+                        new_collection.append(v)
 
         return new_collection
 
@@ -1477,6 +1486,9 @@ To enable, add '--license {LICENSE}' to the 'ceph telemetry on' command.'''
     def do_send(self,
                 endpoint: Optional[List[EndPoint]] = None,
                 license: Optional[str] = None) -> Tuple[int, str, str]:
+        '''
+        Send a sample report
+        '''
         if not self.is_opted_in() and license != LICENSE:
             self.log.debug(('A telemetry send attempt while opted-out. '
                             'Asking for license agreement'))
@@ -1490,7 +1502,7 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
     @CLIReadCommand('telemetry show')
     def show(self, channels: Optional[List[str]] = None) -> Tuple[int, str, str]:
         '''
-        Show a sample report of all enabled channels (except for 'device' channel)
+        Show a sample report of opted-in collections (except for 'device')
         '''
         if not self.enabled:
             # if telemetry is off, no report is being sent, hence nothing to show
@@ -1510,7 +1522,7 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
     @CLIReadCommand('telemetry preview')
     def preview(self, channels: Optional[List[str]] = None) -> Tuple[int, str, str]:
         '''
-        Preview a sample report of the most recent collections available
+        Preview a sample report of the most recent collections available (except for 'device')
         '''
         report = {}
 
@@ -1521,7 +1533,7 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         with self.get_report_lock:
             if len(self.collection_delta()) == 0:
                 # user is already opted-in to the most recent collection
-                msg = 'Telemetry is up to date, see report with `ceph telemetry show`'
+                msg = 'Telemetry is up to date, see report with `ceph telemetry show`.'
                 return 0, msg, ''
             else:
                 # there are collections the user is not opted-in to
@@ -1539,19 +1551,109 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
 
         self.format_perf_histogram(report)
         report = json.dumps(report, indent=4, sort_keys=True)
-        if self.channel_device:
-            report += '''
 
-Device report is generated separately. To see it run 'ceph telemetry show-device'.'''
+        if self.channel_device:
+            report += '''\nDevice report is generated separately. To see it run 'ceph telemetry preview-device'.'''
+
         return 0, report, ''
 
     @CLIReadCommand('telemetry show-device')
     def show_device(self) -> Tuple[int, str, str]:
+        '''
+        Show a sample device report
+        '''
+        if not self.enabled:
+            # if telemetry is off, no report is being sent, hence nothing to show
+            msg = 'Telemetry is off. Please consider opting-in with `ceph telemetry on`.\n' \
+                  'Preview sample device reports with `ceph telemetry preview-device`.'
+            return 0, msg, ''
+
+        if not self.channel_device:
+            # if device channel is off, device report is not being sent, hence nothing to show
+            msg = 'device channel is off. Please enable with `ceph telemetry enable channel device`.\n' \
+                  'Preview sample device reports with `ceph telemetry preview-device`.'
+            return 0, msg, ''
+
         return 0, json.dumps(self.get_report_locked('device'), indent=4, sort_keys=True), ''
+
+    @CLIReadCommand('telemetry preview-device')
+    def preview_device(self) -> Tuple[int, str, str]:
+        '''
+        Preview a sample device report of the most recent device collection
+        '''
+        report = {}
+
+        with self.get_report_lock:
+            if len(self.collection_delta(['device'])) == 0 and self.channel_device:
+                # user is already opted-in to the most recent device collection,
+                # and device channel is on, thus `show-device` should be called
+                msg = 'device channel is on and up to date, see report with `ceph telemetry show-device`.'
+                return 0, msg, ''
+
+            # either the user is not opted-in at all, or there are collections
+            # they are not opted-in to
+            next_collection = []
+
+            for c in MODULE_COLLECTION:
+                for k, v in c.items():
+                    if k == 'name':
+                        next_collection.append(v.name)
+
+            opted_in_collection = self.db_collection
+            self.db_collection = next_collection
+            report = json.dumps(self.get_report('device'), indent=4, sort_keys=True)
+            self.db_collection = opted_in_collection
+
+        return 0, report, ''
 
     @CLIReadCommand('telemetry show-all')
     def show_all(self) -> Tuple[int, str, str]:
+        '''
+        Show a sample report of all enabled channels (including 'device' channel)
+        '''
+        if not self.enabled:
+            # if telemetry is off, no report is being sent, hence nothing to show
+            msg = 'Telemetry is off. Please consider opting-in with `ceph telemetry on`.\n' \
+                  'Preview sample reports with `ceph telemetry preview`.'
+            return 0, msg, ''
+
+        if not self.channel_device:
+            # device channel is off, no need to display its report
+            return 0, json.dumps(self.get_report_locked('default'), indent=4, sort_keys=True), ''
+
+        # telemetry is on and device channel is enabled, show both
         return 0, json.dumps(self.get_report_locked('all'), indent=4, sort_keys=True), ''
+
+    @CLIReadCommand('telemetry preview-all')
+    def preview_all(self) -> Tuple[int, str, str]:
+        '''
+        Preview a sample report of the most recent collections available of all channels (including 'device')
+        '''
+        report = {}
+
+        with self.get_report_lock:
+            if len(self.collection_delta()) == 0:
+                # user is already opted-in to the most recent collection
+                msg = 'Telemetry is up to date, see report with `ceph telemetry show`.'
+                return 0, msg, ''
+
+            # there are collections the user is not opted-in to
+            next_collection = []
+
+            for c in MODULE_COLLECTION:
+                for k, v in c.items():
+                    if k == 'name':
+                        next_collection.append(v.name)
+
+            opted_in_collection = self.db_collection
+            self.db_collection = next_collection
+            report = self.get_report('all')
+            self.db_collection = opted_in_collection
+
+        self.format_perf_histogram(report)
+        report = json.dumps(report, indent=4, sort_keys=True)
+
+        return 0, report, ''
 
     def get_report_locked(self,
                           report_type: str = 'default',
