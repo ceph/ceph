@@ -155,6 +155,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3ListBucketMultipartUploads:
   case s3ListBucketVersions:
   case s3ListMultipartUploadParts:
+  case s3GetBucketWebsite:
     return RGW_PERM_READ;
 
   case s3AbortMultipartUpload:
@@ -171,6 +172,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutObjectRetention:
   case s3PutObjectLegalHold:
   case s3BypassGovernanceRetention:
+  case s3PutBucketWebsite:
     return RGW_PERM_WRITE;
 
   case s3GetAccelerateConfiguration:
@@ -183,7 +185,6 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetBucketRequestPayment:
   case s3GetBucketTagging:
   case s3GetBucketVersioning:
-  case s3GetBucketWebsite:
   case s3GetLifecycleConfiguration:
   case s3GetObjectAcl:
   case s3GetObjectVersionAcl:
@@ -203,7 +204,6 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutBucketRequestPayment:
   case s3PutBucketTagging:
   case s3PutBucketVersioning:
-  case s3PutBucketWebsite:
   case s3PutLifecycleConfiguration:
   case s3PutObjectAcl:
   case s3PutObjectVersionAcl:
