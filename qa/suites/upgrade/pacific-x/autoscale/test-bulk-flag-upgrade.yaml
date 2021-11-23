@@ -1,0 +1,42 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+- - client.0
+
+tasks:
+- install:
+  branch: pacific
+- print: "**** done pacific install"
+- ceph:
+    create_rbd_pool: false
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(OBJECT_
+      - \(SLOW_OPS\)
+      - \(REQUEST_SLOW\)
+      - \(TOO_FEW_PGS\)
+      - slow request
+
+- install.upgrade:
+    mon.a:
+    client.0:
+- ceph.restart:
+    daemons: [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3]
+    wait-for-healthy: true
+    wait-for-osds-up: true
+- print: "**** done upgrade to master ceph.restart all mon/mgr/osd "
+
+- workunit:
+    clients:
+      client.0:
+        - mgr/upgrade/test_autoscale_bulk_flag.sh
+- print: "*** done mgr/upgrade/test_autoscale_bulk_flag.sh"
