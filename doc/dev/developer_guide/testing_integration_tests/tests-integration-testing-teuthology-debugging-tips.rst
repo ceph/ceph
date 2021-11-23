@@ -144,6 +144,8 @@ Suggested Resources
 --------------------
 
   * `Testing Ceph: Pains & Pleasures <https://www.youtube.com/watch?v=gj1OXrKdSrs>`_
+  * `Teuthology Training <https://www.youtube.com/playlist?list=PLrBUGiINAakNsOwHaIM27OBGKezQbUdM->`_
+  * `Intro to Teuthology <https://www.youtube.com/watch?v=WiEUzoS6Nc4>`_
 
 .. _Scheduling Test Run: ../tests-integration-testing-teuthology-workflow/#scheduling-test-run
 .. _detailed test config: https://docs.ceph.com/projects/teuthology/en/latest/detailed_test_config.html
