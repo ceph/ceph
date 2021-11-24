@@ -46,7 +46,7 @@ public:
     crimson::ct_error::invarg,
     crimson::ct_error::enoent,
     crimson::ct_error::erange>;
-  virtual read_ertr::future<> read(uint64_t addr, bufferptr &buffer) = 0;
+  virtual read_ertr::future<> read(paddr_t addr, bufferptr &buffer) = 0;
 
   using write_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
@@ -55,7 +55,7 @@ public:
     crimson::ct_error::enospc,
     crimson::ct_error::erange
     >;
-  virtual write_ertr::future<> write(uint64_t addr, bufferptr &buf) = 0;
+  virtual write_ertr::future<> write(paddr_t addr, bufferptr &buf) = 0;
 
   using open_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
