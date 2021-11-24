@@ -857,6 +857,30 @@ ServerInfoT = Dict[str, Union[str, List[ServiceInfoT]]]
 PerfCounterT = Dict[str, Any]
 
 
+class API:
+    def DecoratorFactory(attr: str, default: Any):  # type: ignore
+        class DecoratorClass:
+            _ATTR_TOKEN = f'__ATTR_{attr.upper()}__'
+
+            def __init__(self, value: Any=default) -> None:
+                self.value = value
+
+            def __call__(self, func: Callable) -> Any:
+                setattr(func, self._ATTR_TOKEN, self.value)
+                return func
+
+            @classmethod
+            def get(cls, func: Callable) -> Any:
+                return getattr(func, cls._ATTR_TOKEN, default)
+
+        return DecoratorClass
+
+    hook = DecoratorFactory('hook', default=False)(True)
+    perm = DecoratorFactory('perm', default='r')
+    internal = DecoratorFactory('internal', default=False)(True)
+    cliapi = DecoratorFactory('cliapi', default=False)(True)
+
+
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     MGR_POOL_NAME = ".mgr"
 
@@ -1238,6 +1262,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self._rados.shutdown()
             self._ceph_unregister_client(addrs)
 
+    @API.cliapi
     def get(self, data_name: str) -> Any:
         """
         Called by the plugin to fetch named cluster-wide objects from ceph-mgr.
@@ -1364,6 +1389,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return ret
 
+    @API.cliapi
     def get_server(self, hostname: str) -> ServerInfoT:
         """
         Called by the plugin to fetch metadata about a particular hostname from
@@ -1376,6 +1402,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return cast(ServerInfoT, self._ceph_get_server(hostname))
 
+    @API.cliapi
     def get_perf_schema(self,
                         svc_type: str,
                         svc_name: str) -> Dict[str,
@@ -1391,6 +1418,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_perf_schema(svc_type, svc_name)
 
+    @API.cliapi
     def get_counter(self,
                     svc_type: str,
                     svc_name: str,
@@ -1409,6 +1437,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_counter(svc_type, svc_name, path)
 
+    @API.cliapi
     def get_latest_counter(self,
                            svc_type: str,
                            svc_name: str,
@@ -1428,6 +1457,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_latest_counter(svc_type, svc_name, path)
 
+    @API.cliapi
     def list_servers(self) -> List[ServerInfoT]:
         """
         Like ``get_server``, but gives information about all servers (i.e. all
@@ -1459,6 +1489,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return default
         return metadata
 
+    @API.cliapi
     def get_daemon_status(self, svc_type: str, svc_id: str) -> Dict[str, str]:
         """
         Fetch the latest status for a particular service daemon.
@@ -1647,6 +1678,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         # any ``COMMANDS``
         raise NotImplementedError()
 
+    @API.cliapi
     def get_mgr_id(self) -> str:
         """
         Retrieve the name of the manager daemon where this plugin
@@ -1806,6 +1838,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def set_localized_store(self, key: str, val: Optional[str]) -> None:
         return self._set_localized(key, val, self.set_store)
 
+    @API.cliapi
     def self_test(self) -> Optional[str]:
         """
         Run a self-test on the module. Override this function and implement
@@ -1820,6 +1853,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         pass
 
+    @API.cliapi
     def get_osdmap(self) -> OSDMap:
         """
         Get a handle to an OSDMap.  If epoch==0, get a handle for the latest
