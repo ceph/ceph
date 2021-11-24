@@ -86,11 +86,19 @@ struct rbm_test_t :
   }
 
   auto write(uint64_t addr, bufferptr &ptr) {
-    return rbm_manager->write(addr, ptr).unsafe_get0();
+    paddr_t paddr = convert_abs_addr_to_paddr(
+      addr,
+      block_size,
+      rbm_manager->get_device_id());
+    return rbm_manager->write(paddr, ptr).unsafe_get0();
   }
 
   auto read(uint64_t addr, bufferptr &ptr) {
-    return rbm_manager->read(addr, ptr).unsafe_get0();
+    paddr_t paddr = convert_abs_addr_to_paddr(
+      addr,
+      block_size,
+      rbm_manager->get_device_id());
+    return rbm_manager->read(paddr, ptr).unsafe_get0();
   }
 
   auto create_rbm_transaction() {
@@ -106,7 +114,7 @@ struct rbm_test_t :
 	paddr_t paddr = convert_abs_addr_to_paddr(
 	    p.first * block_size,
 	    block_size,
-	    0);
+	    rbm_manager->get_device_id());
 	size_t len = p.second * block_size;
 	alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
 	alloc_info.op = rbm_alloc_delta_t::op_types_t::SET;
@@ -149,7 +157,11 @@ struct rbm_test_t :
 		     * DEFAULT_BLOCK_SIZE;
 	logger().debug(" addr {} id {} ", addr, id);
 	auto bp = bufferptr(ceph::buffer::create_page_aligned(DEFAULT_BLOCK_SIZE));
-	rbm_manager->read(addr, bp).unsafe_get0();
+	paddr_t paddr = convert_abs_addr_to_paddr(
+	  addr,
+	  block_size,
+	  rbm_manager->get_device_id());
+	rbm_manager->read(paddr, bp).unsafe_get0();
 	rbm_bitmap_block_t b_block(DEFAULT_BLOCK_SIZE);
 	bufferlist bl;
 	bl.append(bp);
