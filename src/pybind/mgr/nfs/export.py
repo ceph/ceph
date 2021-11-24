@@ -1,7 +1,6 @@
 import errno
 import json
 import logging
-import subprocess
 from typing import List, Any, Dict, Tuple, Optional, TYPE_CHECKING, TypeVar, Callable, cast
 from os.path import normpath
 
@@ -74,6 +73,14 @@ class NFSRados:
             ExportMgr._check_rados_notify(ioctx, config_obj)
             log.debug("Added %s url to %s", obj, config_obj)
 
+    def read_obj(self, obj: str) -> Optional[str]:
+        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+            ioctx.set_namespace(self.namespace)
+            try:
+                return ioctx.read(obj, 1048576).decode()
+            except ObjectNotFound:
+                return None
+
     def update_obj(self, conf_block: str, obj: str, config_obj: str) -> None:
         with self.mgr.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
@@ -125,26 +132,6 @@ class ExportMgr:
             ioctx.notify(obj)
         except TimedOut:
             log.exception("Ganesha timed out")
-
-    def _exec(self, args: List[str]) -> Tuple[int, str, str]:
-        try:
-            util = args.pop(0)
-            cmd = [
-                util,
-                '-k', str(self.mgr.get_ceph_option('keyring')),
-                '-n', f'mgr.{self.mgr.get_mgr_id()}',
-            ] + args
-            log.debug('exec: ' + ' '.join(cmd))
-            p = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                timeout=10,
-            )
-        except subprocess.CalledProcessError as ex:
-            log.error('Error executing <<%s>>: %s', ex.cmd, ex.output)
-        except subprocess.TimeoutExpired:
-            log.error('timeout (10s) executing <<%s>>', cmd)
-        return p.returncode, p.stdout.decode(), p.stderr.decode()
 
     @property
     def exports(self) -> Dict[str, List[Export]]:
@@ -218,19 +205,23 @@ class ExportMgr:
 
         elif isinstance(export.fsal, RGWFSAL):
             rgwfsal = cast(RGWFSAL, export.fsal)
-            ret, out, err = self._exec(['radosgw-admin', 'bucket', 'stats', '--bucket',
-                                        export.path])
-            if ret:
-                raise NFSException(f'Failed to fetch owner for bucket {export.path}')
-            j = json.loads(out)
-            owner = j.get('owner', '')
-            rgwfsal.user_id = owner
-            ret, out, err = self._exec([
-                'radosgw-admin', 'user', 'info', '--uid', owner
+            if not rgwfsal.user_id:
+                assert export.path
+                ret, out, err = self.mgr.tool_exec(
+                    ['radosgw-admin', 'bucket', 'stats', '--bucket', export.path]
+                )
+                if ret:
+                    raise NFSException(f'Failed to fetch owner for bucket {export.path}')
+                j = json.loads(out)
+                owner = j.get('owner', '')
+                rgwfsal.user_id = owner
+            assert rgwfsal.user_id
+            ret, out, err = self.mgr.tool_exec([
+                'radosgw-admin', 'user', 'info', '--uid', rgwfsal.user_id
             ])
             if ret:
                 raise NFSException(
-                    f'Failed to fetch key for bucket {export.path} owner {owner}'
+                    f'Failed to fetch key for bucket {export.path} owner {rgwfsal.user_id}'
                 )
             j = json.loads(out)
 
@@ -555,18 +546,15 @@ class ExportMgr:
             raise NFSInvalidOperation("export must specify pseudo path")
 
         path = ex_dict.get("path")
-        if not path:
+        if path is None:
             raise NFSInvalidOperation("export must specify path")
         path = self.format_path(path)
 
         fsal = ex_dict.get("fsal", {})
         fsal_type = fsal.get("name")
         if fsal_type == NFS_GANESHA_SUPPORTED_FSALS[1]:
-            if '/' in path:
-                raise NFSInvalidOperation('"/" is not allowed in path (bucket name)')
-            uid = f'nfs.{cluster_id}.{path}'
-            if "user_id" in fsal and fsal["user_id"] != uid:
-                raise NFSInvalidOperation(f"export FSAL user_id must be '{uid}'")
+            if '/' in path and path != '/':
+                raise NFSInvalidOperation('"/" is not allowed in path with bucket name')
         elif fsal_type == NFS_GANESHA_SUPPORTED_FSALS[0]:
             fs_name = fsal.get("fs_name")
             if not fs_name:
@@ -585,7 +573,8 @@ class ExportMgr:
         ex_dict["cluster_id"] = cluster_id
         export = Export.from_dict(ex_id, ex_dict)
         export.validate(self.mgr)
-        log.debug("Successfully created %s export-%s from dict for cluster %s", fsal_type, ex_id, cluster_id)
+        log.debug("Successfully created %s export-%s from dict for cluster %s",
+                  fsal_type, ex_id, cluster_id)
         return export
 
     def create_cephfs_export(self,
@@ -629,14 +618,18 @@ class ExportMgr:
         return 0, "", "Export already exists"
 
     def create_rgw_export(self,
-                          bucket: str,
                           cluster_id: str,
                           pseudo_path: str,
                           access_type: str,
                           read_only: bool,
                           squash: str,
+                          bucket: Optional[str] = None,
+                          user_id: Optional[str] = None,
                           clients: list = []) -> Tuple[int, str, str]:
         pseudo_path = self.format_path(pseudo_path)
+
+        if not bucket and not user_id:
+            return -errno.EINVAL, "", "Must specify either bucket or user_id"
 
         if not self._fetch_export(cluster_id, pseudo_path):
             export = self.create_export_from_dict(
@@ -644,10 +637,13 @@ class ExportMgr:
                 self._gen_export_id(cluster_id),
                 {
                     "pseudo": pseudo_path,
-                    "path": bucket,
+                    "path": bucket or '/',
                     "access_type": access_type,
                     "squash": squash,
-                    "fsal": {"name": NFS_GANESHA_SUPPORTED_FSALS[1]},
+                    "fsal": {
+                        "name": NFS_GANESHA_SUPPORTED_FSALS[1],
+                        "user_id": user_id,
+                    },
                     "clients": clients,
                 }
             )

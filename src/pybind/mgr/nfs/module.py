@@ -27,9 +27,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @CLICommand('nfs export create cephfs', perm='rw')
     def _cmd_nfs_export_create_cephfs(
             self,
-            fsname: str,
             cluster_id: str,
             pseudo_path: str,
+            fsname: str,
             path: Optional[str] = '/',
             readonly: Optional[bool] = False,
             client_addr: Optional[List[str]] = None,
@@ -44,15 +44,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @CLICommand('nfs export create rgw', perm='rw')
     def _cmd_nfs_export_create_rgw(
             self,
-            bucket: str,
             cluster_id: str,
             pseudo_path: str,
+            bucket: Optional[str] = None,
+            user_id: Optional[str] = None,
             readonly: Optional[bool] = False,
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
     ) -> Tuple[int, str, str]:
         """Create an RGW export"""
         return self.export_mgr.create_export(fsal_type='rgw', bucket=bucket,
+                                             user_id=user_id,
                                              cluster_id=cluster_id, pseudo_path=pseudo_path,
                                              read_only=readonly, squash=squash,
                                              addr=client_addr)
@@ -119,6 +121,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Tuple[int, str, str]:
         """Displays NFS Cluster info"""
         return self.nfs.show_nfs_cluster_info(cluster_id=cluster_id)
+
+    @CLICommand('nfs cluster config get', perm='r')
+    def _cmd_nfs_cluster_config_get(self, cluster_id: str) -> Tuple[int, str, str]:
+        """Fetch NFS-Ganesha config"""
+        return self.nfs.get_nfs_cluster_config(cluster_id=cluster_id)
 
     @CLICommand('nfs cluster config set', perm='rw')
     @CLICheckNonemptyFileInput(desc='NFS-Ganesha Configuration')
