@@ -61,6 +61,8 @@ class Cluster:
         parser.add_argument('action', choices=Cluster.actions, help='Action to perform on the box')
         parser.add_argument('--osds', type=int, default=1, help='Number of osds')
         parser.add_argument('--hosts', type=int, default=1, help='Number of hosts')
+        parser.add_argument('--skip_deploy_osds', action='store_true', help='skip deploy osd')
+        parser.add_argument('--skip_create_loop', action='store_true', help='skip create loopback device')
 
     def __init__(self, argv):
         self.argv = argv
@@ -118,11 +120,12 @@ class Cluster:
 
         run_shell_command('sudo vgchange --refresh')
 
-        print('Deploying osds...')
-        osds = Config.get('osds')
-        for o in range(osds):
-            osd.deploy_osd(f'/dev/vg1/lv{o}')
-        print('Osds deployed')
+        if not Config.get('skip_deploy_osds'):
+            print('Deploying osds...')
+            osds = Config.get('osds')
+            for o in range(osds):
+                osd.deploy_osd(f'/dev/vg1/lv{o}')
+            print('Osds deployed')
         print('Bootstrap completed!')
 
 
@@ -138,9 +141,10 @@ class Cluster:
         if not image_exists(BOX_IMAGE):
             get_box_image()
 
-        print('Adding logical volumes (block devices) in loopback device...')
-        osd.create_loopback_devices(osds)
-        print(f'Added {osds} logical volumes in a loopback device')
+        if not Config.get('skip_create_loop'):
+            print('Adding logical volumes (block devices) in loopback device...')
+            osd.create_loopback_devices(osds)
+            print(f'Added {osds} logical volumes in a loopback device')
 
         print('Starting containers')
         # ensure boxes don't exist
@@ -161,7 +165,8 @@ class Cluster:
             host._setup_ssh(h+1)
 
         verbose = '-v' if Config.get('verbose') else ''
-        run_dc_shell_command(f'/cephadm/box/box.py {verbose} cluster bootstrap --osds {osds} --hosts {hosts}', 1, 'seed')
+        skip_deploy = '--skip_deploy_osds' if Config.get('skip_deploy_osds') else ''
+        run_dc_shell_command(f'/cephadm/box/box.py {verbose} cluster bootstrap --osds {osds} --hosts {hosts} {skip_deploy}', 1, 'seed')
 
         host._copy_cluster_ssh_key(ips)
 
