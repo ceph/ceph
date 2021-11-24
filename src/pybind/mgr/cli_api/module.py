@@ -1,92 +1,119 @@
-import json
+import concurrent.futures
+import functools
+import inspect
 import logging
-import threading
 import time
-from functools import partial
-from queue import Queue
+import errno
+from typing import Any, Callable, Dict, List
 
-from mgr_module import CLICommand, HandleCommandResult, MgrModule
+from mgr_module import MgrModule, HandleCommandResult, CLICommand, API
 
 logger = logging.getLogger()
+get_time = time.perf_counter
 
 
-class CLI(MgrModule):
-
-    @CLICommand('mgr api get')
-    def api_get(self, arg: str):
-        '''
-        Called by the plugin to fetch named cluster-wide objects from ceph-mgr.
-        :param str data_name: Valid things to fetch are osd_crush_map_text,
-                osd_map, osd_map_tree, osd_map_crush, config, mon_map, fs_map,
-                osd_metadata, pg_summary, io_rate, pg_dump, df, osd_stats,
-                health, mon_status, devices, device <devid>, pg_stats,
-                pool_stats, pg_ready, osd_ping_times.
-        Note:
-            All these structures have their own JSON representations: experiment
-            or look at the C++ ``dump()`` methods to learn about them.
-        '''
-        t1_start = time.time()
-        str_arg = self.get(arg)
-        t1_end = time.time()
-        time_final = (t1_end - t1_start)
-        return HandleCommandResult(0, json.dumps(str_arg), str(time_final))
-
-    @CLICommand('mgr api benchmark get')
-    def api_get_benchmark(self, arg: str, number_of_total_calls: int,
-                          number_of_parallel_calls: int):
-        benchmark_runner = ThreadedBenchmarkRunner(number_of_total_calls, number_of_parallel_calls)
-        benchmark_runner.start(partial(self.get, arg))
-        benchmark_runner.join()
-        stats = benchmark_runner.get_stats()
-        return HandleCommandResult(0, json.dumps(stats), "")
+def pretty_json(obj: Any) -> Any:
+    import json
+    return json.dumps(obj, sort_keys=True, indent=2)
 
 
-class ThreadedBenchmarkRunner:
-    def __init__(self, number_of_total_calls, number_of_parallel_calls):
-        self._number_of_parallel_calls = number_of_parallel_calls
-        self._number_of_total_calls = number_of_total_calls
-        self._threads = []
-        self._jobs: Queue = Queue()
-        self._time = 0.0
-        self._self_time = []
-        self._lock = threading.Lock()
+class CephCommander:
+    """
+    Utility class to inspect Python functions and generate corresponding
+    CephCommand signatures (see src/mon/MonCommand.h for details)
+    """
 
-    def start(self, func):
-        if(self._number_of_total_calls and self._number_of_parallel_calls):
-            for thread_id in range(self._number_of_parallel_calls):
-                new_thread = threading.Thread(target=ThreadedBenchmarkRunner.timer,
-                                              args=(self, self._jobs, func,))
-                self._threads.append(new_thread)
-            for job_id in range(self._number_of_total_calls):
-                self._jobs.put(job_id)
-            for thread in self._threads:
-                thread.start()
-        else:
-            raise BenchmarkException("Number of Total and number of parallel calls must be greater than 0")
+    def __init__(self, func: Callable):
+        self.func = func
+        self.signature = inspect.signature(func)
+        self.params = self.signature.parameters
 
-    def join(self):
-        for thread in self._threads:
-            thread.join()
-
-    def get_stats(self):
-        stats = {
-            "avg": (self._time / self._number_of_total_calls),
-            "min": min(self._self_time),
-            "max": max(self._self_time)
+    def to_ceph_signature(self) -> Dict[str, str]:
+        """
+        Generate CephCommand signature (dict-like)
+        """
+        return {
+            'prefix': f'mgr cli {self.func.__name__}',
+            'perm': API.perm.get(self.func)
         }
-        return stats
 
-    def timer(self, jobs, func):
-        self._lock.acquire()
-        while not self._jobs.empty():
-            jobs.get()
-            time_start = time.time()
-            func()
-            time_end = time.time()
-            self._self_time.append(time_end - time_start)
-            self._time += (time_end - time_start)
-            self._jobs.task_done()
-        self._lock.release()
+
+class MgrAPIReflector(type):
+    """
+    Metaclass to register COMMANDS and Command Handlers via CLICommand
+    decorator
+    """
+
+    def __new__(cls, name, bases, dct):  # type: ignore
+        klass = super().__new__(cls, name, bases, dct)
+        cls.threaded_benchmark_runner = None
+        for base in bases:
+            for name, func in inspect.getmembers(base, cls.is_public):
+                # However not necessary (CLICommand uses a registry)
+                # save functions to klass._cli_{n}() methods. This
+                # can help on unit testing
+                wrapper = cls.func_wrapper(func)
+                command = CLICommand(**CephCommander(func).to_ceph_signature())(  # type: ignore
+                    wrapper)
+                setattr(
+                    klass,
+                    f'_cli_{name}',
+                    command)
+        return klass
+
+    @staticmethod
+    def is_public(func: Callable) -> bool:
+        return (
+            inspect.isfunction(func)
+            and not func.__name__.startswith('_')
+            and API.expose.get(func)
+        )
+
+    @staticmethod
+    def func_wrapper(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs) -> HandleCommandResult:  # type: ignore
+            return HandleCommandResult(stdout=pretty_json(
+                func(self, *args, **kwargs)))
+
+        # functools doesn't change the signature when wrapping a function
+        # so we do it manually
+        signature = inspect.signature(func)
+        wrapper.__signature__ = signature  # type: ignore
+        return wrapper
+
+
+class CLI(MgrModule, metaclass=MgrAPIReflector):
+    @CLICommand('mgr cli_benchmark')
+    def benchmark(self, iterations: int, threads: int, func_name: str,
+                  func_args: List[str] = None) -> HandleCommandResult:  # type: ignore
+        func_args = () if func_args is None else func_args
+        if iterations and threads:
+            try:
+                func = getattr(self, func_name)
+            except AttributeError:
+                return HandleCommandResult(errno.EINVAL,
+                                           stderr="Could not find the public "
+                                           "function you are requesting")
+        else:
+            raise BenchmarkException("Number of calls and number "
+                                     "of parallel calls must be greater than 0")
+
+        def timer(*args: Any) -> float:
+            time_start = get_time()
+            func(*func_args)
+            return get_time() - time_start
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+            results_iter = executor.map(timer, range(iterations))
+        results = list(results_iter)
+
+        stats = {
+            "avg": sum(results) / len(results),
+            "max": max(results),
+            "min": min(results),
+        }
+        return HandleCommandResult(stdout=pretty_json(stats))
 
 
 class BenchmarkException(Exception):
