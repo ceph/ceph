@@ -27,6 +27,7 @@
   - [ ] Very recent bug; references commit where it was introduced
   - [ ] New feature (ticket optional)
   - [ ] Doc update (no ticket needed)
+  - [ ] Code cleanup (no ticket needed)
 - Component impact
   - [ ] Affects [Dashboard](https://tracker.ceph.com/projects/dashboard/issues/new), opened tracker ticket
   - [ ] Affects [Orchestrator](https://tracker.ceph.com/projects/orchestrator/issues/new), opened tracker ticket
@@ -39,9 +40,6 @@
   - [ ] Includes [integration test(s)](https://docs.ceph.com/en/latest/dev/developer_guide/testing_integration_tests/)
   - [ ] Includes bug reproducer
   - [ ] No tests
-- Teuthology
-  - [ ] Completed teuthology run
-  - [ ] No teuthology test necessary (e.g., documentation)
 
 <details>
 <summary>Show available Jenkins commands</summary>
