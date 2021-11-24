@@ -1089,12 +1089,15 @@ class HostCache():
             self.scheduled_daemon_actions[host] = {}
         self.scheduled_daemon_actions[host][daemon_name] = action
 
-    def rm_scheduled_daemon_action(self, host: str, daemon_name: str) -> None:
+    def rm_scheduled_daemon_action(self, host: str, daemon_name: str) -> bool:
+        found = False
         if host in self.scheduled_daemon_actions:
             if daemon_name in self.scheduled_daemon_actions[host]:
                 del self.scheduled_daemon_actions[host][daemon_name]
+                found = True
             if not self.scheduled_daemon_actions[host]:
                 del self.scheduled_daemon_actions[host]
+        return found
 
     def get_scheduled_daemon_action(self, host: str, daemon: str) -> Optional[str]:
         assert not daemon.startswith('ha-rgw.')
