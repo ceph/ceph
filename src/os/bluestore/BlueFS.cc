@@ -927,6 +927,7 @@ int BlueFS::mount()
   log_writer = _create_writer(_get_file(1));
   ceph_assert(log_writer->file->fnode.ino == 1);
   log_writer->pos = log_writer->file->fnode.size;
+  log_writer->file->fnode.reset_delta();
   dout(10) << __func__ << " log write pos set to 0x"
            << std::hex << log_writer->pos << std::dec
            << dendl;
