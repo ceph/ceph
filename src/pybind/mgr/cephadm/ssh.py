@@ -75,7 +75,11 @@ class SSHManager:
 
             with self.redirect_log(host, addr):
                 try:
-                    conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name], known_hosts=None, config=[self.mgr.ssh_config_fname], preferred_auth=['publickey'])
+                    conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name],
+                                                  known_hosts=None, config=[self.mgr.ssh_config_fname],
+                                                  password=self.mgr.ssh_password if self.mgr.ssh_password else None,
+                                                  preferred_auth=['password'] if self.mgr.ssh_password else [
+                                                      'publickey'])
                 except OSError:
                     raise
                 except asyncssh.Error:
@@ -256,7 +260,11 @@ class SSHManager:
             ssh_options += ['-F', self.mgr.ssh_config_fname]
         self.mgr.ssh_config = ssh_config
 
-        # identity
+        # password identity
+        ssh_password = self.mgr.get_store("ssh_password", default='')
+        self.mgr.ssh_password = ssh_password
+
+        # sshkey identity
         ssh_key = self.mgr.get_store("ssh_identity_key")
         ssh_pub = self.mgr.get_store("ssh_identity_pub")
         self.mgr.ssh_pub = ssh_pub

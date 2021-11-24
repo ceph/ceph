@@ -414,6 +414,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.autotune_memory_target_ratio = 0.0
             self.autotune_interval = 0
             self.ssh_user: Optional[str] = None
+            self.ssh_password: Optional[str] = None
             self._ssh_options: Optional[str] = None
             self.tkey = NamedTemporaryFile()
             self.ssh_config_fname: Optional[str] = None
@@ -933,6 +934,31 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             msg += '. sudo will be used'
         self.log.info(msg)
         return 0, msg, ''
+
+    @orchestrator._cli_read_command(
+        'cephadm set-password')
+    def set_ssh_password(self, password: str) -> Tuple[int, str, str]:
+        """
+        Set user for SSHing to cluster hosts, sudo will be needed for non-root users
+        """
+        current_password = self.ssh_password
+        if password == current_password:
+            return 0, "value unchanged", ""
+
+        self._validate_and_set_ssh_val('ssh_password', password, current_password)
+
+        msg = 'ssh password set to %s' % password
+        self.log.info(msg)
+        return 0, msg, ''
+
+    @orchestrator._cli_write_command(
+        'cephadm clear-password')
+    def _clear_password(self) -> Tuple[int, str, str]:
+        """Clear cluster password"""
+        self.set_store('ssh_password', None)
+        self.ssh._reconfig_ssh()
+        self.log.info('Cleared cluster password')
+        return 0, '', ''
 
     @orchestrator._cli_read_command(
         'cephadm registry-login')
