@@ -22,9 +22,11 @@ BackgroundRecovery::BackgroundRecovery(
   Ref<PG> pg,
   ShardServices &ss,
   epoch_t epoch_started,
-  crimson::osd::scheduler::scheduler_class_t scheduler_class)
+  crimson::osd::scheduler::scheduler_class_t scheduler_class,
+  float delay)
   : pg(pg),
     epoch_started(epoch_started),
+    delay(delay),
     ss(ss),
     scheduler_class(scheduler_class)
 {}
@@ -49,20 +51,27 @@ seastar::future<> BackgroundRecovery::start()
   logger().debug("{}: start", *this);
 
   IRef ref = this;
-  return ss.throttler.with_throttle_while(
-    this, get_scheduler_params(), [this] {
-      return interruptor::with_interruption([this] {
-	return do_recovery();
-      }, [](std::exception_ptr) {
-	return seastar::make_ready_future<bool>(false);
-      }, pg);
-    }).handle_exception_type([ref, this](const std::system_error& err) {
-      if (err.code() == std::make_error_code(std::errc::interrupted)) {
-	logger().debug("{} recovery interruped: {}", *pg, err.what());
-	return seastar::now();
-      }
-      return seastar::make_exception_future<>(err);
-    });
+  auto maybe_delay = seastar::now();
+  if (delay) {
+    maybe_delay = seastar::sleep(
+      std::chrono::milliseconds(std::lround(delay * 1000)));
+  }
+  return maybe_delay.then([ref, this] {
+    return ss.throttler.with_throttle_while(
+      this, get_scheduler_params(), [this] {
+        return interruptor::with_interruption([this] {
+          return do_recovery();
+        }, [](std::exception_ptr) {
+	  return seastar::make_ready_future<bool>(false);
+        }, pg);
+      }).handle_exception_type([ref, this](const std::system_error& err) {
+        if (err.code() == std::make_error_code(std::errc::interrupted)) {
+          logger().debug("{} recovery interruped: {}", *pg, err.what());
+	  return seastar::now();
+        }
+        return seastar::make_exception_future<>(err);
+      });
+  });
 }
 
 UrgentRecovery::interruptible_future<bool>
@@ -100,12 +109,14 @@ void UrgentRecovery::dump_detail(Formatter *f) const
 PglogBasedRecovery::PglogBasedRecovery(
   Ref<PG> pg,
   ShardServices &ss,
-  const epoch_t epoch_started)
+  const epoch_t epoch_started,
+  float delay)
   : BackgroundRecovery(
       std::move(pg),
       ss,
       epoch_started,
-      crimson::osd::scheduler::scheduler_class_t::background_recovery)
+      crimson::osd::scheduler::scheduler_class_t::background_recovery,
+      delay)
 {}
 
 PglogBasedRecovery::interruptible_future<bool>

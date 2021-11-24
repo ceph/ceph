@@ -36,7 +36,8 @@ void PGRecovery::start_pglogbased_recovery()
   (void) pg->get_shard_services().start_operation<PglogBasedRecovery>(
     static_cast<crimson::osd::PG*>(pg),
     pg->get_shard_services(),
-    pg->get_osdmap_epoch());
+    pg->get_osdmap_epoch(),
+    float(0.001));
 }
 
 PGRecovery::blocking_interruptible_future<bool>
