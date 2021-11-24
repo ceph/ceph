@@ -43,6 +43,7 @@ Cypress.Commands.add('login', () => {
   }
 });
 
+// @ts-ignore
 Cypress.Commands.add('text', { prevSubject: true }, (subject) => {
   return subject.text();
 });
