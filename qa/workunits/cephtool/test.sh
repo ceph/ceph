@@ -1157,6 +1157,9 @@ function test_mon_mon()
 {
   # print help message
   ceph --help mon
+  # -h works even when some arguments are passed
+  ceph osd dump -h | grep 'osd dump'
+  ceph osd dump 123 -h | grep 'osd dump'
   # no mon add/remove
   ceph mon dump
   ceph mon getmap -o $TEMP_DIR/monmap.$$
