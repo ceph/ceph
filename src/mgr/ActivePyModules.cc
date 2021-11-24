@@ -116,7 +116,7 @@ PyObject *ActivePyModules::list_servers_python()
   without_gil_t no_gil;
   return daemon_state.with_daemons_by_server([this, &no_gil]
       (const std::map<std::string, DaemonStateCollection> &all) {
-    with_gil_t with_gil{no_gil};
+    no_gil.acquire_gil();
     PyFormatter f(false, true);
     for (const auto &[hostname, daemon_state] : all) {
       f.open_object_section("server");
@@ -174,7 +174,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   if (what == "fs_map") {
     without_gil_t no_gil;
     return cluster_state.with_fsmap([&](const FSMap &fsmap) {
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       fsmap.dump(&f);
       return f.get();
     });
@@ -185,12 +185,12 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       osd_map.crush->encode(rdata, CEPH_FEATURES_SUPPORTED_DEFAULT);
     });
     std::string crush_text = rdata.to_str();
-    with_gil_t with_gil{no_gil};
+    no_gil.acquire_gil();
     return PyUnicode_FromString(crush_text.c_str());
   } else if (what.substr(0, 7) == "osd_map") {
     without_gil_t no_gil;
     return cluster_state.with_osdmap([&](const OSDMap &osd_map){
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       if (what == "osd_map") {
         osd_map.dump(&f);
       } else if (what == "osd_map_tree") {
@@ -210,7 +210,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
 	names.insert(name);
       }
     }
-    with_gil_t with_gil{no_gil};
+    no_gil.acquire_gil();
     f.open_array_section("options");
     for (auto& name : names) {
       f.dump_string("name", name);
@@ -227,14 +227,14 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what == "mon_map") {
     without_gil_t no_gil;
     return cluster_state.with_monmap([&](const MonMap &monmap) {
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       monmap.dump(&f);
       return f.get();
     });
   } else if (what == "service_map") {
     without_gil_t no_gil;
     return cluster_state.with_servicemap([&](const ServiceMap &service_map) {
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       service_map.dump(&f);
       return f.get();
     });
@@ -285,7 +285,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
             }
             all[state]++;
           }
-          with_gil_t with_gil{no_gil};
+          no_gil.acquire_gil();
           f.open_object_section("by_osd");
           for (const auto &i : osds) {
             f.open_object_section(i.first.c_str());
@@ -319,7 +319,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     without_gil_t no_gil;
     return cluster_state.with_pgmap(
         [&](const PGMap &pg_map) {
-	  with_gil_t with_gil{no_gil};
+	  no_gil.acquire_gil();
 	  pg_map.print_summary(&f, nullptr);
           return f.get();
         }
@@ -328,7 +328,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     without_gil_t no_gil;
     return cluster_state.with_pgmap(
       [&](const PGMap &pg_map) {
-	with_gil_t with_gil{no_gil};
+	no_gil.acquire_gil();
 	pg_map.dump(&f, false);
 	return f.get();
       }
@@ -362,7 +362,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     without_gil_t no_gil;
     return cluster_state.with_pgmap(
       [&](const PGMap &pg_map) {
-        with_gil_t with_gil{no_gil};
+        no_gil.acquire_gil();
         pg_map.dump_delta(&f);
 	return f.get();
       }
@@ -373,7 +373,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       [&](
 	const OSDMap& osd_map,
 	const PGMap &pg_map) {
-        with_gil_t with_gil{no_gil};
+        no_gil.acquire_gil();
         pg_map.dump_cluster_stats(nullptr, &f, true);
         pg_map.dump_pool_stats_full(osd_map, nullptr, &f, true);
 	return f.get();
@@ -381,14 +381,14 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what == "pg_stats") {
     without_gil_t no_gil;
     return cluster_state.with_pgmap([&](const PGMap &pg_map) {
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       pg_map.dump_pg_stats(&f, false);
       return f.get();
     });
   } else if (what == "pool_stats") {
     without_gil_t no_gil;
     return cluster_state.with_pgmap([&](const PGMap &pg_map) {
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       pg_map.dump_pool_stats(&f);
       return f.get();
     });
@@ -398,14 +398,14 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what == "osd_stats") {
     without_gil_t no_gil;
     return cluster_state.with_pgmap([&](const PGMap &pg_map) {
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       pg_map.dump_osd_stats(&f, false);
       return f.get();
     });
   } else if (what == "osd_ping_times") {
     without_gil_t no_gil;
     return cluster_state.with_pgmap([&](const PGMap &pg_map) {
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       pg_map.dump_osd_ping_times(&f);
       return f.get();
     });
@@ -414,7 +414,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     int64_t poolid = -ENOENT;
     return cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap,
 					    const PGMap& pg_map) {
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       f.open_array_section("pool_stats");
       for (auto &p : osdmap.get_pools()) {
         poolid = p.first;
@@ -426,7 +426,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what == "health") {
     without_gil_t no_gil;
     return cluster_state.with_health([&](const ceph::bufferlist &health_json) {
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       f.dump_string("json", health_json.to_str());
       return f.get();
     });
@@ -434,14 +434,14 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     without_gil_t no_gil;
     return cluster_state.with_mon_status(
         [&](const ceph::bufferlist &mon_status_json) {
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       f.dump_string("json", mon_status_json.to_str());
       return f.get();
     });
   } else if (what == "mgr_map") {
     without_gil_t no_gil;
     return cluster_state.with_mgrmap([&](const MgrMap &mgr_map) {
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       mgr_map.dump(&f);
       return f.get();
     });
@@ -464,7 +464,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     without_gil_t no_gil;
     cluster_state.with_pgmap(
         [&](const PGMap &pg_map) {
-      with_gil_t with_gil{no_gil};
+      no_gil.acquire_gil();
       f.open_array_section("pg_stats");
       for (auto &i : pg_map.pg_stat) {
         const auto state = i.second.state;
@@ -654,7 +654,7 @@ PyObject *ActivePyModules::get_typed_config(
   }
   if (found) {
     PyModuleRef module = py_module_registry.get_module(module_name);
-    with_gil_t with_gil{no_gil};
+    no_gil.acquire_gil();
     if (!module) {
         derr << "Module '" << module_name << "' is not available" << dendl;
         Py_RETURN_NONE;
@@ -671,7 +671,6 @@ PyObject *ActivePyModules::get_typed_config(
   } else {
     dout(10) << " " << key << " not found " << dendl;
   }
-  with_gil_t with_gil{no_gil};
   Py_RETURN_NONE;
 }
 
@@ -681,20 +680,19 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
   without_gil_t no_gil;
   std::lock_guard l(lock);
   std::lock_guard lock(module_config.lock);
+  no_gil.acquire_gil();
 
   const std::string base_prefix = PyModule::mgr_store_prefix
                                     + module_name + "/";
   const std::string global_prefix = base_prefix + prefix;
   dout(4) << __func__ << " prefix: " << global_prefix << dendl;
 
-  return with_gil(no_gil, [&] {
-    PyFormatter f;
-    for (auto p = store_cache.lower_bound(global_prefix);
-         p != store_cache.end() && p->first.find(global_prefix) == 0; ++p) {
-      f.dump_string(p->first.c_str() + base_prefix.size(), p->second);
-    }
-    return f.get();
-  });
+  PyFormatter f;
+  for (auto p = store_cache.lower_bound(global_prefix);
+       p != store_cache.end() && p->first.find(global_prefix) == 0; ++p) {
+    f.dump_string(p->first.c_str() + base_prefix.size(), p->second);
+  }
+  return f.get();
 }
 
 void ActivePyModules::set_store(const std::string &module_name,
@@ -1104,7 +1102,7 @@ PyObject *ActivePyModules::get_foreign_config(
     cmd.wait();
     dout(10) << "ceph_foreign_option_get (mon command) " << who << " " << name << " = "
 	     << cmd.outbl.to_str() << dendl;
-    with_gil_t gil(no_gil);
+    no_gil.acquire_gil();
     return get_python_typed_option_value(opt->type, cmd.outbl.to_str());
   }
 
@@ -1164,7 +1162,7 @@ PyObject *ActivePyModules::get_foreign_config(
   dout(10) << "ceph_foreign_option_get (configmap) " << who << " " << name << " = "
 	   << value << dendl;
   lock.unlock();
-  with_gil_t with_gil(no_gil);
+  no_gil.acquire_gil();
   return get_python_typed_option_value(opt->type, value);
 }
 
