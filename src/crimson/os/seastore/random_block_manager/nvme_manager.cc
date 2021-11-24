@@ -506,10 +506,11 @@ NVMeManager::open_ertr::future<> NVMeManager::open(
 }
 
 NVMeManager::write_ertr::future<> NVMeManager::write(
-  rbm_abs_addr addr,
+  paddr_t paddr,
   bufferptr &bptr)
 {
   ceph_assert(device);
+  rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
   if (addr > super.end || addr < super.start ||
       bptr.length() > super.end - super.start) {
     return crimson::ct_error::erange::make();
@@ -520,10 +521,11 @@ NVMeManager::write_ertr::future<> NVMeManager::write(
 }
 
 NVMeManager::read_ertr::future<> NVMeManager::read(
-  rbm_abs_addr addr,
+  paddr_t paddr,
   bufferptr &bptr)
 {
   ceph_assert(device);
+  rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
   if (addr > super.end || addr < super.start ||
       bptr.length() > super.end - super.start) {
     return crimson::ct_error::erange::make();
