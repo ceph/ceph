@@ -473,8 +473,15 @@ docker.io/ceph/daemon-base:octopus
                 '00000000-0000-0000-0000-0000deadbeef',
                 None,
                 None,
-                [{'name': 'mon.a'}],
+                [{'name': 'mon.a', 'fsid': '00000000-0000-0000-0000-0000deadbeef'}],
                 '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [{'name': 'mon.a', 'fsid': 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'}],
+                cd.SHELL_DEFAULT_CONF,
             ),
             (
                 '00000000-0000-0000-0000-0000deadbeef',
