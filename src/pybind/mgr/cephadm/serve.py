@@ -972,10 +972,14 @@ class CephadmServe:
                         and action == 'reconfig':
                     action = 'redeploy'
                 try:
+                    self.log.info(f'XXX daemon action {action} on {dd.name()}')
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
                     self.mgr._daemon_action(daemon_spec, action=action)
+                    self.log.info(f'XXX rm scheduled action {action} on {dd.name()}')
                     if self.mgr.cache.rm_scheduled_daemon_action(dd.hostname, dd.name()):
+                        self.log.info(f'XXX unscheduled {action} on {dd.name()}, saving host')
                         self.mgr.cache.save_host(dd.hostname)
+                    self.log.info(f'XXX done action {action} on {dd.name()}')
                 except OrchestratorError as e:
                     self.mgr.events.from_orch_error(e)
                     if dd.daemon_type in daemons_post:
