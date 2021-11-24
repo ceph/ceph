@@ -3072,11 +3072,7 @@ int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optiona
   using ceph::encode;
   std::string oid;
 
-  if (addprefix) {
-    oid = get_info_oid_prefix() + info.id;
-  } else {
-    oid = info.id;
-  }
+  oid = info.id;
 
   bufferlist bl;
   encode(this->info, bl);
@@ -3172,29 +3168,21 @@ int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y, bool a
 {
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   std::string oid;
-  if (addprefix) {
-    oid = get_info_oid_prefix() + info.id;
-  } else {
-    oid = info.id;
-  }
+
+  oid = info.id;
+  ldpp_dout(dpp, 20) << "INFO: oid in read_info is: " << oid << dendl;
+
   bufferlist bl;
 
   RGWSI_MBSObj_GetParams params(&bl, &info.attrs, &info.mtime);
   std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
   ctx->init(store->svc()->role->get_be_handler());
-  int ret = store->svc()->role->svc.meta_be->get_entry(ctx.get(), oid, params, &info.objv_tracker, y, dpp);
+  int ret = store->svc()->role->svc.meta_be->get(ctx.get(), oid, params, &info.objv_tracker, y, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role info from Role pool: " << info.id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
-#if 0
-  int ret = rgw_get_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, &info.objv_tracker, &info.mtime, null_yield, dpp, &info.attrs, nullptr, boost::none, true);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed reading role info from Role pool: " << info.id << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-#endif
   try {
     using ceph::decode;
     auto iter = bl.cbegin();
@@ -3240,12 +3228,14 @@ int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yi
     return ret;
   }
 
-  /* create unique id */
-  uuid_d new_uuid;
-  char uuid_str[37];
-  new_uuid.generate_random();
-  new_uuid.print(uuid_str);
-  info.id = uuid_str;
+  if (info.id.empty()) {
+    /* create unique id */
+    uuid_d new_uuid;
+    char uuid_str[37];
+    new_uuid.generate_random();
+    new_uuid.print(uuid_str);
+    info.id = uuid_str;
+  }
 
   //arn
   info.arn = role_arn_prefix + info.tenant + ":role" + info.path + info.name;
