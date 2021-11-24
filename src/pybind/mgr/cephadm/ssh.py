@@ -189,12 +189,17 @@ class SSHManager:
         try:
             dirname = os.path.dirname(path)
             await self._check_execute_command(host, ['mkdir', '-p', dirname], addr=addr)
-            tmp_path = path + '.new'
+            await self._check_execute_command(host, ['mkdir', '-p', '/tmp' + dirname], addr=addr)
+            tmp_path = '/tmp' + path + '.new'
             await self._check_execute_command(host, ['touch', tmp_path], addr=addr)
             if uid is not None and gid is not None and mode is not None:
                 # shlex quote takes str or byte object, not int
                 await self._check_execute_command(host, ['chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
                 await self._check_execute_command(host, ['chmod', oct(mode)[2:], tmp_path], addr=addr)
+            elif self.mgr.ssh_user != 'root':
+                assert self.mgr.ssh_user
+                await self._check_execute_command(host, ['chown', '-R', self.mgr.ssh_user, tmp_path], addr=addr)
+                await self._check_execute_command(host, ['chmod', str(644), tmp_path], addr=addr)
             with NamedTemporaryFile(prefix='cephadm-write-remote-file-') as f:
                 os.fchmod(f.fileno(), 0o600)
                 f.write(content)
