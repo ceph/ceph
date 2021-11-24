@@ -76,16 +76,13 @@ void ActivePyModules::dump_server(const std::string &hostname,
   std::string ceph_version;
 
   for (const auto &[key, state] : dmc) {
-    without_gil([&ceph_version, state=state] {
-      std::lock_guard l(state->lock);
-      // TODO: pick the highest version, and make sure that
-      // somewhere else (during health reporting?) we are
-      // indicating to the user if we see mixed versions
-      auto ver_iter = state->metadata.find("ceph_version");
-      if (ver_iter != state->metadata.end()) {
-        ceph_version = state->metadata.at("ceph_version");
-      }
-    });
+    // TODO: pick the highest version, and make sure that
+    // somewhere else (during health reporting?) we are
+    // indicating to the user if we see mixed versions
+    auto ver_iter = state->metadata.find("ceph_version");
+    if (ver_iter != state->metadata.end()) {
+      ceph_version = state->metadata.at("ceph_version");
+    }
     f->open_object_section("service");
     f->dump_string("type", key.type);
     f->dump_string("id", key.name);
@@ -98,13 +95,19 @@ void ActivePyModules::dump_server(const std::string &hostname,
 
 PyObject *ActivePyModules::get_server_python(const std::string &hostname)
 {
-  const auto dmc = without_gil([&]{
-    std::lock_guard l(lock);
-    dout(10) << " (" << hostname << ")" << dendl;
-    return daemon_state.get_by_server(hostname);
-  });
+  dout(10) << " (" << hostname << ")" << dendl;
+
+  without_gil_t no_gil;
+  std::shared_lock l(daemon_state.lock);
+  no_gil.acquire_gil();
+  
   PyFormatter f;
-  dump_server(hostname, dmc, &f);
+  auto p = daemon_state.by_server.find(hostname);
+  if (p != daemon_state.by_server.end()) {
+    dump_server(hostname, p->second, &f);
+  } else {
+    dump_server(hostname, {}, &f);
+  }
   return f.get();
 }
 
@@ -114,37 +117,36 @@ PyObject *ActivePyModules::list_servers_python()
   dout(10) << " >" << dendl;
 
   without_gil_t no_gil;
-  return daemon_state.with_daemons_by_server([this, &no_gil]
-      (const std::map<std::string, DaemonStateCollection> &all) {
-    no_gil.acquire_gil();
-    PyFormatter f(false, true);
-    for (const auto &[hostname, daemon_state] : all) {
-      f.open_object_section("server");
-      dump_server(hostname, daemon_state, &f);
-      f.close_section();
-    }
-    return f.get();
-  });
+  std::shared_lock l(daemon_state.lock);
+  no_gil.acquire_gil();
+
+  PyFormatter f(false, true);
+  for (const auto &[hostname, ds] : daemon_state.by_server) {
+    f.open_object_section("server");
+    dump_server(hostname, ds, &f);
+    f.close_section();
+  }
+  return f.get();
 }
 
 PyObject *ActivePyModules::get_metadata_python(
   const std::string &svc_type,
   const std::string &svc_id)
 {
-  auto metadata = daemon_state.get(DaemonKey{svc_type, svc_id});
+  without_gil_t no_gil;
+  std::shared_lock l(daemon_state.lock);
+  no_gil.acquire_gil();
+  
+  auto metadata = daemon_state._get(DaemonKey{svc_type, svc_id});
   if (metadata == nullptr) {
     derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
     Py_RETURN_NONE;
   }
-  auto l = without_gil([&] {
-    return std::lock_guard(lock);
-  });
   PyFormatter f;
   f.dump_string("hostname", metadata->hostname);
   for (const auto &[key, val] : metadata->metadata) {
     f.dump_string(key, val);
   }
-
   return f.get();
 }
 
@@ -152,14 +154,15 @@ PyObject *ActivePyModules::get_daemon_status_python(
   const std::string &svc_type,
   const std::string &svc_id)
 {
-  auto metadata = daemon_state.get(DaemonKey{svc_type, svc_id});
+  without_gil_t no_gil;
+  std::shared_lock l(daemon_state.lock);
+  no_gil.acquire_gil();
+  
+  auto metadata = daemon_state._get(DaemonKey{svc_type, svc_id});
   if (metadata == nullptr) {
     derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
     Py_RETURN_NONE;
   }
-  auto l = without_gil([&] {
-    return std::lock_guard(lock);
-  });
   PyFormatter f;
   for (const auto &[daemon, status] : metadata->service_status) {
     f.dump_string(daemon, status);
@@ -202,18 +205,13 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     });
   } else if (what == "modified_config_options") {
     without_gil_t no_gil;
-    auto all_daemons = daemon_state.get_all();
-    set<string> names;
-    for (auto& [key, daemon] : all_daemons) {
-      std::lock_guard l(daemon->lock);
-      for (auto& [name, valmap] : daemon->config) {
-	names.insert(name);
-      }
-    }
+    std::shared_lock l(daemon_state.lock);
     no_gil.acquire_gil();
     f.open_array_section("options");
-    for (auto& name : names) {
-      f.dump_string("name", name);
+    for (auto& [key, daemon] : daemon_state.all) {
+      for (auto& [name, valmap] : daemon->config) {
+	f.dump_string("name", name);
+      }
     }
     f.close_section();
     return f.get();
@@ -240,34 +238,37 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     });
   } else if (what == "osd_metadata") {
     without_gil_t no_gil;
-    auto dmc = daemon_state.get_by_service("osd");
-    for (const auto &[key, state] : dmc) {
-      std::lock_guard l(state->lock);
-      with_gil(no_gil, [&f, &name=key.name, state=state] {
-        f.open_object_section(name.c_str());
-        f.dump_string("hostname", state->hostname);
-        for (const auto &[name, val] : state->metadata) {
-          f.dump_string(name.c_str(), val);
-        }
-        f.close_section();
-      });
+    std::shared_lock l(daemon_state.lock);
+    no_gil.acquire_gil();
+    for (const auto &[key, state] : daemon_state.all) {
+      if (key.type != "osd") {
+	continue;
+      }
+      auto& name = key.name;
+      f.open_object_section(name.c_str());
+      f.dump_string("hostname", state->hostname);
+      for (const auto &[name, val] : state->metadata) {
+	f.dump_string(name.c_str(), val);
+      }
+      f.close_section();
     }
-    return with_gil(no_gil, [&] { return f.get(); });
+    return f.get();
   } else if (what == "mds_metadata") {
     without_gil_t no_gil;
-    auto dmc = daemon_state.get_by_service("mds");
-    for (const auto &[key, state] : dmc) {
-      std::lock_guard l(state->lock);
-      with_gil(no_gil, [&f, &name=key.name, state=state] {
-        f.open_object_section(name.c_str());
-        f.dump_string("hostname", state->hostname);
-        for (const auto &[name, val] : state->metadata) {
-          f.dump_string(name.c_str(), val);
-        }
-        f.close_section();
-      });
+    std::shared_lock l(daemon_state.lock);
+    no_gil.acquire_gil();
+    for (const auto &[key, state] : daemon_state.all) {
+      if (key.type != "mds")
+	continue;
+      auto& name = key.name;
+      f.open_object_section(name.c_str());
+      f.dump_string("hostname", state->hostname);
+      for (const auto &[name, val] : state->metadata) {
+	f.dump_string(name.c_str(), val);
+      }
+      f.close_section();
     }
-    return with_gil(no_gil, [&] { return f.get(); });
+    return f.get();
   } else if (what == "pg_summary") {
     without_gil_t no_gil;
     return cluster_state.with_pgmap(
@@ -335,29 +336,25 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     );
   } else if (what == "devices") {
     without_gil_t no_gil;
-    daemon_state.with_devices2(
-      [&] {
-        with_gil(no_gil, [&] { f.open_array_section("devices"); });
-      },
-      [&](const DeviceState &dev) {
-        with_gil(no_gil, [&] { f.dump_object("device", dev); });
-      });
-    return with_gil(no_gil, [&] {
-      f.close_section();
-      return f.get();
-    });
+    std::shared_lock l(daemon_state.lock);
+    no_gil.acquire_gil();
+    f.open_array_section("devices");
+    for (auto& [devid, dev] : daemon_state.devices) {
+      f.dump_object("device", *dev);
+    }
+    f.close_section();
+    return f.get();
   } else if (what.size() > 7 &&
 	     what.substr(0, 7) == "device ") {
     without_gil_t no_gil;
+    std::shared_lock l(daemon_state.lock);
+    no_gil.acquire_gil();
     string devid = what.substr(7);
-    if (!daemon_state.with_device(devid,
-      [&] (const DeviceState& dev) {
-        with_gil_t with_gil{no_gil};
-        f.dump_object("device", dev);
-      })) {
-      // device not found
+    auto p = daemon_state.devices.find(devid);
+    if (p != daemon_state.devices.end()) {
+      f.dump_object("device", *p->second);
     }
-    return with_gil(no_gil, [&] { return f.get(); });
+    return f.get();
   } else if (what == "io_rate") {
     without_gil_t no_gil;
     return cluster_state.with_pgmap(
@@ -858,32 +855,30 @@ PyObject* ActivePyModules::with_perf_counters(
     const std::string &svc_id,
     const std::string &path) const
 {
+  without_gil_t no_gil;
+  std::shared_lock l(daemon_state.lock);
+  no_gil.acquire_gil();
+
   PyFormatter f;
   f.open_array_section(path);
-  {
-    without_gil_t no_gil;
-    std::lock_guard l(lock);
-    auto metadata = daemon_state.get(DaemonKey{svc_name, svc_id});
-    if (metadata) {
-      std::lock_guard l2(metadata->lock);
-      if (metadata->perf_counters.instances.count(path)) {
-        auto counter_instance = metadata->perf_counters.instances.at(path);
-        auto counter_type = metadata->perf_counters.types.at(path);
-        with_gil(no_gil, [&] {
-          fct(counter_instance, counter_type, f);
-        });
-      } else {
-        dout(4) << "Missing counter: '" << path << "' ("
-		<< svc_name << "." << svc_id << ")" << dendl;
-        dout(20) << "Paths are:" << dendl;
-        for (const auto &i : metadata->perf_counters.instances) {
-          dout(20) << i.first << dendl;
-        }
-      }
+
+  auto metadata = daemon_state._get(DaemonKey{svc_name, svc_id});
+  if (metadata) {
+    if (metadata->perf_counters.instances.count(path)) {
+      auto counter_instance = metadata->perf_counters.instances.at(path);
+      auto counter_type = metadata->perf_counters.types.at(path);
+      fct(counter_instance, counter_type, f);
     } else {
-      dout(4) << "No daemon state for " << svc_name << "." << svc_id << ")"
-              << dendl;
+      dout(4) << "Missing counter: '" << path << "' ("
+	      << svc_name << "." << svc_id << ")" << dendl;
+      dout(20) << "Paths are:" << dendl;
+      for (const auto &i : metadata->perf_counters.instances) {
+	dout(20) << i.first << dendl;
+      }
     }
+  } else {
+    dout(4) << "No daemon state for " << svc_name << "." << svc_id << ")"
+	    << dendl;
   }
   f.close_section();
   return f.get();
@@ -950,46 +945,47 @@ PyObject* ActivePyModules::get_perf_schema_python(
     const std::string &svc_id)
 {
   without_gil_t no_gil;
-  std::lock_guard l(lock);
+  std::shared_lock l(daemon_state.lock);
+  no_gil.acquire_gil();
 
   DaemonStateCollection daemons;
 
   if (svc_type == "") {
-    daemons = daemon_state.get_all();
+    daemons = daemon_state.all;
   } else if (svc_id.empty()) {
-    daemons = daemon_state.get_by_service(svc_type);
+    for (auto& [key, state] : daemon_state.all) {
+      if (key.type == svc_type) {
+	daemons[key] = state;
+      }
+    }
   } else {
     auto key = DaemonKey{svc_type, svc_id};
     // so that the below can be a loop in all cases
-    auto got = daemon_state.get(key);
+    auto got = daemon_state._get(key);
     if (got != nullptr) {
       daemons[key] = got;
     }
   }
 
-  auto f = with_gil(no_gil, [&] {
-    return PyFormatter();
-  });
+  PyFormatter f;
   if (!daemons.empty()) {
-    for (auto& [key, state] : daemons) {
-      std::lock_guard l(state->lock);
-      with_gil(no_gil, [&, key=ceph::to_string(key), state=state] {
-        f.open_object_section(key.c_str());
-        for (auto ctr_inst_iter : state->perf_counters.instances) {
-          const auto &counter_name = ctr_inst_iter.first;
-          f.open_object_section(counter_name.c_str());
-          auto type = state->perf_counters.types[counter_name];
-          f.dump_string("description", type.description);
-          if (!type.nick.empty()) {
-            f.dump_string("nick", type.nick);
-          }
-          f.dump_unsigned("type", type.type);
-          f.dump_unsigned("priority", type.priority);
-          f.dump_unsigned("units", type.unit);
-          f.close_section();
-        }
-        f.close_section();
-      });
+    for (auto& [rkey, state] : daemons) {
+      auto key = ceph::to_string(rkey);
+      f.open_object_section(key.c_str());
+      for (auto ctr_inst_iter : state->perf_counters.instances) {
+	const auto &counter_name = ctr_inst_iter.first;
+	f.open_object_section(counter_name.c_str());
+	auto type = state->perf_counters.types[counter_name];
+	f.dump_string("description", type.description);
+	if (!type.nick.empty()) {
+	  f.dump_string("nick", type.nick);
+	}
+	f.dump_unsigned("type", type.type);
+	f.dump_unsigned("priority", type.priority);
+	f.dump_unsigned("units", type.unit);
+	f.close_section();
+      }
+      f.close_section();
     }
   } else {
     dout(4) << __func__ << ": No daemon state found for "

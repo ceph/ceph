@@ -111,24 +111,24 @@ void MetadataUpdate::finish(int r)
         }
       }
 
-      if (daemon_state.exists(key)) {
-        DaemonStatePtr state = daemon_state.get(key);
+      std::unique_lock l(daemon_state.lock);
+      if (daemon_state._exists(key)) {
+        DaemonStatePtr state = daemon_state._get(key);
 	map<string,string> m;
-	{
-	  std::lock_guard l(state->lock);
-	  state->hostname = daemon_meta.at("hostname").get_str();
 
-	  if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
-	    daemon_meta.erase("name");
-	  } else if (key.type == "osd") {
-	    daemon_meta.erase("id");
-	  }
-	  daemon_meta.erase("hostname");
-	  for (const auto &[key, val] : daemon_meta) {
-	    m.emplace(key, val.get_str());
-	  }
+	state->hostname = daemon_meta.at("hostname").get_str();
+
+	if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
+	  daemon_meta.erase("name");
+	} else if (key.type == "osd") {
+	  daemon_meta.erase("id");
 	}
-	daemon_state.update_metadata(state, m);
+	daemon_meta.erase("hostname");
+	for (const auto &[key, val] : daemon_meta) {
+	  m.emplace(key, val.get_str());
+	}
+
+	daemon_state._update_metadata(state, m);
       } else {
         auto state = std::make_shared<DaemonState>(daemon_state.types);
         state->key = key;
@@ -147,7 +147,7 @@ void MetadataUpdate::finish(int r)
         }
 	state->set_metadata(m);
 
-        daemon_state.insert(state);
+        daemon_state._insert(state);
       }
     } else {
       ceph_abort();
@@ -718,23 +718,25 @@ void Mgr::handle_fs_map(ref_t<MFSMap> m)
     }
 
     bool update = false;
-    if (daemon_state.exists(k)) {
-      auto metadata = daemon_state.get(k);
-      std::lock_guard l(metadata->lock);
-      if (metadata->metadata.empty() ||
-	  metadata->metadata.count("addr") == 0) {
-        update = true;
+    {
+      std::shared_lock l(daemon_state.lock);
+      if (daemon_state._exists(k)) {
+	auto metadata = daemon_state._get(k);
+	if (metadata->metadata.empty() ||
+	    metadata->metadata.count("addr") == 0) {
+	  update = true;
+	} else {
+	  auto metadata_addrs = metadata->metadata.at("addr");
+	  const auto map_addrs = info.addrs;
+	  update = metadata_addrs != stringify(map_addrs);
+	  if (update) {
+	    dout(4) << "MDS[" << info.name << "] addr change " << metadata_addrs
+		    << " != " << stringify(map_addrs) << dendl;
+	  }
+	}
       } else {
-        auto metadata_addrs = metadata->metadata.at("addr");
-        const auto map_addrs = info.addrs;
-        update = metadata_addrs != stringify(map_addrs);
-        if (update) {
-          dout(4) << "MDS[" << info.name << "] addr change " << metadata_addrs
-                  << " != " << stringify(map_addrs) << dendl;
-        }
+	update = true;
       }
-    } else {
-      update = true;
     }
 
     if (update) {

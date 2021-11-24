@@ -224,57 +224,19 @@ void DaemonStateIndex::_erase(const DaemonKey& dmk)
   all.erase(to_erase);
 }
 
-DaemonStateCollection DaemonStateIndex::get_by_service(
-  const std::string& svc) const
+bool DaemonStateIndex::_exists(const DaemonKey &key) const
 {
-  std::shared_lock l{lock};
-
-  DaemonStateCollection result;
-
-  for (const auto& [key, state] : all) {
-    if (key.type == svc) {
-      result[key] = state;
-    }
-  }
-
-  return result;
-}
-
-DaemonStateCollection DaemonStateIndex::get_by_server(
-  const std::string &hostname) const
-{
-  std::shared_lock l{lock};
-
-  if (auto found = by_server.find(hostname); found != by_server.end()) {
-    return found->second;
-  } else {
-    return {};
-  }
-}
-
-bool DaemonStateIndex::exists(const DaemonKey &key) const
-{
-  std::shared_lock l{lock};
-
   return all.count(key) > 0;
 }
 
-DaemonStatePtr DaemonStateIndex::get(const DaemonKey &key)
+DaemonStatePtr DaemonStateIndex::_get(const DaemonKey &key)
 {
-  std::shared_lock l{lock};
-
   auto iter = all.find(key);
   if (iter != all.end()) {
     return iter->second;
   } else {
     return nullptr;
   }
-}
-
-void DaemonStateIndex::rm(const DaemonKey &key)
-{
-  std::unique_lock l{lock};
-  _rm(key);
 }
 
 void DaemonStateIndex::_rm(const DaemonKey &key)

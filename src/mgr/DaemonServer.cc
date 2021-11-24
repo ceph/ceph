@@ -454,10 +454,11 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
 
   _send_configure(con);
 
+  std::unique_lock l2(daemon_state.lock);
   DaemonStatePtr daemon;
-  if (daemon_state.exists(key)) {
+  if (daemon_state._exists(key)) {
     dout(20) << "updating existing DaemonState for " << key << dendl;
-    daemon = daemon_state.get(key);
+    daemon = daemon_state._get(key);
   }
   if (!daemon) {
     if (m->service_daemon) {
@@ -465,7 +466,7 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
       daemon = std::make_shared<DaemonState>(daemon_state.types);
       daemon->key = key;
       daemon->service_daemon = true;
-      daemon_state.insert(daemon);
+      daemon_state._insert(daemon);
     } else {
       /* A normal Ceph daemon has connected but we are or should be waiting on
        * metadata for it. Close the session so that it tries to reconnect.
@@ -474,6 +475,7 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
               << "; not ready for session (expect reconnect)" << dendl;
       con->mark_down();
       l.unlock();
+      l2.unlock();
       fetch_missing_metadata(key, m->get_source_addr());
       return true;
     }
@@ -482,10 +484,9 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
     if (m->service_daemon) {
       // update the metadata through the daemon state index to
       // ensure it's kept up-to-date
-      daemon_state.update_metadata(daemon, m->daemon_metadata);
+      daemon_state._update_metadata(daemon, m->daemon_metadata);
     }
 
-    std::lock_guard l(daemon->lock);
     daemon->perf_counters.clear();
 
     daemon->service_daemon = m->service_daemon;
@@ -540,11 +541,11 @@ bool DaemonServer::handle_close(const ref_t<MMgrClose>& m)
 				   m->daemon_name);
   dout(4) << "from " << m->get_connection() << "  " << key << dendl;
 
-  if (daemon_state.exists(key)) {
-    DaemonStatePtr daemon = daemon_state.get(key);
-    daemon_state.rm(key);
-    {
-      std::lock_guard l(daemon->lock);
+  {
+    std::unique_lock l(daemon_state.lock);
+    if (daemon_state._exists(key)) {
+      DaemonStatePtr daemon = daemon_state._get(key);
+      daemon_state._rm(key);
       if (daemon->service_daemon) {
 	pending_service_map.rm_daemon(m->service_name, m->daemon_name);
 	pending_service_map_dirty = pending_service_map.epoch;
@@ -598,22 +599,19 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 
   {
     std::unique_lock locker(lock);
+    std::unique_lock locker2(daemon_state.lock);
 
     DaemonStatePtr daemon;
     // Look up the DaemonState
-    if (daemon_state.exists(key)) {
+    if (daemon_state._exists(key)) {
       dout(20) << "updating existing DaemonState for " << key << dendl;
-      daemon = daemon_state.get(key);
+      daemon = daemon_state._get(key);
     } else {
-      locker.unlock();
-
+      locker2.unlock();
+      
       // we don't know the hostname at this stage, reject MMgrReport here.
       dout(5) << "rejecting report from " << key << ", since we do not have its metadata now."
               << dendl;
-      // issue metadata request in background
-      fetch_missing_metadata(key, m->get_source_addr());
-
-      locker.lock();
 
       // kill session
       auto priv = m->get_connection()->get_priv();
@@ -635,13 +633,16 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
         daemon_connections.erase(iter);
       }
 
+      // issue metadata request in background
+      locker.unlock();
+      fetch_missing_metadata(key, m->get_source_addr());
+
       return false;
     }
 
     // Update the DaemonState
     ceph_assert(daemon != nullptr);
     {
-      std::lock_guard l(daemon->lock);
       auto &daemon_counters = daemon->perf_counters;
       daemon_counters.update(*m.get());
 
@@ -1167,9 +1168,9 @@ bool DaemonServer::_handle_command(
       for (auto& q : service.daemons) {
 	f->open_object_section(q.first.c_str());
 	DaemonKey key{type, q.first};
-	ceph_assert(daemon_state.exists(key));
-	auto daemon = daemon_state.get(key);
-	std::lock_guard l(daemon->lock);
+	std::shared_lock(daemon_state.lock);
+	ceph_assert(daemon_state._exists(key));
+	auto daemon = daemon_state._get(key);
 	f->dump_stream("status_stamp") << daemon->service_status_stamp;
 	f->dump_stream("last_beacon") << daemon->last_service_beacon;
 	f->open_object_section("status");
@@ -1948,14 +1949,13 @@ bool DaemonServer::_handle_command(
       cmdctx->reply(-EINVAL, ss);
       return true;
     }
-    DaemonStatePtr daemon = daemon_state.get(key);
+    std::shared_lock l(daemon_state.lock);
+    DaemonStatePtr daemon = daemon_state._get(key);
     if (!daemon) {
       ss << "no config state for daemon " << who;
       cmdctx->reply(-ENOENT, ss);
       return true;
     }
-
-    std::lock_guard l(daemon->lock);
 
     int r = 0;
     string name;
@@ -2179,14 +2179,16 @@ bool DaemonServer::_handle_command(
       ss << who << " is not a valid daemon name";
       r = -EINVAL;
     } else {
-      auto dm = daemon_state.get(k);
+      std::shared_lock l(daemon_state.lock);
+      auto dm = daemon_state._get(k);
       if (dm) {
 	if (f) {
 	  f->open_array_section("devices");
 	  for (auto& i : dm->devices) {
-	    daemon_state.with_device(i.first, [&f] (const DeviceState& dev) {
-		f->dump_object("device", dev);
-	      });
+	    auto p = daemon_state.devices.find(i.first);
+	    if (p != daemon_state.devices.end()) {
+	      f->dump_object("device", *p->second);
+	    }
 	  }
 	  f->close_section();
 	  f->flush(cmdctx->odata);
@@ -2475,12 +2477,13 @@ void DaemonServer::_prune_pending_service_map()
 {
   utime_t cutoff = ceph_clock_now();
   cutoff -= g_conf().get_val<double>("mgr_service_beacon_grace");
+  std::unique_lock l(daemon_state.lock);
   auto p = pending_service_map.services.begin();
   while (p != pending_service_map.services.end()) {
     auto q = p->second.daemons.begin();
     while (q != p->second.daemons.end()) {
       DaemonKey key{p->first, q->first};
-      if (!daemon_state.exists(key)) {
+      if (!daemon_state._exists(key)) {
         if (ServiceMap::is_normal_ceph_entity(p->first)) {
           dout(10) << "daemon " << key << " in service map but not in daemon state "
                    << "index -- force pruning" << dendl;
@@ -2494,8 +2497,7 @@ void DaemonServer::_prune_pending_service_map()
         continue;
       }
 
-      auto daemon = daemon_state.get(key);
-      std::lock_guard l(daemon->lock);
+      auto daemon = daemon_state._get(key);
       if (daemon->last_service_beacon == utime_t()) {
 	// we must have just restarted; assume they are alive now.
 	daemon->last_service_beacon = ceph_clock_now();
@@ -2576,11 +2578,12 @@ void DaemonServer::send_report()
 	});
     });
 
+  std::shared_lock l(daemon_state.lock);
   map<daemon_metric, unique_ptr<DaemonHealthMetricCollector>> accumulated;
   for (auto service : {"osd", "mon"} ) {
-    auto daemons = daemon_state.get_by_service(service);
-    for (const auto& [key,state] : daemons) {
-      std::lock_guard l{state->lock};
+    for (const auto& [key,state] : daemon_state.all) {
+      if (key.type != service)
+	continue;
       for (const auto& metric : state->daemon_health_metrics) {
         auto acc = accumulated.find(metric.get_type());
         if (acc == accumulated.end()) {

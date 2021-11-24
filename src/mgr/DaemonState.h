@@ -250,15 +250,17 @@ private:
  */
 class DaemonStateIndex
 {
-private:
+public:
   mutable ceph::shared_mutex lock =
     ceph::make_shared_mutex("DaemonStateIndex", true, true, true);
 
   std::map<std::string, DaemonStateCollection> by_server;
   DaemonStateCollection all;
-  std::set<DaemonKey> updating;
 
   std::map<std::string,ceph::ref_t<DeviceState>> devices;
+
+private:
+  std::set<DaemonKey> updating;
 
   void _erase(const DaemonKey& dmk);
 
@@ -283,17 +285,13 @@ public:
 
   void insert(DaemonStatePtr dm);
   void _insert(DaemonStatePtr dm);
-  bool exists(const DaemonKey &key) const;
-  DaemonStatePtr get(const DaemonKey &key);
-  void rm(const DaemonKey &key);
+  bool exists(const DaemonKey &key) const {
+    std::shared_lock l(lock);
+    return _exists(key);
+  }
+  bool _exists(const DaemonKey &key) const;
+  DaemonStatePtr _get(const DaemonKey &key);
   void _rm(const DaemonKey &key);
-
-  // Note that these return by value rather than reference to avoid
-  // callers needing to stay in lock while using result.  Callers must
-  // still take the individual DaemonState::lock on each entry though.
-  DaemonStateCollection get_by_server(const std::string &hostname) const;
-  DaemonStateCollection get_by_service(const std::string &svc_name) const;
-  DaemonStateCollection get_all() const {return all;}
 
   template<typename Callback, typename...Args>
   auto with_daemons_by_server(Callback&& cb, Args&&... args) const ->
@@ -346,24 +344,14 @@ public:
     }
   }
 
-  template<typename CallbackInitial, typename Callback, typename...Args>
-  void with_devices2(CallbackInitial&& cbi,  // with lock taken
-		     Callback&& cb,          // for each device
-		     Args&&... args) const {
-    std::shared_lock l{lock};
-    cbi();
-    for (auto& i : devices) {
-      std::forward<Callback>(cb)(*i.second, std::forward<Args>(args)...);
-    }
-  }
-
   void list_devids_by_server(const std::string& server,
 			     std::set<std::string> *ls) {
-    auto m = get_by_server(server);
-    for (auto& i : m) {
-      std::lock_guard l(i.second->lock);
-      for (auto& j : i.second->devices) {
-	ls->insert(j.first);
+    std::shared_lock l{lock};
+    for (auto& j : by_server) {
+      for (auto& i : j.second) {
+	for (auto& j : i.second->devices) {
+	  ls->insert(j.first);
+	}
       }
     }
   }
@@ -381,15 +369,11 @@ public:
     return updating.count(k) > 0;
   }
 
-  void update_metadata(DaemonStatePtr state,
+  void _update_metadata(DaemonStatePtr state,
 		       const std::map<std::string,std::string>& meta) {
     // remove and re-insert in case the device metadata changed
-    std::unique_lock l{lock};
     _rm(state->key);
-    {
-      std::lock_guard l2{state->lock};
-      state->set_metadata(meta);
-    }
+    state->set_metadata(meta);
     _insert(state);
   }
 
