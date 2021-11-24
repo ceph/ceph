@@ -914,34 +914,78 @@ TEST(BlueFS, test_truncate_stable_53129) {
 TEST(BlueFS, broken_unlink_fsync_seq) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
+
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false, 1048576));
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
   ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
-  {
-    /*
-    * This reproduces a weird file op sequence (unlink+fsync) that Octopus
-    * RocksDB might issue to BlueFS when recycle_log_file_num setting is 0
-    * See https://tracker.ceph.com/issues/55636 for more details
-    *
-    */
-    char buf[1048571]; // this is biggish, but intentionally not evenly aligned
-    for (unsigned i = 0; i < sizeof(buf); ++i) {
-      buf[i] = i;
-    }
-    BlueFS::FileWriter *h;
-    ASSERT_EQ(0, fs.mkdir("dir"));
-    ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
+  ASSERT_EQ(0, fs.mkdir("dir"));
 
-    h->append(buf, sizeof(buf));
-    fs.flush(h);
-    h->append(buf, sizeof(buf));
-    fs.unlink("dir", "file");
+  char data[2000];
+  BlueFS::FileWriter *h;
+  ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
+  for (size_t i = 0; i < 100; i++) {
+    h->append(data, 2000);
     fs.fsync(h);
-    fs.close_writer(h);
   }
+  fs.close_writer(h);
+  fs.umount(true); //do not compact on exit!
+
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.open_for_write("dir", "file2", &h, false));
+  for (size_t i = 0; i < 100; i++) {
+    h->append(data, 2000);
+    fs.fsync(h);
+  }
+  fs.close_writer(h);
+  fs.umount();
+
+  // remount and check log can replay safe?
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  fs.umount();
+}
+
+TEST(BlueFS, test_update_ino1_delta_after_replay) {
+  uint64_t size = 1048576LL * (2 * 1024 + 128);
+  TempBdev bdev{size};
+
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_alloc_size", "4096");
+  conf.SetVal("bluefs_shared_alloc_size", "4096");
+  conf.SetVal("bluefs_compact_log_sync", "false");
+  conf.SetVal("bluefs_min_log_runway", "32768");
+  conf.SetVal("bluefs_max_log_runway", "65536");
+  conf.SetVal("bluefs_allocator", "stupid");
+  conf.ApplyChanges();
+
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false, 1048576));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mkdir("dir"));
+
+  char data[2000];
+  BlueFS::FileWriter *h;
+  ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
+  for (size_t i = 0; i < 100; i++) {
+    h->append(data, 2000);
+    fs.fsync(h);
+  }
+  fs.close_writer(h);
+  fs.umount(true); //do not compact on exit!
+
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.open_for_write("dir", "file2", &h, false));
+  for (size_t i = 0; i < 100; i++) {
+    h->append(data, 2000);
+    fs.fsync(h);
+  }
+  fs.close_writer(h);
   fs.umount();
 
   // remount and check log can replay safe?
