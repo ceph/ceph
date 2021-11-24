@@ -4378,6 +4378,10 @@ def prepare_ssh(
         }
         cli(['cephadm', 'set-ssh-config', '-i', '/tmp/cephadm-ssh-config'], extra_mounts=mounts)
 
+    if ctx.ssh_password:
+        logger.info('Using provided ssh password...')
+        cli(['cephadm', 'set-password', ctx.ssh_password])
+
     if ctx.ssh_private_key and ctx.ssh_public_key:
         logger.info('Using provided ssh keys...')
         mounts = {
@@ -7991,6 +7995,9 @@ def _get_parser():
         '--ssh-user',
         default='root',
         help='set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users')
+    parser_bootstrap.add_argument(
+        '--ssh-password',
+        help='set password for SSHing to cluster hosts')
     parser_bootstrap.add_argument(
         '--skip-mon-network',
         action='store_true',
