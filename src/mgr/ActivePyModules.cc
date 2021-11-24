@@ -171,18 +171,15 @@ PyObject *ActivePyModules::get_python(const std::string &what)
 {
   PyFormatter f;
 
-  // Drop the GIL, as most of the following blocks will block on
-  // a mutex -- they are all responsible for re-taking the GIL before
-  // touching the PyFormatter instance or returning from the function.
-  without_gil_t no_gil;
-
   if (what == "fs_map") {
+    without_gil_t no_gil;
     return cluster_state.with_fsmap([&](const FSMap &fsmap) {
       with_gil_t with_gil{no_gil};
       fsmap.dump(&f);
       return f.get();
     });
   } else if (what == "osdmap_crush_map_text") {
+    without_gil_t no_gil;
     bufferlist rdata;
     cluster_state.with_osdmap([&](const OSDMap &osd_map){
       osd_map.crush->encode(rdata, CEPH_FEATURES_SUPPORTED_DEFAULT);
@@ -191,6 +188,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     with_gil_t with_gil{no_gil};
     return PyUnicode_FromString(crush_text.c_str());
   } else if (what.substr(0, 7) == "osd_map") {
+    without_gil_t no_gil;
     return cluster_state.with_osdmap([&](const OSDMap &osd_map){
       with_gil_t with_gil{no_gil};
       if (what == "osd_map") {
@@ -203,6 +201,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       return f.get();
     });
   } else if (what == "modified_config_options") {
+    without_gil_t no_gil;
     auto all_daemons = daemon_state.get_all();
     set<string> names;
     for (auto& [key, daemon] : all_daemons) {
@@ -219,7 +218,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     f.close_section();
     return f.get();
   } else if (what.substr(0, 6) == "config") {
-    with_gil_t with_gil{no_gil};
     if (what == "config_options") {
       g_conf().config_options(&f);
     } else if (what == "config") {
@@ -227,18 +225,21 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     }
     return f.get();
   } else if (what == "mon_map") {
+    without_gil_t no_gil;
     return cluster_state.with_monmap([&](const MonMap &monmap) {
       with_gil_t with_gil{no_gil};
       monmap.dump(&f);
       return f.get();
     });
   } else if (what == "service_map") {
+    without_gil_t no_gil;
     return cluster_state.with_servicemap([&](const ServiceMap &service_map) {
       with_gil_t with_gil{no_gil};
       service_map.dump(&f);
       return f.get();
     });
   } else if (what == "osd_metadata") {
+    without_gil_t no_gil;
     auto dmc = daemon_state.get_by_service("osd");
     for (const auto &[key, state] : dmc) {
       std::lock_guard l(state->lock);
@@ -253,6 +254,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     }
     return with_gil(no_gil, [&] { return f.get(); });
   } else if (what == "mds_metadata") {
+    without_gil_t no_gil;
     auto dmc = daemon_state.get_by_service("mds");
     for (const auto &[key, state] : dmc) {
       std::lock_guard l(state->lock);
@@ -267,6 +269,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     }
     return with_gil(no_gil, [&] { return f.get(); });
   } else if (what == "pg_summary") {
+    without_gil_t no_gil;
     return cluster_state.with_pgmap(
         [&f, &no_gil](const PGMap &pg_map) {
           std::map<std::string, std::map<std::string, uint32_t> > osds;
@@ -313,6 +316,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
         }
     );
   } else if (what == "pg_status") {
+    without_gil_t no_gil;
     return cluster_state.with_pgmap(
         [&](const PGMap &pg_map) {
 	  with_gil_t with_gil{no_gil};
@@ -321,6 +325,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
         }
     );
   } else if (what == "pg_dump") {
+    without_gil_t no_gil;
     return cluster_state.with_pgmap(
       [&](const PGMap &pg_map) {
 	with_gil_t with_gil{no_gil};
@@ -329,6 +334,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       }
     );
   } else if (what == "devices") {
+    without_gil_t no_gil;
     daemon_state.with_devices2(
       [&] {
         with_gil(no_gil, [&] { f.open_array_section("devices"); });
@@ -342,6 +348,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     });
   } else if (what.size() > 7 &&
 	     what.substr(0, 7) == "device ") {
+    without_gil_t no_gil;
     string devid = what.substr(7);
     if (!daemon_state.with_device(devid,
       [&] (const DeviceState& dev) {
@@ -352,6 +359,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     }
     return with_gil(no_gil, [&] { return f.get(); });
   } else if (what == "io_rate") {
+    without_gil_t no_gil;
     return cluster_state.with_pgmap(
       [&](const PGMap &pg_map) {
         with_gil_t with_gil{no_gil};
@@ -360,6 +368,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       }
     );
   } else if (what == "df") {
+    without_gil_t no_gil;
     return cluster_state.with_osdmap_and_pgmap(
       [&](
 	const OSDMap& osd_map,
@@ -370,34 +379,38 @@ PyObject *ActivePyModules::get_python(const std::string &what)
 	return f.get();
       });
   } else if (what == "pg_stats") {
+    without_gil_t no_gil;
     return cluster_state.with_pgmap([&](const PGMap &pg_map) {
       with_gil_t with_gil{no_gil};
       pg_map.dump_pg_stats(&f, false);
       return f.get();
     });
   } else if (what == "pool_stats") {
+    without_gil_t no_gil;
     return cluster_state.with_pgmap([&](const PGMap &pg_map) {
       with_gil_t with_gil{no_gil};
       pg_map.dump_pool_stats(&f);
       return f.get();
     });
   } else if (what == "pg_ready") {
-    with_gil_t with_gil{no_gil};
     server.dump_pg_ready(&f);
     return f.get();
   } else if (what == "osd_stats") {
+    without_gil_t no_gil;
     return cluster_state.with_pgmap([&](const PGMap &pg_map) {
       with_gil_t with_gil{no_gil};
       pg_map.dump_osd_stats(&f, false);
       return f.get();
     });
   } else if (what == "osd_ping_times") {
+    without_gil_t no_gil;
     return cluster_state.with_pgmap([&](const PGMap &pg_map) {
       with_gil_t with_gil{no_gil};
       pg_map.dump_osd_ping_times(&f);
       return f.get();
     });
   } else if (what == "osd_pool_stats") {
+    without_gil_t no_gil;
     int64_t poolid = -ENOENT;
     return cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap,
 					    const PGMap& pg_map) {
@@ -411,12 +424,14 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       return f.get();
     });
   } else if (what == "health") {
+    without_gil_t no_gil;
     return cluster_state.with_health([&](const ceph::bufferlist &health_json) {
       with_gil_t with_gil{no_gil};
       f.dump_string("json", health_json.to_str());
       return f.get();
     });
   } else if (what == "mon_status") {
+    without_gil_t no_gil;
     return cluster_state.with_mon_status(
         [&](const ceph::bufferlist &mon_status_json) {
       with_gil_t with_gil{no_gil};
@@ -424,6 +439,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       return f.get();
     });
   } else if (what == "mgr_map") {
+    without_gil_t no_gil;
     return cluster_state.with_mgrmap([&](const MgrMap &mgr_map) {
       with_gil_t with_gil{no_gil};
       mgr_map.dump(&f);
@@ -431,7 +447,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     });
   } else if (what == "mgr_ips") {
     entity_addrvec_t myaddrs = server.get_myaddrs();
-    with_gil_t with_gil{no_gil};
     f.open_array_section("ips");
     std::set<std::string> did;
     for (auto& i : myaddrs.v) {
@@ -443,10 +458,10 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     f.close_section();
     return f.get();
   } else if (what == "have_local_config_map") {
-    with_gil_t with_gil{no_gil};
     f.dump_bool("have_local_config_map", have_local_config_map);
     return f.get();
   } else if (what == "active_clean_pgs"){
+    without_gil_t no_gil;
     cluster_state.with_pgmap(
         [&](const PGMap &pg_map) {
       with_gil_t with_gil{no_gil};
@@ -471,7 +486,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     return f.get();
   } else {
     derr << "Python module requested unknown data '" << what << "'" << dendl;
-    with_gil_t with_gil{no_gil};
     Py_RETURN_NONE;
   }
 }
