@@ -18,6 +18,7 @@ install(DIRECTORY
   REGEX "\\.gitignore" EXCLUDE
   REGEX ".*\\.pyi" EXCLUDE
   REGEX "hello/.*" EXCLUDE
+  REGEX "cli_api/.*" EXCLUDE
   REGEX "tests/.*" EXCLUDE
   REGEX "rook/rook-client-python.*" EXCLUDE
   REGEX "osd_perf_query/.*" EXCLUDE
