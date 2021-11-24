@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 host_rootfs = '/rootfs'
 run_host_cmd = [
         'nsenter',
-        '--root={}'.format(host_rootfs),
         '--mount={}/proc/1/ns/mnt'.format(host_rootfs),
         '--ipc={}/proc/1/ns/ipc'.format(host_rootfs),
         '--net={}/proc/1/ns/net'.format(host_rootfs),
