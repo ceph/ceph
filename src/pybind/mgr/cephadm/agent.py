@@ -371,9 +371,10 @@ class CephadmAgentHelpers:
             self.mgr.cache.agent_timestamp[host] = datetime_now()
             if host in self.mgr.offline_hosts:
                 return False
-        # agent hasn't reported in 2.5 * it's refresh rate. Something is likely wrong with it.
+        # agent hasn't reported in down multiplier * it's refresh rate. Something is likely wrong with it.
+        down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
         time_diff = datetime_now() - self.mgr.cache.agent_timestamp[host]
-        if time_diff.total_seconds() > 2.5 * float(self.mgr.agent_refresh_rate):
+        if time_diff.total_seconds() > down_mult * float(self.mgr.agent_refresh_rate):
             return True
         return False
 
@@ -381,9 +382,10 @@ class CephadmAgentHelpers:
         self.mgr.remove_health_warning('CEPHADM_AGENT_DOWN')
         if down_agent_hosts:
             detail: List[str] = []
+            down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
             for agent in down_agent_hosts:
                 detail.append((f'Cephadm agent on host {agent} has not reported in '
-                              f'{2.5 * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
+                              f'{down_mult * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
                                'down and host may be offline.'))
             for dd in [d for d in self.mgr.cache.get_daemons_by_type('agent') if d.hostname in down_agent_hosts]:
                 dd.status = DaemonDescriptionStatus.error
