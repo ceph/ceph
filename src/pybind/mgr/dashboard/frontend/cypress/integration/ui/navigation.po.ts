@@ -53,9 +53,8 @@ export class NavigationPageHelper extends PageHelper {
 
   checkNavigations(navs: any) {
     // The nfs-ganesha and RGW status requests are mocked to ensure that this method runs in time
-    cy.server();
-    cy.route('/api/nfs-ganesha/status', 'fixture:nfs-ganesha-status');
-    cy.route('/api/rgw/status', 'fixture:rgw-status');
+    cy.intercept('/api/nfs-ganesha/status', { fixture: 'nfs-ganesha-status.json' });
+    cy.intercept('/api/rgw/status', { fixture: 'rgw-status.json' });
 
     navs.forEach((nav: any) => {
       cy.contains('.simplebar-content li.nav-item a', nav.menu).click();
