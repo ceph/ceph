@@ -35,6 +35,7 @@ struct TestMockShutDownCryptoRequest : public TestMockFixture {
   C_SaferCond finished_cond;
   Context *on_finish = &finished_cond;
   MockShutDownCryptoRequest* mock_shutdown_crypto_request;
+  MockCryptoInterface* crypto;
   Context* shutdown_object_dispatch_context;
   Context* shutdown_image_dispatch_context;
 
@@ -44,12 +45,14 @@ struct TestMockShutDownCryptoRequest : public TestMockFixture {
     librbd::ImageCtx *ictx;
     ASSERT_EQ(0, open_image(m_image_name, &ictx));
     mock_image_ctx = new MockTestImageCtx(*ictx);
-    mock_image_ctx->crypto = new MockCryptoInterface();
+    crypto = new MockCryptoInterface();
+    mock_image_ctx->crypto = crypto;
     mock_shutdown_crypto_request = MockShutDownCryptoRequest::create(
           mock_image_ctx, on_finish);
   }
 
   void TearDown() override {
+    crypto->put();
     delete mock_image_ctx;
     TestMockFixture::TearDown();
   }
