@@ -46,9 +46,14 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
     librbd::ImageCtx *ictx;
     ASSERT_EQ(0, open_image(m_image_name, &ictx));
     mock_image_ctx = new MockImageCtx(*ictx);
+    crypto = nullptr;
   }
 
   void TearDown() override {
+    if (crypto != nullptr) {
+      crypto->put();
+      crypto = nullptr;
+    }
     delete mock_image_ctx;
     TestMockFixture::TearDown();
   }
