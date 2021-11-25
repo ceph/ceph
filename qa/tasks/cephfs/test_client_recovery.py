@@ -499,10 +499,16 @@ class TestClientRecovery(CephFSTestCase):
 
         # create a new instance of mount_a's class with most of the
         # same settings, but mounted on mount_b's mountpoint.
-        m = cl(self.mount_a.ctx, self.mount_a.test_dir, self.mount_a.client_id,
-               self.mount_a.client_remote, self.mount_a.client_keyring_path,
-               self.mount_b.hostfs_mntpt, self.mount_a.cephfs_name,
-               self.mount_a.cephfs_mntpt, self.mount_a.ceph_brx_net)
+        m = cl(ctx=self.mount_a.ctx,
+               client_config=self.mount_a.client_config,
+               test_dir=self.mount_a.test_dir,
+               client_id=self.mount_a.client_id,
+               client_remote=self.mount_a.client_remote,
+               client_keyring_path=self.mount_a.client_keyring_path,
+               cephfs_name=self.mount_a.cephfs_name,
+               cephfs_mntpt= self.mount_a.cephfs_mntpt,
+               hostfs_mntpt=self.mount_b.hostfs_mntpt,
+               brxnet=self.mount_a.ceph_brx_net)
 
         # evict mount_a
         mount_a_client_id = self.mount_a.get_global_id()
