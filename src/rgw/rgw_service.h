@@ -75,7 +75,6 @@ class RGWSI_SysObj_Cache;
 class RGWSI_User;
 class RGWSI_User_RADOS;
 class RGWDataChangesLog;
-class RGWSI_Role;
 class RGWSI_Role_RADOS;
 
 struct RGWServices_Def

@@ -3067,7 +3067,7 @@ int RadosOIDCProvider::delete_obj(const DoutPrefixProvider *dpp, optional_yield 
   return ret;
 }
 
-int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y, bool addprefix)
+int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
   using ceph::encode;
   std::string oid;
@@ -3164,7 +3164,7 @@ int RadosRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
   return 0;
 }
 
-int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y, bool addprefix)
+int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
 {
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   std::string oid;
@@ -3208,7 +3208,7 @@ int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y, bool a
   return 0;
 }
 
-int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y, bool addprefix)
+int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
   int ret;
 
@@ -3254,7 +3254,7 @@ int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yi
   info.creation_date.assign(buf, strlen(buf));
 
   auto& pool = store->svc()->zone->get_zone_params().roles_pool;
-  ret = store_info(dpp, exclusive, y, addprefix);
+  ret = store_info(dpp, exclusive, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR:  storing role info in Role pool: "
                   << info.id << ": " << cpp_strerror(-ret) << dendl;

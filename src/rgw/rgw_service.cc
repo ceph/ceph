@@ -36,7 +36,6 @@
 #include "rgw_otp.h"
 #include "rgw_user.h"
 #include "rgw_role.h"
-#include "rgw_sal_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -373,7 +372,7 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixPr
   }
 
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc());
-  meta.role = std::make_unique<rgw::sal::RGWRoleMetadataHandler>(svc.cct, store, svc.role);
+  meta.role = std::make_unique<rgw::sal::RGWRoleMetadataHandler>(store, svc.role);
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
   bucket.reset(new RGWBucketCtl(svc.zone,
