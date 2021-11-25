@@ -21,9 +21,9 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
-#include "services/svc_role.h"
 #include "services/svc_meta_be_sobj.h"
 #include "services/svc_meta.h"
+#include "services/svc_role_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -271,99 +271,10 @@ const string& RGWRole::get_path_oid_prefix()
 {
   return role_path_oid_prefix;
 }
-#if 0
-class RGWSI_Role_Module : public RGWSI_MBSObj_Handler_Module {
-  RGWRoleMetadataHandler::Svc& svc;
-  const std::string prefix;
-public:
-  RGWSI_Role_Module(RGWRoleMetadataHandler::Svc& _svc): RGWSI_MBSObj_Handler_Module("roles"),
-                                                  svc(_svc),
-                                                  prefix(rgw::sal::RGWRole::get_info_oid_prefix()) {}
 
-  void get_pool_and_oid(const std::string& key,
-                        rgw_pool *pool,
-                        std::string *oid) override
-  {
-    if (pool) {
-      *pool = svc.zone->get_zone_params().roles_pool;
-    }
-
-    if (oid) {
-      *oid = key_to_oid(key);
-    }
-  }
-
-  bool is_valid_oid(const std::string& oid) override {
-    return boost::algorithm::starts_with(oid, prefix);
-  }
-
-  std::string key_to_oid(const std::string& key) override {
-    return prefix + key;
-  }
-
-  // This is called after `is_valid_oid` and is assumed to be a valid oid
-  std::string oid_to_key(const std::string& oid) override {
-    return oid.substr(prefix.size());
-  }
-
-  const std::string& get_oid_prefix() {
-    return prefix;
-  }
-};
-
-RGWSI_MetaBackend_Handler* RGWRoleMetadataHandler::get_be_handler()
+RGWRoleMetadataHandler::RGWRoleMetadataHandler(Store* store,
+                                              RGWSI_Role_RADOS *role_svc)
 {
-  return be_handler;
-}
-
-void RGWRoleMetadataHandler::init(RGWSI_Zone *_zone_svc,
-                                  RGWSI_Meta *_meta_svc,
-                                  RGWSI_MetaBackend *_meta_be_svc,
-                                  RGWSI_SysObj *_sysobj_svc)
-{
-  svc.zone = _zone_svc;
-  svc.meta = _meta_svc;
-  svc.meta_be = _meta_be_svc;
-  svc.sysobj = _sysobj_svc;
-  int r = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ,
-                                      &be_handler);
-  if (r < 0) {
-    //ldout(ctx(), 0) << "ERROR: failed to create be_handler for Roles: r="
-    //                << r <<dendl;
-    return;
-  }
-
-  auto module = new RGWSI_Role_Module(svc);
-  RGWSI_MetaBackend_Handler_SObj* bh= static_cast<RGWSI_MetaBackend_Handler_SObj *>(be_handler);
-  be_module.reset(module);
-  bh->set_module(module);
-  base_init(cct, get_be_handler());
-}
-
-
-int RGWRoleMetadataHandler::do_start(optional_yield y, const DoutPrefixProvider *dpp)
-{
-
-  int r = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ,
-                                      &be_handler);
-  if (r < 0) {
-    //ldout(ctx(), 0) << "ERROR: failed to create be_handler for Roles: r="
-    //                << r <<dendl;
-    return r;
-  }
-
-  auto module = new RGWSI_Role_Module(svc);
-  RGWSI_MetaBackend_Handler_SObj* bh= static_cast<RGWSI_MetaBackend_Handler_SObj *>(be_handler);
-  be_module.reset(module);
-  bh->set_module(module);
-  return 0;
-}
-#endif
-
-RGWRoleMetadataHandler::RGWRoleMetadataHandler(CephContext *cct, Store* store,
-                                              RGWSI_Role *role_svc)
-{
-  this->cct = cct;
   this->store = store;
   base_init(role_svc->ctx(), role_svc->get_be_handler());
 }
@@ -390,7 +301,7 @@ int RGWRoleMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
                                    const DoutPrefixProvider *dpp)
 {
   std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(entry);
-  int ret = role->read_info(dpp, y, false);
+  int ret = role->read_info(dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -413,7 +324,7 @@ int RGWRoleMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
                                       const DoutPrefixProvider *dpp)
 {
   std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(entry);
-  int ret = role->read_info(dpp, y, false);
+  int ret = role->read_info(dpp, y);
   if (ret < 0) {
     return ret == -ENOENT? 0 : ret;
   }
@@ -445,7 +356,7 @@ public:
     auto* store = mdo->get_store();
     info.mtime = mtime;
     std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(info);
-    int ret = role->create(dpp, true, y, false);
+    int ret = role->create(dpp, true, y);
     return ret < 0 ? ret : STATUS_APPLIED;
   }
 };
