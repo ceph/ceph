@@ -11,7 +11,9 @@ template class librbd::crypto::BlockCrypto<
 
 using ::testing::ExpectationSet;
 using ::testing::internal::ExpectationBase;
+using ::testing::Invoke;
 using ::testing::Return;
+using ::testing::WithArg;
 using ::testing::_;
 
 namespace librbd {
@@ -52,6 +54,15 @@ struct TestMockCryptoBlockCrypto : public TestFixture {
               EXPECT_CALL(*cryptor, get_context(mode))
               .After(*expectation_set).WillOnce(Return(
                       new MockCryptoContext())));
+    }
+
+    void expect_return_context(CipherMode mode) {
+      _set_last_expectation(
+              EXPECT_CALL(*cryptor, return_context(_, mode))
+              .After(*expectation_set).WillOnce(WithArg<0>(
+                      Invoke([](MockCryptoContext* ctx) {
+                        delete ctx;
+                      }))));
     }
 
     void expect_init_context(const std::string& iv) {
@@ -95,7 +106,7 @@ TEST_F(TestMockCryptoBlockCrypto, Encrypt) {
   expect_update_context(std::string(2048, '1') + std::string(2048, '2'), 4096);
   expect_init_context(std::string("\x38\x12\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16));
   expect_update_context(std::string(2048, '2') + std::string(2048, '3'), 4096);
-  EXPECT_CALL(*cryptor, return_context(_, CipherMode::CIPHER_MODE_ENC));
+  expect_return_context(CipherMode::CIPHER_MODE_ENC);
 
   ASSERT_EQ(0, bc->encrypt(&data, image_offset));
 
@@ -127,6 +138,7 @@ TEST_F(TestMockCryptoBlockCrypto, InitContextError) {
   data.append(std::string(4096, '1'));
   expect_get_context(CipherMode::CIPHER_MODE_ENC);
   EXPECT_CALL(*cryptor, init_context(_, _, _)).WillOnce(Return(-123));
+  expect_return_context(CipherMode::CIPHER_MODE_ENC);
   ASSERT_EQ(-123, bc->encrypt(&data, 0));
 }
 
@@ -136,6 +148,7 @@ TEST_F(TestMockCryptoBlockCrypto, UpdateContextError) {
   expect_get_context(CipherMode::CIPHER_MODE_ENC);
   EXPECT_CALL(*cryptor, init_context(_, _, _));
   EXPECT_CALL(*cryptor, update_context(_, _, _, _)).WillOnce(Return(-123));
+  expect_return_context(CipherMode::CIPHER_MODE_ENC);
   ASSERT_EQ(-123, bc->encrypt(&data, 0));
 }
 
