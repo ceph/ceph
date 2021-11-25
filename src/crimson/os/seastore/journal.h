@@ -290,7 +290,7 @@ private:
         extent_len_t block_size);
 
     // Encode the batched records for write.
-    ceph::bufferlist encode_batch(
+    std::pair<ceph::bufferlist, record_group_size_t> encode_batch(
         const journal_seq_t& committed_to,
         segment_nonce_t segment_nonce);
 
@@ -362,16 +362,27 @@ private:
                     JournalSegmentManager&);
 
     grouped_io_stats get_record_batch_stats() const {
-      return record_batch_stats;
+      return stats.record_batch_stats;
     }
 
     grouped_io_stats get_io_depth_stats() const {
-      return io_depth_stats;
+      return stats.io_depth_stats;
+    }
+
+    uint64_t get_record_group_padding_bytes() const {
+      return stats.record_group_padding_bytes;
+    }
+
+    uint64_t get_record_group_metadata_bytes() const {
+      return stats.record_group_metadata_bytes;
+    }
+
+    uint64_t get_record_group_data_bytes() const {
+      return stats.record_group_data_bytes;
     }
 
     void reset_stats() {
-      record_batch_stats = {};
-      io_depth_stats = {};
+      stats = {};
     }
 
     void set_write_pipeline(WritePipeline *_write_pipeline) {
@@ -386,7 +397,7 @@ private:
 
     void increment_io() {
       ++num_outstanding_io;
-      io_depth_stats.increment(num_outstanding_io);
+      stats.io_depth_stats.increment(num_outstanding_io);
       update_state();
     }
 
@@ -418,6 +429,13 @@ private:
       free_batch_ptrs.pop_front();
     }
 
+    void account_submission(const record_group_size_t& size) {
+      stats.record_group_padding_bytes +=
+        (size.get_mdlength() - size.get_raw_mdlength());
+      stats.record_group_metadata_bytes += size.get_raw_mdlength();
+      stats.record_group_data_bytes += size.dlength;
+    }
+
     using maybe_result_t = RecordBatch::maybe_result_t;
     void finish_submit_batch(RecordBatch*, maybe_result_t);
 
@@ -446,8 +464,13 @@ private:
     seastar::circular_buffer<RecordBatch*> free_batch_ptrs;
     std::optional<seastar::promise<> > wait_submit_promise;
 
-    grouped_io_stats record_batch_stats;
-    grouped_io_stats io_depth_stats;
+    struct {
+      grouped_io_stats record_batch_stats;
+      grouped_io_stats io_depth_stats;
+      uint64_t record_group_padding_bytes = 0;
+      uint64_t record_group_metadata_bytes = 0;
+      uint64_t record_group_data_bytes = 0;
+    } stats;
   };
 
   SegmentProvider* segment_provider = nullptr;

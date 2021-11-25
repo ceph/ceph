@@ -267,6 +267,27 @@ void Journal::register_metrics()
         },
         sm::description("total number of io depth")
       ),
+      sm::make_counter(
+        "record_group_padding_bytes",
+        [this] {
+          return record_submitter.get_record_group_padding_bytes();
+        },
+        sm::description("bytes of metadata padding when write record groups")
+      ),
+      sm::make_counter(
+        "record_group_metadata_bytes",
+        [this] {
+          return record_submitter.get_record_group_metadata_bytes();
+        },
+        sm::description("bytes of raw metadata when write record groups")
+      ),
+      sm::make_counter(
+        "record_group_data_bytes",
+        [this] {
+          return record_submitter.get_record_group_data_bytes();
+        },
+        sm::description("bytes of data when write record groups")
+      ),
     }
   );
 }
@@ -454,7 +475,8 @@ Journal::RecordBatch::add_pending(
   });
 }
 
-ceph::bufferlist Journal::RecordBatch::encode_batch(
+std::pair<ceph::bufferlist, record_group_size_t>
+Journal::RecordBatch::encode_batch(
   const journal_seq_t& committed_to,
   segment_nonce_t segment_nonce)
 {
@@ -468,12 +490,13 @@ ceph::bufferlist Journal::RecordBatch::encode_batch(
 
   state = state_t::SUBMITTING;
   submitting_size = pending.get_size();
-  submitting_length = pending.size.get_encoded_length();
-  submitting_mdlength = pending.size.get_mdlength();
+  auto gsize = pending.size;
+  submitting_length = gsize.get_encoded_length();
+  submitting_mdlength = gsize.get_mdlength();
   auto bl = encode_records(pending, committed_to, segment_nonce);
   // Note: pending is cleared here
   assert(bl.length() == (std::size_t)submitting_length);
-  return bl;
+  return std::make_pair(bl, gsize);
 }
 
 void Journal::RecordBatch::set_result(
@@ -604,9 +627,10 @@ void Journal::RecordSubmitter::flush_current_batch()
   pop_free_batch();
 
   increment_io();
-  ceph::bufferlist to_write = p_batch->encode_batch(
+  auto [to_write, sizes] = p_batch->encode_batch(
     journal_segment_manager.get_committed_to(),
     journal_segment_manager.get_nonce());
+  account_submission(sizes);
   std::ignore = journal_segment_manager.write(to_write
   ).safe_then([this, p_batch](auto write_result) {
     finish_submit_batch(p_batch, write_result);
@@ -632,7 +656,7 @@ Journal::RecordSubmitter::submit_pending(
   bool flush)
 {
   assert(!p_current_batch->is_submitting());
-  record_batch_stats.increment(
+  stats.record_batch_stats.increment(
       p_current_batch->get_num_records() + 1);
   auto write_fut = [this, flush, record=std::move(record)]() mutable {
     if (flush && p_current_batch->is_empty()) {
@@ -643,6 +667,7 @@ Journal::RecordSubmitter::submit_pending(
         journal_segment_manager.get_block_size(),
         journal_segment_manager.get_committed_to(),
         journal_segment_manager.get_nonce());
+      account_submission(sizes);
       return journal_segment_manager.write(to_write
       ).safe_then([mdlength = sizes.get_mdlength()](auto write_result) {
         return record_locator_t{
