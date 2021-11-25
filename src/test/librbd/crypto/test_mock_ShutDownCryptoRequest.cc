@@ -39,7 +39,6 @@ struct TestMockShutDownCryptoRequest : public TestMockFixture {
   MockShutDownCryptoRequest* mock_shutdown_crypto_request;
   MockEncryptionFormat* mock_encryption_format;
   Context* shutdown_object_dispatch_context;
-  Context* shutdown_image_dispatch_context;
 
   void SetUp() override {
     TestMockFixture::SetUp();
@@ -64,25 +63,11 @@ struct TestMockShutDownCryptoRequest : public TestMockFixture {
             io::OBJECT_DISPATCH_LAYER_CRYPTO)).WillOnce(Return(exists));
   }
 
-  void expect_crypto_image_layer_exists_check(
-          MockTestImageCtx* image_ctx, bool exists) {
-    EXPECT_CALL(*image_ctx->io_image_dispatcher, exists(
-            io::IMAGE_DISPATCH_LAYER_CRYPTO)).WillOnce(Return(exists));
-  }
-
   void expect_shutdown_crypto_object_dispatch(MockTestImageCtx* image_ctx) {
     EXPECT_CALL(*image_ctx->io_object_dispatcher, shut_down_dispatch(
             io::OBJECT_DISPATCH_LAYER_CRYPTO, _)).WillOnce(
                     WithArgs<1>(Invoke([this](Context* ctx) {
                       shutdown_object_dispatch_context = ctx;
-    })));
-  }
-
-  void expect_shutdown_crypto_image_dispatch(MockTestImageCtx* image_ctx) {
-    EXPECT_CALL(*image_ctx->io_image_dispatcher, shut_down_dispatch(
-            io::IMAGE_DISPATCH_LAYER_CRYPTO, _)).WillOnce(
-                    WithArgs<1>(Invoke([this](Context* ctx) {
-                      shutdown_image_dispatch_context = ctx;
     })));
   }
 };
@@ -104,41 +89,12 @@ TEST_F(TestMockShutDownCryptoRequest, FailShutdownObjectDispatch) {
   ASSERT_EQ(mock_encryption_format, mock_image_ctx->encryption_format.get());
 }
 
-TEST_F(TestMockShutDownCryptoRequest, NoCryptoImageDispatch) {
-  expect_crypto_object_layer_exists_check(mock_image_ctx, true);
-  expect_shutdown_crypto_object_dispatch(mock_image_ctx);
-  mock_shutdown_crypto_request->send();
-  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
-  expect_crypto_image_layer_exists_check(mock_image_ctx, false);
-  shutdown_object_dispatch_context->complete(0);
-  ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_EQ(nullptr, mock_image_ctx->encryption_format.get());
-}
-
-TEST_F(TestMockShutDownCryptoRequest, FailShutdownImageDispatch) {
-  expect_crypto_object_layer_exists_check(mock_image_ctx, true);
-  expect_shutdown_crypto_object_dispatch(mock_image_ctx);
-  mock_shutdown_crypto_request->send();
-  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
-  expect_crypto_image_layer_exists_check(mock_image_ctx, true);
-  expect_shutdown_crypto_image_dispatch(mock_image_ctx);
-  shutdown_object_dispatch_context->complete(0);
-  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
-  shutdown_image_dispatch_context->complete(-EIO);
-  ASSERT_EQ(-EIO, finished_cond.wait());
-  ASSERT_EQ(mock_encryption_format, mock_image_ctx->encryption_format.get());
-}
-
 TEST_F(TestMockShutDownCryptoRequest, Success) {
   expect_crypto_object_layer_exists_check(mock_image_ctx, true);
   expect_shutdown_crypto_object_dispatch(mock_image_ctx);
   mock_shutdown_crypto_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
-  expect_crypto_image_layer_exists_check(mock_image_ctx, true);
-  expect_shutdown_crypto_image_dispatch(mock_image_ctx);
   shutdown_object_dispatch_context->complete(0);
-  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
-  shutdown_image_dispatch_context->complete(0);
   ASSERT_EQ(0, finished_cond.wait());
   ASSERT_EQ(nullptr, mock_image_ctx->encryption_format.get());
 }
@@ -150,20 +106,12 @@ TEST_F(TestMockShutDownCryptoRequest, ShutdownParent) {
   expect_shutdown_crypto_object_dispatch(mock_image_ctx);
   mock_shutdown_crypto_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
-  expect_crypto_image_layer_exists_check(mock_image_ctx, true);
-  expect_shutdown_crypto_image_dispatch(mock_image_ctx);
-  shutdown_object_dispatch_context->complete(0);
-  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   expect_crypto_object_layer_exists_check(parent_image_ctx, true);
   expect_shutdown_crypto_object_dispatch(parent_image_ctx);
-  shutdown_image_dispatch_context->complete(0);
-  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
-  expect_crypto_image_layer_exists_check(parent_image_ctx, true);
-  expect_shutdown_crypto_image_dispatch(parent_image_ctx);
   shutdown_object_dispatch_context->complete(0);
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   mock_image_ctx->parent = nullptr;
-  shutdown_image_dispatch_context->complete(0);
+  shutdown_object_dispatch_context->complete(0);
   ASSERT_EQ(0, finished_cond.wait());
   ASSERT_EQ(nullptr, mock_image_ctx->encryption_format.get());
   ASSERT_EQ(nullptr, parent_image_ctx->encryption_format.get());

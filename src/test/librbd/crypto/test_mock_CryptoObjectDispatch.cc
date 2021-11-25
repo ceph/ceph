@@ -225,11 +225,6 @@ struct TestMockCryptoCryptoObjectDispatch : public TestMockFixture {
             mock_image_ctx->layout.object_size));
   }
 
-  void expect_remap_to_logical(uint64_t offset, uint64_t length) {
-    EXPECT_CALL(*mock_image_ctx->io_image_dispatcher, remap_to_logical(
-            ElementsAre(Pair(offset, length))));
-  }
-
   void expect_get_parent_overlap(uint64_t overlap) {
     EXPECT_CALL(*mock_image_ctx, get_parent_overlap(_, _))
             .WillOnce(WithArg<1>(Invoke([overlap](uint64_t *o) {
@@ -517,8 +512,6 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteCopyup) {
 
   expect_get_object_size();
   expect_get_parent_overlap(100 << 20);
-  expect_remap_to_logical(11 * mock_image_ctx->layout.object_size,
-                          mock_image_ctx->layout.object_size);
   expect_prune_parent_extents(mock_image_ctx->layout.object_size);
   EXPECT_CALL(mock_exclusive_lock, is_lock_owner()).WillRepeatedly(
           Return(true));
@@ -563,8 +556,6 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteEmptyCopyup) {
 
   expect_get_object_size();
   expect_get_parent_overlap(100 << 20);
-  expect_remap_to_logical(11 * mock_image_ctx->layout.object_size,
-                          mock_image_ctx->layout.object_size);
   expect_prune_parent_extents(mock_image_ctx->layout.object_size);
   EXPECT_CALL(mock_exclusive_lock, is_lock_owner()).WillRepeatedly(
           Return(true));
@@ -753,13 +744,6 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, PrepareCopyup) {
   expect_get_object_size();
   expect_encrypt(6);
   InSequence seq;
-  uint64_t base = 11 * mock_image_ctx->layout.object_size;
-  expect_remap_to_logical(base, 4096);
-  expect_remap_to_logical(base + 4096, 4096);
-  expect_remap_to_logical(base + 8192, 4096);
-  expect_remap_to_logical(base, 4096);
-  expect_remap_to_logical(base + 4096, 8192);
-  expect_remap_to_logical(base + 16384, 4096);
   ASSERT_EQ(0, mock_crypto_object_dispatch->prepare_copyup(
       11, &snapshot_sparse_bufferlist));
 
