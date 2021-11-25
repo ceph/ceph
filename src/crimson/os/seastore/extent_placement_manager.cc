@@ -94,6 +94,7 @@ SegmentedAllocator::Writer::_write(
   stats.extents.bytes += record_size.dlength;
   stats.header_raw_bytes += record_size.get_raw_mdlength();
   stats.header_bytes += record_size.get_mdlength();
+  stats.data_bytes += record_size.dlength;
   stats.num_records += 1;
 
   return trans_intr::make_interruptible(

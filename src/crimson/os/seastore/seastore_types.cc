@@ -154,6 +154,14 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
 	     << ")";
 }
 
+extent_len_t record_size_t::get_raw_mdlength() const
+{
+  // FIXME: prevent submitting empty records
+  // assert(!is_empty());
+  return plain_mdlength +
+         ceph::encoded_sizeof_bounded<record_header_t>();
+}
+
 void record_size_t::account_extent(extent_len_t extent_len)
 {
   assert(extent_len);
@@ -183,10 +191,7 @@ void record_group_size_t::account(
   assert(_block_size > 0);
   assert(rsize.dlength % _block_size == 0);
   assert(block_size == 0 || block_size == _block_size);
-  plain_mdlength += (
-      rsize.plain_mdlength +
-      ceph::encoded_sizeof_bounded<record_header_t>()
-  );
+  plain_mdlength += rsize.get_raw_mdlength();
   dlength += rsize.dlength;
   block_size = _block_size;
 }

@@ -1196,6 +1196,8 @@ struct record_size_t {
   extent_len_t plain_mdlength = 0; // mdlength without the record header
   extent_len_t dlength = 0;
 
+  extent_len_t get_raw_mdlength() const;
+
   bool is_empty() const {
     return plain_mdlength == 0 &&
            dlength == 0;
@@ -1231,15 +1233,14 @@ struct record_t {
            deltas.size() == 0;
   }
 
-  // the size of extents and delta buffers
-  std::size_t get_raw_data_size() const {
+  std::size_t get_delta_size() const {
     auto delta_size = std::accumulate(
         deltas.begin(), deltas.end(), 0,
         [](uint64_t sum, auto& delta) {
           return sum + delta.bl.length();
         }
     );
-    return size.dlength + delta_size;
+    return delta_size;
   }
 
   void push_back(extent_t&& extent) {
