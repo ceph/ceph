@@ -1259,6 +1259,9 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
   if (changed.count("mds_alternate_name_max")) {
     alternate_name_max  = g_conf().get_val<Option::size_t>("mds_alternate_name_max");
   }
+  if (changed.count("mds_fscrypt_last_block_max_size")) {
+    fscrypt_last_block_max_size = g_conf().get_val<Option::size_t>("mds_fscrypt_last_block_max_size");
+  }
   if (changed.count("mds_dir_max_entries")) {
     dir_max_entries = g_conf().get_val<uint64_t>("mds_dir_max_entries");
     dout(20) << __func__ << " max entries per directory changed to "
