@@ -2489,6 +2489,33 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
     return mounts
 
 
+def get_ceph_volume_container(ctx: CephadmContext,
+                              privileged: bool = True,
+                              cname: str = '',
+                              volume_mounts: Dict[str, str] = {},
+                              bind_mounts: Optional[List[List[str]]] = None,
+                              args: List[str] = [],
+                              envs: Optional[List[str]] = None) -> 'CephContainer':
+    if envs is None:
+        envs = []
+    envs.append('CEPH_VOLUME_SKIP_RESTORECON=yes')
+    envs.append('CEPH_VOLUME_DEBUG=1')
+
+    return CephContainer(
+        ctx,
+        image=ctx.image,
+        entrypoint='/usr/sbin/ceph-volume',
+        args=args,
+        volume_mounts=volume_mounts,
+        bind_mounts=bind_mounts,
+        envs=envs,
+        privileged=privileged,
+        cname=cname,
+        memory_request=ctx.memory_request,
+        memory_limit=ctx.memory_limit,
+    )
+
+
 def get_container(ctx: CephadmContext,
                   fsid: str, daemon_type: str, daemon_id: Union[int, str],
                   privileged: bool = False,
@@ -2818,12 +2845,9 @@ def deploy_daemon_units(
             else:
                 # if ceph-volume does not support 'ceph-volume activate', we must
                 # do 'ceph-volume lvm activate'.
-                test_cv = CephContainer(
+                test_cv = get_ceph_volume_container(
                     ctx,
-                    image=ctx.image,
-                    entrypoint='/usr/sbin/ceph-volume',
                     args=['activate', '--bad-option'],
-                    privileged=True,
                     volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
                     bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
                     cname='ceph-%s-%s.%s-activate-test' % (fsid, daemon_type, daemon_id),
@@ -2847,17 +2871,12 @@ def deploy_daemon_units(
                         '--no-tmpfs',
                     ]
 
-                prestart = CephContainer(
+                prestart = get_ceph_volume_container(
                     ctx,
-                    image=ctx.image,
-                    entrypoint='/usr/sbin/ceph-volume',
                     args=cmd,
-                    privileged=True,
                     volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
                     bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
                     cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
-                    memory_request=ctx.memory_request,
-                    memory_limit=ctx.memory_limit,
                 )
                 _write_container_cmd_to_bash(ctx, f, prestart, 'LVM OSDs use ceph-volume lvm activate')
         elif daemon_type == CephIscsi.daemon_type:
@@ -2891,15 +2910,12 @@ def deploy_daemon_units(
     with open(data_dir + '/unit.poststop.new', 'w') as f:
         if daemon_type == 'osd':
             assert osd_fsid
-            poststop = CephContainer(
+            poststop = get_ceph_volume_container(
                 ctx,
-                image=ctx.image,
-                entrypoint='/usr/sbin/ceph-volume',
                 args=[
                     'lvm', 'deactivate',
                     str(daemon_id), osd_fsid,
                 ],
-                privileged=True,
                 volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
                 bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
                 cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
@@ -5275,13 +5291,10 @@ def command_ceph_volume(ctx):
         tmp_keyring = write_tmp(keyring, uid, gid)
         mounts[tmp_keyring.name] = '/var/lib/ceph/bootstrap-osd/ceph.keyring:z'
 
-    c = CephContainer(
+    c = get_ceph_volume_container(
         ctx,
-        image=ctx.image,
-        entrypoint='/usr/sbin/ceph-volume',
         envs=ctx.env,
         args=ctx.command,
-        privileged=True,
         volume_mounts=mounts,
     )
 
@@ -5780,12 +5793,9 @@ class AdoptOsd(object):
         # type: () -> Tuple[Optional[str], Optional[str]]
         osd_fsid, osd_type = None, None
 
-        c = CephContainer(
+        c = get_ceph_volume_container(
             self.ctx,
-            image=self.ctx.image,
-            entrypoint='/usr/sbin/ceph-volume',
             args=['lvm', 'list', '--format=json'],
-            privileged=True
         )
         out, err, code = call_throws(self.ctx, c.run_cmd())
         if not code:
@@ -6138,15 +6148,10 @@ def command_rm_daemon(ctx):
 
 def _zap(ctx: CephadmContext, what: str) -> None:
     mounts = get_container_mounts(ctx, ctx.fsid, 'clusterless-ceph-volume', None)
-    c = CephContainer(
-        ctx,
-        image=ctx.image,
-        entrypoint='/usr/sbin/ceph-volume',
-        envs=ctx.env,
-        args=['lvm', 'zap', '--destroy', what],
-        privileged=True,
-        volume_mounts=mounts,
-    )
+    c = get_ceph_volume_container(ctx,
+                                  args=['lvm', 'zap', '--destroy', what],
+                                  volume_mounts=mounts,
+                                  envs=ctx.env)
     logger.info(f'Zapping {what}...')
     out, err, code = call_throws(ctx, c.run_cmd())
 
@@ -6157,15 +6162,10 @@ def _zap_osds(ctx: CephadmContext) -> None:
 
     # list
     mounts = get_container_mounts(ctx, ctx.fsid, 'clusterless-ceph-volume', None)
-    c = CephContainer(
-        ctx,
-        image=ctx.image,
-        entrypoint='/usr/sbin/ceph-volume',
-        envs=ctx.env,
-        args=['inventory', '--format', 'json'],
-        privileged=True,
-        volume_mounts=mounts,
-    )
+    c = get_ceph_volume_container(ctx,
+                                  args=['inventory', '--format', 'json'],
+                                  volume_mounts=mounts,
+                                  envs=ctx.env)
     out, err, code = call_throws(ctx, c.run_cmd())
     if code:
         raise Error('failed to list osd inventory')
