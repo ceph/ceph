@@ -8,7 +8,7 @@ module.exports = {
     { width: 800, height: 600, name: 'chrome' },
     { width: 800, height: 600, name: 'firefox' }
   ],
-  showLogs: true,
+  showLogs: false,
   saveDebugData: true,
   failCypressOnDiff: true,
   concurrency: 4
