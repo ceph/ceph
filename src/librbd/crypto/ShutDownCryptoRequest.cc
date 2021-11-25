@@ -30,10 +30,6 @@ ShutDownCryptoRequest<I>::ShutDownCryptoRequest(
 
 template <typename I>
 void ShutDownCryptoRequest<I>::send() {
-  m_image_ctx->image_lock.lock_shared();
-  m_crypto = m_image_ctx->crypto;
-  m_image_ctx->image_lock.unlock_shared();
-
   shut_down_object_dispatch();
 }
 
