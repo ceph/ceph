@@ -218,6 +218,8 @@ create a new CRUSH host located in the specified hierachy.
   changes of the ``location`` property will be ignored. Also, removing a host will no remove
   any CRUSH buckets.
 
+See also :ref:`crush_map_default_types`.
+
 SSH Configuration
 =================
 
