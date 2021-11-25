@@ -734,7 +734,7 @@ private:
     effort_t fresh_ool_written;
     counter_by_extent_t<uint64_t> num_trans_invalidated;
     uint64_t num_ool_records = 0;
-    uint64_t ool_record_overhead_bytes = 0;
+    uint64_t ool_record_bytes = 0;
   };
 
   struct commit_trans_efforts_t {
@@ -747,8 +747,10 @@ private:
     counter_by_extent_t<effort_t> fresh_ool_by_ext;
     uint64_t num_trans = 0; // the number of inline records
     uint64_t num_ool_records = 0;
-    uint64_t ool_record_overhead_bytes = 0;
-    uint64_t inline_record_overhead_bytes = 0;
+    uint64_t ool_record_padding_bytes = 0;
+    uint64_t ool_record_metadata_bytes = 0;
+    uint64_t ool_record_data_bytes = 0;
+    uint64_t inline_record_metadata_bytes = 0; // metadata exclude the delta bytes
   };
 
   struct success_read_trans_efforts_t {
@@ -769,16 +771,6 @@ private:
   template <typename CounterT>
   using counter_by_src_t = std::array<CounterT, Transaction::SRC_MAX>;
 
-  struct fill_stat_t {
-    uint64_t filled_bytes = 0;
-    uint64_t total_bytes = 0;
-  };
-
-  struct record_header_fullness_t {
-    fill_stat_t inline_stats;
-    fill_stat_t ool_stats;
-  };
-
   static constexpr std::size_t NUM_SRC_COMB =
       Transaction::SRC_MAX * (Transaction::SRC_MAX + 1) / 2;
 
@@ -787,7 +779,6 @@ private:
     counter_by_src_t<commit_trans_efforts_t> committed_efforts_by_src;
     counter_by_src_t<invalid_trans_efforts_t> invalidated_efforts_by_src;
     counter_by_src_t<query_counters_t> cache_query_by_src;
-    counter_by_src_t<record_header_fullness_t> record_header_fullness_by_src;
     success_read_trans_efforts_t success_read_efforts;
     uint64_t dirty_bytes = 0;
 

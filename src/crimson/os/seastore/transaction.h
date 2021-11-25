@@ -320,12 +320,14 @@ public:
     io_stat_t extents;
     uint64_t header_raw_bytes = 0;
     uint64_t header_bytes = 0;
+    uint64_t data_bytes = 0;
     uint64_t num_records = 0;
 
     bool is_clear() const {
       return (extents.is_clear() &&
               header_raw_bytes == 0 &&
               header_bytes == 0 &&
+              data_bytes == 0 &&
               num_records == 0);
     }
   };
