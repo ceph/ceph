@@ -17,7 +17,7 @@ from cephadm.services.monitoring import GrafanaService, AlertmanagerService, Pro
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import IscsiServiceSpec, MonitoringSpec, AlertManagerSpec, \
     ServiceSpec, RGWSpec
-from cephadm.tests.fixtures import with_host, with_service, _run_cephadm
+from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
 
 from orchestrator import OrchestratorError
 from orchestrator._interface import DaemonDescription
@@ -236,7 +236,7 @@ class TestISCSIService:
 class TestMonitoring:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_alertmanager_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
-        _run_cephadm.return_value = ('{}', '', 0)
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, AlertManagerSpec()):
@@ -280,7 +280,7 @@ class TestMonitoring:
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_prometheus_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
-        _run_cephadm.return_value = ('{}', '', 0)
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, MonitoringSpec('node-exporter')) as _, \
@@ -326,7 +326,7 @@ class TestMonitoring:
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1::4')
     @patch("cephadm.services.monitoring.verify_tls", lambda *_: None)
     def test_grafana_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
-        _run_cephadm.return_value = ('{}', '', 0)
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
         with with_host(cephadm_module, 'test'):
             cephadm_module.set_store('grafana_crt', 'c')
@@ -391,7 +391,7 @@ class TestMonitoring:
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_monitoring_ports(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
-        _run_cephadm.return_value = ('{}', '', 0)
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
         with with_host(cephadm_module, 'test'):
 
