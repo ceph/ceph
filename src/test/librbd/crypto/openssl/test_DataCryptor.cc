@@ -26,7 +26,7 @@ struct TestCryptoOpensslDataCryptor : public TestFixture {
 
     void TearDown() override {
       delete cryptor;
-      Test::TearDown();
+      TestFixture::TearDown();
     }
 };
 
