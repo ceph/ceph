@@ -190,9 +190,3 @@ def make_daemons_running(cephadm_module, service_name):
     own_dds = cephadm_module.cache.get_daemons_by_service(service_name)
     for dd in own_dds:
         dd.status = DaemonDescriptionStatus.running  # We're changing the reference
-
-
-def _deploy_cephadm_binary(host):
-    def foo(*args, **kwargs):
-        return True
-    return foo
