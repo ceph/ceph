@@ -18,6 +18,12 @@ from orchestrator import raise_if_exception, OrchResult, HostSpec, DaemonDescrip
 from tests import mock
 
 
+def async_side_effect(result):
+    async def side_effect(*args, **kwargs):
+        return result
+    return side_effect
+
+
 def get_ceph_option(_, key):
     return __file__
 
