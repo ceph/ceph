@@ -935,6 +935,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         # Keep a librados instance for those that need it.
         self._rados: Optional[rados.Rados] = None
 
+        # this does not change over the lifetime of an active mgr
+        self._mgr_ips: Optional[str] = None
+
         self._db_lock = threading.Lock()
 
     def __del__(self) -> None:
@@ -1656,10 +1659,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_get_ceph_conf_path()
 
     def get_mgr_ip(self) -> str:
-        ips = self.get("mgr_ips").get('ips', [])
-        if not ips:
-            return socket.gethostname()
-        return ips[0]
+        if not self._mgr_ips:
+            ips = self.get("mgr_ips").get('ips', [])
+            if not ips:
+                return socket.gethostname()
+            self._mgr_ips = ips[0]
+        assert self._mgr_ips is not None
+        return self._mgr_ips
 
     def get_ceph_option(self, key: str) -> OptionValue:
         return self._ceph_get_option(key)
