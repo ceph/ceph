@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     else:
         from typing_extensions import Literal
 
+import datetime
 import inspect
 import logging
 import errno
@@ -1254,7 +1255,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             All these structures have their own JSON representations: experiment
             or look at the C++ ``dump()`` methods to learn about them.
         """
-        return self._ceph_get(data_name)
+        self.log.debug(f'mgrmodule.get {data_name} start ')
+        start = datetime.datetime.now()
+        r = self._ceph_get(data_name)
+        end = datetime.datetime.now()
+        self.log.debug(f'mgrmodule.get {data_name} finish took {end-start}')
+        return r
 
     def _stattype_to_str(self, stattype: int) -> str:
 
