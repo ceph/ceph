@@ -193,7 +193,12 @@ void SegmentCleaner::register_metrics()
 		    [this] {
 		      return segments.get_available_bytes();
 		    },
-		    sm::description("the size of the space not occupied"))
+		    sm::description("the size of the space not occupied")),
+    sm::make_derive("opened_segments",
+		    [this] {
+		      return segments.get_opened_segments();
+		    },
+		    sm::description("the number of segments whose state is open"))
   });
 }
 
