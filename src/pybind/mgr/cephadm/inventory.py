@@ -870,13 +870,9 @@ class HostCache():
 
         return [d for d in daemons if d.daemon_type in service_to_daemon_types(service_type)]
 
-    def get_daemon_types(self, hostname: str) -> List[str]:
+    def get_daemon_types(self, hostname: str) -> Set[str]:
         """Provide a list of the types of daemons on the host"""
-        result = set()
-        for _d, dm in self.daemons[hostname].items():
-            assert dm.daemon_type is not None, f'no daemon type for {dm!r}'
-            result.add(dm.daemon_type)
-        return list(result)
+        return cast(Set[str], {d.daemon_type for d in self.daemons[hostname].values()})
 
     def get_daemon_names(self):
         # type: () -> List[str]
