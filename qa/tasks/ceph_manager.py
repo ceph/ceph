@@ -25,6 +25,7 @@ from tasks.util import get_remote
 from teuthology.contextutil import safe_while
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
+from teuthology.parallel import parallel
 from teuthology.exceptions import CommandFailedError
 from tasks.thrasher import Thrasher
 
@@ -1680,15 +1681,15 @@ class CephManager:
         :param wait_for_mon: wait for mon to be synced with mgr. 0 to disable
                              it. (5 min by default)
         """
-        seq = {osd: int(self.raw_cluster_cmd('tell', 'osd.%d' % osd, 'flush_pg_stats'))
-               for osd in osds}
-        if not wait_for_mon:
-            return
         if no_wait is None:
             no_wait = []
-        for osd, need in seq.items():
+
+        def flush_one_osd(osd: int, wait_for_mon: int):
+            need = int(self.raw_cluster_cmd('tell', 'osd.%d' % osd, 'flush_pg_stats'))
+            if not wait_for_mon:
+                return
             if osd in no_wait:
-                continue
+                return
             got = 0
             while wait_for_mon > 0:
                 got = int(self.raw_cluster_cmd('osd', 'last-stat-seq', 'osd.%d' % osd))
@@ -1703,6 +1704,10 @@ class CephManager:
                 raise Exception('timed out waiting for mon to be updated with '
                                 'osd.{osd}: {got} < {need}'.
                                 format(osd=osd, got=got, need=need))
+
+        with parallel() as p:
+            for osd in osds:
+                p.spawn(flush_one_osd, osd, wait_for_mon)
 
     def flush_all_pg_stats(self):
         self.flush_pg_stats(range(len(self.get_osd_dump())))
