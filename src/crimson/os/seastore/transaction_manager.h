@@ -157,6 +157,7 @@ public:
 	assert(!(pin->has_been_invalidated() || ref->has_been_invalidated()));
 	ref->set_pin(std::move(pin));
 	lba_manager->add_pin(ref->get_pin());
+	ref->pin_wait_signal();
       }
       DEBUGT("got extent {}", t, *ref);
       return pin_to_extent_ret<T>(

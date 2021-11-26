@@ -749,6 +749,27 @@ public:
     return true;
   }
 
+  void set_pin_wait() {
+    if (!pin_wait_promise) {
+      pin_wait_promise = seastar::shared_promise<>();
+    }
+  }
+
+  void pin_wait_signal() {
+    if (pin_wait_promise) {
+      pin_wait_promise->set_value();
+      pin_wait_promise = std::nullopt;
+    }
+  }
+
+  seastar::future<> wait_pin() {
+    if (!pin_wait_promise) {
+      return seastar::now();
+    } else {
+      return pin_wait_promise->get_shared_future();
+    }
+  }
+
   std::ostream &print_detail(std::ostream &out) const final;
 protected:
   virtual void apply_delta(const ceph::bufferlist &bl) = 0;
@@ -767,6 +788,9 @@ protected:
 private:
   laddr_t laddr = L_ADDR_NULL;
   LBAPinRef pin;
+
+  /// used to wait for other fibers to set the extent's pin
+  std::optional<seastar::shared_promise<>> pin_wait_promise;
 };
 
 using LogicalCachedExtentRef = TCachedExtentRef<LogicalCachedExtent>;

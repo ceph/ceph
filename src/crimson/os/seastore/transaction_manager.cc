@@ -405,12 +405,19 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
   DEBUGT("type {}, addr {}, laddr {}, len {}", t, type, addr, laddr, len);
 
   return cache->get_extent_if_cached(t, addr, type
-  ).si_then([this, FNAME, &t, type, addr, laddr, len](auto extent)
+  ).si_then([this, FNAME, &t, type, addr, laddr, len](CachedExtentRef extent)
 	    -> get_extent_if_live_ret {
     if (extent) {
-      return get_extent_if_live_ret (
-	interruptible::ready_future_marker{},
-	extent);
+      auto fut = seastar::now();
+      if (extent->is_logical() &&
+	  !(extent->cast<LogicalCachedExtent>()->has_pin())) {
+	fut = extent->cast<LogicalCachedExtent>()->wait_pin();
+      }
+      return fut.then([extent] {
+	return get_extent_if_live_ret (
+	  interruptible::ready_future_marker{},
+	  extent);
+      });
     }
 
     if (is_logical_type(type)) {
@@ -445,6 +452,7 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 			     lref->has_been_invalidated()));
 		    lref->set_pin(std::move(pin));
 		    lba_manager->add_pin(lref->get_pin());
+		    lref->pin_wait_signal();
 		  }
 		  return inner_ret(
 		    interruptible::ready_future_marker{},

@@ -279,6 +279,7 @@ LBABtree::init_cached_extent_ret LBABtree::init_cached_extent(
 	  iter.get_key() == logn->get_laddr() &&
 	  iter.get_val().paddr == logn->get_paddr()) {
 	logn->set_pin(iter.get_pin());
+	logn->pin_wait_signal();
 	ceph_assert(iter.get_val().len == e->get_length());
 	if (c.pins) {
 	  c.pins->add_pin(

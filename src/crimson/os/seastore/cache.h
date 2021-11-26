@@ -791,6 +791,9 @@ private:
     TCachedExtentRef<T>&& extent
   ) {
     extent->set_io_wait();
+    if constexpr (std::is_base_of_v<LogicalCachedExtent, T>) {
+      extent->set_pin_wait();
+    }
     return reader.read(
       extent->get_paddr(),
       extent->get_length(),
