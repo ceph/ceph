@@ -165,6 +165,9 @@ struct Inode : RefCountedObject {
 
   std::vector<uint8_t> fscrypt_auth;
   std::vector<uint8_t> fscrypt_file;
+  bool is_fscrypt_enabled() {
+    return !!fscrypt_auth.size();
+  }
 
   bool is_root()    const { return ino == CEPH_INO_ROOT; }
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
