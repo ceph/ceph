@@ -414,6 +414,13 @@ private:
     done = true;
   }
 
+  void dump_float(ceph::Formatter *f, std::string_view name, double v, int prec = 6) {
+    if (trunc(v) != v) {
+      f->dump_format_unquoted(name, "%.*f", prec, v);
+    } else {
+      f->dump_int(name, trunc(v));
+    }
+  }
 
   void print_main_stats(ceph::Formatter *f, db_stats_mode mode) {
     uint32_t mode_bits = get_mode_bits(mode);
@@ -440,15 +447,15 @@ private:
 	f->open_object_section(c.name);
 	if (db->dbstats) {
 	  db->dbstats->histogramData(c.ticker_index, &data);
-	  f->dump_float("p50", data.median);
-	  f->dump_float("p95", data.percentile95);
-	  f->dump_float("p99", data.percentile99);
-	  f->dump_float("avg", data.average);
-	  f->dump_float("std", data.standard_deviation);
-	  f->dump_float("min", data.min);
-	  f->dump_float("max", data.max);
-	  f->dump_float("count", data.count);
-	  f->dump_float("sum", data.sum);
+	  dump_float(f, "p50", data.median);
+	  dump_float(f, "p95", data.percentile95);
+	  dump_float(f, "p99", data.percentile99);
+	  dump_float(f, "avg", data.average);
+	  dump_float(f, "std", data.standard_deviation);
+	  dump_float(f, "min", data.min);
+	  dump_float(f, "max", data.max);
+	  dump_float(f, "count", data.count);
+	  dump_float(f, "sum", data.sum);
 	} else {
 	  f->dump_float("p50", -1);
 	  f->dump_float("p95", -1);
@@ -653,7 +660,7 @@ private:
     f->open_object_section("sum");
     for (size_t i = 0; i < CC_MAX; i++) {
       if (mode == all || (mode_bits & comp_cnt[i].mode) != 0) {
-	f->dump_float(comp_cnt[i].name, cf_stats.sum.tab[i]);
+	dump_float(f, comp_cnt[i].name, cf_stats.sum.tab[i]);
       }
     }
     f->close_section();
@@ -662,7 +669,7 @@ private:
 	f->open_object_section("l" + std::to_string(l));
 	for (size_t i = 0; i < CC_MAX; i++) {
 	  if (mode == all || (mode_bits & comp_cnt[i].mode) != 0) {
-	    f->dump_float(comp_cnt[i].name, cf_stats.l[l].tab[i]);
+	    dump_float(f, comp_cnt[i].name, cf_stats.l[l].tab[i]);
 	  }
 	}
 	f->close_section();
@@ -670,7 +677,7 @@ private:
     }
     for (size_t i = 0; i < IO_STALLS_MAX; i++) {
       if (mode == all || (mode_bits & io_stalls[i].mode) != 0) {
-	f->dump_float(io_stalls[i].name, cf_stats.iostall[i]);
+	dump_float(f, io_stalls[i].name, cf_stats.iostall[i]);
       }
     }
   };
