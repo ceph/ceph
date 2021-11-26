@@ -296,7 +296,7 @@ def ceph_log(ctx, config):
             except OSError:
                 pass
             for remote in ctx.cluster.remotes.keys():
-                sub = os.path.join(path, remote.name)
+                sub = os.path.join(path, remote.shortname)
                 try:
                     os.makedirs(sub)
                 except OSError:
@@ -330,7 +330,7 @@ def ceph_crash(ctx, config):
             except OSError:
                 pass
             for remote in ctx.cluster.remotes.keys():
-                sub = os.path.join(path, remote.name)
+                sub = os.path.join(path, remote.shortname)
                 try:
                     os.makedirs(sub)
                 except OSError:
@@ -341,6 +341,28 @@ def ceph_crash(ctx, config):
                                               os.path.join(sub, 'crash'))
                 except ReadError:
                     pass
+
+
+@contextlib.contextmanager
+def pull_image(ctx, config):
+    cluster_name = config['cluster']
+    log.info(f'Pulling image {ctx.ceph[cluster_name].image} on all hosts...')
+    run.wait(
+        ctx.cluster.run(
+            args=[
+                'sudo',
+                ctx.cephadm,
+                '--image', ctx.ceph[cluster_name].image,
+                'pull',
+            ],
+            wait=False,
+        )
+    )
+
+    try:
+        yield
+    finally:
+        pass
 
 
 @contextlib.contextmanager
@@ -505,11 +527,11 @@ def ceph_bootstrap(ctx, config):
                 data=ctx.ceph[cluster_name].admin_keyring)
 
             log.info('Adding host %s to orchestrator...' % remote.shortname)
-            _shell(ctx, cluster_name, remote, [
+            _shell(ctx, cluster_name, bootstrap_remote, [
                 'ceph', 'orch', 'host', 'add',
                 remote.shortname
             ])
-            r = _shell(ctx, cluster_name, remote,
+            r = _shell(ctx, cluster_name, bootstrap_remote,
                        ['ceph', 'orch', 'host', 'ls', '--format=json'],
                        stdout=StringIO())
             hosts = [node['hostname'] for node in json.loads(r.stdout.getvalue())]
@@ -1353,11 +1375,15 @@ def initialize_config(ctx, config):
     if config.get('roleless', False):
         # mons will be named after hosts
         first_mon = None
+        max_mons = config.get('max_mons', 5)
         for remote, _ in remotes_and_roles:
             ctx.cluster.remotes[remote].append('mon.' + remote.shortname)
             if not first_mon:
                 first_mon = remote.shortname
                 bootstrap_remote = remote
+            max_mons -= 1
+            if not max_mons:
+                break
         log.info('No mon roles; fabricating mons')
 
     roles = [role_list for (remote, role_list) in ctx.cluster.remotes.items()]
@@ -1489,6 +1515,7 @@ def task(ctx, config):
                               else download_cephadm(ctx=ctx, config=config, ref=ref),
             lambda: ceph_log(ctx=ctx, config=config),
             lambda: ceph_crash(ctx=ctx, config=config),
+            lambda: pull_image(ctx=ctx, config=config),
             lambda: _bypass() if (ctx.ceph[cluster_name].bootstrapped)\
                               else ceph_bootstrap(ctx, config),
             lambda: crush_setup(ctx=ctx, config=config),
