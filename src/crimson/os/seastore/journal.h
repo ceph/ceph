@@ -429,12 +429,7 @@ private:
       free_batch_ptrs.pop_front();
     }
 
-    void account_submission(const record_group_size_t& size) {
-      stats.record_group_padding_bytes +=
-        (size.get_mdlength() - size.get_raw_mdlength());
-      stats.record_group_metadata_bytes += size.get_raw_mdlength();
-      stats.record_group_data_bytes += size.dlength;
-    }
+    void account_submission(std::size_t, const record_group_size_t&);
 
     using maybe_result_t = RecordBatch::maybe_result_t;
     void finish_submit_batch(RecordBatch*, maybe_result_t);

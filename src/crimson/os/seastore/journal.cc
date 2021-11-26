@@ -609,6 +609,23 @@ void Journal::RecordSubmitter::update_state()
   }
 }
 
+void Journal::RecordSubmitter::account_submission(
+  std::size_t num,
+  const record_group_size_t& size)
+{
+  logger().debug("Journal::RecordSubmitter: submitting {} records, "
+                 "mdsize={}, dsize={}, fillness={}",
+                 num,
+                 size.get_raw_mdlength(),
+                 size.dlength,
+                 ((double)(size.get_raw_mdlength() + size.dlength) /
+                  (size.get_mdlength() + size.dlength)));
+  stats.record_group_padding_bytes +=
+    (size.get_mdlength() - size.get_raw_mdlength());
+  stats.record_group_metadata_bytes += size.get_raw_mdlength();
+  stats.record_group_data_bytes += size.dlength;
+}
+
 void Journal::RecordSubmitter::finish_submit_batch(
   RecordBatch* p_batch,
   maybe_result_t maybe_result)
@@ -627,10 +644,11 @@ void Journal::RecordSubmitter::flush_current_batch()
   pop_free_batch();
 
   increment_io();
+  auto num = p_batch->get_num_records();
   auto [to_write, sizes] = p_batch->encode_batch(
     journal_segment_manager.get_committed_to(),
     journal_segment_manager.get_nonce());
-  account_submission(sizes);
+  account_submission(num, sizes);
   std::ignore = journal_segment_manager.write(to_write
   ).safe_then([this, p_batch](auto write_result) {
     finish_submit_batch(p_batch, write_result);
@@ -667,7 +685,7 @@ Journal::RecordSubmitter::submit_pending(
         journal_segment_manager.get_block_size(),
         journal_segment_manager.get_committed_to(),
         journal_segment_manager.get_nonce());
-      account_submission(sizes);
+      account_submission(1, sizes);
       return journal_segment_manager.write(to_write
       ).safe_then([mdlength = sizes.get_mdlength()](auto write_result) {
         return record_locator_t{
