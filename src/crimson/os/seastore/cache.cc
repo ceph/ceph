@@ -1033,6 +1033,16 @@ record_t Cache::prepare_record(Transaction &t)
     assert(ool_stats.is_clear());
     ++(efforts.num_trans);
   } else {
+    DEBUGT("record is ready to submit, src={}, mdsize={}, dsize={}; "
+           "{} ool records, mdsize={}, dsize={}, fillness={}",
+           t, t.get_src(),
+           record.size.get_raw_mdlength(),
+           record.size.dlength,
+           ool_stats.num_records,
+           ool_stats.header_raw_bytes,
+           ool_stats.data_bytes,
+           ((double)(ool_stats.header_raw_bytes + ool_stats.data_bytes) /
+            (ool_stats.header_bytes + ool_stats.data_bytes)));
     if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
         t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
       // CLEANER transaction won't contain any onode tree operations
