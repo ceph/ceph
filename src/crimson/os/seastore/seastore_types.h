@@ -231,6 +231,15 @@ public:
     return device_to_segments[id.device_id()][id.device_segment_id()];
   }
 
+  bool contains(segment_id_t id) {
+    bool b = id.device_id() < device_to_segments.size();
+    if (!b) {
+      return b;
+    }
+    b = id.device_segment_id() < device_to_segments[id.device_id()].size();
+    return b;
+  }
+
   auto begin() {
     return iterator<false>::lower_bound(*this, 0, 0);
   }
