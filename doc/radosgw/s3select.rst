@@ -50,7 +50,7 @@ Basic functionalities
 Error Handling
 ~~~~~~~~~~~~~~
 
-    | Upon an error being detected, a specific error message sends back to the client.
+    | Upon an error being detected, RGW returns 400-Bad-Request and a specific error message sends back to the client.
     | Currently, there are 2 main types of error.
     |
     | **Syntax error**: the s3selecet parser rejects user requests that are not aligned with parser syntax definitions, as     
@@ -445,8 +445,9 @@ Sending Query to RGW
   --expression-type 'SQL'     
   --input-serialization 
   '{"CSV": {"FieldDelimiter": "," , "QuoteCharacter": "\"" , "RecordDelimiter" : "\n" , "QuoteEscapeCharacter" : "\\" , "FileHeaderInfo": "USE" }, "CompressionType": "NONE"}' 
-  --output-serialization '{"CSV": {}}' 
-  --key {OBJECT-NAME} 
+  --output-serialization '{"CSV": {"FieldDelimiter": ":", "RecordDelimiter":"\t", "QuoteFields": "ALWAYS"}}' 
+  --key {OBJECT-NAME}
+  --request-progress '{"Enabled": True}'
   --expression "select count(0) from s3object where int(_1)<10;" output.csv
 
 Input Serialization
@@ -464,8 +465,7 @@ Input Serialization
     | A single character used for escaping the quotation mark character inside an already escaped value.
     |
     | **RecordDelimiter** -> (string) 
-    | A single character is used to separate individual records in the input. Instead of the default value, you can specify an     
-    | arbitrary delimiter.
+    | A single character is used to separate individual records in the input. Instead of the default value, you can specify an arbitrary delimiter.
     |
     | **FieldDelimiter** -> (string) 
     | A single character is used to separate individual fields in a record. You can specify an arbitrary delimiter.
@@ -538,29 +538,46 @@ BOTO3
 
 ::
 
+ import pprint
 
  def run_s3select(bucket,key,query,column_delim=",",row_delim="\n",quot_char='"',esc_char='\\',csv_header_info="NONE"):
+
     s3 = boto3.client('s3',
         endpoint_url=endpoint,
         aws_access_key_id=access_key,
         region_name=region_name,
         aws_secret_access_key=secret_key)
-        
 
-
-    r = s3.select_object_content(
+    result = ""
+    try:
+        r = s3.select_object_content(
         Bucket=bucket,
         Key=key,
         ExpressionType='SQL',
         InputSerialization = {"CSV": {"RecordDelimiter" : row_delim, "FieldDelimiter" : column_delim,"QuoteEscapeCharacter": esc_char, "QuoteCharacter": quot_char, "FileHeaderInfo": csv_header_info}, "CompressionType": "NONE"},
         OutputSerialization = {"CSV": {}},
-        Expression=query,)
+        Expression=query,
+        RequestProgress = {"Enabled": progress})
 
-    result = ""
+    except ClientError as c:
+        result += str(c)
+        return result
+
     for event in r['Payload']:
-        if 'Records' in event:
-            records = event['Records']['Payload'].decode('utf-8')
-            result += records
+            if 'Records' in event:
+                result = ""
+                records = event['Records']
+                records = event['Records']['Payload'].decode('utf-8')
+                result += records
+            if 'Progress' in event:
+                print("progress")
+                pprint.pprint(event['Progress'],width=1)
+            if 'Stats' in event:
+                print("Stats")
+                pprint.pprint(event['Stats'],width=1)
+            if 'End' in event:
+                print("End")
+                pprint.pprint(event['End'],width=1)
 
     return result
 
@@ -589,7 +606,6 @@ Error Response
 
 Report Response
 ~~~~~~~~~~~~~~~
-
    | HTTP/1.1 200
    | <?xml version="1.0" encoding="UTF-8"?>
    | <Payload>
@@ -621,18 +637,15 @@ Response Description
 
    | For CEPH S3 Select, responses can be messages of the following types:
    | 
-   | **Records message**: Can contain a single record, partial records, or multiple records. Depending on the size of the result,       
-   | a response can contain one or more of these messages.
+   | **Records message**: Can contain a single record, partial records, or multiple records. Depending on the size of the result, a response can contain one or more of these messages.
    | 
-   | **Error message**: Upon an error being detected, a specific error message sends back to the client, according to its type.
+   | **Error message**: Upon an error being detected, RGW returns 400 Bad Request, and a specific error message sends back to the client, according to its type.
    |
    | **Continuation message**: Ceph S3 periodically sends this message to keep the TCP connection open.
    | These messages appear in responses at random. The client must detect the message type and process it accordingly.
    | 
-   | **Progress message**: Ceph S3 periodically sends this message if requested. It contains information about the progress of    
-   | a query that has started but has not yet been completed.
+   | **Progress message**: Ceph S3 periodically sends this message if requested. It contains information about the progress of a query that has started but has not yet been completed.  
    | 
    | **Stats message**: Ceph S3 sends this message at the end of the request. It contains statistics about the query.
    | 
-   | **End message**: Indicates that the request is complete, and no more messages will be sent. You should not assume that 
-   | request is complete until the client receives an End message.
+   | **End message**: Indicates that the request is complete, and no more messages will be sent. You should not assume that request is complete until the client receives an End message.
