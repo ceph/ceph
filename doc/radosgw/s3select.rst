@@ -566,7 +566,6 @@ BOTO3
     for event in r['Payload']:
             if 'Records' in event:
                 result = ""
-                records = event['Records']
                 records = event['Records']['Payload'].decode('utf-8')
                 result += records
             if 'Progress' in event:
