@@ -1,3 +1,4 @@
+import { HttpResponse } from '@angular/common/http';
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { FormControl } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -20,6 +21,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
@@ -28,6 +30,7 @@ import { OsdSettings } from '~/app/shared/models/osd-settings';
 import { Permissions } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { CdTableServerSideService } from '~/app/shared/services/cd-table-server-side.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -73,6 +76,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
 
   selection = new CdTableSelection();
   osds: any[] = [];
+  count: number = 0;
+
   disabledFlags: string[] = [
     'sortbitwise',
     'purged_snapdirs',
@@ -86,6 +91,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     create: [OrchestratorFeature.OSD_CREATE],
     delete: [OrchestratorFeature.OSD_DELETE]
   };
+
+  private tableContext: CdTableFetchDataContext = null;
 
   protected static collectStates(osd: any) {
     const states = [osd['in'] ? 'in' : 'out'];
@@ -325,12 +332,12 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       },
       { prop: 'stats.usage', name: $localize`Usage`, cellTemplate: this.osdUsageTpl },
       {
-        prop: 'stats_history.out_bytes',
+        prop: 'stats_history.op_out_bytes',
         name: $localize`Read bytes`,
         cellTransformation: CellTemplate.sparkline
       },
       {
-        prop: 'stats_history.in_bytes',
+        prop: 'stats_history.op_in_bytes',
         name: $localize`Write bytes`,
         cellTransformation: CellTemplate.sparkline
       },
@@ -424,14 +431,17 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     }
   }
 
-  getOsdList() {
-    const observables = [this.osdService.getList(), this.osdService.getFlags()];
-    observableForkJoin(observables).subscribe((resp: [any[], string[]]) => {
-      this.osds = resp[0].map((osd) => {
-        osd.collectedStates = OsdListComponent.collectStates(osd);
-        osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map((i: string) => i[1]);
-        osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map((i: string) => i[1]);
-        osd.stats.usage = osd.stats.stat_bytes_used / osd.stats.stat_bytes;
+  getOsdList(context: CdTableFetchDataContext = null) {
+    if (context !== null) {
+      this.tableContext = context;
+    }
+
+    const observables = [
+      this.osdService.getList(this.tableContext.toParams()),
+      this.osdService.getFlags()
+    ];
+    observableForkJoin(observables).subscribe((resp: [HttpResponse<any[]>, string[]]) => {
+      this.osds = resp[0].body.map((osd) => {
         osd.cdIsBinary = true;
         osd.cdIndivFlags = osd.state.filter((f: string) => this.indivFlagNames.includes(f));
         osd.cdClusterFlags = resp[1].filter((f: string) => !this.disabledFlags.includes(f));
@@ -441,6 +451,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         }
         return osd;
       });
+      this.count = CdTableServerSideService.getCount(resp[0]);
     });
   }
 

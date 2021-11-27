@@ -35,6 +35,7 @@ import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { CdUserConfig } from '~/app/shared/models/cd-user-config';
+import { PageInfo } from '../../models/cd-table-paging';
 
 @Component({
   selector: 'cd-table',
@@ -79,25 +80,25 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   sorts?: SortPropDir[];
   // Method used for setting column widths.
   @Input()
-  columnMode? = 'flex';
+  columnMode?= 'flex';
   // Display only actions in header (make sure to disable toolHeader) and use ".only-table-actions"
   @Input()
-  onlyActionHeader? = false;
+  onlyActionHeader?= false;
   // Display the tool header, including reload button, pagination and search fields?
   @Input()
-  toolHeader? = true;
+  toolHeader?= true;
   // Display search field inside tool header?
   @Input()
-  searchField? = true;
+  searchField?= true;
   // Display the table header?
   @Input()
-  header? = true;
+  header?= true;
   // Display the table footer?
   @Input()
-  footer? = true;
+  footer?= true;
   // Page size to show. Set to 0 to show unlimited number of rows.
   @Input()
-  limit? = 10;
+  limit?= 10;
   // Has the row details?
   @Input()
   hasDetails = false;
@@ -110,7 +111,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    * prevent triggering fetchData when initializing the table.
    */
   @Input()
-  autoReload: any = 5000;
+  autoReload: number = 5000;
 
   // Which row property is unique for a row. If the identifier is not specified in any
   // column, then the property name of the first column is used. Defaults to 'id'.
@@ -149,6 +150,17 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @Input()
   status = new TableStatus();
 
+  // Support server-side pagination/sorting/etc.
+  @Input()
+  serverSide: boolean = false;
+
+  /*
+  Only required when serverSide is enabled.
+  It should be provided by the server via "X-Total-Count" HTTP Header
+  */
+  @Input()
+  count: number = 0;
+
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
    *
@@ -159,7 +171,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    * The function is triggered through one table and all tables will update
    */
   @Output()
-  fetchData = new EventEmitter();
+  fetchData = new EventEmitter<CdTableFetchDataContext>();
 
   /**
    * This should be defined if you need access to the selection object.
@@ -234,7 +246,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     });
   }
 
-  constructor(private ngZone: NgZone, private cdRef: ChangeDetectorRef) {}
+  constructor(private ngZone: NgZone, private cdRef: ChangeDetectorRef) { }
 
   static prepareSearch(search: string) {
     search = search.toLowerCase().replace(/,/g, '');
@@ -319,8 +331,14 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (!this.userConfig.limit) {
       this.userConfig.limit = this.limit;
     }
+    if (!(this.userConfig.offset >= 0)) {
+      this.userConfig.offset = this.table.offset;
+    }
     if (!this.userConfig.sorts) {
       this.userConfig.sorts = this.sorts;
+    }
+    if (this.userConfig.search == null) {
+      this.userConfig.search = this.search;
     }
     if (!this.userConfig.columns) {
       this.updateUserColumns();
@@ -592,9 +610,12 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   setLimit(e: any) {
-    const value = parseInt(e.target.value, 10);
+    const value = Number(e.target.value);
     if (value > 0) {
       this.userConfig.limit = value;
+    }
+    if (this.serverSide) {
+      this.reloadData();
     }
   }
 
@@ -614,6 +635,19 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
         // to the correct state.
         this.useData();
       });
+
+      context.pageInfo.offset = this.userConfig.offset;
+      context.pageInfo.limit = this.userConfig.limit;
+
+      if (this.userConfig.sorts?.length) {
+        const sort = this.userConfig.sorts[0];
+        context.sort = `${sort.dir == "desc" ? "-" : ""}${sort.prop}`;
+      }
+
+      if (this.userConfig.search != null) {
+        context.search = this.userConfig.search;
+      }
+
       this.fetchData.emit(context);
       this.updating = true;
     }
@@ -622,6 +656,14 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   refreshBtn() {
     this.loadingIndicator = true;
     this.reloadData();
+  }
+
+  changePage(pageInfo: PageInfo) {
+    this.userConfig.offset = pageInfo.offset;
+    this.userConfig.limit = pageInfo.limit;
+    if (this.serverSide) {
+      this.reloadData();
+    }
   }
 
   rowIdentity() {
@@ -738,8 +780,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     ];
   }
 
-  changeSorting({ sorts }: any) {
+  changeSorting({ sorts }: { sorts: SortPropDir[] }) {
     this.userConfig.sorts = sorts;
+    if (this.serverSide) {
+      this.reloadData();
+    }
   }
 
   onClearSearch() {
@@ -756,19 +801,26 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   updateFilter() {
-    let rows = this.columnFilters.length !== 0 ? this.doColumnFiltering() : this.data;
+    if (this.serverSide) {
+      this.userConfig.search = this.search;
+      console.log(`search=${this.search}`);
+      this.reloadData();
+      this.rows = this.data;
+    } else {
+      let rows = this.columnFilters.length !== 0 ? this.doColumnFiltering() : this.data;
 
-    if (this.search.length > 0 && rows) {
-      const columns = this.localColumns.filter(
-        (c) => c.cellTransformation !== CellTemplate.sparkline
-      );
-      // update the rows
-      rows = this.subSearch(rows, TableComponent.prepareSearch(this.search), columns);
-      // Whenever the filter changes, always go back to the first page
-      this.table.offset = 0;
+      if (this.search.length > 0 && rows) {
+        const columns = this.localColumns.filter(
+          (c) => c.cellTransformation !== CellTemplate.sparkline
+        );
+        // update the rows
+        rows = this.subSearch(rows, TableComponent.prepareSearch(this.search), columns);
+        // Whenever the filter changes, always go back to the first page
+        this.table.offset = 0;
+      }
+
+      this.rows = rows;
     }
-
-    this.rows = rows;
   }
 
   subSearch(data: any[], currentSearch: string[], columns: CdTableColumn[]): any[] {

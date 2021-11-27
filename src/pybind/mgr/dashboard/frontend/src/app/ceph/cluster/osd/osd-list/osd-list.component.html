@@ -6,10 +6,13 @@
        i18n>OSDs List</a>
     <ng-template ngbNavContent>
       <cd-table [data]="osds"
-                (fetchData)="getOsdList()"
+                (fetchData)="getOsdList($event)"
                 [columns]="columns"
                 selectionType="multiClick"
                 [hasDetails]="true"
+                [autoReload]="5000"
+                [serverSide]="true"
+                [count]="count"
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)"
                 [updateSelectionOnRefresh]="'never'">
@@ -87,6 +90,7 @@
              let-row="row">
   <cd-usage-bar [total]="row.stats.stat_bytes"
                 [used]="row.stats.stat_bytes_used"
+                decimals="1"
                 [warningThreshold]="osdSettings.nearfull_ratio"
                 [errorThreshold]="osdSettings.full_ratio">
   </cd-usage-bar>

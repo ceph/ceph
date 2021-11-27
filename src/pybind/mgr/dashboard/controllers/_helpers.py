@@ -1,8 +1,11 @@
 import collections
+from itertools import islice
 import json
 import logging
 import re
 from functools import wraps
+from textwrap import wrap
+from typing import Any, Callable, Dict, Sequence, TypeVar
 
 import cherrypy
 from ceph_argparse import ArgumentFormat  # pylint: disable=import-error
@@ -124,4 +127,157 @@ def validate_ceph_type(validations, component=''):
                                              component=component)
             return func(*args, **kwargs)
         return validate_args
+    return decorator
+
+
+T = TypeVar('T')
+
+def paginated(func: Callable[..., Sequence[T]]) -> Callable[..., Sequence[T]]:
+    """
+    Paginate the output of decorated method
+
+    >>> paginated(range)(5)
+    [0,1,2,3,4]
+
+    >>> paginated(range)(5, offset="0")
+    [0,1,2,3,4]
+
+    >>> paginated(range)(5, limit="0")
+    [0,1,2,3,4]
+
+    >>> paginated(range)(5, offset="0", limit="0")
+    [0,1,2,3,4]
+
+    >>> paginated(range)(5, offset="1", limit="0")
+    [1,2,3,4]
+
+    >>> paginated(range)(5, offset="1", limit="2")
+    [1,2]
+
+    >>> paginated(range)(5, offset="4", limit="2")
+    [4]
+
+    >>> paginated(range)(5, offset="5", limit="2")
+    []
+    """
+    @wraps(func)
+    def wrapper(*args, offset: int = 0, limit: int = 0, **kwargs) -> Sequence[T]:
+        """
+        Input and output arguments default to a backward-compatible behaviour
+
+        Args:
+            offset (int): default: 0. Item/row count, not pages, starting with 0
+            limit (int): default: 0. Item/row count. 0 means no limit
+        Returns:
+            Iterable<T>: an iterable with equal (or less) amount of items requested
+            (e.g.: in case there less remaining items).
+
+        Additionally, the total number of items returned from the unpaginated
+        method is returned as an HTTP Header `X-Total-Count`. The purpose of
+        this interface is not to break the existing response format and keep
+        the current API version of the unpaginated endpoints.
+        """
+        ret = func(*args, **kwargs)
+        start = int(offset)
+        limit = int(limit)
+        if offset or limit:
+            end = start + limit if limit > 0 else None
+            cherrypy.response.headers['X-Total-Count'] = len(ret)
+            return list(islice(ret, start, end))
+        return ret
+    return wrapper
+
+
+def dot_getitem(_dict: Dict[str, Any], dot_key):
+    """
+    Support JS dot-like access to nested objects
+
+    >>> sort.strip({'osd': {'host': {'name': 'example.com'}}}, 'osd.host.name')
+    'example.com'
+    """
+    for key in dot_key.split('.'):
+        _dict = _dict[key]
+    return _dict
+
+
+def sorting(func: Callable[..., Sequence[T]]) -> Callable[..., Sequence[T]]:
+    """
+    Sort the output of the decorated method
+
+    >>> sorting(iter)([dict(id=1, value="foo"), dict(id=2, value="bar")])
+    [{'id': 1, 'value': 'foo'}, {'id': 2, 'value': 'bar'}]
+
+    >>> sorting(iter)([dict(id=1, value="foo"), dict(id=2, value="bar")], sort="id")
+    [{'id': 1, 'value': 'foo'}, {'id': 2, 'value': 'bar'}]
+
+    >>> sorting(iter)([dict(id=1, value="foo"), dict(id=2, value="bar")], sort="-id")
+    [{'id': 2, 'value': 'bar'}, {'id': 1, 'value': 'foo'}]
+
+    >>> sorting(iter)([dict(id=1, value="foo"), dict(id=2, value="bar")], sort="value")
+    [{'id': 2, 'value': 'bar'}, {'id': 1, 'value': 'foo'}]
+
+    >>> sorting(iter)([dict(id=1, value="foo"), dict(id=2, value="bar")], sort="-value")
+    [{'id': 1, 'value': 'foo'}, {'id': 2, 'value': 'bar'}]
+    """
+    @wraps(func)
+    def wrapper(*args, sort: str = "", **kwargs) -> Sequence[T]:
+        """
+        Input and output arguments default to a backward-compatible behaviour
+
+        Args:
+            sort (string): default: "". Format: "[-]<field_name>".
+
+        Returns:
+            Iterable<T>: an iterable sorted according to the 'field_name' in
+            lexicographically descending order if the 'field_name' is prefixed
+            with '-'; otherwise ascending.
+        """
+        ret = func(*args, **kwargs)
+        if sort:
+            desc = sort.startswith('-')
+            field = sort.strip('-')
+            return sorted(ret, key=lambda i: dot_getitem(i, field), reverse=desc)
+        return ret
+    return wrapper
+
+
+def search_in_dict(obj: Dict[Any, Any], text: str, ignore_case=False):
+    """
+    >>> search(dict(a=1,b="Bar_Foo_Bar"),"Fo")
+    True
+    >>> search(dict(a=1,b="Bar_Foo_Bar"),"fo")
+    False
+    >>> search(dict(a=1,b="Bar_Foo_Bar"),"fo", ingore_case=True)
+    True
+    """
+    return any(
+        text.lower() in str(value).lower() if ignore_case else text in str(value)
+        for value in obj.values()
+        )
+
+
+def searching(func: Callable[..., Sequence[T]]) -> Callable[..., Sequence[T]]:
+    """
+    Search text in the output of the decorated method
+
+    >>> searching(iter)([dict(id=1, value="foo"), dict(id=2, value="bar")], search="bar")
+    [dict(id=2, value="bar")]
+    """
+    @wraps(func)
+    def wrapper(*args, search: str = "", **kwargs) -> Sequence[T]:
+        ret = func(*args, **kwargs)
+        if search:
+            ret = filter(lambda x: search_in_dict(x, search), ret)
+        return ret
+    return wrapper
+
+
+def with_server_timing(getter):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            ret, metric = func(*args, **kwargs)
+            cherrypy.response.headers['Server-Timing'] = getter(ret, metric)
+            return ret
+        return wrapper
     return decorator

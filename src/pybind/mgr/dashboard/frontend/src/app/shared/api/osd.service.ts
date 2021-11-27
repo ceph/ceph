@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
@@ -74,8 +74,13 @@ export class OsdService {
     return this.http.post(this.path, request, { observe: 'response' });
   }
 
-  getList() {
-    return this.http.get(`${this.path}`);
+  getList(params?: HttpParams): Observable<HttpResponse<any>> {
+    return this.http.get(
+      this.path,
+      {
+        params: params,
+        observe: 'response',
+      });
   }
 
   getOsdSettings(): Observable<OsdSettings> {
