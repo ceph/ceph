@@ -107,6 +107,10 @@ TEST_F(TestGroup, add_image)
   ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_GROUP) ==
                 RBD_OPERATION_FEATURE_GROUP);
 
+  rbd_group_info_t group_info;
+  ASSERT_EQ(-ERANGE, rbd_get_group(image, &group_info, 0));
+  ASSERT_EQ(0, rbd_get_group(image, &group_info, sizeof(group_info)));
+
   size_t num_images = 0;
   ASSERT_EQ(-ERANGE, rbd_group_image_list(ioctx, group_name, NULL,
                                           sizeof(rbd_group_image_info_t),
@@ -226,7 +230,6 @@ TEST_F(TestGroup, add_snapshot)
 
   ASSERT_EQ(0, rbd_group_image_add(ioctx, group_name, ioctx,
                                    m_image_name.c_str()));
-
   struct Watcher {
     static void quiesce_cb(void *arg) {
       Watcher *watcher = static_cast<Watcher *>(arg);
