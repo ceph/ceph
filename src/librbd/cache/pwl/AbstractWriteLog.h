@@ -296,7 +296,6 @@ protected:
   std::atomic<int> m_async_flush_ops = {0};
   std::atomic<int> m_async_append_ops = {0};
 
-  std::atomic<int> m_flush_ops_will_send = {0};
   /* Acquire locks in order declared here */
 
   mutable ceph::mutex m_log_retire_lock;
