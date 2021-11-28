@@ -595,7 +595,6 @@ void WriteLog<I>::construct_flush_entries(pwl::GenericLogEntries entries_to_flus
 		  ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
 		                             << " " << *log_entry << dendl;
 		  log_entry->writeback(this->m_image_writeback, ctx);
-		  this->m_flush_ops_will_send -= 1;
 	      }), 0);
 	  });
 	}
