@@ -7664,6 +7664,10 @@ def _get_parser():
         action='store_true',
         default=not CONTAINER_INIT,
         help='Do not run podman/docker with `--init`')
+    parser.add_argument(
+        '--binary_version',
+        action='version',
+        version='%(prog)s binary version 1.0')
 
     subparsers = parser.add_subparsers(help='sub-command')
 
