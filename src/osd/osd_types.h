@@ -2447,7 +2447,7 @@ struct store_statfs_t
 
   void add(const store_statfs_t& o) {
     total += o.total;
-    available += o.available;
+    available = std::min<uint64_t>(available + o.available, total);
     internally_reserved += o.internally_reserved;
     allocated += o.allocated;
     data_stored += o.data_stored;
@@ -2459,7 +2459,7 @@ struct store_statfs_t
   }
   void sub(const store_statfs_t& o) {
     total -= o.total;
-    available -= o.available;
+    available = std::max<int64_t>(available - o.available, 0);
     internally_reserved -= o.internally_reserved;
     allocated -= o.allocated;
     data_stored -= o.data_stored;
