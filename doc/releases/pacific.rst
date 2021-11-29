@@ -15,17 +15,6 @@ Notable Changes
   bluestore-quick-fix-on-mount parameter is set to true or ceph-bluestore-tool's
   quick-fix/repair commands are invoked.
   Relevant tracker: https://tracker.ceph.com/issues/53062
-  ``bluestore-quick-fix-on-mount`` continues to be set to false, by default.
-  
-* CephFS:  If you are not using cephadm, you must disable FSMap sanity checks *before starting the upgrade*::
-  
-      ceph config set mon mon_mds_skip_sanity true
-
-  After the upgrade has finished and the cluster is stable, please remove that setting::
-
-      ceph config rm mon mon_mds_skip_sanity
-
-  Clusters managed by and upgraded using cephadm take care of this step automatically.
 
 * MGR: The pg_autoscaler will use the 'scale-up' profile as the default profile.
   16.2.6 changed the default profile to 'scale-down' but we ran into issues
@@ -34,39 +23,9 @@ Notable Changes
   until we implement a limit on the number of PGs default pools should consume,
   in combination with the 'scale-down' profile.
 
-* Cephadm & Ceph Dashboard: NFS management has been completely reworked to
-  ensure that NFS exports are managed consistently across the different Ceph
-  components. Prior to this, there were 3 incompatible implementations for
-  configuring the NFS exports: Ceph-Ansible/OpenStack Manila, Ceph Dashboard and
-  'mgr/nfs' module. With this release the 'mgr/nfs' way becomes the official
-  interface, and the remaining components (Cephadm and Ceph Dashboard) adhere to
-  it. While this might require manually migrating from the deprecated
-  implementations, it will simplify the user experience for those heavily
-  relying on NFS exports.
-
-* Dashboard: "Cluster Expansion Wizard". After the 'cephadm bootstrap' step,
-  users that log into the Ceph Dashboard will be presented with a welcome
-  screen. If they choose to follow the installation wizard, they will be guided 
-  through a set of steps to help them configure their Ceph cluster: expanding
-  the cluster by adding more hosts, detecting and defining their storage
-  devices, and finally deploying and configuring the different Ceph services.
-
-* OSD: When using mclock_scheduler for QoS, there is no longer a need to run any
-  manual benchmark. The OSD now automatically sets an appropriate value for
-  `osd_mclock_max_capacity_iops` by running a simple benchmark during
-  initialization.
-
-* MGR: The global recovery event in the progress module has been optimized and
-  a `sleep_interval` of 5 seconds has been added between stats collection,
-  to reduce the impact of the progress module on the MGR, especially in large
-  clusters.
-  
 Changelog
 ---------
 
-* rpm, debian: move smartmontools and nvme-cli to ceph-base (`pr#44164 <https://github.com/ceph/ceph/pull/44164>`_, Yaarit Hatuka)
-* qa: miscellaneous perf suite fixes (`pr#44154 <https://github.com/ceph/ceph/pull/44154>`_, Neha Ojha)
-* qa/suites/orch/cephadm: mgr-nfs-upgrade: add missing 0-distro dir (`pr#44201 <https://github.com/ceph/ceph/pull/44201>`_, Sebastian Wagner)
 * \*: s/virtualenv/python -m venv/ (`pr#43002 <https://github.com/ceph/ceph/pull/43002>`_, Kefu Chai, Ken Dreyer)
 * admin/doc-requirements.txt: pin Sphinx at 3.5.4 (`pr#43748 <https://github.com/ceph/ceph/pull/43748>`_, Kefu Chai)
 * backport mgr/nfs bits (`pr#43811 <https://github.com/ceph/ceph/pull/43811>`_, Sage Weil, Michael Fritch)
