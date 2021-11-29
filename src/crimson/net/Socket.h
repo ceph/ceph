@@ -55,8 +55,11 @@ class Socket
 
   static seastar::future<SocketRef>
   connect(const entity_addr_t& peer_addr) {
-    return seastar::connect(peer_addr.in4_addr()
-    ).then([] (seastar::connected_socket socket) {
+    inject_failure();
+    return inject_delay(
+    ).then([peer_addr] {
+      return seastar::connect(peer_addr.in4_addr());
+    }).then([] (seastar::connected_socket socket) {
       return std::make_unique<Socket>(
         std::move(socket), side_t::connector, 0, construct_tag{});
     });
@@ -70,9 +73,14 @@ class Socket
 
   seastar::future<> write(packet&& buf) {
 #ifdef UNIT_TESTS_BUILT
-    return try_trap_pre(next_trap_write).then([buf = std::move(buf), this] () mutable {
+    return try_trap_pre(next_trap_write
+    ).then([buf = std::move(buf), this] () mutable {
 #endif
-      return out.write(std::move(buf));
+      inject_failure();
+      return inject_delay(
+      ).then([buf = std::move(buf), this] () mutable {
+        return out.write(std::move(buf));
+      });
 #ifdef UNIT_TESTS_BUILT
     }).then([this] {
       return try_trap_post(next_trap_write);
@@ -80,13 +88,20 @@ class Socket
 #endif
   }
   seastar::future<> flush() {
-    return out.flush();
+    inject_failure();
+    return inject_delay().then([this] {
+      return out.flush();
+    });
   }
   seastar::future<> write_flush(packet&& buf) {
 #ifdef UNIT_TESTS_BUILT
     return try_trap_pre(next_trap_write).then([buf = std::move(buf), this] () mutable {
 #endif
-      return out.write(std::move(buf)).then([this] { return out.flush(); });
+      inject_failure();
+      return inject_delay(
+      ).then([buf = std::move(buf), this] () mutable {
+        return out.write(std::move(buf)).then([this] { return out.flush(); });
+      });
 #ifdef UNIT_TESTS_BUILT
     }).then([this] {
       return try_trap_post(next_trap_write);
@@ -99,6 +114,10 @@ class Socket
 
   /// Socket can only be closed once.
   seastar::future<> close();
+
+  static seastar::future<> inject_delay();
+
+  static void inject_failure();
 
   // shutdown input_stream only, for tests
   void force_shutdown_in() {
