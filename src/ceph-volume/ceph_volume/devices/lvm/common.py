@@ -123,12 +123,6 @@ bluestore_args = {
         'type': int,
         'default': 1,
     },
-    '--no-tmpfs': {
-        'action': 'store_true',
-        'dest': 'no_tmpfs',
-        'help': ('Disable tmpfs osd data directory with bluestore.'
-            'Useful if you want to run lvm preprare from cephadm'),
-    },
 }
 
 filestore_args = {
