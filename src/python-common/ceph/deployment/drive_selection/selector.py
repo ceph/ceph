@@ -1,7 +1,7 @@
 import logging
 
 try:
-    from typing import List, Optional
+    from typing import List, Optional, Dict
 except ImportError:
     pass
 
@@ -149,3 +149,14 @@ class DriveSelection(object):
                 self.disks.remove(taken_device)
 
         return sorted([x for x in devices], key=lambda dev: dev.path)
+
+    def __repr__(self) -> str:
+        selection: Dict[str, List[str]] = {
+            'data devices': [d.path for d in self._data],
+            'wal_devices': [d.path for d in self._wal],
+            'db devices': [d.path for d in self._db],
+            'journal devices': [d.path for d in self._journal]
+        }
+        return "DeviceSelection({})".format(
+            ', '.join('{}={}'.format(key, selection[key]) for key in selection.keys())
+        )
