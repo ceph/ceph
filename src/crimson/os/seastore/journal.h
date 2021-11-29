@@ -359,6 +359,7 @@ private:
     RecordSubmitter(std::size_t io_depth,
                     std::size_t batch_capacity,
                     std::size_t batch_flush_size,
+                    double preferred_fullness,
                     JournalSegmentManager&);
 
     grouped_io_stats get_record_batch_stats() const {
@@ -449,6 +450,7 @@ private:
     state_t state = state_t::IDLE;
     std::size_t num_outstanding_io = 0;
     std::size_t io_depth_limit;
+    double preferred_fullness;
 
     WritePipeline* write_pipeline = nullptr;
     JournalSegmentManager& journal_segment_manager;

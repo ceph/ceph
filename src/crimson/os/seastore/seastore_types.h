@@ -1323,6 +1323,12 @@ struct record_group_size_t {
     return tmp;
   }
 
+  double get_fullness() const {
+    assert(block_size > 0);
+    return ((double)(get_raw_mdlength() + dlength) /
+            get_encoded_length());
+  }
+
   void account(const record_size_t& rsize,
                extent_len_t block_size);
 };

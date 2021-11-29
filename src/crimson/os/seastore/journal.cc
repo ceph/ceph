@@ -39,6 +39,8 @@ Journal::Journal(
                        "seastore_journal_batch_capacity"),
                      crimson::common::get_conf<Option::size_t>(
                        "seastore_journal_batch_flush_size"),
+                     crimson::common::get_conf<double>(
+                       "seastore_journal_batch_preferred_fullness"),
                      journal_segment_manager),
     scanner(scanner)
 {
@@ -556,15 +558,22 @@ Journal::RecordSubmitter::RecordSubmitter(
   std::size_t io_depth,
   std::size_t batch_capacity,
   std::size_t batch_flush_size,
+  double preferred_fullness,
   JournalSegmentManager& jsm)
   : io_depth_limit{io_depth},
+    preferred_fullness{preferred_fullness},
     journal_segment_manager{jsm},
     batches(new RecordBatch[io_depth + 1])
 {
   logger().info("Journal::RecordSubmitter: io_depth_limit={}, "
-                "batch_capacity={}, batch_flush_size={}",
-                io_depth, batch_capacity, batch_flush_size);
-  assert(io_depth > 0);
+                "batch_capacity={}, batch_flush_size={}, "
+                "preferred_fullness={}",
+                io_depth, batch_capacity,
+                batch_flush_size, preferred_fullness);
+  ceph_assert(io_depth > 0);
+  ceph_assert(batch_capacity > 0);
+  ceph_assert(preferred_fullness >= 0 &&
+              preferred_fullness <= 1);
   free_batch_ptrs.reserve(io_depth + 1);
   for (std::size_t i = 0; i <= io_depth; ++i) {
     batches[i].initialize(i, batch_capacity, batch_flush_size);
@@ -699,7 +708,7 @@ Journal::RecordSubmitter::submit_pending(
       // indirect write with or without the existing pending records
       auto write_fut = p_current_batch->add_pending(
         std::move(record), journal_segment_manager.get_block_size());
-      if (flush) {
+      if (flush || state == state_t::IDLE) {
         flush_current_batch();
       }
       return write_fut;
@@ -745,7 +754,9 @@ Journal::RecordSubmitter::do_submit(
         return do_submit(std::move(record), handle);
       });
     } else {
-      return submit_pending(std::move(record), handle, true);
+      bool flush = (maybe_new_size->get_fullness() > preferred_fullness ?
+                    true : false);
+      return submit_pending(std::move(record), handle, flush);
     }
   }
 
