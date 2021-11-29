@@ -237,31 +237,7 @@ class CephadmServe:
                 self.log.debug(f"autotuning memory for {host}")
                 self._autotune_host_memory(host)
 
-            # client files
-            updated_files = False
-            old_files = self.mgr.cache.get_host_client_files(host).copy()
-            for path, m in client_files.get(host, {}).items():
-                mode, uid, gid, content, digest = m
-                if path in old_files:
-                    match = old_files[path] == (digest, mode, uid, gid)
-                    del old_files[path]
-                    if match:
-                        continue
-                self.log.info(f'Updating {host}:{path}')
-                self._write_remote_file(host, path, content, mode, uid, gid)
-                self.mgr.cache.update_client_file(host, path, digest, mode, uid, gid)
-                updated_files = True
-            for path in old_files.keys():
-                self.log.info(f'Removing {host}:{path}')
-                with self._remote_connection(host) as tpl:
-                    conn, connr = tpl
-                    out, err, code = remoto.process.check(
-                        conn,
-                        ['rm', '-f', path])
-                updated_files = True
-                self.mgr.cache.removed_client_file(host, path)
-            if updated_files:
-                self.mgr.cache.save_host(host)
+            self._write_client_files(client_files, host)
 
         refresh(self.mgr.cache.get_hosts())
 
@@ -1019,6 +995,34 @@ class CephadmServe:
                 self.log.warning(
                     f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
         return client_files
+
+    def _write_client_files(self,
+                            client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]],
+                            host: str) -> None:
+        updated_files = False
+        old_files = self.mgr.cache.get_host_client_files(host).copy()
+        for path, m in client_files.get(host, {}).items():
+            mode, uid, gid, content, digest = m
+            if path in old_files:
+                match = old_files[path] == (digest, mode, uid, gid)
+                del old_files[path]
+                if match:
+                    continue
+            self.log.info(f'Updating {host}:{path}')
+            self._write_remote_file(host, path, content, mode, uid, gid)
+            self.mgr.cache.update_client_file(host, path, digest, mode, uid, gid)
+            updated_files = True
+        for path in old_files.keys():
+            self.log.info(f'Removing {host}:{path}')
+            with self._remote_connection(host) as tpl:
+                conn, connr = tpl
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['rm', '-f', path])
+            updated_files = True
+            self.mgr.cache.removed_client_file(host, path)
+        if updated_files:
+            self.mgr.cache.save_host(host)
 
     def _create_daemon(self,
                        daemon_spec: CephadmDaemonDeploySpec,
