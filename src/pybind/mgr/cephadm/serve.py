@@ -183,69 +183,10 @@ class CephadmServe:
         bad_hosts = []
         failures = []
 
-        # host -> path -> (mode, uid, gid, content, digest)
-        client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]] = {}
-
-        # ceph.conf
         if self.mgr.manage_etc_ceph_ceph_conf or self.mgr.keys.keys:
-            config = self.mgr.get_minimal_ceph_conf().encode('utf-8')
-            config_digest = ''.join('%02x' % c for c in hashlib.sha256(config).digest())
-
-        if self.mgr.manage_etc_ceph_ceph_conf:
-            try:
-                pspec = PlacementSpec.from_string(self.mgr.manage_etc_ceph_ceph_conf_hosts)
-                ha = HostAssignment(
-                    spec=ServiceSpec('mon', placement=pspec),
-                    hosts=self.mgr._schedulable_hosts(),
-                    unreachable_hosts=self.mgr._unreachable_hosts(),
-                    daemons=[],
-                    networks=self.mgr.cache.networks,
-                )
-                all_slots, _, _ = ha.place()
-                for host in {s.hostname for s in all_slots}:
-                    if host not in client_files:
-                        client_files[host] = {}
-                    client_files[host]['/etc/ceph/ceph.conf'] = (
-                        0o644, 0, 0, bytes(config), str(config_digest)
-                    )
-            except Exception as e:
-                self.mgr.log.warning(
-                    f'unable to calc conf hosts: {self.mgr.manage_etc_ceph_ceph_conf_hosts}: {e}')
-
-        # client keyrings
-        for ks in self.mgr.keys.keys.values():
-            assert config
-            assert config_digest
-            try:
-                ret, keyring, err = self.mgr.mon_command({
-                    'prefix': 'auth get',
-                    'entity': ks.entity,
-                })
-                if ret:
-                    self.log.warning(f'unable to fetch keyring for {ks.entity}')
-                    continue
-                digest = ''.join('%02x' % c for c in hashlib.sha256(
-                    keyring.encode('utf-8')).digest())
-                ha = HostAssignment(
-                    spec=ServiceSpec('mon', placement=ks.placement),
-                    hosts=self.mgr._schedulable_hosts(),
-                    unreachable_hosts=self.mgr._unreachable_hosts(),
-                    daemons=[],
-                    networks=self.mgr.cache.networks,
-                )
-                all_slots, _, _ = ha.place()
-                for host in {s.hostname for s in all_slots}:
-                    if host not in client_files:
-                        client_files[host] = {}
-                    client_files[host]['/etc/ceph/ceph.conf'] = (
-                        0o644, 0, 0, bytes(config), str(config_digest)
-                    )
-                    client_files[host][ks.path] = (
-                        ks.mode, ks.uid, ks.gid, keyring.encode('utf-8'), digest
-                    )
-            except Exception as e:
-                self.log.warning(
-                    f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
+            client_files = self._calc_client_files()
+        else:
+            client_files = {}
 
         @forall_hosts
         def refresh(host: str) -> None:
@@ -1015,6 +956,69 @@ class CephadmServe:
                 if image_info.repo_digests:
                     # FIXME: we assume the first digest here is the best
                     self.mgr.set_container_image(entity, image_info.repo_digests[0])
+
+    def _calc_client_files(self) -> Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]]:
+        # host -> path -> (mode, uid, gid, content, digest)
+        client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]] = {}
+
+        # ceph.conf
+        config = self.mgr.get_minimal_ceph_conf().encode('utf-8')
+        config_digest = ''.join('%02x' % c for c in hashlib.sha256(config).digest())
+
+        if self.mgr.manage_etc_ceph_ceph_conf:
+            try:
+                pspec = PlacementSpec.from_string(self.mgr.manage_etc_ceph_ceph_conf_hosts)
+                ha = HostAssignment(
+                    spec=ServiceSpec('mon', placement=pspec),
+                    hosts=self.mgr._schedulable_hosts(),
+                    unreachable_hosts=self.mgr._unreachable_hosts(),
+                    daemons=[],
+                    networks=self.mgr.cache.networks,
+                )
+                all_slots, _, _ = ha.place()
+                for host in {s.hostname for s in all_slots}:
+                    if host not in client_files:
+                        client_files[host] = {}
+                    client_files[host]['/etc/ceph/ceph.conf'] = (
+                        0o644, 0, 0, bytes(config), str(config_digest)
+                    )
+            except Exception as e:
+                self.mgr.log.warning(
+                    f'unable to calc conf hosts: {self.mgr.manage_etc_ceph_ceph_conf_hosts}: {e}')
+
+        # client keyrings
+        for ks in self.mgr.keys.keys.values():
+            try:
+                ret, keyring, err = self.mgr.mon_command({
+                    'prefix': 'auth get',
+                    'entity': ks.entity,
+                })
+                if ret:
+                    self.log.warning(f'unable to fetch keyring for {ks.entity}')
+                    continue
+                digest = ''.join('%02x' % c for c in hashlib.sha256(
+                    keyring.encode('utf-8')).digest())
+                ha = HostAssignment(
+                    spec=ServiceSpec('mon', placement=ks.placement),
+                    hosts=self.mgr._schedulable_hosts(),
+                    unreachable_hosts=self.mgr._unreachable_hosts(),
+                    daemons=[],
+                    networks=self.mgr.cache.networks,
+                )
+                all_slots, _, _ = ha.place()
+                for host in {s.hostname for s in all_slots}:
+                    if host not in client_files:
+                        client_files[host] = {}
+                    client_files[host]['/etc/ceph/ceph.conf'] = (
+                        0o644, 0, 0, bytes(config), str(config_digest)
+                    )
+                    client_files[host][ks.path] = (
+                        ks.mode, ks.uid, ks.gid, keyring.encode('utf-8'), digest
+                    )
+            except Exception as e:
+                self.log.warning(
+                    f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
+        return client_files
 
     def _create_daemon(self,
                        daemon_spec: CephadmDaemonDeploySpec,
