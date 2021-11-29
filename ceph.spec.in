@@ -342,6 +342,7 @@ BuildRequires:	lz4-devel >= 1.7
 %endif
 # distro-conditional make check dependencies
 %if 0%{with make_check}
+BuildRequires:	golang
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:	golang-github-prometheus
 BuildRequires:	jsonnet
