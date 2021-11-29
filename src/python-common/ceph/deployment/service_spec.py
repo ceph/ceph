@@ -432,7 +432,7 @@ class ServiceSpec(object):
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
             'container': CustomContainerSpec,
-            'grafana': MonitoringSpec,
+            'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
             'prometheus': MonitoringSpec,
         }.get(service_type, cls)
@@ -618,7 +618,8 @@ class ServiceSpec(object):
         if self.service_id:
             ret['service_id'] = self.service_id
         ret['service_name'] = self.service_name()
-        ret['placement'] = self.placement.to_json()
+        if self.placement.to_json():
+            ret['placement'] = self.placement.to_json()
         if self.unmanaged:
             ret['unmanaged'] = self.unmanaged
         if self.networks:
@@ -868,61 +869,6 @@ class IscsiServiceSpec(ServiceSpec):
 yaml.add_representer(IscsiServiceSpec, ServiceSpec.yaml_representer)
 
 
-class AlertManagerSpec(ServiceSpec):
-    def __init__(self,
-                 service_type: str = 'alertmanager',
-                 service_id: Optional[str] = None,
-                 placement: Optional[PlacementSpec] = None,
-                 unmanaged: bool = False,
-                 preview_only: bool = False,
-                 user_data: Optional[Dict[str, Any]] = None,
-                 config: Optional[Dict[str, str]] = None,
-                 networks: Optional[List[str]] = None,
-                 port: Optional[int] = None,
-                 ):
-        assert service_type == 'alertmanager'
-        super(AlertManagerSpec, self).__init__(
-            'alertmanager', service_id=service_id,
-            placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config, networks=networks)
-
-        # Custom configuration.
-        #
-        # Example:
-        # service_type: alertmanager
-        # service_id: xyz
-        # user_data:
-        #   default_webhook_urls:
-        #   - "https://foo"
-        #   - "https://bar"
-        #
-        # Documentation:
-        # default_webhook_urls - A list of additional URL's that are
-        #                        added to the default receivers'
-        #                        <webhook_configs> configuration.
-        self.user_data = user_data or {}
-        self.port = port
-
-    def get_port_start(self) -> List[int]:
-        return [self.get_port(), 9094]
-
-    def get_port(self) -> int:
-        if self.port:
-            return self.port
-        else:
-            return 9093
-
-    def validate(self) -> None:
-        super(AlertManagerSpec, self).validate()
-
-        if self.port == 9094:
-            raise SpecValidationError(
-                'Port 9094 is reserved for AlertManager cluster listen address')
-
-
-yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
-
-
 class IngressSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'ingress',
@@ -1074,7 +1020,7 @@ class MonitoringSpec(ServiceSpec):
                  preview_only: bool = False,
                  port: Optional[int] = None,
                  ):
-        assert service_type in ['grafana', 'node-exporter', 'prometheus']
+        assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager']
 
         super(MonitoringSpec, self).__init__(
             service_type, service_id,
@@ -1094,4 +1040,80 @@ class MonitoringSpec(ServiceSpec):
         else:
             return {'prometheus': 9095,
                     'node-exporter': 9100,
+                    'alertmanager': 9093,
                     'grafana': 3000}[self.service_type]
+
+
+yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)
+
+
+class AlertManagerSpec(MonitoringSpec):
+    def __init__(self,
+                 service_type: str = 'alertmanager',
+                 service_id: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 user_data: Optional[Dict[str, Any]] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 port: Optional[int] = None,
+                 ):
+        assert service_type == 'alertmanager'
+        super(AlertManagerSpec, self).__init__(
+            'alertmanager', service_id=service_id,
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only, config=config, networks=networks, port=port)
+
+        # Custom configuration.
+        #
+        # Example:
+        # service_type: alertmanager
+        # service_id: xyz
+        # user_data:
+        #   default_webhook_urls:
+        #   - "https://foo"
+        #   - "https://bar"
+        #
+        # Documentation:
+        # default_webhook_urls - A list of additional URL's that are
+        #                        added to the default receivers'
+        #                        <webhook_configs> configuration.
+        self.user_data = user_data or {}
+
+    def get_port_start(self) -> List[int]:
+        return [self.get_port(), 9094]
+
+    def validate(self) -> None:
+        super(AlertManagerSpec, self).validate()
+
+        if self.port == 9094:
+            raise SpecValidationError(
+                'Port 9094 is reserved for AlertManager cluster listen address')
+
+
+yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
+
+
+class GrafanaSpec(MonitoringSpec):
+    def __init__(self,
+                 service_type: str = 'grafana',
+                 service_id: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 port: Optional[int] = None,
+                 initial_admin_password: Optional[str] = None
+                 ):
+        assert service_type == 'grafana'
+        super(GrafanaSpec, self).__init__(
+            'grafana', service_id=service_id,
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only, config=config, networks=networks, port=port)
+
+        self.initial_admin_password = initial_admin_password
+
+
+yaml.add_representer(GrafanaSpec, ServiceSpec.yaml_representer)

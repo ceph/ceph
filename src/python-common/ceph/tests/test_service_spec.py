@@ -5,7 +5,8 @@ import yaml
 import pytest
 
 from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, \
-    ServiceSpec, RGWSpec, NFSServiceSpec, IscsiServiceSpec
+    ServiceSpec, RGWSpec, NFSServiceSpec, IscsiServiceSpec, AlertManagerSpec, \
+    CustomContainerSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
 
@@ -193,8 +194,9 @@ def test_osd_unmanaged():
     dg_spec = ServiceSpec.from_json(osd_spec)
     assert dg_spec.unmanaged == True
 
-def test_yaml():
-    y = """service_type: crash
+
+@pytest.mark.parametrize("y",
+"""service_type: crash
 service_name: crash
 placement:
   host_pattern: '*'
@@ -233,14 +235,112 @@ spec:
   objectstore: bluestore
   wal_devices:
     model: NVME-QQQQ-987
-"""
+---
+service_type: alertmanager
+service_name: alertmanager
+spec:
+  port: 1234
+  user_data:
+    default_webhook_urls:
+    - foo
+---
+service_type: grafana
+service_name: grafana
+spec:
+  port: 1234
+---
+service_type: grafana
+service_name: grafana
+spec:
+  initial_admin_password: secure
+  port: 1234
+---
+service_type: ingress
+service_id: rgw.foo
+service_name: ingress.rgw.foo
+placement:
+  hosts:
+  - host1
+  - host2
+  - host3
+spec:
+  backend_service: rgw.foo
+  frontend_port: 8080
+  monitor_port: 8081
+  virtual_ip: 192.168.20.1/24
+---
+service_type: nfs
+service_id: mynfs
+service_name: nfs.mynfs
+spec:
+  port: 1234
+---
+service_type: iscsi
+service_id: iscsi
+service_name: iscsi.iscsi
+networks:
+- ::0/8
+spec:
+  api_user: api_user
+  pool: pool
+  trusted_ip_list:
+  - ::1
+  - ::2
+---
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
 
-    for y in y.split('---\n'):
-        data = yaml.safe_load(y)
-        object = ServiceSpec.from_json(data)
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+""".split('---\n'))
+def test_yaml(y):
+    data = yaml.safe_load(y)
+    object = ServiceSpec.from_json(data)
 
-        assert yaml.dump(object) == y
-        assert yaml.dump(ServiceSpec.from_json(object.to_json())) == y
+    assert yaml.dump(object) == y
+    assert yaml.dump(ServiceSpec.from_json(object.to_json())) == y
+
+
+def test_alertmanager_spec_1():
+    spec = AlertManagerSpec()
+    assert spec.service_type == 'alertmanager'
+    assert isinstance(spec.user_data, dict)
+    assert len(spec.user_data.keys()) == 0
+    assert spec.get_port_start() == [9093, 9094]
+
+
+def test_alertmanager_spec_2():
+    spec = AlertManagerSpec(user_data={'default_webhook_urls': ['foo']})
+    assert isinstance(spec.user_data, dict)
+    assert 'default_webhook_urls' in spec.user_data.keys()
+
 
 @pytest.mark.parametrize("spec1, spec2, eq",
                          [
@@ -335,3 +435,78 @@ def test_service_id_raises_invalid_char(s_type, s_id):
     with pytest.raises(SpecValidationError):
         spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
         spec.validate()
+
+def test_custom_container_spec():
+    spec = CustomContainerSpec(service_id='hello-world',
+                               image='docker.io/library/hello-world:latest',
+                               entrypoint='/usr/bin/bash',
+                               uid=1000,
+                               gid=2000,
+                               volume_mounts={'foo': '/foo'},
+                               args=['--foo'],
+                               envs=['FOO=0815'],
+                               bind_mounts=[
+                                   [
+                                       'type=bind',
+                                       'source=lib/modules',
+                                       'destination=/lib/modules',
+                                       'ro=true'
+                                   ]
+                               ],
+                               ports=[8080, 8443],
+                               dirs=['foo', 'bar'],
+                               files={
+                                   'foo.conf': 'foo\nbar',
+                                   'bar.conf': ['foo', 'bar']
+                               })
+    assert spec.service_type == 'container'
+    assert spec.entrypoint == '/usr/bin/bash'
+    assert spec.uid == 1000
+    assert spec.gid == 2000
+    assert spec.volume_mounts == {'foo': '/foo'}
+    assert spec.args == ['--foo']
+    assert spec.envs == ['FOO=0815']
+    assert spec.bind_mounts == [
+        [
+            'type=bind',
+            'source=lib/modules',
+            'destination=/lib/modules',
+            'ro=true'
+        ]
+    ]
+    assert spec.ports == [8080, 8443]
+    assert spec.dirs == ['foo', 'bar']
+    assert spec.files == {
+        'foo.conf': 'foo\nbar',
+        'bar.conf': ['foo', 'bar']
+    }
+
+
+def test_custom_container_spec_config_json():
+    spec = CustomContainerSpec(service_id='foo', image='foo', dirs=None)
+    config_json = spec.config_json()
+    for key in ['entrypoint', 'uid', 'gid', 'bind_mounts', 'dirs']:
+        assert key not in config_json
+
+
+def test_ingress_spec():
+    yaml_str = """service_type: ingress
+service_id: rgw.foo
+placement:
+  hosts:
+    - host1
+    - host2
+    - host3
+spec:
+  virtual_ip: 192.168.20.1/24
+  backend_service: rgw.foo
+  frontend_port: 8080
+  monitor_port: 8081
+"""
+    yaml_file = yaml.safe_load(yaml_str)
+    spec = ServiceSpec.from_json(yaml_file)
+    assert spec.service_type == "ingress"
+    assert spec.service_id == "rgw.foo"
+    assert spec.virtual_ip == "192.168.20.1/24"
+    assert spec.frontend_port == 8080
+    assert spec.monitor_port == 8081
