@@ -581,21 +581,28 @@ void WriteLog<I>::construct_flush_entries(pwl::GenericLogEntries entries_to_flus
   bool invalidating = this->m_invalidating; // snapshot so we behave consistently
 
   for (auto &log_entry : entries_to_flush) {
-    Context *ctx = this->construct_flush_entry(log_entry, invalidating);
+    GuardedRequestFunctionContext *guarded_ctx =
+      new GuardedRequestFunctionContext([this, log_entry, invalidating]
+        (GuardedRequestFunctionContext &guard_ctx) {
+          log_entry->m_cell = guard_ctx.cell;
+          Context *ctx = this->construct_flush_entry(log_entry, invalidating);
 
-    if (!invalidating) {
-      ctx = new LambdaContext(
-        [this, log_entry, ctx](int r) {
-	  m_image_ctx.op_work_queue->queue(new LambdaContext(
-	    [this, log_entry, ctx](int r) {
-	      ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
-					 << " " << *log_entry << dendl;
-	      log_entry->writeback(this->m_image_writeback, ctx);
-	      this->m_flush_ops_will_send -= 1;
-	    }), 0);
-        });
-   }
-   post_unlock.add(ctx);
+	  if (!invalidating) {
+	    ctx = new LambdaContext(
+	      [this, log_entry, ctx](int r) {
+	      m_image_ctx.op_work_queue->queue(new LambdaContext(
+	        [this, log_entry, ctx](int r) {
+		  ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
+		                             << " " << *log_entry << dendl;
+		  log_entry->writeback(this->m_image_writeback, ctx);
+		  this->m_flush_ops_will_send -= 1;
+	      }), 0);
+	  });
+	}
+
+	ctx->complete(0);
+    });
+   this->detain_flush_guard_request(log_entry, guarded_ctx);
   }
 }
 
