@@ -1,8 +1,9 @@
-from typing import Dict, List
 import argparse
-import subprocess
 import os
+import subprocess
 import sys
+from typing import Dict, List
+
 
 class Config:
     args = {
@@ -25,6 +26,29 @@ class Config:
     @staticmethod
     def add_args(args: Dict[str, str]) -> argparse.ArgumentParser:
         Config.args.update(args)
+
+class Target:
+    def __init__(self, argv, subparsers):
+        self.argv = argv
+        self.parser = subparsers.add_parser(self.__class__.__name__.lower(),
+                                                     help=self.__class__._help)
+
+    def set_args(self):
+        """
+        adding the required arguments of the target should go here, example:
+        self.parser.add_argument(..)
+        """
+        raise NotImplementedError()
+
+    def main(self):
+        """
+        A target will be setup by first calling this main function
+        where the parser is initialized.
+        """
+        args = self.parser.parse_args(self.argv)
+        Config.add_args(vars(args))
+        function = getattr(self, args.action)
+        function()
 
 def ensure_outside_container(func) -> bool:
     def wrapper(*args, **kwargs):
@@ -90,7 +114,8 @@ def inside_container() -> bool:
 @ensure_outside_container
 def get_host_ips() -> List[List[str]]:
     containers_info = get_boxes_container_info()
-    print(containers_info)
+    if Config.get('verbose'):
+        print(containers_info)
     ips = []
     for container in containers_info:
         if container[1][:len('box_hosts')] == 'box_hosts':

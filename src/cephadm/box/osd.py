@@ -1,9 +1,11 @@
-from typing import Dict
-import os
 import argparse
 import json
-from util import ensure_inside_container, ensure_outside_container, run_shell_command, \
-    run_cephadm_shell_command, Config
+import os
+from typing import Dict
+
+from util import (Config, Target, ensure_inside_container,
+                  ensure_outside_container, run_cephadm_shell_command,
+                  run_shell_command)
 
 
 def remove_loop_img() -> None:
@@ -87,7 +89,7 @@ def cleanup() -> None:
 
     remove_loop_img()
 
-class Osd:
+class Osd(Target):
     _help = '''
     Deploy osds and create needed block devices with loopback devices:
     Actions:
@@ -96,21 +98,13 @@ class Osd:
     for a number of osds.
     '''
     actions = ['deploy', 'create_loop']
-    parser = None
 
-    def __init__(self, argv):
-        self.argv = argv
-
-    @staticmethod
-    def add_parser(subparsers):
-        assert not Osd.parser
-        Osd.parser = subparsers.add_parser('osd', help=Osd._help)
-        parser = Osd.parser
-        parser.add_argument('action', choices=Osd.actions)
-        parser.add_argument('--data', type=str, help='path to a block device')
-        parser.add_argument('--hostname', type=str, help='host to deploy osd')
-        parser.add_argument('--osds', type=int, default=0, help='number of osds')
-        parser.add_argument('--vg', type=str, help='Deploy with all lv from virtual group')
+    def set_args(self):
+        self.parser.add_argument('action', choices=Osd.actions)
+        self.parser.add_argument('--data', type=str, help='path to a block device')
+        self.parser.add_argument('--hostname', type=str, help='host to deploy osd')
+        self.parser.add_argument('--osds', type=int, default=0, help='number of osds')
+        self.parser.add_argument('--vg', type=str, help='Deploy with all lv from virtual group')
 
     @ensure_inside_container
     def deploy(self):
@@ -135,10 +129,3 @@ class Osd:
         create_loopback_devices(osds)
         print('Successfully added logical volumes in loopback devices')
 
-    def main(self):
-        parser = Osd.parser
-        args = parser.parse_args(self.argv)
-        Config.add_args(vars(args))
-        function = getattr(self, args.action)
-        function()
-    
