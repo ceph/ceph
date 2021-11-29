@@ -54,7 +54,11 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::initialize_blk_alloc_area() {
   for (uint64_t i = 0; i < start; i++) {
     b_block.set_bit(i);
   }
-  b_block.set_crc();
+
+  // CRC calculation is offloaded to NVMeDevice if data protection is enabled.
+  if (device->is_data_protection_enabled() == false) {
+    b_block.set_crc();
+  }
 
   return rbm_sync_block_bitmap(b_block,
     super.start_alloc_area / super.block_size
@@ -565,7 +569,15 @@ NVMeManager::write_ertr::future<> NVMeManager::write_rbm_header()
   bufferlist meta_b_header;
   super.crc = 0;
   encode(super, meta_b_header);
-  super.crc = meta_b_header.crc32c(-1);
+  // If NVMeDevice supports data protection, CRC for checksum is not required
+  // NVMeDevice is expected to generate and store checksum internally.
+  // CPU overhead for CRC might be saved.
+  if (device->is_data_protection_enabled()) {
+    super.crc = -1;
+  }
+  else {
+    super.crc = meta_b_header.crc32c(-1);
+  }
 
   bufferlist bl;
   encode(super, bl);
@@ -605,10 +617,14 @@ NVMeManager::read_ertr::future<rbm_metadata_header_t> NVMeManager::read_rbm_head
     bufferlist meta_b_header;
     super_block.crc = 0;
     encode(super_block, meta_b_header);
-    if (meta_b_header.crc32c(-1) != crc) {
-      logger().debug(" bad crc on super block, expected {} != actual {} ",
-		      meta_b_header.crc32c(-1), crc);
-      return crimson::ct_error::input_output_error::make();
+
+    // Do CRC verification only if data protection is not supported.
+    if (device->is_data_protection_enabled() == false) {
+      if (meta_b_header.crc32c(-1) != crc) {
+        logger().debug(" bad crc on super block, expected {} != actual {} ",
+                        meta_b_header.crc32c(-1), crc);
+        return crimson::ct_error::input_output_error::make();
+      }
     }
     logger().debug(" got {} ", super);
     return read_ertr::future<rbm_metadata_header_t>(
