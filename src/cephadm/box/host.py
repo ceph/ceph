@@ -1,7 +1,10 @@
 import argparse
 import os
 from typing import List
-from util import inside_container, run_shell_command, run_dc_shell_command, Config
+
+from util import (Config, Target, inside_container, run_dc_shell_command,
+                  run_shell_command)
+
 
 def _setup_ssh(container_index):
     if inside_container():
@@ -37,22 +40,14 @@ def _copy_cluster_ssh_key(ips: List[str]):
         # assume we only have one seed
         run_dc_shell_command(f'/cephadm/box/box.py {verbose} host copy_cluster_ssh_key 1 --ips {ips}',
                              1, 'seed')
-class Host:
+class Host(Target):
     _help = 'Run seed/host related commands'
     actions = ['setup_ssh', 'copy_cluster_ssh_key']
-    parser = None
 
-    def __init__(self, argv):
-        self.argv = argv
-
-    @staticmethod
-    def add_parser(subparsers):
-        assert not Host.parser
-        Host.parser = subparsers.add_parser('host', help=Host._help)
-        parser = Host.parser
-        parser.add_argument('action', choices=Host.actions)
-        parser.add_argument('host_container_index', type=str, help='box_host_{index}')
-        parser.add_argument('--ips', nargs='*', help='List of host ips')
+    def set_args(self):
+        self.parser.add_argument('action', choices=Host.actions)
+        self.parser.add_argument('host_container_index', type=str, help='box_host_{index}')
+        self.parser.add_argument('--ips', nargs='*', help='List of host ips')
 
     def setup_ssh(self):
         _setup_ssh(Config.get('host_container_index'))
@@ -63,11 +58,3 @@ class Host:
         if not ips:
             ips = get_host_ips()
         _copy_cluster_ssh_key(ips)
-        
-
-    def main(self):
-        parser = Host.parser
-        args = parser.parse_args(self.argv)
-        Config.add_args(vars(args))
-        function = getattr(self, args.action)
-        function()

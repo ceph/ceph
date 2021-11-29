@@ -1,16 +1,15 @@
 #!/bin/python3
-import sys
 import argparse
 import os
 import stat
+import sys
+
 import host
 import osd
-
-from util import Config, run_shell_command, run_cephadm_shell_command, \
-    ensure_inside_container, ensure_outside_container, get_boxes_container_info, \
-    inside_container, get_host_ips, run_dc_shell_command
-
-
+from util import (Config, Target, ensure_inside_container,
+                  ensure_outside_container, get_boxes_container_info,
+                  get_host_ips, inside_container, run_cephadm_shell_command,
+                  run_dc_shell_command, run_shell_command)
 
 CEPH_IMAGE = 'quay.ceph.io/ceph-ci/ceph:master'
 BOX_IMAGE = 'cephadm-box:latest'
@@ -52,27 +51,18 @@ def get_box_image():
     print('Box image added')
 
     
-
-class Cluster:
+class Cluster(Target):
     _help = 'Manage docker cephadm boxes'
     actions = ['bootstrap', 'start', 'down', 'list', 'sh', 'setup', 'cleanup']
-    parser = None
 
-    @staticmethod
-    def add_parser(subparsers):
-        assert not Cluster.parser
-        Cluster.parser = subparsers.add_parser('cluster', help=Cluster._help)
-        parser = Cluster.parser
-        parser.add_argument('action', choices=Cluster.actions, help='Action to perform on the box')
-        parser.add_argument('--osds', type=int, default=1, help='Number of osds')
-        parser.add_argument('--hosts', type=int, default=1, help='Number of hosts')
-        parser.add_argument('--skip_deploy_osds', action='store_true', help='skip deploy osd')
-        parser.add_argument('--skip_create_loop', action='store_true', help='skip create loopback device')
-        parser.add_argument('--skip_monitoring_stack', action='store_true', help='skip monitoring stack')
-        parser.add_argument('--skip_dashboard', action='store_true', help='skip dashboard')
-
-    def __init__(self, argv):
-        self.argv = argv
+    def set_args(self):
+        self.parser.add_argument('action', choices=Cluster.actions, help='Action to perform on the box')
+        self.parser.add_argument('--osds', type=int, default=1, help='Number of osds')
+        self.parser.add_argument('--hosts', type=int, default=1, help='Number of hosts')
+        self.parser.add_argument('--skip_deploy_osds', action='store_true', help='skip deploy osd')
+        self.parser.add_argument('--skip_create_loop', action='store_true', help='skip create loopback device' )
+        self.parser.add_argument('--skip_monitoring_stack', action='store_true', help='skip monitoring stack')
+        self.parser.add_argument('--skip_dashboard', action='store_true', help='skip dashboard')
 
     @ensure_outside_container
     def setup(self):
@@ -238,12 +228,7 @@ class Cluster:
         print('Seed bash')
         run_shell_command('docker-compose exec seed bash')
 
-    def main(self):
-        parser = Cluster.parser
-        args = parser.parse_args(self.argv)
-        Config.add_args(vars(args))
-        function = getattr(self, args.action)
-        function()
+
 
 
 targets = {
@@ -257,13 +242,16 @@ def main():
     parser.add_argument('-v', action='store_true', dest='verbose', help='be more verbose')
 
     subparsers = parser.add_subparsers()
-    for _, target in targets.items():
-        target.add_parser(subparsers)
+    target_instances = {}
+    for name, target in targets.items():
+        target_instances[name] = target(None, subparsers)
 
     for count, arg in enumerate(sys.argv, 1):
         if arg in targets:
-            instance = targets[arg](sys.argv[count:])
+            instance = target_instances[arg]
             if hasattr(instance, 'main'):
+                instance.argv = sys.argv[count:]
+                instance.set_args() 
                 args = parser.parse_args()
                 Config.add_args(vars(args))
                 instance.main()
