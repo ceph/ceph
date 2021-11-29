@@ -1211,6 +1211,7 @@ struct record_size_t {
 
   void account(const delta_info_t& delta);
 };
+WRITE_EQ_OPERATORS_2(record_size_t, plain_mdlength, dlength);
 
 struct record_t {
   std::vector<extent_t> extents;
@@ -1314,17 +1315,18 @@ struct record_group_size_t {
     return get_mdlength() + dlength;
   }
 
-  extent_len_t get_encoded_length_after(
+  record_group_size_t get_encoded_length_after(
       const record_size_t& rsize,
       extent_len_t block_size) const {
     record_group_size_t tmp = *this;
     tmp.account(rsize, block_size);
-    return tmp.get_encoded_length();
+    return tmp;
   }
 
   void account(const record_size_t& rsize,
                extent_len_t block_size);
 };
+WRITE_EQ_OPERATORS_3(record_group_size_t, plain_mdlength, dlength, block_size);
 
 struct record_group_t {
   std::vector<record_t> records;

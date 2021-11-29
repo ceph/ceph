@@ -253,9 +253,9 @@ private:
       return pending.get_size();
     }
 
-    // return the expected write size if allows to batch,
-    // otherwise, return 0
-    std::size_t can_batch(
+    // return the expected write sizes if allows to batch,
+    // otherwise, return nullopt
+    std::optional<record_group_size_t> can_batch(
         const record_t& record,
         extent_len_t block_size) const {
       assert(state != state_t::SUBMITTING);
@@ -263,7 +263,7 @@ private:
           (pending.get_size() > 0 &&
            pending.size.get_encoded_length() > batch_flush_size)) {
         assert(state == state_t::PENDING);
-        return 0;
+        return std::nullopt;
       }
       return get_encoded_length_after(record, block_size);
     }
@@ -312,7 +312,7 @@ private:
         segment_nonce_t segment_nonce);
 
   private:
-    std::size_t get_encoded_length_after(
+    record_group_size_t get_encoded_length_after(
         const record_t& record,
         extent_len_t block_size) const {
       return pending.size.get_encoded_length_after(
