@@ -1655,6 +1655,9 @@ class Module(MgrModule):
 
 
 class StandbyModule(MgrStandbyModule):
+
+    MODULE_OPTIONS = Module.MODULE_OPTIONS
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(StandbyModule, self).__init__(*args, **kwargs)
         self.shutdown_event = threading.Event()
