@@ -9,6 +9,7 @@ Generic IO Settings
 
 .. confval:: rbd_compression_hint
 .. confval:: rbd_read_from_replica_policy
+.. confval:: rbd_default_order
 
 Cache Settings
 =======================
