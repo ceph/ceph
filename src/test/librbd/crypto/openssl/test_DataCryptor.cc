@@ -26,7 +26,7 @@ struct TestCryptoOpensslDataCryptor : public TestFixture {
 
     void TearDown() override {
       delete cryptor;
-      Test::TearDown();
+      TestFixture::TearDown();
     }
 };
 
@@ -110,6 +110,7 @@ TEST_F(TestCryptoOpensslDataCryptor, InvalidIVLength) {
   ASSERT_NE(ctx, nullptr);
 
   ASSERT_EQ(-EINVAL, cryptor->init_context(ctx, TEST_IV, 1));
+  cryptor->return_context(ctx, CipherMode::CIPHER_MODE_ENC);
 }
 
 } // namespace openssl

@@ -13,7 +13,12 @@ namespace openssl {
 
 int DataCryptor::init(const char* cipher_name, const unsigned char* key,
                       uint16_t key_length) {
-  m_key = nullptr;
+  if (m_key != nullptr) {
+    ceph_memzero_s(m_key, m_key_size, m_key_size);
+    delete [] m_key;
+    m_key = nullptr;
+    m_key_size = 0;
+  }
   if (cipher_name == nullptr) {
     lderr(m_cct) << "missing cipher name" << dendl;
     return -EINVAL;
@@ -39,6 +44,7 @@ int DataCryptor::init(const char* cipher_name, const unsigned char* key,
     return -EINVAL;
   }
 
+  m_key_size = key_length;
   m_key = new unsigned char[key_length];
   memcpy(m_key, key, key_length);
   m_iv_size = static_cast<uint32_t>(EVP_CIPHER_iv_length(m_cipher));
@@ -47,8 +53,7 @@ int DataCryptor::init(const char* cipher_name, const unsigned char* key,
 
 DataCryptor::~DataCryptor() {
   if (m_key != nullptr) {
-    ceph_memzero_s(m_key, EVP_CIPHER_key_length(m_cipher),
-                   EVP_CIPHER_key_length(m_cipher));
+    ceph_memzero_s(m_key, m_key_size, m_key_size);
     delete [] m_key;
     m_key = nullptr;
   }

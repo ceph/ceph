@@ -89,7 +89,7 @@ struct TestMockCryptoLoadRequest : public TestMockFixture {
 };
 
 TEST_F(TestMockCryptoLoadRequest, CryptoAlreadyLoaded) {
-  mock_image_ctx->crypto = new MockCryptoInterface();
+  mock_image_ctx->crypto = crypto;
   mock_load_request->send();
   ASSERT_EQ(-EEXIST, finished_cond.wait());
 }
