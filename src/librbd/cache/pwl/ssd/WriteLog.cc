@@ -209,7 +209,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     ::IOContext ioctx(cct, nullptr);
     r = bdev->read(0, MIN_WRITE_ALLOC_SSD_SIZE, &bl, &ioctx, false);
     if (r < 0) {
-      lderr(cct) << "Read ssd cache superblock failed " << dendl;
+      lderr(cct) << "read ssd cache superblock failed " << dendl;
       goto err_close_bdev;
     }
     auto p = bl.cbegin();
@@ -222,14 +222,14 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
                   << dendl;
     ceph_assert(is_valid_pool_root(pool_root));
     if (pool_root.layout_version != SSD_LAYOUT_VERSION) {
-      lderr(cct) << "Pool layout version is "
+      lderr(cct) << "pool layout version is "
                  << pool_root.layout_version
                  << " expected " << SSD_LAYOUT_VERSION
                  << dendl;
       goto err_close_bdev;
     }
     if (pool_root.block_size != MIN_WRITE_ALLOC_SSD_SIZE) {
-      lderr(cct) << "Pool block size is " << pool_root.block_size
+      lderr(cct) << "pool block size is " << pool_root.block_size
                  << " expected " << MIN_WRITE_ALLOC_SSD_SIZE
                  << dendl;
       goto err_close_bdev;
@@ -446,8 +446,8 @@ void WriteLog<I>::append_scheduled_ops(void) {
   GenericLogOperations ops;
   ldout(m_image_ctx.cct, 20) << dendl;
 
-  bool ops_remain = false; //no-op variable for SSD
-  bool appending = false; //no-op variable for SSD
+  bool ops_remain = false;  // unused, no-op variable for SSD
+  bool appending = false;   // unused, no-op variable for SSD
   this->append_scheduled(ops, ops_remain, appending);
 
   if (ops.size()) {
@@ -1026,7 +1026,7 @@ void WriteLog<I>::update_root_scheduled_ops() {
   });
   Context *append_ctx = new LambdaContext([this, ctx](int r) {
     ldout(m_image_ctx.cct, 15) << "Finish the update of pool root." << dendl;
-    bool need_finisher = false;;
+    bool need_finisher = false;
     assert(r == 0);
     {
       std::lock_guard locker(m_lock);

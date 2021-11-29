@@ -160,9 +160,6 @@ int WriteLog<I>::append_op_log_entries(GenericLogOperations &ops)
                                << "from " << &operation->get_log_entry()->ram_entry << " "
                                << "to " << operation->get_log_entry()->cache_entry << " "
                                << "operation=[" << *operation << "]" << dendl;
-    ldout(m_image_ctx.cct, 05) << "APPENDING: index="
-                               << operation->get_log_entry()->log_entry_index << " "
-                               << "operation=[" << *operation << "]" << dendl;
     operation->log_append_start_time = now;
     *operation->get_log_entry()->cache_entry = operation->get_log_entry()->ram_entry;
     ldout(m_image_ctx.cct, 20) << "APPENDING: index="
@@ -270,8 +267,8 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
                         this->m_pwl_pool_layout_name,
                         this->m_log_pool_size,
                         (S_IWUSR | S_IRUSR))) == NULL) {
-      lderr(cct) << "failed to create pool (" << this->m_log_pool_name << ")"
-                 << pmemobj_errormsg() << dendl;
+      lderr(cct) << "failed to create pool: " << this->m_log_pool_name
+                 << ". error: " << pmemobj_errormsg() << dendl;
       m_cache_state->present = false;
       m_cache_state->clean = true;
       m_cache_state->empty = true;
@@ -317,7 +314,8 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     } TX_ONABORT {
       this->m_total_log_entries = 0;
       this->m_free_log_entries = 0;
-      lderr(cct) << "failed to initialize pool (" << this->m_log_pool_name << ")" << dendl;
+      lderr(cct) << "failed to initialize pool: " << this->m_log_pool_name
+                 << ". pmemobj TX errno: " << pmemobj_tx_errno() << dendl;
       r = -pmemobj_tx_errno();
       goto err_close_pool;
     } TX_FINALLY {
@@ -336,13 +334,13 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
     if (D_RO(pool_root)->header.layout_version != RWL_LAYOUT_VERSION) {
       // TODO: will handle upgrading version in the future
-      lderr(cct) << "Pool layout version is "
+      lderr(cct) << "pool layout version is "
                  << D_RO(pool_root)->header.layout_version
                  << " expected " << RWL_LAYOUT_VERSION << dendl;
       goto err_close_pool;
     }
     if (D_RO(pool_root)->block_size != MIN_WRITE_ALLOC_SIZE) {
-      lderr(cct) << "Pool block size is " << D_RO(pool_root)->block_size
+      lderr(cct) << "pool block size is " << D_RO(pool_root)->block_size
                  << " expected " << MIN_WRITE_ALLOC_SIZE << dendl;
       goto err_close_pool;
     }
@@ -482,7 +480,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
            this->can_retire_entry(m_log_entries.front())) {
       auto entry = m_log_entries.front();
       if (entry->log_entry_index != first_valid_entry) {
-        lderr(cct) << "Retiring entry index (" << entry->log_entry_index
+        lderr(cct) << "retiring entry index (" << entry->log_entry_index
                    << ") and first valid log entry index (" << first_valid_entry
                    << ") must be ==." << dendl;
       }
