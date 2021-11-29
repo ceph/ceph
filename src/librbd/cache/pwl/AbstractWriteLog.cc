@@ -43,6 +43,9 @@ AbstractWriteLog<I>::AbstractWriteLog(
     plugin::Api<I>& plugin_api)
   : m_builder(builder),
     m_write_log_guard(image_ctx.cct),
+    m_flush_guard(image_ctx.cct),
+    m_flush_guard_lock(ceph::make_mutex(pwl::unique_lock_name(
+      "librbd::cache::pwl::AbstractWriteLog::m_flush_guard_lock", this))),
     m_deferred_dispatch_lock(ceph::make_mutex(pwl::unique_lock_name(
       "librbd::cache::pwl::AbstractWriteLog::m_deferred_dispatch_lock", this))),
     m_blockguard_lock(ceph::make_mutex(pwl::unique_lock_name(
@@ -1626,21 +1629,34 @@ bool AbstractWriteLog<I>::can_flush_entry(std::shared_ptr<GenericLogEntry> log_e
 }
 
 template <typename I>
+void AbstractWriteLog<I>::detain_flush_guard_request(std::shared_ptr<GenericLogEntry> log_entry,
+						     GuardedRequestFunctionContext *guarded_ctx) {
+  ldout(m_image_ctx.cct, 20) << dendl;
+
+  BlockExtent extent;
+  if (log_entry->is_sync_point()) {
+    extent = block_extent(whole_volume_extent());
+  } else {
+    extent = log_entry->ram_entry.block_extent();
+  }
+
+  auto req = GuardedRequest(extent, guarded_ctx, false);
+  BlockGuardCell *cell = nullptr;
+
+  {
+    std::lock_guard locker(m_flush_guard_lock);
+    m_flush_guard.detain(req.block_extent, &req, &cell);
+  }
+  if (cell) {
+    req.guard_ctx->cell = cell;
+    m_image_ctx.op_work_queue->queue(req.guard_ctx, 0);
+  }
+}
+
+template <typename I>
 Context* AbstractWriteLog<I>::construct_flush_entry(std::shared_ptr<GenericLogEntry> log_entry,
                                                       bool invalidating) {
-  CephContext *cct = m_image_ctx.cct;
-
-  ldout(cct, 20) << "" << dendl;
-  ceph_assert(m_entry_reader_lock.is_locked());
-  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
-  if (!m_flush_ops_in_flight ||
-      (log_entry->ram_entry.sync_gen_number < m_lowest_flushing_sync_gen)) {
-    m_lowest_flushing_sync_gen = log_entry->ram_entry.sync_gen_number;
-  }
-  m_flush_ops_in_flight += 1;
-  m_flush_ops_will_send += 1;
-  /* For write same this is the bytes affected by the flush op, not the bytes transferred */
-  m_flush_bytes_in_flight += log_entry->ram_entry.write_bytes;
+  ldout(m_image_ctx.cct, 20) << "" << dendl;
 
   /* Flush write completion action */
   utime_t writeback_start_time = ceph_clock_now();
@@ -1671,7 +1687,24 @@ Context* AbstractWriteLog<I>::construct_flush_entry(std::shared_ptr<GenericLogEn
     });
   /* Flush through lower cache before completing */
   ctx = new LambdaContext(
-    [this, ctx](int r) {
+    [this, ctx, log_entry](int r) {
+      {
+
+        WriteLogGuard::BlockOperations block_reqs;
+	BlockGuardCell *detained_cell = nullptr;
+
+	std::lock_guard locker{m_flush_guard_lock};
+	m_flush_guard.release(log_entry->m_cell, &block_reqs);
+
+	for (auto &req : block_reqs) {
+	  m_flush_guard.detain(req.block_extent, &req, &detained_cell);
+	  if (detained_cell) {
+	    req.guard_ctx->cell = detained_cell;
+	    m_image_ctx.op_work_queue->queue(req.guard_ctx, 0);
+	  }
+        }
+      }
+
       if (r < 0) {
         lderr(m_image_ctx.cct) << "failed to flush log entry"
                                << cpp_strerror(r) << dendl;
@@ -1723,6 +1756,18 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
         if (!has_write_entry)
           has_write_entry = candidate->is_write_entry();
         m_dirty_log_entries.pop_front();
+
+	// To track candidate, we should add m_flush_ops_in_flight in here
+	{
+	  if (!m_flush_ops_in_flight ||
+	      (candidate->ram_entry.sync_gen_number < m_lowest_flushing_sync_gen)) {
+	    m_lowest_flushing_sync_gen = candidate->ram_entry.sync_gen_number;
+	  }
+	  m_flush_ops_in_flight += 1;
+	  m_flush_ops_will_send += 1;
+	  /* For write same this is the bytes affected by the flush op, not the bytes transferred */
+	  m_flush_bytes_in_flight += candidate->ram_entry.write_bytes;
+	}
       } else {
         ldout(cct, 20) << "Next dirty entry isn't flushable yet" << dendl;
         break;

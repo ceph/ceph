@@ -550,82 +550,90 @@ void WriteLog<I>::construct_flush_entries(pwl::GenericLogEntries entries_to_flus
 
   if (invalidating || !has_write_entry) {
     for (auto &log_entry : entries_to_flush) {
-      Context *ctx = this->construct_flush_entry(log_entry, invalidating);
+      GuardedRequestFunctionContext *guarded_ctx =
+        new GuardedRequestFunctionContext([this, log_entry, invalidating]
+          (GuardedRequestFunctionContext &guard_ctx) {
+            log_entry->m_cell = guard_ctx.cell;
+            Context *ctx = this->construct_flush_entry(log_entry, invalidating);
 
-      if (!invalidating) {
-        ctx = new LambdaContext(
-        [this, log_entry, ctx](int r) {
-          m_image_ctx.op_work_queue->queue(new LambdaContext(
-	    [this, log_entry, ctx](int r) {
-	      ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
-                                         << " " << *log_entry << dendl;
-	      log_entry->writeback(this->m_image_writeback, ctx);
-	      this->m_flush_ops_will_send -= 1;
-	    }), 0);
-	});
-      }
-      post_unlock.add(ctx);
+            if (!invalidating) {
+              ctx = new LambdaContext([this, log_entry, ctx](int r) {
+                m_image_ctx.op_work_queue->queue(new LambdaContext(
+	          [this, log_entry, ctx](int r) {
+	            ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
+                                               << " " << *log_entry << dendl;
+	            log_entry->writeback(this->m_image_writeback, ctx);
+	            this->m_flush_ops_will_send -= 1;
+	          }), 0);
+	      });
+            }
+            ctx->complete(0);
+        });
+      this->detain_flush_guard_request(log_entry, guarded_ctx);
     }
   } else {
     int count = entries_to_flush.size();
-    std::vector<std::shared_ptr<GenericWriteLogEntry>> log_entries;
+    std::vector<std::shared_ptr<GenericWriteLogEntry>> write_entries;
     std::vector<bufferlist *> read_bls;
-    std::vector<Context *> contexts;
 
-    log_entries.reserve(count);
+    write_entries.reserve(count);
     read_bls.reserve(count);
-    contexts.reserve(count);
 
     for (auto &log_entry : entries_to_flush) {
-      // log_entry already removed from m_dirty_log_entries and
-      // in construct_flush_entry() it will inc(m_flush_ops_in_flight).
-      // We call this func here to make ops can track.
-      Context *ctx = this->construct_flush_entry(log_entry, invalidating);
       if (log_entry->is_write_entry()) {
 	bufferlist *bl = new bufferlist;
 	auto write_entry = static_pointer_cast<WriteLogEntry>(log_entry);
 	write_entry->inc_bl_refs();
-	log_entries.push_back(write_entry);
+	write_entries.push_back(write_entry);
 	read_bls.push_back(bl);
       }
-      contexts.push_back(ctx);
     }
 
     Context *ctx = new LambdaContext(
-      [this, entries_to_flush, read_bls, contexts](int r) {
-        int i = 0, j = 0;
+      [this, entries_to_flush, read_bls](int r) {
+        int i = 0;
+	GuardedRequestFunctionContext *guarded_ctx = nullptr;
 
 	for (auto &log_entry : entries_to_flush) {
-          Context *ctx = contexts[j++];
-
 	  if (log_entry->is_write_entry()) {
 	    bufferlist captured_entry_bl;
-
 	    captured_entry_bl.claim_append(*read_bls[i]);
 	    delete read_bls[i++];
 
-	    m_image_ctx.op_work_queue->queue(new LambdaContext(
-	      [this, log_entry, entry_bl=std::move(captured_entry_bl), ctx](int r) {
-		auto captured_entry_bl = std::move(entry_bl);
-		ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
-				           << " " << *log_entry << dendl;
-		log_entry->writeback_bl(this->m_image_writeback, ctx,
-					std::move(captured_entry_bl));
-		this->m_flush_ops_will_send -= 1;
-	      }), 0);
+	    guarded_ctx = new GuardedRequestFunctionContext([this, log_entry, captured_entry_bl]
+              (GuardedRequestFunctionContext &guard_ctx) {
+                log_entry->m_cell = guard_ctx.cell;
+                Context *ctx = this->construct_flush_entry(log_entry, false);
+
+	        m_image_ctx.op_work_queue->queue(new LambdaContext(
+	          [this, log_entry, entry_bl=std::move(captured_entry_bl), ctx](int r) {
+		    auto captured_entry_bl = std::move(entry_bl);
+		    ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
+			                       << " " << *log_entry << dendl;
+		    log_entry->writeback_bl(this->m_image_writeback, ctx,
+                                            std::move(captured_entry_bl));
+		    this->m_flush_ops_will_send -= 1;
+	          }), 0);
+	      });
 	  } else {
-	      m_image_ctx.op_work_queue->queue(new LambdaContext(
-		[this, log_entry, ctx](int r) {
-		  ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
-                                             << " " << *log_entry << dendl;
-		  log_entry->writeback(this->m_image_writeback, ctx);
-		  this->m_flush_ops_will_send -= 1;
-		}), 0);
+	    guarded_ctx = new GuardedRequestFunctionContext([this, log_entry]
+              (GuardedRequestFunctionContext &guard_ctx) {
+                log_entry->m_cell = guard_ctx.cell;
+                Context *ctx = this->construct_flush_entry(log_entry, false);
+	        m_image_ctx.op_work_queue->queue(new LambdaContext(
+		  [this, log_entry, ctx](int r) {
+		    ldout(m_image_ctx.cct, 15) << "flushing:" << log_entry
+                                               << " " << *log_entry << dendl;
+		    log_entry->writeback(this->m_image_writeback, ctx);
+		    this->m_flush_ops_will_send -= 1;
+		  }), 0);
+            });
 	  }
+          this->detain_flush_guard_request(log_entry, guarded_ctx);
 	}
       });
 
-    aio_read_data_blocks(log_entries, read_bls, ctx);
+    aio_read_data_blocks(write_entries, read_bls, ctx);
   }
 }
 
