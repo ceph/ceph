@@ -469,6 +469,10 @@ class HostCache():
         self.agent_keys = {}  # type: Dict[str, str]
         self.agent_ports = {}  # type: Dict[str, int]
         self.sending_agent_message = {}  # type: Dict[str, bool]
+        self.last_agent_daemons_down_update = (datetime_now()
+                                               - datetime.timedelta(seconds=600))  # type: datetime.datetime
+        self.last_agent_agent_down_update = (datetime_now()
+                                             - datetime.timedelta(seconds=600))  # type: datetime.datetime
 
     def load(self):
         # type: () -> None
@@ -1045,6 +1049,18 @@ class HostCache():
             # of those two categories.
             return False
         return True
+
+    def agent_down_needs_refresh(self) -> bool:
+        cutoff = datetime_now() - datetime.timedelta(seconds=30)
+        if self.last_agent_agent_down_update < cutoff:
+            return True
+        return False
+
+    def agent_daemons_down_needs_refresh(self) -> bool:
+        cutoff = datetime_now() - datetime.timedelta(seconds=60)
+        if self.last_agent_daemons_down_update < cutoff:
+            return True
+        return False
 
     def add_daemon(self, host, dd):
         # type: (str, orchestrator.DaemonDescription) -> None

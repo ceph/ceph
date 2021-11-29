@@ -201,15 +201,25 @@ class HostData:
 
             # update timestamp of most recent agent update
             self.mgr.cache.agent_timestamp[host] = datetime_now()
+            refreshing_down_agents = False
+            refreshing_down_daemons = False
+            if self.mgr.cache.agent_daemons_down_needs_refresh():
+                refreshing_down_daemons = True
+                self.mgr.cache.last_agent_daemons_down_update = datetime_now()
+            if self.mgr.cache.agent_down_needs_refresh():
+                refreshing_down_agents = True
+                self.mgr.cache.last_agent_agent_down_update = datetime_now()
 
-            error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
-            daemon_count_old = len(self.mgr.cache.get_daemons_by_host(host))
+            if refreshing_down_daemons:
+                error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+                daemon_count_old = len(self.mgr.cache.get_daemons_by_host(host))
 
-            agents_down = []
-            for h in self.mgr.cache.get_hosts():
-                if self.mgr.agent_helpers._check_agent(h):
-                    agents_down.append(h)
-            self.mgr.agent_helpers._update_agent_down_healthcheck(agents_down)
+            if refreshing_down_agents:
+                agents_down = []
+                for h in self.mgr.cache.get_hosts():
+                    if self.mgr.agent_helpers._check_agent(h):
+                        agents_down.append(h)
+                self.mgr.agent_helpers._update_agent_down_healthcheck(agents_down)
 
             up_to_date = False
 
@@ -225,7 +235,8 @@ class HostData:
 
             if 'ls' in data and data['ls']:
                 self.mgr._process_ls_output(host, data['ls'])
-                self.mgr.update_failed_daemon_health_check()
+                if refreshing_down_daemons:
+                    self.mgr.update_failed_daemon_health_check()
             if 'networks' in data and data['networks']:
                 self.mgr.cache.update_host_networks(host, data['networks'])
             if 'facts' in data and data['facts']:
@@ -234,13 +245,15 @@ class HostData:
                 ret = Devices.from_json(json.loads(data['volume']))
                 self.mgr.cache.update_host_devices(host, ret.devices)
 
-            if (
-                error_daemons_old != set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
-                or daemon_count_old != len(self.mgr.cache.get_daemons_by_host(host))
-            ):
-                self.mgr.log.debug(
-                    f'Change detected in state of daemons from {host} agent metadata. Kicking serve loop')
-                self.mgr._kick_serve_loop()
+            if refreshing_down_daemons:
+                error_daemons_new = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+                if (
+                    error_daemons_old != error_daemons_new
+                    or daemon_count_old != len(self.mgr.cache.get_daemons_by_host(host))
+                ):
+                    self.mgr.log.debug(
+                        f'Change detected in state of daemons from {host} agent metadata. Kicking serve loop')
+                    self.mgr._kick_serve_loop()
 
             if up_to_date and ('ls' in data and data['ls']):
                 was_out_of_date = not self.mgr.cache.all_host_metadata_up_to_date()
