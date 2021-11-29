@@ -598,7 +598,8 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 
   {
     std::unique_lock locker(lock);
-
+    dout(10) << "have main lock" << dendl;
+    
     DaemonStatePtr daemon;
     // Look up the DaemonState
     if (daemon_state.exists(key)) {
@@ -642,9 +643,11 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
     ceph_assert(daemon != nullptr);
     {
       std::lock_guard l(daemon->lock);
+      dout(10) << " have daemon->lock" << dendl;
       auto &daemon_counters = daemon->perf_counters;
       daemon_counters.update(*m.get());
 
+      dout(10) << " updated counters" << dendl;
       auto p = m->config_bl.cbegin();
       if (p != m->config_bl.end()) {
         decode(daemon->config, p);
@@ -665,8 +668,10 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
       }
       // update task status
       if (m->task_status) {
+	dout(10) << " updating task status" << dendl;
         update_task_status(key, *m->task_status);
         daemon->last_service_beacon = now;
+	dout(10) << " updated task status" << dendl;
       }
       if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
         // only OSD and MON send health_checks to me now
@@ -691,6 +696,7 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
     boost::apply_visitor(HandlePayloadVisitor(this), message.payload);
   }
 
+  dout(10) << "done" << dendl;
   return true;
 }
 
