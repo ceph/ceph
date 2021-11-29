@@ -81,7 +81,7 @@ def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
         )
 
 
-def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid, tmpfs=True):
+def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
     """
     :param block: The name of the logical volume for the bluestore data
     :param wal: a regular/plain disk or logical volume, to be used for block.wal
@@ -104,7 +104,7 @@ def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid, tmpfs=True):
         db = prepare_dmcrypt(key, db, 'db', tags)
 
     # create the directory
-    prepare_utils.create_osd_path(osd_id, tmpfs=tmpfs)
+    prepare_utils.create_osd_path(osd_id, tmpfs=True)
     # symlink the block
     prepare_utils.link_block(block, osd_id)
     # get the latest monmap
@@ -384,8 +384,6 @@ class Prepare(object):
             tags['ceph.type'] = 'block'
             block_lv.set_tags(tags)
 
-            tmpfs = not self.args.no_tmpfs
-
             prepare_bluestore(
                 block_lv.lv_path,
                 wal_device,
@@ -394,7 +392,6 @@ class Prepare(object):
                 tags,
                 self.osd_id,
                 osd_fsid,
-                tmpfs=tmpfs
             )
 
     def main(self):
