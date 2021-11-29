@@ -119,6 +119,18 @@ public:
     const ghobject_t& oid) final;
 
 private:
+  template <class... Args>
+  auto do_with_op_gate(Args&&... args) const {
+    return seastar::with_gate(op_gate,
+      // perfect forwarding in lambda's closure isn't available in C++17
+      // using tuple as workaround; see: https://stackoverflow.com/a/49902823
+      [args = std::make_tuple(std::forward<Args>(args)...)] () mutable {
+      return std::apply([] (auto&&... args) {
+        return seastar::do_with(std::forward<decltype(args)>(args)...);
+      }, std::move(args));
+    });
+  }
+
   // number of cores that are PREVENTED from being scheduled
   // to run alien store threads.
   static constexpr int N_CORES_FOR_SEASTAR = 3;
@@ -129,7 +141,7 @@ private:
   uint64_t used_bytes = 0;
   std::unique_ptr<ObjectStore> store;
   std::unique_ptr<CephContext> cct;
-  seastar::gate transaction_gate;
+  mutable seastar::gate op_gate;
   std::unordered_map<coll_t, CollectionRef> coll_map;
   std::vector<uint64_t> _parse_cpu_cores();
 };
