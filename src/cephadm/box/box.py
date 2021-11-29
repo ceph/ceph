@@ -15,6 +15,9 @@ from util import Config, run_shell_command, run_cephadm_shell_command, \
 CEPH_IMAGE = 'quay.ceph.io/ceph-ci/ceph:master'
 BOX_IMAGE = 'cephadm-box:latest'
 
+def cleanup_box() -> None:
+    osd.cleanup()
+
 def image_exists(image_name: str):
     # extract_tag
     assert image_name.find(':')
@@ -48,9 +51,11 @@ def get_box_image():
     run_shell_command('docker build -t cephadm-box -f Dockerfile .')
     print('Box image added')
 
+    
+
 class Cluster:
     _help = 'Manage docker cephadm boxes'
-    actions = ['bootstrap', 'start', 'down', 'list', 'sh', 'setup']
+    actions = ['bootstrap', 'start', 'down', 'list', 'sh', 'setup', 'cleanup']
     parser = None
 
     @staticmethod
@@ -63,6 +68,8 @@ class Cluster:
         parser.add_argument('--hosts', type=int, default=1, help='Number of hosts')
         parser.add_argument('--skip_deploy_osds', action='store_true', help='skip deploy osd')
         parser.add_argument('--skip_create_loop', action='store_true', help='skip create loopback device')
+        parser.add_argument('--skip_monitoring_stack', action='store_true', help='skip monitoring stack')
+        parser.add_argument('--skip_dashboard', action='store_true', help='skip dashboard')
 
     def __init__(self, argv):
         self.argv = argv
@@ -72,11 +79,17 @@ class Cluster:
         get_ceph_image()
         get_box_image()
 
+    @ensure_outside_container
+    def cleanup(self):
+        cleanup_box()
+
     @ensure_inside_container
     def bootstrap(self):
         print('Running bootstrap on seed')
         cephadm_path = os.environ.get('CEPHADM_PATH')
         os.symlink('/cephadm/cephadm', cephadm_path)
+        run_shell_command('systemctl restart docker') # restart to ensure docker is using daemon.json
+
         st = os.stat(cephadm_path)
         os.chmod(cephadm_path, st.st_mode | stat.S_IEXEC)
 
@@ -91,17 +104,25 @@ class Cluster:
 
         shared_ceph_folder = os.environ.get('SHARED_CEPH_FOLDER')
         if shared_ceph_folder:
-            extra_args.extend(['--shared_ceph_folder', 'shared_ceph_folder'])
+            extra_args.extend(['--shared_ceph_folder', shared_ceph_folder])
 
-        cephadm_image = os.environ.get('CEPHADM_IMAGE')
-        if shared_ceph_folder:
-            extra_args.append('--skip-pull')
+        extra_args.append('--skip-pull')
 
         # cephadm prints in warning, let's redirect it to the output so shell_command doesn't
         # complain
         extra_args.append('2>&0')
 
-        extra_args = ''.join(extra_args)
+        extra_args = ' '.join(extra_args)
+        skip_monitoring_stack = '--skip_monitoring_stack' if Config.get('skip_monitoring_stack') else ''
+        skip_dashboard = '--skip_dashboard' if Config.get('skip_dashboard') else ''
+
+        fsid = Config.get('fsid')
+        config_folder = Config.get('config_folder')
+        config = Config.get('config')
+        mon_config = Config.get('mon_config')
+        keyring = Config.get('keyring')
+        if not os.path.exists(config_folder):
+            os.mkdir(config_folder)
 
         cephadm_bootstrap_command = (
             '$CEPHADM_PATH --verbose bootstrap '
@@ -110,6 +131,14 @@ class Cluster:
             '--initial-dashboard-password admin '
             '--dashboard-password-noupdate '
             '--shared_ceph_folder /ceph '
+            '--allow-overwrite '
+            f'--output-config {config} '
+            f'--output-keyring {keyring} '
+            f'--output-config {config} '
+            f'--fsid "{fsid}" '
+            '--log-to-file '
+            f'{skip_dashboard} '
+            f'{skip_monitoring_stack} '
             f'{extra_args} '
         )
 
@@ -119,13 +148,20 @@ class Cluster:
 
 
         run_shell_command('sudo vgchange --refresh')
+        run_shell_command('cephadm ls')
+        run_shell_command('ln -s /ceph/src/cephadm/box/box.py /usr/bin/box')
 
+        hostname = run_shell_command('hostname')
+        # NOTE: sometimes cephadm in the box takes a while to update the containers
+        # running in the cluster and it cannot deploy the osds. In this case
+        # run: box -v osd deploy --vg vg1 to deploy osds again.
         if not Config.get('skip_deploy_osds'):
             print('Deploying osds...')
             osds = Config.get('osds')
             for o in range(osds):
-                osd.deploy_osd(f'/dev/vg1/lv{o}')
+                osd.deploy_osd(f'vg1/lv{o}', hostname)
             print('Osds deployed')
+        run_cephadm_shell_command('ceph -s')
         print('Bootstrap completed!')
 
 
@@ -134,6 +170,9 @@ class Cluster:
     def start(self):
         osds = Config.get('osds')
         hosts = Config.get('hosts')
+
+        # ensure boxes don't exist
+        run_shell_command('docker-compose down')
 
         print('Checking docker images')
         if not image_exists(CEPH_IMAGE):
@@ -147,8 +186,6 @@ class Cluster:
             print(f'Added {osds} logical volumes in a loopback device')
 
         print('Starting containers')
-        # ensure boxes don't exist
-        run_shell_command('docker-compose down')
 
         dcflags = '-f docker-compose.yml'
         if not os.path.exists('/sys/fs/cgroup/cgroup.controllers'):
@@ -166,6 +203,16 @@ class Cluster:
 
         verbose = '-v' if Config.get('verbose') else ''
         skip_deploy = '--skip_deploy_osds' if Config.get('skip_deploy_osds') else ''
+        skip_monitoring_stack = '--skip_monitoring_stack' if Config.get('skip_monitoring_stack') else ''
+        skip_dashboard = '--skip_dashboard' if Config.get('skip_dashboard') else ''
+        box_bootstrap_command = (
+            f'/cephadm/box/box.py {verbose} cluster bootstrap '
+            '--osds {osds} '
+            '--hosts {hosts} ' 
+            f'{skip_deploy} '
+            f'{skip_dashboard} '
+            f'{skip_monitoring_stack} '
+        )
         run_dc_shell_command(f'/cephadm/box/box.py {verbose} cluster bootstrap --osds {osds} --hosts {hosts} {skip_deploy}', 1, 'seed')
 
         host._copy_cluster_ssh_key(ips)
@@ -175,6 +222,7 @@ class Cluster:
     @ensure_outside_container
     def down(self):
         run_shell_command('docker-compose down')
+        cleanup_box()
         print('Successfully killed all boxes')
 
     @ensure_outside_container
@@ -185,6 +233,8 @@ class Cluster:
 
     @ensure_outside_container
     def sh(self):
+        # we need verbose to see the prompt after running shell command
+        Config.set('verbose', True)
         print('Seed bash')
         run_shell_command('docker-compose exec seed bash')
 

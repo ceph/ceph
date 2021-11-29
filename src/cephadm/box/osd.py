@@ -1,8 +1,15 @@
 from typing import Dict
 import os
 import argparse
+import json
 from util import ensure_inside_container, ensure_outside_container, run_shell_command, \
     run_cephadm_shell_command, Config
+
+
+def remove_loop_img() -> None:
+    loop_image = Config.get('loop_img')
+    if os.path.exists(loop_image):
+        os.remove(loop_image)
 
 @ensure_outside_container
 def create_loopback_devices(osds: int) -> None:
@@ -21,28 +28,30 @@ def create_loopback_devices(osds: int) -> None:
     if os.path.ismount(avail_loop):
         os.umount(avail_loop)
 
-    if run_shell_command(f'losetup -l | grep {avail_loop}', expect_error=True):
-        run_shell_command(f'sudo losetup -d {avail_loop}')
+    loop_devices = json.loads(run_shell_command(f'losetup -l -J', expect_error=True))
+    for dev in loop_devices['loopdevices']:
+        if dev['name'] == avail_loop:
+            run_shell_command(f'sudo losetup -d {avail_loop}')
 
     if not os.path.exists('./loop-images'):
         os.mkdir('loop-images')
 
-    loop_image = 'loop-images/loop.img'
-    if os.path.exists(loop_image):
-        os.remove(loop_image)
+    remove_loop_img()
 
-    run_shell_command(f'sudo dd if=/dev/zero of={loop_image} bs=1G count={size}')
+    loop_image = Config.get('loop_img')
+    run_shell_command(f'sudo dd if=/dev/zero of={loop_image} bs=1 count=0 seek={size}G')
     run_shell_command(f'sudo losetup {avail_loop} {loop_image}')
 
-    vgs = run_shell_command('sudo vgs | grep vg1', expect_error=True)
-    if vgs:
-        run_shell_command('sudo lvm vgremove -f -y vg1')
+    # cleanup last call
+    cleanup()
 
-    run_shell_command(f'sudo pvcreate {avail_loop}')
+    run_shell_command(f'sudo pvcreate {avail_loop} ')
     run_shell_command(f'sudo vgcreate vg1 {avail_loop}')
+
+    p = int(100 / osds)
     for i in range(osds):
         run_shell_command('sudo vgchange --refresh')
-        run_shell_command(f'sudo lvcreate --size 5G --name lv{i} vg1')
+        run_shell_command(f'sudo lvcreate -l {p}%VG --name lv{i} vg1')
 
 def get_lvm_osd_data(data: str) -> Dict[str, str]:
     osd_lvm_info = run_cephadm_shell_command(f'ceph-volume lvm list {data}')
@@ -60,15 +69,24 @@ def get_lvm_osd_data(data: str) -> Dict[str, str]:
     return osd_data
 
 @ensure_inside_container
-def deploy_osd(data: str):
-    assert data
-    out = run_shell_command(f'cephadm ceph-volume lvm zap {data}')
-    out = run_shell_command(f'cephadm ceph-volume --shared_ceph_folder /ceph lvm prepare --data {data} --no-systemd --no-tmpfs')
+def deploy_osd(data: str, hostname: str):
+    run_cephadm_shell_command(f'ceph orch daemon add osd "{hostname}:{data}"')
 
-    osd_data = get_lvm_osd_data(data)
+def cleanup() -> None:
+    vg = 'vg1'
+    pvs = json.loads(run_shell_command('sudo pvs --reportformat json'))
+    for pv in pvs['report'][0]['pv']:
+        if pv['vg_name'] == vg:
+            device = pv['pv_name']
+            run_shell_command(f'sudo vgremove -f --yes {vg}')
+            run_shell_command(f'sudo losetup -d {device}')
+            run_shell_command(f'sudo wipefs -af {device}')
+            # FIX: this can fail with excluded filter
+            run_shell_command(f'sudo pvremove -f --yes {device}', expect_error=True)
+            break
 
-    osd = 'osd.' + osd_data['osd_id']
-    run_shell_command(f'cephadm deploy --name {osd}')
+    remove_loop_img()
+
 class Osd:
     _help = '''
     Deploy osds and create needed block devices with loopback devices:
@@ -90,12 +108,26 @@ class Osd:
         parser = Osd.parser
         parser.add_argument('action', choices=Osd.actions)
         parser.add_argument('--data', type=str, help='path to a block device')
+        parser.add_argument('--hostname', type=str, help='host to deploy osd')
         parser.add_argument('--osds', type=int, default=0, help='number of osds')
+        parser.add_argument('--vg', type=str, help='Deploy with all lv from virtual group')
 
     @ensure_inside_container
     def deploy(self):
         data = Config.get('data')
-        deploy_osd(data)
+        hostname = Config.get('hostname')
+        vg = Config.get('vg')
+        if not hostname:
+            # assume this host
+            hostname = run_shell_command('hostname')
+        if vg:
+            # deploy with vg
+            lvs = json.loads(run_shell_command('lvs --reportformat json'))
+            for lv in lvs['report'][0]['lv']:
+                if lv['vg_name'] == vg:
+                    deploy_osd(f'{vg}/{lv["lv_name"]}', hostname)
+        else:
+            deploy_osd(data, hostname)
 
     @ensure_outside_container
     def create_loop(self):
