@@ -1722,7 +1722,7 @@ def infer_config(func: FuncT) -> FuncT:
             if not name:
                 daemon_list = list_daemons(ctx, detail=False)
                 for daemon in daemon_list:
-                    if daemon.get('name', '').startswith('mon.'):
+                    if daemon.get('name', '').startswith('mon.') and daemon.get('fsid', '') == ctx.fsid:
                         name = daemon['name']
                         break
             if name:
