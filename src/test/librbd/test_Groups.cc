@@ -100,6 +100,10 @@ TEST_F(TestGroup, add_image)
   ASSERT_EQ(0, rbd_group_image_add(ioctx, group_name, ioctx,
                                    m_image_name.c_str()));
 
+  rbd_group_info_t group_info;
+  ASSERT_EQ(-ERANGE, rbd_get_group(image, &group_info, 0));
+  ASSERT_EQ(0, rbd_get_group(image, &group_info, sizeof(group_info)));
+
   ASSERT_EQ(0, rbd_get_features(image, &features));
   ASSERT_TRUE((features & RBD_FEATURE_OPERATIONS) ==
                 RBD_FEATURE_OPERATIONS);
