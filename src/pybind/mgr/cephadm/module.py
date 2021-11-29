@@ -409,6 +409,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.autotune_interval = 0
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
+            self.device_enhanced_scan = False
 
         self._cons: Dict[str, Tuple[remoto.backends.BaseConnection,
                                     remoto.backends.LegacyModuleExecute]] = {}
