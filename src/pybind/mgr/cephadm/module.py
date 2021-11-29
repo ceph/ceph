@@ -356,6 +356,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='First port agent will try to bind to (will also try up to next 1000 subsequent ports if blocked)'
         ),
         Option(
+            'agent_down_multiplier',
+            type='float',
+            default=3.0,
+            desc='Multiplied by agent refresh rate to calculate how long agent must not report before being marked down'
+        ),
+        Option(
             'max_osd_draining_count',
             type='int',
             default=10,
@@ -423,6 +429,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.ssh_pub: Optional[str] = None
             self.use_agent = False
             self.agent_refresh_rate = 0
+            self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
