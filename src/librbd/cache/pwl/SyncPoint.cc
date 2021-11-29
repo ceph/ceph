@@ -38,7 +38,7 @@ std::ostream &operator<<(std::ostream &os,
      << "m_append_scheduled=" << p.m_append_scheduled << ", "
      << "appending=" << p.appending << ", "
      << "on_sync_point_appending=" << p.on_sync_point_appending.size() << ", "
-     << "on_sync_point_persisted=" << p.on_sync_point_persisted.size() << "";
+     << "on_sync_point_persisted=" << p.on_sync_point_persisted.size();
   return os;
 }
 
