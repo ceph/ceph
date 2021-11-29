@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from mgr_module import HandleCommandResult
 
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import AlertManagerSpec, ServiceSpec
+from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from cephadm.services.ingress import IngressSpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert, build_url
@@ -57,8 +57,11 @@ class GrafanaService(CephadmService):
                     'value': 'false',
                 })
 
+        spec: GrafanaSpec = cast(
+            GrafanaSpec, self.mgr.spec_store.active_specs[daemon_spec.service_name])
         grafana_ini = self.mgr.template.render(
             'services/grafana/grafana.ini.j2', {
+                'initial_admin_password': spec.initial_admin_password,
                 'http_port': daemon_spec.ports[0] if daemon_spec.ports else self.DEFAULT_SERVICE_PORT,
                 'http_addr': daemon_spec.ip if daemon_spec.ip else ''
             })
