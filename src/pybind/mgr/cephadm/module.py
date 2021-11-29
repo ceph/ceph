@@ -426,6 +426,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.agent_starting_port = 0
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
+            self.device_enhanced_scan = False
 
         self.notify('mon_map', None)
         self.config_notify()
@@ -2216,7 +2217,7 @@ Then run the following:
             except Exception:
                 pass
             deps = sorted([self.get_mgr_ip(), server_port, root_cert,
-                           str(self.get_module_option('device_enhanced_scan'))])
+                           str(self.device_enhanced_scan)])
         elif daemon_type == 'iscsi':
             deps = [self.get_mgr_ip()]
         else:
