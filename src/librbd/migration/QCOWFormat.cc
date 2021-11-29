@@ -12,6 +12,7 @@
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ReadResult.h"
+#include "librbd/io/Utils.h"
 #include "librbd/migration/SnapshotInterface.h"
 #include "librbd/migration/SourceSpecBuilder.h"
 #include "librbd/migration/StreamInterface.h"
@@ -1460,6 +1461,12 @@ bool QCOWFormat<I>::read(
 
   aio_comp->read_result = std::move(read_result);
   aio_comp->read_result.set_image_extents(image_extents);
+
+  // remap logical to raw
+  for (auto& extent: image_extents) {
+    extent.first = io::util::area_to_raw_offset(
+            *m_image_ctx, extent.first, io::ImageArea::DATA);
+  }
 
   auto read_request = new ReadRequest(this, aio_comp, l1_table,
                                       std::move(image_extents));

@@ -55,6 +55,7 @@ set(unittest_librbd_srcs
   cache/test_mock_ParentCacheObjectDispatch.cc
   crypto/test_mock_BlockCrypto.cc
   crypto/test_mock_CryptoContextPool.cc
+  crypto/test_mock_CryptoImageDispatch.cc
   crypto/test_mock_CryptoObjectDispatch.cc
   crypto/test_mock_FormatRequest.cc
   crypto/test_mock_LoadRequest.cc

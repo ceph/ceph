@@ -2,7 +2,7 @@
 set -ex
 
 CEPH_ID=${CEPH_ID:-admin}
-TMP_FILES="/tmp/passphrase /tmp/passphrase2 /tmp/testdata1 /tmp/testdata2 /tmp/cmpdata"
+TMP_FILES="/tmp/passphrase /tmp/passphrase2 /tmp/testdata1 /tmp/testdata2 /tmp/cmpdata /tmp/rawexport /tmp/export.qcow2"
 
 _sudo()
 {
@@ -104,6 +104,15 @@ function test_clone_encryption() {
   dd if=/tmp/testdata1 of=$LIBRBD_DEV seek=2 skip=2 oflag=direct bs=1M count=1
   _sudo rbd device unmap -t nbd $LIBRBD_DEV
 
+  # migration test
+  rbd migration prepare testimg2 testimg4
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg4 -t nbd -o encryption-format=luks2,encryption-passphrase-file=/tmp/passphrase2,encryption-format=luks2,encryption-passphrase-file=/tmp/passphrase2,encryption-format=luks1,encryption-passphrase-file=/tmp/passphrase)
+  sudo chmod 666 $LIBRBD_DEV
+  dd if=$LIBRBD_DEV of=/tmp/cmpdata iflag=direct bs=1M count=3
+  cmp -n 3MB /tmp/cmpdata /tmp/testdata1
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+  rbd migration abort testimg4
+
   # flatten
   expect_false rbd flatten testimg2 --encryption-format luks1 --encryption-format luks2 --encryption-passphrase-file /tmp/passphrase2 --encryption-passphrase-file /tmp/passphrase
   rbd flatten testimg2 --encryption-format luks2 --encryption-format luks1 --encryption-passphrase-file /tmp/passphrase2 --encryption-passphrase-file /tmp/passphrase
@@ -153,6 +162,55 @@ function test_plaintext_detection {
   test_clone_and_load_with_a_single_passphrase false
 }
 
+function test_encryption_migration() {
+  # export raw image
+  rbd export testimg /tmp/rawexport
+
+  # migrate from raw image
+  rbd migration prepare --import-only \
+    --source-spec "{\"type\": \"raw\", \"stream\": {\"type\": \"file\", \"file_path\": \"/tmp/rawexport\"}}" \
+    testimg3
+
+  # test reading (assume luks2 and testdata2 from preivous test)
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg3 -t nbd -o encryption-format=luks2,encryption-passphrase-file=/tmp/passphrase)
+  sudo chmod 666 $LIBRBD_DEV
+  cmp -n 16MB $LIBRBD_DEV /tmp/testdata2
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+
+  # migration abort
+  rbd migration abort testimg3
+
+  # convert raw to qcow2
+  qemu-img convert -f raw -O qcow2 /tmp/rawexport /tmp/export.qcow2
+
+  # migrate from qcow2 image
+  rbd migration prepare --import-only \
+    --source-spec "{\"type\": \"qcow\", \"stream\": {\"type\": \"file\", \"file_path\": \"/tmp/export.qcow2\"}}" \
+    testimg3
+
+  # test reading
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg3 -t nbd -o encryption-format=luks2,encryption-passphrase-file=/tmp/passphrase)
+  sudo chmod 666 $LIBRBD_DEV
+  cmp -n 16MB $LIBRBD_DEV /tmp/testdata2
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+
+  # migration execute & commit
+  rbd migration execute testimg3
+  rbd migration commit testimg3
+
+  # native migration
+  rbd migration prepare testimg3 testimg4
+
+  # test reading
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg4 -t nbd -o encryption-format=luks2,encryption-passphrase-file=/tmp/passphrase)
+  sudo chmod 666 $LIBRBD_DEV
+  cmp -n 16MB $LIBRBD_DEV /tmp/testdata2
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+
+  # migration abort
+  rbd migration abort testimg4
+}
+
 function get_nbd_device_paths {
   rbd device list -t nbd | tail -n +2 | egrep "\s+rbd\s+testimg" | awk '{print $5;}'
 }
@@ -168,6 +226,9 @@ function clean_up {
     _sudo rbd device unmap -t nbd $device
   done
 
+  (rbd migration abort testimg4 || true) >/dev/null 2>&1
+  (rbd migration abort testimg3 || true) >/dev/null 2>&1
+  rbd remove testimg3 || true
   rbd remove testimg2 || true
   rbd snap unprotect testimg1@snap || true
   rbd snap remove testimg1@snap || true
@@ -211,6 +272,7 @@ test_plaintext_detection
 
 test_encryption_format luks1
 test_encryption_format luks2
+test_encryption_migration
 
 test_clone_encryption
 
