@@ -98,6 +98,7 @@ First release candidate
 =======================
 
 - [ ] src/ceph_release: change type to `rc`
+- [ ] opt-in to all telemetry channels, generate telemetry reports, and verify no sensitive details (like pools names) are collected
 
 
 First stable release
