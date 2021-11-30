@@ -18,7 +18,7 @@ def connect():
         raise RuntimeError(
             'Beanstalk queue information not found in {conf_path}'.format(
                 conf_path=config.teuthology_yaml))
-    return beanstalkc.Connection(host=host, port=port)
+    return beanstalkc.Connection(host=host, port=port, parse_yaml=yaml.safe_load)
 
 
 def watch_tube(connection, tube_name):
