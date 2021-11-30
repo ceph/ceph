@@ -1308,7 +1308,7 @@ def sh(command, log_limit=1024, cwd=None, env=None):
         for line in proc.stdout:
             line = line.decode()
             lines.append(line)
-            line = line.strip()
+            line = line.rstrip()
             if len(line) > log_limit:
                 truncated = True
                 log.debug(line[:log_limit] +
