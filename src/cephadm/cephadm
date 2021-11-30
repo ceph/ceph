@@ -56,6 +56,10 @@ DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:8.3.5'
 DEFAULT_HAPROXY_IMAGE = 'quay.io/ceph/haproxy:2.3'
 DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.1.5'
 DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
+DEFAULT_ELASTICSEARCH_IMAGE = 'docker.io/elasticsearch:7.17.3'
+DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
+DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
+DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
 DEFAULT_REGISTRY = 'docker.io'   # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 
@@ -1096,6 +1100,38 @@ class Keepalived(object):
 
 ##################################
 
+class Tracing(object):
+    """Define the configs for the jaeger tracing containers"""
+
+    components = {
+        'elasticsearch': {
+            'image': DEFAULT_ELASTICSEARCH_IMAGE,
+            'envs': ['discovery.type=single-node']
+        },
+        'jaeger-agent': {
+            'image': DEFAULT_JAEGER_AGENT_IMAGE,
+        },
+        'jaeger-collector': {
+            'image': DEFAULT_JAEGER_COLLECTOR_IMAGE,
+        },
+        'jaeger-query': {
+            'image': DEFAULT_JAEGER_QUERY_IMAGE,
+        },
+    }  # type: ignore
+
+    @staticmethod
+    def set_configuration(config, daemon_type: str):
+        if daemon_type in ['jaeger-collector','jaeger-query']:
+            assert 'elasticsearch_nodes' in config
+            Tracing.components[daemon_type]['envs'] = [
+                'SPAN_STORAGE_TYPE=elasticsearch',
+                f'ES_SERVER_URLS={config["elasticsearch_nodes"]}']
+        if daemon_type == 'jaeger-agent':
+            assert 'collector_nodes' in config
+            Tracing.components[daemon_type]['daemon_args'] = [
+                f'--reporter.grpc.host-port={config["collector_nodes"]}']
+
+##################################
 
 class CustomContainer(object):
     """Defines a custom container"""
@@ -1272,6 +1308,7 @@ def get_supported_daemons():
     supported_daemons.append(Keepalived.daemon_type)
     supported_daemons.append(CephadmAgent.daemon_type)
     supported_daemons.append(SNMPGateway.daemon_type)
+    supported_daemons.extend(Tracing.components)
     assert len(supported_daemons) == len(set(supported_daemons))
     return supported_daemons
 
@@ -2078,6 +2115,8 @@ def default_image(func: FuncT) -> FuncT:
                     ctx.image = Keepalived.default_image
                 if type_ == SNMPGateway.daemon_type:
                     ctx.image = SNMPGateway.default_image
+                if type_ in Tracing.components:
+                    ctx.image = Tracing.components[type_]['image']
             if not ctx.image:
                 ctx.image = os.environ.get('CEPHADM_IMAGE')
             if not ctx.image:
@@ -2563,6 +2602,8 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
             r += ['--path.procfs=/host/proc',
                   '--path.sysfs=/host/sys',
                   '--path.rootfs=/rootfs']
+    elif daemon_type == 'jaeger-agent':
+        r.extend(Tracing.components[daemon_type]['daemon_args'])
     elif daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.init(ctx, fsid, daemon_id)
         r += nfs_ganesha.get_daemon_args()
@@ -2962,6 +3003,12 @@ def get_container(ctx: CephadmContext,
         name = '%s.%s' % (daemon_type, daemon_id)
     elif daemon_type in Monitoring.components:
         entrypoint = ''
+    elif daemon_type in Tracing.components:
+        entrypoint = ''
+        name = '%s.%s' % (daemon_type, daemon_id)
+        config = get_parm(ctx.config_json)
+        Tracing.set_configuration(config, daemon_type)
+        envs.extend(Tracing.components[daemon_type]['envs'])
     elif daemon_type == NFSGanesha.daemon_type:
         entrypoint = NFSGanesha.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)
@@ -5803,7 +5850,12 @@ def command_deploy(ctx):
                       config=config, keyring=keyring,
                       reconfig=ctx.reconfig,
                       ports=daemon_ports)
-
+    elif daemon_type in Tracing.components:
+        uid, gid = 65534, 65534
+        c = get_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
+                      reconfig=ctx.reconfig,
+                      ports=daemon_ports)
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.init(ctx, ctx.fsid, daemon_id)
         uid, gid = haproxy.extract_uid_gid_haproxy()

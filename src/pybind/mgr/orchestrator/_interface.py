@@ -31,7 +31,7 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    IscsiServiceSpec, IngressSpec, SNMPGatewaySpec, MDSSpec
+    IscsiServiceSpec, IngressSpec, SNMPGatewaySpec, MDSSpec, TracingSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -472,6 +472,10 @@ class Orchestrator(object):
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
             'snmp-gateway': self.apply_snmp_gateway,
+            'elasticsearch': self.apply_elasticsearch,
+            'jaeger-agent': self.apply_jaeger_agent,
+            'jaeger-collector': self.apply_jaeger_collector,
+            'jaeger-query': self.apply_jaeger_query,
             'host': self.add_host,
         }
 
@@ -740,6 +744,10 @@ def daemon_type_to_service(dtype: str) -> str:
         'container': 'container',
         'agent': 'agent',
         'snmp-gateway': 'snmp-gateway',
+        'elasticsearch': 'elasticsearch',
+        'jaeger-agent': 'jaeger-agent',
+        'jaeger-collector': 'jaeger-collector',
+        'jaeger-query': 'jaeger-query'
     }
     return mapping[dtype]
 
@@ -766,6 +774,10 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'container': ['container'],
         'agent': ['agent'],
         'snmp-gateway': ['snmp-gateway'],
+        'elasticsearch': ['elasticsearch'],
+        'jaeger-agent': ['jaeger-agent'],
+        'jaeger-collector': ['jaeger-collector'],
+        'jaeger-query': ['jaeger-query']
     }
     return mapping[stype]
 
