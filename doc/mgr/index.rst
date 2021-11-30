@@ -45,6 +45,7 @@ sensible.
     Insights module <insights>
     Orchestrator module <orchestrator>
     Rook module <rook>
+    RGW module <rgw>
     MDS Autoscaler module <mds_autoscaler>
     NFS module <nfs>
     Progress Module <progress>
