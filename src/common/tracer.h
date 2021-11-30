@@ -4,6 +4,7 @@
 #pragma once
 
 #include "acconfig.h"
+#include "include/buffer.h"
 
 #ifdef HAVE_JAEGER
 
@@ -13,6 +14,7 @@
 #include "opentelemetry/sdk/trace/tracer_provider.h"
 
 using jspan = opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span>;
+using jspan_context = opentelemetry::trace::SpanContext;
 
 namespace tracing {
 
@@ -33,10 +35,16 @@ class Tracer {
   // this span represents a trace, since it has no parent.
   jspan start_trace(opentelemetry::nostd::string_view trace_name);
   // creates and returns a new span with `span_name` which parent span is `parent_span'
-  jspan add_span(opentelemetry::nostd::string_view span_name, jspan& parent_span);
+  jspan add_span(opentelemetry::nostd::string_view span_name, const jspan& parent_span);
+  // creates and return a new span with `span_name`
+  // the span is added to the trace which it's context is `parent_ctx`.
+  // parent_ctx contains the required information of the trace.
+  jspan add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx);
 
 };
 
+void encode(const jspan_context& span, ceph::buffer::list& bl, uint64_t f = 0);
+void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl);
 
 } // namespace tracing
 
@@ -45,15 +53,25 @@ class Tracer {
 
 #include <string_view>
 
+
+
 class Value {
  public:
   template <typename T> Value(T val) {}
 };
 
+struct jspan_context {
+  jspan_context() {}
+  jspan_context(bool sampled_flag, bool is_remote) {}
+};
+
 struct span_stub {
+  jspan_context _ctx;
   template <typename T>
   void SetAttribute(std::string_view key, const T& value) const noexcept {}
   void AddEvent(std::string_view, std::initializer_list<std::pair<std::string_view, Value>> fields) {}
+  const jspan_context& GetContext() { return _ctx; }
+  void UpdateName(std::string_view) {}
 };
 
 class jspan {
@@ -74,9 +92,12 @@ struct Tracer {
   bool is_enabled() const { return false; }
   jspan start_trace(std::string_view) { return {}; }
   jspan add_span(std::string_view, const jspan&) { return {}; }
+  jspan add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
   void init(std::string_view service_name) {}
   void shutdown() {}
 };
+  inline void encode(const jspan_context& span, bufferlist& bl, uint64_t f=0) {}
+  inline void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl) {}
 }
 
 #endif // !HAVE_JAEGER
