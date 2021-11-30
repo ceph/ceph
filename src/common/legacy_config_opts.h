@@ -305,6 +305,8 @@ OPTION(mon_debug_unsafe_allow_tier_with_nonempty_snaps, OPT_BOOL)
 OPTION(mon_osd_blocklist_default_expire, OPT_DOUBLE) // default one hour
 OPTION(mon_osd_crush_smoke_test, OPT_BOOL)
 
+OPTION(mgr_max_pg_num_change, OPT_INT)
+
 OPTION(paxos_stash_full_interval, OPT_INT)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE)  // gather updates for this long before proposing a map update

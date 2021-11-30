@@ -5482,6 +5482,11 @@ std::vector<Option> get_global_options() {
     .add_service("mgr")
     .set_description("Path to cephadm utility"),
 
+    Option("mgr_max_pg_num_change", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(128)
+    .add_service("mgr")
+    .set_description("maximum change in pg_num"),
+
     Option("mgr_module_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_DATADIR "/mgr")
     .add_service("mgr")
