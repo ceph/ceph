@@ -1450,7 +1450,7 @@ public:
   bool process_expire_objects(const DoutPrefixProvider *dpp);
   int defer_gc(const DoutPrefixProvider *dpp, void *ctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y);
 
-  int process_lc(const std::string& bucket_name);
+  int process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket);
   int list_lc_progress(std::string& marker, uint32_t max_entries,
 		       std::vector<rgw::sal::Lifecycle::LCEntry>& progress_map, int& index);
 

@@ -365,8 +365,9 @@ which are as follows:
   List all bucket lifecycle progress.
 
 :command:`lc process`
-  Manually process lifecycle.  If bucket specified with --bucket=<bucket>,
-  only <bucket> is processed.
+  Manually process lifecycle.  If a bucket is specified (e.g., via
+  --bucket_id or via --bucket and optional --tenant), only that bucket
+  is processed.
 
 :command:`metadata get`
   Get metadata info.

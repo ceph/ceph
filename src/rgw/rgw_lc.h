@@ -515,9 +515,12 @@ public:
   void initialize(CephContext *_cct, rgw::sal::Store* _store);
   void finalize();
 
-  int process(LCWorker* worker, const std::string& bucket_name, bool once);
-  int process(int index, int max_secs, LCWorker* worker,
-	      const std::string& bucket_name, bool once);
+  int process(LCWorker* worker,
+	      const std::unique_ptr<rgw::sal::Bucket>& optional_bucket,
+	      bool once);
+  int process(int index, int max_lock_secs, LCWorker* worker, bool once);
+  int process_bucket(int index, int max_lock_secs, LCWorker* worker,
+		     const std::string& bucket_entry_marker, bool once);
   bool if_already_run_today(time_t start_date);
   bool expired_session(time_t started);
   time_t thread_stop_at();
