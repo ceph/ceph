@@ -639,10 +639,25 @@ struct HTTPMetaTable : public EmptyMetaTable {
       pushstring(L, info->request_params);
     } else if (strcasecmp(index, "Domain") == 0) {
       pushstring(L, info->domain);
+    } else if (strcasecmp(index, "StorageClass") == 0) {
+      pushstring(L, info->storage_class);
     } else {
       return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
+  }
+
+  static int NewIndexClosure(lua_State* L) {
+    auto info = reinterpret_cast<req_info*>(lua_touserdata(L, lua_upvalueindex(1)));
+
+    const char* index = luaL_checkstring(L, 2);
+
+    if (strcasecmp(index, "StorageClass") == 0) {
+      info->storage_class = luaL_checkstring(L, 3);
+   } else {
+      return error_unknown_field(L, index, TableName());
+   }
+    return NO_RETURNVAL;
   }
 };
 
