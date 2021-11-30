@@ -1016,6 +1016,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         need = cast(int, self.get_ceph_option("osd_pool_default_size"))
         return ready >= need
 
+    @API.perm('w')
     @API.expose
     def rename_pool(self, srcpool: str, destpool: str) -> None:
         c = {
@@ -1026,6 +1027,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         }
         self.check_mon_command(c)
 
+    @API.perm('w')
     @API.expose
     def create_pool(self, pool: str) -> None:
         c = {
@@ -1037,6 +1039,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         }
         self.check_mon_command(c)
 
+    @API.perm('w')
     @API.expose
     def appify_pool(self, pool: str, app: str) -> None:
         c = {
@@ -1048,6 +1051,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         }
         self.check_mon_command(c)
 
+    @API.perm('w')
     @API.expose
     def create_mgr_pool(self) -> None:
         self.log.info("creating mgr pool")
@@ -1811,6 +1815,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self._validate_module_option(key)
         return self._ceph_set_module_option(module, key, str(val))
 
+    @API.perm('w')
     @API.expose
     def set_localized_module_option(self, key: str, val: Optional[str]) -> None:
         """
@@ -1822,6 +1827,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._validate_module_option(key)
         return self._set_localized(key, val, self._set_module_option)
 
+    @API.perm('w')
     @API.expose
     def set_store(self, key: str, val: Optional[str]) -> None:
         """
@@ -1850,6 +1856,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 r = default
         return r
 
+    @API.perm('w')
     @API.expose
     def set_localized_store(self, key: str, val: Optional[str]) -> None:
         return self._set_localized(key, val, self.set_store)
@@ -1979,6 +1986,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_set_uri(uri)
 
+    @API.perm('w')
     @API.expose
     def set_device_wear_level(self, devid: str, wear_level: float) -> None:
         return self._ceph_set_device_wear_level(devid, wear_level)
@@ -2001,10 +2009,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                               add_to_ceph_s: bool) -> None:
         return self._ceph_update_progress_event(evid, desc, progress, add_to_ceph_s)
 
+    @API.perm('w')
     @API.expose
     def complete_progress_event(self, evid: str) -> None:
         return self._ceph_complete_progress_event(evid)
 
+    @API.perm('w')
     @API.expose
     def clear_all_progress_events(self) -> None:
         return self._ceph_clear_all_progress_events()
@@ -2095,6 +2105,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_add_osd_perf_query(query)
 
+    @API.perm('w')
     @API.expose
     def remove_osd_perf_query(self, query_id: int) -> None:
         """
@@ -2142,6 +2153,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_add_mds_perf_query(query)
 
+    @API.perm('w')
     @API.expose
     def remove_mds_perf_query(self, query_id: int) -> None:
         """
