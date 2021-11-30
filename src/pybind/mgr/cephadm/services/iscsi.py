@@ -2,7 +2,7 @@ import errno
 import json
 import logging
 import subprocess
-from typing import List, cast, Optional
+from typing import List, cast, Optional, Set
 from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
@@ -76,6 +76,14 @@ class IscsiService(CephService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.deps = [self.mgr.get_mgr_ip()]
         return daemon_spec
+
+    def undeclared_variables_template_variables(self) -> Set[str]:
+        undeclared = self.mgr.template.find_undeclared_variables(
+            'services/iscsi/iscsi-gateway.cfg.j2')
+        undeclared.difference_update({
+            'client_name', 'trusted_ip_list', 'spec'
+        })
+        return undeclared
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         def get_set_cmd_dicts(out: str) -> List[dict]:

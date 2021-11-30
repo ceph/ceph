@@ -2,7 +2,7 @@ import ipaddress
 import logging
 import random
 import string
-from typing import List, Dict, Any, Tuple, cast, Optional
+from typing import List, Dict, Any, Tuple, cast, Optional, Set
 
 from ceph.deployment.service_spec import IngressSpec
 from mgr_util import build_url
@@ -261,3 +261,16 @@ class IngressService(CephService):
         }
 
         return config_file, deps
+
+    def undeclared_variables_template_variables(self) -> Set[str]:
+        undeclared = self.mgr.template.find_undeclared_variables(
+            'services/ingress/haproxy.cfg.j2')
+        undeclared.difference_update({
+            'spec', 'mode', 'servers', 'user', 'password', 'ip', 'frontend_port', 'monitor_port'
+        })
+        undeclared.update(self.mgr.template.find_undeclared_variables(
+            'services/ingress/keepalived.cfg.j2'))
+        undeclared.difference_update({
+            'spec', 'script', 'password', 'interface', 'state', 'other_ips', 'host_ip'
+        })
+        return undeclared

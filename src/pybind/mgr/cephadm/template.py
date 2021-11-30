@@ -1,8 +1,10 @@
 import copy
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Set
 
-from jinja2 import Environment, PackageLoader, select_autoescape, StrictUndefined
+from jinja2 import Environment, PackageLoader, select_autoescape, StrictUndefined, meta
 from jinja2 import exceptions as j2_exceptions
+
+from ceph.deployment.service_spec import ServiceSpec
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -40,6 +42,11 @@ class Jinja2Engine(TemplateEngine):
             template = self.env.get_template(name)
             if context is None:
                 return template.render()
+
+            for u in self.find_undeclared_variables(name):
+                if u != 'cephadm_managed' and u not in context:
+                    context[u] = None
+
             return template.render(context)
         except j2_exceptions.UndefinedError as e:
             raise UndefinedError(e.message)
@@ -51,11 +58,27 @@ class Jinja2Engine(TemplateEngine):
             template = self.env.from_string(source)
             if context is None:
                 return template.render()
+
+            for u in self.find_undeclared_variables_plain(source, ''):
+                if u != 'cephadm_managed' and u not in context:
+                    context[u] = None
+
             return template.render(context)
         except j2_exceptions.UndefinedError as e:
             raise UndefinedError(e.message)
         except j2_exceptions.TemplateNotFound as e:
             raise TemplateNotFoundError(e.message)
+
+    def find_undeclared_variables(self, name: str) -> Set[str]:
+        assert self.env.loader
+        contents, filename, _ = self.env.loader.get_source(self.env, name)
+        parsed_content = self.env.parse(contents, filename, filename)
+        return meta.find_undeclared_variables(parsed_content)
+
+    def find_undeclared_variables_plain(self, source: str, name: str) -> Set[str]:
+        assert self.env.loader
+        parsed_content = self.env.parse(source, name)
+        return meta.find_undeclared_variables(parsed_content)
 
 
 class TemplateMgr:
@@ -92,6 +115,23 @@ class TemplateMgr:
         if context is not None:
             ctx = {**ctx, **context}
 
+        custom_template = self.get_custom_template(name, host)
+        if custom_template:
+            return self.engine.render_plain(custom_template, ctx)
+        else:
+            return self.engine.render(name, ctx)
+
+    def find_undeclared_variables(self, name: str) -> Set[str]:
+        custom_template = self.get_custom_template(name, '')
+        if custom_template:
+            undeclared = self.engine.find_undeclared_variables_plain(custom_template, name)
+        else:
+            undeclared = self.engine.find_undeclared_variables(name)
+        if 'cephadm_managed' in undeclared:
+            undeclared.remove('cephadm_managed')
+        return undeclared
+
+    def get_custom_template(self, name: str, host: Optional[str]) -> Optional[str]:
         # Check if the given name exists in the module's persistent
         # key-value store, e.g.
         # - blink_device_light_cmd
@@ -102,8 +142,8 @@ class TemplateMgr:
         if host and custom_template is None:
             store_name = '{}/{}'.format(host, store_name)
             custom_template = self.mgr.get_store(store_name, None)
+        return custom_template
 
-        if custom_template:
-            return self.engine.render_plain(custom_template, ctx)
-        else:
-            return self.engine.render(name, ctx)
+    def mk_context(self, spec: ServiceSpec, ctx: dict) -> dict:
+        ctx.update(spec.other_properties)
+        return ctx

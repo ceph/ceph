@@ -3,7 +3,7 @@ import logging
 import os
 import subprocess
 import tempfile
-from typing import Dict, Tuple, Any, List, cast, Optional
+from typing import Dict, Tuple, Any, List, cast, Optional, Set
 
 from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
@@ -134,6 +134,14 @@ class NFSService(CephService):
             return config
 
         return get_cephadm_config(), deps
+
+    def undeclared_variables_template_variables(self) -> Set[str]:
+        undeclared = self.mgr.template.find_undeclared_variables(
+            'services/nfs/ganesha.conf.j2')
+        undeclared.difference_update({
+            'user', 'nodeid', 'namespace', 'rgw_user', 'url', 'port', 'bind_addr', 'pool'
+        })
+        return undeclared
 
     def create_rados_config_obj(self,
                                 spec: NFSServiceSpec,

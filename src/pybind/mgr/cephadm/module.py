@@ -2449,6 +2449,13 @@ Then run the following:
             raise OrchestratorError((f'The maximum count_per_host allowed is {max_count}.'
                                      + ' This limit can be adjusted by changing the mgr/cephadm/max_count_per_host config option'))
 
+        undeclared = self.cephadm_services[spec.service_type].undeclared_variables_template_variables(
+        )
+        others = set(spec.other_properties.keys())
+        if others.difference(undeclared):
+            raise OrchestratorError(
+                f'{spec.one_line_str()} has unused properties: {others.difference(undeclared)}')
+
         HostAssignment(
             spec=spec,
             hosts=self.inventory.all_specs(),  # All hosts, even those without daemon refresh

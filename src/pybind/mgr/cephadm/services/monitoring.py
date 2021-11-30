@@ -1,7 +1,7 @@
 import errno
 import logging
 import os
-from typing import List, Any, Tuple, Dict, Optional, cast
+from typing import List, Any, Tuple, Dict, Optional, cast, Set
 from urllib.parse import urlparse
 
 from mgr_module import HandleCommandResult
@@ -75,6 +75,20 @@ class GrafanaService(CephadmService):
             }
         }
         return config_file, sorted(deps)
+
+    def undeclared_variables_template_variables(self) -> Set[str]:
+        undeclared = self.mgr.template.find_undeclared_variables(
+            'services/grafana/ceph-dashboard.yml.j2')
+        undeclared.difference_update({
+            'hosts'
+        })
+        undeclared.update(self.mgr.template.find_undeclared_variables(
+            'services/grafana/grafana.ini.j2'))
+        undeclared.difference_update({
+            'initial_admin_password', 'http_port', 'http_addr'
+        })
+
+        return undeclared
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # Use the least-created one as the active daemon
@@ -171,6 +185,14 @@ class AlertmanagerService(CephadmService):
             },
             "peers": peers
         }, sorted(deps)
+
+    def undeclared_variables_template_variables(self) -> Set[str]:
+        undeclared = self.mgr.template.find_undeclared_variables(
+            'services/alertmanager/alertmanager.yml.j2')
+        undeclared.difference_update({
+            'dashboard_urls', 'default_webhook_urls'
+        })
+        return undeclared
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # TODO: if there are multiple daemons, who is the active one?
@@ -313,6 +335,14 @@ class PrometheusService(CephadmService):
             r['files']['/etc/prometheus/alerting/ceph_alerts.yml'] = alerts
 
         return r, sorted(deps)
+
+    def undeclared_variables_template_variables(self) -> Set[str]:
+        undeclared = self.mgr.template.find_undeclared_variables(
+            'services/prometheus/prometheus.yml.j2')
+        undeclared.difference_update({
+            'alertmgr_targets', 'mgr_scrape_list', 'haproxy_targets', 'nodes',
+        })
+        return undeclared
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # TODO: if there are multiple daemons, who is the active one?

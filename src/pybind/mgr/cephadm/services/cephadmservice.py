@@ -4,7 +4,7 @@ import logging
 import re
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, TypeVar, \
-    Optional, Dict, Any, Tuple, NewType, cast
+    Optional, Dict, Any, Tuple, NewType, cast, Set
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
@@ -188,6 +188,9 @@ class CephadmService(metaclass=ABCMeta):
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         raise NotImplementedError()
+
+    def undeclared_variables_template_variables(self) -> Set[str]:
+        return set()
 
     def config(self, spec: ServiceSpec) -> None:
         """
