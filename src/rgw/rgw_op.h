@@ -52,6 +52,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 #include "rgw_public_access.h"
 #include "rgw_bucket_encryption.h"
+#include "rgw_tracer.h"
 
 #include "services/svc_sys_obj.h"
 #include "services/svc_tier_rados.h"
@@ -1211,6 +1212,7 @@ protected:
   std::string multipart_upload_id;
   std::string multipart_part_str;
   int multipart_part_num = 0;
+  jspan multipart_trace;
 
   boost::optional<ceph::real_time> delete_at;
   //append obj
@@ -1833,11 +1835,13 @@ protected:
   std::string upload_id;
   RGWAccessControlPolicy policy;
   ceph::real_time mtime;
+  jspan multipart_trace;
 
 public:
   RGWInitMultipart() {}
 
   void init(rgw::sal::Store* store, struct req_state *s, RGWHandler *h) override {
+    multipart_trace = tracing::rgw::tracer.start_trace(tracing::rgw::MULTIPART);
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
@@ -1860,6 +1864,7 @@ protected:
   std::string version_id;
   bufferlist data;
   rgw::sal::MPSerializer* serializer;
+  jspan multipart_trace;
 
 public:
   RGWCompleteMultipart() : serializer(nullptr) {}
@@ -1879,6 +1884,8 @@ public:
 };
 
 class RGWAbortMultipart : public RGWOp {
+protected:
+  jspan multipart_trace;
 public:
   RGWAbortMultipart() {}
 

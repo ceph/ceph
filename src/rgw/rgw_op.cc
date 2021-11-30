@@ -3923,11 +3923,14 @@ void RGWPutObj::execute(optional_yield y)
   rgw_placement_rule *pdest_placement = &s->dest_placement;
 
   if (multipart) {
-    s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, multipart_upload_id);
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = s->bucket->get_multipart_upload(s->object->get_name(),
 					 multipart_upload_id);
     op_ret = upload->get_info(this, s->yield, s->obj_ctx, &pdest_placement);
+
+    s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, multipart_upload_id);
+    multipart_trace = tracing::rgw::tracer.add_span(name(), upload->get_trace());
+
     if (op_ret < 0) {
       if (op_ret != -ENOENT) {
         ldpp_dout(this, 0) << "ERROR: get_multipart_info returned " << op_ret << ": " << cpp_strerror(-op_ret) << dendl;
@@ -3972,7 +3975,6 @@ void RGWPutObj::execute(optional_yield y)
 		      << dendl;
     return;
   }
-
   if ((! copy_source.empty()) && !copy_source_range) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
     op_ret = store->get_bucket(nullptr, copy_source_bucket_info, &bucket);
@@ -3997,7 +3999,6 @@ void RGWPutObj::execute(optional_yield y)
   } else {
     lst = copy_source_range_lst;
   }
-
   fst = copy_source_range_fst;
 
   // no filters by default
@@ -6125,7 +6126,7 @@ void RGWInitMultipart::pre_exec()
 
 void RGWInitMultipart::execute(optional_yield y)
 {
-  bufferlist aclbl;
+  bufferlist aclbl, tracebl;
   rgw::sal::Attrs attrs;
 
   if (get_params(y) < 0)
@@ -6133,6 +6134,11 @@ void RGWInitMultipart::execute(optional_yield y)
 
   if (rgw::sal::Object::empty(s->object.get()))
     return;
+
+  if (multipart_trace) {
+    tracing::encode(multipart_trace->GetContext(), tracebl);
+    attrs[RGW_ATTR_TRACE] = tracebl;
+  }
 
   policy.encode(aclbl);
   attrs[RGW_ATTR_ACL] = aclbl;
@@ -6158,6 +6164,7 @@ void RGWInitMultipart::execute(optional_yield y)
     upload_id = upload->get_upload_id();
   }
   s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
+  multipart_trace->UpdateName(tracing::rgw::MULTIPART + upload_id);
 
 }
 
@@ -6279,8 +6286,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
 
-  s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
-
   RGWCompressionInfo cs_info;
   bool compressed = false;
   uint64_t accounted_size = 0;
@@ -6317,7 +6322,12 @@ void RGWCompleteMultipart::execute(optional_yield y)
 		     << " ret=" << op_ret << dendl;
     return;
   }
+  s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
+  jspan_context trace_ctx(false, false);
+  extract_span_context(meta_obj->get_attrs(), trace_ctx);
+  multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
   
+
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(meta_obj.get(),
 				s, rgw::notify::ObjectCreatedCompleteMultipartUpload, &s->object->get_name());
@@ -6488,7 +6498,7 @@ void RGWAbortMultipart::execute(optional_yield y)
   op_ret = -EINVAL;
   string upload_id;
   upload_id = s->info.args.get("uploadId");
-  rgw_obj meta_obj;
+  std::unique_ptr<rgw::sal::Object> meta_obj;
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
 
   if (upload_id.empty() || rgw::sal::Object::empty(s->object.get()))
@@ -6496,6 +6506,19 @@ void RGWAbortMultipart::execute(optional_yield y)
 
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
+
+  meta_obj = upload->get_meta_obj();
+  meta_obj->set_in_extra_data(true);
+  op_ret = meta_obj->get_obj_attrs(obj_ctx, s->yield, this);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << meta_obj
+		     << " ret=" << op_ret << dendl;
+    return;
+  }
+  jspan_context trace_ctx(false, false);
+  extract_span_context(meta_obj->get_attrs(), trace_ctx);
+  multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
+
   op_ret = upload->abort(this, s->cct, obj_ctx);
 }
 
