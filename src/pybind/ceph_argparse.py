@@ -218,6 +218,8 @@ class CephArgtype(object):
         orig_type = get_origin(tp)
         type_args = get_args(tp)
         if orig_type in (abc.Sequence, Sequence, List, list):
+            if v is None:
+                return None
             return [CephArgtype.cast_to(type_args[0], e) for e in v]
         elif orig_type is Tuple:
             return tuple(CephArgtype.cast_to(type_args[0], e) for e in v)

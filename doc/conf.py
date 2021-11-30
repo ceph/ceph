@@ -13,6 +13,9 @@ top_level = \
         os.path.dirname(
             os.path.abspath(__file__)))
 
+pybind_rgw_mod = __import__('rgw', globals(), locals(), [], 0)
+sys.modules['pybind_rgw_mod'] = pybind_rgw_mod
+
 
 def parse_ceph_release():
     with open(os.path.join(top_level, 'src/ceph_release')) as f:
