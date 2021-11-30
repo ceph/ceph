@@ -132,7 +132,7 @@ class IngressService(CephService):
                 'ip': daemon_spec.ip or '*',
                 'frontend_port': daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port,
                 'monitor_port': daemon_spec.ports[1] if daemon_spec.ports else spec.monitor_port,
-            }
+            }, spec=spec
         )
         config_files = {
             'files': {
@@ -251,7 +251,7 @@ class IngressService(CephService):
                 'state': state,
                 'other_ips': other_ips,
                 'host_ip': resolve_ip(self.mgr.inventory.get_addr(host)),
-            }
+            }, spec=spec
         )
 
         config_file = {

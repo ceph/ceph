@@ -106,7 +106,7 @@ class NFSService(CephService):
                 "port": daemon_spec.ports[0] if daemon_spec.ports else 2049,
                 "bind_addr": daemon_spec.ip if daemon_spec.ip else '',
             }
-            return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
+            return self.mgr.template.render('services/nfs/ganesha.conf.j2', context, spec=spec)
 
         # generate the cephadm config json
         def get_cephadm_config() -> Dict[str, Any]:

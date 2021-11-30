@@ -91,6 +91,7 @@ class TemplateMgr:
 
     def render(self, name: str,
                context: Optional[dict] = None,
+               spec: Optional[ServiceSpec] = None,
                managed_context: bool = True,
                host: Optional[str] = None) -> str:
         """Render a string from a template with context.
@@ -114,6 +115,9 @@ class TemplateMgr:
             ctx = copy.deepcopy(self.base_context)
         if context is not None:
             ctx = {**ctx, **context}
+
+        if spec:
+            ctx = self.mk_context(spec, ctx)
 
         custom_template = self.get_custom_template(name, host)
         if custom_template:

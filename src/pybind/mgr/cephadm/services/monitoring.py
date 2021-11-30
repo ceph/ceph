@@ -27,6 +27,8 @@ class GrafanaService(CephadmService):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps = []  # type: List[str]
+        spec: MonitoringSpec = cast(
+            MonitoringSpec, self.mgr.spec_store.active_specs[daemon_spec.service_name])
 
         prom_services = []  # type: List[str]
         for dd in self.mgr.cache.get_daemons_by_service('prometheus'):
@@ -37,7 +39,7 @@ class GrafanaService(CephadmService):
 
             deps.append(dd.name())
         grafana_data_sources = self.mgr.template.render(
-            'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services})
+            'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services}, spec=spec)
 
         cert = self.mgr.get_store('grafana_crt')
         pkey = self.mgr.get_store('grafana_key')
@@ -64,7 +66,7 @@ class GrafanaService(CephadmService):
                 'initial_admin_password': spec.initial_admin_password,
                 'http_port': daemon_spec.ports[0] if daemon_spec.ports else self.DEFAULT_SERVICE_PORT,
                 'http_addr': daemon_spec.ip if daemon_spec.ip else ''
-            })
+            }, spec=spec)
 
         config_file = {
             'files': {
@@ -170,7 +172,8 @@ class AlertmanagerService(CephadmService):
             'dashboard_urls': dashboard_urls,
             'default_webhook_urls': default_webhook_urls
         }
-        yml = self.mgr.template.render('services/alertmanager/alertmanager.yml.j2', context)
+        yml = self.mgr.template.render(
+            'services/alertmanager/alertmanager.yml.j2', context, spec=spec)
 
         peers = []
         port = 9094
@@ -253,6 +256,7 @@ class PrometheusService(CephadmService):
     ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps = []  # type: List[str]
+        prom_spec = cast(MonitoringSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
         # scrape mgrs
         mgr_scrape_list = []
@@ -324,7 +328,7 @@ class PrometheusService(CephadmService):
             'files': {
                 'prometheus.yml':
                     self.mgr.template.render(
-                        'services/prometheus/prometheus.yml.j2', context)
+                        'services/prometheus/prometheus.yml.j2', context, spec=prom_spec)
             }
         }
 

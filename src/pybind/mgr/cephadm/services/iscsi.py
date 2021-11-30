@@ -69,7 +69,8 @@ class IscsiService(CephService):
             'trusted_ip_list': trusted_ip_list,
             'spec': spec
         }
-        igw_conf = self.mgr.template.render('services/iscsi/iscsi-gateway.cfg.j2', context)
+        igw_conf = self.mgr.template.render(
+            'services/iscsi/iscsi-gateway.cfg.j2', context, spec=spec)
 
         daemon_spec.keyring = keyring
         daemon_spec.extra_files = {'iscsi-gateway.cfg': igw_conf}
