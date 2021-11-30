@@ -62,14 +62,20 @@ public:
 private:
   template <typename FuncT>
   interruptible_future<> with_sequencer(FuncT&& func);
-  interruptible_future<> do_process(
+
+  enum class seq_mode_t {
+    IN_ORDER,
+    OUT_OF_ORDER
+  };
+
+  interruptible_future<seq_mode_t> do_process(
     Ref<PG>& pg,
     crimson::osd::ObjectContextRef obc);
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_pg_op(
     Ref<PG> &pg);
   ::crimson::interruptible::interruptible_future<
-    ::crimson::osd::IOInterruptCondition> process_op(
+    ::crimson::osd::IOInterruptCondition, seq_mode_t> process_op(
     Ref<PG> &pg);
   bool is_pg_op() const;
 
