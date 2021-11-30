@@ -2073,6 +2073,126 @@ TEST_P(OSDMapTest, BUG_51842) {
     }
 }
 
+TEST_F(OSDMapTest, blocklisting) {
+  set_up_map(6); //whatever
+
+  // I pulled the first two ranges and their start/end points from
+  // https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation
+  string range_addrs[] = {"198.51.100.0/22", "2001:db8::/48", "3001:db8::/72"};
+  string ip_addrs[] = {"198.51.100.14", "198.51.100.0", "198.51.103.255",
+    "2001:db8:0:0:0:0:0:0", "2001:db8:0:0:0:0001:ffff:ffff",
+    "2001:db8:0:ffff:ffff:ffff:ffff:ffff",
+    "3001:db8:0:0:0:0:0:0", "3001:db8:0:0:0:0001:ffff:ffff",
+    "3001:db8:0:0:00ff:ffff:ffff:ffff", };
+  string unblocked_ip_addrs[] = { "0.0.0.0", "1.1.1.1", "192.168.1.1",
+    "198.51.99.255", "198.51.104.0",
+    "2001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "2001:db8:0001::",
+    "3001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "3001:db8:0:0:0100::"
+  };
+  OSDMap::Incremental new_blocklist_inc(osdmap.get_epoch() + 1);
+  for (const auto& a : ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    new_blocklist_inc.new_blocklist[addr] = ceph_clock_now();
+  }
+  osdmap.apply_incremental(new_blocklist_inc);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    ASSERT_TRUE(osdmap.is_blocklisted(addr, g_ceph_context));
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    ASSERT_FALSE(osdmap.is_blocklisted(addr, g_ceph_context));
+  }
+
+  OSDMap::Incremental rm_blocklist_inc(osdmap.get_epoch() + 1);
+  for (const auto& a : ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    rm_blocklist_inc.old_blocklist.push_back(addr);
+  }
+  osdmap.apply_incremental(rm_blocklist_inc);
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    ASSERT_FALSE(osdmap.is_blocklisted(addr, g_ceph_context));
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (blocklisted) {
+      cout << "erroneously blocklisted " << addr << std::endl;
+    }
+    EXPECT_FALSE(blocklisted);
+  }
+  
+  OSDMap::Incremental range_blocklist_inc(osdmap.get_epoch() + 1);
+  for (const auto& a : range_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.type = entity_addr_t::TYPE_CIDR;
+    range_blocklist_inc.new_range_blocklist[addr] = ceph_clock_now();
+  }
+  osdmap.apply_incremental(range_blocklist_inc);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (blocklisted) {
+      cout << "erroneously blocklisted " << addr << std::endl;
+    }
+    EXPECT_FALSE(blocklisted);
+  }
+
+  OSDMap::Incremental rm_range_blocklist(osdmap.get_epoch() + 1);
+  for (const auto& a : range_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.type = entity_addr_t::TYPE_CIDR;
+    rm_range_blocklist.old_range_blocklist.push_back(addr);
+  }
+  osdmap.apply_incremental(rm_range_blocklist);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    ASSERT_FALSE(osdmap.is_blocklisted(addr, g_ceph_context));
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (blocklisted) {
+      cout << "erroneously blocklisted " << addr << std::endl;
+    }
+    EXPECT_FALSE(blocklisted);
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
   OSDMap,
   OSDMapTest,
