@@ -66,7 +66,7 @@ class Collection(str, enum.Enum):
     perf_perf = 'perf_perf'
     basic_mds_metadata = 'basic_mds_metadata'
 
-MODULE_COLLECTION = [
+MODULE_COLLECTION : List[Dict] = [
     {
         "name": Collection.basic_base,
         "description": "Basic information about the cluster (capacity, number and type of daemons, version, etc.)",
@@ -180,9 +180,9 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
         self.event = Event()
         self.run = False
-        self.db_collection: List[str] = None
-        self.last_opted_in_ceph_version: int = None
-        self.last_opted_out_ceph_version: int = None
+        self.db_collection: Optional[List[str]] = None
+        self.last_opted_in_ceph_version: Optional[int] = None
+        self.last_opted_out_ceph_version: Optional[int] = None
         self.last_upload: Optional[int] = None
         self.last_report: Dict[str, Any] = dict()
         self.report_id: Optional[str] = None
@@ -1000,12 +1000,11 @@ class Module(MgrModule):
             report['fs']['total_num_mds'] = num_mds  # type: ignore
 
             # daemons
-            report['metadata'] = dict()
-            report['metadata']['osd'] = self.gather_osd_metadata(osd_map)
-            report['metadata']['mon'] = self.gather_mon_metadata(mon_map)
+            report['metadata'] = dict(osd=self.gather_osd_metadata(osd_map),
+                                      mon=self.gather_mon_metadata(mon_map))
 
             if self.is_enabled_collection(Collection.basic_mds_metadata):
-                report['metadata']['mds'] = self.gather_mds_metadata()
+                report['metadata']['mds'] = self.gather_mds_metadata()  # type: ignore
 
             # host counts
             servers = self.list_servers()
@@ -1109,16 +1108,19 @@ class Module(MgrModule):
         ceph = 'ceph'
         device = 'device'
 
-    def collection_delta(self, channels: Optional[List[str]] = None) -> List[Collection]:
+    def collection_delta(self, channels: Optional[List[str]] = None) -> Optional[List[Collection]]:
         '''
         Find collections that are available in the module, but are not in the db
         '''
+        if self.db_collection is None:
+            return None
+
         if not channels:
             channels = ALL_CHANNELS
         else:
-            for c in channels:
-                if c not in ALL_CHANNELS:
-                    self.log.debug(f"invalid channel name: {c}")
+            for ch in channels:
+                if ch not in ALL_CHANNELS:
+                    self.log.debug(f"invalid channel name: {ch}")
                     return None
 
         new_collection : List[Collection] = []
@@ -1154,6 +1156,8 @@ class Module(MgrModule):
         # opted-in, or invoked `telemetry off`), or they upgraded from a
         # telemetry revision 1 or 2, which required to re-opt in to revision 3,
         # regardless, hence is considered as opted-out
+        if self.db_collection is None:
+            return False
         return len(self.db_collection) > 0
 
     def should_nag(self) -> bool:
@@ -1169,12 +1173,13 @@ class Module(MgrModule):
 
         # check if there are collections the user is not opt-in to
         # that we should nag about
-        for c in MODULE_COLLECTION:
-            for k, v in c.items():
-                if k == 'name' and v.name not in self.db_collection:
-                    if c['nag'] == True:
-                        self.log.debug(f"The collection: {v} is not reported, and we should nag about it")
-                        return True
+        if self.db_collection is not None:
+            for c in MODULE_COLLECTION:
+                for k, v in c.items():
+                    if k == 'name' and v.name not in self.db_collection:
+                        if c['nag'] == True:
+                            self.log.debug(f"The collection: {v} is not reported, and we should nag about it")
+                            return True
 
         # user might be opted-in to the most recent collection, or there is no
         # new collection which requires nagging about
@@ -1210,18 +1215,26 @@ class Module(MgrModule):
 
             # reload collection after setting
             collection = self.get_store('collection')
-            self.db_collection = json.loads(collection)
+            if collection is not None:
+                self.db_collection = json.loads(collection)
+            else:
+                raise RuntimeError('collection is None after initial setting')
         else:
             # user has already upgraded
             self.log.debug(f"user has upgraded already: collection: {self.db_collection}")
 
     def is_enabled_collection(self, collection: Collection) -> bool:
+        if self.db_collection is None:
+            return False
         return collection.name in self.db_collection
 
     def opt_in_all_collections(self) -> None:
         """
         Opt-in to all collections; Update db with the currently available collections in the module
         """
+        if self.db_collection is None:
+            raise RuntimeError('db_collection is None after initial setting')
+
         for c in MODULE_COLLECTION:
             for k, v in c.items():
                 if k == 'name' and v.name not in self.db_collection:
@@ -1272,7 +1285,7 @@ class Module(MgrModule):
             return 1, '', '\n'.join(success + failed)
         return 0, '', '\n'.join(success)
 
-    def format_perf_histogram(self, report):
+    def format_perf_histogram(self, report: Dict[str, Any]) -> None:
         # Formatting the perf histograms so they are human-readable. This will change the
         # ranges and values, which are currently in list form, into strings so that
         # they are displayed horizontally instead of vertically.
@@ -1301,7 +1314,7 @@ class Module(MgrModule):
             # histograms.
             pass
 
-    def toggle_channel(self, action, channels: Optional[List[str]] = None) -> Tuple[int, str, str]:
+    def toggle_channel(self, action: str, channels: Optional[List[str]] = None) -> Tuple[int, str, str]:
         '''
         Enable or disable a list of channels
         '''
@@ -1330,7 +1343,7 @@ class Module(MgrModule):
 
         return 0, msg, ''
 
-    def restore_default_opt_setting(self, opt_name) -> None:
+    def restore_default_opt_setting(self, opt_name: str) -> None:
         for o in self.MODULE_OPTIONS:
             if o['name'] == opt_name:
                 default_val = o.get('default', None)
@@ -1362,7 +1375,7 @@ class Module(MgrModule):
         for c in MODULE_COLLECTION:
             for k, v in c.items():
                 if k == 'name':
-                    if not self.is_enabled_collection(v):
+                    if not self.is_enabled_collection(Collection(v)):
                         diff.append({key: val for key, val in c.items() if key not in keys})
 
         r = None
@@ -1530,8 +1543,9 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         # the report, and at the same time the module hits the interval of
         # sending a report with the opted-in collection, which has less data
         # than in the preview report.
+        col_delta = self.collection_delta()
         with self.get_report_lock:
-            if len(self.collection_delta()) == 0:
+            if col_delta is not None and len(col_delta) == 0:
                 # user is already opted-in to the most recent collection
                 msg = 'Telemetry is up to date, see report with `ceph telemetry show`.'
                 return 0, msg, ''
@@ -1583,8 +1597,9 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         '''
         report = {}
 
+        device_col_delta = self.collection_delta(['device'])
         with self.get_report_lock:
-            if len(self.collection_delta(['device'])) == 0 and self.channel_device:
+            if device_col_delta is not None and len(device_col_delta) == 0 and self.channel_device:
                 # user is already opted-in to the most recent device collection,
                 # and device channel is on, thus `show-device` should be called
                 msg = 'device channel is on and up to date, see report with `ceph telemetry show-device`.'
@@ -1601,9 +1616,10 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
 
             opted_in_collection = self.db_collection
             self.db_collection = next_collection
-            report = json.dumps(self.get_report('device'), indent=4, sort_keys=True)
+            report = self.get_report('device')
             self.db_collection = opted_in_collection
 
+        report = json.dumps(report, indent=4, sort_keys=True)
         return 0, report, ''
 
     @CLIReadCommand('telemetry show-all')
@@ -1631,8 +1647,9 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         '''
         report = {}
 
+        col_delta = self.collection_delta()
         with self.get_report_lock:
-            if len(self.collection_delta()) == 0:
+            if col_delta is not None and len(col_delta) == 0:
                 # user is already opted-in to the most recent collection
                 msg = 'Telemetry is up to date, see report with `ceph telemetry show`.'
                 return 0, msg, ''
@@ -1731,11 +1748,9 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
                 try:
                     self.last_report = self.compile_report()
                 except Exception:
-                    # TODO add the exception here
                     self.log.exception('Exception while compiling report:')
 
                 self.send(self.last_report)
-                self.log.debug("SENDING REPORT")
             else:
                 self.log.debug('Interval for sending new report has not expired')
 
