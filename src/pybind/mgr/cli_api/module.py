@@ -1,7 +1,6 @@
 import concurrent.futures
 import functools
 import inspect
-import json
 import logging
 import time
 import errno
@@ -11,6 +10,11 @@ from mgr_module import MgrModule, HandleCommandResult, CLICommand, API
 
 logger = logging.getLogger()
 get_time = time.perf_counter
+
+
+def pretty_json(obj: Any) -> Any:
+    import json
+    return json.dumps(obj, sort_keys=True, indent=2)
 
 
 class CephCommander:
@@ -69,8 +73,8 @@ class MgrAPIReflector(type):
     def func_wrapper(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs) -> HandleCommandResult:  # type: ignore
-            return HandleCommandResult(stdout=json.dumps(
-                func(self, *args, **kwargs), sort_keys=True, indent=4))
+            return HandleCommandResult(stdout=pretty_json(
+                func(self, *args, **kwargs)))
 
         # functools doesn't change the signature when wrapping a function
         # so we do it manually
@@ -109,7 +113,7 @@ class CLI(MgrModule, metaclass=MgrAPIReflector):
             "max": max(results),
             "min": min(results),
         }
-        return HandleCommandResult(stdout=json.dumps(stats, indent=4))
+        return HandleCommandResult(stdout=pretty_json(stats))
 
 
 class BenchmarkException(Exception):
