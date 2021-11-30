@@ -248,7 +248,7 @@ class Sum(Matrix):
     """
     def __init__(self, item, _submats):
         assert len(_submats) > 0, \
-            "Sum requires non-empty _submats"
+            f"Sum requires non-empty _submats: {item}"
         self.item = item
 
         self._pseudo_size = lcml((i.size() for i in _submats)) * len(_submats)
