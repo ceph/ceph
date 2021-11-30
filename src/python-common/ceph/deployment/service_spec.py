@@ -459,7 +459,6 @@ class ServiceSpec(object):
                  service_type: str,
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
-                 count: Optional[int] = None,
                  config: Optional[Dict[str, str]] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
