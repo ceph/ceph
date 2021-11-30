@@ -49,13 +49,12 @@ class MgrAPIReflector(type):
                 # save functions to klass._cli_{n}() methods. This
                 # can help on unit testing
                 wrapper = cls.func_wrapper(func)
-                if API.cliapi.get(func):
-                    command = CLICommand(**CephCommander(func).to_ceph_signature())(  # type: ignore
-                        wrapper)
-                    setattr(
-                        klass,
-                        f'_cli_{name}',
-                        command)
+                command = CLICommand(**CephCommander(func).to_ceph_signature())(  # type: ignore
+                    wrapper)
+                setattr(
+                    klass,
+                    f'_cli_{name}',
+                    command)
         return klass
 
     @staticmethod
@@ -63,8 +62,7 @@ class MgrAPIReflector(type):
         return (
             inspect.isfunction(func)
             and not func.__name__.startswith('_')
-            and not API.hook.get(func)
-            and not API.internal.get(func)
+            and API.expose.get(func)
         )
 
     @staticmethod

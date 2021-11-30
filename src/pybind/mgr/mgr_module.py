@@ -875,10 +875,8 @@ class API:
 
         return DecoratorClass
 
-    hook = DecoratorFactory('hook', default=False)(True)
     perm = DecoratorFactory('perm', default='r')
-    internal = DecoratorFactory('internal', default=False)(True)
-    cliapi = DecoratorFactory('cliapi', default=False)(True)
+    expose = DecoratorFactory('expose', default=False)(True)
 
 
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
@@ -1002,10 +1000,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def version(self) -> str:
         return self._version
 
+    @API.expose
     def pool_exists(self, name: str) -> bool:
         pools = [p['pool_name'] for p in self.get('osd_map')['pools']]
         return name in pools
 
+    @API.expose
     def have_enough_osds(self) -> bool:
         # wait until we have enough OSDs to allow the pool to be healthy
         ready = 0
@@ -1016,6 +1016,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         need = cast(int, self.get_ceph_option("osd_pool_default_size"))
         return ready >= need
 
+    @API.expose
     def rename_pool(self, srcpool: str, destpool: str) -> None:
         c = {
             'prefix': 'osd pool rename',
@@ -1025,6 +1026,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         }
         self.check_mon_command(c)
 
+    @API.expose
     def create_pool(self, pool: str) -> None:
         c = {
             'prefix': 'osd pool create',
@@ -1035,6 +1037,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         }
         self.check_mon_command(c)
 
+    @API.expose
     def appify_pool(self, pool: str, app: str) -> None:
         c = {
             'prefix': 'osd pool application enable',
@@ -1045,6 +1048,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         }
         self.check_mon_command(c)
 
+    @API.expose
     def create_mgr_pool(self) -> None:
         self.log.info("creating mgr pool")
 
@@ -1085,6 +1089,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         with self._db_lock, self.db:
             self.db.execute(SQL, (key, value))
 
+    @API.expose
     def get_kv(self, key: str) -> Any:
         SQL = "SELECT value FROM MgrModuleKV WHERE key = ?;"
 
@@ -1152,6 +1157,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self.configure_db(db)
         return db
 
+    @API.expose
     def db_ready(self) -> bool:
         with self._db_lock:
             try:
@@ -1181,6 +1187,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_release_name()
 
+    @API.expose
     def lookup_release_name(self, major: int) -> str:
         return self._ceph_lookup_release_name(major)
 
@@ -1262,7 +1269,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self._rados.shutdown()
             self._ceph_unregister_client(addrs)
 
-    @API.cliapi
+    @API.expose
     def get(self, data_name: str) -> Any:
         """
         Called by the plugin to fetch named cluster-wide objects from ceph-mgr.
@@ -1389,7 +1396,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return ret
 
-    @API.cliapi
+    @API.expose
     def get_server(self, hostname: str) -> ServerInfoT:
         """
         Called by the plugin to fetch metadata about a particular hostname from
@@ -1402,7 +1409,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return cast(ServerInfoT, self._ceph_get_server(hostname))
 
-    @API.cliapi
+    @API.expose
     def get_perf_schema(self,
                         svc_type: str,
                         svc_name: str) -> Dict[str,
@@ -1418,7 +1425,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_perf_schema(svc_type, svc_name)
 
-    @API.cliapi
+    @API.expose
     def get_counter(self,
                     svc_type: str,
                     svc_name: str,
@@ -1437,7 +1444,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_counter(svc_type, svc_name, path)
 
-    @API.cliapi
+    @API.expose
     def get_latest_counter(self,
                            svc_type: str,
                            svc_name: str,
@@ -1457,7 +1464,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_latest_counter(svc_type, svc_name, path)
 
-    @API.cliapi
+    @API.expose
     def list_servers(self) -> List[ServerInfoT]:
         """
         Like ``get_server``, but gives information about all servers (i.e. all
@@ -1489,7 +1496,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return default
         return metadata
 
-    @API.cliapi
+    @API.expose
     def get_daemon_status(self, svc_type: str, svc_id: str) -> Dict[str, str]:
         """
         Fetch the latest status for a particular service daemon.
@@ -1678,7 +1685,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         # any ``COMMANDS``
         raise NotImplementedError()
 
-    @API.cliapi
     def get_mgr_id(self) -> str:
         """
         Retrieve the name of the manager daemon where this plugin
@@ -1688,18 +1694,22 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_mgr_id()
 
+    @API.expose
     def get_ceph_conf_path(self) -> str:
         return self._ceph_get_ceph_conf_path()
 
+    @API.expose
     def get_mgr_ip(self) -> str:
         ips = self.get("mgr_ips").get('ips', [])
         if not ips:
             return socket.gethostname()
         return ips[0]
 
+    @API.expose
     def get_ceph_option(self, key: str) -> OptionValue:
         return self._ceph_get_option(key)
 
+    @API.expose
     def get_foreign_ceph_option(self, entity: str, key: str) -> OptionValue:
         return self._ceph_get_foreign_option(entity, key)
 
@@ -1749,6 +1759,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         r = self._ceph_get_module_option(module, key)
         return default if r is None else r
 
+    @API.expose
     def get_store_prefix(self, key_prefix: str) -> Dict[str, str]:
         """
         Retrieve a dict of KV store keys to values, where the keys
@@ -1800,6 +1811,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self._validate_module_option(key)
         return self._ceph_set_module_option(module, key, str(val))
 
+    @API.expose
     def set_localized_module_option(self, key: str, val: Optional[str]) -> None:
         """
         Set localized configuration for this ceph-mgr instance
@@ -1810,6 +1822,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._validate_module_option(key)
         return self._set_localized(key, val, self._set_module_option)
 
+    @API.expose
     def set_store(self, key: str, val: Optional[str]) -> None:
         """
         Set a value in this module's persistent key value store.
@@ -1817,6 +1830,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         self._ceph_set_store(key, val)
 
+    @API.expose
     def get_store(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """
         Get a value from this module's persistent key value store
@@ -1827,6 +1841,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return r
 
+    @API.expose
     def get_localized_store(self, key: str, default: Optional[str] = None) -> Optional[str]:
         r = self._ceph_get_store(_get_localized_key(self.get_mgr_id(), key))
         if r is None:
@@ -1835,10 +1850,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 r = default
         return r
 
+    @API.expose
     def set_localized_store(self, key: str, val: Optional[str]) -> None:
         return self._set_localized(key, val, self.set_store)
 
-    @API.cliapi
     def self_test(self) -> Optional[str]:
         """
         Run a self-test on the module. Override this function and implement
@@ -1853,7 +1868,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         pass
 
-    @API.cliapi
     def get_osdmap(self) -> OSDMap:
         """
         Get a handle to an OSDMap.  If epoch==0, get a handle for the latest
@@ -1862,6 +1876,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return cast(OSDMap, self._ceph_get_osdmap())
 
+    @API.expose
     def get_latest(self, daemon_type: str, daemon_name: str, counter: str) -> int:
         data = self.get_latest_counter(
             daemon_type, daemon_name, counter)[counter]
@@ -1870,6 +1885,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return 0
 
+    @API.expose
     def get_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int]:
         data = self.get_latest_counter(
             daemon_type, daemon_name, counter)[counter]
@@ -1880,6 +1896,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return 0, 0
 
+    @API.expose
     @profile_method()
     def get_all_perf_counters(self, prio_limit: int = PRIO_USEFUL,
                               services: Sequence[str] = ("mds", "mon", "osd",
@@ -1952,6 +1969,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return result
 
+    @API.expose
     def set_uri(self, uri: str) -> None:
         """
         If the module exposes a service, then call this to publish the
@@ -1961,9 +1979,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_set_uri(uri)
 
+    @API.expose
     def set_device_wear_level(self, devid: str, wear_level: float) -> None:
         return self._ceph_set_device_wear_level(devid, wear_level)
 
+    @API.expose
     def have_mon_connection(self) -> bool:
         """
         Check whether this ceph-mgr daemon has an open connection
@@ -1981,9 +2001,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                               add_to_ceph_s: bool) -> None:
         return self._ceph_update_progress_event(evid, desc, progress, add_to_ceph_s)
 
+    @API.expose
     def complete_progress_event(self, evid: str) -> None:
         return self._ceph_complete_progress_event(evid)
 
+    @API.expose
     def clear_all_progress_events(self) -> None:
         return self._ceph_clear_all_progress_events()
 
@@ -2018,6 +2040,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return True, ""
 
+    @API.expose
     def remote(self, module_name: str, method_name: str, *args: Any, **kwargs: Any) -> Any:
         """
         Invoke a method on another module.  All arguments, and the return
@@ -2072,6 +2095,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_add_osd_perf_query(query)
 
+    @API.expose
     def remove_osd_perf_query(self, query_id: int) -> None:
         """
         Unregister an OSD perf query.
@@ -2080,6 +2104,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_remove_osd_perf_query(query_id)
 
+    @API.expose
     def get_osd_perf_counters(self, query_id: int) -> Optional[Dict[str, List[PerfCounterT]]]:
         """
         Get stats collected for an OSD perf query.
@@ -2117,6 +2142,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_add_mds_perf_query(query)
 
+    @API.expose
     def remove_mds_perf_query(self, query_id: int) -> None:
         """
         Unregister an MDS perf query.
@@ -2125,6 +2151,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_remove_mds_perf_query(query_id)
 
+    @API.expose
     def get_mds_perf_counters(self, query_id: int) -> Optional[Dict[str, List[PerfCounterT]]]:
         """
         Get stats collected for an MDS perf query.
@@ -2144,6 +2171,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_is_authorized(arguments)
 
+    @API.expose
     def send_rgwadmin_command(self, args: List[str],
                               stdout_as_json: bool = True) -> Tuple[int, Union[str, dict], str]:
         try:
