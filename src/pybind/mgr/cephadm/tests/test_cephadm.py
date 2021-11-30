@@ -161,6 +161,18 @@ class TestCephadm(object):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.utils.resolve_ip")
+    def test_re_add_host_receive_loopback(self, resolve_ip, cephadm_module):
+        resolve_ip.side_effect = ['192.168.122.1', '127.0.0.1', '127.0.0.1']
+        assert wait(cephadm_module, cephadm_module.get_hosts()) == []
+        cephadm_module._add_host(HostSpec('test', '192.168.122.1'))
+        assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '192.168.122.1')]
+        cephadm_module._add_host(HostSpec('test'))
+        assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '192.168.122.1')]
+        with pytest.raises(OrchestratorError):
+            cephadm_module._add_host(HostSpec('test2'))
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_service_ls(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
