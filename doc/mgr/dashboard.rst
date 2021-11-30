@@ -523,6 +523,8 @@ on appropriate hosts, proceed with the following steps.
 
 #.  Add Prometheus as data source to Grafana `using the Grafana Web UI
     <https://grafana.com/docs/grafana/latest/features/datasources/add-a-data-source/>`_.
+    
+    Important: The data source must be named "Dashboard1"
 
 #.  Install the `vonage-status-panel and grafana-piechart-panel` plugins using::
 
