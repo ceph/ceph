@@ -7549,13 +7549,23 @@ next:
   }
 
   if (opt_cmd == OPT::LC_PROCESS) {
-    int ret = static_cast<rgw::sal::RadosStore*>(store)->getRados()->process_lc(bucket_name);
+    if ((! bucket_name.empty()) ||
+	(! bucket_id.empty())) {
+        int ret = init_bucket(nullptr, tenant, bucket_name, bucket_id, &bucket);
+	if (ret < 0) {
+	  cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret)
+	       << std::endl;
+	  return ret;
+	}
+    }
+
+    int ret =
+      static_cast<rgw::sal::RadosStore*>(store)->getRados()->process_lc(bucket);
     if (ret < 0) {
       cerr << "ERROR: lc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
     }
   }
-
 
   if (opt_cmd == OPT::LC_RESHARD_FIX) {
     ret = RGWBucketAdminOp::fix_lc_shards(store, bucket_op, stream_flusher, dpp());
