@@ -5,7 +5,7 @@ import yaml
 import pytest
 
 from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, \
-    ServiceSpec, RGWSpec, NFSServiceSpec, IscsiServiceSpec, AlertManagerSpec, \
+    ServiceSpec, RGWSpec, NFSServiceSpec, IscsiServiceSpec, MonitoringSpec, \
     CustomContainerSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
@@ -329,17 +329,21 @@ def test_yaml(y):
 
 
 def test_alertmanager_spec_1():
-    spec = AlertManagerSpec()
+    spec = MonitoringSpec('alertmanager')
     assert spec.service_type == 'alertmanager'
-    assert isinstance(spec.user_data, dict)
-    assert len(spec.user_data.keys()) == 0
+    assert spec.other_properties == {}
     assert spec.get_port_start() == [9093, 9094]
 
 
 def test_alertmanager_spec_2():
-    spec = AlertManagerSpec(user_data={'default_webhook_urls': ['foo']})
-    assert isinstance(spec.user_data, dict)
-    assert 'default_webhook_urls' in spec.user_data.keys()
+    spec = MonitoringSpec(
+        'alertmanager',
+        other_properties=dict(
+            user_data={'default_webhook_urls': ['foo']}
+        )
+    )
+    assert isinstance(spec.other_properties['user_data'], dict)
+    assert 'default_webhook_urls' in spec.other_properties['user_data'].keys()
 
 
 @pytest.mark.parametrize("spec1, spec2, eq",

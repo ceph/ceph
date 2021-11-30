@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from mgr_module import HandleCommandResult
 
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import AlertManagerSpec, MonitoringSpec, ServiceSpec
+from ceph.deployment.service_spec import MonitoringSpec, ServiceSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from cephadm.services.ingress import IngressSpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert, build_url
@@ -147,13 +147,8 @@ class AlertmanagerService(CephadmService):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps: List[str] = []
-        default_webhook_urls: List[str] = []
 
-        spec = cast(AlertManagerSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        user_data = spec.user_data
-        if 'default_webhook_urls' in user_data and isinstance(
-                user_data['default_webhook_urls'], list):
-            default_webhook_urls.extend(user_data['default_webhook_urls'])
+        spec = cast(MonitoringSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
         # dashboard(s)
         dashboard_urls: List[str] = []
@@ -182,7 +177,6 @@ class AlertmanagerService(CephadmService):
 
         context = AlertmanagerYamlContext(
             dashboard_urls=dashboard_urls,
-            default_webhook_urls: default_webhook_urls
         )
         yml = self.mgr.template.render(
             'services/alertmanager/alertmanager.yml.j2', context._asdict(), spec=spec)

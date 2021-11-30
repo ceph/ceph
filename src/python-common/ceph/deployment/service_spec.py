@@ -430,7 +430,7 @@ class ServiceSpec(object):
             'nfs': NFSServiceSpec,
             'osd': DriveGroupSpec,
             'iscsi': IscsiServiceSpec,
-            'alertmanager': AlertManagerSpec,
+            'alertmanager': MonitoringSpec,
             'ingress': IngressSpec,
             'container': CustomContainerSpec,
             'node-exporter': MonitoringSpec,
@@ -1098,6 +1098,8 @@ class MonitoringSpec(ServiceSpec):
         self.port = port
 
     def get_port_start(self) -> List[int]:
+        if self.service_type == 'alertmanager':
+            return [self.get_port(), 9094]
         return [self.get_port()]
 
     def get_port(self) -> int:
@@ -1109,57 +1111,12 @@ class MonitoringSpec(ServiceSpec):
                     'alertmanager': 9093,
                     'grafana': 3000}[self.service_type]
 
-
-yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)
-
-
-class AlertManagerSpec(MonitoringSpec):
-    KNOWN_PROPERTIES = MonitoringSpec.KNOWN_PROPERTIES + ['user_data']
-
-    def __init__(self,
-                 service_type: str = 'alertmanager',
-                 service_id: Optional[str] = None,
-                 placement: Optional[PlacementSpec] = None,
-                 unmanaged: bool = False,
-                 preview_only: bool = False,
-                 user_data: Optional[Dict[str, Any]] = None,
-                 config: Optional[Dict[str, str]] = None,
-                 networks: Optional[List[str]] = None,
-                 other_properties: Optional[Dict[str, str]] = None,
-                 port: Optional[int] = None,
-                 ):
-        assert service_type == 'alertmanager'
-        super(AlertManagerSpec, self).__init__(
-            'alertmanager', service_id=service_id,
-            placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config, networks=networks, port=port,
-            other_properties=other_properties)
-
-        # Custom configuration.
-        #
-        # Example:
-        # service_type: alertmanager
-        # service_id: xyz
-        # user_data:
-        #   default_webhook_urls:
-        #   - "https://foo"
-        #   - "https://bar"
-        #
-        # Documentation:
-        # default_webhook_urls - A list of additional URL's that are
-        #                        added to the default receivers'
-        #                        <webhook_configs> configuration.
-        self.user_data = user_data or {}
-
-    def get_port_start(self) -> List[int]:
-        return [self.get_port(), 9094]
-
     def validate(self) -> None:
-        super(AlertManagerSpec, self).validate()
+        super(MonitoringSpec, self).validate()
 
-        if self.port == 9094:
+        if self.service_type == 'grafana' and self.port == 9094:
             raise SpecValidationError(
                 'Port 9094 is reserved for AlertManager cluster listen address')
 
 
-yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
+yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)
