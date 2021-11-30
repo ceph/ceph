@@ -5080,6 +5080,9 @@ int main(int argc, const char **argv)
   RGWUser user;
   int ret = 0;
   if (!(user_id.empty() && access_key.empty()) || !subuser.empty()) {
+    if (user_id.empty()) {
+      cerr << "ERROR: --uid required" << std::endl;
+    }
     ret = user.init(store, user_op);
     if (ret < 0) {
       cerr << "user.init failed: " << cpp_strerror(-ret) << std::endl;
