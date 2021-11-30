@@ -54,6 +54,7 @@ from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService, SNMPGatewayService, LokiService, PromtailService
+from .services.jaeger import ElasticSearchService, JaegerAgentService, JaegerCollectorService, JaegerQueryService
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
     ClientKeyringStore, ClientKeyringSpec
@@ -103,6 +104,10 @@ DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:8.3.5'
 DEFAULT_HAPROXY_IMAGE = 'quay.io/ceph/haproxy:2.3'
 DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.1.5'
 DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
+DEFAULT_ELASTICSEARCH_IMAGE = 'docker.io/elasticsearch:7.17.3'
+DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
+DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
+DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
 # ------------------------------------------------------------------------------
 
 
@@ -226,6 +231,26 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'container_image_snmp_gateway',
             default=DEFAULT_SNMP_GATEWAY_IMAGE,
             desc='SNMP Gateway container image',
+        ),
+        Option(
+            'container_image_elasticsearch',
+            default=DEFAULT_ELASTICSEARCH_IMAGE,
+            desc='elasticsearch container image',
+        ),
+        Option(
+            'container_image_jaeger_agent',
+            default=DEFAULT_JAEGER_AGENT_IMAGE,
+            desc='Jaeger agent container image',
+        ),
+        Option(
+            'container_image_jaeger_collector',
+            default=DEFAULT_JAEGER_COLLECTOR_IMAGE,
+            desc='Jaeger collector container image',
+        ),
+        Option(
+            'container_image_jaeger_query',
+            default=DEFAULT_JAEGER_QUERY_IMAGE,
+            desc='Jaeger query container image',
         ),
         Option(
             'warn_on_stray_hosts',
@@ -430,6 +455,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_haproxy = ''
             self.container_image_keepalived = ''
             self.container_image_snmp_gateway = ''
+            self.container_image_elasticsearch = ''
+            self.container_image_jaeger_agent = ''
+            self.container_image_jaeger_collector = ''
+            self.container_image_jaeger_query = ''
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
@@ -524,7 +553,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
             PrometheusService, NodeExporterService, LokiService, PromtailService, CrashService, IscsiService,
             IngressService, CustomContainerService, CephfsMirrorService,
-            CephadmAgent, SNMPGatewayService
+            CephadmAgent, SNMPGatewayService, ElasticSearchService, JaegerQueryService, JaegerAgentService,
+            JaegerCollectorService
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -678,7 +708,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         suffix = daemon_type not in [
             'mon', 'crash',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
-            'container', 'agent', 'snmp-gateway', 'loki', 'promtail'
+            'container', 'agent', 'snmp-gateway', 'loki', 'promtail',
+            'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -1332,6 +1363,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             image = self.container_image_haproxy
         elif daemon_type == 'keepalived':
             image = self.container_image_keepalived
+        elif daemon_type == 'elasticsearch':
+            image = self.container_image_elasticsearch
+        elif daemon_type == 'jaeger-agent':
+            image = self.container_image_jaeger_agent
+        elif daemon_type == 'jaeger-collector':
+            image = self.container_image_jaeger_collector
+        elif daemon_type == 'jaeger-query':
+            image = self.container_image_jaeger_query
         elif daemon_type == CustomContainerService.TYPE:
             # The image can't be resolved, the necessary information
             # is only available when a container is deployed (given
@@ -2512,6 +2551,10 @@ Then run the following:
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
+                'elasticsearch': PlacementSpec(count=1),
+                'jaeger-agent': PlacementSpec(host_pattern='*'),
+                'jaeger-collector': PlacementSpec(count=1),
+                'jaeger-query': PlacementSpec(count=1)
             }
             spec.placement = defaults[spec.service_type]
         elif spec.service_type in ['mon', 'mgr'] and \
@@ -2626,6 +2669,22 @@ Then run the following:
 
     @handle_orch_error
     def apply_alertmanager(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_elasticsearch(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_jaeger_agent(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_jaeger_collector(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_jaeger_query(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error
