@@ -144,18 +144,21 @@ class DriveGroupSpec(ServiceSpec):
     understands.
     """
 
-    _supported_features = [
+    KNOWN_PROPERTIES = [
         "encrypted", "block_wal_size", "osds_per_device",
-        "db_slots", "wal_slots", "block_db_size", "placement", "service_id", "service_type",
+        "db_slots", "wal_slots", "block_db_size",
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
-        "journal_size", "unmanaged", "filter_logic", "preview_only",
+        "journal_size", "filter_logic",
         "data_allocate_fraction", "method"
     ]
+    _supported_features = KNOWN_PROPERTIES + ["placement", "service_id", "service_type",
+                                              "unmanaged", "preview_only"]
 
     def __init__(self,
                  placement=None,  # type: Optional[PlacementSpec]
                  service_id=None,  # type: Optional[str]
+                 other_properties: Optional[Dict[str, str]] = None,
                  data_devices=None,  # type: Optional[DeviceSelection]
                  db_devices=None,  # type: Optional[DeviceSelection]
                  wal_devices=None,  # type: Optional[DeviceSelection]
@@ -181,7 +184,8 @@ class DriveGroupSpec(ServiceSpec):
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
                                              placement=placement,
                                              unmanaged=unmanaged,
-                                             preview_only=preview_only)
+                                             preview_only=preview_only,
+                                             other_properties=other_properties)
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
         self.data_devices = data_devices

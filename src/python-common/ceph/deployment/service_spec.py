@@ -419,6 +419,7 @@ class ServiceSpec(object):
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
     ]
+    KNOWN_PROPERTIES: List[str] = []
 
     @classmethod
     def _cls(cls: Type[ServiceSpecT], service_type: str) -> Type[ServiceSpecT]:
@@ -463,6 +464,7 @@ class ServiceSpec(object):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
+                 other_properties: Optional[Dict[str, Any]] = None,
                  ):
 
         #: See :ref:`orchestrator-cli-placement-spec`.
@@ -500,6 +502,10 @@ class ServiceSpec(object):
         self.config: Optional[Dict[str, str]] = None
         if config:
             self.config = {k.replace(' ', '_'): v for k, v in config.items()}
+
+        #: Dict of properties that can be used in Jinja2 templates without bein
+        #: explicitly tracked in the spec files.
+        self.other_properties = other_properties or {}
 
     @classmethod
     @handle_type_error
@@ -585,14 +591,19 @@ class ServiceSpec(object):
     @classmethod
     def _from_json_impl(cls: Type[ServiceSpecT], json_spec: dict) -> ServiceSpecT:
         args = {}  # type: Dict[str, Any]
+        other_properties: Dict[str, Any] = {}
         for k, v in json_spec.items():
             if k == 'placement':
                 v = PlacementSpec.from_json(v)
             if k == 'spec':
+                for spec_k in list(v.keys()):
+                    if spec_k not in cls.KNOWN_PROPERTIES:
+                        other_properties[spec_k] = v.pop(spec_k)
                 args.update(v)
                 continue
             args.update({k: v})
-        _cls = cls(**args)
+
+        _cls = cls(other_properties=other_properties, **args)
         _cls.validate()
         return _cls
 
@@ -624,12 +635,14 @@ class ServiceSpec(object):
         if self.networks:
             ret['networks'] = self.networks
 
-        c = {}
-        for key, val in sorted(self.__dict__.items(), key=lambda tpl: tpl[0]):
-            if key in ret:
-                continue
+        c = OrderedDict()
+        for key in self.KNOWN_PROPERTIES:
+            val = getattr(self, key)
             if hasattr(val, 'to_json'):
                 val = val.to_json()
+            if val:
+                c[key] = val
+        for key, val in self.other_properties.items():
             if val:
                 c[key] = val
         if c:
@@ -685,7 +698,16 @@ class ServiceSpec(object):
 yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
+def represent_ordered_dict(dumper: 'yaml.SafeDumper', data: OrderedDict) -> Any:
+    return dumper.represent_dict(cast(Mapping, data.items()))
+
+
+yaml.add_representer(OrderedDict, represent_ordered_dict)
+
+
 class NFSServiceSpec(ServiceSpec):
+    KNOWN_PROPERTIES = ['port']
+
     def __init__(self,
                  service_type: str = 'nfs',
                  service_id: Optional[str] = None,
@@ -694,13 +716,14 @@ class NFSServiceSpec(ServiceSpec):
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 other_properties: Optional[Dict[str, Any]] = None,
                  port: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
             'nfs', service_id=service_id,
             placement=placement, unmanaged=unmanaged, preview_only=preview_only,
-            config=config, networks=networks)
+            config=config, networks=networks, other_properties=other_properties)
 
         self.port = port
 
@@ -741,11 +764,20 @@ class RGWSpec(ServiceSpec):
         'rgw_realm',
         'rgw_frontends',
     ]
+    KNOWN_PROPERTIES = [
+        'rgw_realm',
+        'rgw_zone',
+        'rgw_frontend_type',
+        'rgw_frontend_port',
+        'rgw_frontend_ssl_certificate',
+        'ssl'
+    ]
 
     def __init__(self,
                  service_type: str = 'rgw',
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
+                 other_properties: Optional[Dict[str, Any]] = None,
                  rgw_realm: Optional[str] = None,
                  rgw_zone: Optional[str] = None,
                  rgw_frontend_port: Optional[int] = None,
@@ -767,7 +799,8 @@ class RGWSpec(ServiceSpec):
         super(RGWSpec, self).__init__(
             'rgw', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config, networks=networks)
+            preview_only=preview_only, config=config, networks=networks,
+            other_properties=other_properties)
 
         #: The RGW realm associated with this service. Needs to be manually created
         self.rgw_realm: Optional[str] = rgw_realm
@@ -808,9 +841,21 @@ yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
 
 
 class IscsiServiceSpec(ServiceSpec):
+    KNOWN_PROPERTIES = [
+        'pool',
+        'trusted_ip_list',
+        'api_port',
+        'api_user',
+        'api_password',
+        'api_secure',
+        'ssl_cert',
+        'ssl_key',
+    ]
+
     def __init__(self,
                  service_type: str = 'iscsi',
                  service_id: Optional[str] = None,
+                 other_properties: Optional[Dict[str, Any]] = None,
                  pool: Optional[str] = None,
                  trusted_ip_list: Optional[str] = None,
                  api_port: Optional[int] = None,
@@ -829,7 +874,8 @@ class IscsiServiceSpec(ServiceSpec):
         super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
                                                placement=placement, unmanaged=unmanaged,
                                                preview_only=preview_only,
-                                               config=config, networks=networks)
+                                               config=config, networks=networks,
+                                               other_properties=other_properties)
 
         #: RADOS pool where ceph-iscsi config data is stored.
         self.pool = pool
@@ -869,12 +915,30 @@ yaml.add_representer(IscsiServiceSpec, ServiceSpec.yaml_representer)
 
 
 class IngressSpec(ServiceSpec):
+    KNOWN_PROPERTIES = [
+        'backend_service',
+        'frontend_port',
+        'ssl_cert',
+        'ssl_key',
+        'ssl_dh_param',
+        'ssl_ciphers',
+        'ssl_options',
+        'monitor_port',
+        'monitor_user',
+        'monitor_password',
+        'keepalived_password',
+        'virtual_ip',
+        'virtual_interface_networks',
+        'ssl',
+    ]
+
     def __init__(self,
                  service_type: str = 'ingress',
                  service_id: Optional[str] = None,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  placement: Optional[PlacementSpec] = None,
+                 other_properties: Optional[Dict[str, Any]] = None,
                  backend_service: Optional[str] = None,
                  frontend_port: Optional[int] = None,
                  ssl_cert: Optional[str] = None,
@@ -896,7 +960,7 @@ class IngressSpec(ServiceSpec):
         super(IngressSpec, self).__init__(
             'ingress', service_id=service_id,
             placement=placement, config=config,
-            networks=networks
+            networks=networks, other_properties=other_properties,
         )
         self.backend_service = backend_service
         self.frontend_port = frontend_port
@@ -942,6 +1006,21 @@ yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
 
 
 class CustomContainerSpec(ServiceSpec):
+    KNOWN_PROPERTIES = [
+        'image',
+        'entrypoint',
+        'args',
+        'uid',
+        'gid',
+        'volume_mounts',
+        'bind_mounts',
+        'envs',
+        'ports',
+        'dirs',
+        'files',
+        'privileged',
+    ]
+
     def __init__(self,
                  service_type: str = 'container',
                  service_id: Optional[str] = None,
@@ -950,6 +1029,7 @@ class CustomContainerSpec(ServiceSpec):
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
+                 other_properties: Optional[Dict[str, Any]] = None,
                  image: Optional[str] = None,
                  entrypoint: Optional[str] = None,
                  uid: Optional[int] = None,
@@ -971,7 +1051,7 @@ class CustomContainerSpec(ServiceSpec):
             service_type, service_id,
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config,
-            networks=networks)
+            networks=networks, other_properties=other_properties,)
 
         self.image = image
         self.entrypoint = entrypoint
@@ -996,9 +1076,7 @@ class CustomContainerSpec(ServiceSpec):
             properties.
         """
         config_json = {}
-        for prop in ['image', 'entrypoint', 'uid', 'gid', 'args',
-                     'envs', 'volume_mounts', 'privileged',
-                     'bind_mounts', 'ports', 'dirs', 'files']:
+        for prop in self.KNOWN_PROPERTIES:
             value = getattr(self, prop)
             if value is not None:
                 config_json[prop] = value
@@ -1009,6 +1087,8 @@ yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)
 
 
 class MonitoringSpec(ServiceSpec):
+    KNOWN_PROPERTIES = ['port']
+
     def __init__(self,
                  service_type: str,
                  service_id: Optional[str] = None,
@@ -1017,6 +1097,7 @@ class MonitoringSpec(ServiceSpec):
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
+                 other_properties: Optional[Dict[str, Any]] = None,
                  port: Optional[int] = None,
                  ):
         assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager']
@@ -1025,7 +1106,7 @@ class MonitoringSpec(ServiceSpec):
             service_type, service_id,
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config,
-            networks=networks)
+            networks=networks, other_properties=other_properties)
 
         self.service_type = service_type
         self.port = port
@@ -1047,6 +1128,8 @@ yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)
 
 
 class AlertManagerSpec(MonitoringSpec):
+    KNOWN_PROPERTIES = MonitoringSpec.KNOWN_PROPERTIES + ['user_data']
+
     def __init__(self,
                  service_type: str = 'alertmanager',
                  service_id: Optional[str] = None,
@@ -1056,13 +1139,15 @@ class AlertManagerSpec(MonitoringSpec):
                  user_data: Optional[Dict[str, Any]] = None,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 other_properties: Optional[Dict[str, str]] = None,
                  port: Optional[int] = None,
                  ):
         assert service_type == 'alertmanager'
         super(AlertManagerSpec, self).__init__(
             'alertmanager', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config, networks=networks, port=port)
+            preview_only=preview_only, config=config, networks=networks, port=port,
+            other_properties=other_properties)
 
         # Custom configuration.
         #
@@ -1095,6 +1180,8 @@ yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
 
 
 class GrafanaSpec(MonitoringSpec):
+    KNOWN_PROPERTIES = ['initial_admin_password']
+
     def __init__(self,
                  service_type: str = 'grafana',
                  service_id: Optional[str] = None,
@@ -1103,6 +1190,7 @@ class GrafanaSpec(MonitoringSpec):
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 other_properties: Optional[Dict[str, str]] = None,
                  port: Optional[int] = None,
                  initial_admin_password: Optional[str] = None
                  ):
@@ -1110,7 +1198,9 @@ class GrafanaSpec(MonitoringSpec):
         super(GrafanaSpec, self).__init__(
             'grafana', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config, networks=networks, port=port)
+            preview_only=preview_only, config=config, networks=networks, port=port,
+            other_properties=other_properties,
+        )
 
         self.initial_admin_password = initial_admin_password
 

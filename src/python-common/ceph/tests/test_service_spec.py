@@ -217,9 +217,9 @@ networks:
 - 10.0.0.0/8
 - 192.168.0.0/16
 spec:
-  rgw_frontend_type: civetweb
   rgw_realm: default-rgw-realm
   rgw_zone: eu-central-1
+  rgw_frontend_type: civetweb
 ---
 service_type: osd
 service_id: osd_spec_default
@@ -231,10 +231,10 @@ spec:
     model: MC-55-44-XZ
   db_devices:
     model: SSD-123-foo
-  filter_logic: AND
-  objectstore: bluestore
   wal_devices:
     model: NVME-QQQQ-987
+  objectstore: bluestore
+  filter_logic: AND
 ---
 service_type: alertmanager
 service_name: alertmanager
@@ -281,29 +281,37 @@ service_name: iscsi.iscsi
 networks:
 - ::0/8
 spec:
-  api_user: api_user
   pool: pool
   trusted_ip_list:
   - ::1
   - ::2
+  api_user: api_user
 ---
 service_type: container
 service_id: hello-world
 service_name: container.hello-world
 spec:
+  image: docker.io/library/hello-world:latest
+  entrypoint: /usr/bin/bash
   args:
   - --foo
+  uid: 1000
+  gid: 2000
+  volume_mounts:
+    foo: /foo
   bind_mounts:
   - - type=bind
     - source=lib/modules
     - destination=/lib/modules
     - ro=true
+  envs:
+  - FOO=0815
+  ports:
+  - 8080
+  - 8443
   dirs:
   - foo
   - bar
-  entrypoint: /usr/bin/bash
-  envs:
-  - FOO=0815
   files:
     bar.conf:
     - foo
@@ -311,14 +319,6 @@ spec:
     foo.conf: 'foo
 
       bar'
-  gid: 2000
-  image: docker.io/library/hello-world:latest
-  ports:
-  - 8080
-  - 8443
-  uid: 1000
-  volume_mounts:
-    foo: /foo
 """.split('---\n'))
 def test_yaml(y):
     data = yaml.safe_load(y)
