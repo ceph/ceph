@@ -243,7 +243,7 @@ class DriveGroupSpec(ServiceSpec):
         try:
             args['placement'] = PlacementSpec.from_json(json_drive_group.pop('placement'))
         except KeyError:
-            raise DriveGroupValidationError('OSD spec needs a `placement` key.')
+            args['placement'] = PlacementSpec()
 
         args['service_type'] = json_drive_group.pop('service_type', 'osd')
 
