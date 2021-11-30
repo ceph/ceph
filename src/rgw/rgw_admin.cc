@@ -7112,6 +7112,8 @@ next:
       }
     }
 
+    bool resharding_underway = true;
+
     if (bucket_initable) {
       // we did not encounter an error, so let's work with the bucket
       RGWBucketReshard br(store, bucket_info, attrs,
@@ -7120,14 +7122,17 @@ next:
       if (ret < 0) {
         if (ret == -EBUSY) {
           cerr << "There is ongoing resharding, please retry after " <<
-            store->ctx()->_conf.get_val<uint64_t>(
-              "rgw_reshard_bucket_lock_duration") <<
-            " seconds " << std::endl;
+            store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_bucket_lock_duration") <<
+            " seconds." << std::endl;
+	  return -ret;
+	} else if (ret == -EINVAL) {
+	  resharding_underway = false;
+	  // we can continue and try to unschedule
         } else {
-          cerr << "Error canceling bucket " << bucket_name <<
-            " resharding: " << cpp_strerror(-ret) << std::endl;
+          cerr << "Error cancelling bucket \"" << bucket_name <<
+            "\" resharding: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
         }
-        return ret;
       }
     }
 
@@ -7136,13 +7141,22 @@ next:
     cls_rgw_reshard_entry entry;
     entry.tenant = tenant;
     entry.bucket_name = bucket_name;
-    //entry.bucket_id = bucket_id;
 
     ret = reshard.remove(dpp(), entry);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "Error in updating reshard log with bucket " <<
-        bucket_name << ": " << cpp_strerror(-ret) << std::endl;
-      return ret;
+    if (ret == -ENOENT) {
+      if (!resharding_underway) {
+	cerr << "Error, bucket \"" << bucket_name <<
+	  "\" is neither undergoing resharding nor scheduled to undergo "
+	  "resharding." << std::endl;
+	return EINVAL;
+      } else {
+	// we cancelled underway resharding above, so we're good
+	return 0;
+      }
+    } else if (ret < 0) {
+      cerr << "Error in updating reshard log with bucket \"" <<
+        bucket_name << "\": " << cpp_strerror(-ret) << std::endl;
+      return -ret;
     }
   } // OPT_RESHARD_CANCEL
 
