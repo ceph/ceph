@@ -29,6 +29,7 @@
 #include "rgw_acl_s3.h"
 #include "rgw_aio.h"
 #include "rgw_aio_throttle.h"
+#include "rgw_tracer.h"
 
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
@@ -2378,6 +2379,8 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     }
     return ret;
   }
+
+  extract_span_context(meta_obj->get_attrs(), trace_ctx);
 
   if (attrs) {
     /* Attrs are filled in by prepare */
