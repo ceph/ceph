@@ -6062,7 +6062,9 @@ int main(int argc, const char **argv)
                                         OPT::METADATA_RM, OPT::RESHARD_CANCEL,
                                         OPT::RESHARD_ADD, OPT::MFA_CREATE,
                                         OPT::MFA_REMOVE, OPT::MFA_RESYNC,
-                                        OPT::CAPS_ADD, OPT::CAPS_RM};
+                                        OPT::CAPS_ADD, OPT::CAPS_RM,
+                                        OPT::ROLE_CREATE, OPT::ROLE_DELETE,
+                                        OPT::ROLE_POLICY_PUT, OPT::ROLE_POLICY_DELETE};
 
   bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
                                 non_master_cmd);
