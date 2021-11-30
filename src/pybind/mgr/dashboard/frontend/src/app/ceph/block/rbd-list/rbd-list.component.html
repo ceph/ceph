@@ -31,7 +31,7 @@
 
 <ng-template #provisionedNotAvailableTooltipTpl
              let-row="row">
-  <span *ngIf="row.disk_usage === null; else provisioned"
+  <span *ngIf="row.disk_usage === null && !row.features_name.includes('fast-diff'); else provisioned"
         [ngbTooltip]="usageNotAvailableTooltipTpl"
         placement="top"
         i18n>N/A</span>
@@ -41,7 +41,7 @@
 
 <ng-template #totalProvisionedNotAvailableTooltipTpl
              let-row="row">
-  <span *ngIf="row.total_disk_usage === null; else totalProvisioned"
+  <span *ngIf="row.total_disk_usage === null && !row.features_name.includes('fast-diff'); else totalProvisioned"
         [ngbTooltip]="usageNotAvailableTooltipTpl"
         placement="top"
         i18n>N/A</span>
