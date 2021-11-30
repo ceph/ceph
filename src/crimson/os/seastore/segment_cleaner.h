@@ -555,9 +555,9 @@ public:
 	  .9,   // available_ratio_gc_max
 	  .8,   // reclaim_ratio_hard_limit
 	  .6,   // reclaim_ratio_gc_threshhold
-	  .1,   // available_ratio_hard_limit
-	  1<<20,// reclaim 1MB per gc cycle
-	  1<<20 // rewrite 1MB of journal entries per gc cycle
+	  .2,   // available_ratio_hard_limit
+	  1<<25,// reclaim 64MB per gc cycle
+	  1<<25 // rewrite 64MB of journal entries per gc cycle
 	};
     }
   };
