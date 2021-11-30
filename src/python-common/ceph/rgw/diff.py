@@ -16,12 +16,11 @@ class ZoneEPs:
             yield ep
 
 
-
 class RealmEPs:
     def __init__(self):
         self.zones = {}
 
-    def add(self, zone, ep = None):
+    def add(self, zone, ep=None):
         if not zone:
             return
 
@@ -39,7 +38,6 @@ class RealmEPs:
             if not myzep:
                 continue
 
-
             d = myzep.diff(zep)
             if len(d) > 0:
                 result[z] = myzep.diff(zep)
@@ -54,12 +52,11 @@ class RealmEPs:
             yield z, eps
 
 
-
 class RealmsEPs:
     def __init__(self):
         self.realms = {}
 
-    def add(self, realm, zone = None, ep = None):
+    def add(self, realm, zone=None, ep=None):
         if not realm:
             return
 
@@ -94,5 +91,3 @@ class RealmsEPs:
             result[r] = zs
 
         return result
-
-

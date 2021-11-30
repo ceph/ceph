@@ -2,8 +2,9 @@ import json
 
 from abc import abstractmethod
 
+
 class RGWAMException(Exception):
-    def __init__(self, message, orig = None):
+    def __init__(self, message, orig=None):
         if orig:
             self.message = message + ': ' + orig.message
             self.retcode = orig.retcode
@@ -15,12 +16,15 @@ class RGWAMException(Exception):
             self.stdout = None
             self.stderr = None
 
+
 class RGWAMCmdRunException(RGWAMException):
     def __init__(self, cmd, retcode, stdout, stderr):
-        super().__init__('Command error (%d): %s\nstdout:%s\nstderr:%s' % (retcode, cmd, stdout, stderr))
+        super().__init__('Command error (%d): %s\nstdout:%s\nstderr:%s' %
+                         (retcode, cmd, stdout, stderr))
         self.retcode = retcode
         self.stdout = stdout
         self.stderr = stderr
+
 
 class RGWAMEnvMgr:
     @abstractmethod
@@ -28,17 +32,19 @@ class RGWAMEnvMgr:
         pass
 
     @abstractmethod
-    def apply_rgw(self, svc_id, realm_name, zone_name, port = None):
+    def apply_rgw(self, svc_id, realm_name, zone_name, port=None):
         pass
 
     @abstractmethod
-    def list_daemons(self, service_name, daemon_type = None, daemon_id = None, hostname = None, refresh = True):
+    def list_daemons(self, service_name, daemon_type=None, daemon_id=None, hostname=None,
+                     refresh=True):
         pass
 
 
 class JSONObj:
     def to_json(self):
         return json.dumps(self, default=lambda o: o.__dict__, indent=4)
+
 
 class RealmToken(JSONObj):
     def __init__(self, realm_id, endpoint, uid, access_key, secret):
@@ -48,11 +54,13 @@ class RealmToken(JSONObj):
         self.access_key = access_key
         self.secret = secret
 
+
 class RGWZone(JSONObj):
     def __init__(self, zone_dict):
         self.id = zone_dict['id']
         self.name = zone_dict['name']
         self.endpoints = zone_dict['endpoints']
+
 
 class RGWZoneGroup(JSONObj):
     def __init__(self, zg_dict):
@@ -89,6 +97,7 @@ class RGWZoneGroup(JSONObj):
         for zone in self.zones_by_id.values():
             yield zone
 
+
 class RGWPeriod(JSONObj):
     def __init__(self, period_dict):
         self.id = period_dict['id']
@@ -110,7 +119,7 @@ class RGWPeriod(JSONObj):
             if zg.endpoint_exists(endpoint):
                 return True
         return False
-    
+
     def find_zonegroup_by_name(self, zonegroup):
         if not zonegroup:
             return self.find_zonegroup_by_id(self.master_zonegroup)
@@ -130,13 +139,13 @@ class RGWPeriod(JSONObj):
         for zg in self.zonegroups_by_id.values():
             yield zg
 
-        
 
 class RGWAccessKey(JSONObj):
     def __init__(self, d):
         self.uid = d['user']
         self.access_key = d['access_key']
         self.secret_key = d['secret_key']
+
 
 class RGWUser(JSONObj):
     def __init__(self, d):
@@ -151,5 +160,3 @@ class RGWUser(JSONObj):
 
         is_system = d.get('system') or 'false'
         self.system = (is_system == 'true')
-
-
