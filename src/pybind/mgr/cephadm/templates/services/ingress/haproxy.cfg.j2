@@ -6,15 +6,15 @@ global
     maxconn     8000
     daemon
     stats socket /var/lib/haproxy/stats
-{% if spec.ssl_cert %}
-  {% if spec.ssl_dh_param %}
-    tune.ssl.default-dh-param {{ spec.ssl_dh_param }}
+{% if ssl_cert %}
+  {% if ssl_dh_param %}
+    tune.ssl.default-dh-param {{ ssl_dh_param }}
   {% endif %}
-  {% if spec.ssl_ciphers %}
-    ssl-default-bind-ciphers {{ spec.ssl_ciphers | join(':') }}
+  {% if ssl_ciphers %}
+    ssl-default-bind-ciphers {{ ssl_ciphers | join(':') }}
   {% endif %}
-  {% if spec.ssl_options %}
-    ssl-default-bind-options {{ spec.ssl_options | join(' ') }}
+  {% if ssl_options %}
+    ssl-default-bind-options {{ ssl_options | join(' ') }}
   {% endif %}
 {% endif %}
 
@@ -56,7 +56,7 @@ frontend stats
     monitor-uri /health
 
 frontend frontend
-{% if spec.ssl_cert %}
+{% if ssl_cert %}
     bind {{ ip }}:{{ frontend_port }} ssl crt /var/lib/haproxy/haproxy.pem
 {% else %}
     bind {{ ip }}:{{ frontend_port }}

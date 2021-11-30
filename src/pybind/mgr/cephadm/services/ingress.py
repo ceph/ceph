@@ -145,7 +145,7 @@ class IngressService(CephService):
         haproxy_conf = self.mgr.template.render(
             'services/ingress/haproxy.cfg.j2',
             HaproxyCfgContext(
-                spec: spec,
+                ssl_cert=spec.ssl_cert,
                 mode=mode,
                 servers=servers,
                 user=spec.monitor_user or 'admin',
@@ -266,7 +266,7 @@ class IngressService(CephService):
         keepalived_conf = self.mgr.template.render(
             'services/ingress/keepalived.conf.j2',
             KeepalivedConfContext(
-                spec: spec,
+                virtual_ip=spec.virtual_ip,
                 script=script,
                 password=password,
                 interface=interface,

@@ -918,10 +918,6 @@ class IngressSpec(ServiceSpec):
         'backend_service',
         'frontend_port',
         'ssl_cert',
-        'ssl_key',
-        'ssl_dh_param',
-        'ssl_ciphers',
-        'ssl_options',
         'monitor_port',
         'monitor_user',
         'monitor_password',
@@ -941,10 +937,6 @@ class IngressSpec(ServiceSpec):
                  backend_service: Optional[str] = None,
                  frontend_port: Optional[int] = None,
                  ssl_cert: Optional[str] = None,
-                 ssl_key: Optional[str] = None,
-                 ssl_dh_param: Optional[str] = None,
-                 ssl_ciphers: Optional[List[str]] = None,
-                 ssl_options: Optional[List[str]] = None,
                  monitor_port: Optional[int] = None,
                  monitor_user: Optional[str] = None,
                  monitor_password: Optional[str] = None,
@@ -964,10 +956,6 @@ class IngressSpec(ServiceSpec):
         self.backend_service = backend_service
         self.frontend_port = frontend_port
         self.ssl_cert = ssl_cert
-        self.ssl_key = ssl_key
-        self.ssl_dh_param = ssl_dh_param
-        self.ssl_ciphers = ssl_ciphers
-        self.ssl_options = ssl_options
         self.monitor_port = monitor_port
         self.monitor_user = monitor_user
         self.monitor_password = monitor_password
@@ -1107,7 +1095,6 @@ class MonitoringSpec(ServiceSpec):
             preview_only=preview_only, config=config,
             networks=networks, other_properties=other_properties)
 
-        self.service_type = service_type
         self.port = port
 
     def get_port_start(self) -> List[int]:

@@ -24,7 +24,7 @@ vrrp_instance VI_0 {
     {% endfor %}
   }
   virtual_ipaddress {
-    {{ spec.virtual_ip }} dev {{ interface }}
+    {{ virtual_ip }} dev {{ interface }}
   }
   track_script {
       check_backend
