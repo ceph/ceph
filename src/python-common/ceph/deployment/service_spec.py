@@ -433,7 +433,6 @@ class ServiceSpec(object):
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
             'container': CustomContainerSpec,
-            'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
             'prometheus': MonitoringSpec,
         }.get(service_type, cls)
@@ -1177,32 +1176,3 @@ class AlertManagerSpec(MonitoringSpec):
 
 
 yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
-
-
-class GrafanaSpec(MonitoringSpec):
-    KNOWN_PROPERTIES = ['initial_admin_password']
-
-    def __init__(self,
-                 service_type: str = 'grafana',
-                 service_id: Optional[str] = None,
-                 placement: Optional[PlacementSpec] = None,
-                 unmanaged: bool = False,
-                 preview_only: bool = False,
-                 config: Optional[Dict[str, str]] = None,
-                 networks: Optional[List[str]] = None,
-                 other_properties: Optional[Dict[str, str]] = None,
-                 port: Optional[int] = None,
-                 initial_admin_password: Optional[str] = None
-                 ):
-        assert service_type == 'grafana'
-        super(GrafanaSpec, self).__init__(
-            'grafana', service_id=service_id,
-            placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config, networks=networks, port=port,
-            other_properties=other_properties,
-        )
-
-        self.initial_admin_password = initial_admin_password
-
-
-yaml.add_representer(GrafanaSpec, ServiceSpec.yaml_representer)
