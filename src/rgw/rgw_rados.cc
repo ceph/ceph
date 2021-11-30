@@ -8336,12 +8336,12 @@ int RGWRados::list_lc_progress(string& marker, uint32_t max_entries,
   return lc->list_lc_progress(marker, max_entries, progress_map, index);
 }
 
-int RGWRados::process_lc()
+int RGWRados::process_lc(const std::string& bucket_name)
 {
   RGWLC lc;
   lc.initialize(cct, this->store);
   RGWLC::LCWorker worker(&lc, cct, &lc, 0);
-  auto ret = lc.process(&worker, true /* once */);
+  auto ret = lc.process(&worker, bucket_name, true /* once */);
   lc.stop_processor(); // sets down_flag, but returns immediately
   return ret;
 }
