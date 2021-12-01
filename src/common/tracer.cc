@@ -7,8 +7,6 @@
 
 #ifdef HAVE_JAEGER
 
-#include "opentelemetry/trace/propagation/jaeger.h"
-#include "opentelemetry/trace/propagation/detail/hex.h"
 
 namespace tracing {
 
