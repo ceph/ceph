@@ -203,6 +203,12 @@ void SegmentCleaner::register_metrics()
 		     sm::description("total number of extents released by SegmentCleaner")),
     sm::make_counter("accumulated_blocked_ios", stats.accumulated_blocked_ios,
 		     sm::description("accumulated total number of ios that were blocked by gc")),
+    sm::make_counter("reclaimed_segments", stats.reclaimed_segments,
+		     sm::description("reclaimed segments")),
+    sm::make_counter("reclaim_rewrite_bytes", stats.reclaim_rewrite_bytes,
+		     sm::description("rewritten bytes due to reclaim")),
+    sm::make_counter("reclaiming_bytes", stats.reclaiming_bytes,
+		     sm::description("bytes being reclaimed")),
     sm::make_derive("empty_segments", stats.empty_segments,
 		    sm::description("current empty segments")),
     sm::make_derive("ios_blocking", stats.ios_blocking,
@@ -397,19 +403,21 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
   ).safe_then([this](auto &&_extents) {
     return seastar::do_with(
         std::move(_extents),
-        [this](auto &extents) {
-      return repeat_eagain([this, &extents]() mutable {
+	(size_t)0,
+        [this](auto &extents, auto &reclaimed) {
+      return repeat_eagain([this, &extents, &reclaimed]() mutable {
+	reclaimed = 0;
         logger().debug(
           "SegmentCleaner::gc_reclaim_space: processing {} extents",
           extents.size());
         return ecb->with_transaction_intr(
           Transaction::src_t::CLEANER_RECLAIM,
           "reclaim_space",
-          [this, &extents](auto& t)
+          [this, &extents, &reclaimed](auto& t)
         {
           return trans_intr::do_for_each(
               extents,
-              [this, &t](auto &extent) {
+              [this, &t, &reclaimed](auto &extent) {
 	    auto &addr = extent.first;
 	    auto commit_time = extent.second.first.commit_time;
 	    auto commit_type = extent.second.first.commit_type;
@@ -423,7 +431,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
               addr,
               info.addr,
               info.len
-            ).si_then([&info, commit_type, commit_time, addr=addr, &t, this]
+            ).si_then([&info, commit_type, commit_time, addr=addr, &t, this, &reclaimed]
 	      (CachedExtentRef ext) {
               if (!ext) {
                 logger().debug(
@@ -463,6 +471,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 		      && commit_time ==
 			ext->get_last_rewritten().time_since_epoch().count()));
 
+		reclaimed += ext->get_length();
                 return ecb->rewrite_extent(
                   t,
                   ext);
@@ -475,10 +484,16 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
             return ecb->submit_transaction_direct(t);
           });
         });
+      }).safe_then([&reclaimed] {
+	return seastar::make_ready_future<size_t>(reclaimed);
       });
     });
-  }).safe_then([this] {
+  }).safe_then([this](size_t reclaimed) {
+    stats.reclaiming_bytes += reclaimed;
     if (scan_cursor->is_complete()) {
+      stats.reclaim_rewrite_bytes += stats.reclaiming_bytes;
+      stats.reclaiming_bytes = 0;
+      stats.reclaimed_segments++;
       scan_cursor.reset();
     }
   });
