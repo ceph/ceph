@@ -50,6 +50,23 @@ Notable Changes
   until we implement a limit on the number of PGs default pools should consume,
   in combination with the 'scale-down' profile.
 
+* Cephadm & Ceph Dashboard: NFS management has been completely reworked to
+  ensure that NFS exports are managed consistently across the different Ceph
+  components. Prior to this, there were 3 incompatible implementations for
+  configuring the NFS exports: Ceph-Ansible/OpenStack Manila, Ceph Dashboard and
+  'mgr/nfs' module. With this release the 'mgr/nfs' way becomes the official
+  interface, and the remaining components (Cephadm and Ceph Dashboard) adhere to
+  it. While this might require manually migrating from the deprecated
+  implementations, it will simplify the user experience for those heavily
+  relying on NFS exports.
+
+* Dashboard: "Cluster Expansion Wizard". After the 'cephadm bootstrap' step,
+  users that log into the Ceph Dashboard will be presented with a welcome
+  screen. If they choose to follow the installation wizard, they will be guided 
+  through a set of steps to help them configure their Ceph cluster: expanding
+  the cluster by adding more hosts, detecting and defining their storage
+  devices, and finally deploying and configuring the different Ceph services.
+  
 Changelog
 ---------
 
