@@ -64,7 +64,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
 
 void RGWPSListTopicsOp::execute(optional_yield y) {
   ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
-  op_ret = ps->get_topics(&result);
+  op_ret = ps->get_topics(&result, y);
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
   if (op_ret < 0) {
@@ -85,7 +85,7 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
     return;
   }
   ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
-  op_ret = ps->get_topic(topic_name, &result);
+  op_ret = ps->get_topic(topic_name, &result, y);
   if (topic_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
     ldpp_dout(this, 1) << "topic '" << topic_name << "' contain secret and cannot be sent over insecure transport" << dendl;
     op_ret = -EPERM;
@@ -134,7 +134,7 @@ void RGWPSGetSubOp::execute(optional_yield y) {
   }
   ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   auto sub = ps->get_sub(sub_name);
-  op_ret = sub->get_conf(&result);
+  op_ret = sub->get_conf(&result, y);
   if (subscription_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
     ldpp_dout(this, 1) << "subscription '" << sub_name << "' contain secret and cannot be sent over insecure transport" << dendl;
     op_ret = -EPERM;
@@ -168,8 +168,8 @@ void RGWPSAckSubEventOp::execute(optional_yield y) {
     return;
   }
   ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
-  auto sub = ps->get_sub_with_events(sub_name);
-  op_ret = sub->remove_event(s, event_id);
+  auto sub = ps->get_sub_with_events(sub_name, y);
+  op_ret = sub->remove_event(s, event_id, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to ack event on subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
@@ -183,13 +183,13 @@ void RGWPSPullSubEventsOp::execute(optional_yield y) {
     return;
   }
   ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
-  sub = ps->get_sub_with_events(sub_name);
+  sub = ps->get_sub_with_events(sub_name, y);
   if (!sub) {
     op_ret = -ENOENT;
     ldpp_dout(this, 1) << "failed to get subscription '" << sub_name << "' for events, ret=" << op_ret << dendl;
     return;
   }
-  op_ret = sub->list_events(s, marker, max_entries);
+  op_ret = sub->list_events(s, marker, max_entries, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get events from subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;

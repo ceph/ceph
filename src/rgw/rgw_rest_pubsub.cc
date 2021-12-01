@@ -440,11 +440,11 @@ int delete_all_notifications(const DoutPrefixProvider *dpp, const rgw_pubsub_buc
   for (const auto& topic : bucket_topics.topics) {
     // remove the auto generated subscription of the topic (if exist)
     rgw_pubsub_topic_subs topic_subs;
-    int op_ret = ps.get_topic(topic.first, &topic_subs);
+    int op_ret = ps.get_topic(topic.first, &topic_subs, y);
     for (const auto& topic_sub_name : topic_subs.subs) {
       auto sub = ps.get_sub(topic_sub_name);
       rgw_pubsub_sub_config sub_conf;
-      op_ret = sub->get_conf(&sub_conf);
+      op_ret = sub->get_conf(&sub_conf, y);
       if (op_ret < 0) {
         ldpp_dout(dpp, 1) << "failed to get subscription '" << topic_sub_name << "' info, ret=" << op_ret << dendl;
         return op_ret;
@@ -560,7 +560,7 @@ void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
   if(configurations.list.empty()) {
     // get all topics on a bucket
     rgw_pubsub_bucket_topics bucket_topics;
-    op_ret = b->get_topics(&bucket_topics);
+    op_ret = b->get_topics(&bucket_topics, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << bucket_info.bucket.name << "', ret=" << op_ret << dendl;
       return;
@@ -600,7 +600,7 @@ void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
 
     // get topic information. destination information is stored in the topic
     rgw_pubsub_topic topic_info;  
-    op_ret = ps->get_topic(topic_name, &topic_info);
+    op_ret = ps->get_topic(topic_name, &topic_info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
       return;
@@ -691,7 +691,7 @@ void RGWPSDeleteNotif_ObjStore_S3::execute(optional_yield y) {
 
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
-  op_ret = b->get_topics(&bucket_topics);
+  op_ret = b->get_topics(&bucket_topics, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << bucket_info.bucket.name << "', ret=" << op_ret << dendl;
     return;
@@ -766,7 +766,7 @@ void RGWPSListNotifs_ObjStore_S3::execute(optional_yield y) {
   
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
-  op_ret = b->get_topics(&bucket_topics);
+  op_ret = b->get_topics(&bucket_topics, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << bucket_info.bucket.name << "', ret=" << op_ret << dendl;
     return;

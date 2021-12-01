@@ -767,7 +767,7 @@ int publish_reserve(const DoutPrefixProvider *dpp, EventType event_type,
   RGWPubSub ps(res.store, res.s->user->get_id().tenant);
   RGWPubSub::Bucket ps_bucket(&ps, res.s->bucket->get_key());
   rgw_pubsub_bucket_topics bucket_topics;
-  auto rc = ps_bucket.get_topics(&bucket_topics);
+  auto rc = ps_bucket.get_topics(&bucket_topics, res.s->yield);
   if (rc < 0) {
     // failed to fetch bucket topics
     return rc;

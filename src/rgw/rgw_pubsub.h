@@ -618,7 +618,7 @@ class RGWPubSub
   }
 
   template <class T>
-  int read(const rgw_raw_obj& obj, T* data, RGWObjVersionTracker* objv_tracker);
+  int read(const rgw_raw_obj& obj, T* data, RGWObjVersionTracker* objv_tracker, optional_yield y);
 
   template <class T>
   int write(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const T& info,
@@ -627,7 +627,8 @@ class RGWPubSub
   int remove(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, RGWObjVersionTracker* objv_tracker,
 	     optional_yield y);
 
-  int read_topics(rgw_pubsub_topics *result, RGWObjVersionTracker* objv_tracker);
+  int read_topics(rgw_pubsub_topics *result, RGWObjVersionTracker* objv_tracker,
+                  optional_yield y);
   int write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
 			RGWObjVersionTracker* objv_tracker, optional_yield y);
 
@@ -643,7 +644,8 @@ public:
     // read the list of topics associated with a bucket and populate into result
     // use version tacker to enforce atomicity between read/write
     // return 0 on success or if no topic was associated with the bucket, error code otherwise
-    int read_topics(rgw_pubsub_bucket_topics *result, RGWObjVersionTracker* objv_tracker);
+    int read_topics(rgw_pubsub_bucket_topics *result, RGWObjVersionTracker* objv_tracker,
+                    optional_yield y);
     // set the list of topics associated with a bucket
     // use version tacker to enforce atomicity between read/write
     // return 0 on success, error code otherwise
@@ -656,7 +658,7 @@ public:
 
     // read the list of topics associated with a bucket and populate into result
     // return 0 on success or if no topic was associated with the bucket, error code otherwise
-    int get_topics(rgw_pubsub_bucket_topics *result);
+    int get_topics(rgw_pubsub_bucket_topics *result, optional_yield y);
     // adds a topic + filter (event list, and possibly name metadata or tags filters) to a bucket
     // assigning a notification name is optional (needed for S3 compatible notifications)
     // if the topic already exist on the bucket, the filter event list may be updated
@@ -683,7 +685,7 @@ public:
     const std::string sub;
     rgw_raw_obj sub_meta_obj;
 
-    int read_sub(rgw_pubsub_sub_config *result, RGWObjVersionTracker* objv_tracker);
+    int read_sub(rgw_pubsub_sub_config *result, RGWObjVersionTracker* objv_tracker, optional_yield y);
     int write_sub(const DoutPrefixProvider *dpp, const rgw_pubsub_sub_config& sub_conf,
 		  RGWObjVersionTracker* objv_tracker, optional_yield y);
     int remove_sub(const DoutPrefixProvider *dpp, RGWObjVersionTracker* objv_tracker, optional_yield y);
@@ -697,12 +699,14 @@ public:
     int subscribe(const DoutPrefixProvider *dpp, const std::string& topic_name, const rgw_pubsub_sub_dest& dest, optional_yield y,
 		  const std::string& s3_id="");
     int unsubscribe(const DoutPrefixProvider *dpp, const std::string& topic_name, optional_yield y);
-    int get_conf(rgw_pubsub_sub_config* result);
+    int get_conf(rgw_pubsub_sub_config* result, optional_yield y);
     
     static const int DEFAULT_MAX_EVENTS = 100;
     // followint virtual methods should only be called in derived
-    virtual int list_events(const DoutPrefixProvider *dpp, const std::string& marker, int max_events) {ceph_assert(false);}
-    virtual int remove_event(const DoutPrefixProvider *dpp, const std::string& event_id) {ceph_assert(false);}
+    virtual int list_events(const DoutPrefixProvider *dpp, const std::string& marker, int max_events,
+                            optional_yield y) {ceph_assert(false);}
+    virtual int remove_event(const DoutPrefixProvider *dpp, const std::string& event_id,
+                             optional_yield y) {ceph_assert(false);}
     virtual void dump(Formatter* f) const {ceph_assert(false);}
   };
 
@@ -722,8 +726,10 @@ public:
 
     virtual ~SubWithEvents() = default;
     
-    int list_events(const DoutPrefixProvider *dpp, const std::string& marker, int max_events) override;
-    int remove_event(const DoutPrefixProvider *dpp, const std::string& event_id) override;
+    int list_events(const DoutPrefixProvider *dpp, const std::string& marker, int max_events,
+                    optional_yield y) override;
+    int remove_event(const DoutPrefixProvider *dpp, const std::string& event_id,
+                     optional_yield y) override;
     void dump(Formatter* f) const override;
   };
 
@@ -738,10 +744,10 @@ public:
     return std::make_shared<Sub>(this, sub);
   }
   
-  SubRef get_sub_with_events(const std::string& sub) {
+  SubRef get_sub_with_events(const std::string& sub, optional_yield y) {
     auto tmpsub = Sub(this, sub);
     rgw_pubsub_sub_config conf;
-    if (tmpsub.get_conf(&conf) < 0) {
+    if (tmpsub.get_conf(&conf, y) < 0) {
       return nullptr;
     }
     if (conf.s3_id.empty()) {
@@ -757,15 +763,15 @@ public:
 
   // get all topics (per tenant, if used)) and populate them into "result"
   // return 0 on success or if no topics exist, error code otherwise
-  int get_topics(rgw_pubsub_topics *result);
+  int get_topics(rgw_pubsub_topics *result, optional_yield y);
   // get a topic with its subscriptions by its name and populate it into "result"
   // return -ENOENT if the topic does not exists 
   // return 0 on success, error code otherwise
-  int get_topic(const std::string& name, rgw_pubsub_topic_subs *result);
+  int get_topic(const std::string& name, rgw_pubsub_topic_subs *result, optional_yield y);
   // get a topic with by its name and populate it into "result"
   // return -ENOENT if the topic does not exists 
   // return 0 on success, error code otherwise
-  int get_topic(const std::string& name, rgw_pubsub_topic *result);
+  int get_topic(const std::string& name, rgw_pubsub_topic *result, optional_yield y);
   // create a topic with a name only
   // if the topic already exists it is a no-op (considered success)
   // return 0 on success, error code otherwise
@@ -782,14 +788,14 @@ public:
 
 
 template <class T>
-int RGWPubSub::read(const rgw_raw_obj& obj, T* result, RGWObjVersionTracker* objv_tracker)
+int RGWPubSub::read(const rgw_raw_obj& obj, T* result, RGWObjVersionTracker* objv_tracker, optional_yield y)
 {
   bufferlist bl;
   int ret = rgw_get_system_obj(obj_ctx,
                                obj.pool, obj.oid,
                                bl,
                                objv_tracker,
-                               nullptr, null_yield, nullptr, nullptr);
+                               nullptr, y, nullptr, nullptr);
   if (ret < 0) {
     return ret;
   }

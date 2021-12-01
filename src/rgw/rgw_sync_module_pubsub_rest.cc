@@ -454,7 +454,7 @@ void RGWPSListNotifs_ObjStore::execute(optional_yield y)
 {
   ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
-  op_ret = b->get_topics(&result);
+  op_ret = b->get_topics(&result, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topics, ret=" << op_ret << dendl;
     return;

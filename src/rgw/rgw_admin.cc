@@ -9412,7 +9412,7 @@ next:
       }
 
       auto b = ps.get_bucket(bucket->get_key());
-      ret = b->get_topics(&result);
+      ret = b->get_topics(&result, null_yield);
       if (ret < 0) {
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -9420,7 +9420,7 @@ next:
       encode_json("result", result, formatter.get());
     } else {
       rgw_pubsub_topics result;
-      int ret = ps.get_topics(&result);
+      int ret = ps.get_topics(&result, null_yield);
       if (ret < 0) {
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -9439,7 +9439,7 @@ next:
     RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(store), tenant);
 
     rgw_pubsub_topic_subs topic;
-    ret = ps.get_topic(topic_name, &topic);
+    ret = ps.get_topic(topic_name, &topic, null_yield);
     if (ret < 0) {
       cerr << "ERROR: could not get topic: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -9478,7 +9478,7 @@ next:
     rgw_pubsub_sub_config sub_conf;
 
     auto sub = ps.get_sub(sub_name);
-    ret = sub->get_conf(&sub_conf);
+    ret = sub->get_conf(&sub_conf, null_yield);
     if (ret < 0) {
       cerr << "ERROR: could not get subscription info: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -9522,8 +9522,8 @@ next:
     if (!max_entries_specified) {
       max_entries = RGWPubSub::Sub::DEFAULT_MAX_EVENTS;
     }
-    auto sub = ps.get_sub_with_events(sub_name);
-    ret = sub->list_events(dpp(), marker, max_entries);
+    auto sub = ps.get_sub_with_events(sub_name, null_yield);
+    ret = sub->list_events(dpp(), marker, max_entries, null_yield);
     if (ret < 0) {
       cerr << "ERROR: could not list events: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -9548,8 +9548,8 @@ next:
 
     RGWPubSub ps(static_cast<rgw::sal::RadosStore*>(store), tenant);
 
-    auto sub = ps.get_sub_with_events(sub_name);
-    ret = sub->remove_event(dpp(), event_id);
+    auto sub = ps.get_sub_with_events(sub_name, null_yield);
+    ret = sub->remove_event(dpp(), event_id, null_yield);
     if (ret < 0) {
       cerr << "ERROR: could not remove event: " << cpp_strerror(-ret) << std::endl;
       return -ret;
