@@ -2866,9 +2866,10 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
   _mdsmap.swap(mdsmap);
 
   // reset session
-  for (auto &p : mds_sessions) {
-    mds_rank_t mds = p.first;
-    auto session = p.second;
+  for (auto p = mds_sessions.begin(); p != mds_sessions.end(); ) {
+    mds_rank_t mds = p->first;
+    MetaSessionRef session = p->second;
+    ++p;
 
     int oldstate = _mdsmap->get_state(mds);
     int newstate = mdsmap->get_state(mds);
