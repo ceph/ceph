@@ -100,7 +100,7 @@ def task(ctx, config):
             client_id=id_,
             client_remote=remote,
             brxnet=ctx.teuthology_config.get('brxnet', None),
-            config=client_config,
+            client_config=client_config,
             cephfs_name=cephfs_name)
 
         mounts[id_] = kernel_mount
