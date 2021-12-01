@@ -286,6 +286,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("RO", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("PROFILE", TextTable::LEFT, TextTable::LEFT);
     } else {
       f->open_array_section("config");
     }
@@ -304,6 +305,34 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	  f->dump_string("section", sec_name);
 	  masked_opt.dump(f.get());
 	  f->close_section();
+	}
+	auto p = config_map.profiles.find(opt_name);
+	if (p != config_map.profiles.end()) {
+	  auto q = p->second.profile.find(masked_opt.raw_value);
+	  if (q != p->second.profile.end()) {
+	    // dump profile contents
+	    for (auto& k : q->second.options) {
+	      if (!f) {
+		tbl << sec_name;
+		tbl << k.second.mask.to_str();
+		tbl << Option::level_to_str(k.second.opt->level);
+		tbl << k.first;
+		tbl << k.second.raw_value;
+		tbl << (k.second.opt->can_update_at_runtime() ? "" : "*");
+		ostringstream ss;
+		ss << opt_name << "=" << masked_opt.raw_value;
+		tbl << ss.str();
+		tbl << TextTable::endrow;
+	      } else {
+		f->open_object_section("option");
+		f->dump_string("section", k.first);
+		k.second.dump(f.get());
+		f->dump_string("profile_name", opt_name);
+		f->dump_string("profile_value", masked_opt.raw_value);
+		f->close_section();
+	      }
+	    }
+	  }
 	}
       }
     }
