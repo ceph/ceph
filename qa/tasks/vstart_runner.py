@@ -713,9 +713,8 @@ class LocalFuseMount(LocalCephFSMount, FuseMount):
     def __init__(self, ctx, test_dir, client_id, client_keyring_path=None,
                  client_remote=None, hostfs_mntpt=None, cephfs_name=None,
                  cephfs_mntpt=None, brxnet=None):
-        super(LocalFuseMount, self).__init__(ctx=ctx, client_config=None,
-            test_dir=test_dir, client_id=client_id,
-            client_keyring_path=client_keyring_path,
+        super(LocalFuseMount, self).__init__(ctx=ctx, test_dir=test_dir,
+            client_id=client_id, client_keyring_path=client_keyring_path,
             client_remote=LocalRemote(), hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 

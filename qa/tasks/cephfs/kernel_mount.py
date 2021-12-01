@@ -22,15 +22,17 @@ DEBUGFS_META_DIR = 'meta'
 class KernelMount(CephFSMount):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None, config={}):
+                 cephfs_name=None, cephfs_mntpt=None, brxnet=None,
+                 client_config={}):
         super(KernelMount, self).__init__(ctx=ctx, test_dir=test_dir,
             client_id=client_id, client_remote=client_remote,
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
-        self.dynamic_debug = config.get('dynamic_debug', False)
-        self.rbytes = config.get('rbytes', False)
-        self.syntax_style = config.get('syntax', 'v2')
+        self.client_config = client_config
+        self.dynamic_debug = client_config.get('dynamic_debug', False)
+        self.rbytes = client_config.get('rbytes', False)
+        self.syntax_style = client_config.get('syntax', 'v2')
         self.inst = None
         self.addr = None
         self._mount_bin = ['adjust-ulimits', 'ceph-coverage', self.test_dir +\
