@@ -30,6 +30,7 @@ class KernelMount(CephFSMount):
 
         self.dynamic_debug = config.get('dynamic_debug', False)
         self.rbytes = config.get('rbytes', False)
+        self.syntax_style = config.get('syntax', 'v2')
         self.inst = None
         self.addr = None
         self._mount_bin = ['adjust-ulimits', 'ceph-coverage', self.test_dir +\
@@ -43,6 +44,8 @@ class KernelMount(CephFSMount):
 
         if not self.cephfs_mntpt:
             self.cephfs_mntpt = '/'
+        if not self.cephfs_name:
+            self.cephfs_name = 'cephfs'
 
         self._create_mntpt()
 
@@ -77,28 +80,44 @@ class KernelMount(CephFSMount):
                         mountcmd_stderr.getvalue())
         log.info('mount command passed')
 
+    def _make_mount_cmd_old_or_new_style(self):
+        optd = {}
+        mnt_stx = ''
+        if self.syntax_style == 'v1':
+            mnt_stx = f':{self.cephfs_mntpt}'
+            if self.client_id:
+                optd['name'] = self.client_id
+            if self.cephfs_name:
+                optd['mds_namespace'] = self.cephfs_name
+        elif self.syntax_style == 'v2':
+            mnt_stx = f'{self.client_id}@.{self.cephfs_name}={self.cephfs_mntpt}'
+        else:
+            assert 0, f'invalid syntax style: {self.syntax_style}'
+        return (mnt_stx, optd)
+
     def _get_mount_cmd(self, mntopts):
         opts = 'norequire_active_mds'
-        if self.client_id:
-            opts += ',name=' + self.client_id
         if self.client_keyring_path and self.client_id:
             opts += ',secret=' + self.get_key_from_keyfile()
         if self.config_path:
             opts += ',conf=' + self.config_path
-        if self.cephfs_name:
-            opts += ",mds_namespace=" + self.cephfs_name
         if self.rbytes:
             opts += ",rbytes"
         else:
             opts += ",norbytes"
-        if mntopts:
-            opts += ',' + ','.join(mntopts)
 
         mount_cmd = ['sudo'] + self._nsenter_args
-        mount_dev = ':' + self.cephfs_mntpt
-        mount_cmd += self._mount_bin + [mount_dev, self.hostfs_mntpt, '-v',
+        stx_opt = self._make_mount_cmd_old_or_new_style()
+        for opt_name, opt_val in stx_opt[1].items():
+            opts += f',{opt_name}={opt_val}'
+        if mntopts:
+            opts += ',' + ','.join(mntopts)
+        log.info(f'mounting using device: {stx_opt[0]}')
+        # do not fall-back to old-style mount (catch new-style
+        # mount syntax bugs in the kernel).
+        opts += ",nofallback"
+        mount_cmd += self._mount_bin + [stx_opt[0], self.hostfs_mntpt, '-v',
                                         '-o', opts]
-
         return mount_cmd
 
     def umount(self, force=False):
