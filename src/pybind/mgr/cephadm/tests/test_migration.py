@@ -183,7 +183,7 @@ def test_migrate_nfs_initial(cephadm_module: CephadmOrchestrator):
         assert cephadm_module.migration_current == 2
 
         cephadm_module.migration.migrate()
-        assert cephadm_module.migration_current == LAST_MIGRATION
+        assert cephadm_module.migration_current >= 3
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
@@ -228,3 +228,41 @@ def test_migrate_admin_client_keyring(cephadm_module: CephadmOrchestrator):
     assert cephadm_module.migration_current == LAST_MIGRATION
 
     assert cephadm_module.keys.keys['client.admin'].placement.label == '_admin'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_alertmanager(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'host1'):
+        cephadm_module.set_store(
+            SPEC_STORE_PREFIX + 'alertmanager',
+            json.dumps({
+                'spec': {
+                    'service_type': 'alertmanager',
+                    'placement': {
+                        'hosts': ['host1']
+                    },
+                    'spec': {
+                        'user_data': {
+                            'default_webhook_urls': [
+                                'http://url1'
+                            ]
+                        }
+                    },
+                },
+                'created': datetime_to_str(datetime_now()),
+            }, sort_keys=True),
+        )
+        cephadm_module.migration_current = 4
+        cephadm_module.spec_store.load()
+
+        assert cephadm_module.spec_store['alertmanager'].spec.other_properties == {
+            'default_webhook_urls': [
+                'http://url1'
+            ]
+        }
+
+        cephadm_module.migration.migrate(True)
+        assert cephadm_module.migration_current == 4
+
+        cephadm_module.migration.migrate()
+        assert cephadm_module.migration_current == LAST_MIGRATION

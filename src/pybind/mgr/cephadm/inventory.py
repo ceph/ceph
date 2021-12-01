@@ -202,18 +202,33 @@ class SpecStore():
     def active_specs(self) -> Mapping[str, ServiceSpec]:
         return {k: v for k, v in self._specs.items() if k not in self.spec_deleted}
 
+    def migrate_spec(self, service_name: str, j: Dict[str, Any]) -> None:
+        if (
+                (self.mgr.migration_current or 0) < 3
+                and j['spec'].get('service_type') == 'nfs'
+        ):
+            self.mgr.log.debug(f'found legacy nfs spec {j}')
+            queue_migrate_nfs_spec(self.mgr, j)
+
+        if j['spec'].get('service_type') == 'alertmanager' and \
+                (self.mgr.migration_current or 0) < 5:
+            logger.debug(f'found legacy alertmanager spec {j}')
+            if j['spec'].get('spec', {}).get('user_data', {}).get('default_webhook_urls', None):
+                user_data = j['spec']['spec'].pop('user_data')
+                j['spec']['spec']['default_webhook_urls'] = user_data['default_webhook_urls']
+
+                self.mgr.set_store(
+                    SPEC_STORE_PREFIX + service_name,
+                    json.dumps(j, sort_keys=True),
+                )
+
     def load(self):
         # type: () -> None
         for k, v in self.mgr.get_store_prefix(SPEC_STORE_PREFIX).items():
             service_name = k[len(SPEC_STORE_PREFIX):]
             try:
                 j = cast(Dict[str, dict], json.loads(v))
-                if (
-                        (self.mgr.migration_current or 0) < 3
-                        and j['spec'].get('service_type') == 'nfs'
-                ):
-                    self.mgr.log.debug(f'found legacy nfs spec {j}')
-                    queue_migrate_nfs_spec(self.mgr, j)
+                self.migrate_spec(service_name, j)
                 spec = ServiceSpec.from_json(j['spec'])
                 created = str_to_datetime(cast(str, j['created']))
                 self._specs[service_name] = spec

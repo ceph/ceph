@@ -12,7 +12,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 4
+LAST_MIGRATION = 5
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,12 @@ class Migrations:
         if self.mgr.migration_current == 3:
             if self.migrate_3_4():
                 self.set(4)
+
+        if self.mgr.migration_current == 4 and not startup:
+            # This is a migration of the alertmanager spec after 16.2.7
+            # removing user_data
+            self.set(5)
+
 
     def migrate_0_1(self) -> bool:
         """

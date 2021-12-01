@@ -242,11 +242,9 @@ class TestMonitoring:
             spec = MonitoringSpec(
                 'alertmanager',
                 other_properties=dict(
-                    user_data=dict(
-                        default_webhook_urls=[
-                            'http://url1',
-                        ]
-                    )
+                    default_webhook_urls=[
+                        'http://url1',
+                    ]
                 )
             )
             with with_service(cephadm_module, spec):

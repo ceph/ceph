@@ -377,10 +377,9 @@ webhook urls like so:
 
     service_type: alertmanager
     spec:
-      user_data:
-        default_webhook_urls:
-        - "https://foo"
-        - "https://bar"
+      default_webhook_urls:
+      - "https://foo"
+      - "https://bar"
 
 Where ``default_webhook_urls`` is a list of additional URLs that are
 added to the default receivers' ``<webhook_configs>`` configuration.

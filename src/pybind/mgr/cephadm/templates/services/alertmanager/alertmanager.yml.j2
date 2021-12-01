@@ -16,8 +16,8 @@ route:
 receivers:
 - name: 'default'
   webhook_configs:
-{% if user_data and "default_webhook_urls" in user_data and user_data["default_webhook_urls"] is not none %}
-{% for url in user_data["default_webhook_urls"] %}
+{% if default_webhook_urls %}
+{% for url in default_webhook_urls %}
   - url: '{{ url }}'
 {% endfor %}
 {% endif %}
