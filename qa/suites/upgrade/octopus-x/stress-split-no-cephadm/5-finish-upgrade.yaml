@@ -12,5 +12,5 @@ tasks:
     daemons: [mon.c, osd.8, osd.9, osd.10, osd.11, rgw.*]
     wait-for-healthy: false
     wait-for-osds-up: true
-- print: "**** done restarted/upgrated => mon.c, osd.8, osd.9, osd.10, osd.11, rgw.*"
+- print: "**** done restarted/upgraded => mon.c, osd.8, osd.9, osd.10, osd.11, rgw.*"
 
