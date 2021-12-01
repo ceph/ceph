@@ -14,8 +14,6 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "PrimaryLogPG.h"
-
 #include <errno.h>
 
 #include <charconv>
@@ -6443,12 +6441,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	uint64_t ver = op.assert_ver.ver;
 	tracepoint(osd, do_osd_op_pre_assert_ver, soid.oid.name.c_str(), soid.snap.val, ver);
-	if (!ver)
+	if (!ver) {
 	  result = -EINVAL;
-        else if (ver < oi.user_version)
+        } else if (ver < oi.user_version) {
 	  result = -ERANGE;
-	else if (ver > oi.user_version)
+        } else if (ver > oi.user_version) {
 	  result = -EOVERFLOW;
+        }
       }
       break;
 
@@ -12278,6 +12277,8 @@ int PrimaryLogPG::recover_missing(
   int priority,
   PGBackend::RecoveryHandle *h)
 {
+  dout(10) << __func__ << " sar: " << scrub_after_recovery << dendl;
+
   if (recovery_state.get_missing_loc().is_unfound(soid)) {
     dout(7) << __func__ << " " << soid
 	    << " v " << v

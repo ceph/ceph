@@ -155,7 +155,7 @@ class LocalReservation {
 };
 
 /**
- *  wraps the OSD resource we are using when reserved as a replica by a scrubbing master.
+ *  wraps the OSD resource we are using when reserved as a replica by a scrubbing primary.
  */
 class ReservedByRemotePrimary {
   const PgScrubber* m_scrubber; ///< we will be using its gen_prefix()
@@ -904,7 +904,7 @@ private:
 
    private:
     PG* m_pg;
-    mutable std::mutex m_preemption_lock;
+    mutable ceph::mutex m_preemption_lock;
     bool m_preemptable{false};
     bool m_preempted{false};
     int m_left;

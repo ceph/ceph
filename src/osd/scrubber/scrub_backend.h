@@ -167,7 +167,7 @@ struct scrub_chunk_t {
   std::map<pg_shard_t, ScrubMap> received_maps;
 
   /// a collection of all objs mentioned in the maps
-  std::set<hobject_t> master_set;
+  std::set<hobject_t> authoritative_set;
 
   utime_t started{ceph_clock_now()};
 
@@ -269,7 +269,15 @@ class ScrubBackend {
   ConfigProxy& m_conf;
   LogChannelRef clog;
 
- 
+  int num_digest_updates_pending{0};
+
+ public:  
+  // as used by PgScrubber::final_cstat_update(). consider relocating.
+  // actually - only filled in by the PG backend, and used by the scrubber.
+  // We are not handling it. So consider getting it from the Scrubber, or
+  // creating it by the PG-BE
+  omap_stat_t m_omap_stats = (const struct omap_stat_t){0};
+
  private:
   using auth_and_obj_errs_t =
     std::tuple<std::list<pg_shard_t>,  ///< the auth-list
@@ -291,11 +299,11 @@ class ScrubBackend {
   ScrubMap& my_map();
 
   /**
-   *  merge_to_master_set() updates
+   *  merge_to_authoritative_set() updates
    *   - this_chunk->maps[from] with the replicas' scrub-maps;
-   *   - this_chunk->master_set as a union of all the maps' objects;
+   *   - this_chunk->authoritative_set as a union of all the maps' objects;
    */
-  void merge_to_master_set();
+  void merge_to_authoritative_set();
 
   // note: used by both Primary & replicas
   static ScrubMap clean_meta_map(ScrubMap& cleaned, bool max_reached);
