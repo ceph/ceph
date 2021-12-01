@@ -1424,11 +1424,27 @@ void MDSRank::send_message(const ref_t<Message>& m, const ConnectionRef& c)
   c->send_message2(m);
 }
 
+class C_MDS_RetrySendMessageMDS : public MDSInternalContext {
+public:
+  C_MDS_RetrySendMessageMDS(MDSRank* mds, mds_rank_t who, ref_t<Message> m)
+    : MDSInternalContext(mds), who(who), m(std::move(m)) {}
+  void finish(int r) override {
+    mds->send_message_mds(m, who);
+  }
+private:
+  mds_rank_t who;
+  ref_t<Message> m;
+};
+
 
 void MDSRank::send_message_mds(const ref_t<Message>& m, mds_rank_t mds)
 {
   if (!mdsmap->is_up(mds)) {
     dout(10) << "send_message_mds mds." << mds << " not up, dropping " << *m << dendl;
+    return;
+  } else if (mdsmap->is_bootstrapping(mds)) {
+    dout(5) << __func__ << "mds." << mds << " is bootstrapping, deferring " << *m << dendl;
+    wait_for_bootstrapped_peer(mds, new C_MDS_RetrySendMessageMDS(this, mds, m));
     return;
   }
 
@@ -2247,9 +2263,16 @@ void MDSRankDispatcher::handle_mds_map(
 
   if (oldstate != state) {
     // update messenger.
-    if (state == MDSMap::STATE_STANDBY_REPLAY) {
+    auto sleep_rank_change = g_conf().get_val<double>("mds_sleep_rank_change");
+    if (unlikely(sleep_rank_change > 0)) {
+      // This is to trigger a race where another rank tries to connect to this
+      // MDS before an update to the messenger "myname" is processed. This race
+      // should be closed by ranks holding messages until the rank is out of a
+      // "bootstrapping" state.
+      usleep(sleep_rank_change);
+    } if (state == MDSMap::STATE_STANDBY_REPLAY) {
       dout(1) << "handle_mds_map i am now mds." << mds_gid << "." << incarnation
-	      << " replaying mds." << whoami << "." << incarnation << dendl;
+          << " replaying mds." << whoami << "." << incarnation << dendl;
       messenger->set_myname(entity_name_t::MDS(mds_gid));
     } else {
       dout(1) << "handle_mds_map i am now mds." << whoami << "." << incarnation << dendl;
@@ -2434,6 +2457,33 @@ void MDSRankDispatcher::handle_mds_map(
     if (it != waiting_for_active_peer.end()) {
       queue_waiters(it->second);
       waiting_for_active_peer.erase(it);
+    }
+  }
+
+  // did someone leave a "bootstrapping" state? We can't connect until then to
+  // allow messenger "myname" updates.
+  {
+    std::vector<mds_rank_t> erase;
+    for (auto& [rank, queue] : waiting_for_bootstrapping_peer) {
+      auto state = mdsmap->get_state(rank);
+      if (state > MDSMap::STATE_REPLAY) {
+        queue_waiters(queue);
+        erase.push_back(rank);
+      }
+    }
+    for (const auto& rank : erase) {
+      waiting_for_bootstrapping_peer.erase(rank);
+    }
+  }
+  // for testing...
+  if (unlikely(g_conf().get_val<bool>("mds_connect_bootstrapping"))) {
+    std::set<mds_rank_t> bootstrapping;
+    mdsmap->get_mds_set(bootstrapping, MDSMap::STATE_REPLAY);
+    mdsmap->get_mds_set(bootstrapping, MDSMap::STATE_CREATING);
+    mdsmap->get_mds_set(bootstrapping, MDSMap::STATE_STARTING);
+    for (const auto& rank : bootstrapping) {
+      auto m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap);
+      send_message_mds(std::move(m), rank);
     }
   }
 
