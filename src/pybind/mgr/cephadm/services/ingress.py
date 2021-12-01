@@ -2,7 +2,7 @@ import ipaddress
 import logging
 import random
 import string
-from typing import List, Dict, Any, Tuple, cast, Optional, Set
+from typing import List, Dict, Any, Tuple, cast, Optional, Set, NamedTuple
 
 from ceph.deployment.service_spec import IngressSpec
 from mgr_util import build_url
@@ -11,6 +11,27 @@ from orchestrator import OrchestratorError
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
 
 logger = logging.getLogger(__name__)
+
+
+class HaproxyCfgContext(NamedTuple):
+    ssl_cert: Optional[str]
+    mode: str
+    servers: List[Dict[str, Any]]
+    user: str
+    password: Optional[str]
+    ip: str
+    frontend_port: Optional[int]
+    monitor_port: Optional[int]
+
+
+class KeepalivedConfContext(NamedTuple):
+    virtual_ip: Optional[str]
+    script: str
+    password: Optional[str]
+    interface: str
+    state: str
+    other_ips: List[str]
+    host_ip: str
 
 
 class IngressService(CephService):
@@ -123,16 +144,17 @@ class IngressService(CephService):
 
         haproxy_conf = self.mgr.template.render(
             'services/ingress/haproxy.cfg.j2',
-            {
-                'spec': spec,
-                'mode': mode,
-                'servers': servers,
-                'user': spec.monitor_user or 'admin',
-                'password': password,
-                'ip': daemon_spec.ip or '*',
-                'frontend_port': daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port,
-                'monitor_port': daemon_spec.ports[1] if daemon_spec.ports else spec.monitor_port,
-            }, spec=spec
+            HaproxyCfgContext(
+                spec: spec,
+                mode=mode,
+                servers=servers,
+                user=spec.monitor_user or 'admin',
+                password=password,
+                ip=daemon_spec.ip or '*',
+                frontend_port=daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port,
+                monitor_port=daemon_spec.ports[1] if daemon_spec.ports else spec.monitor_port,
+            )._asdict(),
+            spec=spec
         )
         config_files = {
             'files': {
@@ -243,15 +265,16 @@ class IngressService(CephService):
 
         keepalived_conf = self.mgr.template.render(
             'services/ingress/keepalived.conf.j2',
-            {
-                'spec': spec,
-                'script': script,
-                'password': password,
-                'interface': interface,
-                'state': state,
-                'other_ips': other_ips,
-                'host_ip': resolve_ip(self.mgr.inventory.get_addr(host)),
-            }, spec=spec
+            KeepalivedConfContext(
+                spec: spec,
+                script=script,
+                password=password,
+                interface=interface,
+                state=state,
+                other_ips=other_ips,
+                host_ip=resolve_ip(self.mgr.inventory.get_addr(host)),
+            )._asdict(),
+            spec=spec
         )
 
         config_file = {
@@ -265,12 +288,8 @@ class IngressService(CephService):
     def undeclared_variables_template_variables(self) -> Set[str]:
         undeclared = self.mgr.template.find_undeclared_variables(
             'services/ingress/haproxy.cfg.j2')
-        undeclared.difference_update({
-            'spec', 'mode', 'servers', 'user', 'password', 'ip', 'frontend_port', 'monitor_port'
-        })
+        undeclared.difference_update(HaproxyCfgContext._fields)
         undeclared.update(self.mgr.template.find_undeclared_variables(
             'services/ingress/keepalived.cfg.j2'))
-        undeclared.difference_update({
-            'spec', 'script', 'password', 'interface', 'state', 'other_ips', 'host_ip'
-        })
+        undeclared.difference_update(KeepalivedConfContext._fields)
         return undeclared

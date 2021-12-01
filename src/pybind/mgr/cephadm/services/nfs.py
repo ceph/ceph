@@ -3,7 +3,7 @@ import logging
 import os
 import subprocess
 import tempfile
-from typing import Dict, Tuple, Any, List, cast, Optional, Set
+from typing import Dict, Tuple, Any, List, cast, Optional, Set, NamedTuple
 
 from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
@@ -15,6 +15,17 @@ from orchestrator import DaemonDescription
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
 
 logger = logging.getLogger(__name__)
+
+
+class GaneshaConfContext(NamedTuple):
+    user: str
+    nodeid: str
+    namespace: Optional[str]
+    rgw_user: str
+    url: str
+    port: int
+    bind_addr: str
+    pool: str
 
 
 class NFSService(CephService):
@@ -95,18 +106,18 @@ class NFSService(CephService):
 
         # generate the ganesha config
         def get_ganesha_conf() -> str:
-            context = {
-                "user": rados_user,
-                "nodeid": nodeid,
-                "pool": POOL_NAME,
-                "namespace": spec.service_id,
-                "rgw_user": rgw_user,
-                "url": f'rados://{POOL_NAME}/{spec.service_id}/{spec.rados_config_name()}',
+            context = GaneshaConfContext(
+                user=rados_user,
+                nodeid=nodeid,
+                pool=POOL_NAME,
+                namespace=spec.service_id,
+                rgw_user=rgw_user,
+                url=f'rados://{POOL_NAME}/{spec.service_id}/{spec.rados_config_name()}',
                 # fall back to default NFS port if not present in daemon_spec
-                "port": daemon_spec.ports[0] if daemon_spec.ports else 2049,
-                "bind_addr": daemon_spec.ip if daemon_spec.ip else '',
-            }
-            return self.mgr.template.render('services/nfs/ganesha.conf.j2', context, spec=spec)
+                port=daemon_spec.ports[0] if daemon_spec.ports else 2049,
+                bind_addr=daemon_spec.ip if daemon_spec.ip else '',
+            )
+            return self.mgr.template.render('services/nfs/ganesha.conf.j2', context._asdict(), spec=spec)
 
         # generate the cephadm config json
         def get_cephadm_config() -> Dict[str, Any]:
@@ -138,9 +149,7 @@ class NFSService(CephService):
     def undeclared_variables_template_variables(self) -> Set[str]:
         undeclared = self.mgr.template.find_undeclared_variables(
             'services/nfs/ganesha.conf.j2')
-        undeclared.difference_update({
-            'user', 'nodeid', 'namespace', 'rgw_user', 'url', 'port', 'bind_addr', 'pool'
-        })
+        undeclared.difference_update(GaneshaConfContext._fields)
         return undeclared
 
     def create_rados_config_obj(self,

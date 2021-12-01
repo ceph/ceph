@@ -1,7 +1,7 @@
 import errno
 import logging
 import os
-from typing import List, Any, Tuple, Dict, Optional, cast, Set
+from typing import List, Any, Tuple, Dict, Optional, cast, Set, NamedTuple
 from urllib.parse import urlparse
 
 from mgr_module import HandleCommandResult
@@ -13,6 +13,15 @@ from cephadm.services.ingress import IngressSpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert, build_url
 
 logger = logging.getLogger(__name__)
+
+
+class GrafanaDashboardContext(NamedTuple):
+    hosts: List[str]
+
+
+class GrafanaIniContext(NamedTuple):
+    http_port: int
+    http_addr: str
 
 
 class GrafanaService(CephadmService):
@@ -39,7 +48,9 @@ class GrafanaService(CephadmService):
 
             deps.append(dd.name())
         grafana_data_sources = self.mgr.template.render(
-            'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services}, spec=spec)
+            'services/grafana/ceph-dashboard.yml.j2',
+            GrafanaDashboardContext(hosts=prom_services)._asdict(),
+            spec=spec)
 
         cert = self.mgr.get_store('grafana_crt')
         pkey = self.mgr.get_store('grafana_key')
@@ -62,11 +73,12 @@ class GrafanaService(CephadmService):
         spec: GrafanaSpec = cast(
             GrafanaSpec, self.mgr.spec_store.active_specs[daemon_spec.service_name])
         grafana_ini = self.mgr.template.render(
-            'services/grafana/grafana.ini.j2', {
-                'initial_admin_password': spec.initial_admin_password,
-                'http_port': daemon_spec.ports[0] if daemon_spec.ports else self.DEFAULT_SERVICE_PORT,
-                'http_addr': daemon_spec.ip if daemon_spec.ip else ''
-            }, spec=spec)
+            'services/grafana/grafana.ini.j2',
+            GrafanaIniContext(
+                http_port=daemon_spec.ports[0] if daemon_spec.ports else self.DEFAULT_SERVICE_PORT,
+                http_addr=daemon_spec.ip if daemon_spec.ip else ''
+            )._asdict(),
+            spec=spec)
 
         config_file = {
             'files': {
@@ -81,14 +93,10 @@ class GrafanaService(CephadmService):
     def undeclared_variables_template_variables(self) -> Set[str]:
         undeclared = self.mgr.template.find_undeclared_variables(
             'services/grafana/ceph-dashboard.yml.j2')
-        undeclared.difference_update({
-            'hosts'
-        })
+        undeclared.difference_update(GrafanaDashboardContext._fields)
         undeclared.update(self.mgr.template.find_undeclared_variables(
             'services/grafana/grafana.ini.j2'))
-        undeclared.difference_update({
-            'initial_admin_password', 'http_port', 'http_addr'
-        })
+        undeclared.difference_update(GrafanaIniContext._fields)
 
         return undeclared
 
@@ -121,6 +129,10 @@ class GrafanaService(CephadmService):
         if warn and not force:
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
         return HandleCommandResult(0, warn_message, '')
+
+
+class AlertmanagerYamlContext(NamedTuple):
+    dashboard_urls: List[str]
 
 
 class AlertmanagerService(CephadmService):
@@ -168,12 +180,12 @@ class AlertmanagerService(CephadmService):
             addr = self.mgr.inventory.get_addr(dd.hostname)
             dashboard_urls.append(build_url(scheme=proto, host=addr, port=port))
 
-        context = {
-            'dashboard_urls': dashboard_urls,
-            'default_webhook_urls': default_webhook_urls
-        }
+        context = AlertmanagerYamlContext(
+            dashboard_urls=dashboard_urls,
+            default_webhook_urls: default_webhook_urls
+        )
         yml = self.mgr.template.render(
-            'services/alertmanager/alertmanager.yml.j2', context, spec=spec)
+            'services/alertmanager/alertmanager.yml.j2', context._asdict(), spec=spec)
 
         peers = []
         port = 9094
@@ -192,9 +204,7 @@ class AlertmanagerService(CephadmService):
     def undeclared_variables_template_variables(self) -> Set[str]:
         undeclared = self.mgr.template.find_undeclared_variables(
             'services/alertmanager/alertmanager.yml.j2')
-        undeclared.difference_update({
-            'dashboard_urls', 'default_webhook_urls'
-        })
+        undeclared.difference_update(AlertmanagerYamlContext._fields)
         return undeclared
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
@@ -225,6 +235,13 @@ class AlertmanagerService(CephadmService):
         if warn and not force:
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
         return HandleCommandResult(0, warn_message, '')
+
+
+class PrometheusYmlContext(NamedTuple):
+    alertmgr_targets: List[str]
+    mgr_scrape_list: List[str]
+    haproxy_targets: List[Dict[str, Any]]
+    nodes: List[Dict[str, str]]
 
 
 class PrometheusService(CephadmService):
@@ -318,17 +335,17 @@ class PrometheusService(CephadmService):
                     })
 
         # generate the prometheus configuration
-        context = {
-            'alertmgr_targets': alertmgr_targets,
-            'mgr_scrape_list': mgr_scrape_list,
-            'haproxy_targets': haproxy_targets,
-            'nodes': nodes,
-        }
+        context = PrometheusYmlContext(
+            alertmgr_targets=alertmgr_targets,
+            mgr_scrape_list=mgr_scrape_list,
+            haproxy_targets=haproxy_targets,
+            nodes=nodes,
+        )
         r = {
             'files': {
                 'prometheus.yml':
                     self.mgr.template.render(
-                        'services/prometheus/prometheus.yml.j2', context, spec=prom_spec)
+                        'services/prometheus/prometheus.yml.j2', context._asdict(), spec=prom_spec)
             }
         }
 
@@ -343,9 +360,7 @@ class PrometheusService(CephadmService):
     def undeclared_variables_template_variables(self) -> Set[str]:
         undeclared = self.mgr.template.find_undeclared_variables(
             'services/prometheus/prometheus.yml.j2')
-        undeclared.difference_update({
-            'alertmgr_targets', 'mgr_scrape_list', 'haproxy_targets', 'nodes',
-        })
+        undeclared.difference_update(PrometheusYmlContext._fields)
         return undeclared
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:

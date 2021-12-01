@@ -2,7 +2,7 @@ import errno
 import json
 import logging
 import subprocess
-from typing import List, cast, Optional, Set
+from typing import List, cast, Optional, Set, NamedTuple
 from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
@@ -13,6 +13,12 @@ from .cephadmservice import CephadmDaemonDeploySpec, CephService
 from .. import utils
 
 logger = logging.getLogger(__name__)
+
+
+class IscsiGatewayCfgContext(NamedTuple):
+    client_name: str
+    trusted_ip_list: str
+    spec: IscsiServiceSpec
 
 
 class IscsiService(CephService):
@@ -64,13 +70,13 @@ class IscsiService(CephService):
             trusted_ip_list += ','
         trusted_ip_list += self.mgr.get_mgr_ip()
 
-        context = {
-            'client_name': '{}.{}'.format(utils.name_to_config_section('iscsi'), igw_id),
-            'trusted_ip_list': trusted_ip_list,
-            'spec': spec
-        }
+        context = IscsiGatewayCfgContext(
+            client_name='{}.{}'.format(utils.name_to_config_section('iscsi'), igw_id),
+            trusted_ip_list=trusted_ip_list,
+            spec=spec
+        )
         igw_conf = self.mgr.template.render(
-            'services/iscsi/iscsi-gateway.cfg.j2', context, spec=spec)
+            'services/iscsi/iscsi-gateway.cfg.j2', context._asdict(), spec=spec)
 
         daemon_spec.keyring = keyring
         daemon_spec.extra_files = {'iscsi-gateway.cfg': igw_conf}
@@ -81,9 +87,7 @@ class IscsiService(CephService):
     def undeclared_variables_template_variables(self) -> Set[str]:
         undeclared = self.mgr.template.find_undeclared_variables(
             'services/iscsi/iscsi-gateway.cfg.j2')
-        undeclared.difference_update({
-            'client_name', 'trusted_ip_list', 'spec'
-        })
+        undeclared.difference_update(IscsiGatewayCfgContext._fields)
         return undeclared
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
