@@ -1,7 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "PrimaryLogScrub.h"
+#include "./PrimaryLogScrub.h"
+
+#include <sstream>
 
 #include "common/scrub_types.h"
 #include "osd/osd_types_fmt.h"
@@ -14,8 +16,6 @@
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
-
-using std::vector;
 
 template <class T>
 static ostream& _prefix(std::ostream* _dout, T* t)
@@ -122,8 +122,9 @@ void PrimaryLogScrub::_scrub_finish()
       return false;
     });
 
-    if (m_pl_pg->agent_state)
+    if (m_pl_pg->agent_state) {
       m_pl_pg->agent_choose_mode();
+    }
   }
 
   dout(10) << m_mode_desc << " got " << m_scrub_cstat.sum.num_objects << "/"
@@ -164,6 +165,7 @@ void PrimaryLogScrub::_scrub_finish()
        !info.stats.manifest_stats_invalid) ||
       m_scrub_cstat.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
       m_scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
+
     m_osds->clog->error() << info.pgid << " " << m_mode_desc << " : stat mismatch, got "
 			  << m_scrub_cstat.sum.num_objects << "/"
 			  << info.stats.stats.sum.num_objects << " objects, "

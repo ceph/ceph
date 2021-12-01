@@ -115,11 +115,11 @@ ScrubMap* ScrubBackend::new_chunk()
   return &this_chunk->received_maps[m_pg_whoami];
 }
 
-void ScrubBackend::merge_to_master_set()
+void ScrubBackend::merge_to_authoritative_set()
 {
   dout(15) << __func__ << dendl;
   ceph_assert(m_pg.is_primary());
-  ceph_assert(this_chunk->master_set.empty() &&
+  ceph_assert(this_chunk->authoritative_set.empty() &&
               "the scrubber-backend should be empty");
 
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 15>()) {
@@ -132,13 +132,13 @@ void ScrubBackend::merge_to_master_set()
     }
   }
 
-  // Construct the master set of objects
+  // Construct the authoritative set of objects
   for (const auto& map : this_chunk->received_maps) {
-    std::transform(
-      map.second.objects.begin(),
-      map.second.objects.end(),
-      std::inserter(this_chunk->master_set, this_chunk->master_set.end()),
-      [](const auto& i) { return i.first; });
+    std::transform(map.second.objects.begin(),
+                   map.second.objects.end(),
+                   std::inserter(this_chunk->authoritative_set,
+                                 this_chunk->authoritative_set.end()),
+                   [](const auto& i) { return i.first; });
   }
 }
 
@@ -187,7 +187,7 @@ void ScrubBackend::scrub_compare_maps(bool max_reached)
   // construct authoritative scrub map for type-specific scrubbing
 
   m_cleaned_meta_map.insert(my_map());
-  merge_to_master_set();
+  merge_to_authoritative_set();
 
   // collect some omap statistics into m_omap_stats
   omap_checks();
@@ -238,7 +238,7 @@ void ScrubBackend::omap_checks()
   stringstream wss;
 
   // Iterate through objects and update omap stats
-  for (const auto& ho : this_chunk->master_set) {
+  for (const auto& ho : this_chunk->authoritative_set) {
 
     for (const auto& [srd, smap] : this_chunk->received_maps) {
       if (srd != m_pg.get_primary()) {
@@ -776,8 +776,7 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
                       &shard_info_wrapper::set_obj_size_info_mismatch)) {
 
     errstream << sep(err) << "candidate size " << smap_obj.size << " info size "
-              << m_pgbe.be_get_ondisk_size(oi.size)
-              << " mismatch";
+              << m_pgbe.be_get_ondisk_size(oi.size) << " mismatch";
   }
 
   std::optional<uint32_t> digest;
@@ -797,13 +796,14 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
 // re-implementation of PGBackend::be_compare_scrubmaps()
 std::optional<std::string> ScrubBackend::compare_smaps()
 {
-  dout(10) << __func__ << ": master-set #: " << this_chunk->master_set.size()
+  dout(10) << __func__
+           << ": authoritative-set #: " << this_chunk->authoritative_set.size()
            << dendl;
 
   std::stringstream errstream;
   std::for_each(
-    this_chunk->master_set.begin(),
-    this_chunk->master_set.end(),
+    this_chunk->authoritative_set.begin(),
+    this_chunk->authoritative_set.end(),
     [this, &errstream](const auto& ho) { compare_obj_in_maps(ho, errstream); });
 
   if (errstream.str().empty()) {
@@ -892,12 +892,12 @@ void ScrubBackend::compare_obj_in_maps(const hobject_t& ho,
 }
 
 
-std::optional<ScrubBackend::auth_and_obj_errs_t> ScrubBackend::for_empty_auth_list(
-  std::list<pg_shard_t>&& auths,
-  std::set<pg_shard_t>&& obj_errors,
-  shard_to_scrubmap_t::iterator auth,
-  const hobject_t& ho,
-  stringstream& errstream)
+std::optional<ScrubBackend::auth_and_obj_errs_t>
+ScrubBackend::for_empty_auth_list(std::list<pg_shard_t>&& auths,
+                                  std::set<pg_shard_t>&& obj_errors,
+                                  shard_to_scrubmap_t::iterator auth,
+                                  const hobject_t& ho,
+                                  stringstream& errstream)
 {
   if (auths.empty()) {
     if (obj_errors.empty()) {
@@ -919,7 +919,7 @@ std::optional<ScrubBackend::auth_and_obj_errs_t> ScrubBackend::for_empty_auth_li
   }
 
   return ScrubBackend::auth_and_obj_errs_t{std::move(auths),
-                                        std::move(obj_errors)};
+                                           std::move(obj_errors)};
 }
 
 
@@ -1900,7 +1900,7 @@ void ScrubBackend::scan_object_snaps(const hobject_t& hoid,
       ceph::condition_variable my_cond;
       ceph::mutex my_lock = ceph::make_mutex("PG::_scan_snaps my_lock");
       int e = 0;
-      bool done;
+      bool done;  // note: initialized to 'false' by C_SafeCond
 
       t.register_on_applied_sync(new C_SafeCond(my_lock, my_cond, &done, &e));
 
@@ -1911,7 +1911,9 @@ void ScrubBackend::scan_object_snaps(const hobject_t& hoid,
       } else {
         std::unique_lock l{my_lock};
         my_cond.wait(l, [&done] { return done; });
+        ceph_assert(m_pg.osd->store);
       }
+      dout(15) << __func__ << " wait on repair - done" << dendl;
     }
   }
 }

@@ -7473,7 +7473,8 @@ bool OSD::scrub_random_backoff()
   bool coin_flip = (rand() / (double)RAND_MAX >=
 		    cct->_conf->osd_scrub_backoff_ratio);
   if (!coin_flip) {
-    dout(20) << "scrub_random_backoff lost coin flip, randomly backing off" << dendl;
+    dout(20) << "scrub_random_backoff lost coin flip, randomly backing off (ratio: "
+	     << cct->_conf->osd_scrub_backoff_ratio << ")" << dendl;
     return true;
   }
   return false;
