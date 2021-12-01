@@ -692,6 +692,9 @@ private:
     uint64_t accumulated_blocked_ios = 0;
     uint64_t empty_segments = 0;
     int64_t ios_blocking = 0;
+    uint64_t reclaimed_segments = 0;
+    uint64_t reclaim_rewrite_bytes = 0;
+    uint64_t reclaiming_bytes = 0;
     seastar::metrics::histogram segment_util;
   } stats;
   seastar::metrics::metric_group metrics;
