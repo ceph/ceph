@@ -801,7 +801,9 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     if (sparse_read_threshold_bytes == 0) {
       sparse_read_threshold_bytes = get_object_size();
     }
-    if (!skip_partial_discard) {
+
+    bool dirty_cache = test_features(RBD_FEATURE_DIRTY_CACHE);
+    if (!skip_partial_discard || dirty_cache) {
       discard_granularity_bytes = 0;
     }
 
