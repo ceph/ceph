@@ -6507,16 +6507,14 @@ void RGWAbortMultipart::execute(optional_yield y)
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
 
-  meta_obj = upload->get_meta_obj();
-  meta_obj->set_in_extra_data(true);
-  op_ret = meta_obj->get_obj_attrs(obj_ctx, s->yield, this);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << meta_obj
-		     << " ret=" << op_ret << dendl;
-    return;
-  }
   jspan_context trace_ctx(false, false);
-  extract_span_context(meta_obj->get_attrs(), trace_ctx);
+  if (tracing::rgw::tracer.is_enabled()) {
+    // read meta object attributes for trace info
+    meta_obj = upload->get_meta_obj();
+    meta_obj->set_in_extra_data(true);
+    meta_obj->get_obj_attrs(obj_ctx, s->yield, this);
+    extract_span_context(meta_obj->get_attrs(), trace_ctx);
+  }
   multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
 
   op_ret = upload->abort(this, s->cct, obj_ctx);
