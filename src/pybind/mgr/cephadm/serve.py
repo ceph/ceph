@@ -405,7 +405,7 @@ class CephadmServe:
         return None
 
     def _refresh_host_devices(self, host: str) -> Optional[str]:
-        with_lsm = self.mgr.get_module_option('device_enhanced_scan')
+        with_lsm = self.mgr.device_enhanced_scan
         inventory_args = ['--', 'inventory',
                           '--format=json-pretty',
                           '--filter-for-batch']
