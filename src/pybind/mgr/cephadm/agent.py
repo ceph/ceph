@@ -205,10 +205,7 @@ class HostData:
             error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
             daemon_count_old = len(self.mgr.cache.get_daemons_by_host(host))
 
-            agents_down = []
-            for h in self.mgr.cache.get_hosts():
-                if self.mgr.agent_helpers._check_agent(h):
-                    agents_down.append(h)
+            agents_down = self.mgr.agent_helpers._check_agents()
             self.mgr.agent_helpers._update_agent_down_healthcheck(agents_down)
 
             up_to_date = False
@@ -342,7 +339,7 @@ class AgentLockException(Exception):
 class CephadmAgentHelpers:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
-        self.agent_locks: Dict[str, threading.Lock] = {}
+        self.agent_lock: threading.Lock = threading.Lock()
 
     def _request_agent_acks(self, hosts: Set[str], increment: bool = False) -> None:
         for host in hosts:
@@ -432,16 +429,27 @@ class CephadmAgentHelpers:
         return need_apply
 
     @contextmanager
-    def agent_lock(self, host: str) -> Iterator[threading.Lock]:
-        if host not in self.mgr.agent_helpers.agent_locks:
-            self.mgr.agent_helpers.agent_locks[host] = threading.Lock()
-        lock = self.mgr.agent_helpers.agent_locks[host]
-        if not lock.acquire(False):
+    def acquire_agent_lock(self) -> Iterator[threading.Lock]:
+        # multiple threads may find themselves trying to run _check_agents
+        # we only want one at a time, so introduce a non-blocking lock
+        if not self.mgr.agent_helpers.agent_lock.acquire(False):
             raise AgentLockException()
         try:
-            yield lock
+            yield self.mgr.agent_helpers.agent_lock
         finally:
-            lock.release()
+            self.mgr.agent_helpers.agent_lock.release()
+
+    def _check_agents(self) -> List[str]:
+        agents_down = []
+        try:
+            with self.mgr.agent_helpers.acquire_agent_lock():
+                for h in self.mgr.cache.get_hosts():
+                    if self.mgr.agent_helpers._check_agent(h):
+                        agents_down.append(h)
+        except AgentLockException:
+            # some other thread is already checking agents so we don't have to, cont.
+            pass
+        return agents_down
 
     def _check_agent(self, host: str) -> bool:
         try:
@@ -461,12 +469,8 @@ class CephadmAgentHelpers:
                 try:
                     # try to schedule redeploy of agent in case it is individually down
                     agent = self.mgr.cache.get_daemons_by_type('agent', host=host)[0]
-                    with self.mgr.agent_helpers.agent_lock(host):
-                        daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
-                        self.mgr._daemon_action(daemon_spec, action='redeploy')
-                except AgentLockException:
-                    self.mgr.log.debug(
-                        f'Could not redeploy agent on host {host}. Someone else holds agent\'s lock')
+                    daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
+                    self.mgr._daemon_action(daemon_spec, action='redeploy')
                 except Exception as e:
                     self.mgr.log.debug(
                         f'Failed to redeploy agent on host {host}. Agent possibly never deployed: {e}')
@@ -487,25 +491,17 @@ class CephadmAgentHelpers:
                     host, agent.name())
                 if not last_config or last_deps != deps:
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
-                    with self.mgr.agent_helpers.agent_lock(host):
-                        self.mgr._daemon_action(daemon_spec, action='reconfig')
+                    self.mgr._daemon_action(daemon_spec, action='reconfig')
                     return False
-            except AgentLockException:
-                self.mgr.log.debug(
-                    f'Could not reconfig agent on host {host}. Someone else holds agent\'s lock')
             except Exception as e:
                 self.mgr.log.debug(
                     f'Agent on host {host} not ready to have config and deps checked: {e}')
             action = self.mgr.cache.get_scheduled_daemon_action(agent.hostname, agent.name())
             if action:
                 try:
-                    with self.mgr.agent_helpers.agent_lock(host):
-                        daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
-                        self.mgr._daemon_action(daemon_spec, action=action)
-                        self.mgr.cache.rm_scheduled_daemon_action(agent.hostname, agent.name())
-                except AgentLockException:
-                    self.mgr.log.debug(
-                        f'Could not {action} agent on host {host}. Someone else holds agent\'s lock')
+                    daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
+                    self.mgr._daemon_action(daemon_spec, action=action)
+                    self.mgr.cache.rm_scheduled_daemon_action(agent.hostname, agent.name())
                 except Exception as e:
                     self.mgr.log.debug(
                         f'Agent on host {host} not ready to {action}: {e}')
