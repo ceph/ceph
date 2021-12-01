@@ -1783,6 +1783,7 @@ def default_image(func: FuncT) -> FuncT:
                 ctx.image = _get_default_image(ctx)
 
         return func(ctx)
+
     return cast(FuncT, _default_image)
 
 
@@ -2645,8 +2646,6 @@ def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):
     raise RuntimeError('uid/gid not found')
 
 
-
-
 def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
                   config=None, keyring=None,
                   osd_fsid=None,
@@ -2824,7 +2823,6 @@ def deploy_daemon_units(
 ) -> None:
     # cmd
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
-
     with open(data_dir + '/unit.run.new', 'w') as f, \
             open(data_dir + '/unit.meta.new', 'w') as metaf:
         f.write('set -e\n')
@@ -2970,9 +2968,7 @@ def deploy_daemon_units(
          verbosity=CallVerbosity.DEBUG)
     if enable:
         call_throws(ctx, ['systemctl', 'enable', unit_name])
-
     if start:
-
         clean_cgroup(ctx, fsid, unit_name)
         call_throws(ctx, ['systemctl', 'start', unit_name])
 
@@ -5183,7 +5179,6 @@ def command_shell(ctx):
         mounts[pathify(ctx.config)] = '/etc/ceph/ceph.conf:z'
     if ctx.keyring:
         mounts[pathify(ctx.keyring)] = '/etc/ceph/ceph.keyring:z'
-
     if ctx.mount:
         for _mount in ctx.mount:
             split_src_dst = _mount.split(':')
@@ -5266,6 +5261,7 @@ def command_enter(ctx):
 
 ##################################
 
+
 @infer_fsid
 @infer_image
 @validate_fsid
@@ -5294,6 +5290,7 @@ def command_ceph_volume(ctx):
         # tmp config file
         tmp_config = write_tmp(config, uid, gid)
         mounts[tmp_config.name] = '/etc/ceph/ceph.conf:z'
+
     if keyring:
         # tmp keyring file
         tmp_keyring = write_tmp(keyring, uid, gid)
@@ -8098,6 +8095,7 @@ def _get_parser():
         help='daemon name (type.id)')
     parser_deploy.add_argument(
         '--fsid',
+        required=True,
         help='cluster FSID')
     parser_deploy.add_argument(
         '--config', '-c',
