@@ -1426,11 +1426,11 @@ function test_mon_osd()
   ceph osd blocklist ls | grep $bl
   ceph osd blocklist rm $bl
   ceph osd blocklist ls | expect_false grep $bl
-  expect_false "ceph osd blocklist $bl/-1"
-  expect_false "ceph osd blocklist $bl/foo"
+  expect_false "ceph osd blocklist add $bl/-1"
+  expect_false "ceph osd blocklist add $bl/foo"
 
-  # test with wrong address
-  expect_false "ceph osd blocklist 1234.56.78.90/100"
+  # test with invalid address
+  expect_false "ceph osd blocklist add 1234.56.78.90/100"
 
   # Test `clear`
   ceph osd blocklist add $bl
