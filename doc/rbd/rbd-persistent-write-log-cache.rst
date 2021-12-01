@@ -1,32 +1,34 @@
 ================================
- RBD Persistent Write-back Cache
+ RBD Persistent Write Log Cache
 ================================
 
-.. index:: Ceph Block Device; Persistent Write-back Cache
+.. index:: Ceph Block Device; Persistent Write Log Cache
 
-Persistent Write-back Cache
+Persistent Write Log Cache
 ===========================
 
-The persistent write-back cache provides a persistent, fault-tolerant write-back
-cache for librbd-based RBD clients.
+The Persistent Write Log Cache (PWL) provides a persistent, fault-tolerant
+write-back cache for librbd-based RBD clients.
 
 This cache uses a log-ordered write-back design which maintains checkpoints
 internally so that writes that get flushed back to the cluster are always
 crash consistent. Even if the client cache is lost entirely, the disk image is
 still consistent but the data will appear to be stale.
 
-This cache can be used with PMEM or SSD as a cache device.
+This cache can be used with PMEM or SSD as a cache device. For PMEM, the cache
+mode is called ``replica write log (rwl)``. At present, only local cache is
+supported, and the replica function is under development. For SSD, the cache
+mode is called ``ssd``.
 
 Usage
 =====
 
-The persistent write-back cache manages the cache data in a persistent device.
-It looks for and creates cache files in a configured directory, and then caches
-data in the file.
+The PWL cache manages the cache data in a persistent device. It looks for and
+creates cache files in a configured directory, and then caches data in the
+file.
 
-The persistent write-back cache can't be enabled without the exclusive-lock
-feature. It tries to enable the write-back cache only when the exclusive lock
-is acquired.
+The PWL cache depends on the exclusive-lock feature. The cache can be loaded
+only after the exclusive lock is acquired.
 
 The cache provides two different persistence modes. In persistent-on-write mode,
 the writes are completed only when they are persisted to the cache device and
@@ -38,11 +40,10 @@ The data is persisted to the cache device when a flush request is received.
 Initially it defaults to the persistent-on-write mode and it switches to
 persistent-on-flush mode after the first flush request is received.
 
-Enable Persistent Write-back Cache
+Enable Cache
 ========================================
 
-To enable the persistent write-back cache, the following Ceph settings
-need to be enabled.::
+To enable the PWL cache, set the following configuration settings::
 
         rbd persistent cache mode = {cache-mode}
         rbd plugins = pwl_cache
@@ -71,7 +72,7 @@ set per-host, add the overrides to the appropriate `section`_ in the host's
 Cache Status
 ------------
 
-The persistent write-back cache is enabled when the exclusive lock is acquired,
+The PWL cache is enabled when the exclusive lock is acquired,
 and it is closed when the exclusive lock is released. To check the cache status,
 users may use the command ``rbd status``.  ::
 
