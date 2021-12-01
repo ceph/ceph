@@ -3275,7 +3275,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   auto& ioctx = ref.pool.ioctx();
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
-  r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
+  r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, y);
   tracepoint(rgw_rados, operate_exit, req_id.c_str());
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
                 or -ENOENT if was removed, or -EEXIST if it did not exist
@@ -4538,7 +4538,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       auto& ioctx = ref.pool.ioctx();
       ioctx.locator_set_key(loc.loc);
 
-      ret = rgw_rados_operate(dpp, ioctx, loc.oid, &op, null_yield);
+      ret = rgw_rados_operate(dpp, ioctx, loc.oid, &op, y);
       if (ret < 0) {
         goto done_ret;
       }
@@ -4594,7 +4594,7 @@ done_ret:
 
       ref.pool.ioctx().locator_set_key(riter->loc);
 
-      int r = rgw_rados_operate(dpp, ref.pool.ioctx(), riter->oid, &op, null_yield);
+      int r = rgw_rados_operate(dpp, ref.pool.ioctx(), riter->oid, &op, y);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "ERROR: cleanup after error failed to drop reference on obj=" << *riter << dendl;
       }
@@ -7707,7 +7707,7 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
     op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
   }
   bufferlist outbl;
-  r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, &outbl, null_yield);
+  r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, &outbl, y);
 
   if (epoch) {
     *epoch = ref.pool.ioctx().get_last_version();
