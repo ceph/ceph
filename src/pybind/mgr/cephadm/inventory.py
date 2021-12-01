@@ -142,14 +142,6 @@ class Inventory:
         self.assert_host(host)
         return self._inventory[host].get('addr', host)
 
-    def filter_by_label(self, label: Optional[str] = '', as_hostspec: bool = False) -> Iterator:
-        for h, hostspec in self._inventory.items():
-            if not label or label in hostspec.get('labels', []):
-                if as_hostspec:
-                    yield self.spec_from_dict(hostspec)
-                else:
-                    yield h
-
     def spec_from_dict(self, info: dict) -> HostSpec:
         hostname = info['hostname']
         return HostSpec(
