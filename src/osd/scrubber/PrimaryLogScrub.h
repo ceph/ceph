@@ -5,10 +5,6 @@
 // the './' includes are marked this way to affect clang-format
 #include "./pg_scrubber.h"
 
-#include <iostream>
-#include <sstream>
-#include <vector>
-
 #include "debug.h"
 
 #include "common/errno.h"

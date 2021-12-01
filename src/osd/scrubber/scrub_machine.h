@@ -299,11 +299,11 @@ struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing> {
   using reactions =
     mpl::list<sc::custom_reaction<GotReplicas>,	 // all replicas are accounted for
 	      sc::transition<MapsCompared, WaitDigestUpdate>,
-	      sc::deferral<DigestUpdate>  // might arrive before we've reached WDU
+	      sc::custom_reaction<DigestUpdate>
 	      >;
 
   sc::result react(const GotReplicas&);
-
+  sc::result react(const DigestUpdate&);
   bool all_maps_already_called{false};	// see comment in react code
 };
 
