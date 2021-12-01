@@ -11,6 +11,7 @@ if(NOT CEPH_BUILD_VIRTUALENV)
 endif()
 
 if(WITH_GRAFANA)
+  if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
   include(AddCephTest)
   add_tox_test(grafana-check TOX_ENVS grafonnet-check)
   add_tox_test(grafana-query-test TOX_ENVS promql-query-test)
@@ -33,4 +34,5 @@ if(WITH_GRAFANA)
     APPEND
     PROPERTY ENVIRONMENT
     GRAFONNET_PATH=${SOURCE_DIR}/grafonnet)
+  endif(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
 endif()
