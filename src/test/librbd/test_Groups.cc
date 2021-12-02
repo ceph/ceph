@@ -103,6 +103,10 @@ TEST_F(TestGroup, add_image)
   ASSERT_EQ(0, rbd_group_image_add(ioctx, group_name, ioctx,
                                    m_image_name.c_str()));
 
+<<<<<<< HEAD
+=======
+  rbd_group_info_t group_info;
+>>>>>>> cad503cf26836ebf24a07fb5e117aecf5700a87b
   ASSERT_EQ(-ERANGE, rbd_get_group(image, &group_info, 0));
   ASSERT_EQ(0, rbd_get_group(image, &group_info, sizeof(group_info)));
 
