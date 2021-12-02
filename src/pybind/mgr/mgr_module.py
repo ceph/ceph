@@ -1189,7 +1189,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def notify(self, notify_type: NotifyType, notify_id: str) -> None:
         """
         Called by the ceph-mgr service to notify the Python plugin
-        that new state is available.
+        that new state is available.  This method is *only* called for
+        notify_types that are listed in the NOTIFY_TYPES string list
+        member of the module class.
 
         :param notify_type: string indicating what kind of notification,
                             such as osd_map, mon_map, fs_map, mon_status,
