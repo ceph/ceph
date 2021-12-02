@@ -30,7 +30,7 @@ from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
-from mgr_module import MgrModule, HandleCommandResult, Option
+from mgr_module import MgrModule, HandleCommandResult, Option, NotifyType
 from mgr_util import create_self_signed_cert
 import secrets
 import orchestrator
@@ -421,7 +421,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._cons: Dict[str, Tuple[remoto.backends.BaseConnection,
                                     remoto.backends.LegacyModuleExecute]] = {}
 
-        self.notify('mon_map', None)
+        self.notify(NotifyType.mon_map, None)
         self.config_notify()
 
         path = self.get_ceph_option('cephadm_path')
@@ -554,8 +554,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.event.set()
 
-    def notify(self, notify_type: str, notify_id: Optional[str]) -> None:
-        if notify_type == "mon_map":
+    def notify(self, notify_type: NotifyType, notify_id: Optional[str]) -> None:
+        if notify_type == NotifyType.mon_map:
             # get monmap mtime so we can refresh configs when mons change
             monmap = self.get('mon_map')
             self.last_monmap = str_to_datetime(monmap['modified'])
@@ -564,7 +564,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if getattr(self, 'manage_etc_ceph_ceph_conf', False):
                 # getattr, due to notify() being called before config_notify()
                 self._kick_serve_loop()
-        if notify_type == "pg_summary":
+        if notify_type == NotifyType.pg_summary:
             self._trigger_osd_removal()
 
     def _trigger_osd_removal(self) -> None:
