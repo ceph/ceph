@@ -18528,6 +18528,9 @@ int BlueStore::read_allocation_from_drive_on_startup()
   if (ret < 0) {
     return ret;
   }
+  auto shutdown_cache = make_scope_guard([&] {
+    _shutdown_cache();
+  });
 
   read_alloc_stats_t stats = {};
   utime_t    start = ceph_clock_now();
