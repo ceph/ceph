@@ -39,14 +39,6 @@ else
   fi
 fi
 
-# npm resolutions
-npm run fix:audit
-resolutions=`git status | grep package-lock.json`
-if [ "$resolutions" ]; then
-  echo "Please run 'npm run fix:audit' before committing."
-  failed=true
-fi
-
 if [ `uname` != "FreeBSD" ]; then
   deactivate
 fi
