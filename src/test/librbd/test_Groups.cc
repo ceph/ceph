@@ -97,8 +97,14 @@ TEST_F(TestGroup, add_image)
   ASSERT_EQ(0, rbd_get_op_features(image, &op_features));
   ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_GROUP) == 0ULL);
 
+  rbd_group_info_t group_info;
+  ASSERT_EQ(0, rbd_get_group(image, &group_info, sizeof(group_info)));
+
   ASSERT_EQ(0, rbd_group_image_add(ioctx, group_name, ioctx,
                                    m_image_name.c_str()));
+
+  ASSERT_EQ(-ERANGE, rbd_get_group(image, &group_info, 0));
+  ASSERT_EQ(0, rbd_get_group(image, &group_info, sizeof(group_info)));
 
   ASSERT_EQ(0, rbd_get_features(image, &features));
   ASSERT_TRUE((features & RBD_FEATURE_OPERATIONS) ==
@@ -164,6 +170,10 @@ TEST_F(TestGroup, add_imagePP)
 
   ASSERT_EQ(0, rbd.group_image_add(ioctx, group_name, ioctx,
                                    m_image_name.c_str()));
+
+  librbd::group_info_t group_info;
+  ASSERT_EQ(-ERANGE, image.get_group(&group_info, 0));
+  ASSERT_EQ(0, image.get_group(&group_info, sizeof(group_info)));
 
   ASSERT_EQ(0, image.features(&features));
   ASSERT_TRUE((features & RBD_FEATURE_OPERATIONS) ==
