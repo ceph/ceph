@@ -436,7 +436,10 @@ sc::result WaitReplicas::react(const GotReplicas&)
 
 sc::result WaitReplicas::react(const DigestUpdate&)
 {
-  dout(10) << "WaitReplicas::react(const DigestUpdate&) - too early" << dendl;
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  auto warn_msg = "WaitReplicas::react(const DigestUpdate&): Unexpected DigestUpdate event"s;
+  dout(10) << warn_msg << dendl;
+  scrbr->log_cluster_warning(warn_msg);
   return discard_event();
 }
 

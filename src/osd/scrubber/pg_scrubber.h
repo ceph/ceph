@@ -516,6 +516,8 @@ class PgScrubber : public ScrubPgIF,
     return m_pg->snap_mapper.get_snaps(hoid, snaps_set);
   }
 
+  void log_cluster_warning(const std::string& warning) const final;
+
  protected:
   bool state_test(uint64_t m) const { return m_pg->state_test(m); }
   void state_set(uint64_t m) { m_pg->state_set(m); }
