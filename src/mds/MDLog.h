@@ -257,6 +257,7 @@ protected:
   }
 
   int num_events = 0; // in events
+  int total_events = 0; // total events submitted till now
   int unflushed = 0;
   bool mds_is_shutting_down = false;
 
@@ -308,5 +309,8 @@ private:
 
   // -- events --
   LogEvent *cur_event = nullptr;
+
+  // The latest 10000 events' maximum size
+  uint32_t max_events_batch_size = 0;
 };
 #endif

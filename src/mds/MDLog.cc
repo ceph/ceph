@@ -30,6 +30,7 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "include/ceph_assert.h"
+#include "include/intarith.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -305,8 +306,14 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
   }
 
   unflushed++;
-  
+
   uint64_t period = journaler->get_layout_period();
+  float factor = g_conf()->mds_log_segment_size_factor;
+  if (max_events_batch_size > period / 2 && factor > 1.0) {
+    uint64_t _period = factor * std::max<uint64_t>(period, max_events_batch_size);
+    period = round_up_to(_period, period);
+  }
+
   // start a new segment?
   if (le->get_type() == EVENT_SUBTREEMAP ||
       (le->get_type() == EVENT_IMPORTFINISH && mds->is_resolve())) {
@@ -317,7 +324,9 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
   } else if (ls->end/period != ls->offset/period ||
 	     ls->num_events >= g_conf()->mds_log_events_per_segment) {
     dout(10) << "submit_entry also starting new segment: last = "
-	     << ls->seq  << "/" << ls->offset << ", event seq = " << event_seq << dendl;
+	     << ls->seq  << "/" << ls->offset << ", event seq = "
+	     << event_seq << ", max_events_batch_size = " << max_events_batch_size
+	     << ", period = " << period << dendl;
     _start_new_segment();
   } else if (g_conf()->mds_debug_subtrees &&
 	     le->get_type() != EVENT_SUBTREEMAP_TEST) {
@@ -394,6 +403,8 @@ void MDLog::_submit_thread()
       if (le->get_type() == EVENT_SUBTREEMAP)
 	ls->offset = write_pos;
 
+      max_events_batch_size = (total_events % 10000) ? bl.length() : max_events_batch_size;
+
       dout(5) << "_submit_thread " << write_pos << "~" << bl.length()
 	      << " : " << *le << dendl;
 
@@ -432,6 +443,7 @@ void MDLog::_submit_thread()
 	journaler->flush();
     }
 
+    total_events++;
     locker.lock();
     if (data.flush)
       unflushed = 0;

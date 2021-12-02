@@ -543,6 +543,17 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_log_segment_size_factor
+  type: float
+  level: advanced
+  desc: ratio of max(MDLog's segment size, maximum size of every 10000 events) at which
+    the MDLog will start a new LogSegment immediately if the maximum size of the 10000
+    events is larger than half of the segment size. Set a value less than or equal to 1
+    to disable it.
+  default: 2
+  services:
+  - mds
+  with_legacy: true
 - name: mds_log_max_segments
   type: uint
   level: advanced
