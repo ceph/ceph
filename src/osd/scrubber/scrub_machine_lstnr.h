@@ -186,4 +186,7 @@ struct ScrubMachineListener {
 
   /// exposed to be used by the scrub_machine logger
   virtual std::ostream& gen_prefix(std::ostream& out) const = 0;
+
+  /// sending cluster-log warnings
+  virtual void log_cluster_warning(const std::string& msg) const = 0;
 };

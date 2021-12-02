@@ -435,6 +435,15 @@ sc::result WaitReplicas::react(const GotReplicas&)
   }
 }
 
+sc::result WaitReplicas::react(const DigestUpdate&)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  std::string warn_msg = "WaitReplicas::react(const DigestUpdate&): Unexpected DigestUpdate event";
+  dout(10) << warn_msg << dendl;
+  scrbr->log_cluster_warning(warn_msg);
+  return discard_event();
+}
+
 // ----------------------- WaitDigestUpdate -----------------------------------
 
 WaitDigestUpdate::WaitDigestUpdate(my_context ctx) : my_base(ctx)
