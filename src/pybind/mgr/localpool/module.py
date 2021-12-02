@@ -47,6 +47,7 @@ class Module(MgrModule):
             'runtime': True,
         },
     ]
+    NOTIFY_TYPES = [NotifyType.osd_map]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)

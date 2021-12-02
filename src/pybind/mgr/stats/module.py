@@ -21,6 +21,7 @@ class Module(MgrModule):
         },
     ]
     MODULE_OPTIONS: List[Option] = []
+    NOTIFY_TYPES = [NotifyType.command]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
