@@ -929,7 +929,7 @@ private:
   uint64_t total_bytes_returned;
   uint64_t processed_size;
 
-  enum header_name_En
+  enum class header_name_En
   {
     EVENT_TYPE,
     CONTENT_TYPE,
@@ -938,7 +938,7 @@ private:
     ERROR_MESSAGE
   };
 
-  enum header_value_En
+  enum class header_value_En
   {
     RECORDS,
     OCTET_STREAM,
@@ -971,11 +971,11 @@ public:
 
   uint64_t get_processed_size();
 
-  void set_processed_size(uint64_t value);
+  void update_processed_size(uint64_t value);
 
   uint64_t get_total_bytes_returned();
 
-  void set_total_bytes_returned(uint64_t value);
+  void update_total_bytes_returned(uint64_t value);
 
   int create_header_records();
 

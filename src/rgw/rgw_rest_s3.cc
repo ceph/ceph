@@ -6139,7 +6139,7 @@ uint64_t aws_response_handler::get_processed_size()
   return processed_size;
 }
 
-void aws_response_handler::set_processed_size(uint64_t value)
+void aws_response_handler::update_processed_size(uint64_t value)
 {
   processed_size += value;
 }
@@ -6149,7 +6149,7 @@ uint64_t aws_response_handler::get_total_bytes_returned()
   return total_bytes_returned;
 }
 
-void aws_response_handler::set_total_bytes_returned(uint64_t value)
+void aws_response_handler::update_total_bytes_returned(uint64_t value)
 {
   total_bytes_returned += value;
 }
@@ -6171,17 +6171,19 @@ void aws_response_handler::push_header(const char *header_name, const char *head
   m_buff_header.append(header_value);
 }
 
+#define IDX( x ) static_cast<int>( x )
+
 int aws_response_handler::create_header_records()
 {
   //headers description(AWS)
   //[header-name-byte-length:1][header-name:variable-length][header-value-type:1][header-value:variable-length]
 
   //1
-  push_header(header_name_str[EVENT_TYPE], header_value_str[RECORDS]);
+  push_header(header_name_str[IDX(header_name_En::EVENT_TYPE)], header_value_str[IDX(header_value_En::RECORDS)]);
   //2
-  push_header(header_name_str[CONTENT_TYPE], header_value_str[OCTET_STREAM]);
+  push_header(header_name_str[IDX(header_name_En::CONTENT_TYPE)], header_value_str[IDX(header_value_En::OCTET_STREAM)]);
   //3
-  push_header(header_name_str[MESSAGE_TYPE], header_value_str[EVENT]);
+  push_header(header_name_str[IDX(header_name_En::MESSAGE_TYPE)], header_value_str[IDX(header_value_En::EVENT)]);
 
   return m_buff_header.size();
 }
@@ -6190,9 +6192,9 @@ int aws_response_handler::create_header_continuation()
 {
   //headers description(AWS)
   //1
-  push_header(header_name_str[EVENT_TYPE], header_value_str[CONT]);
+  push_header(header_name_str[IDX(header_name_En::EVENT_TYPE)], header_value_str[IDX(header_value_En::CONT)]);
   //2
-  push_header(header_name_str[MESSAGE_TYPE], header_value_str[EVENT]);
+  push_header(header_name_str[IDX(header_name_En::MESSAGE_TYPE)], header_value_str[IDX(header_value_En::EVENT)]);
 
   return m_buff_header.size();
 }
@@ -6201,11 +6203,11 @@ int aws_response_handler::create_header_progress()
 {
   //headers description(AWS)
   //1
-  push_header(header_name_str[EVENT_TYPE], header_value_str[PROGRESS]);
+  push_header(header_name_str[IDX(header_name_En::EVENT_TYPE)], header_value_str[IDX(header_value_En::PROGRESS)]);
   //2
-  push_header(header_name_str[CONTENT_TYPE], header_value_str[XML]);
+  push_header(header_name_str[IDX(header_name_En::CONTENT_TYPE)], header_value_str[IDX(header_value_En::XML)]);
   //3
-  push_header(header_name_str[MESSAGE_TYPE], header_value_str[EVENT]);
+  push_header(header_name_str[IDX(header_name_En::MESSAGE_TYPE)], header_value_str[IDX(header_value_En::EVENT)]);
 
   return m_buff_header.size();
 }
@@ -6214,11 +6216,11 @@ int aws_response_handler::create_header_stats()
 {
   //headers description(AWS)
   //1
-  push_header(header_name_str[EVENT_TYPE], header_value_str[STATS]);
+  push_header(header_name_str[IDX(header_name_En::EVENT_TYPE)], header_value_str[IDX(header_value_En::STATS)]);
   //2
-  push_header(header_name_str[CONTENT_TYPE], header_value_str[XML]);
+  push_header(header_name_str[IDX(header_name_En::CONTENT_TYPE)], header_value_str[IDX(header_value_En::XML)]);
   //3
-  push_header(header_name_str[MESSAGE_TYPE], header_value_str[EVENT]);
+  push_header(header_name_str[IDX(header_name_En::MESSAGE_TYPE)], header_value_str[IDX(header_value_En::EVENT)]);
 
   return m_buff_header.size();
 }
@@ -6227,9 +6229,9 @@ int aws_response_handler::create_header_end()
 {
   //headers description(AWS)
   //1
-  push_header(header_name_str[EVENT_TYPE], header_value_str[END]);
+  push_header(header_name_str[IDX(header_name_En::EVENT_TYPE)], header_value_str[IDX(header_value_En::END)]);
   //2
-  push_header(header_name_str[MESSAGE_TYPE], header_value_str[EVENT]);
+  push_header(header_name_str[IDX(header_name_En::MESSAGE_TYPE)], header_value_str[IDX(header_value_En::EVENT)]);
 
   return m_buff_header.size();
 }
@@ -6240,11 +6242,11 @@ int aws_response_handler::create_error_header_records(const char *error_message)
   //[header-name-byte-length:1][header-name:variable-length][header-value-type:1][header-value:variable-length]
 
   //1
-  push_header(header_name_str[ERROR_CODE], header_value_str[ENGINE_ERROR]);
+  push_header(header_name_str[IDX(header_name_En::ERROR_CODE)], header_value_str[IDX(header_value_En::ENGINE_ERROR)]);
   //2
-  push_header(header_name_str[ERROR_MESSAGE], error_message);
+  push_header(header_name_str[IDX(header_name_En::ERROR_MESSAGE)], error_message);
   //3
-  push_header(header_name_str[MESSAGE_TYPE], header_value_str[ERROR_TYPE]);
+  push_header(header_name_str[IDX(header_name_En::MESSAGE_TYPE)], header_value_str[IDX(header_value_En::ERROR_TYPE)]);
 
   return m_buff_header.size();
 }
@@ -6356,7 +6358,7 @@ void aws_response_handler::send_error_response(const char *error_code,
                                                const char *resource_id)
 {
 
-  set_req_state_err(s, 0); //TODO what err_no?
+  set_req_state_err(s, 0);
   dump_errno(s, 400);
   end_header(s, m_rgwop, "application/xml", CHUNKED_TRANSFER_ENCODING);
   dump_start(s);
@@ -6381,7 +6383,6 @@ void aws_response_handler::send_progress_response()
 
   sql_result.append(progress_payload);
   int buff_len = create_message(header_size);
-
   s->formatter->write_bin_data(sql_result.data(), buff_len);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -6394,7 +6395,6 @@ void aws_response_handler::send_stats_response()
 
   sql_result.append(stats_payload);
   int buff_len = create_message(header_size);
-
   s->formatter->write_bin_data(sql_result.data(), buff_len);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -6407,12 +6407,10 @@ RGWSelectObj_ObjStore_S3::RGWSelectObj_ObjStore_S3() : s3select_syntax(std::make
 }
 
 RGWSelectObj_ObjStore_S3::~RGWSelectObj_ObjStore_S3()
-{
-}
+{}
 
 int RGWSelectObj_ObjStore_S3::get_params(optional_yield y)
 {
-
   //retrieve s3-select query from payload
   bufferlist data;
   int ret;
@@ -6433,7 +6431,6 @@ int RGWSelectObj_ObjStore_S3::get_params(optional_yield y)
   }
 
   int status = handle_aws_cli_parameters(m_sql_query);
-
   if (status<0) {
     return status;
   }
@@ -6529,7 +6526,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
     //query is correct(syntax), processing is starting.
     status = m_s3_csv_object->run_s3select_on_stream(m_aws_response_handler->get_sql_result(), input, input_length, s->obj_size);
     length_post_processing = (m_aws_response_handler->get_sql_result()).size();
-    m_aws_response_handler->set_total_bytes_returned(length_post_processing-length_before_processing);
+    m_aws_response_handler->update_total_bytes_returned(length_post_processing-length_before_processing);
     if (status < 0)
     { //error flow(processing-time)
       m_aws_response_handler->send_error_response(s3select_processTime_error,
@@ -6684,7 +6681,7 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
       continue; 
     }
     
-    m_aws_response_handler->set_processed_size(it.length());
+    m_aws_response_handler->update_processed_size(it.length());
 
     status = run_s3select(m_sql_query.c_str(), &(it)[0], it.length());
     if(status<0) {
