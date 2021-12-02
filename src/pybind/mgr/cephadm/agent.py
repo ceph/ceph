@@ -356,6 +356,12 @@ class CephadmAgentHelpers:
                 host, self.mgr.cache.agent_ports[host], {'counter': self.mgr.cache.agent_counter[host]}, self.mgr)
             message_thread.start()
 
+    def _request_ack_all_not_up_to_date(self) -> None:
+        self.mgr.agent_helpers._request_agent_acks(
+            set([h for h in self.mgr.cache.get_hosts() if
+                 (not self.mgr.cache.host_metadata_up_to_date(h)
+                 and h in self.mgr.cache.agent_ports and not self.mgr.cache.messaging_agent(h))]))
+
     def _agent_down(self, host: str) -> bool:
         # if host is draining or drained (has _no_schedule label) there should not
         # be an agent deployed there and therefore we should return False
