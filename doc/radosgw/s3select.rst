@@ -15,8 +15,8 @@ Overview
     | As the following query:
     | ``select customer-id from s3Object where age>30 and age<65;``
 
-    | Currently the whole s3-object must retrieve from OSD via RGW before filtering and extracting data.
-    | By "pushing down" the query into OSD, it's possible to save a lot of network and CPU(serialization / deserialization).
+    | Currently the whole s3-object must be retrieved from OSD via RGW before filtering and extracting data.
+    | By "pushing down" the query into radosgw, it's possible to save a lot of network and CPU(serialization / deserialization).
 
     | **The bigger the object, and the more accurate the query, the better the performance**.
  
@@ -58,7 +58,7 @@ Error Handling
     | Upon Syntax Error, the engine creates an error message that points to the location of the error.
     | RGW sends back the error message in a specific error response. 
     |
-    | **Processing TIme error**: the runtime engine may detect errors that occur only on processing time, for that type of     
+    | **Processing Time error**: the runtime engine may detect errors that occur only on processing time, for that type of     
     | error, a different error message would describe that.
     | RGW sends back the error message in a specific error response.
 
