@@ -171,7 +171,8 @@ class PromqlTest:
 
         for variable, value in self.variables.items():
             expr = self.promql_expr_test.expr
-            new_expr = re.sub(r'\${0}'.format(variable), str(value), expr)
+            regex = fr'\${variable}(?=\W)'
+            new_expr = re.sub(regex, fr'{str(value)}', expr)
             self.set_expression(new_expr)
 
         test_as_dict = asdict(self.test_file)
