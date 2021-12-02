@@ -1,0 +1,13 @@
+---
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/src/pybind/mgr/dashboard/frontend"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "mgr/dashboard:"
+    labels:
+      - "dashboard"
+    pull-request-branch-name:
+      separator: "-"
