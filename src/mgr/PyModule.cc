@@ -356,6 +356,8 @@ int PyModule::load(PyThreadState *pMainThreadState)
       return r;
     }
 
+    load_notify_types();
+
     // We've imported the module and found a MgrModule subclass, at this
     // point the module is considered loaded.  It might still not be
     // runnable though, can_run populated later...
@@ -464,6 +466,39 @@ int PyModule::register_options(PyObject *cls)
          << dendl;
     derr << handle_pyerror() << dendl;
   }
+  return 0;
+}
+
+int PyModule::load_notify_types()
+{
+  PyObject *ls = PyObject_GetAttrString(pClass, "NOTIFY_TYPES");
+  if (ls == nullptr) {
+    derr << "Module " << get_name() << " has missing NOTIFY_TYPES member" << dendl;
+    return -EINVAL;
+  }
+  if (!PyObject_TypeCheck(ls, &PyList_Type)) {
+    // Relatively easy mistake for human to make, e.g. defining COMMANDS
+    // as a {} instead of a []
+    derr << "Module " << get_name() << " has NOTIFY_TYPES that is not a list" << dendl;
+    return -EINVAL;
+  }
+
+  const size_t list_size = PyList_Size(ls);
+  for (size_t i = 0; i < list_size; ++i) {
+    PyObject *notify_type = PyList_GetItem(ls, i);
+    ceph_assert(notify_type != nullptr);
+
+    if (!PyObject_TypeCheck(notify_type, &PyUnicode_Type)) {
+      derr << "Module " << get_name() << " has non-string entry in NOTIFY_TYPES list"
+	   << dendl;
+      return -EINVAL;
+    }
+
+    notify_types.insert(PyUnicode_AsUTF8(notify_type));
+  }
+  Py_DECREF(ls);
+  dout(10) << "Module " << get_name() << " notify_types " << notify_types << dendl;
+
   return 0;
 }
 
