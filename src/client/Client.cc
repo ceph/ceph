@@ -161,6 +161,7 @@ using namespace TOPNSPC::common;
 
 namespace bs = boost::system;
 namespace ca = ceph::async;
+using namespace ceph::common;
 
 void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 {
@@ -191,12 +192,22 @@ int Client::CommandHook::call(
   std::ostream& errss,
   bufferlist& out)
 {
+  int r = 0;
   f->open_object_section("result");
   {
     std::scoped_lock l{m_client->client_lock};
     if (command == "mds_requests")
       m_client->dump_mds_requests(f);
-    else if (command == "mds_sessions") {
+    else if (command == "get_caps") {
+      std::string path;
+      std::string mask;
+      if (!(cmd_getval(cmdmap, "path", path)) ||
+          !(cmd_getval(cmdmap, "mask", mask))) {
+        r = -EINVAL;
+      } else {
+        m_client->get_caps_asok_interface(path, std::stoi(mask), f);
+      }
+    } else if (command == "mds_sessions") {
       bool cap_dump = false;
       cmd_getval(cmdmap, "cap_dump", cap_dump);
       m_client->dump_mds_sessions(f, cap_dump);
@@ -210,7 +221,7 @@ int Client::CommandHook::call(
       ceph_abort_msg("bad command registered");
   }
   f->close_section();
-  return 0;
+  return r;
 }
 
 
@@ -615,6 +626,14 @@ void Client::_finish_init()
   ret = admin_socket->register_command("kick_stale_sessions",
 				       &m_command_hook,
 				       "kick sessions that were remote reset");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+	       << cpp_strerror(-ret) << dendl;
+  }
+
+  ret = admin_socket->register_command("get_caps name=path,type=CephString name=mask,type=CephString",
+				       &m_command_hook,
+				       "get requested capabilities on a file path");
   if (ret < 0) {
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
@@ -1668,6 +1687,48 @@ void Client::dump_mds_requests(Formatter *f)
     p->second->dump(f);
     f->close_section();
   }
+}
+
+void Client::get_caps_asok_interface(std::string relpath, int mask, Formatter *f)
+{
+  filepath path(relpath);
+  InodeRef inref;
+  UserPerm perms {0,0};
+  ldout(cct, 20) << __func__  << " Requesting caps " << ccap_string(mask)
+	         << " on the file " << relpath << dendl;
+  int r = path_walk(path, &inref, perms, false);
+  if (r < 0) {
+    lderr(cct) << __func__ << " path resolution failed. path = " << relpath
+	       << " errno = " << -r << " (" << strerror(-r) << ")" << dendl;
+    f->dump_stream("path resolution failed") << -r << " (" << strerror(-r) << ")";
+    return;
+  }
+
+  Inode *in = inref.get();
+  for (auto &p : in->caps) {
+    mds_rank_t mds = p.first;
+    Cap &cap = p.second;
+
+    auto session = mds_sessions.at(mds);
+
+    int revoking = cap.implemented & ~cap.issued;
+    int msg_flags = 0;
+    int flushing = 0;
+    ceph_tid_t flush_tid = 0;
+    msg_flags |= MClientCaps::FLAG_SYNC;
+    int cap_used = get_caps_used(in) | in->caps_dirty();
+    int wanted = mask;
+    int retain = (cap.issued | cap.implemented);
+    ldout(cct, 20) << __func__  << " caps issued " << ccap_string(cap.issued)
+	           << " cap implemented " << ccap_string(cap.implemented)
+	           << " cap revoking " << ccap_string(revoking)
+	           << " cap used " << ccap_string(cap_used)
+	           << " cap wanted " << ccap_string(mask)
+                   << " on the file " << relpath << dendl;
+    send_cap(in, session.get(), &cap, msg_flags, cap_used, wanted, retain,
+             flushing, flush_tid);
+  }
+  f->dump_stream("caps granted successfully");
 }
 
 int Client::verify_reply_trace(int r, MetaSession *session,
