@@ -18674,7 +18674,7 @@ int BlueStore::add_existing_bluefs_allocation(Allocator* allocator, read_alloc_s
     }
     for (auto itr = bluefs_extents.begin(); itr != bluefs_extents.end(); extent_count++, itr++) {
       //dout(5) << "BlueFS[" << extent_count << "] <" << itr.get_start() << "," << itr.get_len() << ">" << dendl;
-      shared_alloc.a->init_rm_free(itr.get_start(), itr.get_len());
+      allocator->init_rm_free(itr.get_start(), itr.get_len());
       stats.extent_count++;
     }
   }
