@@ -336,6 +336,76 @@ LBABtree::init_cached_extent_ret LBABtree::init_cached_extent(
   }
 }
 
+LBABtree::get_internal_if_live_ret
+LBABtree::get_internal_if_live(
+  op_context_t c,
+  paddr_t addr,
+  laddr_t laddr,
+  segment_off_t len)
+{
+  LOG_PREFIX(BtreeLBAManager::get_leaf_if_live);
+  return lower_bound(
+    c, laddr
+  ).si_then([FNAME, c, addr, laddr, len](auto iter) {
+    for (depth_t d = 2; d <= iter.get_depth(); ++d) {
+      CachedExtent &node = *iter.get_internal(d).node;
+      auto internal_node = node.cast<LBAInternalNode>();
+      if (internal_node->get_paddr() == addr) {
+	DEBUGT(
+	  "extent laddr {} addr {}~{} found: {}",
+	  c.trans,
+	  laddr,
+	  addr,
+	  len,
+	  *internal_node);
+	assert(internal_node->get_node_meta().begin == laddr);
+	return CachedExtentRef(internal_node);
+      }
+    }
+    DEBUGT(
+      "extent laddr {} addr {}~{} is not live, no matching internal node",
+      c.trans,
+      laddr,
+      addr,
+      len);
+    return CachedExtentRef();
+  });
+}
+
+LBABtree::get_leaf_if_live_ret
+LBABtree::get_leaf_if_live(
+  op_context_t c,
+  paddr_t addr,
+  laddr_t laddr,
+  segment_off_t len)
+{
+  LOG_PREFIX(BtreeLBAManager::get_leaf_if_live);
+  return lower_bound(
+    c, laddr
+  ).si_then([FNAME, c, addr, laddr, len](auto iter) {
+    if (iter.leaf.node->get_paddr() == addr) {
+      DEBUGT(
+	"extent laddr {} addr {}~{} found: {}",
+	c.trans,
+	laddr,
+	addr,
+	len,
+	*iter.leaf.node);
+      return CachedExtentRef(iter.leaf.node);
+    } else {
+      DEBUGT(
+	"extent laddr {} addr {}~{} is not live, does not match node {}",
+	c.trans,
+	laddr,
+	addr,
+	len,
+	*iter.leaf.node);
+      return CachedExtentRef();
+    }
+  });
+}
+
+
 LBABtree::rewrite_lba_extent_ret LBABtree::rewrite_lba_extent(
   op_context_t c,
   CachedExtentRef e)
@@ -408,27 +478,35 @@ LBABtree::get_internal_node_ret LBABtree::get_internal_node(
     offset,
     depth);
   assert(depth > 1);
+  auto init_internal = [c, depth](LBAInternalNode &node) {
+    auto meta = node.get_meta();
+    if (node.get_size()) {
+      ceph_assert(meta.begin <= node.begin()->get_key());
+      ceph_assert(meta.end > (node.end() - 1)->get_key());
+    }
+    ceph_assert(depth == meta.depth);
+    assert(!node.is_pending());
+    assert(!node.pin.is_linked());
+    node.pin.set_range(meta);
+    if (c.pins) {
+      c.pins->add_pin(node.pin);
+    }
+  };
   return c.cache.get_extent<LBAInternalNode>(
     c.trans,
     offset,
-    LBA_BLOCK_SIZE
-  ).si_then([FNAME, c, offset, depth](LBAInternalNodeRef ret) {
+    LBA_BLOCK_SIZE,
+    init_internal
+  ).si_then([FNAME, c, offset, init_internal](LBAInternalNodeRef ret) {
     DEBUGT(
       "read internal at offset {} {}",
       c.trans,
       offset,
       *ret);
-    auto meta = ret->get_meta();
-    if (ret->get_size()) {
-      ceph_assert(meta.begin <= ret->begin()->get_key());
-      ceph_assert(meta.end > (ret->end() - 1)->get_key());
-    }
-    ceph_assert(depth == meta.depth);
-    if (!ret->is_pending() && !ret->pin.is_linked()) {
-      ret->pin.set_range(meta);
-      if (c.pins) {
-	c.pins->add_pin(ret->pin);
-      }
+    // This can only happen during init_cached_extent
+    if (c.pins && !ret->is_pending() && !ret->pin.is_linked()) {
+      assert(ret->is_dirty());
+      init_internal(*ret);
     }
     return get_internal_node_ret(
       interruptible::ready_future_marker{},
@@ -445,27 +523,35 @@ LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
     "reading leaf at offset {}",
     c.trans,
     offset);
+  auto init_leaf = [c](LBALeafNode &node) {
+    auto meta = node.get_meta();
+    if (node.get_size()) {
+      ceph_assert(meta.begin <= node.begin()->get_key());
+      ceph_assert(meta.end > (node.end() - 1)->get_key());
+    }
+    ceph_assert(1 == meta.depth);
+    assert(!node.is_pending());
+    assert(!node.pin.is_linked());
+    node.pin.set_range(meta);
+    if (c.pins) {
+      c.pins->add_pin(node.pin);
+    }
+  };
   return c.cache.get_extent<LBALeafNode>(
     c.trans,
     offset,
-    LBA_BLOCK_SIZE
-  ).si_then([FNAME, c, offset](LBALeafNodeRef ret) {
+    LBA_BLOCK_SIZE,
+    init_leaf
+  ).si_then([FNAME, c, offset, init_leaf](LBALeafNodeRef ret) {
     DEBUGT(
       "read leaf at offset {} {}",
       c.trans,
       offset,
       *ret);
-    auto meta = ret->get_meta();
-    if (ret->get_size()) {
-      ceph_assert(meta.begin <= ret->begin()->get_key());
-      ceph_assert(meta.end > (ret->end() - 1)->get_key());
-    }
-    ceph_assert(1 == meta.depth);
-    if (!ret->is_pending() && !ret->pin.is_linked()) {
-      ret->pin.set_range(meta);
-      if (c.pins) {
-	c.pins->add_pin(ret->pin);
-      }
+    // This can only happen during init_cached_extent
+    if (c.pins && !ret->is_pending() && !ret->pin.is_linked()) {
+      assert(ret->is_dirty());
+      init_leaf(*ret);
     }
     return get_leaf_node_ret(
       interruptible::ready_future_marker{},
