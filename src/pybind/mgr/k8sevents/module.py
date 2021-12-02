@@ -1051,6 +1051,7 @@ class Module(MgrModule):
          'default': 7,
          'desc': "Days to hold ceph event information within local cache"}
     ]
+    NOTIFY_TYPES = [NotifyType.clog]
 
     def __init__(self, *args, **kwargs):
         self.run = True

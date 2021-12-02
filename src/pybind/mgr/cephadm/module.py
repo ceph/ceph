@@ -123,6 +123,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     _STORE_HOST_PREFIX = "host"
 
     instance = None
+    NOTIFY_TYPES = [NotifyType.mon_map, NotifyType.pg_summary]
     NATIVE_OPTIONS = []  # type: List[Any]
     MODULE_OPTIONS = [
         Option(

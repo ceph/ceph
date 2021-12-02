@@ -20,6 +20,9 @@ ON_DISK_VERSION = 1
 
 
 class Module(MgrModule):
+
+    NOTIFY_TYPES = [NotifyType.health]
+
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
 
