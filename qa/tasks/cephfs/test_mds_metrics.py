@@ -3,8 +3,10 @@ import json
 import time
 import random
 import logging
+import errno
 
 from teuthology.contextutil import safe_while
+from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 log = logging.getLogger(__name__)
@@ -299,6 +301,28 @@ class TestMDSMetrics(CephFSTestCase):
         log.debug("metrics={0}".format(metrics))
         self.assertTrue(valid)
 
+    def test_query_client_ip_filter(self):
+        # validate
+        valid, metrics = self._get_metrics(
+            self.verify_mds_metrics(client_count=TestMDSMetrics.CLIENTS_REQUIRED), 30)
+        log.debug("metrics={0}".format(metrics))
+        self.assertTrue(valid)
+
+        client_matadata = metrics['client_metadata']
+        # pick an random client
+        client = random.choice(list(client_matadata.keys()))
+        # get IP of client to use in filter
+        client_ip = client_matadata[client]['IP']
+
+        valid, metrics = self._get_metrics(
+            self.verify_mds_metrics(client_count=1), 30, '--client_ip={}'.format(client_ip))
+        log.debug("metrics={0}".format(metrics))
+        self.assertTrue(valid)
+
+        # verify IP from output with filter IP
+        for i in metrics['client_metadata']:
+            self.assertEqual(client_ip, metrics['client_metadata'][i]['IP'])
+
     def test_query_mds_and_client_filter(self):
         # validate
         valid, metrics = self._get_metrics(
@@ -337,3 +361,36 @@ class TestMDSMetrics(CephFSTestCase):
             30, '--mds_rank={}'.format(filtered_mds), '--client_id={}'.format(client_id))
         log.debug("metrics={0}".format(metrics))
         self.assertTrue(valid)
+
+    def test_for_invalid_mds_rank(self):
+        invalid_mds_rank = "1,"
+        # try, 'fs perf stat' command with invalid mds_rank
+        try:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "perf", "stats", "--mds_rank", invalid_mds_rank)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.EINVAL:
+                raise
+        else:
+            raise RuntimeError("expected the 'fs perf stat' command to fail for invalid mds_rank")
+
+    def test_for_invalid_client_id(self):
+        invalid_client_id = "abcd"
+        # try, 'fs perf stat' command with invalid client_id
+        try:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "perf", "stats", "--client_id", invalid_client_id)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.EINVAL:
+                raise
+        else:
+            raise RuntimeError("expected the 'fs perf stat' command to fail for invalid client_id")
+
+    def test_for_invalid_client_ip(self):
+        invalid_client_ip = "1.2.3"
+        # try, 'fs perf stat' command with invalid client_ip
+        try:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", "perf", "stats", "--client_ip", invalid_client_ip)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.EINVAL:
+                raise
+        else:
+            raise RuntimeError("expected the 'fs perf stat' command to fail for invalid client_ip")
