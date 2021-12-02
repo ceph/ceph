@@ -195,11 +195,12 @@ public:
   using get_extent_ertr = base_ertr;
   template <typename T>
   using get_extent_ret = get_extent_ertr::future<TCachedExtentRef<T>>;
-  template <typename T>
+  template <typename T, typename Func>
   get_extent_ret<T> get_extent(
     paddr_t offset,                ///< [in] starting addr
     segment_off_t length,          ///< [in] length
-    const src_ext_t* p_metric_key  ///< [in] cache query metric key
+    const src_ext_t* p_metric_key, ///< [in] cache query metric key
+    Func &&extent_init_func        ///< [in] init func for extent
   ) {
     auto cached = query_cache(offset, p_metric_key);
     if (!cached) {
@@ -208,7 +209,8 @@ public:
       ret->set_paddr(offset);
       ret->state = CachedExtent::extent_state_t::CLEAN;
       add_extent(ret);
-      return read_extent<T>(std::move(ret));
+      return read_extent<T>(
+	std::move(ret), std::forward<Func>(extent_init_func));
     }
 
     // extent PRESENT in cache
@@ -226,17 +228,30 @@ public:
       }
 
       cached->state = CachedExtent::extent_state_t::INVALID;
-      return read_extent<T>(std::move(ret));
+      return read_extent<T>(
+	std::move(ret), std::forward<Func>(extent_init_func));
     } else {
       auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
       return ret->wait_io(
-      ).then([ret=std::move(ret)]() mutable -> get_extent_ret<T> {
+      ).then([ret=std::move(ret),
+	      extent_init_func=std::forward<Func>(extent_init_func)]() mutable
+	     -> get_extent_ret<T> {
         // ret may be invalid, caller must check
         return get_extent_ret<T>(
           get_extent_ertr::ready_future_marker{},
           std::move(ret));
       });
     }
+  }
+  template <typename T>
+  get_extent_ret<T> get_extent(
+    paddr_t offset,                ///< [in] starting addr
+    segment_off_t length,          ///< [in] length
+    const src_ext_t* p_metric_key  ///< [in] cache query metric key
+  ) {
+    return get_extent<T>(
+      offset, length, p_metric_key,
+      [](T &){});
   }
 
   /**
@@ -298,11 +313,12 @@ public:
    * t *must not* have retired offset
    */
   using get_extent_iertr = base_iertr;
-  template <typename T>
+  template <typename T, typename Func>
   get_extent_iertr::future<TCachedExtentRef<T>> get_extent(
     Transaction &t,
     paddr_t offset,
-    segment_off_t length) {
+    segment_off_t length,
+    Func &&extent_init_func) {
     CachedExtentRef ret;
     LOG_PREFIX(Cache::get_extent);
     auto result = t.get_extent(offset, &ret);
@@ -316,7 +332,9 @@ public:
     } else {
       auto metric_key = std::make_pair(t.get_src(), T::TYPE);
       return trans_intr::make_interruptible(
-	get_extent<T>(offset, length, &metric_key)
+	get_extent<T>(
+	  offset, length, &metric_key,
+	  std::forward<Func>(extent_init_func))
       ).si_then([this, FNAME, offset, &t](auto ref) {
 	(void)this; // silence incorrect clang warning about capture
 	if (!ref->is_valid()) {
@@ -334,6 +352,13 @@ public:
       });
     }
   }
+  template <typename T>
+  get_extent_iertr::future<TCachedExtentRef<T>> get_extent(
+    Transaction &t,
+    paddr_t offset,
+    segment_off_t length) {
+    return get_extent<T>(t, offset, length, [](T &){});
+  }
 
 
   /**
@@ -342,23 +367,52 @@ public:
    * Based on type, instantiate the correct concrete type
    * and read in the extent at location offset~length.
    */
-  get_extent_ertr::future<CachedExtentRef> get_extent_by_type(
-    extent_types_t type,             ///< [in] type tag
-    paddr_t offset,                  ///< [in] starting addr
-    laddr_t laddr,                   ///< [in] logical address if logical
-    segment_off_t length,            ///< [in] length
-    const Transaction::src_t* p_src  ///< [in] src tag for cache query metric
+private:
+  // This is a workaround std::move_only_function not being available,
+  // not really worth generalizing at this time.
+  class extent_init_func_t {
+    struct callable_i {
+      virtual void operator()(CachedExtent &extent) = 0;
+      virtual ~callable_i() = default;
+    };
+    template <typename Func>
+    struct callable_wrapper final : callable_i {
+      Func func;
+      callable_wrapper(Func &&func) : func(std::forward<Func>(func)) {}
+      void operator()(CachedExtent &extent) final {
+	return func(extent);
+      }
+      ~callable_wrapper() final = default;
+    };
+  public:
+    std::unique_ptr<callable_i> wrapped;
+    template <typename Func>
+    extent_init_func_t(Func &&func) : wrapped(
+      std::make_unique<callable_wrapper<Func>>(std::forward<Func>(func)))
+    {}
+    void operator()(CachedExtent &extent) {
+      return (*wrapped)(extent);
+    }
+  };
+  get_extent_ertr::future<CachedExtentRef> _get_extent_by_type(
+    extent_types_t type,
+    paddr_t offset,
+    laddr_t laddr,
+    segment_off_t length,
+    const Transaction::src_t* p_src,
+    extent_init_func_t &&extent_init_func
   );
 
   using get_extent_by_type_iertr = get_extent_iertr;
   using get_extent_by_type_ret = get_extent_by_type_iertr::future<
     CachedExtentRef>;
-  get_extent_by_type_ret get_extent_by_type(
+  get_extent_by_type_ret _get_extent_by_type(
     Transaction &t,
     extent_types_t type,
     paddr_t offset,
     laddr_t laddr,
-    segment_off_t length) {
+    segment_off_t length,
+    extent_init_func_t &&extent_init_func) {
     CachedExtentRef ret;
     auto status = t.get_extent(offset, &ret);
     if (status == Transaction::get_extent_ret::RETIRED) {
@@ -368,7 +422,9 @@ public:
     } else {
       auto src = t.get_src();
       return trans_intr::make_interruptible(
-	get_extent_by_type(type, offset, laddr, length, &src)
+	_get_extent_by_type(
+	  type, offset, laddr, length, &src,
+	  std::move(extent_init_func))
       ).si_then([=, &t](CachedExtentRef ret) {
         if (!ret->is_valid()) {
           LOG_PREFIX(Cache::get_extent_by_type);
@@ -383,6 +439,36 @@ public:
       });
     }
   }
+
+public:
+  template <typename Func>
+  get_extent_by_type_ret get_extent_by_type(
+    Transaction &t,         ///< [in] transaction
+    extent_types_t type,    ///< [in] type tag
+    paddr_t offset,         ///< [in] starting addr
+    laddr_t laddr,          ///< [in] logical address if logical
+    segment_off_t length,   ///< [in] length
+    Func &&extent_init_func ///< [in] extent init func
+  ) {
+    return _get_extent_by_type(
+      t,
+      type,
+      offset,
+      laddr,
+      length,
+      extent_init_func_t(std::forward<Func>(extent_init_func)));
+  }
+  get_extent_by_type_ret get_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    paddr_t offset,
+    laddr_t laddr,
+    segment_off_t length
+  ) {
+    return get_extent_by_type(
+      t, type, offset, laddr, length, [](CachedExtent &) {});
+  }
+
 
   /**
    * alloc_new_extent
@@ -786,9 +872,10 @@ private:
   /// Introspect transaction when it is being destructed
   void on_transaction_destruct(Transaction& t);
 
-  template <typename T>
+  template <typename T, typename Func>
   get_extent_ret<T> read_extent(
-    TCachedExtentRef<T>&& extent
+    TCachedExtentRef<T>&& extent,
+    Func &&func
   ) {
     extent->set_io_wait();
     return reader.read(
@@ -796,11 +883,12 @@ private:
       extent->get_length(),
       extent->get_bptr()
     ).safe_then(
-      [extent=std::move(extent)]() mutable {
+      [extent=std::move(extent), func=std::forward<Func>(func)]() mutable {
         /* TODO: crc should be checked against LBA manager */
         extent->last_committed_crc = extent->get_crc32c();
 
         extent->on_clean_read();
+	func(*extent);
         extent->complete_io();
         return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
           std::move(extent));
