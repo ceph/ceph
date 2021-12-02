@@ -4,7 +4,7 @@ import re
 import threading
 
 from mgr_module import CLICommand, CLIReadCommand, HandleCommandResult
-from mgr_module import MgrModule, CommandResult
+from mgr_module import MgrModule, CommandResult, NotifyType
 from . import health as health_util
 
 # hours of crash history to report
@@ -50,9 +50,9 @@ class Module(MgrModule):
         return { k: v for k, v in self._store.items() if k.startswith(prefix) }
 
 
-    def notify(self, ttype, ident):
+    def notify(self, ttype: NotifyType, ident):
         """Queue updates for processing"""
-        if ttype == "health":
+        if ttype == NotifyType.health:
             self.log.info("Received health check update {} pending".format(
                 len(self._pending_health)))
             health = json.loads(self.get("health")["json"])

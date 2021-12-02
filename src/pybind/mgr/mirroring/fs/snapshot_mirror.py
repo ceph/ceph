@@ -15,6 +15,7 @@ import rados
 
 from mgr_util import RTimer, CephfsClient, open_filesystem,\
     CephfsConnectionException
+from mgr_module import NotifyType
 from .blocklist import blocklist
 from .notify import Notifier, InstanceWatcher
 from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
@@ -288,9 +289,9 @@ class FSSnapshotMirror:
         self.refresh_pool_policy()
         self.local_fs = CephfsClient(mgr)
 
-    def notify(self, notify_type):
+    def notify(self, notify_type: NotifyType):
         log.debug(f'got notify type {notify_type}')
-        if notify_type == 'fs_map':
+        if notify_type == NotifyType.fs_map:
             with self.lock:
                 self.fs_map = self.mgr.get('fs_map')
                 self.refresh_pool_policy_locked()
