@@ -46,6 +46,7 @@ class Module(MgrModule):
             desc='name prefix for any created local pool',
             runtime=True),
     ]
+    NOTIFY_TYPES = [NotifyType.osd_map]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
