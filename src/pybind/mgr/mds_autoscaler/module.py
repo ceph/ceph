@@ -16,6 +16,7 @@ class MDSAutoscaler(orchestrator.OrchestratorClientMixin, MgrModule):
     """
     MDS autoscaler.
     """
+    NOTIFY_TYPES = [NotifyType.fs_map]
     def __init__(self, *args, **kwargs):
         MgrModule.__init__(self, *args, **kwargs)
         self.set_mgr(self)

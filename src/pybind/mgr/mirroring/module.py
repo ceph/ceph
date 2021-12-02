@@ -6,6 +6,7 @@ from .fs.snapshot_mirror import FSSnapshotMirror
 
 class Module(MgrModule):
     MODULE_OPTIONS: List[Option] = []
+    NOTIFY_TYPES = [NotifyType.fs_map]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

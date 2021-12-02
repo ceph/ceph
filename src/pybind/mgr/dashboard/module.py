@@ -276,6 +276,8 @@ class Module(MgrModule, CherryPyConfig):
     for options in PLUGIN_MANAGER.hook.get_options() or []:
         MODULE_OPTIONS.extend(options)
 
+    NOTIFY_TYPES = [NotifyType.clog]
+
     __pool_stats = collections.defaultdict(lambda: collections.defaultdict(
         lambda: collections.deque(maxlen=10)))  # type: dict
 
