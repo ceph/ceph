@@ -5453,6 +5453,8 @@ int BlueStore::_open_bdev(bool create)
   if (r < 0) {
     goto fail_close;
   }
+  // get block dev optimal io size
+  optimal_io_size = bdev->get_optimal_io_size();
 
   return 0;
 
@@ -6936,7 +6938,14 @@ int BlueStore::mkfs()
   dout(10) << " freelist_type " << freelist_type << dendl;
 
   // choose min_alloc_size
-  if (cct->_conf->bluestore_min_alloc_size) {
+  dout(5) << __func__ << " optimal_io_size 0x" << std::hex << optimal_io_size
+	  << " block_size: 0x" << block_size << std::dec << dendl;
+  if ((cct->_conf->bluestore_use_optimal_io_size_for_min_alloc_size) && (optimal_io_size != 0)) {
+    dout(5) << __func__ << " optimal_io_size 0x" << std::hex << optimal_io_size
+		<< " for min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+    min_alloc_size = optimal_io_size;
+  }
+  else if (cct->_conf->bluestore_min_alloc_size) {
     min_alloc_size = cct->_conf->bluestore_min_alloc_size;
   } else {
     ceph_assert(bdev);
@@ -6954,6 +6963,16 @@ int BlueStore::mkfs()
 	 << std::hex << min_alloc_size << std::dec
 	 << " is not power of 2 aligned!"
 	 << dendl;
+    r = -EINVAL;
+    goto out_close_bdev;
+  }
+
+  // make sure min_alloc_size is >= and aligned with block size
+  if (min_alloc_size % block_size != 0) {
+    derr << __func__ << " min_alloc_size 0x"
+	 << std::hex << min_alloc_size
+	 << " is less or not aligned with block_size: 0x"
+	 << block_size << std::dec <<  dendl;
     r = -EINVAL;
     goto out_close_bdev;
   }

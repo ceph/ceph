@@ -4281,6 +4281,16 @@ options:
   flags:
   - create
   with_legacy: true
+- name: bluestore_use_optimal_io_size_for_min_alloc_size 
+  type: bool
+  level: advanced
+  desc: Discover media optimal IO Size and use for min_alloc_size
+  default: false
+  see_also:
+  - bluestore_min_alloc_size
+  flags:
+  - create
+  with_legacy: true
 - name: bluestore_max_alloc_size
   type: size
   level: advanced
