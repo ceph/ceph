@@ -325,7 +325,7 @@ public:
 	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
 	} else {
 	  DEBUGT(
-	    "Found extent at offset {} in cache: {}",
+	    "Read extent at offset {} in cache: {}",
 	    t, offset, *ref);
 	  t.add_to_read_set(ref);
 	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
