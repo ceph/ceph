@@ -6377,9 +6377,8 @@ void aws_response_handler::send_error_response(const char *error_code,
 
 void aws_response_handler::send_progress_response()
 {
-  std::string progress_payload="<?xml version=\"1.0\" encoding=\"UTF-8\"?><Progress><BytesScanned>" + to_string(get_processed_size()) + 
-		    "</BytesScanned><BytesProcessed>" + to_string(get_processed_size()) + "</BytesProcessed>" +
-		    "<BytesReturned>" + to_string(get_total_bytes_returned()) + "</BytesReturned></Progress>";
+  std::string progress_payload = fmt::format("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Progress><BytesScanned>{}</BytesScanned><BytesProcessed>{}</BytesProcessed><BytesReturned>{}</BytesReturned></Progress>"
+      ,get_processed_size(),get_processed_size(),get_total_bytes_returned());
 
   sql_result.append(progress_payload);
   int buff_len = create_message(header_size);
@@ -6389,10 +6388,9 @@ void aws_response_handler::send_progress_response()
 
 void aws_response_handler::send_stats_response()
 {
-  std::string stats_payload="<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>" + to_string(get_processed_size()) + 
-		    "</BytesScanned><BytesProcessed>" + to_string(get_processed_size()) + "</BytesProcessed>" +
-		    "<BytesReturned>" + to_string(get_total_bytes_returned()) + "</BytesReturned></Stats>";
-
+  std::string stats_payload = fmt::format("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>{}</BytesScanned><BytesProcessed>{}</BytesProcessed><BytesReturned>{}</BytesReturned></Stats>"
+      ,get_processed_size(),get_processed_size(),get_total_bytes_returned());  
+    
   sql_result.append(stats_payload);
   int buff_len = create_message(header_size);
   s->formatter->write_bin_data(sql_result.data(), buff_len);
