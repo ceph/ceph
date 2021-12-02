@@ -733,14 +733,6 @@ public:
   }
 };
 
-
-static map<string,string> get_str_map(const string &str) {
-  map<string,string> m;
-  get_str_map(str, &m, ";, \t");
-  return m;
-}
-
-
 static int get_actual_key_from_conf(const DoutPrefixProvider* dpp,
                                     CephContext *cct,
                                     std::string_view key_id,

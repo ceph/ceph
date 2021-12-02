@@ -169,8 +169,8 @@ class DaemonState
     metadata = m;
     auto p = m.find("device_ids");
     if (p != m.end()) {
-      std::map<std::string,std::string> devs, paths; // devname -> id or path
-      get_str_map(p->second, &devs, ",; ");
+      std::map<std::string,std::string> paths; // devname -> id or path
+      auto devs = get_str_map(p->second, ",; ");
       auto q = m.find("device_paths");
       if (q != m.end()) {
 	get_str_map(q->second, &paths, ",; ");
