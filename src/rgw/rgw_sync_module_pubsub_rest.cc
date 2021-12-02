@@ -136,7 +136,7 @@ protected:
     if (s->init_state.url_bucket.empty()) {
       return nullptr;
     }
-    if (s->object->empty()) {
+    if (s->object == nullptr || s->object->empty()) {
       return new RGWPSListTopics_ObjStore();
     }
     return new RGWPSGetTopic_ObjStore();
