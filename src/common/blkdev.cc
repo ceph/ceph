@@ -859,6 +859,11 @@ int BlkDev::discard(int64_t offset, int64_t len) const
   return -EOPNOTSUPP;
 }
 
+int BlkDev::get_optimal_io_size() const
+{
+  return 0;
+}
+
 bool BlkDev::is_rotational() const
 {
   return false;
@@ -986,6 +991,11 @@ bool BlkDev::support_discard() const
 int BlkDev::discard(int64_t offset, int64_t len) const
 {
   return -EOPNOTSUPP;
+}
+
+int BlkDev::get_optimal_io_size() const
+{
+  return 0;
 }
 
 bool BlkDev::is_rotational() const
