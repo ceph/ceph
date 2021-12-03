@@ -78,7 +78,7 @@ private:
 
   // mask for segment manager id
   static constexpr internal_segment_id_t SM_ID_MASK =
-    0xF << (std::numeric_limits<internal_segment_id_t>::digits - DEVICE_ID_LEN_BITS);
+    0xFF << (std::numeric_limits<internal_segment_id_t>::digits - DEVICE_ID_LEN_BITS);
   // default internal segment id
   static constexpr internal_segment_id_t DEFAULT_INTERNAL_SEG_ID =
     (std::numeric_limits<internal_segment_id_t>::max() >> 1) - 1;
@@ -452,10 +452,11 @@ public:
   // use 1bit in device_id_t for address type
   void set_device_id(device_id_t id, addr_types_t type = addr_types_t::SEGMENT) {
     dev_addr &= static_cast<common_addr_t>(
-      std::numeric_limits<device_segment_id_t>::max());
-    dev_addr |= static_cast<common_addr_t>(id & 0x8) << DEV_ADDR_LEN_BITS;
-    dev_addr |= static_cast<common_addr_t>(type)
-      << (std::numeric_limits<common_addr_t>::digits - 1);
+      std::numeric_limits<common_addr_t>::max() >> DEVICE_ID_LEN_BITS);
+    dev_addr |= (static_cast<common_addr_t>(id &
+      std::numeric_limits<device_id_t>::max() >> 1) << DEV_ADDR_LEN_BITS);
+    dev_addr |= (static_cast<common_addr_t>(type)
+      << (std::numeric_limits<common_addr_t>::digits - 1));
   }
 
   device_id_t get_device_id() const {
