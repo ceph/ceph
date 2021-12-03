@@ -418,7 +418,7 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
   extent_types_t type,
   paddr_t addr,
   laddr_t laddr,
-  segment_off_t len)
+  seastore_off_t len)
 {
   LOG_PREFIX(TransactionManager::get_extent_if_live);
   DEBUGT("type {}, addr {}, laddr {}, len {}", t, type, addr, laddr, len);

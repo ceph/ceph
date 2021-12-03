@@ -37,9 +37,9 @@ struct cache_test_t : public seastar_test_suite_t {
       bl.append(block.bl);
     }
 
-    ceph_assert((segment_off_t)bl.length() <
+    ceph_assert((seastore_off_t)bl.length() <
 		segment_manager->get_segment_size());
-    if (current.as_seg_paddr().get_segment_off() + (segment_off_t)bl.length() >
+    if (current.as_seg_paddr().get_segment_off() + (seastore_off_t)bl.length() >
 	segment_manager->get_segment_size())
       current = paddr_t::make_seg_paddr(
 	segment_id_t(

@@ -546,7 +546,7 @@ class ExtentIndex {
   friend class Cache;
   CachedExtent::index extent_index;
 public:
-  auto get_overlap(paddr_t addr, segment_off_t len) {
+  auto get_overlap(paddr_t addr, seastore_off_t len) {
     auto bottom = extent_index.upper_bound(addr, paddr_cmp());
     if (bottom != extent_index.begin())
       --bottom;

@@ -178,13 +178,13 @@ std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
 
 // Offset within a segment on disk, see SegmentManager
 // may be negative for relative offsets
-using segment_off_t = int32_t;
-constexpr segment_off_t NULL_SEG_OFF =
-  std::numeric_limits<segment_off_t>::max();
-constexpr segment_off_t MAX_SEG_OFF =
-  std::numeric_limits<segment_off_t>::max();
+using seastore_off_t = int32_t;
+constexpr seastore_off_t NULL_SEG_OFF =
+  std::numeric_limits<seastore_off_t>::max();
+constexpr seastore_off_t MAX_SEG_OFF =
+  std::numeric_limits<seastore_off_t>::max();
 
-std::ostream &offset_to_stream(std::ostream &, const segment_off_t &t);
+std::ostream &offset_to_stream(std::ostream &, const seastore_off_t &t);
 
 /* Monotonically increasing segment seq, uniquely identifies
  * the incarnation of a segment */
@@ -419,19 +419,19 @@ protected:
   using common_addr_t = uint64_t;
   common_addr_t dev_addr;
 private:
-  constexpr paddr_t(segment_id_t seg, segment_off_t offset)
+  constexpr paddr_t(segment_id_t seg, seastore_off_t offset)
     : dev_addr((static_cast<common_addr_t>(seg.segment)
 	<< SEG_OFF_LEN_BITS) | static_cast<uint32_t>(offset)) {}
   constexpr paddr_t(common_addr_t val) : dev_addr(val) {}
 public:
   static constexpr paddr_t make_seg_paddr(
-    segment_id_t seg, segment_off_t offset) {
+    segment_id_t seg, seastore_off_t offset) {
     return paddr_t(seg, offset);
   }
   static constexpr paddr_t make_seg_paddr(
     device_id_t device,
     device_segment_id_t seg,
-    segment_off_t offset) {
+    seastore_off_t offset) {
     return paddr_t(segment_id_t(device, seg), offset);
   }
   constexpr paddr_t() : paddr_t(NULL_SEG_ID, 0) {}
@@ -524,21 +524,21 @@ struct seg_paddr_t : public paddr_t {
   segment_id_t get_segment_id() const {
     return segment_id_t((dev_addr & SEG_ID_MASK) >> SEG_OFF_LEN_BITS);
   }
-  segment_off_t get_segment_off() const {
-    return segment_off_t(dev_addr & SEG_OFF_MASK);
+  seastore_off_t get_segment_off() const {
+    return seastore_off_t(dev_addr & SEG_OFF_MASK);
   }
   void set_segment_id(const segment_id_t id) {
     dev_addr &= static_cast<common_addr_t>(
       std::numeric_limits<device_segment_id_t>::max());
     dev_addr |= static_cast<common_addr_t>(id.segment) << SEG_OFF_LEN_BITS;
   }
-  void set_segment_off(const segment_off_t off) {
+  void set_segment_off(const seastore_off_t off) {
     dev_addr &= static_cast<common_addr_t>(
       std::numeric_limits<device_segment_id_t>::max()) << SEG_OFF_LEN_BITS;
     dev_addr |= (uint32_t)off;
   }
 
-  paddr_t add_offset(segment_off_t o) const {
+  paddr_t add_offset(seastore_off_t o) const {
     return paddr_t::make_seg_paddr(get_segment_id(), get_segment_off() + o);
   }
 
@@ -598,24 +598,24 @@ constexpr paddr_t P_ADDR_NULL = paddr_t{};
 constexpr paddr_t P_ADDR_MIN = paddr_t::make_seg_paddr(segment_id_t(0, 0), 0);
 constexpr paddr_t P_ADDR_MAX = paddr_t::make_seg_paddr(
   segment_id_t(DEVICE_ID_MAX, DEVICE_SEGMENT_ID_MAX),
-  std::numeric_limits<segment_off_t>::max());
+  std::numeric_limits<seastore_off_t>::max());
 constexpr paddr_t P_ADDR_ZERO = paddr_t::make_seg_paddr(
   DEVICE_ID_ZERO, 0, 0);
 
-constexpr paddr_t make_record_relative_paddr(segment_off_t off) {
+constexpr paddr_t make_record_relative_paddr(seastore_off_t off) {
   return paddr_t::make_seg_paddr(
     segment_id_t{DEVICE_ID_RECORD_RELATIVE, 0},
     off);
 }
-constexpr paddr_t make_block_relative_paddr(segment_off_t off) {
+constexpr paddr_t make_block_relative_paddr(seastore_off_t off) {
   return paddr_t::make_seg_paddr(
     segment_id_t{DEVICE_ID_BLOCK_RELATIVE, 0},
     off);
 }
-constexpr paddr_t make_fake_paddr(segment_off_t off) {
+constexpr paddr_t make_fake_paddr(seastore_off_t off) {
   return paddr_t::make_seg_paddr(FAKE_SEG_ID, off);
 }
-constexpr paddr_t delayed_temp_paddr(segment_off_t off) {
+constexpr paddr_t delayed_temp_paddr(seastore_off_t off) {
   return paddr_t::make_seg_paddr(
     segment_id_t{DEVICE_ID_DELAYED, 0},
     off);
@@ -666,7 +666,7 @@ struct journal_seq_t {
   segment_seq_t segment_seq = 0;
   paddr_t offset;
 
-  journal_seq_t add_offset(segment_off_t o) const {
+  journal_seq_t add_offset(seastore_off_t o) const {
     return {segment_seq, offset.add_offset(o)};
   }
 
@@ -807,7 +807,7 @@ struct delta_info_t {
   laddr_t laddr = L_ADDR_NULL;                 ///< logical address
   uint32_t prev_crc = 0;
   uint32_t final_crc = 0;
-  segment_off_t length = NULL_SEG_OFF;         ///< extent length
+  seastore_off_t length = NULL_SEG_OFF;         ///< extent length
   extent_version_t pversion;                   ///< prior version
   ceph::bufferlist bl;                         ///< payload
 
@@ -1066,7 +1066,7 @@ class __attribute__((packed)) coll_root_le_t {
 public:
   coll_root_le_t() = default;
   
-  coll_root_le_t(laddr_t laddr, segment_off_t size)
+  coll_root_le_t(laddr_t laddr, seastore_off_t size)
     : addr(laddr), size(init_extent_len_le(size)) {}
 
 
@@ -1434,7 +1434,7 @@ try_decode_deltas(
 
 struct write_result_t {
   journal_seq_t start_seq;
-  segment_off_t length;
+  seastore_off_t length;
 
   journal_seq_t get_end_seq() const {
     return start_seq.add_offset(length);
@@ -1476,11 +1476,11 @@ struct scan_valid_records_cursor {
     return seq.offset.as_seg_paddr().get_segment_id();
   }
 
-  segment_off_t get_segment_offset() const {
+  seastore_off_t get_segment_offset() const {
     return seq.offset.as_seg_paddr().get_segment_off();
   }
 
-  void increment_seq(segment_off_t off) {
+  void increment_seq(seastore_off_t off) {
     auto& seg_addr = seq.offset.as_seg_paddr();
     seg_addr.set_segment_off(
       seg_addr.get_segment_off() + off);

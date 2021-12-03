@@ -842,7 +842,7 @@ void Cache::on_transaction_destruct(Transaction& t)
 CachedExtentRef Cache::alloc_new_extent_by_type(
   Transaction &t,       ///< [in, out] current transaction
   extent_types_t type,  ///< [in] type tag
-  segment_off_t length, ///< [in] length
+  seastore_off_t length, ///< [in] length
   bool delay 		///< [in] whether to delay paddr alloc
 )
 {
@@ -974,7 +974,7 @@ record_t Cache::prepare_record(Transaction &t)
 	   : L_ADDR_NULL),
 	  i->last_committed_crc,
 	  final_crc,
-	  (segment_off_t)i->get_length(),
+	  (seastore_off_t)i->get_length(),
 	  i->get_version() - 1,
 	  i->get_delta()
 	});
@@ -1386,7 +1386,7 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::_get_extent_by_type(
   extent_types_t type,
   paddr_t offset,
   laddr_t laddr,
-  segment_off_t length,
+  seastore_off_t length,
   const Transaction::src_t* p_src,
   extent_init_func_t &&extent_init_func)
 {

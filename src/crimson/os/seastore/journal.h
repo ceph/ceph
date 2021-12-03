@@ -140,7 +140,7 @@ private:
       return segment_manager.get_device_id();
     }
 
-    segment_off_t get_block_size() const {
+    seastore_off_t get_block_size() const {
       return segment_manager.get_block_size();
     }
 
@@ -219,7 +219,7 @@ private:
     segment_nonce_t current_segment_nonce;
 
     SegmentRef current_journal_segment;
-    segment_off_t written_to;
+    seastore_off_t written_to;
     // committed_to may be in a previous journal segment
     journal_seq_t committed_to;
   };
@@ -332,12 +332,12 @@ private:
 
     record_group_t pending;
     std::size_t submitting_size = 0;
-    segment_off_t submitting_length = 0;
-    segment_off_t submitting_mdlength = 0;
+    seastore_off_t submitting_length = 0;
+    seastore_off_t submitting_mdlength = 0;
 
     struct promise_result_t {
       write_result_t write_result;
-      segment_off_t mdlength;
+      seastore_off_t mdlength;
     };
     using maybe_promise_result_t = std::optional<promise_result_t>;
     std::optional<seastar::shared_promise<maybe_promise_result_t> > io_promise;

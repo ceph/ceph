@@ -29,7 +29,7 @@ std::ostream &segment_to_stream(std::ostream &out, const segment_id_t &t)
     return out << t;
 }
 
-std::ostream &offset_to_stream(std::ostream &out, const segment_off_t &t)
+std::ostream &offset_to_stream(std::ostream &out, const seastore_off_t &t)
 {
   if (t == NULL_SEG_OFF)
     return out << "NULL_OFF";
@@ -546,7 +546,7 @@ paddr_t convert_blk_paddr_to_paddr(blk_paddr_t addr, size_t block_size,
     d_id,
     (device_segment_id_t)(addr / (block_size * blocks_per_segment))
   };
-  segment_off_t off = addr % (block_size * blocks_per_segment);
+  seastore_off_t off = addr % (block_size * blocks_per_segment);
   return paddr_t::make_seg_paddr(id, off);
 }
 
