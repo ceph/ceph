@@ -411,6 +411,13 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     without_gil_t no_gil;
     with_gil_t with_gil{no_gil};
     server.dump_pg_ready(&f);
+  } else if (what == "pg_progress") {
+    without_gil_t no_gil;
+    cluster_state.with_pgmap([&](const PGMap &pg_map) {
+      no_gil.acquire_gil();
+      pg_map.dump_pg_progress(&f);
+      server.dump_pg_ready(&f);
+    });
   } else if (what == "osd_stats") {
     without_gil_t no_gil;
     cluster_state.with_pgmap([&](const PGMap &pg_map) {
