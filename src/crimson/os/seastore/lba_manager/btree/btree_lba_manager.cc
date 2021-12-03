@@ -402,7 +402,7 @@ BtreeLBAManager::get_physical_extent_if_live(
   extent_types_t type,
   paddr_t addr,
   laddr_t laddr,
-  segment_off_t len)
+  seastore_off_t len)
 {
   ceph_assert(is_lba_node(type));
   auto c = get_context(t);

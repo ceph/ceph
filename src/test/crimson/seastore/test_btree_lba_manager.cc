@@ -347,7 +347,7 @@ struct btree_lba_manager_test : btree_test_base {
     );
   }
 
-  segment_off_t next_off = 0;
+  seastore_off_t next_off = 0;
   paddr_t get_paddr() {
     next_off += block_size;
     return make_fake_paddr(next_off);

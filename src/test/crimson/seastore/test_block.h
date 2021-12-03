@@ -44,7 +44,7 @@ inline std::ostream &operator<<(
 }
 
 struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
-  constexpr static segment_off_t SIZE = 4<<10;
+  constexpr static seastore_off_t SIZE = 4<<10;
   using Ref = TCachedExtentRef<TestBlock>;
 
   std::vector<test_block_delta_t> delta = {};
@@ -83,7 +83,7 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
 using TestBlockRef = TCachedExtentRef<TestBlock>;
 
 struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
-  constexpr static segment_off_t SIZE = 4<<10;
+  constexpr static seastore_off_t SIZE = 4<<10;
   using Ref = TCachedExtentRef<TestBlockPhysical>;
 
   std::vector<test_block_delta_t> delta = {};

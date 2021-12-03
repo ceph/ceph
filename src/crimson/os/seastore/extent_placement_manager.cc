@@ -217,7 +217,7 @@ SegmentedAllocator::Writer::write(
   return write_func();
 }
 
-bool SegmentedAllocator::Writer::_needs_roll(segment_off_t length) const {
+bool SegmentedAllocator::Writer::_needs_roll(seastore_off_t length) const {
   return allocated_to + length > current_segment->segment->get_write_capacity();
 }
 

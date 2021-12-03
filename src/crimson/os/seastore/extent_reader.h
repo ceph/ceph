@@ -6,6 +6,7 @@
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/seastore/logging.h"
 
 namespace crimson::os::seastore {
 
@@ -14,7 +15,7 @@ class TransactionManager;
 
 class ExtentReader {
 public:
-  segment_off_t get_block_size() const {
+  seastore_off_t get_block_size() const {
     assert(segment_managers.size());
     // assume all segment managers have the same block size
     return segment_managers[0]->get_block_size();

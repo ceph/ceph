@@ -59,7 +59,7 @@ bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
 
 int64_t SpaceTrackerDetailed::SegmentMap::allocate(
   device_segment_id_t segment,
-  segment_off_t offset,
+  seastore_off_t offset,
   extent_len_t len,
   const extent_len_t block_size)
 {
@@ -91,7 +91,7 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
 
 int64_t SpaceTrackerDetailed::SegmentMap::release(
   device_segment_id_t segment,
-  segment_off_t offset,
+  seastore_off_t offset,
   extent_len_t len,
   const extent_len_t block_size)
 {
