@@ -41,6 +41,9 @@
 
   https://docs.ceph.com/en/latest/rados/operations/placement-groups/
 
+* A health warning will now be reported if the ``require-osd-release`` flag is not
+  set to the appropriate release after a cluster upgrade.
+
 >=16.2.7
 --------
 * Critical bug in OMAP format upgrade is fixed. This could cause data corruption
