@@ -41,10 +41,7 @@ std::ostream &operator<<(std::ostream &os,
       << " user_req=" << req.user_req << ","
       << " m_user_req_completed=" << req.m_user_req_completed << ","
       << " m_deferred=" << req.m_deferred << ","
-      << " detained=" << req.detained << ","
-      << " waited_lanes=" << req.waited_lanes << ","
-      << " waited_entries=" << req.waited_entries << ","
-      << " waited_buffers=" << req.waited_buffers;
+      << " detained=" << req.detained;
    return os;
 }
 

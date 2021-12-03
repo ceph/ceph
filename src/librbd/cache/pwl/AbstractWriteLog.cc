@@ -1476,7 +1476,6 @@ bool AbstractWriteLog<I>::check_allocation(
   {
     std::lock_guard locker(m_lock);
     if (m_free_lanes < num_lanes) {
-      req->set_io_waited_for_lanes(true);
       ldout(m_image_ctx.cct, 20) << "not enough free lanes (need "
                                  <<  num_lanes
                                  << ", have " << m_free_lanes << ") "
@@ -1485,7 +1484,6 @@ bool AbstractWriteLog<I>::check_allocation(
       /* This isn't considered a "no space" alloc fail. Lanes are a throttling mechanism. */
     }
     if (m_free_log_entries < num_log_entries) {
-      req->set_io_waited_for_entries(true);
       ldout(m_image_ctx.cct, 20) << "not enough free entries (need "
                                  << num_log_entries
                                  << ", have " << m_free_log_entries << ") "
@@ -1495,13 +1493,10 @@ bool AbstractWriteLog<I>::check_allocation(
     }
     /* Don't attempt buffer allocate if we've exceeded the "full" threshold */
     if (m_bytes_allocated + bytes_allocated > m_bytes_allocated_cap) {
-      if (!req->has_io_waited_for_buffers()) {
-        req->set_io_waited_for_buffers(true);
-        ldout(m_image_ctx.cct, 5) << "Waiting for allocation cap (cap="
-                                  << m_bytes_allocated_cap
-                                  << ", allocated=" << m_bytes_allocated
-                                  << ") in write [" << *req << "]" << dendl;
-      }
+      ldout(m_image_ctx.cct, 20) << "Waiting for allocation cap (cap="
+                                 << m_bytes_allocated_cap
+                                 << ", allocated=" << m_bytes_allocated
+                                 << ") in write [" << *req << "]" << dendl;
       alloc_succeeds = false;
       no_space = true; /* Entries must be retired */
     }
@@ -1524,9 +1519,6 @@ bool AbstractWriteLog<I>::check_allocation(
       m_bytes_allocated += bytes_allocated;
       m_bytes_cached += bytes_cached;
       m_bytes_dirty += bytes_dirtied;
-      if (req->has_io_waited_for_buffers()) {
-        req->set_io_waited_for_buffers(false);
-      }
     } else {
       alloc_succeeds = false;
     }
