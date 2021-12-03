@@ -3869,6 +3869,66 @@ returned %d, but should return zero on success." % (self.name, ret))
             rados_write_op_omap_rm_range2(_write_op.write_op, _key_begin, key_begin_len,
                                            _key_end, key_end_len)
 
+    def list_lockers(self, key: str, name: str) -> List[Tuple[str, str, str]]:
+        """
+        List clients that have locked the named object lock and information
+        about the lock.
+
+        :param key: name of the object
+        :param name: name of the lock
+        :returns: list of tag/client/addrs tuples
+        """
+        self.require_ioctx_open()
+
+        key_raw = cstr(key, 'key')
+        name_raw = cstr(name, 'name')
+
+        cdef:
+            char* _key = key_raw
+            char* _name = name_raw
+            int exclusive
+            size_t tag_len = 512
+            size_t clients_len = 512
+            size_t cookies_len = 512
+            size_t addrs_len = 512
+            char* c_tag = NULL
+            char* c_clients = NULL
+            char* c_cookies = NULL
+            char* c_addrs = NULL
+        try:
+            while True:
+                c_tag = <char *>realloc_chk(c_tag, tag_len)
+                c_clients = <char *>realloc_chk(c_clients, clients_len)
+                c_cookies = <char *>realloc_chk(c_cookies, cookies_len)
+                c_addrs = <char *>realloc_chk(c_addrs, addrs_len)
+                with nogil:
+                    ret = rados_list_lockers(self.io, _key, _name, &exclusive, c_tag,
+                                         &tag_len, c_clients, &clients_len, c_cookies,
+                                         &cookies_len, c_addrs, &addrs_len)
+                if ret > 0:
+                     tag = [decode_cstr(tag) for tag in
+                                c_tag[:tag_len].split(b'\0')]
+                     clients = [decode_cstr(client) for client in
+                                    c_clients[:clients_len].split(b'\0')]
+                     cookies = [decode_cstr(cookie) for cookie in
+                                    c_cookies[:cookies_len].split(b'\0')]
+                     addrs = [decode_cstr(client) for client in
+                                  c_addrs[:addrs_len].split(b'\0')]
+                     return list(zip(tag, clients, cookies, addrs))[:-1]
+                elif ret == 0:
+                    return None
+                elif ret == -errno.ERANGE:
+                    tag_len = tag_len * 2
+                    clients_len = clients_len * 2
+                    addrs_len = addrs_len * 2
+                else:
+                    raise make_ex(ret, "error listing lockers")
+        finally:
+            free(c_tag)
+            free(c_clients)
+            free(c_cookies)
+            free(c_addrs)
+
     def lock_exclusive(self, key: str, name: str, cookie: str, desc: str = "",
                        duration: Optional[int] = None,
                        flags: int = 0):

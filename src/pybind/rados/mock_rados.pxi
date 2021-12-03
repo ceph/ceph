@@ -321,6 +321,14 @@ cdef nogil:
                                                    rados_snap_t snapid):
         pass
 
+    ssize_t rados_list_lockers(rados_ioctx_t io, const char *o,
+                               const char *name, int *exclusive,
+                               char *tag, size_t *tag_len,
+                               char *clients, size_t *clients_len,
+                               char *cookies, size_t *cookies_len,
+                               char *addrs, size_t *addrs_len):
+        pass
+
     int rados_lock_exclusive(rados_ioctx_t io, const char * oid, const char * name,
                              const char * cookie, const char * desc,
                              timeval * duration, uint8_t flags):
