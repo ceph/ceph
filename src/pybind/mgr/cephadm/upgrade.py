@@ -689,7 +689,7 @@ class CephadmUpgrade:
                 to_upgrade.append(d_entry)
 
                 # if we don't have a list of others to consider, stop now
-                if not known_ok_to_stop:
+                if d.daemon_type in ['osd', 'mds', 'mon'] and not known_ok_to_stop:
                     break
 
             num = 1
