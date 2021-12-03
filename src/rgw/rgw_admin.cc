@@ -7560,7 +7560,7 @@ next:
   if (opt_cmd == OPT::LC_RESHARD_FIX) {
     ret = RGWBucketAdminOp::fix_lc_shards(store, bucket_op, stream_flusher, dpp());
     if (ret < 0) {
-      cerr << "ERROR: listing stale instances" << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: fixing lc shards: " << cpp_strerror(-ret) << std::endl;
     }
 
   }
