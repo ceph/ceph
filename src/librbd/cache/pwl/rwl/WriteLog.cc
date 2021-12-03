@@ -919,9 +919,6 @@ void WriteLog<I>::reserve_cache(C_BlockIORequestT *req,
                                         0 /* Object type */);
     buffer.allocation_lat = ceph_clock_now() - before_reserve;
     if (TOID_IS_NULL(buffer.buffer_oid)) {
-      if (!req->has_io_waited_for_buffers()) {
-        req->set_io_waited_for_buffers(true);
-      }
       ldout(m_image_ctx.cct, 5) << "can't allocate all data buffers: "
                                 << pmemobj_errormsg() << ". "
                                 << *req << dendl;
