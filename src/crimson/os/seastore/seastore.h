@@ -388,7 +388,7 @@ private:
   seastar::future<> write_fsid(uuid_d new_osd_fsid);
 };
 
-std::unique_ptr<SeaStore> make_seastore(
+seastar::future<std::unique_ptr<SeaStore>> make_seastore(
   const std::string &device,
   const ConfigValues &config);
 }

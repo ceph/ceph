@@ -108,6 +108,9 @@
 /* Define to 1 if you have libxfs */
 #cmakedefine HAVE_LIBXFS 1
 
+/* Define to 1 if zns support enabled */
+#cmakedefine HAVE_ZNS
+
 /* SPDK conditional compilation */
 #cmakedefine HAVE_SPDK
 
