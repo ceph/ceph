@@ -178,6 +178,9 @@ private:
 
   bool m_persist_on_write_until_flush = true;
 
+  pwl::WriteLogGuard m_flush_guard;
+  mutable ceph::mutex m_flush_guard_lock;
+
  /* Debug counters for the places m_async_op_tracker is used */
   std::atomic<int> m_async_complete_ops = {0};
   std::atomic<int> m_async_null_flush_finish = {0};
@@ -225,7 +228,6 @@ private:
   void detain_guarded_request(C_BlockIORequestT *request,
                               pwl::GuardedRequestFunctionContext *guarded_ctx,
                               bool is_barrier);
-
   void perf_start(const std::string name);
   void perf_stop();
   void log_perf();
@@ -294,7 +296,6 @@ protected:
   std::atomic<int> m_async_flush_ops = {0};
   std::atomic<int> m_async_append_ops = {0};
 
-  std::atomic<int> m_flush_ops_will_send = {0};
   /* Acquire locks in order declared here */
 
   mutable ceph::mutex m_log_retire_lock;
@@ -348,6 +349,8 @@ protected:
       std::shared_ptr<pwl::GenericLogEntry> log_entry) = 0;
   Context *construct_flush_entry(
       const std::shared_ptr<pwl::GenericLogEntry> log_entry, bool invalidating);
+  void detain_flush_guard_request(std::shared_ptr<GenericLogEntry> log_entry,
+                                  GuardedRequestFunctionContext *guarded_ctx);
   void process_writeback_dirty_entries();
   bool can_retire_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
 
