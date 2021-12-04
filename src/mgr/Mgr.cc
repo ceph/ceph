@@ -113,17 +113,20 @@ void MetadataUpdate::finish(int r)
 
       if (daemon_state.exists(key)) {
         DaemonStatePtr state = daemon_state.get(key);
-        state->hostname = daemon_meta.at("hostname").get_str();
-
-        if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
-          daemon_meta.erase("name");
-        } else if (key.type == "osd") {
-          daemon_meta.erase("id");
-        }
-        daemon_meta.erase("hostname");
 	map<string,string> m;
-        for (const auto &[key, val] : daemon_meta) {
-          m.emplace(key, val.get_str());
+	{
+	  std::lock_guard l(state->lock);
+	  state->hostname = daemon_meta.at("hostname").get_str();
+
+	  if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
+	    daemon_meta.erase("name");
+	  } else if (key.type == "osd") {
+	    daemon_meta.erase("id");
+	  }
+	  daemon_meta.erase("hostname");
+	  for (const auto &[key, val] : daemon_meta) {
+	    m.emplace(key, val.get_str());
+	  }
 	}
 	daemon_state.update_metadata(state, m);
       } else {
