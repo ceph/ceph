@@ -47,7 +47,7 @@ class TestFindAssociatedDevices(object):
         return self.mock_volumes.pop(0)
 
     mock_single_volumes = {}
-    def mock_get_first_lv(self, *args, **kwargs):
+    def mock_get_single_lv(self, *args, **kwargs):
         p = kwargs['filters']['lv_path']
         return self.mock_single_volumes[p]
 
@@ -64,7 +64,7 @@ class TestFindAssociatedDevices(object):
         self.mock_single_volumes = {'/dev/VolGroup/lv1': vol}
 
         monkeypatch.setattr(migrate.api, 'get_lvs', self.mock_get_lvs)
-        monkeypatch.setattr(migrate.api, 'get_first_lv', self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
         monkeypatch.setattr(process, 'call', lambda x, **kw: ('', '', 0))
 
         result = migrate.find_associated_devices(osd_id='0', osd_fsid='1234')
@@ -89,7 +89,7 @@ class TestFindAssociatedDevices(object):
         self.mock_single_volumes = {'/dev/VolGroup/lv1': vol, '/dev/VolGroup/lv2': vol2}
 
         monkeypatch.setattr(migrate.api, 'get_lvs', self.mock_get_lvs)
-        monkeypatch.setattr(migrate.api, 'get_first_lv', self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
         monkeypatch.setattr(process, 'call', lambda x, **kw: ('', '', 0))
 
         result = migrate.find_associated_devices(osd_id='0', osd_fsid='1234')
@@ -126,7 +126,7 @@ class TestFindAssociatedDevices(object):
                                     '/dev/VolGroup/lv3': vol3}
 
         monkeypatch.setattr(migrate.api, 'get_lvs', self.mock_get_lvs)
-        monkeypatch.setattr(migrate.api, 'get_first_lv', self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
         monkeypatch.setattr(process, 'call', lambda x, **kw: ('', '', 0))
 
         result = migrate.find_associated_devices(osd_id='0', osd_fsid='1234')
@@ -159,7 +159,7 @@ class TestFindAssociatedDevices(object):
 
 class TestVolumeTagTracker(object):
     mock_single_volumes = {}
-    def mock_get_first_lv(self, *args, **kwargs):
+    def mock_get_single_lv(self, *args, **kwargs):
         p = kwargs['filters']['lv_path']
         return self.mock_single_volumes[p]
 
@@ -185,7 +185,7 @@ class TestVolumeTagTracker(object):
         self.mock_single_volumes = {'/dev/VolGroup/lv1': data_vol,
                                     '/dev/VolGroup/lv2': db_vol,
                                     '/dev/VolGroup/lv3': wal_vol}
-        monkeypatch.setattr(migrate.api, 'get_first_lv', self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
 
         self.mock_process_input = []
         monkeypatch.setattr(process, 'call', self.mock_process)
@@ -233,7 +233,7 @@ class TestVolumeTagTracker(object):
         self.mock_single_volumes = {'/dev/VolGroup/lv1': data_vol,
                                     '/dev/VolGroup/lv2': db_vol}
 
-        monkeypatch.setattr(migrate.api, 'get_first_lv', self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
 
         self.mock_process_input = []
         monkeypatch.setattr(process, 'call', self.mock_process)
@@ -297,7 +297,7 @@ class TestVolumeTagTracker(object):
                                     '/dev/VolGroup/lv2': db_vol,
                                     '/dev/VolGroup/lv3': wal_vol}
 
-        monkeypatch.setattr(migrate.api, 'get_first_lv', self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
 
         self.mock_process_input = []
         monkeypatch.setattr(process, 'call', self.mock_process)
@@ -355,7 +355,7 @@ class TestVolumeTagTracker(object):
                                     '/dev/VolGroup/lv2': db_vol,
                                     '/dev/VolGroup/lv3': wal_vol}
 
-        monkeypatch.setattr(migrate.api, 'get_first_lv', self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
 
         self.mock_process_input = []
         monkeypatch.setattr(process, 'call', self.mock_process)
@@ -426,7 +426,7 @@ class TestVolumeTagTracker(object):
                                     '/dev/VolGroup/lv2': db_vol,
                                     '/dev/VolGroup/lv3': wal_vol}
 
-        monkeypatch.setattr(migrate.api, 'get_first_lv', self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
 
         self.mock_process_input = []
         monkeypatch.setattr(process, 'call', self.mock_process)
@@ -512,7 +512,7 @@ class TestNew(object):
         return ('', '', 0)
 
     mock_single_volumes = {}
-    def mock_get_first_lv(self, *args, **kwargs):
+    def mock_get_single_lv(self, *args, **kwargs):
         p = kwargs['filters']['lv_path']
         return self.mock_single_volumes[p]
 
@@ -590,8 +590,8 @@ class TestNew(object):
         self.mock_single_volumes = {'/dev/VolGroup/lv1': data_vol,
                                     '/dev/VolGroup/lv3': wal_vol}
 
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_process_input = []
         monkeypatch.setattr(process, 'call', self.mock_process)
@@ -681,8 +681,8 @@ class TestNew(object):
         self.mock_single_volumes = {'/dev/VolGroup/lv1': data_vol,
                                     '/dev/VolGroup/lv3': wal_vol}
 
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_process_input = []
         monkeypatch.setattr(process, 'call', self.mock_process)
@@ -746,8 +746,8 @@ class TestNew(object):
         self.mock_single_volumes = {'/dev/VolGroup/lv1': data_vol,
                                     '/dev/VolGroup/lv3': wal_vol}
 
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_process_input = []
         monkeypatch.setattr(process, 'call', self.mock_process)
@@ -826,7 +826,7 @@ class TestNew(object):
 
         self.mock_single_volumes = {'/dev/VolGroup/lv1': data_vol}
 
-        monkeypatch.setattr(migrate.api, 'get_first_lv', self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
 
         self.mock_process_input = []
         monkeypatch.setattr(process, 'call', self.mock_process)
@@ -889,7 +889,7 @@ class TestNew(object):
 
         self.mock_single_volumes = {'/dev/VolGroup/lv1': data_vol}
 
-        monkeypatch.setattr(migrate.api, 'get_first_lv', self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
 
         self.mock_process_input = []
         monkeypatch.setattr(process, 'call', self.mock_process)
@@ -937,7 +937,7 @@ class TestNew(object):
 
         self.mock_single_volumes = {'/dev/VolGroup/lv1': data_vol}
 
-        monkeypatch.setattr(migrate.api, 'get_first_lv', self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv', self.mock_get_single_lv)
 
         self.mock_process_input = []
         monkeypatch.setattr(process, 'call', self.mock_process)
@@ -1006,7 +1006,7 @@ class TestMigrate(object):
         return ('', '', 0)
 
     mock_single_volumes = {}
-    def mock_get_first_lv(self, *args, **kwargs):
+    def mock_get_single_lv(self, *args, **kwargs):
         p = kwargs['filters']['lv_path']
         return self.mock_single_volumes[p]
 
@@ -1042,8 +1042,8 @@ class TestMigrate(object):
             '/dev/VolGroup/lv2': db_vol,
             '/dev/VolGroup/lv3': wal_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = api.Volume(lv_name='volume2', lv_uuid='y',
                                       vg_name='vg',
@@ -1168,8 +1168,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv1': data_vol,
             '/dev/VolGroup/lv2': db_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = api.Volume(lv_name='volume2_new', lv_uuid='new-db-uuid',
                                       vg_name='vg',
@@ -1266,8 +1266,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv1': data_vol,
             '/dev/VolGroup/lv2': db_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = api.Volume(lv_name='volume2_new', lv_uuid='new-db-uuid',
                                       vg_name='vg',
@@ -1329,8 +1329,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv1': data_vol,
             '/dev/VolGroup/lv2': db_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = api.Volume(lv_name='volume2_new', lv_uuid='new-db-uuid',
                                       vg_name='vg',
@@ -1437,8 +1437,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv2': db_vol,
             '/dev/VolGroup/lv3': wal_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = api.Volume(lv_name='volume2_new', lv_uuid='new-db-uuid',
                                       vg_name='vg',
@@ -1561,8 +1561,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv2': db_vol,
             '/dev/VolGroup/lv3': wal_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = api.Volume(lv_name='volume2_new', lv_uuid='new-db-uuid',
                                       vg_name='vg',
@@ -1680,8 +1680,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv1': data_vol,
             '/dev/VolGroup/lv2': db_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = api.Volume(lv_name='volume2_new', lv_uuid='new-db-uuid',
                                       vg_name='vg',
@@ -1759,8 +1759,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv2': db_vol,
             '/dev/VolGroup/lv3': wal_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = wal_vol
         monkeypatch.setattr(api, 'get_lv_by_fullname',
@@ -1835,8 +1835,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv2': db_vol,
             '/dev/VolGroup/lv3': wal_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = db_vol
         monkeypatch.setattr(api, 'get_lv_by_fullname',
@@ -1911,8 +1911,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv2': db_vol,
             '/dev/VolGroup/lv3': wal_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = db_vol
         monkeypatch.setattr(api, 'get_lv_by_fullname',
@@ -1982,8 +1982,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv2': db_vol,
             '/dev/VolGroup/lv3': wal_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = db_vol
         monkeypatch.setattr(api, 'get_lv_by_fullname',
@@ -2063,8 +2063,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv2': db_vol,
             '/dev/VolGroup/lv3': wal_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = db_vol
         monkeypatch.setattr(api, 'get_lv_by_fullname',
@@ -2162,8 +2162,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv2': db_vol,
             '/dev/VolGroup/lv3': wal_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = db_vol
         monkeypatch.setattr(api, 'get_lv_by_fullname',
@@ -2234,8 +2234,8 @@ Example calls for supported scenarios:
             '/dev/VolGroup/lv2': db_vol,
             '/dev/VolGroup/lv3': wal_vol,
         }
-        monkeypatch.setattr(migrate.api, 'get_first_lv',
-            self.mock_get_first_lv)
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
 
         self.mock_volume = db_vol
         monkeypatch.setattr(api, 'get_lv_by_fullname',
