@@ -325,7 +325,6 @@ private:
 
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::log.lock");
-    //uint64_t seq_stable = 0; //seq that is now stable on disk    AK - consider also mirroring this
     uint64_t seq_live = 1;   //seq that log is currently writing to; mirrors dirty.seq_live
     FileWriter *writer = 0;
     bluefs_transaction_t t;
@@ -439,8 +438,8 @@ private:
   };
   void _compact_log_dump_metadata_N(bluefs_transaction_t *t,
 				 int flags);
-  void compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
-					  uint64_t capture_before_seq);
+  void _compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
+					   uint64_t capture_before_seq);
 
   void _compact_log_sync_LN_LD();
   void _compact_log_async_LD_NF_D();
