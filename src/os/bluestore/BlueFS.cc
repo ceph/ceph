@@ -2511,15 +2511,11 @@ void BlueFS::_compact_log_async_LD_NF_D() //also locks FW for new_writer
   new_log_writer = _create_writer(new_log);
 
   new_log_writer->append(bl);
-  new_log_writer->lock.lock();
-  new_log->lock.lock();
   // 3. flush
   _flush_special(new_log_writer);
 
   // 4. wait
   _flush_bdev(new_log_writer);
-  new_log->lock.unlock();
-  new_log_writer->lock.unlock();
   // 5. update our log fnode
   // we need to append to new_log the extents that were allocated in step 1.1
   // we do it by inverse logic - we drop 'old_log_jump_to' bytes and keep rest
@@ -2665,6 +2661,10 @@ void BlueFS::_consume_dirty(uint64_t seq)
   if (lsi != dirty.files.end()) {
     dout(20) << __func__ << " " << lsi->second.size() << " dirty.files" << dendl;
     for (auto &f : lsi->second) {
+      // fnode here is protected indirectly
+      // the only path that adds to dirty.files goes from _fsync()
+      // _fsync() is executed under writer lock,
+      // and does not exit until syncing log is done
       dout(20) << __func__ << "   op_file_update_inc " << f.fnode << dendl;
       log.t.op_file_update_inc(f.fnode);
     }
@@ -2889,7 +2889,7 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
   const unsigned length,
   const bluefs_super_t& super)
 {
-  ceph_assert(ceph_mutex_is_locked(this->lock) || file->fnode.ino == 1);
+  ceph_assert(ceph_mutex_is_locked(this->lock) || file->fnode.ino <= 1);
   ceph::bufferlist bl;
   if (partial) {
     tail_block.splice(0, tail_block.length(), &bl);
@@ -3026,7 +3026,7 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
 
 int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered)
 {
-  if (h->file->fnode.ino != 1) {
+  if (h->file->fnode.ino > 1) {
     ceph_assert(ceph_mutex_is_locked(h->lock));
     ceph_assert(ceph_mutex_is_locked(h->file->lock));
   }
@@ -3277,9 +3277,9 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)
 
 int BlueFS::fsync(FileWriter *h)
 {
+  std::unique_lock hl(h->lock);
   uint64_t old_dirty_seq = 0;
   {
-    std::unique_lock hl(h->lock);
     dout(10) << __func__ << " " << h << " " << h->file->fnode << dendl;
     int r = _flush_F(h, true);
     if (r < 0)
@@ -3308,9 +3308,9 @@ int BlueFS::fsync(FileWriter *h)
 // be careful - either h->file->lock or log.lock must be taken
 void BlueFS::_flush_bdev(FileWriter *h)
 {
-  if (h->file->fnode.ino != 1) {
+  if (h->file->fnode.ino > 1) {
     ceph_assert(ceph_mutex_is_locked(h->lock));
-  } else {
+  } else if (h->file->fnode.ino == 1) {
     ceph_assert(ceph_mutex_is_locked(log.lock));
   }
   std::array<bool, MAX_BDEV> flush_devs = h->dirty_devs;
