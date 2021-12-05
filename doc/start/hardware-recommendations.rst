@@ -119,11 +119,6 @@ performance tradeoffs to consider when planning for data storage. Simultaneous
 OS operations, and simultaneous request for read and write operations from
 multiple daemons against a single drive can slow performance considerably.
 
-.. important:: Since Ceph has to write all data to the journal (or WAL+DB)
-   before it can ACK writes, having this metadata and OSD
-   performance in balance is really important!
-
-
 Hard Disk Drives
 ----------------
 
@@ -151,20 +146,10 @@ overall system performance--especially during recovery. We recommend using a
 dedicated (ideally mirrored) drive for the operating system and software, and
 one drive for each Ceph OSD Daemon you run on the host (modulo NVMe above).
 Many "slow OSD" issues not attributable to hardware failure arise from running
-an operating system, multiple OSDs, and/or multiple journals on the same drive.
-Since the cost of troubleshooting performance issues on a small cluster likely
-exceeds the cost of the extra disk drives, you can optimize your cluster
-design planning by avoiding the temptation to overtax the OSD storage drives.
+an operating system and multiple OSDs on the same drive. Since the cost of troubleshooting performance issues on a small cluster likely exceeds the cost of the extra disk drives, you can optimize your cluster design planning by avoiding the temptation to overtax the OSD storage drives.
 
 You may run multiple Ceph OSD Daemons per SAS / SATA drive, but this will likely
-lead to resource contention and diminish the overall throughput. You may store a
-journal and object data on the same drive, but this may increase the time it
-takes to journal a write and ACK to the client. Ceph must write to the journal
-before it can ACK the write.
-
-Ceph best practices dictate that you should run operating systems, OSD data and
-OSD journals on separate drives.
-
+lead to resource contention and diminish the overall throughput. 
 
 Solid State Drives
 ------------------
@@ -178,36 +163,15 @@ hard disk drive.
 SSDs do not have moving mechanical parts so they are not necessarily subject to
 the same types of limitations as hard disk drives. SSDs do have significant
 limitations though. When evaluating SSDs, it is important to consider the
-performance of sequential reads and writes. An SSD that has 400MB/s sequential
-write throughput may have much better performance than an SSD with 120MB/s of
-sequential write throughput when storing multiple journals for multiple OSDs.
+performance of sequential reads and writes.
 
 .. important:: We recommend exploring the use of SSDs to improve performance. 
    However, before making a significant investment in SSDs, we **strongly
    recommend** both reviewing the performance metrics of an SSD and testing the
    SSD in a test configuration to gauge performance. 
 
-Since SSDs have no moving mechanical parts, it makes sense to use them in the
-areas of Ceph that do not use a lot of storage space (e.g., journals).
 Relatively inexpensive SSDs may appeal to your sense of economy. Use caution.
-Acceptable IOPS are not enough when selecting an SSD for use with Ceph. There
-are a few important performance considerations for journals and SSDs:
-
-- **Write-intensive semantics:** Journaling involves write-intensive semantics, 
-  so you should ensure that the SSD you choose to deploy will perform equal to
-  or better than a hard disk drive when writing data. Inexpensive SSDs may 
-  introduce write latency even as they accelerate access time, because 
-  sometimes high performance hard drives can write as fast or faster than 
-  some of the more economical SSDs available on the market!
-  
-- **Sequential Writes:** When you store multiple journals on an SSD you must 
-  consider the sequential write limitations of the SSD too, since they may be 
-  handling requests to write to multiple OSD journals simultaneously.
-
-- **Partition Alignment:** A common problem with SSD performance is that 
-  people like to partition drives as a best practice, but they often overlook
-  proper partition alignment with SSDs, which can cause SSDs to transfer data 
-  much more slowly. Ensure that SSD partitions are properly aligned.
+Acceptable IOPS are not enough when selecting an SSD for use with Ceph. 
 
 SSDs have historically been cost prohibitive for object storage, though
 emerging QLC drives are closing the gap.  HDD OSDs may see a significant
