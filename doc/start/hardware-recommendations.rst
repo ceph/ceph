@@ -181,24 +181,7 @@ performance of sequential reads and writes.
    SSD in a test configuration in order to gauge performance. 
 
 Relatively inexpensive SSDs may appeal to your sense of economy. Use caution.
-Acceptable IOPS are not enough when selecting an SSD for use with Ceph. There
-are a few important performance considerations for journals and SSDs:
-
-- **Write-intensive semantics:** Journaling involves write-intensive semantics, 
-  so you should ensure that the SSD you choose to deploy will perform equal to
-  or better than a hard disk drive when writing data. Inexpensive SSDs may 
-  introduce write latency even as they accelerate access time, because 
-  sometimes high performance hard drives can write as fast or faster than 
-  some of the more economical SSDs available on the market!
-  
-- **Sequential Writes:** When you store multiple journals on an SSD you must 
-  consider the sequential write limitations of the SSD too, since they may be 
-  handling requests to write to multiple OSD journals simultaneously.
-
-- **Partition Alignment:** A common problem with SSD performance is that 
-  people like to partition drives as a best practice, but they often overlook
-  proper partition alignment with SSDs, which can cause SSDs to transfer data 
-  much more slowly. Ensure that SSD partitions are properly aligned.
+Acceptable IOPS are not enough when selecting an SSD for use with Ceph. 
 
 SSDs have historically been cost prohibitive for object storage, though
 emerging QLC drives are closing the gap.  HDD OSDs may see a significant
