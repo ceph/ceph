@@ -1,9 +1,9 @@
-import logging
+from logging import getLogger
 
 from io import BytesIO
 from tasks.cephfs.xfstests_dev import XFSTestsDev
 
-log = logging.getLogger(__name__)
+log = getLogger(__name__)
 
 class TestACLs(XFSTestsDev):
 

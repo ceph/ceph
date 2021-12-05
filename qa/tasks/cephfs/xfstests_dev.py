@@ -1,8 +1,10 @@
 from io import BytesIO
-import logging
+from logging import getLogger
+
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
-logger = logging.getLogger(__name__)
+
+logger = getLogger(__name__)
 
 
 # TODO: add code to run non-ACL tests too.
