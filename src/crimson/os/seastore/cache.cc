@@ -106,7 +106,8 @@ void Cache::register_metrics()
   std::map<src_t, sm::label_instance> labels_by_src {
     {src_t::MUTATE,  src_label("MUTATE")},
     {src_t::READ,    src_label("READ")},
-    {src_t::CLEANER, src_label("CLEANER")},
+    {src_t::CLEANER_TRIM, src_label("CLEANER_TRIM")},
+    {src_t::CLEANER_RECLAIM, src_label("CLEANER_RECLAIM")},
   };
 
   auto ext_label = sm::label("ext");
@@ -514,7 +515,9 @@ void Cache::register_metrics()
         // READ transaction won't contain any tree inserts and erases
         continue;
       }
-      if (src == src_t::CLEANER && tree_label == onode_label) {
+      if ((src == src_t::CLEANER_TRIM ||
+           src == src_t::CLEANER_RECLAIM) &&
+          tree_label == onode_label) {
         // CLEANER transaction won't contain any onode tree operations
         continue;
       }
@@ -730,7 +733,8 @@ void Cache::mark_transaction_conflicted(
     record_header_fullness.ool_stats.filled_bytes += ool_stats.header_raw_bytes;
     record_header_fullness.ool_stats.total_bytes += ool_stats.header_bytes;
 
-    if (t.get_src() == Transaction::src_t::CLEANER) {
+    if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
+        t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
       // CLEANER transaction won't contain any onode tree operations
       assert(t.onode_tree_stats.is_clear());
     } else {
@@ -846,7 +850,8 @@ record_t Cache::prepare_record(Transaction &t)
   assert(!t.is_weak());
   assert(t.get_src() != Transaction::src_t::READ);
 
-  if (t.get_src() == Transaction::src_t::CLEANER) {
+  if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
+      t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
     // CLEANER transaction won't contain any onode tree operations
     assert(t.onode_tree_stats.is_clear());
   } else {
