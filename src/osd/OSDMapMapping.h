@@ -115,7 +115,11 @@ protected:
     ParallelPGMapper *m;
 
     WQ(ParallelPGMapper *m_, ThreadPool *tp)
-      : ThreadPool::WorkQueue<Item>("ParallelPGMapper::WQ", 0, 0, tp),
+      : ThreadPool::WorkQueue<Item>(
+	"ParallelPGMapper::WQ",
+	m_->cct->_conf->threadpool_default_timeout,
+	0,
+	tp),
         m(m_) {}
 
     bool _enqueue(Item *i) override {
