@@ -1916,12 +1916,12 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 {
   ldout(cache->cct, 30) << __func__ << dendl;
   OnodeRef o;
-  bool hit = false;
 
   {
     std::lock_guard l(cache->lock);
     ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
     if (p == onode_map.end()) {
+      cache->logger->inc(l_bluestore_onode_misses);
       ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
     } else {
       ldout(cache->cct, 30) << __func__ << " " << oid << " hit " << p->second
@@ -1934,15 +1934,10 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
       o = p->second;
       ceph_assert(!o->cached || o->pinned);
 
-      hit = true;
+      cache->logger->inc(l_bluestore_onode_hits);
     }
   }
 
-  if (hit) {
-    cache->logger->inc(l_bluestore_onode_hits);
-  } else {
-    cache->logger->inc(l_bluestore_onode_misses);
-  }
   return o;
 }
 
