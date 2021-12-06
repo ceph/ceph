@@ -119,20 +119,23 @@ int decode_base64(const string& s, T *t)
 namespace librados {
 
 class DBStatementCache {
-  SQLite::Database *db;
+  std::shared_ptr<SQLite::Database> db;
   ceph::mutex lock = ceph::make_mutex("DBStatementCache::lock");
   map<string, list<SQLite::Statement *> > entries;
+  list<std::unique_ptr<SQLite::Statement> > all_stmt;
 
 public:
-  DBStatementCache(SQLite::Database *_db) : db(_db) {}
+  DBStatementCache(std::shared_ptr<SQLite::Database>& _db) : db(_db) {}
 
   SQLite::Statement *get(const string& sql) {
     std::unique_lock locker{lock};
     auto& l = entries[sql];
     if (l.empty()) {
 
-      auto stmt = new SQLite::Statement(*db, sql);
-      return stmt;
+      auto stmt = make_unique<SQLite::Statement>(*db, sql);
+      auto ps = stmt.get();
+      all_stmt.push_back(std::move(stmt));
+      return ps;
     }
     auto stmt = l.front();
     l.pop_front();
@@ -151,16 +154,16 @@ LRemDBOps::LRemDBOps(const std::string& _name, int _flags, ceph::mutex *_trans_l
                                                                                        flags(_flags),
                                                                                        trans_lock(_trans_lock) {
 #define DB_TIMEOUT_SEC 20
-  db = std::make_unique<SQLite::Database>(name, flags, DB_TIMEOUT_SEC * 1000);
-  stmt_cache = std::make_unique<DBStatementCache>(db.get());
+  db = std::make_shared<SQLite::Database>(name, flags, DB_TIMEOUT_SEC * 1000);
+  stmt_cache = std::make_unique<DBStatementCache>(db);
 }
 
 LRemDBOps::Transaction LRemDBOps::new_transaction() {
-  return Transaction(*db, trans_lock);
+  return Transaction(db, trans_lock);
 }
 
 LRemDBOps::Transaction *LRemDBOps::alloc_transaction() {
-  return new Transaction(*db, trans_lock);
+  return new Transaction(db, trans_lock);
 }
 
 SQLite::Statement LRemDBOps::statement(const string& sql) {
@@ -268,7 +271,7 @@ void LRemDBOps::flush() {
 
   std::unique_lock locker{flush_lock};
 
-  Transaction t(*db, trans_lock);
+  Transaction t(db, trans_lock);
 
   for (auto& i : deferred_statements) {
     auto s = i.second.ref->stmt;
@@ -310,9 +313,9 @@ public:
 
 static DBOpsCache dbops_cache[NUM_DB_SHARDS + 1];
 
-LRemDBOps::Transaction::Transaction(SQLite::Database& db,
-                                    ceph::mutex *_lock) : lock(_lock) {
-  trans = make_unique<SQLite::Transaction>(db, true);
+LRemDBOps::Transaction::Transaction(std::shared_ptr<SQLite::Database>& _db,
+                                    ceph::mutex *_lock) : db(_db), lock(_lock) {
+  trans = make_unique<SQLite::Transaction>(*db, true);
 }
 
 LRemDBOps::Transaction::~Transaction() {

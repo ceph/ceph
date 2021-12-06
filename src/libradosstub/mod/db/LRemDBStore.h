@@ -20,7 +20,7 @@ class LRemDBOps {
 
   ceph::mutex *trans_lock;
 
-  std::unique_ptr<SQLite::Database> db;
+  std::shared_ptr<SQLite::Database> db;
   std::unique_ptr<DBStatementCache> stmt_cache;
 
   struct queued_statement {
@@ -55,6 +55,7 @@ public:
   void flush();
 
   struct Transaction {
+    std::shared_ptr<SQLite::Database> db;
     int retcode{0};
     std::unique_ptr<SQLite::Transaction> trans;
     ceph::mutex *lock;
@@ -70,7 +71,7 @@ public:
       trans.reset();
     }
 
-    Transaction(SQLite::Database& db, ceph::mutex *_lock);
+    Transaction(std::shared_ptr<SQLite::Database>& _db, ceph::mutex *_lock);
     ~Transaction();
 
     void complete_op(int _r);
