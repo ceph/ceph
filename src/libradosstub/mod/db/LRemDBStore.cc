@@ -1475,8 +1475,8 @@ int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
 
   try {
     while (dbo->exec_step(q)) {
-      --max_return;
-      if (max_return == 0) {
+      --max_req;
+      if (max_req == 0) {
         if (pmore) {
           *pmore = true;
         }
