@@ -14,6 +14,7 @@
 #ifndef CEPH_MDLOG_H
 #define CEPH_MDLOG_H
 
+#include "common/fair_mutex.h"
 #include "include/common_fwd.h"
 
 enum {
@@ -285,8 +286,8 @@ protected:
 
   int64_t mdsmap_up_features = 0;
   std::map<uint64_t,std::list<PendingEvent> > pending_events; // log segment -> event list
-  ceph::mutex submit_mutex = ceph::make_mutex("MDLog::submit_mutex");
-  ceph::condition_variable submit_cond;
+  ceph::fair_mutex submit_mutex{"MDLog::submit_mutex"};
+  std::condition_variable_any submit_cond;
 
 private:
   friend class C_MaybeExpiredSegment;
