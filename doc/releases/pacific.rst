@@ -70,6 +70,9 @@ Notable Changes
 Changelog
 ---------
 
+* rpm, debian: move smartmontools and nvme-cli to ceph-base (`pr#44164 <https://github.com/ceph/ceph/pull/44164>`_, Yaarit Hatuka)
+* qa: miscellaneous perf suite fixes (`pr#44154 <https://github.com/ceph/ceph/pull/44154>`_, Neha Ojha)
+* qa/suites/orch/cephadm: mgr-nfs-upgrade: add missing 0-distro dir (`pr#44201 <https://github.com/ceph/ceph/pull/44201>`_, Sebastian Wagner)
 * \*: s/virtualenv/python -m venv/ (`pr#43002 <https://github.com/ceph/ceph/pull/43002>`_, Kefu Chai, Ken Dreyer)
 * admin/doc-requirements.txt: pin Sphinx at 3.5.4 (`pr#43748 <https://github.com/ceph/ceph/pull/43748>`_, Kefu Chai)
 * backport mgr/nfs bits (`pr#43811 <https://github.com/ceph/ceph/pull/43811>`_, Sage Weil, Michael Fritch)
