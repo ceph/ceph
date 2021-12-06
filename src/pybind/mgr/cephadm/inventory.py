@@ -825,9 +825,9 @@ class HostCache():
 
         raise orchestrator.OrchestratorError(f'Unable to find {daemon_name} daemon(s)')
 
-    def has_daemon(self, daemon_name: str) -> bool:
+    def has_daemon(self, daemon_name: str, host: Optional[str] = None) -> bool:
         try:
-            self.get_daemon(daemon_name)
+            self.get_daemon(daemon_name, host)
         except orchestrator.OrchestratorError:
             return False
         return True
