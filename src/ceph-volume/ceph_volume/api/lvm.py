@@ -8,7 +8,7 @@ import os
 import uuid
 from itertools import repeat
 from math import floor
-from ceph_volume import process, util
+from ceph_volume import process, util, conf
 from ceph_volume.exceptions import SizeAllocationError
 
 logger = logging.getLogger(__name__)
@@ -839,7 +839,7 @@ class Volume(object):
             report = {
                 'name': self.lv_name,
                 'osd_id': self.tags['ceph.osd_id'],
-                'cluster_name': self.tags['ceph.cluster_name'],
+                'cluster_name': self.tags.get('ceph.cluster_name', conf.cluster),
                 'type': type_,
                 'osd_fsid': self.tags['ceph.osd_fsid'],
                 'cluster_fsid': self.tags['ceph.cluster_fsid'],
