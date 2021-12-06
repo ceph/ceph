@@ -75,16 +75,19 @@ ReplicatedRecoveryBackend::maybe_push_shards(
     });
   }).then_interruptible([this, soid] {
     auto &recovery = recovering.at(soid);
-    auto push_info = recovery.pushing.begin();
-    object_stat_sum_t stat = {};
-    if (push_info != recovery.pushing.end()) {
-      stat = push_info->second.stat;
+    if (auto push_info = recovery.pushing.begin();
+        push_info != recovery.pushing.end()) {
+      pg.get_recovery_handler()->on_global_recover(soid,
+                                                   push_info->second.stat,
+                                                   false);
+    } else if (recovery.pi) {
+      // no push happened (empty get_shards_to_push()) but pull actually did
+      pg.get_recovery_handler()->on_global_recover(soid,
+                                                   recovery.pi->stat,
+                                                   false);
     } else {
-      // no push happened, take pull_info's stat
-      assert(recovery.pi);
-      stat = recovery.pi->stat;
+      // no pulls, no pushes
     }
-    pg.get_recovery_handler()->on_global_recover(soid, stat, false);
     return seastar::make_ready_future<>();
   }).handle_exception_interruptible([this, soid](auto e) {
     auto &recovery = recovering.at(soid);
