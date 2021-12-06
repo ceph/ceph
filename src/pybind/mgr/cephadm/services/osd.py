@@ -120,6 +120,10 @@ class OSDService(CephService):
                 if osd_id in before_osd_uuid_map and osd_id not in replace_osd_ids:
                     # if it exists but is part of the replacement operation, don't skip
                     continue
+                if self.mgr.cache.has_daemon(f'osd.{osd_id}', host):
+                    # cephadm daemon instance already exists
+                    logger.debug(f'osd id {osd_id} daemon already exists')
+                    continue
                 if osd_id not in osd_uuid_map:
                     logger.debug('osd id {} does not exist in cluster'.format(osd_id))
                     continue
