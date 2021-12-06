@@ -2276,7 +2276,7 @@ Then run the following:
             osd_id = o.get('osd')
             if osd_id is None:
                 raise OrchestratorError("Could not retrieve osd_id from osd_map")
-            if not only_up or (o['up_from'] > 0):
+            if not only_up:
                 r[str(osd_id)] = o.get('uuid', '')
         return r
 
