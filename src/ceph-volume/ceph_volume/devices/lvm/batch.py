@@ -270,6 +270,7 @@ class Batch(object):
             '--crush-device-class',
             dest='crush_device_class',
             help='Crush device class to assign this OSD to',
+            default=""
         )
         parser.add_argument(
             '--no-systemd',
