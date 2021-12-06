@@ -11,3 +11,4 @@ sphinx-prompt
 Sphinx-Substitution-Extensions
 typed-ast
 sphinxcontrib-openapi
+mistune < 2.0.0
