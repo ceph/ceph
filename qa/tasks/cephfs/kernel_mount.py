@@ -116,8 +116,11 @@ class KernelMount(CephFSMount):
             opts += ',' + ','.join(mntopts)
         log.info(f'mounting using device: {stx_opt[0]}')
         # do not fall-back to old-style mount (catch new-style
-        # mount syntax bugs in the kernel).
-        opts += ",nofallback"
+        # mount syntax bugs in the kernel). exclude this config
+        # when using v1-style syntax, since old mount helpers
+        # (pre-quincy) would pass this option to the kernel.
+        if self.syntax_style != 'v1':
+            opts += ",nofallback"
         mount_cmd += self._mount_bin + [stx_opt[0], self.hostfs_mntpt, '-v',
                                         '-o', opts]
         return mount_cmd
