@@ -15,3 +15,4 @@ Sphinx-Substitution-Extensions
 typed-ast
 sphinxcontrib-openapi
 sphinxcontrib-seqdiag
+mistune < 2.0.0
