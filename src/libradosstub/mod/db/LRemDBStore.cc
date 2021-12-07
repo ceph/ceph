@@ -191,9 +191,9 @@ void LRemDBOps::queue_remove_key(const std::string& key) {
     return;
   }
 
-  statement_keys.erase(key);
-
   int num = iter->second;
+
+  statement_keys.erase(key);
 
   auto siter = deferred_statements.find(num);
   if (siter == deferred_statements.end()) {
@@ -1070,6 +1070,8 @@ int LRemDBStore::Obj::remove_meta() {
   q->bind(1, nspace);
   q->bind(2, oid);
 
+  trans->cache.meta = LRemDBStore::Obj::Meta(); /* reset so that new writes on the same transaction don't revive old info */
+
   dbo->queue_statement(q, join({table_name, nspace, oid}, ":"));
 
   return 0;
@@ -1376,16 +1378,7 @@ int LRemDBStore::ObjData::write(uint64_t ofs, uint64_t len, const bufferlist& bl
 }
 
 int LRemDBStore::ObjData::remove() {
-  auto& dbo = trans->dbo();
-  auto q = dbo->deferred_statement(string("DELETE FROM ") + table_name +
-                                       " WHERE nspace = ? and oid = ?");
-
-  q->bind(1, nspace);
-  q->bind(2, oid);
-
-  dbo->queue_statement(q, join({table_name, nspace, oid}, ":"));
-
-  return 0;
+  return truncate(0);
 }
 
 int LRemDBStore::ObjData::truncate(uint64_t ofs) {
