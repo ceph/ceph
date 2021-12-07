@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <ctime>
 #include <regex>
+#include <boost/algorithm/string/replace.hpp>
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -51,13 +52,21 @@ void RGWRoleInfo::dump(Formatter *f) const
   encode_json("CreateDate", creation_date, f);
   encode_json("MaxSessionDuration", max_session_duration, f);
   encode_json("AssumeRolePolicyDocument", trust_policy, f);
+  if (!perm_policy_map.empty()) {
+    f->open_array_section("PermissionPolicies");
+    for (const auto& it : perm_policy_map) {
+      f->open_object_section("Policy");
+      encode_json("PolicyName", it.first, f);
+      encode_json("PolicyValue", it.second, f);
+      f->close_section();
+    }
+    f->close_section();
+  }
   if (!tags.empty()) {
     f->open_array_section("Tags");
     for (const auto& it : tags) {
-      f->open_object_section("Key");
+      f->open_object_section("Tag");
       encode_json("Key", it.first, f);
-      f->close_section();
-      f->open_object_section("Value");
       encode_json("Value", it.second, f);
       f->close_section();
     }
@@ -74,6 +83,33 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("CreateDate", creation_date, obj);
   JSONDecoder::decode_json("MaxSessionDuration", max_session_duration, obj);
   JSONDecoder::decode_json("AssumeRolePolicyDocument", trust_policy, obj);
+
+  auto tags_iter = obj->find_first("Tags");
+  if (!tags_iter.end()) {
+    JSONObj* tags_json = *tags_iter;
+    auto iter = tags_json->find_first();
+
+    for (; !iter.end(); ++iter) {
+      std::string key, val;
+      JSONDecoder::decode_json("Key", key, *iter);
+      JSONDecoder::decode_json("Value", val, *iter);
+      this->tags.emplace(key, val);
+    }
+  }
+
+  auto perm_policy_iter = obj->find_first("PermissionPolicies");
+  if (!perm_policy_iter.end()) {
+    JSONObj* perm_policies = *perm_policy_iter;
+    auto iter = perm_policies->find_first();
+
+    for (; !iter.end(); ++iter) {
+      std::string policy_name, policy_val;
+      JSONDecoder::decode_json("PolicyName", policy_name, *iter);
+      JSONDecoder::decode_json("PolicyValue", policy_val, *iter);
+      this->perm_policy_map.emplace(policy_name, policy_val);
+    }
+  }
+
   if (auto pos = name.find('$'); pos != std::string::npos) {
     tenant = name.substr(0, pos);
     name = name.substr(pos+1);
@@ -367,6 +403,10 @@ public:
     info.mtime = mtime;
     std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(info);
     int ret = role->create(dpp, true, info.id, y);
+    if (ret == -EEXIST) {
+      ret = role->update(dpp, y);
+    }
+
     return ret < 0 ? ret : STATUS_APPLIED;
   }
 };
