@@ -17,6 +17,7 @@
 
 #include "rgw_user.h"
 #include "rgw_notify_event_type.h"
+#include "common/tracer.h"
 
 class RGWGetDataCB;
 struct RGWObjState;
@@ -1141,7 +1142,7 @@ class MultipartUpload {
 protected:
   Bucket* bucket;
   std::map<uint32_t, std::unique_ptr<MultipartPart>> parts;
-
+  jspan_context trace_ctx{false, false};
 public:
   MultipartUpload(Bucket* _bucket) : bucket(_bucket) {}
   virtual ~MultipartUpload() = default;
@@ -1159,6 +1160,9 @@ public:
 
   /** Get all the cached parts that make up this upload */
   std::map<uint32_t, std::unique_ptr<MultipartPart>>& get_parts() { return parts; }
+
+  /** Get the trace context of this upload */
+  const jspan_context& get_trace() { return trace_ctx; }
 
   /** Get the Object that represents this upload */
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() = 0;

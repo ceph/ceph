@@ -63,10 +63,21 @@ TRACES IN RGW
 
 traces of RGW can be found under Service `rgw` in Jaeger Frontend.
 
+REQUESTS
+^^^^^^^^
 every user request is being traced. each trace contains tags for
 `Operation name`, `User id`, `Object name` and `Bucket name`.
 
 there is also `Upload id` tag for Multipart upload operations.
+
+request trace is named `<command> <transaction id>`.
+
+MULTIPART UPLOAD
+^^^^^^^^^^^^^^^^
+there is a trace, that consists a span for each request that made by that multipart upload, including all `Put Object` requests.
+
+multipart trace is named `multipart_upload <upload id>`.
+
 
 rgw service in Jaeger Frontend:
 
