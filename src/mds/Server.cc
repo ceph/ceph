@@ -2521,7 +2521,7 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
   if (is_full) {
     CInode *cur = try_get_auth_inode(mdr, req->get_filepath().get_ino());
     if (!cur) {
-      respond_to_request(mdr, -EINVAL);
+      // the request is already responded to
       return;
     }
     if (req->get_op() == CEPH_MDS_OP_SETLAYOUT ||
