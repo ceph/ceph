@@ -420,6 +420,15 @@ You may set values for the following keys:
    :Valid Range: 1 sets flag, 0 unsets flag
    :Version: Version ``FIXME``
 
+.. _bulk:
+
+.. describe:: bulk
+
+   Set/Unset bulk flag on a given pool.
+
+   :Type: Boolean
+   :Valid Range: true/1 sets flag, false/0 unsets flag
+
 .. _write_fadvise_dontneed:
 
 .. describe:: write_fadvise_dontneed
