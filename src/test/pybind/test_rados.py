@@ -1053,6 +1053,37 @@ class TestIoctx(object):
         assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker1")
         assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker2")
 
+    def test_break_lock(self):
+        instance_id = self.rados.get_instance_id()
+        client = "client." + str(instance_id)
+        fake_client = "client." + str(instance_id + 1)
+        self.ioctx.lock_exclusive("foo", "lock", "locker1", "desc_lock",
+                                  10000, 0)
+        ret = self.ioctx.list_lockers("foo", "lock")
+        eq((ret[0][0], ret[0][1], ret[0][2]), ("", client, "locker1"))
+        self.ioctx.break_lock("foo", "lock", client, "locker1")
+        assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker1")
+
+        self.ioctx.lock_shared("foo", "lock", "locker2", "tag", "desc_lock",
+                               10000, 0)
+        ret = self.ioctx.list_lockers("foo", "lock")
+        eq((ret[0][0], ret[0][1], ret[0][2]), ("tag", client, "locker2"))
+        self.ioctx.break_lock("foo", "lock", client, "locker2")
+        assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker2")
+
+        self.ioctx.lock_exclusive("foo", "lock", "locker3", "desc_lock",
+                                  10000, 0)
+        ret = self.ioctx.list_lockers("foo", "lock")
+        eq((ret[0][0], ret[0][1], ret[0][2]), ("", client, "locker3"))
+        try:
+            self.ioctx.break_lock("foo", "lock", fake_client, "locker1")
+        except ObjectNotFound as e:
+            eq(e.errno, errno.ENOENT)
+        else:
+            message = "break_lock did not raise Exception when the lock " \
+                      "is not held by the specified (client, cookie) pair."
+            raise AssertionError(message)
+
     def test_execute(self):
         self.ioctx.write("foo", b"") # ensure object exists
 
