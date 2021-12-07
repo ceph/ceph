@@ -36,12 +36,14 @@ using Throttle = crimson::common::Throttle;
 using SocketPolicy = ceph::net::Policy<Throttle>;
 
 class Messenger {
-  entity_name_t my_name;
-  entity_addrvec_t my_addrs;
   uint32_t crc_flags = 0;
   crimson::auth::AuthClient* auth_client = nullptr;
   crimson::auth::AuthServer* auth_server = nullptr;
   bool require_authorizer = true;
+
+protected:
+  entity_name_t my_name;
+  entity_addrvec_t my_addrs;
 
 public:
   Messenger(const entity_name_t& name)
@@ -61,6 +63,7 @@ public:
     my_addrs = addrs;
     return seastar::now();
   }
+  virtual bool set_addr_unknowns(const entity_addrvec_t &addrs) = 0;
 
   using bind_ertr = crimson::errorator<
     crimson::ct_error::address_in_use, // The address (range) is already bound

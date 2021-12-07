@@ -63,6 +63,7 @@ class SocketMessenger final : public Messenger {
 
   seastar::future<> set_myaddrs(const entity_addrvec_t& addr) override;
 
+  bool set_addr_unknowns(const entity_addrvec_t &addr) override;
   // Messenger interfaces are assumed to be called from its own shard, but its
   // behavior should be symmetric when called from any shard.
   bind_ertr::future<> bind(const entity_addrvec_t& addr) override;

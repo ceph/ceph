@@ -107,6 +107,16 @@ const entity_addrvec_t& Heartbeat::get_back_addrs() const
   return back_msgr->get_myaddrs();
 }
 
+crimson::net::MessengerRef Heartbeat::get_front_msgr() const
+{
+  return front_msgr;
+}
+
+crimson::net::MessengerRef Heartbeat::get_back_msgr() const
+{
+  return back_msgr;
+}
+
 void Heartbeat::set_require_authorizer(bool require_authorizer)
 {
   if (front_msgr->get_require_authorizer() != require_authorizer) {
