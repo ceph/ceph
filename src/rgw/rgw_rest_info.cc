@@ -24,10 +24,19 @@ void RGWOp_Info_Get::execute(optional_yield y) {
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
-  // extensible array of general info sections
+  /* extensible array of general info sections, currently only
+   * storage backend is defined:
+   * {"info":{"storage_backends":[{"name":"rados","cluster_id":"75d1938b-2949-4933-8386-fb2d1449ff03"}]}}
+   */
   formatter->open_object_section("dummy");
   formatter->open_object_section("info");
+  formatter->open_array_section("storage_backends");
+  // for now, just return the backend that is accessible
+  formatter->open_object_section("dummy");
+  formatter->dump_string("name", store->get_name());
   formatter->dump_string("cluster_id", store->get_cluster_id(this, y));
+  formatter->close_section();
+  formatter->close_section();
   formatter->close_section();
   formatter->close_section();
 
