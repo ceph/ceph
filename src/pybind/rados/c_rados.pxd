@@ -267,6 +267,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_aio_flush(rados_ioctx_t io)
     int rados_aio_cmpext(rados_ioctx_t io, const char *o, rados_completion_t completion,  const char *cmp_buf, size_t cmp_len, uint64_t off)
     int rados_aio_rmxattr(rados_ioctx_t io, const char *o, rados_completion_t completion, const char *name)
+    int rados_aio_unlock(rados_ioctx_t io, const char *o, const char *name, const char *cookie, rados_completion_t completion)
 
     int rados_aio_get_return_value(rados_completion_t c)
     int rados_aio_wait_for_complete_and_cb(rados_completion_t c)

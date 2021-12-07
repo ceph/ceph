@@ -378,6 +378,8 @@ cdef nogil:
         pass
     int rados_aio_rmxattr(rados_ioctx_t io, const char *o, rados_completion_t completion, const char *name):
         pass
+    int rados_aio_unlock(rados_ioctx_t io, const char *o, const char *name, const char *cookie, rados_completion_t completion):
+        pass
 
     int rados_aio_get_return_value(rados_completion_t c):
         pass

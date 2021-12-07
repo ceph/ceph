@@ -3311,6 +3311,41 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "aio_notify error: %s" % obj)
         return completion
 
+    def aio_unlock(self, key: str, name: str, cookie: str,
+                   oncomplete: Optional[Callable] = None) -> Completion:
+        """
+        Asynchronous release a shared or exclusive lock on an object
+
+        :param key: name of the object
+        :param name: name of the lock
+        :param cookie: cookie of the lock
+        :param oncomplete: what to do when operation has been attempted
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+        self.require_ioctx_open()
+
+        key_raw = cstr(key, 'key')
+        name_raw = cstr(name, 'name')
+        cookie_raw = cstr(cookie, 'cookie')
+
+        cdef:
+            Completion completion
+            char* _key = key_raw
+            char* _name = name_raw
+            char* _cookie = cookie_raw
+
+        completion = self.__get_completion(oncomplete, None)
+        self.__track_completion(completion)
+        with nogil:
+            ret = rados_aio_unlock(self.io, _key, _name, _cookie,
+                                   completion.rados_comp)
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "failed to unlock %s on %s" % (name, key))
+        return completion
+
     def watch(self, obj: str,
               callback: Callable[[int, str, int, bytes], None],
               error_callback: Optional[Callable[[int], None]] = None,
