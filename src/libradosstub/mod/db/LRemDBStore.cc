@@ -44,6 +44,18 @@ static inline string join(std::vector<string> v, const string& sep = ", ")
   return result;
 }
 
+static inline string repeat(const string& s, int num, const string& sep = ", ")
+{
+  string result;
+  for (int i = 0; i < num; ++i) {
+    if (i > 0) {
+      result.append(sep);
+    }
+    result += s;
+  }
+  return result;
+}
+
 template <class T>
 static inline string join_quoted(const T& v, const string& sep = ", ")
 {
@@ -1583,10 +1595,14 @@ int LRemDBStore::KVTableBase::rm_keys(const std::set<std::string>& keys) {
   auto& dbo = trans->dbo();
   auto q = dbo->deferred_statement(string("DELETE FROM ") + table_name +
                           " WHERE nspace = ? and oid = ?"
-                          " AND key IN (" + join_quoted(keys) + ")");
+                          " AND key IN (" + repeat("?", keys.size()) + ")");
 
-  q->bind(1, nspace);
-  q->bind(2, oid);
+  int i = 0;
+  q->bind(++i, nspace);
+  q->bind(++i, oid);
+  for (auto& k : keys) {
+    q->bind(++i, k);
+  }
 
   std::vector<string> qkeys;
   for (auto& k : keys) {
