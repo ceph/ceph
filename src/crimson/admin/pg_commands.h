@@ -6,5 +6,6 @@ namespace crimson::admin::pg {
 
 class QueryCommand;
 class MarkUnfoundLostCommand;
+class ScrubCommand;
 
 }  // namespace crimson::admin::pg

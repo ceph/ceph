@@ -12,6 +12,7 @@
 
 #include "common/dout.h"
 #include "crimson/net/Fwd.h"
+#include "crimson/osd/osd_operations/scrub_event.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDOpReply.h"
 #include "os/Transaction.h"
@@ -37,12 +38,16 @@
 #include "crimson/osd/pg_recovery.h"
 #include "crimson/osd/pg_recovery_listener.h"
 #include "crimson/osd/recovery_backend.h"
+//#include "crimson/osd/scrubber_common_cr.h"
+#include "osd/scrubber_common.h"
 
-class MQuery;
+struct MQuery;
 class OSDMap;
 class PGBackend;
 class PGPeeringEvent;
-class osd_op_params_t;
+struct osd_op_params_t;
+class PgScrubber;
+class ScrubBackend;
 
 namespace recovery {
   class Context;
@@ -52,12 +57,24 @@ namespace crimson::net {
   class Messenger;
 }
 
+namespace Scrub {
+  class Store;
+  class ReplicaReservations;
+  class LocalReservation;
+  class ReservedByRemotePrimary;
+  enum class schedule_result_t;
+}
+
 namespace crimson::os {
   class FuturizedStore;
 }
 
 namespace crimson::osd {
+class ClientRequest;
 class OpsExecuter;
+class ScrubEvent;
+class ScrubRemoteEvent;
+
 
 class PG : public boost::intrusive_ref_counter<
   PG,
@@ -72,6 +89,7 @@ class PG : public boost::intrusive_ref_counter<
   ClientRequest::PGPipeline client_request_pg_pipeline;
   PGPeeringPipeline peering_request_pg_pipeline;
   RepRequest::PGPipeline replicated_request_pg_pipeline;
+  ScrubEvent::PGPipeline scrub_event_pg_pipeline;
 
   ClientRequest::Orderer client_request_orderer;
 
@@ -82,6 +100,10 @@ class PG : public boost::intrusive_ref_counter<
 
   seastar::timer<seastar::lowres_clock> check_readable_timer;
   seastar::timer<seastar::lowres_clock> renew_lease_timer;
+
+  /// the 'scrubber'. Will be allocated in the derivative (PrimaryLogPG) ctor,
+  /// and be removed only in the PrimaryLogPG destructor.
+  std::unique_ptr<ScrubPgIF> m_scrubber;
 
 public:
   template <typename T = void>
@@ -157,17 +179,14 @@ public:
     bool need_write_epoch,
     ceph::os::Transaction &t) final;
 
-  void on_info_history_change() final {
-    // Not needed yet -- mainly for scrub scheduling
-  }
+  // mainly for scrub scheduling
+  void on_info_history_change() final;
 
   /// Notify PG that Primary/Replica status has changed (to update scrub registration)
-  void on_primary_status_change(bool was_primary, bool now_primary) final {
-  }
+  void on_primary_status_change(bool was_primary, bool now_primary) final;
 
   /// Need to reschedule next scrub. Assuming no change in role
-  void reschedule_scrub() final {
-  }
+  void reschedule_scrub() final;
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) final;
 
@@ -484,6 +503,19 @@ public:
 
   seastar::future<> read_state(crimson::os::FuturizedStore* store);
 
+  // -------------- some scrubber-related stuff --------------
+  // ------------- which I don't know what interface it should implement -------------
+
+  seastar::future<Scrub::schedule_result_t> sched_scrub_this_pg();
+
+  bool is_scrub_queued_or_active() const {
+    return m_scrubber->is_queued_or_active();
+  }
+
+  ScrubPgIF* get_scrubber(ScrubberPasskey) {
+    return m_scrubber.get();
+  }
+
   void do_peering_event(
     PGPeeringEvent& evt, PeeringCtx &rctx);
 
@@ -635,6 +667,8 @@ private:
 
 public:
   cached_map_t get_osdmap() { return osdmap; }
+  const cached_map_t get_osdmap() const { return osdmap; }
+
   eversion_t next_version() {
     return eversion_t(get_osdmap_epoch(),
 		      ++projected_last_update.version);
@@ -643,6 +677,10 @@ public:
     return shard_services;
   }
   seastar::future<> stop();
+
+  /// flags detailing scheduling/operation characteristics of the next scrub 
+  requested_scrub_t m_planned_scrub; // RRR why public? refactor
+
 private:
   std::unique_ptr<PGBackend> backend;
   std::unique_ptr<RecoveryBackend> recovery_backend;
@@ -723,6 +761,26 @@ public:
     return seastar::now();
   }
 
+  seastar::future<> push_scrubstamp_back();
+
+  static void set_last_scrub_stamp(
+    utime_t t, pg_history_t &history, pg_stat_t &stats) {
+    stats.last_scrub_stamp = t;
+    history.last_scrub_stamp = t;
+  }
+
+  void set_last_scrub_stamp(utime_t t);
+
+  static void set_last_deep_scrub_stamp(
+    utime_t t, pg_history_t &history, pg_stat_t &stats) {
+    stats.last_deep_scrub_stamp = t;
+    history.last_deep_scrub_stamp = t;
+  }
+
+  void set_last_deep_scrub_stamp(utime_t t);
+
+
+
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch) const;
 
   template <typename MsgType>
@@ -751,6 +809,11 @@ private:
   friend struct PGFacade;
   friend class InternalClientRequest;
   friend class WatchTimeoutRequest;
+  friend class ScrubInternalOp;
+  friend PgScrubber;
+  friend class ::crimson::osd::ScrubEvent;
+  friend class ::crimson::osd::ScrubRemoteEvent;
+
 private:
   seastar::future<bool> find_unfound() {
     return seastar::make_ready_future<bool>(true);
@@ -774,6 +837,43 @@ private:
 
 private:
   BackfillRecovery::BackfillRecoveryPipeline backfill_pipeline;
+
+  // auxiliaries used by sched_scrub():
+
+  double next_deepscrub_interval() const;
+
+  /// should we perform deep scrub?
+  bool is_time_for_deep(bool allow_deep_scrub,
+		        bool allow_scrub,
+		        bool has_deep_errors,
+		        const requested_scrub_t& planned) const;
+
+  /**
+   * Verify the various 'next scrub' flags in m_planned_scrub against configuration
+   * and scrub-related timestamps.
+   *
+   * @returns an updated copy of the m_planned_flags (or nothing if no scrubbing)
+   */
+  std::optional<requested_scrub_t> verify_scrub_mode() const;
+
+  bool verify_periodic_scrub_mode(bool allow_deep_scrub,
+				  bool try_to_auto_repair,
+				  bool allow_regular_scrub,
+				  bool has_deep_errors,
+				  requested_scrub_t& planned) const;
+
+// ScrubberPasskey getters:
+public:
+  const pg_info_t& get_pg_info(ScrubberPasskey) const {
+    return get_info();
+  }
+
+  OSDService* get_pg_osd(ScrubberPasskey) const {
+    ceph_assert(0 && "not implemented");
+    return nullptr; // osd;
+  }
+
+  std::vector<pg_shard_t> get_actingset(ScrubberPasskey) const;
 
   friend class IOInterruptCondition;
   struct log_update_t {

@@ -33,7 +33,6 @@ using std::stringstream;
 using std::vector;
 
 using ceph::Formatter;
-using ceph::make_message;
 
 BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
   // steal messages from ctx

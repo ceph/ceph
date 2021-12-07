@@ -140,6 +140,81 @@ public:
   }
 };
 
+class ScrubCommand final : public PGCommand {
+public:
+  explicit ScrubCommand(crimson::osd::OSD& osd) :
+    PGCommand{osd,
+              "scrub",
+              "name=pgid,type=CephPgid,req=false",
+              "mark all unfound objects in this pg as lost, either"
+              " removing or reverting to a prior version if one is"
+              " available"}
+  {}
+  seastar::future<tell_result_t>
+  do_command(Ref<PG> pg,
+             const cmdmap_t& cmdmap,
+             std::string_view,
+             ceph::bufferlist&&) const final
+  {
+    // what to do with the unfound object specifically.
+    //std::string cmd;
+    //int op = -1;
+    //cmd_getval(cmdmap, "mulcmd", cmd);
+//     if (cmd == "revert") {
+//       op = pg_log_entry_t::LOST_REVERT;
+//     } else if (cmd == "delete") {
+//       op = pg_log_entry_t::LOST_DELETE;
+//     } else {
+//       return seastar::make_ready_future<tell_result_t>(tell_result_t{
+//         -EINVAL, "mode must be 'revert' or 'delete'; mark not yet implemented"});
+//     }
+    return pg->push_scrubstamp_back().then([] {
+      // TODO
+      return seastar::make_ready_future<tell_result_t>();
+    });
+  }
+};
+
+#if 0
+  else if (prefix == "scrub" ||
+	   prefix == "deep_scrub") {
+    bool deep = (prefix == "deep_scrub");
+    int64_t time = cmd_getval_or<int64_t>(cmdmap, "time", 0);
+
+    if (is_primary()) {
+      const pg_pool_t *p = &pool.info;
+      double pool_scrub_max_interval = 0;
+      double scrub_max_interval;
+      if (deep) {
+        p->opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &pool_scrub_max_interval);
+        scrub_max_interval = pool_scrub_max_interval > 0 ?
+          pool_scrub_max_interval : g_conf()->osd_deep_scrub_interval;
+      } else {
+        p->opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &pool_scrub_max_interval);
+        scrub_max_interval = pool_scrub_max_interval > 0 ?
+          pool_scrub_max_interval : g_conf()->osd_scrub_max_interval;
+      }
+      // Instead of marking must_scrub force a schedule scrub
+      utime_t stamp = ceph_clock_now();
+      if (time == 0)
+        stamp -= scrub_max_interval;
+      else
+        stamp -=  (float)time;
+      stamp -= 100.0;  // push back last scrub more for good measure
+      if (deep) {
+        set_last_deep_scrub_stamp(stamp);
+      }
+      set_last_scrub_stamp(stamp); // for 'deep' as well, as we use this value to order scrubs
+      f->open_object_section("result");
+      f->dump_bool("deep", deep);
+      f->dump_stream("stamp") << stamp;
+      f->close_section();
+    } else {
+      ss << "Not primary";
+      ret = -EPERM;
+    }
+#endif
+
 } // namespace crimson::admin::pg
 
 namespace crimson::admin {
@@ -155,5 +230,8 @@ make_asok_hook<crimson::admin::pg::QueryCommand>(crimson::osd::OSD& osd);
 
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<crimson::admin::pg::MarkUnfoundLostCommand>(crimson::osd::OSD& osd);
+
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<crimson::admin::pg::ScrubCommand>(crimson::osd::OSD& osd);
 
 } // namespace crimson::admin

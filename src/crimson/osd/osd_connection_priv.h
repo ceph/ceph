@@ -8,6 +8,7 @@
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
+#include "crimson/osd/osd_operations/scrub_remote_event.h"
 
 namespace crimson::osd {
 
@@ -15,6 +16,7 @@ struct OSDConnectionPriv : public crimson::net::Connection::user_private_t {
   ConnectionPipeline client_request_conn_pipeline;
   ConnectionPipeline peering_request_conn_pipeline;
   ConnectionPipeline replicated_request_conn_pipeline;
+  ConnectionPipeline scrub_request_conn_pipeline;
 };
 
 static OSDConnectionPriv &get_osd_priv(crimson::net::Connection *conn) {

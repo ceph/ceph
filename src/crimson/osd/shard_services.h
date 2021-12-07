@@ -11,10 +11,13 @@
 #include "msg/MessageRef.h"
 #include "crimson/common/exception.h"
 #include "crimson/os/futurized_collection.h"
+#include "crimson/osd/scrubber/osd_scrub_sched.h"
 #include "osd/PeeringState.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/object_context.h"
 #include "common/AsyncReserver.h"
+#include "crimson/common/logclient.h"
+
 
 namespace crimson::net {
   class Messenger;
@@ -33,8 +36,8 @@ namespace crimson::os {
 }
 
 class OSDMap;
-class PeeringCtx;
-class BufferedRecoveryMessages;
+struct PeeringCtx;
+struct BufferedRecoveryMessages;
 
 namespace crimson::osd {
 
@@ -44,7 +47,9 @@ namespace crimson::osd {
 class ShardServices : public md_config_obs_t {
   using cached_map_t = boost::local_shared_ptr<const OSDMap>;
   OSDMapService &osdmap_service;
+public: // RRR
   const int whoami;
+private:
   crimson::net::Messenger &cluster_msgr;
   crimson::net::Messenger &public_msgr;
   crimson::mon::Client &monc;
@@ -52,6 +57,7 @@ class ShardServices : public md_config_obs_t {
   crimson::os::FuturizedStore &store;
 
   crimson::common::CephContext cct;
+  ScrubQueue* scrub_scheduler; // non-owning
 
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
@@ -68,7 +74,8 @@ public:
     crimson::net::Messenger &public_msgr,
     crimson::mon::Client &monc,
     crimson::mgr::Client &mgrc,
-    crimson::os::FuturizedStore &store);
+    crimson::os::FuturizedStore &store,
+    ScrubQueue* scrub_sched);
 
   seastar::future<> send_to_osd(
     int peer,
@@ -87,6 +94,16 @@ public:
   const OSDMapService &get_osdmap_service() const {
     return osdmap_service;
   }
+
+  LogClient log_client;
+  LogChannel::Ref clog;
+  bool is_recovery_active() const;
+  ScrubQueue& get_scrub_services() { return *scrub_scheduler; }
+
+
+//private:
+
+public:
 
   // Op Management
   OSDOperationRegistry registry;

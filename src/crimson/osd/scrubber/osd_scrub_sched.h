@@ -115,11 +115,15 @@ SqrubQueue interfaces (main functions):
 
 #include "common/RefCountedObj.h"
 #include "common/ceph_atomic.h"
+#include "common/ceph_mutex.h"
 #include "include/utime_fmt.h"
 #include "osd/osd_types.h"
 #include "osd/osd_types_fmt.h"
 #include "osd/scrubber_common.h"
 
+#ifdef WITH_SEASTAR
+using CephContext = crimson::common::CephContext;
+#endif
 
 namespace Scrub {
 
@@ -149,10 +153,10 @@ class ScrubSchedListener {
    * own check some of the PG-specific preconditions and those are checked here.
    * See attempt_t definition.
    *
-   * @return a Scrub::attempt_t detailing either a success, or the failure
-   * reason.
+   * @return a Scrub::schedule_result_t detailing either a success, or the
+   * failure reason.
    */
-  virtual schedule_result_t initiate_a_scrub(
+  virtual seastar::future<schedule_result_t> initiate_a_scrub(
     spg_t pgid,
     bool allow_requested_repair_only) = 0;
 
@@ -195,7 +199,9 @@ class ScrubQueue {
     utime_t proposed_time{};
     double min_interval{0.0};
     double max_interval{0.0};
-    must_scrub_t is_must{ScrubQueue::must_scrub_t::not_mandatory};
+    // for today's testing: not must_scrub_t
+    // is_must{ScrubQueue::must_scrub_t::not_mandatory};
+    must_scrub_t is_must{ScrubQueue::must_scrub_t::mandatory};
   };
 
   struct ScrubJob final : public RefCountedObject {
@@ -283,7 +289,7 @@ class ScrubQueue {
   };
 
   friend class TestOSDScrub;
-  friend class ScrubSchedTestWrapper; ///< unit-tests structure
+  friend class ScrubSchedTestWrapper;  ///< unit-tests structure
 
   using ScrubJobRef = ceph::ref_t<ScrubJob>;
   using ScrubQContainer = std::vector<ScrubJobRef>;
@@ -387,9 +393,9 @@ class ScrubQueue {
   void dump_scrub_reservations(ceph::Formatter* f) const;
 
   /// counting the number of PGs stuck while scrubbing, waiting for objects
-  void mark_pg_scrub_blocked(spg_t blocked_pg);
-  void clear_pg_scrub_blocked(spg_t blocked_pg);
-  int get_blocked_pgs_count() const;
+  void mark_pg_scrub_blocked(spg_t blocked_pg) {/*TBD*/}
+  void clear_pg_scrub_blocked(spg_t blocked_pg) {/*TBD*/}
+  int get_blocked_pgs_count() const { return 0; }
 
   /**
    * Pacing the scrub operation by inserting delays (mostly between chunks)
@@ -410,12 +416,12 @@ class ScrubQueue {
   [[nodiscard]] std::optional<double> update_load_average();
 
  private:
-  CephContext* cct;
+  CephContext* cct;  // RRR fix this faked, not really wanted, pointer
   Scrub::ScrubSchedListener& osd_service;
 
   // the following is required for Crimson compatibility
 #ifdef WITH_SEASTAR
-  auto& conf() const { return local_conf(); }
+  auto& conf() const { return crimson::common::local_conf(); }
 #else
   auto& conf() const { return cct->_conf; }
 #endif
@@ -436,8 +442,10 @@ class ScrubQueue {
   bool restore_penalized{false};
 
   double daily_loadavg{0.0};
+  double current_loadavg{0.0};
+  double filtrd_loadavg{1.0};  // decaying-mean loadavg
 
-  static inline constexpr auto registered_job = [](const auto& jobref) -> bool {
+  static constexpr auto registered_job = [](const auto& jobref) -> bool {
     return jobref->state == qu_state_t::registered;
   };
 
@@ -476,18 +484,6 @@ class ScrubQueue {
   int scrubs_local{0};
   int scrubs_remote{0};
 
-  /**
-   * The scrubbing of PGs might be delayed if the scrubbed chunk of objects is
-   * locked by some other operation. A bug might cause this to be an infinite
-   * delay. If that happens, the OSDs "scrub resources" (i.e. the
-   * counters that limit the number of concurrent scrub operations) might
-   * be exhausted.
-   * We do issue a cluster-log warning in such occasions, but that message is
-   * easy to miss. The 'some pg is blocked' global flag is used to note the
-   * existence of such a situation in the scrub-queue log messages.
-   */
-  std::atomic_int_fast16_t blocked_scrubs_cnt{0};
-
   std::atomic_bool a_pg_is_reserving{false};
 
   [[nodiscard]] bool scrub_load_below_threshold() const;
@@ -514,12 +510,12 @@ class ScrubQueue {
    */
   void move_failed_pgs(utime_t now_is);
 
-  Scrub::schedule_result_t select_from_group(
+  seastar::future<Scrub::schedule_result_t> select_from_group(
     ScrubQContainer& group,
     const Scrub::ScrubPreconds& preconds,
     utime_t now_is);
 
-protected: // used by the unit-tests
+ protected:  // used by the unit-tests
   /**
    * unit-tests will override this function to return a mock time
    */

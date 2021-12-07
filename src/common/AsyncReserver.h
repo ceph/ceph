@@ -15,7 +15,11 @@
 #ifndef ASYNC_RESERVER_H
 #define ASYNC_RESERVER_H
 
+#include <set>
+
 #include "common/Formatter.h"
+#include "common/ceph_mutex.h"
+#include "osd/osd_types.h"
 
 #define rdout(x) lgeneric_subdout(cct,reserver,x)
 
@@ -32,7 +36,7 @@ class AsyncReserver {
   F *f;
   unsigned max_allowed;
   unsigned min_priority;
-  ceph::mutex lock = ceph::make_mutex("AsyncReserver::lock");
+  mutable ceph::mutex lock = ceph::make_mutex("AsyncReserver::lock");
 
   struct Reservation {
     T item;
@@ -309,7 +313,7 @@ public:
    *
    * Return true if there are reservations in progress
    */
-  bool has_reservation() {
+  bool has_reservation() const {
     std::lock_guard l(lock);
     return !in_progress.empty();
   }

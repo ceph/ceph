@@ -36,6 +36,7 @@
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/pg_recovery.h"
 #include "crimson/osd/replicated_recovery_backend.h"
+#include "crimson/osd/scrubber/pg_scrubber.h"
 
 using std::ostream;
 using std::set;
@@ -125,6 +126,7 @@ PG::PG(
     new ReadablePredicate(pg_whoami),
     new RecoverablePredicate());
   osdmap_gate.got_map(osdmap->get_epoch());
+  m_scrubber = std::make_unique<PgScrubber>(this);
 }
 
 PG::~PG() {}
@@ -151,6 +153,14 @@ void PG::publish_stats_to_osd()
 {
   if (!is_primary())
     return;
+
+  ceph_assert(m_scrubber);
+  peering_state.update_stats_wo_resched(
+    [scrubber = m_scrubber.get()](pg_history_t& hist,
+                                  pg_stat_t& info) mutable -> void {
+      info.scrub_sched_status = scrubber->get_schedule();
+    });
+
   if (auto new_pg_stats = peering_state.prepare_stats_for_publish(
         pg_stats,
         object_stat_collection_t());
@@ -365,6 +375,33 @@ void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
   });
 }
 
+
+void PG::set_last_scrub_stamp(utime_t t)
+{
+  peering_state.update_stats([=](auto& history, auto& stats) {
+    set_last_scrub_stamp(t, history, stats);
+    return true;
+  });
+}
+
+
+void PG::set_last_deep_scrub_stamp(utime_t t)
+{
+  peering_state.update_stats([=](auto& history, auto& stats) {
+    set_last_deep_scrub_stamp(t, history, stats);
+    return true;
+  });
+}
+
+// debug aux
+seastar::future<> PG::push_scrubstamp_back()
+{
+  set_last_scrub_stamp(utime_t(0, 0));
+
+  return seastar::now();
+}
+
+
 void PG::log_state_enter(const char *state) {
   logger().info("Entering state: {}", state);
 }
@@ -530,8 +567,11 @@ void PG::dump_primary(Formatter* f)
   peering_state.handle_event(q, 0);
   f->close_section();
 
+  if (is_primary() && peering_state.is_active() && m_scrubber) {
+    m_scrubber->dump_scrubber(f, m_planned_scrub);
+  }
+
   // TODO: snap_trimq
-  // TODO: scrubber state
   // TODO: agent state
 }
 
@@ -1335,6 +1375,7 @@ seastar::future<> PG::stop()
 {
   logger().info("PG {} {}", pgid, __func__);
   stopping = true;
+  m_scrubber->rm_from_osd_scrubbing();  // should this block and wait for a possible ongoing scrub to finish?
   cancel_local_background_io_reservation();
   cancel_remote_recovery_reservation();
   check_readable_timer.cancel();
@@ -1419,4 +1460,305 @@ PG::already_complete(const osd_reqid_t& reqid)
   }
 }
 
+// ==========================================================================================
+// SCRUB
+
+/*
+ *  implementation note:
+ *  PG::sched_scrub_this_pg() is called only once per a specific scrub session.
+ *  That call commits us to whatever choices are made (deep/shallow, etc').
+ *  Unless failing to start scrubbing, the 'planned scrub' flag-set is 'frozen'
+ * into PgScrubber's m_flags, then cleared.
+ */
+seastar::future<Scrub::schedule_result_t> PG::sched_scrub_this_pg()
+{
+  using Scrub::schedule_result_t;
+  logger().info("{}: pg {} (<{}>,<{}>)",
+		__func__,
+		pgid,
+		(peering_state.is_active() ? "active" : "not-active"),
+		(peering_state.is_clean() ? "clean" : "not-clean"));
+
+  // ceph_assert(ceph_mutex_is_locked(_lock));
+  ceph_assert(m_scrubber);
+
+  //   if (is_scrub_queued_or_active()) {
+  //     return seastar::make_ready_future<schedule_result_t>(
+  //       schedule_result_t::already_started);
+  //   }
+
+  if (!is_primary() || !peering_state.is_active() ||
+      !peering_state.is_clean()) {
+    return seastar::make_ready_future<schedule_result_t>(
+      schedule_result_t::bad_pg_state);
+  }
+
+  // analyse the combination of the requested scrub flags, the osd/pool
+  // configuration and the PG status to determine whether we should scrub now,
+  // and what type of scrub should that be.
+  auto updated_flags = verify_scrub_mode();
+  if (!updated_flags) {
+    // the stars do not align for starting a scrub for this PG at this time
+    // (due to configuration or priority issues)
+    // The reason was already reported by the callee.
+    logger().info("{}: failed to initiate a scrub", __func__);
+    return seastar::make_ready_future<schedule_result_t>(
+      schedule_result_t::preconditions);
+  }
+
+  // try to reserve the local OSD resources. If failing: no harm. We will
+  // be retried by the OSD later on.
+  if (!m_scrubber->reserve_local()) {
+    logger().info("{}: failed to reserve locally", __func__);
+    return seastar::make_ready_future<schedule_result_t>(
+      schedule_result_t::no_local_resources);
+  }
+
+  // can commit to the updated flags now, as nothing will stop the scrub
+  m_planned_scrub = *updated_flags;
+
+  // An interrupted recovery repair could leave this set.
+  peering_state.state_clear(PG_STATE_REPAIR);
+
+  // Pass control to the scrubber. It is the scrubber that handles the replicas'
+  // resources reservations.
+  m_scrubber->set_op_parameters(m_planned_scrub);
+
+  logger().info("{}: pg[{}] queueing scrub", __func__, pgid);
+  m_scrubber->set_queued_or_active();
+
+  // for now - faking an N seconds scrub.
+
+  (void)shard_services.start_operation<ScrubEvent>(
+    this,
+    get_shard_services(),
+    pgid,
+    (ScrubEvent::ScrubEventFwdImm)(&PgScrubber::scrub_fake_scrub_session),
+    get_osdmap_epoch(),
+    0,
+    10ms);
+
+  // RRR ask how to guarantee that the scrub is not executed before we return?
+
+  return seastar::make_ready_future<schedule_result_t>(
+    schedule_result_t::scrub_initiated);
 }
+
+double PG::next_deepscrub_interval() const
+{
+  double deep_scrub_interval =
+    get_pgpool().info.opts.value_or(pool_opts_t::DEEP_SCRUB_INTERVAL, 0.0);
+  if (deep_scrub_interval <= 0.0)
+    deep_scrub_interval = local_conf()->osd_deep_scrub_interval;
+  return get_info().history.last_deep_scrub_stamp + deep_scrub_interval;
+}
+
+bool PG::is_time_for_deep(bool allow_deep_scrub,
+			  bool allow_scrub,
+			  bool has_deep_errors,
+			  const requested_scrub_t& planned) const
+{
+  logger().info(
+    "{}: need_auto? {} allow_deep_scrub? {} allow_scrub? {} has_deep_errors? "
+    "{}",
+    __func__, planned.need_auto, allow_deep_scrub, allow_scrub,
+    has_deep_errors);
+
+  if (!allow_deep_scrub) {
+    return false;
+  }
+
+  if (planned.need_auto) {
+    logger().info("{}: need repair after scrub errors", __func__);
+    return true;
+  }
+
+  if (ceph_clock_now() >= next_deepscrub_interval()) {
+    logger().debug("{}: now ({}) >= time for deep ({})", __func__,
+		   ceph_clock_now(), next_deepscrub_interval());
+    return true;
+  }
+
+  if (has_deep_errors) {
+    shard_services.clog->info() << fmt::format(
+      "osd.{}: pg {}: Deep scrub errors, upgrading scrub to deep-scrub",
+      shard_services.whoami, pgid);
+    return true;
+  }
+
+  // we only flip coins if 'allow_scrub' is asserted. Otherwise - as this
+  // function is called often, we will probably be deep-scrubbing most of the
+  // time.
+  if (allow_scrub) {
+    bool deep_coin_flip =
+      (rand() % 100) < local_conf()->osd_deep_scrub_randomize_ratio * 100;
+
+    logger().info("{}: time_for_deep={} deep_coin_flip={}", __func__,
+		  planned.time_for_deep, deep_coin_flip);
+    if (deep_coin_flip) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+
+bool PG::verify_periodic_scrub_mode(bool allow_deep_scrub,
+				    bool try_to_auto_repair,
+				    bool allow_regular_scrub,
+				    bool has_deep_errors,
+				    requested_scrub_t& planned) const
+
+{
+  ceph_assert(!planned.must_deep_scrub && !planned.must_repair);
+
+  if (!allow_deep_scrub && has_deep_errors) {
+    shard_services.clog->error()
+      << "osd." << shard_services.whoami << " pg " << pgid
+      << " Regular scrub skipped due to deep-scrub errors and nodeep-scrub set";
+    return false;
+  }
+
+  if (allow_deep_scrub) {
+    // Initial entry and scheduled scrubs without nodeep_scrub set get here
+
+    planned.time_for_deep = is_time_for_deep(
+      allow_deep_scrub, allow_regular_scrub, has_deep_errors, planned);
+
+    if (try_to_auto_repair) {
+      if (planned.time_for_deep) {
+	logger().info("{}: auto repair with deep scrubbing", __func__);
+	planned.auto_repair = true;
+      } else if (allow_regular_scrub) {
+	logger().info("{}: auto repair with scrubbing, rescrub if errors found",
+		      __func__);
+	planned.deep_scrub_on_error = true;
+      }
+    }
+  }
+
+  logger().info("{}: updated flags: {} allow_regular_scrub: {}", __func__,
+		planned, allow_regular_scrub);
+
+  // NOSCRUB so skip regular scrubs
+  if (!allow_regular_scrub && !planned.time_for_deep) {
+    return false;
+  }
+
+  return true;
+}
+
+std::optional<requested_scrub_t> PG::verify_scrub_mode() const
+{
+  const bool allow_regular_scrub =
+    !(get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
+      get_pgpool().info.has_flag(pg_pool_t::FLAG_NOSCRUB));
+
+  const bool allow_deep_scrub =
+    allow_regular_scrub &&
+    !(get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
+      get_pgpool().info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB));
+
+  const bool has_deep_errors =
+    (get_info().stats.stats.sum.num_deep_scrub_errors > 0);
+
+  const bool try_to_auto_repair = (local_conf()->osd_scrub_auto_repair &&
+				   get_backend().auto_repair_supported());
+
+  logger().info(
+    "{}: pg {}: allow (reg/deep)? {}/{} auto-repair? {} (conf:{}) deep-errors? "
+    "{}",
+    __func__,
+    pgid,
+    allow_regular_scrub,
+    allow_deep_scrub,
+    try_to_auto_repair,
+    local_conf()->osd_scrub_auto_repair,
+    has_deep_errors);
+
+  auto upd_flags = m_planned_scrub;
+
+  upd_flags.time_for_deep = false;
+  // Clear these in case user issues the scrub/repair command during
+  // the scheduling of the scrub/repair (e.g. request reservation)
+  upd_flags.deep_scrub_on_error = false;
+  upd_flags.auto_repair = false;
+
+  if (upd_flags.must_scrub && !upd_flags.must_deep_scrub && has_deep_errors) {
+    shard_services.clog->error()
+      << "osd." << shard_services.whoami << " pg " << pgid
+      << " Regular scrub request, deep-scrub details will be lost";
+  }
+
+  if (!upd_flags.must_scrub) {
+    // All periodic scrub handling goes here because must_scrub is
+    // always set for must_deep_scrub and must_repair.
+
+    const bool can_start_periodic =
+      verify_periodic_scrub_mode(allow_deep_scrub,
+				 try_to_auto_repair,
+				 allow_regular_scrub,
+				 has_deep_errors,
+				 upd_flags);
+    if (!can_start_periodic) {
+      // "I don't want no scrub"
+      logger().info("{}: no periodic scrubs allowed", __func__);
+      return std::nullopt;
+    }
+  }
+
+  //  scrubbing while recovering?
+
+  bool prevented_by_recovery =
+    shard_services.is_recovery_active() &&
+    !local_conf()->osd_scrub_during_recovery &&
+    (!local_conf()->osd_repair_during_recovery || !upd_flags.must_repair);
+
+  if (prevented_by_recovery) {
+    logger().info("{}: scrubbing prevented during recovery", __func__);
+    return std::nullopt;
+  }
+
+  upd_flags.need_auto = false;
+  return upd_flags;
+}
+
+std::vector<pg_shard_t> PG::get_actingset(ScrubberPasskey) const
+{
+  const auto& aset = peering_state.get_actingset();
+  std::vector<pg_shard_t> ret{aset.cbegin(), aset.cend()};
+  return ret;
+}
+
+void PG::on_info_history_change()
+{
+  logger().warn("{} {}", __func__, m_planned_scrub);
+  ceph_assert(m_scrubber);
+  m_scrubber->on_maybe_registration_change(m_planned_scrub);
+}
+
+void PG::on_primary_status_change(bool was_primary, bool now_primary)
+{
+  logger().warn("{}: {} -> {}", __func__, was_primary ? "primary" : "secondary",
+                now_primary ? "primary" : "secondary");
+  if (was_primary != now_primary) {
+    ceph_assert(m_scrubber);
+    m_scrubber->on_primary_change(m_planned_scrub);
+  }
+}
+
+void PG::reschedule_scrub()
+{
+  logger().debug("{}: for a {}", __func__,
+                 (is_primary() ? "Primary" : "non-primary"));
+
+  // we are assuming no change in primary status
+  if (is_primary()) {
+    ceph_assert(m_scrubber);
+    m_scrubber->update_scrub_job(m_planned_scrub);
+  }
+}
+
+
+}  // namespace crimson::osd

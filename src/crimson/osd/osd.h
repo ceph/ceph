@@ -20,6 +20,7 @@
 #include "crimson/mgr/client.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/osd/osdmap_service.h"
+#include "crimson/osd/scrubber/osd_scrub_sched.h"
 #include "crimson/osd/state.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/osdmap_gate.h"
@@ -37,6 +38,8 @@ class MOSDMap;
 class MOSDRepOpReply;
 class MOSDRepOp;
 class MOSDScrub2;
+class MOSDScrubReserve;
+class OSDMap;
 class OSDMeta;
 class Heartbeat;
 
@@ -60,6 +63,7 @@ namespace crimson::osd {
 class PG;
 
 class OSD final : public crimson::net::Dispatcher,
+		  public Scrub::ScrubSchedListener,
 		  private OSDMapService,
 		  private crimson::common::AuthHandler,
 		  private crimson::mgr::WithStats {
@@ -111,6 +115,12 @@ class OSD final : public crimson::net::Dispatcher,
   void handle_authentication(const EntityName& name,
 			     const AuthCapsInfo& caps) final;
 
+  /**
+   * The entity that maintains the set of PGs we may scrub (i.e. - those that we
+   * are their primary), and schedules their scrubbing.
+   */
+  ScrubQueue scrub_scheduler;
+
   crimson::osd::ShardServices shard_services;
 
   std::unique_ptr<Heartbeat> heartbeat;
@@ -144,6 +154,8 @@ public:
 
   /// @return the seq id of the pg stats being sent
   uint64_t send_pg_stats();
+
+  ScrubQueue& get_scrub_services() { return scrub_scheduler; }
 
 private:
   seastar::future<> _write_superblock();
@@ -197,6 +209,8 @@ private:
 					   Ref<MOSDFastDispatchOp> m);
   seastar::future<> handle_scrub(crimson::net::ConnectionRef conn,
 				 Ref<MOSDScrub2> m);
+  seastar::future<> handle_scrub_reserve(crimson::net::ConnectionRef conn,
+				 Ref<MOSDScrubReserve> m);
   seastar::future<> handle_mark_me_down(crimson::net::ConnectionRef conn,
 					Ref<MOSDMarkMeDown> m);
 
@@ -223,6 +237,8 @@ public:
 
   seastar::future<> consume_map(epoch_t epoch);
 
+  int get_nodeid() const final { return whoami; }
+
 private:
   PGMap pg_map;
   crimson::common::Gated gate;
@@ -241,6 +257,14 @@ private:
   RemotePeeringEvent::OSDPipeline peering_request_osd_pipeline;
   friend class RemotePeeringEvent;
 
+  friend class ScrubQueue;
+  seastar::future<> sched_scrub();
+  bool scrub_random_backoff();
+  void scrub_tick();
+  void resched_all_scrubs();
+
+
+public:
   seastar::future<Ref<PG>> get_or_create_pg(
     PGMap::PGCreationBlockingEvent::TriggerI&&,
     spg_t pgid,
@@ -259,6 +283,7 @@ public:
       std::forward<Args>(args)...);
     auto &logger = crimson::get_logger(ceph_subsys_osd);
     logger.debug("{}: starting {}", *op, __func__);
+    logger.warn("{}: starting {} {}", __func__, *op, op->get_pgid());
     auto &opref = *op;
 
     auto fut = opref.template enter_stage<>(
@@ -282,7 +307,7 @@ public:
     }).then([&logger, &opref](auto epoch) {
       logger.debug("{}: got map {}, entering get_pg", opref, epoch);
       return opref.template enter_stage<>(
-	opref.get_connection_pipeline().get_pg);
+	opref.get_connection_pipeline().get_pg);// get_pg is an object - the name of the piple stage
     }).then([this, &logger, &opref] {
       logger.debug("{}: in get_pg", opref);
       if constexpr (T::can_create()) {
@@ -315,6 +340,9 @@ public:
 
 
 private:
+  seastar::future<Scrub::schedule_result_t> initiate_a_scrub(
+    spg_t pgid, bool allow_requested_repair_only);
+
   LogClient log_client;
   LogChannelRef clog;
 };

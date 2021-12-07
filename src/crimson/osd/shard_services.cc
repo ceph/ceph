@@ -3,6 +3,7 @@
 
 #include "crimson/osd/shard_services.h"
 
+#include "crimson/common/logclient.h"
 #include "messages/MOSDAlive.h"
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
@@ -34,7 +35,8 @@ ShardServices::ShardServices(
   crimson::net::Messenger &public_msgr,
   crimson::mon::Client &monc,
   crimson::mgr::Client &mgrc,
-  crimson::os::FuturizedStore &store)
+  crimson::os::FuturizedStore &store,
+  ScrubQueue* scrub_sched)
     : osdmap_service(osdmap_service),
       whoami(whoami),
       cluster_msgr(cluster_msgr),
@@ -42,6 +44,9 @@ ShardServices::ShardServices(
       monc(monc),
       mgrc(mgrc),
       store(store),
+      scrub_scheduler(scrub_sched),
+      log_client{&cluster_msgr, LogClient::NO_FLAGS},
+      clog{log_client.create_channel()},
       throttler(crimson::common::local_conf()),
       obc_registry(crimson::common::local_conf()),
       local_reserver(
@@ -314,4 +319,9 @@ seastar::future<> ShardServices::send_alive(const epoch_t want)
   }
 }
 
-};
+bool ShardServices::is_recovery_active() const
+{
+  return local_reserver.has_reservation() || remote_reserver.has_reservation();
+}
+
+}  // namespace crimson::osd

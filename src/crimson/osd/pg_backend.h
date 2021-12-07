@@ -341,6 +341,8 @@ public:
   };
   virtual void on_actingset_changed(peering_info_t pi) = 0;
   virtual void on_activate_complete();
+
+  virtual bool auto_repair_supported() const {return true; };
 protected:
   const shard_id_t shard;
   CollectionRef coll;

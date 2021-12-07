@@ -9747,7 +9747,7 @@ void OSDService::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
   _maybe_queue_recovery();
 }
 
-bool OSDService::is_recovery_active()
+bool OSDService::is_recovery_active() const
 {
   if (cct->_conf->osd_debug_pretend_recovery_active) {
     return true;

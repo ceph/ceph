@@ -47,6 +47,18 @@ namespace ceph {
     operator T() const noexcept {
       return value;
     }
+    bool compare_exchange_strong(
+      T& expected,
+      T desired,
+      std::memory_order = std::memory_order_seq_cst) noexcept {
+      if (expected == value) {
+	value = std::move(desired);
+	return true;
+      } else {
+	expected = value;
+	return false;
+      }
+    }
 
     // We need to differentiate with SFINAE as std::atomic offers beefier
     // interface for integral types.
