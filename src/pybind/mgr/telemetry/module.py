@@ -169,7 +169,7 @@ class Module(MgrModule):
         Option(name='channel_perf',
                type='bool',
                default=False,
-               desc='Share perf counter metrics summed across the whole cluster'),
+               desc='Share various performance metrics of a cluster'),
     ]
 
     @property
