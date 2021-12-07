@@ -12,12 +12,6 @@
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/pg_recovery.h"
 
-#include "messages/MOSDPGPull.h"
-#include "messages/MOSDPGPush.h"
-#include "messages/MOSDPGPushReply.h"
-#include "messages/MOSDPGRecoveryDelete.h"
-#include "messages/MOSDPGRecoveryDeleteReply.h"
-
 #include "osd/osd_types.h"
 #include "osd/PeeringState.h"
 
