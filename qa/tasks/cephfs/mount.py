@@ -41,7 +41,6 @@ class CephFSMount(object):
         :param cephfs_mntpt: Path to directory inside Ceph FS that will be
                              mounted as root
         """
-        self.mounted = False
         self.ctx = ctx
         self.test_dir = test_dir
 
@@ -170,7 +169,8 @@ class CephFSMount(object):
                               sudo=True).decode())
 
     def is_mounted(self):
-        return self.mounted
+        return self.hostfs_mntpt in \
+            self.client_remote.read_file('/proc/self/mounts',stdout=StringIO())
 
     def setupfs(self, name=None):
         if name is None and self.fs is not None:
@@ -518,7 +518,7 @@ class CephFSMount(object):
         exception: wait accepted too which can be True or False.
         """
         self.umount_wait()
-        assert not self.mounted
+        assert not self.is_mounted()
 
         mntopts = kwargs.pop('mntopts', [])
         check_status = kwargs.pop('check_status', True)
