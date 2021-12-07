@@ -237,9 +237,6 @@ void rgw_pubsub_s3_notification::dump_xml(Formatter *f) const {
 
 bool rgw_pubsub_s3_notifications::decode_xml(XMLObj *obj) {
   do_decode_xml_obj(list, "TopicConfiguration", obj);
-  if (list.empty()) {
-    throw RGWXMLDecoder::err("at least one 'TopicConfiguration' must exist");
-  }
   return true;
 }
 

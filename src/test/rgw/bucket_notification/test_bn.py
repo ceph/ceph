@@ -683,6 +683,63 @@ def test_ps_s3_notification_on_master():
     conn.delete_bucket(bucket_name)
 
 
+@attr('basic_test')
+def test_ps_s3_notification_on_master_empty_config():
+    """ test s3 notification set/get/delete on master with empty config """
+    hostname = get_ip()
+
+    conn = connection()
+
+    zonegroup = 'default'
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic
+    endpoint_address = 'amqp://127.0.0.1:7001'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name+'_1',
+                        'TopicArn': topic_arn,
+                        'Events': []
+                       }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # get notifications on a bucket
+    response, status = s3_notification_conf.get_config(notification=notification_name+'_1')
+    assert_equal(status/100, 2)
+    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn)
+
+    # create s3 notification again with empty configuration to check if it deletes or not
+    topic_conf_list = []
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # make sure that the notification is now deleted
+    response, status = s3_notification_conf.get_config()
+    try:
+        check = response['NotificationConfiguration']
+    except KeyError as e:
+        assert_equal(status/100, 2)
+    else:
+        assert False
+
+    # cleanup
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+
+
 @attr('amqp_test')
 def test_ps_s3_notification_filter_on_master():
     """ test s3 notification filter on master """
