@@ -126,14 +126,19 @@ extern int list_multipart_parts(rgw::sal::RGWRadosStore *store, struct req_state
 extern int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct, RGWObjectCtx *obj_ctx,
                                 RGWBucketInfo& bucket_info, RGWMPObj& mp_obj);
 
-extern int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
-				  const string& prefix,
-				  const string& marker,
-				  const string& delim,
+extern int list_bucket_multiparts(rgw::sal::RGWRadosStore* store,
+				  RGWBucketInfo& bucket_info,
+				  const std::string& prefix,
+				  std::string& marker, // in/out
+				  const std::string& delim,
 				  const int& max_uploads,
-				  vector<rgw_bucket_dir_entry> *objs,
-				  map<string, bool> *common_prefixes, bool *is_truncated);
+				  std::vector<rgw_bucket_dir_entry>* objs,
+				  std::map<std::string, bool>* common_prefixes,
+				  bool* is_truncated);
 
-extern int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RGWBucketInfo& bucket_info,
-                                string& prefix, string& delim);
+extern int abort_bucket_multiparts(rgw::sal::RGWRadosStore* store,
+				   CephContext* cct,
+				   RGWBucketInfo& bucket_info,
+				   const std::string& prefix,
+				   const std::string& delim);
 #endif

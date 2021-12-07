@@ -285,16 +285,19 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
   return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
 }
 
-int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
-			   const string& prefix, const string& marker,
-			   const string& delim,
+int list_bucket_multiparts(rgw::sal::RGWRadosStore* store,
+			   RGWBucketInfo& bucket_info,
+			   const std::string& prefix,
+			   std::string& marker, // in/out
+			   const std::string& delim,
 			   const int& max_uploads,
-			   vector<rgw_bucket_dir_entry> *objs,
-			   map<string, bool> *common_prefixes, bool *is_truncated)
+			   std::vector<rgw_bucket_dir_entry> *objs,
+			   std::map<std::string, bool> *common_prefixes,
+			   bool *is_truncated)
 {
   RGWRados::Bucket target(store->getRados(), bucket_info);
   RGWRados::Bucket::List list_op(&target);
-  MultipartMetaFilter mp_filter;
+  MultipartMetaFilter mp_filter; // filter out all but ".meta" entries
 
   list_op.params.prefix = prefix;
   list_op.params.delim = delim;
@@ -302,11 +305,18 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
   list_op.params.ns = RGW_OBJ_NS_MULTIPART;
   list_op.params.filter = &mp_filter;
 
-  return(list_op.list_objects(max_uploads, objs, common_prefixes, is_truncated, null_yield));
+  int ret = list_op.list_objects(max_uploads, objs, common_prefixes, is_truncated, null_yield);
+  if (ret >= 0) {
+    marker = list_op.params.marker.name;
+  }
+  return ret;
 }
 
-int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RGWBucketInfo& bucket_info,
-				string& prefix, string& delim)
+int abort_bucket_multiparts(rgw::sal::RGWRadosStore* store,
+			    CephContext* cct,
+			    RGWBucketInfo& bucket_info,
+			    const std::string& prefix,
+			    const std::string& delim)
 {
   constexpr int max = 1000;
   int ret, num_deleted = 0;
