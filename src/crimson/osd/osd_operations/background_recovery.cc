@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <seastar/core/future.hh>
+#include <seastar/core/sleep.hh>
 
 #include "messages/MOSDOp.h"
 
