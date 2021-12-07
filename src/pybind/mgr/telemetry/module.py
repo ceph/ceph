@@ -1493,7 +1493,48 @@ To enable, add '--license {LICENSE}' to the 'ceph telemetry on' command.'''
                 desc,
             ))
 
-        return 0, table.get_string(), ''
+        return 0, table.get_string(sortby="NAME"), ''
+
+    @CLIReadCommand('telemetry collection ls')
+    def collection_ls(self) -> Tuple[int, str, str]:
+        '''
+        List all collections
+        '''
+        table = PrettyTable(
+            [
+                'NAME', 'ENROLLED', 'STATUS', 'DEFAULT', 'DESC',
+            ],
+            border=False)
+        table.align['NAME'] = 'l'
+        table.align['ENROLLED'] = 'l'
+        table.align['STATUS'] = 'l'
+        table.align['DEFAULT'] = 'l'
+        table.align['DESC'] = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 4
+
+        for c in MODULE_COLLECTION:
+            name = c['name']
+            enrolled = "TRUE" if self.is_enabled_collection(name) else "FALSE"
+            status = "ON" if getattr(self, f"channel_{c['channel']}") and self.is_enabled_collection(name) \
+                    else "OFF"
+            # default value of *channel*, since we check for active channels
+            # when generating reports
+            for o in self.MODULE_OPTIONS:
+                if o['name'] == f"channel_{c['channel']}":
+                    default = "ON" if o.get('default', None) else "OFF"
+
+            desc = c['description']
+
+            table.add_row((
+                name,
+                enrolled,
+                status,
+                default,
+                desc,
+            ))
+
+        return 0, table.get_string(sortby="NAME"), ''
 
     @CLICommand('telemetry send')
     def do_send(self,
