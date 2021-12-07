@@ -1140,6 +1140,26 @@ class TestIoctx(object):
         eq(comp.get_return_value(), 0)
         eq(self.ioctx.get_xattr("obj", "key"), b'value')
 
+    def test_aio_unlock(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+
+        self.ioctx.lock_exclusive("foo", "lock", "locker1", "desc_lock",
+                                  10000, 0)
+        comp = self.ioctx.aio_unlock("foo", "lock", "locker1", cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock",
+                      "locker1")
+
     def test_applications(self):
         cmd = {"prefix":"osd dump", "format":"json"}
         ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'')
