@@ -244,6 +244,9 @@ cdef extern from "rados/librados.h" nogil:
     int rados_lock_shared(rados_ioctx_t io, const char * o, const char * name,
                           const char * cookie, const char * tag, const char * desc,
                           timeval * duration, uint8_t flags)
+    int rados_break_lock(rados_ioctx_t io, const char *o,
+                         const char *name, const char *client,
+                         const char *cookie)
     int rados_unlock(rados_ioctx_t io, const char * o, const char * name, const char * cookie)
 
     rados_write_op_t rados_create_write_op()

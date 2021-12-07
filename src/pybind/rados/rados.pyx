@@ -4021,6 +4021,37 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret < 0:
             raise make_ex(ret, "Ioctx.rados_lock_exclusive(%s): failed to set lock %s on %s" % (self.name, name, key))
 
+    def break_lock(self, key: str, name: str, client: str, cookie: str):
+        """
+        Release a shared or exclusive lock on an object
+
+        :param key: name of the object
+        :param name: name of the lock
+        :param client: client 0f currently holding the lock
+        :param cookie: cookie of the lock
+
+        :raises: :class:`TypeError`
+        :raises: :class:`Error`
+        """
+        self.require_ioctx_open()
+
+        key_raw = cstr(key, 'key')
+        name_raw = cstr(name, 'name')
+        client_raw = cstr(client, 'client')
+        cookie_raw = cstr(cookie, 'cookie')
+
+        cdef:
+            char* _key = key_raw
+            char* _name = name_raw
+            char* _client = client_raw
+            char* _cookie = cookie_raw
+
+        with nogil:
+            ret = rados_break_lock(self.io, _key, _name,
+                                   _client, _cookie)
+        if ret < 0:
+            raise make_ex(ret, "failed to release lock %s on %s" % (name, key))
+
     def unlock(self, key: str, name: str, cookie: str):
 
         """

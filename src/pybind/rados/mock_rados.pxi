@@ -337,6 +337,10 @@ cdef nogil:
                           const char * cookie, const char * tag, const char * desc,
                           timeval * duration, uint8_t flags):
         pass
+    int rados_break_lock(rados_ioctx_t io, const char *o,
+                         const char *name, const char *client,
+                         const char *cookie):
+        pass
     int rados_unlock(rados_ioctx_t io, const char * o, const char * name, const char * cookie):
         pass
 
