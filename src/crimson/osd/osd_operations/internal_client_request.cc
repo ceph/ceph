@@ -52,7 +52,7 @@ seastar::future<> InternalClientRequest::start()
           return with_blocking_future_interruptible<interruptor::condition>(
             handle.enter(pp().recover_missing)
           ).then_interruptible([this] {
-            return do_recover_missing(pg, {});
+            return do_recover_missing(pg, get_target_oid());
           }).then_interruptible([this] {
             return with_blocking_future_interruptible<interruptor::condition>(
               handle.enter(pp().get_obc)
