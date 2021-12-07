@@ -203,14 +203,18 @@ def generate_iso(ctx, config):
                     'device_letter' not in disk or \
                     'image_url' in disk:
                 continue
-            dev_letter = disk['device_letter']
+            if disk['encryption_format'] == 'none':
+                dev_name = 'vd' + disk['device_letter']
+            else:
+                # encrypted disks use if=ide interface, instead of if=virtio
+                dev_name = 'sd' + disk['device_letter']
             user_data += """
 - |
   #!/bin/bash
-  mkdir /mnt/test_{dev_letter}
-  mkfs -t xfs /dev/vd{dev_letter}
-  mount -t xfs /dev/vd{dev_letter} /mnt/test_{dev_letter}
-""".format(dev_letter=dev_letter)
+  mkdir /mnt/test_{dev_name}
+  mkfs -t xfs /dev/{dev_name}
+  mount -t xfs /dev/{dev_name} /mnt/test_{dev_name}
+""".format(dev_name=dev_name)
 
         user_data += """
 - |
@@ -496,17 +500,23 @@ def run_qemu(ctx, config):
                 continue
 
             if disk['encryption_format'] == 'none':
+                interface = 'virtio'
                 disk_spec = 'rbd:rbd/{img}:id={id}'.format(
                     img=disk['image_name'],
                     id=client[len('client.'):]
                     )
             else:
+                # encrypted disks use ide as a temporary workaround for
+                # a bug in qemu when using virtio over nbd
+                # TODO: use librbd encryption directly via qemu (not via nbd)
+                interface = 'ide'
                 disk_spec = disk['device_path']
 
             args.extend([
                 '-drive',
-                'file={disk_spec},format=raw,if=virtio,cache={cachemode}'.format(
+                'file={disk_spec},format=raw,if={interface},cache={cachemode}'.format(
                     disk_spec=disk_spec,
+                    interface=interface,
                     cachemode=cachemode,
                     ),
                 ])
