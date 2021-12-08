@@ -19,6 +19,7 @@
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_tier_rados.h"
+#include "services/svc_bilog_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -289,6 +290,35 @@ static int remove_old_reshard_instance(rgw::sal::RadosStore* store,
   return store->ctl()->bucket->remove_bucket_instance_info(bucket, info, null_yield, dpp);
 }
 
+// initialize the new bucket index shard objects
+static int init_target_index(rgw::sal::RadosStore* store,
+                             RGWBucketInfo& bucket_info,
+                             const rgw::bucket_index_layout_generation& index,
+                             const DoutPrefixProvider* dpp)
+{
+  int ret = store->svc()->bi->init_index(dpp, bucket_info, index);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to initialize "
+       "target index shard objects: " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  if (!bucket_info.datasync_flag_enabled()) {
+    // if bucket sync is disabled, disable it on each of the new shards too
+    auto log = rgw::log_layout_from_index(0, index);
+    ret = store->svc()->bilog_rados->log_stop(dpp, bucket_info, log, -1);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to disable "
+          "bucket sync on the target index shard objects: "
+          << cpp_strerror(ret) << dendl;
+      store->svc()->bi->clean_index(dpp, bucket_info, index);
+      return ret;
+    }
+  }
+
+  return ret;
+}
+
 // initialize a target index layout, create its bucket index shard objects, and
 // write the target layout to the bucket instance metadata
 static int init_target_layout(rgw::sal::RadosStore* store,
@@ -333,11 +363,8 @@ static int init_target_layout(rgw::sal::RadosStore* store,
   // update resharding state
   bucket_info.layout.resharding = rgw::BucketReshardState::InProgress;
 
-  // initialize the new bucket index shard objects
-  int ret = store->svc()->bi->init_index(dpp, bucket_info, *target);
+  int ret = init_target_index(store, bucket_info, *target, dpp);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to initialize "
-       " target index shard objects: " << cpp_strerror(ret) << dendl;
     return ret;
   }
 
