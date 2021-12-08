@@ -1212,7 +1212,7 @@ The command returns the URL where the Ceph Dashboard is located: ``https://<host
 
     Many Ceph tools return results in JSON format. We suggest that
     you install the `jq <https://stedolan.github.io/jq>`_ command-line
-    utility to faciliate working with JSON data.
+    utility to facilitate working with JSON data.
 
 
 Accessing the Dashboard

@@ -170,8 +170,8 @@ network ``10.1.2.0/24``, run the following commands:
 
     ceph orch apply mon --placement="newhost1,newhost2,newhost3" 
 
-Futher Reading
-==============
+Further Reading
+===============
 
 * :ref:`rados-operations`
 * :ref:`rados-troubleshooting-mon`

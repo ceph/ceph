@@ -161,7 +161,7 @@ To stop a mirroring directory snapshots use::
   $ ceph fs snapshot mirror remove <fs_name> <path>
 
 Only absolute directory paths are allowed. Also, paths are normalized by the mirroring
-module, therfore, `/a/b/../b` is equivalent to `/a/b`.
+module, therefore, `/a/b/../b` is equivalent to `/a/b`.
 
   $ mkdir -p /d0/d1/d2
   $ ceph fs snapshot mirror add cephfs /d0/d1/d2
@@ -170,7 +170,7 @@ module, therfore, `/a/b/../b` is equivalent to `/a/b`.
   Error EEXIST: directory /d0/d1/d2 is already tracked
 
 Once a directory is added for mirroring, its subdirectory or ancestor directories are
-disallowed to be added for mirorring::
+disallowed to be added for mirroring::
 
   $ ceph fs snapshot mirror add cephfs /d0/d1
   Error EINVAL: /d0/d1 is a ancestor of tracked path /d0/d1/d2
@@ -355,7 +355,7 @@ E.g., adding a regular file for synchronization would result in failed status::
 
 This allows a user to add a non-existent directory for synchronization. The mirror daemon
 would mark the directory as failed and retry (less frequently). When the directory comes
-to existence, the mirror daemons would unmark the failed state upon successfull snapshot
+to existence, the mirror daemons would unmark the failed state upon successful snapshot
 synchronization.
 
 When mirroring is disabled, the respective `fs mirror status` command for the file system

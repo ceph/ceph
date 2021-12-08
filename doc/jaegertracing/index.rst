@@ -46,7 +46,7 @@ HOW TO ENABLE TRACING IN CEPH
 -----------------------------
 
 tracing in Ceph is disabled by default.
-it could be enabled globally, or for each entity seperately (e.g. rgw).
+it could be enabled globally, or for each entity separately (e.g. rgw).
 
   Enable tracing globally::
 

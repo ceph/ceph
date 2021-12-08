@@ -8,7 +8,7 @@
 
 This document does NOT define a specific proposal or some future work.
 Instead it merely lists a few thoughts that MIGHT be relevant for future
-cephadm enhacements.
+cephadm enhancements.
 
 *******
  Intro

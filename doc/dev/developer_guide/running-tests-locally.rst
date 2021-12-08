@@ -137,12 +137,12 @@ Running Workunits Using vstart_enviroment.sh
 
 Code can be tested by building Ceph locally from source, starting a vstart
 cluster, and running any suite against it.
-Similar to S3-Tests, other workunits can be run against by configuring your enviroment.
+Similar to S3-Tests, other workunits can be run against by configuring your environment.
 
-Set up the enviroment
-^^^^^^^^^^^^^^^^^^^^^
+Set up the environment
+^^^^^^^^^^^^^^^^^^^^^^
 
-Configure your enviroment::
+Configure your environment::
 
     $ . ./build/vstart_enviroment.sh
 

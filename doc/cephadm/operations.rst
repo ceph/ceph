@@ -524,7 +524,7 @@ Purging a cluster
 
 .. danger:: THIS OPERATION WILL DESTROY ALL DATA STORED IN THIS CLUSTER
 
-In order to destory a cluster and delete all data stored in this cluster, pause 
+In order to destroy a cluster and delete all data stored in this cluster, pause 
 cephadm to avoid deploying new daemons.
 
 .. prompt:: bash #
