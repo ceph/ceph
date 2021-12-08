@@ -45,6 +45,33 @@ SocketMessenger::~SocketMessenger()
   ceph_assert(!listener);
 }
 
+bool SocketMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
+{
+  bool ret = false;
+
+  entity_addrvec_t newaddrs = my_addrs;
+  for (auto& a : newaddrs.v) {
+    if (a.is_blank_ip()) {
+      int type = a.get_type();
+      int port = a.get_port();
+      uint32_t nonce = a.get_nonce();
+      for (auto& b : addrs.v) {
+       if (a.get_family() == b.get_family()) {
+         logger().debug(" assuming my addr {} matches provided addr {}", a, b);
+         a = b;
+         a.set_nonce(nonce);
+         a.set_type(type);
+         a.set_port(port);
+         ret = true;
+         break;
+       }
+      }
+    }
+  }
+  my_addrs = newaddrs;
+  return ret;
+}
+
 seastar::future<> SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
 {
   assert(seastar::this_shard_id() == master_sid);
