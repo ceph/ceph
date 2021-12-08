@@ -31,14 +31,13 @@ options:
   - mds_client
   with_legacy: true
 - name: client_mount_timeout
-  type: float
+  type: secs
   level: advanced
   desc: timeout for mounting CephFS (seconds)
   fmt_desc: Set the timeout for CephFS mount in seconds.
   default: 5_min
   services:
   - mds_client
-  with_legacy: true
 - name: client_tick_interval
   type: secs
   level: dev
@@ -144,7 +143,7 @@ options:
   - mds_client
   with_legacy: true
 - name: client_caps_release_delay
-  type: int
+  type: secs
   level: dev
   default: 5
   services:
@@ -153,7 +152,6 @@ options:
     sets how many   seconds a client waits to release capabilities that it no
     longer needs in case the capabilities are needed for another user space
     operation.
-  with_legacy: true
 - name: client_quota_df
   type: bool
   level: advanced
