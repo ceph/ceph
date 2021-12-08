@@ -250,6 +250,29 @@ seastar::future<> SocketMessenger::shutdown()
   });
 }
 
+static entity_addr_t choose_addr(
+  const entity_addr_t &peer_addr_for_me,
+  const SocketConnection& conn)
+{
+  using crimson::common::local_conf;
+  // XXX: a syscall is here
+  if (const auto local_addr = conn.get_local_address();
+      local_conf()->ms_learn_addr_from_peer) {
+    logger().info("{} peer {} says I am {} (socket says {})",
+                  conn, conn.get_peer_socket_addr(), peer_addr_for_me,
+                  local_addr);
+    return peer_addr_for_me;
+  } else {
+    const auto local_addr_for_me = conn.get_local_address();
+    logger().info("{} socket to {} says I am {} (peer says {})",
+                  conn, conn.get_peer_socket_addr(),
+                  local_addr, peer_addr_for_me);
+    entity_addr_t addr;
+    addr.set_sockaddr(&local_addr_for_me.as_posix_sockaddr());
+    return addr;
+  }
+}
+
 seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_for_me, const SocketConnection& conn)
 {
   assert(seastar::this_shard_id() == master_sid);
@@ -268,14 +291,13 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
 
   if (get_myaddr().get_type() == entity_addr_t::TYPE_NONE) {
     // Not bound
-    entity_addr_t addr = peer_addr_for_me;
+    auto addr = choose_addr(peer_addr_for_me, conn);
     addr.set_type(entity_addr_t::TYPE_ANY);
     addr.set_port(0);
     need_addr = false;
     return set_myaddrs(entity_addrvec_t{addr}
-    ).then([this, &conn, peer_addr_for_me] {
-      logger().info("{} learned myaddr={} (unbound) from {}",
-                    conn, get_myaddr(), peer_addr_for_me);
+    ).then([this, &conn] {
+      logger().info("{} learned myaddr={} (unbound)", conn, get_myaddr());
     });
   } else {
     // Already bound
@@ -293,14 +315,13 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
           make_error_code(crimson::net::error::bad_peer_address));
     }
     if (get_myaddr().is_blank_ip()) {
-      entity_addr_t addr = peer_addr_for_me;
+      auto addr = choose_addr(peer_addr_for_me, conn);
       addr.set_type(get_myaddr().get_type());
       addr.set_port(get_myaddr().get_port());
       need_addr = false;
       return set_myaddrs(entity_addrvec_t{addr}
-      ).then([this, &conn, peer_addr_for_me] {
-        logger().info("{} learned myaddr={} (blank IP) from {}",
-                      conn, get_myaddr(), peer_addr_for_me);
+      ).then([this, &conn] {
+        logger().info("{} learned myaddr={} (blank IP)", conn, get_myaddr());
       });
     } else if (!get_myaddr().is_same_host(peer_addr_for_me)) {
       logger().warn("{} peer_addr_for_me {} IP doesn't match myaddr {}",

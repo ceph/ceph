@@ -127,6 +127,10 @@ class Socket
     ephemeral_port = port;
   }
 
+  seastar::socket_address get_local_address() const {
+    return socket.local_address();
+  }
+
  private:
   const seastar::shard_id sid;
   seastar::connected_socket socket;
