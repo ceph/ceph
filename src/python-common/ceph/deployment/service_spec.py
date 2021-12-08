@@ -273,10 +273,24 @@ class PlacementSpec(object):
         if self.hosts and self.label:
             # TODO: a less generic Exception
             raise SpecValidationError('Host and label are mutually exclusive')
-        if self.count is not None and self.count <= 0:
-            raise SpecValidationError("num/count must be > 1")
-        if self.count_per_host is not None and self.count_per_host < 1:
-            raise SpecValidationError("count-per-host must be >= 1")
+        if self.count is not None:
+            try:
+                intval = int(self.count)
+            except (ValueError, TypeError):
+                raise SpecValidationError("num/count must be a numeric value")
+            if self.count != intval:
+                raise SpecValidationError("num/count must be an integer value")
+            if self.count <= 0:
+                raise SpecValidationError("num/count must be > 1")
+        if self.count_per_host is not None:
+            try:
+                intval = int(self.count_per_host)
+            except (ValueError, TypeError):
+                raise SpecValidationError("count-per-host must be a numeric value")
+            if self.count_per_host != intval:
+                raise SpecValidationError("count-per-host must be an integer value")
+            if self.count_per_host < 1:
+                raise SpecValidationError("count-per-host must be >= 1")
         if self.count_per_host is not None and not (
                 self.label
                 or self.hosts
