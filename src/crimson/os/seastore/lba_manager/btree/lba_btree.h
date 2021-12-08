@@ -384,6 +384,24 @@ public:
   using init_cached_extent_ret = init_cached_extent_iertr::future<CachedExtentRef>;
   init_cached_extent_ret init_cached_extent(op_context_t c, CachedExtentRef e);
 
+  /// get_leaf_if_live: get leaf node at laddr/addr if still live
+  using get_leaf_if_live_iertr = base_iertr;
+  using get_leaf_if_live_ret = get_leaf_if_live_iertr::future<CachedExtentRef>;
+  get_leaf_if_live_ret get_leaf_if_live(
+    op_context_t c,
+    paddr_t addr,
+    laddr_t laddr,
+    segment_off_t len);
+
+  /// get_internal_if_live: get internal node at laddr/addr if still live
+  using get_internal_if_live_iertr = base_iertr;
+  using get_internal_if_live_ret = get_internal_if_live_iertr::future<CachedExtentRef>;
+  get_internal_if_live_ret get_internal_if_live(
+    op_context_t c,
+    paddr_t addr,
+    laddr_t laddr,
+    segment_off_t len);
+
   /**
    * rewrite_lba_extent
    *

@@ -409,22 +409,17 @@ BtreeLBAManager::get_physical_extent_if_live(
   segment_off_t len)
 {
   ceph_assert(is_lba_node(type));
-  return cache.get_extent_by_type(
-    t,
-    type,
-    addr,
-    laddr,
-    len
-  ).si_then([=, &t](CachedExtentRef extent) {
-    auto c = get_context(t);
-    return with_btree_ret<CachedExtentRef>(
-      c,
-      [c, extent](auto &btree) {
-	return btree.init_cached_extent(
-	  c,
-	  extent);
-      });
-  });
+  auto c = get_context(t);
+  return with_btree_ret<CachedExtentRef>(
+    c,
+    [c, type, addr, laddr, len](auto &btree) {
+      if (type == extent_types_t::LADDR_INTERNAL) {
+	return btree.get_internal_if_live(c, addr, laddr, len);
+      } else {
+	assert(type == extent_types_t::LADDR_LEAF);
+	return btree.get_leaf_if_live(c, addr, laddr, len);
+      }
+    });
 }
 
 BtreeLBAManager::BtreeLBAManager(

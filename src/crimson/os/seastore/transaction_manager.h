@@ -148,16 +148,20 @@ public:
     LOG_PREFIX(TransactionManager::pin_to_extent);
     using ret = pin_to_extent_ret<T>;
     DEBUGT("getting extent {}", t, *pin);
+    auto &pref = *pin;
     return cache->get_extent<T>(
       t,
-      pin->get_paddr(),
-      pin->get_length()
-    ).si_then([this, FNAME, &t, pin=std::move(pin)](auto ref) mutable -> ret {
-      if (!ref->has_pin()) {
-	assert(!(pin->has_been_invalidated() || ref->has_been_invalidated()));
-	ref->set_pin(std::move(pin));
-	lba_manager->add_pin(ref->get_pin());
+      pref.get_paddr(),
+      pref.get_length(),
+      [this, pin=std::move(pin)](T &extent) mutable {
+	if (!extent.has_pin()) {
+	  assert(!(extent.has_been_invalidated() ||
+		   pin->has_been_invalidated()));
+	  extent.set_pin(std::move(pin));
+	  lba_manager->add_pin(extent.get_pin());
+	}
       }
+    ).si_then([FNAME, &t](auto ref) mutable -> ret {
       DEBUGT("got extent {}", t, *ref);
       return pin_to_extent_ret<T>(
 	interruptible::ready_future_marker{},
