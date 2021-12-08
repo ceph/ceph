@@ -1,0 +1,39 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 4
+      size: 10 # GB
+overrides:
+  ceph:
+    create_rbd_pool: false
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+    conf:
+      mon:
+        osd pool default pg autoscale mode: on
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(OBJECT_
+      - \(SLOW_OPS\)
+      - \(REQUEST_SLOW\)
+      - \(TOO_FEW_PGS\)
+      - slow request
+tasks:
+- install:
+- ceph:
+- workunit:
+    clients:
+      all:
+        - mon/test_noautoscale_flag.sh
