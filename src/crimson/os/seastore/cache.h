@@ -339,6 +339,7 @@ public:
 	(void)this; // silence incorrect clang warning about capture
 	if (!ref->is_valid()) {
 	  DEBUGT("got invalid extent: {}", t, ref);
+	  ++(get_by_src(stats.trans_conflicts_by_unknown, t.get_src()));
 	  mark_transaction_conflicted(t, *ref);
 	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
 	} else {
@@ -429,6 +430,7 @@ private:
         if (!ret->is_valid()) {
           LOG_PREFIX(Cache::get_extent_by_type);
           DEBUGT("got invalid extent: {}", t, ret);
+          ++(get_by_src(stats.trans_conflicts_by_unknown, t.get_src()));
           mark_transaction_conflicted(t, *ret.get());
           return get_extent_ertr::make_ready_future<CachedExtentRef>();
         } else {
@@ -794,6 +796,9 @@ private:
     fill_stat_t ool_stats;
   };
 
+  static constexpr std::size_t NUM_SRC_COMB =
+      Transaction::SRC_MAX * (Transaction::SRC_MAX + 1) / 2;
+
   struct {
     counter_by_src_t<uint64_t> trans_created_by_src;
     counter_by_src_t<commit_trans_efforts_t> committed_efforts_by_src;
@@ -810,6 +815,9 @@ private:
     uint64_t lba_tree_depth = 0;
     counter_by_src_t<tree_efforts_t> committed_lba_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_lba_tree_efforts;
+
+    std::array<uint64_t, NUM_SRC_COMB> trans_conflicts_by_srcs;
+    counter_by_src_t<uint64_t> trans_conflicts_by_unknown;
   } stats;
 
   template <typename CounterT>
@@ -827,6 +835,32 @@ private:
     auto index = static_cast<uint8_t>(ext);
     assert(index < EXTENT_TYPES_MAX);
     return counters_by_ext[index];
+  }
+
+  void account_conflict(Transaction::src_t src1, Transaction::src_t src2) {
+    assert(src1 < Transaction::src_t::MAX);
+    assert(src2 < Transaction::src_t::MAX);
+    if (src1 > src2) {
+      std::swap(src1, src2);
+    }
+    // impossible combinations
+    // should be consistent with trans_srcs_invalidated in register_metrics()
+    assert(!(src1 == Transaction::src_t::READ &&
+             src2 == Transaction::src_t::READ));
+    assert(!(src1 == Transaction::src_t::CLEANER_TRIM &&
+             src2 == Transaction::src_t::CLEANER_TRIM));
+    assert(!(src1 == Transaction::src_t::CLEANER_RECLAIM &&
+             src2 == Transaction::src_t::CLEANER_RECLAIM));
+    assert(!(src1 == Transaction::src_t::CLEANER_TRIM &&
+             src2 == Transaction::src_t::CLEANER_RECLAIM));
+
+    auto src1_value = static_cast<std::size_t>(src1);
+    auto src2_value = static_cast<std::size_t>(src2);
+    auto num_srcs = static_cast<std::size_t>(Transaction::src_t::MAX);
+    auto conflict_index = num_srcs * src1_value + src2_value -
+        src1_value * (src1_value + 1) / 2;
+    assert(conflict_index < NUM_SRC_COMB);
+    ++stats.trans_conflicts_by_srcs[conflict_index];
   }
 
   seastar::metrics::metric_group metrics;
@@ -857,13 +891,13 @@ private:
   void remove_extent(CachedExtentRef ref);
 
   /// Retire extent
-  void retire_extent(CachedExtentRef ref);
+  void commit_retire_extent(Transaction& t, CachedExtentRef ref);
 
   /// Replace prev with next
-  void replace_extent(CachedExtentRef next, CachedExtentRef prev);
+  void commit_replace_extent(Transaction& t, CachedExtentRef next, CachedExtentRef prev);
 
   /// Invalidate extent and mark affected transactions
-  void invalidate_extent(CachedExtent &extent);
+  void invalidate_extent(Transaction& t, CachedExtent& extent);
 
   /// Mark a valid transaction as conflicted
   void mark_transaction_conflicted(
