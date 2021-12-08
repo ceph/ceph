@@ -204,7 +204,8 @@ public:
   enum class src_t : uint8_t {
     MUTATE = 0,
     READ, // including weak and non-weak read transactions
-    CLEANER,
+    CLEANER_TRIM,
+    CLEANER_RECLAIM,
     MAX
   };
   static constexpr auto SRC_MAX = static_cast<std::size_t>(src_t::MAX);
@@ -410,8 +411,10 @@ inline std::ostream& operator<<(std::ostream& os,
     return os << "MUTATE";
   case Transaction::src_t::READ:
     return os << "READ";
-  case Transaction::src_t::CLEANER:
-    return os << "CLEANER";
+  case Transaction::src_t::CLEANER_TRIM:
+    return os << "CLEANER_TRIM";
+  case Transaction::src_t::CLEANER_RECLAIM:
+    return os << "CLEANER_RECLAIM";
   default:
     ceph_abort("impossible");
   }

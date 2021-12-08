@@ -3,6 +3,7 @@
 
 #include "crimson/os/seastore/cache.h"
 
+#include <sstream>
 #include <string_view>
 
 #include "crimson/os/seastore/logging.h"
@@ -106,7 +107,8 @@ void Cache::register_metrics()
   std::map<src_t, sm::label_instance> labels_by_src {
     {src_t::MUTATE,  src_label("MUTATE")},
     {src_t::READ,    src_label("READ")},
-    {src_t::CLEANER, src_label("CLEANER")},
+    {src_t::CLEANER_TRIM, src_label("CLEANER_TRIM")},
+    {src_t::CLEANER_RECLAIM, src_label("CLEANER_RECLAIM")},
   };
 
   auto ext_label = sm::label("ext");
@@ -514,7 +516,9 @@ void Cache::register_metrics()
         // READ transaction won't contain any tree inserts and erases
         continue;
       }
-      if (src == src_t::CLEANER && tree_label == onode_label) {
+      if ((src == src_t::CLEANER_TRIM ||
+           src == src_t::CLEANER_RECLAIM) &&
+          tree_label == onode_label) {
         // CLEANER transaction won't contain any onode tree operations
         continue;
       }
@@ -561,6 +565,64 @@ void Cache::register_metrics()
       stats.lba_tree_depth,
       stats.committed_lba_tree_efforts,
       stats.invalidated_lba_tree_efforts);
+
+  /**
+   * conflict combinations
+   */
+  auto srcs_label = sm::label("srcs");
+  auto num_srcs = static_cast<std::size_t>(Transaction::src_t::MAX);
+  std::size_t srcs_index = 0;
+  for (uint8_t src2_int = 0; src2_int < num_srcs; ++src2_int) {
+    auto src2 = static_cast<Transaction::src_t>(src2_int);
+    for (uint8_t src1_int = src2_int; src1_int < num_srcs; ++src1_int) {
+      ++srcs_index;
+      auto src1 = static_cast<Transaction::src_t>(src1_int);
+      // impossible combinations
+      // should be consistent with checks in account_conflict()
+      if ((src1 == Transaction::src_t::READ &&
+           src2 == Transaction::src_t::READ) ||
+          (src1 == Transaction::src_t::CLEANER_TRIM &&
+           src2 == Transaction::src_t::CLEANER_TRIM) ||
+          (src1 == Transaction::src_t::CLEANER_RECLAIM &&
+           src2 == Transaction::src_t::CLEANER_RECLAIM) ||
+          (src1 == Transaction::src_t::CLEANER_TRIM &&
+           src2 == Transaction::src_t::CLEANER_RECLAIM)) {
+        continue;
+      }
+      std::ostringstream oss;
+      oss << src1 << "," << src2;
+      metrics.add_group(
+        "cache",
+        {
+          sm::make_counter(
+            "trans_srcs_invalidated",
+            stats.trans_conflicts_by_srcs[srcs_index - 1],
+            sm::description("total number conflicted transactions by src pair"),
+            {srcs_label(oss.str())}
+          ),
+        }
+      );
+    }
+  }
+  assert(srcs_index == NUM_SRC_COMB);
+  srcs_index = 0;
+  for (uint8_t src_int = 0; src_int < num_srcs; ++src_int) {
+    ++srcs_index;
+    auto src = static_cast<Transaction::src_t>(src_int);
+    std::ostringstream oss;
+    oss << "UNKNOWN," << src;
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "trans_srcs_invalidated",
+          stats.trans_conflicts_by_unknown[srcs_index - 1],
+          sm::description("total number conflicted transactions by src pair"),
+          {srcs_label(oss.str())}
+        ),
+      }
+    );
+  }
 }
 
 void Cache::add_extent(CachedExtentRef ref)
@@ -621,23 +683,28 @@ void Cache::remove_extent(CachedExtentRef ref)
   extents.erase(*ref);
 }
 
-void Cache::retire_extent(CachedExtentRef ref)
+void Cache::commit_retire_extent(
+    Transaction& t,
+    CachedExtentRef ref)
 {
-  LOG_PREFIX(Cache::retire_extent);
-  DEBUG("extent {}", *ref);
+  LOG_PREFIX(Cache::commit_retire_extent);
+  DEBUGT("extent {}", t, *ref);
   assert(ref->is_valid());
 
   remove_from_dirty(ref);
   ref->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
 
-  invalidate_extent(*ref);
+  invalidate_extent(t, *ref);
   extents.erase(*ref);
 }
 
-void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
+void Cache::commit_replace_extent(
+    Transaction& t,
+    CachedExtentRef next,
+    CachedExtentRef prev)
 {
-  LOG_PREFIX(Cache::replace_extent);
-  DEBUG("prev {}, next {}", *prev, *next);
+  LOG_PREFIX(Cache::commit_replace_extent);
+  DEBUGT("prev {}, next {}", t, *prev, *next);
   assert(next->get_paddr() == prev->get_paddr());
   assert(next->version == prev->version + 1);
   extents.replace(*next, *prev);
@@ -663,20 +730,23 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
     add_to_dirty(next);
   }
 
-  invalidate_extent(*prev);
+  invalidate_extent(t, *prev);
 }
 
-void Cache::invalidate_extent(CachedExtent &extent)
+void Cache::invalidate_extent(
+    Transaction& t,
+    CachedExtent& extent)
 {
   LOG_PREFIX(Cache::invalidate);
-  DEBUG("conflict begin -- extent {}", extent);
+  DEBUGT("conflict begin -- extent {}", t, extent);
   for (auto &&i: extent.transactions) {
     if (!i.t->conflicted) {
       assert(!i.t->is_weak());
+      account_conflict(t.get_src(), i.t->get_src());
       mark_transaction_conflicted(*i.t, extent);
     }
   }
-  DEBUG("conflict end");
+  DEBUGT("conflict end", t);
   extent.state = CachedExtent::extent_state_t::INVALID;
 }
 
@@ -730,7 +800,8 @@ void Cache::mark_transaction_conflicted(
     record_header_fullness.ool_stats.filled_bytes += ool_stats.header_raw_bytes;
     record_header_fullness.ool_stats.total_bytes += ool_stats.header_bytes;
 
-    if (t.get_src() == Transaction::src_t::CLEANER) {
+    if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
+        t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
       // CLEANER transaction won't contain any onode tree operations
       assert(t.onode_tree_stats.is_clear());
     } else {
@@ -846,7 +917,8 @@ record_t Cache::prepare_record(Transaction &t)
   assert(!t.is_weak());
   assert(t.get_src() != Transaction::src_t::READ);
 
-  if (t.get_src() == Transaction::src_t::CLEANER) {
+  if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
+      t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
     // CLEANER transaction won't contain any onode tree operations
     assert(t.onode_tree_stats.is_clear());
   } else {
@@ -895,7 +967,7 @@ record_t Cache::prepare_record(Transaction &t)
                i->get_type()).increment(i->get_length());
 
     assert(i->prior_instance);
-    replace_extent(i, i->prior_instance);
+    commit_replace_extent(t, i, i->prior_instance);
 
     i->prepare_write();
     i->set_io_wait();
@@ -944,7 +1016,7 @@ record_t Cache::prepare_record(Transaction &t)
     DEBUGT("retiring {}", t, *i);
     get_by_ext(efforts.retire_by_ext,
                i->get_type()).increment(i->get_length());
-    retire_extent(i);
+    commit_retire_extent(t, i);
     if (i->backend_type == device_type_t::RANDOM_BLOCK) {
       paddr_t paddr = i->get_paddr();
       rbm_alloc_delta_t delta;
@@ -1240,6 +1312,7 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	    ext->wait_io()
 	  ).then_interruptible([FNAME, this, ext, &t, &ret] {
 	    if (!ext->is_valid()) {
+	      ++(get_by_src(stats.trans_conflicts_by_unknown, t.get_src()));
 	      mark_transaction_conflicted(t, *ext);
 	      return;
 	    }
@@ -1287,6 +1360,7 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
       DEBUGT("got root read {}", t, *ret);
       if (!ret->is_valid()) {
 	DEBUGT("root became invalid: {}", t, *ret);
+	++(get_by_src(stats.trans_conflicts_by_unknown, t.get_src()));
 	mark_transaction_conflicted(t, *ret);
 	return get_root_iertr::make_ready_future<RootBlockRef>();
       } else {
