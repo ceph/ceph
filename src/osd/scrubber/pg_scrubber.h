@@ -86,7 +86,7 @@ class LocalReservation {
   bool m_holding_local_reservation{false};
 
  public:
-  LocalReservation(OSDService* osds);
+  explicit LocalReservation(OSDService* osds);
   ~LocalReservation();
   bool is_reserved() const { return m_holding_local_reservation; }
 };
@@ -612,6 +612,17 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
    *  triggered by the backend will be discarded.
    */
   Scrub::act_token_t m_current_token{1};
+
+  /**
+   *  (primary/replica) a test aid. A counter that is incremented whenever a scrub starts,
+   *  and again when it terminates. Exposed as part of the 'pg query' command, to be used
+   *  by test scripts.
+   *
+   *  @ATTN: not guaranteed to be accurate. To be only used for tests. This is why it
+   *  is initialized to a meaningless number;
+   */
+  int32_t m_sessions_counter{(int32_t)((int64_t)(this) & 0x0000'0000'00ff'fff0)};
+  bool m_publish_sessions{false}; //< will the counter be part of 'query' output?
 
   scrub_flags_t m_flags;
 
