@@ -11,7 +11,7 @@ def needs_root(func):
     """
     @wraps(func)
     def is_root(*a, **kw):
-        if not os.getuid() == 0:
+        if not os.getuid() == 0 and not os.environ.get('CEPH_VOLUME_SKIP_NEEDS_ROOT', False):
             raise exceptions.SuperUserError()
         return func(*a, **kw)
     return is_root
