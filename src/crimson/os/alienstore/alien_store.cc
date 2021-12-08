@@ -432,7 +432,8 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
     std::move(done),
     [this, ch, id] (auto &txn, auto &done) {
 	AlienCollection* alien_coll = static_cast<AlienCollection*>(ch.get());
-	return alien_coll->with_lock([this, ch, id, &txn, &done] {
+        // moving the `ch` is crucial for buildability on newer S* versions.
+	return alien_coll->with_lock([this, ch=std::move(ch), id, &txn, &done] {
 	  Context *crimson_wrapper =
 	    ceph::os::Transaction::collect_all_contexts(txn);
 	  assert(tp);
