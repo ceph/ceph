@@ -463,7 +463,11 @@ static int cancel_reshard(rgw::sal::RadosStore* store,
     ret = 0; // non-fatal error
   }
 
-  return revert_target_layout(store, bucket_info, fault, dpp);
+  if (bucket_info.layout.target_index) {
+    return revert_target_layout(store, bucket_info, fault, dpp);
+  }
+  // there is nothing to revert
+  return 0;
 } // cancel_reshard
 
 static int commit_reshard(rgw::sal::RadosStore* store,
