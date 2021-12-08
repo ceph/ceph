@@ -115,6 +115,7 @@ struct CapSnap {
 #define I_ERROR_FILELOCK	(1 << 5)
 
 struct Inode : RefCountedObject {
+  ceph::coarse_mono_time hold_caps_until;
   Client *client;
 
   // -- the actual inode --
@@ -215,7 +216,6 @@ struct Inode : RefCountedObject {
   int cache_gen = 0;
   int snap_caps = 0;
   int snap_cap_refs = 0;
-  utime_t hold_caps_until;
   xlist<Inode*>::item delay_cap_item, dirty_cap_item, flushing_cap_item;
 
   SnapRealm *snaprealm = 0;

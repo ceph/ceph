@@ -1496,7 +1496,7 @@ private:
   Finisher async_ino_releasor;
   Finisher objecter_finisher;
 
-  utime_t last_cap_renew;
+  ceph::coarse_mono_time last_cap_renew;
 
   CommandHook m_command_hook;
 
@@ -1557,8 +1557,8 @@ private:
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
   std::map<std::string, std::string> metadata;
 
-  utime_t last_auto_reconnect;
-
+  ceph::coarse_mono_time last_auto_reconnect;
+  std::chrono::seconds caps_release_delay, mount_timeout;
   // trace generation
   std::ofstream traceout;
 
