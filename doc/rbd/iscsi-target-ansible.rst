@@ -96,7 +96,7 @@ advanced variables.
 
 **Deployment:**
 
-Perform the followint steps on the Ansible installer node.
+Perform the following steps on the Ansible installer node.
 
 #. As ``root``, execute the Ansible playbook:
 

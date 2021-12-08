@@ -41,7 +41,7 @@ No matter what happens, Ceph will not compromise on data integrity
 and consistency. If there's a failure in your network or a loss of nodes and
 you can restore service, Ceph will return to normal functionality on its own.
 
-But there are scenarios where you lose data availibility despite having
+But there are scenarios where you lose data availability despite having
 enough servers available to satisfy Ceph's consistency and sizing constraints, or
 where you may be surprised to not satisfy Ceph's constraints.
 The first important category of these failures resolve around inconsistent
@@ -112,7 +112,7 @@ CRUSH and place ``mon.e`` there ::
   $ ceph mon set_location e datacenter=site3
   $ ceph mon enable_stretch_mode e stretch_rule datacenter
 
-When stretch mode is enabled, the OSDs wlll only take PGs active when
+When stretch mode is enabled, the OSDs will only take PGs active when
 they peer across data centers (or whatever other CRUSH bucket type
 you specified), assuming both are alive. Pools will increase in size
 from the default 3 to 4, expecting 2 copies in each site. OSDs will only

@@ -31,7 +31,7 @@ Initial Troubleshooting
 **Are you able to reach to the mon nodes?**
 
   Doesn't happen often, but sometimes there are ``iptables`` rules that
-  block accesse to mon nodes or TCP ports. These may be leftovers from
+  block access to mon nodes or TCP ports. These may be leftovers from
   prior stress-testing or rule development. Try SSHing into
   the server and, if that succeeds, try connecting to the monitor's ports
   (``tcp/3300`` and ``tcp/6789``) using a ``telnet``, ``nc``, or similar tools.
@@ -361,7 +361,7 @@ Can I increase the maximum tolerated clock skew?
   The maximum tolerated clock skew is configurable via the
   ``mon-clock-drift-allowed`` option, and
   although you *CAN* you almost certainly *SHOULDN'T*. The clock skew mechanism
-  is in place because clock-skewed monitors are liely to misbehave. We, as
+  is in place because clock-skewed monitors are likely to misbehave. We, as
   developers and QA aficionados, are comfortable with the current default
   value, as it will alert the user before the monitors get out hand. Changing
   this value may cause unforeseen effects on the

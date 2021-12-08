@@ -171,7 +171,7 @@ pg stats reported to mgr
 ------------------------
 
 Crimson collects the per-pg, per-pool, and per-osd stats in a `MPGStats`
-messsage, and send it over to mgr, so that the mgr modules can query
+message, and send it over to mgr, so that the mgr modules can query
 them using the `MgrModule.get()` method.
 
 asock command

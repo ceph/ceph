@@ -150,7 +150,7 @@ Features Support
 | predicate as a projection       | where address like '%new-york%';                                                        |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
 | an alias to                     | select (_1 like "_3_") as *likealias*,_1 from s3object                                  |
-| predicate as a prjection        | where *likealias* = true and cast(_1 as int) between 800 and 900;                       |
+| predicate as a projection       | where *likealias* = true and cast(_1 as int) between 800 and 900;                       |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
 | casting operator                | select cast(123 as int)%2 from s3object;                                                |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+

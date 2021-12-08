@@ -213,14 +213,14 @@ BlueStore OSD with the *prime-osd-dir* command::
 BlueFS log rescue
 =====================
 
-Some versions of BlueStore were susceptible to BlueFS log growing extremaly large -
+Some versions of BlueStore were susceptible to BlueFS log growing extremely large -
 beyond the point of making booting OSD impossible. This state is indicated by
 booting that takes very long and fails in _replay function.
 
 This can be fixed by::
   ceph-bluestore-tool fsck --path *osd path* --bluefs_replay_recovery=true
 
-It is advised to first check if rescue process would be successfull::
+It is advised to first check if rescue process would be successful::
   ceph-bluestore-tool fsck --path *osd path* \
   --bluefs_replay_recovery=true --bluefs_replay_recovery_disable_compact=true
 

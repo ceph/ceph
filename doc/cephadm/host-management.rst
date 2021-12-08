@@ -82,7 +82,7 @@ All osds on the host will be scheduled to be removed. You can check osd removal 
 
 see :ref:`cephadm-osd-removal` for more details about osd removal
 
-You can check if there are no deamons left on the host with the following:
+You can check if there are no daemons left on the host with the following:
 
 .. prompt:: bash #
 
@@ -202,7 +202,7 @@ Setting the initial CRUSH location of host
 ==========================================
 
 Hosts can contain a ``location`` identifier which will instruct cephadm to 
-create a new CRUSH host located in the specified hierachy.
+create a new CRUSH host located in the specified hierarchy.
 
 .. code-block:: yaml
 

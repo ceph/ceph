@@ -10,7 +10,7 @@ storage administrators among others can use the common CLI provided by the
 ceph-mgr volumes module to manage the CephFS exports.
 
 The ceph-mgr volumes module implements the following file system export
-abstactions:
+abstractions:
 
 * FS volumes, an abstraction for CephFS file systems
 
@@ -359,13 +359,13 @@ To delete a partial clone use::
   $ ceph fs subvolume rm <vol_name> <clone_name> [--group_name <group_name>] --force
 
 .. note:: Cloning only synchronizes directories, regular files and symbolic links. Also, inode timestamps (access and
-          modification times) are synchronized upto seconds granularity.
+          modification times) are synchronized up to seconds granularity.
 
 An `in-progress` or a `pending` clone operation can be canceled. To cancel a clone operation use the `clone cancel` command::
 
   $ ceph fs clone cancel <vol_name> <clone_name> [--group_name <group_name>]
 
-On successful cancelation, the cloned subvolume is moved to `canceled` state::
+On successful cancellation, the cloned subvolume is moved to `canceled` state::
 
   $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
   $ ceph fs clone cancel cephfs clone1
