@@ -4399,7 +4399,7 @@ int main(int argc, const char **argv)
 	  cout << "No default realm is set" << std::endl;
 	  return -ret;
 	} else if (ret < 0) {
-	  cerr << "Error reading default realm:" << cpp_strerror(-ret) << std::endl;
+	  cerr << "Error reading default realm: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 	cout << "default realm: " << default_id << std::endl;
@@ -4624,7 +4624,7 @@ int main(int argc, const char **argv)
 	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
 	int ret = zonegroup.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
 	if (ret < 0) {
-	  cerr << "failed to initialize zonegroup " << zonegroup_name << " id " << zonegroup_id << " :"
+	  cerr << "failed to initialize zonegroup " << zonegroup_name << " id " << zonegroup_id << ": "
 	       << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
@@ -5324,7 +5324,7 @@ int main(int argc, const char **argv)
 	}
 
 	if( !zone_name.empty() && !zone.get_name().empty() && zone.get_name() != zone_name) {
-	  cerr << "Error: zone name" << zone_name << " is different than the zone name " << zone.get_name() << " in the provided json " << std::endl;
+	  cerr << "Error: zone name " << zone_name << " is different than the zone name " << zone.get_name() << " in the provided json " << std::endl;
 	  return EINVAL;
 	}
 
