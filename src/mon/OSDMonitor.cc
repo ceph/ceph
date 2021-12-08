@@ -12696,8 +12696,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
   } else if (prefix == "osd blocklist" ||
 	     prefix == "osd blacklist") {
-    string addrstr;
+    string addrstr, rangestr;
+    bool range = false;
     cmd_getval(cmdmap, "addr", addrstr);
+    if (cmd_getval(cmdmap, "range", rangestr)) {
+      if (rangestr == "range") {
+	range = true;
+      } else {
+	ss << "Did you mean to specify \"osd blocklist range\"?";
+	err = -EINVAL;
+	goto reply;
+      }
+    }
     entity_addr_t addr;
     if (!addr.parse(addrstr)) {
       ss << "unable to parse address " << addrstr;
@@ -12705,7 +12715,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     else {
-      if (addr.is_cidr()) {
+      if (range) {
+	if (!addr.maybe_cidr()) {
+	  ss << "You specified a range command, but " << addr
+	     << " does not parse as a CIDR range";
+	  err = -EINVAL;
+	  goto reply;
+	}
+	addr.type = entity_addr_t::TYPE_CIDR;
 	err = check_cluster_features(CEPH_FEATUREMASK_RANGE_BLOCKLIST, ss);
 	if (err) {
 	  goto reply;
@@ -12747,7 +12764,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	    ob.erase(it);
 	  }
 	};
-	if (addr.is_cidr()) {
+	if (range) {
 	  add_to_pending_blocklists(pending_inc.new_range_blocklist,
 				    pending_inc.old_range_blocklist,
 				    addr, expires);
@@ -12764,9 +12781,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 						  get_last_committed() + 1));
 	return true;
       } else if (blocklistop == "rm") {
-	auto maybe_rm_from_pending_blocklists = [](const auto& addr,
-						   auto& blocklist,
-						   auto& ob, auto& pb) {
+	auto rm_from_pending_blocklists = [](const auto& addr,
+					     auto& blocklist,
+					     auto& ob, auto& pb) {
 	  if (blocklist.count(addr)) {
 	    ob.push_back(addr);
 	    return true;
@@ -12776,12 +12793,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  }
 	  return false;
 	};
-	if (maybe_rm_from_pending_blocklists(addr, osdmap.blocklist,
-					     pending_inc.old_blocklist,
-					     pending_inc.new_blocklist) ||
-	    maybe_rm_from_pending_blocklists(addr, osdmap.range_blocklist,
-					     pending_inc.old_range_blocklist,
-					     pending_inc.new_range_blocklist)) {
+	if ((!range && rm_from_pending_blocklists(addr, osdmap.blocklist,
+						  pending_inc.old_blocklist,
+						  pending_inc.new_blocklist)) ||
+	    (range && rm_from_pending_blocklists(addr, osdmap.range_blocklist,
+						 pending_inc.old_range_blocklist,
+						 pending_inc.new_range_blocklist))) {
 	  ss << "un-blocklisting " << addr;
 	  getline(ss, rs);
 	  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
