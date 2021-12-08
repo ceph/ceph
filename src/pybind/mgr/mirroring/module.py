@@ -1,17 +1,18 @@
 from typing import List, Optional
 
-from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand, Option
+from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand, Option, NotifyType
 
 from .fs.snapshot_mirror import FSSnapshotMirror
 
 class Module(MgrModule):
     MODULE_OPTIONS: List[Option] = []
+    NOTIFY_TYPES = [NotifyType.fs_map]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fs_snapshot_mirror = FSSnapshotMirror(self)
 
-    def notify(self, notify_type, notify_id):
+    def notify(self, notify_type: NotifyType, notify_id):
         self.fs_snapshot_mirror.notify(notify_type)
 
     @CLIWriteCommand('fs snapshot mirror enable')

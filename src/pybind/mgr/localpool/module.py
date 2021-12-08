@@ -1,4 +1,4 @@
-from mgr_module import MgrModule, CommandResult, Option
+from mgr_module import MgrModule, CommandResult, Option, NotifyType
 import json
 import threading
 from typing import cast, Any
@@ -46,13 +46,14 @@ class Module(MgrModule):
             desc='name prefix for any created local pool',
             runtime=True),
     ]
+    NOTIFY_TYPES = [NotifyType.osd_map]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
         self.serve_event = threading.Event()
 
-    def notify(self, notify_type: str, notify_id: str) -> None:
-        if notify_type == 'osd_map':
+    def notify(self, notify_type: NotifyType, notify_id: str) -> None:
+        if notify_type == NotifyType.osd_map:
             self.handle_osd_map()
 
     def handle_osd_map(self) -> None:

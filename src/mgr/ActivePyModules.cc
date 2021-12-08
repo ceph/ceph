@@ -553,9 +553,12 @@ void ActivePyModules::notify_all(const std::string &notify_type,
 
   dout(10) << __func__ << ": notify_all " << notify_type << dendl;
   for (auto& [name, module] : modules) {
+    if (!py_module_registry.should_notify(name, notify_type)) {
+      continue;
+    }
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
-    dout(15) << "queuing notify to " << name << dendl;
+    dout(15) << "queuing notify (" << notify_type << ") to " << name << dendl;
     // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
     finisher.queue(new LambdaContext([module=module, notify_type, notify_id]
       (int r){
@@ -570,6 +573,9 @@ void ActivePyModules::notify_all(const LogEntry &log_entry)
 
   dout(10) << __func__ << ": notify_all (clog)" << dendl;
   for (auto& [name, module] : modules) {
+    if (!py_module_registry.should_notify(name, "clog")) {
+      continue;
+    }
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     //

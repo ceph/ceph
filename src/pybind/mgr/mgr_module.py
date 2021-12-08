@@ -17,7 +17,7 @@ import json
 import subprocess
 import threading
 from collections import defaultdict
-from enum import IntEnum
+from enum import IntEnum, Enum
 import rados
 import re
 import socket
@@ -82,6 +82,23 @@ PG_STATES = [
 
 NFS_GANESHA_SUPPORTED_FSALS = ['CEPH', 'RGW']
 NFS_POOL_NAME = '.nfs'
+
+
+class NotifyType(str, Enum):
+    mon_map = 'mon_map'
+    pg_summary = 'pg_summary'
+    health = 'health'
+    clog = 'clog'
+    osd_map = 'osd_map'
+    fs_map = 'fs_map'
+    command = 'command'
+
+    # these are disabled because there are no users.
+    #  see Mgr.cc:
+    # service_map = 'service_map'
+    # mon_status = 'mon_status'
+    #  see DaemonServer.cc:
+    # perf_schema_update = 'perf_schema_update'
 
 
 class CommandResult(object):
@@ -1169,10 +1186,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_context()
 
-    def notify(self, notify_type: str, notify_id: str) -> None:
+    def notify(self, notify_type: NotifyType, notify_id: str) -> None:
         """
         Called by the ceph-mgr service to notify the Python plugin
-        that new state is available.
+        that new state is available.  This method is *only* called for
+        notify_types that are listed in the NOTIFY_TYPES string list
+        member of the module class.
 
         :param notify_type: string indicating what kind of notification,
                             such as osd_map, mon_map, fs_map, mon_status,
