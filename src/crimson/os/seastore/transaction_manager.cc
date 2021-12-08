@@ -437,19 +437,16 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 	      type,
 	      addr,
 	      laddr,
-	      len).si_then(
-		[this, pin=std::move(pin)](CachedExtentRef ret) mutable {
-		  auto lref = ret->cast<LogicalCachedExtent>();
-		  if (!lref->has_pin()) {
-		    assert(!(pin->has_been_invalidated() ||
-			     lref->has_been_invalidated()));
-		    lref->set_pin(std::move(pin));
-		    lba_manager->add_pin(lref->get_pin());
-		  }
-		  return inner_ret(
-		    interruptible::ready_future_marker{},
-		    ret);
-		});
+	      len,
+	      [this, pin=std::move(pin)](CachedExtent &extent) mutable {
+		auto lref = extent.cast<LogicalCachedExtent>();
+		if (!lref->has_pin()) {
+		  assert(!(pin->has_been_invalidated() ||
+			   lref->has_been_invalidated()));
+		  lref->set_pin(std::move(pin));
+		  lba_manager->add_pin(lref->get_pin());
+		}
+	      });
 	  } else {
 	    return inner_ret(
 	      interruptible::ready_future_marker{},

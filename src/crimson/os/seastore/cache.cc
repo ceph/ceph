@@ -1161,12 +1161,13 @@ Cache::replay_delta(
     };
     auto extent_fut = (delta.pversion == 0 ?
       // replay is not included by the cache hit metrics
-      get_extent_by_type(
+      _get_extent_by_type(
         delta.type,
         delta.paddr,
         delta.laddr,
         delta.length,
-        nullptr) :
+        nullptr,
+        [](CachedExtent &) {}) :
       _get_extent_if_cached(
 	delta.paddr)
     ).handle_error(
@@ -1298,14 +1299,15 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
   }
 }
 
-Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
+Cache::get_extent_ertr::future<CachedExtentRef> Cache::_get_extent_by_type(
   extent_types_t type,
   paddr_t offset,
   laddr_t laddr,
   segment_off_t length,
-  const Transaction::src_t* p_src)
+  const Transaction::src_t* p_src,
+  extent_init_func_t &&extent_init_func)
 {
-  return [=] {
+  return [=, extent_init_func=std::move(extent_init_func)]() mutable {
     src_ext_t* p_metric_key = nullptr;
     src_ext_t metric_key;
     if (p_src) {
@@ -1319,43 +1321,43 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
     case extent_types_t::LADDR_INTERNAL:
       return get_extent<lba_manager::btree::LBAInternalNode>(
-          offset, length, p_metric_key
+	offset, length, p_metric_key, std::move(extent_init_func)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::LADDR_LEAF:
       return get_extent<lba_manager::btree::LBALeafNode>(
-          offset, length, p_metric_key
+	offset, length, p_metric_key, std::move(extent_init_func)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OMAP_INNER:
       return get_extent<omap_manager::OMapInnerNode>(
-          offset, length, p_metric_key
+          offset, length, p_metric_key, std::move(extent_init_func)
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OMAP_LEAF:
       return get_extent<omap_manager::OMapLeafNode>(
-          offset, length, p_metric_key
+          offset, length, p_metric_key, std::move(extent_init_func)
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::COLL_BLOCK:
       return get_extent<collection_manager::CollectionNode>(
-          offset, length, p_metric_key
+          offset, length, p_metric_key, std::move(extent_init_func)
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::ONODE_BLOCK_STAGED:
       return get_extent<onode::SeastoreNodeExtent>(
-          offset, length, p_metric_key
+          offset, length, p_metric_key, std::move(extent_init_func)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OBJECT_DATA_BLOCK:
       return get_extent<ObjectDataBlock>(
-          offset, length, p_metric_key
+          offset, length, p_metric_key, std::move(extent_init_func)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
@@ -1364,13 +1366,13 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
     case extent_types_t::TEST_BLOCK:
       return get_extent<TestBlock>(
-          offset, length, p_metric_key
+          offset, length, p_metric_key, std::move(extent_init_func)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::TEST_BLOCK_PHYSICAL:
       return get_extent<TestBlockPhysical>(
-          offset, length, p_metric_key
+          offset, length, p_metric_key, std::move(extent_init_func)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
