@@ -6895,6 +6895,15 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 	ldpp_dout(dpp, 10) << __PRETTY_FUNCTION__ <<
 	  ": was able to take reshard lock for bucket " <<
 	  bucket_id << dendl;
+        // the reshard may have finished, so call clear_resharding() with its current bucket info
+        ret = fetch_new_bucket_info("trying_to_clear_resharding");
+        if (ret < 0) {
+	  reshard_lock.unlock();
+	  ldpp_dout(dpp, 0) << __func__ <<
+	    " ERROR: failed to update bucket info before clear resharding for bucket " <<
+	    bucket_id << dendl;
+          continue; // try again
+        }
 	ret = RGWBucketReshard::clear_resharding(this->store, bucket_info, dpp);
 	if (ret < 0) {
 	  reshard_lock.unlock();
