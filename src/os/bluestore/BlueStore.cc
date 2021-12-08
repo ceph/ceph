@@ -4942,6 +4942,11 @@ void BlueStore::_init_logger()
 	    unit_t(UNIT_BYTES));
   b.add_u64(l_bluestore_fragmentation, "fragmentation_micros",
             "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000");
+  b.add_u64(l_bluestore_alloc_unit, "alloc_unit",
+	    "allocation unit size in bytes",
+	    "au_b",
+	    PerfCountersBuilder::PRIO_CRITICAL,
+	    unit_t(UNIT_BYTES));
   //****************************************
 
   // Update op processing state latencies
@@ -11974,6 +11979,7 @@ int BlueStore::_open_super_meta()
     }
     dout(1) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
 	     << std::dec << dendl;
+    logger->set(l_bluestore_alloc_unit, min_alloc_size);
   }
 
   // smr fields
