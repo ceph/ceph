@@ -1189,7 +1189,8 @@ void PrimaryLogPG::do_command(
     outbl.append(ss.str());
   }
 
-  else if (prefix == "block" || prefix == "unblock") {
+  else if (prefix == "block" || prefix == "unblock" || prefix == "set" ||
+           prefix == "unset") {
     string value;
     cmd_getval(cmdmap, "value", value);
 
