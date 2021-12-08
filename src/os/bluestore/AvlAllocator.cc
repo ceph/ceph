@@ -29,30 +29,63 @@ namespace {
  * a suitable block to allocate. This will search the specified AVL
  * tree looking for a block that matches the specified criteria.
  */
-template<class Tree>
-uint64_t AvlAllocator::_block_picker(const Tree& t,
-				     uint64_t *cursor,
-				     uint64_t size,
-				     uint64_t align)
+uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
+					 uint64_t size,
+					 uint64_t align)
 {
-  const auto compare = t.key_comp();
-  auto rs_start = t.lower_bound(range_t{*cursor, size}, compare);
-  for (auto rs = rs_start; rs != t.end(); ++rs) {
+  const auto compare = range_tree.key_comp();
+  uint32_t search_count = 0;
+  uint64_t search_bytes = 0;
+  auto rs_start = range_tree.lower_bound(range_t{*cursor, size}, compare);
+  for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
     if (offset + size <= rs->end) {
       *cursor = offset + size;
       return offset;
     }
+    if (max_search_count > 0 && ++search_count > max_search_count) {
+      return -1ULL;
+    }
+    if (search_bytes = rs->start - rs_start->start;
+	max_search_bytes > 0 && search_bytes > max_search_bytes) {
+      return -1ULL;
+    }
   }
-  /*
-   * If we know we've searched the whole tree (*cursor == 0), give up.
-   * Otherwise, reset the cursor to the beginning and try again.
-   */
-   if (*cursor == 0 || rs_start == t.begin()) {
-     return -1ULL;
-   }
-   *cursor = 0;
-   return _block_picker(t, cursor, size, align);
+  if (*cursor == 0) {
+    // If we already started from beginning, don't bother with searching from beginning
+    return -1ULL;
+  }
+  // If we reached end, start from beginning till cursor.
+  for (auto rs = range_tree.begin(); rs != rs_start; ++rs) {
+    uint64_t offset = p2roundup(rs->start, align);
+    if (offset + size <= rs->end) {
+      *cursor = offset + size;
+      return offset;
+    }
+    if (max_search_count > 0 && ++search_count > max_search_count) {
+      return -1ULL;
+    }
+    if (max_search_bytes > 0 && search_bytes + rs->start > max_search_bytes) {
+      return -1ULL;
+    }
+  }
+  return -1ULL;
+}
+
+uint64_t AvlAllocator::_pick_block_fits(uint64_t size,
+					uint64_t align)
+{
+  // instead of searching from cursor, just pick the smallest range which fits
+  // the needs
+  const auto compare = range_size_tree.key_comp();
+  auto rs_start = range_size_tree.lower_bound(range_t{0, size}, compare);
+  for (auto rs = rs_start; rs != range_size_tree.end(); ++rs) {
+    uint64_t offset = p2roundup(rs->start, align);
+    if (offset + size <= rs->end) {
+      return offset;
+    }
+  }
+  return -1ULL;
 }
 
 void AvlAllocator::_add_to_tree(uint64_t start, uint64_t size)
@@ -222,39 +255,30 @@ int AvlAllocator::_allocate(
 
   const int free_pct = num_free * 100 / num_total;
   uint64_t start = 0;
-  /*
-   * If we're running low on space switch to using the size
-   * sorted AVL tree (best-fit).
-   */
+  // If we're running low on space, find a range by size by looking up in the size
+  // sorted tree (best-fit), instead of searching in the area pointed by cursor
   if (force_range_size_alloc ||
       max_size < range_size_alloc_threshold ||
       free_pct < range_size_alloc_free_pct) {
-    uint64_t fake_cursor = 0;
-    do {
-      start = _block_picker(range_size_tree, &fake_cursor, size, unit);
-      dout(20) << __func__ << " best fit=" << start << " size=" << size << dendl;
-      if (start != uint64_t(-1ULL)) {
-        break;
-      }
-      // try to collect smaller extents as we could fail to retrieve
-      // that large block due to misaligned extents
-      size = p2align(size >> 1, unit);
-    } while (size >= unit);
+    start = -1ULL;
   } else {
+    /*
+     * Find the largest power of 2 block size that evenly divides the
+     * requested size. This is used to try to allocate blocks with similar
+     * alignment from the same area (i.e. same cursor bucket) but it does
+     * not guarantee that other allocations sizes may exist in the same
+     * region.
+     */
+    uint64_t align = size & -size;
+    ceph_assert(align != 0);
+    uint64_t* cursor = &lbas[cbits(align) - 1];
+    start = _pick_block_after(cursor, size, unit);
+    dout(20) << __func__ << " first fit=" << start << " size=" << size << dendl;
+  }
+  if (start == -1ULL) {
     do {
-      /*
-       * Find the largest power of 2 block size that evenly divides the
-       * requested size. This is used to try to allocate blocks with similar
-       * alignment from the same area (i.e. same cursor bucket) but it does
-       * not guarantee that other allocations sizes may exist in the same
-       * region.
-       */
-      uint64_t align = size & -size;
-      ceph_assert(align != 0);
-      uint64_t* cursor = &lbas[cbits(align) - 1];
-
-      start = _block_picker(range_tree, cursor, size, unit);
-      dout(20) << __func__ << " first fit=" << start << " size=" << size << dendl;
+      start = _pick_block_fits(size, unit);
+      dout(20) << __func__ << " best fit=" << start << " size=" << size << dendl;
       if (start != uint64_t(-1ULL)) {
         break;
       }
@@ -315,6 +339,10 @@ AvlAllocator::AvlAllocator(CephContext* cct,
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
   range_size_alloc_free_pct(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_free_pct")),
+  max_search_count(
+    cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_ff_max_search_count")),
+  max_search_bytes(
+    cct->_conf.get_val<Option::size_t>("bluestore_avl_alloc_ff_max_search_bytes")),
   range_count_cap(max_mem / sizeof(range_seg_t)),
   cct(cct)
 {}
@@ -323,14 +351,7 @@ AvlAllocator::AvlAllocator(CephContext* cct,
 			   int64_t device_size,
 			   int64_t block_size,
 			   const std::string& name) :
-  Allocator(name, device_size, block_size),
-  num_total(device_size),
-  block_size(block_size),
-  range_size_alloc_threshold(
-    cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
-  range_size_alloc_free_pct(
-    cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_free_pct")),
-  cct(cct)
+  AvlAllocator(cct, device_size, block_size, 0 /* max_mem */, name)
 {}
 
 AvlAllocator::~AvlAllocator()
