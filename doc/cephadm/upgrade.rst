@@ -188,3 +188,47 @@ you need. For example, the following command upgrades to a development build:
   ceph orch upgrade start --image quay.io/ceph-ci/ceph:recent-git-branch-name
 
 For more information about available container images, see :ref:`containers`.
+
+
+Migrations
+==========
+
+.. _cephadm-migration-nfs:
+
+16.2.7 - NFS export migration
+-----------------------------
+
+This migration should be done fully automated, but in case something goes
+wrong while the upgrade is in progress, there is also a manual procedure
+
+in 16.2.6, the pool for storing NFS ganesha exports was arbitrary, after
+16.2.7, the pool name is always ``.nfs``. to create the Pool, run::
+
+  ceph osd pool create pool .nfs
+  ceph osd pool application enable .nfs nfs
+
+Previously, there was an extra parameter which was the RADOS namespace. 
+After 16.2.7, the namespace is now always set to the cephadm service id. 
+
+Next, we have to copy over the ``grace`` object from the old location to
+the new location::
+
+  rados [get|put] --pool <pool> --namespace <namespace> ...
+
+To migrate export objects (all RADOS objects starting with ``export-``),
+run::
+
+  ceph nfs export apply --cluster-id <cephadm-service-id> -i <local-path-to-export-object>
+
+with the old export object.
+
+.. note:: 
+
+  In each of the export objects, all lines containing ``secret_access_key``
+  or ``user-id`` should be removed.
+
+Then, redeploy the nfs ganesha daemons::
+
+  ceph orch redeploy nfs.<cephadm-service-id>
+
+To clean up the migration, you can remove the old Ceph pool from the cluster.
