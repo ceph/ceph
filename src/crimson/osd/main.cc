@@ -103,7 +103,7 @@ seastar::future<> make_keyring()
     if (exists &&
         keyring.load(nullptr, path) == 0 &&
         keyring.get_auth(name, auth)) {
-      seastar::fprint(std::cerr, "already have key in keyring: %s\n", path);
+      fmt::print(std::cerr, "already have key in keyring: {}\n", path);
       return seastar::now();
     } else {
       auth.key.create(std::make_unique<CephContext>().get(), CEPH_CRYPTO_AES);
@@ -115,7 +115,7 @@ seastar::future<> make_keyring()
       return crimson::write_file(std::move(bl), path, permissions);
     }
   }).handle_exception_type([path](const std::filesystem::filesystem_error& e) {
-    seastar::fprint(std::cerr, "FATAL: writing new keyring to %s: %s\n", path, e.what());
+    fmt::print(std::cerr, "FATAL: writing new keyring to {}: {}\n", path, e.what());
     throw e;
   });
 }
@@ -167,7 +167,7 @@ seastar::future<> fetch_config()
       msgr->shutdown().get();
     });
     monc.start().handle_exception([] (auto ep) {
-      seastar::fprint(std::cerr, "FATAL: unable to connect to cluster: {}\n", ep);
+      fmt::print(std::cerr, "FATAL: unable to connect to cluster: {}\n", ep);
       return seastar::make_exception_future<>(ep);
     }).get();
     auto stop_monc = seastar::defer([&] {
@@ -359,7 +359,7 @@ int main(int argc, char* argv[])
       });
     });
   } catch (...) {
-    seastar::fprint(std::cerr, "FATAL: Exception during startup, aborting: %s\n", std::current_exception());
+    fmt::print(std::cerr, "FATAL: Exception during startup, aborting: {}\n", std::current_exception());
     return EXIT_FAILURE;
   }
 }
