@@ -22,7 +22,8 @@
 namespace ceph::osd::scheduler {
 
 OpSchedulerRef make_scheduler(
-  CephContext *cct, uint32_t num_shards, bool is_rotational)
+  CephContext *cct, uint32_t num_shards,
+  bool is_rotational, std::string_view osd_objectstore)
 {
   const std::string *type = &cct->_conf->osd_op_queue;
   if (*type == "debug_random") {
@@ -33,8 +34,9 @@ OpSchedulerRef make_scheduler(
     type = &index_lookup[which];
   }
 
-  if (*type == "wpq" ) {
-    // default is 'wpq'
+  // Force the use of 'wpq' scheduler for filestore OSDs.
+  // The 'mclock_scheduler' is not supported for filestore OSDs.
+  if (*type == "wpq" || osd_objectstore == "filestore") {
     return std::make_unique<
       ClassedOpQueueScheduler<WeightedPriorityQueue<OpSchedulerItem, client>>>(
 	cct,
@@ -42,6 +44,7 @@ OpSchedulerRef make_scheduler(
 	cct->_conf->osd_op_pq_min_cost
     );
   } else if (*type == "mclock_scheduler") {
+    // default is 'mclock_scheduler'
     return std::make_unique<mClockScheduler>(cct, num_shards, is_rotational);
   } else {
     ceph_assert("Invalid choice of wq" == 0);
