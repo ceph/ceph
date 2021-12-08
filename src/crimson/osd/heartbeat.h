@@ -45,6 +45,8 @@ public:
   const entity_addrvec_t& get_front_addrs() const;
   const entity_addrvec_t& get_back_addrs() const;
 
+  crimson::net::MessengerRef get_front_msgr() const;
+  crimson::net::MessengerRef get_back_msgr() const;
   void set_require_authorizer(bool);
 
   // Dispatcher methods
