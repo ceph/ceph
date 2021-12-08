@@ -3,7 +3,9 @@ import os
 import subprocess
 import time
 import yaml
+import requests
 
+from urllib.parse import urljoin
 from datetime import datetime
 
 import teuthology
@@ -151,6 +153,47 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
     if 'targets' in job_config:
         unlock_targets(job_config)
 
+def failure_is_reimage(failure_reason):
+    if not failure_reason:
+        return False
+    reimage_failure = "Error reimaging machines:"
+    if reimage_failure in failure_reason:
+        return True
+    else:
+        return False
+
+def check_for_reimage_failures_and_mark_down(targets, count=10):
+    # Grab paddles history of jobs in the machine
+    # and count the number of reimaging errors
+    # if it fails N times then mark the machine down
+    base_url = teuth_config.results_server
+    for k, _ in targets.items():
+        machine = k.split('@')[-1]
+        url = urljoin(
+                base_url,
+                '/nodes/{0}/jobs/?count={1}'.format(
+                machine, count)
+        )
+        resp = requests.get(url)
+        jobs = resp.json()
+        if len(jobs) < count:
+            continue
+        reimage_failures = list(filter(
+            lambda j: failure_is_reimage(j['failure_reason']),
+            jobs
+        ))
+        if len(reimage_failures) < count:
+            continue
+        # Mark machine down
+        machine_name = shortname(k)
+        teuthology.lock.ops.update_lock(
+	    machine_name,
+	    description='reimage failed {0} times'.format(count),
+	    status='down',
+	)
+        log.error(
+            'Reimage failed {0} times ... marking machine down'.format(count)
+        )
 
 def reimage(job_config):
     # Reimage the targets specified in job config
@@ -166,6 +209,8 @@ def reimage(job_config):
         # Reimage failures should map to the 'dead' status instead of 'fail'
         report.try_push_job_info(ctx.config, dict(status='dead', failure_reason='Error reimaging machines: ' + str(e)))
         nuke(ctx, True)
+        # Machine that fails to reimage after 10 times will be marked down
+        check_for_reimage_failures_and_mark_down(targets)
         raise
     ctx.config['targets'] = reimaged
     # change the status to running after the reimaging process
