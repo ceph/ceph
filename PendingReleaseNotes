@@ -50,7 +50,10 @@
 * RGW: `radosgw-admin realm delete` is now renamed to `radosgw-admin realm rm`. This
   is consistent with the help message.
 
-* OSD: Ceph now uses mclock_scheduler as its default osd_op_queue to provide QoS.
+* OSD: Ceph now uses mclock_scheduler for bluestore OSDs as its default osd_op_queue
+  to provide QoS. The 'mclock_scheduler' is not supported for filestore OSDs.
+  Therefore, the default 'osd_op_queue' is set to 'wpq' for filestore OSDs
+  and is enforced even if the user attempts to change it.
 
 * CephFS: Failure to replay the journal by a standby-replay daemon will now
   cause the rank to be marked damaged.

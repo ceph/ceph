@@ -2174,7 +2174,9 @@ void OSDMonitor::check_for_filestore_osds(health_check_map_t *checks)
     ss << " [Deprecated]";
     auto& d = checks->add("OSD_FILESTORE", HEALTH_WARN, ss.str(),
                           filestore_osds.size());
-    deprecated_tip << ", which has been deprecated.";
+    deprecated_tip << ", which has been deprecated and"
+                   << " not been optimized for QoS"
+                   << " (Filestore OSDs will use 'osd_op_queue = wpq' strictly)";
     detail.push_back(deprecated_tip.str());
     d.detail.swap(detail);
   }

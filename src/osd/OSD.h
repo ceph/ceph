@@ -2062,6 +2062,7 @@ private:
                          double *elapsed,
                          std::ostream& ss);
   int mon_cmd_set_config(const std::string &key, const std::string &val);
+  bool unsupported_objstore_for_qos();
 
   void scrub_purged_snaps();
   void probe_smart(const std::string& devid, std::ostream& ss);
