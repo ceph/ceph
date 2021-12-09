@@ -47,39 +47,38 @@ class ool_record_t {
 
 public:
   ool_record_t(size_t block_size) : block_size(block_size) {}
-  record_size_t get_encoded_record_length() {
+  record_group_size_t get_encoded_record_length() {
     assert(extents.size() == record.extents.size());
-    return crimson::os::seastore::get_encoded_record_length(record, block_size);
+    return record_group_size_t(record.size, block_size);
   }
   size_t get_wouldbe_encoded_record_length(LogicalCachedExtentRef& extent) {
-    auto raw_mdlength = get_encoded_record_raw_mdlength(record, block_size);
-    auto wouldbe_mdlength = p2roundup(
-      raw_mdlength + ceph::encoded_sizeof_bounded<extent_info_t>(),
-      block_size);
-    return wouldbe_mdlength + extent_buf_len + extent->get_bptr().length();
+    record_size_t rsize = record.size;
+    rsize.account_extent(extent->get_bptr().length());
+    return record_group_size_t(rsize, block_size).get_encoded_length();
   }
-  ceph::bufferlist encode(const record_size_t& rsize,
-                          segment_id_t segment,
+  ceph::bufferlist encode(segment_id_t segment,
                           segment_nonce_t nonce) {
     assert(extents.size() == record.extents.size());
-    segment_off_t extent_offset = base + rsize.mdlength;
+    assert(!record.deltas.size());
+    auto record_group = record_group_t(std::move(record), block_size);
+    segment_off_t extent_offset = base + record_group.size.get_mdlength();
     for (auto& extent : extents) {
       extent.set_ool_paddr(
         paddr_t::make_seg_paddr(segment, extent_offset));
       extent_offset += extent.get_bptr().length();
     }
-    assert(extent_offset == (segment_off_t)(base + rsize.mdlength + rsize.dlength));
-    return encode_record(rsize, std::move(record), block_size, journal_seq_t(), nonce);
+    assert(extent_offset ==
+           (segment_off_t)(base + record_group.size.get_encoded_length()));
+    return encode_records(record_group, journal_seq_t(), nonce);
   }
   void add_extent(LogicalCachedExtentRef& extent) {
     extents.emplace_back(extent);
     ceph::bufferlist bl;
     bl.append(extent->get_bptr());
-    record.extents.emplace_back(extent_t{
+    record.push_back(extent_t{
       extent->get_type(),
       extent->get_laddr(),
       std::move(bl)});
-    extent_buf_len += extent->get_bptr().length();
   }
   std::vector<OolExtent>& get_extents() {
     return extents;
@@ -91,10 +90,8 @@ public:
     return base;
   }
   void clear() {
-    record.extents.clear();
+    record = {};
     extents.clear();
-    assert(!record.deltas.size());
-    extent_buf_len = 0;
     base = MAX_SEG_OFF;
   }
   uint64_t get_num_extents() const {
@@ -105,7 +102,6 @@ private:
   std::vector<OolExtent> extents;
   record_t record;
   size_t block_size;
-  segment_off_t extent_buf_len = 0;
   segment_off_t base = MAX_SEG_OFF;
 };
 

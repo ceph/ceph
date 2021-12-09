@@ -59,4 +59,9 @@ options:
   type: uint
   level: dev
   desc: The io depth limit to submit journal records
-  default: 2
+  default: 5
+- name: seastore_journal_batch_preferred_fullness
+  type: float
+  level: dev
+  desc: The record fullness threshold to flush a journal batch
+  default: 0.95

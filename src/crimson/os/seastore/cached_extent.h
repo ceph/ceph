@@ -83,6 +83,7 @@ class CachedExtent : public boost::intrusive_ref_counter<
   enum class extent_state_t : uint8_t {
     INITIAL_WRITE_PENDING, // In Transaction::write_set and fresh_block_list
     MUTATION_PENDING,      // In Transaction::write_set and mutated_block_list
+    CLEAN_PENDING,         // CLEAN, but not yet read out
     CLEAN,                 // In Cache::extent_index, Transaction::read_set
                            //  during write, contents match disk, version == 0
     DIRTY,                 // Same as CLEAN, but contents do not match disk,
@@ -170,10 +171,14 @@ public:
 	<< ", version=" << version
 	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
 	<< ", paddr=" << get_paddr()
+	<< ", length=" << get_length()
 	<< ", state=" << state
 	<< ", last_committed_crc=" << last_committed_crc
 	<< ", refcount=" << use_count();
-    print_detail(out);
+    if (state != extent_state_t::INVALID &&
+        state != extent_state_t::CLEAN_PENDING) {
+      print_detail(out);
+    }
     return out << ")";
   }
 
@@ -252,7 +257,8 @@ public:
   bool is_clean() const {
     ceph_assert(is_valid());
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
-      state == extent_state_t::CLEAN;
+           state == extent_state_t::CLEAN ||
+           state == extent_state_t::CLEAN_PENDING;
   }
 
   /// Returns true if extent is dirty (has deltas on disk)

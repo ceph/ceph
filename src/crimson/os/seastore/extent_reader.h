@@ -56,11 +56,11 @@ public:
     size_t>;
   using found_record_handler_t = std::function<
     scan_valid_records_ertr::future<>(
-      paddr_t record_block_base,
+      record_locator_t record_locator,
       // callee may assume header and bl will remain valid until
       // returned future resolves
-      const record_header_t &header,
-      const bufferlist &bl)>;
+      const record_group_header_t &header,
+      const bufferlist &mdbuf)>;
   scan_valid_records_ret scan_valid_records(
     scan_valid_records_cursor &cursor, ///< [in, out] cursor, updated during call
     segment_nonce_t nonce,             ///< [in] nonce for segment
@@ -92,28 +92,26 @@ private:
   using read_validate_record_metadata_ertr = read_ertr;
   using read_validate_record_metadata_ret =
     read_validate_record_metadata_ertr::future<
-      std::optional<std::pair<record_header_t, bufferlist>>
+      std::optional<std::pair<record_group_header_t, bufferlist>>
     >;
   read_validate_record_metadata_ret read_validate_record_metadata(
     paddr_t start,
     segment_nonce_t nonce);
-
-  /// attempts to decode extent infos from bl, return nullopt if unsuccessful
-  std::optional<std::vector<extent_info_t>> try_decode_extent_infos(
-    record_header_t header,
-    const bufferlist &bl);
 
   /// read and validate data
   using read_validate_data_ertr = read_ertr;
   using read_validate_data_ret = read_validate_data_ertr::future<bool>;
   read_validate_data_ret read_validate_data(
     paddr_t record_base,
-    const record_header_t &header  ///< caller must ensure lifetime through
-                                   ///  future resolution
+    const record_group_header_t &header  ///< caller must ensure lifetime through
+                                         ///  future resolution
   );
 
-  /// validate embedded metadata checksum
-  static bool validate_metadata(const bufferlist &bl);
+  using consume_record_group_ertr = scan_valid_records_ertr;
+  consume_record_group_ertr::future<> consume_next_records(
+      scan_valid_records_cursor& cursor,
+      found_record_handler_t& handler,
+      std::size_t& budget_used);
 
   friend class TransactionManager;
 };

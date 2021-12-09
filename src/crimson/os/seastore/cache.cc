@@ -273,9 +273,9 @@ void Cache::register_metrics()
             {src_label}
           ),
           sm::make_counter(
-            "invalidated_ool_record_overhead_bytes",
-            efforts.ool_record_overhead_bytes,
-            sm::description("bytes of ool-record overhead from invalidated transactions"),
+            "invalidated_ool_record_bytes",
+            efforts.ool_record_bytes,
+            sm::description("bytes of ool-record from invalidated transactions"),
             {src_label}
           ),
         }
@@ -313,15 +313,28 @@ void Cache::register_metrics()
             {src_label}
           ),
           sm::make_counter(
-            "committed_ool_record_overhead_bytes",
-            efforts.ool_record_overhead_bytes,
-            sm::description("bytes of ool-record overhead from committed transactions"),
+            "committed_ool_record_padding_bytes",
+            efforts.ool_record_padding_bytes,
+            sm::description("bytes of ool-record padding from committed transactions"),
             {src_label}
           ),
           sm::make_counter(
-            "committed_inline_record_overhead_bytes",
-            efforts.inline_record_overhead_bytes,
-            sm::description("bytes of inline-record overhead from committed transactions"),
+            "committed_ool_record_metadata_bytes",
+            efforts.ool_record_metadata_bytes,
+            sm::description("bytes of ool-record metadata from committed transactions"),
+            {src_label}
+          ),
+          sm::make_counter(
+            "committed_ool_record_data_bytes",
+            efforts.ool_record_data_bytes,
+            sm::description("bytes of ool-record data from committed transactions"),
+            {src_label}
+          ),
+          sm::make_counter(
+            "committed_inline_record_metadata_bytes",
+            efforts.inline_record_metadata_bytes,
+            sm::description("bytes of inline-record metadata from committed transactions"
+                            "(excludes delta buffer)"),
             {src_label}
           ),
         }
@@ -404,52 +417,6 @@ void Cache::register_metrics()
         ),
       }
     );
-  }
-
-  /**
-   * Record header fullness
-   */
-  auto record_type_label = sm::label("record_type");
-  using namespace std::literals::string_view_literals;
-  const string_view record_type_names[] = {
-    "INLINE"sv,
-    "OOL"sv,
-  };
-  for (auto& [src, src_label] : labels_by_src) {
-    if (src == src_t::READ) {
-      // READ transaction won't commit
-      continue;
-    }
-    auto& record_header_fullness = get_by_src(
-        stats.record_header_fullness_by_src, src);
-    for (auto& record_type_name : record_type_names) {
-      auto& fill_stat = [&record_type_name,
-                         &record_header_fullness]() -> fill_stat_t& {
-        if (record_type_name == "INLINE") {
-          return record_header_fullness.inline_stats;
-        } else {
-          assert(record_type_name == "OOL");
-          return record_header_fullness.ool_stats;
-        }
-      }();
-      metrics.add_group(
-        "cache",
-        {
-          sm::make_counter(
-            "record_header_filled_bytes",
-            fill_stat.filled_bytes,
-            sm::description("filled bytes of record header"),
-            {src_label, record_type_label(record_type_name)}
-          ),
-          sm::make_counter(
-            "record_header_total_bytes",
-            fill_stat.total_bytes,
-            sm::description("total bytes of record header"),
-            {src_label, record_type_label(record_type_name)}
-          ),
-        }
-      );
-    }
   }
 
   /**
@@ -793,12 +760,9 @@ void Cache::mark_transaction_conflicted(
     efforts.fresh_ool_written.extents += ool_stats.extents.num;
     efforts.fresh_ool_written.bytes += ool_stats.extents.bytes;
     efforts.num_ool_records += ool_stats.num_records;
-    efforts.ool_record_overhead_bytes += ool_stats.header_bytes;
-
-    auto& record_header_fullness = get_by_src(
-        stats.record_header_fullness_by_src, t.get_src());
-    record_header_fullness.ool_stats.filled_bytes += ool_stats.header_raw_bytes;
-    record_header_fullness.ool_stats.total_bytes += ool_stats.header_bytes;
+    efforts.ool_record_bytes +=
+      (ool_stats.header_bytes + ool_stats.data_bytes);
+    // Note: we only account overhead from committed ool records
 
     if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
         t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
@@ -814,9 +778,9 @@ void Cache::mark_transaction_conflicted(
   } else {
     // read transaction won't have non-read efforts
     assert(t.retired_set.empty());
-    assert(t.get_fresh_block_stats().num == 0);
+    assert(t.get_fresh_block_stats().is_clear());
     assert(t.mutated_block_list.empty());
-    assert(t.get_ool_write_stats().num_records == 0);
+    assert(t.get_ool_write_stats().is_clear());
     assert(t.onode_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
   }
@@ -917,27 +881,8 @@ record_t Cache::prepare_record(Transaction &t)
   assert(!t.is_weak());
   assert(t.get_src() != Transaction::src_t::READ);
 
-  if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
-      t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
-    // CLEANER transaction won't contain any onode tree operations
-    assert(t.onode_tree_stats.is_clear());
-  } else {
-    if (t.onode_tree_stats.depth) {
-      stats.onode_tree_depth = t.onode_tree_stats.depth;
-    }
-    get_by_src(stats.committed_onode_tree_efforts, t.get_src()
-        ).increment(t.onode_tree_stats);
-  }
-
-  if (t.lba_tree_stats.depth) {
-    stats.lba_tree_depth = t.lba_tree_stats.depth;
-  }
-  get_by_src(stats.committed_lba_tree_efforts, t.get_src()
-      ).increment(t.lba_tree_stats);
-
   auto& efforts = get_by_src(stats.committed_efforts_by_src,
                              t.get_src());
-  ++(efforts.num_trans);
 
   // Should be valid due to interruptible future
   for (auto &i: t.read_set) {
@@ -977,7 +922,7 @@ record_t Cache::prepare_record(Transaction &t)
     if (i->get_type() == extent_types_t::ROOT) {
       root = t.root;
       DEBUGT("writing out root delta for {}", t, *t.root);
-      record.deltas.push_back(
+      record.push_back(
 	delta_info_t{
 	  extent_types_t::ROOT,
 	  paddr_t{},
@@ -989,7 +934,7 @@ record_t Cache::prepare_record(Transaction &t)
 	  t.root->get_delta()
 	});
     } else {
-      record.deltas.push_back(
+      record.push_back(
 	delta_info_t{
 	  i->get_type(),
 	  i->get_paddr(),
@@ -1047,7 +992,7 @@ record_t Cache::prepare_record(Transaction &t)
     }
 
     assert(bl.length() == i->get_length());
-    record.extents.push_back(extent_t{
+    record.push_back(extent_t{
 	i->get_type(),
 	i->is_logical()
 	? i->cast<LogicalCachedExtent>()->get_laddr()
@@ -1062,7 +1007,7 @@ record_t Cache::prepare_record(Transaction &t)
     delta_info_t delta;
     delta.type = extent_types_t::RBM_ALLOC_INFO;
     delta.bl = bl;
-    record.deltas.push_back(delta);
+    record.push_back(std::move(delta));
   }
 
   for (auto &i: t.ool_block_list) {
@@ -1079,21 +1024,52 @@ record_t Cache::prepare_record(Transaction &t)
 
   auto& ool_stats = t.get_ool_write_stats();
   ceph_assert(ool_stats.extents.num == t.ool_block_list.size());
-  efforts.num_ool_records += ool_stats.num_records;
-  efforts.ool_record_overhead_bytes += ool_stats.header_bytes;
 
-  auto& record_header_fullness = get_by_src(
-      stats.record_header_fullness_by_src, t.get_src());
-  record_header_fullness.ool_stats.filled_bytes += ool_stats.header_raw_bytes;
-  record_header_fullness.ool_stats.total_bytes += ool_stats.header_bytes;
+  // FIXME: prevent submitting empty records
+  if (record.is_empty()) {
+    ERRORT("record is empty!", t);
+    assert(t.onode_tree_stats.is_clear());
+    assert(t.lba_tree_stats.is_clear());
+    assert(ool_stats.is_clear());
+    ++(efforts.num_trans);
+  } else {
+    DEBUGT("record is ready to submit, src={}, mdsize={}, dsize={}; "
+           "{} ool records, mdsize={}, dsize={}, fillness={}",
+           t, t.get_src(),
+           record.size.get_raw_mdlength(),
+           record.size.dlength,
+           ool_stats.num_records,
+           ool_stats.header_raw_bytes,
+           ool_stats.data_bytes,
+           ((double)(ool_stats.header_raw_bytes + ool_stats.data_bytes) /
+            (ool_stats.header_bytes + ool_stats.data_bytes)));
+    if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
+        t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
+      // CLEANER transaction won't contain any onode tree operations
+      assert(t.onode_tree_stats.is_clear());
+    } else {
+      if (t.onode_tree_stats.depth) {
+        stats.onode_tree_depth = t.onode_tree_stats.depth;
+      }
+      get_by_src(stats.committed_onode_tree_efforts, t.get_src()
+          ).increment(t.onode_tree_stats);
+    }
 
-  auto record_size = get_encoded_record_length(
-      record, reader.get_block_size());
-  auto inline_overhead =
-      record_size.mdlength + record_size.dlength - record.get_raw_data_size();
-  efforts.inline_record_overhead_bytes += inline_overhead;
-  record_header_fullness.inline_stats.filled_bytes += record_size.raw_mdlength;
-  record_header_fullness.inline_stats.total_bytes += record_size.mdlength;
+    if (t.lba_tree_stats.depth) {
+      stats.lba_tree_depth = t.lba_tree_stats.depth;
+    }
+    get_by_src(stats.committed_lba_tree_efforts, t.get_src()
+        ).increment(t.lba_tree_stats);
+
+    ++(efforts.num_trans);
+    efforts.num_ool_records += ool_stats.num_records;
+    efforts.ool_record_padding_bytes +=
+      (ool_stats.header_bytes - ool_stats.header_raw_bytes);
+    efforts.ool_record_metadata_bytes += ool_stats.header_raw_bytes;
+    efforts.ool_record_data_bytes += ool_stats.data_bytes;
+    efforts.inline_record_metadata_bytes +=
+      (record.size.get_raw_mdlength() - record.get_delta_size());
+  }
 
   return record;
 }
