@@ -41,8 +41,8 @@ you may write data with one API and retrieve it with the other.
    :maxdepth: 1
 
    HTTP Frontends <frontends>
-   Pool Placement and Storage Classes <placement>
    Multisite Configuration <multisite>
+   Pool Placement and Storage Classes <placement>
    Multisite Sync Policy Configuration <multisite-sync-policy>
    Configuring Pools <pools>
    Config Reference <config-ref>
