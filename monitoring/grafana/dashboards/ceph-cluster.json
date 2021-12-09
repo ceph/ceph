@@ -190,7 +190,7 @@
           "displayAliasType": "Always",
           "displayType": "Regular",
           "displayValueWithAlias": "When Alias Displayed",
-          "expr": "sum(ceph_osds_in)",
+          "expr": "sum(ceph_osd_in)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "In",
