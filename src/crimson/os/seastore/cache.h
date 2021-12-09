@@ -216,8 +216,7 @@ public:
     } else {
       auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
       return ret->wait_io(
-      ).then([ret=std::move(ret),
-	      extent_init_func=std::forward<Func>(extent_init_func)]() mutable
+      ).then([ret=std::move(ret)]() mutable
 	     -> get_extent_ret<T> {
         // ret may be invalid, caller must check
         return get_extent_ret<T>(
