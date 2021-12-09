@@ -95,7 +95,7 @@ def rook_operator(ctx, config):
 
     # operator.yaml
     operator_yaml = ctx.rook[cluster_name].remote.read_file(
-        'rook/cluster/examples/kubernetes/ceph/operator.yaml'
+        'rook/deploy/examples/operator.yaml'
     )
     rook_image = config.get('rook_image')
     if rook_image:
@@ -111,8 +111,8 @@ def rook_operator(ctx, config):
         log.info('Deploying operator')
         _kubectl(ctx, config, [
             'create',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/crds.yaml',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/common.yaml',
+            '-f', 'rook/deploy/examples/crds.yaml',
+            '-f', 'rook/deploy/examples/common.yaml',
             '-f', 'operator.yaml',
         ])
 
@@ -165,11 +165,11 @@ def rook_operator(ctx, config):
             # fails sometimes when deleting some of the CRDs... not sure why!)
             _kubectl(ctx, config, [
                 'delete',
-                '-f', 'rook/cluster/examples/kubernetes/ceph/common.yaml',
+                '-f', 'rook/deploy/examples/common.yaml',
             ])
             _kubectl(ctx, config, [
                 'delete',
-                '-f', 'rook/cluster/examples/kubernetes/ceph/crds.yaml',
+                '-f', 'rook/deploy/examples/crds.yaml',
             ])
         ctx.rook[cluster_name].remote.run(args=['rm', '-rf', 'rook', 'operator.yaml'])
         if op_job:
@@ -409,7 +409,7 @@ def rook_toolbox(ctx, config):
     try:
         _kubectl(ctx, config, [
             'create',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/toolbox.yaml',
+            '-f', 'rook/deploy/examples/toolbox.yaml',
         ])
 
         log.info('Waiting for tools container to start')
