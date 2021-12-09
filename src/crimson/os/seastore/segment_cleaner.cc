@@ -309,7 +309,10 @@ SegmentCleaner::gc_trim_journal_ret SegmentCleaner::gc_trim_journal()
 {
   return repeat_eagain([this] {
     return ecb->with_transaction_intr(
-        Transaction::src_t::CLEANER_TRIM, [this](auto& t) {
+      Transaction::src_t::CLEANER_TRIM,
+      "trim_journal",
+      [this](auto& t)
+    {
       return rewrite_dirty(t, get_dirty_tail()
       ).si_then([this, &t] {
         return ecb->submit_transaction_direct(t);
@@ -349,8 +352,10 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
           "SegmentCleaner::gc_reclaim_space: processing {} extents",
           extents.size());
         return ecb->with_transaction_intr(
-            Transaction::src_t::CLEANER_RECLAIM,
-            [this, &extents](auto& t) {
+          Transaction::src_t::CLEANER_RECLAIM,
+          "reclaim_space",
+          [this, &extents](auto& t)
+        {
           return trans_intr::do_for_each(
               extents,
               [this, &t](auto &extent) {

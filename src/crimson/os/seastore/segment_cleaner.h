@@ -472,13 +472,17 @@ public:
   public:
     virtual ~ExtentCallbackInterface() = default;
 
-    virtual TransactionRef create_transaction(Transaction::src_t) = 0;
+    virtual TransactionRef create_transaction(
+        Transaction::src_t, const char*) = 0;
 
     /// Creates empty transaction with interruptible context
     template <typename Func>
-    auto with_transaction_intr(Transaction::src_t src, Func &&f) {
+    auto with_transaction_intr(
+        Transaction::src_t src,
+        const char* name,
+        Func &&f) {
       return seastar::do_with(
-        create_transaction(src),
+        create_transaction(src, name),
         [f=std::forward<Func>(f)](auto &ref_t) mutable {
           return with_trans_intr(
             *ref_t,

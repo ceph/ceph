@@ -95,41 +95,24 @@ public:
 
   /// Creates empty transaction by source
   TransactionRef create_transaction(
-      Transaction::src_t src) {
+      Transaction::src_t src,
+      const char* name,
+      bool is_weak) {
     LOG_PREFIX(Cache::create_transaction);
 
     ++(get_by_src(stats.trans_created_by_src, src));
 
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
-      false,
+      is_weak,
       src,
       last_commit,
       [this](Transaction& t) {
         return on_transaction_destruct(t);
       }
     );
-    DEBUGT("created source={}", *ret, src);
-    return ret;
-  }
-
-  /// Creates empty weak transaction by source
-  TransactionRef create_weak_transaction(
-      Transaction::src_t src) {
-    LOG_PREFIX(Cache::create_weak_transaction);
-
-    ++(get_by_src(stats.trans_created_by_src, src));
-
-    auto ret = std::make_unique<Transaction>(
-      get_dummy_ordering_handle(),
-      true,
-      src,
-      last_commit,
-      [this](Transaction& t) {
-        return on_transaction_destruct(t);
-      }
-    );
-    DEBUGT("created source={}", *ret, src);
+    DEBUGT("created name={}, source={}, is_weak={}",
+           *ret, name, src, is_weak);
     return ret;
   }
 
@@ -207,7 +190,7 @@ public:
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
       ret->set_paddr(offset);
-      ret->state = CachedExtent::extent_state_t::CLEAN;
+      ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
       add_extent(ret);
       return read_extent<T>(
 	std::move(ret), std::forward<Func>(extent_init_func));
@@ -218,7 +201,7 @@ public:
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
       ret->set_paddr(offset);
-      ret->state = CachedExtent::extent_state_t::CLEAN;
+      ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
       extents.replace(*ret, *cached);
 
       // replace placeholder in transactions
@@ -751,7 +734,7 @@ private:
     effort_t fresh_ool_written;
     counter_by_extent_t<uint64_t> num_trans_invalidated;
     uint64_t num_ool_records = 0;
-    uint64_t ool_record_overhead_bytes = 0;
+    uint64_t ool_record_bytes = 0;
   };
 
   struct commit_trans_efforts_t {
@@ -759,13 +742,15 @@ private:
     counter_by_extent_t<effort_t> mutate_by_ext;
     counter_by_extent_t<uint64_t> delta_bytes_by_ext;
     counter_by_extent_t<effort_t> retire_by_ext;
-    counter_by_extent_t<effort_t> fresh_invalid_by_ext;
+    counter_by_extent_t<effort_t> fresh_invalid_by_ext; // inline but is already invalid (retired)
     counter_by_extent_t<effort_t> fresh_inline_by_ext;
     counter_by_extent_t<effort_t> fresh_ool_by_ext;
     uint64_t num_trans = 0; // the number of inline records
     uint64_t num_ool_records = 0;
-    uint64_t ool_record_overhead_bytes = 0;
-    uint64_t inline_record_overhead_bytes = 0;
+    uint64_t ool_record_padding_bytes = 0;
+    uint64_t ool_record_metadata_bytes = 0;
+    uint64_t ool_record_data_bytes = 0;
+    uint64_t inline_record_metadata_bytes = 0; // metadata exclude the delta bytes
   };
 
   struct success_read_trans_efforts_t {
@@ -786,16 +771,6 @@ private:
   template <typename CounterT>
   using counter_by_src_t = std::array<CounterT, Transaction::SRC_MAX>;
 
-  struct fill_stat_t {
-    uint64_t filled_bytes = 0;
-    uint64_t total_bytes = 0;
-  };
-
-  struct record_header_fullness_t {
-    fill_stat_t inline_stats;
-    fill_stat_t ool_stats;
-  };
-
   static constexpr std::size_t NUM_SRC_COMB =
       Transaction::SRC_MAX * (Transaction::SRC_MAX + 1) / 2;
 
@@ -804,7 +779,6 @@ private:
     counter_by_src_t<commit_trans_efforts_t> committed_efforts_by_src;
     counter_by_src_t<invalid_trans_efforts_t> invalidated_efforts_by_src;
     counter_by_src_t<query_counters_t> cache_query_by_src;
-    counter_by_src_t<record_header_fullness_t> record_header_fullness_by_src;
     success_read_trans_efforts_t success_read_efforts;
     uint64_t dirty_bytes = 0;
 
@@ -911,6 +885,7 @@ private:
     TCachedExtentRef<T>&& extent,
     Func &&func
   ) {
+    assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING);
     extent->set_io_wait();
     return reader.read(
       extent->get_paddr(),
@@ -918,6 +893,7 @@ private:
       extent->get_bptr()
     ).safe_then(
       [extent=std::move(extent), func=std::forward<Func>(func)]() mutable {
+        extent->state = CachedExtent::extent_state_t::CLEAN;
         /* TODO: crc should be checked against LBA manager */
         extent->last_committed_crc = extent->get_crc32c();
 
