@@ -1103,6 +1103,11 @@ namespace rgw::sal {
     return 0;
   }
 
+  std::string DBStore::get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y)
+  {
+    return "PLACEHOLDER"; // for instance unique identifier
+  }
+
   std::unique_ptr<Object> DBStore::get_object(const rgw_obj_key& k)
   {
     return std::make_unique<DBObject>(this, k);

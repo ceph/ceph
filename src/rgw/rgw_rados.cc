@@ -2420,6 +2420,11 @@ bool RGWRados::obj_to_raw(const rgw_placement_rule& placement_rule, const rgw_ob
   return get_obj_data_pool(placement_rule, obj, &raw_obj->pool);
 }
 
+std::string RGWRados::get_cluster_fsid(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  return svc.rados->cluster_fsid();
+}
+
 int RGWRados::get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx)
 {
   string oid, key;

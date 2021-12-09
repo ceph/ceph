@@ -23,6 +23,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
 #include "rgw_rest_admin.h"
+#include "rgw_rest_info.h"
 #include "rgw_rest_usage.h"
 #include "rgw_rest_user.h"
 #include "rgw_rest_bucket.h"
@@ -499,6 +500,7 @@ int radosgw_Main(int argc, const char **argv)
 
   if (apis_map.count("admin") > 0) {
     RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
+    admin_resource->register_resource("info", new RGWRESTMgr_Info);
     admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
     admin_resource->register_resource("user", new RGWRESTMgr_User);
     /* XXX dang part of this is RADOS specific */

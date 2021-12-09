@@ -244,6 +244,10 @@ class Store {
     Store() {}
     virtual ~Store() = default;
 
+    /** Name of this store provider (e.g., RADOS") */
+    virtual const char* get_name() const = 0;
+    /** Get cluster unique identifier */
+    virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y) = 0;
     /** Get a User from a rgw_user.  Does not query store for user info, so quick */
     virtual std::unique_ptr<User> get_user(const rgw_user& u) = 0;
     /** Lookup a User by access key.  Queries store for user info. */

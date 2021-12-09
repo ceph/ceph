@@ -977,6 +977,11 @@ std::unique_ptr<User> RadosStore::get_user(const rgw_user &u)
   return std::make_unique<RadosUser>(this, u);
 }
 
+std::string RadosStore::get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y)
+{
+  return getRados()->get_cluster_fsid(dpp, y);
+}
+
 int RadosStore::get_user_by_access_key(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user)
 {
   RGWUserInfo uinfo;

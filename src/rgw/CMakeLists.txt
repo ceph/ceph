@@ -270,6 +270,7 @@ set(rgw_a_srcs
   rgw_rest_realm.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
+  rgw_rest_info.cc
   rgw_rest_user.cc
   rgw_swift_auth.cc
   rgw_usage.cc
