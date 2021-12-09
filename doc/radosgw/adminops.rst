@@ -10,6 +10,54 @@ mechanism. Some operations require that the user holds special administrative ca
 The response entity type (XML or JSON) may be specified as the 'format' option in the
 request and defaults to JSON if not specified.
 
+Info
+====
+
+Get RGW cluster/endpoint information.
+
+:caps: info=read
+
+
+Syntax
+~~~~~~
+
+::
+
+	GET /{admin}/info?format=json HTTP/1.1
+	Host: {fqdn}
+
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+None.
+
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
+If successful, the response contains an ``info`` section.
+
+``info``
+
+:Description: A container for all returned information.
+:Type: Container
+
+``cluster_id``
+
+:Description: The (typically unique) identifier for the controlling
+	      backing store for the RGW cluster.  In the typical case,
+	      this is value returned from librados::rados::cluster_fsid().
+:Type: String
+:Parent: ``info``
+
+
+Special Error Responses
+~~~~~~~~~~~~~~~~~~~~~~~
+
+None.
+
+
 Get Usage
 =========
 

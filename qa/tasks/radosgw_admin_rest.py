@@ -31,7 +31,7 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
     put_cmds = ['create', 'link', 'add']
     post_cmds = ['unlink', 'modify']
     delete_cmds = ['trim', 'rm', 'process']
-    get_cmds = ['check', 'info', 'show', 'list']
+    get_cmds = ['check', 'info', 'show', 'list', '']
 
     bucket_sub_resources = ['object', 'policy', 'index']
     user_sub_resources = ['subuser', 'key', 'caps']
@@ -67,6 +67,8 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
                 return 'user', cmd[0]
         elif cmd[0] == 'usage':
             return 'usage', ''
+        elif cmd[0] == 'info':
+            return 'info', ''
         elif cmd[0] == 'zone' or cmd[0] in zone_sub_resources:
             if cmd[0] == 'zone':
                 return 'zone', ''
@@ -137,7 +139,7 @@ def task(ctx, config):
     admin_display_name = 'Ms. Admin User'
     admin_access_key = 'MH1WC2XQ1S8UISFDZC8W'
     admin_secret_key = 'dQyrTPA0s248YeN5bBv4ukvKU0kh54LWWywkrpoG'
-    admin_caps = 'users=read, write; usage=read, write; buckets=read, write; zone=read, write'
+    admin_caps = 'users=read, write; usage=read, write; buckets=read, write; zone=read, write; info=read'
 
     user1 = 'foo'
     user2 = 'fud'
@@ -719,3 +721,15 @@ def task(ctx, config):
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
     assert ret == 404
 
+    # TESTCASE 'info' 'display info' 'succeeds'
+    (ret, out) = rgwadmin_rest(admin_conn, ['info', ''])
+    assert ret == 200
+    info = out['info']
+    backends = info['storage_backends']
+    name = backends[0]['name']
+    fsid = backends[0]['cluster_id']
+    # name is always "rados" at time of writing, but zipper would allow
+    # other backends, at some point
+    assert len(name) > 0
+    # fsid is a uuid, but I'm not going to try to parse it
+    assert len(fsid) > 0

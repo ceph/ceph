@@ -506,11 +506,17 @@ protected:
       }
 
       int initialize(CephContext *cct, const DoutPrefixProvider *dpp);
+
+      virtual const char* get_name() const override {
+        return "dbstore";
+      }
+
       virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
       virtual int get_user_by_access_key(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user) override;
       virtual int get_user_by_email(const DoutPrefixProvider *dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user) override;
       virtual int get_user_by_swift(const DoutPrefixProvider *dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user) override;
       virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
+      virtual std::string get_cluster_id(const DoutPrefixProvider* dpp, optional_yield y);
       virtual int get_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y) override;
       virtual int get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket) override;
       virtual int get_bucket(const DoutPrefixProvider *dpp, User* u, const std::string& tenant, const std::string&name, std::unique_ptr<Bucket>* bucket, optional_yield y) override;
