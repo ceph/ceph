@@ -814,9 +814,9 @@ void Cache::mark_transaction_conflicted(
   } else {
     // read transaction won't have non-read efforts
     assert(t.retired_set.empty());
-    assert(t.get_fresh_block_stats().num == 0);
+    assert(t.get_fresh_block_stats().is_clear());
     assert(t.mutated_block_list.empty());
-    assert(t.get_ool_write_stats().num_records == 0);
+    assert(t.get_ool_write_stats().is_clear());
     assert(t.onode_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
   }
@@ -917,27 +917,8 @@ record_t Cache::prepare_record(Transaction &t)
   assert(!t.is_weak());
   assert(t.get_src() != Transaction::src_t::READ);
 
-  if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
-      t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
-    // CLEANER transaction won't contain any onode tree operations
-    assert(t.onode_tree_stats.is_clear());
-  } else {
-    if (t.onode_tree_stats.depth) {
-      stats.onode_tree_depth = t.onode_tree_stats.depth;
-    }
-    get_by_src(stats.committed_onode_tree_efforts, t.get_src()
-        ).increment(t.onode_tree_stats);
-  }
-
-  if (t.lba_tree_stats.depth) {
-    stats.lba_tree_depth = t.lba_tree_stats.depth;
-  }
-  get_by_src(stats.committed_lba_tree_efforts, t.get_src()
-      ).increment(t.lba_tree_stats);
-
   auto& efforts = get_by_src(stats.committed_efforts_by_src,
                              t.get_src());
-  ++(efforts.num_trans);
 
   // Should be valid due to interruptible future
   for (auto &i: t.read_set) {
@@ -1079,26 +1060,51 @@ record_t Cache::prepare_record(Transaction &t)
 
   auto& ool_stats = t.get_ool_write_stats();
   ceph_assert(ool_stats.extents.num == t.ool_block_list.size());
-  efforts.num_ool_records += ool_stats.num_records;
-  efforts.ool_record_overhead_bytes += ool_stats.header_bytes;
-
-  auto& record_header_fullness = get_by_src(
-      stats.record_header_fullness_by_src, t.get_src());
-  record_header_fullness.ool_stats.filled_bytes += ool_stats.header_raw_bytes;
-  record_header_fullness.ool_stats.total_bytes += ool_stats.header_bytes;
-
-  // TODO: move to Journal to get accurate result
-  auto record_size = record_group_size_t(
-      record.size, reader.get_block_size());
-  auto inline_overhead =
-      record_size.get_encoded_length() - record.get_raw_data_size();
-  efforts.inline_record_overhead_bytes += inline_overhead;
-  record_header_fullness.inline_stats.filled_bytes += record_size.get_raw_mdlength();
-  record_header_fullness.inline_stats.total_bytes += record_size.get_mdlength();
 
   // FIXME: prevent submitting empty records
   if (record.is_empty()) {
     ERRORT("record is empty!", t);
+    assert(t.onode_tree_stats.is_clear());
+    assert(t.lba_tree_stats.is_clear());
+    assert(ool_stats.is_clear());
+    ++(efforts.num_trans);
+  } else {
+    if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
+        t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
+      // CLEANER transaction won't contain any onode tree operations
+      assert(t.onode_tree_stats.is_clear());
+    } else {
+      if (t.onode_tree_stats.depth) {
+        stats.onode_tree_depth = t.onode_tree_stats.depth;
+      }
+      get_by_src(stats.committed_onode_tree_efforts, t.get_src()
+          ).increment(t.onode_tree_stats);
+    }
+
+    if (t.lba_tree_stats.depth) {
+      stats.lba_tree_depth = t.lba_tree_stats.depth;
+    }
+    get_by_src(stats.committed_lba_tree_efforts, t.get_src()
+        ).increment(t.lba_tree_stats);
+
+    ++(efforts.num_trans);
+
+    efforts.num_ool_records += ool_stats.num_records;
+    efforts.ool_record_overhead_bytes += ool_stats.header_bytes;
+
+    auto& record_header_fullness = get_by_src(
+        stats.record_header_fullness_by_src, t.get_src());
+    record_header_fullness.ool_stats.filled_bytes += ool_stats.header_raw_bytes;
+    record_header_fullness.ool_stats.total_bytes += ool_stats.header_bytes;
+
+    // TODO: move to Journal to get accurate result
+    auto record_size = record_group_size_t(
+        record.size, reader.get_block_size());
+    auto inline_overhead =
+        record_size.get_encoded_length() - record.get_raw_data_size();
+    efforts.inline_record_overhead_bytes += inline_overhead;
+    record_header_fullness.inline_stats.filled_bytes += record_size.get_raw_mdlength();
+    record_header_fullness.inline_stats.total_bytes += record_size.get_mdlength();
   }
 
   return record;
