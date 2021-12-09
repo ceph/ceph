@@ -190,6 +190,10 @@ public:
   struct io_stat_t {
     uint64_t num = 0;
     uint64_t bytes = 0;
+
+    bool is_clear() const {
+      return (num == 0 && bytes == 0);
+    }
   };
   const io_stat_t& get_fresh_block_stats() const {
     return fresh_block_stats;
@@ -317,6 +321,13 @@ public:
     uint64_t header_raw_bytes = 0;
     uint64_t header_bytes = 0;
     uint64_t num_records = 0;
+
+    bool is_clear() const {
+      return (extents.is_clear() &&
+              header_raw_bytes == 0 &&
+              header_bytes == 0 &&
+              num_records == 0);
+    }
   };
   ool_write_stats_t& get_ool_write_stats() {
     return ool_write_stats;

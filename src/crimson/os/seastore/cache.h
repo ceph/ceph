@@ -742,7 +742,7 @@ private:
     counter_by_extent_t<effort_t> mutate_by_ext;
     counter_by_extent_t<uint64_t> delta_bytes_by_ext;
     counter_by_extent_t<effort_t> retire_by_ext;
-    counter_by_extent_t<effort_t> fresh_invalid_by_ext;
+    counter_by_extent_t<effort_t> fresh_invalid_by_ext; // inline but is already invalid (retired)
     counter_by_extent_t<effort_t> fresh_inline_by_ext;
     counter_by_extent_t<effort_t> fresh_ool_by_ext;
     uint64_t num_trans = 0; // the number of inline records
