@@ -168,6 +168,14 @@ void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
     block_size_by_segment_manager[id.device_id()]);
 }
 
+void SpaceTrackerSimple::dump_usage(segment_id_t id) const
+{
+  logger().info(
+    "SpaceTrackerSimple::dump_usage id: {}, live_bytes: {}",
+    id,
+    live_bytes_by_segment[id].live_bytes);
+}
+
 SegmentCleaner::SegmentCleaner(
   config_t config,
   ExtentReaderRef&& scr,

@@ -220,7 +220,11 @@ public:
     SegmentManager& sm);
 
   Writer &get_writer(placement_hint_t hint) {
-    return writers[std::rand() % writers.size()];
+    if (hint == placement_hint_t::REWRITE) {
+      return rewriter;
+    } else {
+      return writers[std::rand() % writers.size()];
+    }
   }
 
   alloc_paddr_iertr::future<> alloc_ool_extents_paddr(
@@ -249,6 +253,7 @@ public:
     });
   }
 private:
+  Writer rewriter;
   std::vector<Writer> writers;
 };
 
