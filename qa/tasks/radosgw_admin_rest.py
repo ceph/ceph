@@ -16,7 +16,6 @@ import boto.s3.acl
 
 import requests
 import time
-import json
 
 from boto.connection import AWSAuthConnection
 from teuthology import misc as teuthology
