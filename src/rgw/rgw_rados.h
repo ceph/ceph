@@ -482,6 +482,10 @@ public:
     return lc;
   }
 
+  RGWGC *get_gc() {
+    return gc;
+  }
+
   RGWRados& set_run_gc_thread(bool _use_gc_thread) {
     use_gc_thread = _use_gc_thread;
     return *this;

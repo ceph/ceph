@@ -1986,15 +1986,20 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
     }
   } while (truncated);
 
-  /* use upload id as tag and do it synchronously */
-  ret = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
-  if (ret < 0) {
-    ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
-    if (ret == -ENOENT) {
-      return -ERR_NO_SUCH_UPLOAD;
-    }
-    //Delete objects inline if send chain to gc fails
+  if (store->getRados()->get_gc() == nullptr) {
+    //Delete objects inline if gc hasn't been initialised (in case when bypass gc is specified)
     store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
+  } else {
+    /* use upload id as tag and do it synchronously */
+    ret = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
+    if (ret < 0) {
+      ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
+      if (ret == -ENOENT) {
+        return -ERR_NO_SUCH_UPLOAD;
+      }
+      //Delete objects inline if send chain to gc fails
+      store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
+    }
   }
 
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op(obj_ctx);
