@@ -966,7 +966,7 @@ int RGWGetObj::verify_permission()
 {
   obj = rgw_obj(s->bucket, s->object);
   store->getRados()->set_atomic(s->obj_ctx, obj);
-  if (get_data) {
+  if (prefetch_data()) {
     store->getRados()->set_prefetch_data(s->obj_ctx, obj);
   }
 
