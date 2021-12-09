@@ -13517,7 +13517,7 @@ void BlueStore::_do_write_small(
 				    end_offs - offset + head_pad + tail_pad);
 	}
 	if (head_pad &&
-	    o->extent_map.has_any_lextents(offset - head_pad, chunk_size)) {
+	    o->extent_map.has_any_lextents(offset - head_pad, head_pad)) {
 	  head_pad = 0;
 	}
 	if (tail_pad && o->extent_map.has_any_lextents(end_offs, tail_pad)) {
