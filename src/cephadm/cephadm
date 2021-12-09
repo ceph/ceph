@@ -3589,8 +3589,8 @@ class CephadmAgent():
         self.ack = 1
         self.event = Event()
         self.mgr_listener = MgrListener(self)
-        self.ls_gatherer = AgentGatherer(self, self._get_ls, 'Ls')
-        self.volume_gatherer = AgentGatherer(self, self._ceph_volume, 'Volume')
+        self.ls_gatherer = AgentGatherer(self, lambda: self._get_ls(), 'Ls')
+        self.volume_gatherer = AgentGatherer(self, lambda: self._ceph_volume(enhanced=False), 'Volume')
         self.device_enhanced_scan = False
         self.recent_iteration_run_times: List[float] = [0.0, 0.0, 0.0]
         self.recent_iteration_index: int = 0
@@ -3692,6 +3692,7 @@ WantedBy=ceph-{fsid}.target
         self.device_enhanced_scan = False
         if use_lsm.lower() == 'true':
             self.device_enhanced_scan = True
+        self.volume_gatherer.update_func(lambda: self._ceph_volume(enhanced=self.device_enhanced_scan))
 
     def run(self) -> None:
         self.pull_conf_settings()
@@ -3955,6 +3956,9 @@ class AgentGatherer(Thread):
 
     def wakeup(self) -> None:
         self.event.set()
+
+    def update_func(self, func: Callable) -> None:
+        self.func = func
 
 
 def command_agent(ctx: CephadmContext) -> None:
