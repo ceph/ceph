@@ -35,6 +35,7 @@
 
 #include "include/page.h"
 #include "common/perf_counters.h"
+#include "common/admin_socket.h"
 #include "msg/async/Event.h"
 #include "const.h"
 #include "circular_buffer.h"
@@ -478,6 +479,10 @@ class DPDKQueuePair {
       _ring.push_back(buf);
     }
 
+    unsigned ring_size() const {
+      return _ring.size();
+    }
+
     bool gc() {
       for (int cnt = 0; cnt < gc_count; ++cnt) {
         auto tx_buf_p = get_one_completed();
@@ -758,6 +763,7 @@ class DPDKDevice {
   struct rte_flow *_flow = nullptr;
   bool _is_i40e_device = false;
   bool _is_vmxnet3_device = false;
+  std::unique_ptr<AdminSocketHook> dfx_hook;
 
  public:
   rte_eth_dev_info _dev_info = {};
@@ -769,6 +775,8 @@ class DPDKDevice {
    */
   int init_port_fini();
 
+  void nic_stats_dump(Formatter *f);
+  void nic_xstats_dump(Formatter *f);
  private:
   /**
    * Port initialization consists of 3 main stages:
@@ -829,6 +837,8 @@ class DPDKDevice {
   }
 
   ~DPDKDevice() {
+    cct->get_admin_socket()->unregister_commands(dfx_hook.get());
+    dfx_hook.reset();
     if (_flow)
        rte_flow_destroy(_port_idx, _flow, nullptr);
     rte_eth_dev_stop(_port_idx);

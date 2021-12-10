@@ -392,6 +392,23 @@ not_supported:
   ldout(cct, 1) << __func__ << " port " << int(_port_idx) << ": changing HW FC settings is not supported" << dendl;
 }
 
+class XstatSocketHook : public AdminSocketHook {
+  DPDKDevice *dev;
+ public:
+  explicit XstatSocketHook(DPDKDevice *dev) : dev(dev) {}
+  int call(std::string_view prefix, const cmdmap_t& cmdmap,
+           Formatter *f,
+           std::ostream& ss,
+           bufferlist& out) override {
+    if (prefix == "show_pmd_stats") {
+      dev->nic_stats_dump(f);
+    } else if (prefix == "show_pmd_xstats") {
+      dev->nic_xstats_dump(f);
+    }
+    return 0;
+  }
+};
+
 int DPDKDevice::init_port_fini()
 {
   // Changing FC requires HW reset, so set it before the port is initialized.
@@ -412,6 +429,14 @@ int DPDKDevice::init_port_fini()
   }
 
   ldout(cct, 5) << __func__ << " created DPDK device" << dendl;
+  AdminSocket *admin_socket = cct->get_admin_socket();
+  dfx_hook = std::make_unique<XstatSocketHook>(this);
+  int r = admin_socket->register_command("show_pmd_stats", dfx_hook.get(),
+                                         "show pmd stats statistics");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("show_pmd_xstats", dfx_hook.get(),
+                                   "show pmd xstats statistics");
+  ceph_assert(r == 0);
   return 0;
 }
 
@@ -642,6 +667,92 @@ DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, 
 
   if (!_qid)
     device_stat_time_fd = center->create_time_event(1000*1000, new C_handle_dev_stats(this));
+}
+
+void DPDKDevice::nic_stats_dump(Formatter *f)
+{
+  static uint64_t prev_pkts_rx[RTE_MAX_ETHPORTS];
+  static uint64_t prev_pkts_tx[RTE_MAX_ETHPORTS];
+  static uint64_t prev_cycles[RTE_MAX_ETHPORTS];
+  size_t tx_fragments = 0;
+  size_t rx_fragments = 0;
+  size_t tx_free_cnt = 0;
+  size_t rx_free_cnt = 0;
+
+  for (auto &qp: _queues) {
+    tx_fragments += qp->perf_logger->get(l_dpdk_qp_tx_fragments);
+    rx_fragments += qp->perf_logger->get(l_dpdk_qp_rx_fragments);
+    tx_free_cnt += qp->_tx_buf_factory.ring_size();
+    rx_free_cnt += rte_mempool_avail_count(qp->_pktmbuf_pool_rx);
+  }
+  struct rte_eth_stats stats;
+  rte_eth_stats_get(_port_idx, &stats);
+  f->open_object_section("RX");
+  f->dump_unsigned("in_packets", stats.ipackets);
+  f->dump_unsigned("recv_packets", rx_fragments);
+  f->dump_unsigned("in_bytes", stats.ibytes);
+  f->dump_unsigned("missed", stats.imissed);
+  f->dump_unsigned("errors", stats.ierrors);
+  f->close_section();
+
+  f->open_object_section("TX");
+  f->dump_unsigned("out_packets", stats.opackets);
+  f->dump_unsigned("send_packets", tx_fragments);
+  f->dump_unsigned("out_bytes", stats.obytes);
+  f->dump_unsigned("errors", stats.oerrors);
+  f->close_section();
+
+  f->open_object_section("stats");
+  f->dump_unsigned("RX_nombuf", stats.rx_nombuf);
+  f->dump_unsigned("RX_avail_mbufs", rx_free_cnt);
+  f->dump_unsigned("TX_avail_mbufs", tx_free_cnt);
+
+  uint64_t diff_cycles = prev_cycles[_port_idx];
+  prev_cycles[_port_idx] = rte_rdtsc();
+  if (diff_cycles > 0) {
+    diff_cycles = prev_cycles[_port_idx] - diff_cycles;
+  }
+
+  uint64_t diff_pkts_rx = (stats.ipackets > prev_pkts_rx[_port_idx]) ?
+	         (stats.ipackets - prev_pkts_rx[_port_idx]) : 0;
+  uint64_t diff_pkts_tx = (stats.opackets > prev_pkts_tx[_port_idx]) ?
+	         (stats.opackets - prev_pkts_tx[_port_idx]) : 0;
+  prev_pkts_rx[_port_idx] = stats.ipackets;
+  prev_pkts_tx[_port_idx] = stats.opackets;
+  uint64_t mpps_rx = diff_cycles > 0 ? diff_pkts_rx * rte_get_tsc_hz() / diff_cycles : 0;
+  uint64_t mpps_tx = diff_cycles > 0 ? diff_pkts_tx * rte_get_tsc_hz() / diff_cycles : 0;
+  f->dump_unsigned("Rx_pps", mpps_rx);
+  f->dump_unsigned("Tx_pps", mpps_tx);
+  f->close_section();
+}
+
+void DPDKDevice::nic_xstats_dump(Formatter *f)
+{
+  // Get count
+  int cnt_xstats = rte_eth_xstats_get_names(_port_idx, NULL, 0);
+  if (cnt_xstats < 0) {
+    ldout(cct, 1) << "Error: Cannot get count of xstats" << dendl;
+    return;
+  }
+ 
+  // Get id-name lookup table
+  std::vector<struct rte_eth_xstat_name> xstats_names(cnt_xstats);
+  if (cnt_xstats != rte_eth_xstats_get_names(_port_idx, xstats_names.data(), cnt_xstats)) {
+    ldout(cct, 1) << "Error: Cannot get xstats lookup" << dendl;
+    return;
+  }
+
+  // Get stats themselves
+  std::vector<struct rte_eth_xstat> xstats(cnt_xstats);
+  if (cnt_xstats != rte_eth_xstats_get(_port_idx, xstats.data(), cnt_xstats)) {
+    ldout(cct, 1) << "Error: Unable to get xstats" << dendl;
+    return;
+  }
+  f->open_object_section("xstats");
+  for (int i = 0; i < cnt_xstats; i++){
+    f->dump_unsigned(xstats_names[i].name, xstats[i].value);
+  }
+  f->close_section();
 }
 
 void DPDKQueuePair::handle_stats()
