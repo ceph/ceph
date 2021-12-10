@@ -297,16 +297,6 @@ if(LINUX)
   endif()
 endif()
 
-option(WITH_LEVELDB "LevelDB is here" ON)
-if(WITH_LEVELDB)
-  if(LEVELDB_PREFIX)
-    include_directories(SYSTEM ${LEVELDB_PREFIX}/include)
-    link_directories(${LEVELDB_PREFIX}/lib)
-  endif()
-  find_package(leveldb REQUIRED)
-  find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
-endif(WITH_LEVELDB)
-
 find_package(snappy REQUIRED)
 
 option(WITH_BROTLI "Brotli compression support" OFF)
