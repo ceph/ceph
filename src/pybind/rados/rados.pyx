@@ -3311,6 +3311,26 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "aio_notify error: %s" % obj)
         return completion
 
+    def aio_flush_async(self, oncomplete: Optional[Callable] = None) -> Completion:
+        """
+        This is a non-blocking version of rados_aio_flush()
+
+        :param oncomplete: what to do when the writes are safe
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+        cdef:
+            Completion completion
+        completion = self.__get_completion(oncomplete, None)
+        self.__track_completion(completion)
+        with nogil:
+            ret = rados_aio_flush_async(self.io, completion.rados_comp)
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "error flushing")
+        return completion
+
     def watch(self, obj: str,
               callback: Callable[[int, str, int, bytes], None],
               error_callback: Optional[Callable[[int], None]] = None,
