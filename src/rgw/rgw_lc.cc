@@ -2002,23 +2002,21 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   std::unique_lock<rgw::sal::LCSerializer> lock(
     *(serializer.get()), std::adopt_lock);
 
-  if (! (cct->_conf->rgw_lc_lock_max_time == 9969)) {
-    ret = sal_lc->get_entry(obj_names[index], bucket_entry_marker, entry);
-    if (ret >= 0) {
-      if (entry.status == lc_processing) {
-	if (expired_session(entry.start_time)) {
-	  ldpp_dout(this, 5) << "RGWLC::process_bucket(): STALE lc session found for: " << entry
-			     << " index: " << index << " worker ix: " << worker->ix
-			     << " (clearing)"
-			     << dendl;
-	} else {
-	  ldpp_dout(this, 5) << "RGWLC::process_bucket(): ACTIVE entry: "
-			     << entry
-			     << " index: " << index
-			     << " worker ix: " << worker->ix
-			     << dendl;
-	  return ret;
-	}
+  ret = sal_lc->get_entry(obj_names[index], bucket_entry_marker, entry);
+  if (ret >= 0) {
+    if (entry.status == lc_processing) {
+      if (expired_session(entry.start_time)) {
+	ldpp_dout(this, 5) << "RGWLC::process_bucket(): STALE lc session found for: " << entry
+			   << " index: " << index << " worker ix: " << worker->ix
+			   << " (clearing)"
+			   << dendl;
+      } else {
+	ldpp_dout(this, 5) << "RGWLC::process_bucket(): ACTIVE entry: "
+			   << entry
+			   << " index: " << index
+			   << " worker ix: " << worker->ix
+			   << dendl;
+	return ret;
       }
     }
   }
@@ -2090,21 +2088,19 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       goto exit;
     }
 
-    if (! (cct->_conf->rgw_lc_lock_max_time == 9969)) {
-      ret = sal_lc->get_entry(obj_names[index], head.marker, entry);
-      if (ret >= 0) {
-	if (entry.status == lc_processing) {
-	  if (expired_session(entry.start_time)) {
-	    ldpp_dout(this, 5) << "RGWLC::process(): STALE lc session found for: " << entry
-		    << " index: " << index << " worker ix: " << worker->ix
-		    << " (clearing)"
-		    << dendl;
-	  } else {
-	    ldpp_dout(this, 5) << "RGWLC::process(): ACTIVE entry: " << entry
-		    << " index: " << index << " worker ix: " << worker->ix
-		  << dendl;
-	    goto exit;
-	  }
+    ret = sal_lc->get_entry(obj_names[index], head.marker, entry);
+    if (ret >= 0) {
+      if (entry.status == lc_processing) {
+	if (expired_session(entry.start_time)) {
+	  ldpp_dout(this, 5) << "RGWLC::process(): STALE lc session found for: " << entry
+			     << " index: " << index << " worker ix: " << worker->ix
+			     << " (clearing)"
+			     << dendl;
+	} else {
+	  ldpp_dout(this, 5) << "RGWLC::process(): ACTIVE entry: " << entry
+			     << " index: " << index << " worker ix: " << worker->ix
+			     << dendl;
+	  goto exit;
 	}
       }
     }
