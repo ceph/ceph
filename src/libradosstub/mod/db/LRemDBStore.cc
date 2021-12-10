@@ -1454,7 +1454,7 @@ int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
                                        bool *pmore) {
   auto& dbo = trans->dbo();
   string s = string("SELECT key, data from ") + table_name +
-                    " WHERE nspace = ? AND oid = ? AND key > ''";
+                    " WHERE nspace = ? AND oid = ? AND key > ?";
   string filt_val;
   if (!filter_prefix.empty()) {
     s += " AND key LIKE ?";
@@ -1471,11 +1471,13 @@ int LRemDBStore::KVTableBase::get_vals(const std::string& start_after,
 
   SQLite::Statement q = dbo->statement(s);
 
-  q.bind(1, nspace);
-  q.bind(2, oid);
+  int i = 0;
+  q.bind(++i, nspace);
+  q.bind(++i, oid);
+  q.bind(++i, start_after);
   if (!filter_prefix.empty()) {
     filt_val = filter_prefix + "%";
-    q.bind(3, filt_val);
+    q.bind(++i, filt_val);
   }
 
   try {
