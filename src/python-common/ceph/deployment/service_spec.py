@@ -280,8 +280,8 @@ class PlacementSpec(object):
                 raise SpecValidationError("num/count must be a numeric value")
             if self.count != intval:
                 raise SpecValidationError("num/count must be an integer value")
-            if self.count <= 0:
-                raise SpecValidationError("num/count must be > 1")
+            if self.count < 1:
+                raise SpecValidationError("num/count must be >= 1")
         if self.count_per_host is not None:
             try:
                 intval = int(self.count_per_host)
