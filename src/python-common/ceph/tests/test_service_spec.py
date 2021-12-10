@@ -549,6 +549,18 @@ service_id: foo
 placement:
   count: 7.36
 """, "num/count must be an integer value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count: 0
+""", "num/count must be >= 1",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count_per_host: 0
+""", "count-per-host must be >= 1",),
     ])
 def test_service_spec_validation_error(y, error_match):
     data = yaml.safe_load(y)
