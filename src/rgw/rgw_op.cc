@@ -2209,7 +2209,13 @@ void RGWGetObj::execute(optional_yield y)
   attr_iter = attrs.find(RGW_ATTR_MANIFEST);
   if (attr_iter != attrs.end() && get_type() == RGW_OP_GET_OBJ && get_data) {
     RGWObjManifest m;
-    decode(m, attr_iter->second);
+    try {
+      decode(m, attr_iter->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 0) << "ERROR: failed to decode manifest" << dendl;
+      op_ret = -EIO;
+      goto done_err;
+    }
     if (m.get_tier_type() == "cloud-s3") {
       /* XXX: Instead send presigned redirect or read-through */
       op_ret = -ERR_INVALID_OBJECT_STATE;
