@@ -286,6 +286,7 @@ class SQLUpdateObject : public SQLiteDB, public UpdateObjectOp {
     sqlite3_stmt *omap_stmt = NULL; // Prepared statement
     sqlite3_stmt *attrs_stmt = NULL; // Prepared statement
     sqlite3_stmt *meta_stmt = NULL; // Prepared statement
+    sqlite3_stmt *mp_stmt = NULL; // Prepared statement
 
   public:
     SQLUpdateObject(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
@@ -333,6 +334,24 @@ class SQLPutObjectData : public SQLiteDB, public PutObjectDataOp {
     SQLPutObjectData(sqlite3 **sdbi, string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
 
     ~SQLPutObjectData() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLUpdateObjectData : public SQLiteDB, public UpdateObjectDataOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+
+  public:
+    SQLUpdateObjectData(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLUpdateObjectData(sqlite3 **sdbi, string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
+
+    ~SQLUpdateObjectData() {
       if (stmt)
         sqlite3_finalize(stmt);
     }

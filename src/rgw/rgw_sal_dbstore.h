@@ -19,6 +19,7 @@
 #include "rgw_oidc_provider.h"
 #include "rgw_role.h"
 #include "rgw_lc.h"
+#include "rgw_multi.h"
 
 #include "store/dbstore/common/dbstore.h"
 #include "store/dbstore/dbstore_mgr.h"
@@ -304,6 +305,133 @@ protected:
     }
   };
 
+  /*
+   * For multipart upload, below is the process flow -
+   *
+   * MultipartUpload::Init - create head object of meta obj (src_obj_name + "." + upload_id)
+   *                     [ Meta object stores all the parts upload info]
+   * MultipartWriter::process - create all data/tail objects with obj_name same as
+   *                        meta obj (so that they can all be identified & deleted 
+   *                        during abort)
+   * MultipartUpload::Abort - Just delete meta obj .. that will indirectly delete all the
+   *                     uploads associated with that upload id / meta obj so far.
+   * MultipartUpload::Complete - create head object of the original object (if not exists) &
+   *                     rename all data/tail objects to orig object name and update
+   *                     metadata of the orig object.
+   */
+  class DBMultipartPart : public MultipartPart {
+  protected:
+    RGWUploadPartInfo info; /* XXX: info contains manifest also which is not needed */
+
+  public:
+    DBMultipartPart() = default;
+    virtual ~DBMultipartPart() = default;
+
+    virtual RGWUploadPartInfo& get_info() { return info; }
+    virtual void set_info(const RGWUploadPartInfo& _info) { info = _info; }
+    virtual uint32_t get_num() { return info.num; }
+    virtual uint64_t get_size() { return info.accounted_size; }
+    virtual const std::string& get_etag() { return info.etag; }
+    virtual ceph::real_time& get_mtime() { return info.modified; }
+
+  };
+
+  class DBMPObj {
+    std::string oid; // object name
+    std::string upload_id;
+    std::string meta; // multipart meta object = <oid>.<upload_id>
+  public:
+    DBMPObj() {}
+    DBMPObj(const std::string& _oid, const std::string& _upload_id) {
+      init(_oid, _upload_id, _upload_id);
+    }
+    DBMPObj(const std::string& _oid, std::optional<std::string> _upload_id) {
+      if (_upload_id) {
+        init(_oid, *_upload_id, *_upload_id);
+      } else {
+        from_meta(_oid);
+      }
+    }
+    void init(const std::string& _oid, const std::string& _upload_id) {
+      init(_oid, _upload_id, _upload_id);
+    }
+    void init(const std::string& _oid, const std::string& _upload_id, const std::string& part_unique_str) {
+      if (_oid.empty()) {
+        clear();
+        return;
+      }
+      oid = _oid;
+      upload_id = _upload_id;
+      meta = oid + "." + upload_id;
+    }
+    const std::string& get_upload_id() const {
+      return upload_id;
+    }
+    const std::string& get_key() const {
+      return oid;
+    }
+    const std::string& get_meta() const { return meta; }
+    bool from_meta(const std::string& meta) {
+      int end_pos = meta.length();
+      int mid_pos = meta.rfind('.', end_pos - 1); // <key>.<upload_id>
+      if (mid_pos < 0)
+        return false;
+      oid = meta.substr(0, mid_pos);
+      upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
+      init(oid, upload_id, upload_id);
+      return true;
+    }
+    void clear() {
+      oid = "";
+      meta = "";
+      upload_id = "";
+    }
+  };
+
+  class DBMultipartUpload : public MultipartUpload {
+    DBStore* store;
+    DBMPObj mp_obj;
+    ACLOwner owner;
+    ceph::real_time mtime;
+    rgw_placement_rule placement;
+
+  public:
+    DBMultipartUpload(DBStore* _store, Bucket* _bucket, const std::string& oid, std::optional<std::string> upload_id, ACLOwner _owner, ceph::real_time _mtime) : MultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), owner(_owner), mtime(_mtime) {}
+    virtual ~DBMultipartUpload() = default;
+
+    virtual const std::string& get_meta() const { return mp_obj.get_meta(); }
+    virtual const std::string& get_key() const { return mp_obj.get_key(); }
+    virtual const std::string& get_upload_id() const { return mp_obj.get_upload_id(); }
+    virtual const ACLOwner& get_owner() const override { return owner; }
+    virtual ceph::real_time& get_mtime() { return mtime; }
+    virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
+    virtual int init(const DoutPrefixProvider* dpp, optional_yield y, RGWObjectCtx* obj_ctx, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;
+    virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			 int num_parts, int marker,
+			 int* next_marker, bool* truncated,
+			 bool assume_unsorted = false) override;
+    virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct,
+		    RGWObjectCtx* obj_ctx) override;
+    virtual int complete(const DoutPrefixProvider* dpp,
+		       optional_yield y, CephContext* cct,
+		       std::map<int, std::string>& part_etags,
+		       std::list<rgw_obj_index_key>& remove_objs,
+		       uint64_t& accounted_size, bool& compressed,
+		       RGWCompressionInfo& cs_info, off_t& ofs,
+		       std::string& tag, ACLOwner& owner,
+		       uint64_t olh_epoch,
+		       rgw::sal::Object* target_obj,
+		       RGWObjectCtx* obj_ctx) override;
+    virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, RGWObjectCtx* obj_ctx, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) override;
+    virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
+			  optional_yield y,
+			  std::unique_ptr<rgw::sal::Object> _head_obj,
+			  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+			  const rgw_placement_rule *ptail_placement_rule,
+			  uint64_t part_num,
+			  const std::string& part_num_str) override;
+  };
+
   class DBObject : public Object {
     private:
       DBStore* store;
@@ -432,6 +560,15 @@ protected:
       int read_attrs(const DoutPrefixProvider* dpp, DB::Object::Read &read_op, optional_yield y, rgw_obj* target_obj = nullptr);
   };
 
+  class MPDBSerializer : public MPSerializer {
+
+  public:
+    MPDBSerializer(const DoutPrefixProvider *dpp, DBStore* store, DBObject* obj, const std::string& lock_name) {}
+
+    virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override {return 0; }
+    virtual int unlock() override { return 0;}
+  };
+
   class DBAtomicWriter : public Writer {
     protected:
     rgw::sal::DBStore* store;
@@ -475,6 +612,54 @@ protected:
                          const std::string *user_data,
                          rgw_zone_set *zones_trace, bool *canceled,
                          optional_yield y) override;
+  };
+
+  class DBMultipartWriter : public Writer {
+  protected:
+    rgw::sal::DBStore* store;
+    const rgw_user& owner;
+	const rgw_placement_rule *ptail_placement_rule;
+	uint64_t olh_epoch;
+    std::unique_ptr<rgw::sal::Object> head_obj;
+    string upload_id;
+    string oid; /* object->name() + "." + "upload_id" + "." + part_num */
+    std::unique_ptr<rgw::sal::Object> meta_obj;
+    DB::Object op_target;
+    DB::Object::Write parent_op;
+    int part_num;
+    string part_num_str;
+    uint64_t total_data_size = 0; /* for total data being uploaded */
+    bufferlist head_data;
+    bufferlist tail_part_data;
+    uint64_t tail_part_offset;
+    uint64_t tail_part_size = 0; /* corresponds to each tail part being
+                                  written to dbstore */
+
+public:
+    DBMultipartWriter(const DoutPrefixProvider *dpp,
+		       optional_yield y, MultipartUpload* upload,
+		       std::unique_ptr<rgw::sal::Object> _head_obj,
+		       DBStore* _store,
+		       const rgw_user& owner, RGWObjectCtx& obj_ctx,
+		       const rgw_placement_rule *ptail_placement_rule,
+		       uint64_t part_num, const std::string& part_num_str);
+    ~DBMultipartWriter() = default;
+
+    // prepare to start processing object data
+    virtual int prepare(optional_yield y) override;
+
+    // Process a bufferlist
+    virtual int process(bufferlist&& data, uint64_t offset) override;
+
+    // complete the operation and make its result visible to clients
+    virtual int complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y) override;
   };
 
   class DBStore : public Store {
