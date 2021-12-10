@@ -232,9 +232,11 @@ int DPDKDevice::init_port_start()
     } else if (_dev_info.hash_key_size == 52) {
       _rss_key = default_rsskey_52bytes;
     } else if (_dev_info.hash_key_size != 0) {
-      rte_exit(EXIT_FAILURE,
-               "Port %d: We support only 40 or 52 bytes RSS hash keys, %d bytes key requested",
-               _port_idx, _dev_info.hash_key_size);
+      lderr(cct) << "Port " << int(_port_idx)
+	         << ": We support only 40 or 52 bytes RSS hash keys, "
+	         << int(_dev_info.hash_key_size) << " bytes key requested"
+	         << dendl;
+      return -EINVAL;
     } else {
       _rss_key = default_rsskey_40bytes;
       _dev_info.hash_key_size = 40;
@@ -1250,7 +1252,7 @@ std::unique_ptr<DPDKDevice> create_dpdk_net_device(
 {
   // Check that we have at least one DPDK-able port
   if (rte_eth_dev_count_avail() == 0) {
-    rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
+    ceph_assert(false && "No Ethernet ports - bye\n");
   } else {
     ldout(cct, 10) << __func__ << " ports number: " << int(rte_eth_dev_count_avail()) << dendl;
   }
