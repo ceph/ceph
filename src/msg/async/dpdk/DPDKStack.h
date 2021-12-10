@@ -254,6 +254,7 @@ class DPDKStack : public NetworkStack {
   virtual Worker* create_worker(CephContext *c, unsigned worker_id) override {
     return new DPDKWorker(c, worker_id);
   }
+  virtual void rename_thread(unsigned id) override {}
 
  public:
   explicit DPDKStack(CephContext *cct): NetworkStack(cct), eal(cct) {
