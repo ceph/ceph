@@ -46,12 +46,12 @@ the per-channel setting has no effect.)
     - cluster description
     - contact email address
 
-* **perf** (default: off): Aggregated performance counter metrics of a cluster, which can be used to
+* **perf** (default: off): Various performance metrics of a cluster, which can be used to
 
     - reveal overall cluster health
     - identify workload patterns
     - troubleshoot issues with latency, throttling, memory management, etc.
-    - monitor cluster performance by daemon types
+    - monitor cluster performance by daemon
 
 The data being reported does *not* contain any sensitive
 data like pool names, object names, object contents, hostnames, or device
