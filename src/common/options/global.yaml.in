@@ -1465,6 +1465,10 @@ options:
   level: advanced
   default: true
   with_legacy: true
+- name: ms_dpdk_enable_tso
+  type: bool
+  level: advanced
+  default: true
 - name: ms_dpdk_hw_flow_control
   type: bool
   level: advanced
