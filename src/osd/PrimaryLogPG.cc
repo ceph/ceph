@@ -12472,6 +12472,11 @@ void PrimaryLogPG::_force_object_missing(const pg_shard_t &from,
 
   recovery_state.force_object_missing(from, oid, version);
 
+  if (!HAVE_FEATURE(min_peer_features(), SERVER_QUINCY)) {
+    dout(20) << __func__ << " skipping notifying peers" << dendl;
+    return;
+  }
+
   for (auto &peer : get_acting_recovery_backfill()) {
     if (peer == pg_whoami) {
       continue;
