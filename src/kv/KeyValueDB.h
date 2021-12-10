@@ -17,7 +17,7 @@
 /**
  * Defines virtual interface to be implemented by key value store
  *
- * Kyoto Cabinet or LevelDB should implement this
+ * Kyoto Cabinet should implement this
  */
 class KeyValueDB {
 public:
@@ -153,7 +153,7 @@ public:
 
   virtual void close() { }
 
-  /// Try to repair K/V database. leveldb and rocksdb require that database must be not opened.
+  /// Try to repair K/V database. rocksdb requires that database must be not opened.
   virtual int repair(std::ostream &out) { return 0; }
 
   virtual Transaction get_transaction() = 0;
