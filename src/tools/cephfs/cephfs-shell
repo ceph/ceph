@@ -386,7 +386,7 @@ def dirwalk(path):
 class CephFSShell(Cmd):
 
     def __init__(self):
-        super().__init__(use_ipython=False)
+        super().__init__()
         self.working_dir = cephfs.getcwd().decode('utf-8')
         self.set_prompt()
         self.interactive = False
