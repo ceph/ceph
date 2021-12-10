@@ -475,21 +475,17 @@ LBABtree::get_internal_node_ret LBABtree::get_internal_node(
 {
   LOG_PREFIX(LBATree::get_internal_node);
   DEBUGT(
-    "reading internal at offset {}, depth {}",
+    "reading internal at offset {}, depth {}, begin {}, end {}",
     c.trans,
     offset,
-    depth);
+    depth,
+    begin,
+    end);
   assert(depth > 1);
-  auto init_internal = [c, depth](LBAInternalNode &node) {
-    auto meta = node.get_meta();
-    if (node.get_size()) {
-      ceph_assert(meta.begin <= node.begin()->get_key());
-      ceph_assert(meta.end > (node.end() - 1)->get_key());
-    }
-    ceph_assert(depth == meta.depth);
+  auto init_internal = [c, depth, begin, end](LBAInternalNode &node) {
     assert(!node.is_pending());
     assert(!node.pin.is_linked());
-    node.pin.set_range(meta);
+    node.pin.set_range(lba_node_meta_t{begin, end, depth});
     if (c.pins) {
       c.pins->add_pin(node.pin);
     }
@@ -499,7 +495,8 @@ LBABtree::get_internal_node_ret LBABtree::get_internal_node(
     offset,
     LBA_BLOCK_SIZE,
     init_internal
-  ).si_then([FNAME, c, offset, init_internal](LBAInternalNodeRef ret) {
+  ).si_then([FNAME, c, offset, init_internal, depth, begin, end](
+	      LBAInternalNodeRef ret) {
     DEBUGT(
       "read internal at offset {} {}",
       c.trans,
@@ -510,6 +507,14 @@ LBABtree::get_internal_node_ret LBABtree::get_internal_node(
       assert(ret->is_dirty());
       init_internal(*ret);
     }
+    auto meta = ret->get_meta();
+    if (ret->get_size()) {
+      ceph_assert(meta.begin <= ret->begin()->get_key());
+      ceph_assert(meta.end > (ret->end() - 1)->get_key());
+    }
+    ceph_assert(depth == meta.depth);
+    ceph_assert(begin == meta.begin);
+    ceph_assert(end == meta.end);
     return get_internal_node_ret(
       interruptible::ready_future_marker{},
       ret);
@@ -524,19 +529,15 @@ LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
 {
   LOG_PREFIX(LBATree::get_leaf_node);
   DEBUGT(
-    "reading leaf at offset {}",
+    "reading leaf at offset {}, begin {}, end {}",
     c.trans,
-    offset);
-  auto init_leaf = [c](LBALeafNode &node) {
-    auto meta = node.get_meta();
-    if (node.get_size()) {
-      ceph_assert(meta.begin <= node.begin()->get_key());
-      ceph_assert(meta.end > (node.end() - 1)->get_key());
-    }
-    ceph_assert(1 == meta.depth);
+    offset,
+    begin,
+    end);
+  auto init_leaf = [c, begin, end](LBALeafNode &node) {
     assert(!node.is_pending());
     assert(!node.pin.is_linked());
-    node.pin.set_range(meta);
+    node.pin.set_range(lba_node_meta_t{begin, end, 1});
     if (c.pins) {
       c.pins->add_pin(node.pin);
     }
@@ -546,7 +547,7 @@ LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
     offset,
     LBA_BLOCK_SIZE,
     init_leaf
-  ).si_then([FNAME, c, offset, init_leaf](LBALeafNodeRef ret) {
+  ).si_then([FNAME, c, offset, init_leaf, begin, end](LBALeafNodeRef ret) {
     DEBUGT(
       "read leaf at offset {} {}",
       c.trans,
@@ -557,6 +558,14 @@ LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
       assert(ret->is_dirty());
       init_leaf(*ret);
     }
+    auto meta = ret->get_meta();
+    if (ret->get_size()) {
+      ceph_assert(meta.begin <= ret->begin()->get_key());
+      ceph_assert(meta.end > (ret->end() - 1)->get_key());
+    }
+    ceph_assert(1 == meta.depth);
+    ceph_assert(begin == meta.begin);
+    ceph_assert(end == meta.end);
     return get_leaf_node_ret(
       interruptible::ready_future_marker{},
       ret);
