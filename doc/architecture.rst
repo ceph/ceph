@@ -493,7 +493,7 @@ Pools set at least the following parameters:
 See `Set Pool Values`_ for details.
 
 
-.. index: architecture; placement group mapping
+.. index:: architecture; placement group mapping
 
 Mapping PGs to OSDs
 ~~~~~~~~~~~~~~~~~~~

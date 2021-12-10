@@ -174,7 +174,7 @@ If you start your cluster and an OSD won't start, check the following:
   bother by raising ``nf_conntrack_max`` to a much higher value via ``sysctl``.
   Be sure to raise ``nf_conntrack_buckets`` accordingly to
   ``nf_conntrack_max / 4``, which may require action outside of ``sysctl`` e.g.
-  ``"echo 131072 > /sys/module/nf_conntrack/parameters/hashsize``
+  ``echo 131072 > /sys/module/nf_conntrack/parameters/hashsize``.
   More interdictive but fussier is to blacklist the associated kernel modules
   to disable processing altogether.  This is fragile in that the modules
   vary among kernel versions, as does the order in which they must be listed.
