@@ -122,6 +122,13 @@ public:
                    const char *cls, const char *method,
                    bufferlist& inbl, bufferlist* outbl,
                    uint64_t snap_id, const SnapContext &snapc);
+  int do_exec(LRemTransactionStateRef& trans, LRemClassHandler *handler,
+              const std::string& cls, const std::string& method,
+              bufferlist& inbl, bufferlist* outbl,
+              uint64_t snap_id, const SnapContext &snapc) {
+    return exec(trans, handler, cls.c_str(), method.c_str(),
+                inbl, outbl, snap_id, snapc);
+  }
   virtual int list_snaps(LRemTransactionStateRef& trans, snap_set_t *out_snaps) = 0;
   virtual int list_watchers(LRemTransactionStateRef& trans,
                             std::list<obj_watch_t> *out_watchers);
@@ -205,14 +212,32 @@ public:
                      uint64_t snap_id) = 0;
   virtual int cmpxattr_str(LRemTransactionStateRef& trans, const char *name,
                            uint8_t op, const bufferlist& bl) = 0;
+  int do_cmpxattr_str(LRemTransactionStateRef& trans, const std::string& name,
+                      uint8_t op, const bufferlist& bl) {
+    return cmpxattr_str(trans, name.c_str(), op, bl);
+  }
   virtual int cmpxattr(LRemTransactionStateRef& trans, const char *name,
                        uint8_t op, uint64_t v) = 0;
+  int do_cmpxattr(LRemTransactionStateRef& trans, const std::string& name,
+                  uint8_t op, uint64_t v) {
+    return cmpxattr(trans, name.c_str(), op, v);
+  }
   virtual int getxattr(LRemTransactionStateRef& trans, const char *name, bufferlist *pbl);
+  int do_getxattr(LRemTransactionStateRef& trans, const std::string& name, bufferlist *pbl) {
+    return getxattr(trans, name.c_str(), pbl);
+  }
   virtual int xattr_get(LRemTransactionStateRef& trans,
                         std::map<std::string, bufferlist>* attrset) = 0;
   virtual int setxattr(LRemTransactionStateRef& trans, const char *name,
                        bufferlist& bl) = 0;
+  int do_setxattr(LRemTransactionStateRef& trans, const std::string& name,
+                       bufferlist& bl) {
+    return setxattr(trans, name.c_str(), bl);
+  }
   virtual int rmxattr(LRemTransactionStateRef& trans, const char *name) = 0;
+  int do_rmxattr(LRemTransactionStateRef& trans, const std::string& name) {
+    return rmxattr(trans, name.c_str());
+  }
   virtual int zero(LRemTransactionStateRef& trans, uint64_t off, uint64_t len,
                    const SnapContext &snapc) = 0;
 

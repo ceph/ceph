@@ -1410,9 +1410,11 @@ void ObjectOperation::exec(const char *cls, const char *method,
                            bufferlist& inbl) {
   dout(20) << __func__ << "()" << dendl;
   LRemObjectOperationImpl *o = reinterpret_cast<LRemObjectOperationImpl*>(impl);
-  o->ops.push_back(std::bind(&LRemIoCtxImpl::exec, _1, _7,
-			       librados_stub::get_class_handler(), cls,
-			       method, inbl, _3, _4, _5));
+  string cls_str(cls);
+  string method_str(method);
+  o->ops.push_back(std::bind(&LRemIoCtxImpl::do_exec, _1, _7,
+			       librados_stub::get_class_handler(), cls_str,
+			       method_str, inbl, _3, _4, _5));
 }
 
 void ObjectOperation::exec(const char *cls, const char *method,
@@ -1421,9 +1423,11 @@ void ObjectOperation::exec(const char *cls, const char *method,
                            int *prval) {
   dout(20) << __func__ << "()" << dendl;
   LRemObjectOperationImpl *o = reinterpret_cast<LRemObjectOperationImpl*>(impl);
-  ObjectOperationLRemImpl op = std::bind(&LRemIoCtxImpl::exec, _1, _7,
-                                          librados_stub::get_class_handler(), cls,
-                                          method, inbl, outbl, _4, _5);
+  string cls_str(cls);
+  string method_str(method);
+  ObjectOperationLRemImpl op = std::bind(&LRemIoCtxImpl::do_exec, _1, _7,
+                                          librados_stub::get_class_handler(), cls_str,
+                                          method_str, inbl, outbl, _4, _5);
   if (prval != NULL) {
     op = std::bind(save_operation_result,
                      std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
@@ -1510,13 +1514,15 @@ void ObjectOperation::cmpext(uint64_t off, const bufferlist& cmp_bl,
 void ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
 {
   LRemObjectOperationImpl *o = reinterpret_cast<LRemObjectOperationImpl*>(impl);
-  o->ops.push_back(std::bind(&LRemIoCtxImpl::cmpxattr_str, _1, _7, name, op, v));
+  string name_str(name);
+  o->ops.push_back(std::bind(&LRemIoCtxImpl::do_cmpxattr_str, _1, _7, name_str, op, v));
 }
 
 void ObjectOperation::cmpxattr(const char *name, uint8_t op, uint64_t v)
 {
   LRemObjectOperationImpl *o = reinterpret_cast<LRemObjectOperationImpl*>(impl);
-  o->ops.push_back(std::bind(&LRemIoCtxImpl::cmpxattr, _1, _7, name, op, v));
+  string name_str(name);
+  o->ops.push_back(std::bind(&LRemIoCtxImpl::do_cmpxattr, _1, _7, name_str, op, v));
 }
 
 void ObjectReadOperation::list_snaps(snap_set_t *out_snaps, int *prval) {
@@ -1625,8 +1631,9 @@ void ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, int *prval
   dout(20) << __func__ << "()" << dendl;
   LRemObjectOperationImpl *o = reinterpret_cast<LRemObjectOperationImpl*>(impl);
 
-  ObjectOperationLRemImpl op = std::bind(&LRemIoCtxImpl::getxattr, _1, _7,
-                                         name, pbl);
+  string name_str(name);
+  ObjectOperationLRemImpl op = std::bind(&LRemIoCtxImpl::do_getxattr, _1, _7,
+                                         name_str, pbl);
 
   if (prval != NULL) {
     op = std::bind(save_operation_result,
@@ -1822,12 +1829,14 @@ void ObjectWriteOperation::mtime2(struct timespec *pts) {
 
 void ObjectWriteOperation::setxattr(const char *name, const bufferlist& v) {
   LRemObjectOperationImpl *o = reinterpret_cast<LRemObjectOperationImpl*>(impl);
-  o->ops.push_back(std::bind(&LRemIoCtxImpl::setxattr, _1, _7, name, v));
+  string name_str(name);
+  o->ops.push_back(std::bind(&LRemIoCtxImpl::do_setxattr, _1, _7, name_str, v));
 }
 
 void ObjectWriteOperation::rmxattr(const char *name) {
   LRemObjectOperationImpl *o = reinterpret_cast<LRemObjectOperationImpl*>(impl);
-  o->ops.push_back(std::bind(&LRemIoCtxImpl::rmxattr, _1, _7, name));
+  string name_str(name);
+  o->ops.push_back(std::bind(&LRemIoCtxImpl::do_rmxattr, _1, _7, name_str));
 }
 
 void ObjectWriteOperation::set_redirect(const std::string& tgt_obj,
