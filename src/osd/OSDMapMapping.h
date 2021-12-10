@@ -115,10 +115,11 @@ protected:
     ParallelPGMapper *m;
 
     WQ(ParallelPGMapper *m_, ThreadPool *tp)
-      : ThreadPool::WorkQueue<Item>("ParallelPGMapper::WQ",
-				    ceph::timespan::zero(),
-				    ceph::timespan::zero(),
-				    tp),
+      : ThreadPool::WorkQueue<Item>(
+	"ParallelPGMapper::WQ",
+	ceph::make_timespan(m_->cct->_conf->threadpool_default_timeout),
+	ceph::timespan::zero(),
+	tp),
         m(m_) {}
 
     bool _enqueue(Item *i) override {
