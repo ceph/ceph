@@ -3011,11 +3011,13 @@ void PGMap::get_health_checks(
 	if (mon_pg_warn_max_object_skew > 0 &&
 	    ratio > mon_pg_warn_max_object_skew) {
 	  ostringstream ss;
-	  ss << "pool " << name << " objects per pg ("
-	     << objects_per_pg << ") is more than " << ratio
-	     << " times cluster average ("
-	     << average_objects_per_pg << ")";
-	  many_detail.push_back(ss.str());
+	  if (pi->pg_autoscale_mode != pg_pool_t::pg_autoscale_mode_t::ON) {
+	      ss << "pool " << name << " objects per pg ("
+		 << objects_per_pg << ") is more than " << ratio
+		 << " times cluster average ("
+		 << average_objects_per_pg << ")";
+	      many_detail.push_back(ss.str());
+	  }
 	}
       }
     }
