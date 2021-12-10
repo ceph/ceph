@@ -1280,12 +1280,27 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -EINVAL;
     }
 
+    // ensure previous writes are visible to dest
+    C_SaferCond flush_ctx;
+    {
+      auto aio_comp = io::AioCompletion::create_and_start(&flush_ctx, src,
+	  io::AIO_TYPE_FLUSH);
+      auto req = io::ImageDispatchSpec::create_flush(
+	  *src, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
+	  aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+      req->send();
+    }
+    int r = flush_ctx.wait();
+    if (r < 0) {
+      return r;
+    }
+
     C_SaferCond ctx;
     auto req = deep_copy::MetadataCopyRequest<>::create(
       src, dest, &ctx);
     req->send();
 
-    int r = ctx.wait();
+    r = ctx.wait();
     if (r < 0) {
       lderr(cct) << "failed to copy metadata: " << cpp_strerror(r) << dendl;
       return r;

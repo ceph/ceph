@@ -100,7 +100,8 @@ void PreReleaseRequest<I>::send_set_require_lock() {
   // setting the lock as required will automatically cause the IO
   // queue to re-request the lock if any IO is queued
   if (m_image_ctx.clone_copy_on_read ||
-      m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
+      m_image_ctx.test_features(RBD_FEATURE_JOURNALING) ||
+      m_image_ctx.test_features(RBD_FEATURE_DIRTY_CACHE)) {
     m_image_dispatch->set_require_lock(m_shutting_down,
                                        io::DIRECTION_BOTH, ctx);
   } else {
