@@ -552,11 +552,6 @@ Special Error Responses
 :Description: Invalid access key specified.
 :Code: 400 Bad Request
 
-``InvalidKeyType``
-
-:Description: Invalid key type specified.
-:Code: 400 Bad Request
-
 ``InvalidSecretKey``
 
 :Description: Invalid secret key specified.
@@ -1187,11 +1182,6 @@ Special Error Responses
 ``InvalidAccessKey``
 
 :Description: Invalid access key specified.
-:Code: 400 Bad Request
-
-``InvalidKeyType``
-
-:Description: Invalid key type specified.
 :Code: 400 Bad Request
 
 ``InvalidSecretKey``
