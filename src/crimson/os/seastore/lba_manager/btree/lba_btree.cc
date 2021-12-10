@@ -469,7 +469,9 @@ LBABtree::rewrite_lba_extent_ret LBABtree::rewrite_lba_extent(
 LBABtree::get_internal_node_ret LBABtree::get_internal_node(
   op_context_t c,
   depth_t depth,
-  paddr_t offset)
+  paddr_t offset,
+  laddr_t begin,
+  laddr_t end)
 {
   LOG_PREFIX(LBATree::get_internal_node);
   DEBUGT(
@@ -516,7 +518,9 @@ LBABtree::get_internal_node_ret LBABtree::get_internal_node(
 
 LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
   op_context_t c,
-  paddr_t offset)
+  paddr_t offset,
+  laddr_t begin,
+  laddr_t end)
 {
   LOG_PREFIX(LBATree::get_leaf_node);
   DEBUGT(
@@ -709,23 +713,29 @@ template <typename NodeType>
 LBABtree::base_iertr::future<typename NodeType::Ref> get_node(
   op_context_t c,
   depth_t depth,
-  paddr_t addr);
+  paddr_t addr,
+  laddr_t begin,
+  laddr_t end);
 
 template <>
 LBABtree::base_iertr::future<LBALeafNodeRef> get_node<LBALeafNode>(
   op_context_t c,
   depth_t depth,
-  paddr_t addr) {
+  paddr_t addr,
+  laddr_t begin,
+  laddr_t end) {
   assert(depth == 1);
-  return LBABtree::get_leaf_node(c, addr);
+  return LBABtree::get_leaf_node(c, addr, begin, end);
 }
 
 template <>
 LBABtree::base_iertr::future<LBAInternalNodeRef> get_node<LBAInternalNode>(
   op_context_t c,
   depth_t depth,
-  paddr_t addr) {
-  return LBABtree::get_internal_node(c, depth, addr);
+  paddr_t addr,
+  laddr_t begin,
+  laddr_t end) {
+  return LBABtree::get_internal_node(c, depth, addr, begin, end);
 }
 
 template <typename NodeType>
@@ -746,12 +756,19 @@ LBABtree::handle_merge_ret merge_level(
   assert(iter.get_offset() < parent_pos.node->get_size());
   bool donor_is_left = ((iter.get_offset() + 1) == parent_pos.node->get_size());
   auto donor_iter = donor_is_left ? (iter - 1) : (iter + 1);
-
+  auto next_iter = donor_iter + 1;
+  auto begin = donor_iter->get_key();
+  auto end = next_iter == parent_pos.node->end()
+    ? parent_pos.node->get_node_meta().end
+    : next_iter->get_key();
+  
   DEBUGT("parent: {}, node: {}", c.trans, *parent_pos.node, *pos.node);
   return get_node<NodeType>(
     c,
     depth,
-    donor_iter.get_val().maybe_relative_to(parent_pos.node->get_paddr())
+    donor_iter.get_val().maybe_relative_to(parent_pos.node->get_paddr()),
+    begin,
+    end
   ).si_then([c, iter, donor_iter, donor_is_left, &parent_pos, &pos](
 	      typename NodeType::Ref donor) {
     LOG_PREFIX(LBABtree::merge_level);
