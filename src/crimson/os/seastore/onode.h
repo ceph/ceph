@@ -52,12 +52,25 @@ class Onode : public boost::intrusive_ref_counter<
   Onode,
   boost::thread_unsafe_counter>
 {
+protected:
+  virtual laddr_t get_hint() const = 0;
 public:
+  static constexpr uint32_t DEFAULT_DATA_RESERVATION = 16<<20;
+  static constexpr uint32_t DEFAULT_METADATA_OFFSET =
+    DEFAULT_DATA_RESERVATION;
+  static constexpr uint32_t DEFAULT_METADATA_RANGE = 16<<20;
 
   virtual const onode_layout_t &get_layout() const = 0;
   virtual onode_layout_t &get_mutable_layout(Transaction &t) = 0;
   virtual ~Onode() = default;
-  virtual laddr_t get_hint() const = 0;
+
+  laddr_t get_metadata_hint() const {
+    return get_hint() + DEFAULT_METADATA_OFFSET +
+      ((uint32_t)std::rand() % DEFAULT_METADATA_RANGE);
+  }
+  laddr_t get_data_hint() const {
+    return get_hint();
+  }
 };
 
 

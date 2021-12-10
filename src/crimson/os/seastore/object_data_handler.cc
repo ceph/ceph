@@ -24,7 +24,7 @@ namespace crimson::os::seastore {
  * mappings (necessary for clone), we'll add the ability to grow and shrink
  * these regions and remove this assumption.
  */
-static constexpr extent_len_t MAX_OBJECT_SIZE = 16<<20;
+static constexpr extent_len_t MAX_OBJECT_SIZE = Onode::DEFAULT_DATA_RESERVATION;
 #define assert_aligned(x) ceph_assert(((x)%ctx.tm.get_block_size()) == 0)
 
 using context_t = ObjectDataHandler::context_t;
@@ -272,11 +272,11 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   } else {
     DEBUGT("reserving: {}~{}",
            ctx.t,
-           ctx.onode.get_hint(),
+           ctx.onode.get_data_hint(),
            MAX_OBJECT_SIZE);
     return ctx.tm.reserve_region(
       ctx.t,
-      ctx.onode.get_hint(),
+      ctx.onode.get_data_hint(),
       MAX_OBJECT_SIZE
     ).si_then([&object_data](auto pin) {
       ceph_assert(pin->get_length() == MAX_OBJECT_SIZE);
