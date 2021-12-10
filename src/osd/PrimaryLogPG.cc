@@ -12501,7 +12501,6 @@ void PrimaryLogPG::on_failed_pull(
     obc->drop_recovery_read(&blocked_ops);
     requeue_ops(blocked_ops);
   }
-  recovering.erase(soid);
 
   ceph_assert(force_object_missing_in_flight.count(soid) == 0);
 
@@ -12525,6 +12524,7 @@ void PrimaryLogPG::on_failed_pull(
 
   if (force_object_missing_in_flight.count(soid) == 0) {
     backfills_in_flight.erase(soid);
+    recovering.erase(soid);
   }
 }
 
@@ -12700,6 +12700,8 @@ void PrimaryLogPG::do_force_object_missing_reply(OpRequestRef &op) {
     dout(20) << __func__ << " got all replies" << dendl;
     force_object_missing_in_flight.erase(m->oid);
     backfills_in_flight.erase(m->oid);
+    ceph_assert(recovering.count(m->oid));
+    recovering.erase(m->oid);
   }
 }
 
@@ -13202,6 +13204,7 @@ void PrimaryLogPG::_clear_recovery_state()
   last_backfill_started = hobject_t();
   set<hobject_t>::iterator i = backfills_in_flight.begin();
   while (i != backfills_in_flight.end()) {
+    ceph_assert(recovering.count(*i));
     backfills_in_flight.erase(i++);
   }
   force_object_missing_in_flight.clear();
