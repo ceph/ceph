@@ -1441,6 +1441,13 @@ options:
   type: str
   level: advanced
   with_legacy: true
+- name: ms_dpdk_devs_allowlist
+  type: str
+  level: advanced
+  desc: NIC's PCIe address are allowed to use
+  long_desc: for a single NIC use ms_dpdk_devs_allowlist=-a 0000:7d:010 or --allow=0000:7d:010;
+    for a bond nics use ms_dpdk_devs_allowlist=--allow=0000:7d:01.0 --allow=0000:7d:02.6
+    --vdev=net_bonding0,mode=2,slave=0000:7d:01.0,slave=0000:7d:02.6.
 - name: ms_dpdk_host_ipv4_addr
   type: str
   level: advanced

@@ -23,6 +23,8 @@
 #include <rte_ethdev.h>
 #include <rte_version.h>
 
+#include "include/str_map.h"
+
 #include "DPDK.h"
 #include "dpdk_rte.h"
 
@@ -122,6 +124,14 @@ namespace dpdk {
       } else if (!cct->_conf->ms_dpdk_pmd.empty()) {
         args.push_back(string2vector("--no-huge"));
       }
+
+      for_each_pair(cct->_conf.get_val<std::string>("ms_dpdk_devs_allowlist"), " ",
+		    [&args] (std::string_view key, std::string_view val) {
+		      args.push_back(string2vector(std::string(key)));
+		      if (!val.empty()) {
+                        args.push_back(string2vector(std::string(val)));
+                      }
+		    });
 
       std::string rte_file_prefix;
       rte_file_prefix = "rte_";
