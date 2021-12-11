@@ -30,6 +30,8 @@ int UserspaceEventManager::get_eventfd()
     unused_fds.pop_front();
   } else {
     fd = ++max_fd;
+    if (fd == wakeup_fd)
+      fd = ++max_fd;
     fds.resize(fd + 1);
   }
 

@@ -139,12 +139,6 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type)
     return r;
   }
 
-  file_events.resize(nevent);
-  this->nevent = nevent;
-
-  if (!driver->need_wakeup())
-    return 0;
-
   int fds[2];
 
   #ifdef _WIN32
@@ -168,8 +162,10 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type)
   if (r < 0) {
     return r;
   }
-
-  return r;
+  driver->reserved_wakeup_fd(notify_receive_fd);
+  file_events.resize(nevent);
+  this->nevent = nevent;
+  return 0;
 }
 
 EventCenter::~EventCenter()
@@ -207,11 +203,9 @@ void EventCenter::set_owner()
 	"AsyncMessenger::EventCenter::global_center::" + type, true);
     ceph_assert(global_centers);
     global_centers->centers[center_id] = this;
-    if (driver->need_wakeup()) {
-      notify_handler = new C_handle_notify(this, cct);
-      int r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
-      ceph_assert(r == 0);
-    }
+    notify_handler = new C_handle_notify(this, cct);
+    int r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
+    ceph_assert(r == 0);
   }
 }
 
@@ -330,10 +324,6 @@ void EventCenter::delete_time_event(uint64_t id)
 
 void EventCenter::wakeup()
 {
-  // No need to wake up since we never sleep
-  if (!pollers.empty() || !driver->need_wakeup())
-    return ;
-
   ldout(cct, 20) << __func__ << dendl;
   char buf = 'c';
   // wake up "event_wait"
@@ -397,7 +387,7 @@ int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *
     }
   }
 
-  bool blocking = pollers.empty() && !external_num_events.load();
+  bool blocking = !polling && !external_num_events.load();
   if (!blocking)
     timeout_microseconds = 0;
   tv.tv_sec = timeout_microseconds / 1000000;
@@ -451,9 +441,10 @@ int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *
     }
   }
 
-  if (!numevents && !blocking) {
+  if (pollers.size()) {
     for (uint32_t i = 0; i < pollers.size(); i++)
       numevents += pollers[i]->poll();
+    polling = numevents;
   }
 
   if (working_dur)

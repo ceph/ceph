@@ -44,6 +44,7 @@ class UserspaceEventManager {
   std::vector<std::optional<UserspaceFDImpl> > fds;
   std::vector<int> waiting_fds;
   std::list<uint32_t> unused_fds;
+  int wakeup_fd;
 
  public:
   explicit UserspaceEventManager(CephContext *c): cct(c) {
@@ -100,6 +101,10 @@ class UserspaceEventManager {
         return false;
     }
     return true;
+  }
+
+  void reserved_wakeup_fd(int fd) {
+    wakeup_fd = fd;
   }
 };
 

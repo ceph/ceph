@@ -333,7 +333,7 @@ int DPDKDevice::init_port_start()
   int retval;
 
   ldout(cct, 1) << __func__ << " Port " << int(_port_idx) << " init ... " << dendl;
-
+  port_conf.intr_conf.rxq = 1;
   /*
    * Standard DPDK port initialisation - config port, then set up
    * rx and tx rings.
@@ -522,7 +522,6 @@ void DPDKQueuePair::build_sw_reta(const std::map<unsigned, float>& cpu_weights) 
   }
   _sw_reta = reta;
 }
-
 
 bool DPDKQueuePair::init_rx_mbuf_pool()
 {
@@ -781,6 +780,18 @@ void DPDKQueuePair::handle_stats()
   device_stat_time_fd = center->create_time_event(1000*1000, new C_handle_dev_stats(this));
 }
 
+DPDKQueuePair::~DPDKQueuePair()
+{
+  if (support_rx_intr) {
+    rte_eth_dev_rx_intr_ctl_q(_dev->_port_idx, _qid,
+      center->get_driver()->get_epfd(), RTE_INTR_EVENT_DEL, nullptr);
+  }
+  if (device_stat_time_fd) {
+    center->delete_time_event(device_stat_time_fd);
+  }
+  rx_gc(true);
+}
+
 bool DPDKQueuePair::poll_tx() {
   bool nonloopback = !cct->_conf->ms_dpdk_debug_allow_loopback;
 #ifdef CEPH_PERF_DEV
@@ -797,7 +808,6 @@ bool DPDKQueuePair::poll_tx() {
         if (p) {
           work++;
           if (likely(nonloopback)) {
-            // ldout(cct, 0) << __func__ << " len: " << p->len() << " frags: " << p->nr_frags() << dendl;
             _tx_packetq.push_back(std::move(*p));
           } else {
             auto th = p->get_header<eth_hdr>(0);
@@ -944,7 +954,6 @@ void DPDKQueuePair::process_packets(
       perf_logger->inc(l_dpdk_qp_rx_no_memory_errors);
       continue;
     }
-    // ldout(cct, 0) << __func__ << " len " << p->len() << " " << dendl;
 
     nr_frags += m->nb_segs;
     bytes    += m->pkt_len;
@@ -980,6 +989,29 @@ void DPDKQueuePair::process_packets(
   perf_logger->inc(l_dpdk_qp_rx_bytes, bytes);
 }
 
+void DPDKQueuePair::rx_start() {
+  _poll_start_time = clock_type::now();
+  _rx_intr_enabled = false;
+  _rx_intr_callback = [this] {
+    if (_rx_intr_enabled) {
+      _poll_start_time = clock_type::now();
+      rte_eth_dev_rx_intr_disable(_dev_port_idx, _qid);
+      _rx_intr_enabled = false;
+      ldout(cct, 10) << __func__ << " turn off irq with _qid " << _qid << dendl;
+    }
+  };
+  int r = rte_eth_dev_rx_intr_ctl_q(_dev->_port_idx, _qid,
+	                    center->get_driver()->get_epfd(),
+                            RTE_INTR_EVENT_ADD,
+	                    static_cast<void*>(&_rx_intr_callback));
+  if (r) {
+    ldout(cct, 1) << __func__ << " NIC don't support rx interrupt " << cpp_strerror(r) << dendl;
+  } else {
+    support_rx_intr = true;
+  }
+  _rx_poller.emplace(this);
+}
+
 bool DPDKQueuePair::poll_rx_once()
 {
   struct rte_mbuf *buf[packet_read_size];
@@ -998,18 +1030,28 @@ bool DPDKQueuePair::poll_rx_once()
     rx_cycles = Cycles::rdtsc() - start;
     rx_count += count;
 #endif
-  }
+  } else {
 #ifdef CEPH_PERF_DEV
-  else {
     if (rx_count > 10000 && tx_count) {
       ldout(cct, 0) << __func__ << " rx count=" << rx_count << " avg rx=" << Cycles::to_nanoseconds(rx_cycles)/rx_count << "ns "
                     << " tx count=" << tx_count << " avg tx=" << Cycles::to_nanoseconds(tx_cycles)/tx_count << "ns"
                     << dendl;
       rx_count = rx_cycles = tx_count = tx_cycles = 0;
     }
-  }
 #endif
-
+    if (!support_rx_intr)
+      return true; // will poll again
+    auto poll_duration = std::chrono::duration_cast<std::chrono::milliseconds>(clock_type::now() - _poll_start_time);
+    if (poll_duration < cct->_conf.get_val<std::chrono::milliseconds>("ms_async_dpdk_polling_ms")) {
+      return true; // will poll again
+    }
+    if (!_rx_intr_enabled) {
+      rte_eth_dev_rx_intr_enable(_dev_port_idx, _qid);
+      _rx_intr_enabled = true;
+      ldout(cct,10) << __func__ << " turn on irq with _qid " << _qid << dendl;
+      return true; // will poll again
+    }
+  }
   return count;
 }
 

@@ -74,11 +74,12 @@ class EventDriver {
  public:
   virtual ~EventDriver() {}       // we want a virtual destructor!!!
   virtual int init(EventCenter *center, int nevent) = 0;
+  virtual int get_epfd() { return -1; };
   virtual int add_event(int fd, int cur_mask, int mask) = 0;
   virtual int del_event(int fd, int cur_mask, int del_mask) = 0;
   virtual int event_wait(std::vector<FiredFileEvent> &fired_events, struct timeval *tp) = 0;
   virtual int resize_events(int newsize) = 0;
-  virtual bool need_wakeup() { return true; }
+  virtual int reserved_wakeup_fd(int fd) { return -1; }
 };
 
 /*
@@ -155,6 +156,7 @@ class EventCenter {
   CephContext *cct;
   std::string type;
   int nevent;
+  int polling = 0;
   // Used only to external event
   pthread_t owner = 0;
   std::mutex external_lock;

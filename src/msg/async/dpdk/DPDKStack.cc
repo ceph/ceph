@@ -55,6 +55,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "dpdkstack "
 
+#ifndef RTE_LCORE_FOREACH_WORKER
+  #define RTE_LCORE_FOREACH_WORKER RTE_LCORE_FOREACH_SLAVE
+#endif
+
 static int dpdk_thread_adaptor(void* f)
 {
   (*static_cast<std::function<void ()>*>(f))();
@@ -259,7 +263,7 @@ void DPDKStack::spawn_worker(std::function<void ()> &&func)
   unsigned nr_worker = funcs.size();
   ceph_assert(rte_lcore_count() >= nr_worker);
   unsigned core_id;
-  RTE_LCORE_FOREACH_SLAVE(core_id) {
+  RTE_LCORE_FOREACH_WORKER(core_id) {
     if (--nr_worker == 0) {
       break;
     }

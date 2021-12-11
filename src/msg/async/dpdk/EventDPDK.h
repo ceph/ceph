@@ -16,12 +16,15 @@
 #ifndef CEPH_EVENTDPDK_H
 #define CEPH_EVENTDPDK_H
 
+#include "common/ceph_time.h"
 #include "msg/async/Event.h"
 #include "msg/async/Stack.h"
 #include "UserspaceEvent.h"
 
 class DPDKDriver : public EventDriver {
   CephContext *cct;
+  int epfd;
+  int wakeup_fd;
 
  public:
   UserspaceEventManager manager;
@@ -34,7 +37,14 @@ class DPDKDriver : public EventDriver {
   int del_event(int fd, int cur_mask, int del_mask) override;
   int resize_events(int newsize) override;
   int event_wait(std::vector<FiredFileEvent> &fired_events, struct timeval *tp) override;
-  bool need_wakeup() override { return false; }
+  int reserved_wakeup_fd(int fd) override {
+    manager.reserved_wakeup_fd(fd);
+    wakeup_fd = fd;
+    return 0;
+  };
+  int get_epfd() override {
+    return epfd;
+  };
 };
 
-#endif //CEPH_EVENTDPDK_H
+#endif // CEPH_EVENTDPDK_H

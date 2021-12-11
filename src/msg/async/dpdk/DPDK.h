@@ -532,17 +532,9 @@ class DPDKQueuePair {
 
  public:
   explicit DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, uint8_t qid);
-  ~DPDKQueuePair() {
-    if (device_stat_time_fd) {
-      center->delete_time_event(device_stat_time_fd);
-    }
-    rx_gc(true);
-  }
+  ~DPDKQueuePair();
 
-  void rx_start() {
-    _rx_poller.emplace(this);
-  }
-
+  void rx_start();
   uint32_t send(circular_buffer<Packet>& pb) {
     // Zero-copy send
     return _send(pb, [&] (Packet&& p) {
@@ -664,6 +656,7 @@ class DPDKQueuePair {
   std::optional<Packet> from_mbuf_lro(rte_mbuf* m);
 
  private:
+  using clock_type = ceph::coarse_real_clock;
   CephContext *cct;
   std::vector<packet_provider_type> _pkt_providers;
   std::optional<std::array<uint8_t, 128>> _sw_reta;
@@ -677,6 +670,10 @@ class DPDKQueuePair {
   uint8_t _dev_port_idx;
   EventCenter *center;
   uint8_t _qid;
+  clock_type::time_point _poll_start_time;
+  std::function<void ()> _rx_intr_callback;
+  bool _rx_intr_enabled = false;
+  bool support_rx_intr = false;
   rte_mempool *_pktmbuf_pool_rx;
   std::vector<rte_mbuf*> _rx_free_pkts;
   std::vector<rte_mbuf*> _rx_free_bufs;

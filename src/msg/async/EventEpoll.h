@@ -39,6 +39,7 @@ class EpollDriver : public EventDriver {
   }
 
   int init(EventCenter *c, int nevent) override;
+  int get_epfd() { return epfd; };
   int add_event(int fd, int cur_mask, int add_mask) override;
   int del_event(int fd, int cur_mask, int del_mask) override;
   int resize_events(int newsize) override;
