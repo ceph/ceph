@@ -137,17 +137,21 @@ namespace dpdk {
       if (!rte_initialized) {
         /* initialise the EAL for all */
         int ret = rte_eal_init(cargs.size(), cargs.data());
-        if (ret < 0)
-          return;
+	if (ret < 0) {
+          std::unique_lock locker(lock);
+          done = true;
+          cond.notify_all();
+          return ret;
+	}
         rte_initialized = true;
       }
 
-      std::unique_lock<std::mutex> l(lock);
+      std::unique_lock locker(lock);
       initialized = true;
       done = true;
       cond.notify_all();
       while (!stopped) {
-        cond.wait(l, [this] { return !funcs.empty() || stopped; });
+        cond.wait(locker, [this] { return !funcs.empty() || stopped; });
         if (!funcs.empty()) {
           auto f = std::move(funcs.front());
           funcs.pop_front();
@@ -156,10 +160,9 @@ namespace dpdk {
         }
       }
     });
-    std::unique_lock<std::mutex> l(lock);
-    while (!done)
-      cond.wait(l);
-    return 0;
+    std::unique_lock locker(lock);
+    cond.wait(locker, [&] { return done; });
+    return initialized ? 0 : -EIO;
   }
 
   size_t eal::mem_size(int num_cpus)
