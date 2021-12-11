@@ -564,7 +564,6 @@ class tcp {
       _snd.user_queue_space.reset();
       cleanup();
       _errno = -ECONNRESET;
-      manager.notify(fd, EVENT_READABLE);
 
       if (_snd._all_data_acked_fd >= 0)
         manager.notify(_snd._all_data_acked_fd, EVENT_READABLE);
@@ -952,6 +951,11 @@ tcp<InetTraits>::tcb::~tcb()
     center->delete_time_event(*retransmit_fd);
   if (persist_fd)
     center->delete_time_event(*persist_fd);
+  if (_snd._all_data_acked_fd >= 0) {
+    center->delete_file_event(_snd._all_data_acked_fd, EVENT_READABLE);
+    _tcp.manager.close(_snd._all_data_acked_fd);
+    _snd._all_data_acked_fd = -1;
+  }
   delete delayed_ack_event;
   delete retransmit_event;
   delete persist_event;

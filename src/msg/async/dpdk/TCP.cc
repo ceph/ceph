@@ -818,7 +818,7 @@ void tcp<InetTraits>::tcb::retransmit()
     ldout(_tcp.cct, 5) << __func__ << " seg retransmit exceed max "
                        << _max_nr_retransmit << dendl;
     _errno = -ETIMEDOUT;
-    cleanup();
+    do_reset();
     return;
   }
   retransmit_one();
