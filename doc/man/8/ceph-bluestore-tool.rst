@@ -37,6 +37,7 @@ Description
 **ceph-bluestore-tool** is a utility to perform low-level administrative
 operations on a BlueStore instance.
 
+
 Commands
 ========
 
@@ -46,7 +47,8 @@ Commands
 
 :command:`fsck` [ --deep ]
 
-   run consistency check on BlueStore metadata.  If *--deep* is specified, also read all object data and verify checksums.
+   run consistency check on BlueStore metadata.  If ``--deep`` is specified,
+   also read all object data and verify checksums.
 
 :command:`repair`
 
@@ -54,16 +56,20 @@ Commands
 
 :command:`qfsck`
 
-   run consistency check on BlueStore metadata comparing allocator data (from RocksDB CFB when exists and if not uses allocation-file) with ONodes state.
+   run consistency check on BlueStore metadata comparing allocator data
+   (from RocksDB CFB when exists and if not uses allocation-file) with
+   ONodes state.
 
 :command:`allocmap`
 
-   performs the same check done by qfsck and then stores a new allocation-file (command is disabled by default and requires a special build)
+   performs the same check done by qfsck and then stores a new allocation-file
+   (command is disabled by default and requires a special build)
 
 :command:`restore_cfb`
 
-   Reverses changes done by the new NCB code (either through ceph restart or when running allocmap command) and restores RocksDB B Column-Family (allocator-map).
-
+   Reverses changes done by the new NCB code (either through ceph restart or
+   when running ``allocmap`` command) and restores RocksDB B Column-Family
+   (allocator-map).
 
 :command:`bluefs-export`
 
@@ -101,7 +107,8 @@ Commands
 
       - if source list has DB volume - target device replaces it.
       - if source list has WAL volume - target device replace it.
-      - if source list has slow volume only - operation isn't permitted, requires explicit allocation via new-db/new-wal command.
+      - if source list has slow volume only - operation isn't permitted,
+        requires explicit allocation via new-db/new-wal command.
 
 :command:`show-label` --dev *device* [...]
 
@@ -114,22 +121,26 @@ Commands
 :command:`free-score` --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
 
    Give a [0-1] number that represents quality of fragmentation in allocator.
-   0 represents case when all free space is in one chunk. 1 represents worst possible fragmentation.
+   0 represents case when all free space is in one chunk. 1 represents
+   worst possible fragmentation.
 
 :command:`reshard` --path *osd path* --sharding *new sharding* [ --resharding-ctrl *control string* ]
 
-   Changes sharding of BlueStore's RocksDB. Sharding is build on top of RocksDB column families.
-   This option allows to test performance of *new sharding* without need to redeploy OSD.
-   Resharding is usually a long process, which involves walking through entire RocksDB key space
+   Changes sharding of BlueStore's RocksDB. Sharding is build on top of
+   RocksDB column families. This option allows to test performance of
+   *new sharding* without need to redeploy OSD. Resharding is usually a
+   long process, which involves walking through entire RocksDB key space
    and moving some of them to different column families.
-   Option --resharding-ctrl provides performance control over resharding process.
+   Option ``--resharding-ctrl`` provides performance control over resharding process.
    Interrupted resharding will prevent OSD from running.
-   Interrupted resharding does not corrupt data. It is always possible to continue previous resharding,
-   or select any other sharding scheme, including reverting to original one.
+   Interrupted resharding does not corrupt data. It is always possible to
+   continue previous resharding, or select any other sharding scheme,
+   including reverting to original one.
 
 :command:`show-sharding` --path *osd path*
 
    Show sharding that is currently applied to BlueStore's RocksDB.
+
 
 Options
 =======
@@ -141,7 +152,8 @@ Options
 .. option:: -i *osd_id*
 
    Operate as OSD *osd_id*. Connect to monitor for OSD specific options.
-   If monitor is unavailable, add --no-mon-config to read from ceph.conf instead.
+   If monitor is unavailable, add ``--no-mon-config`` to read from
+   ``ceph.conf`` instead.
 
 .. option:: --devs-source *device*
 
@@ -153,11 +165,14 @@ Options
 
 .. option:: --path *osd path*
 
-   Specify an osd path.  In most cases, the device list is inferred from the symlinks present in *osd path*.  This is usually simpler than explicitly specifying the device(s) with --dev. Not necessary if -i *osd_id* is provided.
+   Specify an osd path.  In most cases, the device list is inferred from
+   the symlinks present in *osd path*.  This is usually simpler than
+   explicitly specifying the device(s) with ``--dev``. Not necessary if
+   ``-i *osd_id*`` is provided.
 
 .. option:: --out-dir *dir*
 
-   Output directory for bluefs-export
+   Output directory for ``bluefs-export``
 
 .. option:: -l, --log-file *log file*
 
@@ -174,20 +189,24 @@ Options
 
 .. option:: --allocator *name*
 
-   Useful for *free-dump* and *free-score* actions. Selects allocator(s).
+   Useful for ``free-dump`` and ``free-score`` actions. Selects allocator(s).
 
 .. option:: --resharding-ctrl *control string*
 
-   Provides control over resharding process. Specifies how often refresh RocksDB iterator,
-   and how large should commit batch be before committing to RocksDB. Option format is:
+   Provides control over resharding process. Specifies how often refresh
+   RocksDB iterator, and how large should commit batch be before committing to
+   RocksDB. Option format is:
    <iterator_refresh_bytes>/<iterator_refresh_keys>/<batch_commit_bytes>/<batch_commit_keys>
    Default: 10000000/10000/1000000/1000
+
 
 Additional ceph.conf options
 ============================
 
-Any configuration option that is accepted by OSD can be also passed to **ceph-bluestore-tool**.
-Useful to provide necessary configuration options when access to monitor/ceph.conf is impossible and -i option cannot be used.
+Any configuration option that is accepted by OSD can be also passed to
+**ceph-bluestore-tool**. Useful to provide necessary configuration options
+when access to monitor/ceph.conf is impossible and ``-i`` option cannot be used.
+
 
 Device labels
 =============
@@ -195,36 +214,41 @@ Device labels
 Every BlueStore block device has a single block label at the beginning of the
 device.  You can dump the contents of the label with::
 
-  ceph-bluestore-tool show-label --dev *device*
+    ceph-bluestore-tool show-label --dev *device*
 
 The main device will have a lot of metadata, including information
 that used to be stored in small files in the OSD data directory.  The
 auxiliary devices (db and wal) will only have the minimum required
 fields (OSD UUID, size, device type, birth time).
 
+
 OSD directory priming
 =====================
 
 You can generate the content for an OSD data directory that can start up a
-BlueStore OSD with the *prime-osd-dir* command::
+BlueStore OSD with the ``prime-osd-dir`` command::
 
-  ceph-bluestore-tool prime-osd-dir --dev *main device* --path /var/lib/ceph/osd/ceph-*id*
+    ceph-bluestore-tool prime-osd-dir --dev *main device* --path /var/lib/ceph/osd/ceph-*id*
+
 
 BlueFS log rescue
-=====================
+=================
 
 Some versions of BlueStore were susceptible to BlueFS log growing extremely large -
 beyond the point of making booting OSD impossible. This state is indicated by
 booting that takes very long and fails in _replay function.
 
 This can be fixed by::
-  ceph-bluestore-tool fsck --path *osd path* --bluefs_replay_recovery=true
+
+    ceph-bluestore-tool fsck --path *osd path* --bluefs_replay_recovery=true
 
 It is advised to first check if rescue process would be successful::
-  ceph-bluestore-tool fsck --path *osd path* \
-  --bluefs_replay_recovery=true --bluefs_replay_recovery_disable_compact=true
+
+    ceph-bluestore-tool fsck --path *osd path* \
+        --bluefs_replay_recovery=true --bluefs_replay_recovery_disable_compact=true
 
 If above fsck is successful fix procedure can be applied.
+
 
 Availability
 ============
