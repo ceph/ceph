@@ -305,6 +305,7 @@ private:
   TransactionManagerRef transaction_manager;
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;
+  const uint32_t max_object_size = 0;
 
   using tm_iertr = TransactionManager::base_iertr;
   using tm_ret = tm_iertr::future<>;

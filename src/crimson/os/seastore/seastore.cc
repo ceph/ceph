@@ -68,6 +68,8 @@ public:
   }
 };
 
+using crimson::common::get_conf;
+
 SeaStore::SeaStore(
   const std::string& root,
   MDStoreRef mdstore,
@@ -80,7 +82,9 @@ SeaStore::SeaStore(
     segment_manager(std::move(sm)),
     transaction_manager(std::move(tm)),
     collection_manager(std::move(cm)),
-    onode_manager(std::move(om))
+    onode_manager(std::move(om)),
+    max_object_size(
+      get_conf<uint64_t>("seastore_default_max_object_size"))
 {
   register_metrics();
 }
@@ -459,7 +463,7 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
 	size - offset :
 	std::min(size - offset, len);
 
-      return ObjectDataHandler().read(
+      return ObjectDataHandler(max_object_size).read(
         ObjectDataHandler::context_t{
           *transaction_manager,
           t,
@@ -1069,7 +1073,7 @@ SeaStore::tm_ret SeaStore::_write(
   return seastar::do_with(
     std::move(_bl),
     [=, &ctx, &onode](auto &bl) {
-      return ObjectDataHandler().write(
+      return ObjectDataHandler(max_object_size).write(
         ObjectDataHandler::context_t{
           *transaction_manager,
           *ctx.transaction,
@@ -1199,7 +1203,7 @@ SeaStore::tm_ret SeaStore::_truncate(
   LOG_PREFIX(SeaStore::_truncate);
   DEBUGT("onode={} size={}", *ctx.transaction, *onode, size);
   onode->get_mutable_layout(*ctx.transaction).size = size;
-  return ObjectDataHandler().truncate(
+  return ObjectDataHandler(max_object_size).truncate(
     ObjectDataHandler::context_t{
       *transaction_manager,
       *ctx.transaction,

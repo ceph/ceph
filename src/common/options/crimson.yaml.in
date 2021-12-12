@@ -65,3 +65,13 @@ options:
   level: dev
   desc: The record fullness threshold to flush a journal batch
   default: 0.95
+- name: seastore_default_max_object_size
+  type: uint
+  level: dev
+  desc: default logical address space reservation for seastore objects' data
+  default: 16777216
+- name: seastore_default_object_metadata_reservation
+  type: uint
+  level: dev
+  desc: default logical address space reservation for seastore objects' metadata
+  default: 16777216
