@@ -62,13 +62,13 @@ seastar::future<> PeeringEvent::start()
   return maybe_delay.then([this] {
     return get_pg();
   }).then([this](Ref<PG> pg) {
+    if (!pg) {
+      logger().warn("{}: pg absent, did not create", *this);
+      on_pg_absent();
+      handle.exit();
+      return complete_rctx_no_pg();
+    }
     return interruptor::with_interruption([this, pg] {
-      if (!pg) {
-        logger().warn("{}: pg absent, did not create", *this);
-        on_pg_absent();
-        handle.exit();
-        return complete_rctx(pg);
-      }
       logger().debug("{}: pg present", *this);
       return with_blocking_future_interruptible<interruptor::condition>(
         handle.enter(pp(*pg).await_map)
@@ -163,6 +163,15 @@ PeeringEvent::interruptible_future<> RemotePeeringEvent::complete_rctx(Ref<PG> p
       return shard_services.dispatch_context_messages(std::move(ctx));
     });
   }
+}
+
+seastar::future<> RemotePeeringEvent::complete_rctx_no_pg()
+{
+  logger().debug("{}: OSDState is {}", *this, osd.state);
+  return osd.state.when_active().then([this] {
+    assert(osd.state.is_active());
+    return shard_services.dispatch_context_messages(std::move(ctx));
+  });
 }
 
 seastar::future<Ref<PG>> RemotePeeringEvent::get_pg()
