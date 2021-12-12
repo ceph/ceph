@@ -50,6 +50,8 @@ class ObjectDataHandler {
 public:
   using base_iertr = TransactionManager::base_iertr;
 
+  ObjectDataHandler(uint32_t mos) : max_object_size(mos) {}
+
   struct context_t {
     TransactionManager &tm;
     Transaction &t;
@@ -104,6 +106,16 @@ private:
     context_t ctx,
     object_data_t &object_data,
     extent_len_t size);
+private:
+  /**
+   * max_object_size
+   *
+   * For now, we allocate a fixed region of laddr space of size max_object_size
+   * for any object.  In the future, once we have the ability to remap logical
+   * mappings (necessary for clone), we'll add the ability to grow and shrink
+   * these regions and remove this assumption.
+   */
+  const uint32_t max_object_size = 0;
 };
 
 }
