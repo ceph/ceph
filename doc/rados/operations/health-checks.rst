@@ -1031,6 +1031,8 @@ not contain as much data have too many PGs.  See the discussion of
 The threshold can be raised to silence the health warning by adjusting
 the ``mon_pg_warn_max_object_skew`` config option on the managers.
 
+The health warning will be silenced for a particular pool if
+``pg_autoscale_mode`` is set to ``on``.
 
 POOL_APP_NOT_ENABLED
 ____________________
