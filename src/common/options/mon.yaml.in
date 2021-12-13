@@ -22,7 +22,7 @@ options:
     will be stored as N stripes, with each data chunk
     receiving ``stripe unit`` bytes. Each stripe of ``N *
     stripe unit`` bytes will be encoded/decoded
-    individually. This option can is overridden by the
+    individually. This option can be overridden by the
     ``stripe_unit`` setting in an erasure code profile.
   default: 4_K
   services:

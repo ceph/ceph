@@ -118,7 +118,7 @@ come back on their own without intervention. ::
 
 	sudo systemctl start ceph.target
 
-Finally, you must unset the cluster-wide``noout`` flag::
+Finally, you must unset the cluster-wide ``noout`` flag::
 
 	ceph osd unset noout
 	ceph osd unset-group noout prod-ceph-data1701

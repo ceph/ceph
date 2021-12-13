@@ -202,7 +202,7 @@ class CephModule(SphinxDirective):
 
 class CephOption(ObjectDescription):
     """
-    emit option loaded from given command/options/<name>.yaml.in file
+    emit option loaded from given common/options/<name>.yaml.in file
     """
     has_content = True
     required_arguments = 1
