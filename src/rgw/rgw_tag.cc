@@ -52,3 +52,13 @@ int RGWObjTags::set_from_string(const string& input){
   }
   return ret;
 }
+
+void RGWObjTags::dump(Formatter *f) const
+{
+  f->open_object_section("tagset");
+  for (auto& tag: tag_map){
+    f->dump_string(tag.first.c_str(), tag.second);
+  }
+  f->close_section();
+}
+

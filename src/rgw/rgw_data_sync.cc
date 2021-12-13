@@ -5061,3 +5061,94 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
                                                   dest_bucket_info,
                                                   status));
 }
+
+void rgw_data_sync_info::generate_test_instances(list<rgw_data_sync_info*>& o)
+{
+  auto info = new rgw_data_sync_info;
+  info->state = rgw_data_sync_info::StateBuildingFullSyncMaps;
+  info->num_shards = 8;
+  o.push_back(info);
+  o.push_back(new rgw_data_sync_info);
+}
+
+void rgw_data_sync_marker::generate_test_instances(list<rgw_data_sync_marker*>& o)
+{
+  auto marker = new rgw_data_sync_marker;
+  marker->state = rgw_data_sync_marker::IncrementalSync;
+  marker->marker = "01234";
+  marker->pos = 5;
+  o.push_back(marker);
+  o.push_back(new rgw_data_sync_marker);
+}
+
+void rgw_data_sync_status::generate_test_instances(list<rgw_data_sync_status*>& o)
+{
+  o.push_back(new rgw_data_sync_status);
+}
+
+void rgw_bucket_shard_full_sync_marker::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("position", position, obj);
+  JSONDecoder::decode_json("count", count, obj);
+}
+
+void rgw_bucket_shard_full_sync_marker::dump(Formatter *f) const
+{
+  encode_json("position", position, f);
+  encode_json("count", count, f);
+}
+
+void rgw_bucket_shard_inc_sync_marker::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("position", position, obj);
+  JSONDecoder::decode_json("timestamp", timestamp, obj);
+}
+
+void rgw_bucket_shard_inc_sync_marker::dump(Formatter *f) const
+{
+  encode_json("position", position, f);
+  encode_json("timestamp", timestamp, f);
+}
+
+void rgw_bucket_shard_sync_info::decode_json(JSONObj *obj)
+{
+  std::string s;
+  JSONDecoder::decode_json("status", s, obj);
+  if (s == "full-sync") {
+    state = StateFullSync;
+  } else if (s == "incremental-sync") {
+    state = StateIncrementalSync;
+  } else if (s == "stopped") {
+    state = StateStopped;
+  } else {
+    state = StateInit;
+  }
+  JSONDecoder::decode_json("full_marker", full_marker, obj);
+  JSONDecoder::decode_json("inc_marker", inc_marker, obj);
+}
+
+void rgw_bucket_shard_sync_info::dump(Formatter *f) const
+{
+  const char *s{nullptr};
+  switch ((SyncState)state) {
+    case StateInit:
+    s = "init";
+    break;
+  case StateFullSync:
+    s = "full-sync";
+    break;
+  case StateIncrementalSync:
+    s = "incremental-sync";
+    break;
+  case StateStopped:
+    s = "stopped";
+    break;
+  default:
+    s = "unknown";
+    break;
+  }
+  encode_json("status", s, f);
+  encode_json("full_marker", full_marker, f);
+  encode_json("inc_marker", inc_marker, f);
+}
+

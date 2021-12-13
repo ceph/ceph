@@ -9,6 +9,7 @@
 
 #include "json_spirit/json_spirit.h"
 #include "common/ceph_json.h"
+#include "common/Formatter.h"
 
 #include "rgw_op.h"
 #include "rgw_common.h"
@@ -22,7 +23,6 @@
 #include "common/armor.h"
 #include "common/errno.h"
 #include "common/Clock.h"
-#include "common/Formatter.h"
 #include "common/convenience.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
@@ -2301,4 +2301,605 @@ bool RGWBucketInfo::empty_sync_policy() const
 
   return sync_policy->empty();
 }
+
+struct rgw_pool;
+struct rgw_placement_rule;
+class RGWUserCaps;
+
+void decode_json_obj(rgw_pool& pool, JSONObj *obj)
+{
+  string s;
+  decode_json_obj(s, obj);
+  pool = rgw_pool(s);
+}
+
+void encode_json(const char *name, const rgw_placement_rule& r, Formatter *f)
+{
+  encode_json(name, r.to_str(), f);
+}
+
+void encode_json(const char *name, const rgw_pool& pool, Formatter *f)
+{
+  f->dump_string(name, pool.to_str());
+}
+
+void encode_json(const char *name, const RGWUserCaps& val, Formatter *f)
+{
+  val.dump(f, name);
+}
+
+void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
+{
+  RGWBucketEnt *e = new RGWBucketEnt;
+  init_bucket(&e->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  e->size = 1024;
+  e->size_rounded = 4096;
+  e->count = 1;
+  o.push_back(e);
+  o.push_back(new RGWBucketEnt);
+}
+
+void RGWBucketEnt::dump(Formatter *f) const
+{
+  encode_json("bucket", bucket, f);
+  encode_json("size", size, f);
+  encode_json("size_rounded", size_rounded, f);
+  utime_t ut(creation_time);
+  encode_json("mtime", ut, f); /* mtime / creation time discrepency needed for backward compatibility */
+  encode_json("count", count, f);
+  encode_json("placement_rule", placement_rule.to_str(), f);
+}
+
+void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
+{
+  rgw_bucket b;
+  init_bucket(&b, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  rgw_obj *obj = new rgw_obj(b, "object");
+  o.push_back(obj);
+  o.push_back(new rgw_obj);
+}
+
+void rgw_bucket_placement::dump(Formatter *f) const
+{
+  encode_json("bucket", bucket, f);
+  encode_json("placement_rule", placement_rule, f);
+}
+
+void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
+{
+  // Since things without a log will have one synthesized on decode,
+  // ensure the things we attempt to encode will have one added so we
+  // round-trip properly.
+  auto gen_layout = [](rgw::BucketLayout& l) {
+    l.current_index.gen = 0;
+    l.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
+    l.current_index.layout.type = rgw::BucketIndexType::Normal;
+    l.current_index.layout.normal.num_shards = 11;
+    l.logs.push_back(log_layout_from_index(
+                       l.current_index.gen,
+                       l.current_index.layout.normal));
+  };
+
+
+  RGWBucketInfo *i = new RGWBucketInfo;
+  init_bucket(&i->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  i->owner = "owner";
+  i->flags = BUCKET_SUSPENDED;
+  gen_layout(i->layout);
+  o.push_back(i);
+  i = new RGWBucketInfo;
+  gen_layout(i->layout);
+  o.push_back(i);
+}
+
+void RGWBucketInfo::dump(Formatter *f) const
+{
+  encode_json("bucket", bucket, f);
+  utime_t ut(creation_time);
+  encode_json("creation_time", ut, f);
+  encode_json("owner", owner.to_str(), f);
+  encode_json("flags", flags, f);
+  encode_json("zonegroup", zonegroup, f);
+  encode_json("placement_rule", placement_rule, f);
+  encode_json("has_instance_obj", has_instance_obj, f);
+  encode_json("quota", quota, f);
+  encode_json("num_shards", layout.current_index.layout.normal.num_shards, f);
+  encode_json("bi_shard_hash_type", (uint32_t)layout.current_index.layout.normal.hash_type, f);
+  encode_json("requester_pays", requester_pays, f);
+  encode_json("has_website", has_website, f);
+  if (has_website) {
+    encode_json("website_conf", website_conf, f);
+  }
+  encode_json("swift_versioning", swift_versioning, f);
+  encode_json("swift_ver_location", swift_ver_location, f);
+  encode_json("index_type", (uint32_t)layout.current_index.layout.type, f);
+  encode_json("mdsearch_config", mdsearch_config, f);
+  encode_json("reshard_status", (int)reshard_status, f);
+  encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
+  if (!empty_sync_policy()) {
+    encode_json("sync_policy", *sync_policy, f);
+  }
+}
+
+void RGWBucketInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("bucket", bucket, obj);
+  utime_t ut;
+  JSONDecoder::decode_json("creation_time", ut, obj);
+  creation_time = ut.to_real_time();
+  JSONDecoder::decode_json("owner", owner, obj);
+  JSONDecoder::decode_json("flags", flags, obj);
+  JSONDecoder::decode_json("zonegroup", zonegroup, obj);
+  /* backward compatability with region */
+  if (zonegroup.empty()) {
+    JSONDecoder::decode_json("region", zonegroup, obj);
+  }
+  string pr;
+  JSONDecoder::decode_json("placement_rule", pr, obj);
+  placement_rule.from_str(pr);
+  JSONDecoder::decode_json("has_instance_obj", has_instance_obj, obj);
+  JSONDecoder::decode_json("quota", quota, obj);
+  JSONDecoder::decode_json("num_shards", layout.current_index.layout.normal.num_shards, obj);
+  uint32_t hash_type;
+  JSONDecoder::decode_json("bi_shard_hash_type", hash_type, obj);
+  layout.current_index.layout.normal.hash_type = static_cast<rgw::BucketHashType>(hash_type);
+  JSONDecoder::decode_json("requester_pays", requester_pays, obj);
+  JSONDecoder::decode_json("has_website", has_website, obj);
+  if (has_website) {
+    JSONDecoder::decode_json("website_conf", website_conf, obj);
+  }
+  JSONDecoder::decode_json("swift_versioning", swift_versioning, obj);
+  JSONDecoder::decode_json("swift_ver_location", swift_ver_location, obj);
+  uint32_t it;
+  JSONDecoder::decode_json("index_type", it, obj);
+  layout.current_index.layout.type = (rgw::BucketIndexType)it;
+  JSONDecoder::decode_json("mdsearch_config", mdsearch_config, obj);
+  int rs;
+  JSONDecoder::decode_json("reshard_status", rs, obj);
+  reshard_status = (cls_rgw_reshard_status)rs;
+
+  rgw_sync_policy_info sp;
+  JSONDecoder::decode_json("sync_policy", sp, obj);
+  if (!sp.empty()) {
+    set_sync_policy(std::move(sp));
+  }
+}
+
+void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
+{
+  RGWUserInfo *i = new RGWUserInfo;
+  i->user_id = "user_id";
+  i->display_name =  "display_name";
+  i->user_email = "user@email";
+  RGWAccessKey k1, k2;
+  k1.id = "id1";
+  k1.key = "key1";
+  k2.id = "id2";
+  k2.subuser = "subuser";
+  RGWSubUser u;
+  u.name = "id2";
+  u.perm_mask = 0x1;
+  i->access_keys[k1.id] = k1;
+  i->swift_keys[k2.id] = k2;
+  i->subusers[u.name] = u;
+  o.push_back(i);
+
+  o.push_back(new RGWUserInfo);
+}
+
+static void user_info_dump_subuser(const char *name, const RGWSubUser& subuser, Formatter *f, void *parent)
+{
+  RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
+  subuser.dump(f, info->user_id.to_str());
+}
+
+static void user_info_dump_key(const char *name, const RGWAccessKey& key, Formatter *f, void *parent)
+{
+  RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
+  key.dump(f, info->user_id.to_str(), false);
+}
+
+static void user_info_dump_swift_key(const char *name, const RGWAccessKey& key, Formatter *f, void *parent)
+{
+  RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
+  key.dump(f, info->user_id.to_str(), true);
+}
+
+static void decode_access_keys(map<string, RGWAccessKey>& m, JSONObj *o)
+{
+  RGWAccessKey k;
+  k.decode_json(o);
+  m[k.id] = k;
+}
+
+static void decode_swift_keys(map<string, RGWAccessKey>& m, JSONObj *o)
+{
+  RGWAccessKey k;
+  k.decode_json(o, true);
+  m[k.id] = k;
+}
+
+static void decode_subusers(map<string, RGWSubUser>& m, JSONObj *o)
+{
+  RGWSubUser u;
+  u.decode_json(o);
+  m[u.name] = u;
+}
+
+
+struct rgw_flags_desc {
+  uint32_t mask;
+  const char *str;
+};
+
+static struct rgw_flags_desc rgw_perms[] = {
+ { RGW_PERM_FULL_CONTROL, "full-control" },
+ { RGW_PERM_READ | RGW_PERM_WRITE, "read-write" },
+ { RGW_PERM_READ, "read" },
+ { RGW_PERM_WRITE, "write" },
+ { RGW_PERM_READ_ACP, "read-acp" },
+ { RGW_PERM_WRITE_ACP, "write-acp" },
+ { 0, NULL }
+};
+
+void rgw_perm_to_str(uint32_t mask, char *buf, int len)
+{
+  const char *sep = "";
+  int pos = 0;
+  if (!mask) {
+    snprintf(buf, len, "<none>");
+    return;
+  }
+  while (mask) {
+    uint32_t orig_mask = mask;
+    for (int i = 0; rgw_perms[i].mask; i++) {
+      struct rgw_flags_desc *desc = &rgw_perms[i];
+      if ((mask & desc->mask) == desc->mask) {
+        pos += snprintf(buf + pos, len - pos, "%s%s", sep, desc->str);
+        if (pos == len)
+          return;
+        sep = ", ";
+        mask &= ~desc->mask;
+        if (!mask)
+          return;
+      }
+    }
+    if (mask == orig_mask) // no change
+      break;
+  }
+}
+
+uint32_t rgw_str_to_perm(const char *str)
+{
+  if (strcasecmp(str, "") == 0)
+    return RGW_PERM_NONE;
+  else if (strcasecmp(str, "read") == 0)
+    return RGW_PERM_READ;
+  else if (strcasecmp(str, "write") == 0)
+    return RGW_PERM_WRITE;
+  else if (strcasecmp(str, "readwrite") == 0)
+    return RGW_PERM_READ | RGW_PERM_WRITE;
+  else if (strcasecmp(str, "full") == 0)
+    return RGW_PERM_FULL_CONTROL;
+
+  return RGW_PERM_INVALID;
+}
+
+template <class T>
+static void mask_to_str(T *mask_list, uint32_t mask, char *buf, int len)
+{
+  const char *sep = "";
+  int pos = 0;
+  if (!mask) {
+    snprintf(buf, len, "<none>");
+    return;
+  }
+  while (mask) {
+    uint32_t orig_mask = mask;
+    for (int i = 0; mask_list[i].mask; i++) {
+      T *desc = &mask_list[i];
+      if ((mask & desc->mask) == desc->mask) {
+        pos += snprintf(buf + pos, len - pos, "%s%s", sep, desc->str);
+        if (pos == len)
+          return;
+        sep = ", ";
+        mask &= ~desc->mask;
+        if (!mask)
+          return;
+      }
+    }
+    if (mask == orig_mask) // no change
+      break;
+  }
+}
+
+static void perm_to_str(uint32_t mask, char *buf, int len)
+{
+  return mask_to_str(rgw_perms, mask, buf, len);
+}
+
+static struct rgw_flags_desc op_type_flags[] = {
+ { RGW_OP_TYPE_READ, "read" },
+ { RGW_OP_TYPE_WRITE, "write" },
+ { RGW_OP_TYPE_DELETE, "delete" },
+ { 0, NULL }
+};
+
+void op_type_to_str(uint32_t mask, char *buf, int len)
+{
+  return mask_to_str(op_type_flags, mask, buf, len);
+}
+
+void RGWUserInfo::dump(Formatter *f) const
+{
+
+  encode_json("user_id", user_id.to_str(), f);
+  encode_json("display_name", display_name, f);
+  encode_json("email", user_email, f);
+  encode_json("suspended", (int)suspended, f);
+  encode_json("max_buckets", (int)max_buckets, f);
+
+  encode_json_map("subusers", NULL, "subuser", NULL, user_info_dump_subuser,(void *)this, subusers, f);
+  encode_json_map("keys", NULL, "key", NULL, user_info_dump_key,(void *)this, access_keys, f);
+  encode_json_map("swift_keys", NULL, "key", NULL, user_info_dump_swift_key,(void *)this, swift_keys, f);
+
+  encode_json("caps", caps, f);
+
+  char buf[256];
+  op_type_to_str(op_mask, buf, sizeof(buf));
+  encode_json("op_mask", (const char *)buf, f);
+
+  if (system) { /* no need to show it for every user */
+    encode_json("system", (bool)system, f);
+  }
+  if (admin) {
+    encode_json("admin", (bool)admin, f);
+  }
+  encode_json("default_placement", default_placement.name, f);
+  encode_json("default_storage_class", default_placement.storage_class, f);
+  encode_json("placement_tags", placement_tags, f);
+  encode_json("bucket_quota", bucket_quota, f);
+  encode_json("user_quota", user_quota, f);
+  encode_json("temp_url_keys", temp_url_keys, f);
+
+  string user_source_type;
+  switch ((RGWIdentityType)type) {
+  case TYPE_RGW:
+    user_source_type = "rgw";
+    break;
+  case TYPE_KEYSTONE:
+    user_source_type = "keystone";
+    break;
+  case TYPE_LDAP:
+    user_source_type = "ldap";
+    break;
+  case TYPE_NONE:
+    user_source_type = "none";
+    break;
+  default:
+    user_source_type = "none";
+    break;
+  }
+  encode_json("type", user_source_type, f);
+  encode_json("mfa_ids", mfa_ids, f);
+}
+
+void RGWUserInfo::decode_json(JSONObj *obj)
+{
+  string uid;
+
+  JSONDecoder::decode_json("user_id", uid, obj, true);
+  user_id.from_str(uid);
+
+  JSONDecoder::decode_json("display_name", display_name, obj);
+  JSONDecoder::decode_json("email", user_email, obj);
+  bool susp = false;
+  JSONDecoder::decode_json("suspended", susp, obj);
+  suspended = (__u8)susp;
+  JSONDecoder::decode_json("max_buckets", max_buckets, obj);
+
+  JSONDecoder::decode_json("keys", access_keys, decode_access_keys, obj);
+  JSONDecoder::decode_json("swift_keys", swift_keys, decode_swift_keys, obj);
+  JSONDecoder::decode_json("subusers", subusers, decode_subusers, obj);
+
+  JSONDecoder::decode_json("caps", caps, obj);
+
+  string mask_str;
+  JSONDecoder::decode_json("op_mask", mask_str, obj);
+  rgw_parse_op_type_list(mask_str, &op_mask);
+
+  bool sys = false;
+  JSONDecoder::decode_json("system", sys, obj);
+  system = (__u8)sys;
+  bool ad = false;
+  JSONDecoder::decode_json("admin", ad, obj);
+  admin = (__u8)ad;
+  JSONDecoder::decode_json("default_placement", default_placement.name, obj);
+  JSONDecoder::decode_json("default_storage_class", default_placement.storage_class, obj);
+  JSONDecoder::decode_json("placement_tags", placement_tags, obj);
+  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", user_quota, obj);
+  JSONDecoder::decode_json("temp_url_keys", temp_url_keys, obj);
+
+  string user_source_type;
+  JSONDecoder::decode_json("type", user_source_type, obj);
+  if (user_source_type == "rgw") {
+    type = TYPE_RGW;
+  } else if (user_source_type == "keystone") {
+    type = TYPE_KEYSTONE;
+  } else if (user_source_type == "ldap") {
+    type = TYPE_LDAP;
+  } else if (user_source_type == "none") {
+    type = TYPE_NONE;
+  }
+  JSONDecoder::decode_json("mfa_ids", mfa_ids, obj);
+}
+
+
+void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
+{
+  RGWSubUser *u = new RGWSubUser;
+  u->name = "name";
+  u->perm_mask = 0xf;
+  o.push_back(u);
+  o.push_back(new RGWSubUser);
+}
+
+void RGWSubUser::dump(Formatter *f) const
+{
+  encode_json("id", name, f);
+  char buf[256];
+  perm_to_str(perm_mask, buf, sizeof(buf));
+  encode_json("permissions", (const char *)buf, f);
+}
+
+void RGWSubUser::dump(Formatter *f, const string& user) const
+{
+  string s = user;
+  s.append(":");
+  s.append(name);
+  encode_json("id", s, f);
+  char buf[256];
+  perm_to_str(perm_mask, buf, sizeof(buf));
+  encode_json("permissions", (const char *)buf, f);
+}
+
+uint32_t str_to_perm(const string& s)
+{
+  if (s.compare("read") == 0)
+    return RGW_PERM_READ;
+  else if (s.compare("write") == 0)
+    return RGW_PERM_WRITE;
+  else if (s.compare("read-write") == 0)
+    return RGW_PERM_READ | RGW_PERM_WRITE;
+  else if (s.compare("full-control") == 0)
+    return RGW_PERM_FULL_CONTROL;
+  return 0;
+}
+
+void RGWSubUser::decode_json(JSONObj *obj)
+{
+  string uid;
+  JSONDecoder::decode_json("id", uid, obj);
+  int pos = uid.find(':');
+  if (pos >= 0)
+    name = uid.substr(pos + 1);
+  string perm_str;
+  JSONDecoder::decode_json("permissions", perm_str, obj);
+  perm_mask = str_to_perm(perm_str);
+}
+
+void RGWAccessKey::generate_test_instances(list<RGWAccessKey*>& o)
+{
+  RGWAccessKey *k = new RGWAccessKey;
+  k->id = "id";
+  k->key = "key";
+  k->subuser = "subuser";
+  o.push_back(k);
+  o.push_back(new RGWAccessKey);
+}
+
+void RGWAccessKey::dump(Formatter *f) const
+{
+  encode_json("access_key", id, f);
+  encode_json("secret_key", key, f);
+  encode_json("subuser", subuser, f);
+}
+
+void RGWAccessKey::dump_plain(Formatter *f) const
+{
+  encode_json("access_key", id, f);
+  encode_json("secret_key", key, f);
+}
+
+void RGWAccessKey::dump(Formatter *f, const string& user, bool swift) const
+{
+  string u = user;
+  if (!subuser.empty()) {
+    u.append(":");
+    u.append(subuser);
+  }
+  encode_json("user", u, f);
+  if (!swift) {
+    encode_json("access_key", id, f);
+  }
+  encode_json("secret_key", key, f);
+}
+
+void RGWAccessKey::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("access_key", id, obj, true);
+  JSONDecoder::decode_json("secret_key", key, obj, true);
+  if (!JSONDecoder::decode_json("subuser", subuser, obj)) {
+    string user;
+    JSONDecoder::decode_json("user", user, obj);
+    int pos = user.find(':');
+    if (pos >= 0) {
+      subuser = user.substr(pos + 1);
+    }
+  }
+}
+
+void RGWAccessKey::decode_json(JSONObj *obj, bool swift) {
+  if (!swift) {
+    decode_json(obj);
+    return;
+  }
+
+  if (!JSONDecoder::decode_json("subuser", subuser, obj)) {
+    JSONDecoder::decode_json("user", id, obj, true);
+    int pos = id.find(':');
+    if (pos >= 0) {
+      subuser = id.substr(pos + 1);
+    }
+  }
+  JSONDecoder::decode_json("secret_key", key, obj, true);
+}
+
+void RGWStorageStats::dump(Formatter *f) const
+{
+  encode_json("size", size, f);
+  encode_json("size_actual", size_rounded, f);
+  if (dump_utilized) {
+    encode_json("size_utilized", size_utilized, f);
+  }
+  encode_json("size_kb", rgw_rounded_kb(size), f);
+  encode_json("size_kb_actual", rgw_rounded_kb(size_rounded), f);
+  if (dump_utilized) {
+    encode_json("size_kb_utilized", rgw_rounded_kb(size_utilized), f);
+  }
+  encode_json("num_objects", num_objects, f);
+}
+
+void rgw_obj_key::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("instance", instance, f);
+  encode_json("ns", ns, f);
+}
+
+void rgw_obj_key::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("instance", instance, obj);
+  JSONDecoder::decode_json("ns", ns, obj);
+}
+
+void rgw_raw_obj::dump(Formatter *f) const
+{
+  encode_json("pool", pool, f);
+  encode_json("oid", oid, f);
+  encode_json("loc", loc, f);
+}
+
+void rgw_raw_obj::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("pool", pool, obj);
+  JSONDecoder::decode_json("oid", oid, obj);
+  JSONDecoder::decode_json("loc", loc, obj);
+}
+
+void rgw_obj::dump(Formatter *f) const
+{
+  encode_json("bucket", bucket, f);
+  encode_json("key", key, f);
+}
+
 

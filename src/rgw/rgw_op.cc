@@ -8734,3 +8734,11 @@ void RGWDeleteBucketEncryption::execute(optional_yield y)
     return op_ret;
   });
 }
+
+void rgw_slo_entry::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("path", path, obj);
+  JSONDecoder::decode_json("etag", etag, obj);
+  JSONDecoder::decode_json("size_bytes", size_bytes, obj);
+};
+

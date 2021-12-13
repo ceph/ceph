@@ -11,6 +11,10 @@
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
 
+#include "common/ceph_json.h"
+#include "common/Formatter.h"
+
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw_zone_defaults {
@@ -47,6 +51,15 @@ using namespace rgw_zone_defaults;
 RGWMetaSyncStatusManager::~RGWMetaSyncStatusManager(){}
 
 #define FIRST_EPOCH 1
+
+struct RGWAccessKey;
+
+void encode_json_plain(const char *name, const RGWAccessKey& val, Formatter *f)
+{
+  f->open_object_section(name);
+  val.dump_plain(f);
+  f->close_section();
+}
 
 void RGWDefaultZoneGroupInfo::dump(Formatter *f) const {
   encode_json("default_zonegroup", default_zonegroup, f);
@@ -404,6 +417,14 @@ int RGWSystemMetaObj::init(const DoutPrefixProvider *dpp, CephContext *_cct, RGW
   }
 
   return read_info(dpp, id, y, old_format);
+}
+
+void RGWDefaultSystemMetaObjInfo::dump(Formatter *f) const {
+  encode_json("default_id", default_id, f);
+}
+
+void RGWDefaultSystemMetaObjInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("default_id", default_id, obj);
 }
 
 int RGWSystemMetaObj::read_default(const DoutPrefixProvider *dpp, 
@@ -1612,6 +1633,29 @@ int RGWZoneParams::create_default(const DoutPrefixProvider *dpp, optional_yield 
   return r;
 }
 
+void RGWZoneParams::dump(Formatter *f) const
+{
+  RGWSystemMetaObj::dump(f);
+  encode_json("domain_root", domain_root, f);
+  encode_json("control_pool", control_pool, f);
+  encode_json("gc_pool", gc_pool, f);
+  encode_json("lc_pool", lc_pool, f);
+  encode_json("log_pool", log_pool, f);
+  encode_json("intent_log_pool", intent_log_pool, f);
+  encode_json("usage_log_pool", usage_log_pool, f);
+  encode_json("roles_pool", roles_pool, f);
+  encode_json("reshard_pool", reshard_pool, f);
+  encode_json("user_keys_pool", user_keys_pool, f);
+  encode_json("user_email_pool", user_email_pool, f);
+  encode_json("user_swift_pool", user_swift_pool, f);
+  encode_json("user_uid_pool", user_uid_pool, f);
+  encode_json("otp_pool", otp_pool, f);
+  encode_json_plain("system_key", system_key, f);
+  encode_json("placement_pools", placement_pools, f);
+  encode_json("tier_config", tier_config, f);
+  encode_json("realm_id", realm_id, f);
+  encode_json("notif_pool", notif_pool, f);
+}
 
 namespace {
 int get_zones_pool_set(const DoutPrefixProvider *dpp, 
@@ -2115,6 +2159,41 @@ int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
   return r;
 }
 
+void RGWZoneGroupPlacementTier::dump(Formatter *f) const
+{
+  encode_json("tier_type", tier_type, f);
+  encode_json("storage_class", storage_class, f);
+  encode_json("retain_head_object", retain_head_object, f);
+
+  if (tier_type == "cloud-s3") {
+    encode_json("s3", t.s3, f);
+  }
+}
+
+void RGWZoneGroupPlacementTier::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("tier_type", tier_type, obj);
+  JSONDecoder::decode_json("storage_class", storage_class, obj);
+  JSONDecoder::decode_json("retain_head_object", retain_head_object, obj);
+
+  if (tier_type == "cloud-s3") {
+    JSONDecoder::decode_json("s3", t.s3, obj);
+  }
+}
+
+int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
+{
+  if (config.exists("retain_head_object")) {
+    retain_head_object = false;
+  }
+
+  if (tier_type == "cloud-s3") {
+    t.s3.clear_params(config);
+  }
+
+  return 0;
+}
+
 int RGWZoneGroupPlacementTierS3::update_params(const JSONFormattable& config)
 {
   int r = -1;
@@ -2180,17 +2259,40 @@ int RGWZoneGroupPlacementTierS3::update_params(const JSONFormattable& config)
   }
   return 0;
 }
-int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
+
+void RGWZoneGroupPlacementTierS3::dump(Formatter *f) const
 {
-  if (config.exists("retain_head_object")) {
-    retain_head_object = false;
-  }
+  encode_json("endpoint", endpoint, f);
+  encode_json("access_key", key.id, f);
+  encode_json("secret", key.key, f);
+  encode_json("region", region, f);
+  string s = (host_style == PathStyle ? "path" : "virtual");
+  encode_json("host_style", s, f);
+  encode_json("target_storage_class", target_storage_class, f);
+  encode_json("target_path", target_path, f);
+  encode_json("acl_mappings", acl_mappings, f);
+  encode_json("multipart_sync_threshold", multipart_sync_threshold, f);
+  encode_json("multipart_min_part_size", multipart_min_part_size, f);
+}
 
-  if (tier_type == "cloud-s3") {
-    t.s3.clear_params(config);
+void RGWZoneGroupPlacementTierS3::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("endpoint", endpoint, obj);
+  JSONDecoder::decode_json("access_key", key.id, obj);
+  JSONDecoder::decode_json("secret", key.key, obj);
+  JSONDecoder::decode_json("region", region, obj);
+  string s;
+  JSONDecoder::decode_json("host_style", s, obj);
+  if (s != "virtual") {
+    host_style = PathStyle;
+  } else {
+    host_style = VirtualStyle;
   }
-
-  return 0;
+  JSONDecoder::decode_json("target_storage_class", target_storage_class, obj);
+  JSONDecoder::decode_json("target_path", target_path, obj);
+  JSONDecoder::decode_json("acl_mappings", acl_mappings, obj);
+  JSONDecoder::decode_json("multipart_sync_threshold", multipart_sync_threshold, obj);
+  JSONDecoder::decode_json("multipart_min_part_size", multipart_min_part_size, obj);
 }
 
 int RGWZoneGroupPlacementTierS3::clear_params(const JSONFormattable& config)
@@ -2238,5 +2340,467 @@ int RGWZoneGroupPlacementTierS3::clear_params(const JSONFormattable& config)
     }
   }
   return 0;
+}
+
+void RGWZoneGroupPlacementTarget::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("tags", tags, f);
+  encode_json("storage_classes", storage_classes, f);
+  if (!tier_targets.empty()) {
+    encode_json("tier_targets", tier_targets, f);
+  }
+}
+
+void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("tags", tags, obj);
+  JSONDecoder::decode_json("storage_classes", storage_classes, obj);
+  if (storage_classes.empty()) {
+    storage_classes.insert(RGW_STORAGE_CLASS_STANDARD);
+  }
+  if (!tier_targets.empty()) {
+    JSONDecoder::decode_json("tier_targets", tier_targets, obj);
+  }
+}
+
+void RGWZoneGroup::dump(Formatter *f) const
+{
+  RGWSystemMetaObj::dump(f);
+  encode_json("api_name", api_name, f);
+  encode_json("is_master", is_master, f);
+  encode_json("endpoints", endpoints, f);
+  encode_json("hostnames", hostnames, f);
+  encode_json("hostnames_s3website", hostnames_s3website, f);
+  encode_json("master_zone", master_zone, f);
+  encode_json_map("zones", zones, f); /* more friendly representation */
+  encode_json_map("placement_targets", placement_targets, f); /* more friendly representation */
+  encode_json("default_placement", default_placement, f);
+  encode_json("realm_id", realm_id, f);
+  encode_json("sync_policy", sync_policy, f);
+}
+
+static void decode_zones(map<rgw_zone_id, RGWZone>& zones, JSONObj *o)
+{
+  RGWZone z;
+  z.decode_json(o);
+  zones[z.id] = z;
+}
+
+static void decode_placement_targets(map<string, RGWZoneGroupPlacementTarget>& targets, JSONObj *o)
+{
+  RGWZoneGroupPlacementTarget t;
+  t.decode_json(o);
+  targets[t.name] = t;
+}
+
+static void decode_zonegroups(map<string, RGWZoneGroup>& zonegroups, JSONObj *o)
+{
+  RGWZoneGroup zg;
+  zg.decode_json(o);
+  zonegroups[zg.get_id()] = zg;
+}
+
+void RGWZoneGroup::decode_json(JSONObj *obj)
+{
+  RGWSystemMetaObj::decode_json(obj);
+  if (id.empty()) {
+    derr << "old format " << dendl;
+    JSONDecoder::decode_json("name", name, obj);
+    id = name;
+  }
+  JSONDecoder::decode_json("api_name", api_name, obj);
+  JSONDecoder::decode_json("is_master", is_master, obj);
+  JSONDecoder::decode_json("endpoints", endpoints, obj);
+  JSONDecoder::decode_json("hostnames", hostnames, obj);
+  JSONDecoder::decode_json("hostnames_s3website", hostnames_s3website, obj);
+  JSONDecoder::decode_json("master_zone", master_zone, obj);
+  JSONDecoder::decode_json("zones", zones, decode_zones, obj);
+  JSONDecoder::decode_json("placement_targets", placement_targets, decode_placement_targets, obj);
+  JSONDecoder::decode_json("default_placement", default_placement.name, obj);
+  JSONDecoder::decode_json("default_storage_class", default_placement.storage_class, obj);
+  JSONDecoder::decode_json("realm_id", realm_id, obj);
+  JSONDecoder::decode_json("sync_policy", sync_policy, obj);
+}
+
+void rgw_meta_sync_info::generate_test_instances(list<rgw_meta_sync_info*>& o)
+{
+  auto info = new rgw_meta_sync_info;
+  info->state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
+  info->period = "periodid";
+  info->realm_epoch = 5;
+  o.push_back(info);
+  o.push_back(new rgw_meta_sync_info);
+}
+
+void rgw_meta_sync_marker::generate_test_instances(list<rgw_meta_sync_marker*>& o)
+{
+  auto marker = new rgw_meta_sync_marker;
+  marker->state = rgw_meta_sync_marker::IncrementalSync;
+  marker->marker = "01234";
+  marker->realm_epoch = 5;
+  o.push_back(marker);
+  o.push_back(new rgw_meta_sync_marker);
+}
+
+void rgw_meta_sync_status::generate_test_instances(list<rgw_meta_sync_status*>& o)
+{
+  o.push_back(new rgw_meta_sync_status);
+}
+
+void RGWZoneParams::generate_test_instances(list<RGWZoneParams*> &o)
+{
+  o.push_back(new RGWZoneParams);
+  o.push_back(new RGWZoneParams);
+}
+
+void RGWPeriodLatestEpochInfo::generate_test_instances(list<RGWPeriodLatestEpochInfo*> &o)
+{
+  RGWPeriodLatestEpochInfo *z = new RGWPeriodLatestEpochInfo;
+  o.push_back(z);
+  o.push_back(new RGWPeriodLatestEpochInfo);
+}
+
+void RGWRealm::generate_test_instances(list<RGWRealm*> &o)
+{
+  RGWRealm *z = new RGWRealm;
+  o.push_back(z);
+  o.push_back(new RGWRealm);
+}
+
+void RGWRealm::dump(Formatter *f) const
+{
+  RGWSystemMetaObj::dump(f);
+  encode_json("current_period", current_period, f);
+  encode_json("epoch", epoch, f);
+}
+
+
+void RGWRealm::decode_json(JSONObj *obj)
+{
+  RGWSystemMetaObj::decode_json(obj);
+  JSONDecoder::decode_json("current_period", current_period, obj);
+  JSONDecoder::decode_json("epoch", epoch, obj);
+}
+
+void RGWZoneGroup::generate_test_instances(list<RGWZoneGroup*>& o)
+{
+  RGWZoneGroup *r = new RGWZoneGroup;
+  o.push_back(r);
+  o.push_back(new RGWZoneGroup);
+}
+
+void RGWZone::generate_test_instances(list<RGWZone*> &o)
+{
+  RGWZone *z = new RGWZone;
+  o.push_back(z);
+  o.push_back(new RGWZone);
+}
+
+void RGWPeriod::generate_test_instances(list<RGWPeriod*> &o)
+{
+  RGWPeriod *z = new RGWPeriod;
+  o.push_back(z);
+  o.push_back(new RGWPeriod);
+}
+
+void RGWPeriodLatestEpochInfo::dump(Formatter *f) const {
+  encode_json("latest_epoch", epoch, f);
+}
+
+void RGWPeriodLatestEpochInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("latest_epoch", epoch, obj);
+}
+
+void RGWPeriod::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("epoch", epoch , f);
+  encode_json("predecessor_uuid", predecessor_uuid, f);
+  encode_json("sync_status", sync_status, f);
+  encode_json("period_map", period_map, f);
+  encode_json("master_zonegroup", master_zonegroup, f);
+  encode_json("master_zone", master_zone, f);
+  encode_json("period_config", period_config, f);
+  encode_json("realm_id", realm_id, f);
+  encode_json("realm_name", realm_name, f);
+  encode_json("realm_epoch", realm_epoch, f);
+}
+
+void RGWPeriod::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("epoch", epoch, obj);
+  JSONDecoder::decode_json("predecessor_uuid", predecessor_uuid, obj);
+  JSONDecoder::decode_json("sync_status", sync_status, obj);
+  JSONDecoder::decode_json("period_map", period_map, obj);
+  JSONDecoder::decode_json("master_zonegroup", master_zonegroup, obj);
+  JSONDecoder::decode_json("master_zone", master_zone, obj);
+  JSONDecoder::decode_json("period_config", period_config, obj);
+  JSONDecoder::decode_json("realm_id", realm_id, obj);
+  JSONDecoder::decode_json("realm_name", realm_name, obj);
+  JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
+}
+
+void RGWNameToId::dump(Formatter *f) const {
+  encode_json("obj_id", obj_id, f);
+}
+
+void RGWNameToId::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("obj_id", obj_id, obj);
+}
+
+void RGWSystemMetaObj::dump(Formatter *f) const
+{
+  encode_json("id", id , f);
+  encode_json("name", name , f);
+}
+
+void RGWSystemMetaObj::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("name", name, obj);
+}
+
+void RGWZoneStorageClass::dump(Formatter *f) const
+{
+  if (data_pool) {
+    encode_json("data_pool", data_pool.get(), f);
+  }
+  if (compression_type) {
+    encode_json("compression_type", compression_type.get(), f);
+  }
+}
+
+void RGWZoneStorageClass::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("data_pool", data_pool, obj);
+  JSONDecoder::decode_json("compression_type", compression_type, obj);
+}
+
+void RGWZoneStorageClasses::dump(Formatter *f) const
+{
+  for (auto& i : m) {
+    encode_json(i.first.c_str(), i.second, f);
+  }
+}
+
+void RGWZoneStorageClasses::decode_json(JSONObj *obj)
+{
+  JSONFormattable f;
+  decode_json_obj(f, obj);
+
+  for (auto& field : f.object()) {
+    JSONObj *field_obj = obj->find_obj(field.first);
+    assert(field_obj);
+
+    decode_json_obj(m[field.first], field_obj);
+  }
+  standard_class = &m[RGW_STORAGE_CLASS_STANDARD];
+}
+
+void RGWZonePlacementInfo::dump(Formatter *f) const
+{
+  encode_json("index_pool", index_pool, f);
+  encode_json("storage_classes", storage_classes, f);
+  encode_json("data_extra_pool", data_extra_pool, f);
+  encode_json("index_type", (uint32_t)index_type, f);
+
+  /* no real need for backward compatibility of compression_type and data_pool in here,
+   * rather not clutter the output */
+}
+
+void RGWZonePlacementInfo::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("index_pool", index_pool, obj);
+  JSONDecoder::decode_json("storage_classes", storage_classes, obj);
+  JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
+  uint32_t it;
+  JSONDecoder::decode_json("index_type", it, obj);
+  index_type = (rgw::BucketIndexType)it;
+
+  /* backward compatibility, these are now defined in storage_classes */
+  string standard_compression_type;
+  string *pcompression = nullptr;
+  if (JSONDecoder::decode_json("compression", standard_compression_type, obj)) {
+    pcompression = &standard_compression_type;
+  }
+  rgw_pool standard_data_pool;
+  rgw_pool *ppool = nullptr;
+  if (JSONDecoder::decode_json("data_pool", standard_data_pool, obj)) {
+    ppool = &standard_data_pool;
+  }
+  if (ppool || pcompression) {
+    storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, ppool, pcompression);
+  }
+}
+
+void RGWZoneParams::decode_json(JSONObj *obj)
+{
+  RGWSystemMetaObj::decode_json(obj);
+  JSONDecoder::decode_json("domain_root", domain_root, obj);
+  JSONDecoder::decode_json("control_pool", control_pool, obj);
+  JSONDecoder::decode_json("gc_pool", gc_pool, obj);
+  JSONDecoder::decode_json("lc_pool", lc_pool, obj);
+  JSONDecoder::decode_json("log_pool", log_pool, obj);
+  JSONDecoder::decode_json("intent_log_pool", intent_log_pool, obj);
+  JSONDecoder::decode_json("roles_pool", roles_pool, obj);
+  JSONDecoder::decode_json("reshard_pool", reshard_pool, obj);
+  JSONDecoder::decode_json("usage_log_pool", usage_log_pool, obj);
+  JSONDecoder::decode_json("user_keys_pool", user_keys_pool, obj);
+  JSONDecoder::decode_json("user_email_pool", user_email_pool, obj);
+  JSONDecoder::decode_json("user_swift_pool", user_swift_pool, obj);
+  JSONDecoder::decode_json("user_uid_pool", user_uid_pool, obj);
+  JSONDecoder::decode_json("otp_pool", otp_pool, obj);
+  JSONDecoder::decode_json("system_key", system_key, obj);
+  JSONDecoder::decode_json("placement_pools", placement_pools, obj);
+  JSONDecoder::decode_json("tier_config", tier_config, obj);
+  JSONDecoder::decode_json("realm_id", realm_id, obj);
+  JSONDecoder::decode_json("notif_pool", notif_pool, obj);
+
+}
+
+void RGWZone::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("name", name, f);
+  encode_json("endpoints", endpoints, f);
+  encode_json("log_meta", log_meta, f);
+  encode_json("log_data", log_data, f);
+  encode_json("bucket_index_max_shards", bucket_index_max_shards, f);
+  encode_json("read_only", read_only, f);
+  encode_json("tier_type", tier_type, f);
+  encode_json("sync_from_all", sync_from_all, f);
+  encode_json("sync_from", sync_from, f);
+  encode_json("redirect_zone", redirect_zone, f);
+}
+
+void RGWZone::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("name", name, obj);
+  if (id.empty()) {
+    id = name;
+  }
+  JSONDecoder::decode_json("endpoints", endpoints, obj);
+  JSONDecoder::decode_json("log_meta", log_meta, obj);
+  JSONDecoder::decode_json("log_data", log_data, obj);
+  JSONDecoder::decode_json("bucket_index_max_shards", bucket_index_max_shards, obj);
+  JSONDecoder::decode_json("read_only", read_only, obj);
+  JSONDecoder::decode_json("tier_type", tier_type, obj);
+  JSONDecoder::decode_json("sync_from_all", sync_from_all, true, obj);
+  JSONDecoder::decode_json("sync_from", sync_from, obj);
+  JSONDecoder::decode_json("redirect_zone", redirect_zone, obj);
+}
+
+void RGWTierACLMapping::dump(Formatter *f) const
+{
+  string s;
+  switch (type) {
+    case ACL_TYPE_EMAIL_USER:
+      s = "email";
+      break;
+    case ACL_TYPE_GROUP:
+      s = "uri";
+      break;
+    default:
+      s = "id";
+      break;
+  }
+  encode_json("type", s, f);
+  encode_json("source_id", source_id, f);
+  encode_json("dest_id", dest_id, f);
+}
+
+void RGWTierACLMapping::decode_json(JSONObj *obj)
+{
+  string s;
+  JSONDecoder::decode_json("type", s, obj);
+  if (s == "email") {
+    type = ACL_TYPE_EMAIL_USER;
+  } else if (s == "uri") {
+    type = ACL_TYPE_GROUP;
+  } else {
+    type = ACL_TYPE_CANON_USER;
+  }
+
+  JSONDecoder::decode_json("source_id", source_id, obj);
+  JSONDecoder::decode_json("dest_id", dest_id, obj);
+}
+
+void RGWPeriodMap::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json_map("zonegroups", zonegroups, f);
+  encode_json("short_zone_ids", short_zone_ids, f);
+}
+
+void RGWPeriodMap::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("zonegroups", zonegroups, decode_zonegroups, obj);
+  /* backward compatability with region */
+  if (zonegroups.empty()) {
+    JSONDecoder::decode_json("regions", zonegroups, obj);
+  }
+  /* backward compatability with region */
+  if (master_zonegroup.empty()) {
+    JSONDecoder::decode_json("master_region", master_zonegroup, obj);
+  }
+  JSONDecoder::decode_json("short_zone_ids", short_zone_ids, obj);
+}
+
+void RGWPeriodConfig::dump(Formatter *f) const
+{
+  encode_json("bucket_quota", bucket_quota, f);
+  encode_json("user_quota", user_quota, f);
+}
+
+void RGWPeriodConfig::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", user_quota, obj);
+}
+
+void RGWRegionMap::dump(Formatter *f) const
+{
+  encode_json("regions", regions, f);
+  encode_json("master_region", master_region, f);
+  encode_json("bucket_quota", bucket_quota, f);
+  encode_json("user_quota", user_quota, f);
+}
+
+void RGWRegionMap::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("regions", regions, obj);
+  JSONDecoder::decode_json("master_region", master_region, obj);
+  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", user_quota, obj);
+}
+
+void RGWZoneGroupMap::dump(Formatter *f) const
+{
+  encode_json("zonegroups", zonegroups, f);
+  encode_json("master_zonegroup", master_zonegroup, f);
+  encode_json("bucket_quota", bucket_quota, f);
+  encode_json("user_quota", user_quota, f);
+}
+
+void RGWZoneGroupMap::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("zonegroups", zonegroups, obj);
+  /* backward compatability with region */
+  if (zonegroups.empty()) {
+    JSONDecoder::decode_json("regions", zonegroups, obj);
+  }
+  JSONDecoder::decode_json("master_zonegroup", master_zonegroup, obj);
+  /* backward compatability with region */
+  if (master_zonegroup.empty()) {
+    JSONDecoder::decode_json("master_region", master_zonegroup, obj);
+  }
+
+  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", user_quota, obj);
 }
 
