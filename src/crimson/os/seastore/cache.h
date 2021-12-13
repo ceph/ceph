@@ -192,8 +192,9 @@ public:
       ret->set_paddr(offset);
       ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
       add_extent(ret);
+      extent_init_func(*ret);
       return read_extent<T>(
-	std::move(ret), std::forward<Func>(extent_init_func));
+	std::move(ret));
     }
 
     // extent PRESENT in cache
@@ -211,13 +212,13 @@ public:
       }
 
       cached->state = CachedExtent::extent_state_t::INVALID;
+      extent_init_func(*ret);
       return read_extent<T>(
-	std::move(ret), std::forward<Func>(extent_init_func));
+	std::move(ret));
     } else {
       auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
       return ret->wait_io(
-      ).then([ret=std::move(ret),
-	      extent_init_func=std::forward<Func>(extent_init_func)]() mutable
+      ).then([ret=std::move(ret)]() mutable
 	     -> get_extent_ret<T> {
         // ret may be invalid, caller must check
         return get_extent_ret<T>(
@@ -880,10 +881,9 @@ private:
   /// Introspect transaction when it is being destructed
   void on_transaction_destruct(Transaction& t);
 
-  template <typename T, typename Func>
+  template <typename T>
   get_extent_ret<T> read_extent(
-    TCachedExtentRef<T>&& extent,
-    Func &&func
+    TCachedExtentRef<T>&& extent
   ) {
     assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING);
     extent->set_io_wait();
@@ -892,13 +892,12 @@ private:
       extent->get_length(),
       extent->get_bptr()
     ).safe_then(
-      [extent=std::move(extent), func=std::forward<Func>(func)]() mutable {
+      [extent=std::move(extent)]() mutable {
         extent->state = CachedExtent::extent_state_t::CLEAN;
         /* TODO: crc should be checked against LBA manager */
         extent->last_committed_crc = extent->get_crc32c();
 
         extent->on_clean_read();
-	func(*extent);
         extent->complete_io();
         return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
           std::move(extent));
