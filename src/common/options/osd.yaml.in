@@ -658,8 +658,7 @@ options:
   level: advanced
   desc: if >= 0, initial CRUSH weight for newly created OSDs
   long_desc: If this value is negative, the size of the OSD in TiB is used.
-  fmt_desc: The initial CRUSH weight for newly added OSDs. The default
-    value of this option is ``the size of a newly added OSD in TB``. By default,
+  fmt_desc: The initial CRUSH weight for newly added OSDs. By default,
     the initial CRUSH weight for a newly added OSD is set to its device size in
     TB. See `Weighting Bucket Items`_ for details.
   default: -1
