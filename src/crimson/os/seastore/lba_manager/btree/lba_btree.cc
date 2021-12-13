@@ -469,25 +469,23 @@ LBABtree::rewrite_lba_extent_ret LBABtree::rewrite_lba_extent(
 LBABtree::get_internal_node_ret LBABtree::get_internal_node(
   op_context_t c,
   depth_t depth,
-  paddr_t offset)
+  paddr_t offset,
+  laddr_t begin,
+  laddr_t end)
 {
   LOG_PREFIX(LBATree::get_internal_node);
   DEBUGT(
-    "reading internal at offset {}, depth {}",
+    "reading internal at offset {}, depth {}, begin {}, end {}",
     c.trans,
     offset,
-    depth);
+    depth,
+    begin,
+    end);
   assert(depth > 1);
-  auto init_internal = [c, depth](LBAInternalNode &node) {
-    auto meta = node.get_meta();
-    if (node.get_size()) {
-      ceph_assert(meta.begin <= node.begin()->get_key());
-      ceph_assert(meta.end > (node.end() - 1)->get_key());
-    }
-    ceph_assert(depth == meta.depth);
+  auto init_internal = [c, depth, begin, end](LBAInternalNode &node) {
     assert(!node.is_pending());
     assert(!node.pin.is_linked());
-    node.pin.set_range(meta);
+    node.pin.set_range(lba_node_meta_t{begin, end, depth});
     if (c.pins) {
       c.pins->add_pin(node.pin);
     }
@@ -497,7 +495,8 @@ LBABtree::get_internal_node_ret LBABtree::get_internal_node(
     offset,
     LBA_BLOCK_SIZE,
     init_internal
-  ).si_then([FNAME, c, offset, init_internal](LBAInternalNodeRef ret) {
+  ).si_then([FNAME, c, offset, init_internal, depth, begin, end](
+	      LBAInternalNodeRef ret) {
     DEBUGT(
       "read internal at offset {} {}",
       c.trans,
@@ -508,6 +507,14 @@ LBABtree::get_internal_node_ret LBABtree::get_internal_node(
       assert(ret->is_dirty());
       init_internal(*ret);
     }
+    auto meta = ret->get_meta();
+    if (ret->get_size()) {
+      ceph_assert(meta.begin <= ret->begin()->get_key());
+      ceph_assert(meta.end > (ret->end() - 1)->get_key());
+    }
+    ceph_assert(depth == meta.depth);
+    ceph_assert(begin == meta.begin);
+    ceph_assert(end == meta.end);
     return get_internal_node_ret(
       interruptible::ready_future_marker{},
       ret);
@@ -516,23 +523,21 @@ LBABtree::get_internal_node_ret LBABtree::get_internal_node(
 
 LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
   op_context_t c,
-  paddr_t offset)
+  paddr_t offset,
+  laddr_t begin,
+  laddr_t end)
 {
   LOG_PREFIX(LBATree::get_leaf_node);
   DEBUGT(
-    "reading leaf at offset {}",
+    "reading leaf at offset {}, begin {}, end {}",
     c.trans,
-    offset);
-  auto init_leaf = [c](LBALeafNode &node) {
-    auto meta = node.get_meta();
-    if (node.get_size()) {
-      ceph_assert(meta.begin <= node.begin()->get_key());
-      ceph_assert(meta.end > (node.end() - 1)->get_key());
-    }
-    ceph_assert(1 == meta.depth);
+    offset,
+    begin,
+    end);
+  auto init_leaf = [c, begin, end](LBALeafNode &node) {
     assert(!node.is_pending());
     assert(!node.pin.is_linked());
-    node.pin.set_range(meta);
+    node.pin.set_range(lba_node_meta_t{begin, end, 1});
     if (c.pins) {
       c.pins->add_pin(node.pin);
     }
@@ -542,7 +547,7 @@ LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
     offset,
     LBA_BLOCK_SIZE,
     init_leaf
-  ).si_then([FNAME, c, offset, init_leaf](LBALeafNodeRef ret) {
+  ).si_then([FNAME, c, offset, init_leaf, begin, end](LBALeafNodeRef ret) {
     DEBUGT(
       "read leaf at offset {} {}",
       c.trans,
@@ -553,6 +558,14 @@ LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
       assert(ret->is_dirty());
       init_leaf(*ret);
     }
+    auto meta = ret->get_meta();
+    if (ret->get_size()) {
+      ceph_assert(meta.begin <= ret->begin()->get_key());
+      ceph_assert(meta.end > (ret->end() - 1)->get_key());
+    }
+    ceph_assert(1 == meta.depth);
+    ceph_assert(begin == meta.begin);
+    ceph_assert(end == meta.end);
     return get_leaf_node_ret(
       interruptible::ready_future_marker{},
       ret);
@@ -709,23 +722,29 @@ template <typename NodeType>
 LBABtree::base_iertr::future<typename NodeType::Ref> get_node(
   op_context_t c,
   depth_t depth,
-  paddr_t addr);
+  paddr_t addr,
+  laddr_t begin,
+  laddr_t end);
 
 template <>
 LBABtree::base_iertr::future<LBALeafNodeRef> get_node<LBALeafNode>(
   op_context_t c,
   depth_t depth,
-  paddr_t addr) {
+  paddr_t addr,
+  laddr_t begin,
+  laddr_t end) {
   assert(depth == 1);
-  return LBABtree::get_leaf_node(c, addr);
+  return LBABtree::get_leaf_node(c, addr, begin, end);
 }
 
 template <>
 LBABtree::base_iertr::future<LBAInternalNodeRef> get_node<LBAInternalNode>(
   op_context_t c,
   depth_t depth,
-  paddr_t addr) {
-  return LBABtree::get_internal_node(c, depth, addr);
+  paddr_t addr,
+  laddr_t begin,
+  laddr_t end) {
+  return LBABtree::get_internal_node(c, depth, addr, begin, end);
 }
 
 template <typename NodeType>
@@ -746,12 +765,19 @@ LBABtree::handle_merge_ret merge_level(
   assert(iter.get_offset() < parent_pos.node->get_size());
   bool donor_is_left = ((iter.get_offset() + 1) == parent_pos.node->get_size());
   auto donor_iter = donor_is_left ? (iter - 1) : (iter + 1);
-
+  auto next_iter = donor_iter + 1;
+  auto begin = donor_iter->get_key();
+  auto end = next_iter == parent_pos.node->end()
+    ? parent_pos.node->get_node_meta().end
+    : next_iter->get_key();
+  
   DEBUGT("parent: {}, node: {}", c.trans, *parent_pos.node, *pos.node);
   return get_node<NodeType>(
     c,
     depth,
-    donor_iter.get_val().maybe_relative_to(parent_pos.node->get_paddr())
+    donor_iter.get_val().maybe_relative_to(parent_pos.node->get_paddr()),
+    begin,
+    end
   ).si_then([c, iter, donor_iter, donor_is_left, &parent_pos, &pos](
 	      typename NodeType::Ref donor) {
     LOG_PREFIX(LBABtree::merge_level);
