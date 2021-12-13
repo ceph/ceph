@@ -15,7 +15,17 @@ Notable Changes
   bluestore-quick-fix-on-mount parameter is set to true or ceph-bluestore-tool's
   quick-fix/repair commands are invoked.
   Relevant tracker: https://tracker.ceph.com/issues/53062
-  bluestore-quick-fix-on-mount continues to be set to false, by default.
+  ``bluestore-quick-fix-on-mount`` continues to be set to false, by default.
+  
+  If you are not using cephadm, you must disable FSMap sanity checks *before starting the upgrade*::
+  
+      ceph config set mon mon_mds_skip_sanity true
+
+  After the upgrade has finished and the cluster is stable, please remove that setting::
+
+      ceph config rm mon mon_mds_skip_sanity
+
+  Clusters managed by and upgraded using cephadm take care of this step automatically.
 
 * MGR: The pg_autoscaler will use the 'scale-up' profile as the default profile.
   16.2.6 changed the default profile to 'scale-down' but we ran into issues
