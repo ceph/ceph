@@ -181,6 +181,7 @@ class CherryPyConfig(object):
                 context.minimum_version = ssl.TLSVersion.TLSv1_2
             else:
                 context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
+            context.set_ciphers('ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:HIGH')
 
             config['server.ssl_module'] = 'builtin'
             config['server.ssl_certificate'] = cert_fname
