@@ -1464,6 +1464,9 @@ def call_throws(
         **kwargs: Any) -> Tuple[str, str, int]:
     out, err, ret = call(ctx, command, desc, verbosity, timeout, **kwargs)
     if ret:
+        for s in (out, err):
+            if s.strip() and len(s.splitlines()) <= 2:  # readable message?
+                raise RuntimeError(f'Failed command: {" ".join(command)}: {s}')
         raise RuntimeError('Failed command: %s' % ' '.join(command))
     return out, err, ret
 
@@ -2607,6 +2610,8 @@ def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):
     else:
         paths = file_path
 
+    ex: Optional[Tuple[str, RuntimeError]] = None
+
     for fp in paths:
         try:
             out = CephContainer(
@@ -2617,8 +2622,11 @@ def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):
             ).run()
             uid, gid = out.split(' ')
             return int(uid), int(gid)
-        except RuntimeError:
-            pass
+        except RuntimeError as e:
+            ex = (fp, e)
+    if ex:
+        raise Error(f'Failed to extract uid/gid for path {ex[0]}: {ex[1]}')
+
     raise RuntimeError('uid/gid not found')
 
 
