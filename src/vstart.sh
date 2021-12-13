@@ -22,12 +22,12 @@ debug() {
 
 prunb() {
     debug quoted_print "$@" '&'
-    "$@" &
+    PATH=$CEPH_BIN:$PATH "$@" &
 }
 
 prun() {
     debug quoted_print "$@"
-    "$@"
+    PATH=$CEPH_BIN:$PATH "$@"
 }
 
 
