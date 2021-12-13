@@ -348,10 +348,10 @@ class RGWHTTPArgs {
   const std::string& get(const std::string& name, bool *exists = NULL) const;
   boost::optional<const std::string&>
   get_optional(const std::string& name) const;
-  int get_bool(const std::string& name, bool *val, bool *exists);
-  int get_bool(const char *name, bool *val, bool *exists);
-  void get_bool(const char *name, bool *val, bool def_val);
-  int get_int(const char *name, int *val, int def_val);
+  int get_bool(const std::string& name, bool *val, bool *exists) const;
+  int get_bool(const char *name, bool *val, bool *exists) const;
+  void get_bool(const char *name, bool *val, bool def_val) const;
+  int get_int(const char *name, int *val, int def_val) const;
 
   /** Get the value for specific system argument parameter */
   std::string sys_get(const std::string& name, bool *exists = nullptr) const;
