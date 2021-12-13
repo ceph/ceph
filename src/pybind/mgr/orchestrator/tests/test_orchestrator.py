@@ -1,5 +1,6 @@
 
 import json
+import textwrap
 
 import pytest
 import yaml
@@ -73,11 +74,11 @@ def test_daemon_description():
 def test_apply():
     to = _TestOrchestrator('', 0, 0)
     completion = to.apply([
-        ServiceSpec(service_type='nfs'),
-        ServiceSpec(service_type='nfs'),
-        ServiceSpec(service_type='nfs'),
+        ServiceSpec(service_type='nfs', service_id='foo'),
+        ServiceSpec(service_type='nfs', service_id='foo'),
+        ServiceSpec(service_type='nfs', service_id='foo'),
     ])
-    res = '<NFSServiceSpec for service_name=nfs>'
+    res = '<NFSServiceSpec for service_name=nfs.foo>'
     assert completion.result == [res, res, res]
 
 
@@ -154,6 +155,24 @@ def test_orch_ls(_describe_service):
     r = m._handle_command(None, cmd)
     out = 'NAME  PORTS  RUNNING  REFRESHED  AGE  PLACEMENT  \n' \
           'osd              123  -          -               '
+    assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
+
+    cmd = {
+        'prefix': 'orch ls',
+        'format': 'yaml',
+    }
+    m = OrchestratorCli('orchestrator', 0, 0)
+    r = m._handle_command(None, cmd)
+    out = textwrap.dedent("""
+        service_type: osd
+        service_name: osd
+        spec:
+          filter_logic: AND
+          objectstore: bluestore
+        status:
+          running: 123
+          size: 0
+        """).lstrip()
     assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
 
 
