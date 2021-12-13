@@ -60,14 +60,12 @@ set(librgw_common_srcs
   rgw_etag_verifier.cc
   rgw_cors.cc
   rgw_cors_s3.cc
-  rgw_dencoder.cc
   rgw_env.cc
   rgw_es_query.cc
   rgw_formats.cc
   rgw_gc.cc
   rgw_gc_log.cc
   rgw_http_client.cc
-  rgw_json_enc.cc
   rgw_keystone.cc
   rgw_ldap.cc
   rgw_lc.cc
@@ -135,7 +133,6 @@ set(librgw_common_srcs
   rgw_user.cc
   rgw_website.cc
   rgw_xml.cc
-  rgw_xml_enc.cc
   rgw_torrent.cc
   rgw_crypt.cc
   rgw_crypt_sanitize.cc

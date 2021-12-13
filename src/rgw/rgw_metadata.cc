@@ -31,6 +31,22 @@ using namespace std;
 
 const std::string RGWMetadataLogHistory::oid = "meta.history";
 
+struct obj_version;
+
+void encode_json(const char *name, const obj_version& v, Formatter *f)
+{
+  f->open_object_section(name);
+  f->dump_string("tag", v.tag);
+  f->dump_unsigned("ver", v.ver);
+  f->close_section();
+}
+
+void decode_json_obj(obj_version& v, JSONObj *obj)
+{
+  JSONDecoder::decode_json("tag", v.tag, obj);
+  JSONDecoder::decode_json("ver", v.ver, obj);
+}
+
 void LogStatusDump::dump(Formatter *f) const {
   string s;
   switch (status) {
@@ -855,5 +871,20 @@ void RGWMetadataManager::get_sections(list<string>& sections)
   for (map<string, RGWMetadataHandler *>::iterator iter = handlers.begin(); iter != handlers.end(); ++iter) {
     sections.push_back(iter->first);
   }
+}
+
+void RGWMetadataLogInfo::dump(Formatter *f) const
+{
+  encode_json("marker", marker, f);
+  utime_t ut(last_update);
+  encode_json("last_update", ut, f);
+}
+
+void RGWMetadataLogInfo::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("marker", marker, obj);
+  utime_t ut;
+  JSONDecoder::decode_json("last_update", ut, obj);
+  last_update = ut.to_real_time();
 }
 

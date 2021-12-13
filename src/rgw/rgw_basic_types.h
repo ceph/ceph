@@ -510,9 +510,22 @@ inline std::ostream& operator<<(std::ostream& os, const rgw_zone_id& zid) {
   return os;
 }
 
-void encode_json_impl(const char *name, const rgw_zone_id& zid, ceph::Formatter *f);
-void decode_json_obj(rgw_zone_id& zid, JSONObj *obj);
+struct obj_version;
+struct rgw_placement_rule;
+struct RGWAccessKey;
+class RGWUserCaps;
 
+extern void encode_json(const char *name, const obj_version& v, Formatter *f);
+extern void encode_json(const char *name, const RGWUserCaps& val, Formatter *f);
+extern void encode_json(const char *name, const rgw_pool& pool, Formatter *f);
+extern void encode_json(const char *name, const rgw_placement_rule& r, Formatter *f);
+extern void encode_json_impl(const char *name, const rgw_zone_id& zid, ceph::Formatter *f);
+extern void encode_json_plain(const char *name, const RGWAccessKey& val, Formatter *f);
+
+extern void decode_json_obj(obj_version& v, JSONObj *obj);
+extern void decode_json_obj(rgw_zone_id& zid, JSONObj *obj);
+extern void decode_json_obj(rgw_pool& pool, JSONObj *obj);
+extern void decode_json_obj(rgw_placement_rule& v, JSONObj *obj);
 
 // Represents an identity. This is more wide-ranging than a
 // 'User'. Its purposes is to be matched against by an
