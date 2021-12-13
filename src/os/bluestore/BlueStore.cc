@@ -16269,6 +16269,9 @@ int BlueStore::_clone(TransContext *txc,
     } else {
       newo->onode.set_omap_flags(per_pool_omap == OMAP_BULK);
     }
+    // check if prefix for omap key is exactly the same size for both objects
+    // otherwise rewrite_omap_key will corrupt data
+    ceph_assert(oldo->onode.flags == newo->onode.flags);
     const string& prefix = newo->get_omap_prefix();
     KeyValueDB::Iterator it = db->get_iterator(prefix);
     string head, tail;
