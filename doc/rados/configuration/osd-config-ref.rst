@@ -75,7 +75,8 @@ Ceph builds and mounts file systems which are used for Ceph OSDs.
 :Default for other file systems: {empty string}
 
 For example::
-  ``osd_mkfs_options_xfs = -f -d agcount=24``
+
+    ``osd_mkfs_options_xfs = -f -d agcount=24``
 
 ``osd_mount_options {fs-type}``
 
@@ -86,7 +87,8 @@ For example::
 :Default for other file systems: ``rw, noatime``
 
 For example::
-  ``osd_mount_options_xfs = rw, noatime, inode64, logbufs=8``
+
+    ``osd_mount_options_xfs = rw, noatime, inode64, logbufs=8``
 
 
 .. index:: OSD; journal settings

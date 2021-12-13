@@ -272,8 +272,8 @@ To remove a snapshot of a pool, execute::
 
 	ceph osd pool rmsnap {pool-name} {snap-name}
 
-.. _setpoolvalues:
 
+.. _setpoolvalues:
 
 Set Pool Values
 ===============
@@ -373,7 +373,6 @@ You may set values for the following keys:
 
 .. describe:: allow_ec_overwrites
 
-
    Whether writes to an erasure coded pool can update part
    of an object, so cephfs and rbd can use it. See
    `Erasure Coding with Overwrites`_ for more details.
@@ -405,7 +404,8 @@ You may set values for the following keys:
 
 .. describe:: nopgchange
 
-   :Description: Set/Unset NOPGCHANGE flag on a given pool.
+   Set/Unset NOPGCHANGE flag on a given pool.
+
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
    :Version: Version ``FIXME``
@@ -647,7 +647,6 @@ You may set values for the following keys:
 
    :Type: Integer
    :Default: ``0``
-
 
 .. _recovery_op_priority:
 

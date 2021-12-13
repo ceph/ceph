@@ -487,7 +487,7 @@ information stored in OSDs.
   # sections named like '[mon.foo]'. don't pass the "--mon-ids" option, if you are
   # using DNS SRV for looking up monitors.
   ceph-monstore-tool $ms rebuild -- --keyring /path/to/admin.keyring --mon-ids alpha beta gamma
-  
+
   # make a backup of the corrupted store.db just in case!  repeat for
   # all monitors.
   mv /var/lib/ceph/mon/mon.foo/store.db /var/lib/ceph/mon/mon.foo/store.db.corrupted
