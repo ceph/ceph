@@ -50,6 +50,8 @@ struct MetaSession {
   list<Context*> waiting_for_open;
 
   xlist<Cap*> caps;
+  // dirty_list keeps all the dirty inodes before flushing in current session.
+  xlist<Inode*> dirty_list;
   xlist<Inode*> flushing_caps;
   xlist<MetaRequest*> requests;
   xlist<MetaRequest*> unsafe_requests;
@@ -60,6 +62,8 @@ struct MetaSession {
   MetaSession(mds_rank_t mds_num, ConnectionRef con, const entity_addrvec_t& addrs)
     : mds_num(mds_num), con(con), addrs(addrs) {
   }
+
+  xlist<Inode*> &get_dirty_list() { return dirty_list; }
 
   const char *get_state_name() const;
 

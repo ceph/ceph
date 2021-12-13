@@ -772,12 +772,26 @@ void Inode::unset_deleg(Fh *fh)
 */
 void Inode::mark_caps_dirty(int caps)
 {
+  /*
+   * If auth_cap is nullptr means the reonnecting is not finished or
+   * already rejected.
+   */
+  if (!auth_cap) {
+    ceph_assert(!dirty_caps);
+
+    lsubdout(client->cct, client, 1) << __func__ << " " << *this << " dirty caps '" << ccap_string(caps)
+	     << "', but no auth cap." << dendl;
+    return;
+  }
+
   lsubdout(client->cct, client, 10) << __func__ << " " << *this << " " << ccap_string(dirty_caps) << " -> "
            << ccap_string(dirty_caps | caps) << dendl;
+
   if (caps && !caps_dirty())
     iget();
+
   dirty_caps |= caps;
-  client->get_dirty_list().push_back(&dirty_cap_item);
+  auth_cap->session->get_dirty_list().push_back(&dirty_cap_item);
   client->cap_delay_requeue(this);
 }
 

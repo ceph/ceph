@@ -4801,35 +4801,25 @@ void Client::adjust_session_flushing_caps(Inode *in, MetaSession *old_s,  MetaSe
 }
 
 /*
- * Flush all caps back to the MDS. Because the callers generally wait on the
- * result of this function (syncfs and umount cases), we set
- * CHECK_CAPS_SYNCHRONOUS on the last check_caps call.
+ * Flush all the dirty caps back to the MDS. Because the callers
+ * generally wait on the result of this function (syncfs and umount
+ * cases), we set CHECK_CAPS_SYNCHRONOUS on the last check_caps call.
  */
 void Client::flush_caps_sync()
 {
   ldout(cct, 10) << __func__ << dendl;
-  xlist<Inode*>::iterator p = delayed_list.begin();
-  while (!p.end()) {
-    unsigned flags = CHECK_CAPS_NODELAY;
-    Inode *in = *p;
+  for (auto &q : mds_sessions) {
+    auto s = q.second;
+    xlist<Inode*>::iterator p = s.dirty_list.begin();
+    while (!p.end()) {
+      unsigned flags = CHECK_CAPS_NODELAY;
+      Inode *in = *p;
 
-    ++p;
-    delayed_list.pop_front();
-    if (p.end() && dirty_list.empty())
-      flags |= CHECK_CAPS_SYNCHRONOUS;
-    check_caps(in, flags);
-  }
-
-  // other caps, too
-  p = dirty_list.begin();
-  while (!p.end()) {
-    unsigned flags = CHECK_CAPS_NODELAY;
-    Inode *in = *p;
-
-    ++p;
-    if (p.end())
-      flags |= CHECK_CAPS_SYNCHRONOUS;
-    check_caps(in, flags);
+      ++p;
+      if (p.end())
+        flags |= CHECK_CAPS_SYNCHRONOUS;
+      check_caps(in, flags);
+    }
   }
 }
 
@@ -6663,13 +6653,16 @@ void Client::_unmount(bool abort)
   }
 
   if (abort || blocklisted) {
-    for (auto p = dirty_list.begin(); !p.end(); ) {
-      Inode *in = *p;
-      ++p;
-      if (in->dirty_caps) {
-	ldout(cct, 0) << " drop dirty caps on " << *in << dendl;
-	in->mark_caps_clean();
-	put_inode(in);
+    for (auto &q : mds_sessions) {
+      auto s = q.second;
+      for (auto p = s.dirty_list.begin(); !p.end(); ) {
+        Inode *in = *p;
+        ++p;
+        if (in->dirty_caps) {
+          ldout(cct, 0) << " drop dirty caps on " << *in << dendl;
+          in->mark_caps_clean();
+          put_inode(in);
+        }
       }
     }
   } else {
