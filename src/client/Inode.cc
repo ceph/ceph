@@ -778,6 +778,7 @@ void Inode::mark_caps_dirty(int caps)
     iget();
   dirty_caps |= caps;
   client->get_dirty_list().push_back(&dirty_cap_item);
+  client->cap_delay_requeue(this);
 }
 
 /**
