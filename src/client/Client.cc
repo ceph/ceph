@@ -3835,6 +3835,7 @@ void Client::check_caps(Inode *in, unsigned flags)
       flush_tid = 0;
     }
 
+    in->delay_cap_item.remove_myself();
     send_cap(in, session.get(), &cap, msg_flags, cap_used, wanted, retain,
 	     flushing, flush_tid);
   }
