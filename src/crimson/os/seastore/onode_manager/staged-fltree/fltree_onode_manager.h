@@ -37,7 +37,14 @@ struct FLTreeOnode final : Onode, Value {
   FLTreeOnode& operator=(const FLTreeOnode&) = delete;
 
   template <typename... T>
-  FLTreeOnode(T&&... args) : Value(std::forward<T>(args)...) {}
+  FLTreeOnode(uint32_t ddr, uint32_t dmr, T&&... args)
+    : Onode(ddr, dmr),
+      Value(std::forward<T>(args)...) {}
+
+  template <typename... T>
+  FLTreeOnode(T&&... args)
+    : Onode(0, 0),
+      Value(std::forward<T>(args)...) {}
 
   struct Recorder : public ValueDeltaRecorder {
     Recorder(bufferlist &bl) : ValueDeltaRecorder(bl) {}
@@ -102,12 +109,23 @@ struct FLTreeOnode final : Onode, Value {
 
 using OnodeTree = Btree<FLTreeOnode>;
 
+using crimson::common::get_conf;
+
 class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
   OnodeTree tree;
 
+  uint32_t default_data_reservation = 0;
+  uint32_t default_metadata_offset = 0;
+  uint32_t default_metadata_range = 0;
 public:
   FLTreeOnodeManager(TransactionManager &tm) :
-    tree(NodeExtentManager::create_seastore(tm)) {}
+    tree(NodeExtentManager::create_seastore(tm)),
+    default_data_reservation(
+      get_conf<uint64_t>("seastore_default_max_object_size")),
+    default_metadata_offset(default_data_reservation),
+    default_metadata_range(
+      get_conf<uint64_t>("seastore_default_object_metadata_reservation"))
+  {}
 
   mkfs_ret mkfs(Transaction &t) {
     return tree.mkfs(t);

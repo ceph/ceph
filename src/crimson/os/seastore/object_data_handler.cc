@@ -15,16 +15,6 @@ namespace {
 }
 
 namespace crimson::os::seastore {
-
-/**
- * MAX_OBJECT_SIZE
- *
- * For now, we allocate a fixed region of laddr space of size MAX_OBJECT_SIZE
- * for any object.  In the future, once we have the ability to remap logical
- * mappings (necessary for clone), we'll add the ability to grow and shrink
- * these regions and remove this assumption.
- */
-static constexpr extent_len_t MAX_OBJECT_SIZE = 16<<20;
 #define assert_aligned(x) ceph_assert(((x)%ctx.tm.get_block_size()) == 0)
 
 using context_t = ObjectDataHandler::context_t;
@@ -261,9 +251,9 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   extent_len_t size)
 {
   LOG_PREFIX(ObjectDataHandler::prepare_data_reservation);
-  ceph_assert(size <= MAX_OBJECT_SIZE);
+  ceph_assert(size <= max_object_size);
   if (!object_data.is_null()) {
-    ceph_assert(object_data.get_reserved_data_len() == MAX_OBJECT_SIZE);
+    ceph_assert(object_data.get_reserved_data_len() == max_object_size);
     DEBUGT("reservation present: {}~{}",
            ctx.t,
            object_data.get_reserved_data_base(),
@@ -272,14 +262,14 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   } else {
     DEBUGT("reserving: {}~{}",
            ctx.t,
-           ctx.onode.get_hint(),
-           MAX_OBJECT_SIZE);
+           ctx.onode.get_data_hint(),
+           max_object_size);
     return ctx.tm.reserve_region(
       ctx.t,
-      ctx.onode.get_hint(),
-      MAX_OBJECT_SIZE
-    ).si_then([&object_data](auto pin) {
-      ceph_assert(pin->get_length() == MAX_OBJECT_SIZE);
+      ctx.onode.get_data_hint(),
+      max_object_size
+    ).si_then([max_object_size=max_object_size, &object_data](auto pin) {
+      ceph_assert(pin->get_length() == max_object_size);
       object_data.update_reserved(
 	pin->get_laddr(),
 	pin->get_length());

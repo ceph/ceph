@@ -31,15 +31,15 @@ struct onode_item_t {
   void initialize(Transaction& t, Onode& value) const {
     auto& layout = value.get_mutable_layout(t);
     layout.size = size;
-    layout.omap_root.update(omap_root_t(id, cnt_modify, value.get_hint()));
+    layout.omap_root.update(omap_root_t(id, cnt_modify, value.get_metadata_hint()));
     validate(value);
   }
 
   void validate(Onode& value) const {
     auto& layout = value.get_layout();
     ceph_assert(laddr_t(layout.size) == laddr_t{size});
-    ceph_assert(layout.omap_root.get(value.get_hint()).addr == id);
-    ceph_assert(layout.omap_root.get(value.get_hint()).depth == cnt_modify);
+    ceph_assert(layout.omap_root.get(value.get_metadata_hint()).addr == id);
+    ceph_assert(layout.omap_root.get(value.get_metadata_hint()).depth == cnt_modify);
   }
 
   void modify(Transaction& t, Onode& value) {
