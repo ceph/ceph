@@ -894,10 +894,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 	// could be marked up *or* down, but we're too lazy to check which
 	last_osd_report.erase(osd);
       }
-      if (state & CEPH_OSD_OUT) {
-        // could be marked in *or* out, but we can safely drop it
-        osd_epochs.erase(osd);
-      }
     }
     for (const auto [osd, weight] : inc.new_weight) {
       if (weight == CEPH_OSD_OUT) {
