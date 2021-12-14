@@ -179,6 +179,26 @@ void SegmentCleaner::register_metrics()
   metrics.add_group("segment_cleaner", {
     sm::make_counter("segments_released", stats.segments_released,
 		     sm::description("total number of extents released by SegmentCleaner")),
+    sm::make_counter("accumulated_blocked_ios", stats.accumulated_blocked_ios,
+		     sm::description("accumulated total number of ios that were blocked by gc")),
+    sm::make_derive("empty_segments", stats.empty_segments,
+		    sm::description("current empty segments")),
+    sm::make_derive("ios_blocking", stats.ios_blocking,
+		    sm::description("IOs that are blocking on space usage")),
+    sm::make_derive("used_bytes", stats.used_bytes,
+		    sm::description("the size of the space occupied by live extents")),
+    sm::make_derive("projected_used_bytes", stats.projected_used_bytes,
+		    sm::description("the size of the space going to be occupied by new extents")),
+    sm::make_derive("avail_bytes",
+		    [this] {
+		      return segments.get_available_bytes();
+		    },
+		    sm::description("the size of the space not occupied")),
+    sm::make_derive("opened_segments",
+		    [this] {
+		      return segments.get_opened_segments();
+		    },
+		    sm::description("the number of segments whose state is open"))
   });
 }
 

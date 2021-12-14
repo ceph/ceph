@@ -73,6 +73,10 @@ SegmentedAllocator::Writer::_write(
 {
   auto record_size = record.get_encoded_record_length();
   allocated_to += record_size.get_encoded_length();
+  segment_provider.update_segment_avail_bytes(
+    paddr_t::make_seg_paddr(
+      current_segment->segment->get_segment_id(),
+      allocated_to));
   bufferlist bl = record.encode(
       current_segment->segment->get_segment_id(),
       0);
