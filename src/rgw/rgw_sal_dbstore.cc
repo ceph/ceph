@@ -234,6 +234,32 @@ namespace rgw::sal {
 
     /* XXX: handle delete_children */
 
+    if (!delete_children) {
+      /* Check if there are any objects */
+      rgw::sal::Bucket::ListParams params;
+      params.list_versions = true;
+      params.allow_unordered = true;
+
+      rgw::sal::Bucket::ListResults results;
+
+      results.objs.clear();
+
+      ret = list(dpp, params, 2, results, null_yield);
+
+      if (ret < 0) {
+        ldpp_dout(dpp, 20) << __func__ << ": Bucket list objects returned " <<
+        ret << dendl;
+        return ret;
+      }
+
+      if (!results.objs.empty()) {
+        ret = -ENOTEMPTY;
+        ldpp_dout(dpp, -1) << __func__ << ": Bucket Not Empty.. returning " <<
+        ret << dendl;
+        return ret;
+      }
+    }
+
     ret = store->getDB()->remove_bucket(dpp, info);
 
     return ret;

@@ -40,7 +40,11 @@
 
 #define SQL_BIND_TEXT(dpp, stmt, index, str, sdb)			\
   do {								\
-    rc = sqlite3_bind_text(stmt, index, str, -1, SQLITE_TRANSIENT); 	\
+    if (strcmp(str, "null") == 0) {          \
+      rc = sqlite3_bind_text(stmt, index, "", -1, SQLITE_TRANSIENT); 	\
+    } else {                                                       \
+      rc = sqlite3_bind_text(stmt, index, str, -1, SQLITE_TRANSIENT); 	\
+    }                                   \
     \
     if (rc != SQLITE_OK) {					      	\
       ldpp_dout(dpp, 0)<<"sqlite bind text failed for index("     	\
