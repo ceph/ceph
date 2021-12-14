@@ -61,6 +61,7 @@ protected:
 
   virtual void on_pg_absent();
   virtual PeeringEvent::interruptible_future<> complete_rctx(Ref<PG>);
+  virtual seastar::future<> complete_rctx_no_pg() { return seastar::now();}
   virtual seastar::future<Ref<PG>> get_pg() = 0;
 
 public:
@@ -96,6 +97,7 @@ protected:
 
   void on_pg_absent() final;
   PeeringEvent::interruptible_future<> complete_rctx(Ref<PG> pg) override;
+  seastar::future<> complete_rctx_no_pg() override;
   seastar::future<Ref<PG>> get_pg() final;
 
 public:
