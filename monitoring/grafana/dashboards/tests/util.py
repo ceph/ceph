@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, Tuple, Union
 
@@ -66,3 +67,25 @@ def add_dashboard_variables(data: Dict[str, Any], dashboard_data: Dict[str, Any]
     for variable in dashboard_data['templating']['list']:
         if 'name' in variable:
             data['variables'][variable['name']] = 'UNSET VARIABLE'
+
+
+def replace_grafana_expr_variables(expr: str, variable: str, value: Any) -> str:
+    """ Replace grafana variables in expression with a value
+
+    It should match the whole word, 'osd' musn't match with the 'osd' prefix in 'osd_hosts'
+    >>> replace_grafana_expr_variables('metric{name~="$osd_hosts|$other|$osd"}', \
+        'osd', 'replacement')
+    'metric{name~="$osd_hosts|$other|replacement"}'
+
+    >>> replace_grafana_expr_variables('metric{name~="$osd_hosts|$other|$osd"}', \
+        'other', 'replacement')
+    'metric{name~="$osd_hosts|replacement|$osd"}'
+
+    It replaces words with dollar prefix
+    >>> replace_grafana_expr_variables('metric{name~="no_dollar|$other|$osd"}', \
+        'no_dollar', 'replacement')
+    'metric{name~="no_dollar|$other|$osd"}'
+    """
+    regex = fr'\${variable}(?=\W)'
+    new_expr = re.sub(regex, fr'{str(value)}', expr)
+    return new_expr
