@@ -41,7 +41,7 @@ For example, to upgrade to v16.2.6, run the following command:
 
 .. prompt:: bash #
 
-  ceph orch upgrade start --ceph-version 15.2.1
+  ceph orch upgrade start --ceph-version 16.2.6
 
 .. note::
 
