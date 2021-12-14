@@ -36,6 +36,8 @@ enum class op_scheduler_class : uint8_t {
   client,
 };
 
+std::ostream& operator<<(std::ostream& out, const op_scheduler_class& class_id);
+
 class OpSchedulerItem {
 public:
   class OrderLocker {
