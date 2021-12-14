@@ -19,6 +19,11 @@
 
 namespace ceph::osd::scheduler {
 
+std::ostream& operator<<(std::ostream& out, const op_scheduler_class& class_id) {
+  out << static_cast<size_t>(class_id);
+  return out;
+}
+
 void PGOpItem::run(
   OSD *osd,
   OSDShard *sdata,
