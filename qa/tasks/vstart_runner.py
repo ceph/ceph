@@ -423,7 +423,8 @@ class LocalRemote(object):
 
         # Filter out helper tools that don't exist in a vstart environment
         args = [a for a in args if a not in ('adjust-ulimits',
-                                             'ceph-coverage')]
+                                             'ceph-coverage',
+                                             'None/archive/coverage')]
 
         # Adjust binary path prefix if given a bare program name
         if not isinstance(args[0], Raw) and "/" not in args[0]:
@@ -469,7 +470,7 @@ class LocalRemote(object):
             elif isinstance(stdin, StringIO):
                 subproc.stdin.write(bytes(stdin.getvalue(),encoding='utf8'))
             else:
-                subproc.stdin.write(stdin)
+                subproc.stdin.write(stdin.getvalue())
 
         proc = LocalRemoteProcess(
             args, subproc, check_status,
