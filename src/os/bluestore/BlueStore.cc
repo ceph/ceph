@@ -3505,14 +3505,6 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.onode(" << this << ")." << __func__ << " "
 
-//
-// A tricky thing about Onode's ref counter is that we do an additional
-// increment when newly pinned instance is detected. And -1 on unpin.
-// This prevents from a conflict with a delete call (when nref == 0).
-// The latter might happen while the thread is in unpin() function
-// (and e.g. waiting for lock acquisition) since nref is already
-// decremented. And another 'putting' thread on the instance will release it.
-//
 void BlueStore::Onode::get() {
   if (++nref >= 2 && !pinned) {
     OnodeCacheShard* ocs = c->get_onode_cache();
@@ -3525,11 +3517,7 @@ void BlueStore::Onode::get() {
     }
     bool was_pinned = pinned;
     pinned = nref >= 2;
-    // additional increment for newly pinned instance
     bool r = !was_pinned && pinned;
-    if (r) {
-      ++nref;
-    }
     if (cached && r) {
       ocs->_pin(this);
     }
@@ -3539,7 +3527,7 @@ void BlueStore::Onode::get() {
 void BlueStore::Onode::put() {
   ++put_nref;
   int n = --nref;
-  if (n == 2) {
+  if (n == 1) {
     OnodeCacheShard* ocs = c->get_onode_cache();
     ocs->lock.lock();
     // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
@@ -3549,8 +3537,7 @@ void BlueStore::Onode::put() {
       ocs->lock.lock();
     }
     bool need_unpin = pinned;
-    pinned = pinned && nref > 2; // intentionally use > not >= as we have
-                                 // +1 due to pinned state
+    pinned = pinned && nref >= 2;
     need_unpin = need_unpin && !pinned;
     if (cached && need_unpin) {
       if (exists) {
@@ -3560,10 +3547,6 @@ void BlueStore::Onode::put() {
         // remove will also decrement nref
         c->onode_map._remove(oid);
       }
-    }
-    // additional decrement for newly unpinned instance
-    if (need_unpin) {
-      --nref;
     }
     ocs->lock.unlock();
   }
