@@ -17,19 +17,19 @@ def test_upgrade_start(cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test2'):
             with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
                 assert wait(cephadm_module, cephadm_module.upgrade_start(
-                    'image_id', None)) == 'Initiating upgrade to docker.io/image_id'
+                    'image_id', None)) == 'Initiating upgrade to image_id'
 
                 assert wait(cephadm_module, cephadm_module.upgrade_status()
-                            ).target_image == 'docker.io/image_id'
+                            ).target_image == 'image_id'
 
                 assert wait(cephadm_module, cephadm_module.upgrade_pause()
-                            ) == 'Paused upgrade to docker.io/image_id'
+                            ) == 'Paused upgrade to image_id'
 
                 assert wait(cephadm_module, cephadm_module.upgrade_resume()
-                            ) == 'Resumed upgrade to docker.io/image_id'
+                            ) == 'Resumed upgrade to image_id'
 
                 assert wait(cephadm_module, cephadm_module.upgrade_stop()
-                            ) == 'Stopped upgrade to docker.io/image_id'
+                            ) == 'Stopped upgrade to image_id'
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -57,10 +57,10 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
                            }):
                 version_mock.return_value = 'ceph version 18.2.1 (somehash)'
                 assert wait(cephadm_module, cephadm_module.upgrade_start(
-                    'to_image', None)) == 'Initiating upgrade to docker.io/to_image'
+                    'to_image', None)) == 'Initiating upgrade to to_image'
 
                 assert wait(cephadm_module, cephadm_module.upgrade_status()
-                            ).target_image == 'docker.io/to_image'
+                            ).target_image == 'to_image'
 
                 def _versions_mock(cmd):
                     return json.dumps({
@@ -113,7 +113,7 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
                 if use_repo_digest:
                     assert image == 'to_image@repo_digest'
                 else:
-                    assert image == 'docker.io/to_image'
+                    assert image == 'to_image'
 
 
 def test_upgrade_state_null(cephadm_module: CephadmOrchestrator):

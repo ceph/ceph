@@ -27,20 +27,24 @@ def normalize_image_digest(digest: str, default_registry: str) -> str:
     >>> normalize_image_digest('ceph/ceph', 'docker.io')
     'docker.io/ceph/ceph'
 
-    Edge cases that shouldn't ever come up. (ubuntu alias for library/ubuntu)
-    >>> normalize_image_digest('ubuntu', 'docker.io')
-    'docker.io/ubuntu'
-
     No change:
     >>> normalize_image_digest('quay.ceph.io/ceph/ceph', 'docker.io')
     'quay.ceph.io/ceph/ceph'
 
     >>> normalize_image_digest('docker.io/ubuntu', 'docker.io')
     'docker.io/ubuntu'
+
+    >>> normalize_image_digest('localhost/ceph', 'docker.io')
+    'localhost/ceph'
     """
-    bits = digest.split('/')
-    if '.' not in bits[0] or len(bits) < 3:
-        digest = 'docker.io/' + digest
+    known_shortnames = [
+        'ceph/ceph',
+        'ceph/daemon',
+        'ceph/daemon-base',
+    ]
+    for image in known_shortnames:
+        if digest.startswith(image):
+            return f'{default_registry}/{digest}'
     return digest
 
 
