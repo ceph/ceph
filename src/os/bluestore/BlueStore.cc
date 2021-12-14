@@ -3656,7 +3656,7 @@ void BlueStore::Onode::calc_omap_tail(
 }
 
 void BlueStore::Onode::get() {
-  if (++nref >= 2 && !pinned) {
+  if (++nref >= 1 && !pinned) {
     OnodeCacheShard* ocs = c->get_onode_cache();
     ocs->lock.lock();
     // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
