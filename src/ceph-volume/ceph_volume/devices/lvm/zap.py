@@ -266,7 +266,7 @@ class Zap(object):
 
         for device in devices:
             mlogger.info("Zapping: %s", device.abspath)
-            if device.is_mapper:
+            if device.is_mapper and not device.is_mpath:
                 terminal.error("Refusing to zap the mapper device: {}".format(device))
                 raise SystemExit(1)
             if device.is_lvm_member:
