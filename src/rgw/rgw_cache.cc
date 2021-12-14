@@ -357,3 +357,63 @@ ObjectCache::~ObjectCache()
   }
 }
 
+void ObjectMetaInfo::generate_test_instances(list<ObjectMetaInfo*>& o)
+{
+  ObjectMetaInfo *m = new ObjectMetaInfo;
+  m->size = 1024 * 1024;
+  o.push_back(m);
+  o.push_back(new ObjectMetaInfo);
+}
+
+void ObjectMetaInfo::dump(Formatter *f) const
+{
+  encode_json("size", size, f);
+  encode_json("mtime", utime_t(mtime), f);
+}
+
+void ObjectCacheInfo::generate_test_instances(list<ObjectCacheInfo*>& o)
+{
+  using ceph::encode;
+  ObjectCacheInfo *i = new ObjectCacheInfo;
+  i->status = 0;
+  i->flags = CACHE_FLAG_MODIFY_XATTRS;
+  string s = "this is a string";
+  string s2 = "this is a another string";
+  bufferlist data, data2;
+  encode(s, data);
+  encode(s2, data2);
+  i->data = data;
+  i->xattrs["x1"] = data;
+  i->xattrs["x2"] = data2;
+  i->rm_xattrs["r2"] = data2;
+  i->rm_xattrs["r3"] = data;
+  i->meta.size = 512 * 1024;
+  o.push_back(i);
+  o.push_back(new ObjectCacheInfo);
+}
+
+void ObjectCacheInfo::dump(Formatter *f) const
+{
+  encode_json("status", status, f);
+  encode_json("flags", flags, f);
+  encode_json("data", data, f);
+  encode_json_map("xattrs", "name", "value", "length", xattrs, f);
+  encode_json_map("rm_xattrs", "name", "value", "length", rm_xattrs, f);
+  encode_json("meta", meta, f);
+
+}
+
+void RGWCacheNotifyInfo::generate_test_instances(list<RGWCacheNotifyInfo*>& o)
+{
+  o.push_back(new RGWCacheNotifyInfo);
+}
+
+void RGWCacheNotifyInfo::dump(Formatter *f) const
+{
+  encode_json("op", op, f);
+  encode_json("obj", obj, f);
+  encode_json("obj_info", obj_info, f);
+  encode_json("ofs", ofs, f);
+  encode_json("ns", ns, f);
+}
+

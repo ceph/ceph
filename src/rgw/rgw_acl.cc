@@ -11,6 +11,7 @@
 #include "common/Formatter.h"
 
 #include "rgw_acl.h"
+#include "rgw_acl_s3.h"
 #include "rgw_user.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -263,3 +264,179 @@ bool RGWAccessControlPolicy::is_public(const DoutPrefixProvider *dpp) const
                          );
 
 }
+
+void ACLPermission::generate_test_instances(list<ACLPermission*>& o)
+{
+  ACLPermission *p = new ACLPermission;
+  p->set_permissions(RGW_PERM_WRITE_ACP);
+  o.push_back(p);
+  o.push_back(new ACLPermission);
+}
+
+void ACLPermission::dump(Formatter *f) const
+{
+  f->dump_int("flags", flags);
+}
+
+void ACLGranteeType::dump(Formatter *f) const
+{
+  f->dump_unsigned("type", type);
+}
+
+void ACLGrant::dump(Formatter *f) const
+{
+  f->open_object_section("type");
+  type.dump(f);
+  f->close_section();
+
+  f->dump_string("id", id.to_str());
+  f->dump_string("email", email);
+
+  f->open_object_section("permission");
+  permission.dump(f);
+  f->close_section();
+
+  f->dump_string("name", name);
+  f->dump_int("group", (int)group);
+  f->dump_string("url_spec", url_spec);
+}
+
+void ACLGrant::generate_test_instances(list<ACLGrant*>& o)
+{
+  rgw_user id("rgw");
+  string name, email;
+  name = "Mr. RGW";
+  email = "r@gw";
+
+  ACLGrant *g1 = new ACLGrant;
+  g1->set_canon(id, name, RGW_PERM_READ);
+  g1->email = email;
+  o.push_back(g1);
+
+  ACLGrant *g2 = new ACLGrant;
+  g1->set_group(ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_WRITE);
+  o.push_back(g2);
+
+  o.push_back(new ACLGrant);
+}
+
+void ACLGranteeType::generate_test_instances(list<ACLGranteeType*>& o)
+{
+  ACLGranteeType *t = new ACLGranteeType;
+  t->set(ACL_TYPE_CANON_USER);
+  o.push_back(t);
+  o.push_back(new ACLGranteeType);
+}
+
+void RGWAccessControlList::generate_test_instances(list<RGWAccessControlList*>& o)
+{
+  RGWAccessControlList *acl = new RGWAccessControlList(NULL);
+
+  list<ACLGrant *> glist;
+  list<ACLGrant *>::iterator iter;
+
+  ACLGrant::generate_test_instances(glist);
+  for (iter = glist.begin(); iter != glist.end(); ++iter) {
+    ACLGrant *grant = *iter;
+    acl->add_grant(grant);
+
+    delete grant;
+  }
+  o.push_back(acl);
+  o.push_back(new RGWAccessControlList(NULL));
+}
+
+void ACLOwner::generate_test_instances(list<ACLOwner*>& o)
+{
+  ACLOwner *owner = new ACLOwner;
+  owner->id = "rgw";
+  owner->display_name = "Mr. RGW";
+  o.push_back(owner);
+  o.push_back(new ACLOwner);
+}
+
+void RGWAccessControlPolicy::generate_test_instances(list<RGWAccessControlPolicy*>& o)
+{
+  list<RGWAccessControlList *> acl_list;
+  list<RGWAccessControlList *>::iterator iter;
+  for (iter = acl_list.begin(); iter != acl_list.end(); ++iter) {
+    RGWAccessControlList::generate_test_instances(acl_list);
+    iter = acl_list.begin();
+
+    RGWAccessControlPolicy *p = new RGWAccessControlPolicy(NULL);
+    RGWAccessControlList *l = *iter;
+    p->acl = *l;
+
+    string name = "radosgw";
+    rgw_user id("rgw");
+    p->owner.set_name(name);
+    p->owner.set_id(id);
+
+    o.push_back(p);
+
+    delete l;
+  }
+
+  o.push_back(new RGWAccessControlPolicy(NULL));
+}
+
+void RGWAccessControlList::dump(Formatter *f) const
+{
+  map<string, int>::const_iterator acl_user_iter = acl_user_map.begin();
+  f->open_array_section("acl_user_map");
+  for (; acl_user_iter != acl_user_map.end(); ++acl_user_iter) {
+    f->open_object_section("entry");
+    f->dump_string("user", acl_user_iter->first);
+    f->dump_int("acl", acl_user_iter->second);
+    f->close_section();
+  }
+  f->close_section();
+
+  map<uint32_t, int>::const_iterator acl_group_iter = acl_group_map.begin();
+  f->open_array_section("acl_group_map");
+  for (; acl_group_iter != acl_group_map.end(); ++acl_group_iter) {
+    f->open_object_section("entry");
+    f->dump_unsigned("group", acl_group_iter->first);
+    f->dump_int("acl", acl_group_iter->second);
+    f->close_section();
+  }
+  f->close_section();
+
+  multimap<string, ACLGrant>::const_iterator giter = grant_map.begin();
+  f->open_array_section("grant_map");
+  for (; giter != grant_map.end(); ++giter) {
+    f->open_object_section("entry");
+    f->dump_string("id", giter->first);
+    f->open_object_section("grant");
+    giter->second.dump(f);
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void ACLOwner::dump(Formatter *f) const
+{
+  encode_json("id", id.to_str(), f);
+  encode_json("display_name", display_name, f);
+}
+
+void ACLOwner::decode_json(JSONObj *obj) {
+  string id_str;
+  JSONDecoder::decode_json("id", id_str, obj);
+  id.from_str(id_str);
+  JSONDecoder::decode_json("display_name", display_name, obj);
+}
+
+void RGWAccessControlPolicy::dump(Formatter *f) const
+{
+  encode_json("acl", acl, f);
+  encode_json("owner", owner, f);
+}
+
+ACLGroupTypeEnum ACLGrant::uri_to_group(string& uri)
+{
+  // this is required for backward compatibility
+  return ACLGrant_S3::uri_to_group(uri);
+}
+

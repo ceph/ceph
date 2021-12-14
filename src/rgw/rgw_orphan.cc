@@ -1523,3 +1523,52 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 
   return 0;
 } // RGWRadosList::do_incomplete_multipart
+
+void RGWOrphanSearchStage::dump(Formatter *f) const
+{
+  f->open_object_section("orphan_search_stage");
+  string s;
+  switch(stage){
+  case ORPHAN_SEARCH_STAGE_INIT:
+    s = "init";
+    break;
+  case ORPHAN_SEARCH_STAGE_LSPOOL:
+    s = "lspool";
+    break;
+  case ORPHAN_SEARCH_STAGE_LSBUCKETS:
+    s =  "lsbuckets";
+    break;
+  case ORPHAN_SEARCH_STAGE_ITERATE_BI:
+    s = "iterate_bucket_index";
+    break;
+  case ORPHAN_SEARCH_STAGE_COMPARE:
+    s = "comparing";
+    break;
+  default:
+    s = "unknown";
+  }
+  f->dump_string("search_stage", s);
+  f->dump_int("shard",shard);
+  f->dump_string("marker",marker);
+  f->close_section();
+}
+
+void RGWOrphanSearchInfo::dump(Formatter *f) const
+{
+  f->open_object_section("orphan_search_info");
+  f->dump_string("job_name", job_name);
+  encode_json("pool", pool, f);
+  f->dump_int("num_shards", num_shards);
+  encode_json("start_time", start_time, f);
+  f->close_section();
+}
+
+void RGWOrphanSearchState::dump(Formatter *f) const
+{
+  f->open_object_section("orphan_search_state");
+  encode_json("info", info, f);
+  encode_json("stage", stage, f);
+  f->close_section();
+}
+
+
