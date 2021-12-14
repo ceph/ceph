@@ -79,3 +79,22 @@ bool is_v2_upload_id(const string& upload_id)
          (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX_LEGACY, sizeof(MULTIPART_UPLOAD_ID_PREFIX_LEGACY) - 1) == 0);
 }
 
+void RGWUploadPartInfo::generate_test_instances(list<RGWUploadPartInfo*>& o)
+{
+  RGWUploadPartInfo *i = new RGWUploadPartInfo;
+  i->num = 1;
+  i->size = 10 * 1024 * 1024;
+  i->etag = "etag";
+  o.push_back(i);
+  o.push_back(new RGWUploadPartInfo);
+}
+
+void RGWUploadPartInfo::dump(Formatter *f) const
+{
+  encode_json("num", num, f);
+  encode_json("size", size, f);
+  encode_json("etag", etag, f);
+  utime_t ut(modified);
+  encode_json("modified", ut, f);
+}
+

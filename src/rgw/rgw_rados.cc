@@ -9457,3 +9457,46 @@ int RGWRados::delete_obj_aio(const DoutPrefixProvider *dpp, const rgw_obj& obj,
   }
   return ret;
 }
+
+void objexp_hint_entry::generate_test_instances(list<objexp_hint_entry*>& o)
+{
+  auto it = new objexp_hint_entry;
+  it->tenant = "tenant1";
+  it->bucket_name = "bucket1";
+  it->bucket_id = "1234";
+  it->obj_key = rgw_obj_key("obj");
+  o.push_back(it);
+  o.push_back(new objexp_hint_entry);
+}
+
+void objexp_hint_entry::dump(Formatter *f) const
+{
+  f->open_object_section("objexp_hint_entry");
+  encode_json("tenant", tenant, f);
+  encode_json("bucket_name", bucket_name, f);
+  encode_json("bucket_id", bucket_id, f);
+  encode_json("rgw_obj_key", obj_key, f);
+  utime_t ut(exp_time);
+  encode_json("exp_time", ut, f);
+  f->close_section();
+}
+
+void RGWOLHInfo::generate_test_instances(list<RGWOLHInfo*> &o)
+{
+  RGWOLHInfo *olh = new RGWOLHInfo;
+  olh->removed = false;
+  o.push_back(olh);
+  o.push_back(new RGWOLHInfo);
+}
+
+void RGWOLHInfo::dump(Formatter *f) const
+{
+  encode_json("target", target, f);
+}
+
+void RGWOLHPendingInfo::dump(Formatter *f) const
+{
+  utime_t ut(time);
+  encode_json("time", ut, f);
+}
+
