@@ -7,6 +7,8 @@ from typing import Any, List
 
 import yaml
 
+from .util import replace_grafana_expr_variables
+
 
 @dataclass
 class InputSeries:
@@ -171,8 +173,7 @@ class PromqlTest:
 
         for variable, value in self.variables.items():
             expr = self.promql_expr_test.expr
-            regex = fr'\${variable}(?=\W)'
-            new_expr = re.sub(regex, fr'{str(value)}', expr)
+            new_expr = replace_grafana_expr_variables(expr, variable, value)
             self.set_expression(new_expr)
 
         test_as_dict = asdict(self.test_file)
