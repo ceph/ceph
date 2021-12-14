@@ -11,7 +11,7 @@
 #include "crimson/common/log.h"
 #include "crimson/common/errorator.h"
 
-#define INTR_FUT_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_osd).trace(FMT_MSG, ##__VA_ARGS__)
+#define INTR_FUT_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_).trace(FMT_MSG, ##__VA_ARGS__)
 
 // The interrupt condition generally works this way:
 //
