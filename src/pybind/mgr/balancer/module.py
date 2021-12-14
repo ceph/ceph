@@ -1217,7 +1217,7 @@ class Module(MgrModule):
                           pe.score)
             plan.compat_ws = {}
             return -errno.EDOM, 'Unable to find further optimization, ' \
-                                'change balancer mode and retry might help'
+                                'change balancer mode or adjust target_max_misplaced_ratio config and retry might help'
 
     def get_compat_weight_set_weights(self, ms: MappingState):
         have_choose_args = CRUSHMap.have_default_choose_args(ms.crush_dump)
