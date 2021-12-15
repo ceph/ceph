@@ -296,7 +296,7 @@ the following packages are required:
 - python3-dev
 - python3-pip
 - python3-sphinx
-- pytnon3-venv
+- python3-venv
 - libxml2-dev
 - libxslt1-dev
 - doxygen
@@ -533,14 +533,14 @@ Pull`_ approach.
 Notify Us
 ---------
 
-In case The PR did not got a review within in a resonable timeframe, please get in touch
+In case The PR did not got a review within in a reasonable timeframe, please get in touch
 with the corresponding component lead of the :ref:`clt`.
 
 Documentation Style Guide
 =========================
 
 One objective of the Ceph documentation project is to ensure the readability of
-the documentation in both native restructuredText format and its rendered
+the documentation in both native reStructuredText format and its rendered
 formats such as HTML. Navigate to your Ceph repository and view a document in
 its native format. You may notice that it is generally as legible in a terminal
 as it is in its rendered HTML format. Additionally, you may also notice that

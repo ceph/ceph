@@ -4,7 +4,7 @@ Converting an existing cluster to cephadm
 =========================================
 
 It is possible to convert some existing clusters so that they can be managed
-with ``cephadm``. This statment applies to some clusters that were deployed
+with ``cephadm``. This statement applies to some clusters that were deployed
 with ``ceph-deploy``, ``ceph-ansible``, or ``DeepSea``.
 
 This section of the documentation explains how to determine whether your
@@ -51,7 +51,7 @@ Preparation
 
       cephadm ls
 
-   Before starting the converstion process, ``cephadm ls`` shows all existing
+   Before starting the conversion process, ``cephadm ls`` shows all existing
    daemons to have a style of ``legacy``. As the adoption process progresses,
    adopted daemons will appear with a style of ``cephadm:v1``.
 

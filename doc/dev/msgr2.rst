@@ -578,7 +578,7 @@ Compression will not be possible when using secure mode, unless configured speci
 
 Post-compression frame format 
 -----------------------------
-Depending on the negotiated connection mode from TAG_COMPRESSION_DONE, the connection is able to acccept/send compressed frames or process all frames as decompressed.
+Depending on the negotiated connection mode from TAG_COMPRESSION_DONE, the connection is able to accept/send compressed frames or process all frames as decompressed.
 
 # msgr2.x-force mode
 

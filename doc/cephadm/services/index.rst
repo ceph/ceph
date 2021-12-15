@@ -435,7 +435,7 @@ Consider the following service specification:
       count: 3
       label: myfs
 
-This service specifcation instructs cephadm to deploy three daemons on hosts
+This service specification instructs cephadm to deploy three daemons on hosts
 labeled ``myfs`` across the cluster.
 
 If there are fewer than three daemons deployed on the candidate hosts, cephadm

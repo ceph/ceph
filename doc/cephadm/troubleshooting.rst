@@ -273,7 +273,7 @@ To call miscellaneous like ``ceph-objectstore-tool`` or
     0: [v2:127.0.0.1:3300/0,v1:127.0.0.1:6789/0] mon.myhostname
 
 This command sets up the environment in a way that is suitable
-for extended daemon maintenance and running the deamon interactively. 
+for extended daemon maintenance and running the daemon interactively. 
 
 .. _cephadm-restore-quorum:
 
@@ -324,7 +324,7 @@ Get the container image::
 
   ceph config get "mgr.hostname.smfvfd" container_image
 
-Create a file ``config-json.json`` which contains the information neccessary to deploy
+Create a file ``config-json.json`` which contains the information necessary to deploy
 the daemon:
 
 .. code-block:: json

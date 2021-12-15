@@ -539,7 +539,7 @@ Flapping OSDs
 When OSDs peer and check heartbeats, they use the cluster (back-end)
 network when it's available. See `Monitor/OSD Interaction`_ for details.
 
-We have tradtionally recommended separate *public* (front-end) and *private*
+We have traditionally recommended separate *public* (front-end) and *private*
 (cluster / back-end / replication) networks:
 
 #. Segregation of heartbeat and replication / recovery traffic (private)

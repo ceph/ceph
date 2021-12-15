@@ -64,7 +64,7 @@ To add a specific version of a package to the allowlist:
   # radosgw-admin script-package add --package='{package name} {package version}' [--allow-compilation]
 
 
-* When adding a diffrent version of a package which already exists in the list, the newly
+* When adding a different version of a package which already exists in the list, the newly
   added version will override the existing one.
 
 * When adding a package without a version specified, the latest version of the package
@@ -324,9 +324,9 @@ Lua Code Samples
 
   function print_owner(owner)
     RGWDebugLog("Owner:")
-    RGWDebugLog("  Dispaly Name: " .. owner.DisplayName)
+    RGWDebugLog("  Display Name: " .. owner.DisplayName)
     RGWDebugLog("  Id: " .. owner.User.Id)
-    RGWDebugLog("  Tenanet: " .. owner.User.Tenant)
+    RGWDebugLog("  Tenant: " .. owner.User.Tenant)
   end
 
   function print_acl(acl_type)

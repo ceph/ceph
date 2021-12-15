@@ -768,8 +768,8 @@ layout, it is recommended to apply different OSD specs matching only one
 set of hosts. Typically you will have a spec for multiple hosts with the 
 same layout. 
 
-The sevice id as the unique key: In case a new OSD spec with an already
-applied service id is applied, the existing OSD spec will be superseeded.
+The service id as the unique key: In case a new OSD spec with an already
+applied service id is applied, the existing OSD spec will be superseded.
 cephadm will now create new OSD daemons based on the new spec
 definition. Existing OSD daemons will not be affected. See :ref:`cephadm-osd-declarative`.
 
@@ -912,8 +912,8 @@ activates all existing OSDs on a host.
 
 This will scan all existing disks for OSDs and deploy corresponding daemons.
 
-Futher Reading
-==============
+Further Reading
+===============
 
 * :ref:`ceph-volume`
 * :ref:`rados-index`

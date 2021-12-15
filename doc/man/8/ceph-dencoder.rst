@@ -73,7 +73,7 @@ Commands
 
 .. option:: select_test <n>
 
-   Select the given build-in test instance as a the in-memory instance
+   Select the given built-in test instance as the in-memory instance
    of the type.
 
 .. option:: get_features
