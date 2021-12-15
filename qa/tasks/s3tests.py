@@ -432,6 +432,8 @@ def run_tests(ctx, config):
         attrs = ["!fails_on_rgw", "!lifecycle_expiration", "!fails_strict_rfc2616","!test_of_sts","!webidentity_test"]
         if client_config.get('calling-format') != 'ordinary':
             attrs += ['!fails_with_subdomain']
+        if not client_config.get('with-sse-s3'):
+            attrs += ['!sse-s3']
        
         if 'extra_attrs' in client_config:
             attrs = client_config.get('extra_attrs') 
