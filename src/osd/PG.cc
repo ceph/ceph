@@ -986,7 +986,6 @@ int PG::peek_map_epoch(ObjectStore *store,
 		       epoch_t *pepoch)
 {
   coll_t coll(pgid);
-  ghobject_t legacy_infos_oid(OSD::make_infos_oid());
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   epoch_t cur_epoch = 0;
 
