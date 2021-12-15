@@ -3719,7 +3719,12 @@ WantedBy=ceph-{fsid}.target
             url = f'https://{self.target_ip}:{self.target_port}/data'
             try:
                 req = Request(url, data, {'Content-Type': 'application/json'})
-                urlopen(req, context=ssl_ctx)
+                send_time = time.monotonic()
+                with urlopen(req, context=ssl_ctx) as response:
+                    response_str = response.read()
+                    response_json = json.loads(response_str)
+                    total_request_time = datetime.timedelta(seconds=(time.monotonic() - send_time)).total_seconds()
+                    logger.info(f'Received mgr response: "{response_json["result"]}" {total_request_time} seconds after sending request.')
             except Exception as e:
                 logger.error(f'Failed to send metadata to mgr: {e}')
 
