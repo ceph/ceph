@@ -8551,10 +8551,12 @@ CInode *MDCache::cache_traverse(const filepath& fp)
 
   CInode *in;
   unsigned depth = 0;
+  char mdsdir_name[16];
+  sprintf(mdsdir_name, "~mds%d", mds->get_nodeid());
 
   if (fp.get_ino()) {
     in = get_inode(fp.get_ino());
-  } else if (fp.depth() > 0 && fp[0] == "~mdsdir") {
+  } else if (fp.depth() > 0 && (fp[0] == "~mdsdir" || fp[0] == mdsdir_name)) {
     in = myin;
     depth = 1;
   } else {
