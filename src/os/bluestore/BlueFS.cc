@@ -1595,6 +1595,14 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                 return r;
               }
 	    }
+	  } else if (noop && delta.ino == 1) {
+	    // we need to track bluefs log, even in noop mode
+	    FileRef f = _get_file(1);
+	    bluefs_fnode_t& fnode = f->fnode;
+	    fnode.ino = delta.ino;
+	    fnode.mtime = delta.mtime;
+	    fnode.size = delta.size;
+	    fnode.claim_extents(delta.extents);
 	  }
 	}
       break;
