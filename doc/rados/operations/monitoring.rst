@@ -414,7 +414,7 @@ on the number of replicas, clones and snapshots.
   the cache pool but have not been flushed yet to the base pool. This field is
   only available when cache tiering is in use.
 - **USED COMPR:** amount of space allocated for compressed data (i.e. this
-  includes comrpessed data plus all the allocation, replication and erasure
+  includes compressed data plus all the allocation, replication and erasure
   coding overhead).
 - **UNDER COMPR:** amount of data passed through compression (summed over all
   replicas) and beneficial enough to be stored in a compressed form.
@@ -447,7 +447,7 @@ Or:
   ceph osd dump
 	
 You can also check view OSDs according to their position in the CRUSH map by
-using the folloiwng command:
+using the following command:
 
 .. prompt:: bash #
 

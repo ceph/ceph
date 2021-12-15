@@ -64,7 +64,7 @@ performance issues::
   MDS_SLOW_REQUEST 1 MDSs report slow requests
      mds.fs-01(mds.0): 5 slow requests are blocked > 30 secs
 
-Where, for intance, ``MDS_SLOW_REQUEST`` is the unique code representing the
+Where, for instance, ``MDS_SLOW_REQUEST`` is the unique code representing the
 condition where requests are taking long time to complete. And the following
 description shows its severity and the MDS daemons which are serving these
 slow requests.

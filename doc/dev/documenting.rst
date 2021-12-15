@@ -5,7 +5,7 @@
 User documentation
 ==================
 
-The documentation on docs.ceph.com is generated from the restructuredText
+The documentation on docs.ceph.com is generated from the reStructuredText
 sources in ``/doc/`` in the Ceph git repository.
 
 Please make sure that your changes are written in a way that is intended

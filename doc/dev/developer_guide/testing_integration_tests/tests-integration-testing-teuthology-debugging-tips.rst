@@ -48,7 +48,7 @@ A job failure might be caused by one or more of the following reasons:
 
 * environment setup (`testing on varied
   systems <https://github.com/ceph/ceph/tree/master/qa/distros/supported>`_):
-  testing compatibility with stable realeases for supported versions.
+  testing compatibility with stable releases for supported versions.
 
 * permutation of config values: for instance, `qa/suites/rados/thrash
   <https://github.com/ceph/ceph/tree/master/qa/suites/rados/thrash>`_ ensures

@@ -279,7 +279,7 @@ For example,
 Object modification & Limitations
 ----------------------------------
 
-The cloud storage class once configured can then be used like any other storage class in the bucket lifecyle rules. For example,
+The cloud storage class once configured can then be used like any other storage class in the bucket lifecycle rules. For example,
 
 ::
 
@@ -351,6 +351,6 @@ Future Work
 
 * Federation between RGW and Cloud services.
 
-* Support transition to other cloud provideres (like Azure).
+* Support transition to other cloud providers (like Azure).
 
 .. _`Multisite Configuration`: ../multisite

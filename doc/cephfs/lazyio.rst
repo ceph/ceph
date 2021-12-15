@@ -23,7 +23,7 @@ Using LazyIO
 ============
 
 LazyIO includes two methods ``lazyio_propagate()`` and ``lazyio_synchronize()``.
-With LazyIO enabled, writes may not be visble to other clients until
+With LazyIO enabled, writes may not be visible to other clients until
 ``lazyio_propagate()`` is called. Reads may come from local cache (irrespective of
 changes to the file by other clients) until ``lazyio_synchronize()`` is called.
 
@@ -59,7 +59,7 @@ particular client/file descriptor in a parallel application:
             
             /* The barrier makes sure changes associated with all file descriptors
             are propagated so that there is certainty that the backing file 
-            is upto date */
+            is up to date */
             application_specific_barrier();
 
             char in_buf[40];

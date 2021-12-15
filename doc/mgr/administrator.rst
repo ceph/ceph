@@ -50,7 +50,7 @@ If the active daemon fails to send a beacon to the monitors for
 more than :confval:`mon_mgr_beacon_grace`, then it will be replaced
 by a standby.
 
-If you want to pre-empt failover, you can explicitly mark a ceph-mgr
+If you want to preempt failover, you can explicitly mark a ceph-mgr
 daemon as failed using ``ceph mgr fail <mgr name>``.
 
 Using modules

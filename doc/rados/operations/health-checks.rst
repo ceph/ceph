@@ -1142,7 +1142,7 @@ _______________
 One or more PGs has not been scrubbed recently.  PGs are normally scrubbed
 within every configured interval specified by
 :confval:`osd_scrub_max_interval` globally. This
-interval can be overriden on per-pool basis with
+interval can be overridden on per-pool basis with
 :confval:`scrub_max_interval`. The warning triggers when
 ``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed without a
 scrub since it was due.

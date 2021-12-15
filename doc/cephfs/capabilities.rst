@@ -123,7 +123,7 @@ clients allowed, even some capabilities are not needed or wanted by the clients,
 as pre-issuing capabilities could reduce latency in some cases.
 
 If there is only one client, usually it will be the loner client for all the inodes.
-While in multiple clients case, the MDS will try to caculate a loner client out for
+While in multiple clients case, the MDS will try to calculate a loner client out for
 each inode depending on the capabilities the clients (needed | wanted), but usually
 it will fail. The loner client will always get all the capabilities.
 
