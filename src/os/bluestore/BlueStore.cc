@@ -4953,13 +4953,13 @@ void BlueStore::_init_logger()
 	    "Number of onodes in cache");
   b.add_u64(l_bluestore_pinned_onodes, "bluestore_pinned_onodes",
             "Number of pinned onodes in cache");
-  b.add_u64_counter(l_bluestore_onode_hits, "bluestore_onode_hits",
+  b.add_u64_counter(l_bluestore_onode_hits, "onode_hits",
 		    "Count of onode cache lookup hits",
 		    "o_ht", PerfCountersBuilder::PRIO_USEFUL);
-  b.add_u64_counter(l_bluestore_onode_misses, "bluestore_onode_misses",
+  b.add_u64_counter(l_bluestore_onode_misses, "onode_misses",
 		    "Count of onode cache lookup misses",
 		    "o_ms", PerfCountersBuilder::PRIO_USEFUL);
-  b.add_u64_counter(l_bluestore_onode_shard_hits, "bluestore_onode_shard_hits",
+  b.add_u64_counter(l_bluestore_onode_shard_hits, "onode_shard_hits",
 		    "Sum for onode-shard lookups hit in the cache");
   b.add_u64_counter(l_bluestore_onode_shard_misses,
 		    "bluestore_onode_shard_misses",
