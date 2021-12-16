@@ -96,6 +96,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolumegroup info '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString ',
+            'desc': "Get the metadata of a CephFS subvolume group in a volume, ",
+            'perm': 'r'
+        },
+        {
             'cmd': 'fs subvolume ls '
                    'name=vol_name,type=CephString '
                    'name=group_name,type=CephString,req=false ',
@@ -535,6 +542,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.remove_subvolume_group(vol_name=cmd['vol_name'],
                                               group_name=cmd['group_name'],
                                               force=cmd.get('force', False))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_info(self, inbuf, cmd):
+        return self.vc.subvolumegroup_info(vol_name=cmd['vol_name'],
+                                           group_name=cmd['group_name'])
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_ls(self, inbuf, cmd):

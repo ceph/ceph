@@ -783,6 +783,27 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def subvolumegroup_info(self, **kwargs):
+        ret        = None
+        volname    = kwargs['vol_name']
+        groupname  = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                        mon_addr_lst = []
+                        mon_map_mons = self.mgr.get('mon_map')['mons']
+                        for mon in mon_map_mons:
+                            ip_port = mon['addr'].split("/")[0]
+                            mon_addr_lst.append(ip_port)
+
+                        group_info_dict = group.info()
+                        group_info_dict["mon_addrs"] = mon_addr_lst
+                        ret = 0, json.dumps(group_info_dict, indent=4, sort_keys=True), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
     def getpath_subvolume_group(self, **kwargs):
         volname    = kwargs['vol_name']
         groupname  = kwargs['group_name']

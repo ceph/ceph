@@ -88,6 +88,34 @@ class Group(GroupTemplate):
                 return []
             raise
 
+    def info(self):
+        st = self.fs.statx(self.path, cephfs.CEPH_STATX_BTIME | cephfs.CEPH_STATX_SIZE
+                           | cephfs.CEPH_STATX_UID | cephfs.CEPH_STATX_GID | cephfs.CEPH_STATX_MODE
+                           | cephfs.CEPH_STATX_ATIME | cephfs.CEPH_STATX_MTIME | cephfs.CEPH_STATX_CTIME,
+                           cephfs.AT_SYMLINK_NOFOLLOW)
+        usedbytes = st["size"]
+        try:
+            nsize = int(self.fs.getxattr(self.path, 'ceph.quota.max_bytes').decode('utf-8'))
+        except cephfs.NoData:
+            nsize = 0
+
+        try:
+            data_pool = self.fs.getxattr(self.path, 'ceph.dir.layout.pool').decode('utf-8')
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+        return {'uid': int(st["uid"]),
+                'gid': int(st["gid"]),
+                'atime': str(st["atime"]),
+                'mtime': str(st["mtime"]),
+                'ctime': str(st["ctime"]),
+                'mode': int(st["mode"]),
+                'data_pool': data_pool,
+                'created_at': str(st["btime"]),
+                'bytes_quota': "infinite" if nsize == 0 else nsize,
+                'bytes_used': int(usedbytes),
+                'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0)}
+
 def set_group_attrs(fs, path, attrs):
     # set subvolume group attrs
     # set size
