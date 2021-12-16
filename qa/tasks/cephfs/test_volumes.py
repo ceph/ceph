@@ -213,6 +213,12 @@ class TestVolumesHelper(CephFSTestCase):
         # remove the leading '/', and trailing whitespaces
         return path[1:].rstrip()
 
+    def  _get_subvolume_group_info(self, vol_name, group_name):
+        args = ["subvolumegroup", "info", vol_name, group_name]
+        args = tuple(args)
+        group_md = self._fs_cmd(*args)
+        return group_md
+
     def  _get_subvolume_path(self, vol_name, subvol_name, group_name=None):
         args = ["subvolume", "getpath", vol_name, subvol_name]
         if group_name:
@@ -759,6 +765,52 @@ class TestSubvolumeGroups(TestVolumesHelper):
                 raise
         else:
             raise RuntimeError("expected the 'fs subvolumegroup create' command to fail")
+
+    def test_subvolume_group_create_with_size(self):
+        # create group with size -- should set quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+
+        # get group metadata
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertEqual(group_info["bytes_quota"], 1000000000)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_info(self):
+        # tests the 'fs subvolumegroup info' command
+
+        group_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
+                     "data_pool", "gid", "mode", "mon_addrs", "mtime", "uid"]
+
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # get group metadata
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        for md in group_md:
+            self.assertIn(md, group_info, "'{0}' key not present in metadata of group".format(md))
+
+        self.assertEqual(group_info["bytes_pcent"], "undefined", "bytes_pcent should be set to undefined if quota is not set")
+        self.assertEqual(group_info["bytes_quota"], "infinite", "bytes_quota should be set to infinite if quota is not set")
+        self.assertEqual(group_info["uid"], 0)
+        self.assertEqual(group_info["gid"], 0)
+
+        nsize = self.DEFAULT_FILE_SIZE*1024*1024
+        self._fs_cmd("subvolumegroup", "resize", self.volname, group, str(nsize))
+
+        # get group metadata after quota set
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        for md in group_md:
+            self.assertIn(md, group_info, "'{0}' key not present in metadata of subvolume".format(md))
+
+        self.assertNotEqual(group_info["bytes_pcent"], "undefined", "bytes_pcent should not be set to undefined if quota is set")
+        self.assertEqual(group_info["bytes_quota"], nsize, "bytes_quota should be set to '{0}'".format(nsize))
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
     def test_subvolume_group_ls(self):
         # tests the 'fs subvolumegroup ls' command
