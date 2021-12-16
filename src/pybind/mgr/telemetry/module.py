@@ -483,8 +483,10 @@ class Module(MgrModule):
 
             # redact final line of python tracebacks, as the exception
             # payload may contain identifying information
-            if 'mgr_module' in c:
-                c['backtrace'][-1] = '<redacted>'
+            if 'mgr_module' in c and 'backtrace' in c:
+                # backtrace might be empty
+                if len(c['backtrace']) > 0:
+                    c['backtrace'][-1] = '<redacted>'
 
             crashlist.append(c)
         return crashlist
