@@ -534,11 +534,12 @@ options:
   services:
   - mds
   with_legacy: true
-# segment size for mds log, default to default file_layout_t
+# expected segment size for mds log, default to default file_layout_t
 - name: mds_log_segment_size
   type: size
   level: advanced
-  desc: size in bytes of each MDS log segment
+  desc: expected size in bytes of each MDS log segment, the actual segment size probably
+    will be large than or less than it.
   default: 0
   services:
   - mds
@@ -546,11 +547,22 @@ options:
 - name: mds_log_segment_size_factor
   type: float
   level: advanced
-  desc: ratio of max(MDLog's segment size, maximum size of every 10000 events) at which
-    the MDLog will start a new LogSegment immediately if the maximum size of the 10000
-    events is larger than half of the segment size. Set a value less than or equal to 1
-    to disable it.
+  desc: ratio of max(MDLog's expected segment size, maximum size of every 10000 events)
+    at which the MDLog will start a new LogSegment immediately if the maximum size of
+    the 10000 events is larger than half of the expected segment size. Set a value less
+    than or equal to 1 to disable it.
   default: 2
+  services:
+  - mds
+  with_legacy: true
+- name: mds_log_max_average_segment_size_factor
+  type: float
+  level: advanced
+  desc: ratio of expected segment size, if the average of the actual segments size is
+    larger than it the MDS will try to trim the segments. It must equal to or be lager
+    than mds_log_segment_size_factor. Set a value less than mds_log_segment_size_factor
+    will be ignored and 64 will be used as default.
+  default: 64
   services:
   - mds
   with_legacy: true

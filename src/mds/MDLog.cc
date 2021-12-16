@@ -663,14 +663,41 @@ void MDLog::trim(int m)
     ceph_assert(segments.size() >= pre_segments_size);
     max_expiring_segments = std::max<unsigned>(max_expiring_segments,segments.size() - pre_segments_size);
   }
-  
+
+  /*
+   * If the average factor is less than size factor, will set 64 as
+   * default. The size factor will always be equal to or larger than
+   * 1.0.
+   */
+  float average_factor = g_conf()->mds_log_max_average_segment_size_factor;
+  float size_factor = g_conf()->mds_log_segment_size_factor;
+  size_factor = size_factor < 1.0 ? 1.0 : size_factor;
+  average_factor = average_factor < size_factor ? 64 : average_factor;
+  uint64_t total_size = journaler->get_write_pos() - journaler->get_trimmed_pos();
+  uint64_t average_size = total_size / segments.size();
+  uint64_t expected_size = journaler->get_layout_period();
+  if (max_event_size > expected_size / 2) {
+    uint64_t _expected_size = size_factor * std::max<uint64_t>(expected_size, max_event_size);
+    expected_size = round_up_to(_expected_size, expected_size);
+  }
+
+  dout(15) << "trim "
+	   << " average_factor: " << average_factor
+	   << " size_factor: " << size_factor
+	   << ", total_size: " << total_size
+	   << ", average_size: " << average_size
+	   << ", expected segment size: " << expected_size
+	   << ", max_event_size: " << max_event_size
+	   << dendl;
+
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
   while (p != segments.end()) {
     if (stop < ceph_clock_now())
       break;
 
     unsigned num_remaining_segments = (segments.size() - expired_segments.size() - expiring_segments.size());
-    if ((num_remaining_segments <= max_segments) &&
+    if ((average_size <= expected_size * average_factor) &&
+	(num_remaining_segments <= max_segments) &&
 	(max_events < 0 || num_events - expiring_events - expired_events <= max_events))
       break;
 
