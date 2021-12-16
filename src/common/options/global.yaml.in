@@ -1262,6 +1262,12 @@ options:
   desc: Inject various internal delays to induce races (seconds)
   default: 0
   with_legacy: true
+- name: ms_inject_network_congestion
+  type: uint
+  level: dev
+  desc: Inject a network congestions that stuck with N times operations
+  default: 0
+  with_legacy: true
 - name: ms_blackhole_osd
   type: bool
   level: dev

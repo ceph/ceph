@@ -1287,6 +1287,8 @@ static ceph::spinlock debug_lock;
 
   void buffer::list::claim_append(list& bl)
   {
+    // check overflow
+    assert(_len + bl._len >= _len);
     // steal the other guy's buffers
     _len += bl._len;
     _num += bl._num;
