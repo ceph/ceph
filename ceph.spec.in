@@ -661,14 +661,15 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-asyncssh
-Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       cephadm = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?suse_version}
 Requires:       openssh
+Requires:       python%{python3_pkgversion}-CherryPy
 Requires:       python%{python3_pkgversion}-Jinja2
 %endif
 %if 0%{?rhel} || 0%{?fedora}
 Requires:       openssh-clients
+Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-jinja2
 %endif
 %description mgr-cephadm
