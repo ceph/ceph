@@ -158,7 +158,9 @@ class AlertmanagerService(CephadmService):
             assert dd.ports
             addr = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
             deps.append(dd.name())
-            snmp_gateway_urls.append(f"http://{addr}:{dd.ports[0]}/alerts")
+
+            snmp_gateway_urls.append(build_url(scheme='http', host=addr,
+                                     port=dd.ports[0], path='/alerts'))
 
         context = {
             'dashboard_urls': dashboard_urls,
