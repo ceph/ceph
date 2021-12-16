@@ -106,7 +106,8 @@ seastar::future<> make_keyring()
       fmt::print(std::cerr, "already have key in keyring: {}\n", path);
       return seastar::now();
     } else {
-      auth.key.create(std::make_unique<CephContext>().get(), CEPH_CRYPTO_AES);
+      CephContext temp_cct{};
+      auth.key.create(&temp_cct, CEPH_CRYPTO_AES);
       keyring.add(name, auth);
       bufferlist bl;
       keyring.encode_plaintext(bl);
