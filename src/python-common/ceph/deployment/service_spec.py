@@ -18,21 +18,6 @@ ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
 FuncT = TypeVar('FuncT', bound=Callable)
 
 
-class SNMPVersion(enum.Enum):
-    V2c = 'V2c'
-    V3 = 'V3'
-
-
-class SNMPAuthType(enum.Enum):
-    MD5 = 'MD5'
-    SHA = 'SHA'
-
-
-class SNMPPrivacyType(enum.Enum):
-    DES = 'DES'
-    AES = 'AES'
-
-
 def handle_type_error(method: FuncT) -> FuncT:
     @wraps(method)
     def inner(cls: Any, *args: Any, **kwargs: Any) -> Any:
@@ -1164,6 +1149,27 @@ yaml.add_representer(GrafanaSpec, ServiceSpec.yaml_representer)
 
 
 class SNMPGatewaySpec(ServiceSpec):
+    class SNMPVersion(str, enum.Enum):
+        V2c = 'V2c'
+        V3 = 'V3'
+
+        def to_json(self) -> str:
+            return self.value
+
+    class SNMPAuthType(str, enum.Enum):
+        MD5 = 'MD5'
+        SHA = 'SHA'
+
+        def to_json(self) -> str:
+            return self.value
+
+    class SNMPPrivacyType(str, enum.Enum):
+        DES = 'DES'
+        AES = 'AES'
+
+        def to_json(self) -> str:
+            return self.value
+
     valid_destination_types = [
         'Name:Port',
         'IPv4:Port'
@@ -1171,12 +1177,12 @@ class SNMPGatewaySpec(ServiceSpec):
 
     def __init__(self,
                  service_type: str = 'snmp-gateway',
-                 snmp_version: Optional[str] = None,
+                 snmp_version: Optional[SNMPVersion] = None,
                  snmp_destination: str = '',
                  credentials: Dict[str, str] = {},
                  engine_id: Optional[str] = None,
-                 auth_protocol: Optional[str] = None,
-                 privacy_protocol: Optional[str] = None,
+                 auth_protocol: Optional[SNMPAuthType] = None,
+                 privacy_protocol: Optional[SNMPPrivacyType] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -1199,6 +1205,25 @@ class SNMPGatewaySpec(ServiceSpec):
         self.auth_protocol = auth_protocol
         self.privacy_protocol = privacy_protocol
 
+    @classmethod
+    def _from_json_impl(cls, json_spec: dict) -> 'SNMPGatewaySpec':
+
+        cpy = json_spec.copy()
+        types = [
+            ('snmp_version', SNMPGatewaySpec.SNMPVersion),
+            ('auth_protocol', SNMPGatewaySpec.SNMPAuthType),
+            ('privacy_protocol', SNMPGatewaySpec.SNMPPrivacyType),
+        ]
+        for d in cpy, cpy.get('spec', {}):
+            for key, enum_cls in types:
+                try:
+                    if key in d:
+                        d[key] = enum_cls(d[key])
+                except ValueError:
+                    raise SpecValidationError(f'{key} unsupported. Must be one of '
+                                              f'{", ".join(enum_cls)}')
+        return super(SNMPGatewaySpec, cls)._from_json_impl(cpy)
+
     @property
     def ports(self) -> List[int]:
         return [self.port]
@@ -1209,14 +1234,6 @@ class SNMPGatewaySpec(ServiceSpec):
     def validate(self) -> None:
         super(SNMPGatewaySpec, self).validate()
 
-        def _check_type(name: str, value: Optional[str], options: List[str]) -> None:
-            if not value:
-                return
-            if value not in options:
-                raise SpecValidationError(
-                    f'{name} unsupported. Must be one of {", ".join(sorted(options))}'
-                )
-
         if not self.credentials:
             raise SpecValidationError(
                 'Missing authentication information (credentials). '
@@ -1226,16 +1243,6 @@ class SNMPGatewaySpec(ServiceSpec):
             raise SpecValidationError(
                 'Missing SNMP version (snmp_version)'
             )
-
-        _check_type('snmp_version',
-                    self.snmp_version,
-                    list(set(opt.value for opt in SNMPVersion)))
-        _check_type('auth_protocol',
-                    self.auth_protocol,
-                    list(set(opt.value for opt in SNMPAuthType)))
-        _check_type('privacy_protocol',
-                    self.privacy_protocol,
-                    list(set(opt.value for opt in SNMPPrivacyType)))
 
         creds_requirement = {
             'V2c': ['snmp_community'],
