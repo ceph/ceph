@@ -66,7 +66,7 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
                 data['queries'][query_id] = {'query': target['expr'], 'path': path}
                 data['stats'][path]['total'] += 1
     if error:
-        raise RuntimeError(f'Missing legend_format in queries, please add a proper value.')
+        raise ValueError(f'Missing legend_format in queries, please add a proper value.')
 
 
 def add_dashboard_variables(data: Dict[str, Any], dashboard_data: Dict[str, Any]) -> None:
