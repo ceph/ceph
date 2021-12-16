@@ -6450,12 +6450,17 @@ void Monitor::ms_handle_accept(Connection *con)
     dout(10) << __func__ << " con " << con << " session " << s
 	     << " already on list" << dendl;
   } else {
+    std::lock_guard l(session_map_lock);
+    if (state == STATE_SHUTDOWN) {
+      dout(10) << __func__ << " ignoring new con " << con << " (shutdown)" << dendl;
+      con->mark_down();
+      return;
+    }
     dout(10) << __func__ << " con " << con << " session " << s
 	     << " registering session for "
 	     << con->get_peer_addrs() << dendl;
     s->_ident(entity_name_t(con->get_peer_type(), con->get_peer_id()),
 	      con->get_peer_addrs());
-    std::lock_guard l(session_map_lock);
     session_map.add_session(s);
   }
 }
