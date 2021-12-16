@@ -1186,7 +1186,7 @@ class SNMPGatewaySpec(ServiceSpec):
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
-                 port: int = 9464,
+                 port: Optional[int] = None,
                  ):
         assert service_type == 'snmp-gateway'
 
@@ -1226,7 +1226,7 @@ class SNMPGatewaySpec(ServiceSpec):
 
     @property
     def ports(self) -> List[int]:
-        return [self.port]
+        return [self.port or 9464]
 
     def get_port_start(self) -> List[int]:
         return self.ports
