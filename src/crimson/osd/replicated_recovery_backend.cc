@@ -589,6 +589,10 @@ RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
 {
   logger().debug("{}: {}", __func__, *m);
+  if (pg.can_discard_replica_op(*m)) {
+    logger().debug("{}: discarding {}", __func__, *m);
+    return seastar::now();
+  }
   return seastar::do_with(m->take_pulls(), [this, from=m->from](auto& pulls) {
     return interruptor::parallel_for_each(pulls,
                                       [this, from](auto& pull_op) {
@@ -709,6 +713,10 @@ RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::handle_pull_response(
   Ref<MOSDPGPush> m)
 {
+  if (pg.can_discard_replica_op(*m)) {
+    logger().debug("{}: discarding {}", __func__, *m);
+    return seastar::now();
+  }
   const PushOp& pop = m->pushes[0]; //TODO: only one push per message for now.
   if (pop.version == eversion_t()) {
     // replica doesn't have it!
@@ -797,6 +805,10 @@ RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::handle_push(
   Ref<MOSDPGPush> m)
 {
+  if (pg.can_discard_replica_op(*m)) {
+    logger().debug("{}: discarding {}", __func__, *m);
+    return seastar::now();
+  }
   if (pg.is_primary()) {
     return handle_pull_response(m);
   }
