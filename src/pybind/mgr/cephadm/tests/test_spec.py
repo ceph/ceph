@@ -672,7 +672,6 @@ placement:
 spec:
   credentials:
     snmp_community: public
-port: 9464
 snmp_destination: 192.168.1.42:162
 snmp_version: V4
 """), 'snmp_version unsupported. Must be one of V2c, V3'),
