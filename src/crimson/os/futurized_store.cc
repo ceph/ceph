@@ -16,14 +16,20 @@ FuturizedStore::create(const std::string& type,
                        const ConfigValues& values)
 {
   if (type == "cyanstore") {
-    return seastar::make_ready_future<std::unique_ptr<FuturizedStore>>(std::make_unique<crimson::os::CyanStore>(data));
+    return seastar::make_ready_future<std::unique_ptr<FuturizedStore>>(
+      std::make_unique<crimson::os::CyanStore>(data));
   } else if (type == "seastore") {
-    return seastar::make_ready_future<std::unique_ptr<FuturizedStore>>(crimson::os::seastore::make_seastore(data, values));
+    return crimson::os::seastore::make_seastore(
+      data, values
+    ).then([] (auto seastore) {
+      return seastar::make_ready_future<std::unique_ptr<FuturizedStore>>(
+	seastore.release());
+    });
   } else {
 #ifdef WITH_BLUESTORE
     // use AlienStore as a fallback. It adapts e.g. BlueStore.
-    return seastar::make_ready_future<std::unique_ptr<FuturizedStore>>(std::make_unique<crimson::os::AlienStore>(
-      type, data, values));
+    return seastar::make_ready_future<std::unique_ptr<FuturizedStore>>(
+      std::make_unique<crimson::os::AlienStore>(type, data, values));
 #else
     ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
     return {};

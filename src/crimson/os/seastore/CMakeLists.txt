@@ -1,6 +1,7 @@
-add_library(crimson-seastore STATIC
+set(crimson_seastore_srcs
   cached_extent.cc
   seastore_types.cc
+  segment_manager.cc
   segment_manager/ephemeral.cc
   segment_manager/block.cc
   transaction_manager.cc
@@ -41,6 +42,15 @@ add_library(crimson-seastore STATIC
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)
+
+if(HAVE_ZNS)
+  list(APPEND crimson_seastore_srcs
+    segment_manager/zns.cc)
+endif()
+
+add_library(crimson-seastore STATIC
+  ${crimson_seastore_srcs})
+
 target_link_libraries(crimson-seastore
   crimson)
 set_target_properties(crimson-seastore PROPERTIES
