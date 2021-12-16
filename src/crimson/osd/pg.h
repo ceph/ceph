@@ -707,7 +707,7 @@ public:
     return seastar::now();
   }
 
-  bool old_peering_msg(epoch_t map_epoch) const;
+  bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch) const;
 
   template <typename MsgType>
   bool can_discard_replica_op(const MsgType& m) const {
