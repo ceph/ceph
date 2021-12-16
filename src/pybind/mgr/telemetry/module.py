@@ -520,6 +520,9 @@ class Module(MgrModule):
 
         return result
 
+    def get_stats_per_pg(self) -> dict:
+        return self.get('pg_dump')['pg_stats']
+
     def gather_crashinfo(self) -> List[Dict[str, str]]:
         crashlist: List[Dict[str, str]] = list()
         errno, crashids, err = self.remote('crash', 'ls')
@@ -970,7 +973,7 @@ class Module(MgrModule):
         if 'perf' in channels:
             report['perf_counters'] = self.gather_perf_counters('separated')
             report['stats_per_pool'] = self.get_stats_per_pool()
-            report['stats_per_pg'] = self.get('pg_dump')['pg_stats']
+            report['stats_per_pg'] = self.get_stats_per_pg()
             report['io_rate'] = self.get_io_rate()
             report['osd_perf_histograms'] = self.get_osd_histograms('separated')
             report['mempool'] = self.get_mempool('separated')
