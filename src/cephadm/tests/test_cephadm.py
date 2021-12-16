@@ -540,6 +540,16 @@ docker.io/ceph/daemon-base:octopus
             infer_config(ctx)
             assert ctx.config == result
 
+    @mock.patch('cephadm.call')
+    def test_extract_uid_gid_fail(self, _call):
+        err = """Error: container_linux.go:370: starting container process caused: process_linux.go:459: container init caused: process_linux.go:422: setting cgroup config for procHooks process caused: Unit libpod-056038e1126191fba41d8a037275136f2d7aeec9710b9ee
+ff792c06d8544b983.scope not found.: OCI runtime error"""
+        _call.return_value = ('', err, 127)
+        ctx = cd.CephadmContext()
+        ctx.container_engine = mock_podman()
+        with pytest.raises(cd.Error, match='OCI'):
+            cd.extract_uid_gid(ctx)
+
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer
