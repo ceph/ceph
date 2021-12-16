@@ -278,6 +278,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default='*',
             desc='PlacementSpec describing on which hosts to manage /etc/ceph/ceph.conf',
         ),
+        # not used anymore
         Option(
             'registry_url',
             type='str',
@@ -296,6 +297,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=None,
             desc='Custom repository password'
         ),
+        ####
         Option(
             'registry_insecure',
             type='bool',
@@ -954,14 +956,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if not (url and username and password) and (inbuf is None or len(inbuf) == 0):
             return -errno.EINVAL, "", ("Invalid arguments. Please provide arguments <url> <username> <password> "
                                        "or -i <login credentials json file>")
-        elif not (url and username and password):
+        elif (url and username and password):
+            registry_json = {'url': url, 'username': username, 'password': password}
+        else:
             assert isinstance(inbuf, str)
-            login_info = json.loads(inbuf)
-            if "url" in login_info and "username" in login_info and "password" in login_info:
-                url = login_info["url"]
-                username = login_info["username"]
-                password = login_info["password"]
-            else:
+            registry_json = json.loads(inbuf)
+            if "url" not in registry_json or "username" not in registry_json or "password" not in registry_json:
                 return -errno.EINVAL, "", ("json provided for custom registry login did not include all necessary fields. "
                                            "Please setup json file as\n"
                                            "{\n"
@@ -969,6 +969,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                            " \"username\": \"REGISTRY_USERNAME\",\n"
                                            " \"password\": \"REGISTRY_PASSWORD\"\n"
                                            "}\n")
+
         # verify login info works by attempting login on random host
         host = None
         for host_name in self.inventory.keys():
@@ -976,14 +977,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             break
         if not host:
             raise OrchestratorError('no hosts defined')
-        r = self.wait_async(CephadmServe(self)._registry_login(host, url, username, password))
+        r = self.wait_async(CephadmServe(self)._registry_login(host, registry_json))
         if r is not None:
             return 1, '', r
         # if logins succeeded, store info
         self.log.debug("Host logins successful. Storing login info.")
-        self.set_module_option('registry_url', url)
-        self.set_module_option('registry_username', username)
-        self.set_module_option('registry_password', password)
+        self.set_store('registry_credentials', json.dumps(registry_json))
         # distribute new login info to all hosts
         self.cache.distribute_new_registry_login_info()
         return 0, "registry login scheduled", ''
