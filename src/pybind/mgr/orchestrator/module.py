@@ -1163,7 +1163,7 @@ Usage:
     def _apply_snmp_gateway(self,
                             snmp_version: SNMPGatewaySpec.SNMPVersion,
                             destination: str,
-                            port: int = 9464,
+                            port: Optional[int] = None,
                             engine_id: Optional[str] = None,
                             auth_protocol: Optional[SNMPGatewaySpec.SNMPAuthType] = None,
                             privacy_protocol: Optional[SNMPGatewaySpec.SNMPPrivacyType] = None,
