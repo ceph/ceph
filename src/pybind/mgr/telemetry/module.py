@@ -499,6 +499,27 @@ class Module(MgrModule):
     def get_io_rate(self) -> dict:
         return self.get('io_rate')
 
+    def get_stats_per_pool(self) -> dict:
+        result = self.get('pg_dump')['pool_stats']
+
+        # collect application metadata from osd_map
+        osd_map = self.get('osd_map')
+        app_dict = {}
+        for pool in osd_map['pools']:
+            app_dict[pool['pool']] = pool['application_metadata']
+
+        # add application to each pool from pg_dump
+        for pool in result:
+            poolid = pool['poolid']
+            # Check that the pool has an application. If it does not,
+            # the application dict will be empty.
+            if app_dict[poolid]:
+                pool['application'] = list(app_dict[poolid].keys())[0]
+            else:
+                pool['application'] = ""
+
+        return result
+
     def gather_crashinfo(self) -> List[Dict[str, str]]:
         crashlist: List[Dict[str, str]] = list()
         errno, crashids, err = self.remote('crash', 'ls')
@@ -948,7 +969,7 @@ class Module(MgrModule):
 
         if 'perf' in channels:
             report['perf_counters'] = self.gather_perf_counters('separated')
-            report['stats_per_pool'] = self.get('pg_dump')['pool_stats']
+            report['stats_per_pool'] = self.get_stats_per_pool()
             report['stats_per_pg'] = self.get('pg_dump')['pg_stats']
             report['io_rate'] = self.get_io_rate()
             report['osd_perf_histograms'] = self.get_osd_histograms('separated')
