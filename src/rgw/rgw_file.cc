@@ -1415,7 +1415,7 @@ namespace rgw {
        * no unsafe iterators reaching it either--n.b., this constraint
        * is binding oncode which may in future attempt to e.g.,
        * cause the eviction of objects in LRU order */
-      (void) get_fs()->unref(parent);
+      (void) get_fs()->unref(parent, RGWFileHandle::FLAG_NONE);
     }
   }
 
@@ -1480,6 +1480,19 @@ namespace rgw {
     }
     return true;
   } /* RGWFileHandle::reclaim */
+
+  bool RGWFileHandle::remove() {
+    lsubdout(fs->get_context(), rgw, 17)
+      << __func__ << " " << *this
+      << dendl;
+    /* in the non-delete case, handle may still be in handle table */
+    if (fh_hook.is_linked()) {
+      /* in this case, we are being called from a context which holds
+       * the partition lock */
+      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_NONE);
+    }
+    return true;
+  }
 
   bool RGWFileHandle::has_children() const
   {

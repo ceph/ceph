@@ -74,6 +74,8 @@ namespace cohort {
 
       virtual bool reclaim(const ObjectFactory* newobj_fac) = 0;
 
+      virtual bool remove() = 0;
+
       virtual ~Object() {}
 
     private:
@@ -207,6 +209,7 @@ namespace cohort {
 	      Object::Queue::s_iterator_to(*o);
 	    lane.q.erase(it);
 	    tdo = o;
+	    tdo->remove();
 	  }
 	  lane.lock.unlock();
 	} else if (unlikely(refcnt == SENTINEL_REFCNT)) {
@@ -221,6 +224,7 @@ namespace cohort {
 	    /* hiwat check */
 	    if (lane.q.size() > lane_hiwat) {
 	      tdo = o;
+	      tdo->remove();
 	    } else {
 	      lane.q.push_back(*o);
 	    }

@@ -736,6 +736,8 @@ namespace rgw {
 
     bool reclaim(const cohort::lru::ObjectFactory* newobj_fac) override;
 
+    bool remove() override;
+
     typedef cohort::lru::LRU<std::mutex> FhLRU;
 
     struct FhLT
@@ -1171,9 +1173,21 @@ namespace rgw {
       return fhr;
     } /*  lookup_fh(RGWFileHandle*, const char *, const uint32_t) */
 
-    inline void unref(RGWFileHandle* fh) {
+    inline void unref(RGWFileHandle* fh, uint32_t flags = RGWFileHandle::FLAG_LOCK) {
       if (likely(! fh->is_mount())) {
+	RGWFileHandle::FHCache::Latch lat;
+	lat.p = &(fh->fs->fh_cache.partition_of_scalar(fh->fh.fh_hk.object));
+
+	if (flags & RGWFileHandle::FLAG_LOCK) {
+	  lat.lock = &lat.p->lock;
+	  lat.lock->lock();
+	}
+
 	(void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+
+	if (flags & RGWFileHandle::FLAG_LOCK) {
+          lat.lock->unlock();
+        }
       }
     }
 
