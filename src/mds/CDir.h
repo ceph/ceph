@@ -247,6 +247,7 @@ public:
   void reset_fnode(fnode_const_ptr&& ptr) {
     fnode = std::move(ptr);
   }
+  void set_fresh_fnode(fnode_const_ptr&& ptr);
 
   const fnode_const_ptr& get_fnode() const {
     return fnode;
