@@ -1116,6 +1116,17 @@ void PG::handle_rep_op_reply(crimson::net::ConnectionRef conn,
   }
 }
 
+bool PG::old_peering_msg(const epoch_t map_epoch) const
+{
+  if (const epoch_t lpr = peering_state.get_last_peering_reset();
+      lpr > map_epoch) {
+    logger().debug("{}: pg changed {} after {}, dropping",
+                   __func__, get_info().history, map_epoch);
+    return true;
+  }
+  return false;
+}
+
 bool PG::can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const
 {
   // if a repop is replied after a replica goes down in a new osdmap, and
@@ -1139,13 +1150,7 @@ bool PG::can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const
   }
   // same pg?
   //  if pg changes *at all*, we reset and repeer!
-  if (epoch_t lpr = peering_state.get_last_peering_reset();
-      lpr > m_map_epoch) {
-    logger().debug("{}: pg changed {} after {}, dropping",
-                   __func__, get_info().history, m_map_epoch);
-    return true;
-  }
-  return false;
+  return old_peering_msg(m_map_epoch);
 }
 
 seastar::future<> PG::stop()

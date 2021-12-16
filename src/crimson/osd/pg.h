@@ -707,6 +707,8 @@ public:
     return seastar::now();
   }
 
+  bool old_peering_msg(epoch_t map_epoch) const;
+
   template <typename MsgType>
   bool can_discard_replica_op(const MsgType& m) const {
     return can_discard_replica_op(m, m.map_epoch);
