@@ -167,7 +167,7 @@ def run_scheduler_test(results, mk_spec, hosts, daemons, key_elems):
 #       |   |   | |     + expected result
 #       |   |   | |     |
 test_explicit_scheduler_results = [
-    (k("*   *   0 *"), error(SpecValidationError, 'num/count must be > 1')),
+    (k("*   *   0 *"), error(SpecValidationError, 'num/count must be >= 1')),
     (k("*   e   N l"), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mgr>: No matching hosts for label mylabel')),
     (k("*   e   N p"), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mgr>: No matching hosts')),
     (k("*   e   N h"), error(OrchestratorValidationError, 'placement spec is empty: no hosts, no label, no pattern, no count')),
