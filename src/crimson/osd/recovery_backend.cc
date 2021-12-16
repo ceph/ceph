@@ -124,6 +124,10 @@ RecoveryBackend::handle_backfill(
   MOSDPGBackfill& m)
 {
   logger().debug("{}", __func__);
+  if (pg.old_peering_msg(m.map_epoch, m.query_epoch)) {
+    logger().debug("{}: discarding {}", __func__, m);
+    return seastar::now();
+  }
   switch (m.op) {
     case MOSDPGBackfill::OP_BACKFILL_FINISH:
       handle_backfill_finish(m);
@@ -144,7 +148,10 @@ RecoveryBackend::handle_backfill_remove(
 {
   logger().debug("{} m.ls={}", __func__, m.ls);
   assert(m.get_type() == MSG_OSD_PG_BACKFILL_REMOVE);
-
+  if (pg.can_discard_replica_op(m)) {
+    logger().debug("{}: discarding {}", __func__, m);
+    return seastar::now();
+  }
   ObjectStore::Transaction t;
   for ([[maybe_unused]] const auto& [soid, ver] : m.ls) {
     // TODO: the reserved space management. PG::try_reserve_recovery_space().
@@ -275,6 +282,10 @@ RecoveryBackend::handle_scan(
   MOSDPGScan& m)
 {
   logger().debug("{}", __func__);
+  if (pg.old_peering_msg(m.map_epoch, m.query_epoch)) {
+    logger().debug("{}: discarding {}", __func__, m);
+    return seastar::now();
+  }
   switch (m.op) {
     case MOSDPGScan::OP_SCAN_GET_DIGEST:
       return handle_scan_get_digest(m);
