@@ -12,6 +12,15 @@ route:
       group_interval: 10s
       repeat_interval: 1h
       receiver: 'ceph-dashboard'
+{% if snmp_gateway_urls %}
+      continue: true
+    - receiver: 'snmp-gateway'
+      repeat_interval: 1h
+      group_interval: 10s
+      group_by: ['alertname']
+      match_re:
+        oid: "(1.3.6.1.4.1.50495.).*"
+{% endif %}
 
 receivers:
 - name: 'default'
@@ -24,3 +33,10 @@ receivers:
 {% for url in dashboard_urls %}
   - url: '{{ url }}/api/prometheus_receiver'
 {% endfor %}
+{% if snmp_gateway_urls %}
+- name: 'snmp-gateway'
+  webhook_configs:
+{% for url in snmp_gateway_urls %}
+  - url: '{{ url }}'
+{% endfor %}
+{% endif %}
