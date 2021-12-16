@@ -248,6 +248,9 @@ void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *in)
 
   if (dnl == &linkage)
     in->add_remote_parent(this);
+
+  // check for reintegration
+  dir->cache->eval_remote(this);
 }
 
 void CDentry::unlink_remote(CDentry::linkage_t *dnl)
