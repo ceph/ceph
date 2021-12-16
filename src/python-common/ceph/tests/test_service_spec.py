@@ -572,6 +572,23 @@ service_id: foo
 placement:
   count_per_host: 0
 """, "count-per-host must be >= 1",),
+    ("""
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_password: mypassword
+    snmp_v3_auth_username: myuser
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  engine_id: 8000c53f0000000000
+  privacy_protocol: WEIRD
+  snmp_destination: 192.168.122.1:162
+  auth_protocol: BIZARRE
+  snmp_version: V3
+""", "auth_protocol unsupported. Must be one of MD5, SHA"),
     ])
 def test_service_spec_validation_error(y, error_match):
     data = yaml.safe_load(y)

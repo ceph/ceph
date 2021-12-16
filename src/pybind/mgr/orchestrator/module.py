@@ -11,7 +11,7 @@ from prettytable import PrettyTable
 from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, OSDMethod
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spec_allow_invalid_from_json, \
-    SNMPGatewaySpec, SNMPVersion, SNMPAuthType, SNMPPrivacyType
+    SNMPGatewaySpec
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.utils import datetime_now
 
@@ -1151,12 +1151,12 @@ Usage:
 
     @_cli_write_command('orch apply snmp-gateway')
     def _apply_snmp_gateway(self,
-                            snmp_version: SNMPVersion,
+                            snmp_version: SNMPGatewaySpec.SNMPVersion,
                             destination: str,
                             port: int = 9464,
                             engine_id: Optional[str] = None,
-                            auth_protocol: Optional[SNMPAuthType] = None,
-                            privacy_protocol: Optional[SNMPPrivacyType] = None,
+                            auth_protocol: Optional[SNMPGatewaySpec.SNMPAuthType] = None,
+                            privacy_protocol: Optional[SNMPGatewaySpec.SNMPPrivacyType] = None,
                             placement: Optional[str] = None,
                             unmanaged: bool = False,
                             dry_run: bool = False,
@@ -1175,17 +1175,14 @@ Usage:
         except (OSError, yaml.YAMLError):
             raise OrchestratorValidationError('credentials file must be valid YAML')
 
-        auth = None if not auth_protocol else auth_protocol.value
-        priv = None if not privacy_protocol else privacy_protocol.value
-
         spec = SNMPGatewaySpec(
-            snmp_version=snmp_version.value,
+            snmp_version=snmp_version,
             port=port,
             credentials=credentials,
             snmp_destination=destination,
             engine_id=engine_id,
-            auth_protocol=auth,
-            privacy_protocol=priv,
+            auth_protocol=auth_protocol,
+            privacy_protocol=privacy_protocol,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             preview_only=dry_run
