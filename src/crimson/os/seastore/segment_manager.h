@@ -13,6 +13,7 @@
 #include "include/ceph_assert.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "include/buffer_fwd.h"
+#include "crimson/common/config_proxy.h"
 #include "crimson/osd/exceptions.h"
 
 namespace crimson::os::seastore {
@@ -141,6 +142,9 @@ public:
 using SegmentRef = boost::intrusive_ptr<Segment>;
 
 constexpr size_t PADDR_SIZE = sizeof(paddr_t);
+class SegmentManager;
+
+using SegmentManagerRef = std::unique_ptr<SegmentManager>;
 
 class SegmentManager {
 public:
@@ -213,8 +217,9 @@ public:
   virtual magic_t get_magic() const = 0;
 
   virtual ~SegmentManager() {}
+
+  static seastar::future<SegmentManagerRef> get_segment_manager(const std::string &device);
 };
-using SegmentManagerRef = std::unique_ptr<SegmentManager>;
 
 }
 
