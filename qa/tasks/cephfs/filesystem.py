@@ -1032,8 +1032,13 @@ class Filesystem(MDSCluster):
         return self.json_asok(command, 'mds', info['name'], timeout=timeout)
 
     def rank_tell(self, command, rank=0, status=None):
-        info = self.get_rank(rank=rank, status=status)
-        return json.loads(self.mon_manager.raw_cluster_cmd("tell", 'mds.{0}'.format(info['name']), *command))
+        try:
+            info = self.get_rank(rank=rank, status=status)
+            out = self.mon_manager.raw_cluster_cmd("tell", 'mds.{0}'.format(info['name']), *command)
+            return json.loads(out)
+        except json.decoder.JSONDecodeError:
+            log.error("could not decode: {}".format(out))
+            raise
 
     def ranks_tell(self, command, status=None):
         if status is None:
