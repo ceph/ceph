@@ -719,7 +719,7 @@ auth_protocol: SHA
 privacy_protocol: weewah
 snmp_destination: 192.168.1.42:162
 snmp_version: V3
-"""), 'privacy_protocol unsupported. Must be one of AES, DES'),
+"""), 'privacy_protocol unsupported. Must be one of DES, AES'),
         (YAMLdoc("""
 ---
 service_type: snmp-gateway
