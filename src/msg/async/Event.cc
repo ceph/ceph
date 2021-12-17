@@ -246,7 +246,8 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
     // add_event shouldn't report error, otherwise it must be a innermost bug!
     lderr(cct) << __func__ << " add event failed, ret=" << r << " fd=" << fd
                << " mask=" << mask << " original mask is " << event->mask << dendl;
-    ceph_abort_msg("BUG!");
+    if (r != -ENOMEM)
+      ceph_abort_msg("BUG!");
     return r;
   }
 
