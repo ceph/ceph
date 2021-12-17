@@ -318,6 +318,16 @@ void PGRecovery::on_local_recover(
   const bool is_delete,
   ceph::os::Transaction& t)
 {
+  if (const auto &log = pg->get_peering_state().get_pg_log();
+      !is_delete &&
+      log.get_missing().is_missing(recovery_info.soid) &&
+      log.get_missing().get_items().find(recovery_info.soid)->second.need > recovery_info.version) {
+    assert(pg->is_primary());
+    if (const auto* latest = log.get_log().objects.find(recovery_info.soid)->second;
+        latest->op == pg_log_entry_t::LOST_REVERT) {
+      ceph_abort("mark_unfound_lost (LOST_REVERT) is not implemented yet");
+    }
+  }
   pg->get_peering_state().recover_got(soid,
       recovery_info.version, is_delete, t);
 
