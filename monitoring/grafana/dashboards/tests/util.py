@@ -41,7 +41,6 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
     if 'panels' not in dashboard_data:
         return
     error = 0
-    dashboard_title = dashboard_data['title']
     for panel in dashboard_data['panels']:
         if (
                 'title' in panel
@@ -66,7 +65,7 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
                 data['queries'][query_id] = {'query': target['expr'], 'path': path}
                 data['stats'][path]['total'] += 1
     if error:
-        raise ValueError(f'Missing legend_format in queries, please add a proper value.')
+        raise ValueError('Missing legend_format in queries, please add a proper value.')
 
 
 def add_dashboard_variables(data: Dict[str, Any], dashboard_data: Dict[str, Any]) -> None:
