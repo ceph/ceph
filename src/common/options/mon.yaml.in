@@ -741,6 +741,13 @@ options:
   services:
   - mon
   with_legacy: true
+- name: paxos_warn_table_size
+  type: uint
+  level: advanced
+  default: 10000
+  services:
+  - mon
+  fmt_desc: The maximum amount of versions before warning
 - name: mon_auth_validate_all_caps
   type: bool
   level: advanced

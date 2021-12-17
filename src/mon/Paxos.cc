@@ -461,6 +461,13 @@ void Paxos::_sanity_check_store()
 {
   version_t lc = get_store()->get(get_name(), "last_committed");
   ceph_assert(lc == last_committed);
+  if (last_committed < first_committed) {
+    mon.clog->warn() << "sanity_check_store violation in " << get_name() << ". first_commited: " << first_committed << " last_commited: " << last_committed <<
+     ". Run ceph-monstore-tool fix-paxos-counters";
+  }
+  if ((last_committed - first_committed) > g_conf().get_val<uint64_t>("paxos_warn_table_size")) {
+    mon.clog->warn() << "sanity_check_store violation in " << get_name() << ". Number of versions reached warning level, maybe table corrupted or garbable collection broken. first_commited: " << first_committed << " last_commited: " << last_committed;
+  }
 }
 
 

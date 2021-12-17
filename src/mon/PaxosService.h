@@ -20,6 +20,11 @@
 #include "Monitor.h"
 #include "MonitorDBStore.h"
 
+const std::string kPaxosKeyLastCommited = "last_committed";
+const std::string kPaxosKeyFirstCommited = "first_committed";
+const std::string kPaxosFullPrefix = "full";
+const std::string kPaxosFullLatest = "latest";
+
 /**
  * A Paxos Service is an abstraction that easily allows one to obtain an
  * association between a Monitor and a Paxos class, in order to implement any
@@ -149,9 +154,9 @@ public:
       proposing(false),
       service_version(0), proposal_timer(0), have_pending(false),
       format_version(0),
-      last_committed_name("last_committed"),
-      first_committed_name("first_committed"),
-      full_prefix_name("full"), full_latest_name("latest"),
+      last_committed_name(kPaxosKeyLastCommited),
+      first_committed_name(kPaxosKeyFirstCommited),
+      full_prefix_name(kPaxosFullPrefix), full_latest_name(kPaxosFullLatest),
       cached_first_committed(0), cached_last_committed(0)
   {
   }

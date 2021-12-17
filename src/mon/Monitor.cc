@@ -237,16 +237,16 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   paxos = std::make_unique<Paxos>(*this, "paxos");
 
-  paxos_service[PAXOS_MDSMAP].reset(new MDSMonitor(*this, *paxos, "mdsmap"));
-  paxos_service[PAXOS_MONMAP].reset(new MonmapMonitor(*this, *paxos, "monmap"));
-  paxos_service[PAXOS_OSDMAP].reset(new OSDMonitor(cct, *this, *paxos, "osdmap"));
-  paxos_service[PAXOS_LOG].reset(new LogMonitor(*this, *paxos, "logm"));
-  paxos_service[PAXOS_AUTH].reset(new AuthMonitor(*this, *paxos, "auth"));
-  paxos_service[PAXOS_MGR].reset(new MgrMonitor(*this, *paxos, "mgr"));
-  paxos_service[PAXOS_MGRSTAT].reset(new MgrStatMonitor(*this, *paxos, "mgrstat"));
-  paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(*this, *paxos, "health"));
-  paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(*this, *paxos, "config"));
-  paxos_service[PAXOS_KV].reset(new KVMonitor(*this, *paxos, "kv"));
+  paxos_service[PAXOS_MDSMAP].reset(new MDSMonitor(*this, *paxos, get_paxos_name(PAXOS_MDSMAP)));
+  paxos_service[PAXOS_MONMAP].reset(new MonmapMonitor(*this, *paxos, get_paxos_name(PAXOS_MONMAP)));
+  paxos_service[PAXOS_OSDMAP].reset(new OSDMonitor(cct, *this, *paxos, get_paxos_name(PAXOS_OSDMAP)));
+  paxos_service[PAXOS_LOG].reset(new LogMonitor(*this, *paxos, get_paxos_name(PAXOS_LOG)));
+  paxos_service[PAXOS_AUTH].reset(new AuthMonitor(*this, *paxos, get_paxos_name(PAXOS_AUTH)));
+  paxos_service[PAXOS_MGR].reset(new MgrMonitor(*this, *paxos, get_paxos_name(PAXOS_MGR)));
+  paxos_service[PAXOS_MGRSTAT].reset(new MgrStatMonitor(*this, *paxos, get_paxos_name(PAXOS_MGRSTAT)));
+  paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(*this, *paxos, get_paxos_name(PAXOS_HEALTH)));
+  paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(*this, *paxos, get_paxos_name(PAXOS_CONFIG)));
+  paxos_service[PAXOS_KV].reset(new KVMonitor(*this, *paxos, get_paxos_name(PAXOS_KV)));
 
   bool r = mon_caps.parse("allow *", NULL);
   ceph_assert(r);

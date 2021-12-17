@@ -50,6 +50,7 @@ inline const char *get_paxos_name(int p) {
   case PAXOS_MGRSTAT: return "mgrstat";
   case PAXOS_HEALTH: return "health";
   case PAXOS_CONFIG: return "config";
+  case PAXOS_KV: return "kv";
   default: ceph_abort(); return 0;
   }
 }

@@ -32,9 +32,11 @@
 #include "mon/MonMap.h"
 #include "mds/FSMap.h"
 #include "mon/MgrMap.h"
+#include "mon/PaxosService.h"
 #include "osd/OSDMap.h"
 #include "crush/CrushCompiler.h"
 #include "mon/CreatingPGs.h"
+#include "mon/mon_types.h"
 
 namespace po = boost::program_options;
 
@@ -222,6 +224,8 @@ void usage(const char *n, po::options_description &d)
   << "                                  (replay-trace -- --help for more info)\n"
   << "  random-gen [-- options]         add randomly generated ops to the store\n"
   << "                                  (random-gen -- --help for more info)\n"
+  << "  fix-paxos-counters              corrects internal version mismatches\n"
+  << "                                  Can fix cases of ever growing monstore database.\n"
   << "  rewrite-crush [-- options]      add a rewrite commit to the store\n"
   << "                                  (rewrite-crush -- --help for more info)\n"
   << "  rebuild                         rebuild store\n"
@@ -655,6 +659,150 @@ static int update_mgrmap(MonitorDBStore& st)
   return st.apply_transaction(t);
 }
 
+static int fix_paxos_counters(MonitorDBStore& st)
+{
+  auto name_full_latest = st.combine_strings(kPaxosFullPrefix, kPaxosFullLatest);
+
+  for(int MAP = PAXOS_MDSMAP; MAP < PAXOS_NUM; MAP++) {
+    auto t = make_shared<MonitorDBStore::Transaction>();
+    auto prefix = get_paxos_name(MAP);
+    bool has_full = false;
+
+    // those services do not use version blobs, so we skip them
+    if (MAP == PAXOS_HEALTH || MAP == PAXOS_CONFIG ){
+       cout << "skip checking table: " << prefix <<  std::endl;
+       continue;
+    }
+
+    version_t last_committed = 0;
+    version_t last_full = 0;
+    version_t old_first_comitted = st.get(prefix, kPaxosKeyFirstCommited);
+    version_t old_last_comitted = st.get(prefix, kPaxosKeyLastCommited);
+    version_t old_last_full = 0;
+
+    if (MAP == PAXOS_OSDMAP || MAP == PAXOS_LOG || MAP == PAXOS_AUTH) {
+      has_full = true;
+      old_last_full = st.get(prefix, name_full_latest);
+    }
+
+
+    cout << "checking table: " << prefix << " first_comitted: " << old_first_comitted << " last_committed: " << old_last_comitted << " full_last: " << old_last_full  <<  std::endl;
+
+    // version, ok
+    std::map<version_t, bool> found;
+    std::map<version_t, bool> full_found;
+
+    // STEP 1: iterate through all keys, collect versions, collect full version numbers if used
+    // Check if version could be fetched
+    for (auto i = st.get_iterator(prefix); i->valid(); i->next()) {
+      pair<string,string> key(i->raw_key());
+      // cout << key.first << " / " << key.second << std::endl;
+
+      version_t ver = 0;
+      if (has_full) {
+        if (key.second.find("full_") == 0) {
+          version_t full_ver;
+          try {
+            full_ver = std::stoull(key.second.substr(5));
+          } catch (const std::exception& e) {
+            full_ver = 0;
+          }
+          if (full_ver) {
+            last_full = last_full == 0 ? full_ver : max(last_full, full_ver);
+            full_found[full_ver] = st.get(key.first, key.second) == ver;
+          }
+        }
+      }
+
+      try {
+        ver = std::stoull( key.second );
+      } catch (const std::exception& e) {
+        continue;
+      }
+
+      // since get return value depends on the decoder, is there a way to general check if the datum is ok ?
+      bool good = st.get(key.first, key.second) > 0;
+      found[ver] = good;
+      if (!good) {
+         std::cout << "error: ver: " << ver << " is not good" << std::endl;
+      } else {
+        //first_committed = first_committed == 0 ? ver : min(first_committed, ver);
+        last_committed = last_committed == 0 ? ver : max(last_committed, ver);
+      }
+    }
+
+    std::cout << prefix << " versions: " << found.size() << " last_committed:" << last_committed << " first_committed: " << old_first_comitted << " full_last: " << old_last_full << std::endl;
+
+    // STEP 2: Correct last version numbers
+
+    if (last_committed != 0 && old_last_comitted != last_committed) {
+        // check if the new last_comitted is valid
+      std::cout << "fix: wrong last_comitted " << prefix
+                << " old " << old_last_comitted << " new " << last_committed << std::endl;
+        t->put(prefix, "last_committed", last_committed);
+    }
+    if (has_full && old_last_full != last_full) {
+        // check if the new last_comitted is valid
+      std::cout << "fix: wrong full_last " << prefix
+                << " old " << old_last_full << " new " << last_full << std::endl;
+        t->put(prefix, name_full_latest, last_full);
+    }
+
+    // STEP 3: Find the longest chain of versions from the last_commited counting backwards.
+    // Remove all versions after the first break
+
+    auto it = found.find(last_committed);
+
+    version_t last_good = last_committed;
+    bool still_good = true;
+    if (it != found.end()) {
+       it--;
+    }
+    for (;it != found.end(); --it) {
+      if (still_good && ((last_good - it->first) != 1)) {
+        std::cout << "fix: found gap between " << last_good << " and " << it->first << std::endl;
+        still_good = false;
+      } else if (still_good && !it->second) {
+        std::cout << "fix: found bad value at " << it->first << " will use version: " << last_good << std::endl;
+        still_good = false;
+      } else if (still_good) {
+        last_good = it->first;
+      } else {
+        still_good = false;
+        std::cout << "fix: remove garbage " << prefix << "/" << it->first << std::endl;
+        t->erase(prefix, it->first);
+        // check if there is a full version of the garbage as well
+        if(has_full) {
+          auto full_name = st.combine_strings(kPaxosFullPrefix, it->first);
+          if (st.exists(prefix, full_name)) {
+            t->erase(prefix, full_name);
+          }
+        }
+      }
+    }
+    // STEP 4: Remove full garbage before the first_commited version
+
+    auto it2 = full_found.find(last_good);
+    if (it2 != full_found.end()) {
+      for (it2--;it2 != full_found.end(); --it2) {
+        std::cout << "fix: remove garbage " << prefix << "/" << it2->first << std::endl;
+        t->erase(prefix, it2->first);
+      }
+    }
+
+    // STEP 5: Correct first_committed if necessary
+    // std::cout << " cmp " << prefix << " | " << last_good << "/" << old_first_comitted << std::endl;
+    if (last_good != old_first_comitted) {
+        std::cout << "fix: wrong first_comitted " << prefix
+                << " old " << old_first_comitted << " new " << last_good << std::endl;
+        t->put(prefix, kPaxosKeyFirstCommited, last_good);
+    }
+    st.apply_transaction(t);
+  }
+
+  return 0;
+}
+
 static int update_paxos(MonitorDBStore& st)
 {
   const string prefix("paxos");
@@ -864,6 +1012,8 @@ int main(int argc, char **argv) {
       cout << key.first << " / " << key.second << std::endl;
       iter->next();
     }
+  } else if (cmd == "fix-paxos-counters") {
+    fix_paxos_counters(st);
   } else if (cmd == "compact") {
     st.compact();
   } else if (cmd == "get") {
