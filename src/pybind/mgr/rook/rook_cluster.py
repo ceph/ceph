@@ -423,7 +423,6 @@ class DefaultCreator():
             ]
             for device in to_create:
                 new_scds = self.device_to_device_set(drive_group, device)
-                new_cluster.spec.storage.storageClassDeviceSets.append(new_scds)
                 if new_scds.name not in existing_scds:
                     new_cluster.spec.storage.storageClassDeviceSets.append(new_scds)
             return new_cluster
@@ -1187,6 +1186,7 @@ class RookCluster(object):
                                     )
                                 ],
                                 security_context=client.V1SecurityContext(
+                                    run_as_user=0,
                                     privileged=True
                                 ),
                                 volume_mounts=[

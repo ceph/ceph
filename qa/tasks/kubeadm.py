@@ -468,7 +468,7 @@ def setup_pvs(ctx, config):
                     'volumeMode': 'Block',
                     'accessModes': ['ReadWriteOnce'],
                     'capacity': {'storage': '100Gi'},  # doesn't matter?
-                    'persistentVolumeReclaimPolicy': 'Recycle',
+                    'persistentVolumeReclaimPolicy': 'Retain',
                     'storageClassName': 'scratch',
                     'local': {'path': dev},
                     'nodeAffinity': {
