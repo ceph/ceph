@@ -254,7 +254,8 @@ private:
           ).si_then([&](auto onode_ret) {
             onode = std::move(onode_ret);
             return f(t, *onode);
-          }).si_then([&ret](auto _ret) {
+          }).si_then([&ret, &onode](auto _ret) {
+	    onode.reset();
             ret = _ret;
           });
         });
