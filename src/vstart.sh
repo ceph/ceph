@@ -945,7 +945,7 @@ start_osd() {
 	    if [ "$debug" -ne 0 ]; then
 		extra_seastar_args+=" --debug"
 	    fi
-            if [ "$trace" -ne 0]; then
+            if [ "$trace" -ne 0 ]; then
                 extra_seastar_args+=" --trace"
             fi
 	fi
