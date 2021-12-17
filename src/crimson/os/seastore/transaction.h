@@ -132,6 +132,7 @@ public:
   void add_mutated_extent(CachedExtentRef ref) {
     LOG_PREFIX(Transaction::add_mutated_extent);
     ceph_assert(!is_weak());
+    assert(read_set.count(ref->prior_instance->get_paddr()));
     mutated_block_list.push_back(ref);
     TRACET("adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
