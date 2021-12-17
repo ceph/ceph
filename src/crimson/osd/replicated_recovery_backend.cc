@@ -197,6 +197,7 @@ ReplicatedRecoveryBackend::on_local_recover_persist(
   logger().debug("{}", __func__);
   ceph::os::Transaction t;
   pg.get_recovery_handler()->on_local_recover(soid, _recovery_info, is_delete, t);
+  logger().debug("ReplicatedRecoveryBackend::on_local_recover_persist: do_transaction...");
   return interruptor::make_interruptible(
       shard_services.get_store().do_transaction(coll, std::move(t)))
   .then_interruptible(
@@ -220,6 +221,7 @@ ReplicatedRecoveryBackend::local_recover_delete(
 	[this, lomt = std::move(lomt)](auto& txn) {
 	return backend->remove(lomt->os, txn).then_interruptible(
 	  [this, &txn]() mutable {
+	  logger().debug("ReplicatedRecoveryBackend::local_recover_delete: do_transaction...");
 	  return shard_services.get_store().do_transaction(coll,
 							   std::move(txn));
 	});
@@ -740,6 +742,7 @@ ReplicatedRecoveryBackend::handle_pull_response(
       return _handle_pull_response(from, pop, &response, &t).then_interruptible(
 	[this, &t](bool complete) {
 	epoch_t epoch_frozen = pg.get_osdmap_epoch();
+	logger().debug("ReplicatedRecoveryBackend::handle_pull_response: do_transaction...");
 	return shard_services.get_store().do_transaction(coll, std::move(t))
 	  .then([this, epoch_frozen, complete,
 	  last_complete = pg.get_info().last_complete] {
@@ -824,6 +827,7 @@ ReplicatedRecoveryBackend::handle_push(
       return _handle_push(m->from, pop, &response, &t).then_interruptible(
 	[this, &t] {
 	epoch_t epoch_frozen = pg.get_osdmap_epoch();
+	logger().debug("ReplicatedRecoveryBackend::handle_push: do_transaction...");
 	return interruptor::make_interruptible(
 	    shard_services.get_store().do_transaction(coll, std::move(t))).then_interruptible(
 	  [this, epoch_frozen, last_complete = pg.get_info().last_complete] {

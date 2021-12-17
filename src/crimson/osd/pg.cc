@@ -130,6 +130,7 @@ PG::PG(
 PG::~PG() {}
 
 bool PG::try_flush_or_schedule_async() {
+  logger().debug("PG::try_flush_or_schedule_async: do_transaction...");
   (void)shard_services.get_store().do_transaction(
     coll_ref,
     ObjectStore::Transaction()).then(
@@ -1100,6 +1101,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
   decode(log_entries, p);
   peering_state.append_log(std::move(log_entries), req->pg_trim_to,
       req->version, req->min_last_complete_ondisk, txn, !txn.empty(), false);
+  logger().debug("PG::handle_rep_op: do_transaction...");
   return interruptor::make_interruptible(shard_services.get_store().do_transaction(
 	coll_ref, std::move(txn))).then_interruptible(
       [req, lcod=peering_state.get_info().last_complete, this] {

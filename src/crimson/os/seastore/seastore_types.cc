@@ -156,8 +156,7 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
 
 extent_len_t record_size_t::get_raw_mdlength() const
 {
-  // FIXME: prevent submitting empty records
-  // assert(!is_empty());
+  // empty record is allowed to submit
   return plain_mdlength +
          ceph::encoded_sizeof_bounded<record_header_t>();
 }
@@ -186,8 +185,7 @@ void record_group_size_t::account(
     const record_size_t& rsize,
     extent_len_t _block_size)
 {
-  // FIXME: prevent submitting empty records
-  // assert(!rsize.is_empty());
+  // empty record is allowed to submit
   assert(_block_size > 0);
   assert(rsize.dlength % _block_size == 0);
   assert(block_size == 0 || block_size == _block_size);
