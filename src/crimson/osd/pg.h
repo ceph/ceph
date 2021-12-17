@@ -707,6 +707,13 @@ public:
     return seastar::now();
   }
 
+  bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch) const;
+
+  template <typename MsgType>
+  bool can_discard_replica_op(const MsgType& m) const {
+    return can_discard_replica_op(m, m.map_epoch);
+  }
+
 private:
   // instead of seastar::gate, we use a boolean flag to indicate
   // whether the system is shutting down, as we don't need to track
@@ -746,8 +753,7 @@ private:
     return seastar::make_ready_future<bool>(true);
   }
 
-  template <typename MsgType>
-  bool can_discard_replica_op(const MsgType& m) const;
+  bool can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const;
   bool can_discard_op(const MOSDOp& m) const;
   bool is_missing_object(const hobject_t& soid) const {
     return peering_state.get_pg_log().get_missing().get_items().count(soid);
