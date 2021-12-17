@@ -1,0 +1,9 @@
+roles:
+- [mon.a, osd.0, osd.1, osd.2, mgr.0, client.0]
+openstack:
+- volumes: # attached to each instance
+    count: 1
+    size: 10 # GB
+overrides:
+  rgw:
+    frontend: beast
