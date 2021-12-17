@@ -6285,9 +6285,15 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   parts = static_cast<RGWMultiCompleteUpload *>(parser.find_first("CompleteMultipartUpload"));
   if (!parts || parts->parts.empty()) {
+    // CompletedMultipartUpload is incorrect but some versions of some libraries use it, see PR #41700
+    parts = static_cast<RGWMultiCompleteUpload *>(parser.find_first("CompletedMultipartUpload"));
+  }
+
+  if (!parts || parts->parts.empty()) {
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
+
 
   if ((int)parts->parts.size() >
       s->cct->_conf->rgw_multipart_part_upload_limit) {
