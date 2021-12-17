@@ -3656,7 +3656,9 @@ void BlueStore::Onode::calc_omap_tail(
 }
 
 void BlueStore::Onode::get() {
-  if (++nref >= 1 && !pinned) {
+  ++nref;
+  ceph_assert(nref >= 1);
+  if (!pinned) {
     OnodeCacheShard* ocs = c->get_onode_cache();
     ocs->lock.lock();
     // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
@@ -3666,9 +3668,9 @@ void BlueStore::Onode::get() {
       ocs->lock.lock();
     }
     bool was_pinned = pinned;
+    ceph_assert(nref >= 1);
     pinned = nref >= 2;
-    bool r = !was_pinned && pinned;
-    if (cached && r) {
+    if (cached && !was_pinned && pinned) {
       ocs->_pin(this);
     }
     ocs->lock.unlock();
@@ -3676,8 +3678,7 @@ void BlueStore::Onode::get() {
 }
 void BlueStore::Onode::put() {
   ++put_nref;
-  int n = --nref;
-  if (n == 1) {
+  if (--nref == 1) {
     OnodeCacheShard* ocs = c->get_onode_cache();
     ocs->lock.lock();
     // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
@@ -3686,21 +3687,24 @@ void BlueStore::Onode::put() {
       ocs = c->get_onode_cache();
       ocs->lock.lock();
     }
-    bool need_unpin = pinned;
-    pinned = pinned && nref >= 2;
-    need_unpin = need_unpin && !pinned;
-    if (cached && need_unpin) {
+    // on 1st glance pinned == true always
+    // on 2nd inspection we see that some other thread could have beaten us to unpinning
+    bool was_pinned = pinned;
+    if (nref >= 2) ceph_assert(pinned);
+    pinned = nref >= 2;
+    if (cached && was_pinned && !pinned) {
       if (exists) {
         ocs->_unpin(this);
       } else {
         ocs->_unpin_and_rm(this);
         // remove will also decrement nref
         c->onode_map._remove(oid);
+	ceph_assert(nref == 0);
       }
     }
     ocs->lock.unlock();
   }
-  auto pn = --put_nref;
+  int pn = --put_nref;
   if (nref == 0 && pn == 0) {
     delete this;
   }
