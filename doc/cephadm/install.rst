@@ -393,14 +393,34 @@ with the hostname and port where the registry is running.
   For every host which accesses the local insecure registry, you will 
   need to repeat this step on the host.
 
-Next, push your container image to your local registry.
+Next, push your container image to your local registry:
 
-Then run bootstrap using the ``--image`` flag with your container 
+* Ceph container iamge. See :ref:`containers`.
+* Prometheus container image
+* Node exporter container image
+* Grafana container image
+* Alertmanager container image
+
+Now, create a temporary configuration file for setting the montoring
+images::
+
+      $ cat <<EOF > initial-ceph.conf
+      [mgr]
+      mgr/cephadm/container_image_prometheus *<hostname>*:5000/prometheus
+      mgr/cephadm/container_image_node_exporter *<hostname>*:5000/node_exporter
+      mgr/cephadm/container_image_grafana *<hostname>*:5000/grafana
+      mgr/cephadm/container_image_alertmanager *<hostname>*:5000/alertmanger
+      EOF
+
+Then run bootstrap using the ``--image`` flag with your Ceph container 
 image. For example:
 
 .. prompt:: bash #
 
-   cephadm --image *<hostname>*:5000/ceph/ceph bootstrap --mon-ip *<mon-ip>*
+   cephadm \
+     --image *<hostname>*:5000/ceph/ceph bootstrap \
+     --mon-ip *<mon-ip>* \
+     --config initial-ceph.conf
 
 
 .. _cluster network: ../rados/configuration/network-config-ref#cluster-network
