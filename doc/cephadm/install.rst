@@ -374,7 +374,8 @@ Deployment in an isolated environment
 -------------------------------------
 
 You can install Cephadm in an isolated environment by using a custom 
-container registry. You can either configure Podman or Docker to use 
+container registry. Sometimes also referred as airgap. 
+You can either configure Podman or Docker to use 
 an insecure registry, or make the registry secure. Ensure your container 
 image is inside the registry and that you have access to all hosts 
 you wish to add to the cluster.
