@@ -6555,7 +6555,7 @@ void RGWListMultipart::execute(optional_yield y)
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
 
   rgw::sal::Attrs attrs;
-  op_ret = upload->get_info(this, s->yield, s->obj_ctx, nullptr, &attrs);
+  op_ret = upload->get_info(this, s->yield, s->obj_ctx, &placement, &attrs);
   /* decode policy */
   map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ACL);
   if (iter != attrs.end()) {
