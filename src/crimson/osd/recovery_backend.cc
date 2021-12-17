@@ -103,6 +103,7 @@ RecoveryBackend::handle_backfill_progress(
     m.stats,
     m.op == MOSDPGBackfill::OP_BACKFILL_PROGRESS,
     t);
+  logger().debug("RecoveryBackend::handle_backfill_progress: do_transaction...");
   return shard_services.get_store().do_transaction(
     pg.get_collection_ref(), std::move(t)).or_terminate();
 }
@@ -158,6 +159,7 @@ RecoveryBackend::handle_backfill_remove(
     t.remove(pg.get_collection_ref()->get_cid(),
 	      ghobject_t(soid, ghobject_t::NO_GEN, pg.get_pg_whoami().shard));
   }
+  logger().debug("RecoveryBackend::handle_backfill_remove: do_transaction...");
   return shard_services.get_store().do_transaction(
     pg.get_collection_ref(), std::move(t)).or_terminate();
 }

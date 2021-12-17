@@ -221,6 +221,7 @@ seastar::future<> OSD::_write_superblock()
         ceph::os::Transaction t;
         meta_coll->create(t);
         meta_coll->store_superblock(t, superblock);
+        logger().debug("OSD::_write_superblock: do_transaction...");
         return store.do_transaction(meta_coll->collection(), std::move(t));
       });
     }
@@ -1106,6 +1107,7 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
         superblock.clean_thru = last;
       }
       meta_coll->store_superblock(t, superblock);
+      logger().debug("OSD::handle_osd_map: do_transaction...");
       return store.do_transaction(meta_coll->collection(), std::move(t));
     });
   }).then([=] {

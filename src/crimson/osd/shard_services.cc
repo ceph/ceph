@@ -106,6 +106,7 @@ seastar::future<> ShardServices::send_to_osd(
 
 seastar::future<> ShardServices::dispatch_context_transaction(
   crimson::os::CollectionRef col, PeeringCtx &ctx) {
+  logger().debug("ShardServices::dispatch_context_transaction: do_transaction...");
   auto ret = store.do_transaction(
     col,
     std::move(ctx.transaction));
