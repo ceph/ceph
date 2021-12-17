@@ -370,6 +370,8 @@ options::
 For more information on these options, see :ref:`one-node-cluster` 
 and ``mgr_standby_modules`` in :ref:`mgr-administrator-guide`.
 
+.. _cephadm-airgap:
+
 Deployment in an isolated environment
 -------------------------------------
 
@@ -403,7 +405,7 @@ Next, push your container image to your local registry:
 * Alertmanager container image
 
 Now, create a temporary configuration file for setting the montoring
-images::
+images. (See :ref:`cephadm_monitoring-images`)::
 
       $ cat <<EOF > initial-ceph.conf
       [mgr]
