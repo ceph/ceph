@@ -32,7 +32,7 @@
      --upmap-pool <poolname> restrict upmap balancing to 1 or more pools
      --upmap-active          Act like an active balancer, keep applying changes until balanced
      --dump <format>         displays the map in plain text when <format> is 'plain', 'json' if specified format is not supported
-     --tree                  displays a tree of the map
+     --tree [<format>]       displays a tree of the map in plain text when <format> is 'plain', 'json' if <format> is not specified or not supported
      --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds
      --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight>
      --save                  write modified osdmap with upmap or crush-adjust changes

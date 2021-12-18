@@ -63,7 +63,7 @@ void usage()
   cout << "   --upmap-pool <poolname> restrict upmap balancing to 1 or more pools" << std::endl;
   cout << "   --upmap-active          Act like an active balancer, keep applying changes until balanced" << std::endl;
   cout << "   --dump <format>         displays the map in plain text when <format> is 'plain', 'json' if specified format is not supported" << std::endl;
-  cout << "   --tree                  displays a tree of the map" << std::endl;
+  cout << "   --tree [<format>]       displays a tree of the map in plain text when <format> is 'plain', 'json' if <format> is not specified or not supported" << std::endl;
   cout << "   --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds" << std::endl;
   cout << "   --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight>" << std::endl;
   cout << "   --save                  write modified osdmap with upmap or crush-adjust changes" << std::endl;

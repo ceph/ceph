@@ -131,9 +131,10 @@ Options
 
    mark an osd as in (but do not persist)
 
-.. option:: --tree
+.. option:: --tree [<format>]
 
-   Displays a hierarchical tree of the map.
+   Displays a hierarchical tree of the map in plain text when <format> is
+   'plain', 'json' if <format> is not specified or not supported.
 
 .. option:: --clear-temp
 
