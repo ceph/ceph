@@ -43,9 +43,10 @@ void usage()
   cout << "   --test-map-pgs-dump [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs\n";
   cout << "   --test-map-pgs-dump-all [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs to osds\n";
   cout << "   --mark-up-in            mark osds up and in (but do not persist)\n";
-  cout << "   --mark-out <osdid>      mark an osd as out (but do not persist)\n";
   cout << "   --mark-up <osdid>       mark an osd as up (but do not persist)\n";
+  cout << "   --mark-down <osdid>     mark an osd as down (but do not persist)\n";
   cout << "   --mark-in <osdid>       mark an osd as in (but do not persist)\n";
+  cout << "   --mark-out <osdid>      mark an osd as out (but do not persist)\n";
   cout << "   --with-default-pool     include default pool when creating map\n";
   cout << "   --clear-temp            clear pg_temp and primary_temp\n";
   cout << "   --clean-temps           clean pg_temps\n";
@@ -138,9 +139,10 @@ int main(int argc, const char **argv)
   int range_last = -1;
   int pool = -1;
   bool mark_up_in = false;
-  std::list<int> marked_out;
   std::list<int> marked_up;
+  std::list<int> marked_down;
   std::list<int> marked_in;
+  std::list<int> marked_out;
   bool clear_temp = false;
   bool clean_temps = false;
   bool test_map_pgs = false;
@@ -199,12 +201,14 @@ int main(int argc, const char **argv)
       create_from_conf = true;
     } else if (ceph_argparse_flag(args, i, "--mark-up-in", (char*)NULL)) {
       mark_up_in = true;
-    } else if (ceph_argparse_witharg(args, i, &int_val, err, "--mark-out", (char*)NULL)) {
-      marked_out.push_back(int_val);
     } else if (ceph_argparse_witharg(args, i, &int_val, err, "--mark-up", (char*)NULL)) {
       marked_up.push_back(int_val);
+    } else if (ceph_argparse_witharg(args, i, &int_val, err, "--mark-down", (char*)NULL)) {
+      marked_down.push_back(int_val);
     } else if (ceph_argparse_witharg(args, i, &int_val, err, "--mark-in", (char*)NULL)) {
       marked_in.push_back(int_val);
+    } else if (ceph_argparse_witharg(args, i, &int_val, err, "--mark-out", (char*)NULL)) {
+      marked_out.push_back(int_val);
     } else if (ceph_argparse_flag(args, i, "--clear-temp", (char*)NULL)) {
       clear_temp = true;
     } else if (ceph_argparse_flag(args, i, "--clean-temps", (char*)NULL)) {
@@ -360,19 +364,24 @@ int main(int argc, const char **argv)
     }
   };
 
-  for_each_osd_id(marked_out, [&](int id) {
-    cout << "marking OSD@" << id << " as out" << std::endl;
-    osdmap.set_weight(id, CEPH_OSD_OUT);
-  });
-
   for_each_osd_id(marked_up, [&](int id) {
     cout << "marking OSD@" << id << " as up" << std::endl;
     osdmap.set_state(id, osdmap.get_state(id) | CEPH_OSD_UP);
   });
 
+  for_each_osd_id(marked_down, [&](int id) {
+    cout << "marking OSD@" << id << " as down" << std::endl;
+    osdmap.set_state(id, osdmap.get_state(id) & ~CEPH_OSD_UP);
+  });
+
   for_each_osd_id(marked_in, [&](int id) {
     cout << "marking OSD@" << id << " as in" << std::endl;
     osdmap.set_weight(id, CEPH_OSD_IN);
+  });
+
+  for_each_osd_id(marked_out, [&](int id) {
+    cout << "marking OSD@" << id << " as out" << std::endl;
+    osdmap.set_weight(id, CEPH_OSD_OUT);
   });
 
   for_each_substr(adjust_crush_weight, ",", [&](auto osd_to_adjust) {
