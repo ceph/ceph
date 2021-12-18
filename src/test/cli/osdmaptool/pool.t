@@ -11,7 +11,7 @@
   [1]
 
   $ osdmaptool myosdmap --test-map-object foo --pool bar
-  The option value 'bar' is invalid
+  The option value 'bar' is invalid for --pool
   [1]
 
   $ osdmaptool myosdmap --test-map-object foo --pool 123
@@ -37,7 +37,7 @@
   [1]
 
   $ osdmaptool myosdmap --test-map-pgs --pool baz
-  The option value 'baz' is invalid
+  The option value 'baz' is invalid for --pool
   [1]
 
   $ osdmaptool myosdmap --test-map-pgs --pool 123

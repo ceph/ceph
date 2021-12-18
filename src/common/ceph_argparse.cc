@@ -415,6 +415,7 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, T *ret,
 	std::ostream &oss, ...)
 {
+  const char* option_name = *i;
   int r;
   va_list ap;
   bool is_option = false;
@@ -437,6 +438,7 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
     } else {
       oss << "The option value '" << str << "' is invalid";
     }
+    oss << " for " << option_name;
     return true;
   }
 
@@ -444,7 +446,7 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
   T myret = strict_str_convert(str.c_str(), &err);
   *ret = myret;
   if (!err.empty()) {
-    oss << err;
+    oss << "Invalid value for " << option_name << ": " << err;
   }
   return true;
 }
