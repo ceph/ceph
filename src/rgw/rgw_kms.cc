@@ -699,16 +699,6 @@ public:
     }
     return 0;
   }
-
-  int make_kek_s3(std::string key_id)
-  {
-    bufferlist secret_bl;
-    int res = send_request("POST", "/keys/", key_id,
-	string{}, secret_bl);
-
-    ldout(cct, 20) << "Generate KEK Response: " << res << dendl;
-    return res;
-  }
 };
 
 class KvSecretEngine: public VaultSecretEngine {
@@ -1142,7 +1132,7 @@ public:
     return cct->_conf->rgw_crypt_sse_s3_vault_prefix;
   };
   const std::string & secret_engine() override {
-    return sse_s3_secret_engine;
+    return cct->_conf->rgw_crypt_sse_s3_vault_secret_engine;
   };
   const std::string & ssl_cacert() override {
     return cct->_conf->rgw_crypt_sse_s3_vault_ssl_cacert;
@@ -1160,7 +1150,6 @@ public:
     return cct->_conf->rgw_crypt_sse_s3_vault_verify_ssl;
   };
 };
-const std::string SseS3Context::sse_s3_secret_engine = "transit";
 
 int reconstitute_actual_key_from_kms(CephContext *cct,
                             map<string, bufferlist>& attrs,
@@ -1238,7 +1227,7 @@ int make_actual_key_from_sse_s3(CephContext *cct,
 }
 
 
-int create_ss3_s3_bucket_key(CephContext *cct,
+int create_sse_s3_bucket_key(CephContext *cct,
                                      const std::string& bucket_key)
 {
   SseS3Context kctx { cct };
@@ -1252,7 +1241,7 @@ int create_ss3_s3_bucket_key(CephContext *cct,
   std::string secret_engine_str = kctx.secret_engine();
   EngineParmMap secret_engine_parms;
   auto secret_engine { config_to_engine_and_parms(
-    cct, "rgw_crypt_vault_secret_engine",	// XXX wrong, but...
+    cct, "rgw_crypt_sse_s3_vault_secret_engine",
     secret_engine_str, secret_engine_parms) };
   if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine){
     TransitSecretEngine engine(cct, kctx, std::move(secret_engine_parms));
@@ -1264,14 +1253,14 @@ int create_ss3_s3_bucket_key(CephContext *cct,
   }
 }
 
-int remove_ss3_s3_bucket_key(CephContext *cct,
+int remove_sse_s3_bucket_key(CephContext *cct,
                                      const std::string& bucket_key)
 {
   SseS3Context kctx { cct };
   std::string secret_engine_str = kctx.secret_engine();
   EngineParmMap secret_engine_parms;
   auto secret_engine { config_to_engine_and_parms(
-    cct, "rgw_crypt_vault_secret_engine",	// XXX wrong, but...
+    cct, "rgw_crypt_sse_s3_vault_secret_engine",
     secret_engine_str, secret_engine_parms) };
   if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine){
     TransitSecretEngine engine(cct, kctx, std::move(secret_engine_parms));
@@ -1281,31 +1270,4 @@ int remove_ss3_s3_bucket_key(CephContext *cct,
     ldout(cct, 0) << "Missing or invalid secret engine" << dendl;
     return -EINVAL;
   }
-}
-
-int generate_kek_sse_s3(CephContext *cct, string kek_id)
-{
-  SseS3Context kctx { cct };
-  std::string kms_backend { kctx.backend() };
-  if (RGW_SSE_KMS_BACKEND_VAULT != kms_backend) {
-    ldout(cct, 0) << "ERROR: Unsupported rgw_crypt_s3_backend: " << kms_backend << dendl;
-    return -EINVAL;
-  }
-
-  std::string secret_engine_str = kctx.secret_engine();
-  EngineParmMap secret_engine_parms;
-  auto secret_engine { config_to_engine_and_parms(
-    cct, "rgw_crypt_vault_secret_engine",
-    secret_engine_str, secret_engine_parms) };
-  ldout(cct, 20) << "Vault authentication method: " << kctx.auth() << dendl;
-  ldout(cct, 20) << "Vault Secrets Engine: " << secret_engine << dendl;
-
-  if (RGW_SSE_KMS_VAULT_SE_TRANSIT == secret_engine){
-    TransitSecretEngine engine(cct, kctx, std::move(secret_engine_parms));
-    return engine.make_kek_s3(kek_id);
-  } else {
-    ldout(cct, 0) << "Missing or invalid/unsupported secret engine" << dendl;
-    return -EINVAL;
-  }
-
 }

@@ -43,7 +43,6 @@ int make_actual_key_from_sse_s3(const DoutPrefixProvider *dpp, CephContext *cct,
 int reconstitute_actual_key_from_sse_s3(const DoutPrefixProvider *dpp, CephContext *cct,
                             std::map<std::string, bufferlist>& attrs,
                             std::string& actual_key);
-int generate_kek_sse_s3(CephContext *cct, string kek_id);
 
 int create_sse_s3_bucket_key(const DoutPrefixProvider *dpp, CephContext *cct,
                             const std::string& actual_key);
