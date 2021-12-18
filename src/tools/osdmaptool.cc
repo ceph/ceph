@@ -138,9 +138,9 @@ int main(int argc, const char **argv)
   int range_last = -1;
   int pool = -1;
   bool mark_up_in = false;
-  int marked_out = -1;
-  int marked_up = -1;
-  int marked_in = -1;
+  std::list<int> marked_out;
+  std::list<int> marked_up;
+  std::list<int> marked_in;
   bool clear_temp = false;
   bool clean_temps = false;
   bool test_map_pgs = false;
@@ -159,6 +159,7 @@ int main(int argc, const char **argv)
   bool save = false;
 
   std::string val;
+  int int_val;
   std::ostringstream err;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -198,12 +199,12 @@ int main(int argc, const char **argv)
       create_from_conf = true;
     } else if (ceph_argparse_flag(args, i, "--mark-up-in", (char*)NULL)) {
       mark_up_in = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--mark-out", (char*)NULL)) {
-      marked_out = std::stoi(val);
-    } else if (ceph_argparse_witharg(args, i, &val, "--mark-up", (char*)NULL)) {
-      marked_up  = std::stod(val);
-    } else if (ceph_argparse_witharg(args, i, &val, "--mark-in", (char*)NULL)) {
-      marked_in  = std::stod(val);
+    } else if (ceph_argparse_witharg(args, i, &int_val, err, "--mark-out", (char*)NULL)) {
+      marked_out.push_back(int_val);
+    } else if (ceph_argparse_witharg(args, i, &int_val, err, "--mark-up", (char*)NULL)) {
+      marked_up.push_back(int_val);
+    } else if (ceph_argparse_witharg(args, i, &int_val, err, "--mark-in", (char*)NULL)) {
+      marked_in.push_back(int_val);
     } else if (ceph_argparse_flag(args, i, "--clear-temp", (char*)NULL)) {
       clear_temp = true;
     } else if (ceph_argparse_flag(args, i, "--clean-temps", (char*)NULL)) {
@@ -349,24 +350,31 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (marked_out >=0 && marked_out < osdmap.get_max_osd()) {
-    cout << "marking OSD@" << marked_out << " as out" << std::endl;
-    int id = marked_out;
+  auto for_each_osd_id = [&](const auto& osd_ids, auto&& f) {
+    for (auto id : osd_ids) {
+      if (id < 0 || id >= osdmap.get_max_osd()) {
+        std::cerr << "Invalid OSD ID " << id << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      f(id);
+    }
+  };
+
+  for_each_osd_id(marked_out, [&](int id) {
+    cout << "marking OSD@" << id << " as out" << std::endl;
     osdmap.set_state(id, osdmap.get_state(id) | CEPH_OSD_UP);
     osdmap.set_weight(id, CEPH_OSD_OUT);
-  }
+  });
 
-  if (marked_up >=0 && marked_up < osdmap.get_max_osd()) {
-    cout << "marking OSD@" << marked_up << " as up" << std::endl;
-    int id = marked_up;
+  for_each_osd_id(marked_up, [&](int id) {
+    cout << "marking OSD@" << id << " as up" << std::endl;
     osdmap.set_state(id, osdmap.get_state(id) | CEPH_OSD_UP);
-  }
+  });
 
-  if (marked_in >=0 && marked_in < osdmap.get_max_osd()) {
-    cout << "marking OSD@" << marked_in << " as in" << std::endl;
-    int id = marked_in;
+  for_each_osd_id(marked_in, [&](int id) {
+    cout << "marking OSD@" << id << " as in" << std::endl;
     osdmap.set_weight(id, CEPH_OSD_IN);
-  }
+  });
 
   for_each_substr(adjust_crush_weight, ",", [&](auto osd_to_adjust) {
     std::string_view osd_to_weight_delimiter{":"};
