@@ -756,7 +756,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
 
   // resharding successful, so remove old bucket index shards; use
   // best effort and don't report out an error; the lock isn't needed
-  // at this point since all we're using a best effor to to remove old
+  // at this point since all we're using a best effort to remove old
   // shard objects
   ret = store->svc()->bi->clean_index(dpp, bucket_info);
   if (ret < 0) {
