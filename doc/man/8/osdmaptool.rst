@@ -26,7 +26,8 @@ Description
 
 **osdmaptool** is a utility that lets you create, view, and manipulate
 OSD cluster maps from the Ceph distributed storage system. Notably, it
-lets you extract the embedded CRUSH map or import a new CRUSH map.
+lets you extract the embedded CRUSH map or import a new CRUSH map,
+and test placement group mapping on different OSD state.
 It can also simulate the upmap balancer mode so you can get a sense of
 what is needed to balance your PGs.
 
