@@ -118,23 +118,23 @@ Options
 
 .. option:: --mark-up-in
 
-   mark osds up and in (but do not persist).
+   mark osds up and in.
 
 .. option:: --mark-up <osdid>
 
-   mark an osd as up (but do not persist)
+   mark an osd as up.
 
 .. option:: --mark-down <osdid>
 
-   mark an osd as down (but do not persist)
+   mark an osd as down.
 
 .. option:: --mark-in <osdid>
 
-   mark an osd as in (but do not persist)
+   mark an osd as in.
 
 .. option:: --mark-out <osdid>
 
-   mark an osd as out (but do not persist)
+   mark an osd as out.
 
 .. option:: --tree [<format>]
 

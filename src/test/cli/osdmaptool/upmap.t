@@ -8,7 +8,7 @@
   upmap, max-count 11, max deviation 5
   pools rbd 
   prepared 11/11 changes
-  osdmaptool: writing epoch 1 to om
+  osdmaptool: writing epoch 2 to om
   $ cat c
   ceph osd pg-upmap-items 1.7 142 147
   ceph osd pg-upmap-items 1.8 219 223

@@ -3,7 +3,7 @@
   $ osdmaptool --osd_calc_pg_upmaps_aggressively=false om --mark-up-in --mark-out 147 --upmap-max 11 --upmap c
   osdmaptool: input osdmap file 'om'
   marking all OSDs up and in
-  marking OSD@147 as out
+  marking osd.147 as out
   writing upmap command output to: c
   checking for upmap cleanups
   upmap, max-count 11, max deviation 5

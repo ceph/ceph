@@ -42,11 +42,11 @@ void usage()
   cout << "   --test-map-pgs [--pool <poolid>] [--pg_num <pg_num>] [--range-first <first> --range-last <last>] map all pgs\n";
   cout << "   --test-map-pgs-dump [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs\n";
   cout << "   --test-map-pgs-dump-all [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs to osds\n";
-  cout << "   --mark-up-in            mark osds up and in (but do not persist)\n";
-  cout << "   --mark-up <osdid>       mark an osd as up (but do not persist)\n";
-  cout << "   --mark-down <osdid>     mark an osd as down (but do not persist)\n";
-  cout << "   --mark-in <osdid>       mark an osd as in (but do not persist)\n";
-  cout << "   --mark-out <osdid>      mark an osd as out (but do not persist)\n";
+  cout << "   --mark-up-in            mark osds up and in\n";
+  cout << "   --mark-up <osdid>       mark an osd as up\n";
+  cout << "   --mark-down <osdid>     mark an osd as down\n";
+  cout << "   --mark-in <osdid>       mark an osd as in\n";
+  cout << "   --mark-out <osdid>      mark an osd as out\n";
   cout << "   --with-default-pool     include default pool when creating map\n";
   cout << "   --clear-temp            clear pg_temp and primary_temp\n";
   cout << "   --clean-temps           clean pg_temps\n";
@@ -99,6 +99,12 @@ void print_inc_upmaps(const OSDMap::Incremental& pending_inc, int fd)
     cerr << "error writing output: " << cpp_strerror(r) << std::endl;
     exit(1);
   }
+}
+
+void mark_osd_up(OSDMap::Incremental& inc, int osd_id) {
+  inc.new_up_client[osd_id] = {};
+  inc.new_hb_back_up[osd_id] = {};
+  inc.new_hb_front_up[osd_id] = {};
 }
 
 int main(int argc, const char **argv)
@@ -341,46 +347,71 @@ int main(int argc, const char **argv)
   }
 
   if (mark_up_in) {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+
     cout << "marking all OSDs up and in" << std::endl;
     int n = osdmap.get_max_osd();
-    for (int i=0; i<n; i++) {
-      osdmap.set_state(i, osdmap.get_state(i) | CEPH_OSD_UP);
-      osdmap.set_weight(i, CEPH_OSD_IN);
+    for (int i = 0; i < n; i++) {
+      if (!(osdmap.get_state(i) & CEPH_OSD_UP))
+        mark_osd_up(inc, i);
+      inc.new_weight[i] = CEPH_OSD_IN;
       if (osdmap.crush->get_item_weight(i) == 0 ) {
         osdmap.crush->adjust_item_weightf(g_ceph_context, i, 1.0);
       }
     }
+
+    osdmap.apply_incremental(inc);
+    modified = true;
   }
 
-  auto for_each_osd_id = [&](const auto& osd_ids, auto&& f) {
-    for (auto id : osd_ids) {
-      if (id < 0 || id >= osdmap.get_max_osd()) {
-        std::cerr << "Invalid OSD ID " << id << std::endl;
-        exit(EXIT_FAILURE);
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+
+    auto for_each_osd_id = [&](const auto& osd_ids, auto&& f) {
+      for (auto id : osd_ids) {
+        if (id < 0 || id >= osdmap.get_max_osd()) {
+          std::cerr << "Invalid OSD ID " << id << std::endl;
+          exit(EXIT_FAILURE);
+        }
+        f(id);
       }
-      f(id);
+    };
+
+    for_each_osd_id(marked_up, [&](int id) {
+      if (osdmap.get_state(id) & CEPH_OSD_UP) {
+        cout << "osd." << id << " is already up" << std::endl;
+      } else {
+        cout << "marking osd." << id << " as up" << std::endl;
+        mark_osd_up(inc, id);
+      }
+    });
+
+    for_each_osd_id(marked_down, [&](int id) {
+      if (!(osdmap.get_state(id) & CEPH_OSD_UP)) {
+        cout << "osd." << id << " is already down" << std::endl;
+      } else {
+        cout << "marking osd." << id << " as down" << std::endl;
+        inc.pending_osd_state_set(id, CEPH_OSD_UP);
+      }
+    });
+
+    for_each_osd_id(marked_in, [&](int id) {
+      cout << "marking osd." << id << " as in" << std::endl;
+      inc.new_weight[id] = CEPH_OSD_IN;
+    });
+
+    for_each_osd_id(marked_out, [&](int id) {
+      cout << "marking osd." << id << " as out" << std::endl;
+      inc.new_weight[id] = CEPH_OSD_OUT;
+    });
+
+    if (!inc.new_weight.empty() || !inc.new_state.empty()) {
+      osdmap.apply_incremental(inc);
+      modified = true;
     }
-  };
-
-  for_each_osd_id(marked_up, [&](int id) {
-    cout << "marking OSD@" << id << " as up" << std::endl;
-    osdmap.set_state(id, osdmap.get_state(id) | CEPH_OSD_UP);
-  });
-
-  for_each_osd_id(marked_down, [&](int id) {
-    cout << "marking OSD@" << id << " as down" << std::endl;
-    osdmap.set_state(id, osdmap.get_state(id) & ~CEPH_OSD_UP);
-  });
-
-  for_each_osd_id(marked_in, [&](int id) {
-    cout << "marking OSD@" << id << " as in" << std::endl;
-    osdmap.set_weight(id, CEPH_OSD_IN);
-  });
-
-  for_each_osd_id(marked_out, [&](int id) {
-    cout << "marking OSD@" << id << " as out" << std::endl;
-    osdmap.set_weight(id, CEPH_OSD_OUT);
-  });
+  }
 
   for_each_substr(adjust_crush_weight, ",", [&](auto osd_to_adjust) {
     std::string_view osd_to_weight_delimiter{":"};

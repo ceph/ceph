@@ -12,11 +12,11 @@
      --test-map-pgs [--pool <poolid>] [--pg_num <pg_num>] [--range-first <first> --range-last <last>] map all pgs
      --test-map-pgs-dump [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs
      --test-map-pgs-dump-all [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs to osds
-     --mark-up-in            mark osds up and in (but do not persist)
-     --mark-up <osdid>       mark an osd as up (but do not persist)
-     --mark-down <osdid>     mark an osd as down (but do not persist)
-     --mark-in <osdid>       mark an osd as in (but do not persist)
-     --mark-out <osdid>      mark an osd as out (but do not persist)
+     --mark-up-in            mark osds up and in
+     --mark-up <osdid>       mark an osd as up
+     --mark-down <osdid>     mark an osd as down
+     --mark-in <osdid>       mark an osd as in
+     --mark-out <osdid>      mark an osd as out
      --with-default-pool     include default pool when creating map
      --clear-temp            clear pg_temp and primary_temp
      --clean-temps           clean pg_temps
