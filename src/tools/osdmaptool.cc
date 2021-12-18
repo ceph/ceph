@@ -362,7 +362,6 @@ int main(int argc, const char **argv)
 
   for_each_osd_id(marked_out, [&](int id) {
     cout << "marking OSD@" << id << " as out" << std::endl;
-    osdmap.set_state(id, osdmap.get_state(id) | CEPH_OSD_UP);
     osdmap.set_weight(id, CEPH_OSD_OUT);
   });
 
