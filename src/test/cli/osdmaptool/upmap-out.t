@@ -1,5 +1,5 @@
   $ osdmaptool --create-from-conf -c $TESTDIR/ceph.conf.withracks --with-default-pool -o om
-  osdmaptool: writing epoch 1 to om
+  osdmaptool: writing epoch 0 to om
   $ osdmaptool --osd_calc_pg_upmaps_aggressively=false om --mark-up-in --mark-out 147 --upmap-max 11 --upmap c
   osdmaptool: input osdmap file 'om'
   marking all OSDs up and in

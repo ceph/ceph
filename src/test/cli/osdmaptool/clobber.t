@@ -1,5 +1,5 @@
   $ osdmaptool --createsimple 3 --with-default-pool -o myosdmap
-  osdmaptool: writing epoch 1 to myosdmap
+  osdmaptool: writing epoch 0 to myosdmap
 
   $ ORIG_FSID="$(osdmaptool --print myosdmap|grep ^fsid)"
   osdmaptool: input osdmap file 'myosdmap'
@@ -12,7 +12,7 @@
 #TODO typo
   $ osdmaptool --print myosdmap
   osdmaptool: input osdmap file 'myosdmap'
-  epoch 1
+  epoch 0
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
   created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
   modified \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
@@ -34,11 +34,11 @@
   $ [ "$ORIG_FSID" = "$NEW_FSID" ]
 
   $ osdmaptool --createsimple 1 --clobber --with-default-pool -o myosdmap
-  osdmaptool: writing epoch 1 to myosdmap
+  osdmaptool: writing epoch 0 to myosdmap
 
   $ osdmaptool --print myosdmap
   osdmaptool: input osdmap file 'myosdmap'
-  epoch 1
+  epoch 0
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
   created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
   modified \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)

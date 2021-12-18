@@ -778,9 +778,6 @@ skip_upmap:
     }
   }
 
-  if (modified)
-    osdmap.inc_epoch();
-
   if (health) {
     health_check_map_t checks;
     osdmap.check_health(cct.get(), &checks);

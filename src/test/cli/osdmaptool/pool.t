@@ -1,5 +1,5 @@
   $ osdmaptool --createsimple 3 --with-default-pool -o myosdmap
-  osdmaptool: writing epoch 1 to myosdmap
+  osdmaptool: writing epoch 0 to myosdmap
 
 #
 # --test-map-object / --pool

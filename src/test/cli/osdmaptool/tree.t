@@ -1,5 +1,5 @@
   $ osdmaptool --createsimple 3 --with-default-pool -o om
-  osdmaptool: writing epoch 1 to om
+  osdmaptool: writing epoch 0 to om
 
   $ osdmaptool --tree=plain om
   osdmaptool: input osdmap file 'om'

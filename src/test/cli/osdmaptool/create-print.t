@@ -1,5 +1,5 @@
   $ osdmaptool --createsimple 3 --with-default-pool -o myosdmap
-  osdmaptool: writing epoch 1 to myosdmap
+  osdmaptool: writing epoch 0 to myosdmap
 
   $ osdmaptool --export-crush oc myosdmap
   osdmaptool: input osdmap file 'myosdmap'
@@ -71,7 +71,7 @@
   # end crush map
   $ osdmaptool --print myosdmap
   osdmaptool: input osdmap file 'myosdmap'
-  epoch 1
+  epoch 0
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
   created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
   modified \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
@@ -88,7 +88,7 @@
   max_osd 3
   
   $ osdmaptool --clobber --createsimple 3 --with-default-pool -o myosdmap
-  osdmaptool: writing epoch 1 to myosdmap
+  osdmaptool: writing epoch 0 to myosdmap
   $ osdmaptool --print myosdmap | grep 'pool 1'
   osdmaptool: input osdmap file 'myosdmap'
   pool 1 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 autoscale_mode on last_change 0 flags hashpspool stripe_width 0 application rbd
