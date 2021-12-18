@@ -169,4 +169,6 @@ static inline std::string get_str_attribute(map<string, bufferlist>& attrs,
   return iter->second.to_str();
 }
 
+int rgw_remove_sse_s3_bucket_key(req_state *s);
+
 #endif
