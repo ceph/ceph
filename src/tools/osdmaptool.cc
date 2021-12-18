@@ -121,9 +121,9 @@ int main(int argc, const char **argv)
 
   std::string fn;
   bool print = false;
-  boost::scoped_ptr<Formatter> print_formatter;
+  std::unique_ptr<Formatter> print_formatter;
   bool tree = false;
-  boost::scoped_ptr<Formatter> tree_formatter;
+  std::unique_ptr<Formatter> tree_formatter;
   bool createsimple = false;
   bool createpool = false;
   bool create_from_conf = false;
