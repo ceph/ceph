@@ -12,12 +12,12 @@ Synopsis
 ========
 
 | **osdmaptool** *mapfilename* [--print] [--createsimple *numosd*
-  [--pgbits *bitsperosd* ] ] [--clobber]
-| **osdmaptool** *mapfilename* [--import-crush *crushmap*]
+  [--pgbits *bitsperosd* ] ] [--clobber] [--outfn *file*]
+| **osdmaptool** *mapfilename* [--import-crush *crushmap*] [--outfn *file*]
 | **osdmaptool** *mapfilename* [--export-crush *crushmap*]
 | **osdmaptool** *mapfilename* [--upmap *file*] [--upmap-max *max-optimizations*]
   [--upmap-deviation *max-deviation*] [--upmap-pool *poolname*]
-  [--save] [--upmap-active]
+  [--upmap-active] [--outfn *file*]
 | **osdmaptool** *mapfilename* [--upmap-cleanup] [--upmap *file*]
 
 
@@ -185,9 +185,9 @@ Options
 
    Change CRUSH weight of <osdid>
 
-.. option:: --save
+.. option:: --outfn|-o <file>
 
-   write modified osdmap with upmap or crush-adjust changes
+   write modified osdmap to <file>.
 
 Example
 =======

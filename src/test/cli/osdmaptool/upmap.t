@@ -1,8 +1,7 @@
-  $ osdmaptool --create-from-conf om -c $TESTDIR/ceph.conf.withracks --with-default-pool
-  osdmaptool: osdmap file 'om'
+  $ osdmaptool --create-from-conf -c $TESTDIR/ceph.conf.withracks --with-default-pool -o om
   osdmaptool: writing epoch 1 to om
-  $ osdmaptool --osd_calc_pg_upmaps_aggressively=false om --mark-up-in --upmap-max 11 --upmap c --save
-  osdmaptool: osdmap file 'om'
+  $ osdmaptool --osd_calc_pg_upmaps_aggressively=false om --mark-up-in --upmap-max 11 --upmap c -o om --clobber
+  osdmaptool: input osdmap file 'om'
   marking all OSDs up and in
   writing upmap command output to: c
   checking for upmap cleanups
@@ -22,7 +21,7 @@
   ceph osd pg-upmap-items 1.62 219 223
   ceph osd pg-upmap-items 1.6f 219 223
   $ osdmaptool --print om | grep pg_upmap_items
-  osdmaptool: osdmap file 'om'
+  osdmaptool: input osdmap file 'om'
   pg_upmap_items 1.7 [142,147]
   pg_upmap_items 1.8 [219,223]
   pg_upmap_items 1.17 [201,202,171,173]

@@ -1,19 +1,17 @@
-  $ osdmaptool --createsimple 3 myosdmap --with-default-pool
-  osdmaptool: osdmap file 'myosdmap'
+  $ osdmaptool --createsimple 3 --with-default-pool -o myosdmap
   osdmaptool: writing epoch 1 to myosdmap
 
   $ ORIG_FSID="$(osdmaptool --print myosdmap|grep ^fsid)"
-  osdmaptool: osdmap file 'myosdmap'
+  osdmaptool: input osdmap file 'myosdmap'
 
-  $ osdmaptool --createsimple 3 myosdmap --with-default-pool
-  osdmaptool: osdmap file 'myosdmap'
+  $ osdmaptool --createsimple 3 --with-default-pool -o myosdmap
   osdmaptool: myosdmap exists, --clobber to overwrite
   [255]
 
 # hasn't changed yet
 #TODO typo
   $ osdmaptool --print myosdmap
-  osdmaptool: osdmap file 'myosdmap'
+  osdmaptool: input osdmap file 'myosdmap'
   epoch 1
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
   created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
@@ -32,15 +30,14 @@
   
 
   $ NEW_FSID="$(osdmaptool --print myosdmap|grep ^fsid)"
-  osdmaptool: osdmap file 'myosdmap'
+  osdmaptool: input osdmap file 'myosdmap'
   $ [ "$ORIG_FSID" = "$NEW_FSID" ]
 
-  $ osdmaptool --createsimple 1 --clobber myosdmap --with-default-pool
-  osdmaptool: osdmap file 'myosdmap'
+  $ osdmaptool --createsimple 1 --clobber --with-default-pool -o myosdmap
   osdmaptool: writing epoch 1 to myosdmap
 
   $ osdmaptool --print myosdmap
-  osdmaptool: osdmap file 'myosdmap'
+  osdmaptool: input osdmap file 'myosdmap'
   epoch 1
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
   created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
@@ -59,7 +56,7 @@
   
 
   $ NEW_FSID="$(osdmaptool --print myosdmap|grep ^fsid)"
-  osdmaptool: osdmap file 'myosdmap'
+  osdmaptool: input osdmap file 'myosdmap'
 #TODO --clobber should probably set new fsid, remove the [1]
   $ [ "$ORIG_FSID" != "$NEW_FSID" ]
   [1]

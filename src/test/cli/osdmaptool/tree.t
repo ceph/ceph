@@ -1,9 +1,8 @@
-  $ osdmaptool --createsimple 3 om --with-default-pool
-  osdmaptool: osdmap file 'om'
+  $ osdmaptool --createsimple 3 --with-default-pool -o om
   osdmaptool: writing epoch 1 to om
 
   $ osdmaptool --tree=plain om
-  osdmaptool: osdmap file 'om'
+  osdmaptool: input osdmap file 'om'
   ID  CLASS  WEIGHT   TYPE NAME               STATUS  REWEIGHT  PRI-AFF
   -1         3.00000  root default                                     
   -3         3.00000      rack localrack                               
@@ -13,7 +12,7 @@
    2         1.00000              osd.2          DNE         0         
 
   $ osdmaptool --tree=json-pretty om
-  osdmaptool: osdmap file 'om'
+  osdmaptool: input osdmap file 'om'
   {
       "nodes": [
           {

@@ -66,7 +66,7 @@ void usage()
   cout << "   --tree [<format>]       displays a tree of the map in plain text when <format> is 'plain', 'json' if <format> is not specified or not supported\n";
   cout << "   --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds\n";
   cout << "   --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight>\n";
-  cout << "   --save                  write modified osdmap with upmap or crush-adjust changes\n";
+  cout << "   --outfn|-o <file>       write modified osdmap to <file>\n";
   exit(1);
 }
 
@@ -120,7 +120,7 @@ int main(int argc, const char **argv)
 
   const char *me = argv[0];
 
-  std::string fn;
+  std::string infn, outfn;
   bool print = false;
   std::unique_ptr<Formatter> print_formatter;
   bool tree = false;
@@ -158,7 +158,6 @@ int main(int argc, const char **argv)
   std::set<std::string> upmap_pools;
   int64_t pg_num = -1;
   bool test_map_pgs_dump_all = false;
-  bool save = false;
 
   std::string val;
   int int_val;
@@ -246,8 +245,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &pool, err, "--pool", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &val, err, "--adjust-crush-weight", (char*)NULL)) {
       adjust_crush_weight = val;
-    } else if (ceph_argparse_flag(args, i, "--save", (char*)NULL)) {
-      save = true;
+    } else if (ceph_argparse_witharg(args, i, &outfn, "--outfn", "-o", (char*)NULL)) {
     } else {
       ++i;
     }
@@ -256,9 +254,8 @@ int main(int argc, const char **argv)
       exit(EXIT_FAILURE);
     }
   }
-  if (args.empty()) {
-    cerr << me << ": must specify osdmap filename" << std::endl;
-    usage();
+  if (args.size() == 1) {
+    infn = args[0];
   }
   else if (args.size() > 1) {
     cerr << me << ": too many arguments: " << args << std::endl;
@@ -268,14 +265,13 @@ int main(int argc, const char **argv)
     cerr << me << ": upmap-deviation must be >= 1" << std::endl;
     usage();
   }
-  fn = args[0];
 
   if (range_first >= 0 && range_last >= 0) {
     set<OSDMap*> maps;
     OSDMap *prev = NULL;
     for (int i=range_first; i <= range_last; i++) {
       ostringstream f;
-      f << fn << "/" << i;
+      f << infn << "/" << i;
       bufferlist bl;
       string error, s = f.str();
       int r = bl.read_file(s.c_str(), &error);
@@ -297,29 +293,31 @@ int main(int argc, const char **argv)
   OSDMap osdmap;
   bufferlist bl;
 
-  cerr << me << ": osdmap file '" << fn << "'" << std::endl;
-  
   int r = 0;
   struct stat st;
-  if (!createsimple && !create_from_conf && !clobber) {
+  if (!infn.empty()) {
+    cerr << me << ": input osdmap file '" << infn << "'" << std::endl;
     std::string error;
-    r = bl.read_file(fn.c_str(), &error);
+    r = bl.read_file(infn.c_str(), &error);
     if (r == 0) {
       try {
 	osdmap.decode(bl);
       }
       catch (const buffer::error &e) {
-	cerr << me << ": error decoding osdmap '" << fn << "'" << std::endl;
-	return -1;
+        cerr << me << ": error decoding osdmap '" << infn << "'" << std::endl;
+        return -1;
       }
     }
     else {
-      cerr << me << ": couldn't open " << fn << ": " << error << std::endl;
+      cerr << me << ": couldn't open " << infn << ": " << error << std::endl;
       return -1;
     }
+  } else if (!createsimple && !create_from_conf) {
+    cerr << me << ": No input file specified" << std::endl;
+    exit(EXIT_FAILURE);
   }
-  else if ((createsimple || create_from_conf) && !clobber && ::stat(fn.c_str(), &st) == 0) {
-    cerr << me << ": " << fn << " exists, --clobber to overwrite" << std::endl;
+  if (!outfn.empty() && !clobber && ::stat(outfn.c_str(), &st) == 0) {
+    cerr << me << ": " << outfn << " exists, --clobber to overwrite" << std::endl;
     return -1;
   }
 
@@ -397,13 +395,11 @@ int main(int argc, const char **argv)
     osdmap.crush->adjust_item_weightf(g_ceph_context, osd_id, new_weight);
     std::cout << "Adjusted osd." << osd_id << " CRUSH weight to " << new_weight
 	      << std::endl;
-    if (save) {
-      OSDMap::Incremental inc;
-      inc.fsid = osdmap.get_fsid();
-      inc.epoch = osdmap.get_epoch() + 1;
-      osdmap.apply_incremental(inc);
-      modified = true;
-    }
+
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+    osdmap.apply_incremental(inc);
+    modified = true;
   });
 
   if (clear_temp) {
@@ -507,12 +503,9 @@ int main(int argc, const char **argv)
         cout << "Time elapsed " << elapsed_time << " secs" << std::endl;
       if (total_did > 0) {
         print_inc_upmaps(pending_inc, upmap_fd);
-        if (save || upmap_active) {
-	  int r = osdmap.apply_incremental(pending_inc);
-	  ceph_assert(r == 0);
-	  if (save)
-	    modified = true;
-        }
+        int r = osdmap.apply_incremental(pending_inc);
+        ceph_assert(r == 0);
+        modified = true;
       } else {
         cout << "Unable to find further optimization, "
 	     << "or distribution is already perfect"
@@ -570,9 +563,8 @@ skip_upmap:
     }
     
     // apply
-    OSDMap::Incremental inc;
+    OSDMap::Incremental inc(osdmap.get_epoch()+1);
     inc.fsid = osdmap.get_fsid();
-    inc.epoch = osdmap.get_epoch()+1;
     inc.crush = cbl;
     osdmap.apply_incremental(inc);
     cout << me << ": imported " << cbl.length() << " byte crush map from " << import_crush << std::endl;
@@ -786,15 +778,6 @@ skip_upmap:
     }
   }
 
-  if (!print && !health && !tree && !modified &&
-      export_crush.empty() && import_crush.empty() && 
-      test_map_pg.empty() && test_map_object.empty() &&
-      !test_map_pgs && !test_map_pgs_dump && !test_map_pgs_dump_all &&
-      adjust_crush_weight.empty() && !upmap && !upmap_cleanup) {
-    cerr << me << ": no action specified?" << std::endl;
-    usage();
-  }
-
   if (modified)
     osdmap.inc_epoch();
 
@@ -827,18 +810,20 @@ skip_upmap:
       osdmap.print_tree(NULL, &cout);
     }
   }
-  if (modified) {
+  if (modified && outfn.empty()) {
+    cout << me << ": successfully built or modified map.  Use '-o <file>' to write it out." << std::endl;
+  }
+  if (!outfn.empty()) {
     bl.clear();
     osdmap.encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT | CEPH_FEATURE_RESERVED);
 
     // write it out
     cout << me << ": writing epoch " << osdmap.get_epoch()
-	 << " to " << fn
-	 << std::endl;
-    int r = bl.write_file(fn.c_str());
+         << " to " << outfn << std::endl;
+    int r = bl.write_file(outfn.c_str());
     if (r) {
-      cerr << "osdmaptool: error writing to '" << fn << "': "
-	   << cpp_strerror(r) << std::endl;
+      cerr << me << ": error writing to '" << outfn << "': "
+           << cpp_strerror(r) << std::endl;
       return 1;
     }
   }

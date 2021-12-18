@@ -13,9 +13,10 @@
      --test-map-pgs-dump [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs
      --test-map-pgs-dump-all [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs to osds
      --mark-up-in            mark osds up and in (but do not persist)
-     --mark-out <osdid>      mark an osd as out (but do not persist)
      --mark-up <osdid>       mark an osd as up (but do not persist)
+     --mark-down <osdid>     mark an osd as down (but do not persist)
      --mark-in <osdid>       mark an osd as in (but do not persist)
+     --mark-out <osdid>      mark an osd as out (but do not persist)
      --with-default-pool     include default pool when creating map
      --clear-temp            clear pg_temp and primary_temp
      --clean-temps           clean pg_temps
@@ -35,5 +36,5 @@
      --tree [<format>]       displays a tree of the map in plain text when <format> is 'plain', 'json' if <format> is not specified or not supported
      --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds
      --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight>
-     --save                  write modified osdmap with upmap or crush-adjust changes
+     --outfn|-o <file>       write modified osdmap to <file>
   [1]

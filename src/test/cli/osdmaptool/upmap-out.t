@@ -1,8 +1,7 @@
-  $ osdmaptool --create-from-conf om -c $TESTDIR/ceph.conf.withracks --with-default-pool
-  osdmaptool: osdmap file 'om'
+  $ osdmaptool --create-from-conf -c $TESTDIR/ceph.conf.withracks --with-default-pool -o om
   osdmaptool: writing epoch 1 to om
   $ osdmaptool --osd_calc_pg_upmaps_aggressively=false om --mark-up-in --mark-out 147 --upmap-max 11 --upmap c
-  osdmaptool: osdmap file 'om'
+  osdmaptool: input osdmap file 'om'
   marking all OSDs up and in
   marking OSD@147 as out
   writing upmap command output to: c
@@ -10,6 +9,7 @@
   upmap, max-count 11, max deviation 5
   pools rbd 
   prepared 11/11 changes
+  osdmaptool: successfully built or modified map.  Use '-o <file>' to write it out.
   $ cat c
   ceph osd pg-upmap-items 1.7 142 145
   ceph osd pg-upmap-items 1.8 219 223

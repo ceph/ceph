@@ -1,8 +1,7 @@
-  $ osdmaptool --create-from-conf om -c $TESTDIR/ceph.conf.withracks --with-default-pool
-  osdmaptool: osdmap file 'om'
+  $ osdmaptool --create-from-conf -c $TESTDIR/ceph.conf.withracks --with-default-pool -o om
   osdmaptool: writing epoch 1 to om
   $ osdmaptool --export-crush oc om
-  osdmaptool: osdmap file 'om'
+  osdmaptool: input osdmap file 'om'
   osdmaptool: exported crush map to oc
   $ crushtool --decompile oc
   # begin crush map
@@ -779,11 +778,11 @@
   # end crush map
   $ rm oc
   $ osdmaptool --test-map-pg 0.0 om
-  osdmaptool: osdmap file 'om'
+  osdmaptool: input osdmap file 'om'
    parsed '0.0' -> 0.0
   0.0 raw ([], p-1) up ([], p-1) acting ([], p-1)
   $ osdmaptool --print om
-  osdmaptool: osdmap file 'om'
+  osdmaptool: input osdmap file 'om'
   epoch 1
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
   created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
@@ -801,10 +800,9 @@
   max_osd 239
   
 
-  $ osdmaptool --clobber --create-from-conf --with-default-pool om -c $TESTDIR/ceph.conf.withracks
-  osdmaptool: osdmap file 'om'
+  $ osdmaptool --clobber --create-from-conf --with-default-pool -c $TESTDIR/ceph.conf.withracks -o om
   osdmaptool: writing epoch 1 to om
   $ osdmaptool --print om | grep 'pool 1'
-  osdmaptool: osdmap file 'om'
+  osdmaptool: input osdmap file 'om'
   pool 1 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 15296 pgp_num 15296 autoscale_mode on last_change 0 flags hashpspool stripe_width 0 application rbd
   $ rm -f om
