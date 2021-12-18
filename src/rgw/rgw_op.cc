@@ -3637,15 +3637,15 @@ int RGWPutObj::verify_permission(optional_yield y)
 
     constexpr auto encrypt_attr = "x-amz-server-side-encryption";
     constexpr auto s3_encrypt_attr = "s3:x-amz-server-side-encryption";
-    auto enc_header = s->info.x_meta_map.find(encrypt_attr);
-    if (enc_header != s->info.x_meta_map.end()){
+    auto enc_header = s->info.crypt_attribute_map.find(encrypt_attr);
+    if (enc_header != s->info.crypt_attribute_map.end()){
       rgw_add_to_iam_environment(s->env, s3_encrypt_attr, enc_header->second);
     }
 
     constexpr auto kms_attr = "x-amz-server-side-encryption-aws-kms-key-id";
     constexpr auto s3_kms_attr = "s3:x-amz-server-side-encryption-aws-kms-key-id";
-    auto kms_header = s->info.x_meta_map.find(kms_attr);
-    if (kms_header != s->info.x_meta_map.end()){
+    auto kms_header = s->info.crypt_attribute_map.find(kms_attr);
+    if (kms_header != s->info.crypt_attribute_map.end()){
       rgw_add_to_iam_environment(s->env, s3_kms_attr, kms_header->second);
     }
 
