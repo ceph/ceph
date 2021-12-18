@@ -377,8 +377,8 @@ int main(int argc, const char **argv)
   }
 
   if (marked_in >=0 && marked_in < osdmap.get_max_osd()) {
-    cout << "marking OSD@" << marked_up << " as up" << std::endl;
-    int id = marked_up;
+    cout << "marking OSD@" << marked_in << " as in" << std::endl;
+    int id = marked_in;
     osdmap.set_weight(id, CEPH_OSD_IN);
   }
 
