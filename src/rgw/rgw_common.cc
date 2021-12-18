@@ -393,6 +393,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
 void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta)
 {
   x_meta_map.clear();
+  crypt_attribute_map.clear();
 
   for (const auto& kv: env->get_map()) {
     const char *prefix;
@@ -432,6 +433,9 @@ void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_met
         } else {
           x_meta_map[name_low] = val;
         }
+        if (strncmp(name_low, "x-amz-server-side-encryption", 20) == 0) {
+          crypt_attribute_map[name_low] = val;
+        }
       }
     }
   }
@@ -461,6 +465,35 @@ void rgw_add_amz_meta_header(
   } else {
     x_meta_map[k] = v;
   }
+}
+
+bool rgw_set_amz_meta_header(
+  meta_map_t& x_meta_map,
+  const std::string& k,
+  const std::string& v,
+  rgw_set_action_if_set a)
+{
+  auto it { x_meta_map.find(k) };
+  bool r { it != x_meta_map.end() };
+  switch(a) {
+  default:
+    ceph_assert(a == 0);
+  case DISCARD:
+    break;
+  case APPEND:
+    if (r) {
+	std::string old { it->second };
+	boost::algorithm::trim_right(old);
+	old.append(",");
+	old.append(v);
+	x_meta_map[k] = old;
+	break;
+    }
+    /* fall through */
+  case OVERWRITE:
+    x_meta_map[k] = v;
+  }
+  return r;
 }
 
 string rgw_string_unquote(const string& s)
