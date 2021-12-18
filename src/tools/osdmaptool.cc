@@ -188,10 +188,6 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--upmap-pool", (char*)NULL)) {
       upmap_pools.insert(val);
     } else if (ceph_argparse_witharg(args, i, &num_osd, err, "--createsimple", (char*)NULL)) {
-      if (!err.str().empty()) {
-	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
-      }
       createsimple = true;
     } else if (ceph_argparse_flag(args, i, "--upmap-active", (char*)NULL)) {
       upmap_active = true;
@@ -224,15 +220,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
       clobber = true;
     } else if (ceph_argparse_witharg(args, i, &pg_bits, err, "--pg_bits", (char*)NULL)) {
-      if (!err.str().empty()) {
-	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
-      }
     } else if (ceph_argparse_witharg(args, i, &pgp_bits, err, "--pgp_bits", (char*)NULL)) {
-      if (!err.str().empty()) {
-	cerr << err.str() << std::endl;
-	exit(EXIT_FAILURE);
-      }
     } else if (ceph_argparse_witharg(args, i, &val, "--export_crush", (char*)NULL)) {
       export_crush = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--import_crush", (char*)NULL)) {
@@ -245,18 +233,13 @@ int main(int argc, const char **argv)
       test_crush = true;
     } else if (ceph_argparse_witharg(args, i, &val, err, "--pg_num", (char*)NULL)) {
       string interr;
-      pg_num = strict_strtoll(val.c_str(), 10, &interr);
+      pg_num = strict_strtoll(val, 10, &interr);
       if (interr.length() > 0) {
-        cerr << "error parsing integer value " << interr << std::endl;
-        exit(EXIT_FAILURE);
+        err << "Invalid value for --pg_num: " << interr;
       }
     } else if (ceph_argparse_witharg(args, i, &range_first, err, "--range_first", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &range_last, err, "--range_last", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &pool, err, "--pool", (char*)NULL)) {
-      if (!err.str().empty()) {
-        cerr << err.str() << std::endl;
-        exit(EXIT_FAILURE);
-      }
     } else if (ceph_argparse_witharg(args, i, &val, err, "--adjust-crush-weight", (char*)NULL)) {
       adjust_crush_weight = val;
     } else if (ceph_argparse_flag(args, i, "--save", (char*)NULL)) {
@@ -264,13 +247,17 @@ int main(int argc, const char **argv)
     } else {
       ++i;
     }
+    if (!err.str().empty()) {
+      cerr << err.str() << std::endl;
+      exit(EXIT_FAILURE);
+    }
   }
   if (args.empty()) {
     cerr << me << ": must specify osdmap filename" << std::endl;
     usage();
   }
   else if (args.size() > 1) {
-    cerr << me << ": too many arguments" << std::endl;
+    cerr << me << ": too many arguments: " << args << std::endl;
     usage();
   }
   if (upmap_deviation < 1) {
