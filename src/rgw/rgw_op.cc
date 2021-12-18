@@ -3428,6 +3428,11 @@ void RGWDeleteBucket::execute(optional_yield y)
     return;
   }
 
+  op_ret = rgw_remove_sse_s3_bucket_key(s);
+  if (op_ret != 0) {
+      // do nothing; it will already have been logged
+  }
+
   op_ret = s->bucket->remove_bucket(this, false, false, nullptr, y);
   if (op_ret < 0 && op_ret == -ECANCELED) {
       // lost a race, either with mdlog sync or another delete bucket operation.
