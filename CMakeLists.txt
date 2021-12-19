@@ -14,6 +14,9 @@ cmake_policy(SET CMP0065 NEW)
 cmake_policy(SET CMP0074 NEW)
 cmake_policy(SET CMP0075 NEW)
 cmake_policy(SET CMP0093 NEW)
+if(POLICY CMP0127)
+  cmake_policy(SET CMP0127 NEW)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
