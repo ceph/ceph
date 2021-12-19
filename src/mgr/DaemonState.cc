@@ -164,6 +164,50 @@ void DeviceState::print(ostream& out) const
   }
 }
 
+void DaemonState::set_metadata(const std::map<std::string,std::string>& m)
+{
+  devices.clear();
+  devices_bypath.clear();
+  metadata = m;
+  if (auto found = m.find("device_ids"); found != m.end()) {
+    auto& device_ids = found->second;
+    std::map<std::string,std::string> paths; // devname -> id or path
+    if (auto found = m.find("device_paths"); found != m.end()) {
+      get_str_map(found->second, &paths, ",; ");
+    }
+    for_each_pair(
+      device_ids, ",; ",
+      [&paths, this](std::string_view devname, std::string_view id) {
+	// skip blank ids
+	if (id.empty()) {
+	  return;
+	}
+	// id -> devname
+	devices.emplace(id, devname);
+	if (auto path = paths.find(std::string(id)); path != paths.end()) {
+	  // id -> path
+	  devices_bypath.emplace(id, path->second);
+	}
+      });
+  }
+  if (auto found = m.find("hostname"); found != m.end()) {
+    hostname = found->second;
+  }
+}
+
+const std::map<std::string,std::string>& DaemonState::_get_config_defaults()
+{
+  if (config_defaults.empty() &&
+      config_defaults_bl.length()) {
+    auto p = config_defaults_bl.cbegin();
+    try {
+      decode(config_defaults, p);
+    } catch (buffer::error& e) {
+    }
+  }
+  return config_defaults;
+}
+
 void DaemonStateIndex::insert(DaemonStatePtr dm)
 {
   std::unique_lock l{lock};
