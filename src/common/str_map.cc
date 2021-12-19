@@ -59,12 +59,15 @@ int get_json_str_map(
   return 0;
 }
 
-string trim(const string& str) {
-  return boost::algorithm::trim_copy_if(
-    str,
-    [](unsigned char c) {
-      return std::isspace(c);
-    });
+static std::string_view trim(std::string_view str)
+{
+  static const char* whitespaces = "\t\n ";
+  auto beg = str.find_first_not_of(whitespaces);
+  if (beg == str.npos) {
+    return {};
+  }
+  auto end = str.find_last_not_of(whitespaces);
+  return str.substr(beg, end - beg + 1);
 }
 
 int get_str_map(
@@ -72,18 +75,15 @@ int get_str_map(
     str_map_t* str_map,
     const char *delims)
 {
-  auto pairs = get_str_list(str, delims);
-  for (const auto& pr : pairs) {
-    size_t equal = pr.find('=');
-    if (equal == string::npos)
-      (*str_map)[pr] = string();
-    else {
-      const string key = trim(pr.substr(0, equal));
-      equal++;
-      const string value = trim(pr.substr(equal));
-      (*str_map)[key] = value;
+  for_each_pair(str, delims, [str_map](std::string_view key,
+				       std::string_view val) {
+    // is the format 'K=V' or just 'K'?
+    if (val.empty()) {
+      str_map->emplace(std::string(key), "");
+    } else {
+      str_map->emplace(std::string(trim(key)), std::string(trim(val)));
     }
-  }
+  });
   return 0;
 }
 
@@ -91,23 +91,8 @@ str_map_t get_str_map(
   const string& str,
   const char* delim)
 {
-  auto pairs = get_str_list(str, delim);
   str_map_t str_map;
-
-  for (const auto& pr : pairs) {
-    auto equal = pr.find('=');
-
-    // is the format 'K=V' or just 'K'?
-    if (equal == std::string::npos) {
-      str_map[pr] = std::string{};
-    } else {
-      const string key = trim(pr.substr(0, equal));
-      equal++;
-      const string value = trim(pr.substr(equal));
-      str_map[key] = value;
-    }
-  }
-
+  get_str_map(str, &str_map, delim);
   return str_map;
 }
 

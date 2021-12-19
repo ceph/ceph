@@ -23,6 +23,23 @@
 #include <string>
 #include <sstream>
 
+template <typename Func>
+void for_each_pair(std::string_view s, const char* delims, Func&& f)
+{
+  auto pos = s.find_first_not_of(delims);
+  while (pos != s.npos) {
+    s.remove_prefix(pos); // trim delims from the front
+    auto end = s.find_first_of(delims);
+    auto kv = s.substr(0, end);
+    if (auto equal = kv.find('='); equal != kv.npos) {
+      f(kv.substr(0, equal), kv.substr(equal + 1));
+    } else {
+      f(kv.substr(0, equal), std::string_view());
+    }
+    pos = s.find_first_not_of(delims, end);
+  }
+}
+
 using str_map_t = std::map<std::string,std::string>;
 
 /**
