@@ -34,6 +34,6 @@
      --dump <format>         displays the map in plain text when <format> is 'plain', 'json' if specified format is not supported
      --tree                  displays a tree of the map
      --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds
-     --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight> (but do not persist)
+     --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight>
      --save                  write modified osdmap with upmap or crush-adjust changes
   [1]
