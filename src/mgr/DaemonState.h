@@ -167,27 +167,29 @@ class DaemonState
     devices.clear();
     devices_bypath.clear();
     metadata = m;
-    auto p = m.find("device_ids");
-    if (p != m.end()) {
+    if (auto found = m.find("device_ids"); found != m.end()) {
+      auto& device_ids = found->second;
       std::map<std::string,std::string> paths; // devname -> id or path
-      auto devs = get_str_map(p->second, ",; ");
-      auto q = m.find("device_paths");
-      if (q != m.end()) {
-	get_str_map(q->second, &paths, ",; ");
+      if (auto found = m.find("device_paths"); found != m.end()) {
+	get_str_map(found->second, &paths, ",; ");
       }
-      for (auto& i : devs) {
-	if (i.second.size()) {  // skip blank ids
-	  devices[i.second] = i.first;   // id -> devname
-	  auto j = paths.find(i.first);
-	  if (j != paths.end()) {
-	    devices_bypath[i.second] = j->second; // id -> path
+      for_each_pair(
+	device_ids, ",; ",
+	[&paths, this](std::string_view devname, std::string_view id) {
+	  // skip blank ids
+	  if (id.empty()) {
+	    return;
 	  }
-	}
-      }
+	  // id -> devname
+	  devices.emplace(id, devname);
+	  if (auto path = paths.find(std::string(id)); path != paths.end()) {
+	    // id -> path
+	    devices_bypath.emplace(id, path->second);
+	  }
+	});
     }
-    p = m.find("hostname");
-    if (p != m.end()) {
-      hostname = p->second;
+    if (auto found = m.find("hostname"); found != m.end()) {
+      hostname = found->second;
     }
   }
 
