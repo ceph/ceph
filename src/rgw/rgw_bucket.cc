@@ -2893,7 +2893,6 @@ int RGWBucketCtl::chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
                         const rgw_user& user_id, const std::string& display_name,
                         const std::string& marker, optional_yield y, const DoutPrefixProvider *dpp)
 {
-  RGWObjectCtx obj_ctx(store);
   map<string, bool> common_prefixes;
 
   rgw::sal::Bucket::ListParams params;
@@ -2909,6 +2908,7 @@ int RGWBucketCtl::chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
   //Loop through objects and update object acls to point to bucket owner
 
   do {
+    RGWObjectCtx obj_ctx(store);
     results.objs.clear();
     int ret = bucket->list(dpp, params, max_entries, results, y);
     if (ret < 0) {
