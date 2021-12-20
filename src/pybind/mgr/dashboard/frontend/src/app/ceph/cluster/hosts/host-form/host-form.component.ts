@@ -110,7 +110,7 @@ export class HostFormComponent extends CdForm implements OnInit {
     // pattern to replace range [0-5] to [0..5](valid expression for brace expansion)
     // replace any kind of brackets with curly braces
     return hostname
-      .replace(/(?<=\d)\s*-\s*(?=\d)/g, '..')
+      .replace(/(\d)\s*-\s*(\d)/g, '$1..$2')
       .replace(/\(/g, '{')
       .replace(/\)/g, '}')
       .replace(/\[/g, '{')
