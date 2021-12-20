@@ -14,6 +14,7 @@ import logging
 import errno
 
 from urllib.parse import urlparse
+from typing import Tuple
 
 from .types import RGWAMException, RGWAMCmdRunException, RGWPeriod, RGWUser, RealmToken
 from .diff import RealmsEPs
@@ -152,7 +153,7 @@ class RGWCmdBase:
             opt_arg(self.cmd_suffix, '--rgw-zone', zone_env.zone.name)
             opt_arg(self.cmd_suffix, '--zone-id', zone_env.zone.id)
 
-    def run(self, cmd):
+    def run(self, cmd: str) -> Tuple[int, str, str]:
         args = cmd + self.cmd_suffix
         cmd, returncode, stdout, stderr = self.mgr.tool_exec(self.prog, args)
 
@@ -165,7 +166,7 @@ class RGWCmdBase:
                       (returncode, cmd_str, stdout, stderr))
             raise RGWAMCmdRunException(cmd_str, -returncode, stdout, stderr)
 
-        return (stdout, stderr)
+        return (returncode, stdout, stderr)
 
 
 class RGWAdminCmd(RGWCmdBase):
@@ -842,6 +843,6 @@ class RGWAM:
         if debug_rgw:
             params += ['--debug-rgw', debug_rgw]
 
-        (retcode, stdout, stderr) = RGWCmd(self.env).run(params)
+        (returncode, stdout, stderr) = RGWCmd(self.env).run(params)
 
-        return (retcode, stdout, stderr)
+        return (returncode, stdout, stderr)
