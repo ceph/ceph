@@ -181,7 +181,7 @@ other daemons, please see :ref:`health-checks`.
     limit set by the administrator.  If the MDS cache becomes too large, the daemon
     may exhaust available memory and crash.  By default, this message appears if
     the actual cache size (in memory) is at least 50% greater than
-    ``mds_cache_memory_limit`` (default 1GB). Modify ``mds_health_cache_threshold``
+    ``mds_cache_memory_limit`` (default 4GB). Modify ``mds_health_cache_threshold``
     to set the warning ratio.
 
 ``FS_WITH_FAILED_MDS``

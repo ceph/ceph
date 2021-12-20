@@ -24,7 +24,7 @@ Is mount helper is present?
 ---------------------------
 ``mount.ceph`` helper is installed by Ceph packages. The helper passes the
 monitor address(es) and CephX user keyrings automatically saving the Ceph
-admin the effort to pass these details explicitly while mountng CephFS. In
+admin the effort to pass these details explicitly while mounting CephFS. In
 case the helper is not present on the client machine, CephFS can still be
 mounted using kernel but by passing these details explicitly to the ``mount``
 command. To check whether it is present on your system, do::
