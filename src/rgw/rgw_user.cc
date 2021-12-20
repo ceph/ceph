@@ -742,8 +742,12 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
     modify_key.subuser = op_state.get_subuser();
   } else if (key_type == KEY_TYPE_S3) {
     kiter = access_keys->find(id);
-    if (kiter != access_keys->end()) {
+    if (kiter != access_keys->end() &&
+        kiter->second.subuser == op_state.get_subuser()) {
       modify_key = kiter->second;
+    } else {
+      set_err_msg(err_msg, "existing S3 key in RGW system:" + id);
+      return -ERR_KEY_EXIST;
     }
   }
 
