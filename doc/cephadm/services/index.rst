@@ -455,6 +455,32 @@ candidate hosts.
    If there are fewer hosts selected by the placement specification than
    demanded by ``count``, cephadm will deploy only on the selected hosts.
 
+Extra Container Arguments
+=========================
+
+.. warning:: 
+  The arguments provided for extra container args are limited to whatever arguments are available for a `run` command from whichever container engine you are using. Providing any arguments the `run` command does not support (or invalid values for arguments) will cause the daemon to fail to start.
+
+
+Cephadm supports providing extra miscellaneous container arguments for
+specific cases when they may be necessary. For example, if a user needed
+to limit the amount of cpus their mon daemons make use of they could apply
+a spec like
+
+.. code-block:: yaml
+
+    service_type: mon
+    service_name: mon
+    placement:
+      hosts:
+        - host1
+        - host2
+        - host3
+    extra_container_args:
+      -  "--cpus=2"
+
+which would cause each mon daemon to be deployed with `--cpus=2`.
+
 .. _orch-rm:
 
 Removing a Service

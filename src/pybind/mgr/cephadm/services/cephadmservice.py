@@ -37,7 +37,8 @@ class CephadmDaemonDeploySpec:
                  ip: Optional[str] = None,
                  ports: Optional[List[int]] = None,
                  rank: Optional[int] = None,
-                 rank_generation: Optional[int] = None):
+                 rank_generation: Optional[int] = None,
+                 extra_container_args: Optional[List[str]] = None):
         """
         A data struction to encapsulate `cephadm deploy ...
         """
@@ -72,6 +73,8 @@ class CephadmDaemonDeploySpec:
         self.rank: Optional[int] = rank
         self.rank_generation: Optional[int] = rank_generation
 
+        self.extra_container_args = extra_container_args
+
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
 
@@ -96,6 +99,7 @@ class CephadmDaemonDeploySpec:
             ports=dd.ports,
             rank=dd.rank,
             rank_generation=dd.rank_generation,
+            extra_container_args=dd.extra_container_args,
         )
 
     def to_daemon_description(self, status: DaemonDescriptionStatus, status_desc: str) -> DaemonDescription:
@@ -110,6 +114,7 @@ class CephadmDaemonDeploySpec:
             ports=self.ports,
             rank=self.rank,
             rank_generation=self.rank_generation,
+            extra_container_args=self.extra_container_args,
         )
 
 
@@ -171,6 +176,10 @@ class CephadmService(metaclass=ABCMeta):
             rank: Optional[int] = None,
             rank_generation: Optional[int] = None,
     ) -> CephadmDaemonDeploySpec:
+        try:
+            eca = spec.extra_container_args
+        except AttributeError:
+            eca = None
         return CephadmDaemonDeploySpec(
             host=host,
             daemon_id=daemon_id,
@@ -181,6 +190,7 @@ class CephadmService(metaclass=ABCMeta):
             ip=ip,
             rank=rank,
             rank_generation=rank_generation,
+            extra_container_args=eca,
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
