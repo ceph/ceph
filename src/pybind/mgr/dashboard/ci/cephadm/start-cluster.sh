@@ -69,13 +69,13 @@ cd ${CEPH_DEV_FOLDER}
 : ${VM_IMAGE_URL:='https://fedora.mirror.liteserver.nl/linux/releases/34/Cloud/x86_64/images/Fedora-Cloud-Base-34-1.2.x86_64.qcow2'}
 kcli download image -p ceph-dashboard -u ${VM_IMAGE_URL} ${VM_IMAGE}
 kcli delete plan -y ceph || true
-kcli create plan -f ./src/pybind/mgr/dashboard/ci/cephadm/ceph_cluster.yml \
+kcli create plan -f src/pybind/mgr/dashboard/ci/cephadm/ceph_cluster.yml \
     -P ceph_dev_folder=${CEPH_DEV_FOLDER} \
     ${EXTRA_PARAMS} ceph
 
 : ${CLUSTER_DEBUG:=0}
 : ${DASHBOARD_CHECK_INTERVAL:=10}
-while [[ -z $(kcli ssh -u root -- ceph-node-00 'journalctl --no-tail --no-pager -t cloud-init' | grep "Dashboard is now available") ]]; do
+while [[ -z $(kcli ssh -u root -- ceph-node-00 'journalctl --no-tail --no-pager -t cloud-init' | grep "kcli boot finished") ]]; do
     sleep ${DASHBOARD_CHECK_INTERVAL}
     kcli list vm
     if [[ ${CLUSTER_DEBUG} != 0 ]]; then
