@@ -7489,9 +7489,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
      * case later, we can build a more complex pipelined cap writeback
      * infrastructure...
      */
-    if (!mask)
-      mask |= CEPH_SETATTR_CTIME;
-    goto force_request;
+    mask |= CEPH_SETATTR_CTIME;
   }
 
   if (!mask) {
@@ -7691,7 +7689,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     return 0;
   }
 
-force_request:
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETATTR);
 
   filepath path;
