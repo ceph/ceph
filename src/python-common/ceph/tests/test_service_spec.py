@@ -321,6 +321,44 @@ spec:
   uid: 1000
   volume_mounts:
     foo: /foo
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_community: public
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V2c
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  auth_protocol: MD5
+  credentials:
+    snmp_v3_auth_password: mypassword
+    snmp_v3_auth_username: myuser
+  engine_id: 8000C53F00000000
+  port: 9464
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_password: mypassword
+    snmp_v3_auth_username: myuser
+    snmp_v3_priv_password: mysecret
+  engine_id: 8000C53F00000000
+  privacy_protocol: AES
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
 """.split('---\n'))
 def test_yaml(y):
     data = yaml.safe_load(y)
