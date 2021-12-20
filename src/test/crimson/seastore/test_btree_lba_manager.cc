@@ -58,15 +58,20 @@ struct btree_test_base :
   virtual void complete_commit(Transaction &t) {}
   seastar::future<> submit_transaction(TransactionRef t)
   {
-    auto record = cache->prepare_record(*t);
-    return journal->submit_record(std::move(record), t->get_handle()).safe_then(
-      [this, t=std::move(t)](auto submit_result) mutable {
-	cache->complete_commit(
+    auto maybe_record = cache->prepare_record(*t);
+    return journal->submit_record(
+      std::move(maybe_record),
+      t->get_handle()
+    ).safe_then([this, t=std::move(t)](auto maybe_submit_result) mutable {
+      if (maybe_submit_result.has_value()) {
+        auto& submit_result = *maybe_submit_result;
+        cache->complete_commit(
             *t,
             submit_result.record_block_base,
             submit_result.write_result.start_seq);
-	complete_commit(*t);
-      }).handle_error(crimson::ct_error::assert_all{});
+        complete_commit(*t);
+      }
+    }).handle_error(crimson::ct_error::assert_all{});
   }
 
   virtual LBAManager::mkfs_ret test_structure_setup(Transaction &t) = 0;

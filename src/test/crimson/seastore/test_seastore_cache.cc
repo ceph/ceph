@@ -30,8 +30,12 @@ struct cache_test_t : public seastar_test_suite_t {
 
   seastar::future<paddr_t> submit_transaction(
     TransactionRef t) {
-    auto record = cache->prepare_record(*t);
+    auto maybe_record = cache->prepare_record(*t);
+    if (!maybe_record.has_value()) {
+      return seastar::make_ready_future<paddr_t>(current);
+    }
 
+    auto& record = *maybe_record;
     bufferlist bl;
     for (auto &&block : record.extents) {
       bl.append(block.bl);

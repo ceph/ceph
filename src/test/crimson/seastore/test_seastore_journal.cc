@@ -218,9 +218,10 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     auto record{std::forward<T>(_record)...};
     records.push_back(record);
     OrderingHandle handle = get_dummy_ordering_handle();
-    auto [addr, _] = journal->submit_record(
+    auto maybe_result = journal->submit_record(
       std::move(record),
       handle).unsafe_get0();
+    auto [addr, _] = *maybe_result;
     records.back().record_final_offset = addr;
     return addr;
   }

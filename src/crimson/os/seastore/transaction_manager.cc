@@ -275,38 +275,45 @@ TransactionManager::submit_transaction_direct(
     return tref.get_handle().enter(write_pipeline.prepare);
   }).si_then([this, FNAME, &tref]() mutable
 	      -> submit_transaction_iertr::future<> {
-    auto record = cache->prepare_record(tref);
+    auto maybe_record = cache->prepare_record(tref);
 
     tref.get_handle().maybe_release_collection_lock();
 
     DEBUGT("about to submit to journal", tref);
 
-    return journal->submit_record(std::move(record), tref.get_handle()
-    ).safe_then([this, FNAME, &tref](auto submit_result) mutable {
-      auto start_seq = submit_result.write_result.start_seq;
-      auto end_seq = submit_result.write_result.get_end_seq();
-      DEBUGT("journal commit to record_block_base={}, start_seq={}, end_seq={}",
-             tref,
-             submit_result.record_block_base,
-             start_seq,
-             end_seq);
-      segment_cleaner->set_journal_head(end_seq);
-      cache->complete_commit(
-          tref,
-          submit_result.record_block_base,
-          start_seq,
-          segment_cleaner.get());
-      lba_manager->complete_transaction(tref);
-      segment_cleaner->update_journal_tail_target(
-	cache->get_oldest_dirty_from().value_or(start_seq));
-      auto to_release = tref.get_segment_to_release();
-      if (to_release != NULL_SEG_ID) {
-	return segment_manager.release(to_release
-	).safe_then([this, to_release] {
-	  segment_cleaner->mark_segment_released(to_release);
-	});
+    return journal->submit_record(
+      std::move(maybe_record),
+      tref.get_handle()
+    ).safe_then([this, FNAME, &tref](auto maybe_submit_result) mutable {
+      if (maybe_submit_result.has_value()) {
+        auto& submit_result = *maybe_submit_result;
+        auto start_seq = submit_result.write_result.start_seq;
+        auto end_seq = submit_result.write_result.get_end_seq();
+        DEBUGT("journal commit to record_block_base={}, start_seq={}, end_seq={}",
+               tref,
+               submit_result.record_block_base,
+               start_seq,
+               end_seq);
+        segment_cleaner->set_journal_head(end_seq);
+        cache->complete_commit(
+            tref,
+            submit_result.record_block_base,
+            start_seq,
+            segment_cleaner.get());
+        lba_manager->complete_transaction(tref);
+        segment_cleaner->update_journal_tail_target(
+          cache->get_oldest_dirty_from().value_or(start_seq));
+        auto to_release = tref.get_segment_to_release();
+        if (to_release != NULL_SEG_ID) {
+          return segment_manager.release(to_release
+          ).safe_then([this, to_release] {
+            segment_cleaner->mark_segment_released(to_release);
+          });
+        } else {
+          return SegmentManager::release_ertr::now();
+        }
       } else {
-	return SegmentManager::release_ertr::now();
+        return SegmentManager::release_ertr::now();
       }
     }).safe_then([&tref] {
       return tref.get_handle().complete();

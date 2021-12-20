@@ -584,10 +584,19 @@ Journal::RecordSubmitter::RecordSubmitter(
 
 Journal::RecordSubmitter::submit_ret
 Journal::RecordSubmitter::submit(
-  record_t&& record,
+  std::optional<record_t>&& maybe_record,
   OrderingHandle& handle)
 {
   assert(write_pipeline);
+  if (!maybe_record.has_value()) {
+    return submit_noop(handle).then([] {
+      return submit_ret(
+        submit_ertr::ready_future_marker{},
+        std::nullopt);
+    });
+  }
+
+  auto& record = *maybe_record;
   auto expected_size = record_group_size_t(
       record.size,
       journal_segment_manager.get_block_size()
@@ -602,7 +611,12 @@ Journal::RecordSubmitter::submit(
     return crimson::ct_error::erange::make();
   }
 
-  return do_submit(std::move(record), handle);
+  return do_submit(std::move(record), handle
+  ).safe_then([](auto ret) {
+    return submit_ret(
+      submit_ertr::ready_future_marker{},
+      ret);
+  });
 }
 
 void Journal::RecordSubmitter::update_state()
@@ -673,6 +687,15 @@ void Journal::RecordSubmitter::flush_current_batch()
       "Journal::RecordSubmitter::flush_current_batch: got exception {}",
       e);
     finish_submit_batch(p_batch, std::nullopt);
+  });
+}
+
+seastar::future<>
+Journal::RecordSubmitter::submit_noop(OrderingHandle& handle)
+{
+  return handle.enter(write_pipeline->device_submission
+  ).then([this, &handle] {
+    return handle.enter(write_pipeline->finalize);
   });
 }
 

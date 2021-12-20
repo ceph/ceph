@@ -903,7 +903,7 @@ CachedExtentRef Cache::duplicate_for_write(
   return ret;
 }
 
-record_t Cache::prepare_record(Transaction &t)
+std::optional<record_t> Cache::prepare_record(Transaction &t)
 {
   LOG_PREFIX(Cache::prepare_record);
   DEBUGT("enter", t);
@@ -1059,11 +1059,17 @@ record_t Cache::prepare_record(Transaction &t)
   ceph_assert(ool_stats.extents.num == t.ool_block_list.size());
 
   if (record.is_empty()) {
-    // XXX: improve osd logic to not submit empty transactions.
-    DEBUGT("record to submit is empty, src={}!", t, trans_src);
     assert(t.onode_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
     assert(ool_stats.is_clear());
+    if (trans_src == Transaction::src_t::MUTATE) {
+      DEBUGT("record is empty, src={}, skip", t, trans_src);
+      return std::nullopt;
+    }
+    // XXX: Skipping empty cleaner transactions may end up with endless loop
+    // because the committed journal tail cannot be updated.
+    assert(trans_src == Transaction::src_t::CLEANER_TRIM ||
+           trans_src == Transaction::src_t::CLEANER_RECLAIM);
   }
 
   DEBUGT("record is ready to submit, src={}, mdsize={}, dsize={}; "

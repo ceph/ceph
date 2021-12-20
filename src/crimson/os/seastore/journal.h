@@ -90,13 +90,13 @@ public:
     crimson::ct_error::input_output_error
     >;
   using submit_record_ret = submit_record_ertr::future<
-    record_locator_t
+    std::optional<record_locator_t>
     >;
   submit_record_ret submit_record(
-    record_t &&record,
+    std::optional<record_t>&& maybe_record,
     OrderingHandle &handle
   ) {
-    return record_submitter.submit(std::move(record), handle);
+    return record_submitter.submit(std::move(maybe_record), handle);
   }
 
   /**
@@ -390,8 +390,9 @@ private:
       write_pipeline = _write_pipeline;
     }
 
+    using submit_ertr = Journal::submit_record_ertr;
     using submit_ret = Journal::submit_record_ret;
-    submit_ret submit(record_t&&, OrderingHandle&);
+    submit_ret submit(std::optional<record_t>&&, OrderingHandle&);
 
   private:
     void update_state();
@@ -436,6 +437,8 @@ private:
     void finish_submit_batch(RecordBatch*, maybe_result_t);
 
     void flush_current_batch();
+
+    seastar::future<> submit_noop(OrderingHandle& handle);
 
     using submit_pending_ertr = JournalSegmentManager::write_ertr;
     using submit_pending_ret = submit_pending_ertr::future<

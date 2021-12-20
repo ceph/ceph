@@ -526,9 +526,10 @@ public:
   /**
    * prepare_record
    *
-   * Construct the record for Journal from transaction.
+   * Construct the record for Journal from transaction. Return nullopt if the
+   * emtpy transaction can be ignored.
    */
-  record_t prepare_record(
+  std::optional<record_t> prepare_record(
     Transaction &t ///< [in, out] current transaction
   );
 
