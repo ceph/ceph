@@ -820,6 +820,7 @@ class DaemonDescription(object):
                  deployed_by: Optional[List[str]] = None,
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
+                 extra_container_args: Optional[List[str]] = None,
                  ) -> None:
 
         # Host is at the same granularity as InventoryHost
@@ -881,6 +882,17 @@ class DaemonDescription(object):
         self.deployed_by = deployed_by
 
         self.is_active = is_active
+
+        self.extra_container_args = extra_container_args
+
+    @property
+    def status(self) -> Optional[DaemonDescriptionStatus]:
+        return self._status
+
+    @status.setter
+    def status(self, new: DaemonDescriptionStatus) -> None:
+        self._status = new
+        self.status_desc = DaemonDescriptionStatus.to_str(new)
 
     def get_port_summary(self) -> str:
         if not self.ports:
