@@ -996,7 +996,9 @@ record_t Cache::prepare_record(Transaction &t)
 	i->get_type(),
 	i->is_logical()
 	? i->cast<LogicalCachedExtent>()->get_laddr()
-	: L_ADDR_NULL,
+	: (is_lba_node(i->get_type())
+	  ? i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin
+	  : L_ADDR_NULL),
 	std::move(bl)
       });
   }
