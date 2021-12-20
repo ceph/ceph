@@ -10170,7 +10170,7 @@ TEST_P(StoreTestOmapUpgrade, WithOmapHeader) {
   if (string(GetParam()) != "bluestore")
     return;
 
-  SetVal(g_conf(), "bluestore_debug_legacy_omap", "true");
+  SetVal(g_conf(), "bluestore_omap_naming", "bulk");
   g_conf().apply_changes(nullptr);
 
   StartDeferred();
@@ -10213,9 +10213,12 @@ TEST_P(StoreTestOmapUpgrade, WithOmapHeader) {
   }
   store->umount();
   ASSERT_EQ(store->fsck(false), 0);
-  SetVal(g_conf(), "bluestore_debug_legacy_omap", "false");
+  g_conf()._clear_safe_to_start_threads();
+  SetVal(g_conf(), "bluestore_omap_naming", "per-pg");
   SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_omap", "true");
   g_conf().apply_changes(nullptr);
+  g_conf().set_safe_to_start_threads();
+
   ASSERT_EQ(store->fsck(false), 2);
   ASSERT_EQ(store->quick_fix(), 0);
   store->mount();
@@ -10304,7 +10307,7 @@ TEST_P(StoreTestOmapUpgrade, NoOmapHeader) {
   if (string(GetParam()) != "bluestore")
     return;
 
-  SetVal(g_conf(), "bluestore_debug_legacy_omap", "true");
+  SetVal(g_conf(), "bluestore_omap_naming", "bulk");
   g_conf().apply_changes(nullptr);
 
   StartDeferred();
@@ -10342,7 +10345,7 @@ TEST_P(StoreTestOmapUpgrade, NoOmapHeader) {
   }
   store->umount();
   ASSERT_EQ(store->fsck(false), 0);
-  SetVal(g_conf(), "bluestore_debug_legacy_omap", "false");
+  SetVal(g_conf(), "bluestore_omap_naming", "per-pg");
   SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_omap", "true");
   g_conf().apply_changes(nullptr);
   ASSERT_EQ(store->fsck(false), 2);
@@ -10370,7 +10373,7 @@ TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
   if (string(GetParam()) != "bluestore")
     return;
 
-  SetVal(g_conf(), "bluestore_debug_legacy_omap", "true");
+  SetVal(g_conf(), "bluestore_omap_naming", "bulk");
   g_conf().apply_changes(nullptr);
 
   int64_t poolid;
@@ -10400,7 +10403,7 @@ TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
 
   store->umount();
   ASSERT_EQ(store->fsck(false), 0);
-  SetVal(g_conf(), "bluestore_debug_legacy_omap", "false");
+  SetVal(g_conf(), "bluestore_omap_naming", "per-pg");
   SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_omap", "true");
   g_conf().apply_changes(nullptr);
   ASSERT_EQ(store->fsck(false), 1001);

@@ -5152,6 +5152,13 @@ options:
     be transformed to the currently default 'per-pg' format when BlueStore's quick-fix or
     repair are applied. Acceptable values 'bulk', 'per-pool', 'per-pg'
   default: per-pg
+  enum_values:
+  - bulk
+  - per-pool
+  - per-pg
+  flags:
+#It is not actually runtime, since it is only applied during mkfs. It is needed for unit tests.
+  - runtime
   with_legacy: false
 - name: bluestore_fsck_error_on_no_per_pool_stats
   type: bool
