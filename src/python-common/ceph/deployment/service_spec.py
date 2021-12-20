@@ -490,6 +490,7 @@ class ServiceSpec(object):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
+                 extra_container_args: Optional[List[str]] = None,
                  ):
 
         #: See :ref:`orchestrator-cli-placement-spec`.
@@ -527,6 +528,8 @@ class ServiceSpec(object):
         self.config: Optional[Dict[str, str]] = None
         if config:
             self.config = {k.replace(' ', '_'): v for k, v in config.items()}
+
+        self.extra_container_args: Optional[List[str]] = extra_container_args
 
     @classmethod
     @handle_type_error
@@ -650,6 +653,8 @@ class ServiceSpec(object):
             ret['unmanaged'] = self.unmanaged
         if self.networks:
             ret['networks'] = self.networks
+        if self.extra_container_args:
+            ret['extra_container_args'] = self.extra_container_args
 
         c = {}
         for key, val in sorted(self.__dict__.items(), key=lambda tpl: tpl[0]):
