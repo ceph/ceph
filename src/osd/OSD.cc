@@ -8339,7 +8339,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	reset_heartbeat_peers(true);
       }
     }
-  } else if (osdmap->get_epoch() > 0 && osdmap->is_stop(whoami)) {
+  } else if (osdmap->get_epoch() > 0 && is_waiting_for_healthy() && osdmap->is_stop(whoami)) {
     derr << "map says i am stopped by admin. shutting down." << dendl;
     do_shutdown = true;
   }
