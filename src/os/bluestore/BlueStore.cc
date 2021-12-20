@@ -6600,7 +6600,8 @@ void BlueStore::_close_db()
   dout(10) << __func__ << ":read_only=" << db_was_opened_read_only << " fm=" << fm << " destage_alloc_file=" << need_to_destage_allocation_file << dendl;
   _close_db_leave_bluefs();
 
-  if (fm && fm->is_null_manager() && !db_was_opened_read_only && need_to_destage_allocation_file) {
+  if (need_to_destage_allocation_file) {
+    ceph_assert(fm && fm->is_null_manager());
     int ret = store_allocator(alloc);
     if (ret != 0) {
       derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
@@ -7449,6 +7450,11 @@ int BlueStore::expand_devices(ostream& out)
           << std::endl;
       }
     }
+
+    // we grow the allocation range, must reflect it in the allocation file
+    alloc->init_add_free(size0, size - size0);
+    need_to_destage_allocation_file = true;
+
     _close_db_and_around();
 
     // mount in read/write to sync expansion changes
