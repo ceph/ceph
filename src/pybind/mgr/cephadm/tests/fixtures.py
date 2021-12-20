@@ -176,7 +176,7 @@ def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth=No
 
     dds = wait(cephadm_module, cephadm_module.list_daemons())
     own_dds = [dd for dd in dds if dd.service_name() == spec.service_name()]
-    if host:
+    if host and spec.service_type != 'osd':
         assert own_dds
 
     yield [dd.name() for dd in own_dds]
