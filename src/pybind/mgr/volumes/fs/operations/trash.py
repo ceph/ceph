@@ -30,7 +30,9 @@ class Trash(GroupTemplate):
         """
         return os.path.join(self.path, str(uuid.uuid4()).encode('utf-8'))
 
-    def _get_single_dir_entry(self, exclude_list=[]):
+    def _get_single_dir_entry(self, exclude_list=None):
+        if exclude_list is None:
+            exclude_list = []
         exclude_list.extend((b".", b".."))
         try:
             with self.fs.opendir(self.path) as d:
