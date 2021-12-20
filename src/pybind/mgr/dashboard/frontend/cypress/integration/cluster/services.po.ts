@@ -81,13 +81,15 @@ export class ServicesPageHelper extends PageHelper {
   }
 
   checkServiceStatus(daemon: string) {
-    this.getTableCell(this.serviceDetailColumnIndex.daemonType, daemon)
-      .parent()
-      .find(`datatable-body-cell:nth-child(${this.serviceDetailColumnIndex.status}) .badge`)
-      .should(($ele) => {
-        const status = $ele.toArray().map((v) => v.innerText);
-        expect(status).to.include('running');
-      });
+    cy.get('cd-service-daemon-list').within(() => {
+      this.getTableCell(this.serviceDetailColumnIndex.daemonType, daemon)
+        .parent()
+        .find(`datatable-body-cell:nth-child(${this.serviceDetailColumnIndex.status}) .badge`)
+        .should(($ele) => {
+          const status = $ele.toArray().map((v) => v.innerText);
+          expect(status).to.include('running');
+        });
+    });
   }
 
   expectPlacementCount(serviceName: string, expectedCount: string) {
