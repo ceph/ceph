@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -x
+
 export PATH=/root/bin:$PATH
 mkdir /root/bin
 
