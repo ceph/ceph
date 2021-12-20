@@ -779,6 +779,12 @@ constexpr bool is_logical_type(extent_types_t type) {
   }
 }
 
+constexpr bool is_lba_node(extent_types_t type)
+{
+  return type == extent_types_t::LADDR_INTERNAL ||
+    type == extent_types_t::LADDR_LEAF;
+}
+
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
 /* description of a new physical extent */
