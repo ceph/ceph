@@ -3,7 +3,6 @@
 # fmt: off
 
 import json
-import yaml
 
 import pytest
 
@@ -599,62 +598,3 @@ def test_daemon_description_service_name(spec: ServiceSpec,
     else:
         with pytest.raises(OrchestratorError):
             dd.service_name()
-
-
-class YAMLdoc:
-    def __init__(self, text):
-        self.content = yaml.safe_load(text)
-
-
-@pytest.mark.parametrize(
-    "yaml_doc,snmp_type", [
-        (YAMLdoc("""
----
-service_type: snmp-gateway
-service_name: snmp-gateway
-placement:
-  count: 1
-spec:
-  credentials:
-    snmp_community: public
-port: 9464
-snmp_destination: 192.168.1.42:162
-snmp_version: V2c
-"""), 'snmp V2c'),
-        (YAMLdoc("""
----
-service_type: snmp-gateway
-service_name: snmp-gateway
-placement:
-  count: 1
-spec:
-  credentials:
-    snmp_v3_auth_username: myuser
-    snmp_v3_auth_password: mypassword
-port: 9464
-engine_id: 8000C53F00000000
-auth_protocol: MD5
-snmp_destination: 192.168.1.42:162
-snmp_version: V3
-"""), 'SNMP V3 authNoPriv'),
-        (YAMLdoc("""
----
-service_type: snmp-gateway
-service_name: snmp-gateway
-placement:
-  count: 1
-spec:
-  credentials:
-    snmp_v3_auth_username: myuser
-    snmp_v3_auth_password: mypassword
-    snmp_v3_priv_password: mysecret
-port: 9464
-engine_id: 8000C53F00000000
-privacy_protocol: AES
-snmp_destination: 192.168.1.42:162
-snmp_version: V3
-"""), 'SNMP V3 authPriv'),
-    ])
-def test_valid_snmp_gateway_spec(yaml_doc: YAMLdoc, snmp_type: str):
-    spec = ServiceSpec.from_json(yaml_doc.content)
-    spec.validate()
