@@ -1,7 +1,6 @@
 import logging
 import threading
 import os
-import subprocess
 
 from mgr_module import MgrModule, CLICommand, HandleCommandResult, Option
 import orchestrator
