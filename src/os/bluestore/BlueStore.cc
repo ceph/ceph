@@ -6373,6 +6373,11 @@ int BlueStore::close_db_environment()
   return 0;
 }
 
+/* gets access to bluefs supporting RocksDB */
+BlueFS* BlueStore::get_bluefs() {
+  return bluefs;
+}
+
 int BlueStore::_prepare_db_environment(bool create, bool read_only,
 				       std::string* _fn, std::string* _kv_backend)
 {
