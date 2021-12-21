@@ -25,8 +25,8 @@
  * - Specially optimized for onode key structures and seastore
  *   delta/transaction semantics;
  *
- * Note: User should not hold any Cursor/Value when call
- * submit_transaction() because of validations implemented in ~tree_cursor_t().
+ * Note: Cursor/Value are transactional, they cannot be used outside the scope
+ * of the according transaction, or the behavior is undefined.
  */
 
 namespace crimson::os::seastore::onode {
