@@ -51,7 +51,7 @@ private:
   version_t external_log_to = 0;
   std::map<std::string, int> channel_fds;
 
-  fmt::memory_buffer file_log_buffer;
+  fmt::memory_buffer log_buffer;
   std::atomic<bool> log_rotated = false;
 
   struct log_channel_info {
