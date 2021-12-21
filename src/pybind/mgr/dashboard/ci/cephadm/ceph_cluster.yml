@@ -1,5 +1,5 @@
 parameters:
- nodes: 3
+ nodes: 4
  pool: ceph-dashboard
  network: ceph-dashboard
  domain: cephlab.com
