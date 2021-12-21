@@ -613,7 +613,7 @@ class Module(MgrModule):
             # anonymize host id
             try:
                 host = d['location'][0]['host']
-            except KeyError:
+            except (KeyError, IndexError):
                 continue
             anon_host = self.get_store('host-id/%s' % host)
             if not anon_host:
