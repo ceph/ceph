@@ -139,6 +139,23 @@ void rgw_shard_name(const string& prefix, unsigned shard_id, string& name)
   name = prefix + buf;
 }
 
+uint32_t rgw_bucket_shard_index(const rgw_obj_key& obj_key,
+				int num_shards)
+{
+  std::string sharding_key;
+  if (obj_key.ns == RGW_OBJ_NS_MULTIPART) {
+    RGWMPObj mp;
+    mp.from_meta(obj_key.name);
+    sharding_key = mp.get_key();
+  } else {
+    sharding_key = obj_key.name;
+  }
+
+  uint32_t sid = ceph_str_hash_linux(sharding_key.c_str(), sharding_key.size());
+  uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
+  return rgw_shards_mod(sid2, num_shards);
+}
+
 int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
 			    const string& str, uint32_t *perm)
 {

@@ -561,6 +561,21 @@ public:
     CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio) {}
 };
 
+class CLSRGWIssueBucketBIDirSuggest : public CLSRGWConcurrentIO {
+  std::map<int, bufferlist>& updates;
+protected:
+  virtual int issue_op(int shard_id, const std::string& oid);
+public:
+  CLSRGWIssueBucketBIDirSuggest(librados::IoCtx& io_ctx,
+				std::map<int, std::string>& _bucket_objs,
+				std::map<int, bufferlist>& _updates,
+				uint32_t max_aio)
+  : CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio),
+    updates(_updates)
+  {/* empty */ }
+};
+
+
 int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, std::string& oid, RGWGetDirHeader_CB *ctx);
 
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, ceph::buffer::list& updates);
