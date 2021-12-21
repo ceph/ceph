@@ -76,7 +76,7 @@ def task(ctx, config):
     target = acting[1]
 
     log.debug("write some data")
-    rados(ctx, mon, ['-p', pool, 'bench', '60', 'write', '--no-cleanup'])
+    rados(ctx, mon, ['-p', pool, 'bench', '120', 'write', '--no-cleanup'])
     df = manager.get_osd_df(target)
     log.debug("target osd df: %s" % df)
 
@@ -120,9 +120,9 @@ def task(ctx, config):
     log.debug("update nearfull ratio to %s and backfillfull ratio to %s" %
               (nearfull, backfillfull))
     manager.raw_cluster_cmd('osd', 'set-nearfull-ratio',
-                            '{:.3f}'.format(nearfull))
+                            '{:.3f}'.format(nearfull + 0.001))
     manager.raw_cluster_cmd('osd', 'set-backfillfull-ratio',
-                            '{:.3f}'.format(backfillfull))
+                            '{:.3f}'.format(backfillfull + 0.001))
 
     log.debug("start tartget osd %s" % target)
 
@@ -145,7 +145,7 @@ def task(ctx, config):
     # We also need to update nearfull ratio to prevent "full ratio(s) out of order".
 
     pdf = manager.get_pool_df(pool)
-    log.debug("pool %s df: %s" % (pool, df))
+    log.debug("pool %s df: %s" % (pool, pdf))
     assert pdf
     compress_ratio = 1.0 * pdf['compress_under_bytes'] / pdf['compress_bytes_used'] \
         if pdf['compress_bytes_used'] > 0 else 1.0
@@ -162,9 +162,9 @@ def task(ctx, config):
     log.debug("update nearfull ratio to %s and backfillfull ratio to %s" %
               (nearfull, backfillfull))
     manager.raw_cluster_cmd('osd', 'set-nearfull-ratio',
-                            '{:.3f}'.format(nearfull))
+                            '{:.3f}'.format(nearfull + 0.001))
     manager.raw_cluster_cmd('osd', 'set-backfillfull-ratio',
-                            '{:.3f}'.format(backfillfull))
+                            '{:.3f}'.format(backfillfull + 0.001))
 
     wait_for_pg_state(manager, pgid, 'backfilling', target)
 
