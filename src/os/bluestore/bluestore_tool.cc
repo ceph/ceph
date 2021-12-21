@@ -240,8 +240,14 @@ static void bluefs_import(
     cerr << "open " << input_file.c_str() << " failed: " << cpp_strerror(r) << std::endl;
     exit(EXIT_FAILURE);
   }
-
-  std::unique_ptr<BlueFS> bs{open_bluefs_readonly(cct, path, devs)};
+  BlueStore bluestore(cct, path);
+  KeyValueDB *db_ptr;
+  r = bluestore.open_db_environment(&db_ptr, false);
+  if (r < 0) {
+    cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  BlueFS* bs = bluestore.get_bluefs();
 
   BlueFS::FileWriter *h;
   fs::path file_path(dest_file);
@@ -261,7 +267,7 @@ static void bluefs_import(
   f.close();
   bs->fsync(h);
   bs->close_writer(h);
-  bs->umount();
+  bluestore.close_db_environment();
   return;
 }
 
