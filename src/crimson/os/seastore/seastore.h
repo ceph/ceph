@@ -182,14 +182,12 @@ private:
 	iter(ext_transaction.begin()) {}
 
     TransactionRef transaction;
-    std::vector<OnodeRef> onodes;
 
     ceph::os::Transaction::iterator iter;
     std::chrono::steady_clock::time_point begin_timestamp = std::chrono::steady_clock::now();
 
     void reset_preserve_handle(TransactionManager &tm) {
       tm.reset_transaction_preserve_handle(*transaction);
-      onodes.clear();
       iter = ext_transaction.begin();
     }
   };
@@ -240,9 +238,9 @@ private:
     F &&f) const {
     auto begin_time = std::chrono::steady_clock::now();
     return seastar::do_with(
-      oid, Ret{}, OnodeRef(), std::forward<F>(f),
+      oid, Ret{}, std::forward<F>(f),
       [this, src, op_type, begin_time, tname
-      ](auto &oid, auto &ret, auto &onode, auto &f)
+      ](auto &oid, auto &ret, auto &f)
     {
       return repeat_eagain([&, this, src, tname] {
         return transaction_manager->with_transaction_intr(
@@ -251,11 +249,11 @@ private:
           [&, this](auto& t)
         {
           return onode_manager->get_onode(t, oid
-          ).si_then([&](auto onode_ret) {
-            onode = std::move(onode_ret);
-            return f(t, *onode);
-          }).si_then([&ret, &onode](auto _ret) {
-	    onode.reset();
+          ).si_then([&](auto onode) {
+            return seastar::do_with(std::move(onode), [&](auto& onode) {
+              return f(t, *onode);
+            });
+          }).si_then([&ret](auto _ret) {
             ret = _ret;
           });
         });
