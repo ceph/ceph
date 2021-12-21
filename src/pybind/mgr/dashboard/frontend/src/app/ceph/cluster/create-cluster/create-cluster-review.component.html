@@ -1,5 +1,5 @@
 <div class="row">
-  <div class="col-lg-4">
+  <div class="col-lg-3">
     <fieldset>
       <legend class="cd-header"
               i18n>Cluster Resources</legend>
@@ -10,10 +10,21 @@
           <td>{{ hostsCount }}</td>
         </tr>
         <tr>
-          <td i18n
-              class="bold">Storage Capacity</td>
-          <td><span i18n>Number of devices: {{ totalDevices }}. Raw capacity:
-            {{ totalCapacity | dimlessBinary }}.</span></td>
+          <td>
+          <dl>
+            <dt>
+              <p i18n>Storage Capacity</p>
+            </dt>
+            <dd>
+              <p i18n>Number of devices</p>
+            </dd>
+            <dd>
+              <p i18n>Raw capacity</p>
+            </dd>
+          </dl>
+        </td>
+          <td class="pt-5"><p>{{ totalDevices }}</p><p>
+            {{ totalCapacity | dimlessBinary }}</p></td>
         </tr>
         <tr>
           <td i18n
@@ -29,22 +40,15 @@
     </fieldset>
   </div>
 
-  <div class="col-lg-8">
-    <legend i18n
-            class="cd-header">Hosts by Services</legend>
-    <cd-table [data]="hostsByService['data']"
-              [columns]="hostsByService['columns']"
-              [toolHeader]="false">
-    </cd-table>
-  </div>
+<div class="col-lg-9">
+  <legend i18n
+          class="cd-header">Host Details</legend>
+  <cd-hosts [hiddenColumns]="['services', 'status']"
+            [hideToolHeader]="true"
+            [hideTitle]="true"
+            [hideSubmitBtn]="true"
+            [hasTableDetails]="false"
+            [showGeneralActionsOnly]="true">
+  </cd-hosts>
 </div>
-
-<legend i18n
-        class="cd-header">Host Details</legend>
-<cd-hosts [hiddenColumns]="['services', 'status']"
-          [hideToolHeader]="true"
-          [hideTitle]="true"
-          [hideSubmitBtn]="true"
-          [hasTableDetails]="false"
-          [showGeneralActionsOnly]="true">
-</cd-hosts>
+</div>
