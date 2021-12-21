@@ -84,13 +84,13 @@ tasks:
 - print: "**** done workload v16.2.5"
 
 
-#######  upgrade to v16.2.6
+#######  upgrade to v16.2.7
 - install.upgrade:
     #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
     mon.a:
-      tag: v16.2.6
+      tag: v16.2.7
     mon.b:
-      tag: v16.2.6
+      tag: v16.2.7
 - parallel:
    - workload_pacific
    - upgrade-sequence_pacific
