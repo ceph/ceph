@@ -641,6 +641,17 @@ static bool issue_bi_log_list_op(librados::IoCtx& io_ctx, const string& oid, con
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 
+static bool issue_bi_dir_suggest_op(librados::IoCtx& io_ctx,
+				    const int shard_id,
+				    const std::string& shard_oid,
+				    bufferlist& updates,
+				    BucketIndexAioManager* manager)
+{
+  librados::ObjectWriteOperation op;
+  op.exec(RGW_CLASS, RGW_DIR_SUGGEST_CHANGES, updates);
+  return manager->aio_operate(io_ctx, shard_id, shard_oid, &op);
+}
+
 int CLSRGWIssueBILogList::issue_op(const int shard_id, const string& oid)
 {
   return issue_bi_log_list_op(io_ctx, oid, shard_id, marker_mgr, max, &manager, &result[shard_id]);
@@ -746,6 +757,18 @@ static bool issue_bi_log_stop(librados::IoCtx& io_ctx, const int shard_id, const
 int CLSRGWIssueBucketBILogStop::issue_op(const int shard_id, const string& oid)
 {
   return issue_bi_log_stop(io_ctx, shard_id, oid, &manager);
+}
+
+int CLSRGWIssueBucketBIDirSuggest::issue_op(int shard_id,
+					    const std::string& oid)
+{
+  auto update_iter = updates.find(shard_id);
+  if (update_iter == updates.end()) {
+    // we did not have an update for that shard, so do nothing
+    return 0;
+  }
+  return issue_bi_dir_suggest_op(io_ctx, shard_id, oid,
+				 update_iter->second, &manager);
 }
 
 class GetDirHeaderCompletion : public ObjectOperationCompletion {

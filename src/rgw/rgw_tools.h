@@ -53,6 +53,9 @@ static inline int rgw_shards_mod(unsigned hval, int max_shards)
   return hval % RGW_SHARDS_PRIME_1 % max_shards;
 }
 
+uint32_t rgw_bucket_shard_index(const rgw_obj_key& obj_key,
+				int num_shards);
+
 // used for logging and tagging
 inline int rgw_shard_id(const std::string& key, int max_shards)
 {
