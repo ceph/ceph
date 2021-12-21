@@ -55,10 +55,10 @@ the PG count with this command::
 
 Output will be something like::
 
-   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  TARGET RATIO  EFFECTIVE RATIO BIAS PG_NUM  NEW PG_NUM  AUTOSCALE PROFILE 
-   a     12900M                3.0        82431M  0.4695                                          8         128  warn      scale-up
-   c         0                 3.0        82431M  0.0000        0.2000           0.9884  1.0      1          64  warn      scale-down
-   b         0        953.6M   3.0        82431M  0.0347                                          8              warn      scale-down
+   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  TARGET RATIO  EFFECTIVE RATIO BIAS PG_NUM  NEW PG_NUM  AUTOSCALE BULK
+   a     12900M                3.0        82431M  0.4695                                          8         128  warn      True
+   c         0                 3.0        82431M  0.0000        0.2000           0.9884  1.0      1          64  warn      True
+   b         0        953.6M   3.0        82431M  0.0347                                          8              warn      False
 
 **SIZE** is the amount of data stored in the pool. **TARGET SIZE**, if
 present, is the amount of data the administrator has specified that
@@ -105,9 +105,12 @@ varies from the current value by more than a factor of 3.
 **AUTOSCALE**, is the pool ``pg_autoscale_mode``
 and will be either ``on``, ``off``, or ``warn``.
 
-The final column, **PROFILE** shows the autoscale profile 
-used by each pool. ``scale-up`` and ``scale-down`` are the
-currently available profiles.
+The final column, **BULK** determines if the pool is ``bulk``
+and will be either ``True`` or ``False``. A ``bulk`` pool
+means that the pool is expected to be large and should start out
+with large amount of PGs for performance purposes. On the other hand,
+pools without the ``bulk`` flag are expected to be smaller e.g.,
+.mgr or meta pools.
 
 
 Automated scaling
@@ -135,28 +138,27 @@ example, a pool that maps to OSDs of class `ssd` and a pool that maps
 to OSDs of class `hdd` will each have optimal PG counts that depend on
 the number of those respective device types.
 
-The autoscaler uses the `scale-up` profile by default,
-where it starts out each pool with minimal PGs and scales
-up PGs when there is more usage in each pool. However, it also has
-a `scale-down` profile, where each pool starts out with a full complements 
-of PGs and only scales down when the usage ratio across the pools is not even.
+The autoscaler uses the `bulk` flag to determine which pool
+should start out with a full complements of PGs and only
+scales down when the the usage ratio across the pool is not even. 
+However, if the pool doesn't have the `bulk` flag, the pool will
+start out with minimal PGs and only when there is more usage in the pool.
 
-With only the `scale-down` profile, the autoscaler identifies
-any overlapping roots and prevents the pools with such roots
-from scaling because overlapping roots can cause problems
+The autoscaler identifies any overlapping roots and prevents the pools 
+with such roots from scaling because overlapping roots can cause problems
 with the scaling process.
 
-To use the `scale-down` profile::
+To create pool with `bulk` flag::
 
-  ceph osd pool set autoscale-profile scale-down
+  ceph osd create <pool-name> --bulk
 
-To switch back to the default `scale-up` profile::
+To set/unset `bulk` flag of existing pool::
 
-  ceph osd pool set autoscale-profile scale-up
+  ceph osd pool set <pool-name> bulk=true/false/1/0
 
-Existing clusters will continue to use the `scale-up` profile.
-To use the `scale-down` profile, users will need to set autoscale-profile `scale-down`,
-after upgrading to a version of Ceph that provides the `scale-down` feature.
+To get `bulk` flag of existing pool::
+
+  ceph osd pool get <pool-name> bulk
 
 .. _specifying_pool_target_size:
 
