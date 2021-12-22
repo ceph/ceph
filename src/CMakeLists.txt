@@ -593,6 +593,13 @@ if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
 
+# make rocksdb statically
+
+if(NOT WITH_SYSTEM_ROCKSDB)
+  include(BuildRocksDB)
+  build_rocksdb()
+endif(NOT WITH_SYSTEM_ROCKSDB)
+
 if(WITH_MGR)
   add_subdirectory(mgr)
 endif()
@@ -630,12 +637,6 @@ target_link_libraries(ceph-mon mon os global-static ceph-common
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
-# make rocksdb statically
-
-if(NOT WITH_SYSTEM_ROCKSDB)
-  include(BuildRocksDB)
-  build_rocksdb()
-endif(NOT WITH_SYSTEM_ROCKSDB)
 
 include(TestBigEndian)
 test_big_endian(CEPH_BIG_ENDIAN)
