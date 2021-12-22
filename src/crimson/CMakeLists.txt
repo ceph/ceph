@@ -136,7 +136,7 @@ set(crimson_common_deps
 
 if(WITH_JAEGER)
   include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
-  list(APPEND crimson_common_deps jaeger-base)
+  list(APPEND crimson_common_deps ${jaeger_base})
 endif()
 
 if(NOT WITH_SYSTEM_BOOST)
