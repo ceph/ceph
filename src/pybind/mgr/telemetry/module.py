@@ -458,6 +458,16 @@ class Module(MgrModule):
     def get_io_rate(self) -> dict:
         return self.get('io_rate')
 
+    def get_rocksdb_stats(self) -> Dict[str, str]:
+        # Initalizers
+        result: Dict[str, str] = defaultdict()
+        version = self.get_rocksdb_version()
+
+        # Update result
+        result['version'] = version
+
+        return result
+
     def gather_crashinfo(self) -> List[Dict[str, str]]:
         crashlist: List[Dict[str, str]] = list()
         errno, crashids, err = self.remote('crash', 'ls')
@@ -912,6 +922,7 @@ class Module(MgrModule):
             report['io_rate'] = self.get_io_rate()
             report['osd_perf_histograms'] = self.get_osd_histograms('separated')
             report['mempool'] = self.get_mempool('separated')
+            report['rocksdb_stats'] = self.get_rocksdb_stats()
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
