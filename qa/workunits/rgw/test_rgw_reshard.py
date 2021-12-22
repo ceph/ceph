@@ -149,7 +149,7 @@ def main():
     json_op = json.loads(cmd)
     log.debug('bucket name %s', json_op[0]['bucket_name'])
     assert json_op[0]['bucket_name'] == BUCKET_NAME1
-    assert json_op[0]['new_num_shards'] == num_shards_expected
+    assert json_op[0]['tentative_new_num_shards'] == num_shards_expected
 
     # TESTCASE 'reshard-process','reshard','','process bucket resharding','succeeds'
     log.debug(' test: reshard process')
@@ -174,7 +174,7 @@ def main():
     json_op = json.loads(cmd)
     log.debug('bucket name %s', json_op[0]['bucket_name'])
     assert json_op[0]['bucket_name'] == BUCKET_NAME1
-    assert json_op[0]['new_num_shards'] == num_shards_expected
+    assert json_op[0]['tentative_new_num_shards'] == num_shards_expected
 
     # TESTCASE 'reshard process ,'reshard','process','reshard non empty bucket','succeeds'
     log.debug(' test: reshard process non empty bucket')
