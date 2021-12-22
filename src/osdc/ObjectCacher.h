@@ -161,6 +161,13 @@ class ObjectCacher {
     }
     int get_state() const { return state; }
 
+    inline int get_error() const {
+      return error;
+    }
+    inline void set_error(int _error) {
+      error = _error;
+    }
+
     inline ceph_tid_t get_journal_tid() const {
       return journal_tid;
     }

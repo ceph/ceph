@@ -118,6 +118,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left,
   right->last_write_tid = left->last_write_tid;
   right->last_read_tid = left->last_read_tid;
   right->set_state(left->get_state());
+  right->set_error(left->error);
   right->snapc = left->snapc;
   right->set_journal_tid(left->journal_tid);
 
