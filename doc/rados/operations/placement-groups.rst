@@ -33,6 +33,20 @@ set on any pools that are subsequently created::
 
   ceph config set global osd_pool_default_pg_autoscale_mode <mode>
 
+You can disable or enable the autoscaler for all pools with
+the ``noautoscale`` flag. By default this flag is set to  be ``off``,
+but you can turn it ``on`` by using the command::
+
+  ceph osd pool set noautoscale
+
+You can turn it ``off`` using the command::
+
+  ceph osd pool unset noautoscale
+
+To ``get`` the value of the flag use the command::
+
+  ceph osd pool get noautoscale
+
 Viewing PG scaling recommendations
 ----------------------------------
 
