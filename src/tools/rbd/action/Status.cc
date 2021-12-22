@@ -9,6 +9,7 @@
 #include "tools/rbd/Utils.h"
 #include "include/rbd_types.h"
 #include "include/stringify.h"
+#include "librbd/cache/Types.h"
 #include <iostream>
 #include <boost/program_options.hpp>
 
@@ -18,12 +19,6 @@ namespace status {
 
 namespace at = argument_types;
 namespace po = boost::program_options;
-
-namespace {
-
-const std::string IMAGE_CACHE_STATE = ".librbd/image_cache_state";
-
-} // anonymous namespace
 
 static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name,
                           librbd::Image &image, Formatter *f)
@@ -133,7 +128,7 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
   } cache_state;
   std::string cache_str;
   if (features & RBD_FEATURE_DIRTY_CACHE) {
-    r = image.metadata_get(IMAGE_CACHE_STATE, &cache_str);
+    r = image.metadata_get(librbd::cache::PERSISTENT_CACHE_STATE, &cache_str);
     if (r < 0) {
       std::cerr << "rbd: getting persistent cache state failed: " << cpp_strerror(r)
                 << std::endl;
