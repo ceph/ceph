@@ -317,8 +317,8 @@ Modifying the CRUSH map
 Add/Move an OSD
 ---------------
 
-.. note: OSDs are normally automatically added to the CRUSH map when
-         the OSD is created.  This command is rarely needed.
+.. note:: OSDs are normally automatically added to the CRUSH map when
+   the OSD is created.  This command is rarely needed.
 
 To add or move an OSD in the CRUSH map of a running cluster::
 
@@ -367,9 +367,9 @@ OSD from a previous location. ::
 Adjust OSD weight
 -----------------
 
-.. note: Normally OSDs automatically add themselves to the CRUSH map
-         with the correct weight when they are created. This command
-         is rarely needed.
+.. note:: Normally OSDs automatically add themselves to the CRUSH map
+   with the correct weight when they are created. This command
+   is rarely needed.
 
 To adjust an OSD's CRUSH weight in the CRUSH map of a running cluster, execute
 the following::
@@ -399,7 +399,7 @@ Where:
 Remove an OSD
 -------------
 
-.. note: OSDs are normally removed from the CRUSH as part of the
+.. note:: OSDs are normally removed from the CRUSH as part of the
    ``ceph osd purge`` command.  This command is rarely needed.
 
 To remove an OSD from the CRUSH map of a running cluster, execute the
@@ -420,7 +420,7 @@ Where:
 Add a Bucket
 ------------
 
-.. note: Buckets are implicitly created when an OSD is added
+.. note:: Buckets are implicitly created when an OSD is added
    that specifies a ``{bucket-type}={bucket-name}`` as part of its
    location,  if a bucket with that name does not already exist.  This
    command is typically used when manually adjusting the structure of the
@@ -506,7 +506,7 @@ The following example removes the ``rack12`` bucket from the hierarchy::
 Creating a compat weight set
 ----------------------------
 
-.. note: This step is normally done automatically by the ``balancer``
+.. note:: This step is normally done automatically by the ``balancer``
    module when enabled.
 
 To create a *compat* weight set::
@@ -663,7 +663,7 @@ Once a profile is defined, you can create a CRUSH rule with::
 
   ceph osd crush rule create-erasure {name} {profile-name}
 
-.. note: When creating a new pool, it is not actually necessary to
+.. note:: When creating a new pool, it is not actually necessary to
    explicitly create the rule.  If the erasure code profile alone is
    specified and the rule argument is left off then Ceph will create
    the CRUSH rule automatically.
