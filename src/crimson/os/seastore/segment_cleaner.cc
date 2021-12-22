@@ -33,23 +33,23 @@ bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
 {
   const auto &other = static_cast<const SpaceTrackerSimple&>(_other);
 
-  if (other.live_bytes_by_segment.size() != live_bytes_by_segment.size()) {
+  if (other.live_space_tracker.size() != live_space_tracker.size()) {
     logger().error("{}: different segment counts, bug in test");
     assert(0 == "segment counts should match");
     return false;
   }
 
   bool all_match = true;
-  for (auto i = live_bytes_by_segment.begin(), j = other.live_bytes_by_segment.begin();
-       i != live_bytes_by_segment.end(); ++i, ++j) {
-    if (i->second != j->second) {
+  for (auto i = live_space_tracker.begin(), j = other.live_space_tracker.begin();
+       i != live_space_tracker.end(); ++i, ++j) {
+    if (i->second.get_live_bytes() != j->second.get_live_bytes()) {
       all_match = false;
       logger().debug(
 	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
 	__func__,
 	i->first,
-	i->second,
-	j->second);
+	i->second.get_live_bytes(),
+	j->second.get_live_bytes());
     }
   }
   return all_match;
@@ -383,28 +383,35 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
             logger().debug(
               "SegmentCleaner::gc_reclaim_space: checking extent {}",
               info);
-            return ecb->get_extent_if_live(
-              t,
-              info.type,
-              addr,
-              info.addr,
-              info.len
-            ).si_then([addr=addr, &t, this](CachedExtentRef ext) {
-              if (!ext) {
-                logger().debug(
-                  "SegmentCleaner::gc_reclaim_space: addr {} dead, skipping",
-                  addr);
-                return ExtentCallbackInterface::rewrite_extent_iertr::now();
-              } else {
-                logger().debug(
-                  "SegmentCleaner::gc_reclaim_space: addr {} alive, gc'ing {}",
-                  addr,
-                  *ext);
-                return ecb->rewrite_extent(
-                  t,
-                  ext);
-              }
-            });
+	    if (space_tracker->is_live(addr, info.len)) {
+	      return ecb->get_extent_if_live(
+		t,
+		info.type,
+		addr,
+		info.addr,
+		info.len
+	      ).si_then([addr=addr, &t, this](CachedExtentRef ext) {
+		if (!ext) {
+		  // extents may have been overwritten after the last is_live check
+		  logger().debug(
+		    "SegmentCleaner::gc_reclaim_space: addr {} dead, skipping",
+		    addr);
+		  return ExtentCallbackInterface::rewrite_extent_iertr::now();
+		}
+		logger().debug(
+		  "SegmentCleaner::gc_reclaim_space: addr {} alive, gc'ing {}",
+		  addr,
+		  *ext);
+		return ecb->rewrite_extent(
+		  t,
+		  ext);
+	      });
+	    } else {
+	      logger().debug(
+		"SegmentCleaner::gc_reclaim_space: addr {} dead, skipping",
+		addr);
+	      return ExtentCallbackInterface::rewrite_extent_iertr::now();
+	    }
           }).si_then([this, &t] {
             if (scan_cursor->is_complete()) {
               t.mark_segment_to_release(scan_cursor->get_segment_id());

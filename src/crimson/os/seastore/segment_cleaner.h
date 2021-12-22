@@ -320,19 +320,100 @@ public:
 
   virtual void reset() = 0;
 
+  virtual bool is_live(paddr_t, extent_len_t) const = 0;
+
   virtual ~SpaceTrackerI() = default;
 };
 using SpaceTrackerIRef = std::unique_ptr<SpaceTrackerI>;
 
 class SpaceTrackerSimple : public SpaceTrackerI {
-  // Tracks live space for each segment
-  segment_map_t<int64_t> live_bytes_by_segment;
+  class SegmentSpaceMap {
+    int64_t live_bytes = 0;
+    std::vector<uint64_t> bitmap;
+    static constexpr uint64_t BITMAP_BUF_LEN = 64;
+    static constexpr uint64_t EXTENT_SIZE = 4096;
+  public:
+    SegmentSpaceMap(size_t segment_size) {
+      bitmap.resize(segment_size / EXTENT_SIZE / BITMAP_BUF_LEN, 0);
+    }
 
-  int64_t update_usage(segment_id_t segment, int64_t delta) {
-    live_bytes_by_segment[segment] += delta;
-    assert(live_bytes_by_segment[segment] >= 0);
-    return live_bytes_by_segment[segment];
-  }
+    int64_t get_live_bytes() const {
+      return live_bytes;
+    }
+
+    int64_t allocate(
+      segment_off_t offset,
+      extent_len_t len) {
+      ceph_assert(offset >= 0);
+      ceph_assert(!(offset % EXTENT_SIZE));
+      ceph_assert(!(len % EXTENT_SIZE));
+      size_t block_start_pos = offset / EXTENT_SIZE;
+      size_t block_end_pos = (offset + len) / EXTENT_SIZE;
+
+      for (size_t i = block_start_pos; i < block_end_pos; i++) {
+	uint64_t mask = ((uint64_t)1) << (i % BITMAP_BUF_LEN);
+	auto& bit_buf = bitmap[i / BITMAP_BUF_LEN];
+	if (bit_buf & mask) {
+	  crimson::get_logger(ceph_subsys_seastore).error(
+	    "SegmentSpaceMap::allocate offset {}, len {}, bit_buf {}, mask {}",
+	    offset, len, bit_buf, mask);
+	  ceph_assert(!(bit_buf & mask));
+	}
+	bit_buf |= mask;
+      }
+      live_bytes += len;
+      return live_bytes;
+    }
+
+    int64_t release(
+      segment_off_t offset,
+      extent_len_t len) {
+      ceph_assert(offset >= 0);
+      ceph_assert(!(offset % EXTENT_SIZE));
+      ceph_assert(!(len % EXTENT_SIZE));
+      size_t block_start_pos = offset / EXTENT_SIZE;
+      size_t block_end_pos = (offset + len) / EXTENT_SIZE;
+
+      for (size_t i = block_start_pos; i < block_end_pos; i++) {
+	uint64_t mask = ~(((uint64_t)1) << (i % BITMAP_BUF_LEN));
+	auto& bit_buf = bitmap[i / BITMAP_BUF_LEN];
+	ceph_assert(bit_buf & (~mask));
+	bit_buf &= mask;
+      }
+      ceph_assert(live_bytes >= len);
+      live_bytes -= len;
+      return live_bytes;
+    }
+
+    bool is_live(
+      segment_off_t offset,
+      extent_len_t len) const {
+      ceph_assert(offset >= 0);
+      ceph_assert(!(offset % EXTENT_SIZE));
+      ceph_assert(!(len % EXTENT_SIZE));
+      size_t block_start_pos = offset / EXTENT_SIZE;
+      size_t block_end_pos = (offset + len) / EXTENT_SIZE;
+
+      bool live = false;
+      for (size_t i = block_start_pos; i < block_end_pos; i++) {
+	uint64_t mask = ((uint64_t)1) << (i % BITMAP_BUF_LEN);
+	auto& bit_buf = bitmap[i / BITMAP_BUF_LEN];
+	if (bit_buf & mask) {
+	  live = true;
+	}
+      }
+      return live;
+    }
+
+    void reset() {
+      for (auto& bit_buf : bitmap) {
+	bit_buf = 0;
+      }
+    }
+  };
+  // Tracks live space for each segment
+  segment_map_t<SegmentSpaceMap> live_space_tracker;
+
 public:
   SpaceTrackerSimple(const SpaceTrackerSimple &) = default;
   SpaceTrackerSimple(std::vector<SegmentManager*> sms) {
@@ -343,10 +424,10 @@ public:
 	// may be null.
 	continue;
       }
-      live_bytes_by_segment.add_device(
+      live_space_tracker.add_device(
 	sm->get_device_id(),
 	sm->get_num_segments(),
-	0);
+	SegmentSpaceMap(sm->get_segment_size()));
     }
   }
 
@@ -354,26 +435,31 @@ public:
     segment_id_t segment,
     segment_off_t offset,
     extent_len_t len) final {
-    return update_usage(segment, len);
+    return live_space_tracker[segment].allocate(offset, len);
   }
 
   int64_t release(
     segment_id_t segment,
     segment_off_t offset,
     extent_len_t len) final {
-    return update_usage(segment, -(int64_t)len);
+    return live_space_tracker[segment].release(offset, len);
   }
 
   int64_t get_usage(segment_id_t segment) const final {
-    return live_bytes_by_segment[segment];
+    return live_space_tracker[segment].get_live_bytes();
   }
 
   void dump_usage(segment_id_t) const final {}
 
   void reset() final {
-    for (auto &i : live_bytes_by_segment) {
-      i.second = 0;
+    for (auto &i : live_space_tracker) {
+      i.second.reset();
     }
+  }
+
+  bool is_live(paddr_t paddr, extent_len_t len) const {
+    auto& seg_addr = paddr.as_seg_paddr();
+    return live_space_tracker[seg_addr.get_segment_id()].is_live(seg_addr.get_segment_off(), len);
   }
 
   SpaceTrackerIRef make_empty() const final {
@@ -412,6 +498,20 @@ class SpaceTrackerDetailed : public SpaceTrackerI {
 
     int64_t get_usage() const {
       return used;
+    }
+
+    bool is_live(
+      segment_off_t offset,
+      extent_len_t len,
+      const extent_len_t block_size) const {
+      auto b = offset / block_size;
+      auto e = (offset + len) / block_size;
+      for (auto i = b; i < e; ++i) {
+	if (bitmap[i]) {
+	  return true;
+	}
+      }
+      return false;
     }
 
     void dump_usage(extent_len_t block_size) const;
@@ -469,6 +569,14 @@ public:
       offset,
       len,
       block_size_by_segment_manager[segment.device_id()]);
+  }
+
+  bool is_live(paddr_t paddr, extent_len_t len) const final {
+    auto& seg_addr = paddr.as_seg_paddr();
+    return segment_usage[seg_addr.get_segment_id()].is_live(
+      seg_addr.get_segment_off(),
+      len,
+      block_size_by_segment_manager[seg_addr.get_segment_id().device_id()]);
   }
 
   int64_t get_usage(segment_id_t segment) const final {
