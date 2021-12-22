@@ -32,9 +32,17 @@
   in certain recovery scenarios, e.g., monitor database lost and rebuilt, and
   the restored file system is expected to have the same ID as before.
 
+>=16.2.8
+--------
+* MGR: The pg_autoscaler can now be turned `on` and `off` globally
+  with the `noautoscale` flag. By default this flag is unset and
+  the default pg_autoscale mode remains the same.
+  For more details, see:
+
+  https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+
 >=16.2.7
 --------
-
 * Critical bug in OMAP format upgrade is fixed. This could cause data corruption
   (improperly formatted OMAP keys) after pre-Pacific cluster upgrade if
   bluestore-quick-fix-on-mount parameter is set to true or ceph-bluestore-tool's
