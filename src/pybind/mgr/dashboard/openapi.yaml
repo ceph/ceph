@@ -3413,7 +3413,7 @@ paths:
         \ name of the host to be processed.\n        :param update_labels: To update\
         \ the labels.\n        :param labels: List of labels.\n        :param maintenance:\
         \ Enter/Exit maintenance mode.\n        :param force: Force enter maintenance\
-        \ mode.\n        "
+        \ mode.\n        :param drain: Drain host\n        "
       parameters:
       - description: Hostname
         in: path
@@ -3426,6 +3426,10 @@ paths:
           application/json:
             schema:
               properties:
+                drain:
+                  default: false
+                  description: Drain Host
+                  type: boolean
                 force:
                   default: false
                   description: Force Enter Maintenance
