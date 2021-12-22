@@ -73,6 +73,13 @@
 
   https://docs.ceph.com/en/latest/rados/operations/placement-groups/
 
+* MGR: The pg_autoscaler can now be turned `on` and `off` globally
+  with the `noautoscale` flag. By default this flag is unset and
+  the default pg_autoscale mode remains the same.
+  For more details, see:
+
+  https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+
 * The ``ceph pg dump`` command now prints two additional columns:
   `LAST_SCRUB_DURATION` shows the duration (in seconds) of the last completed scrub;
   `SCRUB_SCHEDULING` conveys whether a PG is scheduled to be scrubbed at a specified
