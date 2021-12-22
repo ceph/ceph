@@ -1117,7 +1117,7 @@ public:
     int r;
     if (o.is_delete_marker()) {
       r = remove_expired_obj(oc.dpp, oc, true,
-			     rgw::notify::ObjectDeleteMarkerExpiration);
+			     rgw::notify::ObjectExpirationDeleteMarker);
       if (r < 0) {
 	ldpp_dout(oc.dpp, 0) << "ERROR: current is-dm remove_expired_obj "
 			 << oc.bucket << ":" << o.key
@@ -1131,7 +1131,7 @@ public:
     } else {
       /* ! o.is_delete_marker() */
       r = remove_expired_obj(oc.dpp, oc, !oc.bucket->versioned(),
-			     rgw::notify::ObjectExpiration);
+			     rgw::notify::ObjectExpirationCurrent);
       if (r < 0) {
 	ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj "
 			 << oc.bucket << ":" << o.key
@@ -1179,7 +1179,7 @@ public:
   int process(lc_op_ctx& oc) {
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, oc, true,
-			       rgw::notify::ObjectNoncurrentExpiration);
+			       rgw::notify::ObjectExpirationNoncurrent);
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (non-current expiration) " 
 		       << oc.bucket << ":" << o.key
@@ -1224,7 +1224,7 @@ public:
   int process(lc_op_ctx& oc) {
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, oc, true,
-			       rgw::notify::ObjectDeleteMarkerExpiration);
+			       rgw::notify::ObjectExpirationDeleteMarker);
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (delete marker expiration) "
 		       << oc.bucket << ":" << o.key
