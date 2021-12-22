@@ -2566,6 +2566,15 @@ options:
   services:
   - mon
   with_legacy: true
+- name: osd_pool_default_flag_bulk
+  type: bool
+  level: advanced
+  desc: set bulk flag on new pools
+  fmt_desc: Set the ``bulk`` flag on new pools. Allowing autoscaler to use scale-down mode.
+  default: false
+  services:
+  - mon
+  with_legacy: true
 - name: osd_pool_default_hit_set_bloom_fpp
   type: float
   level: advanced
