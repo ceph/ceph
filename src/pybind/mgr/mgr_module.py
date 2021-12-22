@@ -1409,6 +1409,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_perf_schema(svc_type, svc_name)
 
+    def get_rocksdb_version(self) -> str:
+        """
+        Called by the plugin to fetch the latest RocksDB version number.
+
+        :return: str representing the major, minor, and patch RocksDB version numbers
+        """
+        return self._ceph_get_rocksdb_version()
+
     def get_counter(self,
                     svc_type: str,
                     svc_name: str,
