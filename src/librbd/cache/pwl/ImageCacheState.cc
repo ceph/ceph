@@ -83,7 +83,7 @@ void ImageCacheState<I>::write_image_cache_state(Context *on_finish) {
 
   ldout(m_image_ctx->cct, 20) << __func__ << " Store state: "
                               << image_state_json << dendl;
-  m_plugin_api.execute_image_metadata_set(m_image_ctx, IMAGE_CACHE_STATE,
+  m_plugin_api.execute_image_metadata_set(m_image_ctx, PERSISTENT_CACHE_STATE,
                                           image_state_json, on_finish);
 }
 
@@ -92,7 +92,7 @@ void ImageCacheState<I>::clear_image_cache_state(Context *on_finish) {
   std::shared_lock owner_lock{m_image_ctx->owner_lock};
   ldout(m_image_ctx->cct, 20) << __func__ << " Remove state: " << dendl;
   m_plugin_api.execute_image_metadata_remove(
-    m_image_ctx, IMAGE_CACHE_STATE, on_finish);
+    m_image_ctx, PERSISTENT_CACHE_STATE, on_finish);
 }
 
 template <typename I>
@@ -105,7 +105,7 @@ ImageCacheState<I>* ImageCacheState<I>::create_image_cache_state(
   bool dirty_cache = plugin_api.test_image_features(image_ctx, RBD_FEATURE_DIRTY_CACHE);
   if (dirty_cache) {
     cls_client::metadata_get(&image_ctx->md_ctx, image_ctx->header_oid,
-                             IMAGE_CACHE_STATE, &cache_state_str);
+                             PERSISTENT_CACHE_STATE, &cache_state_str);
   }
 
   ldout(image_ctx->cct, 20) << "image_cache_state: " << cache_state_str << dendl;
@@ -153,7 +153,7 @@ ImageCacheState<I>* ImageCacheState<I>::get_image_cache_state(
   ImageCacheState<I>* cache_state = nullptr;
   string cache_state_str;
   cls_client::metadata_get(&image_ctx->md_ctx, image_ctx->header_oid,
-			   IMAGE_CACHE_STATE, &cache_state_str);
+			   PERSISTENT_CACHE_STATE, &cache_state_str);
   if (!cache_state_str.empty()) {
     // ignore errors, best effort
     cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
