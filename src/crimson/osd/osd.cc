@@ -1192,11 +1192,10 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
 seastar::future<> OSD::handle_osd_op(crimson::net::ConnectionRef conn,
                                      Ref<MOSDOp> m)
 {
-  (void) shard_services.start_operation<ClientRequest>(
+  return shard_services.start_operation<ClientRequest>(
     *this,
     conn,
-    std::move(m));
-  return seastar::now();
+    std::move(m)).second;
 }
 
 seastar::future<> OSD::send_incremental_map(crimson::net::ConnectionRef conn,
@@ -1229,11 +1228,10 @@ seastar::future<> OSD::handle_rep_op(crimson::net::ConnectionRef conn,
 				     Ref<MOSDRepOp> m)
 {
   m->finish_decode();
-  (void) shard_services.start_operation<RepRequest>(
+  return shard_services.start_operation<RepRequest>(
     *this,
     std::move(conn),
-    std::move(m));
-  return seastar::now();
+    std::move(m)).second;
 }
 
 seastar::future<> OSD::handle_rep_op_reply(crimson::net::ConnectionRef conn,
@@ -1283,11 +1281,10 @@ seastar::future<> OSD::handle_mark_me_down(crimson::net::ConnectionRef conn,
 seastar::future<> OSD::handle_recovery_subreq(crimson::net::ConnectionRef conn,
 				   Ref<MOSDFastDispatchOp> m)
 {
-  (void) shard_services.start_operation<RecoverySubRequest>(
+  return shard_services.start_operation<RecoverySubRequest>(
     *this,
     conn,
-    std::move(m));
-  return seastar::now();
+    std::move(m)).second;
 }
 
 bool OSD::should_restart() const
@@ -1375,14 +1372,13 @@ seastar::future<> OSD::handle_peering_op(
   const int from = m->get_source().num();
   logger().debug("handle_peering_op on {} from {}", m->get_spg(), from);
   std::unique_ptr<PGPeeringEvent> evt(m->get_event());
-  (void) shard_services.start_operation<RemotePeeringEvent>(
+  return shard_services.start_operation<RemotePeeringEvent>(
     *this,
     conn,
     shard_services,
     pg_shard_t{from, m->get_spg().shard},
     m->get_spg(),
-    std::move(*evt));
-  return seastar::now();
+    std::move(*evt)).second;
 }
 
 seastar::future<> OSD::check_osdmap_features()
