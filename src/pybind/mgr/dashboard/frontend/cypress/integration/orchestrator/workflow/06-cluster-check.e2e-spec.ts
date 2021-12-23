@@ -62,16 +62,16 @@ describe('when cluster creation is completed', () => {
       });
     });
 
-    it('should force maintenance and exit', { retries: 1 }, () => {
-      hosts.maintenance(hostnames[3], true, true);
-    });
-
     it('should drain, remove and add the host back', () => {
       hosts.drain(hostnames[1]);
       hosts.remove(hostnames[1]);
       hosts.navigateTo('add');
       hosts.add(hostnames[1]);
       hosts.checkExist(hostnames[1], true);
+    });
+
+    it('should force maintenance and exit', { retries: 1 }, () => {
+      hosts.maintenance(hostnames[3], true, true);
     });
   });
 

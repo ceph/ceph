@@ -36,7 +36,7 @@ export class OSDsPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   checkStatus(id: number, status: string[]) {
-    this.seachTable(`id:${id}`);
+    this.searchTable(`id:${id}`);
     this.expectTableCount('found', 1);
     cy.get(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`).should(($ele) => {
       const allStatus = $ele.toArray().map((v) => v.innerText);
@@ -48,7 +48,7 @@ export class OSDsPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   ensureNoOsd(id: number) {
-    this.seachTable(`id:${id}`);
+    this.searchTable(`id:${id}`);
     this.expectTableCount('found', 0);
     this.clearTableSearchInput();
   }
