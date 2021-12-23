@@ -958,13 +958,13 @@ void BlueFS::umount(bool avoid_compact)
 
   _close_writer(log.writer);
   log.writer = NULL;
+  log.t.clear();
 
   vselector.reset(nullptr);
   _stop_alloc();
   nodes.file_map.clear();
   nodes.dir_map.clear();
   super = bluefs_super_t();
-  log.t.clear();
   _shutdown_logger();
 }
 
@@ -979,7 +979,7 @@ int BlueFS::prepare_new_device(int id, const bluefs_layout_t& layout)
       new_log_dev_cur = BDEV_NEWDB;
       new_log_dev_next = BDEV_DB;
     }
-    _rewrite_log_and_layout_sync_LN_LD(false,
+    _rewrite_log_and_layout_sync_LNF_LD(false,
       BDEV_NEWDB,
       new_log_dev_cur,
       new_log_dev_next,
@@ -987,7 +987,7 @@ int BlueFS::prepare_new_device(int id, const bluefs_layout_t& layout)
       layout);
     //}
   } else if(id == BDEV_NEWWAL) {
-    _rewrite_log_and_layout_sync_LN_LD(false,
+    _rewrite_log_and_layout_sync_LNF_LD(false,
       BDEV_DB,
       BDEV_NEWWAL,
       BDEV_WAL,
@@ -1827,7 +1827,7 @@ int BlueFS::device_migrate_to_existing(
         new_log_dev_next;
   }
 
-  _rewrite_log_and_layout_sync_LN_LD(
+  _rewrite_log_and_layout_sync_LNF_LD(
     false,
     (flags & REMOVE_DB) ? BDEV_SLOW : BDEV_DB,
     new_log_dev_cur,
@@ -1962,7 +1962,7 @@ int BlueFS::device_migrate_to_new(
         BDEV_DB :
 	BDEV_SLOW;
 
-  _rewrite_log_and_layout_sync_LN_LD(
+  _rewrite_log_and_layout_sync_LNF_LD(
     false,
     super_dev,
     new_log_dev_cur,
@@ -1989,6 +1989,14 @@ BlueFS::FileRef BlueFS::_get_file(uint64_t ino)
   }
 }
 
+
+/**
+To modify fnode both FileWriter::lock and File::lock must be obtained.
+The special case is when we modify bluefs log (ino 1) or
+we are compacting log (ino 0).
+
+In any case it is enough to hold File::lock to be sure fnode will not be modified.
+*/
 struct lock_fnode_print {
   BlueFS::FileRef file;
   lock_fnode_print(BlueFS::FileRef file) : file(file) {};
@@ -2005,6 +2013,7 @@ void BlueFS::_drop_link_D(FileRef file)
 	   << " on " << lock_fnode_print(file) << dendl;
   ceph_assert(file->refs > 0);
   ceph_assert(ceph_mutex_is_locked(log.lock));
+  ceph_assert(ceph_mutex_is_locked(nodes.lock));
 
   --file->refs;
   if (file->refs == 0) {
@@ -2251,7 +2260,7 @@ int64_t BlueFS::_read(
 void BlueFS::invalidate_cache(FileRef f, uint64_t offset, uint64_t length)
 {
   std::lock_guard l(f->lock);
-  dout(10) << __func__ << " file " << lock_fnode_print(f)
+  dout(10) << __func__ << " file " << f->fnode
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
            << dendl;
   if (offset & ~super.block_mask()) {
@@ -2286,7 +2295,7 @@ void BlueFS::compact_log()
 {
   if (!cct->_conf->bluefs_replay_recovery_disable_compact) {
     if (cct->_conf->bluefs_compact_log_sync) {
-      _compact_log_sync_LN_LD();
+      _compact_log_sync_LNF_LD();
     } else {
       _compact_log_async_LD_NF_D();
     }
@@ -2317,7 +2326,7 @@ bool BlueFS::_should_start_compact_log_L_N()
   return true;
 }
 
-void BlueFS::_compact_log_dump_metadata_N(bluefs_transaction_t *t,
+void BlueFS::_compact_log_dump_metadata_NF(bluefs_transaction_t *t,
 					int flags)
 {
   std::lock_guard nl(nodes.lock);
@@ -2402,12 +2411,16 @@ void BlueFS::_compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
   }
 }
 
-void BlueFS::_compact_log_sync_LN_LD()
+void BlueFS::_compact_log_sync_LNF_LD()
 {
   dout(10) << __func__ << dendl;
-  auto prefer_bdev =
-    vselector->select_prefer_bdev(log.writer->file->vselector_hint);
-  _rewrite_log_and_layout_sync_LN_LD(true,
+  uint8_t prefer_bdev;
+  {
+    std::lock_guard ll(log.lock);
+    prefer_bdev =
+      vselector->select_prefer_bdev(log.writer->file->vselector_hint);
+  }
+  _rewrite_log_and_layout_sync_LNF_LD(true,
     BDEV_DB,
     prefer_bdev,
     prefer_bdev,
@@ -2416,7 +2429,7 @@ void BlueFS::_compact_log_sync_LN_LD()
   logger->inc(l_bluefs_log_compactions);
 }
 
-void BlueFS::_rewrite_log_and_layout_sync_LN_LD(bool allocate_with_fallback,
+void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
 					 int super_dev,
 					 int log_dev,
 					 int log_dev_new,
@@ -2441,7 +2454,7 @@ void BlueFS::_rewrite_log_and_layout_sync_LN_LD(bool allocate_with_fallback,
 		       << " flags:" << flags
 		       << dendl;
   bluefs_transaction_t t;
-  _compact_log_dump_metadata_N(&t, flags);
+  _compact_log_dump_metadata_NF(&t, flags);
 
   dout(20) << __func__ << " op_jump_seq " << log.seq_live << dendl;
   t.op_jump_seq(log.seq_live);
@@ -2623,9 +2636,6 @@ void BlueFS::_compact_log_async_LD_NF_D() //also locks FW for new_writer
                     &new_log->fnode);
   ceph_assert(r == 0);
 
-  // we might have some more ops in log_t due to _allocate call
-  // t.claim_ops(log_t); no we no longer track allocations in log
-
   bufferlist bl;
   encode(t, bl);
   _pad_bl(bl);
@@ -2741,19 +2751,6 @@ void BlueFS::_pad_bl(bufferlist& bl)
   }
 }
 
-/**
- * Adds file modifications from `dirty.files` to bluefs transactions
- * already stored in `log.t`. Writes them to disk and waits until are stable.
- * Guarantees that file modifications with `want_seq` are already stable on disk.
- * In addition may insert jump forward transaction to log write position `jump_to`.
- *
- * it should lock ability to:
- * 1) add to log.t
- * 2) modify dirty.files
- * 3) add to pending_release
- *
- * pending_release and log.t go with same lock
- */
 
 // Returns log seq that was live before advance.
 uint64_t BlueFS::_log_advance_seq()
@@ -3083,7 +3080,7 @@ int BlueFS::_signal_dirty_to_log_D(FileWriter *h)
   return 0;
 }
 
-void BlueFS::flush_range/*WF*/(FileWriter *h, uint64_t offset, uint64_t length) {
+void BlueFS::flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
   std::unique_lock hl(h->lock);
   _flush_range_F(h, offset, length);
 }
@@ -3286,7 +3283,7 @@ void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)
     }
   }
   if (flushed_sum) {
-    _maybe_compact_log_LN_NF_LD_D();
+    _maybe_compact_log_LNF_NF_LD_D();
   }
 }
 
@@ -3300,7 +3297,7 @@ void BlueFS::flush(FileWriter *h, bool force)
     ceph_assert(r == 0);
   }
   if (r == 0 && flushed) {
-    _maybe_compact_log_LN_NF_LD_D();
+    _maybe_compact_log_LNF_NF_LD_D();
   }
 }
 
@@ -3423,7 +3420,7 @@ int BlueFS::fsync(FileWriter *h)
   if (old_dirty_seq) {
     _flush_and_sync_log_LD(old_dirty_seq);
   }
-  _maybe_compact_log_LN_NF_LD_D();
+  _maybe_compact_log_LNF_NF_LD_D();
   return 0;
 }
 
@@ -3628,16 +3625,16 @@ void BlueFS::sync_metadata(bool avoid_compact)
   }
 
   if (!avoid_compact) {
-    _maybe_compact_log_LN_NF_LD_D();
+    _maybe_compact_log_LNF_NF_LD_D();
   }
 }
 
-void BlueFS::_maybe_compact_log_LN_NF_LD_D()
+void BlueFS::_maybe_compact_log_LNF_NF_LD_D()
 {
   if (!cct->_conf->bluefs_replay_recovery_disable_compact &&
       _should_start_compact_log_L_N()) {
     if (cct->_conf->bluefs_compact_log_sync) {
-      _compact_log_sync_LN_LD();
+      _compact_log_sync_LNF_LD();
     } else {
       _compact_log_async_LD_NF_D();
     }
