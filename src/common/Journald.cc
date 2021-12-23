@@ -5,6 +5,7 @@
 
 #include <endian.h>
 #include <fcntl.h>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <sys/mman.h>
@@ -107,7 +108,7 @@ class EntryEncoder : public EntryEncoderBase {
   void encode(const Entry& e, const SubsystemMap *s)
   {
     meta_buf.clear();
-    fmt::format_to(meta_buf,
+    fmt::format_to(std::back_inserter(meta_buf),
       R"(PRIORITY={:d}
 CEPH_SUBSYS={}
 TIMESTAMP={}
@@ -138,7 +139,7 @@ class LogEntryEncoder : public EntryEncoderBase {
   void encode(const LogEntry& le)
   {
     meta_buf.clear();
-    fmt::format_to(meta_buf,
+    fmt::format_to(std::back_inserter(meta_buf),
       R"(PRIORITY={:d}
 TIMESTAMP={}
 CEPH_NAME={}
