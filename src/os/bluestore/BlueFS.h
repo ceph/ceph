@@ -436,15 +436,15 @@ private:
     RENAME_SLOW2DB = 4,
     RENAME_DB2SLOW = 8,
   };
-  void _compact_log_dump_metadata_N(bluefs_transaction_t *t,
+  void _compact_log_dump_metadata_NF(bluefs_transaction_t *t,
 				 int flags);
   void _compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
 					   uint64_t capture_before_seq);
 
-  void _compact_log_sync_LN_LD();
+  void _compact_log_sync_LNF_LD();
   void _compact_log_async_LD_NF_D();
 
-  void _rewrite_log_and_layout_sync_LN_LD(bool allocate_with_fallback,
+  void _rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
 				    int super_dev,
 				    int log_dev,
 				    int new_log_dev,
@@ -575,7 +575,7 @@ public:
   /// sync any uncommitted state to disk
   void sync_metadata(bool avoid_compact);
   /// test and compact log, if necessary
-  void _maybe_compact_log_LN_NF_LD_D();
+  void _maybe_compact_log_LNF_NF_LD_D();
 
   void set_volume_selector(BlueFSVolumeSelector* s) {
     vselector.reset(s);
