@@ -94,7 +94,7 @@ Development builds
 We automatically build container images for development ``wip-*``
 branches in the ceph-ci.git repositories and push them to Quay at::
 
-  https://quay.io/organization/ceph-ci
+  https://quay.ceph.io/organization/ceph-ci
 
 ceph-ci/ceph
 ^^^^^^^^^^^^
