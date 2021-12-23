@@ -189,9 +189,9 @@ BlueFS::BlueFS(CephContext* cct)
     ioc(MAX_BDEV),
     block_reserved(MAX_BDEV),
     alloc(MAX_BDEV),
-    alloc_size(MAX_BDEV, 0),
-    pending_release(MAX_BDEV)
+    alloc_size(MAX_BDEV, 0)
 {
+  dirty.pending_release.resize(MAX_BDEV);
   discard_cb[BDEV_WAL] = wal_discard_cb;
   discard_cb[BDEV_DB] = db_discard_cb;
   discard_cb[BDEV_SLOW] = slow_discard_cb;
@@ -1904,7 +1904,7 @@ void BlueFS::_drop_link_D(FileRef file)
 
     std::lock_guard dl(dirty.lock);
     for (auto& r : file->fnode.extents) {
-      pending_release[r.bdev].insert(r.offset, r.length);
+      dirty.pending_release[r.bdev].insert(r.offset, r.length);
     }
     if (file->dirty_seq > dirty.seq_stable) {
       // retract request to serialize changes
@@ -2395,7 +2395,7 @@ void BlueFS::_rewrite_log_and_layout_sync_LN_LD(bool allocate_with_fallback,
   dout(10) << __func__ << " release old log extents " << old_fnode.extents << dendl;
   std::lock_guard dl(dirty.lock);
   for (auto& r : old_fnode.extents) {
-    pending_release[r.bdev].insert(r.offset, r.length);
+    dirty.pending_release[r.bdev].insert(r.offset, r.length);
   }
 }
 
@@ -2597,7 +2597,7 @@ void BlueFS::_compact_log_async_LD_NF_D() //also locks FW for new_writer
   {
     std::lock_guard dl(dirty.lock);
     for (auto& r : old_extents) {
-      pending_release[r.bdev].insert(r.offset, r.length);
+      dirty.pending_release[r.bdev].insert(r.offset, r.length);
     }
   }
 
@@ -2843,8 +2843,8 @@ int BlueFS::_flush_and_sync_log_LD(uint64_t want_seq)
   ceph_assert(want_seq == 0 || want_seq <= dirty.seq_live); // illegal to request seq that was not created yet
   uint64_t seq =_log_advance_seq();
   _consume_dirty(seq);
-  vector<interval_set<uint64_t>> to_release(pending_release.size());
-  to_release.swap(pending_release);
+  vector<interval_set<uint64_t>> to_release(dirty.pending_release.size());
+  to_release.swap(dirty.pending_release);
   dirty.lock.unlock();
 
   _flush_and_sync_log_core(available_runway);
@@ -2872,8 +2872,8 @@ int BlueFS::_flush_and_sync_log_jump_D(uint64_t jump_to,
   dirty.lock.lock();
   uint64_t seq =_log_advance_seq();
   _consume_dirty(seq);
-  vector<interval_set<uint64_t>> to_release(pending_release.size());
-  to_release.swap(pending_release);
+  vector<interval_set<uint64_t>> to_release(dirty.pending_release.size());
+  to_release.swap(dirty.pending_release);
   dirty.lock.unlock();
   _flush_and_sync_log_core(available_runway);
 
@@ -3537,6 +3537,11 @@ int BlueFS::open_for_write(
   FileWriter **h,
   bool overwrite)
 {
+  FileRef file;
+  bool create = false;
+  bool truncate = false;
+  mempool::bluefs::vector<bluefs_extent_t> pending_release_extents;
+  {
   std::unique_lock nl(nodes.lock);
   dout(10) << __func__ << " " << dirname << "/" << filename << dendl;
   map<string,DirRef>::iterator p = nodes.dir_map.find(dirname);
@@ -3550,9 +3555,6 @@ int BlueFS::open_for_write(
     dir = p->second;
   }
 
-  FileRef file;
-  bool create = false;
-  bool truncate = false;
   map<string,FileRef>::iterator q = dir->file_map.find(filename);
   if (q == dir->file_map.end()) {
     if (overwrite) {
@@ -3581,9 +3583,7 @@ int BlueFS::open_for_write(
 	       << " already exists, truncate + overwrite" << dendl;
       vselector->sub_usage(file->vselector_hint, file->fnode);
       file->fnode.size = 0;
-      for (auto& p : file->fnode.extents) {
-	pending_release[p.bdev].insert(p.offset, p.length);
-      }
+      pending_release_extents.swap(file->fnode.extents);
       truncate = true;
 
       file->fnode.clear_extents();
@@ -3600,12 +3600,17 @@ int BlueFS::open_for_write(
   dout(20) << __func__ << " mapping " << dirname << "/" << filename
 	   << " vsel_hint " << file->vselector_hint
 	   << dendl;
-  nl.unlock();
+  }
   {
     std::lock_guard ll(log.lock);
     log.t.op_file_update(file->fnode);
     if (create)
       log.t.op_dir_link(dirname, filename, file->fnode.ino);
+
+    std::lock_guard dl(dirty.lock);
+    for (auto& p : pending_release_extents) {
+      dirty.pending_release[p.bdev].insert(p.offset, p.length);
+    }
   }
   *h = _create_writer(file);
 

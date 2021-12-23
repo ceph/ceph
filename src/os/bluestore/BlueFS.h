@@ -336,6 +336,11 @@ private:
     uint64_t seq_live = 1;   //seq that is ongoing and dirty files will be written to
     // map of dirty files, files of same dirty_seq are grouped into list.
     std::map<uint64_t, dirty_file_list_t> files;
+    std::vector<interval_set<uint64_t>> pending_release; ///< extents to release
+    // TODO: it should be examined what makes pending_release immune to
+    // eras in a way similar to dirty_files. Hints:
+    // 1) we have actually only 2 eras: log_seq and log_seq+1
+    // 2) we usually not remove extents from files. And when we do, we force log-syncing.
   } dirty;
 
   ceph::condition_variable log_cond;                             ///< used for state control between log flush / log compaction
@@ -354,11 +359,6 @@ private:
   std::vector<uint64_t> block_reserved;            ///< starting reserve extent per device
   std::vector<Allocator*> alloc;                   ///< allocators for bdevs
   std::vector<uint64_t> alloc_size;                ///< alloc size for each device
-  std::vector<interval_set<uint64_t>> pending_release; ///< extents to release
-  // TODO: it should be examined what makes pending_release immune to
-  // eras in a way similar to dirty_files. Hints:
-  // 1) we have actually only 2 eras: log_seq and log_seq+1
-  // 2) we usually not remove extents from files. And when we do, we force log-syncing.
 
   //std::vector<interval_set<uint64_t>> block_unused_too_granular;
 
