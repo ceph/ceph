@@ -634,6 +634,14 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
 
   //key's subuser
   if (op_state.has_subuser()) {
+    std::map<std::string, RGWSubUser> *subuser_map = op_state.get_subusers();
+    std::string subuser = op_state.get_subuser();
+    std::map<std::string, RGWSubUser>::iterator kiter =
+        subuser_map->find(subuser);
+    if (kiter == subuser_map->end()) {
+      set_err_msg(err_msg, "no subuser specified");
+      return -ERR_NOT_FOUND;
+    }
     //create user and subuser at the same time, user's s3 key should not be set this
     if (!op_state.key_type_setbycontext || (key_type == KEY_TYPE_SWIFT)) {
       new_key.subuser = op_state.get_subuser();
