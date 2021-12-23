@@ -92,6 +92,5 @@ ceph orch device ls --refresh
 sleep 10
 ceph orch device ls --format=json | tee cypress/fixtures/orchestrator/inventory.json
 
-cypress_run "orchestrator/02-hosts-inventory.e2e-spec.ts"
 cypress_run "orchestrator/03-inventory.e2e-spec.ts"
 cypress_run "orchestrator/04-osds.e2e-spec.ts" 300000
