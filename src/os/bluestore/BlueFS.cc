@@ -310,13 +310,8 @@ void BlueFS::_shutdown_logger()
   delete logger;
 }
 
-//AK - TODO - locking needed but not certain
 void BlueFS::_update_logger_stats()
 {
-  // we must be holding the lock
-  logger->set(l_bluefs_num_files, nodes.file_map.size());
-  logger->set(l_bluefs_log_bytes, log.writer->file->fnode.size);
-
   if (alloc[BDEV_WAL]) {
     logger->set(l_bluefs_wal_total_bytes, _get_total(BDEV_WAL));
     logger->set(l_bluefs_wal_used_bytes, _get_used(BDEV_WAL));
@@ -813,7 +808,8 @@ int BlueFS::mount()
   dout(10) << __func__ << " log write pos set to 0x"
            << std::hex << log.writer->pos << std::dec
            << dendl;
-
+  // update log size
+  logger->set(l_bluefs_log_bytes, log.writer->file->fnode.size);
   return 0;
 
  out:
@@ -1556,6 +1552,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       }
     }
   }
+  // reflect file count in logger
+  logger->set(l_bluefs_num_files, nodes.file_map.size());
 
   dout(10) << __func__ << " done" << dendl;
   return 0;
@@ -1866,6 +1864,8 @@ BlueFS::FileRef BlueFS::_get_file(uint64_t ino)
   if (p == nodes.file_map.end()) {
     FileRef f = ceph::make_ref<File>();
     nodes.file_map[ino] = f;
+    // track files count in logger
+    logger->set(l_bluefs_num_files, nodes.file_map.size());
     dout(30) << __func__ << " ino " << ino << " = " << f
 	     << " (new)" << dendl;
     return f;
@@ -1899,6 +1899,7 @@ void BlueFS::_drop_link_D(FileRef file)
     vselector->sub_usage(file->vselector_hint, file->fnode);
     log.t.op_file_remove(file->fnode.ino);
     nodes.file_map.erase(file->fnode.ino);
+    logger->set(l_bluefs_num_files, nodes.file_map.size());
     file->deleted = true;
 
     std::lock_guard dl(dirty.lock);
@@ -2848,6 +2849,7 @@ int BlueFS::_flush_and_sync_log_LD(uint64_t want_seq)
 
   _flush_and_sync_log_core(available_runway);
   _flush_bdev(log.writer);
+  logger->set(l_bluefs_log_bytes, log.writer->file->fnode.size);
   //now log.lock is no longer needed
   log.lock.unlock();
 
@@ -2887,6 +2889,7 @@ int BlueFS::_flush_and_sync_log_jump_D(uint64_t jump_to,
   _clear_dirty_set_stable_D(seq);
   _release_pending_allocations(to_release);
 
+  logger->set(l_bluefs_log_bytes, log.writer->file->fnode.size);
   _update_logger_stats();
   return 0;
 }
@@ -3564,6 +3567,7 @@ int BlueFS::open_for_write(
     dir->file_map[string{filename}] = file;
     ++file->refs;
     create = true;
+    logger->set(l_bluefs_num_files, nodes.file_map.size());
   } else {
     // overwrite existing file?
     file = q->second;
@@ -3852,6 +3856,7 @@ int BlueFS::lock_file(std::string_view dirname, std::string_view filename,
     file->fnode.mtime = ceph_clock_now();
     nodes.file_map[ino_last] = file;
     dir->file_map[string{filename}] = file;
+    logger->set(l_bluefs_num_files, nodes.file_map.size());
     ++file->refs;
     log.t.op_file_update(file->fnode);
     log.t.op_dir_link(dirname, filename, file->fnode.ino);
