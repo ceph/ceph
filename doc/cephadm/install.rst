@@ -318,7 +318,31 @@ available and unused device:
 
     ceph orch apply osd --all-available-devices
 
-Or See :ref:`cephadm-deploy-osds` for more detailed instructions.
+See :ref:`cephadm-deploy-osds` for more detailed instructions.
+
+Enabling OSD memory autotuning
+------------------------------
+
+.. warning:: By default, cephadm enables ``osd_memory_target_autotune`` on bootstrap, with ``mgr/cephadm/autotune_memory_target_ratio`` set to ``.7`` of total host memory.
+
+See :ref:`osd_autotune`.
+
+To deploy hyperconverged Ceph with TripleO, please refer to the TripleO documentation: `Scenario: Deploy Hyperconverged Ceph <https://docs.openstack.org/project-deploy-guide/tripleo-docs/latest/features/cephadm.html#scenario-deploy-hyperconverged-ceph>`_
+
+In other cases where the cluster hardware is not exclusively used by Ceph (hyperconverged),
+reduce the memory consumption of Ceph like so:
+
+  .. prompt:: bash #
+
+    # hyperconverged only:
+    ceph config set mgr mgr/cephadm/autotune_memory_target_ratio 0.2
+
+Then enable memory autotuning:
+
+  .. prompt:: bash #
+
+    ceph config set osd osd_memory_target_autotune true
+
 
 Using Ceph
 ==========
