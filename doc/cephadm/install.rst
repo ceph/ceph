@@ -362,11 +362,14 @@ See :ref:`cephadm-deploy-osds` for more detailed instructions.
 Enabling OSD memory autotuning
 ------------------------------
 
-It is recommended to enable ``osd_memory_target_autotune``. 
-in order to maximise the performance of the cluster. See :ref:`osd_autotune`.
+.. warning:: By default, cephadm enables ``osd_memory_target_autotune`` on bootstrap, with ``mgr/cephadm/autotune_memory_target_ratio`` set to ``.7`` of total host memory.
 
-In case the cluster hardware is not exclusively used by Ceph (hyperconverged),
-reduce the memory consuption of Ceph like so:
+See :ref:`osd_autotune`.
+
+To deploy hyperconverged Ceph with TripleO, please refer to the TripleO documentation: `Scenario: Deploy Hyperconverged Ceph <https://docs.openstack.org/project-deploy-guide/tripleo-docs/latest/features/cephadm.html#scenario-deploy-hyperconverged-ceph>`_
+
+In other cases where the cluster hardware is not exclusively used by Ceph (hyperconverged),
+reduce the memory consumption of Ceph like so:
 
   .. prompt:: bash #
 
