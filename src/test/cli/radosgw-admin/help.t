@@ -270,6 +270,7 @@
                                actual objects state
      --format=<format>         specify output format for certain operations: xml,
                                json
+     --pretty-format           pretty formatting when specified output format
      --purge-data              when specified, user removal will also purge all the
                                user data
      --purge-keys              when specified, subuser removal will also purge all the

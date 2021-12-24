@@ -378,6 +378,7 @@ void usage()
   cout << "                             actual objects state\n";
   cout << "   --format=<format>         specify output format for certain operations: xml,\n";
   cout << "                             json\n";
+  cout << "   --pretty-format           pretty formatting when specified output format\n";
   cout << "   --purge-data              when specified, user removal will also purge all the\n";
   cout << "                             user data\n";
   cout << "   --purge-keys              when specified, subuser removal will also purge all the\n";
