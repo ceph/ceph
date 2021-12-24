@@ -37,8 +37,8 @@ seastar::logger& logger() {
 }
 
 void usage(const char* prog) {
-  std::cout << "usage: " << prog << " -i <ID>\n"
-            << "  --help-seastar    show Seastar help messages\n";
+  std::cout << "usage: " << prog << "\n"
+            << "  -i <ID>\n";
   generic_server_usage();
 }
 
@@ -71,11 +71,7 @@ auto partition_args(seastar::app_template& app, char** argv_begin, char** argv_e
     for (; unknown != unknown_args.end() &&
            argv != argv_end &&
            *unknown == *argv; ++argv, ++unknown) {
-      if (std::strcmp(*argv, "--help-seastar") == 0) {
-        app_args.push_back("--help");
-      } else {
-        ceph_args.push_back(*argv);
-      }
+      ceph_args.push_back(*argv);
     }
     return argv;
   };
