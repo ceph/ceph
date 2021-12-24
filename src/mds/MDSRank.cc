@@ -3095,6 +3095,9 @@ void MDSRank::command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Format
   std::string root;
   int64_t depth;
   cmd_getval(cmdmap, "root", root);
+  if (root.empty()) {
+    root = "/";
+  }
   if (!cmd_getval(cmdmap, "depth", depth))
     depth = -1;
   std::lock_guard l(mds_lock);
