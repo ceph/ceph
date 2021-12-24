@@ -10,6 +10,14 @@ be backward compatible with classic OSD.
 
 .. highlight:: console
 
+Obtaining Crimson
+=================
+
+The Crimson's source code is a part of the Ceph repository. To clone it::
+
+  $ git clone https://github.com/ceph/ceph.git
+  $ cd ceph
+
 Building Crimson
 ================
 
