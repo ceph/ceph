@@ -24,8 +24,10 @@ Building Crimson
 Crimson is not enabled by default. To enable it::
 
   $ WITH_SEASTAR=true ./install-deps.sh
-  $ mkdir build && cd build
-  $ cmake -DWITH_SEASTAR=ON ..
+  $ ./do_cmake.sh -DWITH_SEASTAR=ON
+  $ cd build
+  $ ninja
+
 
 Please note, `ASan`_ is enabled by default if crimson is built from a source
 cloned using git.
