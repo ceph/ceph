@@ -7238,6 +7238,364 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
   }
 }
 
+TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionSmallAppend) {
+  if (string(GetParam()) != "bluestore") {
+    return;
+  }
+
+  size_t block_size = 65536;
+  StartDeferred(block_size);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // [1] append zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append_zero(4096);
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_small), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_bytes), 4096u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped_bytes), 4096u);
+
+    bufferlist in;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(4096, r);
+    ASSERT_TRUE(in.is_zero());
+  }
+
+  {
+    // [2] append non-zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(4096, 'c'));
+
+    t.write(cid, hoid, 4096, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_small), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_bytes), 4096u*2);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped_bytes), 4096u);
+
+    bufferlist in, _exp;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(4096 * 2, r);
+    _exp.append_zero(4096);
+    _exp.append(bl);
+    ASSERT_TRUE(bl_eq(_exp, in));
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionSmallOverwrite) {
+  if (string(GetParam()) != "bluestore") {
+    return;
+  }
+  if (smr) {
+    cout << "SKIP" << std::endl;
+    return;
+  }
+
+  size_t block_size = 65536;
+  StartDeferred(block_size);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  
+  {
+    // {setting up the scenario} append non-zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(4096, 'c'));
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_small), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_bytes), 4096u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped_bytes), 0u);
+
+    bufferlist in, _exp;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(4096, r);
+    _exp.append(bl);
+    ASSERT_TRUE(bl_eq(_exp, in));
+  }
+
+  { 
+    // [1] overwrite non-zeros with zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append_zero(4096);
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_small), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_bytes), 4096u*2);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped_bytes), 0u);
+    
+    bufferlist in;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(4096, r);
+    ASSERT_TRUE(in.is_zero());
+  }
+
+  {
+    // [2] overwrite zeros with non-zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(4096, 'c'));
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_small), 3u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_bytes), 4096u*3);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_small_skipped_bytes), 0u);
+
+    bufferlist in, _exp;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(4096, r);
+    _exp.append(bl);
+    ASSERT_TRUE(bl_eq(_exp, in));
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionBigAppend) {
+  if (string(GetParam()) != "bluestore") {
+    return;
+  }
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  
+  {
+    // [1] append zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append_zero(block_size * 2);
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), 4096u*2);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_bytes), 4096u*2);
+
+    bufferlist in;
+    r = store->read(ch, hoid, 0, block_size * 8, in);
+    ASSERT_EQ(block_size * 2, r);
+    ASSERT_TRUE(in.is_zero());
+  }
+
+  {
+    // [2] append non-zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size * 2, 'c'));
+
+    t.write(cid, hoid, block_size * 2, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), 4096u*4);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_bytes), 4096u*2);
+
+    bufferlist in, _exp;
+    r = store->read(ch, hoid, 0, block_size * 8, in);
+    ASSERT_EQ(block_size * 4, r);
+    _exp.append_zero(block_size * 2);
+    _exp.append(bl);
+    ASSERT_TRUE(bl_eq(_exp, in));
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionBigOverwrite) {
+  if (string(GetParam()) != "bluestore") {
+    return;
+  }
+  if (smr) {
+    cout << "SKIP" << std::endl;
+    return;
+  }
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  
+  {
+    // {setting up the scenario} append non-zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size * 2, 'c'));
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), 4096u*2);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_blobs), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_bytes), 0u);
+
+    bufferlist in, _exp;
+    r = store->read(ch, hoid, 0, block_size * 8, in);
+    ASSERT_EQ(block_size * 2, r);
+    _exp.append(bl);
+    ASSERT_TRUE(bl_eq(_exp, in));
+  }
+
+  {
+    // [1] overwrite non-zeros with zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append_zero(block_size * 2);
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), 4096u*4);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_bytes), 4096u*2);
+
+    bufferlist in;
+    r = store->read(ch, hoid, 0, block_size * 8, in);
+    ASSERT_EQ(block_size * 2, r);
+    ASSERT_TRUE(in.is_zero());
+  }
+
+  {
+    // [2] overwrite zeros with non-zeros
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size * 2, 'c'));
+
+    t.write(cid, hoid, 0, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 3u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), 4096u*6);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_skipped_bytes), 4096u*2);
+
+    bufferlist in, _exp;
+    r = store->read(ch, hoid, 0, block_size * 8, in);
+    ASSERT_EQ(block_size * 2, r);
+    _exp.append(bl);
+    ASSERT_TRUE(bl_eq(_exp, in));
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
 
   if (string(GetParam()) != "bluestore")
