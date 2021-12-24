@@ -147,7 +147,7 @@ static int log_index_operation(cls_method_context_t hctx, const cls_rgw_obj_key&
   rgw_bi_log_entry entry;
 
   entry.object = obj_key.name;
-  entry.instance = obj_key.instance;
+  entry.instance = obj_key.instance == "" ? "null" : obj_key.instance;
   entry.timestamp = timestamp;
   entry.op = op;
   entry.ver = ver;
