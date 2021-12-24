@@ -215,10 +215,9 @@ int main(int argc, char* argv[])
      "Prometheus metrics prefix");
 
   auto [ceph_args, app_args] = partition_args(app, argv, argv + argc);
-  if (ceph_argparse_need_usage(ceph_args) &&
-      std::find(app_args.begin(), app_args.end(), "--help") == app_args.end()) {
+  if (ceph_argparse_need_usage(ceph_args) ||
+      ceph_argparse_need_usage(app_args)) {
     usage(argv[0]);
-    return EXIT_SUCCESS;
   }
   override_seastar_opts(app_args);
   std::string cluster_name{"ceph"};
