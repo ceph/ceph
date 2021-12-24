@@ -886,13 +886,14 @@ seastar::future<> SeaStore::do_transaction(
       return with_trans_intr(*ctx.transaction, [&, this](auto &t) {
         return onode_manager->get_or_create_onodes(
           *ctx.transaction, ctx.iter.get_objects()
-        ).si_then([this, &ctx](auto &&read_onodes) {
-          ctx.onodes = std::move(read_onodes);
-          return trans_intr::repeat(
-            [this, &ctx]() -> tm_iertr::future<seastar::stop_iteration> {
+        ).si_then([this, &ctx](auto &&onodes) {
+          return seastar::do_with(std::move(onodes), [this, &ctx](auto& onodes) {
+            return trans_intr::repeat(
+              [this, &ctx, &onodes]() -> tm_iertr::future<seastar::stop_iteration>
+            {
               if (ctx.iter.have_op()) {
                 return _do_transaction_step(
-                  ctx, ctx.ch, ctx.onodes, ctx.iter
+                  ctx, ctx.ch, onodes, ctx.iter
                 ).si_then([] {
                   return seastar::make_ready_future<seastar::stop_iteration>(
                     seastar::stop_iteration::no);
@@ -901,15 +902,11 @@ seastar::future<> SeaStore::do_transaction(
                 return seastar::make_ready_future<seastar::stop_iteration>(
                   seastar::stop_iteration::yes);
               };
-            }
-          );
+            }).si_then([this, &ctx, &onodes] {
+              return onode_manager->write_dirty(*ctx.transaction, onodes);
+            });
+          });
         }).si_then([this, &ctx] {
-          return onode_manager->write_dirty(*ctx.transaction, ctx.onodes);
-        }).si_then([this, &ctx] {
-          // There are some validations in onode tree during onode value
-          // destruction in debug mode, which need to be done before calling
-          // submit_transaction().
-          ctx.onodes.clear();
           return transaction_manager->submit_transaction(*ctx.transaction);
         });
       }).safe_then([&ctx]() {
