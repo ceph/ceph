@@ -141,6 +141,9 @@ enum {
   l_bluestore_issued_deferred_write_bytes,
   l_bluestore_submitted_deferred_writes,
   l_bluestore_submitted_deferred_write_bytes,
+
+  l_bluestore_write_small_skipped,
+  l_bluestore_write_small_skipped_bytes,
   //****************************************
 
   // compressions stats
@@ -3257,7 +3260,6 @@ private:
       uint64_t loffs_end,
       uint64_t min_alloc_size);
   };
-
   void _do_write_small(
     TransContext *txc,
     CollectionRef &c,
