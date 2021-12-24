@@ -59,6 +59,7 @@ auto partition_args(seastar::app_template& app, char** argv_begin, char** argv_e
   // options. and ceph wins
   auto consume_conf_arg = [&](char** argv) {
     if (std::strcmp(*argv, "-c") == 0) {
+      std::cout << "warn: apply '-c FILE' as ceph option" << std::endl;
       ceph_args.push_back(*argv++);
       if (argv != argv_end) {
         ceph_args.push_back(*argv++);
@@ -189,6 +190,7 @@ static void override_seastar_opts(std::vector<const char*>& args)
     // with the deployment tools, like cephadm and rook, which don't set, for
     // instance, aio-max-nr for us. but we should fix this, once crimson is able
     // to run on a multi-core system, i.e., once m-to-n problem is resolved.
+    std::cout << "warn: added seastar option --smp 1" << std::endl;
     args.emplace_back("--smp");
     args.emplace_back("1");
   }
