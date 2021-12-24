@@ -6,7 +6,15 @@ import { ServicesPageHelper } from 'cypress/integration/cluster/services.po';
 describe('when cluster creation is completed', () => {
   const createCluster = new CreateClusterWizardHelper();
   const services = new ServicesPageHelper();
+  const hosts = new HostsPageHelper();
+
   const serviceName = 'rgw.foo';
+  const hostnames = [
+    'ceph-node-00.cephlab.com',
+    'ceph-node-01.cephlab.com',
+    'ceph-node-02.cephlab.com',
+    'ceph-node-03.cephlab.com'
+  ];
 
   beforeEach(() => {
     cy.login();
@@ -23,14 +31,6 @@ describe('when cluster creation is completed', () => {
   });
 
   describe('Hosts page', () => {
-    const hosts = new HostsPageHelper();
-    const hostnames = [
-      'ceph-node-00.cephlab.com',
-      'ceph-node-01.cephlab.com',
-      'ceph-node-02.cephlab.com',
-      'ceph-node-03.cephlab.com'
-    ];
-
     beforeEach(() => {
       hosts.navigateTo();
     });
@@ -61,18 +61,6 @@ describe('when cluster creation is completed', () => {
         services.checkServiceStatus('rgw');
       });
     });
-
-    it('should drain, remove and add the host back', () => {
-      hosts.drain(hostnames[1]);
-      hosts.remove(hostnames[1]);
-      hosts.navigateTo('add');
-      hosts.add(hostnames[1]);
-      hosts.checkExist(hostnames[1], true);
-    });
-
-    it('should force maintenance and exit', { retries: 1 }, () => {
-      hosts.maintenance(hostnames[3], true, true);
-    });
   });
 
   describe('OSDs page', () => {
@@ -94,6 +82,24 @@ describe('when cluster creation is completed', () => {
 
     it('should check if services are created', () => {
       services.checkExist(serviceName, true);
+    });
+  });
+
+  describe('Host actions', () => {
+    beforeEach(() => {
+      hosts.navigateTo();
+    });
+
+    it('should force maintenance and exit', { retries: 1 }, () => {
+      hosts.maintenance(hostnames[3], true, true);
+    });
+
+    it('should drain, remove and add the host back', () => {
+      hosts.drain(hostnames[1]);
+      hosts.remove(hostnames[1]);
+      hosts.navigateTo('add');
+      hosts.add(hostnames[1]);
+      hosts.checkExist(hostnames[1], true);
     });
   });
 });
