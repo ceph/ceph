@@ -1323,6 +1323,11 @@ options:
   min: 1
   max: 24
   with_legacy: true
+- name: ms_async_tcp_zerocopy
+  type: bool
+  level: advanced
+  desc: TCP send big packet using tcp zerocopy
+  default: false
 - name: ms_async_reap_threshold
   type: uint
   level: dev

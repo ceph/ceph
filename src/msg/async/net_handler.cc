@@ -168,6 +168,21 @@ void NetHandler::set_priority(int sd, int prio, int domain)
 #endif	// SO_PRIORITY
 }
 
+int NetHandler::set_zerocopy(int sd, int enable)
+{
+#ifdef SO_ZEROCOPY
+  int r = ::setsockopt(sd, SOL_SOCKET, SO_ZEROCOPY, (char*)&enable, sizeof(enable));
+  if (r < 0) {
+     r = -errno;
+     ldout(cct,0) << __func__ << " couldn't set SO_ZEROCOPY to " << enable
+	     << ": " << cpp_strerror(r) << dendl;
+  }
+  return r;
+#else
+  return -EINVAL;
+#endif // SO_ZEROCOPY
+}
+
 int NetHandler::generic_connect(const entity_addr_t& addr, const entity_addr_t &bind_addr, bool nonblock)
 {
   int ret;

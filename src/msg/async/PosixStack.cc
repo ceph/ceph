@@ -19,6 +19,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <linux/errqueue.h>
 
 #include <algorithm>
 
@@ -33,20 +34,70 @@
 #include "include/compat.h"
 #include "include/sock_compat.h"
 
+#ifndef SO_EE_ORIGIN_ZEROCOPY
+  #define SO_EE_ORIGIN_ZEROCOPY 5
+#endif // SO_EE_ORIGIN_ZEROCOPY
+
+#ifndef MSG_ZEROCOPY
+  #define MSG_ZEROCOPY		0x4000000
+#endif // MSG_ZEROCOPY
+
+
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << "PosixStack "
 
 class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
+  const int MERGE_THRESHOLD = 128;
+  const int ZEROCOPY_THRESHOLD = 4096;
+  CephContext *cct;
+  PosixNetworkStack *stack;
   ceph::NetHandler &handler;
   int _fd;
   entity_addr_t sa;
   bool connected;
-
+  bool use_zerocopy;
+  uint32_t send_id;
+  std::mutex lock;
+  uint64_t inflight_bytes;
+  std::unordered_map<uint32_t, bufferlist> unacked_map;
  public:
-  explicit PosixConnectedSocketImpl(ceph::NetHandler &h, const entity_addr_t &sa,
-				    int f, bool connected)
-      : handler(h), _fd(f), sa(sa), connected(connected) {}
+  explicit PosixConnectedSocketImpl(CephContext *cct, PosixNetworkStack *stack,
+              NetHandler &h, const entity_addr_t &sa, int f, bool connected)
+	  : cct(cct), stack(stack), handler(h), _fd(f), sa(sa),
+	    connected(connected), send_id(0), inflight_bytes(0) {
+     bool zerocopy = cct->_conf.get_val<bool>("ms_async_tcp_zerocopy");
+     if (zerocopy) {
+       if (handler.set_zerocopy(_fd, 1))
+	 zerocopy = false;
+     }
+     if (zerocopy) {
+       stack->register_poll(_fd, this);
+       struct epoll_event ee;
+       ee.events = EPOLLET;
+       ee.data.u64 = 0; /* avoid valgrind warning */
+       ee.data.fd = _fd;
+       if (epoll_ctl(stack->get_epfd(),EPOLL_CTL_ADD, _fd, &ee) == -1) {
+	 lderr(cct) << __func__<< " epoll_ctl: add fd=" << _fd << " failed "
+	            << cpp_strerror(errno) << dendl;
+	 zerocopy = false;
+       }
+     }
+     use_zerocopy = zerocopy;
+  }
+
+  void free_zerocpy_buffer(uint32_t lo, uint32_t hi)
+  {
+    std::unique_lock<std::mutex> locker(lock);
+    for(uint32_t i = lo; i <=hi; i++) {
+      bufferlist &bl = unacked_map[i];
+      inflight_bytes -= bl.length();
+      bl.clear();
+      unacked_map.erase(i);
+    }
+    ldout(cct, 10) << __func__ << " " << this << " notify free " << lo << "-"
+	           << hi << " send_id " << send_id << dendl;
+  }
 
   int is_connected() override {
     if (connected)
@@ -77,13 +128,17 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   // return the sent length
   // < 0 means error occurred
   #ifndef _WIN32
-  static ssize_t do_sendmsg(int fd, struct msghdr &msg, unsigned len, bool more)
+  ssize_t do_sendmsg(bufferlist &zc_bl, int fd, struct msghdr &msg, unsigned len, bool more)
   {
     size_t sent = 0;
+    bool zerocopy = !!zc_bl.length();
+
     while (1) {
       MSGR_SIGPIPE_STOPPER;
-      ssize_t r;
-      r = ::sendmsg(fd, &msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
+      int flags = MSG_NOSIGNAL | (more ? MSG_MORE : 0);
+      if (zerocopy && (len - sent) > ZEROCOPY_THRESHOLD)
+        flags |= MSG_ZEROCOPY;
+      ssize_t r = ::sendmsg(fd, &msg, flags);
       if (r < 0) {
         int err = ceph_sock_errno();
         if (err == EINTR) {
@@ -93,7 +148,18 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
         }
         return -err;
       }
-
+      if (flags & MSG_ZEROCOPY) {
+        lock.lock();
+        bufferlist sented;
+        zc_bl.splice(0, r, &sented);
+        unacked_map[send_id] = std::move(sented);
+        send_id++;
+        inflight_bytes += r;
+        lock.unlock();
+        ldout(cct,10) << __func__ << " msglen " << len << " sent " << sent
+                      << " send_id " << send_id << " inflight_bytes "
+                      << inflight_bytes << dendl;
+      }
       sent += r;
       if (len == sent) break;
 
@@ -113,6 +179,33 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     return (ssize_t)sent;
   }
 
+  ceph::buffer::list prepare_zerocopy(bufferlist::buffers_t::const_iterator &pb, unsigned merged_len, struct msghdr &msg)
+  {
+    ceph::buffer::list zc_bl;
+
+    ceph::buffer::ptr bufptr;
+    char *merged_buf = nullptr;
+    if (merged_len) {
+      bufptr = ceph::buffer::ptr(ceph::buffer::create(merged_len));
+      merged_buf = bufptr.c_str();
+    }
+
+    unsigned off = 0;
+    for (auto iov = msg.msg_iov; iov != msg.msg_iov + msg.msg_iovlen; iov++, pb++) {
+      if (pb->length() < MERGE_THRESHOLD && merged_buf) {
+        char *data = merged_buf + off;
+        ceph::buffer::ptr ptr(bufptr, off, pb->length());
+        pb->copy_out(0, pb->length(), data);
+        off += round_up_to(pb->length(), sizeof(size_t));
+        zc_bl.append(std::move(ptr));
+        iov->iov_base = data;
+      } else {
+        zc_bl.append(*pb);
+      }
+    }
+    return zc_bl;
+  }
+
   ssize_t send(ceph::buffer::list &bl, bool more) override {
     size_t sent_bytes = 0;
     auto pb = std::cbegin(bl.buffers());
@@ -127,13 +220,27 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
       msg.msg_iovlen = size;
       msg.msg_iov = msgvec;
       unsigned msglen = 0;
+      unsigned merged_len = 0;
+      int small_cnt = 0;
+      auto pa = pb;
       for (auto iov = msgvec; iov != msgvec + size; iov++) {
 	iov->iov_base = (void*)(pb->c_str());
 	iov->iov_len = pb->length();
 	msglen += pb->length();
+	if(use_zerocopy && pb->length() < MERGE_THRESHOLD) {
+	  small_cnt++;
+	  merged_len += round_up_to(pb->length(), sizeof(size_t));
+	}
 	++pb;
       }
-      ssize_t r = do_sendmsg(_fd, msg, msglen, left_pbrs || more);
+      ceph::buffer::list zc_bl;
+      if (use_zerocopy && msglen > ZEROCOPY_THRESHOLD) {
+        if (small_cnt < 2) {
+	  merged_len = 0;
+	}
+        zc_bl = prepare_zerocopy(pa, merged_len, msg);
+      }
+      ssize_t r = do_sendmsg(zc_bl, _fd, msg, msglen, left_pbrs || more);
       if (r < 0)
         return r;
 
@@ -204,6 +311,24 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     ::shutdown(_fd, SHUT_RDWR);
   }
   void close() override {
+    if (use_zerocopy) {
+      stack->unregister_poll(_fd, this);
+      struct epoll_event ee;
+      int r = 0;
+      ee.events = 0;
+      ee.data.u64 = 0;
+      if ((r = epoll_ctl(stack->get_epfd(), EPOLL_CTL_DEL, _fd, &ee)) < 0) {
+        lderr(cct) << __func__ << " epoll_ctl: delete fd=" << _fd
+                   << " failed." << cpp_strerror(errno) << dendl;
+      }
+
+      lock.lock();
+      for(auto &item : unacked_map) {
+	item.second.clear();
+      }
+      unacked_map.clear();
+      lock.unlock();
+    }
     compat_closesocket(_fd);
   }
   int fd() const override {
@@ -214,14 +339,17 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 };
 
 class PosixServerSocketImpl : public ServerSocketImpl {
+  CephContext *cct;
+  PosixNetworkStack *stack;
   ceph::NetHandler &handler;
   int _fd;
 
  public:
-  explicit PosixServerSocketImpl(ceph::NetHandler &h, int f,
+  explicit PosixServerSocketImpl(CephContext *cct, PosixNetworkStack *stack,
+                                 ceph::NetHandler &h, int f,
 				 const entity_addr_t& listen_addr, unsigned slot)
     : ServerSocketImpl(listen_addr.get_type(), slot),
-      handler(h), _fd(f) {}
+      cct(cct), stack(stack), handler(h), _fd(f) {}
   int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
   void abort_accept() override {
     ::close(_fd);
@@ -259,8 +387,10 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
   out->set_sockaddr((sockaddr*)&ss);
   handler.set_priority(sd, opt.priority, out->get_family());
 
-  std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, *out, sd, true));
+  std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(cct, stack, handler, *out, sd, true));
   *sock = ConnectedSocket(std::move(csi));
+
+
   return 0;
 }
 
@@ -309,7 +439,7 @@ int PosixWorker::listen(entity_addr_t &sa,
 
   *sock = ServerSocket(
           std::unique_ptr<PosixServerSocketImpl>(
-	    new PosixServerSocketImpl(net, listen_sd, sa, addr_slot)));
+	    new PosixServerSocketImpl(cct, stack, net, listen_sd, sa, addr_slot)));
   return 0;
 }
 
@@ -328,11 +458,77 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
 
   net.set_priority(sd, opts.priority, addr.get_family());
   *socket = ConnectedSocket(
-      std::unique_ptr<PosixConnectedSocketImpl>(new PosixConnectedSocketImpl(net, addr, sd, !opts.nonblock)));
+      std::unique_ptr<PosixConnectedSocketImpl>(new PosixConnectedSocketImpl(cct,
+          stack, net, addr, sd, !opts.nonblock)));
   return 0;
 }
 
 PosixNetworkStack::PosixNetworkStack(CephContext *c)
-    : NetworkStack(c)
+    : NetworkStack(c), cct(c)
 {
 }
+
+int PosixNetworkStack::polling(void)
+{
+  const int nevent = 1024;
+  struct epoll_event *events = (struct epoll_event *)malloc(sizeof(struct epoll_event) * nevent);
+  if (!events) {
+    lderr(cct) << __func__ << " unable to malloc memory. " << dendl;
+    return -ENOMEM;
+  }
+  memset(events, 0, sizeof(struct epoll_event) * nevent);
+
+  epfd = epoll_create(nevent);
+  if (epfd == -1) {
+    lderr(cct) << __func__ << " unable to do epoll_create: " << cpp_strerror(errno) << dendl;
+    return -errno;
+  }
+  if (::fcntl(epfd, F_SETFD, FD_CLOEXEC) == -1) {
+    int e = errno;
+    ::close(epfd);
+    lderr(cct) << __func__ << " unable to set cloexec: " << cpp_strerror(e) << dendl;
+    return -e;
+  }
+
+  while (!done) {
+       int retval = epoll_wait(epfd, events, nevent, 50);
+       if (retval <= 0)
+	  continue;
+
+       int numevents = retval;
+       for (int i = 0; i< numevents; i++) {
+         struct epoll_event *e = events +i;
+         if (!(e->events & EPOLLERR))
+           continue;
+
+         char control[100];
+         struct msghdr msg = {};
+         msg.msg_control = control;
+         msg.msg_controllen = sizeof(control);
+         int ret = ::recvmsg(e->data.fd, &msg, MSG_ERRQUEUE);
+         if (ret < 0)
+             continue;
+         struct sock_extended_err *serr;
+         struct cmsghdr *cm;
+         cm = CMSG_FIRSTHDR(&msg);
+         if ((cm->cmsg_level == SOL_IP && cm->cmsg_type == IP_RECVERR) ||
+             (cm->cmsg_level == SOL_IPV6 && cm->cmsg_type == IPV6_RECVERR)) {
+             serr = (struct sock_extended_err *)CMSG_DATA(cm);
+             if (serr->ee_errno == 0 && serr->ee_origin == SO_EE_ORIGIN_ZEROCOPY) {
+               uint32_t lo = serr->ee_info;
+               uint32_t hi = serr->ee_data;
+               std::unique_lock locker(lock);
+               auto it = poll_conn.find(e->data.fd);
+               if (it == poll_conn.end()) {
+                 continue;
+               }
+               PosixConnectedSocketImpl *sock = static_cast<PosixConnectedSocketImpl *>(it->second);
+               sock->free_zerocpy_buffer(lo,hi);
+             }
+         }
+       }
+  }
+  ::close(epfd);
+  return 0;
+}
+
