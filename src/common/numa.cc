@@ -156,6 +156,32 @@ static int easy_readdir(const std::string& dir, std::set<std::string> *out)
   return 0;
 }
 
+static std::string get_task_comm(pid_t tid)
+{
+  static const char* comm_fmt = "/proc/self/task/%d/comm";
+  char comm_name[strlen(comm_fmt) + 8];
+  snprintf(comm_name, sizeof(comm_name), comm_fmt, tid);
+  int fd = open(comm_name, O_CLOEXEC | O_RDONLY);
+  if (fd == -1) {
+    return "";
+  }
+  // see linux/sched.h
+  static constexpr int TASK_COMM_LEN = 16;
+  char name[TASK_COMM_LEN];
+  ssize_t n = safe_read(fd, name, sizeof(name));
+  close(fd);
+  if (n < 0) {
+    return "";
+  }
+  assert(n <= sizeof(name));
+  if (name[n - 1] == '\n') {
+    name[n - 1] = '\0';
+  } else {
+    name[n] = '\0';
+  }
+  return name;
+}
+
 int set_cpu_affinity_all_threads(size_t cpu_set_size, cpu_set_t *cpu_set)
 {
   // first set my affinity
@@ -179,6 +205,14 @@ int set_cpu_affinity_all_threads(size_t cpu_set_size, cpu_set_t *cpu_set)
       if (!tid) {
 	continue;  // wtf
       }
+      #ifdef HAVE_DPDK
+      std::string thread_name = get_task_comm(tid);
+      static const char *dpdk_worker_name = "lcore-worker";
+      if (!thread_name.compare(0, strlen(dpdk_worker_name), dpdk_worker_name)) {
+	// ignore dpdk reactor thread, as it takes case of numa by itself
+        continue;
+      }
+      #endif
       r = sched_setaffinity(tid, cpu_set_size, cpu_set);
       if (r < 0) {
 	return -errno;
