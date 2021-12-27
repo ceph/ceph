@@ -26,7 +26,6 @@ set(rbd_srcs
   action/Flatten.cc
   action/Ggate.cc
   action/Group.cc
-  action/ImageCache.cc
   action/ImageMeta.cc
   action/Import.cc
   action/Info.cc
@@ -43,6 +42,7 @@ set(rbd_srcs
   action/Nbd.cc
   action/ObjectMap.cc
   action/Perf.cc
+  action/PersistentCache.cc
   action/Pool.cc
   action/Remove.cc
   action/Rename.cc
