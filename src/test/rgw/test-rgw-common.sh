@@ -76,9 +76,13 @@ function rgw_admin {
 }
 
 function rgw {
-  [ $# -ne 2 ] && echo "rgw() needs 2 params" && exit 1
+  [ $# -lt 2 ] && echo "rgw() needs at least 2 params" && exit 1
 
-  echo "$mrgw $1 $2 $rgw_flags"
+  name=$1
+  port=$2
+  shift 2
+
+  echo "$mrgw $name $port $rgw_flags $@"
 }
 
 function init_first_zone {
