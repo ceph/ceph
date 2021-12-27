@@ -156,7 +156,6 @@ static int easy_readdir(const std::string& dir, std::set<std::string> *out)
   return 0;
 }
 
-#ifdef HAVE_DPDK
 static std::string get_task_comm(pid_t tid)
 {
   static const char* comm_fmt = "/proc/self/task/%d/comm";
@@ -182,12 +181,19 @@ static std::string get_task_comm(pid_t tid)
   }
   return name;
 }
-#endif
 
 int set_cpu_affinity_all_threads(size_t cpu_set_size, cpu_set_t *cpu_set)
 {
+  return set_cpu_affinity_all_threads([&] (pid_t pid, std::string &thread_name) {
+    return sched_setaffinity(pid, cpu_set_size, cpu_set);
+  });
+}
+
+int set_cpu_affinity_all_threads(std::function<int (pid_t, std::string &)> &&func)
+{
   // first set my affinity
-  int r = sched_setaffinity(getpid(), cpu_set_size, cpu_set);
+  std::string comm = get_task_comm(getpid());
+  int r = func(getpid(), comm);
   if (r < 0) {
     return -errno;
   }
@@ -207,15 +213,17 @@ int set_cpu_affinity_all_threads(size_t cpu_set_size, cpu_set_t *cpu_set)
       if (!tid) {
 	continue;  // wtf
       }
-      #ifdef HAVE_DPDK
+
       std::string thread_name = get_task_comm(tid);
+#ifdef HAVE_DPDK
       static const char *dpdk_worker_name = "lcore-worker";
       if (!thread_name.compare(0, strlen(dpdk_worker_name), dpdk_worker_name)) {
 	// ignore dpdk reactor thread, as it takes case of numa by itself
         continue;
       }
-      #endif
-      r = sched_setaffinity(tid, cpu_set_size, cpu_set);
+#endif
+
+      r = func(tid, thread_name);
       if (r < 0) {
 	return -errno;
       }
@@ -251,10 +259,13 @@ int get_numa_node_cpu_set(int node,
   return -ENOTSUP;
 }
 
-int set_cpu_affinity_all_threads(size_t cpu_set_size,
-				 cpu_set_t *cpu_set)
+int set_cpu_affinity_all_threads(size_t cpu_set_size, cpu_set_t *cpu_set)
 {
   return -ENOTSUP;
 }
 
+int set_cpu_affinity_all_threads(std::function<int (pid_t, std::string &)> &&func)
+{
+  return -ENOTSUP;
+}
 #endif

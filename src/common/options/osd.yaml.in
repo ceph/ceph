@@ -27,6 +27,32 @@ options:
   - osd_numa_auto_affinity
   flags:
   - startup
+- name: osd_priority_threads
+  type: str
+  level: advanced
+  desc: High-priority thread collection
+  default: msgr-worker,tp_osd_tp,bstore_kv_sync
+  flags:
+  - startup
+- name: osd_priority_cores
+  type: str
+  level: advanced
+  desc: Logic cores for priority thread collection
+  flags:
+  - startup
+- name: osd_misc_threads
+  type: str
+  level: advanced
+  desc: Non-priority thread collection
+  default: bstore_kv_final,bstore_aio
+  flags:
+  - startup
+- name: osd_misc_cores
+  type: str
+  level: advanced
+  desc: Logic cores for Non-priority thread collection
+  flags:
+  - startup
 - name: osd_smart_report_timeout
   type: uint
   level: advanced

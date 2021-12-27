@@ -2398,16 +2398,54 @@ int OSD::set_numa_affinity()
 	      << " cpus "
 	      << cpu_set_to_str_list(numa_cpu_set_size, &numa_cpu_set)
 	      << dendl;
-      r = set_cpu_affinity_all_threads(numa_cpu_set_size, &numa_cpu_set);
-      if (r < 0) {
-	r = -errno;
-	derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r)
-	     << dendl;
-	numa_node = -1;
-      }
     }
   } else {
     dout(1) << __func__ << " not setting numa affinity" << dendl;
+  }
+
+  size_t priority_cpu_set_size = 0;
+  cpu_set_t priority_cpu_set;
+  std::string value;
+  cct->_conf.get_val(string("osd_priority_cores"), &value);
+  if (value.size())
+    parse_cpu_set_list(value.c_str(), &priority_cpu_set_size, &priority_cpu_set);
+
+  size_t misc_cpu_set_size = 0;
+  cpu_set_t misc_cpu_set;
+  cct->_conf.get_val(string("osd_misc_cores"), &value);
+  if (value.size())
+    parse_cpu_set_list(value.c_str(), &misc_cpu_set_size, &misc_cpu_set);
+  list<string> prio_list;
+  list<string> misc_list;
+  cct->_conf.get_val(string("osd_priority_threads"), &value);
+  get_str_list(value, prio_list);
+  cct->_conf.get_val(string("osd_misc_threads"), &value);
+  get_str_list(value, misc_list);
+  auto set_affinity = [&] (pid_t pid, string &thread_name) {
+    for (auto &name : prio_list) {
+      if (thread_name.compare(0, name.length(), name) == 0) {
+        return sched_setaffinity(pid, priority_cpu_set_size, &priority_cpu_set);
+      }
+    }
+
+    for (auto &name : misc_list) {
+      if (thread_name.compare(0, name.length(), name) == 0) {
+        return sched_setaffinity(pid, misc_cpu_set_size, &misc_cpu_set);
+      }
+    }
+
+    if (numa_node >= 0) {
+      return sched_setaffinity(pid, numa_cpu_set_size, &numa_cpu_set);
+    }
+
+    return 0;
+  };
+  r = set_cpu_affinity_all_threads(std::move(set_affinity));
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r)
+         << dendl;
+    numa_node = -1;
   }
   return 0;
 }

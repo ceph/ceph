@@ -7,6 +7,7 @@
 #include <sched.h>
 #include <ostream>
 #include <set>
+#include <functional>
 
 int parse_cpu_set_list(const char *s,
 		       size_t *cpu_set_size,
@@ -20,5 +21,6 @@ int get_numa_node_cpu_set(int node,
 			  size_t *cpu_set_size,
 			  cpu_set_t *cpu_set);
 
-int set_cpu_affinity_all_threads(size_t cpu_set_size,
-				 cpu_set_t *cpu_set);
+int set_cpu_affinity_all_threads(size_t cpu_set_size, cpu_set_t *cpu_set);
+int set_cpu_affinity_all_threads(std::function<int (pid_t, std::string &)> &&func);
+
