@@ -747,6 +747,7 @@ private:
 	intrusive_ptr_add_ref(&extent);
 	lru.push_back(extent);
       }
+      trim_to_capacity();
     }
 
     void remove_from_lru(CachedExtent &extent) {
