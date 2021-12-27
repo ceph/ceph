@@ -98,6 +98,21 @@ For example::
                 hit_bytes: 192 MiB / 66%
                 miss_bytes: 97 MiB
 
+Flush Cache
+-----------
+
+To flush a cache file with ``rbd``, specify the ``persistent-cache flush``
+command, the pool name and the image name.  ::
+
+        rbd persistent-cache flush {pool-name}/{image-name}
+
+If the application dies unexpectedly, this command can also be used to flush
+the cache back to OSDs.
+
+For example::
+
+        $ rbd persistent-cache flush rbd/foo
+
 Invalidate Cache
 ----------------
 

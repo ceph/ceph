@@ -123,6 +123,7 @@
       object-map rebuild                Rebuild an invalid object map.
       perf image iostat                 Display image IO statistics.
       perf image iotop                  Display a top-like IO monitor.
+      persistent-cache flush            Flush persistent cache.
       persistent-cache invalidate       Invalidate (discard) existing / dirty
                                         persistent cache.
       pool init                         Initialize pool for use by RBD.
@@ -2106,6 +2107,23 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --namespace arg      namespace name
+  
+  rbd help persistent-cache flush
+  usage: rbd persistent-cache flush [--pool <pool>] [--namespace <namespace>] 
+                                    [--image <image>] [--image-id <image-id>] 
+                                    <image-spec> 
+  
+  Flush persistent cache.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --image-id arg       image id
   
   rbd help persistent-cache invalidate
   usage: rbd persistent-cache invalidate
