@@ -151,7 +151,7 @@ need to be keep intact after the OSD is destroyed for replacement.
 #. Zap a disk for the new OSD, if the disk was used before for other purposes.
    It's not necessary for a new disk::
 
-     ceph-volume lvm zap /dev/sdX
+     ceph-volume lvm zap /dev/sdX --destroy
 
 #. Prepare the disk for replacement by using the previously destroyed OSD id::
 
