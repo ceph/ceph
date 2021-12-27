@@ -98,20 +98,20 @@ For example::
                 hit_bytes: 192 MiB / 66%
                 miss_bytes: 97 MiB
 
-Discard Cache
--------------
+Invalidate Cache
+----------------
 
-To discard a cache file with ``rbd``, specify the ``image-cache invalidate``
-option, the pool name and the image name.  ::
+To invalidate (discard) a cache file with ``rbd``, specify the
+``persistent-cache invalidate`` command, the pool name and the image name.  ::
 
-        rbd image-cache invalidate {pool-name}/{image-name}
+        rbd persistent-cache invalidate {pool-name}/{image-name}
 
-The command removes the cache metadata of the corresponding image, disable
+The command removes the cache metadata of the corresponding image, disables
 the cache feature and deletes the local cache file if it exists.
 
 For example::
 
-        $ rbd image-cache invalidate rbd/foo
+        $ rbd persistent-cache invalidate rbd/foo
 
 .. _section: ../../rados/configuration/ceph-conf/#configuration-sections
 .. _commands: ../../man/8/rbd#commands
