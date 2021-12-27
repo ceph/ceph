@@ -2283,7 +2283,8 @@ OSD::OSD(CephContext *cct_,
     OSDShard *one_shard = new OSDShard(
       i,
       cct,
-      this);
+      this,
+      get_num_op_threads() / num_shards);
     shards.push_back(one_shard);
   }
 }
@@ -10750,7 +10751,8 @@ std::string OSDShard::get_scheduler_type()
 OSDShard::OSDShard(
   int id,
   CephContext *cct,
-  OSD *osd)
+  OSD *osd,
+  int per_shard)
   : shard_id(id),
     cct(cct),
     osd(osd),
@@ -10763,7 +10765,8 @@ OSDShard::OSDShard(
     scheduler(ceph::osd::scheduler::make_scheduler(
       cct, osd->num_shards, osd->store->is_rotational(),
       osd->store->get_type())),
-    context_queue(sdata_wait_lock, sdata_cond)
+    context_queue(sdata_wait_lock, sdata_cond),
+    processing(per_shard, spg_t(pg_t(0,0), shard_id_t::NO_SHARD))
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;
 }
@@ -10798,10 +10801,61 @@ void OSD::ShardedOpWQ::_add_slot_waiter(
 
 #undef dout_prefix
 #define dout_prefix *_dout << "osd." << osd->whoami << " op_wq(" << shard_index << ") "
+WorkItem OSD::ShardedOpWQ::_get_no_conflicts_item(OSDShard* sdata, int thread_index, bool &from_queue)
+{
+  uint32_t shard_index = thread_index % osd->num_shards;
+  uint32_t index = thread_index / osd->num_shards;
 
+  if (sdata->processing[index].ps()) {
+    const spg_t& token = sdata->processing[index];
+    auto p = sdata->pg_slots.find(token);
+    if (p != sdata->pg_slots.end()) {
+      OSDShardPGSlot *slot = p->second.get();
+      if(!slot->pending.empty()) {
+        WorkItem work_item{std::move(slot->pending.front())};
+        slot->pending.pop_front();
+        dout(20) << __func__ << " " << token
+                 << " size " << slot->pending.size()
+                 << " thread_index " << thread_index
+                 << dendl;
+        from_queue = false;
+        return work_item;
+      }
+    }
+    sdata->processing[index].pgid.set_ps(0);
+  }
+
+  while(!sdata->scheduler->empty()) {
+    WorkItem work_item = sdata->scheduler->dequeue();
+    auto &item = std::get<OpSchedulerItem>(work_item);
+    const spg_t& token = item.get_ordering_token();
+    if (token.ps() == 0) {
+      return work_item;
+    }
+    bool conflict = false;
+    for (unsigned i=0; i < sdata->processing.size(); i++) {
+       if (token == sdata->processing[i]) {
+         conflict = true;
+	 break;
+       }
+    }
+    if (!conflict) {
+      return work_item;
+    }
+    auto p = sdata->pg_slots.find(token);
+    if (p == sdata->pg_slots.end()) {
+      return work_item;
+    }
+    OSDShardPGSlot *slot = p->second.get();
+    slot->pending.push_back(std::move(item));
+    dout(20) << __func__ << " " << slot->pending.back() << "queued" <<dendl;
+  }
+  return {};
+}
 void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 {
   uint32_t shard_index = thread_index % osd->num_shards;
+  uint32_t index = thread_index / osd->num_shards;
   auto& sdata = osd->shards[shard_index];
   ceph_assert(sdata);
 
@@ -10813,7 +10867,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 
   // peek at spg_t
   sdata->shard_lock.lock();
-  if (sdata->scheduler->empty() &&
+  if (sdata->scheduler->empty() && !sdata->processing[index].ps() &&
       (!is_smallest_thread_index || sdata->context_queue.empty())) {
     std::unique_lock wait_lock{sdata->sdata_wait_lock};
     if (is_smallest_thread_index && !sdata->context_queue.empty()) {
@@ -10847,9 +10901,10 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     sdata->context_queue.move_to(oncommits);
   }
 
+  bool from_queue = true;
   WorkItem work_item;
   while (!std::get_if<OpSchedulerItem>(&work_item)) {
-    if (sdata->scheduler->empty()) {
+    if (sdata->scheduler->empty() && !sdata->processing[index].ps()) {
       if (osd->is_stopping()) {
         sdata->shard_lock.unlock();
         for (auto c : oncommits) {
@@ -10863,7 +10918,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       return;
     }
 
-    work_item = sdata->scheduler->dequeue();
+    work_item = _get_no_conflicts_item(sdata, thread_index, from_queue);
     if (osd->is_stopping()) {
       sdata->shard_lock.unlock();
       for (auto c : oncommits) {
@@ -10915,15 +10970,24 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     r.first->second = make_unique<OSDShardPGSlot>();
   }
   OSDShardPGSlot *slot = r.first->second.get();
+  if (token.ps())
+    sdata->processing[index] = token;
+
   dout(20) << __func__ << " " << token
 	   << (r.second ? " (new)" : "")
 	   << " to_process " << slot->to_process
 	   << " waiting " << slot->waiting
 	   << " waiting_peering " << slot->waiting_peering
 	   << dendl;
+  if (from_queue) {
   slot->to_process.push_back(std::move(item));
   dout(20) << __func__ << " " << slot->to_process.back()
 	   << " queued" << dendl;
+  } else {
+    slot->to_process.push_front(std::move(item));
+    dout(20) << __func__ << " " << slot->to_process.front()
+	    << " queued" << dendl;
+  }
 
  retry_pg:
   PGRef pg = slot->pg;

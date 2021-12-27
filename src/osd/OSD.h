@@ -959,6 +959,7 @@ struct OSDShardPGSlot {
   using OpSchedulerItem = ceph::osd::scheduler::OpSchedulerItem;
   PGRef pg;                      ///< pg reference
   std::deque<OpSchedulerItem> to_process; ///< order items for this slot
+  std::deque<OpSchedulerItem> pending; ///< pending items for this slot
   int num_running = 0;          ///< _process threads doing pg lookup/lock
 
   std::deque<OpSchedulerItem> waiting;   ///< waiting for pg (or map + pg)
@@ -1007,6 +1008,7 @@ struct OSDShard {
   /// from scheduler while _process thread drops shard lock to acquire the
   /// pg lock.  stale slots are removed by consume_map.
   std::unordered_map<spg_t,std::unique_ptr<OSDShardPGSlot>> pg_slots;
+  std::vector<spg_t> processing;
 
   struct pg_slot_compare_by_epoch {
     bool operator()(const OSDShardPGSlot& l, const OSDShardPGSlot& r) const {
@@ -1066,7 +1068,8 @@ struct OSDShard {
   OSDShard(
     int id,
     CephContext *cct,
-    OSD *osd);
+    OSD *osd,
+    int per_shard);
 };
 
 class OSD : public Dispatcher,
@@ -1606,6 +1609,9 @@ protected:
       spg_t token,
       OSDShardPGSlot *slot,
       OpSchedulerItem&& qi);
+
+    using WorkItem = std::variant<std::monostate, OpSchedulerItem, double>;
+    WorkItem _get_no_conflicts_item(OSDShard* sdata, int thread_index, bool &from_queue);
 
     /// try to do some work
     void _process(uint32_t thread_index, ceph::heartbeat_handle_d *hb) override;
