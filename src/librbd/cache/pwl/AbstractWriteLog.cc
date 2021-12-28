@@ -573,8 +573,29 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
 }
 
 template <typename I>
+void AbstractWriteLog<I>::update_image_cache_state() {
+  using klass = AbstractWriteLog<I>;
+  Context *ctx = util::create_context_callback<
+                 klass, &klass::handle_update_image_cache_state>(this);
+  update_image_cache_state(ctx);
+}
+
+template <typename I>
 void AbstractWriteLog<I>::update_image_cache_state(Context *on_finish) {
+  ldout(m_image_ctx.cct, 10) << dendl;
   m_cache_state->write_image_cache_state(on_finish);
+}
+
+template <typename I>
+void AbstractWriteLog<I>::handle_update_image_cache_state(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to update image cache state: " << cpp_strerror(r)
+               << dendl;
+    return;
+  }
 }
 
 template <typename I>
@@ -628,8 +649,9 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
         std::lock_guard locker(m_lock);
         check_image_cache_state_clean();
         m_wake_up_enabled = false;
-        m_cache_state->clean = true;
         m_log_entries.clear();
+        m_cache_state->clean = true;
+        m_cache_state->empty = true;
 
         remove_pool_file();
 
@@ -1304,6 +1326,10 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
       std::lock_guard locker(m_lock);
       m_unpublished_reserves -= published_reserves;
       m_dirty_log_entries.splice(m_dirty_log_entries.end(), dirty_entries);
+      if (m_cache_state->clean && !this->m_dirty_log_entries.empty()) {
+        m_cache_state->clean = false;
+        update_image_cache_state();
+      }
     }
     op->complete(result);
     m_perfcounter->tinc(l_librbd_pwl_log_op_dis_to_app_t,
@@ -1741,6 +1767,10 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
         ldout(cct, 20) << "Nothing new to flush" << dendl;
         /* Do flush complete only when all flush ops are finished */
         all_clean = !m_flush_ops_in_flight;
+        if (!m_cache_state->clean && all_clean) {
+          m_cache_state->clean = true;
+          update_image_cache_state();
+        }
         break;
       }
 
@@ -1990,6 +2020,10 @@ void AbstractWriteLog<I>::flush_dirty_entries(Context *on_finish) {
     std::lock_guard locker(m_lock);
     flushing = (0 != m_flush_ops_in_flight);
     all_clean = m_dirty_log_entries.empty();
+    if (!m_cache_state->clean && all_clean && !flushing) {
+      m_cache_state->clean = true;
+      update_image_cache_state();
+    }
     stop_flushing = (m_shutting_down);
   }
 

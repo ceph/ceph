@@ -196,7 +196,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
       return false;
     }
   } else {
-    m_cache_state->present = true;
+    ceph_assert(m_cache_state->present);
     r = create_and_open_bdev();
     if (r < 0) {
       on_finish->complete(r);
@@ -539,6 +539,10 @@ void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops) {
     m_log_entries.push_back(log_entry);
     ldout(m_image_ctx.cct, 20) << "operation=[" << *operation << "]" << dendl;
   }
+  if (m_cache_state->empty && !m_log_entries.empty()) {
+    m_cache_state->empty = false;
+    this->update_image_cache_state();
+  }
 }
 
 template <typename I>
@@ -811,6 +815,10 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
           this->m_bytes_allocated -= allocated_bytes;
           ceph_assert(this->m_bytes_cached >= cached_bytes);
           this->m_bytes_cached -= cached_bytes;
+          if (!m_cache_state->empty && m_log_entries.empty()) {
+            m_cache_state->empty = true;
+            this->update_image_cache_state();
+          }
 
           ldout(m_image_ctx.cct, 20)
             << "Finished root update: " << "initial_first_valid_entry="
