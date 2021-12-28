@@ -17,7 +17,11 @@ int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
 
-  seastar_test_suite_t::seastar_env.init(argc, argv);
+  int ret = seastar_test_suite_t::seastar_env.init(argc, argv);
+  if (ret != 0) {
+    seastar_test_suite_t::seastar_env.stop();
+    return ret;
+  }
 
   // HACK: differntiate between the `make check` bot and human user
   // for the sake of log flooding
@@ -38,7 +42,7 @@ int main(int argc, char **argv)
     });
   });
 
-  int ret = RUN_ALL_TESTS();
+  ret = RUN_ALL_TESTS();
 
   seastar_test_suite_t::seastar_env.run([] {
     return crimson::common::sharded_perf_coll().stop().then([] {
