@@ -44,7 +44,7 @@ int remove_persistent_topic(const std::string& topic_name, optional_yield y);
 struct reservation_t {
   struct topic_t {
     topic_t(const std::string& _configurationId, const rgw_pubsub_topic& _cfg,
-	    const cls_2pc_reservation::id_t _res_id) :
+	    cls_2pc_reservation::id_t _res_id) :
       configurationId(_configurationId), cfg(_cfg), res_id(_res_id) {}
 
     std::string configurationId;

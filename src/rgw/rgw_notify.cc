@@ -847,7 +847,7 @@ int publish_commit(rgw::sal::Object* obj,
       event_entry.push_endpoint = std::move(topic.cfg.dest.push_endpoint);
       event_entry.push_endpoint_args =
 	std::move(topic.cfg.dest.push_endpoint_args);
-      event_entry.arn_topic = std::move(topic.cfg.dest.arn_topic);
+      event_entry.arn_topic = topic.cfg.dest.arn_topic;
       bufferlist bl;
       encode(event_entry, bl);
       const auto& queue_name = topic.cfg.dest.arn_topic;
