@@ -3807,6 +3807,13 @@ TEST_P(StoreTest, BlueStoreUnshareBlobTest) {
     r = queue_transaction(store, ch, std::move(t4));
     ASSERT_EQ(r, 0);
 
+    {
+      // this ensures remove operation submitted to kv store
+      EXPECT_EQ(store->umount(), 0);
+      EXPECT_EQ(store->mount(), 0);
+      ch = store->open_collection(cid);
+    }
+
     bufferlist resdata;
     r = store->read(ch, hoid, 0, 0x2000, resdata);
     ASSERT_EQ(r, 0x2000);
