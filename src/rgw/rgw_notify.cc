@@ -680,7 +680,7 @@ static inline void populate_event(reservation_t& res,
         EventType event_type,
         rgw_pubsub_s3_event& event) {
   event.eventTime = mtime;
-  event.eventName = to_string(event_type);
+  event.eventName = to_event_string(event_type);
   event.userIdentity = res.user_id;    // user that triggered the change
   event.x_amz_request_id = res.req_id; // request ID of the original change
   event.x_amz_id_2 = res.store->getRados()->host_id; // RGW on which the change was made
