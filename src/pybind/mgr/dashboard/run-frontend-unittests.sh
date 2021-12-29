@@ -16,6 +16,9 @@ npm run build -- --prod --progress=false || failed=true
 # Unit Tests
 npm run test:ci || failed=true
 
+# Fixing minor linting errors beforehand if any
+npm run fix
+
 # Linting
 npm run lint --silent
 if [ $? -gt 0 ]; then
