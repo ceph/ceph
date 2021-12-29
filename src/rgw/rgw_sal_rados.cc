@@ -2494,6 +2494,7 @@ int RadosLifecycle::set_entry(const std::string& oid, const LCEntry& entry)
   cls_entry.bucket = entry.bucket;
   cls_entry.start_time = entry.start_time;
   cls_entry.status = entry.status;
+  cls_entry.optional_cookie = entry.optional_cookie;
 
   return cls_rgw_lc_set_entry(*store->getRados()->get_lc_pool_ctx(), oid, cls_entry);
 }
@@ -2510,7 +2511,8 @@ int RadosLifecycle::list_entries(const std::string& oid, const std::string& mark
     return ret;
 
   for (auto& entry : cls_entries) {
-    entries.push_back(LCEntry(entry.bucket, entry.start_time, entry.status));
+    entries.push_back(LCEntry(entry.bucket, entry.start_time, entry.status,
+			entry.optional_cookie));
   }
 
   return ret;

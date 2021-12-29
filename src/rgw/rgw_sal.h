@@ -1282,9 +1282,14 @@ public:
     std::string bucket;
     uint64_t start_time{0};
     uint32_t status{0};
+    std::string optional_cookie;
 
     LCEntry() = default;
-    LCEntry(std::string& _bucket, uint64_t _time, uint32_t _status) : bucket(_bucket), start_time(_time), status(_status) {}
+    LCEntry(std::string& _bucket, uint64_t _time, uint32_t _status,
+	    std::string& _optional_cookie) : bucket(_bucket), start_time(_time),
+					     status(_status),
+					     optional_cookie(_optional_cookie)
+      {}
   };
 
   Lifecycle() = default;

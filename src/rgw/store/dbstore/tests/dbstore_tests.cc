@@ -45,6 +45,7 @@ namespace gtest {
         delete db;
       }
 
+	  string cookie; // server instance
       string tenant;
       DB *db;
       string db_type;
@@ -1064,12 +1065,12 @@ TEST_F(DBStoreTest, LCEntry) {
   std::string index2 = "lcindex2";
   typedef enum {lc_uninitial = 1, lc_complete} status;
   std::string ents[] = {"bucket1", "bucket2", "bucket3", "bucket4"};
+  std::string& cookie = gtest::env->cookie;
   rgw::sal::Lifecycle::LCEntry entry;
-  rgw::sal::Lifecycle::LCEntry entry1 = {ents[0], lc_time, lc_uninitial};
-  rgw::sal::Lifecycle::LCEntry entry2 = {ents[1], lc_time, lc_uninitial};
-  rgw::sal::Lifecycle::LCEntry entry3 = {ents[2], lc_time, lc_uninitial};
-  rgw::sal::Lifecycle::LCEntry entry4 = {ents[3], lc_time, lc_uninitial};
-
+  rgw::sal::Lifecycle::LCEntry entry1 = {ents[0], lc_time, lc_uninitial, cookie};
+  rgw::sal::Lifecycle::LCEntry entry2 = {ents[1], lc_time, lc_uninitial, cookie};
+  rgw::sal::Lifecycle::LCEntry entry3 = {ents[2], lc_time, lc_uninitial, cookie};
+  rgw::sal::Lifecycle::LCEntry entry4 = {ents[3], lc_time, lc_uninitial, cookie};
   vector<rgw::sal::Lifecycle::LCEntry> lc_entries;
 
   ret = db->set_entry(index1, entry1);
@@ -1086,6 +1087,7 @@ TEST_F(DBStoreTest, LCEntry) {
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(entry.status, lc_uninitial);
   ASSERT_EQ(entry.start_time, lc_time);
+  ASSERT_EQ(entry.optional_cookie, cookie);
 
   // get next entry index1, entry2
   ret = db->get_next_entry(index1, ents[1], entry); 
@@ -1093,6 +1095,7 @@ TEST_F(DBStoreTest, LCEntry) {
   ASSERT_EQ(entry.bucket, ents[2]);
   ASSERT_EQ(entry.status, lc_uninitial);
   ASSERT_EQ(entry.start_time, lc_time);
+  ASSERT_EQ(entry.optional_cookie, cookie);
 
   // update entry4 to entry5
   entry4.status = lc_complete;
@@ -1101,6 +1104,7 @@ TEST_F(DBStoreTest, LCEntry) {
   ret = db->get_entry(index2, ents[3], entry); 
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(entry.status, lc_complete);
+  ASSERT_EQ(entry.optional_cookie, cookie);
 
   // list entries
   ret = db->list_entries(index1, "", 5, lc_entries);
@@ -1173,6 +1177,7 @@ int main(int argc, char **argv)
   gtest::env = new gtest::Environment();
   gtest::env->logfile = c_logfile;
   gtest::env->loglevel = c_loglevel;
+  gtest::env->cookie  = "cookie";
   ::testing::AddGlobalTestEnvironment(gtest::env);
 
   ret = RUN_ALL_TESTS();

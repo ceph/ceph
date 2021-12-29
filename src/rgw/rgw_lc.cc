@@ -325,6 +325,7 @@ int RGWLC::bucket_lc_prepare(int index, LCWorker* worker)
     for (auto& entry : entries) {
       entry.start_time = ceph_clock_now();
       entry.status = lc_uninitial; // lc_uninitial? really?
+      entry.optional_cookie = cookie; // claim this entry
       ret = sal_lc->set_entry(obj_names[index], entry);
       if (ret < 0) {
         ldpp_dout(this, 0)

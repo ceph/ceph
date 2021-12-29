@@ -1267,6 +1267,8 @@ struct cls_rgw_lc_entry {
   std::string bucket;
   uint64_t start_time; // if in_progress
   uint32_t status;
+  std::string optional_cookie; // boot-time identifier of the rgw which
+			       // last updated the entry (or "")
 
   cls_rgw_lc_entry()
     : start_time(0), status(0) {}
@@ -1277,10 +1279,11 @@ struct cls_rgw_lc_entry {
     : bucket(b), start_time(t), status(s) {};
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(bucket, bl);
     encode(start_time, bl);
     encode(status, bl);
+    encode(optional_cookie, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -1289,6 +1292,9 @@ struct cls_rgw_lc_entry {
     decode(bucket, bl);
     decode(start_time, bl);
     decode(status, bl);
+    if (struct_v > 1) {
+      decode(optional_cookie, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
