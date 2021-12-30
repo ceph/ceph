@@ -2,6 +2,110 @@
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
+// clang-format off
+/*
+┌───────────────────────┐
+│ OSD                   │
+│ OSDService           ─┼───┐
+│                       │   │
+│                       │   │
+└───────────────────────┘   │   Ownes & uses the following
+                            │   ScrubQueue interfaces:
+                            │
+                            │
+                            │   - resource management (*1)
+                            │
+                            │   - environment conditions (*2)
+                            │
+                            │   - scrub scheduling (*3)
+                            │
+                            │
+                            │
+                            │
+                            │
+                            │
+ ScrubQueue                 │
+┌───────────────────────────▼────────────┐
+│                                        │
+│                                        │
+│  ScrubQContainer    to_scrub <>────────┼────────┐
+│  ScrubQContainer    penalized          │        │
+│                                        │        │
+│                                        │        │
+│  OSD_wide resource counters            │        │
+│                                        │        │
+│                                        │        │
+│  "env scrub conditions" monitoring     │        │
+│                                        │        │
+│                                        │        │
+│                                        │        │
+│                                        │        │
+└─▲──────────────────────────────────────┘        │
+  │                                               │
+  │                                               │
+  │uses interface <4>                             │
+  │                                               │
+  │                                               │
+  │            ┌──────────────────────────────────┘
+  │            │                 shared ownership of jobs
+  │            │
+  │      ┌─────▼──────┐
+  │      │ScrubJob    │
+  │      │            ├┐
+  │      │            ││
+  │      │            │┼┐
+  │      │            │┼│
+  └──────┤            │┼┤◄──────┐
+         │            │┼│       │
+         │            │┼│       │
+         │            │┼│       │
+         └┬───────────┼┼│       │shared ownership
+          └─┼┼┼┼┼┼┼┼┼┼┼┼│       │
+            └───────────┘       │
+                                │
+                                │
+                                │
+                                │
+┌───────────────────────────────┼─┐
+│                               <>│
+│PgScrubber                       │
+│                                 │
+│                                 │
+│                                 │
+│                                 │
+│                                 │
+└─────────────────────────────────┘
+
+
+SqrubQueue interfaces (main functions):
+
+<1> - OSD/PG resources management:
+
+  - can_inc_scrubs()
+  - {inc/dec}_scrubs_{local/remote}()
+  - dump_scrub_reservations()
+  - {set/clear/is}_reserving_now()
+
+<2> - environment conditions:
+
+  - update_loadavg()
+
+  - scrub_load_below_threshold()
+  - scrub_time_permit()
+
+<3> - scheduling scrubs:
+
+  - select_pg_and_scrub()
+  - dump_scrubs()
+
+<4> - manipulating a job's state:
+
+  - register_with_osd()
+  - remove_from_osd_queue()
+  - update_job()
+
+ */
+// clang-format on
 
 #include <atomic>
 #include <chrono>

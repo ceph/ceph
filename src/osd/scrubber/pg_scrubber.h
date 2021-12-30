@@ -25,7 +25,7 @@ Main Scrubber interfaces:
                                  │
                                  │
 ┌────────────────────────────────▼──────────────────┐
-│               ScrubPgIf                           │
+│               <<ScrubPgIF>>                       │
 └───────────────────────────▲───────────────────────┘
                             │
                             │
@@ -45,7 +45,7 @@ Main Scrubber interfaces:
       │                   │                         implements
       │    ownes & uses   │                                 │
       │                   │       ┌─────────────────────────▼──────┐
-      │                   │       │    ScrubMachineListener        │
+      │                   │       │    <<ScrubMachineListener>>    │
       │                   │       └─────────▲──────────────────────┘
       │                   │                 │
       │                   │                 │
