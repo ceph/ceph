@@ -219,7 +219,9 @@ class ScrubBackend {
    *
    * @returns a pointer to the newly created ScrubMap.
    */
-  ScrubMap* new_chunk();
+  void new_chunk();
+
+  ScrubMap& get_primary_scrubmap();
 
   /**
    * sets Backend's m_repair flag (setting m_mode_desc to a corresponding

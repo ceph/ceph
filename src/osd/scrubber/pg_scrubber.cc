@@ -17,6 +17,7 @@
 #include "messages/MOSDScrubReserve.h"
 
 #include "osd/OSD.h"
+#include "osd/PG.h"
 #include "osd/osd_types_fmt.h"
 #include "ScrubStore.h"
 #include "scrub_backend.h"
@@ -631,7 +632,7 @@ void PgScrubber::on_applied_when_primary(const eversion_t& applied_version)
  */
 bool PgScrubber::select_range()
 {
-  m_primary_scrubmap = m_be->new_chunk();
+  m_be->new_chunk();
 
   /* get the start and end of our scrub chunk
    *
@@ -1000,7 +1001,7 @@ int PgScrubber::build_primary_map_chunk()
   dout(20) << __func__ << ": initiated at epoch " << map_building_since
            << dendl;
 
-  auto ret = build_scrub_map_chunk(*m_primary_scrubmap,
+  auto ret = build_scrub_map_chunk(m_be->get_primary_scrubmap(),
                                    m_primary_scrubmap_pos,
                                    m_start,
                                    m_end,
@@ -1521,7 +1522,7 @@ void PgScrubber::scrub_finish()
   ceph_assert(m_pg->is_locked());
   ceph_assert(is_queued_or_active());
 
-  m_pg->m_planned_scrub = requested_scrub_t{};
+  m_planned_scrub = requested_scrub_t{};
 
   // if the repair request comes from auto-repair and large number of errors,
   // we would like to cancel auto-repair
@@ -1590,11 +1591,11 @@ void PgScrubber::scrub_finish()
 
       // Deep scrub in order to get corrected error counts
       m_pg->scrub_after_recovery = true;
-      m_pg->m_planned_scrub.req_scrub =
-        m_pg->m_planned_scrub.req_scrub || m_flags.required;
+      m_planned_scrub.req_scrub =
+        m_planned_scrub.req_scrub || m_flags.required;
 
       dout(20) << __func__ << " Current 'required': " << m_flags.required
-               << " Planned 'req_scrub': " << m_pg->m_planned_scrub.req_scrub
+               << " Planned 'req_scrub': " << m_planned_scrub.req_scrub
                << dendl;
 
     } else if (m_shallow_errors || m_deep_errors) {
@@ -1683,7 +1684,7 @@ void PgScrubber::scrub_finish()
 
   cleanup_on_finish();
   if (do_auto_scrub) {
-    request_rescrubbing(m_pg->m_planned_scrub);
+    request_rescrubbing(m_planned_scrub);
   }
 
   if (m_pg->is_active() && m_pg->is_primary()) {
@@ -1729,7 +1730,7 @@ void PgScrubber::dump_scrubber(ceph::Formatter* f,
   } else {
     f->dump_bool("active", false);
     f->dump_bool("must_scrub",
-		 (m_pg->m_planned_scrub.must_scrub || m_flags.required));
+		 (m_planned_scrub.must_scrub || m_flags.required));
     f->dump_bool("must_deep_scrub", request_flags.must_deep_scrub);
     f->dump_bool("must_repair", request_flags.must_repair);
     f->dump_bool("need_auto", request_flags.need_auto);
@@ -1818,13 +1819,13 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
   // Will next scrub surely be a deep one? note that deep-scrub might be
   // selected even if we report a regular scrub here.
   bool deep_expected = (now_is >= m_pg->next_deepscrub_interval()) ||
-                       m_pg->m_planned_scrub.must_deep_scrub ||
-                       m_pg->m_planned_scrub.need_auto;
+                       m_planned_scrub.must_deep_scrub ||
+                       m_planned_scrub.need_auto;
   scrub_level_t expected_level =
     deep_expected ? scrub_level_t::deep : scrub_level_t::shallow;
-  bool periodic = !m_pg->m_planned_scrub.must_scrub &&
-                  !m_pg->m_planned_scrub.need_auto &&
-                  !m_pg->m_planned_scrub.must_deep_scrub;
+  bool periodic = !m_planned_scrub.must_scrub &&
+                  !m_planned_scrub.need_auto &&
+                  !m_planned_scrub.must_deep_scrub;
 
   // are we ripe for scrubbing?
   if (now_is > m_scrub_job->schedule.scheduled_at) {
@@ -1884,6 +1885,7 @@ PgScrubber::PgScrubber(PG* pg)
     , m_pg_id{pg->pg_id}
     , m_osds{m_pg->osd}
     , m_pg_whoami{pg->pg_whoami}
+    , m_planned_scrub{pg->get_planned_scrub(ScrubberPasskey{})}
     , preemption_data{pg}
 {
   m_fsm = std::make_unique<ScrubMachine>(m_pg, this);
