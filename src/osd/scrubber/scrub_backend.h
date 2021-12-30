@@ -271,15 +271,6 @@ class ScrubBackend {
   ConfigProxy& m_conf;
   LogChannelRef clog;
 
-  int num_digest_updates_pending{0};
-
- public:  
-  // as used by PgScrubber::final_cstat_update(). consider relocating.
-  // actually - only filled in by the PG backend, and used by the scrubber.
-  // We are not handling it. So consider getting it from the Scrubber, or
-  // creating it by the PG-BE
-  omap_stat_t m_omap_stats = (const struct omap_stat_t){0};
-
  private:
   using auth_and_obj_errs_t =
     std::tuple<std::list<pg_shard_t>,  ///< the auth-list
