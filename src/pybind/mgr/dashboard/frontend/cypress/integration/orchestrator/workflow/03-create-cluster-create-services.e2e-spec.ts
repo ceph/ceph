@@ -39,9 +39,9 @@ describe('Create cluster create services page', () => {
     });
 
     it('should edit a service', () => {
-      const count = '3';
-      createClusterServicePage.editService(serviceName, count);
-      createClusterServicePage.expectPlacementCount(serviceName, count);
+      const daemonCount = '4';
+      createClusterServicePage.editService(serviceName, daemonCount);
+      createClusterServicePage.expectPlacementCount(serviceName, daemonCount);
     });
 
     it('should create an ingress service', () => {
