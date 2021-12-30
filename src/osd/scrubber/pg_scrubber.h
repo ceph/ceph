@@ -690,6 +690,9 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   scrub_flags_t m_flags;
 
+  /// a reference to the details of the next scrub (as requested and managed by the PG)
+  requested_scrub_t& m_planned_scrub;
+
   bool m_active{false};
 
   /**
@@ -800,7 +803,6 @@ private:
   void message_all_replicas(int32_t opcode, std::string_view op_text);
 
   hobject_t m_max_end;	///< Largest end that may have been sent to replicas
-  ScrubMap* m_primary_scrubmap{nullptr}; ///< the map is owned by the ScrubBackend
   ScrubMapBuilder m_primary_scrubmap_pos;
 
   void _request_scrub_map(pg_shard_t replica,

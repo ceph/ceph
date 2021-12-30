@@ -7548,7 +7548,7 @@ Scrub::schedule_result_t OSDService::initiate_a_scrub(spg_t pgid,
     return Scrub::schedule_result_t::already_started;
   }
   // Skip other kinds of scrubbing if only explicitly requested repairing is allowed
-  if (allow_requested_repair_only && !pg->m_planned_scrub.must_repair) {
+  if (allow_requested_repair_only && !pg->get_planned_scrub().must_repair) {
     pg->unlock();
     dout(10) << __func__ << " skip " << pgid
 	     << " because repairing is not explicitly requested on it" << dendl;
@@ -7573,7 +7573,7 @@ void OSD::resched_all_scrubs()
     if (!pg)
       continue;
 
-    if (!pg->m_planned_scrub.must_scrub && !pg->m_planned_scrub.need_auto) {
+    if (!pg->get_planned_scrub().must_scrub && !pg->get_planned_scrub().need_auto) {
       dout(15) << __func__ << ": reschedule " << job.pgid << dendl;
       pg->reschedule_scrub();
     }

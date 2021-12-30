@@ -168,6 +168,7 @@ class ScrubberPasskey {
 private:
   friend class Scrub::ReplicaReservations;
   friend class PrimaryLogScrub;
+  friend class PgScrubber;
   ScrubberPasskey() {}
   ScrubberPasskey(const ScrubberPasskey&) = default;
   ScrubberPasskey& operator=(const ScrubberPasskey&) = delete;
@@ -189,6 +190,10 @@ public:
 
   /// flags detailing scheduling/operation characteristics of the next scrub 
   requested_scrub_t m_planned_scrub;
+
+  const requested_scrub_t& get_planned_scrub() const {
+    return m_planned_scrub;
+  }
 
   /// scrubbing state for both Primary & replicas
   bool is_scrub_active() const { return m_scrubber->is_scrub_active(); }
@@ -1372,6 +1377,10 @@ public:
 
   OSDService* get_pg_osd(ScrubberPasskey) const {
     return osd;
+  }
+
+  requested_scrub_t& get_planned_scrub(ScrubberPasskey) {
+    return m_planned_scrub;
   }
 
 };

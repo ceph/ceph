@@ -108,11 +108,15 @@ void ScrubBackend::update_repair_status(bool should_repair)
               : (m_depth == scrub_level_t::deep ? "deep-scrub"sv : "scrub"sv));
 }
 
-ScrubMap* ScrubBackend::new_chunk()
+void ScrubBackend::new_chunk()
 {
   dout(15) << __func__ << dendl;
   this_chunk.emplace(m_pg_whoami);
-  return &this_chunk->received_maps[m_pg_whoami];
+}
+
+ScrubMap& ScrubBackend::get_primary_scrubmap()
+{
+  return this_chunk->received_maps[m_pg_whoami];
 }
 
 void ScrubBackend::merge_to_authoritative_set()
