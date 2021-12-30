@@ -528,6 +528,9 @@ add_dependencies(common legacy-option-headers ${jaeger_base})
 
 add_library(ceph-common SHARED ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})
+if(ENABLE_COVERAGE)
+  target_link_libraries(ceph-common gcov)
+endif(ENABLE_COVERAGE)
 add_dependencies(ceph-common legacy-option-headers ${jaeger_base})
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
