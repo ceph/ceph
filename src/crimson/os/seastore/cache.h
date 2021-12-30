@@ -725,16 +725,6 @@ private:
 	remove_from_lru(lru.front());
       }
     }
-  public:
-    LRU(size_t capacity) : capacity(capacity) {}
-
-    size_t get_current_contents_bytes() const {
-      return contents;
-    }
-
-    size_t get_current_contents_extents() const {
-      return lru.size();
-    }
 
     void add_to_lru(CachedExtent &extent) {
       assert(
@@ -748,6 +738,17 @@ private:
 	lru.push_back(extent);
       }
       trim_to_capacity();
+    }
+
+  public:
+    LRU(size_t capacity) : capacity(capacity) {}
+
+    size_t get_current_contents_bytes() const {
+      return contents;
+    }
+
+    size_t get_current_contents_extents() const {
+      return lru.size();
     }
 
     void remove_from_lru(CachedExtent &extent) {
@@ -787,7 +788,7 @@ private:
     }
 
     ~LRU() {
-      assert(lru.empty());
+      clear();
     }
   } lru;
 

@@ -34,7 +34,6 @@ Cache::Cache(
 Cache::~Cache()
 {
   LOG_PREFIX(Cache::~Cache);
-  lru.clear();
   for (auto &i: extents) {
     ERROR("extent {} still alive", i);
   }
@@ -618,9 +617,9 @@ void Cache::add_extent(CachedExtentRef ref)
 
   if (ref->is_dirty()) {
     add_to_dirty(ref);
-  } else if (!ref->is_placeholder()) {
-    lru.add_to_lru(*ref);
-  } 
+  } else {
+    touch_extent(*ref);
+  }
   DEBUG("extent {}", *ref);
 }
 
