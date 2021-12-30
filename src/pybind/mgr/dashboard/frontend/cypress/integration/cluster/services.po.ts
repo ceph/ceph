@@ -70,12 +70,12 @@ export class ServicesPageHelper extends PageHelper {
     }
   }
 
-  editService(name: string, count: string) {
+  editService(name: string, daemonCount: string) {
     this.navigateEdit(name, true, false);
     cy.get(`${this.pages.create.id}`).within(() => {
       cy.get('#service_type').should('be.disabled');
       cy.get('#service_id').should('be.disabled');
-      cy.get('#count').clear().type(count);
+      cy.get('#count').clear().type(daemonCount);
       cy.get('cd-submit-button').click();
     });
   }
