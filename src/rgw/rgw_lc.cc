@@ -16,6 +16,7 @@
 #include "include/scope_guard.h"
 #include "common/Formatter.h"
 #include "common/containers.h"
+#include "common/split.h"
 #include <common/errno.h>
 #include "include/random.h"
 #include "cls/lock/cls_lock_client.h"
@@ -212,6 +213,28 @@ bool RGWLifecycleConfiguration::valid()
   return true;
 }
 
+static inline std::string_view sv_trim(std::string_view str) {
+  while (isspace(str.front())) {
+    str.remove_prefix(1);
+  }
+  while (isspace(str.back())) {
+    str.remove_suffix(1);
+  }
+  return str;
+}
+
+void RGWLC::Flags::initialize(CephContext* cct)
+{
+  flags.fill(false);
+  ceph::split sp_flags(cct->_conf.get_val<string>("rgw_lc_flags"));
+  for (auto it = sp_flags.begin(); it != sp_flags.end(); ++it) {
+    auto token = sv_trim(string_view{*it});
+    if (token == "clear_stale_entries") {
+      flags[uint8_t(flag_value::clear_stale_entries)] = true;
+    }
+  }
+}
+
 void *RGWLC::LCWorker::entry() {
   do {
     std::unique_ptr<rgw::sal::Bucket> all_buckets; // empty restriction
@@ -246,6 +269,7 @@ void *RGWLC::LCWorker::entry() {
 
 void RGWLC::initialize(CephContext *_cct, rgw::sal::Store* _store) {
   cct = _cct;
+  global_flags.initialize(cct);
   store = _store;
   sal_lc = store->get_lifecycle();
   max_objs = cct->_conf->rgw_lc_max_objs;

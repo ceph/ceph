@@ -428,6 +428,16 @@ options:
   default: 10_min
   services:
   - rgw
+- name: rgw_lc_flags
+  type: str
+  level: advanced
+  desc: a set of optional runtime flags that customize lifecycle processing
+  long_desc: A comma delimited list of flags that customize lifecycle processing, as defined below
+    ``clear_stale_entries`` process entries even if marked already active by a prior/different rgw instance (does not override locks)
+  fmt_desc: Customizes the lifecycle processing behavior, whether started from radosgw or radosgw-admin lc process
+    Currently supported flags are ``clear_stale_entries`` process entries even if marked already active by a prior/different rgw instance (does not override locks)
+  services:
+  - rgw
 - name: rgw_script_uri
   type: str
   level: dev

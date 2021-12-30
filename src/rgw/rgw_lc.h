@@ -5,6 +5,8 @@
 #define CEPH_RGW_LC_H
 
 #include <map>
+#include <array>
+#include <vector>
 #include <string>
 #include <iostream>
 
@@ -467,6 +469,25 @@ class RGWLC : public DoutPrefixProvider {
   std::atomic<bool> down_flag = { false };
   std::string cookie;
 
+  class Flags
+  {
+  public:
+    enum class flag_value : uint8_t
+    {
+      clear_stale_entries = 0,
+      last_option
+    };
+
+    void initialize(CephContext* cct);
+
+    bool have_flag(const flag_value &k) const {
+      return flags[uint8_t(k)];
+    }
+
+  private:
+    std::array<bool, uint8_t(flag_value::last_option)> flags;
+  };
+
 public:
 
   class WorkPool;
@@ -507,6 +528,7 @@ public:
 
   friend class RGWRados;
 
+  Flags global_flags;
   std::vector<std::unique_ptr<RGWLC::LCWorker>> workers;
 
   RGWLC() : cct(nullptr), store(nullptr) {}
