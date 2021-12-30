@@ -1969,7 +1969,7 @@ int RGWLC::process(LCWorker* worker,
   return 0;
 }
 
-bool RGWLC::expired_session(time_t started)
+bool RGWLC::expired_session(const rgw::sal::Lifecycle::LCEntry& entry)
 {
   time_t interval = (cct->_conf->rgw_lc_debug_interval > 0)
     ? cct->_conf->rgw_lc_debug_interval
@@ -1978,12 +1978,20 @@ bool RGWLC::expired_session(time_t started)
   auto now = time(nullptr);
 
   ldpp_dout(this, 16) << "RGWLC::expired_session"
-	   << " started: " << started
+	   << " started: " << entry.start_time
 	   << " interval: " << interval << "(*2==" << 2*interval << ")"
 	   << " now: " << now
 	   << dendl;
 
-  return (started + 2*interval < now);
+  /* sessions should self-expire iff:
+   * 1) at least the two lc intervals have passed, and
+   * 2) the session is not running in the current radosgw instance.
+   * OR
+   * 3) the normal behavior has been overriden with the
+   * clear_stale_entries flag */
+  return (((time_t(entry.start_time) + 2*interval < now) &&
+	   (entry.optional_cookie != cookie)) ||
+	  (global_flags.have_flag(Flags::flag_value::clear_stale_entries)));
 }
 
 time_t RGWLC::thread_stop_at()
@@ -2030,7 +2038,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   ret = sal_lc->get_entry(obj_names[index], bucket_entry_marker, entry);
   if (ret >= 0) {
     if (entry.status == lc_processing) {
-      if (expired_session(entry.start_time)) {
+      if (expired_session(entry)) {
 	ldpp_dout(this, 5) << "RGWLC::process_bucket(): STALE lc session found for: " << entry
 			   << " index: " << index << " worker ix: " << worker->ix
 			   << " (clearing)"
@@ -2116,7 +2124,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     ret = sal_lc->get_entry(obj_names[index], head.marker, entry);
     if (ret >= 0) {
       if (entry.status == lc_processing) {
-	if (expired_session(entry.start_time)) {
+	if (expired_session(entry)) {
 	  ldpp_dout(this, 5) << "RGWLC::process(): STALE lc session found for: " << entry
 			     << " index: " << index << " worker ix: " << worker->ix
 			     << " (clearing)"
