@@ -15,7 +15,6 @@
 #include "common/interval_map.h"
 #include "crimson/osd/exceptions.h"
 
-#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/cache.h"
