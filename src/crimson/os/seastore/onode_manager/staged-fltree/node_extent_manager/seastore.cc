@@ -10,6 +10,8 @@ namespace {
 LOG_PREFIX(OTree::Seastore);
 }
 
+SET_SUBSYS(seastore_onode);
+
 namespace crimson::os::seastore::onode {
 
 static DeltaRecorderURef create_replay_recorder(

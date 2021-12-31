@@ -248,18 +248,18 @@ class Btree {
   insert(Transaction& t, const ghobject_t& obj, tree_value_config_t _vconf) {
     LOG_PREFIX(OTree::insert);
     if (_vconf.payload_size > value_builder.get_max_value_payload_size()) {
-      ERRORT("value payload size {} too large to insert {}",
-             t, _vconf.payload_size, key_hobj_t{obj});
+      SUBERRORT(seastore_onode, "value payload size {} too large to insert {}",
+                t, _vconf.payload_size, key_hobj_t{obj});
       return crimson::ct_error::value_too_large::make();
     }
     if (obj.hobj.nspace.size() > value_builder.get_max_ns_size()) {
-      ERRORT("namespace size {} too large to insert {}",
-             t, obj.hobj.nspace.size(), key_hobj_t{obj});
+      SUBERRORT(seastore_onode, "namespace size {} too large to insert {}",
+                t, obj.hobj.nspace.size(), key_hobj_t{obj});
       return crimson::ct_error::value_too_large::make();
     }
     if (obj.hobj.oid.name.size() > value_builder.get_max_oid_size()) {
-      ERRORT("oid size {} too large to insert {}",
-             t, obj.hobj.oid.name.size(), key_hobj_t{obj});
+      SUBERRORT(seastore_onode, "oid size {} too large to insert {}",
+                t, obj.hobj.oid.name.size(), key_hobj_t{obj});
       return crimson::ct_error::value_too_large::make();
     }
     value_config_t vconf{value_builder.get_header_magic(), _vconf.payload_size};
