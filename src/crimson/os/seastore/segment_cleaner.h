@@ -205,7 +205,7 @@ public:
     auto& sm_info = sm_infos[segment_id.device_id()];
     auto iter = sm_info->open_segment_avails.find(segment_id);
     if (iter == sm_info->open_segment_avails.end()) {
-      crimson::get_logger(ceph_subsys_seastore).error(
+      crimson::get_logger(ceph_subsys_seastore_cleaner).error(
 	"SegmentCleaner::update_segment_avail_bytes:"
 	":segment closed {}, not updating",
 	offset);
@@ -213,7 +213,7 @@ public:
     }
     auto new_avail_bytes = sm_info->segment_size - offset.as_seg_paddr().get_segment_off();
     if (iter->second < new_avail_bytes) {
-      crimson::get_logger(ceph_subsys_seastore).error(
+      crimson::get_logger(ceph_subsys_seastore_cleaner).error(
 	"SegmentCleaner::update_segment_avail_bytes:"
 	" avail_bytes increased? , {}, {}",
 	iter->second,
@@ -685,7 +685,7 @@ public:
     bool detailed = false);
 
   void mount(device_id_t pdevice_id, std::vector<SegmentManager*>& sms) {
-    crimson::get_logger(ceph_subsys_seastore).debug(
+    crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
       "SegmentCleaner::mount: {} segment managers", sms.size());
     init_complete = false;
     stats = {};
@@ -778,7 +778,7 @@ public:
     segment_seq_t seq,
     bool out_of_line) final
   {
-    crimson::get_logger(ceph_subsys_seastore).debug(
+    crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
       "SegmentCleaner::init_mark_segment_closed: segment {}, seq {}",
       segment,
       seq);
@@ -862,7 +862,7 @@ public:
       }
     }
     if (id != NULL_SEG_ID) {
-      crimson::get_logger(ceph_subsys_seastore).debug(
+      crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
 	"SegmentCleaner::get_next_gc_target: segment {} seq {}",
 	id,
 	seq);
@@ -1181,7 +1181,7 @@ private:
   }
 
   void log_gc_state(const char *caller) const {
-    auto &logger = crimson::get_logger(ceph_subsys_seastore);
+    auto &logger = crimson::get_logger(ceph_subsys_seastore_cleaner);
     if (logger.is_enabled(seastar::log_level::debug)) {
       logger.debug(
 	"SegmentCleaner::log_gc_state({}): "
@@ -1304,7 +1304,7 @@ private:
       stats.empty_segments--;
     }
     segments.segment_closed(segment);
-    crimson::get_logger(ceph_subsys_seastore).info(
+    crimson::get_logger(ceph_subsys_seastore_cleaner).info(
       "mark closed: {} empty_segments: {}"
       ", opened_segments {}, should_block_on_gc {}"
       ", projected_avail_ratio {}, projected_reclaim_ratio {}",
@@ -1330,7 +1330,7 @@ private:
     }
     segment_info.set_empty();
     stats.empty_segments++;
-    crimson::get_logger(ceph_subsys_seastore
+    crimson::get_logger(ceph_subsys_seastore_cleaner
       ).info("mark empty: {}, empty_segments {}"
 	", opened_segments {}, should_block_on_gc {}"
 	", projected_avail_ratio {}, projected_reclaim_ratio {}",
@@ -1357,7 +1357,7 @@ private:
     segments[segment].set_open();
     assert(stats.empty_segments > 0);
     stats.empty_segments--;
-    crimson::get_logger(ceph_subsys_seastore
+    crimson::get_logger(ceph_subsys_seastore_cleaner
       ).info("mark open: {}, empty_segments {}"
 	", opened_segments {}, should_block_on_gc {}"
 	", projected_avail_ratio {}, projected_reclaim_ratio {}",

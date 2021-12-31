@@ -41,7 +41,7 @@ public:
 	iter != write_set.end()) {
       if (out)
 	*out = CachedExtentRef(&*iter);
-      TRACET("Found offset {} in write_set: {}", *this, addr, *iter);
+      SUBTRACET(seastore_tm, "Found offset {} in write_set: {}", *this, addr, *iter);
       return get_extent_ret::PRESENT;
     } else if (
       auto iter = read_set.find(addr);
@@ -51,7 +51,7 @@ public:
       assert(iter->ref->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
       if (out)
 	*out = iter->ref;
-      TRACET("Found offset {} in read_set: {}", *this, addr, *(iter->ref));
+      SUBTRACET(seastore_tm, "Found offset {} in read_set: {}", *this, addr, *(iter->ref));
       return get_extent_ret::PRESENT;
     } else {
       return get_extent_ret::ABSENT;
@@ -102,30 +102,30 @@ public:
     }
     ++fresh_block_stats.num;
     fresh_block_stats.bytes += ref->get_length();
-    TRACET("adding {} to write_set", *this, *ref);
+    SUBTRACET(seastore_tm, "adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
   void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
     LOG_PREFIX(Transaction::mark_delayed_extent_inline);
-    TRACET("removing {} from write_set", *this, *ref);
+    SUBTRACET(seastore_tm, "removing {} from write_set", *this, *ref);
     write_set.erase(*ref);
     ref->set_paddr(make_record_relative_paddr(offset));
     offset += ref->get_length();
     inline_block_list.push_back(ref);
-    TRACET("adding {} to write_set", *this, *ref);
+    SUBTRACET(seastore_tm, "adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
   void mark_delayed_extent_ool(LogicalCachedExtentRef& ref, paddr_t final_addr) {
     LOG_PREFIX(Transaction::mark_delayed_extent_ool);
-    TRACET("removing {} from write_set", *this, *ref);
+    SUBTRACET(seastore_tm, "removing {} from write_set", *this, *ref);
     write_set.erase(*ref);
     ref->set_paddr(final_addr);
     assert(!ref->get_paddr().is_null());
     assert(!ref->is_inline());
     ool_block_list.push_back(ref);
-    TRACET("adding {} to write_set", *this, *ref);
+    SUBTRACET(seastore_tm, "adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
@@ -134,7 +134,7 @@ public:
     ceph_assert(!is_weak());
     assert(read_set.count(ref->prior_instance->get_paddr()));
     mutated_block_list.push_back(ref);
-    TRACET("adding {} to write_set", *this, *ref);
+    SUBTRACET(seastore_tm, "adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 

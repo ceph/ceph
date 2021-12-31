@@ -6,6 +6,8 @@
 
 #include "crimson/os/seastore/lba_manager/btree/lba_btree.h"
 
+SET_SUBSYS(seastore_lba);
+
 namespace crimson::os::seastore::lba_manager::btree {
 
 LBABtree::mkfs_ret LBABtree::mkfs(op_context_t c)

@@ -35,6 +35,8 @@
 using std::string;
 using crimson::common::local_conf;
 
+SET_SUBSYS(seastore);
+
 namespace crimson::os::seastore {
 
 class FileMDStore final : public SeaStore::MDStore {
