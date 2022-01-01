@@ -136,7 +136,7 @@ per gigabyte (i.e., $150 / 3072 = 0.0488). In the foregoing example, using the
 
 .. tip:: Running multiple OSDs on a single SAS / SATA drive
    is **NOT** a good idea.  NVMe drives, however, can achieve
-   improved performance by being split into two more more OSDs.
+   improved performance by being split into two or more OSDs.
 
 .. tip:: Running an OSD and a monitor or a metadata server on a single 
    drive is also **NOT** a good idea.
