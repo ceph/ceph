@@ -67,8 +67,6 @@ The metadata daemon memory utilization depends on how much memory its cache is
 configured to consume.  We recommend 1 GB as a minimum for most systems.  See
 ``mds_cache_memory``.
 
-OSDs (ceph-osd)
----------------
 
 Memory
 ======
@@ -135,7 +133,7 @@ per gigabyte by 40%--rendering your cluster substantially less cost efficient.
 
 .. tip:: Running multiple OSDs on a single SAS / SATA drive
    is **NOT** a good idea.  NVMe drives, however, can achieve
-   improved performance by being split into two more more OSDs.
+   improved performance by being split into two or more OSDs.
 
 .. tip:: Running an OSD and a monitor or a metadata server on a single 
    drive is also **NOT** a good idea.
