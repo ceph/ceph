@@ -374,6 +374,12 @@ int radosgw_Main(int argc, const char **argv)
   }
 #endif
 
+#ifdef WITH_RADOSGW_DAOS
+  if (config_store == "daos") {
+    rgw_store = "daos";
+  }
+#endif
+
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
 				 rgw_store,

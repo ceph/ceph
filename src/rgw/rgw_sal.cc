@@ -33,6 +33,9 @@
 #include "rgw_sal_motr.h"
 #endif
 
+#ifdef WITH_RADOSGW_DAOS
+#include "rgw_sal_daos.h"
+#endif
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -43,6 +46,9 @@ extern rgw::sal::Store* newDBStore(CephContext *cct);
 #endif
 #ifdef WITH_RADOSGW_MOTR
 extern rgw::sal::Store* newMotrStore(CephContext *cct);
+#endif
+#ifdef WITH_RADOSGW_DAOS
+extern rgw::sal::Store* newDaosStore(CephContext *cct);
 #endif
 }
 
@@ -194,6 +200,17 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
   }
 #endif
 
+#ifdef WITH_RADOSGW_DAOS
+  if (svc.compare("daos") == 0) {
+    rgw::sal::Store* store = newDaosStore(cct);
+    if (store == nullptr) {
+      ldpp_dout(dpp, 0) << "newDaosStore() failed!" << dendl;
+      return store;
+    }
+    return store;
+  }
+#endif
+
   return nullptr;
 }
 
@@ -234,6 +251,14 @@ rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvide
   if (svc.compare("motr") == 0) {
 #ifdef WITH_RADOSGW_MOTR
     store = newMotrStore(cct);
+#else
+    store = nullptr;
+#endif
+  }
+
+  if (svc.compare("daos") == 0) {
+#ifdef WITH_RADOSGW_DAOS
+    store = newDaosStore(cct);
 #else
     store = nullptr;
 #endif

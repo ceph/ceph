@@ -320,6 +320,7 @@ else
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     [ $WITH_RADOSGW_MOTR ] && with_rgw_motr=true || with_rgw_motr=false
+    [ $WITH_RADOSGW_DAOS ] && with_rgw_daos=true || with_rgw_daos=false
     motr_pkgs_url='https://github.com/Seagate/cortx-motr/releases/download/2.0.0-rgw'
     source /etc/os-release
     case "$ID" in
@@ -449,6 +450,13 @@ EOF
                   "$motr_pkgs_url/isa-l-2.30.0-1.el7.${ARCH}.rpm" \
                   "$motr_pkgs_url/cortx-motr-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm" \
                   "$motr_pkgs_url/cortx-motr-devel-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm"
+        fi
+        # for rgw daos backend build checks
+        if ! rpm --quiet -q daos-devel &&
+              { [[ $FOR_MAKE_CHECK ]] || $with_rgw_daos; }; then
+            $SUDO dnf config-manager --add-repo https://packages.daos.io/v2.0/CentOS${MAJOR_VERSION}/packages/x86_64/daos_packages.repo
+            $SUDO rpm --import https://packages.daos.io/RPM-GPG-KEY
+            $SUDO dnf install -y daos-devel
         fi
         ;;
     opensuse*|suse|sles)
