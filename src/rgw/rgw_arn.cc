@@ -163,7 +163,7 @@ ARN::ARN(const std::string& resource_name, const std::string& type, const std::s
 }
 
 boost::optional<ARN> ARN::parse(const std::string& s, bool wildcards) {
-  static const std::regex rx_wild("arn:([^:]*):([^:]*):([^:]*):([^:]*):([^:]*)",
+  static const std::regex rx_wild("arn:([^:]*):([^:]*):([^:]*):([^:]*):(\\$\\{aws\\:[^:]*\\}|[^:]*)",
 			     std::regex_constants::ECMAScript |
 			     std::regex_constants::optimize);
   static const std::regex rx_no_wild(
