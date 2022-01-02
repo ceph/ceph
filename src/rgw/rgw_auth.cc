@@ -853,6 +853,12 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
 {
   for (auto it: role.role_policies) {
     try {
+      const char *variable = "${aws:username}";
+      std::string str(variable);
+      if (it.find(variable,0) != string::npos){
+        auto length = str.length();
+        it.replace(it.find(variable,0),length,s->user->get_id().id);
+      }
       bufferlist bl = bufferlist::static_from_string(it);
       const rgw::IAM::Policy p(s->cct, role.tenant, bl);
       s->iam_user_policies.push_back(std::move(p));
