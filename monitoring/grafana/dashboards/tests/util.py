@@ -56,8 +56,8 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
                     # NOTE: If two or more panels have the same name and legend it
                     # might suggest a refactoring is needed or add something else
                     # to identify each query.
-                    conflict_file = data['queries'][query_id]['path'].split('/')[-1]
-                    file = path.split('/')[-1]
+                    conflict_file = Path(data['queries'][query_id]['path']).name
+                    file = Path(path).name
                     cprint((f'ERROR: Query in panel "{title}" with legend "{legend_format}"'
                                        f' already exists. Conflict "{conflict_file}" '
                                        f'with: "{file}"'), 'red')
