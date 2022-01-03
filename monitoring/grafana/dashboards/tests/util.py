@@ -92,7 +92,12 @@ def replace_grafana_expr_variables(expr: str, variable: str, value: Any) -> str:
     >>> replace_grafana_expr_variables('metric{name~="no_dollar|$other|$osd"}', \
         'no_dollar', 'replacement')
     'metric{name~="no_dollar|$other|$osd"}'
+
+    It shouldn't replace the next char after the variable (positive lookahead test).
+    >>> replace_grafana_expr_variables('metric{name~="$osd"}', \
+        'osd', 'replacement')
+    'metric{name~="replacement"}'
     """
     regex = fr'\${variable}(?=\W)'
-    new_expr = re.sub(regex, fr'{str(value)}', expr)
+    new_expr = re.sub(regex, fr'{value}', expr)
     return new_expr
