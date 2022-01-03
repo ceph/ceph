@@ -5074,6 +5074,19 @@ void BlueStore::_init_logger()
 		    NULL,
 		    PerfCountersBuilder::PRIO_DEBUGONLY,
 		    unit_t(UNIT_BYTES));
+
+  b.add_u64_counter(l_bluestore_write_big_skipped_blobs,
+      "write_big_skipped_blobs",
+      "Large aligned writes into fresh blobs skipped due to zero detection (blobs)");
+  b.add_u64_counter(l_bluestore_write_big_skipped_bytes,
+      "write_big_skipped_bytes",
+      "Large aligned writes into fresh blobs skipped due to zero detection (bytes)");
+  b.add_u64_counter(l_bluestore_write_small_skipped,
+      "write_small_skipped",
+      "Small writes into existing or sparse small blobs skipped due to zero detection");
+  b.add_u64_counter(l_bluestore_write_small_skipped_bytes,
+      "write_small_skipped_bytes",
+      "Small writes into existing or sparse small blobs skipped due to zero detection (bytes)");
   //****************************************
 
   // compressions stats
@@ -14252,12 +14265,24 @@ void BlueStore::_do_write_small(
   // temporarily just pad them to min_alloc_size and write them to a new place
   // on every update.
   if (bdev->is_smr()) {
-    BlobRef b = c->new_blob();
     uint64_t b_off = p2phase<uint64_t>(offset, alloc_len);
     uint64_t b_off0 = b_off;
-    _pad_zeros(&bl, &b_off0, min_alloc_size);
     o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
-    wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length, false, true);
+
+    // Zero detection -- small block
+    if (!bl.is_zero()) {
+      BlobRef b = c->new_blob();
+      _pad_zeros(&bl, &b_off0, min_alloc_size);
+      wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length, false, true);
+    } else { // if (bl.is_zero())
+      dout(20) << __func__ << " skip small zero block " << std::hex
+        << " (0x" << b_off0 << "~" << bl.length() << ")"
+        << " (0x" << b_off << "~" << length << ")"
+        << std::dec << dendl;
+      logger->inc(l_bluestore_write_small_skipped);
+      logger->inc(l_bluestore_write_small_skipped_bytes, length);
+    }
+
     return;
   }
 #endif
@@ -14481,17 +14506,29 @@ void BlueStore::_do_write_small(
 	    // due to existent extents
 	    uint64_t b_off = offset - bstart;
 	    uint64_t b_off0 = b_off;
-	    _pad_zeros(&bl, &b_off0, chunk_size);
-
-	    dout(20) << __func__ << " reuse blob " << *b << std::hex
-		     << " (0x" << b_off0 << "~" << bl.length() << ")"
-		     << " (0x" << b_off << "~" << length << ")"
-		     << std::dec << dendl;
-
 	    o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
-	    wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length,
-			false, false);
-	    logger->inc(l_bluestore_write_small_unused);
+
+	    // Zero detection -- small block
+	    if (!bl.is_zero()) {
+	      _pad_zeros(&bl, &b_off0, chunk_size);
+
+	      dout(20) << __func__ << " reuse blob " << *b << std::hex
+		       << " (0x" << b_off0 << "~" << bl.length() << ")"
+		       << " (0x" << b_off << "~" << length << ")"
+		       << std::dec << dendl;
+
+	      wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length,
+		  false, false);
+	      logger->inc(l_bluestore_write_small_unused);
+	    } else { // if (bl.is_zero())
+	      dout(20) << __func__ << " skip small zero block " << std::hex
+                << " (0x" << b_off0 << "~" << bl.length() << ")"
+                << " (0x" << b_off << "~" << length << ")"
+                << std::dec << dendl;
+	      logger->inc(l_bluestore_write_small_skipped);
+	      logger->inc(l_bluestore_write_small_skipped_bytes, length);
+	    }
+
 	    return;
 	  }
 	}
@@ -14529,20 +14566,32 @@ void BlueStore::_do_write_small(
 				offset0 + alloc_len, 
 				min_alloc_size)) {
 
-	  uint64_t chunk_size = b->get_blob().get_chunk_size(block_size);
 	  uint64_t b_off = offset - bstart;
 	  uint64_t b_off0 = b_off;
-	  _pad_zeros(&bl, &b_off0, chunk_size);
-
-	  dout(20) << __func__ << " reuse blob " << *b << std::hex
-		    << " (0x" << b_off0 << "~" << bl.length() << ")"
-		    << " (0x" << b_off << "~" << length << ")"
-		    << std::dec << dendl;
-
 	  o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
-	  wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length,
-		      false, false);
-	  logger->inc(l_bluestore_write_small_unused);
+
+	  // Zero detection -- small block
+	  if (!bl.is_zero()) {
+	    uint64_t chunk_size = b->get_blob().get_chunk_size(block_size);
+	    _pad_zeros(&bl, &b_off0, chunk_size);
+
+	    dout(20) << __func__ << " reuse blob " << *b << std::hex
+	      << " (0x" << b_off0 << "~" << bl.length() << ")"
+	      << " (0x" << b_off << "~" << length << ")"
+	      << std::dec << dendl;
+
+	    wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length,
+		false, false);
+	    logger->inc(l_bluestore_write_small_unused);
+	  } else { // if (bl.is_zero())
+	    dout(20) << __func__ << " skip small zero block " << std::hex
+	      << " (0x" << b_off0 << "~" << bl.length() << ")"
+	      << " (0x" << b_off << "~" << length << ")"
+	      << std::dec << dendl;
+	    logger->inc(l_bluestore_write_small_skipped);
+	    logger->inc(l_bluestore_write_small_skipped_bytes, length);
+	  }
+
 	  return;
 	}
       } 
@@ -14573,16 +14622,27 @@ void BlueStore::_do_write_small(
               << std::hex << offset << "~" << length
 	      << std::dec << dendl;
   }
-  // new blob.
-  BlobRef b = c->new_blob();
   uint64_t b_off = p2phase<uint64_t>(offset, alloc_len);
   uint64_t b_off0 = b_off;
-  _pad_zeros(&bl, &b_off0, block_size);
   o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
-  wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length,
-    min_alloc_size != block_size, // use 'unused' bitmap when alloc granularity
-                                  // doesn't match disk one only
-    true);
+
+  // Zero detection -- small block
+  if (!bl.is_zero()) {
+    // new blob.
+    BlobRef b = c->new_blob();
+    _pad_zeros(&bl, &b_off0, block_size);
+    wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length,
+	min_alloc_size != block_size, // use 'unused' bitmap when alloc granularity
+                                      // doesn't match disk one only
+	true);
+  } else { // if (bl.is_zero())
+    dout(20) << __func__ << " skip small zero block " << std::hex
+      << " (0x" << b_off0 << "~" << bl.length() << ")"
+      << " (0x" << b_off << "~" << length << ")"
+      << std::dec << dendl;
+    logger->inc(l_bluestore_write_small_skipped);
+    logger->inc(l_bluestore_write_small_skipped_bytes, length);
+  }
 
   return;
 }
@@ -14898,14 +14958,28 @@ void BlueStore::_do_write_big(
     }
     bufferlist t;
     blp.copy(l, t);
-    wctx->write(offset, b, l, b_off, t, b_off, l, false, new_blob);
-    dout(20) << __func__ << " schedule write big: 0x"
+
+    // Zero detection -- big block
+    if (!t.is_zero()) {
+      wctx->write(offset, b, l, b_off, t, b_off, l, false, new_blob);
+
+      dout(20) << __func__ << " schedule write big: 0x"
       << std::hex << offset << "~" << l << std::dec
       << (new_blob ? " new " : " reuse ")
       << *b << dendl;
+
+      logger->inc(l_bluestore_write_big_blobs);
+    } else { // if (!t.is_zero())
+      dout(20) << __func__ << " skip big zero block " << std::hex
+        << " (0x" << b_off << "~" << t.length() << ")"
+        << " (0x" << b_off << "~" << l << ")"
+        << std::dec << dendl;
+      logger->inc(l_bluestore_write_big_skipped_blobs);
+      logger->inc(l_bluestore_write_big_skipped_bytes, l);
+    }
+
     offset += l;
     length -= l;
-    logger->inc(l_bluestore_write_big_blobs);
   }
 }
 
