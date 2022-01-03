@@ -336,6 +336,11 @@ add_library(radosgw SHARED
   rgw_kmip_client_impl.cc)
 
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
+if(WITH_RADOSGW_ASAN)
+  target_compile_options(radosgw PRIVATE -fsanitize=address -fsanitize-recover=address -fno-omit-frame-pointer)
+  target_link_options(radosgw PRIVATE -fsanitize=address)
+endif()
+
 target_include_directories(radosgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
   PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip")
@@ -348,6 +353,9 @@ target_link_libraries(radosgw
 if(WITH_RADOSGW_BEAST_OPENSSL)
   # used by rgw_asio_frontend.cc
   target_link_libraries(radosgw PRIVATE OpenSSL::SSL)
+endif()
+if(WITH_RADOSGW_ASAN)
+  target_link_libraries(radosgw PRIVATE asan)
 endif()
 set_target_properties(radosgw PROPERTIES OUTPUT_NAME radosgw VERSION 2.0.0
   SOVERSION 2)

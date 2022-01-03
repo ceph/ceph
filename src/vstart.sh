@@ -247,6 +247,7 @@ options:
 	--jaeger: use jaegertracing for tracing
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-des: comma-separated list of secondary blockdevs to use for seastore
+	--rgw-asan: run the radosgw with address sanitizer (it has to be compiled with it beforehand)
 \n
 EOF
 
@@ -517,6 +518,9 @@ case $1 in
     --jaeger)
         with_jaeger=1
         echo "with_jaeger $with_jaeger"
+        ;;
+    --rgw-asan)
+        with_rgw_asan=1
         ;;
     *)
         usage_exit
@@ -1628,6 +1632,10 @@ do_rgw()
     [ $CEPH_RGW_PORT_NUM -lt 1024 ] && RGWSUDO=sudo
 
     current_port=$CEPH_RGW_PORT
+    if [ $with_rgw_asan -eq 1 ]; then
+        export LD_PRELOAD=/usr/lib64/libasan.so.6.0.0 
+        export ASAN_OPTIONS=halt_on_error=0:log_path=${CEPH_OUT_DIR}/radosgw.asan
+    fi
     for n in $(seq 1 $CEPH_NUM_RGW); do
         rgw_name="client.rgw.${current_port}"
 
