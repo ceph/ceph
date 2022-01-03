@@ -2669,10 +2669,10 @@ int SQLGetLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
   } else {
     pstmt = &stmt;
   }
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.index.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.lc_entry.index.c_str(), sdb);
   SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.index.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.lc_entry.bucket_name.c_str(), sdb);
   SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
 
 out:
