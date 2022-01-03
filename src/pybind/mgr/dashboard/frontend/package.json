@@ -84,7 +84,7 @@
     "@angular/platform-browser-dynamic": "11.2.14",
     "@angular/router": "11.2.14",
     "@circlon/angular-tree-component": "10.0.0",
-    "@ng-bootstrap/ng-bootstrap": "7.0.0",
+    "@ng-bootstrap/ng-bootstrap": "11.0.0",
     "@swimlane/ngx-datatable": "18.0.0",
     "@types/file-saver": "2.0.1",
     "async-mutex": "0.2.4",
