@@ -2,6 +2,13 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "dbstore_mgr.h"
+#include <boost/lockfree/queue.hpp>
+
+std::atomic<uint64_t> DBStoreManager::max_conn(MAX_QUEUE_DEFAULT); 
+std::atomic<uint64_t> DBStoreManager::total_conn(0); 
+DBStoreQueue DBStoreManager::db_connections(DBStoreManager::max_conn);
+std::mutex DBStoreManager::db_mutex;
+std::condition_variable DBStoreManager::db_cond;
 
 /* Given a tenant, find and return the DBStore handle.
  * If not found and 'create' set to true, create one
@@ -59,18 +66,21 @@ DB *DBStoreManager::createDB(string tenant) {
 
   /* XXX: Do we need lock to protect this map?
   */
-  ret = DBStoreHandles.insert(pair<string, DB*>(tenant, dbs));
+  /* XXX: Now that multiple connections can open same .db file,
+   * need to modify this
+   */
+  //ret = DBStoreHandles.insert(pair<string, DB*>(tenant, dbs));
 
   /*
    * Its safe to check for already existing entry (just
    * incase other thread raced and created the entry)
    */
-  if (ret.second == false) {
-    /* Entry already created by another thread */
+ /* if (ret.second == false) {
+    // Entry already created by another thread 
     delete dbs;
 
     dbs = ret.first->second;
-  }
+  }*/
 
   return dbs;
 }
