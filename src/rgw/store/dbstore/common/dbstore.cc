@@ -279,6 +279,12 @@ int DB::get_user(const DoutPrefixProvider *dpp,
   if (ret)
     goto out;
 
+  /* Verify if its a valid user */
+  if (params.op.user.uinfo.access_keys.empty()) {
+    ldpp_dout(dpp, 0)<<"In GetUser - No user with query(" <<query_str.c_str()<<"), user_id(" << uinfo.user_id <<") found" << dendl;
+    return -ENOENT;
+  }
+
   uinfo = params.op.user.uinfo;
 
   if (pattrs) {
