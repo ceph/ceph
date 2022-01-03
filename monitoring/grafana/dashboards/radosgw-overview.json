@@ -98,14 +98,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "rate(ceph_rgw_get_initial_lat_sum[30s]) / rate(ceph_rgw_get_initial_lat_count[30s])",
+               "expr": "rate(ceph_rgw_get_initial_lat_sum[30s]) / rate(ceph_rgw_get_initial_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "GET AVG",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_rgw_put_initial_lat_sum[30s]) / rate(ceph_rgw_put_initial_lat_count[30s])",
+               "expr": "rate(ceph_rgw_put_initial_lat_sum[30s]) / rate(ceph_rgw_put_initial_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "PUT AVG",
@@ -190,7 +190,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by(rgw_host) (label_replace(rate(ceph_rgw_req[30s]), \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"))",
+               "expr": "sum by (rgw_host) (label_replace(rate(ceph_rgw_req[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata, \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -275,7 +275,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(rate(ceph_rgw_get_initial_lat_sum[30s]),\"rgw_host\",\"$1\",\"ceph_daemon\",\"rgw.(.*)\") / \nlabel_replace(rate(ceph_rgw_get_initial_lat_count[30s]),\"rgw_host\",\"$1\",\"ceph_daemon\",\"rgw.(.*)\")",
+               "expr": "label_replace(\n    rate(ceph_rgw_get_initial_lat_sum[30s]) /\n    rate(ceph_rgw_get_initial_lat_count[30s]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n\"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\")",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -452,7 +452,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by(rgw_host) (\n  (label_replace(rate(ceph_rgw_get_b[30s]), \"rgw_host\",\"$1\",\"ceph_daemon\",\"rgw.(.*)\")) + \n  (label_replace(rate(ceph_rgw_put_b[30s]), \"rgw_host\",\"$1\",\"ceph_daemon\",\"rgw.(.*)\"))\n)",
+               "expr": "label_replace(sum by (instance_id) (\n    rate(ceph_rgw_get_b[30s]) + \n    rate(ceph_rgw_put_b[30s])\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata, \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\")",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -537,7 +537,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(rate(ceph_rgw_put_initial_lat_sum[30s]),\"rgw_host\",\"$1\",\"ceph_daemon\",\"rgw.(.*)\") / \nlabel_replace(rate(ceph_rgw_put_initial_lat_count[30s]),\"rgw_host\",\"$1\",\"ceph_daemon\",\"rgw.(.*)\")",
+               "expr": "label_replace(\n    rate(ceph_rgw_put_initial_lat_sum[30s]) /\n    rate(ceph_rgw_put_initial_lat_count[30s]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n\"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\")",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -1093,7 +1093,7 @@
             "multi": false,
             "name": "rgw_servers",
             "options": [ ],
-            "query": "label_values(ceph_rgw_req, ceph_daemon)",
+            "query": "label_values(ceph_rgw_metadata, ceph_daemon)",
             "refresh": 1,
             "regex": "",
             "sort": 1,
