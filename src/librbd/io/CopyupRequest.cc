@@ -600,7 +600,17 @@ bool CopyupRequest<I>::is_copyup_required() {
 template <typename I>
 bool CopyupRequest<I>::is_deep_copy() const {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx->image_lock));
-  return !m_image_ctx->migration_info.empty();
+  if (m_image_ctx->migration_info.empty()) {
+    return false;
+  }
+
+  // return true if migration source contains any snapshot
+  for (const auto& pair : m_image_ctx->migration_info.snap_map) {
+    if (pair.first != CEPH_NOSNAP) {
+      return true;
+    }
+  }
+  return false;
 }
 
 template <typename I>
