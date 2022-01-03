@@ -1304,7 +1304,6 @@ bool set_ratelimit_info(RGWRateLimitInfo& ratelimit, OPT opt_cmd, int64_t max_re
       ratelimit.enabled = true;
       break;
 
-
     case OPT::RATELIMIT_SET:
     case OPT::GLOBAL_RATELIMIT_SET:
       ratelimit_configured = false;
@@ -6765,19 +6764,6 @@ int main(int argc, const char **argv)
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
-    }
-    RGWRateLimitInfo ratelimit_info;
-    std::unique_ptr<rgw::sal::Bucket> bucket_sal;
-    auto iter = bucket->get_attrs().find(RGW_ATTR_RATELIMIT);
-    if(iter != bucket->get_attrs().end()) {
-      try {
-        std::cerr << "here" << std::endl;
-        bufferlist& bl = iter->second;
-        auto biter = bl.cbegin();
-        decode(ratelimit_info, biter);
-      } catch (buffer::error& err) {
-        cerr << "ERROR: failed to decode rate limit" << std::endl;
-      }
     }
   }
 

@@ -311,7 +311,7 @@ To add administrative capabilities to a user, execute the following::
 You can add read, write or all capabilities to users, buckets, metadata and 
 usage (utilization). For example::
 
-	--caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles]=[*|read|write|read, write]"
+	--caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles|ratelimit]=[*|read|write|read, write]"
 
 For example::
 
@@ -513,7 +513,7 @@ After userA completes this 1GB operation, the RGW will block the user request fo
 - **Maximum Write Bytes:** The ``--max-write-bytes`` setting allows you to specify
   the maximum number of write bytes per minute per RGW. A 0 value disables this setting (which means unlimited access).
  
-- **Rate Limit Scope:** The ``--ratelimit-scope `` option sets the scope for the rate limit.
+- **Rate Limit Scope:** The ``--ratelimit-scope`` option sets the scope for the rate limit.
   The options are ``bucket`` , ``user`` and ``anonymous``. Bucket rate limit apply to buckets. 
   The user rate limit applies to a user. Anonymous applies to an unauthenticated user.
   Anonymous scope is only available for global rate limit.
@@ -542,7 +542,7 @@ Get User Rate Limit
 Get the current configured rate limit parameters
 For example:: 
 
-	radosgw-admin ratelimit set --ratelimit-scope=user --uid=<uid>
+	radosgw-admin ratelimit get --ratelimit-scope=user --uid=<uid>
 
 For example:: 
 
@@ -621,7 +621,7 @@ view the global rate limit settings::
 
 The global rate limit settings can be manipulated with the ``global ratelimit``
 counterparts of the ``ratelimit set``, ``ratelimit enable``, and ``ratelimit disable``
-commands. ``Per user and per bucket ratelimit configuration is overriding the global configuration``::
+commands. Per user and per bucket ratelimit configuration is overriding the global configuration::
 
 	radosgw-admin global ratelimit set --ratelimit-scope bucket --max-read-ops=1024
 	radosgw-admin global ratelimit enable --ratelimit-scope bucket
@@ -637,7 +637,7 @@ The global rate limit can configure rate limit scope for all unauthenticated use
   radosgw-admin global ratelimit enable --ratelimit-scope=anonymous
 
 .. note:: In a multisite configuration, where there is a realm and period
-   present, changes to the global quotas must be committed using ``period
+   present, changes to the global rate limit must be committed using ``period
    update --commit``. If there is no period present, the rados gateway(s) must
    be restarted for the changes to take effect.
 
