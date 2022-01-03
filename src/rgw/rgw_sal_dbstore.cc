@@ -565,9 +565,7 @@ namespace rgw::sal {
 
   int DBObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, RGWObjState **state, optional_yield y, bool follow_olh)
   {
-    if (!*state) {
-      *state = new RGWObjState();
-    }
+    *state = &(this->state);
     DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
     return op_target.get_obj_state(dpp, get_bucket()->get_info(), get_obj(), follow_olh, state);
   }
