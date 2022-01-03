@@ -481,6 +481,9 @@ options:
   type: uint
   level: advanced
   desc: default order (data block object size) for new images
+  long_desc: This configures the default object size for new images. The value is used as a
+    power of two, meaning ``default_object_size = 2 ^ rbd_default_order``. Configure a value
+    between 12 and 25 (inclusive), translating to 4KiB lower and 32MiB upper limit.
   default: 22
   services:
   - rbd
