@@ -101,7 +101,7 @@
     "ngx-pipe-function": "1.0.0",
     "ngx-toastr": "13.1.0",
     "rxjs": "6.6.3",
-    "simplebar-angular": "2.3.0",
+    "simplebar-angular": "2.3.6",
     "swagger-ui": "4.1.3",
     "tslib": "2.0.0"
   },
