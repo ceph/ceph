@@ -349,7 +349,7 @@ private:
 	tid(tid), on_commit(on_commit),
 	op(op), v(v) {}
   };
-  std::map<ceph_tid_t, ceph::ref_t<InProgressOp>> in_progress_ops;
+  std::unordered_map<ceph_tid_t, ceph::ref_t<InProgressOp>> in_progress_ops;
 public:
   friend class C_OSD_OnOpCommit;
 
