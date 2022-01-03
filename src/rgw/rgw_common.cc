@@ -2015,7 +2015,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "roles",
                                     "user-policy",
                                     "amz-cache",
-                                    "oidc-provider"};
+                                    "oidc-provider",
+				                            "ratelimit"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {

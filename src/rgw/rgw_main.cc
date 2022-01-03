@@ -32,6 +32,7 @@
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_sts.h"
+#include "rgw_rest_ratelimit.h"
 #include "rgw_swift_auth.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
@@ -512,6 +513,7 @@ int radosgw_Main(int argc, const char **argv)
     admin_resource->register_resource("log", new RGWRESTMgr_Log);
     admin_resource->register_resource("config", new RGWRESTMgr_Config);
     admin_resource->register_resource("realm", new RGWRESTMgr_Realm);
+    admin_resource->register_resource("ratelimit", new RGWRESTMgr_Ratelimit);
     rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
   }
 
