@@ -1105,6 +1105,18 @@ options:
   services:
   - mds
   with_legacy: true
+# Max number of slow ops to track
+- name: mds_op_history_slow_op_size
+  type: uint
+  level: advanced
+  default: 20
+  with_legacy: true
+# track the op if over this threshold
+- name: mds_op_history_slow_op_threshold
+  type: float
+  level: advanced
+  default: 10
+  with_legacy: true
 - name: mds_snap_min_uid
   type: uint
   level: advanced
