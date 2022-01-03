@@ -118,6 +118,7 @@
 
 #define SQL_EXECUTE(dpp, params, stmt, cbk, args...) \
   do{						\
+    const std::lock_guard<std::mutex> lk(((DBOp*)(this))->mtx); \
     if (!stmt) {				\
       ret = Prepare(dpp, params);		\
     }					\

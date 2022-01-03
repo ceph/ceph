@@ -39,20 +39,10 @@ int DB::Initialize(string logfile, int loglevel)
     return ret;
   }
 
-  ret = LockInit(dpp);
-
-  if (ret) {
-    ldpp_dout(dpp, 0) <<"Error: mutex is NULL " << dendl;
-    closeDB(dpp);
-    db = NULL;
-    return ret;
-  }
-
   ret = InitializeDBOps(dpp);
 
   if (ret) {
     ldpp_dout(dpp, 0) <<"InitializeDBOps failed " << dendl;
-    LockDestroy(dpp);
     closeDB(dpp);
     db = NULL;
     return ret;
@@ -71,7 +61,6 @@ int DB::Destroy(const DoutPrefixProvider *dpp)
 
   closeDB(dpp);
 
-  LockDestroy(dpp);
 
   FreeDBOps(dpp);
 
@@ -81,49 +70,6 @@ int DB::Destroy(const DoutPrefixProvider *dpp)
   return 0;
 }
 
-int DB::LockInit(const DoutPrefixProvider *dpp) {
-  int ret;
-
-  ret = pthread_mutex_init(&mutex, NULL);
-
-  if (ret)
-    ldpp_dout(dpp, 0)<<"pthread_mutex_init failed " << dendl;
-
-  return ret;
-}
-
-int DB::LockDestroy(const DoutPrefixProvider *dpp) {
-  int ret;
-
-  ret = pthread_mutex_destroy(&mutex);
-
-  if (ret)
-    ldpp_dout(dpp, 0)<<"pthread_mutex_destroy failed " << dendl;
-
-  return ret;
-}
-
-int DB::Lock(const DoutPrefixProvider *dpp) {
-  int ret;
-
-  ret = pthread_mutex_lock(&mutex);
-
-  if (ret)
-    ldpp_dout(dpp, 0)<<"pthread_mutex_lock failed " << dendl;
-
-  return ret;
-}
-
-int DB::Unlock(const DoutPrefixProvider *dpp) {
-  int ret;
-
-  ret = pthread_mutex_unlock(&mutex);
-
-  if (ret)
-    ldpp_dout(dpp, 0)<<"pthread_mutex_unlock failed " << dendl;
-
-  return ret;
-}
 
 DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *params)
 {
@@ -162,7 +108,10 @@ DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *p
   map<string, class ObjectOp*>::iterator iter;
   class ObjectOp* Ob;
 
-  iter = DB::objectmap.find(params->op.bucket.info.bucket.name);
+  {
+    const std::lock_guard<std::mutex> lk(mtx);
+    iter = DB::objectmap.find(params->op.bucket.info.bucket.name);
+  }
 
   if (iter == DB::objectmap.end()) {
     ldpp_dout(dpp, 30)<<"No objectmap found for bucket: " \
@@ -195,20 +144,23 @@ DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *p
   return NULL;
 }
 
-int DB::objectmapInsert(const DoutPrefixProvider *dpp, string bucket, void *ptr)
+int DB::objectmapInsert(const DoutPrefixProvider *dpp, string bucket, class ObjectOp* ptr)
 {
   map<string, class ObjectOp*>::iterator iter;
   class ObjectOp *Ob;
 
+  const std::lock_guard<std::mutex> lk(mtx);
   iter = DB::objectmap.find(bucket);
 
   if (iter != DB::objectmap.end()) {
     // entry already exists
     // return success or replace it or
     // return error ?
-    // return success for now
+    //
+    // return success for now & delete the newly allocated ptr
     ldpp_dout(dpp, 20)<<"Objectmap entry already exists for bucket("\
       <<bucket<<"). Not inserted " << dendl;
+    delete ptr;
     return 0;
   }
 
@@ -225,6 +177,7 @@ int DB::objectmapDelete(const DoutPrefixProvider *dpp, string bucket)
   map<string, class ObjectOp*>::iterator iter;
   class ObjectOp *Ob;
 
+  const std::lock_guard<std::mutex> lk(mtx);
   iter = DB::objectmap.find(bucket);
 
   if (iter == DB::objectmap.end()) {
