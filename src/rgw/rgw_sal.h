@@ -303,6 +303,7 @@ class Store {
 					const std::map<std::string, std::string>& meta) = 0;
     /** Get default quota info.  Used as fallback if a user or bucket has no quota set*/
     virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) = 0;
+    /** Get global rate limit configuration*/
     virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) = 0;
     /** Enable or disable a set of bucket.  e.g. if a User is suspended */
     virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled) = 0;

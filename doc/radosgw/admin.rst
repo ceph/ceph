@@ -311,7 +311,7 @@ To add administrative capabilities to a user, execute the following::
 You can add read, write or all capabilities to users, buckets, metadata and 
 usage (utilization). For example::
 
-	--caps="[users|buckets|metadata|usage|zone]=[*|read|write|read, write]"
+	--caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles]=[*|read|write|read, write]"
 
 For example::
 
@@ -481,7 +481,7 @@ Rate limit includes the maximum number of read ops and write ops per minute
 and how many bytes per minute could be written or read per user or per bucket.
 Requests that are using GET or HEAD method in the REST request are considered as "read requests", otherwise they are considered as "write requests".
 Every Object Gateway tracks per user and bucket metrics separately, these metrics are not shared with other gateways.
-Also, note that usage is calculated after an operation was successfully finished. That means that the desired limits configured should be divide by the number of active Object Gateways.
+That means that the desired limits configured should be divide by the number of active Object Gateways.
 For example, if userA should be limited by 10 ops per minute and there are 2 Object Gateways in the cluster,
 the limit over userA should be 5 (10 ops per minute / 2 RGWs).
 if the requests are ``not`` balanced between RGWs, the rate limit may be underutilized.
