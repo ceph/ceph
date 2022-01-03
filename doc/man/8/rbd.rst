@@ -81,6 +81,9 @@ Parameters
    nearest power of two; if no suffix is given, unit B is assumed.  The default
    object size is 4M, smallest is 4K and maximum is 32M.
 
+   The default value can be changed with the configuration option ``rbd_default_order``,
+   which takes a power of two (default object size is ``2 ^ rbd_default_order``).
+
 .. option:: --stripe-unit size-in-B/K/M
 
    Specifies the stripe unit size in B/K/M.  If no suffix is given, unit B is
