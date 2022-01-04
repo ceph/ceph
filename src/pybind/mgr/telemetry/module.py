@@ -523,6 +523,16 @@ class Module(MgrModule):
     def get_stats_per_pg(self) -> dict:
         return self.get('pg_dump')['pg_stats']
 
+    def get_rocksdb_stats(self) -> Dict[str, str]:
+        # Initalizers
+        result: Dict[str, str] = defaultdict()
+        version = self.get_rocksdb_version()
+
+        # Update result
+        result['version'] = version
+
+        return result
+
     def gather_crashinfo(self) -> List[Dict[str, str]]:
         crashlist: List[Dict[str, str]] = list()
         errno, crashids, err = self.remote('crash', 'ls')
@@ -978,6 +988,7 @@ class Module(MgrModule):
             report['osd_perf_histograms'] = self.get_osd_histograms('separated')
             report['mempool'] = self.get_mempool('separated')
             report['heap_stats'] = self.get_heap_stats()
+            report['rocksdb_stats'] = self.get_rocksdb_stats()
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
