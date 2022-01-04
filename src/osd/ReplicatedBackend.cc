@@ -2214,7 +2214,7 @@ bool ReplicatedBackend::handle_push_reply(
     PushInfo *pi = &pushing[soid][peer];
     bool error = pushing[soid].begin()->second.recovery_progress.error;
 
-    if (!pi->recovery_progress.data_complete && !error) {
+    if ((!pi->recovery_progress.data_complete || !pi->recovery_progress.omap_complete)&& !error) {
       dout(10) << " pushing more from, "
 	       << pi->recovery_progress.data_recovered_to
 	       << " of " << pi->recovery_info.copy_subset << dendl;
