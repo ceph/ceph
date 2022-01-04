@@ -300,9 +300,12 @@ int DiffIterate<I>::execute() {
                    diff_state == object_map::DIFF_STATE_DATA_UPDATED) {
           bool updated = (diff_state == object_map::DIFF_STATE_DATA_UPDATED);
           for (auto& oe : extents) {
-            r = m_callback(off + oe.offset, oe.length, updated, m_callback_arg);
-            if (r < 0) {
-              return r;
+            for (auto& be : oe.buffer_extents) {
+              r = m_callback(off + be.first, be.second, updated,
+                             m_callback_arg);
+              if (r < 0) {
+                return r;
+              }
             }
           }
         }

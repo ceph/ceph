@@ -4650,6 +4650,72 @@ TYPED_TEST(DiffIterateTest, DiffIterateParentDiscard)
   ASSERT_TRUE(two.subset_of(diff));
 }
 
+TYPED_TEST(DiffIterateTest, DiffIterateUnalignedSmall)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = this->get_temp_image_name();
+    ssize_t size = 10 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    ceph::bufferlist bl;
+    bl.append(std::string(size, '1'));
+    ASSERT_EQ(size, image.write(0, size, bl));
+
+    std::vector<diff_extent> extents;
+    ASSERT_EQ(0, image.diff_iterate2(NULL, 5000005, 1234, true,
+                                     this->whole_object, vector_iterate_cb,
+                                     &extents));
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(5000005, 1234, true, 0), extents[0]);
+
+    ASSERT_PASSED(this->validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TYPED_TEST(DiffIterateTest, DiffIterateUnaligned)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 22;
+    std::string name = this->get_temp_image_name();
+    ssize_t size = 20 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    ceph::bufferlist bl;
+    bl.append(std::string(size, '1'));
+    ASSERT_EQ(size, image.write(0, size, bl));
+
+    std::vector<diff_extent> extents;
+    ASSERT_EQ(0, image.diff_iterate2(NULL, 8376263, 4260970, true,
+                                     this->whole_object, vector_iterate_cb,
+                                     &extents));
+    ASSERT_EQ(3u, extents.size());
+    ASSERT_EQ(diff_extent(8376263, 12345, true, 0), extents[0]);
+    ASSERT_EQ(diff_extent(8388608, 4194304, true, 0), extents[1]);
+    ASSERT_EQ(diff_extent(12582912, 54321, true, 0), extents[2]);
+
+    ASSERT_PASSED(this->validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
 TEST_F(TestLibRBD, ZeroLengthWrite)
 {
   rados_ioctx_t ioctx;
