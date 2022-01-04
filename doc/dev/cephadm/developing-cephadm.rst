@@ -53,7 +53,7 @@ conf and keyring in your build dir, so that the ``bin/ceph ...`` CLI works
 There are a few advantages here:
 
 - The cluster is a "normal" cephadm cluster that looks and behaves
-  just like a user's cluster would.  In contract, vstart and teuthology
+  just like a user's cluster would.  In contrast, vstart and teuthology
   clusters tend to be special in subtle (and not-so-subtle) ways.
 
 To start a test cluster::
