@@ -156,15 +156,15 @@ int WriteLog<I>::append_op_log_entries(GenericLogOperations &ops)
       }
     }
     ldout(m_image_ctx.cct, 20) << "Copying entry for operation at index="
-                               << operation->get_log_entry()->log_entry_index << " "
-                               << "from " << &operation->get_log_entry()->ram_entry << " "
-                               << "to " << operation->get_log_entry()->cache_entry << " "
-                               << "operation=[" << *operation << "]" << dendl;
+                               << operation->get_log_entry()->log_entry_index
+                               << " from " << &operation->get_log_entry()->ram_entry
+                               << " to " << operation->get_log_entry()->cache_entry
+                               << " operation=[" << *operation << "]" << dendl;
     operation->log_append_start_time = now;
     *operation->get_log_entry()->cache_entry = operation->get_log_entry()->ram_entry;
     ldout(m_image_ctx.cct, 20) << "APPENDING: index="
-                               << operation->get_log_entry()->log_entry_index << " "
-                               << "pmem_entry=[" << *operation->get_log_entry()->cache_entry
+                               << operation->get_log_entry()->log_entry_index
+                               << " pmem_entry=[" << *operation->get_log_entry()->cache_entry
                                << "]" << dendl;
     entries_to_flush.push_back(operation);
   }
@@ -223,10 +223,10 @@ void WriteLog<I>::flush_op_log_entries(GenericLogOperationsVector &ops)
     ceph_assert(ops.front()->get_log_entry()->cache_entry < ops.back()->get_log_entry()->cache_entry);
   }
 
-  ldout(m_image_ctx.cct, 20) << "entry count=" << ops.size() << " "
-                             << "start address="
-                             << ops.front()->get_log_entry()->cache_entry << " "
-                             << "bytes="
+  ldout(m_image_ctx.cct, 20) << "entry count=" << ops.size()
+                             << " start address="
+                             << ops.front()->get_log_entry()->cache_entry
+                             << " bytes="
                              << ops.size() * sizeof(*(ops.front()->get_log_entry()->cache_entry))
                              << dendl;
   pmemobj_flush(m_log_pool,
@@ -630,8 +630,8 @@ void WriteLog<I>::flush_then_append_scheduled_ops(void)
         std::advance(last_in_batch, ops_to_flush);
         ops.splice(ops.end(), m_ops_to_flush, m_ops_to_flush.begin(), last_in_batch);
         ops_remain = !m_ops_to_flush.empty();
-        ldout(m_image_ctx.cct, 20) << "flushing " << ops.size() << ", "
-                                   << m_ops_to_flush.size() << " remain" << dendl;
+        ldout(m_image_ctx.cct, 20) << "flushing " << ops.size() << ", remain "
+                                   << m_ops_to_flush.size() << dendl;
       } else {
         ops_remain = false;
       }

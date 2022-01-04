@@ -345,9 +345,9 @@ public:
   explicit ExtentsSummary(const ExtentsType &extents);
   friend std::ostream &operator<<(std::ostream &os,
                                   const ExtentsSummary &s) {
-    os << "total_bytes=" << s.total_bytes << ", "
-       << "first_image_byte=" << s.first_image_byte << ", "
-       << "last_image_byte=" << s.last_image_byte;
+    os << "total_bytes=" << s.total_bytes
+       << ", first_image_byte=" << s.first_image_byte
+       << ", last_image_byte=" << s.last_image_byte;
     return os;
   }
   BlockExtent block_extent() {

@@ -690,9 +690,9 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
   C_ReadRequest *read_ctx = m_builder->create_read_request(
       cct, now, m_perfcounter, bl, on_finish);
   ldout(cct, 20) << "name: " << m_image_ctx.name << " id: " << m_image_ctx.id
-                 << "image_extents=" << image_extents << ", "
-                 << "bl=" << bl << ", "
-                 << "on_finish=" << on_finish << dendl;
+                 << "image_extents=" << image_extents
+                 << ", bl=" << bl
+                 << ", on_finish=" << on_finish << dendl;
 
   ceph_assert(m_initialized);
   bl->clear();
@@ -809,8 +809,8 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
     }
   }
 
-  ldout(cct, 20) << "miss_extents=" << read_ctx->miss_extents << ", "
-                 << "miss_bl=" << read_ctx->miss_bl << dendl;
+  ldout(cct, 20) << "miss_extents=" << read_ctx->miss_extents
+                 << ", miss_bl=" << read_ctx->miss_bl << dendl;
 
   complete_read(log_entries_to_read, bls_to_read, ctx);
 }
@@ -1248,8 +1248,8 @@ void AbstractWriteLog<I>::append_scheduled(GenericLogOperations &ops, bool &ops_
       std::advance(last_in_batch, ops_to_append);
       ops.splice(ops.end(), m_ops_to_append, m_ops_to_append.begin(), last_in_batch);
       ops_remain = true; /* Always check again before leaving */
-      ldout(m_image_ctx.cct, 20) << "appending " << ops.size() << ", "
-                                 << m_ops_to_append.size() << " remain" << dendl;
+      ldout(m_image_ctx.cct, 20) << "appending " << ops.size() << ", remain "
+                                 << m_ops_to_append.size() << dendl;
     } else if (isRWL) {
       ops_remain = false;
       if (appending) {
@@ -2048,8 +2048,8 @@ void AbstractWriteLog<I>::internal_flush(bool invalidate, Context *on_finish) {
                                       << invalidate << ")" << dendl;
             if (m_log_entries.size()) {
               ldout(m_image_ctx.cct, 1) << "m_log_entries.size()="
-                                        << m_log_entries.size() << ", "
-                                        << "front()=" << *m_log_entries.front()
+                                        << m_log_entries.size()
+                                        << ", front()=" << *m_log_entries.front()
                                         << dendl;
             }
             if (invalidate) {
