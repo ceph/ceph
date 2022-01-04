@@ -55,11 +55,13 @@ describe('when cluster creation is completed', () => {
       });
     });
 
-    it('should check if rgw service is running', () => {
-      hosts.clickTab('cd-host-details', hostnames[3], 'Daemons');
-      cy.get('cd-host-details').within(() => {
-        services.checkServiceStatus('rgw');
-      });
+    it('should check if mon daemon is running on all hosts', () => {
+      for (const hostname of hostnames) {
+        hosts.clickTab('cd-host-details', hostname, 'Daemons');
+        cy.get('cd-host-details').within(() => {
+          services.checkServiceStatus('mon');
+        });
+      }
     });
   });
 
@@ -71,7 +73,7 @@ describe('when cluster creation is completed', () => {
     });
 
     it('should check if osds are created', { retries: 1 }, () => {
-      osds.getTableCount('total').should('be.gte', 1);
+      osds.getTableCount('total').should('be.gte', 2);
     });
   });
 
@@ -88,6 +90,13 @@ describe('when cluster creation is completed', () => {
   describe('Host actions', () => {
     beforeEach(() => {
       hosts.navigateTo();
+    });
+
+    it('should check if rgw daemon is running', () => {
+      hosts.clickTab('cd-host-details', hostnames[3], 'Daemons');
+      cy.get('cd-host-details').within(() => {
+        services.checkServiceStatus('rgw');
+      });
     });
 
     it('should force maintenance and exit', { retries: 1 }, () => {
