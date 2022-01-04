@@ -26,6 +26,7 @@ void MDSContext::complete(int r) {
   ceph_assert(mds != nullptr);
   ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
   dout(10) << "MDSContext::complete: " << typeid(*this).name() << dendl;
+  mds->heartbeat_reset();
   return Context::complete(r);
 }
 
