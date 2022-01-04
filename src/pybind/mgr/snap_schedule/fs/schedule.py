@@ -29,7 +29,7 @@ except AttributeError:
     log.info(('Couldn\'t find datetime.fromisoformat, falling back to '
               f'static timestamp parsing ({SNAP_DB_TS_FORMAT}'))
 
-    def ts_parser(data_string: str) -> datetime: # type: ignore
+    def ts_parser(data_string: str) -> datetime:  # type: ignore
         try:
             date = datetime.strptime(data_string, SNAP_DB_TS_FORMAT)
             return date
@@ -225,7 +225,7 @@ class Schedule(object):
             data += (start,)
         with db:
             c = db.execute(query, data)
-        return [cls._from_db_row(row, fs) for row in c.fetchall()]
+            return [cls._from_db_row(row, fs) for row in c.fetchall()]
 
     @classmethod
     def list_schedules(cls,
@@ -239,7 +239,7 @@ class Schedule(object):
             else:
                 c = db.execute(cls.PROTO_GET_SCHEDULES + ' path = ?',
                                (f'{path}',))
-        return [cls._from_db_row(row, fs) for row in c.fetchall()]
+            return [cls._from_db_row(row, fs) for row in c.fetchall()]
 
     INSERT_SCHEDULE = '''INSERT INTO
         schedules(path, subvol, retention, rel_path)
