@@ -8043,7 +8043,7 @@ def _get_parser():
         help='cluster FSID')
     parser_ceph_volume.add_argument(
         '--config-json',
-        help='JSON file with config and (client.bootrap-osd) key')
+        help='JSON file with config and (client.bootstrap-osd) key')
     parser_ceph_volume.add_argument(
         '--config', '-c',
         help='ceph conf file')
