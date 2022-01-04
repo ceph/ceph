@@ -306,6 +306,47 @@ class Module(MgrModule):
             'active_changed': sorted(list(active)),
         }
 
+    def get_heap_stats(self) -> Dict[str, dict]:
+        # Initialize result dict
+        result: Dict[str, dict] = defaultdict(lambda: defaultdict(int))
+
+        # Get list of osd ids from the metadata
+        osd_metadata = self.get('osd_metadata')
+
+        # Grab output from the "osd.x heap stats" command
+        for osd_id in osd_metadata:
+            cmd_dict = {
+                'prefix': 'heap',
+                'heapcmd': 'stats',
+                'id': str(osd_id),
+            }
+            r, outb, outs = self.osd_command(cmd_dict)
+            if r != 0:
+                self.log.debug("Invalid command dictionary.")
+                continue
+            else:
+                if 'tcmalloc heap stats' in outs:
+                    values = [int(i) for i in outs.split() if i.isdigit()]
+                    if len(values) != 12:
+                        self.log.debug('Received unexpected output: | outs: {} ' \
+                                '| values: {} |'.format(outs, values))
+                        return {}
+
+                    categories = ['use_by_application', 'page_heap_freelist',
+                                  'central_cache_freelist', 'transfer_cache_freelist',
+                                  'thread_cache_freelists', 'malloc_metadata',
+                                  'actual_memory_used', 'released_to_os',
+                                  'virtual_address_space_used', 'spans_in_use',
+                                  'thread_heaps_in_use', 'tcmalloc_page_size']
+
+                    osd = 'osd.' + str(osd_id)
+                    result[osd] = dict(zip(categories, values))
+                else:
+                    self.log.debug('No heap stats available: {}'.format(outs))
+                    return {}
+
+        return result
+
     def get_mempool(self, mode: str = 'separated') -> Dict[str, dict]:
         # Initialize result dict
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(int))
@@ -457,6 +498,30 @@ class Module(MgrModule):
 
     def get_io_rate(self) -> dict:
         return self.get('io_rate')
+
+    def get_stats_per_pool(self) -> dict:
+        result = self.get('pg_dump')['pool_stats']
+
+        # collect application metadata from osd_map
+        osd_map = self.get('osd_map')
+        app_dict = {}
+        for pool in osd_map['pools']:
+            app_dict[pool['pool']] = pool['application_metadata']
+
+        # add application to each pool from pg_dump
+        for pool in result:
+            poolid = pool['poolid']
+            # Check that the pool has an application. If it does not,
+            # the application dict will be empty.
+            if app_dict[poolid]:
+                pool['application'] = list(app_dict[poolid].keys())[0]
+            else:
+                pool['application'] = ""
+
+        return result
+
+    def get_stats_per_pg(self) -> dict:
+        return self.get('pg_dump')['pg_stats']
 
     def gather_crashinfo(self) -> List[Dict[str, str]]:
         crashlist: List[Dict[str, str]] = list()
@@ -907,11 +972,12 @@ class Module(MgrModule):
 
         if 'perf' in channels:
             report['perf_counters'] = self.gather_perf_counters('separated')
-            report['stats_per_pool'] = self.get('pg_dump')['pool_stats']
-            report['stats_per_pg'] = self.get('pg_dump')['pg_stats']
+            report['stats_per_pool'] = self.get_stats_per_pool()
+            report['stats_per_pg'] = self.get_stats_per_pg()
             report['io_rate'] = self.get_io_rate()
             report['osd_perf_histograms'] = self.get_osd_histograms('separated')
             report['mempool'] = self.get_mempool('separated')
+            report['heap_stats'] = self.get_heap_stats()
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
