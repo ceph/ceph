@@ -3,6 +3,7 @@
 import json
 import logging
 from contextlib import contextmanager
+from typing import Any, Dict
 
 import cherrypy
 import rados
@@ -25,7 +26,7 @@ def serialize_dashboard_exception(e, include_http_status=False, task=None):
     if isinstance(e, ViewCacheNoDataException):
         return {'status': ViewCache.VALUE_NONE, 'value': None}
 
-    out = dict(detail=str(e))
+    out: Dict[str, Any] = dict(detail=str(e))
     try:
         out['code'] = e.code
     except AttributeError:

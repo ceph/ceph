@@ -69,8 +69,9 @@ class RESTController(BaseController, skip_registry=True):
             return cls.RESOURCE_ID.split('/')
         for k, v in cls._method_mapping.items():
             func = getattr(cls, k, None)
-            while hasattr(func, "__wrapped__"):
-                func = func.__wrapped__
+            if func:
+                while hasattr(func, "__wrapped__"):
+                    func = func.__wrapped__
             if v['resource'] and func:
                 path_params = cls.get_path_param_names()
                 params = _get_function_params(func)
