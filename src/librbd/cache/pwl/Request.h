@@ -309,10 +309,10 @@ struct BlockGuardReqState {
   bool queued = false; /* Queued for barrier */
   friend std::ostream &operator<<(std::ostream &os,
                                   const BlockGuardReqState &r) {
-    os << "barrier=" << r.barrier << ", "
-       << "current_barrier=" << r.current_barrier << ", "
-       << "detained=" << r.detained << ", "
-       << "queued=" << r.queued;
+    os << "barrier=" << r.barrier
+       << ", current_barrier=" << r.current_barrier
+       << ", detained=" << r.detained
+       << ", queued=" << r.queued;
     return os;
   }
 };
@@ -347,9 +347,9 @@ public:
   }
   friend std::ostream &operator<<(std::ostream &os,
                                   const GuardedRequest &r) {
-    os << "guard_ctx->state=[" << r.guard_ctx->state << "], "
-       << "block_extent.block_start=" << r.block_extent.block_start << ", "
-       << "block_extent.block_start=" << r.block_extent.block_end;
+    os << "guard_ctx->state=[" << r.guard_ctx->state
+       << "], block_extent.block_start=" << r.block_extent.block_start
+       << ", block_extent.block_end=" << r.block_extent.block_end;
     return os;
   }
 };

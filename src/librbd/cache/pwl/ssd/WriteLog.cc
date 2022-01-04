@@ -815,12 +815,12 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
           this->m_bytes_cached -= cached_bytes;
 
           ldout(m_image_ctx.cct, 20)
-            << "Finished root update: " << "initial_first_valid_entry="
-            << initial_first_valid_entry << ", " << "m_first_valid_entry="
-            << m_first_valid_entry << "," << "release space = "
-            << allocated_bytes << "," << "m_bytes_allocated="
-            << m_bytes_allocated << "," << "release cached space="
-            << cached_bytes << "," << "m_bytes_cached="
+            << "Finished root update: initial_first_valid_entry="
+            << initial_first_valid_entry << ", m_first_valid_entry="
+            << m_first_valid_entry << ", release space = "
+            << allocated_bytes << ", m_bytes_allocated="
+            << m_bytes_allocated << ", release cached space="
+            << cached_bytes << ", m_bytes_cached="
             << this->m_bytes_cached << dendl;
 
           this->m_alloc_failed_since_retire = false;

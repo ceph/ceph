@@ -114,18 +114,18 @@ void WriteLogPoolRoot::generate_test_instances(std::list<WriteLogPoolRoot*>& ls)
 
 std::ostream& operator<<(std::ostream& os,
                          const WriteLogCacheEntry &entry) {
-  os << "entry_valid=" << (bool)entry.entry_valid << ", "
-     << "sync_point=" << (bool)entry.sync_point << ", "
-     << "sequenced=" << (bool)entry.sequenced << ", "
-     << "has_data=" << (bool)entry.has_data << ", "
-     << "discard=" << (bool)entry.discard << ", "
-     << "writesame=" << (bool)entry.writesame << ", "
-     << "sync_gen_number=" << entry.sync_gen_number << ", "
-     << "write_sequence_number=" << entry.write_sequence_number << ", "
-     << "image_offset_bytes=" << entry.image_offset_bytes << ", "
-     << "write_bytes=" << entry.write_bytes << ", "
-     << "ws_datalen=" << entry.ws_datalen << ", "
-     << "entry_index=" << entry.entry_index;
+  os << "entry_valid=" << (bool)entry.entry_valid
+     << ", sync_point=" << (bool)entry.sync_point
+     << ", sequenced=" << (bool)entry.sequenced
+     << ", has_data=" << (bool)entry.has_data
+     << ", discard=" << (bool)entry.discard
+     << ", writesame=" << (bool)entry.writesame
+     << ", sync_gen_number=" << entry.sync_gen_number
+     << ", write_sequence_number=" << entry.write_sequence_number
+     << ", image_offset_bytes=" << entry.image_offset_bytes
+     << ", write_bytes=" << entry.write_bytes
+     << ", ws_datalen=" << entry.ws_datalen
+     << ", entry_index=" << entry.entry_index;
   return os;
 }
 
