@@ -442,7 +442,7 @@ private:
 					   uint64_t capture_before_seq);
 
   void _compact_log_sync_LNF_LD();
-  void _compact_log_async_LD_NF_D();
+  void _compact_log_async_LD_LNF_D();
 
   void _rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
 				    int super_dev,
@@ -574,8 +574,6 @@ public:
 
   /// sync any uncommitted state to disk
   void sync_metadata(bool avoid_compact);
-  /// test and compact log, if necessary
-  void _maybe_compact_log_LNF_NF_LD_D();
 
   void set_volume_selector(BlueFSVolumeSelector* s) {
     vselector.reset(s);
@@ -619,11 +617,6 @@ public:
   void invalidate_cache(FileRef f, uint64_t offset, uint64_t len);
   int preallocate(FileRef f, uint64_t offset, uint64_t len);
   int truncate(FileWriter *h, uint64_t offset);
-  int _do_replay_recovery_read(FileReader *log,
-			       size_t log_pos,
-			       size_t read_offset,
-			       size_t read_len,
-			       bufferlist* bl);
 
   size_t probe_alloc_avail(int dev, uint64_t alloc_size);
 
@@ -640,6 +633,14 @@ private:
   int read(uint8_t ndev, uint64_t off, uint64_t len,
 	   ceph::buffer::list *pbl, IOContext *ioc, bool buffered);
   int read_random(uint8_t ndev, uint64_t off, uint64_t len, char *buf, bool buffered);
+
+  /// test and compact log, if necessary
+  void _maybe_compact_log_LNF_NF_LD_D();
+  int _do_replay_recovery_read(FileReader *log,
+			       size_t log_pos,
+			       size_t read_offset,
+			       size_t read_len,
+			       bufferlist* bl);
 };
 
 class OriginalVolumeSelector : public BlueFSVolumeSelector {
@@ -694,15 +695,15 @@ public:
  * Vertices - Locks. Edges (directed) - locking progression.
  * Edge A->B exist if last taken lock was A and next taken lock is B.
  * 
- * Column represents last lock taken.
- * Row represents next lock taken.
+ * Row represents last lock taken.
+ * Column represents next lock taken.
  *
- *     >        | W | L | D | N | F
+ *     >        | W | L | N | D | F
  * -------------|---|---|---|---|---
- * FileWriter W |   | > | > |   | >
+ * FileWriter W |   | > | > | > | >
  * log        L |       | > | > | >
+ * nodes      N |           | > | >
  * dirty      D |           |   | >
- * nodes      N |               | >
  * File       F |
  * 
  * Claim: Deadlock is possible IFF graph contains cycles.

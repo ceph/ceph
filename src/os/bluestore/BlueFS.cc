@@ -2176,13 +2176,13 @@ uint64_t BlueFS::_estimate_log_size_N()
   return round_up_to(size, super.block_size);
 }
 
-void BlueFS::compact_log()
+void BlueFS::compact_log()/*_LNF_LD_NF_D*/
 {
   if (!cct->_conf->bluefs_replay_recovery_disable_compact) {
     if (cct->_conf->bluefs_compact_log_sync) {
       _compact_log_sync_LNF_LD();
     } else {
-      _compact_log_async_LD_NF_D();
+      _compact_log_async_LD_LNF_D();
     }
   }
 }
@@ -2435,7 +2435,7 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
  * 8. Release the old log space.  Clean up.
  */
 
-void BlueFS::_compact_log_async_LD_NF_D() //also locks FW for new_writer
+void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
 {
   dout(10) << __func__ << dendl;
   // only one compaction allowed at one time
@@ -2968,7 +2968,8 @@ int BlueFS::_signal_dirty_to_log_D(FileWriter *h)
   return 0;
 }
 
-void BlueFS::flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
+void BlueFS::flush_range(FileWriter *h, uint64_t offset, uint64_t length)/*_WF*/
+{
   std::unique_lock hl(h->lock);
   _flush_range_F(h, offset, length);
 }
@@ -3143,7 +3144,7 @@ void BlueFS::_wait_for_aio(FileWriter *h)
 }
 #endif
 
-void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)
+void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)/*_WF_LNF_NF_LD_D*/
 {
   bool flushed_sum = false;
   {
@@ -3175,7 +3176,7 @@ void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)
   }
 }
 
-void BlueFS::flush(FileWriter *h, bool force)
+void BlueFS::flush(FileWriter *h, bool force)/*_WF_LNF_NF_LD_D*/
 {
   bool flushed = false;
   int r;
@@ -3241,7 +3242,7 @@ uint64_t BlueFS::_flush_special(FileWriter *h)
   return new_data;
 }
 
-int BlueFS::truncate(FileWriter *h, uint64_t offset)
+int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
 {
   std::lock_guard hl(h->lock);
   dout(10) << __func__ << " 0x" << std::hex << offset << std::dec
@@ -3283,7 +3284,7 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)
   return 0;
 }
 
-int BlueFS::fsync(FileWriter *h)
+int BlueFS::fsync(FileWriter *h)/*_WF_WD_WLD_WLNF_WNF*/
 {
   std::unique_lock hl(h->lock);
   uint64_t old_dirty_seq = 0;
@@ -3463,7 +3464,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   return 0;
 }
 
-int BlueFS::preallocate(FileRef f, uint64_t off, uint64_t len)
+int BlueFS::preallocate(FileRef f, uint64_t off, uint64_t len)/*_LF*/
 {
   std::lock_guard ll(log.lock);
   std::lock_guard fl(f->lock);
@@ -3491,7 +3492,7 @@ int BlueFS::preallocate(FileRef f, uint64_t off, uint64_t len)
   return 0;
 }
 
-void BlueFS::sync_metadata(bool avoid_compact)
+void BlueFS::sync_metadata(bool avoid_compact)/*_LNF_NF_LD_D*/
 {
   bool can_skip_flush;
   {
@@ -3523,7 +3524,7 @@ void BlueFS::_maybe_compact_log_LNF_NF_LD_D()
     if (cct->_conf->bluefs_compact_log_sync) {
       _compact_log_sync_LNF_LD();
     } else {
-      _compact_log_async_LD_NF_D();
+      _compact_log_async_LD_LNF_D();
     }
   }
 }
@@ -3532,7 +3533,7 @@ int BlueFS::open_for_write(
   std::string_view dirname,
   std::string_view filename,
   FileWriter **h,
-  bool overwrite)
+  bool overwrite)/*_N_LD*/
 {
   FileRef file;
   bool create = false;
@@ -3686,7 +3687,7 @@ int BlueFS::open_for_read(
   std::string_view dirname,
   std::string_view filename,
   FileReader **h,
-  bool random)
+  bool random)/*_N*/
 {
   std::lock_guard nl(nodes.lock);
   dout(10) << __func__ << " " << dirname << "/" << filename
@@ -3715,7 +3716,7 @@ int BlueFS::open_for_read(
 
 int BlueFS::rename(
   std::string_view old_dirname, std::string_view old_filename,
-  std::string_view new_dirname, std::string_view new_filename)
+  std::string_view new_dirname, std::string_view new_filename)/*_LND*/
 {
   std::lock_guard ll(log.lock);
   std::lock_guard nl(nodes.lock);
@@ -3763,7 +3764,7 @@ int BlueFS::rename(
   return 0;
 }
 
-int BlueFS::mkdir(std::string_view dirname)
+int BlueFS::mkdir(std::string_view dirname)/*_LN*/
 {
   std::lock_guard ll(log.lock);
   std::lock_guard nl(nodes.lock);
@@ -3778,7 +3779,7 @@ int BlueFS::mkdir(std::string_view dirname)
   return 0;
 }
 
-int BlueFS::rmdir(std::string_view dirname)
+int BlueFS::rmdir(std::string_view dirname)/*_LN*/
 {
   std::lock_guard ll(log.lock);
   std::lock_guard nl(nodes.lock);
@@ -3798,7 +3799,7 @@ int BlueFS::rmdir(std::string_view dirname)
   return 0;
 }
 
-bool BlueFS::dir_exists(std::string_view dirname)
+bool BlueFS::dir_exists(std::string_view dirname)/*_N*/
 {
   std::lock_guard nl(nodes.lock);
   map<string,DirRef>::iterator p = nodes.dir_map.find(dirname);
@@ -3808,7 +3809,7 @@ bool BlueFS::dir_exists(std::string_view dirname)
 }
 
 int BlueFS::stat(std::string_view dirname, std::string_view filename,
-		 uint64_t *size, utime_t *mtime)
+		 uint64_t *size, utime_t *mtime)/*_N*/
 {
   std::lock_guard nl(nodes.lock);
   dout(10) << __func__ << " " << dirname << "/" << filename << dendl;
@@ -3836,7 +3837,7 @@ int BlueFS::stat(std::string_view dirname, std::string_view filename,
 }
 
 int BlueFS::lock_file(std::string_view dirname, std::string_view filename,
-		      FileLock **plock)
+		      FileLock **plock)/*_LN*/
 {
   std::lock_guard ll(log.lock);
   std::lock_guard nl(nodes.lock);
@@ -3876,7 +3877,7 @@ int BlueFS::lock_file(std::string_view dirname, std::string_view filename,
   return 0;
 }
 
-int BlueFS::unlock_file(FileLock *fl)
+int BlueFS::unlock_file(FileLock *fl)/*_N*/
 {
   std::lock_guard nl(nodes.lock);
   dout(10) << __func__ << " " << fl << " on " << fl->file->fnode << dendl;
@@ -3886,7 +3887,7 @@ int BlueFS::unlock_file(FileLock *fl)
   return 0;
 }
 
-int BlueFS::readdir(std::string_view dirname, vector<string> *ls)
+int BlueFS::readdir(std::string_view dirname, vector<string> *ls)/*_N*/
 {
   // dirname may contain a trailing /
   if (!dirname.empty() && dirname.back() == '/') {
@@ -3918,7 +3919,7 @@ int BlueFS::readdir(std::string_view dirname, vector<string> *ls)
   return 0;
 }
 
-int BlueFS::unlink(std::string_view dirname, std::string_view filename)
+int BlueFS::unlink(std::string_view dirname, std::string_view filename)/*_LND*/
 {
   std::lock_guard ll(log.lock);
   std::lock_guard nl(nodes.lock);
