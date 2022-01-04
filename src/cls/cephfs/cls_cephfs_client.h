@@ -22,6 +22,7 @@ class ClsCephFSClient
       const std::string &oid,
       inode_backtrace_t *backtrace,
       file_layout_t *layout,
+      std::string *symlink,
       AccumulateResult *result);
 
   static int delete_inode_accumulate_result(

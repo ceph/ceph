@@ -223,6 +223,10 @@ class MDCache {
     return export_ephemeral_random_config;
   }
 
+  bool get_symlink_recovery(void) const {
+    return symlink_recovery;
+  }
+
   /**
    * Call this when you know that a CDentry is ready to be passed
    * on to StrayManager (i.e. this is a stray you've just created)
@@ -1314,6 +1318,9 @@ class MDCache {
   bool export_ephemeral_distributed_config;
   bool export_ephemeral_random_config;
   unsigned export_ephemeral_dist_frag_bits;
+
+  // Stores the symlink target on the file object's head
+  bool symlink_recovery;
 
   // File size recovery
   RecoveryQueue recovery_queue;

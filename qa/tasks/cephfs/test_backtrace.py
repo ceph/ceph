@@ -1,16 +1,40 @@
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-
+from tasks.cephfs.filesystem import ObjectNotFound
 
 class TestBacktrace(CephFSTestCase):
     def test_backtrace(self):
         """
-        That the 'parent' and 'layout' xattrs on the head objects of files
+        That the 'parent' 'layout' and 'symlink' xattrs on the head objects of files
         are updated correctly.
         """
 
         old_data_pool_name = self.fs.get_data_pool_name()
         old_pool_id = self.fs.get_data_pool_id()
+
+        # Not enabling symlink recovery option should not store symlink xattr
+        self.config_set('mds', 'mds_symlink_recovery', 'false')
+        self.mount_a.run_shell(["mkdir", "sym_dir0"])
+        self.mount_a.run_shell(["touch", "sym_dir0/file1"])
+        self.mount_a.run_shell(["ln", "-s", "sym_dir0/file1", "sym_dir0/symlink_file1"])
+        file_ino = self.mount_a.path_to_ino("sym_dir0/symlink_file1", follow_symlinks=False)
+
+        self.fs.mds_asok(["flush", "journal"])
+        with self.assertRaises(ObjectNotFound):
+            self.fs.read_symlink(file_ino)
+
+        # Enabling symlink recovery option should store symlink xattr for symlinks
+        self.config_set('mds', 'mds_symlink_recovery', 'true')
+        self.mount_a.run_shell(["mkdir", "sym_dir"])
+        self.mount_a.run_shell(["touch", "sym_dir/file1"])
+        self.mount_a.run_shell(["ln", "-s", "./file1", "sym_dir/symlink_file1"])
+        file_ino = self.mount_a.path_to_ino("sym_dir/symlink_file1", follow_symlinks=False)
+
+        self.fs.mds_asok(["flush", "journal"])
+        symlink = self.fs.read_symlink(file_ino)
+        self.assertEqual(symlink, {
+            "s" : "./file1",
+            })
 
         # Create a file for subsequent checks
         self.mount_a.run_shell(["mkdir", "parent_a"])

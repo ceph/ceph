@@ -1290,6 +1290,9 @@ class Filesystem(MDSCluster):
         args = ["setxattr", obj_name, xattr_name, data]
         self.rados(args, pool=pool)
 
+    def read_symlink(self, ino_no, pool=None):
+        return self._read_data_xattr(ino_no, "symlink", "string_wrapper", pool)
+
     def read_backtrace(self, ino_no, pool=None):
         """
         Read the backtrace from the data pool, return a dict in the format

@@ -63,13 +63,19 @@ void CInodeCommitOperation::update(ObjectOperation &op, inode_backtrace_t &bt) {
   encode(bt, parent_bl);
   op.setxattr("parent", parent_bl);
 
-  // for the old pool there is no need to update the layout
-  if (!update_layout)
+  // for the old pool there is no need to update the layout and symlink
+  if (!update_layout_symlink)
     return;
 
   bufferlist layout_bl;
   encode(_layout, layout_bl, _features);
   op.setxattr("layout", layout_bl);
+
+  if (!_symlink.empty()) {
+    bufferlist symlink_bl;
+    encode(_symlink, symlink_bl);
+    op.setxattr("symlink", symlink_bl);
+  }
 }
 
 class CInodeIOContext : public MDSIOContextBase
@@ -1350,8 +1356,13 @@ void CInode::_store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
   const int64_t pool = get_backtrace_pool();
   build_backtrace(pool, bt);
 
+  std::string_view slink = "";
+  if (is_symlink() && mdcache->get_symlink_recovery()) {
+    slink = symlink;
+  }
+
   ops_vec.emplace_back(op_prio, pool, get_inode()->layout,
-                       mdcache->mds->mdsmap->get_up_features());
+                       mdcache->mds->mdsmap->get_up_features(), slink);
 
   if (!state_test(STATE_DIRTYPOOL) || get_inode()->old_pools.empty()) {
     dout(20) << __func__ << ": no dirtypool or no old pools" << dendl;
