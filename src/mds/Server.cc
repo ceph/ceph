@@ -6404,6 +6404,7 @@ void Server::handle_client_link(MDRequestRef& mdr)
   if (targeti->get_projected_inode()->nlink == 0) {
     dout(7) << "target has no link, failing..." << dendl;
     respond_to_request(mdr, -ENOENT);
+    return;
   }
 
   if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
