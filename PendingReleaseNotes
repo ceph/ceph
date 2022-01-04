@@ -68,6 +68,10 @@
   For more details, see:
 
   https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+* Cephadm: ``osd_memory_target_autotune`` will be enabled by default which will set
+  ``mgr/cephadm/autotune_memory_target_ratio`` to ``0.7`` of total RAM. This will be
+  unsuitable for hyperconverged infrastructures. For hyperconverged Ceph, please refer
+  to the documentation or set ``mgr/cephadm/autotune_memory_target_ratio`` to ``0.2``.
 
 >=16.0.0
 --------
