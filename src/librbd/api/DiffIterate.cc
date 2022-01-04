@@ -399,9 +399,12 @@ int DiffIterate<I>::execute() {
           bool updated = (diff_state == object_map::DIFF_STATE_DATA_UPDATED);
           for (std::vector<ObjectExtent>::iterator q = p->second.begin();
                q != p->second.end(); ++q) {
-            r = m_callback(off + q->offset, q->length, updated, m_callback_arg);
-            if (r < 0) {
-              return r;
+            for (auto& be : q->buffer_extents) {
+              r = m_callback(off + be.first, be.second, updated,
+                             m_callback_arg);
+              if (r < 0) {
+                return r;
+              }
             }
           }
         }
