@@ -3702,6 +3702,8 @@ class MgrListener(Thread):
                         logger.error(err_str)
                     else:
                         conn.send(b'ACK')
+                        if 'config' in data:
+                            self.agent.wakeup()
                         self.agent.ls_gatherer.wakeup()
                         self.agent.volume_gatherer.wakeup()
                         logger.debug(f'Got mgr message {data}')
@@ -3713,6 +3715,15 @@ class MgrListener(Thread):
 
     def handle_json_payload(self, data: Dict[Any, Any]) -> None:
         self.agent.ack = int(data['counter'])
+        if 'config' in data:
+            logger.info('Received new config from mgr')
+            config = data['config']
+            for filename in config:
+                if filename in self.agent.required_files:
+                    with open(os.path.join(self.agent.daemon_dir, filename), 'w') as f:
+                        f.write(config[filename])
+            self.agent.pull_conf_settings()
+            self.agent.wakeup()
 
 
 class CephadmAgent():
@@ -3722,12 +3733,19 @@ class CephadmAgent():
     loop_interval = 30
     stop = False
 
-    required_files = ['agent.json', 'keyring']
+    required_files = [
+        'agent.json',
+        'keyring',
+        'root_cert.pem',
+        'listener.crt',
+        'listener.key',
+    ]
 
     def __init__(self, ctx: CephadmContext, fsid: str, daemon_id: Union[int, str] = ''):
         self.ctx = ctx
         self.fsid = fsid
         self.daemon_id = daemon_id
+        self.starting_port = 14873
         self.target_ip = ''
         self.target_port = ''
         self.host = ''
@@ -3741,22 +3759,30 @@ class CephadmAgent():
         self.ack = 1
         self.event = Event()
         self.mgr_listener = MgrListener(self)
-        self.ls_gatherer = AgentGatherer(self, self._get_ls, 'Ls')
-        self.volume_gatherer = AgentGatherer(self, self._ceph_volume, 'Volume')
+        self.ls_gatherer = AgentGatherer(self, lambda: self._get_ls(), 'Ls')
+        self.volume_gatherer = AgentGatherer(self, lambda: self._ceph_volume(enhanced=False), 'Volume')
         self.device_enhanced_scan = False
         self.recent_iteration_run_times: List[float] = [0.0, 0.0, 0.0]
         self.recent_iteration_index: int = 0
         self.cached_ls_values: Dict[str, Dict[str, str]] = {}
 
+    def validate(self, config: Dict[str, str] = {}) -> None:
+        # check for the required files
+        for fname in self.required_files:
+            if fname not in config:
+                raise Error('required file missing from config: %s' % fname)
+
     def deploy_daemon_unit(self, config: Dict[str, str] = {}) -> None:
         if not config:
             raise Error('Agent needs a config')
         assert isinstance(config, dict)
+        self.validate(config)
 
         # Create the required config files in the daemons dir, with restricted permissions
         for filename in config:
-            with open(os.path.join(self.daemon_dir, filename), 'w') as f:
-                f.write(config[filename])
+            if filename in self.required_files:
+                with open(os.path.join(self.daemon_dir, filename), 'w') as f:
+                    f.write(config[filename])
 
         with open(os.path.join(self.daemon_dir, 'unit.run'), 'w') as f:
             f.write(self.unit_run())
@@ -3810,14 +3836,14 @@ WantedBy=ceph-{fsid}.target
     def wakeup(self) -> None:
         self.event.set()
 
-    def run(self) -> None:
+    def pull_conf_settings(self) -> None:
         try:
             with open(self.config_path, 'r') as f:
                 config = json.load(f)
                 self.target_ip = config['target_ip']
                 self.target_port = config['target_port']
                 self.loop_interval = int(config['refresh_period'])
-                starting_port = int(config['listener_port'])
+                self.starting_port = int(config['listener_port'])
                 self.host = config['host']
                 use_lsm = config['device_enhanced_scan']
         except Exception as e:
@@ -3836,15 +3862,19 @@ WantedBy=ceph-{fsid}.target
         self.device_enhanced_scan = False
         if use_lsm.lower() == 'true':
             self.device_enhanced_scan = True
+        self.volume_gatherer.update_func(lambda: self._ceph_volume(enhanced=self.device_enhanced_scan))
+
+    def run(self) -> None:
+        self.pull_conf_settings()
 
         try:
             for _ in range(1001):
-                if not port_in_use(self.ctx, starting_port):
-                    self.listener_port = str(starting_port)
+                if not port_in_use(self.ctx, self.starting_port):
+                    self.listener_port = str(self.starting_port)
                     break
-                starting_port += 1
+                self.starting_port += 1
             if not self.listener_port:
-                raise Error(f'All 1000 ports starting at {str(starting_port - 1001)} taken.')
+                raise Error(f'All 1000 ports starting at {str(self.starting_port - 1001)} taken.')
         except Exception as e:
             raise Error(f'Failed to pick port for agent to listen on: {e}')
 
@@ -4096,6 +4126,9 @@ class AgentGatherer(Thread):
 
     def wakeup(self) -> None:
         self.event.set()
+
+    def update_func(self, func: Callable) -> None:
+        self.func = func
 
 
 def command_agent(ctx: CephadmContext) -> None:
