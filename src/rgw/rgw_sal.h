@@ -284,10 +284,18 @@ class Store {
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
     /** Get a @a Completions object.  Used for Async I/O tracking */
     virtual std::unique_ptr<Completions> get_completions(void) = 0;
-    /** Get a @a Notification object.  Used to communicate with non-RGW daemons, such as
-     * management/tracking software */
-    virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, struct req_state* s, 
+
+     /** Get a @a Notification object.  Used to communicate with non-RGW daemons, such as
+      * management/tracking software */
+    /** RGWOp variant */
+    virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s, 
         rgw::notify::EventType event_type, const std::string* object_name=nullptr) = 0;
+    /** No-req_state variant (e.g., rgwlc) */
+    virtual std::unique_ptr<Notification> get_notification(
+    const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, RGWObjectCtx* rctx,
+    rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant,
+    std::string& _req_id, optional_yield y) = 0;
+
     /** Get access to the lifecycle management thread */
     virtual RGWLC* get_rgwlc(void) = 0;
     /** Get access to the coroutine registry.  Used to create new coroutine managers */
@@ -630,6 +638,12 @@ class Bucket {
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     /** Set the ACL for this bucket */
     virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl, optional_yield y) = 0;
+
+    // XXXX hack
+    void set_owner(rgw::sal::User* _owner) {
+      owner = _owner;
+    }
+
     /** Load this bucket from the backing store.  Requires the key to be set, fills other fields */
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Read the bucket stats from the backing Store, synchronous */
@@ -1319,10 +1333,14 @@ public:
 class Notification {
 protected:
   Object* obj;
+  Object* src_obj;
   rgw::notify::EventType event_type;
 
   public:
-    Notification(Object* _obj, rgw::notify::EventType _type) : obj(_obj), event_type(_type) {}
+    Notification(Object* _obj, Object* _src_obj, rgw::notify::EventType _type)
+      : obj(_obj), src_obj(_src_obj), event_type(_type)
+    {}
+
     virtual ~Notification() = default;
 
     /** Indicate the start of the event associated with this notification */
