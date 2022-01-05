@@ -10,6 +10,8 @@ from urllib import parse as urlparse
 from time import gmtime, strftime
 import boto3
 from botocore.client import Config
+import os
+import subprocess
 
 log = logging.getLogger('bucket_notification.tests')
 
@@ -231,3 +233,19 @@ class PSNotificationS3:
         parameters = {'notification': notification}
 
         return self.send_request('DELETE', parameters)
+
+
+test_path = os.path.normpath(os.path.dirname(os.path.realpath(__file__))) + '/../'
+
+def bash(cmd, **kwargs):
+    log.debug('running command: %s', ' '.join(cmd))
+    kwargs['stdout'] = subprocess.PIPE
+    process = subprocess.Popen(cmd, **kwargs)
+    s = process.communicate()[0].decode('utf-8')
+    return (s, process.returncode)
+
+def admin(args, **kwargs):
+    """ radosgw-admin command """
+    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', 'noname'] + args
+    return bash(cmd, **kwargs)
+

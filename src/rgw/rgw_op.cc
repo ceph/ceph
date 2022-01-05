@@ -3904,8 +3904,10 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   // make reservation for notification if needed
-  std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
-						s, rgw::notify::ObjectCreatedPut);
+  std::unique_ptr<rgw::sal::Notification> res
+		     = store->get_notification(
+		       s->object.get(), s->src_object.get(), s,
+		       rgw::notify::ObjectCreatedPut);
   if(!multipart) {
     op_ret = res->publish_reserve(this, obj_tags.get());
     if (op_ret < 0) {
@@ -4304,7 +4306,8 @@ void RGWPostObj::execute(optional_yield y)
   }
 
   // make reservation for notification if needed
-  std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(), s, rgw::notify::ObjectCreatedPost);
+  std::unique_ptr<rgw::sal::Notification> res
+    = store->get_notification(s->object.get(), s->src_object.get(), s, rgw::notify::ObjectCreatedPost);
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
@@ -4985,10 +4988,13 @@ void RGWDeleteObj::execute(optional_yield y)
 
     // make reservation for notification if needed
     const auto versioned_object = s->bucket->versioning_enabled();
-    const auto event_type = versioned_object && s->object->get_instance().empty() ? 
-        rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete;
-    std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
-									s, event_type);
+    const auto event_type = versioned_object &&
+      s->object->get_instance().empty() ?
+      rgw::notify::ObjectRemovedDeleteMarkerCreated :
+      rgw::notify::ObjectRemovedDelete;
+    std::unique_ptr<rgw::sal::Notification> res
+      = store->get_notification(s->object.get(), s->src_object.get(), s,
+				event_type);
     op_ret = res->publish_reserve(this);
     if (op_ret < 0) {
       return;
@@ -5388,8 +5394,10 @@ void RGWCopyObj::execute(optional_yield y)
     return;
 
   // make reservation for notification if needed
-  std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
-						s, rgw::notify::ObjectCreatedCopy);
+  std::unique_ptr<rgw::sal::Notification> res
+				   = store->get_notification(
+				     s->object.get(), s->src_object.get(),
+				     s, rgw::notify::ObjectCreatedCopy);
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
@@ -6349,8 +6357,8 @@ void RGWCompleteMultipart::execute(optional_yield y)
   
 
   // make reservation for notification if needed
-  std::unique_ptr<rgw::sal::Notification> res = store->get_notification(meta_obj.get(),
-				s, rgw::notify::ObjectCreatedCompleteMultipartUpload, &s->object->get_name());
+  std::unique_ptr<rgw::sal::Notification> res
+    = store->get_notification(meta_obj.get(), nullptr, s, rgw::notify::ObjectCreatedCompleteMultipartUpload, &s->object->get_name());
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
@@ -6915,10 +6923,11 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 
     // make reservation for notification if needed
     const auto versioned_object = s->bucket->versioning_enabled();
-    const auto event_type = versioned_object && obj->get_instance().empty() ? 
-        rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete;
-    std::unique_ptr<rgw::sal::Notification> res = store->get_notification(obj.get(),
-									s, event_type);
+    const auto event_type = versioned_object && obj->get_instance().empty() ?
+      rgw::notify::ObjectRemovedDeleteMarkerCreated :
+      rgw::notify::ObjectRemovedDelete;
+    std::unique_ptr<rgw::sal::Notification> res
+      = store->get_notification(obj.get(), s->src_object.get(), s, event_type);
     op_ret = res->publish_reserve(this);
     if (op_ret < 0) {
       send_partial_response(*iter, false, "", op_ret);

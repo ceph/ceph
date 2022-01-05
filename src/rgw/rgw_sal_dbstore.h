@@ -59,11 +59,9 @@ public:
 
 class DBNotification : public Notification {
 protected:
-  Object* obj;
-  rgw::notify::EventType event_type;
-
   public:
-    DBNotification(Object* _obj, rgw::notify::EventType _type) : Notification(_obj, _type), obj(_obj), event_type(_type) {}
+  DBNotification(Object* _obj, Object* _src_obj, rgw::notify::EventType _type)
+    : Notification(_obj, _src_obj, _type) {}
     ~DBNotification() = default;
 
     virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override { return 0;}
@@ -715,11 +713,20 @@ public:
       virtual int cluster_stat(RGWClusterStat& stats) override;
       virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
       virtual std::unique_ptr<Completions> get_completions(void) override;
-      virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, struct req_state* s, 
-          rgw::notify::EventType event_type, const std::string* object_name=nullptr) override;
+
+  virtual std::unique_ptr<Notification> get_notification(
+    rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
+    rgw::notify::EventType event_type, const std::string* object_name) override;
+
+  virtual std::unique_ptr<Notification> get_notification(
+    const DoutPrefixProvider* dpp, rgw::sal::Object* obj,
+    rgw::sal::Object* src_obj, RGWObjectCtx* rctx,
+    rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
+    std::string& _user_id, std::string& _user_tenant, std::string& _req_id,
+    optional_yield y) override;
+    
       virtual RGWLC* get_rgwlc(void) override;
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
-
       virtual int log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;
       virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;
       virtual int register_to_service_map(const DoutPrefixProvider *dpp, const string& daemon_type,
