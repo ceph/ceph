@@ -512,6 +512,9 @@ class HostCache():
                 self.agent_counter[host] = int(j.get('agent_counter', 1))
                 self.metadata_up_to_date[host] = False
                 self.agent_keys[host] = str(j.get('agent_keys', ''))
+                agent_port = int(j.get('agent_ports', 0))
+                if agent_port:
+                    self.agent_ports[host] = agent_port
 
                 self.mgr.log.debug(
                     'HostCache.load: host %s has %d daemons, '
@@ -706,6 +709,8 @@ class HostCache():
             j['agent_counter'] = self.agent_counter[host]
         if host in self.agent_keys:
             j['agent_keys'] = self.agent_keys[host]
+        if host in self.agent_ports:
+            j['agent_ports'] = self.agent_ports[host]
 
         self.mgr.set_store(HOST_CACHE_PREFIX + host, json.dumps(j))
 
