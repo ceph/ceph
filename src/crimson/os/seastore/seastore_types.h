@@ -38,6 +38,8 @@ struct seastore_meta_t {
   }
 };
 
+std::ostream& operator<<(std::ostream& out, const seastore_meta_t& meta);
+
 // identifies a specific physical device within seastore
 using device_id_t = uint8_t;
 
@@ -644,7 +646,7 @@ enum class placement_hint_t {
   NUM_HINTS  // Constant for number of hints
 };
 
-enum device_type_t {
+enum class device_type_t {
   NONE = 0,
   SEGMENTED, // i.e. Hard_Disk, SATA_SSD, NAND_NVME
   RANDOM_BLOCK, // i.e. RANDOM_BD
@@ -652,9 +654,10 @@ enum device_type_t {
   NUM_TYPES
 };
 
+std::ostream& operator<<(std::ostream& out, device_type_t t);
+
 bool can_delay_allocation(device_type_t type);
 device_type_t string_to_device_type(std::string type);
-std::string device_type_to_string(device_type_t type);
 
 /* Monotonically increasing identifier for the location of a
  * journal_record.

@@ -33,6 +33,8 @@ struct device_spec_t{
   }
 };
 
+std::ostream& operator<<(std::ostream&, const device_spec_t&);
+
 using secondary_device_set_t =
   std::map<device_id_t, device_spec_t>;
 
@@ -73,6 +75,8 @@ struct block_sm_superblock_t {
   }
 };
 
+std::ostream& operator<<(std::ostream&, const block_sm_superblock_t&);
+
 struct segment_manager_config_t {
   bool major_dev = false;
   magic_t magic = 0;
@@ -81,6 +85,8 @@ struct segment_manager_config_t {
   seastore_meta_t meta;
   secondary_device_set_t secondary_devices;
 };
+
+std::ostream& operator<<(std::ostream&, const segment_manager_config_t&);
 
 class Segment : public boost::intrusive_ref_counter<
   Segment,
@@ -140,6 +146,8 @@ public:
   virtual ~Segment() {}
 };
 using SegmentRef = boost::intrusive_ptr<Segment>;
+
+std::ostream& operator<<(std::ostream& out, Segment::segment_state_t);
 
 constexpr size_t PADDR_SIZE = sizeof(paddr_t);
 class SegmentManager;
