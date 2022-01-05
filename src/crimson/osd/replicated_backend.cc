@@ -60,6 +60,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
   bufferlist encoded_txn;
   encode(txn, encoded_txn);
 
+  logger().debug("ReplicatedBackend::_submit_transaction: do_transaction...");
   auto all_completed = interruptor::make_interruptible(
       shard_services.get_store().do_transaction(coll, std::move(txn)))
   .then_interruptible([this, peers=pending_txn->second.weak_from_this()] {
