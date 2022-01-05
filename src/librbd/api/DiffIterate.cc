@@ -37,7 +37,6 @@ struct DiffContext {
   bool include_parent;
   uint64_t from_snap_id;
   uint64_t end_snap_id;
-  interval_set<uint64_t> parent_diff;
   OrderedThrottle throttle;
 
   template <typename I>
@@ -150,6 +149,15 @@ private:
   }
 };
 
+int simple_diff_cb(uint64_t off, size_t len, int exists, void *arg) {
+  // it's possible for a discard to create a hole in the parent image -- ignore
+  if (exists) {
+    interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
+    diff->insert(off, len);
+  }
+  return 0;
+}
+
 } // anonymous namespace
 
 template <typename I>
@@ -237,6 +245,7 @@ int DiffIterate<I>::execute() {
   int r;
   bool fast_diff_enabled = false;
   BitVector<2> object_diff_state;
+  interval_set<uint64_t> parent_diff;
   if (m_whole_object) {
     C_SaferCond ctx;
     auto req = object_map::DiffRequest<I>::create(&m_image_ctx, from_snap_id,
@@ -250,6 +259,22 @@ int DiffIterate<I>::execute() {
     } else {
       ldout(cct, 5) << "fast diff enabled" << dendl;
       fast_diff_enabled = true;
+
+      // check parent overlap only if we are comparing to the beginning of time
+      if (m_include_parent && from_snap_id == 0) {
+        std::shared_lock image_locker{m_image_ctx.image_lock};
+        uint64_t overlap = 0;
+        m_image_ctx.get_parent_overlap(m_image_ctx.snap_id, &overlap);
+        if (m_image_ctx.parent && overlap > 0) {
+          ldout(cct, 10) << " first getting parent diff" << dendl;
+          DiffIterate diff_parent(*m_image_ctx.parent, {}, nullptr, 0, overlap,
+                                  true, true, &simple_diff_cb, &parent_diff);
+          r = diff_parent.execute();
+          if (r < 0) {
+            return r;
+          }
+        }
+      }
     }
   }
 
@@ -282,13 +307,13 @@ int DiffIterate<I>::execute() {
         const uint64_t object_no = extents.front().objectno;
         uint8_t diff_state = object_diff_state[object_no];
         if (diff_state == object_map::DIFF_STATE_HOLE &&
-            from_snap_id == 0 && !diff_context.parent_diff.empty()) {
+            from_snap_id == 0 && !parent_diff.empty()) {
           // no data in child object -- report parent diff instead
           for (auto& oe : extents) {
             for (auto& be : oe.buffer_extents) {
               interval_set<uint64_t> o;
               o.insert(off + be.first, be.second);
-              o.intersection_of(diff_context.parent_diff);
+              o.intersection_of(parent_diff);
               ldout(cct, 20) << " reporting parent overlap " << o << dendl;
               for (auto e = o.begin(); e != o.end(); ++e) {
                 r = m_callback(e.get_start(), e.get_len(), true,
