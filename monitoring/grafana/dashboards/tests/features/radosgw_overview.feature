@@ -32,6 +32,17 @@ Scenario: "Test Total Requests/sec by RGW Instance"
     | metrics | values |
     | {rgw_host="1"} | 1.6666666666666667 |
 
+Scenario: "Test GET Latencies by RGW Instance"
+  Given the following series:
+    | metrics | values |
+    | ceph_rgw_get_initial_lat_sum{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 10 50 100 |
+    | ceph_rgw_get_initial_lat_count{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 20 60 80 |
+    | ceph_rgw_metadata{ceph_daemon="rgw.foo", hostname="localhost", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1 1 1 |
+  When interval is `30s`
+  Then Grafana panel `GET Latencies by RGW Instance` with legend `{{rgw_host}}` shows:
+    | metrics | values |
+    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph", rgw_host="foo"} | 2.5000000000000004 |
+
 Scenario: "Test Bandwidth Consumed by Type- GET"
   Given the following series:
     | metrics | values |
@@ -51,6 +62,30 @@ Scenario: "Test Bandwidth Consumed by Type- PUT"
   Then Grafana panel `Bandwidth Consumed by Type` with legend `PUTs` shows:
     | metrics | values |
     | {} | 1 |
+
+Scenario: "Test Bandwidth by RGW Instance"
+  Given the following series:
+    | metrics | values |
+    | ceph_rgw_get_b{instance="127.0.0.1", instance_id="92806566", job="ceph"} | 10 50 100 |
+    | ceph_rgw_put_b{instance="127.0.0.1", instance_id="92806566", job="ceph"} | 5 20 50 |
+    | ceph_rgw_metadata{ceph_daemon="rgw.1", hostname="localhost", instance="127.0.0.1", instance_id="92806566", job="ceph"} | 1 1 1 |
+  When evaluation time is `1m`
+  And interval is `30s`
+  Then Grafana panel `Bandwidth by RGW Instance` with legend `{{rgw_host}}` shows:
+    | metrics | values |
+    | {ceph_daemon="rgw.1", instance_id="92806566", rgw_host="1"} | 2.666666666666667 |
+
+Scenario: "Test PUT Latencies by RGW Instance"
+  Given the following series:
+    | metrics | values |
+    | ceph_rgw_put_initial_lat_sum{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 15 35 55 |
+    | ceph_rgw_put_initial_lat_count{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 10 30 50 |
+    | ceph_rgw_metadata{ceph_daemon="rgw.foo", hostname="localhost", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1 1 1 |
+  When evaluation time is `1m`
+  And interval is `30s`
+  Then Grafana panel `PUT Latencies by RGW Instance` with legend `{{rgw_host}}` shows:
+    | metrics | values |
+    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph", rgw_host="foo"} | 1 |
 
 Scenario: "Test Total backend responses by HTTP code"
   Given the following series:
