@@ -40,7 +40,7 @@ file, developers should include any necessary changes to the MIB.
 
 ### Building from Jsonnet
 
-- Install [jsonnet](https://jsonnet.org/)
+- Install [jsonnet](https://jsonnet.org/) (at least v0.18.0)
     - By installing the package `jsonnet` in most of the distro and
       `golang-github-google-jsonnet` in fedora
 - Install [jsonnet-bundler](https://github.com/jsonnet-bundler/jsonnet-bundler)

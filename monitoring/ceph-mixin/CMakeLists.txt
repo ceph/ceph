@@ -17,6 +17,17 @@ if(WITH_GRAFANA)
       BUILD_IN_SOURCE 1
       INSTALL_COMMAND cp <SOURCE_DIR>/_output/jb <INSTALL_DIR>)
 
+    ExternalProject_Add(jsonnet
+      GIT_REPOSITORY "https://github.com/google/go-jsonnet.git"
+      GIT_TAG "v0.18.0"
+      GIT_SHALLOW TRUE
+      SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/src
+      CONFIGURE_COMMAND ""
+      DOWNLOAD_DIR ${CMAKE_CURRENT_BINARY_DIR}/src
+      BUILD_COMMAND make build
+      BUILD_IN_SOURCE 1
+      INSTALL_COMMAND cp <SOURCE_DIR>/_output/jsonnet <INSTALL_DIR>)
+
     set(CEPH_BUILD_VIRTUALENV $ENV{TMPDIR})
     if(NOT CEPH_BUILD_VIRTUALENV)
       include(AddCephTest)
