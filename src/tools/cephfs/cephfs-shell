@@ -386,7 +386,7 @@ def dirwalk(path):
 class CephFSShell(Cmd):
 
     def __init__(self):
-        super().__init__(use_ipython=False)
+        super().__init__()
         self.working_dir = cephfs.getcwd().decode('utf-8')
         self.set_prompt()
         self.interactive = False
@@ -1498,14 +1498,14 @@ class CephFSShell(Cmd):
 #
 #####################################################
 
-def setup_cephfs():
+def setup_cephfs(args):
     """
     Mounting a cephfs
     """
     global cephfs
     try:
         cephfs = libcephfs.LibCephFS(conffile='')
-        cephfs.mount()
+        cephfs.mount(filesystem_name=args.fs)
     except libcephfs.ObjectNotFound as e:
         print('couldn\'t find ceph configuration not found')
         sys.exit(e.get_error_code())
@@ -1580,12 +1580,15 @@ def get_shell_conffile_path(arg_conf=''):
 
 def manage_args():
     main_parser = argparse.ArgumentParser(description='')
-    main_parser.add_argument('-c', '--config', action='store',
-                             help='Path to Ceph configuration file.',
-                             type=str)
     main_parser.add_argument('-b', '--batch', action='store',
                              help='Path to CephFS shell script/batch file'
                                   'containing CephFS shell commands',
+                             type=str)
+    main_parser.add_argument('-c', '--config', action='store',
+                             help='Path to Ceph configuration file.',
+                             type=str)
+    main_parser.add_argument('-f', '--fs', action='store',
+                             help='Name of filesystem to mount.',
                              type=str)
     main_parser.add_argument('-t', '--test', action='store',
                              help='Test against transcript(s) in FILE',
@@ -1620,7 +1623,7 @@ def manage_sys_argv(args):
     sys.argv.append(exe)
     sys.argv.extend([i.strip() for i in ' '.join(args.commands).split(',')])
 
-    setup_cephfs()
+    setup_cephfs(args)
 
 
 def execute_cmd_args(args):
