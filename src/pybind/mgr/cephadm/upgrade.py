@@ -521,13 +521,6 @@ class CephadmUpgrade:
         target_digests = self.upgrade_state.target_digests
         target_version = self.upgrade_state.target_version
 
-        if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
-            # need to wait for metadata to come in
-            self.mgr.agent_helpers._request_agent_acks(
-                set([h for h in self.mgr.cache.get_hosts() if
-                     (not self.mgr.cache.host_metadata_up_to_date(h) and h in self.mgr.cache.agent_ports and not self.mgr.cache.messaging_agent(h))]))
-            return
-
         first = False
         if not target_id or not target_version or not target_digests:
             # need to learn the container hash
@@ -612,6 +605,9 @@ class CephadmUpgrade:
                     continue
                 assert d.daemon_type is not None
                 assert d.daemon_id is not None
+                assert d.hostname is not None
+                if self.mgr.use_agent and not self.mgr.cache.host_metadata_up_to_date(d.hostname):
+                    continue
                 correct_digest = False
                 if (any(d in target_digests for d in (d.container_image_digests or []))
                         or d.daemon_type in MONITORING_STACK_TYPES):
@@ -693,7 +689,7 @@ class CephadmUpgrade:
                 to_upgrade.append(d_entry)
 
                 # if we don't have a list of others to consider, stop now
-                if not known_ok_to_stop:
+                if d.daemon_type in ['osd', 'mds', 'mon'] and not known_ok_to_stop:
                     break
 
             num = 1
@@ -827,8 +823,6 @@ class CephadmUpgrade:
                         'who': section,
                     })
 
-            logger.debug('Upgrade: All %s daemons are up to date.' % daemon_type)
-
             # complete osd upgrade?
             if daemon_type == 'osd':
                 osdmap = self.mgr.get("osd_map")
@@ -880,6 +874,13 @@ class CephadmUpgrade:
 
                     self.upgrade_state.fs_original_allow_standby_replay = {}
                     self._save_upgrade_state()
+
+            # Make sure all metadata is up to date before saying we are done upgrading this daemon type
+            if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
+                self.mgr.agent_helpers._request_ack_all_not_up_to_date()
+                return
+
+            logger.debug('Upgrade: All %s daemons are up to date.' % daemon_type)
 
         # clean up
         logger.info('Upgrade: Finalizing container_image settings')
