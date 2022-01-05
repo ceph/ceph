@@ -137,8 +137,6 @@ block_sm_superblock_t make_superblock(
   segment_manager_config_t sm_config,
   const seastar::stat_data &data)
 {
-  LOG_PREFIX(block_make_superblock);
-
   using crimson::common::get_conf;
 
   auto config_size = get_conf<Option::size_t>(
@@ -154,16 +152,6 @@ block_sm_superblock_t make_superblock(
     data.block_size);
   size_t segments = (size - tracker_size - data.block_size)
     / config_segment_size;
-
-  DEBUG(
-    "size {}, block_size {}, allocated_size {}, configured_size {}, "
-    "segment_size {}",
-    data.size,
-    data.block_size,
-    data.allocated_size,
-    config_size,
-    config_segment_size
-  );
 
   return block_sm_superblock_t{
     size,
@@ -262,7 +250,6 @@ static
 BlockSegmentManager::access_ertr::future<>
 write_superblock(seastar::file &device, block_sm_superblock_t sb)
 {
-  LOG_PREFIX(block_write_superblock);
   assert(ceph::encoded_sizeof<block_sm_superblock_t>(sb) <
 	 sb.block_size);
   return seastar::do_with(
@@ -274,7 +261,6 @@ write_superblock(seastar::file &device, block_sm_superblock_t sb)
     auto iter = bl.begin();
     assert(bl.length() < sb.block_size);
     iter.copy(bl.length(), bp.c_str());
-    DEBUG("doing writeout");
     return do_write(device, 0, bp);
   });
 }
@@ -388,6 +374,7 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
     auto sd = p.second;
     return read_superblock(device, sd);
   }).safe_then([=](auto sb) {
+    INFO("device {} path={} read {}", get_device_id(), device_path, sb);
     superblock = sb;
     stats.data_read.increment(
         ceph::encoded_sizeof<block_sm_superblock_t>(superblock));
@@ -417,8 +404,7 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
   segment_manager_config_t sm_config)
 {
   LOG_PREFIX(BlockSegmentManager::mkfs);
-  DEBUG("magic={}, dtype={}, id={}",
-    sm_config.magic, sm_config.dtype, sm_config.device_id);
+  DEBUG("path={}, {}", device_path, sm_config);
   return seastar::do_with(
     seastar::file{},
     seastar::stat_data{},
@@ -426,7 +412,6 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
     std::unique_ptr<SegmentStateTracker>(),
     [=](auto &device, auto &stat, auto &sb, auto &tracker)
   {
-    ERROR("path {}", device_path);
     check_create_device_ret maybe_create = check_create_device_ertr::now();
     using crimson::common::get_conf;
     if (get_conf<bool>("seastore_block_create")) {
@@ -436,12 +421,13 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
 
     return maybe_create.safe_then([this] {
       return open_device(device_path);
-    }).safe_then([&, sm_config](auto p) {
+    }).safe_then([&, sm_config, FNAME](auto p) {
       device = p.first;
       stat = p.second;
       sb = make_superblock(sm_config, stat);
       stats.metadata_write.increment(
           ceph::encoded_sizeof<block_sm_superblock_t>(sb));
+      INFO("device {} path={},  writing {}", get_device_id(), device_path, sb);
       return write_superblock(device, sb);
     }).safe_then([&, FNAME] {
       DEBUG("superblock written");
@@ -477,7 +463,7 @@ SegmentManager::open_ertr::future<SegmentRef> BlockSegmentManager::open(
   }
 
   if (tracker->get(s_id) != segment_state_t::EMPTY) {
-    ERROR("invalid segment {} state {}", id, tracker->get(s_id));
+    ERROR("invalid segment {} state {} != EMPTY", id, tracker->get(s_id));
     return crimson::ct_error::invarg::make();
   }
 
@@ -506,7 +492,7 @@ SegmentManager::release_ertr::future<> BlockSegmentManager::release(
   }
 
   if (tracker->get(s_id) != segment_state_t::CLOSED) {
-    ERROR("invalid segment {} state {}", id, tracker->get(s_id));
+    ERROR("invalid segment {} state {} != CLOSED", id, tracker->get(s_id));
     return crimson::ct_error::invarg::make();
   }
 

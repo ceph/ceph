@@ -14,6 +14,11 @@ seastar::logger& logger() {
 
 namespace crimson::os::seastore {
 
+std::ostream& operator<<(std::ostream& out, const seastore_meta_t& meta)
+{
+  return out << meta.seastore_id;
+}
+
 std::ostream &segment_to_stream(std::ostream &out, const segment_id_t &t)
 {
   if (t == NULL_SEG_ID)
@@ -458,7 +463,7 @@ try_decode_deltas(
 
 bool can_delay_allocation(device_type_t type) {
   // Some types of device may not support delayed allocation, for example PMEM.
-  return type <= RANDOM_BLOCK;
+  return type <= device_type_t::RANDOM_BLOCK;
 }
 
 device_type_t string_to_device_type(std::string type) {
@@ -474,18 +479,22 @@ device_type_t string_to_device_type(std::string type) {
   return device_type_t::NONE;
 }
 
-std::string device_type_to_string(device_type_t dtype) {
-  switch (dtype) {
+std::ostream& operator<<(std::ostream& out, device_type_t t)
+{
+  switch (t) {
+  case device_type_t::NONE:
+    return out << "NONE";
   case device_type_t::SEGMENTED:
-    return "segmented";
+    return out << "SEGMENTED";
   case device_type_t::RANDOM_BLOCK:
-    return "random_block";
+    return out << "RANDOM_BLOCK";
   case device_type_t::PMEM:
-    return "pmem";
+    return out << "PMEM";
   default:
-    ceph_assert(0 == "impossible");
+    return out << "INVALID_DEVICE_TYPE!";
   }
 }
+
 paddr_t convert_blk_paddr_to_paddr(blk_paddr_t addr, size_t block_size,
     uint32_t blocks_per_segment, device_id_t d_id)
 {
