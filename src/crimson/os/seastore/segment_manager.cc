@@ -11,9 +11,13 @@
 #endif
 
 namespace{
-  seastar::logger &logger(){
-    return crimson::get_logger(ceph_subsys_seastore_device);
-  }
+
+#ifdef HAVE_ZNS
+seastar::logger &logger(){
+  return crimson::get_logger(ceph_subsys_seastore_device);
+}
+#endif
+
 }
 
 namespace crimson::os::seastore {
