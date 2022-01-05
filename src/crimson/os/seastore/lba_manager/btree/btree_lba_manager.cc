@@ -185,12 +185,6 @@ BtreeLBAManager::alloc_extent(
     });
 }
 
-static bool is_lba_node(extent_types_t type)
-{
-  return type == extent_types_t::LADDR_INTERNAL ||
-    type == extent_types_t::LADDR_LEAF;
-}
-
 static bool is_lba_node(const CachedExtent &e)
 {
   return is_lba_node(e.get_type());
