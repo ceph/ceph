@@ -21,21 +21,25 @@ data cluster (e.g., OpenStack, CloudStack, etc).
 CPU
 ===
 
-CephFS metadata servers are CPU intensive, so they should have significant
-processing power (e.g., quad core or better CPUs) and benefit from higher clock
-rate (frequency in GHz). Ceph OSDs run the :term:`RADOS` service, calculate
-data placement with :term:`CRUSH`, replicate data, and maintain their own copy of the
-cluster map. Therefore, OSD nodes should have a reasonable amount of processing
-power. Requirements vary by use-case; a starting point might be one core per
-OSD for light / archival usage, and two cores per OSD for heavy workloads such
-as RBD volumes attached to VMs.  Monitor / manager nodes do not have heavy CPU
-demands so a modest processor can be chosen for them.  Also consider whether the
-host machine will run CPU-intensive processes in addition to Ceph daemons. For
-example, if your hosts will run computing VMs (e.g., OpenStack Nova), you will
-need to ensure that these other processes leave sufficient processing power for
-Ceph daemons. We recommend running additional CPU-intensive processes on
-separate hosts to avoid resource contention.
+CephFS metadata servers are CPU intensive. CephFS metadata servers should
+therefore have quad-core or better CPUs and high clock rates (GHz). OSD nodes
+need hardware with enough processing power to run the RADOS service, calculate
+data placement with CRUSH, replicate data, and maintain their own copies of the
+cluster map.
 
+The requirements of one Ceph cluster are not the same as the requirements of
+another, but here are some general guidelines. Pay particular attention to the
+number of cycles per IOP and the number of IOPs per OSD. For example, for NVMe
+drives, Ceph can easily utilize five or six cores on real clusters and up to
+about fourteen cores on single OSDs in isolation. 
+
+Monitor nodes and manager nodes have no heavy CPU demands and require only a
+modest processor. If your host machines will run CPU-intensive processes in
+addition to Ceph daemons, make sure that you have enough processing power to
+run both the CPU-intensive processes and the Ceph daemons. (OpenStack Nova is
+one such example of a CPU-intensive process.) We recommend that you run
+non-Ceph CPU-intensive processes on separate hosts in order to avoid resource
+contention.
 
 RAM
 ===
