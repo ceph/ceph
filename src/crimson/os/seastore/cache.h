@@ -782,7 +782,7 @@ private:
     void clear() {
       LOG_PREFIX(Cache::LRU::clear);
       for (auto iter = lru.begin(); iter != lru.end();) {
-	DEBUG("clearing {}", *iter);
+	SUBDEBUG(seastore_cache, "clearing {}", *iter);
 	remove_from_lru(*(iter++));
       }
     }
