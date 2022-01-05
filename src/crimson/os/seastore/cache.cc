@@ -878,11 +878,12 @@ record_t Cache::prepare_record(Transaction &t)
   LOG_PREFIX(Cache::prepare_record);
   DEBUGT("enter", t);
 
+  auto trans_src = t.get_src();
   assert(!t.is_weak());
-  assert(t.get_src() != Transaction::src_t::READ);
+  assert(trans_src != Transaction::src_t::READ);
 
   auto& efforts = get_by_src(stats.committed_efforts_by_src,
-                             t.get_src());
+                             trans_src);
 
   // Should be valid due to interruptible future
   for (auto &i: t.read_set) {
@@ -1025,51 +1026,50 @@ record_t Cache::prepare_record(Transaction &t)
   auto& ool_stats = t.get_ool_write_stats();
   ceph_assert(ool_stats.extents.num == t.ool_block_list.size());
 
-  // FIXME: prevent submitting empty records
   if (record.is_empty()) {
-    ERRORT("record is empty!", t);
+    // XXX: improve osd logic to not submit empty transactions.
+    DEBUGT("record to submit is empty, src={}!", t, trans_src);
     assert(t.onode_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
     assert(ool_stats.is_clear());
-    ++(efforts.num_trans);
-  } else {
-    DEBUGT("record is ready to submit, src={}, mdsize={}, dsize={}; "
-           "{} ool records, mdsize={}, dsize={}, fillness={}",
-           t, t.get_src(),
-           record.size.get_raw_mdlength(),
-           record.size.dlength,
-           ool_stats.num_records,
-           ool_stats.header_raw_bytes,
-           ool_stats.data_bytes,
-           ((double)(ool_stats.header_raw_bytes + ool_stats.data_bytes) /
-            (ool_stats.header_bytes + ool_stats.data_bytes)));
-    if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
-        t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
-      // CLEANER transaction won't contain any onode tree operations
-      assert(t.onode_tree_stats.is_clear());
-    } else {
-      if (t.onode_tree_stats.depth) {
-        stats.onode_tree_depth = t.onode_tree_stats.depth;
-      }
-      get_by_src(stats.committed_onode_tree_efforts, t.get_src()
-          ).increment(t.onode_tree_stats);
-    }
-
-    if (t.lba_tree_stats.depth) {
-      stats.lba_tree_depth = t.lba_tree_stats.depth;
-    }
-    get_by_src(stats.committed_lba_tree_efforts, t.get_src()
-        ).increment(t.lba_tree_stats);
-
-    ++(efforts.num_trans);
-    efforts.num_ool_records += ool_stats.num_records;
-    efforts.ool_record_padding_bytes +=
-      (ool_stats.header_bytes - ool_stats.header_raw_bytes);
-    efforts.ool_record_metadata_bytes += ool_stats.header_raw_bytes;
-    efforts.ool_record_data_bytes += ool_stats.data_bytes;
-    efforts.inline_record_metadata_bytes +=
-      (record.size.get_raw_mdlength() - record.get_delta_size());
   }
+
+  DEBUGT("record is ready to submit, src={}, mdsize={}, dsize={}; "
+         "{} ool records, mdsize={}, dsize={}, fillness={}",
+         t, trans_src,
+         record.size.get_raw_mdlength(),
+         record.size.dlength,
+         ool_stats.num_records,
+         ool_stats.header_raw_bytes,
+         ool_stats.data_bytes,
+         ((double)(ool_stats.header_raw_bytes + ool_stats.data_bytes) /
+          (ool_stats.header_bytes + ool_stats.data_bytes)));
+  if (trans_src == Transaction::src_t::CLEANER_TRIM ||
+      trans_src == Transaction::src_t::CLEANER_RECLAIM) {
+    // CLEANER transaction won't contain any onode tree operations
+    assert(t.onode_tree_stats.is_clear());
+  } else {
+    if (t.onode_tree_stats.depth) {
+      stats.onode_tree_depth = t.onode_tree_stats.depth;
+    }
+    get_by_src(stats.committed_onode_tree_efforts, trans_src
+        ).increment(t.onode_tree_stats);
+  }
+
+  if (t.lba_tree_stats.depth) {
+    stats.lba_tree_depth = t.lba_tree_stats.depth;
+  }
+  get_by_src(stats.committed_lba_tree_efforts, trans_src
+      ).increment(t.lba_tree_stats);
+
+  ++(efforts.num_trans);
+  efforts.num_ool_records += ool_stats.num_records;
+  efforts.ool_record_padding_bytes +=
+    (ool_stats.header_bytes - ool_stats.header_raw_bytes);
+  efforts.ool_record_metadata_bytes += ool_stats.header_raw_bytes;
+  efforts.ool_record_data_bytes += ool_stats.data_bytes;
+  efforts.inline_record_metadata_bytes +=
+    (record.size.get_raw_mdlength() - record.get_delta_size());
 
   return record;
 }
