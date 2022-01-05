@@ -32,13 +32,17 @@ Behaviour of CephFS Shell can be tweaked using ``cephfs-shell.conf``. Refer to
 Options
 =======
 
+.. option:: -b, --batch FILE
+
+   Path to batch file.
+
 .. option:: -c, --config FILE
 
    Path to cephfs-shell.conf
 
-.. option:: -b, --batch FILE
+.. option:: -f, --fs FS
 
-   Path to batch file.
+   Name of filesystem to mount.
 
 .. option:: -t, --test FILE
 
