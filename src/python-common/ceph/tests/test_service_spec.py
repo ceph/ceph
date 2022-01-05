@@ -1,5 +1,7 @@
 # flake8: noqa
 import json
+import re
+
 import yaml
 
 import pytest
@@ -319,6 +321,44 @@ spec:
   uid: 1000
   volume_mounts:
     foo: /foo
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_community: public
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V2c
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  auth_protocol: MD5
+  credentials:
+    snmp_v3_auth_password: mypassword
+    snmp_v3_auth_username: myuser
+  engine_id: 8000C53F00000000
+  port: 9464
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_password: mypassword
+    snmp_v3_auth_username: myuser
+    snmp_v3_priv_password: mysecret
+  engine_id: 8000C53F00000000
+  privacy_protocol: AES
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
 """.split('---\n'))
 def test_yaml(y):
     data = yaml.safe_load(y)
@@ -572,6 +612,250 @@ service_id: foo
 placement:
   count_per_host: 0
 """, "count-per-host must be >= 1",),
+    ("""
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_password: mypassword
+    snmp_v3_auth_username: myuser
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  engine_id: 8000c53f0000000000
+  privacy_protocol: WEIRD
+  snmp_destination: 192.168.122.1:162
+  auth_protocol: BIZARRE
+  snmp_version: V3
+""", "auth_protocol unsupported. Must be one of MD5, SHA"),
+    ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_community: public
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V4
+""", 'snmp_version unsupported. Must be one of V2c, V3'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_community: public
+  port: 9464
+  snmp_destination: 192.168.1.42:162
+""", re.escape('Missing SNMP version (snmp_version)')),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+  port: 9464
+  auth_protocol: wah
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
+""", 'auth_protocol unsupported. Must be one of MD5, SHA'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: weewah
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
+""", 'privacy_protocol unsupported. Must be one of DES, AES'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
+""", 'Must provide an engine_id for SNMP V3 notifications'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_community: public
+  port: 9464
+  snmp_destination: 192.168.1.42
+  snmp_version: V2c
+""", re.escape('SNMP destination (snmp_destination) type (IPv4) is invalid. Must be either: IPv4:Port, Name:Port')),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: bogus
+  snmp_destination: 192.168.1.42:162
+  snmp_version: V3
+""", 'engine_id must be a string containing 10-64 hex characters. Its length must be divisible by 2'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+  port: 9464
+  auth_protocol: SHA
+  engine_id: 8000C53F0000000000
+  snmp_version: V3
+""", re.escape('SNMP destination (snmp_destination) must be provided')),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: 8000C53F0000000000
+  snmp_destination: my.imaginary.snmp-host
+  snmp_version: V3
+""", re.escape('SNMP destination (snmp_destination) is invalid: DNS lookup failed')),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: 8000C53F0000000000
+  snmp_destination: 10.79.32.10:fred
+  snmp_version: V3
+""", re.escape('SNMP destination (snmp_destination) is invalid: Port must be numeric')),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: 8000C53
+  snmp_destination: 10.79.32.10:162
+  snmp_version: V3
+""", 'engine_id must be a string containing 10-64 hex characters. Its length must be divisible by 2'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: 8000C53DOH!
+  snmp_destination: 10.79.32.10:162
+  snmp_version: V3
+""", 'engine_id must be a string containing 10-64 hex characters. Its length must be divisible by 2'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: 8000C53FCA7344403DC611EC9B985254002537A6C53FCA7344403DC6112537A60
+  snmp_destination: 10.79.32.10:162
+  snmp_version: V3
+""", 'engine_id must be a string containing 10-64 hex characters. Its length must be divisible by 2'),
+        ("""
+---
+service_type: snmp-gateway
+service_name: snmp-gateway
+placement:
+  count: 1
+spec:
+  credentials:
+    snmp_v3_auth_username: myuser
+    snmp_v3_auth_password: mypassword
+    snmp_v3_priv_password: mysecret
+  port: 9464
+  auth_protocol: SHA
+  privacy_protocol: AES
+  engine_id: 8000C53F00000
+  snmp_destination: 10.79.32.10:162
+  snmp_version: V3
+""", 'engine_id must be a string containing 10-64 hex characters. Its length must be divisible by 2'),
     ])
 def test_service_spec_validation_error(y, error_match):
     data = yaml.safe_load(y)
