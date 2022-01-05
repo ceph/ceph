@@ -1665,6 +1665,15 @@ Traceback (most recent call last):
             with with_osd_daemon(cephadm_module, _run_cephadm, 'test', 1, ceph_volume_lvm_list=_ceph_volume_list):
                 pass
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_osd_count(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        dg = DriveGroupSpec(service_id='', data_devices=DeviceSelection(all=True))
+        with with_host(cephadm_module, 'test', refresh_hosts=False):
+            with with_service(cephadm_module, dg, host='test'):
+                with with_osd_daemon(cephadm_module, _run_cephadm, 'test', 1):
+                    assert wait(cephadm_module, cephadm_module.describe_service())[0].size == 1
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_host_rm_last_admin(self, cephadm_module: CephadmOrchestrator):
         with pytest.raises(OrchestratorError):
