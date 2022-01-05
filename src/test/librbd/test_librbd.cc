@@ -4518,6 +4518,73 @@ TYPED_TEST(DiffIterateTest, DiffIterateRegression6926)
   ASSERT_EQ(static_cast<size_t>(0), extents.size());
 }
 
+TYPED_TEST(DiffIterateTest, DiffIterateParent)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 22;
+    std::string name = this->get_temp_image_name();
+    ssize_t size = 20 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    uint64_t features;
+    ASSERT_EQ(0, image.features(&features));
+    uint64_t object_size = 0;
+    if (this->whole_object) {
+      object_size = 1 << order;
+    }
+
+    ceph::bufferlist bl;
+    bl.append(std::string(size, '1'));
+    ASSERT_EQ(size, image.write(0, size, bl));
+    ASSERT_EQ(0, image.snap_create("snap"));
+    ASSERT_EQ(0, image.snap_protect("snap"));
+
+    std::string clone_name = this->get_temp_image_name();
+    ASSERT_EQ(0, rbd.clone(ioctx, name.c_str(), "snap", ioctx,
+                           clone_name.c_str(), features, &order));
+    librbd::Image clone;
+    ASSERT_EQ(0, rbd.open(ioctx, clone, clone_name.c_str(), NULL));
+
+    std::vector<diff_extent> extents;
+    ASSERT_EQ(0, clone.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                     vector_iterate_cb, &extents));
+    ASSERT_EQ(5u, extents.size());
+    ASSERT_EQ(diff_extent(0, 4194304, true, object_size), extents[0]);
+    ASSERT_EQ(diff_extent(4194304, 4194304, true, object_size), extents[1]);
+    ASSERT_EQ(diff_extent(8388608, 4194304, true, object_size), extents[2]);
+    ASSERT_EQ(diff_extent(12582912, 4194304, true, object_size), extents[3]);
+    ASSERT_EQ(diff_extent(16777216, 4194304, true, object_size), extents[4]);
+    extents.clear();
+
+    ASSERT_EQ(0, clone.resize(size / 2));
+    ASSERT_EQ(0, clone.resize(size));
+    ASSERT_EQ(1, clone.write(size - 1, 1, bl));
+
+    ASSERT_EQ(0, clone.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                     vector_iterate_cb, &extents));
+    ASSERT_EQ(4u, extents.size());
+    ASSERT_EQ(diff_extent(0, 4194304, true, object_size), extents[0]);
+    ASSERT_EQ(diff_extent(4194304, 4194304, true, object_size), extents[1]);
+    ASSERT_EQ(diff_extent(8388608, 2097152, true, object_size), extents[2]);
+    // hole (parent overlap = 10M) followed by copyup'ed object
+    ASSERT_EQ(diff_extent(16777216, 4194304, true, object_size), extents[3]);
+
+    ASSERT_PASSED(this->validate_object_map, image);
+    ASSERT_PASSED(this->validate_object_map, clone);
+  }
+
+  ioctx.close();
+}
+
 TYPED_TEST(DiffIterateTest, DiffIterateIgnoreParent)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
