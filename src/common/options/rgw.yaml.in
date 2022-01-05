@@ -844,6 +844,16 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_keystone_token_cache_ttl
+  type: int
+  level: advanced
+  desc: Keystone token secret key cache TTL
+  long_desc: The TTL for secret keys that are loaded from Keystone and stored in the cache system.
+  fmt_desc: The maximum TTL that a secret loaded from Keystone is maintained in the token cache system.
+  default: 300
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_keystone_verify_ssl
   type: bool
   level: advanced
