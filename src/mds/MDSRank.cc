@@ -556,6 +556,7 @@ MDSRank::~MDSRank()
 {
   if (hb) {
     g_ceph_context->get_heartbeat_map()->remove_worker(hb);
+    hb = nullptr;
   }
 
   if (scrubstack) { delete scrubstack; scrubstack = NULL; }
