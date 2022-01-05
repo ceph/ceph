@@ -11,6 +11,7 @@ from mgr_module import CommandResult
 
 from datetime import datetime, timedelta
 from threading import Lock, Condition, Thread
+from ipaddress import ip_address
 
 PERF_STATS_VERSION = 1
 
@@ -68,7 +69,7 @@ class FilterSpec(object):
 def extract_mds_ranks_from_spec(mds_rank_spec):
     if not mds_rank_spec:
         return MDS_RANK_ALL
-    match = re.match(r'^(\d[,\d]*)$', mds_rank_spec)
+    match = re.match(r'^\d+(,\d+)*$', mds_rank_spec)
     if not match:
         raise ValueError("invalid mds filter spec: {}".format(mds_rank_spec))
     return tuple(int(mds_rank) for mds_rank in match.group(0).split(','))
@@ -78,15 +79,25 @@ def extract_client_id_from_spec(client_id_spec):
         return CLIENT_ID_ALL
     # the client id is the spec itself since it'll be a part
     # of client filter regex.
+    if not client_id_spec.isdigit():
+        raise ValueError('invalid client_id filter spec: {}'.format(client_id_spec))
     return client_id_spec
 
 def extract_client_ip_from_spec(client_ip_spec):
     if not client_ip_spec:
         return CLIENT_IP_ALL
-    # TODO: validate if it is an ip address (or a subset of it).
-    # the client ip is the spec itself since it'll be a part
-    # of client filter regex.
-    return client_ip_spec
+
+    client_ip = client_ip_spec
+    if client_ip.startswith('v1:'):
+        client_ip = client_ip.replace('v1:', '')
+    elif client_ip.startswith('v2:'):
+        client_ip = client_ip.replace('v2:', '')
+
+    try:
+        ip_address(client_ip)
+        return client_ip_spec
+    except ValueError:
+        raise ValueError('invalid client_ip filter spec: {}'.format(client_ip_spec))
 
 def extract_mds_ranks_from_report(mds_ranks_str):
     if not mds_ranks_str:
@@ -452,7 +463,10 @@ class FSPerfStats(object):
         return FilterSpec(mds_ranks, client_id, client_ip)
 
     def get_perf_data(self, cmd):
-        filter_spec = self.extract_query_filters(cmd)
+        try:
+            filter_spec = self.extract_query_filters(cmd)
+        except ValueError as e:
+            return -errno.EINVAL, "", str(e)
 
         counters = {}
         with self.lock:
