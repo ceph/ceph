@@ -4696,9 +4696,9 @@ options:
   desc: The number of seconds to wait between rebalances when cache autotune is enabled.
   fmt_desc: |
     The number of seconds to wait between rebalances when cache autotune
-    is enabled.  This setting changes how quickly the allocation ratios of
-    various caches are recomputed.  Note:  Setting this interval too small
-    can result in high CPU usage and lower performance.
+    is enabled.  This setting changes the speed at which Ceph recomputes
+    the allocation ratios of various caches. Note: Setting this interval 
+    too small can result in high CPU usage and lower performance.
   default: 5
   see_also:
   - bluestore_cache_autotune
