@@ -15,6 +15,8 @@
 #include "node_impl.h"
 #include "stages/node_stage_layout.h"
 
+SET_SUBSYS(seastore_onode);
+
 namespace crimson::os::seastore::onode {
 /*
  * tree_cursor_t

@@ -10,9 +10,11 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore);
+    return crimson::get_logger(ceph_subsys_seastore_odata);
   }
 }
+
+SET_SUBSYS(seastore_odata);
 
 namespace crimson::os::seastore {
 #define assert_aligned(x) ceph_assert(((x)%ctx.tm.get_block_size()) == 0)

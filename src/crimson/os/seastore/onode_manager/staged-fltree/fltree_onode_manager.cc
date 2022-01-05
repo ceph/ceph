@@ -5,6 +5,8 @@
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
 
+SET_SUBSYS(seastore_onode);
+
 namespace crimson::os::seastore::onode {
 
 FLTreeOnodeManager::contains_onode_ret FLTreeOnodeManager::contains_onode(

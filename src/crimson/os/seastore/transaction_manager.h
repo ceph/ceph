@@ -45,7 +45,7 @@ auto repeat_eagain(F &&f) {
 	    return seastar::stop_iteration::yes;
 	  }).handle_error(
 	    [FNAME](const crimson::ct_error::eagain &e) {
-	      DEBUG("hit eagain, restarting");
+	      SUBDEBUG(seastore_tm, "hit eagain, restarting");
 	      return seastar::stop_iteration::no;
 	    },
 	    crimson::ct_error::pass_further_all{}
@@ -149,7 +149,7 @@ public:
     LBAPinRef pin) {
     LOG_PREFIX(TransactionManager::pin_to_extent);
     using ret = pin_to_extent_ret<T>;
-    DEBUGT("getting extent {}", t, *pin);
+    SUBDEBUGT(seastore_tm, "getting extent {}", t, *pin);
     auto &pref = *pin;
     return cache->get_extent<T>(
       t,
@@ -163,7 +163,7 @@ public:
 	lba_manager->add_pin(extent.get_pin());
       }
     ).si_then([FNAME, &t](auto ref) mutable -> ret {
-      DEBUGT("got extent {}", t, *ref);
+      SUBDEBUGT(seastore_tm, "got extent {}", t, *ref);
       return pin_to_extent_ret<T>(
 	interruptible::ready_future_marker{},
 	std::move(ref));
@@ -190,8 +190,9 @@ public:
       t, offset
     ).si_then([this, FNAME, &t, offset, length] (auto pin) {
       if (length != pin->get_length() || !pin->get_paddr().is_real()) {
-        ERRORT("offset {} len {} got wrong pin {}",
-               t, offset, length, *pin);
+        SUBERRORT(seastore_tm,
+            "offset {} len {} got wrong pin {}",
+            t, offset, length, *pin);
         ceph_assert(0 == "Should be impossible");
       }
       return this->pin_to_extent<T>(t, std::move(pin));
@@ -212,8 +213,9 @@ public:
       t, offset
     ).si_then([this, FNAME, &t, offset] (auto pin) {
       if (!pin->get_paddr().is_real()) {
-        ERRORT("offset {} got wrong pin {}",
-               t, offset, *pin);
+        SUBERRORT(seastore_tm,
+            "offset {} got wrong pin {}",
+            t, offset, *pin);
         ceph_assert(0 == "Should be impossible");
       }
       return this->pin_to_extent<T>(t, std::move(pin));
@@ -229,14 +231,14 @@ public:
     stats.extents_mutated_total++;
     stats.extents_mutated_bytes += ret->get_length();
     if (!ret->has_pin()) {
-      DEBUGT(
+      SUBDEBUGT(seastore_tm,
 	"duplicating {} for write: {}",
 	t,
 	*ref,
 	*ret);
       ret->set_pin(ref->get_pin().duplicate());
     } else {
-      DEBUGT(
+      SUBDEBUGT(seastore_tm,
 	"{} already pending",
 	t,
 	*ref);
@@ -311,7 +313,7 @@ public:
       ext->set_pin(std::move(ref));
       stats.extents_allocated_total++;
       stats.extents_allocated_bytes += len;
-      DEBUGT("new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
+      SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
       return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });
@@ -507,7 +509,7 @@ public:
 
   void add_segment_manager(SegmentManager* sm) {
     LOG_PREFIX(TransactionManager::add_segment_manager);
-    DEBUG("adding segment manager {}", sm->get_device_id());
+    SUBDEBUG(seastore_tm, "adding segment manager {}", sm->get_device_id());
     scanner.add_segment_manager(sm);
     epm->add_allocator(
       device_type_t::SEGMENTED,

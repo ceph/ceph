@@ -9,9 +9,11 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore);
+    return crimson::get_logger(ceph_subsys_seastore_cleaner);
   }
 }
+
+SET_SUBSYS(seastore_cleaner);
 
 namespace crimson::os::seastore {
 

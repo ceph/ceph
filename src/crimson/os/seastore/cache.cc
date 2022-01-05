@@ -20,6 +20,8 @@
 
 using std::string_view;
 
+SET_SUBSYS(seastore_cache);
+
 namespace crimson::os::seastore {
 
 Cache::Cache(

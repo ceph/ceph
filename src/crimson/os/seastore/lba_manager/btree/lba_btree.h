@@ -555,7 +555,7 @@ private:
     mapped_space_visitor_t *visitor ///< [in] mapped space visitor
   ) {
     LOG_PREFIX(LBATree::lookup_depth_range);
-    DEBUGT("{} -> {}", c.trans, from, to);
+    SUBDEBUGT(seastore_lba, "{} -> {}", c.trans, from, to);
     return seastar::do_with(
       from,
       [c, to, visitor, &iter, &li, &ll](auto &d) {
@@ -619,7 +619,7 @@ private:
 	    auto riter = ll(*(root_entry.node));
 	    root_entry.pos = riter->get_offset();
 	  }
-	  DEBUGT("got root, depth {}", c.trans, root.get_depth());
+	  SUBDEBUGT(seastore_lba, "got root, depth {}", c.trans, root.get_depth());
 	  return lookup_depth_range(
 	    c,
 	    iter,
