@@ -65,14 +65,18 @@ public:
     Context* ctx = m_diff_context.throttle.start_op(this);
     auto aio_comp = io::AioCompletion::create_and_start(
       ctx, util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_GENERIC);
+    int list_snaps_flags = 0;
+    if (!m_diff_context.include_parent || m_diff_context.from_snap_id != 0) {
+      list_snaps_flags |= io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT;
+    }
+    if (m_diff_context.whole_object) {
+      list_snaps_flags |= io::LIST_SNAPS_FLAG_WHOLE_OBJECT;
+    }
     auto req = io::ImageDispatchSpec::create_list_snaps(
       m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
       aio_comp, {{m_image_offset, m_image_length}},
       {m_diff_context.from_snap_id, m_diff_context.end_snap_id},
-      (m_diff_context.include_parent ?
-        0 : io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT) |
-      (m_diff_context.whole_object ? io::LIST_SNAPS_FLAG_WHOLE_OBJECT : 0),
-      &m_snapshot_delta, {});
+      list_snaps_flags, &m_snapshot_delta, {});
     req->send();
   }
 
@@ -253,8 +257,7 @@ int DiffIterate<I>::execute() {
                 << end_snap_id << " size from " << from_size
                 << " to " << end_size << dendl;
   DiffContext diff_context(m_image_ctx, m_callback, m_callback_arg,
-                           m_whole_object,
-                           m_include_parent && from_snap_id == 0, from_snap_id,
+                           m_whole_object, m_include_parent, from_snap_id,
                            end_snap_id);
 
   uint64_t period = m_image_ctx.get_stripe_period();
