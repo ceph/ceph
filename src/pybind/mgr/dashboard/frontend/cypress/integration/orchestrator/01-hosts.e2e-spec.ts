@@ -38,7 +38,7 @@ describe('Hosts page', () => {
       for (const host of this.hosts) {
         hosts.clickTab('cd-host-details', host.name, 'Physical Disks');
         cy.get('cd-host-details').within(() => {
-          hosts.getTableCount('total').should('be.gte', 0);
+          hosts.expectTableCount('total', host.devices.length);
         });
       }
     });
