@@ -9,6 +9,8 @@
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/journal.h"
 
+SET_SUBSYS(seastore_tm);
+
 namespace crimson::os::seastore {
 
 TransactionManager::TransactionManager(

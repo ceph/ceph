@@ -255,7 +255,7 @@ public:
     Transaction& t,
     std::list<LogicalCachedExtentRef>& extents) final {
     LOG_PREFIX(SegmentedAllocator::alloc_ool_extents_paddr);
-    DEBUGT("start", t);
+    SUBDEBUGT(seastore_tm, "start", t);
     return seastar::do_with(
       std::map<Writer*, std::list<LogicalCachedExtentRef>>(),
       [this, extents=std::move(extents), &t](auto& alloc_map) {
@@ -348,7 +348,7 @@ public:
   alloc_paddr_iertr::future<> delayed_alloc_or_ool_write(
     Transaction& t) {
     LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
-    DEBUGT("start", t);
+    SUBDEBUGT(seastore_tm, "start", t);
     return seastar::do_with(
         std::map<ExtentAllocator*, std::list<LogicalCachedExtentRef>>(),
         [this, &t](auto& alloc_map) {
@@ -368,7 +368,7 @@ public:
         alloc_map[allocator_ptr.get()].emplace_back(extent);
         num_ool_extents++;
       }
-      DEBUGT("{} ool extents", t, num_ool_extents);
+      SUBDEBUGT(seastore_tm, "{} ool extents", t, num_ool_extents);
       return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
         auto allocator = p.first;
         auto& extents = p.second;
@@ -380,7 +380,7 @@ public:
   void add_allocator(device_type_t type, ExtentAllocatorRef&& allocator) {
     allocators[type].emplace_back(std::move(allocator));
     LOG_PREFIX(ExtentPlacementManager::add_allocator);
-    DEBUG("allocators for {}: {}",
+    SUBDEBUG(seastore_tm, "allocators for {}: {}",
       device_type_to_string(type),
       allocators[type].size());
   }

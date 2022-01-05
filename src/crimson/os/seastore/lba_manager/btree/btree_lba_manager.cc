@@ -15,9 +15,11 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore);
+    return crimson::get_logger(ceph_subsys_seastore_lba);
   }
 }
+
+SET_SUBSYS(seastore_lba);
 
 namespace crimson::os::seastore::lba_manager::btree {
 
