@@ -14,8 +14,7 @@
  * 
  */
 
-#ifndef CEPH_RGW_COMMON_H
-#define CEPH_RGW_COMMON_H
+#pragma once
 
 #include <array>
 #include <string_view>
@@ -1121,17 +1120,20 @@ struct RGWStorageStats
   RGWObjCategory category;
   uint64_t size;
   uint64_t size_rounded;
-  uint64_t size_utilized{0}; //< size after compression, encryption
   uint64_t num_objects;
+  uint64_t size_utilized{0}; //< size after compression, encryption
+  bool dump_utilized;        // whether dump should include utilized values
 
-  RGWStorageStats()
+  RGWStorageStats(bool _dump_utilized=true)
     : category(RGWObjCategory::None),
       size(0),
       size_rounded(0),
-      num_objects(0) {}
+      num_objects(0),
+      dump_utilized(_dump_utilized)
+  {}
 
   void dump(Formatter *f) const;
-};
+}; // RGWStorageStats
 
 class RGWEnv;
 
@@ -2328,5 +2330,3 @@ int decode_bl(bufferlist& bl, T& t)
   }
   return 0;
 }
-
-#endif
