@@ -493,8 +493,11 @@ class PgAutoscaler(MgrModule):
             final_ratio = 1 / (pool_count - root_map[root_id].pool_used)
             pool_pg_target = (final_ratio * root_map[root_id].pg_left) / p['size'] * bias
 
-        final_pg_target = max(p.get('options', {}).get('pg_num_min', PG_NUM_MIN),
-                              nearest_power_of_two(pool_pg_target))
+        min_pg = p.get('options', {}).get('pg_num_min', PG_NUM_MIN)
+        max_pg = p.get('options', {}).get('pg_num_max')
+        final_pg_target = max(min_pg, nearest_power_of_two(pool_pg_target))
+        if max_pg and max_pg < final_pg_target:
+            final_pg_target = max_pg
         self.log.info("Pool '{0}' root_id {1} using {2} of space, bias {3}, "
                       "pg target {4} quantized to {5} (current {6})".format(
                       p['pool_name'],
