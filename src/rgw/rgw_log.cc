@@ -328,8 +328,14 @@ int OpsLogManifold::log(struct req_state* s, struct rgw_log_entry& entry)
 }
 
 OpsLogFile::OpsLogFile(CephContext* cct, std::string& path, uint64_t max_data_size) :
-  cct(cct), file(path, std::ofstream::app), data_size(0), max_data_size(max_data_size)
+  cct(cct), file(path, std::ofstream::app), data_size(0), max_data_size(max_data_size), path(path)
 {
+}
+
+void OpsLogFile::reopen() {
+  std::scoped_lock flush_lock(flush_mutex);
+  file.close();
+  file.open(path, std::ofstream::app);
 }
 
 void OpsLogFile::flush()

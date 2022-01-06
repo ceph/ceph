@@ -178,6 +178,7 @@ class OpsLogFile : public JsonOpsLogSink, public Thread, public DoutPrefixProvid
   bool stopped;
   uint64_t data_size;
   uint64_t max_data_size;
+  std::string path;
 
   void flush();
 protected:
@@ -189,6 +190,7 @@ public:
   CephContext *get_cct() const override { return cct; }
   unsigned get_subsys() const override { return dout_subsys; }
   std::ostream& gen_prefix(std::ostream& out) const override { return out << "rgw OpsLogFile: "; }
+  void reopen();
   void start();
   void stop();
 };
