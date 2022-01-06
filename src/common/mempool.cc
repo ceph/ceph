@@ -15,7 +15,7 @@
 #include "include/mempool.h"
 #include "include/demangle.h"
 
-
+static thread_local mempool::shard_t *thread_shard = NULL;
 // default to debug_mode off
 bool mempool::debug_mode = false;
 
@@ -92,9 +92,9 @@ size_t mempool::pool_t::allocated_items() const
 
 void mempool::pool_t::adjust_count(ssize_t items, ssize_t bytes)
 {
-  shard_t *shard = pick_a_shard();
-  shard->items += items;
-  shard->bytes += bytes;
+  thread_shard = (thread_shard == NULL) ? pick_a_shard() : thread_shard;
+  thread_shard->items += items;
+  thread_shard->bytes += bytes;
 }
 
 void mempool::pool_t::get_stats(
