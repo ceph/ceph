@@ -23,7 +23,7 @@ namespace dmc = crimson::dmclock;
 using namespace std::placeholders;
 
 #define dout_context cct
-#define dout_subsys ceph_subsys_osd
+#define dout_subsys ceph_subsys_mclock
 #undef dout_prefix
 #define dout_prefix *_dout << "mClockScheduler: "
 
