@@ -73,10 +73,12 @@ public:
   }
 
   write_ertr::future<> write_out(
+    device_id_t device_id,
     seastar::file &device,
     uint64_t offset);
 
   read_ertr::future<> read_in(
+    device_id_t device_id,
     seastar::file &device,
     uint64_t offset);
 };
