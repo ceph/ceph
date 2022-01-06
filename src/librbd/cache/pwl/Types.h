@@ -283,7 +283,7 @@ struct WriteLogPoolRoot {
   #ifdef WITH_RBD_RWL
   union {
     struct {
-      uint8_t layout_version;    /* Version of this structure (RWL_LAYOUT_VERSION) */
+      uint8_t layout_version;
     };
     uint64_t _u64;
   } header;
@@ -291,15 +291,16 @@ struct WriteLogPoolRoot {
   #endif
   #ifdef WITH_RBD_SSD_CACHE
   uint64_t layout_version = 0;
-  uint64_t cur_sync_gen = 0;
+  uint64_t cur_sync_gen = 0;    /* TODO: remove it when changing disk format */
   #endif
   uint64_t pool_size;
-  uint64_t flushed_sync_gen;     /* All writing entries with this or a lower
-                                  * sync gen number are flushed. */
-  uint32_t block_size;           /* block size */
+  uint64_t flushed_sync_gen;    /* All writing entries with this or a lower
+                                 * sync gen number are flushed. */
+  uint32_t block_size;
   uint32_t num_log_entries;
-  uint64_t first_free_entry;     /* Entry following the newest valid entry */
-  uint64_t first_valid_entry;    /* Index of the oldest valid entry in the log */
+  uint64_t first_free_entry;    /* The free entry following the latest valid
+                                 * entry, which is going to be written */
+  uint64_t first_valid_entry;   /* The oldest valid entry to be retired */
 
   #ifdef WITH_RBD_SSD_CACHE
   DENC(WriteLogPoolRoot, v, p) {
@@ -344,9 +345,9 @@ public:
   explicit ExtentsSummary(const ExtentsType &extents);
   friend std::ostream &operator<<(std::ostream &os,
                                   const ExtentsSummary &s) {
-    os << "total_bytes=" << s.total_bytes << ", "
-       << "first_image_byte=" << s.first_image_byte << ", "
-       << "last_image_byte=" << s.last_image_byte << "";
+    os << "total_bytes=" << s.total_bytes
+       << ", first_image_byte=" << s.first_image_byte
+       << ", last_image_byte=" << s.last_image_byte;
     return os;
   }
   BlockExtent block_extent() {
