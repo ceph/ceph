@@ -50,7 +50,7 @@ struct block_sm_superblock_t {
   bool major_dev = false;
   magic_t magic = 0;
   device_type_t dtype = device_type_t::NONE;
-  device_id_t device_id = 0;
+  device_id_t device_id = DEVICE_ID_NULL;
 
   seastore_meta_t meta;
 
@@ -81,7 +81,7 @@ struct segment_manager_config_t {
   bool major_dev = false;
   magic_t magic = 0;
   device_type_t dtype = device_type_t::NONE;
-  device_id_t device_id = 0;
+  device_id_t device_id = DEVICE_ID_NULL;
   seastore_meta_t meta;
   secondary_device_set_t secondary_devices;
 };
