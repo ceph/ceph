@@ -8571,13 +8571,14 @@ def cephadm_init_logging(ctx: CephadmContext, args: List[str]) -> None:
     logger.debug('%s\ncephadm %s' % ('-' * 80, args))
 
 
-def main() -> None:
-
-    # root?
+def cephadm_require_root() -> None:
+    """Exit if the process is not running as root."""
     if os.geteuid() != 0:
         sys.stderr.write('ERROR: cephadm should be run as root\n')
         sys.exit(1)
 
+
+def main() -> None:
     av: List[str] = []
     av = sys.argv[1:]
 
@@ -8586,6 +8587,7 @@ def main() -> None:
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
 
+    cephadm_require_root()
     cephadm_init_logging(ctx, av)
     try:
         # podman or docker?
