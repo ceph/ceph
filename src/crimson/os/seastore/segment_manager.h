@@ -73,6 +73,30 @@ struct block_sm_superblock_t {
     }
     DENC_FINISH(p);
   }
+
+  void validate() const {
+    ceph_assert(block_size > 0);
+    ceph_assert(segment_size > 0 &&
+                segment_size % block_size == 0);
+    ceph_assert(size > segment_size &&
+                size % block_size == 0);
+    ceph_assert(segments > 0);
+    ceph_assert(tracker_offset > 0 &&
+                tracker_offset % block_size == 0);
+    ceph_assert(first_segment_offset > tracker_offset &&
+                first_segment_offset % block_size == 0);
+    ceph_assert(magic != 0);
+    ceph_assert(dtype == device_type_t::SEGMENTED);
+    ceph_assert(device_id <= DEVICE_ID_MAX_VALID);
+    for (const auto& [k, v] : secondary_devices) {
+      ceph_assert(k != device_id);
+      ceph_assert(k <= DEVICE_ID_MAX_VALID);
+      ceph_assert(k == v.id);
+      ceph_assert(v.magic != 0);
+      ceph_assert(v.dtype > device_type_t::NONE);
+      ceph_assert(v.dtype < device_type_t::NUM_TYPES);
+    }
+  }
 };
 
 std::ostream& operator<<(std::ostream&, const block_sm_superblock_t&);

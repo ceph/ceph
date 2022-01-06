@@ -304,6 +304,7 @@ write_superblock(
 {
   LOG_PREFIX(block_write_superblock);
   DEBUG("D{} write {}", device_id, sb);
+  sb.validate();
   assert(ceph::encoded_sizeof<block_sm_superblock_t>(sb) <
 	 sb.block_size);
   return seastar::do_with(
@@ -382,7 +383,8 @@ Segment::write_ertr::future<> BlockSegment::write(
     manager.get_offset(paddr));
 
   if (offset < write_pointer ||
-      offset % manager.superblock.block_size != 0) {
+      offset % manager.superblock.block_size != 0 ||
+      bl.length() % manager.superblock.block_size != 0) {
     ERROR("D{} S{} offset={}~{} poffset={} invalid write",
           id.device_id(),
           id.device_segment_id(),
@@ -460,6 +462,7 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
   }).safe_then([=](auto sb) {
     set_device_id(sb.device_id);
     INFO("D{} read {}", get_device_id(), sb);
+    sb.validate();
     superblock = sb;
     stats.data_read.increment(
         ceph::encoded_sizeof<block_sm_superblock_t>(superblock));
@@ -615,6 +618,13 @@ SegmentManager::read_ertr::future<> BlockSegmentManager::read(
         get_device_id(), s_id, s_off, len, p_off);
 
   assert(addr.get_device_id() == get_device_id());
+
+  if (s_off % superblock.block_size != 0 ||
+      len % superblock.block_size != 0) {
+    ERROR("D{} S{} offset={}~{} poffset={} invalid read",
+          get_device_id(), s_id, s_off, len, p_off);
+    return crimson::ct_error::invarg::make();
+  }
 
   if (s_id >= get_num_segments()) {
     ERROR("D{} S{} offset={}~{} poffset={} segment-id out of range {}",
