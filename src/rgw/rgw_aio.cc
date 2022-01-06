@@ -79,12 +79,12 @@ struct Handler {
 
 template <typename Op>
 Aio::OpFunc aio_abstract(Op&& op, boost::asio::io_context& context,
-                         spawn::yield_context yield) {
+                         yield_context yield) {
   return [op = std::move(op), &context, yield] (Aio* aio, AioResult& r) mutable {
       // arrange for the completion Handler to run on the yield_context's strand
       // executor so it can safely call back into Aio without locking
       using namespace boost::asio;
-      async_completion<spawn::yield_context, void()> init(yield);
+      async_completion<yield_context, void()> init(yield);
       auto ex = get_associated_executor(init.completion_handler);
 
       auto& ref = r.obj.get_ref();
