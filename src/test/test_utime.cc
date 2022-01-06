@@ -65,3 +65,11 @@ TEST(utime_t, parse_date)
     ASSERT_EQ(ss.str(), v[i][1]);
   }
 }
+
+TEST(utime_t, after)
+{
+  ASSERT_EQ(utime_t(1, 200000000).after({0, 100000000}), 1.1);
+  ASSERT_EQ(utime_t(1, 200000000).after({0, 300000000}), 0.9);
+  ASSERT_EQ(utime_t(1, 200000000).after({2, 100000000}), -0.9);
+  ASSERT_EQ(utime_t(1, 200000000).after({2, 300000000}), -1.1);
+}

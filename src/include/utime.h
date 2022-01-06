@@ -224,8 +224,16 @@ public:
 
   // cast to double
   operator double() const {
-    return (double)sec() + ((double)nsec() / 1000000000.0f);
+    return (double)sec() + ((double)nsec() / 1000000000.);
   }
+  double after(const utime_t& r) const {
+    // avoid underflow
+    auto& l = *this;
+    time_t sec = l.sec() - r.sec();
+    int nsec = l.nsec() - r.nsec();
+    return (double)sec + ((double)nsec / 1000000000.);
+  }
+
   operator ceph_timespec() const {
     ceph_timespec ts;
     ts.tv_sec = sec();

@@ -77,8 +77,7 @@ void OpRequest::_dump(Formatter *f) const
       double duration = 0;
 
       if (i != events.begin()) {
-        auto i_prev = i - 1;
-        duration = i->stamp - i_prev->stamp;
+        duration = i->stamp.after(std::prev(i)->stamp);
       }
 
       f->dump_float("duration", duration);
