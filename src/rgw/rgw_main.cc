@@ -131,6 +131,15 @@ static void handle_sigterm(int signum)
 
 }
 
+static OpsLogFile* ops_log_file = nullptr;
+
+static void rgw_sighup_handler(int signum) {
+    if (ops_log_file != nullptr) {
+        ops_log_file->reopen();
+    }
+    sighup_handler(signum);
+}
+
 static void godown_alarm(int signum)
 {
   _exit(0);
@@ -315,7 +324,6 @@ int radosgw_Main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
 
   TracepointProvider::initialize<rgw_rados_tracepoint_traits>(g_ceph_context);
   TracepointProvider::initialize<rgw_op_tracepoint_traits>(g_ceph_context);
@@ -546,12 +554,12 @@ int radosgw_Main(int argc, const char **argv)
     olog_socket->init(g_conf()->rgw_ops_log_socket_path);
     olog->add_sink(olog_socket);
   }
-  OpsLogFile* ops_log_file;
   if (!g_conf()->rgw_ops_log_file_path.empty()) {
     ops_log_file = new OpsLogFile(g_ceph_context, g_conf()->rgw_ops_log_file_path, g_conf()->rgw_ops_log_data_backlog);
     ops_log_file->start();
     olog->add_sink(ops_log_file);
   }
+  register_async_signal_handler(SIGHUP, rgw_sighup_handler);
   olog->add_sink(new OpsLogRados(store));
 
   r = signal_fd_init();
@@ -693,7 +701,7 @@ int radosgw_Main(int argc, const char **argv)
     delete fec;
   }
 
-  unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGHUP, rgw_sighup_handler);
   unregister_async_signal_handler(SIGTERM, handle_sigterm);
   unregister_async_signal_handler(SIGINT, handle_sigterm);
   unregister_async_signal_handler(SIGUSR1, handle_sigterm);
