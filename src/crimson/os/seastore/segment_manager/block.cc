@@ -329,7 +329,7 @@ Segment::write_ertr::future<> BlockSegment::write(
 Segment::close_ertr::future<> BlockSegmentManager::segment_close(
     segment_id_t id, segment_off_t write_pointer)
 {
-  assert(id.device_id() == superblock.device_id);
+  assert(id.device_id() == get_device_id());
   auto s_id = id.device_segment_id();
   assert(tracker);
   tracker->set(s_id, segment_state_t::CLOSED);
@@ -374,6 +374,7 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
     auto sd = p.second;
     return read_superblock(device, sd);
   }).safe_then([=](auto sb) {
+    set_device_id(sb.device_id);
     INFO("device {} path={} read {}", get_device_id(), device_path, sb);
     superblock = sb;
     stats.data_read.increment(
@@ -404,6 +405,7 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
   segment_manager_config_t sm_config)
 {
   LOG_PREFIX(BlockSegmentManager::mkfs);
+  set_device_id(sm_config.device_id);
   DEBUG("path={}, {}", device_path, sm_config);
   return seastar::do_with(
     seastar::file{},
@@ -455,7 +457,7 @@ SegmentManager::open_ertr::future<SegmentRef> BlockSegmentManager::open(
   segment_id_t id)
 {
   LOG_PREFIX(BlockSegmentManager::open);
-  assert(id.device_id() == superblock.device_id);
+  assert(id.device_id() == get_device_id());
   auto s_id = id.device_segment_id();
   if (s_id >= get_num_segments()) {
     ERROR("invalid segment {}", id);
@@ -483,7 +485,7 @@ SegmentManager::release_ertr::future<> BlockSegmentManager::release(
 {
   LOG_PREFIX(BlockSegmentManager::release);
   DEBUG("releasing segment {}", id);
-  assert(id.device_id() == superblock.device_id);
+  assert(id.device_id() == get_device_id());
 
   auto s_id = id.device_segment_id();
   if (s_id >= get_num_segments()) {
