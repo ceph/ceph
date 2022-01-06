@@ -371,6 +371,10 @@ namespace rgw {
       fh.fh_private = this;
     }
 
+    const std::string& get_name() const {
+      return name;
+    }
+
     const fh_key& get_key() const {
       return fhk;
     }
@@ -1292,6 +1296,8 @@ namespace rgw {
     }
 
     struct rgw_fs* get_fs() { return &fs; }
+
+    RGWFileHandle& get_fh() { return root_fh; }
 
     uint64_t get_fsid() { return root_fh.state.dev; }
 

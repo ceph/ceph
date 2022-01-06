@@ -2061,10 +2061,21 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
 {
   int rc = 0;
 
-  /* stash access data for "mount" */
-  RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
-				  sec_key, root);
-  ceph_assert(new_fs);
+  /* if the config has no value for path/root, choose "/" */
+  RGWLibFS* new_fs{nullptr};
+  if(root &&
+     (!strcmp(root, ""))) {
+    /* stash access data for "mount" */
+    new_fs = new RGWLibFS(
+      static_cast<CephContext*>(rgw), uid, acc_key, sec_key, "/");
+  }
+  else {
+    /* stash access data for "mount" */
+    new_fs = new RGWLibFS(
+      static_cast<CephContext*>(rgw), uid, acc_key, sec_key, root);
+  }
+
+  ceph_assert(new_fs); /* should we be using ceph_assert? */
 
   const DoutPrefix dp(rgwlib.get_store()->ctx(), dout_subsys, "rgw mount2: ");
   rc = new_fs->authorize(&dp, rgwlib.get_store());
