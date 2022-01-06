@@ -3897,7 +3897,7 @@ void OSD::final_init()
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump_op_pq_state",
 				     asok_hook,
-				     "dump op priority queue state");
+				     "dump op queue state");
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump_blocklist",
 				     asok_hook,
