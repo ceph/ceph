@@ -8718,11 +8718,11 @@ def cephadm_init_ctx(args: List[str]) -> CephadmContext:
     return ctx
 
 
-def cephadm_init(args: List[str]) -> CephadmContext:
+def cephadm_init_logging(ctx: CephadmContext, args: List[str]) -> None:
+    """Configure the logging for cephadm as well as updating the system
+    to have the expected log dir and logrotate configuration.
+    """
     global logger
-    ctx = cephadm_init_ctx(args)
-
-    # Logger configuration
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
     dictConfig(logging_config)
@@ -8745,7 +8745,6 @@ def cephadm_init(args: List[str]) -> CephadmContext:
             if handler.name == 'console':
                 handler.setLevel(logging.DEBUG)
     logger.debug('%s\ncephadm %s' % ('-' * 80, args))
-    return ctx
 
 
 def main() -> None:
@@ -8758,11 +8757,12 @@ def main() -> None:
     av: List[str] = []
     av = sys.argv[1:]
 
-    ctx = cephadm_init(av)
+    ctx = cephadm_init_ctx(av)
     if not ctx.has_function():
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
 
+    cephadm_init_logging(ctx, av)
     try:
         # podman or docker?
         ctx.container_engine = find_container_engine(ctx)
