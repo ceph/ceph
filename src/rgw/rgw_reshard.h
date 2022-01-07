@@ -74,6 +74,7 @@ class RGWBucketReshard {
  private:
   rgw::sal::RadosStore *store;
   RGWBucketInfo bucket_info;
+  std::map<std::string, bufferlist> bucket_attrs;
 
   RGWBucketReshardLock reshard_lock;
   RGWBucketReshardLock* outer_reshard_lock;
@@ -95,6 +96,7 @@ public:
   // manage
   RGWBucketReshard(rgw::sal::RadosStore* _store,
 		   const RGWBucketInfo& _bucket_info,
+		   const std::map<std::string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
   int execute(int num_shards, const ReshardFaultInjector& f,
               int max_op_entries, const DoutPrefixProvider *dpp,
@@ -162,6 +164,10 @@ public:
       std::min(prime_ish_num_shards, absolute_max);
 
     return final_num_shards;
+  }
+
+  const std::map<std::string, bufferlist>& get_bucket_attrs() const {
+    return bucket_attrs;
   }
 
   // for multisite, the RGWBucketInfo keeps a history of old log generations
