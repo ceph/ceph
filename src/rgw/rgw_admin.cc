@@ -7716,7 +7716,9 @@ next:
       return -EINVAL;
     }
 
-    RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), nullptr /* no callback */);
+    RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store),
+			bucket->get_info(), bucket->get_attrs(),
+			nullptr /* no callback */);
 
 #define DEFAULT_RESHARD_MAX_ENTRIES 1000
     if (max_entries < 1) {
@@ -7817,7 +7819,9 @@ next:
       return -ret;
     }
 
-    RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), nullptr /* no callback */);
+    RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store),
+			bucket->get_info(), bucket->get_attrs(),
+			nullptr /* no callback */);
     list<cls_rgw_bucket_instance_entry> status;
     int r = br.get_status(dpp(), &status);
     if (r < 0) {
@@ -7862,7 +7866,9 @@ next:
 
     if (bucket_initable) {
       // we did not encounter an error, so let's work with the bucket
-      RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), nullptr /* no callback */);
+	RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store),
+			    bucket->get_info(), bucket->get_attrs(),
+			    nullptr /* no callback */);
       int ret = br.cancel(dpp());
       if (ret < 0) {
         if (ret == -EBUSY) {
