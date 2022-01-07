@@ -69,7 +69,6 @@ export class HostsPageHelper extends PageHelper {
   }
 
   checkExist(hostname: string, exist: boolean) {
-    this.clearTableSearchInput();
     this.getTableCell(this.columnIndex.hostname, hostname).should(($elements) => {
       const hosts = $elements.map((_, el) => el.textContent).get();
       if (exist) {
@@ -127,6 +126,7 @@ export class HostsPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   maintenance(hostname: string, exit = false, force = false) {
+    this.clearTableSearchInput();
     if (force) {
       this.getTableCell(this.columnIndex.hostname, hostname).click();
       this.clickActionButton('enter-maintenance');

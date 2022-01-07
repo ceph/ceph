@@ -7,6 +7,12 @@ describe('Create cluster create services page', () => {
   const createCluster = new CreateClusterWizardHelper();
   const createClusterServicePage = new CreateClusterServicePageHelper();
 
+  const createService = (serviceType: string, serviceName: string, count?: string) => {
+    cy.get('.btn.btn-accent').first().click({ force: true });
+    createClusterServicePage.addService(serviceType, false, count);
+    createClusterServicePage.checkExist(serviceName, true);
+  };
+
   beforeEach(() => {
     cy.login();
     Cypress.Cookies.preserveOnce('token');
@@ -23,24 +29,23 @@ describe('Create cluster create services page', () => {
     const serviceName = 'rgw.foo';
 
     it('should create an rgw service', () => {
-      cy.get('.btn.btn-accent').first().click({ force: true });
+      createService('rgw', serviceName, '2');
+    });
 
-      createClusterServicePage.addService('rgw', false, '2');
-      createClusterServicePage.checkExist(serviceName, true);
+    it('should delete the service and add it back', () => {
+      createClusterServicePage.deleteService(serviceName);
+
+      createService('rgw', serviceName, '2');
     });
 
     it('should edit a service', () => {
-      const count = '3';
-      createClusterServicePage.editService(serviceName, count);
-      createClusterServicePage.expectPlacementCount(serviceName, count);
+      const daemonCount = '4';
+      createClusterServicePage.editService(serviceName, daemonCount);
+      createClusterServicePage.expectPlacementCount(serviceName, daemonCount);
     });
 
-    it('should create and delete an ingress service', () => {
-      cy.get('.btn.btn-accent').first().click({ force: true });
-
-      createClusterServicePage.addService('ingress');
-      createClusterServicePage.checkExist('ingress.rgw.foo', true);
-      createClusterServicePage.deleteService('ingress.rgw.foo');
+    it('should create an ingress service', () => {
+      createService('ingress', 'ingress.rgw.foo', '2');
     });
   });
 });
