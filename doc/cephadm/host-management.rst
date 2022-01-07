@@ -8,7 +8,13 @@ To list hosts associated with the cluster:
 
 .. prompt:: bash #
 
-    ceph orch host ls [--format yaml]
+    ceph orch host ls [--format yaml] [--host-pattern <name>] [--label <label>] [--host-status <status>]
+
+where the optional arguments "host-pattern", "label" and "host-status" are used for filtering.
+"host-pattern" is a regex that will match against hostnames and will only return matching hosts
+"label" will only return hosts with the given label
+"host-status" will only return hosts with the given status (currently "offline" or "maintenance")
+Any combination of these filtering flags is valid. You may filter against name, label and/or status simultaneously
 
 .. _cephadm-adding-hosts:    
     

@@ -371,10 +371,20 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_read_command('orch host ls')
-    def _get_hosts(self, format: Format = Format.plain) -> HandleCommandResult:
+    def _get_hosts(self, format: Format = Format.plain, host_pattern: str = '', label: str = '', host_status: str = '') -> HandleCommandResult:
         """List hosts"""
         completion = self.get_hosts()
         hosts = raise_if_exception(completion)
+
+        filter_spec = PlacementSpec(
+            host_pattern=host_pattern,
+            label=label
+        )
+        filtered_hosts: List[str] = filter_spec.filter_matching_hostspecs(hosts)
+        hosts = [h for h in hosts if h.hostname in filtered_hosts]
+
+        if host_status:
+            hosts = [h for h in hosts if h.status.lower() == host_status]
 
         if format != Format.plain:
             output = to_format(hosts, format, many=True, cls=HostSpec)
@@ -389,6 +399,14 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 table.add_row((host.hostname, host.addr, ' '.join(
                     host.labels), host.status.capitalize()))
             output = table.get_string()
+        if format == Format.plain:
+            output += f'\n{len(hosts)} hosts in cluster'
+            if label:
+                output += f' who had label {label}'
+            if host_pattern:
+                output += f' whose hostname matched {host_pattern}'
+            if host_status:
+                output += f' with status {host_status}'
         return HandleCommandResult(stdout=output)
 
     @_cli_write_command('orch host label add')
