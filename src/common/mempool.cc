@@ -15,7 +15,10 @@
 #include "include/mempool.h"
 #include "include/demangle.h"
 
-static thread_local mempool::shard_t *thread_shard = nullptr;
+// Thread local variables should save index, not &shard[index],
+// because shard[] is defined in the class
+static thread_local size_t thread_shard_index = mempool::num_shards;
+
 // default to debug_mode off
 bool mempool::debug_mode = false;
 
@@ -92,9 +95,9 @@ size_t mempool::pool_t::allocated_items() const
 
 void mempool::pool_t::adjust_count(ssize_t items, ssize_t bytes)
 {
-  thread_shard = (thread_shard == nullptr) ? pick_a_shard() : thread_shard;
-  thread_shard->items += items;
-  thread_shard->bytes += bytes;
+  thread_shard_index = (thread_shard_index == num_shards) ? pick_a_shard_int() : thread_shard_index;
+  shard[thread_shard_index].items += items;
+  shard[thread_shard_index].bytes += bytes;
 }
 
 void mempool::pool_t::get_stats(
