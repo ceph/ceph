@@ -2,9 +2,8 @@ tasks:
 - rbd.create_image:
     client.0:
       image_name: testimage
-      image_size: 10
+      image_size: 10240
       image_format: 2
-- exec:
+- persistent_write_log_cache_thrash:
     client.0:
-      - "timeout 10s rbd bench --io-pattern rand --io-type write testimage || true"
-      - "rbd bench --io-type write --io-pattern rand --io-total 32M testimage"
+      image_name: testimage
