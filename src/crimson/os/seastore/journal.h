@@ -15,7 +15,6 @@
 #include "include/buffer.h"
 #include "include/denc.h"
 
-#include "crimson/common/log.h"
 #include "crimson/os/seastore/extent_reader.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/ordering_handle.h"
