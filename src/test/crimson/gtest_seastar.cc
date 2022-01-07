@@ -15,23 +15,33 @@ SeastarRunner seastar_test_suite_t::seastar_env;
 
 int main(int argc, char **argv)
 {
-  ::testing::InitGoogleTest(&argc, argv);
+  // preprocess args
+  std::vector<const char*> args;
+  bool global_log_level_is_set = false;
+  const char* prefix_log_level = "--default-log-level";
+  for (int i = 0; i < argc; ++i) {
+    if (std::strncmp(argv[i], prefix_log_level,
+                     std::strlen(prefix_log_level)) == 0) {
+      global_log_level_is_set = true;
+    }
+    args.push_back(argv[i]);
+  }
+  // HACK: differentiate between the `make check` bot and human user
+  // for the sake of log flooding
+  if (!global_log_level_is_set && !std::getenv("FOR_MAKE_CHECK")) {
+    std::cout << "WARNING: set default seastar log level to debug" << std::endl;
+    ++argc;
+    args.push_back("--default-log-level=debug");
+  }
 
-  int ret = seastar_test_suite_t::seastar_env.init(argc, argv);
+  auto app_argv = const_cast<char**>(args.data());
+  auto app_argc = static_cast<int>(args.size());
+  ::testing::InitGoogleTest(&app_argc, app_argv);
+
+  int ret = seastar_test_suite_t::seastar_env.init(app_argc, app_argv);
   if (ret != 0) {
     seastar_test_suite_t::seastar_env.stop();
     return ret;
-  }
-
-  // HACK: differntiate between the `make check` bot and human user
-  // for the sake of log flooding
-  if (std::getenv("FOR_MAKE_CHECK")) {
-    std::cout << "WARNING: bumping log level skipped due to FOR_MAKE_CHECK!"
-              << std::endl;
-  } else {
-    seastar::global_logger_registry().set_all_loggers_level(
-      seastar::log_level::debug
-    );
   }
 
   seastar_test_suite_t::seastar_env.run([] {
