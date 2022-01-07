@@ -735,8 +735,8 @@ install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crash
-  ${CMAKE_SOURCE_DIR}/src/ceph-run
-  ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
+  ceph-run
+  ceph-clsinfo
   DESTINATION bin)
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph
@@ -755,7 +755,7 @@ install(PROGRAMS
   DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/ceph)
 
 install(PROGRAMS
-  ${CMAKE_SOURCE_DIR}/src/ceph-create-keys
+  ceph-create-keys
   DESTINATION sbin)
 
 add_subdirectory(bash_completion)
@@ -780,7 +780,7 @@ if(WITH_LIBCEPHFS)
   endif(ENABLE_SHARED)
   install(TARGETS cephfs DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(DIRECTORY
-    "${CMAKE_SOURCE_DIR}/src/include/cephfs"
+    "include/cephfs"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   set(ceph_syn_srcs
     ceph_syn.cc
@@ -838,9 +838,9 @@ if(WITH_RBD)
   endif()
 
   install(PROGRAMS
-    ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer
-    ${CMAKE_SOURCE_DIR}/src/rbd-replay-many
-    ${CMAKE_SOURCE_DIR}/src/rbdmap
+    ceph-rbdnamer
+    rbd-replay-many
+    rbdmap
     DESTINATION ${CMAKE_INSTALL_BINDIR})
   add_subdirectory(rbd_replay)
 endif(WITH_RBD)
@@ -996,4 +996,3 @@ if(DOXYGEN_FOUND)
     rgw
     COMMENT "Generate C++ documentation")
 endif()
-
