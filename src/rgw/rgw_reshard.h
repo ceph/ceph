@@ -108,6 +108,7 @@ public:
 
   static int clear_resharding(rgw::sal::RadosStore* store,
 			      RGWBucketInfo& bucket_info,
+			      std::map<std::string, bufferlist>& bucket_attrs,
                               const DoutPrefixProvider* dpp);
 
   static uint32_t get_max_prime_shards() {
