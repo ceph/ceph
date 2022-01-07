@@ -1200,18 +1200,22 @@ class shared_blob_2hash_tracker_t
   : public ref_counter_2hash_tracker_t<mempool::bluestore_fsck::vector> {
 
   static const size_t hash_input_len = 3;
+
   typedef std::array<uint64_t, hash_input_len> hash_input_t;
-  inline hash_input_t build_hash_input(uint64_t sbid, uint64_t offset) const;
+
   static size_t get_hash_input_size() {
     return hash_input_len * sizeof(hash_input_t::value_type);
   }
 
+  inline hash_input_t build_hash_input(uint64_t sbid, uint64_t offset) const;
+
   size_t au_void_bits = 0;
+
 
 public:
   shared_blob_2hash_tracker_t(uint64_t mem_cap, size_t alloc_unit)
     : ref_counter_2hash_tracker_t(mem_cap) {
-    ceph_assert(!!alloc_unit);
+    ceph_assert(alloc_unit);
     ceph_assert(isp2(alloc_unit));
     au_void_bits = ctz(alloc_unit);
   }
@@ -1302,7 +1306,7 @@ struct sb_info_space_efficient_map_t {
       if (aux_items.size() != 0) {
 	auto it = std::lower_bound(
 	  aux_items.begin(),
-	  aux_items.end() - 1,
+	  aux_items.end(),
 	  id,
 	  [](const sb_info_t& a, const uint64_t& b) {
 	    return a < b;
@@ -1342,21 +1346,22 @@ struct sb_info_space_efficient_map_t {
   }
 private:
   sb_info_t& _add(int64_t id) {
-    if (items.size() == 0 || uint64_t(std::abs(id)) > items.back().get_sbid()) {
+    uint64_t n_id = uint64_t(std::abs(id));
+    if (items.size() == 0 || n_id > items.back().get_sbid()) {
       return items.emplace_back(id);
     }
-    auto it = find(uint64_t(std::abs(id)));
+    auto it = find(n_id);
     if (it != items.end()) {
       return *it;
     }
-    if (aux_items.size() == 0 || uint64_t(std::abs(id)) > aux_items.back().get_sbid()) {
+    if (aux_items.size() == 0 || n_id > aux_items.back().get_sbid()) {
       return aux_items.emplace_back(id);
     }
     // do sorted insertion, may be expensive!
     it = std::upper_bound(
       aux_items.begin(),
-      aux_items.end() - 1,
-      uint64_t(std::abs(id)),
+      aux_items.end(),
+      n_id,
       [](const uint64_t& a, const sb_info_t& b) {
 	return a < b.get_sbid();
       });
