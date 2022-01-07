@@ -6833,14 +6833,18 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   int ret = 0;
   cls_rgw_bucket_instance_entry entry;
 
+  // gets loaded by fetch_new_bucket_info; can be used by
+  // clear_resharding
+  std::map<std::string, bufferlist> bucket_attrs;
+
   // since we want to run this recovery code from two distinct places,
   // let's just put it in a lambda so we can easily re-use; if the
   // lambda successfully fetches a new bucket id, it sets
   // new_bucket_id and returns 0, otherwise it returns a negative
   // error code
   auto fetch_new_bucket_info =
-    [this, &bucket_info, dpp](const std::string& log_tag) -> int {
-      int ret = try_refresh_bucket_info(bucket_info, nullptr, dpp);
+    [this, &bucket_info, &bucket_attrs, dpp](const std::string& log_tag) -> int {
+      int ret = try_refresh_bucket_info(bucket_info, nullptr, dpp, &bucket_attrs);
       if (ret < 0) {
 	ldpp_dout(dpp, 0) << __func__ <<
 	  " ERROR: failed to refresh bucket info after reshard at " <<
@@ -6895,7 +6899,9 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 	ldpp_dout(dpp, 10) << __PRETTY_FUNCTION__ <<
 	  ": was able to take reshard lock for bucket " <<
 	  bucket_id << dendl;
-        // the reshard may have finished, so call clear_resharding() with its current bucket info
+        // the reshard may have finished, so call clear_resharding()
+        // with its current bucket info; ALSO this will load
+        // bucket_attrs for call to clear_resharding below
         ret = fetch_new_bucket_info("trying_to_clear_resharding");
         if (ret < 0) {
 	  reshard_lock.unlock();
@@ -6904,7 +6910,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 	    bucket_id << dendl;
           continue; // try again
         }
-	ret = RGWBucketReshard::clear_resharding(this->store, bucket_info, dpp);
+	ret = RGWBucketReshard::clear_resharding(this->store, bucket_info, bucket_attrs, dpp);
 	if (ret < 0) {
 	  reshard_lock.unlock();
 	  ldpp_dout(dpp, 0) << __PRETTY_FUNCTION__ <<
