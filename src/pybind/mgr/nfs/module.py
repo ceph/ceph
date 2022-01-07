@@ -41,6 +41,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                              read_only=readonly, path=path,
                                              squash=squash, addr=client_addr)
 
+    @CLICommand('nfs export clients update cephfs', perm='rw')
+    def _cmd_nfs_export_clients_update_cephfs(
+            self,
+            cluster_id: str,
+            pseudo_path: str,
+            clients: str
+    ) -> Tuple[int, str, str]:
+        """Update a CephFS export's clients by `-i <json list of ganesha client blocks>`"""
+        return self.export_mgr.update_cephfs_export_clients(
+            cluster_id=cluster_id, pseudo_path=pseudo_path,
+            clients_json=clients)
+
     @CLICommand('nfs export create rgw', perm='rw')
     def _cmd_nfs_export_create_rgw(
             self,

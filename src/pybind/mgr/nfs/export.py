@@ -8,7 +8,7 @@ from rados import TimedOut, ObjectNotFound
 
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
 
-from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL
+from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL, Client
 from .exception import NFSException, NFSInvalidOperation, FSNotFound, \
     ClusterNotFound
 from .utils import available_clusters, check_fs, restart_nfs_service
@@ -349,6 +349,45 @@ class ExportMgr:
             raise NotImplementedError()
         except Exception as e:
             return exception_handler(e, f"Failed to create {kwargs['pseudo_path']} export for {kwargs['cluster_id']}")
+
+    @export_cluster_checker
+    def update_cephfs_export_clients(self, cluster_id: str, pseudo_path: str, clients_json: str) -> Tuple[int, str, str]:
+        try:
+            export = self._fetch_export(cluster_id, pseudo_path)
+            if not export:
+                raise NFSInvalidOperation(
+                    f"Cannot update export '{pseudo_path}' that does not exist in cluster '{cluster_id}'")
+
+            fsal_type = export.fsal.name
+            if fsal_type != NFS_GANESHA_SUPPORTED_FSALS[0]:
+                raise NFSInvalidOperation(
+                        f"Can only update CephFS export (FSAL type '{NFS_GANESHA_SUPPORTED_FSALS[0]}'). "
+                        f"Given export has FSAL type '{fsal_type}'")
+
+            if not clients_json:
+                raise NFSInvalidOperation("Empty list of client blocks!")
+            try:
+                clients = json.loads(clients_json)
+            except ValueError:
+                raise NFSInvalidOperation("List of client blocks must be in JSON")
+
+            for client in clients:
+                client['squash'] = client.get('squash', 'none')
+                client['access_type'] = client.get('access_type', 'none')
+                Export.validate_access_type(client['access_type'])
+                Export.validate_squash(client['squash'])
+            export.clients = [Client.from_dict(client) for client in clients]
+            # TODO: CephFS exports created with access type 'ro' will be using export cephx IDs
+            # with MDS ceph caps 'ro' (See _create_export_user() for more details). So the caps will have to be
+            # changed to 'rw' if there is a rw client addr. Will updating the ceph caps from 'ro' to 'rw'
+            # using `ceph auth caps` be dynamic?  If not, the NFS server will need to be restarted in such
+            # a case?
+            NFSRados(self.mgr, cluster_id).update_obj(
+                GaneshaConfParser.write_block(export.to_export_block()),
+                f'export-{export.export_id}', f'conf-nfs.{export.cluster_id}')
+            return (0, json.dumps(export.to_dict(), indent=4), '')
+        except Exception as e:
+            return exception_handler(e, f'Failed to update export "{pseudo_path}" in cluster "{cluster_id}"')
 
     @export_cluster_checker
     def delete_export(self,

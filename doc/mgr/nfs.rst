@@ -474,6 +474,48 @@ fragment.  For example,::
        transports = "TCP";
    }
 
+Update CephFS export's clients dynamically
+------------------------------------------
+
+A CephFS export's client access control list can be replaced without
+restarting the ganesha server(s) by using the following command.
+
+::
+
+    $ ceph nfs export clients update cephfs <cluster_id> <pseudo_path> --clients <json_list_of_clients>
+
+The 'clients' arguments should be a list of python dictionaries in JSON format.
+Each dictionary represents a ganesha export's client block. A client block
+dictionary should have the following keys 'addresses', 'access_type', 'squash'.
+
+Possible values of 'access_type' are 'ro', 'rw', 'none'
+
+Possible values of 'squash' are "root", "root_squash", "rootsquash", "rootid",
+"root_id_squash", "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous",
+"allanonymous", "no_root_squash", "none", "noidsquash"
+
+For example, to update clients of a CephFS export in cluster 'mynfs' with
+pseudopath '/cephfs'
+
+::
+
+  $ read -d '' CLIENTS_JSON << EOF
+  > [
+  >   {
+  >     "addresses": ["10.0.2.15", "10.0.2.16"],
+  >     "access_type": "rw",
+  >     "squash": "none"
+  >   },
+  >   {
+  >     "addresses": ["10.0.2.17"],
+  >     "access_type": "ro",
+  >     "squash": "none"
+  >   }
+  > ]
+  > EOF
+
+  $ ceph nfs export clients update cephfs mynfs /cephfs --clients "$CLIENTS_JSON"
+
 
 Mounting
 ========
