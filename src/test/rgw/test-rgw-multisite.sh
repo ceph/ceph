@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
-[ $# -lt 1 ] && echo "usage: $0 <num-clusters>" && exit 1
+[ $# -lt 1 ] && echo "usage: $0 <num-clusters> [rgw parameters...]" && exit 1
 
 num_clusters=$1
+shift
 
 [ $num_clusters -lt 1 ] && echo "clusters num must be at least 1" && exit 1
 
@@ -22,7 +23,7 @@ x $(start_ceph_cluster c1) -n
 
 # create realm, zonegroup, zone, start rgw
 init_first_zone c1 $realm_name $zg ${zg}-1 8001 $system_access_key $system_secret
-x $(rgw c1 8001)
+x $(rgw c1 8001 "$@")
 
 output=`$(rgw_admin c1) realm get`
 
@@ -36,7 +37,7 @@ while [ $i -le $num_clusters ]; do
 
   # create new zone, start rgw
   init_zone_in_existing_zg c$i $realm_name $zg ${zg}-${i} 8001 $((8000+$i)) $zone_port $system_access_key $system_secret
-  x $(rgw c$i $((8000+$i)))
+  x $(rgw c$i $((8000+$i)) "$@")
 
   i=$((i+1))
 done
