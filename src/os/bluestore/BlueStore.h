@@ -195,8 +195,10 @@ enum {
   l_bluestore_omap_next_lat,
   l_bluestore_omap_get_keys_lat,
   l_bluestore_omap_get_values_lat,
+  l_bluestore_omap_clear_lat,
   l_bluestore_clist_lat,
   l_bluestore_remove_lat,
+  l_bluestore_truncate_lat,
   //****************************************
 
   // allocation stats
@@ -2115,7 +2117,8 @@ private:
   bool db_was_opened_read_only = true;
   bool need_to_destage_allocation_file = false;
 
-  ceph::shared_mutex coll_lock = ceph::make_shared_mutex("BlueStore::coll_lock");  ///< rwlock to protect coll_map
+  ///< rwlock to protect coll_map/new_coll_map
+  ceph::shared_mutex coll_lock = ceph::make_shared_mutex("BlueStore::coll_lock");
   mempool::bluestore_cache_other::unordered_map<coll_t, CollectionRef> coll_map;
   bool collections_had_errors = false;
   std::map<coll_t,CollectionRef> new_coll_map;
