@@ -68,6 +68,11 @@ void StoreTestFixture::SetUp()
 
 void StoreTestFixture::TearDown()
 {
+  if (store) {
+    int r = store->umount();
+    EXPECT_EQ(0, r);
+    rm_r(data_dir);
+  }
   // we keep this stuff 'unsafe' out of test case scope to be able to update ANY
   // config settings. Hence setting it to 'unsafe' here as test case is closing.
   g_conf()._clear_safe_to_start_threads();
@@ -75,11 +80,6 @@ void StoreTestFixture::TearDown()
   if (!orig_death_test_style.empty()) {
     ::testing::FLAGS_gtest_death_test_style = orig_death_test_style;
     orig_death_test_style.clear();
-  }
-  if (store) {
-    int r = store->umount();
-    EXPECT_EQ(0, r);
-    rm_r(data_dir);
   }
 }
 
