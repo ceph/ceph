@@ -257,9 +257,9 @@ bool MDCache::shutdown()
 // ====================================================================
 // some inode functions
 
-void MDCache::add_inode(CInode *in) 
+void MDCache::add_inode(CInode *in)
 {
-  // add to lru, inode map
+  // add to inode map
   if (in->last == CEPH_NOSNAP) {
     auto &p = inode_map[in->ino()];
     ceph_assert(!p); // should be no dup inos!
@@ -13358,7 +13358,9 @@ void MDCache::upkeep_main(void)
         if (active_with_clients) {
           trim_client_leases();
         }
-        trim();
+        if (is_open()) {
+          trim();
+        }
         if (active_with_clients) {
           auto recall_flags = Server::RecallFlags::ENFORCE_MAX|Server::RecallFlags::ENFORCE_LIVENESS;
           if (cache_toofull()) {
