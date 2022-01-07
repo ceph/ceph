@@ -7830,94 +7830,121 @@ void BlueStore::_fsck_repair_shared_blobs(
   if (!sb_ref_mismatches) // not expected to succeed, just in case
     return;
 
-  mempool::bluestore_fsck::map<uint64_t, bluestore_extent_ref_map_t> ref_maps;
-  auto it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
-  if (it) {
-    CollectionRef c;
-    spg_t pgid;
-    for (it->lower_bound(string()); it->valid(); it->next()) {
-      dout(30) << __func__ << " key "
-	<< pretty_binary_string(it->key()) << dendl;
-      if (is_extent_shard_key(it->key())) {
-	continue;
-      }
 
-      ghobject_t oid;
-      int r = get_key_object(it->key(), &oid);
-      if (r < 0) {
-	continue;
-      }
+  auto foreach_shared_blob = [&](std::function<
+    void (coll_t,
+          ghobject_t,
+          uint64_t,
+          const bluestore_blob_t&)> cb) {
+      auto it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
+      if (it) {
+        CollectionRef c;
+        spg_t pgid;
+        for (it->lower_bound(string()); it->valid(); it->next()) {
+          dout(30) << __func__ << " key "
+	           << pretty_binary_string(it->key())
+	           << dendl;
+          if (is_extent_shard_key(it->key())) {
+	    continue;
+          }
 
-      if (!c ||
-	oid.shard_id != pgid.shard ||
-	oid.hobj.get_logical_pool() != (int64_t)pgid.pool() ||
-	!c->contains(oid)) {
-	c = nullptr;
-	for (auto& p : coll_map) {
-	  if (p.second->contains(oid)) {
-	    c = p.second;
-	    break;
-	  }
-	}
-	if (!c) {
-	  continue;
-	}
-      }
-      dout(20) << __func__ << " inspecting shared blob refs for col:" << c->cid
-	<< " obj:" << oid << dendl;
+          ghobject_t oid;
+          int r = get_key_object(it->key(), &oid);
+          if (r < 0) {
+	    continue;
+          }
 
-      OnodeRef o;
-      o.reset(Onode::decode(c, oid, it->key(), it->value()));
-      o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
-
-      _dump_onode<30>(cct, *o);
-
-      mempool::bluestore_fsck::set<BlobRef> passed_sbs;
-      for (auto& e : o->extent_map.extent_map) {
-	auto& b = e.blob->get_blob();
-	if (b.is_shared() && passed_sbs.count(e.blob) == 0) {
-	  auto sbid = e.blob->shared_blob->get_sbid();
-	  passed_sbs.emplace(e.blob);
-	  bluestore_extent_ref_map_t ref_map_candidate;
-	  bool to_be_updated = false;
-	  auto it = ref_maps.lower_bound(sbid);
-	  bool add_existing = it != ref_maps.end() && it->first == sbid;
-	  for (auto& p : b.get_extents()) {
-	    if (p.is_valid()) {
-	      if (add_existing) {
-		it->second.get(p.offset, p.length);
-	      } else {
-		ref_map_candidate.get(p.offset, p.length);
-		if (!to_be_updated) {
-		  to_be_updated =
-		    !sb_ref_counts.test_all_zero_range(sbid, p.offset, p.length);
-		}
+          if (!c ||
+	    oid.shard_id != pgid.shard ||
+	    oid.hobj.get_logical_pool() != (int64_t)pgid.pool() ||
+	    !c->contains(oid)) {
+	    c = nullptr;
+	    for (auto& p : coll_map) {
+	      if (p.second->contains(oid)) {
+	        c = p.second;
+	        break;
 	      }
 	    }
-	  }
-	  if (to_be_updated) {
-	    ceph_assert(!ref_map_candidate.empty());
-	    ceph_assert(!add_existing);
-	    ref_maps.emplace_hint(it, sbid, std::move(ref_map_candidate));
-	  }
-	  dout(20) << __func__ << " inspected shared blob refs for col:" << c->cid
-	    << " obj:" << oid << " sbid 0x " << std::hex << sbid << std::dec
-	    << " existed " << add_existing
-	    << " to be updated " << to_be_updated
-	    << dendl;
-	} // if b.shared ....
-      } // for ... extent_map
-    } // for ... it->valid
-  } //if (it(PREFIX_OBJ))
+	    if (!c) {
+	      continue;
+	    }
+          }
+          dout(20) << __func__
+                   << " inspecting shared blob refs for col:" << c->cid
+	           << " obj:" << oid
+	           << dendl;
+
+          OnodeRef o;
+          o.reset(Onode::decode(c, oid, it->key(), it->value()));
+          o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+
+          _dump_onode<30>(cct, *o);
+
+          mempool::bluestore_fsck::set<BlobRef> passed_sbs;
+          for (auto& e : o->extent_map.extent_map) {
+	    auto& b = e.blob->get_blob();
+	    if (b.is_shared() && passed_sbs.count(e.blob) == 0) {
+	      auto sbid = e.blob->shared_blob->get_sbid();
+	      cb(c->cid, oid, sbid, b);
+	      passed_sbs.emplace(e.blob);
+	    }
+          } // for ... extent_map
+        } // for ... it->valid
+      } //if (it(PREFIX_OBJ))
+    }; //foreach_shared_blob fn declaration
+
+  mempool::bluestore_fsck::map<uint64_t, bluestore_extent_ref_map_t> refs_map;
+
+  // first iteration over objects to identify all the broken sbids
+  foreach_shared_blob( [&](coll_t cid,
+                           ghobject_t oid,
+                           uint64_t sbid,
+                           const bluestore_blob_t& b) {
+    auto it = refs_map.lower_bound(sbid);
+    if(it != refs_map.end() && it->first == sbid) {
+      return;
+    }
+    for (auto& p : b.get_extents()) {
+      if (p.is_valid() &&
+	  !sb_ref_counts.test_all_zero_range(sbid,
+					     p.offset,
+					     p.length)) {
+	refs_map.emplace_hint(it, sbid, bluestore_extent_ref_map_t());
+        dout(20) << __func__
+                 << " broken shared blob found for col:" << cid
+	         << " obj:" << oid
+	         << " sbid 0x " << std::hex << sbid << std::dec
+	         << dendl;
+	break;
+      }
+    }
+  });
+
+  // second iteration over objects to build new ref map for the broken sbids
+  foreach_shared_blob( [&](coll_t cid,
+                           ghobject_t oid,
+                           uint64_t sbid,
+                           const bluestore_blob_t& b) {
+    auto it = refs_map.find(sbid);
+    if(it == refs_map.end()) {
+      return;
+    }
+    for (auto& p : b.get_extents()) {
+      if (p.is_valid()) {
+	it->second.get(p.offset, p.length);
+	break;
+      }
+    }
+  });
 
   // update shared blob records
-  auto ref_it = ref_maps.begin();
-  while (ref_it != ref_maps.end()) {
+  auto ref_it = refs_map.begin();
+  while (ref_it != refs_map.end()) {
     size_t cnt = 0;
     const size_t max_transactions = 4096;
     KeyValueDB::Transaction txn = db->get_transaction();
     for (cnt = 0;
-      cnt < max_transactions && ref_it != ref_maps.end();
+      cnt < max_transactions && ref_it != refs_map.end();
       ref_it++) {
       auto sbid = ref_it->first;
       dout(20) << __func__ << " repaired shared_blob 0x"
@@ -8976,13 +9003,18 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
 
 int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 {
-  dout(5) << __func__ << "::NCB::entered" << dendl;
+  uint64_t sb_hash_size = uint64_t(
+    cct->_conf.get_val<Option::size_t>("osd_memory_target") *
+    cct->_conf.get_val<double>(
+      "bluestore_fsck_shared_blob_tracker_size"));
+
   dout(1) << __func__
 	  << " <<<START>>>"
 	  << (repair ? " repair" : " check")
 	  << (depth == FSCK_DEEP ? " (deep)" :
                 depth == FSCK_SHALLOW ? " (shallow)" : " (regular)")
-          << " start" << dendl;
+          << " start sb_tracker_hash_size:" << sb_hash_size
+          << dendl;
   int64_t errors = 0;
   int64_t warnings = 0;
   unsigned repaired = 0;
@@ -8997,7 +9029,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   sb_info_space_efficient_map_t sb_info;
   shared_blob_2hash_tracker_t sb_ref_counts(
-    cct->_conf->bluestore_fsck_shared_blob_tracker_size,
+    sb_hash_size,
     min_alloc_size);
   size_t sb_ref_mismatches = 0;
 
@@ -9168,8 +9200,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     for (it->lower_bound(string()); it->valid(); it->next()) {
       string key = it->key();
       uint64_t sbid;
-      if (get_key_shared_blob(key, &sbid)) {
-	// this gonna to be handled at the second stage
+      if (get_key_shared_blob(key, &sbid) < 0) {
+        // Failed to parse the key.
+	// This gonna to be handled at the second stage
 	continue;
       }
       bluestore_shared_blob_t shared_blob(sbid);
@@ -9246,7 +9279,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     errors += sb_ref_mismatches;
   }
 
-  if (depth != FSCK_SHALLOW && repair && sb_ref_mismatches) {
+  if (depth != FSCK_SHALLOW && repair) {
     _fsck_repair_shared_blobs(repairer, sb_ref_counts, sb_info);
   }
   dout(1) << __func__ << " checking shared_blobs (phase 2)" << dendl;

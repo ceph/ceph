@@ -3786,9 +3786,6 @@ public:
 public:
   void fix_per_pool_omap(KeyValueDB *db, int);
   bool remove_key(KeyValueDB *db, const std::string& prefix, const std::string& key);
-  //bool fix_shared_blob(KeyValueDB *db,
-  //		       uint64_t sbid,
-  //		       const ceph::buffer::list* bl);
   bool fix_shared_blob(KeyValueDB::Transaction txn,
 			uint64_t sbid,
 			bluestore_extent_ref_map_t* ref_map,
