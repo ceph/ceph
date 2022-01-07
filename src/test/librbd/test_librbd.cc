@@ -4603,6 +4603,8 @@ TYPED_TEST(DiffIterateTest, DiffIterateIgnoreParent)
 
   bool skip_discard = this->is_skip_partial_discard_enabled(image);
 
+  uint64_t features;
+  ASSERT_EQ(0, image.features(&features));
   uint64_t object_size = 0;
   if (this->whole_object) {
     object_size = 1 << order;
@@ -4619,7 +4621,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateIgnoreParent)
 
   std::string clone_name = this->get_temp_image_name();
   ASSERT_EQ(0, rbd.clone(ioctx, name.c_str(), "one", ioctx, clone_name.c_str(),
-                         RBD_FEATURE_LAYERING, &order));
+                         features, &order));
   ASSERT_EQ(0, rbd.open(ioctx, image, clone_name.c_str(), NULL));
 
   interval_set<uint64_t> exists;
@@ -4686,6 +4688,8 @@ TYPED_TEST(DiffIterateTest, DiffIterateParentDiscard)
 
   bool skip_discard = this->is_skip_partial_discard_enabled(image);
 
+  uint64_t features;
+  ASSERT_EQ(0, image.features(&features));
   uint64_t object_size = 0;
   if (this->whole_object) {
     object_size = 1 << order;
@@ -4704,7 +4708,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateParentDiscard)
 
   std::string clone_name = this->get_temp_image_name();
   ASSERT_EQ(0, rbd.clone(ioctx, name.c_str(), "two", ioctx,
-                         clone_name.c_str(), RBD_FEATURE_LAYERING, &order));
+                         clone_name.c_str(), features, &order));
   ASSERT_EQ(0, rbd.open(ioctx, image, clone_name.c_str(), NULL));
 
   interval_set<uint64_t> two;
