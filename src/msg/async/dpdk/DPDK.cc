@@ -310,7 +310,10 @@ int DPDKDevice::init_port_start()
   }
 
   // TSO is supported starting from DPDK v1.8
-  if (_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_TSO) {
+  // TSO is abnormal in some DPDK versions (eg.dpdk-20.11-3.e18.aarch64), try
+  // disable TSO by ms_dpdk_enable_tso=false
+  if ((_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_TSO) &&
+       cct->_conf.get_val<bool>("ms_dpdk_enable_tso")) {
     ldout(cct, 1) << __func__ << " TSO is supported" << dendl;
     _hw_features.tx_tso = 1;
   }
