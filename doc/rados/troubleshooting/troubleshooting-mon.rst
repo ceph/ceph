@@ -428,6 +428,36 @@ or::
 
   Corruption: 1 missing files; e.g.: /var/lib/ceph/mon/mon.foo/store.db/1234567.ldb
 
+
+Symptoms of a constantly growing monitor
+----------------------------------------
+
+If the cluster is unhealty, every osdmap is stored until the cluster reaches a healthy state.
+In all other cases, the monstore should not grow beyond sane levels of a few gigabytes, even on large clusters.
+In cases of internal counter corruptions, old versions of objects don't get garbage-collected, causing
+constant growth, until the filesystem fills up.
+
+To test this, take a snapshot of the monitor database while the monitor is stopped. Run:
+
+  ceph-monstore-tool /path/to/snapshot fix-paxos-counters
+
+If the tool reports "error:" or "fix:" messages, use the following procedure:
+
+  1. Reduce cluster to 1 mon server
+  2. Stop mon server
+  3. Run ceph-monstore-tool /var/lib/ceph/mon/ceph-[servername] fix-paxos-counters
+  4. Maybe run: chown ceph.ceph  /var/lib/ceph/mon/ceph*
+  5. Start mon server
+  6. Wait
+  7. Recreate original mon servers one by one (wait until sync is finished)
+
+After the mon server is started, the trimming will begin. It will take some minutes for rockdb to start compacting the huge database into a small one.
+This will cause the mon server to be unresponsive, in the worst case for some minutes.
+The whole procedure requires a hard downtime and heavily depends on the storage performance.
+
+A 140GB monstore on an average HDD took around 1.5h to scan and repair. After the procedure, the monstore had 80MB again.
+
+
 Recovery using healthy monitor(s)
 ---------------------------------
 
