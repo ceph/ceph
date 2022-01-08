@@ -29,3 +29,6 @@ docs/teuthology.task.tests.rst
 
 # PyCharm
 .idea
+
+# vscode 
+.vscode/
