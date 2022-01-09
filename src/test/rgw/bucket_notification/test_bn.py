@@ -15,6 +15,8 @@ import hashlib
 from nose.plugins.attrib import attr
 import boto3
 import datetime
+from cloudevents.http import from_http
+from dateutil import parser
 
 from boto.s3.connection import S3Connection
 
@@ -66,43 +68,48 @@ class HTTPPostHandler(http_server.BaseHTTPRequestHandler):
     """HTTP POST hanler class storing the received events in its http server"""
     def do_POST(self):
         """implementation of POST handler"""
-        try:
-            content_length = int(self.headers['Content-Length'])
-            body = self.rfile.read(content_length)
-            log.info('HTTP Server (%d) received event: %s', self.server.worker_id, str(body))
-            self.server.append(json.loads(body))
-        except:
-            log.error('HTTP Server received empty event')
-            self.send_response(400)
+        content_length = int(self.headers['Content-Length'])
+        body = self.rfile.read(content_length)
+        if self.server.cloudevents:
+            event = from_http(self.headers, body) 
+            record = json.loads(body)['Records'][0]
+            assert_equal(event['specversion'], '1.0')
+            assert_equal(event['id'], record['responseElements']['x-amz-request-id'] + '.' + record['responseElements']['x-amz-id-2'])
+            assert_equal(event['source'], 'ceph:s3.' + record['awsRegion'] + '.' + record['s3']['bucket']['name'])
+            assert_equal(event['type'], 'com.amazonaws.' + record['eventName'])
+            assert_equal(event['datacontenttype'], 'application/json') 
+            assert_equal(event['subject'], record['s3']['object']['key'])
+            assert_equal(parser.parse(event['time']), parser.parse(record['eventTime']))
+        log.info('HTTP Server (%d) received event: %s', self.server.worker_id, str(body))
+        self.server.append(json.loads(body))
+        if self.headers.get('Expect') == '100-continue':
+            self.send_response(100)
         else:
-            if self.headers.get('Expect') == '100-continue':
-                self.send_response(100)
-            else:
-                self.send_response(200)
-        finally:
-            if self.server.delay > 0:
-                time.sleep(self.server.delay)
-            self.end_headers()
+            self.send_response(200)
+        if self.server.delay > 0:
+            time.sleep(self.server.delay)
+        self.end_headers()
 
 
 class HTTPServerWithEvents(http_server.HTTPServer):
     """HTTP server used by the handler to store events"""
-    def __init__(self, addr, handler, worker_id, delay=0):
+    def __init__(self, addr, handler, worker_id, delay=0, cloudevents=False):
         http_server.HTTPServer.__init__(self, addr, handler, False)
         self.worker_id = worker_id
         self.events = []
         self.delay = delay
+        self.cloudevents = cloudevents
 
     def append(self, event):
         self.events.append(event)
 
 class HTTPServerThread(threading.Thread):
     """thread for running the HTTP server. reusing the same socket for all threads"""
-    def __init__(self, i, sock, addr, delay=0):
+    def __init__(self, i, sock, addr, delay=0, cloudevents=False):
         threading.Thread.__init__(self)
         self.i = i
         self.daemon = True
-        self.httpd = HTTPServerWithEvents(addr, HTTPPostHandler, i, delay)
+        self.httpd = HTTPServerWithEvents(addr, HTTPPostHandler, i, delay, cloudevents)
         self.httpd.socket = sock
         # prevent the HTTP server from re-binding every handler
         self.httpd.server_bind = self.server_close = lambda self: None
@@ -129,13 +136,13 @@ class HTTPServerThread(threading.Thread):
 class StreamingHTTPServer:
     """multi-threaded http server class also holding list of events received into the handler
     each thread has its own server, and all servers share the same socket"""
-    def __init__(self, host, port, num_workers=100, delay=0):
+    def __init__(self, host, port, num_workers=100, delay=0, cloudevents=False):
         addr = (host, port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(addr)
         self.sock.listen(num_workers)
-        self.workers = [HTTPServerThread(i, self.sock, addr, delay) for i in range(num_workers)]
+        self.workers = [HTTPServerThread(i, self.sock, addr, delay, cloudevents) for i in range(num_workers)]
 
     def verify_s3_events(self, keys, exact_match=False, deletions=False, expected_sizes={}):
         """verify stored s3 records agains a list of keys"""
@@ -1438,6 +1445,90 @@ def test_ps_s3_notification_push_http_on_master():
     # create s3 topic
     endpoint_address = 'http://'+host+':'+str(port)
     endpoint_args = 'push-endpoint='+endpoint_address
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': []
+                       }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket
+    client_threads = []
+    objects_size = {}
+    start_time = time.time()
+    for i in range(number_of_objects):
+        content = str(os.urandom(randint(1, 1024)))
+        object_size = len(content)
+        key = bucket.new_key(str(i))
+        objects_size[key.name] = object_size
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    # check http receiver
+    keys = list(bucket.list())
+    http_server.verify_s3_events(keys, exact_match=True, deletions=False, expected_sizes=objects_size)
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for deletion + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    # check http receiver
+    http_server.verify_s3_events(keys, exact_match=True, deletions=True, expected_sizes=objects_size)
+
+    # cleanup
+    topic_conf.del_config()
+    s3_notification_conf.del_config(notification=notification_name)
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+    http_server.close()
+
+
+@attr('http_test')
+def test_ps_s3_notification_push_cloudevents_on_master():
+    """ test pushing cloudevents notification on master """
+    hostname = get_ip_http()
+    conn = connection()
+    zonegroup = 'default'
+
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    number_of_objects = 10
+    http_server = StreamingHTTPServer(host, port, num_workers=number_of_objects, cloudevents=True)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&cloudevents=true'
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     # create s3 notification
