@@ -918,9 +918,9 @@ RGWHTTPArgs::get_optional(const std::string& name) const
   }
 }
 
-int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists)
+int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists) const
 {
-  map<string, string>::iterator iter;
+  map<string, string>::const_iterator iter;
   iter = val_map.find(name);
   bool e = (iter != val_map.end());
   if (exists)
@@ -941,13 +941,13 @@ int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists)
   return 0;
 }
 
-int RGWHTTPArgs::get_bool(const char *name, bool *val, bool *exists)
+int RGWHTTPArgs::get_bool(const char *name, bool *val, bool *exists) const
 {
   string s(name);
   return get_bool(s, val, exists);
 }
 
-void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
+void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val) const
 {
   bool exists = false;
   if ((get_bool(name, val, &exists) < 0) ||
@@ -956,7 +956,7 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
   }
 }
 
-int RGWHTTPArgs::get_int(const char *name, int *val, int def_val)
+int RGWHTTPArgs::get_int(const char *name, int *val, int def_val) const
 {
   bool exists = false;
   string val_str;
