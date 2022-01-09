@@ -56,9 +56,8 @@ class MDSMap {
 public:
   /* These states are the union of the set of possible states of an MDS daemon,
    * and the set of possible states of an MDS rank. See
-   * doc/cephfs/mds-states.rst for state descriptions,
-   * doc/cephfs/mds-state-diagram.svg for a visual state diagram, and
-   * doc/cephfs/mds-state-diagram.dot to update mds-state-diagram.svg.
+   * doc/cephfs/mds-states.rst for state descriptions and a visual state diagram, and
+   * doc/cephfs/mds-state-diagram.dot to update the diagram.
    */
   typedef enum {
     // States of an MDS daemon not currently holding a rank
