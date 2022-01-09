@@ -413,7 +413,7 @@ class MDSRank {
     // The last different state I held before current
     MDSMap::DaemonState last_state = MDSMap::STATE_BOOT;
     // The state assigned to me by the MDSMap
-    MDSMap::DaemonState state = MDSMap::STATE_BOOT;
+    MDSMap::DaemonState state = MDSMap::STATE_STANDBY;
 
     bool cluster_degraded = false;
 
