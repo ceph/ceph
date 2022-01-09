@@ -700,27 +700,27 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       return true;
     }
 
+    if (state == MDSMap::STATE_DNE) {
+      dout(1) << __func__ << ": DNE from " << info << dendl;
+      goto evict;
+    }
+
     // legal state change?
-    if ((info.state == MDSMap::STATE_STANDBY && state > 0) ||
-        (info.state == MDSMap::STATE_STANDBY_REPLAY && state > 0 && state != MDSMap::STATE_DAMAGED)) {
-      /* N.B.: standby-replay can indicate the rank is damaged due to failure to replay */
-      dout(10) << "mds_beacon mds can't activate itself (" << ceph_mds_state_name(info.state)
-	       << " -> " << ceph_mds_state_name(state) << ")" << dendl;
+    if ((info.state == MDSMap::STATE_STANDBY && state != info.state) ||
+        (info.state == MDSMap::STATE_STANDBY_REPLAY && state != info.state && state != MDSMap::STATE_DAMAGED)) {
+      // Standby daemons should never modify their own state.
+      // Except that standby-replay can indicate the rank is damaged due to failure to replay.
+      // Reject any attempts to do so.
+      derr << "standby " << gid << " attempted to change state to "
+           << ceph_mds_state_name(state) << ", rejecting" << dendl;
       goto evict;
-    } else if (info.state >= CEPH_MDS_STATE_REPLAY &&
-              (state == MDSMap::STATE_STANDBY ||
-               state == MDSMap::STATE_STANDBY_REPLAY)) {
-      dout(1) << "mds_beacon MDS can't go back into standby after taking rank: "
-                 "held rank " << info.rank << " while requesting state "
-              << ceph_mds_state_name(state) << " from "
-              << ceph_mds_state_name(info.state) << dendl;
-      goto evict;
-    } else if (info.state == MDSMap::STATE_STOPPING &&
-        state != MDSMap::STATE_STOPPING &&
-        state != MDSMap::STATE_STOPPED) {
-      // we can't transition to any other states from STOPPING
-      dout(0) << "got beacon for MDS in STATE_STOPPING, ignoring requested state change"
-	       << dendl;
+    } else if (info.state != MDSMap::STATE_STANDBY && state != info.state &&
+               !MDSMap::state_transition_valid(info.state, state)) {
+      // Validate state transitions for daemons that hold a rank
+      derr << "daemon " << gid << " (rank " << info.rank << ") "
+           << "reported invalid state transition "
+           << ceph_mds_state_name(info.state) << " -> "
+           << ceph_mds_state_name(state) << dendl;
       goto evict;
     }
 
@@ -801,23 +801,6 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       last_beacon.erase(rankgid);
 
       /* MDS expects beacon reply back */
-    } else if (state == MDSMap::STATE_DNE) {
-      dout(1) << __func__ << ": DNE from " << info << dendl;
-      goto evict;
-    } else if (info.state == MDSMap::STATE_STANDBY && state != info.state) {
-      // Standby daemons should never modify their own
-      // state.  Reject any attempts to do so.
-      derr << "standby " << gid << " attempted to change state to "
-           << ceph_mds_state_name(state) << ", rejecting" << dendl;
-      goto evict;
-    } else if (info.state != MDSMap::STATE_STANDBY && state != info.state &&
-               !MDSMap::state_transition_valid(info.state, state)) {
-      // Validate state transitions for daemons that hold a rank
-      derr << "daemon " << gid << " (rank " << info.rank << ") "
-           << "reported invalid state transition "
-           << ceph_mds_state_name(info.state) << " -> "
-           << ceph_mds_state_name(state) << dendl;
-      goto evict;
     } else {
       if (info.state != MDSMap::STATE_ACTIVE && state == MDSMap::STATE_ACTIVE) {
         const auto &fscid = pending.mds_roles.at(gid);
