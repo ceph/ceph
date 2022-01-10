@@ -196,12 +196,6 @@ if(WITH_ZFS)
   set(HAVE_LIBZFS ${ZFS_FOUND})
 endif()
 
-option(WITH_ZNS "enable zns support" OFF)
-if (WITH_ZNS)
-  # TODO: add detection, need kernel header >= 5.5
-  set(HAVE_ZNS ON)
-endif()
-
 option(WITH_BLUESTORE "Bluestore OSD backend" ON)
 if(WITH_BLUESTORE)
   if(LINUX)
