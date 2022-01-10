@@ -295,6 +295,8 @@ public:
   virtual int open(const std::string& path) = 0;
   virtual void close() = 0;
 
+  struct hugepaged_raw_marker_t {};
+
 protected:
   bool is_valid_io(uint64_t off, uint64_t len) const;
 };

@@ -31,6 +31,7 @@
 #include "include/stringify.h"
 #include "include/str_map.h"
 #include "common/blkdev.h"
+#include "common/buffer_instrumentation.h"
 #include "common/errno.h"
 #if defined(__FreeBSD__)
 #include "bsm/audit_errno.h"
@@ -1048,12 +1049,14 @@ int KernelDevice::discard(uint64_t offset, uint64_t len)
 
 struct ExplicitHugePagePool {
   using region_queue_t = boost::lockfree::queue<void*>;
+  using instrumented_raw = ceph::buffer_instrumentation::instrumented_raw<
+    BlockDevice::hugepaged_raw_marker_t>;
 
-  struct mmaped_buffer_raw : public buffer::raw {
+  struct mmaped_buffer_raw : public instrumented_raw {
     region_queue_t& region_q; // for recycling
 
     mmaped_buffer_raw(void* mmaped_region, ExplicitHugePagePool& parent)
-      : raw(static_cast<char*>(mmaped_region), parent.buffer_size),
+      : instrumented_raw(static_cast<char*>(mmaped_region), parent.buffer_size),
 	region_q(parent.region_q) {
       // the `mmaped_region` has been passed to `raw` as the buffer's `data`
     }
