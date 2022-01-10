@@ -1,0 +1,120 @@
+<cd-modal [modalRef]="activeModal">
+  <div class="modal-title"
+       i18n>Report an issue</div>
+
+  <div class="modal-content">
+    <form name="feedbackForm"
+          [formGroup]="feedbackForm"
+          #formDir="ngForm">
+      <div class="modal-body">
+        <cd-alert-panel *ngIf="!isFeedbackEnabled"
+                        type="error"
+                        i18n>Feedback module is not enabled. Please enable it from <a (click)="redirect()">Cluster-> Manager Modules.</a>
+        </cd-alert-panel>
+        <!-- api_key -->
+        <div class="form-group row"
+             *ngIf="!isAPIKeySet">
+          <label class="cd-col-form-label required"
+                 for="api_key"
+                 i18n>Ceph Tracker API Key</label>
+          <div class="cd-col-form-input">
+            <input id="api_key"
+                   type="password"
+                   formControlName="api_key"
+                   class="form-control"
+                   placeholder="Add Ceph tracker API key">
+            <span class="invalid-feedback"
+                  *ngIf="feedbackForm.showError('api_key', formDir, 'required')"
+                  i18n>Ceph Tracker API key is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="feedbackForm.showError('api_key', formDir, 'invalidApiKey')"
+                  i18n>Ceph Tracker API key is invalid.</span>
+          </div>
+        </div>
+
+        <!-- project -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="project"
+                 i18n>Project name</label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    id="project"
+                    formControlName="project">
+              <option ngValue=""
+                      i18n>-- Select a project --</option>
+              <option *ngFor="let projectName of project"
+                      [value]="projectName">{{ projectName }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="feedbackForm.showError('project', formDir, 'required')"
+                  i18n>Project name is required.</span>
+          </div>
+        </div>
+
+        <!-- tracker -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="tracker"
+                 i18n>Tracker</label>
+          <div class="cd-col-form-input">
+            <select class="form-control custom-select"
+                    id="tracker"
+                    formControlName="tracker">
+              <option ngValue=""
+                      i18n>-- Select a tracker --</option>
+              <option *ngFor="let trackerName of tracker"
+                      [value]="trackerName">{{ trackerName }}</option>
+            </select>
+            <span  class="invalid-feedback"
+                   *ngIf="feedbackForm.showError('tracker', formDir, 'required')"
+                   i18n>Tracker name is required.</span>
+          </div>
+        </div>
+
+        <!-- subject -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="subject"
+                 i18n>Subject</label>
+          <div class="cd-col-form-input">
+            <input id="subject"
+                   type="text"
+                   formControlName="subject"
+                   class="form-control"
+                   placeholder="Add issue title">
+            <span class="invalid-feedback"
+                  *ngIf="feedbackForm.showError('subject', formDir, 'required')"
+                  i18n>Subject is required.</span>
+          </div>
+        </div>
+
+        <!-- description -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="description"
+                 i18n>Description</label>
+          <div class="cd-col-form-input">
+            <textarea id="description"
+                      type="text"
+                      formControlName="description"
+                      class="form-control"
+                      placeholder="Add issue description">
+            </textarea>
+            <span class="invalid-feedback"
+                  *ngIf="feedbackForm.showError('description', formDir, 'required')"
+                  i18n>Description is required.</span>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                              [form]="feedbackForm"
+                              [submitText]="actionLabels.SUBMIT"
+                              wrappingClass="text-right">
+        </cd-form-button-panel>
+      </div>
+    </form>
+  </div>
+</cd-modal>
