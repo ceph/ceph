@@ -276,7 +276,7 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
     }
   }
 
-  ret = store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y);
+  ret = store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y, nullptr);
   if (ret < 0) {
      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -512,7 +512,7 @@ int RadosBucket::read_bucket_stats(const DoutPrefixProvider* dpp, optional_yield
 
 int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y);
+  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, &ent);
 }
 
 int RadosBucket::update_container_stats(const DoutPrefixProvider* dpp)
