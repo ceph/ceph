@@ -6,8 +6,8 @@
 
 namespace {
 
-seastar::logger& logger() {
-  return crimson::get_logger(ceph_subsys_seastore_tm);
+seastar::logger& journal_logger() {
+  return crimson::get_logger(ceph_subsys_seastore_journal);
 }
 
 }
@@ -297,14 +297,14 @@ try_decode_records_header(
   try {
     decode(header, bp);
   } catch (ceph::buffer::error &e) {
-    logger().debug(
+    journal_logger().debug(
         "try_decode_records_header: failed, "
         "cannot decode record_group_header_t, got {}.",
         e);
     return std::nullopt;
   }
   if (header.segment_nonce != expected_nonce) {
-    logger().debug(
+    journal_logger().debug(
         "try_decode_records_header: failed, record_group_header nonce mismatch, "
         "read {}, expected {}!",
         header.segment_nonce,
@@ -329,7 +329,8 @@ bool validate_records_metadata(
     test_crc);
   bool success = (test_crc == recorded_crc);
   if (!success) {
-    logger().debug("validate_records_metadata: failed, metadata crc mismatch.");
+    journal_logger().debug(
+        "validate_records_metadata: failed, metadata crc mismatch.");
   }
   return success;
 }
@@ -340,7 +341,8 @@ bool validate_records_data(
 {
   bool success = (data_bl.crc32c(-1) == header.data_crc);
   if (!success) {
-    logger().debug("validate_records_data: failed, data crc mismatch!");
+    journal_logger().debug(
+        "validate_records_data: failed, data crc mismatch!");
   }
   return success;
 }
@@ -360,7 +362,7 @@ try_decode_record_headers(
     try {
       decode(i, bliter);
     } catch (ceph::buffer::error &e) {
-      logger().debug(
+      journal_logger().debug(
           "try_decode_record_headers: failed, "
           "cannot decode record_header_t, got {}.",
           e);
@@ -379,7 +381,7 @@ try_decode_extent_infos(
 {
   auto maybe_headers = try_decode_record_headers(header, md_bl);
   if (!maybe_headers) {
-    logger().debug(
+    journal_logger().debug(
         "try_decode_extent_infos: failed, cannot decode record headers.");
     return std::nullopt;
   }
@@ -400,7 +402,7 @@ try_decode_extent_infos(
       try {
         decode(i, bliter);
       } catch (ceph::buffer::error &e) {
-        logger().debug(
+        journal_logger().debug(
             "try_decode_extent_infos: failed, "
             "cannot decode extent_info_t, got {}.",
             e);
@@ -420,7 +422,7 @@ try_decode_deltas(
 {
   auto maybe_record_extent_infos = try_decode_extent_infos(header, md_bl);
   if (!maybe_record_extent_infos) {
-    logger().debug(
+    journal_logger().debug(
         "try_decode_deltas: failed, cannot decode extent_infos.");
     return std::nullopt;
   }
@@ -445,7 +447,7 @@ try_decode_deltas(
       try {
         decode(i, bliter);
       } catch (ceph::buffer::error &e) {
-        logger().debug(
+        journal_logger().debug(
             "try_decode_deltas: failed, "
             "cannot decode delta_info_t, got {}.",
             e);
