@@ -3769,8 +3769,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 	     << (state_test(CInode::STATE_EXPORTINGCAPS)?", exporting caps":"")
 	     << dendl;
 
-  
-  // "fake" a version that is old (stable) version, +1 if projected.
+
+  // "fake" a version that is odd (stable) version, +1 if projected.
   version_t version = (oi->version * 2) + is_projected();
 
   Capability *cap = get_client_cap(client);
@@ -3782,9 +3782,9 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   bool plocal = versionlock.get_last_wrlock_client() == client;
   bool ppolicy = policylock.is_xlocked_by_client(client) || get_loner()==client;
-  
+
   const mempool_inode *any_i = (pfile|pauth|plink|pxattr|plocal) ? pi : oi;
-  
+
   dout(20) << " pfile " << pfile << " pauth " << pauth
 	   << " plink " << plink << " pxattr " << pxattr
 	   << " plocal " << plocal
