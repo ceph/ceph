@@ -22,6 +22,7 @@
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/binomial_distribution.hpp>
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include "os/ObjectStore.h"
@@ -31,18 +32,21 @@
 #include "os/bluestore/BlueFS.h"
 #endif
 #include "include/Context.h"
+#include "common/buffer_instrumentation.h"
 #include "common/ceph_argparse.h"
 #include "common/admin_socket.h"
 #include "global/global_init.h"
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
+#include "common/options.h" // for the size literals
 #include "common/pretty_binary.h"
 #include "include/stringify.h"
 #include "include/coredumpctl.h"
 
 #include "include/unordered_map.h"
 #include "store_test_fixture.h"
+
 
 using namespace std;
 using namespace std::placeholders;
@@ -155,6 +159,7 @@ protected:
 
 public:
 };
+
 
 class StoreTestSpecificAUSize : public StoreTestDeferredSetup {
 
@@ -6864,6 +6869,14 @@ INSTANTIATE_TEST_SUITE_P(
 #endif
     "kstore"));
 
+#if defined(WITH_BLUESTORE)
+INSTANTIATE_TEST_SUITE_P(
+  ObjectStore,
+  StoreTestDeferredSetup,
+  ::testing::Values(
+    "bluestore"));
+#endif
+
 void doMany4KWritesTest(ObjectStore* store,
                         unsigned max_objects,
                         unsigned max_ops,
@@ -9591,6 +9604,99 @@ TEST_P(StoreTest, BluestorePerPoolOmapFixOnMount)
   ASSERT_EQ(bstore->fsck(false), 0); // this will fail without fix for #43824
 
   bstore->mount();
+}
+
+class hugepaged_raw;
+
+static bool is_hugepaged(const bufferptr& bp)
+{
+  const auto& ibp =
+    static_cast<const ceph::buffer_instrumentation::instrumented_bptr&>(bp);
+  return ibp.is_raw_marked<BlockDevice::hugepaged_raw_marker_t>();
+}
+
+// disabled by default b/c of the dependency on huge page ssome test
+// environments might not offer without extra configuration.
+TEST_P(StoreTestDeferredSetup, DISABLED_BluestoreHugeReads)
+{
+  if (string(GetParam()) != "bluestore") {
+    return;
+  }
+
+  constexpr static size_t HUGE_BUFFER_SIZE{2_M};
+  cout << "Configuring huge page pools" << std::endl;
+  {
+    SetVal(g_conf(), "bdev_read_preallocated_huge_buffers",
+           fmt::format("{}=2", HUGE_BUFFER_SIZE).c_str());
+    SetVal(g_conf(), "bluestore_max_blob_size",
+           std::to_string(HUGE_BUFFER_SIZE).c_str());
+    // let's verify the per-IOContext no-cache override
+    SetVal(g_conf(), "bluestore_default_buffered_read", "true");
+    g_ceph_context->_conf.apply_changes(nullptr);
+  }
+  DeferredSetup();
+
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test_huge_buffers", "", CEPH_NOSNAP, 0, 0, ""));
+  auto ch = store->create_new_collection(cid);
+
+  bufferlist bl;
+  {
+    bufferptr bp{HUGE_BUFFER_SIZE};
+    // non-zeros! Otherwise the deduplication will take place.
+    ::memset(bp.c_str(), 0x42, HUGE_BUFFER_SIZE);
+    bl.push_back(std::move(bp));
+    ASSERT_EQ(bl.get_num_buffers(), 1);
+    ASSERT_EQ(bl.length(), HUGE_BUFFER_SIZE);
+  }
+
+  cout << "Write object" << std::endl;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, hoid);
+    t.write(cid, hoid, 0, bl.length(), bl);
+    const auto r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // force cache clear
+  {
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+    ch = store->open_collection(cid);
+  }
+
+  // we want to extend the life-time of all huge paged-backed
+  // bufferlists to validate the behaviour on pool exhaustion.
+  bufferlist bl_1_huge, bl_2_huge, bl_3_plain;
+
+  cout << "Read object 1st time" << std::endl;
+  {
+    const auto r = store->read(ch, hoid, 0, HUGE_BUFFER_SIZE, bl_1_huge);
+    ASSERT_EQ(static_cast<int>(HUGE_BUFFER_SIZE), r);
+    ASSERT_TRUE(bl_eq(bl, bl_1_huge));
+    ASSERT_EQ(bl_1_huge.get_num_buffers(), 1);
+    ASSERT_TRUE(is_hugepaged(bl_1_huge.front()));
+  }
+
+  cout << "Read object 2nd time" << std::endl;
+  {
+    const auto r = store->read(ch, hoid, 0, HUGE_BUFFER_SIZE, bl_2_huge);
+    ASSERT_EQ(static_cast<int>(HUGE_BUFFER_SIZE), r);
+    ASSERT_TRUE(bl_eq(bl, bl_2_huge));
+    ASSERT_EQ(bl_2_huge.get_num_buffers(), 1);
+    ASSERT_TRUE(is_hugepaged(bl_2_huge.front()));
+  }
+
+  cout << "Read object 3rd time" << std::endl;
+  {
+    const auto r = store->read(ch, hoid, 0, HUGE_BUFFER_SIZE, bl_3_plain);
+    ASSERT_EQ(static_cast<int>(HUGE_BUFFER_SIZE), r);
+    ASSERT_TRUE(bl_eq(bl, bl_3_plain));
+    ASSERT_EQ(bl_3_plain.get_num_buffers(), 1);
+    ASSERT_FALSE(is_hugepaged(bl_3_plain.front()));
+  }
 }
 
 TEST_P(StoreTest, SpuriousReadErrorTest) {
