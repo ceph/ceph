@@ -181,9 +181,9 @@ class HostData:
         if 'keyring' not in data:
             raise Exception(
                 f'Agent on host {host} not reporting its keyring for validation ("keyring" field). Only received fields {fields}')
-        if host not in self.mgr.cache.agent_keys:
+        if host not in self.mgr.agent_cache.agent_keys:
             raise Exception(f'No agent keyring stored for host {host}. Cannot verify agent')
-        if data['keyring'] != self.mgr.cache.agent_keys[host]:
+        if data['keyring'] != self.mgr.agent_cache.agent_keys[host]:
             raise Exception(f'Got wrong keyring from agent on host {host}.')
         if 'port' not in data:
             raise Exception(
@@ -205,16 +205,16 @@ class HostData:
     def handle_metadata(self, data: Dict[str, Any]) -> str:
         try:
             host = data['host']
-            self.mgr.cache.agent_ports[host] = int(data['port'])
-            if host not in self.mgr.cache.agent_counter:
-                self.mgr.cache.agent_counter[host] = 1
+            self.mgr.agent_cache.agent_ports[host] = int(data['port'])
+            if host not in self.mgr.agent_cache.agent_counter:
+                self.mgr.agent_cache.agent_counter[host] = 1
                 self.mgr.agent_helpers._request_agent_acks({host})
                 res = f'Got metadata from agent on host {host} with no known counter entry. Starting counter at 1 and requesting new metadata'
                 self.mgr.log.debug(res)
                 return res
 
             # update timestamp of most recent agent update
-            self.mgr.cache.agent_timestamp[host] = datetime_now()
+            self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
 
             error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
             daemon_count_old = len(self.mgr.cache.get_daemons_by_host(host))
@@ -222,11 +222,11 @@ class HostData:
             up_to_date = False
 
             int_ack = int(data['ack'])
-            if int_ack == self.mgr.cache.agent_counter[host]:
+            if int_ack == self.mgr.agent_cache.agent_counter[host]:
                 up_to_date = True
             else:
                 # we got old counter value with message, inform agent of new timestamp
-                if not self.mgr.cache.messaging_agent(host):
+                if not self.mgr.agent_cache.messaging_agent(host):
                     self.mgr.agent_helpers._request_agent_acks({host})
                 self.mgr.log.debug(
                     f'Received old metadata from agent on host {host}. Requested up-to-date metadata.')
@@ -260,6 +260,7 @@ class HostData:
                 self.mgr.log.debug(
                     f'Received up-to-date metadata from agent on host {host}.')
 
+            self.mgr.agent_cache.save_agent(host)
             return 'Successfully processed metadata.'
 
         except Exception as e:
@@ -280,7 +281,7 @@ class AgentMessageThread(threading.Thread):
 
     def run(self) -> None:
         self.mgr.log.debug(f'Sending message to agent on host {self.host}')
-        self.mgr.cache.sending_agent_message[self.host] = True
+        self.mgr.agent_cache.sending_agent_message[self.host] = True
         try:
             assert self.mgr.cherrypy_thread
             root_cert = self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
@@ -307,7 +308,7 @@ class AgentMessageThread(threading.Thread):
             ssl_ctx.load_cert_chain(cert_fname, key_fname)
         except Exception as e:
             self.mgr.log.error(f'Failed to get certs for connecting to agent: {e}')
-            self.mgr.cache.sending_agent_message[self.host] = False
+            self.mgr.agent_cache.sending_agent_message[self.host] = False
             return
         try:
             bytes_len: str = str(len(self.data.encode('utf-8')))
@@ -318,7 +319,7 @@ class AgentMessageThread(threading.Thread):
                 bytes_len = '0' + bytes_len
         except Exception as e:
             self.mgr.log.error(f'Failed to get length of json payload: {e}')
-            self.mgr.cache.sending_agent_message[self.host] = False
+            self.mgr.agent_cache.sending_agent_message[self.host] = False
             return
         for retry_wait in [3, 5]:
             try:
@@ -330,8 +331,8 @@ class AgentMessageThread(threading.Thread):
                 agent_response = secure_agent_socket.recv(1024).decode()
                 self.mgr.log.debug(f'Received "{agent_response}" from agent on host {self.host}')
                 if self.daemon_spec:
-                    self.mgr.cache.agent_config_successfully_delivered(self.daemon_spec)
-                self.mgr.cache.sending_agent_message[self.host] = False
+                    self.mgr.agent_cache.agent_config_successfully_delivered(self.daemon_spec)
+                self.mgr.agent_cache.sending_agent_message[self.host] = False
                 return
             except ConnectionError as e:
                 # if it's a connection error, possibly try to connect again.
@@ -342,10 +343,10 @@ class AgentMessageThread(threading.Thread):
             except Exception as e:
                 # if it's not a connection error, something has gone wrong. Give up.
                 self.mgr.log.error(f'Failed to contact agent on host {self.host}: {e}')
-                self.mgr.cache.sending_agent_message[self.host] = False
+                self.mgr.agent_cache.sending_agent_message[self.host] = False
                 return
         self.mgr.log.error(f'Could not connect to agent on host {self.host}')
-        self.mgr.cache.sending_agent_message[self.host] = False
+        self.mgr.agent_cache.sending_agent_message[self.host] = False
         return
 
 
@@ -357,22 +358,22 @@ class CephadmAgentHelpers:
         for host in hosts:
             if increment:
                 self.mgr.cache.metadata_up_to_date[host] = False
-            if host not in self.mgr.cache.agent_counter:
-                self.mgr.cache.agent_counter[host] = 1
+            if host not in self.mgr.agent_cache.agent_counter:
+                self.mgr.agent_cache.agent_counter[host] = 1
             elif increment:
-                self.mgr.cache.agent_counter[host] = self.mgr.cache.agent_counter[host] + 1
-            payload: Dict[str, Any] = {'counter': self.mgr.cache.agent_counter[host]}
+                self.mgr.agent_cache.agent_counter[host] = self.mgr.agent_cache.agent_counter[host] + 1
+            payload: Dict[str, Any] = {'counter': self.mgr.agent_cache.agent_counter[host]}
             if daemon_spec:
                 payload['config'] = daemon_spec.final_config
             message_thread = AgentMessageThread(
-                host, self.mgr.cache.agent_ports[host], payload, self.mgr, daemon_spec)
+                host, self.mgr.agent_cache.agent_ports[host], payload, self.mgr, daemon_spec)
             message_thread.start()
 
     def _request_ack_all_not_up_to_date(self) -> None:
         self.mgr.agent_helpers._request_agent_acks(
             set([h for h in self.mgr.cache.get_hosts() if
                  (not self.mgr.cache.host_metadata_up_to_date(h)
-                 and h in self.mgr.cache.agent_ports and not self.mgr.cache.messaging_agent(h))]))
+                 and h in self.mgr.agent_cache.agent_ports and not self.mgr.agent_cache.messaging_agent(h))]))
 
     def _agent_down(self, host: str) -> bool:
         # if host is draining or drained (has _no_schedule label) there should not
@@ -385,13 +386,13 @@ class CephadmAgentHelpers:
         # if we don't have a timestamp, it's likely because of a mgr fail over.
         # just set the timestamp to now. However, if host was offline before, we
         # should not allow creating a new timestamp to cause it to be marked online
-        if host not in self.mgr.cache.agent_timestamp:
+        if host not in self.mgr.agent_cache.agent_timestamp:
             if host in self.mgr.offline_hosts:
                 return False
-            self.mgr.cache.agent_timestamp[host] = datetime_now()
+            self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
         # agent hasn't reported in down multiplier * it's refresh rate. Something is likely wrong with it.
         down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
-        time_diff = datetime_now() - self.mgr.cache.agent_timestamp[host]
+        time_diff = datetime_now() - self.mgr.agent_cache.agent_timestamp[host]
         if time_diff.total_seconds() > down_mult * float(self.mgr.agent_refresh_rate):
             return True
         return False
@@ -434,7 +435,7 @@ class CephadmAgentHelpers:
             # we can tell they're in that state if we don't have a keyring for
             # them in the host cache
             for agent in self.mgr.cache.get_daemons_by_service('agent'):
-                if agent.hostname not in self.mgr.cache.agent_keys:
+                if agent.hostname not in self.mgr.agent_cache.agent_keys:
                     self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
             if 'agent' not in self.mgr.spec_store:
                 self.mgr.agent_helpers._apply_agent()
@@ -443,10 +444,10 @@ class CephadmAgentHelpers:
             if 'agent' in self.mgr.spec_store:
                 self.mgr.spec_store.rm('agent')
                 need_apply = True
-            self.mgr.cache.agent_counter = {}
-            self.mgr.cache.agent_timestamp = {}
-            self.mgr.cache.agent_keys = {}
-            self.mgr.cache.agent_ports = {}
+            self.mgr.agent_cache.agent_counter = {}
+            self.mgr.agent_cache.agent_timestamp = {}
+            self.mgr.agent_cache.agent_keys = {}
+            self.mgr.agent_cache.agent_ports = {}
         return need_apply
 
     def _check_agent(self, host: str) -> bool:
@@ -471,8 +472,7 @@ class CephadmAgentHelpers:
         try:
             spec = self.mgr.spec_store.active_specs.get('agent', None)
             deps = self.mgr._calc_daemon_deps(spec, 'agent', agent.daemon_id)
-            last_deps, last_config = self.mgr.cache.get_daemon_last_config_deps(
-                host, agent.name())
+            last_deps, last_config = self.mgr.agent_cache.get_agent_last_config_deps(host)
             if not last_config or last_deps != deps:
                 # if root cert is the dep that changed, we must use ssh to reconfig
                 # so it's necessary to check this one specifically
@@ -486,7 +486,7 @@ class CephadmAgentHelpers:
                 daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
                 # we need to know the agent port to try to reconfig w/ http
                 # otherwise there is no choice but a full ssh reconfig
-                if host in self.mgr.cache.agent_ports and root_cert_match and not down:
+                if host in self.mgr.agent_cache.agent_ports and root_cert_match and not down:
                     daemon_spec = self.mgr.cephadm_services[daemon_type_to_service(
                         daemon_spec.daemon_type)].prepare_create(daemon_spec)
                     self.mgr.agent_helpers._request_agent_acks(
