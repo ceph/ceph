@@ -43,7 +43,10 @@ set(crimson_seastore_srcs
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)
 
-if(HAVE_ZNS)
+CMAKE_DEPENDENT_OPTION(WITH_ZNS "enable Linux ZNS support" OFF
+  "CMAKE_SYSTEM_NAME STREQUAL Linux" OFF)
+if(WITH_ZNS)
+  find_package(LinuxZNS REQUIRED)
   list(APPEND crimson_seastore_srcs
     segment_manager/zns.cc)
 endif()
@@ -53,5 +56,10 @@ add_library(crimson-seastore STATIC
 
 target_link_libraries(crimson-seastore
   crimson)
+if(WITH_ZNS)
+  target_link_libraries(crimson-seastore
+    Linux::ZNS)
+endif()
+
 set_target_properties(crimson-seastore PROPERTIES
   JOB_POOL_COMPILE heavy_compile_job_pool)
