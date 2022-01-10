@@ -609,6 +609,7 @@ add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 #add_ceph_test(test_pidfile.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_pidfile.sh)
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
+add_ceph_test(flap.sh ${CMAKE_CURRENT_SOURCE_DIR}/flap.sh)
 
 if(DEFINED PROMTOOL_EXECUTABLE)
   set(promtool_executable_checked TRUE)
