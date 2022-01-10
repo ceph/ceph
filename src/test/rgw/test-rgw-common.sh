@@ -80,9 +80,10 @@ function rgw {
 
   name=$1
   port=$2
+  ssl_port=0 #ssl port not used
   shift 2
 
-  echo "$mrgw $name $port $rgw_flags $@"
+  echo "$mrgw $name $port $ssl_port $rgw_flags $@"
 }
 
 function init_first_zone {
