@@ -8,8 +8,9 @@
 #include "common/TextTable.h"
 #include "include/stringify.h"
 
-#include "CrushWrapper.h"
 #include "CrushTreeDumper.h"
+#include "CrushWrapper.h"
+#include <cstddef>
 
 #define dout_subsys ceph_subsys_crush
 
@@ -3909,7 +3910,8 @@ int CrushWrapper::_choose_type_stack(
       ldout(cct, 10) << __func__ << " end of orig, break 0" << dendl;
       break;
     }
-    for (auto from : w) {
+    for (size_t w_pos = 0; w_pos < w.size(); w_pos++) { // w vector pos
+      int from = w[w_pos];
       ldout(cct, 10) << " from " << from << dendl;
       // identify leaves under each choice.  we use this to check whether any of these
       // leaves are overfull.  (if so, we need to make sure there are underfull candidates
@@ -3999,11 +4001,16 @@ int CrushWrapper::_choose_type_stack(
       }
       if (j + 1 < stack.size()) {
 	// check if any buckets have overfull leaves but no underfull candidates
-	for (int pos = 0; pos < fanout; ++pos) {
+	for (size_t l_pos = 0; l_pos < (size_t)fanout; ++l_pos) {
+	  // l_pos mean leaves vector pos
+	  size_t pos = l_pos + w_pos * fanout;
+    	  if (pos >= o.size()) {
+	    break;
+	  }
 	  if (underfull_buckets[j].count(o[pos]) == 0) {
 	    // are any leaves overfull?
 	    bool any_overfull = false;
-	    for (auto osd : leaves[pos]) {
+	    for (auto osd : leaves[l_pos]) {
 	      if (overfull.count(osd)) {
 		any_overfull = true;
                break;
@@ -4011,7 +4018,7 @@ int CrushWrapper::_choose_type_stack(
 	    }
 	    if (any_overfull) {
 	      ldout(cct, 10) << " bucket " << o[pos] << " has no underfull targets and "
-			     << ">0 leaves " << leaves[pos] << " is overfull; alts "
+			     << ">0 leaves " << leaves[l_pos] << " is overfull; alts "
 			     << underfull_buckets[j]
 			     << dendl;
 	      for (auto alt : underfull_buckets[j]) {

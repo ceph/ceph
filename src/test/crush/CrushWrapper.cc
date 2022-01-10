@@ -1454,6 +1454,33 @@ TEST_F(CrushWrapperTest, try_remap_rule) {
     ASSERT_EQ(5, out[1]);
     ASSERT_EQ(16, out[2]);
   }
+
+  {
+    cout << "take + choose + chooseleaf + emit" << std::endl;
+    int rule = c.add_rule(3, 4, 0);
+    ASSERT_EQ(3, rule);
+    c.set_rule_step_take(rule, 0, bno);
+    c.set_rule_step_choose_firstn(rule, 1, 3, 2);
+    c.set_rule_step_choose_leaf_firstn(rule, 2, 1, 1);
+    c.set_rule_step_emit(rule, 3);
+
+    // a:(foo | bar): 0 1 2 | 3 4 5
+    // b:(baz | qux): 6 7 8 | 9 10 11
+    // c:(bif | pop): 12 13 14 | 15 16 17
+    vector<int> orig = {0, 6, 12};
+    set<int> overfull = {0, 6, 12};
+    vector<int> underfull = {3, 4, 5, 7, 8, 9, 10, 11, 15, 16, 17};
+    vector<int> more_underfull = {};
+    vector<int> out;
+    int r = c.try_remap_rule(cct, rule, 3, overfull, underfull, more_underfull,
+                             orig, &out);
+    cout << orig << " -> r = " << (int)r << " out " << out << std::endl;
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(3u, out.size());
+    ASSERT_EQ(3, out[0]);  // 0 -> 3 (from diff host)
+    ASSERT_EQ(7, out[1]);  // 6 -> 7 (from same host)
+    ASSERT_EQ(15, out[2]); // 12 -> 15 (from diff host)
+  }
 }
 
 // Local Variables:
