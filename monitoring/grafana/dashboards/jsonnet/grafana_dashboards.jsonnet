@@ -581,6 +581,49 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
     ])
 }
 {
+  "capacity-planning.json":
+    local CapacitySingleStatPanel(format, title, description, valueName, expr, targetFormat, x, y, w, h) =
+      addSingelStatSchema('$datasource', format, title, description, valueName, false, 100, false, false, '')
+      .addTarget(addTargetSchema(expr, 1, targetFormat, '')) + {gridPos: {x: x, y: y, w: w, h: h}};
+
+    local CapacityGraphPanel(title, description, formatY1, labelY1, expr, targetFormat, legendFormat, x, y, w, h) =
+      graphPanelSchema({}, title, description, 'null as zero', false, formatY1, 'short', labelY1, null, 0, 1, '$datasource')
+      .addTargets(
+        [addTargetSchema(expr, 1, 'time_series', legendFormat)]) + {gridPos: {x: x, y: y, w: w, h: h}};
+
+    dashboardSchema(
+      'Capacity planning', '', 'z99hzWtmz', 'now-1h', '15s', 22, [], '', {refresh_intervals:['5s','10s','15s','30s','1m','5m','15m','30m','1h','2h','1d'],time_options:['5m','15m','1h','6h','12h','24h','2d','7d','30d']}
+    )
+    .addAnnotation(
+      addAnnotationSchema(
+        1, '-- Grafana --', true, true, 'rgba(0, 211, 255, 1)', 'Annotations & Alerts', 'dashboard')
+    )
+    .addTemplate(
+       g.template.datasource('datasource', 'prometheus', 'Dashboard1', label='Data Source')
+    )
+    .addPanels([
+      CapacitySingleStatPanel(
+        'none', 'last 15 days avg change', '', 'avg', '(delta(sum(ceph_osd_stat_bytes_used)[1d:5m]) / sum(ceph_osd_stat_bytes_used)) * 100', 'table', 0, 0, 3, 3),
+      CapacityGraphPanel(
+        '% change last 15 days', 'This chart shows the increase or decrease avg at a certain point',
+'short', 'bytes used',
+'(delta(sum(ceph_osd_stat_bytes_used)[1d:5m]) / sum(ceph_osd_stat_bytes_used)) * 100',
+'time_series', '{{name}} ', 0, 9, 12, 8
+      ),
+      CapacityGraphPanel(
+        'capacity predictions', 'This chart shows the current osd capacity usage and the prediction',
+'short', 'bytes used',
+'sum(ceph_osd_stat_bytes_used)',
+'time_series', '{{name}} ', 0, 9, 12, 8
+      )
+      .addTargets([
+        addTargetSchema('avg_over_time(sum(ceph_osd_stat_bytes_used)[15d:5m])', 1, 'time_series', 'avg_over_time'),
+        addTargetSchema('predict_linear(sum(ceph_osd_stat_bytes_used)[15d:5m], 0)', 1, 'time_series', 'predict_linear'),
+      ]),
+
+    ])
+}
+{
   "pool-detail.json":
     local PoolDetailSingleStatPanel(format, title, description, valueName, colorValue, gaugeMaxValue, gaugeShow, sparkLineShow, thresholds, expr, targetFormat, x, y, w, h) =
       addSingelStatSchema('$datasource', format, title, description, valueName, colorValue, gaugeMaxValue, gaugeShow, sparkLineShow, thresholds)
