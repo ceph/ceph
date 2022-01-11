@@ -1355,7 +1355,6 @@ WRITE_EQ_OPERATORS_3(record_group_size_t, plain_mdlength, dlength, block_size);
 struct record_group_t {
   std::vector<record_t> records;
   record_group_size_t size;
-  extent_len_t current_dlength = 0;
 
   record_group_t() = default;
   record_group_t(
@@ -1372,7 +1371,6 @@ struct record_group_t {
       record_t&& record,
       extent_len_t block_size) {
     size.account(record.size, block_size);
-    current_dlength += record.size.dlength;
     records.push_back(std::move(record));
     assert(size.get_encoded_length() < MAX_SEG_OFF);
   }
@@ -1384,7 +1382,6 @@ struct record_group_t {
   void clear() {
     records.clear();
     size = {};
-    current_dlength = 0;
   }
 };
 

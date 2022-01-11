@@ -439,7 +439,7 @@ Journal::RecordBatch::add_pending(
   assert(state != state_t::SUBMITTING);
   assert(can_batch(record, block_size).value() == new_size);
 
-  auto dlength_offset = pending.current_dlength;
+  auto dlength_offset = pending.size.dlength;
   pending.push_back(
       std::move(record), block_size);
   assert(pending.size == new_size);
