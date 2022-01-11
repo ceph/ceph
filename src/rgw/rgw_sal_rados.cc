@@ -567,7 +567,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   return ret;
 }
 
-int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
+int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bool get_stats)
 {
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   int ret;
@@ -594,7 +594,9 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 
   bucket_version = ep_ot.read_version;
 
-  ret = store->ctl()->bucket->read_bucket_stats(info.bucket, &ent, y, dpp);
+  if (get_stats) {
+    ret = store->ctl()->bucket->read_bucket_stats(info.bucket, &ent, y, dpp);
+  }
 
   return ret;
 }

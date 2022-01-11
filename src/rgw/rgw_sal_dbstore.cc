@@ -240,7 +240,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y)
+  int DBBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y, bool get_stats)
   {
     int ret = 0;
 
