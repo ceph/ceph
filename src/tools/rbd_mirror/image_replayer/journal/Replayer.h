@@ -14,6 +14,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "librbd/mirror/Types.h"
 #include <string>
 #include <type_traits>
 
@@ -103,6 +104,12 @@ private:
    *
    *  <init>
    *    |
+   *    v
+   * REGISTER_LOCAL_UPDATE_WATCHER
+   *    |
+   *    v
+   * REGISTER_REMOTE_UPDATE_WATCHER
+   *    |
    *    v                     (error)
    * INIT_REMOTE_JOURNALER  * * * * * * * * * * * * * * * * * * *
    *    |                                                       *
@@ -154,7 +161,13 @@ private:
    * WAIT_FOR_REPLAY                                            *
    *    |                                                       *
    *    v                                                       *
-   * CLOSE_LOCAL_IMAGE  < * * * * * * * * * * * * * * * * * * * *
+   * UNREGISTER_REMOTE_UPDATE_WATCHER < * * * * * * * * * * * * *
+   *    |
+   *    v
+   * UNREGISTER_LOCAL_UPDATE_WATCHER
+   *    |
+   *    v
+   * CLOSE_LOCAL_IMAGE
    *    |
    *    v (skip if not started)
    * STOP_REMOTE_JOURNALER_REPLAY
@@ -180,6 +193,7 @@ private:
   struct RemoteJournalerListener;
   struct RemoteReplayHandler;
   struct LocalJournalListener;
+  struct C_UpdateWatchCtx;
 
   Threads<ImageCtxT>* m_threads;
   std::string m_local_mirror_uuid;
@@ -195,6 +209,10 @@ private:
   int m_error_code = 0;
   std::string m_error_description;
   bool m_resync_requested = false;
+
+  C_UpdateWatchCtx* m_update_watch_ctx = nullptr;
+  uint64_t m_local_update_watcher_handle = 0;
+  uint64_t m_remote_update_watcher_handle = 0;
 
   ceph::ref_t<typename std::remove_pointer<decltype(ImageCtxT::journal)>::type>
     m_local_journal;
@@ -224,6 +242,10 @@ private:
 
   AsyncOpTracker m_in_flight_op_tracker;
   Context *m_flush_local_replay_task = nullptr;
+
+  cls::rbd::MirrorImage m_mirror_image;
+  librbd::mirror::PromotionState m_promotion_state;
+  std::string m_primary_mirror_uuid;
 
   void handle_remote_journal_metadata_updated();
 
@@ -262,8 +284,25 @@ private:
   void stop_remote_journaler_replay();
   void handle_stop_remote_journaler_replay(int r);
 
+  void register_remote_update_watcher();
+  void handle_register_remote_update_watcher(int r);
+
+  void unregister_remote_update_watcher();
+  void handle_unregister_remote_update_watcher(int r);
+
+  void register_local_update_watcher();
+  void handle_register_local_update_watcher(int r);
+
+  void unregister_local_update_watcher();
+  void handle_unregister_local_update_watcher(int r);
+
   void wait_for_in_flight_ops();
   void handle_wait_for_in_flight_ops(int r);
+
+  void handle_image_update_notify();
+  void update_local_image_status();
+  void get_mirror_info();
+  void handle_get_mirror_info(int r);
 
   void replay_flush();
   void handle_replay_flush_shut_down(int r);

@@ -6,9 +6,11 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "librbd/Journal.h"
+#include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/journal/Replay.h"
+#include "librbd/mirror/GetInfoRequest.h"
 #include "journal/Journaler.h"
 #include "journal/JournalMetadataListener.h"
 #include "journal/ReplayHandler.h"
@@ -55,6 +57,18 @@ uint32_t calculate_replay_delay(const utime_t &event_time,
 
 using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
+
+template <typename I>
+struct Replayer<I>::C_UpdateWatchCtx : public librbd::UpdateWatchCtx {
+  Replayer<I>* replayer;
+
+  C_UpdateWatchCtx(Replayer<I>* replayer) : replayer(replayer) {
+  }
+
+  void handle_notify() override {
+     replayer->handle_image_update_notify();
+  }
+};
 
 template <typename I>
 struct Replayer<I>::C_ReplayCommitted : public Context {
@@ -168,6 +182,7 @@ Replayer<I>::~Replayer() {
   ceph_assert(m_delayed_preprocess_task == nullptr);
   ceph_assert(m_flush_local_replay_task == nullptr);
   ceph_assert(m_state_builder->local_image_ctx == nullptr);
+  ceph_assert(m_update_watch_ctx == nullptr);
 }
 
 template <typename I>
@@ -189,7 +204,127 @@ void Replayer<I>::init(Context* on_finish) {
   ceph_assert(m_on_init_shutdown == nullptr);
   m_on_init_shutdown = on_finish;
 
+  register_local_update_watcher();
+}
+
+template <typename I>
+void Replayer<I>::register_local_update_watcher() {
+  dout(10) << dendl;
+  std::unique_lock locker{m_lock};
+
+  m_update_watch_ctx = new C_UpdateWatchCtx(this);
+
+  int r = m_state_builder->local_image_ctx->state->register_update_watcher(
+    m_update_watch_ctx, &m_local_update_watcher_handle);
+  handle_register_local_update_watcher(r);
+}
+
+template <typename I>
+void Replayer<I>::handle_register_local_update_watcher(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    std::unique_lock locker{m_lock};
+    derr << "failed to register local update watcher: " << cpp_strerror(r)
+         << dendl;
+    handle_replay_complete(locker,
+                           r, "failed to register local image update watcher");
+    close_local_image();
+    return;
+  }
+
+  register_remote_update_watcher();
+}
+
+template <typename I>
+void Replayer<I>::register_remote_update_watcher() {
+  dout(10) << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  int r = m_state_builder->remote_image_ctx->state->register_update_watcher(
+    m_update_watch_ctx, &m_remote_update_watcher_handle);
+  handle_register_remote_update_watcher(r);
+}
+
+template <typename I>
+void Replayer<I>::handle_register_remote_update_watcher(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to register remote update watcher: " << cpp_strerror(r)
+         << dendl;
+    handle_replay_complete(r, "failed to register remote image update watcher");
+
+    unregister_local_update_watcher();
+    return;
+  }
+
   init_remote_journaler();
+}
+
+template <typename I>
+void Replayer<I>::handle_image_update_notify() {
+  dout(10) << dendl;
+
+  std::unique_lock locker{m_lock};
+  if (m_state == STATE_COMPLETE) {
+    return;
+  }
+
+  if (m_state == STATE_REPLAYING) {
+    get_mirror_info();
+  }
+  update_local_image_status();
+}
+
+template <typename I>
+void Replayer<I>::update_local_image_status() {
+  dout(10) << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  bool update_status = false;
+  {
+    auto local_image_ctx = m_state_builder->local_image_ctx;
+    std::shared_lock image_locker{local_image_ctx->image_lock};
+    auto image_spec = image_replayer::util::compute_image_spec(
+      local_image_ctx->md_ctx, local_image_ctx->name);
+    if (m_image_spec != image_spec) {
+      m_image_spec = image_spec;
+      update_status = true;
+    }
+  }
+  if (update_status) {
+    unregister_perf_counters();
+    register_perf_counters();
+    notify_status_updated();
+  }
+}
+
+template <typename I>
+void Replayer<I>::get_mirror_info() {
+  dout(10) << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_get_mirror_info>(this);
+  auto req = librbd::mirror::GetInfoRequest<I>::create(
+    *m_state_builder->remote_image_ctx, &m_mirror_image, &m_promotion_state,
+    &m_primary_mirror_uuid, new C_TrackedOp(m_in_flight_op_tracker, ctx));
+  req->send();
+}
+
+template <typename I>
+void Replayer<I>::handle_get_mirror_info(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r == -ENOENT) {
+    dout(10) << "image is not mirrored" << dendl;
+    handle_replay_complete(r, "image is not mirrored");
+  } else if (r < 0) {
+    derr << "error retrieving image primary info for image: "
+         << cpp_strerror(r) << dendl;
+    handle_replay_complete(r, "error retrieving image primary info for image");
+  }
 }
 
 template <typename I>
@@ -260,7 +395,7 @@ void Replayer<I>::handle_init_remote_journaler(int r) {
   if (r < 0) {
     derr << "failed to initialize remote journal: " << cpp_strerror(r) << dendl;
     handle_replay_complete(locker, r, "error initializing remote journal");
-    close_local_image();
+    unregister_remote_update_watcher();
     return;
   }
 
@@ -276,7 +411,7 @@ void Replayer<I>::handle_init_remote_journaler(int r) {
     derr << "error retrieving remote journal client: " << cpp_strerror(r)
          << dendl;
     handle_replay_complete(locker, r, "error retrieving remote journal client");
-    close_local_image();
+    unregister_remote_update_watcher();
     return;
   }
 
@@ -286,7 +421,7 @@ void Replayer<I>::handle_init_remote_journaler(int r) {
                                    &m_resync_requested, &error);
   if (r < 0) {
     handle_replay_complete(locker, r, error);
-    close_local_image();
+    unregister_remote_update_watcher();
     return;
   }
 
@@ -307,7 +442,7 @@ void Replayer<I>::start_external_replay(std::unique_lock<ceph::mutex>& locker) {
 
     derr << "local image journal closed" << dendl;
     handle_replay_complete(locker, -EINVAL, "error accessing local journal");
-    close_local_image();
+    unregister_remote_update_watcher();
     return;
   }
 
@@ -329,7 +464,7 @@ void Replayer<I>::handle_start_external_replay(int r) {
          << cpp_strerror(r) << dendl;
 
     handle_replay_complete(locker, r, "error starting replay on local image");
-    close_local_image();
+    unregister_remote_update_watcher();
     return;
   }
 
@@ -414,7 +549,7 @@ bool Replayer<I>::notify_init_complete(std::unique_lock<ceph::mutex>& locker) {
   if (m_on_init_shutdown != nullptr) {
     // shut down requested after we notified init complete but before we
     // grabbed the lock
-    close_local_image();
+    unregister_remote_update_watcher();
     return false;
   }
 
@@ -488,6 +623,66 @@ void Replayer<I>::handle_wait_for_event_replay(int r) {
   dout(10) << "r=" << r << dendl;
 
   std::unique_lock locker{m_lock};
+  unregister_remote_update_watcher();
+}
+
+template <typename I>
+void Replayer<I>::unregister_remote_update_watcher() {
+  dout(10) << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  auto ctx = create_async_context_callback(
+    m_threads->work_queue, create_context_callback<
+      Replayer<I>, &Replayer<I>::handle_unregister_remote_update_watcher>(this));
+  m_state_builder->remote_image_ctx->state->unregister_update_watcher(
+    m_remote_update_watcher_handle, ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_unregister_remote_update_watcher(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to unregister remote update watcher: " << cpp_strerror(r)
+         << dendl;
+    handle_replay_complete(
+      r, "failed to unregister remote image update watcher");
+  }
+
+  unregister_local_update_watcher();
+}
+
+template <typename I>
+void Replayer<I>::unregister_local_update_watcher() {
+  dout(10) << dendl;
+
+  if (m_local_update_watcher_handle == 0 ||
+      m_update_watch_ctx == nullptr) {
+    handle_unregister_local_update_watcher(0);
+    return;
+  }
+
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_unregister_local_update_watcher>(this);
+  m_state_builder->local_image_ctx->state->unregister_update_watcher(
+    m_local_update_watcher_handle, ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_unregister_local_update_watcher(int r) {
+  dout(10) << "r=" << r << dendl;
+  std::unique_lock locker{m_lock};
+
+  if (r < 0) {
+    derr << "failed to unregister local update watcher: " << cpp_strerror(r)
+         << dendl;
+    handle_replay_complete(locker,
+      r, "failed to unregister local image update watcher");
+  }
+
+  delete m_update_watch_ctx;
+  m_update_watch_ctx = nullptr;
+
   close_local_image();
 }
 
@@ -530,7 +725,6 @@ void Replayer<I>::close_local_image() {
     &m_state_builder->local_image_ctx, ctx);
   request->send();
 }
-
 
 template <typename I>
 void Replayer<I>::handle_close_local_image(int r) {
@@ -1118,25 +1312,7 @@ void Replayer<I>::handle_process_entry_ready(int r) {
   dout(20) << dendl;
   ceph_assert(r == 0);
 
-  bool update_status = false;
-  {
-    auto local_image_ctx = m_state_builder->local_image_ctx;
-    std::shared_lock image_locker{local_image_ctx->image_lock};
-    auto image_spec = util::compute_image_spec(local_image_ctx->md_ctx,
-                                               local_image_ctx->name);
-    if (m_image_spec != image_spec) {
-      m_image_spec = image_spec;
-      update_status = true;
-    }
-  }
-
   m_replay_status_formatter->handle_entry_processed(m_replay_bytes);
-
-  if (update_status) {
-    unregister_perf_counters();
-    register_perf_counters();
-    notify_status_updated();
-  }
 
   // attempt to process the next event
   handle_replay_ready(locker);
