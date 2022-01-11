@@ -44,6 +44,13 @@
 * MDS upgrades no longer require stopping all standby MDS daemons before
   upgrading the sole active MDS for a file system.
 
+* RGW: RGW now supports rate limiting by user and/or by bucket.
+  With this feature it is possible to limit user and/or bucket, the total operations and/or
+  bytes per minute can be delivered.
+  This feature is allowing the admin to limit only READ operations and/or WRITE operations.
+  The rate limiting configuration could be applied on all users and all bucket by using 
+  global configuration.
+
 * RGW: `radosgw-admin realm delete` is now renamed to `radosgw-admin realm rm`. This
   is consistent with the help message.
 

@@ -2755,12 +2755,18 @@ void RGWPeriodConfig::dump(Formatter *f) const
 {
   encode_json("bucket_quota", bucket_quota, f);
   encode_json("user_quota", user_quota, f);
+  encode_json("user_ratelimit", user_ratelimit, f);
+  encode_json("bucket_ratelimit", bucket_ratelimit, f);
+  encode_json("anonymous_ratelimit", anon_ratelimit, f);
 }
 
 void RGWPeriodConfig::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
+  JSONDecoder::decode_json("user_ratelimit", user_ratelimit, obj);
+  JSONDecoder::decode_json("bucket_ratelimit", bucket_ratelimit, obj);
+  JSONDecoder::decode_json("anonymous_ratelimit", anon_ratelimit, obj);
 }
 
 void RGWRegionMap::dump(Formatter *f) const

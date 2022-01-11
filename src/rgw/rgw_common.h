@@ -18,6 +18,8 @@
 
 #include <array>
 #include <string_view>
+#include <atomic>
+#include <unordered_map>
 
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
@@ -66,6 +68,7 @@ using ceph::crypto::MD5;
 #define RGW_SYS_PARAM_PREFIX "rgwx-"
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
+#define RGW_ATTR_RATELIMIT		RGW_ATTR_PREFIX "ratelimit"
 #define RGW_ATTR_LC            RGW_ATTR_PREFIX "lc"
 #define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG    	RGW_ATTR_PREFIX "etag"
@@ -303,6 +306,7 @@ struct rgw_err {
   std::string err_code;
   std::string message;
 };
+
 
 /* Helper class used for RGWHTTPArgs parsing */
 class NameVal
@@ -691,6 +695,43 @@ void decode_json_obj(rgw_placement_rule& v, JSONObj *obj);
 inline std::ostream& operator<<(std::ostream& out, const rgw_placement_rule& rule) {
   return out << rule.to_str();
 }
+
+class RateLimiter;
+struct RGWRateLimitInfo {
+  int64_t max_write_ops;
+  int64_t max_read_ops;
+  int64_t max_write_bytes;
+  int64_t max_read_bytes;
+  bool enabled = false;
+  RGWRateLimitInfo()
+    : max_write_ops(0), max_read_ops(0), max_write_bytes(0), max_read_bytes(0)  {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(max_write_ops, bl);
+    encode(max_read_ops, bl);
+    encode(max_write_bytes, bl);
+    encode(max_read_bytes, bl);
+    encode(enabled, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(max_write_ops,bl);
+    decode(max_read_ops, bl);
+    decode(max_write_bytes,bl);
+    decode(max_read_bytes, bl);
+    decode(enabled, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+
+  void decode_json(JSONObj *obj);
+
+};
+WRITE_CLASS_ENCODER(RGWRateLimitInfo)
+
 struct RGWUserInfo
 {
   rgw_user user_id;
@@ -1510,6 +1551,11 @@ struct req_state : DoutPrefixProvider {
   rgw::io::BasicClient *cio{nullptr};
   http_op op{OP_UNKNOWN};
   RGWOpType op_type{};
+  std::shared_ptr<RateLimiter> ratelimit_data;
+  RGWRateLimitInfo user_ratelimit;
+  RGWRateLimitInfo bucket_ratelimit;
+  std::string ratelimit_bucket_marker;
+  std::string ratelimit_user_name;
   bool content_started{false};
   int format{0};
   ceph::Formatter *formatter{nullptr};
