@@ -1061,6 +1061,7 @@ struct OSDShard {
   void register_and_wake_split_child(PG *pg);
   void unprime_split_children(spg_t parent, unsigned old_pg_num);
   void update_scheduler_config();
+  std::string get_scheduler_type();
 
   OSDShard(
     int id,
