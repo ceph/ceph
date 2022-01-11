@@ -644,8 +644,9 @@ class Bucket {
       owner = _owner;
     }
 
-    /** Load this bucket from the backing store.  Requires the key to be set, fills other fields */
-    virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    /** Load this bucket from the backing store.  Requires the key to be set, fills other fields.
+     * If @a get_stats is true, then statistics on the bucket are also looked up. */
+    virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bool get_stats = false) = 0;
     /** Read the bucket stats from the backing Store, synchronous */
     virtual int read_stats(const DoutPrefixProvider *dpp, int shard_id,
 				 std::string* bucket_ver, std::string* master_ver,

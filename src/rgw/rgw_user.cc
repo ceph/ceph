@@ -118,7 +118,7 @@ int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
       marker = i.first;
 
       auto& bucket_ent = i.second;
-      ret = bucket_ent->load_bucket(dpp, y);
+      ret = bucket_ent->load_bucket(dpp, y, true /* load user stats */);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
         return ret;

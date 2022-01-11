@@ -2838,6 +2838,7 @@ void RGWStatBucket::execute(optional_yield y)
   if (op_ret) {
     return;
   }
+  op_ret = bucket->update_container_stats(s);
 }
 
 int RGWListBucket::verify_permission(optional_yield y)
