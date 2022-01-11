@@ -1891,8 +1891,8 @@ public:
   }
   osd_id_t pop_osd() {
     ceph_assert(!is_empty());
-    auto ret = osds.back();
-    osds.pop_back();
+    auto ret = osds.front();
+    osds.pop_front();
     return ret.second;
   }
 
@@ -1901,7 +1901,7 @@ public:
 
   osd_ord_t get_ord() const {
     return osds.empty() ? std::make_tuple(false, eversion_t())
-      : osds.back().first;
+      : osds.front().first;
   }
 
   bool is_empty() const { return osds.empty(); }
