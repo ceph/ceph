@@ -763,15 +763,15 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
     ldpp_dout(dpp, -1) << "Error: " << __func__ <<
       " failed to clean up old shards; " <<
       "RGWRados::clean_bucket_index returned " << ret << dendl;
-  }
-
-  ret = store->ctl()->bucket->remove_bucket_instance_info(bucket_info.bucket,
-                                                       bucket_info, null_yield, dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "Error: " << __func__ <<
-      " failed to clean old bucket info object \"" <<
-      bucket_info.bucket.get_key() <<
-      "\"created after successful resharding with error " << ret << dendl;
+  } else {
+    ret = store->ctl()->bucket->remove_bucket_instance_info(bucket_info.bucket,
+                                                        bucket_info, null_yield, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "Error: " << __func__ <<
+        " failed to clean old bucket info object \"" <<
+        bucket_info.bucket.get_key() <<
+        "\"created after successful resharding with error " << ret << dendl;
+    }
   }
 
   ldpp_dout(dpp, 1) << __func__ <<
@@ -793,16 +793,16 @@ error_out:
     ldpp_dout(dpp, -1) << "Error: " << __func__ <<
       " failed to clean up shards from failed incomplete resharding; " <<
       "RGWRados::clean_bucket_index returned " << ret2 << dendl;
-  }
-
-  ret2 = store->ctl()->bucket->remove_bucket_instance_info(new_bucket_info.bucket,
-                                                        new_bucket_info,
-							null_yield, dpp);
-  if (ret2 < 0) {
-    ldpp_dout(dpp, -1) << "Error: " << __func__ <<
-      " failed to clean bucket info object \"" <<
-      new_bucket_info.bucket.get_key() <<
-      "\"created during incomplete resharding with error " << ret2 << dendl;
+  } else {
+    ret2 = store->ctl()->bucket->remove_bucket_instance_info(new_bucket_info.bucket,
+                                                          new_bucket_info,
+                null_yield, dpp);
+    if (ret2 < 0) {
+      ldpp_dout(dpp, -1) << "Error: " << __func__ <<
+        " failed to clean bucket info object \"" <<
+        new_bucket_info.bucket.get_key() <<
+        "\"created during incomplete resharding with error " << ret2 << dendl;
+    }
   }
 
   return ret;
