@@ -176,7 +176,6 @@ static void record_name(const char *name, struct ceph_mount_info *cmi)
 	int name_pos = 0;
 	int name_len = 0;
 
-	name_pos = safe_cat(&cmi->cmi_name, &name_len, name_pos, "client.");
 	name_pos = safe_cat(&cmi->cmi_name, &name_len, name_pos, name);
 }
 
@@ -394,11 +393,19 @@ static int fetch_config_info(struct ceph_mount_info *cmi)
 	}
 
 	if (pid == 0) {
+		char *entity_name = NULL;
+		int name_pos = 0;
+		int name_len = 0;
+
 		/* child */
 		ret = drop_capabilities();
 		if (ret)
 			exit(1);
-		mount_ceph_get_config_info(cmi->cmi_conf, cmi->cmi_name, v2_addrs, cci);
+
+		name_pos = safe_cat(&entity_name, &name_len, name_pos, "client.");
+		name_pos = safe_cat(&entity_name, &name_len, name_pos, cmi->cmi_name);
+		mount_ceph_get_config_info(cmi->cmi_conf, entity_name, v2_addrs, cci);
+		free(entity_name);
 		exit(0);
 	} else {
 		/* parent */
