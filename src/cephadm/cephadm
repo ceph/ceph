@@ -1724,7 +1724,7 @@ def infer_config(func: FuncT) -> FuncT:
             if not name:
                 daemon_list = list_daemons(ctx, detail=False)
                 for daemon in daemon_list:
-                    if daemon.get('name', '').startswith('mon.'):
+                    if daemon.get('name', '').startswith('mon.') and daemon.get('fsid', '') == ctx.fsid:
                         name = daemon['name']
                         break
             if name:
@@ -2193,7 +2193,9 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
                        config=None, keyring=None):
     # type: (CephadmContext, str, str, Union[int, str], int, int, Optional[str], Optional[str]) ->  None
     data_dir = make_data_dir(ctx, fsid, daemon_type, daemon_id, uid=uid, gid=gid)
-    make_log_dir(ctx, fsid, uid=uid, gid=gid)
+
+    if daemon_type in Ceph.daemons:
+        make_log_dir(ctx, fsid, uid=uid, gid=gid)
 
     if config:
         config_path = os.path.join(data_dir, 'config')
@@ -4664,8 +4666,6 @@ def command_shell(ctx):
        cp.get('global', 'fsid') != ctx.fsid:
         raise Error('fsid does not match ceph.conf')
 
-    if ctx.fsid:
-        make_log_dir(ctx, ctx.fsid)
     if ctx.name:
         if '.' in ctx.name:
             (daemon_type, daemon_id) = ctx.name.split('.', 1)
@@ -4675,6 +4675,9 @@ def command_shell(ctx):
     else:
         daemon_type = 'osd'  # get the most mounts
         daemon_id = None
+
+    if ctx.fsid and daemon_type in Ceph.daemons:
+        make_log_dir(ctx, ctx.fsid)
 
     if daemon_id and not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
@@ -5864,8 +5867,9 @@ def command_check_host(ctx: CephadmContext) -> None:
         if get_hostname().lower() != ctx.expect_hostname.lower():
             errors.append('hostname "%s" does not match expected hostname "%s"' % (
                 get_hostname(), ctx.expect_hostname))
-        logger.info('Hostname "%s" matches what is expected.',
-                    ctx.expect_hostname)
+        else:
+            logger.info('Hostname "%s" matches what is expected.',
+                        ctx.expect_hostname)
 
     if errors:
         raise Error('\nERROR: '.join(errors))
@@ -8017,6 +8021,10 @@ def _get_parser():
     parser_shell = subparsers.add_parser(
         'shell', help='run an interactive shell inside a daemon container')
     parser_shell.set_defaults(func=command_shell)
+    parser_shell.add_argument(
+        '--shared_ceph_folder',
+        metavar='CEPH_SOURCE_FOLDER',
+        help='Development mode. Several folders in containers are volumes mapped to different sub-folders in the ceph source folder')
     parser_shell.add_argument(
         '--fsid',
         help='cluster FSID')

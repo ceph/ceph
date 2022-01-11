@@ -559,12 +559,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self._trigger_osd_removal()
 
     def _trigger_osd_removal(self) -> None:
+        remove_queue = self.to_remove_osds.as_osd_ids()
+        if not remove_queue:
+            return
         data = self.get("osd_stats")
         for osd in data.get('osd_stats', []):
             if osd.get('num_pgs') == 0:
                 # if _ANY_ osd that is currently in the queue appears to be empty,
                 # start the removal process
-                if int(osd.get('osd')) in self.to_remove_osds.as_osd_ids():
+                if int(osd.get('osd')) in remove_queue:
                     self.log.debug('Found empty osd. Starting removal process')
                     # if the osd that is now empty is also part of the removal queue
                     # start the process
@@ -2068,7 +2071,7 @@ Then run the following:
             for h, dm in self.cache.get_daemons_with_volatile_status():
                 osds_to_remove = []
                 for name, dd in dm.items():
-                    if dd.daemon_type == 'osd' and (dd.service_name() == service_name or not dd.osdspec_affinity):
+                    if dd.daemon_type == 'osd' and dd.service_name() == service_name:
                         osds_to_remove.append(str(dd.daemon_id))
                 if osds_to_remove:
                     osds_msg[h] = osds_to_remove
@@ -2255,6 +2258,15 @@ Then run the following:
                 r[str(osd_id)] = o.get('uuid', '')
         return r
 
+    def get_osd_by_id(self, osd_id: int) -> Optional[Dict[str, Any]]:
+        osd = [x for x in self.get('osd_map')['osds']
+               if x['osd'] == osd_id]
+
+        if len(osd) != 1:
+            return None
+
+        return osd[0]
+
     def _trigger_preview_refresh(self,
                                  specs: Optional[List[DriveGroupSpec]] = None,
                                  service_name: Optional[str] = None,
@@ -2436,9 +2448,14 @@ Then run the following:
     @handle_orch_error
     def add_daemon(self, spec: ServiceSpec) -> List[str]:
         ret: List[str] = []
-        for d_type in service_to_daemon_types(spec.service_type):
-            ret.extend(self._add_daemon(d_type, spec))
-        return ret
+        try:
+            with orchestrator.set_exception_subject('service', spec.service_name(), overwrite=True):
+                for d_type in service_to_daemon_types(spec.service_type):
+                    ret.extend(self._add_daemon(d_type, spec))
+                return ret
+        except OrchestratorError as e:
+            self.events.from_orch_error(e)
+            raise
 
     @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:

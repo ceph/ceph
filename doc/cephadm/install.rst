@@ -229,7 +229,52 @@ available options.
   and then store the login info in its config database. Other hosts added to
   the cluster will then also be able to make use of the authenticated registry.
 
+* See :ref:`cephadm-deployment-scenarios` for additional examples for using ``cephadm bootstrap``.
+
 .. _cephadm-enable-cli:
+
+Different deployment scenarios
+==============================
+
+Single host
+-----------
+
+To configure a Ceph cluster to run on a single host, use the ``--single-host-defaults`` flag when bootstrapping.
+
+Deployment in an isolated environment
+-------------------------------------
+
+You can install Cephadm in an isolated environment by using a custom container registry and configuring Docker to use an insecure registry. Ensure your container image is inside the registry and that you have access to all hosts you wish to add to the cluster. Currently, to add multiple hosts to a Ceph cluster in an isolated environment, you must use Docker. This may require you to uninstall Podman if it's present on your host as Cephadm prefers to use Podman over Docker.
+
+Run a local container registry:
+
+.. prompt:: bash #
+
+   docker run --privileged -d --name registry -p 5000:5000 -v /var/lib/registry:/var/lib/registry --restart=always registry:2
+
+Edit the ``/etc/docker/daemon.json`` file with the hostname and port where the registry is running:
+
+.. code-block:: bash
+
+   { "insecure-registries":["*<hostname>*:5000"] }
+
+.. note:: For every host which accesses the local registry, you will need to repeat this step and edit the ``/etc/docker/daemon.json`` file on the host.
+
+Restart docker:
+
+.. prompt:: bash #
+
+   systemctl daemon-reload
+   systemctl restart docker
+   
+Next, push your container image to your local registry.
+
+Then run bootstrap using the ``--image`` flag with your container image. For example:
+
+.. prompt:: bash #
+
+   cephadm --image *<hostname>*:5000/ceph/ceph bootstrap --mon-ip *<mon-ip>*
+
 
 Enable Ceph CLI
 ===============
@@ -328,6 +373,47 @@ To use the *Ceph Object Gateway*, follow :ref:`cephadm-deploy-rgw`.
 To use *NFS*, follow :ref:`deploy-cephadm-nfs-ganesha`
 
 To use *iSCSI*, follow :ref:`cephadm-iscsi`
+
+.. _cephadm-deployment-scenarios:
+
+Different deployment scenarios
+==============================
+
+Single host
+-----------
+
+To configure a Ceph cluster to run on a single host, use the ``--single-host-defaults`` flag when bootstrapping. For use cases of this, see :ref:`one-node-cluster`.
+
+The ``--single-host-defaults`` flag sets the following configuration options::
+
+  global/osd_crush_choose_leaf_type = 0
+  global/osd_pool_default_size = 2
+  mgr/mgr_standby_modules = False
+   
+For more information on these options, see :ref:`one-node-cluster` and ``mgr_standby_modules`` in :ref:`mgr-administrator-guide`.
+
+Deployment in an isolated environment
+-------------------------------------
+
+You can install Cephadm in an isolated environment by using a custom container registry. You can either configure Podman or Docker to use an insecure registry, or make the registry secure. Ensure your container image is inside the registry and that you have access to all hosts you wish to add to the cluster.
+
+Run a local container registry:
+
+.. prompt:: bash #
+
+   podman run --privileged -d --name registry -p 5000:5000 -v /var/lib/registry:/var/lib/registry --restart=always registry:2
+
+If you are using an insecure registry, configure Podman or Docker with the hostname and port where the registry is running.
+
+.. note:: For every host which accesses the local insecure registry, you will need to repeat this step on the host.
+
+Next, push your container image to your local registry.
+
+Then run bootstrap using the ``--image`` flag with your container image. For example:
+
+.. prompt:: bash #
+
+   cephadm --image *<hostname>*:5000/ceph/ceph bootstrap --mon-ip *<mon-ip>*
 
 
 .. _cluster network: ../rados/configuration/network-config-ref#cluster-network

@@ -4,7 +4,8 @@ import logging
 import uuid
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator
+from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator, \
+    DefaultDict
 
 from cephadm import remotes
 
@@ -100,6 +101,8 @@ class CephadmServe:
                     self._check_daemons()
 
                     self._purge_deleted_services()
+
+                    self._check_for_moved_osds()
 
                     if self.mgr.upgrade.continue_upgrade():
                         continue
@@ -408,8 +411,6 @@ class CephadmServe:
             sd.rank = int(d['rank']) if d.get('rank') is not None else None
             sd.rank_generation = int(d['rank_generation']) if d.get(
                 'rank_generation') is not None else None
-            if sd.daemon_type == 'osd':
-                sd.osdspec_affinity = self.mgr.osd_service.get_osdspec_affinity(sd.daemon_id)
             if 'state' in d:
                 sd.status_desc = d['state']
                 sd.status = {
@@ -539,9 +540,38 @@ class CephadmServe:
                         'stray host %s has %d stray daemons: %s' % (
                             host, len(missing_names), missing_names))
             if self.mgr.warn_on_stray_hosts and host_detail:
-                self.mgr.set_health_warning('CEPHADM_STRAY_HOST', f'{len(host_detail)} stray host(s) with {host_num_daemons} daemon(s) not managed by cephadm', len(host_detail), host_detail)
+                self.mgr.set_health_warning(
+                    'CEPHADM_STRAY_HOST', f'{len(host_detail)} stray host(s) with {host_num_daemons} daemon(s) not managed by cephadm', len(host_detail), host_detail)
             if self.mgr.warn_on_stray_daemons and daemon_detail:
-                self.mgr.set_health_warning('CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
+                self.mgr.set_health_warning(
+                    'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
+
+    def _check_for_moved_osds(self) -> None:
+        all_osds: DefaultDict[int, List[orchestrator.DaemonDescription]] = defaultdict(list)
+        for dd in self.mgr.cache.get_daemons_by_type('osd'):
+            assert dd.daemon_id
+            all_osds[int(dd.daemon_id)].append(dd)
+        for osd_id, dds in all_osds.items():
+            if len(dds) <= 1:
+                continue
+            running = [dd for dd in dds if dd.status == DaemonDescriptionStatus.running]
+            error = [dd for dd in dds if dd.status == DaemonDescriptionStatus.error]
+            msg = f'Found duplicate OSDs: {", ".join(str(dd) for dd in dds)}'
+            logger.info(msg)
+            if len(running) != 1:
+                continue
+            osd = self.mgr.get_osd_by_id(osd_id)
+            if not osd or not osd['up']:
+                continue
+            for e in error:
+                assert e.hostname
+                try:
+                    self._remove_daemon(e.name(), e.hostname, no_post_remove=True)
+                    self.mgr.events.for_daemon(
+                        e.name(), 'INFO', f"Removed duplicated daemon on host '{e.hostname}'")
+                except OrchestratorError as ex:
+                    self.mgr.events.from_orch_error(ex)
+                    logger.exception(f'failed to remove duplicated daemon {e}')
 
     def _apply_all_services(self) -> bool:
         r = False
@@ -928,7 +958,8 @@ class CephadmServe:
                 try:
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
                     self.mgr._daemon_action(daemon_spec, action=action)
-                    self.mgr.cache.rm_scheduled_daemon_action(dd.hostname, dd.name())
+                    if self.mgr.cache.rm_scheduled_daemon_action(dd.hostname, dd.name()):
+                        self.mgr.cache.save_host(dd.hostname)
                 except OrchestratorError as e:
                     self.mgr.events.from_orch_error(e)
                     if dd.daemon_type in daemons_post:
@@ -1066,7 +1097,7 @@ class CephadmServe:
                         # prime cached service state with what we (should have)
                         # just created
                         sd = daemon_spec.to_daemon_description(
-                            DaemonDescriptionStatus.running, 'starting')
+                            DaemonDescriptionStatus.starting, 'starting')
                         self.mgr.cache.add_daemon(daemon_spec.host, sd)
                         if daemon_spec.daemon_type in REQUIRES_POST_ACTIONS:
                             self.mgr.requires_post_actions.add(daemon_spec.name())
@@ -1093,7 +1124,7 @@ class CephadmServe:
                     self.mgr.cephadm_services[servict_type].post_remove(dd, is_failed_deploy=True)
                 raise
 
-    def _remove_daemon(self, name: str, host: str) -> str:
+    def _remove_daemon(self, name: str, host: str, no_post_remove: bool = False) -> str:
         """
         Remove a daemon
         """
@@ -1118,8 +1149,9 @@ class CephadmServe:
                 self.mgr.cache.rm_daemon(host, name)
             self.mgr.cache.invalidate_host_daemons(host)
 
-            self.mgr.cephadm_services[daemon_type_to_service(
-                daemon_type)].post_remove(daemon, is_failed_deploy=False)
+            if not no_post_remove:
+                self.mgr.cephadm_services[daemon_type_to_service(
+                    daemon_type)].post_remove(daemon, is_failed_deploy=False)
 
             return "Removed {} from host '{}'".format(name, host)
 
