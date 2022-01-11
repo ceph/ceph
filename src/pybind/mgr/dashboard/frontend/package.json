@@ -137,7 +137,7 @@
     "pretty-quick": "3.0.2",
     "start-server-and-test": "1.12.1",
     "stylelint": "13.13.1",
-    "stylelint-config-sass-guidelines": "7.1.0",
+    "stylelint-config-sass-guidelines": "8.0.0",
     "stylelint-declaration-use-variable": "1.7.3",
     "transifex-i18ntool": "1.1.0",
     "ts-node": "9.0.0",
