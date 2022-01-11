@@ -726,7 +726,7 @@ int RGWAsyncStatRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        petag); /* string *petag, */
 
   if (r < 0) {
-    ldpp_dout(dpp, 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "store->stat_remote_obj() returned r=" << r << dendl;
   }
   return r;
 }
