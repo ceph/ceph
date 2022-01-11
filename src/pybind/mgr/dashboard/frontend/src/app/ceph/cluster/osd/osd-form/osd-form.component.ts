@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { FormControl } from '@angular/forms';
 import { Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -115,12 +115,8 @@ export class OsdFormComponent extends CdForm implements OnInit {
 
   createForm() {
     this.form = new CdFormGroup({
-      walSlots: new FormControl(0, {
-        validators: [Validators.min(0)]
-      }),
-      dbSlots: new FormControl(0, {
-        validators: [Validators.min(0)]
-      }),
+      walSlots: new FormControl(0),
+      dbSlots: new FormControl(0),
       features: new CdFormGroup(
         this.featureList.reduce((acc: object, e) => {
           // disable initially because no data devices are selected

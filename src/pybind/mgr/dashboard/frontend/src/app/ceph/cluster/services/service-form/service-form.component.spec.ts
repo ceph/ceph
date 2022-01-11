@@ -227,13 +227,13 @@ describe('ServiceFormComponent', () => {
 
       it('should submit invalid rgw port (1)', () => {
         formHelper.setValue('rgw_frontend_port', 0);
-        component.onSubmit();
+        fixture.detectChanges();
         formHelper.expectError('rgw_frontend_port', 'min');
       });
 
       it('should submit invalid rgw port (2)', () => {
         formHelper.setValue('rgw_frontend_port', 65536);
-        component.onSubmit();
+        fixture.detectChanges();
         formHelper.expectError('rgw_frontend_port', 'max');
       });
 
@@ -349,13 +349,13 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 
       it('should submit invalid iscsi port (1)', () => {
         formHelper.setValue('api_port', 0);
-        component.onSubmit();
+        fixture.detectChanges();
         formHelper.expectError('api_port', 'min');
       });
 
       it('should submit invalid iscsi port (2)', () => {
         formHelper.setValue('api_port', 65536);
-        component.onSubmit();
+        fixture.detectChanges();
         formHelper.expectError('api_port', 'max');
       });
 
@@ -363,6 +363,10 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         formHelper.setValue('api_port', 'abc');
         component.onSubmit();
         formHelper.expectError('api_port', 'pattern');
+      });
+
+      it('should throw error when there is no pool', () => {
+        formHelper.expectErrorChange('pool', '', 'required');
       });
     });
 
@@ -398,14 +402,14 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         // min value
         formHelper.setValue('frontend_port', 1);
         formHelper.setValue('monitor_port', 1);
-        component.onSubmit();
+        fixture.detectChanges();
         formHelper.expectValid('frontend_port');
         formHelper.expectValid('monitor_port');
 
         // max value
         formHelper.setValue('frontend_port', 65535);
         formHelper.setValue('monitor_port', 65535);
-        component.onSubmit();
+        fixture.detectChanges();
         formHelper.expectValid('frontend_port');
         formHelper.expectValid('monitor_port');
       });
@@ -414,14 +418,14 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         // min
         formHelper.setValue('frontend_port', 0);
         formHelper.setValue('monitor_port', 0);
-        component.onSubmit();
+        fixture.detectChanges();
         formHelper.expectError('frontend_port', 'min');
         formHelper.expectError('monitor_port', 'min');
 
         // max
         formHelper.setValue('frontend_port', 65536);
         formHelper.setValue('monitor_port', 65536);
-        component.onSubmit();
+        fixture.detectChanges();
         formHelper.expectError('frontend_port', 'max');
         formHelper.expectError('monitor_port', 'max');
 
