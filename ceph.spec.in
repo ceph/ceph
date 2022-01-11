@@ -17,8 +17,8 @@
 #################################################################################
 # conditional build section
 #
-# please read http://rpm.org/user_doc/conditional_builds.html for explanation of
-# bcond syntax!
+# please read this for explanation of bcond syntax:
+# https://rpm-software-management.github.io/rpm/manual/conditionalbuilds.html
 #################################################################################
 %bcond_with make_check
 %bcond_with zbd
