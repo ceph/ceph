@@ -269,6 +269,7 @@ set(rgw_a_srcs
   rgw_rest_usage.cc
   rgw_rest_info.cc
   rgw_rest_user.cc
+  rgw_rest_ratelimit.cc
   rgw_swift_auth.cc
   rgw_usage.cc
   rgw_opa.cc

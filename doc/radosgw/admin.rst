@@ -311,7 +311,7 @@ To add administrative capabilities to a user, execute the following::
 You can add read, write or all capabilities to users, buckets, metadata and 
 usage (utilization). For example::
 
-	--caps="[users|buckets|metadata|usage|zone]=[*|read|write|read, write]"
+	--caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles|ratelimit]=[*|read|write|read, write]"
 
 For example::
 
@@ -472,6 +472,174 @@ commands. ::
    update --commit``. If there is no period present, the rados gateway(s) must
    be restarted for the changes to take effect.
 
+
+Rate Limit Management
+=====================
+
+The Ceph Object Gateway enables you to set rate limits on users and buckets. 
+Rate limit includes the maximum number of read ops and write ops per minute
+and how many bytes per minute could be written or read per user or per bucket.
+Requests that are using GET or HEAD method in the REST request are considered as "read requests", otherwise they are considered as "write requests".
+Every Object Gateway tracks per user and bucket metrics separately, these metrics are not shared with other gateways.
+That means that the desired limits configured should be divide by the number of active Object Gateways.
+For example, if userA should be limited by 10 ops per minute and there are 2 Object Gateways in the cluster,
+the limit over userA should be 5 (10 ops per minute / 2 RGWs).
+if the requests are ``not`` balanced between RGWs, the rate limit may be underutilized.
+For example, if the ops limit is 5 and there are 2 RGWs, ``but`` the Load Balancer send load only to one of those RGWs,
+The effective limit would be 5 ops, because this limit is enforced per RGW.
+If there is a limit reached for bucket not for user or vice versa the request would be cancelled as well.
+The bandwidth counting happens after the request is being accepted, as a result, even if in the middle of the request the bucket/user has reached its bandwidth limit this request will proceed.
+The RGW will keep a "debt" of used bytes more than the configured value and will prevent this user/bucket from sending more requests until there "debt" is being paid.
+The "debt" maximum size is twice the max-read/write-bytes per minute.
+If userA has 1 byte read limit per minute and this user tries to GET 1 GB object, the user will be able to do it.
+After userA completes this 1GB operation, the RGW will block the user request for up to 2 minutes until userA will be able to send GET request again.
+
+
+- **Bucket:** The ``--bucket`` option allows you to specify a rate limit for a
+  bucket.
+
+- **User:** The ``--uid`` option allows you to specify a rate limit for a
+  user.
+
+- **Maximum Read Ops:** The ``--max-read-ops`` setting allows you to specify
+  the maximum number of read ops per minute per RGW. A 0 value disables this setting (which means unlimited access).
+  
+- **Maximum Read Bytes:** The ``--max-read-bytes`` setting allows you to specify
+  the maximum number of read bytes per minute per RGW. A 0 value disables this setting (which means unlimited access).
+
+- **Maximum Write Ops:** The ``--max-write-ops`` setting allows you to specify
+  the maximum number of write ops per minute per RGW. A 0 value disables this setting (which means unlimited access).
+  
+- **Maximum Write Bytes:** The ``--max-write-bytes`` setting allows you to specify
+  the maximum number of write bytes per minute per RGW. A 0 value disables this setting (which means unlimited access).
+ 
+- **Rate Limit Scope:** The ``--ratelimit-scope`` option sets the scope for the rate limit.
+  The options are ``bucket`` , ``user`` and ``anonymous``. Bucket rate limit apply to buckets. 
+  The user rate limit applies to a user. Anonymous applies to an unauthenticated user.
+  Anonymous scope is only available for global rate limit.
+
+
+Set User Rate Limit
+-------------------
+
+Before you enable a rate limit, you must first set the rate limit parameters.
+For example:: 
+
+	radosgw-admin ratelimit set --ratelimit-scope=user --uid=<uid> <[--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>]
+  [--max-write-ops=<num ops>] [--max-write-bytes=<num bytes>]>
+
+For example:: 
+
+	radosgw-admin ratelimit set --ratelimit-scope=user --uid=johndoe --max-read-ops=1024 --max-write-bytes=10240
+
+
+A 0 value for num ops and / or num bytes means that the
+specific rate limit attribute check is disabled.
+
+Get User Rate Limit
+-------------------
+
+Get the current configured rate limit parameters
+For example:: 
+
+	radosgw-admin ratelimit get --ratelimit-scope=user --uid=<uid>
+
+For example:: 
+
+	radosgw-admin ratelimit get --ratelimit-scope=user --uid=johndoe
+
+
+A 0 value for num ops and / or num bytes means that the
+specific rate limit attribute check is disabled.
+
+
+Enable/Disable User Rate Limit
+------------------------------
+
+Once you set a user rate limit, you may enable it. For example:: 
+
+	radosgw-admin ratelimit enable --ratelimit-scope=user --uid=<uid>
+
+You may disable an enabled user rate limit. For example:: 
+
+	radosgw-admin ratelimit disable --ratelimit-scope=user --uid=johndoe
+
+
+Set Bucket Rate Limit
+---------------------
+
+Before you enable a rate limit, you must first set the rate limit parameters.
+For example:: 
+
+	radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=<bucket> <[--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>]
+  [--max-write-ops=<num ops>] [--max-write-bytes=<num bytes>]>
+
+For example:: 
+
+	radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=mybucket --max-read-ops=1024 --max-write-bytes=10240
+
+
+A 0 value for num ops and / or num bytes means that the
+specific rate limit attribute check is disabled.
+
+Get Bucket Rate Limit
+---------------------
+
+Get the current configured rate limit parameters
+For example:: 
+
+	radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=<bucket>
+
+For example:: 
+
+	radosgw-admin ratelimit get --ratelimit-scope=bucket --bucket=mybucket
+
+
+A 0 value for num ops and / or num bytes means that the
+specific rate limit attribute check is disabled.
+
+
+Enable/Disable Bucket Rate Limit
+--------------------------------
+
+Once you set a bucket rate limit, you may enable it. For example:: 
+
+	radosgw-admin ratelimit enable --ratelimit-scope=bucket --bucket=<bucket>
+
+You may disable an enabled bucket rate limit. For example:: 
+
+	radosgw-admin ratelimit disable --ratelimit-scope=bucket --uid=mybucket
+
+
+Reading / Writing Global Rate Limit Configuration
+-------------------------------------------------
+
+You can read and write global rate limit settings in the period configuration. To
+view the global rate limit settings::
+
+	radosgw-admin global rate limit get
+
+The global rate limit settings can be manipulated with the ``global ratelimit``
+counterparts of the ``ratelimit set``, ``ratelimit enable``, and ``ratelimit disable``
+commands. Per user and per bucket ratelimit configuration is overriding the global configuration::
+
+	radosgw-admin global ratelimit set --ratelimit-scope bucket --max-read-ops=1024
+	radosgw-admin global ratelimit enable --ratelimit-scope bucket
+
+The global rate limit can configure rate limit scope for all authenticated users::
+
+  radosgw-admin global ratelimit set --ratelimit-scope user --max-read-ops=1024
+  radosgw-admin global ratelimit enable --ratelimit-scope user
+
+The global rate limit can configure rate limit scope for all unauthenticated users::
+  
+  radosgw-admin global ratelimit set --ratelimit-scope=anonymous --max-read-ops=1024
+  radosgw-admin global ratelimit enable --ratelimit-scope=anonymous
+
+.. note:: In a multisite configuration, where there is a realm and period
+   present, changes to the global rate limit must be committed using ``period
+   update --commit``. If there is no period present, the rados gateway(s) must
+   be restarted for the changes to take effect.
 
 Usage
 =====
