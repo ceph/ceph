@@ -192,6 +192,14 @@ def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
             dst_path = clone_volumes[0].path
             bulk_copy(fs_handle, src_path, dst_path, should_cancel)
 
+def log_clone_failure(volname, groupname, subvolname, ve):
+    if ve.errno == -errno.EINTR:
+        log.info("Clone cancelled: ({0}, {1}, {2})".format(volname, groupname, subvolname))
+    elif ve.errno == -errno.EDQUOT:
+        log.error("Clone failed: ({0}, {1}, {2}, reason -> Disk quota exceeded)".format(volname, groupname, subvolname))
+    else:
+        log.error("Clone failed: ({0}, {1}, {2}, reason -> {3})".format(volname, groupname, subvolname, ve))
+
 def handle_clone_in_progress(fs_client, volspec, volname, index, groupname, subvolname, should_cancel):
     try:
         do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel)
@@ -199,6 +207,7 @@ def handle_clone_in_progress(fs_client, volspec, volname, index, groupname, subv
                                               SubvolumeStates.STATE_INPROGRESS,
                                               SubvolumeActions.ACTION_SUCCESS)
     except VolumeException as ve:
+        log_clone_failure(volname, groupname, subvolname, ve)
         next_state = get_next_state_on_error(ve.errno)
     except OpSmException as oe:
         raise VolumeException(oe.errno, oe.error_str)
