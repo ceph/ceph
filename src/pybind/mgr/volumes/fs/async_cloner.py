@@ -4,6 +4,7 @@ import time
 import errno
 import logging
 from contextlib import contextmanager
+from typing import Dict, Union
 
 import cephfs
 from mgr_util import lock_timeout_log
@@ -185,12 +186,27 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
     if should_cancel():
         raise VolumeException(-errno.EINTR, "clone operation interrupted")
 
+def set_quota_on_clone(fs_handle, clone_volumes_pair):
+    attrs = {}  # type: Dict[str, Union[int, str, None]]
+    src_path = clone_volumes_pair[1].snapshot_data_path(clone_volumes_pair[2])
+    dst_path = clone_volumes_pair[0].path
+    try:
+        attrs["quota"] = int(fs_handle.getxattr(src_path,
+                                                'ceph.quota.max_bytes'
+                                                ).decode('utf-8'))
+    except cephfs.NoData:
+        attrs["quota"] = None
+
+    if attrs["quota"] is not None:
+        clone_volumes_pair[0].set_attrs(dst_path, attrs)
+
 def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
     with open_volume_lockless(fs_client, volname) as fs_handle:
         with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
             src_path = clone_volumes[1].snapshot_data_path(clone_volumes[2])
             dst_path = clone_volumes[0].path
             bulk_copy(fs_handle, src_path, dst_path, should_cancel)
+            set_quota_on_clone(fs_handle, clone_volumes)
 
 def log_clone_failure(volname, groupname, subvolname, ve):
     if ve.errno == -errno.EINTR:
