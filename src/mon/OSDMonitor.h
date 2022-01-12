@@ -222,6 +222,7 @@ public:
   ceph::mutex balancer_lock = ceph::make_mutex("OSDMonitor::balancer_lock");
 
   std::map<int,double> osd_weight;
+  std::set<int32_t> filestore_osds;
 
   using osdmap_key_t = std::pair<version_t, uint64_t>;
   using osdmap_cache_t = SimpleLRU<osdmap_key_t,
@@ -630,6 +631,8 @@ private:
 public:
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
   void get_versions(std::map<std::string, std::list<std::string>> &versions);
+  void get_filestore_osd_list();
+  void check_for_filestore_osds(health_check_map_t *checks);
 protected:
   int get_osd_objectstore_type(int osd, std::string *type);
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,

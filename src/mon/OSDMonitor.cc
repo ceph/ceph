@@ -2020,12 +2020,26 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // metadata, too!
   for (map<int,bufferlist>::iterator p = pending_metadata.begin();
        p != pending_metadata.end();
-       ++p)
+       ++p) {
+    Metadata m;
+    auto mp = p->second.cbegin();
+    decode(m, mp);
+    auto it = m.find("osd_objectstore");
+    if (it != m.end()) {
+      if (it->second == "filestore") {
+        filestore_osds.insert(p->first);
+      } else {
+        filestore_osds.erase(p->first);
+      }
+    }
     t->put(OSD_METADATA_PREFIX, stringify(p->first), p->second);
+  }
   for (set<int>::iterator p = pending_metadata_rm.begin();
        p != pending_metadata_rm.end();
-       ++p)
+       ++p) {
+    filestore_osds.erase(*p);
     t->erase(OSD_METADATA_PREFIX, stringify(*p));
+  }
   pending_metadata.clear();
   pending_metadata_rm.clear();
 
@@ -2058,6 +2072,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // health
   health_check_map_t next;
   tmp.check_health(cct, &next);
+  // OSD_FILESTORE
+  check_for_filestore_osds(&next);
   encode_health(next, t);
 }
 
@@ -2131,6 +2147,39 @@ int OSDMonitor::get_osd_objectstore_type(int osd, string *type)
     return -ENOENT;
   *type = it->second;
   return 0;
+}
+
+void OSDMonitor::get_filestore_osd_list()
+{
+  for (unsigned osd = 0; osd < osdmap.get_num_osds(); ++osd) {
+    string objectstore_type;
+    int r = get_osd_objectstore_type(osd, &objectstore_type);
+    if (r == 0 && objectstore_type == "filestore") {
+      filestore_osds.insert(osd);
+    }
+  }
+}
+
+void OSDMonitor::check_for_filestore_osds(health_check_map_t *checks)
+{
+  if (g_conf()->mon_warn_on_filestore_osds &&
+      filestore_osds.size() > 0) {
+    ostringstream ss, deprecated_tip;
+    list<string> detail;
+    ss << filestore_osds.size()
+       << " osd(s) "
+       << (filestore_osds.size() == 1 ? "is" : "are")
+       << " running Filestore";
+    deprecated_tip << ss.str();
+    ss << " [Deprecated]";
+    auto& d = checks->add("OSD_FILESTORE", HEALTH_WARN, ss.str(),
+                          filestore_osds.size());
+    deprecated_tip << ", which has been deprecated and"
+                   << " not been optimized for QoS"
+                   << " (Filestore OSDs will use 'osd_op_queue = wpq' strictly)";
+    detail.push_back(deprecated_tip.str());
+    d.detail.swap(detail);
+  }
 }
 
 bool OSDMonitor::is_pool_currently_all_bluestore(int64_t pool_id,
