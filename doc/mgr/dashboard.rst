@@ -521,8 +521,10 @@ on appropriate hosts, proceed with the following steps.
       services run on a manager host will be restarted automatically on a different
       manager host if one Ceph Manager goes down.
 
-#.  Add Prometheus as data source to Grafana `using the Grafana Web UI
-    <https://grafana.com/docs/grafana/latest/features/datasources/add-a-data-source/>`_.
+#. Add Prometheus as data source to Grafana `using the Grafana Web UI <https://grafana.com/docs/grafana/latest/features/datasources/add-a-data-source/>`_.
+
+   .. IMPORTANT:: 
+      The data source must be named "Dashboard1".
 
 #.  Install the `vonage-status-panel and grafana-piechart-panel` plugins using::
 
