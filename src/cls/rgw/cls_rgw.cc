@@ -2984,7 +2984,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
   }
 
   if (!more) {
-    ret = list_plain_entries(hctx, op.name_filter, op.marker, max,
+    ret = list_plain_entries(hctx, op.name_filter, op.marker, max - count,
 			     &op_ret.entries, &more, PlainEntriesRegion::High);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: %s: list_plain_entries (high) returned ret=%d, marker=\"%s\", filter=\"%s\", max=%d",
