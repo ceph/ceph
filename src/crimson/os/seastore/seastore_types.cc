@@ -516,5 +516,20 @@ blk_paddr_t convert_paddr_to_blk_paddr(paddr_t addr, size_t block_size,
 	  (block_size * blocks_per_segment) + s.get_segment_off());
 }
 
+void scan_valid_records_cursor::emplace_record_group(
+    const record_group_header_t& header, ceph::bufferlist&& md_bl)
+{
+  auto new_committed_to = header.committed_to;
+  ceph_assert(last_committed == journal_seq_t() ||
+              last_committed <= new_committed_to);
+  last_committed = new_committed_to;
+  pending_record_groups.emplace_back(
+    seq.offset,
+    header,
+    std::move(md_bl));
+  increment_seq(header.dlength + header.mdlength);
+  ceph_assert(new_committed_to == journal_seq_t() ||
+              new_committed_to < seq);
+}
 
 }
