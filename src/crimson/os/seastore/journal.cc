@@ -66,12 +66,19 @@ Journal::prep_replay_segments(
   std::for_each(
     segments.begin(),
     segments.end(),
-    [this](auto &seg) {
-      segment_provider->init_mark_segment_closed(
-	seg.first,
-	seg.second.journal_segment_seq,
-	false);
-    });
+    [this, FNAME](auto &seg)
+  {
+    if (seg.first != seg.second.physical_segment_id ||
+        seg.first.device_id() != journal_segment_manager.get_device_id() ||
+        seg.second.out_of_line == true) {
+      ERROR("illegal journal segment for replay -- {}", seg.second);
+      ceph_abort();
+    }
+    segment_provider->init_mark_segment_closed(
+      seg.first,
+      seg.second.journal_segment_seq,
+      false);
+  });
 
   auto journal_tail = segments.rbegin()->second.journal_tail;
   segment_provider->update_journal_tail_committed(journal_tail);
