@@ -742,6 +742,10 @@ options:
   type: uint
   level: advanced
   desc: minimum schedule tick (in milliseconds) for QoS
+  long_desc: This determines the minimum time (in milliseconds) at which I/Os
+    can become unblocked if the limit of a throttle is hit. In terms of the
+    token bucket algorithm, this is the minimum interval at which tokens are
+    added to the bucket.
   default: 50
   services:
   - rbd
