@@ -2557,6 +2557,9 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
     return false;
   } else if (subdir_name.back() == '/') {
     subdir_name.pop_back();
+    if (subdir_name.empty()) {
+      return false;
+    }
   }
 
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(std::move(subdir_name)));
