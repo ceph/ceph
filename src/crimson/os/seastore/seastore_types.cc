@@ -427,8 +427,6 @@ try_decode_extent_infos(
 {
   auto maybe_headers = try_decode_record_headers(header, md_bl);
   if (!maybe_headers) {
-    journal_logger().debug(
-        "try_decode_extent_infos: failed, cannot decode record headers.");
     return std::nullopt;
   }
 
@@ -468,8 +466,6 @@ try_decode_deltas(
 {
   auto maybe_record_extent_infos = try_decode_extent_infos(header, md_bl);
   if (!maybe_record_extent_infos) {
-    journal_logger().debug(
-        "try_decode_deltas: failed, cannot decode extent_infos.");
     return std::nullopt;
   }
 
