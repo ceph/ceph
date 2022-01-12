@@ -1180,8 +1180,15 @@ class Module(MgrModule):
                         return True
 
         # user might be opted-in to the most recent collection, or there is no
-        # new collection which requires nagging about
-        return self.is_major_upgrade()
+        # new collection which requires nagging about; thus nag in case it's a
+        # major upgrade and there are new collections
+        # (which their own nag == False):
+        new_collections = False
+        col_delta = self.collection_delta()
+        if col_delta is not None and len(col_delta) > 0:
+            new_collections = True
+
+        return self.is_major_upgrade() and new_collections
 
     def init_collection(self) -> None:
         # We fetch from db the collections the user had already opted-in to.
