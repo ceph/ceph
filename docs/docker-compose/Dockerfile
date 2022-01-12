@@ -26,8 +26,8 @@ RUN ./bootstrap
 CMD ./virtualenv/bin/teuthology-suite \
     -v --ceph-repo https://github.com/ceph/ceph.git \
     --suite-repo https://github.com/ceph/ceph.git \
-    -c master -m smithi --subset 9000/100000 --limit 1 \
+    -c master -m testnode --subset 9000/100000 --limit 1 \
     --suite dummy \
     --suite-branch master -p 75 --force-priority -n 100 && \
-    ./virtualenv/bin/teuthology-dispatcher --log-dir ./log --tube smithi ; \
+    ./virtualenv/bin/teuthology-dispatcher --log-dir ./log --tube testnode ; \
     tail -f /dev/null

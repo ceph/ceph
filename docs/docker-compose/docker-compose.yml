@@ -66,3 +66,18 @@ services:
     links:
         - paddles
         - beanstalk
+    environment:
+      SSH_PRIVKEY:
+  testnode:
+    build:
+      context: .
+      dockerfile: ./Dockerfile-testnode
+    depends_on:
+        paddles:
+            condition: service_healthy
+    links:
+      - paddles
+    ports:
+      - "22:22"
+    environment:
+      SSH_PUBKEY:
