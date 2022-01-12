@@ -381,7 +381,7 @@ public:
     allocators[type].emplace_back(std::move(allocator));
     LOG_PREFIX(ExtentPlacementManager::add_allocator);
     SUBDEBUG(seastore_tm, "allocators for {}: {}",
-      device_type_to_string(type),
+      type,
       allocators[type].size());
   }
 
