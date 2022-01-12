@@ -27,6 +27,7 @@ if(WITH_BLUESTORE)
     bluestore/bluefs_types.cc
     bluestore/BlueRocksEnv.cc
     bluestore/BlueStore.cc
+    bluestore/simple_bitmap.cc
     bluestore/bluestore_types.cc
     bluestore/fastbmap_allocator_impl.cc
     bluestore/FreelistManager.cc
