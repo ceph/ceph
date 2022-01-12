@@ -55,7 +55,7 @@ receive bug fixes or backports).
 Release timeline
 ----------------
 
-.. ceph_timeline:: releases.yml dev pacific octopus nautilus mimic luminous
+.. ceph_timeline:: releases.yml pacific octopus nautilus
 
 
 .. _Pacific: pacific
