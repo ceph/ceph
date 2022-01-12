@@ -178,29 +178,23 @@ List all collections with::
 
   ceph telemetry collection ls
 
-  NAME                  ENROLLED    STATUS    DEFAULT    DESC
-  basic_base            FALSE       OFF       ON         Basic information about the cluster (capacity, number and type of daemons, version, etc.)
-  basic_mds_metadata    FALSE       OFF       ON         MDS metadata
-  crash_base            FALSE       OFF       ON         Information about daemon crashes (daemon type and version, backtrace, etc.)
-  device_base           FALSE       OFF       ON         Information about device health metrics
-  ident_base            FALSE       OFF       OFF        User-provided identifying information about the cluster
-  perf_perf             FALSE       OFF       OFF        Information about performance of the cluster
+  NAME                  STATUS                                               DESC
+  basic_base            REPORTING                                            Basic information about the cluster (capacity, number and type of daemons, version, etc.)
+  basic_mds_metadata    NOT REPORTING: NOT OPTED-IN                          MDS metadata
+  crash_base            REPORTING                                            Information about daemon crashes (daemon type and version, backtrace, etc.)
+  device_base           REPORTING                                            Information about device health metrics
+  ident_base            NOT REPORTING: CHANNEL ident IS OFF                  User-provided identifying information about the cluster
+  perf_perf             NOT REPORTING: NOT OPTED-IN, CHANNEL perf IS OFF     Information about performance counters of the cluster
+
 
 Where:
 
 **NAME**: Collection name; prefix indicates the channel the collection belongs to.
 
-**ENROLLED**: Signifies the collections that were available in the module when
-the user last opted-in to telemetry. Please note: Even if a collection is
-'enrolled', its metrics will be reported only if its channel is enabled.
-The STATUS column indicates whether the collection is being reported.
-
 **STATUS**: Indicates whether the collection metrics are reported; this is
 determined by the status (enabled / disabled) of the channel the collection
-belongs to, along with the enrollment status of the collection.
-
-**DEFAULT**: The default status (enabled / disabled) of the channel the
-collection belongs to.
+belongs to, along with the enrollment status of the collection (whether the user
+is opted-in to this collection).
 
 **DESC**: General description of the collection.
 

@@ -1495,41 +1495,57 @@ To enable, add '--license {LICENSE}' to the 'ceph telemetry on' command.'''
         '''
         List all collections
         '''
+        col_delta = self.collection_delta()
+        msg = ''
+        if col_delta is not None and len(col_delta) > 0:
+            msg = f"New collections are available:\n" \
+                  f"{sorted([c.name for c in col_delta])}\n" \
+                  f"Run `ceph telemetry on` to opt-in to these collections.\n"
+
         table = PrettyTable(
             [
-                'NAME', 'ENROLLED', 'STATUS', 'DEFAULT', 'DESC',
+                'NAME', 'STATUS', 'DESC',
             ],
             border=False)
         table.align['NAME'] = 'l'
-        table.align['ENROLLED'] = 'l'
         table.align['STATUS'] = 'l'
-        table.align['DEFAULT'] = 'l'
         table.align['DESC'] = 'l'
         table.left_padding_width = 0
         table.right_padding_width = 4
 
         for c in MODULE_COLLECTION:
             name = c['name']
-            enrolled = "TRUE" if self.is_enabled_collection(name) else "FALSE"
-            status = "ON" if getattr(self, f"channel_{c['channel']}") and self.is_enabled_collection(name) \
-                    else "OFF"
-            # default value of *channel*, since we check for active channels
-            # when generating reports
-            for o in self.MODULE_OPTIONS:
-                if o['name'] == f"channel_{c['channel']}":
-                    default = "ON" if o.get('default', None) else "OFF"
+            opted_in = self.is_enabled_collection(name)
+            channel_enabled = getattr(self, f"channel_{c['channel']}")
+
+            status = ''
+            if channel_enabled and opted_in:
+                status = "REPORTING"
+            else:
+                why = ''
+                delimiter = ''
+
+                if not opted_in:
+                    why += "NOT OPTED-IN"
+                    delimiter = ', '
+                if not channel_enabled:
+                    why += f"{delimiter}CHANNEL {c['channel']} IS OFF"
+
+                status = f"NOT REPORTING: {why}"
 
             desc = c['description']
 
             table.add_row((
                 name,
-                enrolled,
                 status,
-                default,
                 desc,
             ))
 
-        return 0, table.get_string(sortby="NAME"), ''
+        if len(msg):
+            # add a new line between message and table output
+            msg = f"{msg} \n"
+
+        return 0, f'{msg}{table.get_string(sortby="NAME")}', ''
 
     @CLICommand('telemetry send')
     def do_send(self,
