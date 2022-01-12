@@ -83,6 +83,11 @@ Multiple channels can be enabled or disabled with::
   ceph telemetry enable channel basic crash device ident perf
   ceph telemetry disable channel basic crash device ident perf
 
+Channels can be enabled or disabled all at once with::
+
+  ceph telemetry enable channel all
+  ceph telemetry disable channel all
+
 Please note that telemetry should be on for these commands to take effect.
 
 List all channels with::
