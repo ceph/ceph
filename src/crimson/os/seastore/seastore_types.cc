@@ -69,10 +69,10 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 
 std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq)
 {
-  return out << "journal_seq_t(segment_seq="
-	     << seq.segment_seq << ", offset="
-	     << seq.offset
-	     << ")";
+  return out << "journal_seq_t("
+             << "segment_seq=" << seq.segment_seq
+             << ", offset=" << seq.offset
+             << ")";
 }
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t)
@@ -152,7 +152,7 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
 {
   return out << "segment_header_t("
 	     << "segment_seq=" << header.journal_segment_seq
-	     << ", physical_segment_id=" << header.physical_segment_id
+	     << ", segment_id=" << header.physical_segment_id
 	     << ", journal_tail=" << header.journal_tail
 	     << ", segment_nonce=" << header.segment_nonce
 	     << ", out-of-line=" << header.out_of_line
@@ -179,6 +179,34 @@ void record_size_t::account(const delta_info_t& delta)
   plain_mdlength += ceph::encoded_sizeof(delta);
 }
 
+std::ostream &operator<<(std::ostream& out, const record_size_t& rsize)
+{
+  return out << "record_size_t("
+             << "raw_md=" << rsize.get_raw_mdlength()
+             << ", data=" << rsize.dlength
+             << ")";
+}
+
+std::ostream &operator<<(std::ostream& out, const record_t& r)
+{
+  return out << "record_t("
+             << "num_extents=" << r.extents.size()
+             << ", num_deltas=" << r.deltas.size()
+             << ")";
+}
+
+std::ostream& operator<<(std::ostream& out, const record_group_header_t& h)
+{
+  return out << "record_group_header_t("
+             << "num_records=" << h.records
+             << ", mdlength=" << h.mdlength
+             << ", dlength=" << h.dlength
+             << ", nonce=" << h.segment_nonce
+             << ", committed_to=" << h.committed_to
+             << ", data_crc=" << h.data_crc
+             << ")";
+}
+
 extent_len_t record_group_size_t::get_raw_mdlength() const
 {
   return plain_mdlength +
@@ -197,6 +225,24 @@ void record_group_size_t::account(
   plain_mdlength += rsize.get_raw_mdlength();
   dlength += rsize.dlength;
   block_size = _block_size;
+}
+
+std::ostream& operator<<(std::ostream& out, const record_group_size_t& size)
+{
+  return out << "record_group_size_t("
+             << "raw_md=" << size.get_raw_mdlength()
+             << ", data=" << size.dlength
+             << ", block_size=" << size.block_size
+             << ", fullness=" << size.get_fullness()
+             << ")";
+}
+
+std::ostream& operator<<(std::ostream& out, const record_group_t& rg)
+{
+  return out << "record_group_t("
+             << "num_records=" << rg.records.size()
+             << ", " << rg.size
+             << ")";
 }
 
 ceph::bufferlist encode_record(
@@ -516,6 +562,22 @@ blk_paddr_t convert_paddr_to_blk_paddr(paddr_t addr, size_t block_size,
 	  (block_size * blocks_per_segment) + s.get_segment_off());
 }
 
+std::ostream& operator<<(std::ostream& out, const write_result_t& w)
+{
+  return out << "write_result_t("
+             << "start=" << w.start_seq
+             << ", length=" << w.length
+             << ")";
+}
+
+std::ostream& operator<<(std::ostream& out, const record_locator_t& l)
+{
+  return out << "record_locator_t("
+             << "block_base=" << l.record_block_base
+             << ", " << l.write_result
+             << ")";
+}
+
 void scan_valid_records_cursor::emplace_record_group(
     const record_group_header_t& header, ceph::bufferlist&& md_bl)
 {
@@ -530,6 +592,16 @@ void scan_valid_records_cursor::emplace_record_group(
   increment_seq(header.dlength + header.mdlength);
   ceph_assert(new_committed_to == journal_seq_t() ||
               new_committed_to < seq);
+}
+
+std::ostream& operator<<(std::ostream& out, const scan_valid_records_cursor& c)
+{
+  return out << "cursor(last_valid_header_found=" << c.last_valid_header_found
+             << ", seq=" << c.seq
+             << ", last_committed=" << c.last_committed
+             << ", pending_record_groups=" << c.pending_record_groups.size()
+             << ", num_consumed_records=" << c.num_consumed_records
+             << ")";
 }
 
 }
