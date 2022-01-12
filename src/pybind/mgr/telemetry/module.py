@@ -1347,15 +1347,6 @@ class Module(MgrModule):
 
         return 0, msg, ''
 
-    def restore_default_opt_setting(self, opt_name: str) -> None:
-        for o in self.MODULE_OPTIONS:
-            if o['name'] == opt_name:
-                default_val = o.get('default', None)
-                self.set_module_option(opt_name, default_val)
-                setattr(self,
-                        opt_name,
-                        default_val)
-
     @CLIReadCommand('telemetry status')
     def status(self) -> Tuple[int, str, str]:
         '''
@@ -1444,10 +1435,7 @@ To enable, add '--license {LICENSE}' to the 'ceph telemetry on' command.'''
         self.set_store('last_opted_out_ceph_version', str(mon_min))
         self.last_opted_out_ceph_version = mon_min
 
-        for c in ALL_CHANNELS:
-            self.restore_default_opt_setting(f"channel_{c}")
-
-        msg = 'Telemetry is now disabled. Channels settings are restored to default.'
+        msg = 'Telemetry is now disabled.'
         return 0, msg, ''
 
     @CLIReadCommand('telemetry enable channel')
