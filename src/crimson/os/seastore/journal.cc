@@ -685,8 +685,9 @@ Journal::RecordSubmitter::submit_pending(
   assert(!p_current_batch->is_submitting());
   stats.record_batch_stats.increment(
       p_current_batch->get_num_records() + 1);
-  auto write_fut = [this, flush, record=std::move(record)]() mutable {
-    if (flush && p_current_batch->is_empty()) {
+  bool do_flush = (flush || state == state_t::IDLE);
+  auto write_fut = [this, do_flush, record=std::move(record)]() mutable {
+    if (do_flush && p_current_batch->is_empty()) {
       // fast path with direct write
       increment_io();
       auto [to_write, sizes] = p_current_batch->submit_pending_fast(
@@ -708,7 +709,7 @@ Journal::RecordSubmitter::submit_pending(
       // indirect write with or without the existing pending records
       auto write_fut = p_current_batch->add_pending(
         std::move(record), journal_segment_manager.get_block_size());
-      if (flush || state == state_t::IDLE) {
+      if (do_flush) {
         flush_current_batch();
       }
       return write_fut;
