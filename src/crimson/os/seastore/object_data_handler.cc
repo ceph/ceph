@@ -308,12 +308,17 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 	  pin.get_laddr() <= object_data.get_reserved_data_base() + size);
 	auto pin_offset = pin.get_laddr() -
 	  object_data.get_reserved_data_base();
-	if (pin.get_paddr().is_zero()) {
+	if ((pin.get_laddr() == (object_data.get_reserved_data_base() + size)) ||
+	  (pin.get_paddr().is_zero())) {
+	  /* First pin is exactly at the boundary or is a zero pin.  Either way,
+	   * remove all pins and add a single zero pin to the end. */
 	  to_write.emplace_back(
 	    pin.get_laddr(),
 	    object_data.get_reserved_data_len() - pin_offset);
 	  return clear_iertr::now();
 	} else {
+	  /* First pin overlaps the boundary and has data, read in extent
+	   * and rewrite portion prior to size */
 	  return read_pin(
 	    ctx,
 	    pin.duplicate()
@@ -548,6 +553,7 @@ ObjectDataHandler::truncate_ret ObjectDataHandler::truncate(
   context_t ctx,
   objaddr_t offset)
 {
+  offset = p2roundup(offset, ctx.tm.get_block_size());
   return with_object_data(
     ctx,
     [this, ctx, offset](auto &object_data) {
