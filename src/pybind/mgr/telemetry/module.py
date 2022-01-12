@@ -1295,22 +1295,17 @@ class Module(MgrModule):
         # they are displayed horizontally instead of vertically.
         try:
             # Formatting ranges and values in osd_perf_histograms
-            modes_to_be_formatted = ['osd_perf_histograms_aggregated', 'osd_perf_histograms_separated']
-            for mode in modes_to_be_formatted:
-                for config in report[mode]:
-                    for histogram in config:
-                        # Adjust ranges by converting lists into strings
-                        for axis in config[histogram]['axes']:
-                            for i in range(0, len(axis['ranges'])):
-                                axis['ranges'][i] = str(axis['ranges'][i])
-                        # Adjust values by converting lists into strings
-                        if mode == 'osd_perf_histograms_aggregated':
-                            for i in range(0, len(config[histogram]['values'])):
-                                config[histogram]['values'][i] = str(config[histogram]['values'][i])
-                        else: # if mode == 'osd_perf_histograms_separated'
-                            for osd in config[histogram]['osds']:
-                                for i in range(0, len(osd['values'])):
-                                    osd['values'][i] = str(osd['values'][i])
+            mode = 'osd_perf_histograms'
+            for config in report[mode]:
+                for histogram in config:
+                    # Adjust ranges by converting lists into strings
+                    for axis in config[histogram]['axes']:
+                        for i in range(0, len(axis['ranges'])):
+                            axis['ranges'][i] = str(axis['ranges'][i])
+
+                    for osd in config[histogram]['osds']:
+                        for i in range(0, len(osd['values'])):
+                            osd['values'][i] = str(osd['values'][i])
         except KeyError:
             # If the perf channel is not enabled, there should be a KeyError since
             # 'osd_perf_histograms' would not be present in the report. In that case,
