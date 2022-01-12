@@ -1073,7 +1073,7 @@ class Module(MgrModule):
             report['crashes'] = self.gather_crashinfo()
 
         if 'perf' in channels:
-            if self.is_enabled_collection(Collection.perf):
+            if self.is_enabled_collection(Collection.perf_perf):
                 report['perf_counters'] = self.gather_perf_counters('separated')
                 report['stats_per_pool'] = self.get_stats_per_pool()
                 report['stats_per_pg'] = self.get_stats_per_pg()
@@ -1126,10 +1126,9 @@ class Module(MgrModule):
         new_collection : List[Collection] = []
 
         for c in MODULE_COLLECTION:
-            for k, v in c.items():
-                if k == 'name' and v.name not in self.db_collection:
-                    if c['channel'] in channels:
-                        new_collection.append(v)
+            if c['name'].name not in self.db_collection:
+                if c['channel'] in channels:
+                    new_collection.append(c['name'])
 
         return new_collection
 
@@ -1175,11 +1174,10 @@ class Module(MgrModule):
         # that we should nag about
         if self.db_collection is not None:
             for c in MODULE_COLLECTION:
-                for k, v in c.items():
-                    if k == 'name' and v.name not in self.db_collection:
-                        if c['nag'] == True:
-                            self.log.debug(f"The collection: {v} is not reported, and we should nag about it")
-                            return True
+                if c['name'].name not in self.db_collection:
+                    if c['nag'] == True:
+                        self.log.debug(f"The collection: {c['name']} is not reported")
+                        return True
 
         # user might be opted-in to the most recent collection, or there is no
         # new collection which requires nagging about
@@ -1236,9 +1234,8 @@ class Module(MgrModule):
             raise RuntimeError('db_collection is None after initial setting')
 
         for c in MODULE_COLLECTION:
-            for k, v in c.items():
-                if k == 'name' and v.name not in self.db_collection:
-                    self.db_collection.append(v.name)
+            if c['name'].name not in self.db_collection:
+                self.db_collection.append(c['name'])
 
         self.set_store('collection', json.dumps(self.db_collection))
 
@@ -1373,10 +1370,8 @@ class Module(MgrModule):
         keys = ['nag']
 
         for c in MODULE_COLLECTION:
-            for k, v in c.items():
-                if k == 'name':
-                    if not self.is_enabled_collection(Collection(v)):
-                        diff.append({key: val for key, val in c.items() if key not in keys})
+            if not self.is_enabled_collection(c['name']):
+                diff.append({key: val for key, val in c.items() if key not in keys})
 
         r = None
         if diff == []:
@@ -1595,9 +1590,7 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
                 next_collection = []
 
                 for c in MODULE_COLLECTION:
-                    for k, v in c.items():
-                        if k == 'name':
-                            next_collection.append(v.name)
+                    next_collection.append(c['name'].name)
 
                 opted_in_collection = self.db_collection
                 self.db_collection = next_collection
@@ -1651,9 +1644,7 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
             next_collection = []
 
             for c in MODULE_COLLECTION:
-                for k, v in c.items():
-                    if k == 'name':
-                        next_collection.append(v.name)
+                next_collection.append(c['name'].name)
 
             opted_in_collection = self.db_collection
             self.db_collection = next_collection
@@ -1699,9 +1690,7 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
             next_collection = []
 
             for c in MODULE_COLLECTION:
-                for k, v in c.items():
-                    if k == 'name':
-                        next_collection.append(v.name)
+                next_collection.append(c['name'].name)
 
             opted_in_collection = self.db_collection
             self.db_collection = next_collection
