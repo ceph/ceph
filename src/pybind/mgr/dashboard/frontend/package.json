@@ -111,7 +111,7 @@
     "@angular/compiler-cli": "12.2.13",
     "@angular/language-service": "12.2.13",
     "@applitools/eyes-cypress": "3.22.5",
-    "@compodoc/compodoc": "1.1.15",
+    "@compodoc/compodoc": "1.1.18",
     "@types/brace-expansion": "1.1.0",
     "@types/jest": "26.0.14",
     "@types/lodash": "4.14.161",
