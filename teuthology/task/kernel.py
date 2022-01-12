@@ -288,7 +288,7 @@ def install_firmware(ctx, config):
                 run.Raw('&&'),
                 'sudo', 'git', 'fetch', 'origin',
                 run.Raw('&&'),
-                'sudo', 'git', 'reset', '--hard', 'origin/master'
+                'sudo', 'git', 'reset', '--hard', 'origin/main'
                 ],
             )
 
