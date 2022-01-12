@@ -219,21 +219,21 @@ librbd supports limiting per-image IO, controlled by the following
 settings.
 
 .. confval:: rbd_qos_iops_limit
-.. confval:: rbd_qos_bps_limit
-.. confval:: rbd_qos_read_iops_limit
-.. confval:: rbd_qos_write_iops_limit
-.. confval:: rbd_qos_read_bps_limit
-.. confval:: rbd_qos_write_bps_limit
 .. confval:: rbd_qos_iops_burst
-.. confval:: rbd_qos_bps_burst
-.. confval:: rbd_qos_read_iops_burst
-.. confval:: rbd_qos_write_iops_burst
-.. confval:: rbd_qos_read_bps_burst
-.. confval:: rbd_qos_write_bps_burst
 .. confval:: rbd_qos_iops_burst_seconds
-.. confval:: rbd_qos_bps_burst_seconds
+.. confval:: rbd_qos_read_iops_limit
+.. confval:: rbd_qos_read_iops_burst
 .. confval:: rbd_qos_read_iops_burst_seconds
+.. confval:: rbd_qos_write_iops_limit
+.. confval:: rbd_qos_write_iops_burst
 .. confval:: rbd_qos_write_iops_burst_seconds
+.. confval:: rbd_qos_bps_limit
+.. confval:: rbd_qos_bps_burst
+.. confval:: rbd_qos_bps_burst_seconds
+.. confval:: rbd_qos_read_bps_limit
+.. confval:: rbd_qos_read_bps_burst
 .. confval:: rbd_qos_read_bps_burst_seconds
+.. confval:: rbd_qos_write_bps_limit
+.. confval:: rbd_qos_write_bps_burst
 .. confval:: rbd_qos_write_bps_burst_seconds
 .. confval:: rbd_qos_schedule_tick_min
