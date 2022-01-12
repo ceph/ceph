@@ -155,10 +155,10 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
       device_id_t id = device_entry.first;
       magic_t magic = device_entry.second.magic;
       device_type_t dtype = device_entry.second.dtype;
+      std::ostringstream oss;
+      oss << root << "/block." << dtype << "." << std::to_string(id);
       auto sm = std::make_unique<
-	segment_manager::block::BlockSegmentManager>(
-	  root + "/block." + device_type_to_string(dtype)
-	  + "." + std::to_string(id));
+	segment_manager::block::BlockSegmentManager>(oss.str());
       return sm->mount().safe_then([this, sm=std::move(sm), magic]() mutable {
 	assert(sm->get_magic() == magic);
 	transaction_manager->add_segment_manager(sm.get());
@@ -241,7 +241,7 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
                 device_type_t dtype =
                   string_to_device_type(
                     entry_name.substr(6, dtype_end - 6));
-                if (!dtype) {
+                if (dtype == device_type_t::NONE) {
                   // invalid device type
                   return seastar::now();
                 }
