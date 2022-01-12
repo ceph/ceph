@@ -1230,6 +1230,7 @@ struct record_size_t {
   void account(const delta_info_t& delta);
 };
 WRITE_EQ_OPERATORS_2(record_size_t, plain_mdlength, dlength);
+std::ostream &operator<<(std::ostream&, const record_size_t&);
 
 struct record_t {
   std::vector<extent_t> extents;
@@ -1272,6 +1273,7 @@ struct record_t {
     deltas.push_back(std::move(delta));
   }
 };
+std::ostream &operator<<(std::ostream&, const record_t&);
 
 struct record_header_t {
   uint32_t deltas;              // number of deltas
@@ -1307,6 +1309,7 @@ struct record_group_header_t {
     DENC_FINISH(p);
   }
 };
+std::ostream& operator<<(std::ostream&, const record_group_header_t&);
 
 struct record_group_size_t {
   extent_len_t plain_mdlength = 0; // mdlength without the group header
@@ -1351,6 +1354,7 @@ struct record_group_size_t {
                extent_len_t block_size);
 };
 WRITE_EQ_OPERATORS_3(record_group_size_t, plain_mdlength, dlength, block_size);
+std::ostream& operator<<(std::ostream&, const record_group_size_t&);
 
 struct record_group_t {
   std::vector<record_t> records;
@@ -1384,6 +1388,7 @@ struct record_group_t {
     size = {};
   }
 };
+std::ostream& operator<<(std::ostream&, const record_group_t&);
 
 ceph::bufferlist encode_record(
   record_t&& record,
@@ -1435,11 +1440,13 @@ struct write_result_t {
     return start_seq.add_offset(length);
   }
 };
+std::ostream& operator<<(std::ostream&, const write_result_t&);
 
 struct record_locator_t {
   paddr_t record_block_base;
   write_result_t write_result;
 };
+std::ostream& operator<<(std::ostream&, const record_locator_t&);
 
 /// scan segment for end incrementally
 struct scan_valid_records_cursor {
@@ -1491,6 +1498,7 @@ struct scan_valid_records_cursor {
     journal_seq_t seq)
     : seq(seq) {}
 };
+std::ostream& operator<<(std::ostream&, const scan_valid_records_cursor&);
 
 inline const seg_paddr_t& paddr_t::as_seg_paddr() const {
   assert(get_addr_type() == addr_types_t::SEGMENT);
