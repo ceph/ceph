@@ -1446,6 +1446,7 @@ struct scan_valid_records_cursor {
   bool last_valid_header_found = false;
   journal_seq_t seq;
   journal_seq_t last_committed;
+  std::size_t num_consumed_records = 0;
 
   struct found_record_group_t {
     paddr_t offset;
@@ -1472,10 +1473,18 @@ struct scan_valid_records_cursor {
     return seq.offset.as_seg_paddr().get_segment_off();
   }
 
-  void increment(segment_off_t off) {
+  void increment_seq(segment_off_t off) {
     auto& seg_addr = seq.offset.as_seg_paddr();
     seg_addr.set_segment_off(
       seg_addr.get_segment_off() + off);
+  }
+
+  void emplace_record_group(const record_group_header_t&, ceph::bufferlist&&);
+
+  void pop_record_group() {
+    assert(!pending_record_groups.empty());
+    ++num_consumed_records;
+    pending_record_groups.pop_front();
   }
 
   scan_valid_records_cursor(

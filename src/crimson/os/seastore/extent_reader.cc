@@ -113,7 +113,7 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
   auto& segment_manager =
     *segment_managers[cursor.get_segment_id().device_id()];
   if (cursor.get_segment_offset() == 0) {
-    cursor.increment(segment_manager.get_block_size());
+    cursor.increment_seq(segment_manager.get_block_size());
   }
   auto retref = std::make_unique<size_t>(0);
   auto &budget_used = *retref;
@@ -135,16 +135,7 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
 	      auto new_committed_to = header.committed_to;
 	      DEBUG("valid record read at {}, now committed at {}",
 		    cursor.seq, new_committed_to);
-	      ceph_assert(cursor.last_committed == journal_seq_t() ||
-		          cursor.last_committed <= new_committed_to);
-	      cursor.last_committed = new_committed_to;
-	      cursor.pending_record_groups.emplace_back(
-		cursor.seq.offset,
-		header,
-		std::move(md_bl));
-	      cursor.increment(header.dlength + header.mdlength);
-	      ceph_assert(new_committed_to == journal_seq_t() ||
-	                  new_committed_to < cursor.seq);
+	      cursor.emplace_record_group(header, std::move(md_bl));
 	      return scan_valid_records_ertr::now();
 	    }
 	  }).safe_then([=, &cursor, &budget_used, &handler] {
@@ -318,7 +309,7 @@ ExtentReader::consume_next_records(
     next.header,
     next.mdbuffer
   ).safe_then([&cursor] {
-    cursor.pending_record_groups.pop_front();
+    cursor.pop_record_group();
   });
 }
 
