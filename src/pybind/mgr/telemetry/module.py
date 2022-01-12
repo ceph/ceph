@@ -1438,12 +1438,26 @@ To enable, add '--license {LICENSE}' to the 'ceph telemetry on' command.'''
         msg = 'Telemetry is now disabled.'
         return 0, msg, ''
 
+    @CLIReadCommand('telemetry enable channel all')
+    def enable_channel_all(self, channels: List[str] = ALL_CHANNELS) -> Tuple[int, str, str]:
+        '''
+        Enable all channels
+        '''
+        return self.toggle_channel('enable', channels)
+
     @CLIReadCommand('telemetry enable channel')
     def enable_channel(self, channels: Optional[List[str]] = None) -> Tuple[int, str, str]:
         '''
         Enable a list of channels
         '''
         return self.toggle_channel('enable', channels)
+
+    @CLIReadCommand('telemetry disable channel all')
+    def disable_channel_all(self, channels: List[str] = ALL_CHANNELS) -> Tuple[int, str, str]:
+        '''
+        Disable all channels
+        '''
+        return self.toggle_channel('disable', channels)
 
     @CLIReadCommand('telemetry disable channel')
     def disable_channel(self, channels: Optional[List[str]] = None) -> Tuple[int, str, str]:
