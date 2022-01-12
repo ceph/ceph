@@ -111,6 +111,16 @@
 
   https://docs.ceph.com/en/latest/rados/operations/placement-groups/
 
+* telemetry: Improved the opt-in flow so that users can keep sharing the same
+  data, even when new data collections are available. A new 'perf' channel
+  that collects various performance metrics is now avaiable to opt-in to with:
+  `ceph telemetry on`
+  `ceph telemetry enable channel perf`
+  See a sample report with `ceph telemetry preview`
+  For more details, see:
+
+  https://docs.ceph.com/en/latest/mgr/telemetry/
+
 >=16.0.0
 --------
 * mgr/nfs: ``nfs`` module is moved out of volumes plugin. Prior using the
