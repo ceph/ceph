@@ -705,7 +705,7 @@ public:
   int sync_user_stats(const DoutPrefixProvider *dpp, 
                       const rgw_user& user_id, const RGWBucketInfo& bucket_info,
 		      optional_yield y,
-                      RGWBucketEnt* pent = nullptr);
+                      RGWBucketEnt* pent);
 
   /* bucket sync */
   int get_sync_policy_handler(std::optional<rgw_zone_id> zone,
