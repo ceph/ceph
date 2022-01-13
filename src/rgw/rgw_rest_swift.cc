@@ -667,7 +667,7 @@ static void get_rmattrs_from_headers(const req_state * const s,
 
     if (prefix_len > 0) {
       string name(RGW_ATTR_META_PREFIX);
-      name.append(lowercase_dash_http_attr(p + prefix_len));
+      name.append(lowercase_underscore_http_attr(p + prefix_len));
       rmattr_names.insert(name);
     }
   }
