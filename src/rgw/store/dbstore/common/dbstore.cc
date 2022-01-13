@@ -366,7 +366,7 @@ int DB::remove_user(const DoutPrefixProvider *dpp,
     RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv)
 {
   DBOpParams params = {};
-  InitializeParams(dpp, "CreateUser", &params);
+  InitializeParams(dpp, "RemoveUser", &params);
   int ret = 0;
 
   RGWUserInfo orig_info;
@@ -750,6 +750,7 @@ int DB::raw_obj::InitializeParamsfromRawObj(const DoutPrefixProvider *dpp,
   params->op.obj.state.obj.key.name = obj_name;
   params->op.obj.state.obj.key.instance = obj_instance;
   params->op.obj.state.obj.key.ns = obj_ns;
+  params->op.obj.obj_id = obj_id;
 
   if (multipart_part_str != "0.0") {
     params->op.obj.is_multipart = true;
@@ -775,6 +776,7 @@ int DB::Object::InitializeParamsfromObject(const DoutPrefixProvider *dpp,
   params->objectdata_table = store->getObjectDataTable(bucket);
   params->op.bucket.info.bucket.name = bucket;
   params->op.obj.state.obj = obj;
+  params->op.obj.obj_id = obj_id;
 
   return ret;
 }
@@ -1083,6 +1085,13 @@ int DB::raw_obj::read(const DoutPrefixProvider *dpp, int64_t ofs,
     return ret;
   }
 
+  /* Verify if its valid obj */
+  if (!params.op.obj_data.size) {
+    ret = -ENOENT;
+    ldpp_dout(dpp, 0)<<"In GetObjectData failed err:(" <<ret<<")" << dendl;
+    return ret;
+  }
+
   bufferlist& read_bl = params.op.obj_data.data;
 
   unsigned copy_len;
@@ -1189,6 +1198,9 @@ int DB::Object::get_obj_state(const DoutPrefixProvider *dpp,
   }
 
   s = &params.op.obj.state;
+  /* XXX: For now use state->shadow_obj to store ObjectID string */
+  s->shadow_obj = params.op.obj.obj_id;
+
   **state = *s;
 
   if (follow_olh && params.op.obj.state.obj.key.instance.empty()) {
@@ -1250,6 +1262,8 @@ int DB::Object::Read::prepare(const DoutPrefixProvider *dpp)
 
   RGWObjState base_state;
   RGWObjState *astate = &base_state;
+
+  /* XXX Read obj_id too */
   int r = source->get_state(dpp, &astate, true);
   if (r < 0)
     return r;
@@ -1259,6 +1273,7 @@ int DB::Object::Read::prepare(const DoutPrefixProvider *dpp)
   }
 
   state.obj = astate->obj;
+  source->obj_id = astate->shadow_obj;
 
   if (params.target_obj) {
     *params.target_obj = state.obj;
@@ -1382,7 +1397,7 @@ int DB::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, const DoutP
   int part_num = (ofs / max_chunk_size);
   /* XXX: Handle multipart_str */
   raw_obj read_obj(store, source->get_bucket_info().bucket.name, astate->obj.key.name, 
-      astate->obj.key.instance, astate->obj.key.ns, "0.0", part_num);
+      astate->obj.key.instance, astate->obj.key.ns, source->obj_id, "0.0", part_num);
 
   read_len = len;
 
@@ -1425,7 +1440,7 @@ int DB::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
     /* read entire data. So pass offset as '0' & len as '-1' */
     r = robj.read(dpp, 0, -1, bl);
 
-    if (r < 0) {
+    if (r <= 0) {
       return r;
     }
   }
@@ -1498,7 +1513,7 @@ int DB::Object::iterate_obj(const DoutPrefixProvider *dpp,
 
     /* XXX: Handle multipart_str */
     raw_obj read_obj(store, get_bucket_info().bucket.name, astate->obj.key.name, 
-        astate->obj.key.instance, astate->obj.key.ns, "0.0", part_num);
+        astate->obj.key.instance, astate->obj.key.ns, obj_id, "0.0", part_num);
     bool reading_from_head = (ofs < head_data_size);
 
     r = cb(dpp, read_obj, ofs, read_len, reading_from_head, astate, arg);
@@ -1517,38 +1532,21 @@ int DB::Object::Write::prepare(const DoutPrefixProvider* dpp)
 {
   DB *store = target->get_store();
 
-  DBOpParams params = {};
   int ret = -1;
 
   /* XXX: handle assume_noent */
-  store->InitializeParams(dpp, "GetObject", &params);
-  target->InitializeParamsfromObject(dpp, &params);
 
-  ret = store->ProcessOp(dpp, "GetObject", &params);
-
-  if (ret) {
-    ldpp_dout(dpp, 0)<<"In GetObject failed err:(" <<ret<<")" << dendl;
-    goto out;
+  obj_state.obj = target->obj;
+ 
+  if (target->obj_id.empty()) { 
+    // generate obj_id
+    char buf[33];
+    gen_rand_alphanumeric(store->ctx(), buf, sizeof(buf) - 1);
+    target->obj_id = target->obj.key.name + "." + buf;
   }
-
-  /* pick one field check if object exists */
-  if (params.op.obj.state.exists) {
-    ldpp_dout(dpp, 0)<<"Object(bucket:" << target->bucket_info.bucket.name << ", Object:"<< target->obj.key.name << ") exists" << dendl;
-
-  } else { /* create object entry in the object table */
-    params.op.obj.storage_class = "STANDARD"; /* XXX: handle storage class */
-    ret = store->ProcessOp(dpp, "PutObject", &params);
-
-    if (ret) {
-      ldpp_dout(dpp, 0)<<"In PutObject failed err:(" <<ret<<")" << dendl;
-      goto out;
-    }
-  }
-
-  obj_state = params.op.obj.state;
+  
   ret = 0;
 
-out:
   return ret;
 }
 
@@ -1581,7 +1579,7 @@ int DB::Object::Write::write_data(const DoutPrefixProvider* dpp,
 
     /* XXX: Handle multipart_str */
     raw_obj write_obj(store, target->get_bucket_info().bucket.name, obj_state.obj.key.name, 
-        obj_state.obj.key.instance, obj_state.obj.key.ns, mp_part_str, part_num);
+        obj_state.obj.key.instance, obj_state.obj.key.ns, target->obj_id, mp_part_str, part_num);
 
 
     ldpp_dout(dpp, 20) << "dbstore->write obj-ofs=" << ofs << " write_len=" << len << dendl;
@@ -1712,10 +1710,10 @@ int DB::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
 
   /* XXX: handle multipart */
   params.op.query_str = "meta";
-  ret = store->ProcessOp(dpp, "UpdateObject", &params);
+  ret = store->ProcessOp(dpp, "PutObject", &params);
 
   if (ret) {
-    ldpp_dout(dpp, 0)<<"In UpdateObject failed err:(" <<ret<<")" << dendl;
+    ldpp_dout(dpp, 0)<<"In PutObject failed err:(" <<ret<<")" << dendl;
     goto out;
   }
 
