@@ -253,11 +253,10 @@ endif()
 
 if(WITH_RADOSGW_MOTR)
   target_include_directories(rgw_common PRIVATE "/usr/include/motr")
-  target_compile_options(rgw_common
-    PRIVATE "-Wno-attributes")
+  target_compile_options(rgw_common PRIVATE "-Wno-attributes")
   target_compile_definitions(rgw_common
     PRIVATE "M0_EXTERN=extern" "M0_INTERNAL=")
-  target_link_libraries(rgw_common PRIVATE "motr")
+  target_link_libraries(rgw_common PRIVATE motr motr-helpers)
 endif()
 
 set(rgw_a_srcs

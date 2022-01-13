@@ -24,6 +24,7 @@ extern "C" {
 #include "lib/types.h"
 #include "lib/trace.h"   // m0_trace_set_mmapped_buffer
 #include "motr/layout.h" // M0_OBJ_LAYOUT_ID
+#include "helpers/helpers.h" // m0_ufid_next
 }
 
 #include "common/Clock.h"
@@ -43,6 +44,7 @@ using std::set;
 using std::list;
 
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
+static struct m0_ufid_generator ufid_gr;
 
 namespace rgw::sal {
 
@@ -1346,26 +1348,30 @@ void MotrObject::obj_name_to_motr_fid(struct m0_uint128 *obj_fid)
 int MotrObject::create_mobj(const DoutPrefixProvider *dpp, uint64_t sz)
 {
   if (mobj != nullptr) {
-    ldpp_dout(dpp, 0) << "ERROR: object is already opened" << dendl;
+    ldpp_dout(dpp, 0) << __func__ << "ERROR: object is already opened" << dendl;
     return -EINVAL;
   }
 
-  this->obj_name_to_motr_fid(&fid);
+  int rc = m0_ufid_next(&ufid_gr, 1, &meta.oid);
+  if (rc != 0) {
+    ldpp_dout(dpp, 0) << __func__ << "ERROR: m0_ufid_next() failed: " << rc << dendl;
+    return rc;
+  }
 
   char fid_str[M0_FID_STR_LEN];
-  snprintf(fid_str, ARRAY_SIZE(fid_str), U128X_F, U128_P(&fid));
-  ldpp_dout(dpp, 20) << __func__ << ": sz=" << sz << " fid=" << fid_str << dendl;
+  snprintf(fid_str, ARRAY_SIZE(fid_str), U128X_F, U128_P(&meta.oid));
+  ldpp_dout(dpp, 20) << __func__ << ": sz=" << sz << " oid=" << fid_str << dendl;
 
   int64_t lid = m0_layout_find_by_objsz(store->instance, nullptr, sz);
   M0_ASSERT(lid > 0);
 
   M0_ASSERT(mobj == nullptr);
   mobj = new m0_obj();
-  m0_obj_init(mobj, &store->container.co_realm, &fid, lid);
+  m0_obj_init(mobj, &store->container.co_realm, &meta.oid, lid);
 
   struct m0_op *op = nullptr;
   mobj->ob_entity.en_flags |= M0_ENF_META;
-  int rc = m0_entity_create(nullptr, &mobj->ob_entity, &op);
+  rc = m0_entity_create(nullptr, &mobj->ob_entity, &op);
   if (rc != 0) {
     this->close_mobj();
     ldpp_dout(dpp, 0) << "ERROR: m0_entity_create() failed: " << rc << dendl;
@@ -1389,16 +1395,17 @@ int MotrObject::create_mobj(const DoutPrefixProvider *dpp, uint64_t sz)
   ldpp_dout(dpp, 20) << __func__ << ": lid=0x" << std::hex << meta.layout_id
                      << std::dec << " rc=" << rc << dendl;
 
+  // TODO: add key:user+bucket+key+obj.meta.oid value:timestamp to
+  // gc.queue.index. See more at github.com/Seagate/cortx-rgw/issues/7.
+
   return rc;
 }
 
 int MotrObject::open_mobj(const DoutPrefixProvider *dpp)
 {
-  this->obj_name_to_motr_fid(&fid);
-
   char fid_str[M0_FID_STR_LEN];
-  snprintf(fid_str, ARRAY_SIZE(fid_str), U128X_F, U128_P(&fid));
-  ldpp_dout(dpp, 20) << __func__ << ": fid=" << fid_str << dendl;
+  snprintf(fid_str, ARRAY_SIZE(fid_str), U128X_F, U128_P(&meta.oid));
+  ldpp_dout(dpp, 20) << __func__ << ": oid=" << fid_str << dendl;
 
   int rc;
   if (meta.layout_id == 0) {
@@ -1414,7 +1421,7 @@ int MotrObject::open_mobj(const DoutPrefixProvider *dpp)
   M0_ASSERT(mobj == nullptr);
   mobj = new m0_obj();
   memset(mobj, 0, sizeof *mobj);
-  m0_obj_init(mobj, &store->container.co_realm, &fid, store->conf.mc_layout_id);
+  m0_obj_init(mobj, &store->container.co_realm, &meta.oid, store->conf.mc_layout_id);
 
   struct m0_op *op = nullptr;
   mobj->ob_attr.oa_layout_id = meta.layout_id;
@@ -1640,7 +1647,7 @@ int MotrObject::get_bucket_dir_ent(const DoutPrefixProvider *dpp, rgw_bucket_dir
       if (ent_to_check.is_current()) {
         ent = ent_to_check;
         rc = 0;
-	goto out;
+        goto out;
       }
     }
 
@@ -1967,7 +1974,7 @@ int MotrAtomicWriter::write()
       rc = obj.open_mobj(dpp);
     if (rc != 0) {
       char fid_str[M0_FID_STR_LEN];
-      snprintf(fid_str, ARRAY_SIZE(fid_str), U128X_F, U128_P(&obj.fid));
+      snprintf(fid_str, ARRAY_SIZE(fid_str), U128X_F, U128_P(&obj.meta.oid));
       ldpp_dout(dpp, 0) << "ERROR: failed to create/open motr object "
                         << fid_str << " (" << obj.get_bucket()->get_name()
                         << "/" << obj.get_key().to_str() << "): rc=" << rc
@@ -2124,7 +2131,7 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   // Insert an entry into bucket index.
   string bucket_index_iname = "motr.rgw.bucket.index." + obj.get_bucket()->get_name();
   rc = store->do_idx_op_by_name(bucket_index_iname,
-                                M0_IC_PUT, obj.get_key().to_str(), bl);
+                                M0_IC_PUT, obj.get_key().to_str(), bl, false);
   if (rc == 0)
     store->get_obj_meta_cache()->put(dpp, obj.get_key().to_str(), bl);
 
@@ -2556,7 +2563,7 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): target_obj name=" << target_obj->get_name()
                                   << " target_obj oid=" << target_obj->get_oid() << dendl;
   rc = store->do_idx_op_by_name(bucket_index_iname, M0_IC_PUT,
-                                target_obj->get_name(), update_bl);
+                                target_obj->get_name(), update_bl, false);
   if (rc < 0)
     return rc;
 
@@ -3315,7 +3322,7 @@ void MotrStore::index_name_to_motr_fid(string iname, struct m0_uint128 *id)
 }
 
 int MotrStore::do_idx_op_by_name(string idx_name, enum m0_idx_opcode opcode,
-                                 string key_str, bufferlist &bl)
+                                 string key_str, bufferlist &bl, bool update)
 {
   struct m0_idx idx;
   vector<uint8_t> key(key_str.begin(), key_str.end());
@@ -3335,7 +3342,7 @@ int MotrStore::do_idx_op_by_name(string idx_name, enum m0_idx_opcode opcode,
   ldout(cctx, 20) << "DEBUG: do_idx_op_by_name(): op="
                  << (opcode == M0_IC_PUT ? "PUT" : "GET")
                  << " idx=" << idx_name << " key=" << key_str << dendl;
-  rc = do_idx_op(&idx, opcode, key, val, true);
+  rc = do_idx_op(&idx, opcode, key, val, update);
   if (rc == 0 && opcode == M0_IC_GET)
     // Append the returned value (blob) to the bufferlist.
     bl.append(reinterpret_cast<char*>(val.data()), val.size());
@@ -3467,6 +3474,12 @@ void *newMotrStore(CephContext *cct)
     rc = store->container.co_realm.re_entity.en_sm.sm_rc;
     if (rc != 0) {
       ldout(cct, 0) << "ERROR: m0_container_init() failed: " << rc << dendl;
+      goto out;
+    }
+
+    rc = m0_ufid_init(store->instance, &ufid_gr);
+    if (rc != 0) {
+      ldout(cct, 0) << "ERROR: m0_ufid_init() failed: " << rc << dendl;
       goto out;
     }
 

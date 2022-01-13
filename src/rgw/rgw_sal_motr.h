@@ -438,12 +438,15 @@ class MotrObject : public Object {
 
     // motr object metadata stored in index
     struct Meta {
+      struct m0_uint128 oid = {};
       struct m0_fid pver = {};
       uint64_t layout_id = 0;
 
       void encode(bufferlist& bl) const
       {
-        ENCODE_START(3, 3, bl);
+        ENCODE_START(5, 5, bl);
+        encode(oid.u_hi, bl);
+        encode(oid.u_lo, bl);
         encode(pver.f_container, bl);
         encode(pver.f_key, bl);
         encode(layout_id, bl);
@@ -452,7 +455,9 @@ class MotrObject : public Object {
 
       void decode(bufferlist::const_iterator& bl)
       {
-        DECODE_START(3, bl);
+        DECODE_START(5, bl);
+        decode(oid.u_hi, bl);
+        decode(oid.u_lo, bl);
         decode(pver.f_container, bl);
         decode(pver.f_key, bl);
         decode(layout_id, bl);
@@ -461,7 +466,6 @@ class MotrObject : public Object {
     };
 
     struct m0_obj     *mobj = NULL;
-    struct m0_uint128  fid;
     Meta               meta;
 
     struct MotrReadOp : public ReadOp {
@@ -952,7 +956,7 @@ class MotrStore : public Store {
     int create_motr_idx_by_name(std::string iname);
     int delete_motr_idx_by_name(std::string iname);
     int do_idx_op_by_name(std::string idx_name, enum m0_idx_opcode opcode,
-                          std::string key_str, bufferlist &bl);
+                          std::string key_str, bufferlist &bl, bool update=true);
     int check_n_create_global_indices();
 
     int init_metadata_cache(const DoutPrefixProvider *dpp, CephContext *cct);
