@@ -286,12 +286,11 @@ LBABtree::init_cached_extent_ret LBABtree::init_cached_extent(
 	  c.pins->add_pin(
 	    static_cast<BtreeLBAPin&>(logn->get_pin()).pin);
 	}
-	DEBUGT("logical extent {} live, initialized", c.trans, *logn);
-	return e;
+	DEBUGT("logical extent {} live", c.trans, *logn);
+	return true;
       } else {
-	DEBUGT("logical extent {} not live, dropping", c.trans, *logn);
-	c.cache.drop_from_cache(logn);
-	return CachedExtentRef();
+	DEBUGT("logical extent {} not live", c.trans, *logn);
+	return false;
       }
     });
   } else if (e->get_type() == extent_types_t::LADDR_INTERNAL) {
@@ -304,11 +303,10 @@ LBABtree::init_cached_extent_ret LBABtree::init_cached_extent(
       if (cand_depth <= iter.get_depth() &&
 	  &*iter.get_internal(cand_depth).node == &*eint) {
 	DEBUGT("extent {} is live", c.trans, *eint);
-	return e;
+	return true;
       } else {
 	DEBUGT("extent {} is not live", c.trans, *eint);
-	c.cache.drop_from_cache(eint);
-	return CachedExtentRef();
+	return false;
       }
     });
   } else if (e->get_type() == extent_types_t::LADDR_LEAF) {
@@ -319,11 +317,10 @@ LBABtree::init_cached_extent_ret LBABtree::init_cached_extent(
       // Note, this check is valid even if iter.is_end()
       if (iter.leaf.node == &*eleaf) {
 	DEBUGT("extent {} is live", c.trans, *eleaf);
-	return e;
+	return true;
       } else {
 	DEBUGT("extent {} is not live", c.trans, *eleaf);
-	c.cache.drop_from_cache(eleaf);
-	return CachedExtentRef();
+	return false;
       }
     });
   } else {
@@ -334,7 +331,7 @@ LBABtree::init_cached_extent_ret LBABtree::init_cached_extent(
       e->get_type());
     return init_cached_extent_ret(
       interruptible::ready_future_marker{},
-      e);
+      true);
   }
 }
 
