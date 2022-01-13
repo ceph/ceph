@@ -126,17 +126,6 @@ public:
     SUBDEBUGT(seastore_cache, "reset", t);
   }
 
-  /**
-   * drop_from_cache
-   *
-   * Drop extent from cache.  Intended for use when
-   * ref refers to a logically dead extent as during
-   * replay.
-   */
-  void drop_from_cache(CachedExtentRef ref) {
-    remove_extent(ref);
-  }
-
   /// Declare ref retired in t
   void retire_extent(Transaction &t, CachedExtentRef ref) {
     t.add_to_retired_set(ref);
@@ -608,16 +597,25 @@ public:
     return seastar::do_with(
       std::forward<F>(f),
       std::move(dirty),
-      [&t](auto &f, auto &refs) mutable {
-	return trans_intr::do_for_each(
-	  refs,
-	  [&t, &f](auto &e) { return f(t, e); });
-      }).handle_error_interruptible(
-	init_cached_extents_iertr::pass_further{},
-	crimson::ct_error::assert_all{
-	  "Invalid error in Cache::init_cached_extents"
-	}
-      );
+      [this, &t](auto &f, auto &refs) mutable
+    {
+      return trans_intr::do_for_each(
+        refs,
+        [this, &t, &f](auto &e)
+      {
+        return f(t, e
+        ).si_then([this, &t, e](bool is_alive) {
+          if (!is_alive) {
+            remove_extent(e);
+          }
+        });
+      });
+    }).handle_error_interruptible(
+      init_cached_extents_iertr::pass_further{},
+      crimson::ct_error::assert_all{
+        "Invalid error in Cache::init_cached_extents"
+      }
+    );
   }
 
   /**
