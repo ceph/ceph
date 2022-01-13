@@ -356,9 +356,19 @@ else
 	    build_profiles+=",pkg.ceph.jaeger"
 	fi
 
-	wget -qO - https://dist.apache.org/repos/dist/dev/arrow/KEYS | $SUDO apt-key add -
-	echo "deb [arch=amd64] https://apache.jfrog.io/artifactory/arrow/ubuntu $(lsb_release -sc) main" | $SUDO tee /etc/apt/sources.list.d/arrow.list
-	$SUDO apt update
+	if [ "$(arch)" == "x86_64" ]; then
+		ARCH="amd64"
+	elif [ "$(arch)" == "aarch64" ]; then
+		ARCH="arm64"
+	fi
+
+	if [ -z ${ARCH+x} ]; then
+		echo "WARNING: $(arch) is not yet a supported architecture.  Can't install arrow."
+	else
+		wget -qO - https://dist.apache.org/repos/dist/dev/arrow/KEYS | $SUDO apt-key add -
+		echo "deb [arch=$ARCH] https://apache.jfrog.io/artifactory/arrow/ubuntu $(lsb_release -sc) main" | $SUDO tee /etc/apt/sources.list.d/arrow.list
+		$SUDO apt update
+	fi
 
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
 	      --build-profiles "${build_profiles#,}" \
