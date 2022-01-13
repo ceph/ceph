@@ -950,7 +950,7 @@ void PgScrubber::on_init()
 {
   // going upwards from 'inactive'
   ceph_assert(!is_scrub_active());
-
+  m_pg->reset_objects_scrubbed();
   preemption_data.reset();
   m_pg->publish_stats_to_osd();
   m_interval_start = m_pg->get_history().same_interval_since;
@@ -1370,8 +1370,6 @@ void PgScrubber::scrub_compare_maps()
 {
   dout(10) << __func__ << " has maps, analyzing" << dendl;
 
-  int64_t primary_objects = 0;
-
   // construct authoritative scrub map for type-specific scrubbing
   m_cleaned_meta_map.insert(m_primary_scrubmap);
   map<hobject_t, pair<std::optional<uint32_t>, std::optional<uint32_t>>> missing_digest;
@@ -1412,8 +1410,7 @@ void PgScrubber::scrub_compare_maps()
 
     dout(2) << __func__ << ": primary (" << m_pg->get_primary() << ") has "
 	    << m_primary_scrubmap.objects.size() << " items" << dendl;
-    primary_objects = m_primary_scrubmap.objects.size();
-    m_pg->add_objects_scrubbed_count(primary_objects);
+    m_pg->add_objects_scrubbed_count(m_primary_scrubmap.objects.size());
 
     ss.str("");
     ss.clear();
