@@ -2336,7 +2336,7 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 {
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " start " << *this << dendl;
-  ceph_assert(blob.can_split());
+  ceph_assert_info(blob.can_split(), "blob=" << blob);
   ceph_assert(used_in_blob.can_split());
   bluestore_blob_t &lb = dirty_blob();
   bluestore_blob_t &rb = r->dirty_blob();

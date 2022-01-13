@@ -35,9 +35,16 @@ namespace ceph {
     g_assert_context = cct;
   }
 
+  void __ceph_assert_fail(const char *assertion,
+			  const char *file, int line,
+			  const char *func,
+			  std::function<void(ostringstream&)> extra_derr)
+  __attribute__ ((__noreturn__));
+
   [[gnu::cold]] void __ceph_assert_fail(const char *assertion,
 					const char *file, int line,
-					const char *func)
+					const char *func,
+					std::function<void(ostringstream&)> extra_derr)
   {
     g_assert_condition = assertion;
     g_assert_file = file;
@@ -49,12 +56,17 @@ namespace ceph {
 
     ostringstream tss;
     tss << ceph_clock_now();
-
+    ostringstream ss_extra;
+    if (extra_derr) {
+      ss_extra << " info (";
+      extra_derr(ss_extra);
+      ss_extra << ")";
+    }
     snprintf(g_assert_msg, sizeof(g_assert_msg),
 	     "%s: In function '%s' thread %llx time %s\n"
-	     "%s: %d: FAILED ceph_assert(%s)\n",
+	     "%s: %d: FAILED ceph_assert(%s)%s\n",
 	     file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
-	     file, line, assertion);
+	     file, line, assertion, ss_extra.str().c_str());
     dout_emergency(g_assert_msg);
 
     // TODO: get rid of this memory allocation.
@@ -75,11 +87,23 @@ namespace ceph {
     abort();
   }
 
+  [[gnu::cold]] void __ceph_assert_fail(const char *assertion,
+					const char *file, int line,
+					const char *func)
+  {
+    __ceph_assert_fail(assertion, file, line, func, nullptr);
+  }
+
   [[gnu::cold]] void __ceph_assert_fail(const assert_data &ctx)
   {
     __ceph_assert_fail(ctx.assertion, ctx.file, ctx.line, ctx.function);
   }
 
+  [[gnu::cold]] void __ceph_assert_fail_info(const assert_data &ctx,
+					     std::function<void(ostringstream&)> extra_derr)
+  {
+    __ceph_assert_fail(ctx.assertion, ctx.file, ctx.line, ctx.function, extra_derr);
+  }
   class BufAppender {
   public:
     BufAppender(char* buf, int size) : bufptr(buf), remaining(size) {}

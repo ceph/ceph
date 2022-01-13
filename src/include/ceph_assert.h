@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <string>
+#include <functional>
 
 #ifndef __STRING
 # define __STRING(x) #x
@@ -54,9 +55,12 @@ extern void __ceph_assert_fail(const char *assertion, const char *file, int line
   __attribute__ ((__noreturn__));
 extern void __ceph_assert_fail(const assert_data &ctx)
   __attribute__ ((__noreturn__));
+extern void __ceph_assert_fail_info(const assert_data &ctx, std::function<void(std::ostringstream&)>)
+  __attribute__ ((__noreturn__));
 
 extern void __ceph_assertf_fail(const char *assertion, const char *file, int line, const char *function, const char* msg, ...)
   __attribute__ ((__noreturn__));
+
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
 
 [[noreturn]] void __ceph_abort(const char *file, int line, const char *func,
@@ -107,6 +111,19 @@ using namespace ceph;
    ? _CEPH_ASSERT_VOID_CAST (0) \
     : ::ceph::__ceph_assert_fail(assert_data_ctx)); } while(false)
 #endif
+/* Variant of ceph_assert that allows to print extra info via std::ostringstream.
+   Content of `action` is appended to "oss <<" using preprocessor.
+   This variant compiles the same as ceph_assert on default path.
+   example: ceph_assert_info(want % unit == 0, "want=" << want << " unit=" << unit);
+ */
+#define ceph_assert_info(expr, action)				\
+  do { static const ceph::assert_data assert_data_ctx = \
+   {__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION}; \
+   ((expr) \
+   ? _CEPH_ASSERT_VOID_CAST (0) \
+    : ::ceph::__ceph_assert_fail_info(assert_data_ctx, \
+                                      [&](std::ostringstream& __oss){__oss << action; } \
+                                     )); } while(false)
 
 // this variant will *never* get compiled out to NDEBUG in the future.
 // (ceph_assert currently doesn't either, but in the future it might.)
