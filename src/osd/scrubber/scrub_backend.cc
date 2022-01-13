@@ -968,7 +968,8 @@ void ScrubBackend::inconsistents(const hobject_t& ho,
     if (auth_object.omap_digest_present) {
       omap_digest = auth_object.omap_digest;
     }
-    this_chunk->missing_digest[ho] = make_pair(data_digest, omap_digest);
+    this_chunk->missing_digest.push_back(
+      make_pair(ho, make_pair(data_digest, omap_digest)));
   }
 
   if (!this_chunk->cur_inconsistent.empty() ||
@@ -1017,7 +1018,8 @@ void ScrubBackend::inconsistents(const hobject_t& ho,
           dout(20) << __func__ << ": will update omap digest on " << ho
                    << dendl;
         }
-        this_chunk->missing_digest[ho] = make_pair(data_digest, omap_digest);
+        this_chunk->missing_digest.push_back(
+          make_pair(ho, make_pair(data_digest, omap_digest)));
         break;
     }
   }
@@ -1739,14 +1741,7 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map)
     m_scrubber.m_store->add_snap_error(pool.id, head_error);
 
   // fix data/omap digests
-  digests_fixes_t digest_fixes{this_chunk->missing_digest.size()};
-  std::transform(
-    this_chunk->missing_digest.begin(),
-    this_chunk->missing_digest.end(),
-    digest_fixes.begin(),
-    [](const auto& p) { return std::make_pair(p.first, p.second); });
-
-  m_scrubber.submit_digest_fixes(digest_fixes);
+  m_scrubber.submit_digest_fixes(this_chunk->missing_digest);
 
   dout(10) << __func__ << " (" << m_mode_desc << ") finish" << dendl;
 }
