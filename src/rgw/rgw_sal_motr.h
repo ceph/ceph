@@ -591,7 +591,6 @@ class MotrObject : public Object {
     int write_mobj(const DoutPrefixProvider *dpp, bufferlist&& data, uint64_t offset);
     int read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t end, RGWGetDataCB* cb);
     unsigned get_optimal_bs(unsigned len);
-    void obj_name_to_motr_fid(struct m0_uint128 *obj_fid);
 
     int get_part_objs(const DoutPrefixProvider *dpp,
                       std::map<int, std::unique_ptr<MotrObject>>& part_objs);

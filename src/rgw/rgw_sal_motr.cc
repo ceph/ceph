@@ -1329,22 +1329,6 @@ int MotrAtomicWriter::prepare(optional_yield y)
   return rc;
 }
 
-void MotrObject::obj_name_to_motr_fid(struct m0_uint128 *obj_fid)
-{
-  // calculate FID from the object name (key) and its bucket marker
-  MD5 hash;
-  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-  hash.Update((const unsigned char *)this->get_key().to_str().c_str(),
-  this->get_key().to_str().length());
-  hash.Update((const unsigned char *)this->get_bucket()->get_name().c_str(),
-  this->get_bucket()->get_name().length());
-  unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  hash.Final(md5);
-
-  memcpy(obj_fid, md5, sizeof *obj_fid);
-}
-
 int MotrObject::create_mobj(const DoutPrefixProvider *dpp, uint64_t sz)
 {
   if (mobj != nullptr) {
