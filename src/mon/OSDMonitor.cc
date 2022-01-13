@@ -214,6 +214,16 @@ struct OSDMemCache : public PriorityCache::PriCache {
   virtual void set_cache_ratio(double ratio) {
     cache_ratio = ratio;
   }
+  virtual void shift_bins() {
+  }
+  virtual void import_bins(const std::vector<uint64_t> &bins) {
+  }
+  virtual void set_bins(PriorityCache::Priority pri, uint64_t end_bin) {
+  }
+  virtual uint64_t get_bins(PriorityCache::Priority pri) const {
+    return 0;
+  }
+
   virtual string get_cache_name() const = 0;
 };
 
