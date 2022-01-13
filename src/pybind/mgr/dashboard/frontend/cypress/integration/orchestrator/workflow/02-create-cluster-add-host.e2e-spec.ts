@@ -13,7 +13,7 @@ describe('Create cluster add host page', () => {
     'ceph-node-[01-03].cephlab.com'
   ];
   const addHost = (hostname: string, exist?: boolean, pattern?: boolean, labels: string[] = []) => {
-    cy.get('.btn.btn-accent').first().click({ force: true });
+    cy.get('button[data-testid=table-action-button]').click();
     createClusterHostPage.add(hostname, exist, false, labels);
     if (!pattern) {
       createClusterHostPage.checkExist(hostname, true);
