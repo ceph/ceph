@@ -390,6 +390,20 @@ options:
   default: true
   services:
   - mds_client
+ - name: fuse_entry_timeout
+  type: int
+  level: advanced
+  desc: timeout for entry in kernel
+  default: 0
+  services:
+  - mds_client
+ - name: fuse_attr_timeout
+  type: int
+  level: advanced
+  desc: timeout for attr in kernel
+  default: 0
+  services:
+  - mds_client
 - name: fuse_max_write
   type: size
   level: advanced

@@ -152,6 +152,8 @@ public:
 
   ceph::mutex stag_lock = ceph::make_mutex("fuse_ll.cc stag_lock");
   int last_stag;
+  int entry_timeout;
+  int attr_timeout;
 
   ceph::unordered_map<uint64_t,int> snap_stag_map;
   ceph::unordered_map<int,uint64_t> stag_snap_map;
@@ -238,6 +240,8 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   if (r >= 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
+	fe.entry_timeout = cfuse->entry_timeout;
+	fe.attr_timeout = cfuse->attr_timeout;
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, get_sys_errno(-r));
@@ -1172,7 +1176,9 @@ CephFuse::Handle::Handle(Client *c, int fd) :
   ch(NULL),
   mountpoint(NULL),
 #endif
-  last_stag(0)
+  last_stag(0),
+  entry_timeout(0),
+  attr_timeout(0)
 {
   snap_stag_map[CEPH_NOSNAP] = 0;
   stag_snap_map[0] = CEPH_NOSNAP;
@@ -1251,6 +1257,9 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     "fuse_splice_move");
   auto fuse_debug = client->cct->_conf.get_val<bool>(
     "fuse_debug");
+
+  entry_timeout = client->cct->_conf.get_val<int64_t>("fuse_entry_timeout");
+  attr_timeout = client->cct->_conf.get_val<int64_t>("fuse_attr_timeout");
 
   if (fuse_allow_other) {
     newargv[newargc++] = "-o";
@@ -1343,7 +1352,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     derr << "registering callbacks failed: " << r << dendl;
     return r;
   }
-
+  
   return 0;
 }
 
