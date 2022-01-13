@@ -26,12 +26,12 @@ else()
       include)
   find_path(dpdk_common_INCLUDE_DIR rte_common.h
     HINTS
-      ENC DPDK_DIR
+      ENV DPDK_DIR
     PATH_SUFFIXES
       dpdk
       include)
   set(dpdk_INCLUDE_DIRS "${dpdk_config_INCLUDE_DIR}")
-  if(NOT dpdk_config_INCLUDE_DIR EQUAL dpdk_common_INCLUDE_DIR)
+  if(dpdk_common_INCLUDE_DIR AND NOT dpdk_config_INCLUDE_DIR STREQUAL dpdk_common_INCLUDE_DIR)
     list(APPEND dpdk_INCLUDE_DIRS "${dpdk_common_INCLUDE_DIR}")
   endif()
 endif()
