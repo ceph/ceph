@@ -42,12 +42,12 @@ bool PrimaryLogScrub::get_store_errors(const scrub_ls_arg_t& arg,
   return true;
 }
 
-//  forwarders used by the scrubber backend
-
 /// \todo combine the multiple transactions into a single one
 void PrimaryLogScrub::submit_digest_fixes(const digests_fixes_t& fixes)
 {
-  num_digest_updates_pending += fixes.size();
+  // note: the following line was modified from '+=' to '=', as we should not
+  // encounter previous-chunk digest updates after starting a new chunk
+  num_digest_updates_pending = fixes.size();
   dout(10) << __func__
            << ": num_digest_updates_pending: " << num_digest_updates_pending
            << dendl;
@@ -99,6 +99,7 @@ void PrimaryLogScrub::submit_digest_fixes(const digests_fixes_t& fixes)
   }
 }
 
+//  a forwarder used by the scrubber backend
 
 void PrimaryLogScrub::add_to_stats(const object_stat_sum_t& stat)
 {
