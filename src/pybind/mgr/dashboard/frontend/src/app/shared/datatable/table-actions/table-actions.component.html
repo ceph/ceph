@@ -6,6 +6,7 @@
             [ngClass]="{'disabled': disableSelectionAction(currentAction)}"
             (click)="useClickAction(currentAction)"
             [routerLink]="useRouterLink(currentAction)"
+            data-testid="table-action-button"
             [preserveFragment]="currentAction.preserveFragment ? '' : null">
       <i [ngClass]="[currentAction.icon]"></i>
       <span>{{ currentAction.name }}</span>
