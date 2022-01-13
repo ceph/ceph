@@ -995,6 +995,18 @@ class CrashService(CephService):
 class CephfsMirrorService(CephService):
     TYPE = 'cephfs-mirror'
 
+    def config(self, spec: ServiceSpec) -> None:
+        # make sure mirroring module is enabled
+        mgr_map = self.mgr.get('mgr_map')
+        mod_name = 'mirroring'
+        if mod_name not in mgr_map.get('services', {}):
+            self.mgr.check_mon_command({
+                'prefix': 'mgr module enable',
+                'module': mod_name
+            })
+            # we shouldn't get here (mon will tell the mgr to respawn), but no
+            # harm done if we do.
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
