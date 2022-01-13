@@ -7446,6 +7446,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 			const UserPerm& perms, InodeRef *inp)
 {
   int issued = in->caps_issued();
+  union ceph_mds_request_args args;
+  bool kill_sguid = false;
+  int inode_drop = 0;
 
   ldout(cct, 10) << __func__ << " mask " << mask << " issued " <<
     ccap_string(issued) << dendl;
@@ -7459,6 +7462,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 			      perms)) {
     return -CEPHFS_EDQUOT;
   }
+
+  memset(&args, 0, sizeof(args));
 
   // make the change locally?
   if ((in->cap_dirtier_uid >= 0 && perms.uid() != in->cap_dirtier_uid) ||
@@ -7478,9 +7483,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
      * case later, we can build a more complex pipelined cap writeback
      * infrastructure...
      */
-    if (!mask)
-      mask |= CEPH_SETATTR_CTIME;
-    goto force_request;
+    mask |= CEPH_SETATTR_CTIME;
   }
 
   if (!mask) {
@@ -7499,11 +7502,19 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
-    bool kill_sguid = mask & (CEPH_SETATTR_SIZE|CEPH_SETATTR_KILL_SGUID);
+    kill_sguid = mask & (CEPH_SETATTR_SIZE|CEPH_SETATTR_KILL_SGUID);
 
     mask &= ~CEPH_SETATTR_KILL_SGUID;
+  } else if (mask & CEPH_SETATTR_SIZE) {
+    /* If we don't have Ax, then we must ask the server to clear them on truncate */
+    mask |= CEPH_SETATTR_KILL_SGUID;
+    inode_drop |= CEPH_CAP_AUTH_SHARED;
+  }
 
-    if (mask & CEPH_SETATTR_UID) {
+  if (mask & CEPH_SETATTR_UID) {
+    ldout(cct,10) << "changing uid to " << stx->stx_uid << dendl;
+
+    if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
@@ -7511,9 +7522,19 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
       kill_sguid = true;
-      ldout(cct,10) << "changing uid to " << stx->stx_uid << dendl;
+    } else if (!in->caps_issued_mask(CEPH_CAP_AUTH_SHARED) ||
+               in->uid != stx->stx_uid) {
+      args.setattr.uid = stx->stx_uid;
+      inode_drop |= CEPH_CAP_AUTH_SHARED;
+    } else {
+      mask &= ~CEPH_SETATTR_UID;
     }
-    if (mask & CEPH_SETATTR_GID) {
+  }
+
+  if (mask & CEPH_SETATTR_GID) {
+    ldout(cct,10) << "changing gid to " << stx->stx_gid << dendl;
+
+    if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
@@ -7521,57 +7542,147 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
       kill_sguid = true;
-      ldout(cct,10) << "changing gid to " << stx->stx_gid << dendl;
+    } else if (!in->caps_issued_mask(CEPH_CAP_AUTH_SHARED) ||
+               in->gid != stx->stx_gid) {
+      args.setattr.gid = stx->stx_gid;
+      inode_drop |= CEPH_CAP_AUTH_SHARED;
+    } else {
+      mask &= ~CEPH_SETATTR_GID;
     }
+  }
 
-    if (mask & CEPH_SETATTR_MODE) {
+  if (mask & CEPH_SETATTR_MODE) {
+    ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
+
+    if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->mode = (in->mode & ~07777) | (stx->stx_mode & 07777);
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
-      ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
-    } else if (kill_sguid && S_ISREG(in->mode) && (in->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
-      /* Must squash the any setuid/setgid bits with an ownership change */
-      in->mode &= ~(S_ISUID|S_ISGID);
-      in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
+    } else if (!in->caps_issued_mask(CEPH_CAP_AUTH_SHARED) ||
+               in->mode != stx->stx_mode) {
+      args.setattr.mode = stx->stx_mode;
+      inode_drop |= CEPH_CAP_AUTH_SHARED;
+    } else {
+      mask &= ~CEPH_SETATTR_MODE;
     }
+  } else if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL) &&
+             kill_sguid && S_ISREG(in->mode) &&
+	     (in->mode & (S_IXUSR|S_IXGRP|S_IXOTH))) {
+    /* Must squash the any setuid/setgid bits with an ownership change */
+    in->mode &= ~(S_ISUID|S_ISGID);
+    in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
+  }
 
-    if (mask & CEPH_SETATTR_BTIME) {
+  if (mask & CEPH_SETATTR_BTIME) {
+    ldout(cct,10) << "changing btime to " << in->btime << dendl;
+
+    if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->btime = utime_t(stx->stx_btime);
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_BTIME;
-      ldout(cct,10) << "changing btime to " << in->btime << dendl;
+    } else if (!in->caps_issued_mask(CEPH_CAP_AUTH_SHARED) ||
+               in->btime != utime_t(stx->stx_btime)) {
+      args.setattr.btime = utime_t(stx->stx_btime);
+      inode_drop |= CEPH_CAP_AUTH_SHARED;
+    } else {
+      mask &= ~CEPH_SETATTR_BTIME;
     }
-  } else if (mask & CEPH_SETATTR_SIZE) {
-    /* If we don't have Ax, then we must ask the server to clear them on truncate */
-    mask |= CEPH_SETATTR_KILL_SGUID;
   }
 
-  if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
-    if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME)) {
-      if (mask & CEPH_SETATTR_MTIME)
-        in->mtime = utime_t(stx->stx_mtime);
-      if (mask & CEPH_SETATTR_ATIME)
-        in->atime = utime_t(stx->stx_atime);
+  if (mask & CEPH_SETATTR_SIZE) {
+    if ((uint64_t)stx->stx_size >= mdsmap->get_max_filesize()) {
+      //too big!
+      ldout(cct,10) << "unable to set size to " << stx->stx_size << ". Too large!" << dendl;
+      return -CEPHFS_EFBIG;
+    }
+
+    ldout(cct,10) << "changing size to " << stx->stx_size << dendl;
+    if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL) &&
+        !(mask & CEPH_SETATTR_KILL_SGUID) &&
+        stx->stx_size >= in->size) {
+      if (stx->stx_size > in->size) {
+        in->size = in->reported_size = stx->stx_size;
+        in->cap_dirtier_uid = perms.uid();
+        in->cap_dirtier_gid = perms.gid();
+        in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+        mask &= ~(CEPH_SETATTR_SIZE);
+        mask |= CEPH_SETATTR_MTIME;
+      } else {
+        // ignore it when size doesn't change
+        mask &= ~(CEPH_SETATTR_SIZE);
+      }
+    } else {
+      args.setattr.size = stx->stx_size;
+      inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD |
+                    CEPH_CAP_FILE_WR;
+    }
+  }
+
+  if (mask & CEPH_SETATTR_MTIME) {
+    if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
+      in->mtime = utime_t(stx->stx_mtime);
       in->ctime = ceph_clock_now();
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->time_warp_seq++;
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
-      mask &= ~(CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
+      mask &= ~CEPH_SETATTR_MTIME;
+    } else if (in->caps_issued_mask(CEPH_CAP_FILE_WR) &&
+               utime_t(stx->stx_mtime) > in->mtime) {
+      in->mtime = utime_t(stx->stx_mtime);
+      in->ctime = ceph_clock_now();
+      in->cap_dirtier_uid = perms.uid();
+      in->cap_dirtier_gid = perms.gid();
+      in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+      mask &= ~CEPH_SETATTR_MTIME;
+    } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
+	       in->mtime != utime_t(stx->stx_mtime)) {
+      args.setattr.mtime = utime_t(stx->stx_mtime);
+      inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD |
+                    CEPH_CAP_FILE_WR;
+    } else {
+      mask &= ~CEPH_SETATTR_MTIME;
     }
   }
+
+  if (mask & CEPH_SETATTR_ATIME) {
+    if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
+      in->atime = utime_t(stx->stx_atime);
+      in->ctime = ceph_clock_now();
+      in->cap_dirtier_uid = perms.uid();
+      in->cap_dirtier_gid = perms.gid();
+      in->time_warp_seq++;
+      in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+      mask &= ~CEPH_SETATTR_ATIME;
+    } else if (in->caps_issued_mask(CEPH_CAP_FILE_WR) &&
+               utime_t(stx->stx_atime) > in->atime) {
+      in->atime = utime_t(stx->stx_atime);
+      in->ctime = ceph_clock_now();
+      in->cap_dirtier_uid = perms.uid();
+      in->cap_dirtier_gid = perms.gid();
+      in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+      mask &= ~CEPH_SETATTR_ATIME;
+    } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
+	       in->atime != utime_t(stx->stx_atime)) {
+      args.setattr.atime = utime_t(stx->stx_atime);
+      inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD |
+                    CEPH_CAP_FILE_WR;
+    } else {
+      mask &= ~CEPH_SETATTR_ATIME;
+    }
+  }
+
   if (!mask) {
     in->change_attr++;
     return 0;
   }
 
-force_request:
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETATTR);
 
   filepath path;
@@ -7580,52 +7691,9 @@ force_request:
   req->set_filepath(path);
   req->set_inode(in);
 
-  if (mask & CEPH_SETATTR_KILL_SGUID) {
-    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-  }
-  if (mask & CEPH_SETATTR_MODE) {
-    req->head.args.setattr.mode = stx->stx_mode;
-    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-    ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
-  }
-  if (mask & CEPH_SETATTR_UID) {
-    req->head.args.setattr.uid = stx->stx_uid;
-    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-    ldout(cct,10) << "changing uid to " << stx->stx_uid << dendl;
-  }
-  if (mask & CEPH_SETATTR_GID) {
-    req->head.args.setattr.gid = stx->stx_gid;
-    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-    ldout(cct,10) << "changing gid to " << stx->stx_gid << dendl;
-  }
-  if (mask & CEPH_SETATTR_BTIME) {
-    req->head.args.setattr.btime = utime_t(stx->stx_btime);
-    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-  }
-  if (mask & CEPH_SETATTR_MTIME) {
-    req->head.args.setattr.mtime = utime_t(stx->stx_mtime);
-    req->inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD |
-      CEPH_CAP_FILE_WR;
-  }
-  if (mask & CEPH_SETATTR_ATIME) {
-    req->head.args.setattr.atime = utime_t(stx->stx_atime);
-    req->inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD |
-      CEPH_CAP_FILE_WR;
-  }
-  if (mask & CEPH_SETATTR_SIZE) {
-    if ((uint64_t)stx->stx_size < mdsmap->get_max_filesize()) {
-      req->head.args.setattr.size = stx->stx_size;
-      ldout(cct,10) << "changing size to " << stx->stx_size << dendl;
-    } else { //too big!
-      put_request(req);
-      ldout(cct,10) << "unable to set size to " << stx->stx_size << ". Too large!" << dendl;
-      return -CEPHFS_EFBIG;
-    }
-    req->inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD |
-      CEPH_CAP_FILE_WR;
-  }
+  req->head.args = args;
+  req->inode_drop = inode_drop;
   req->head.args.setattr.mask = mask;
-
   req->regetattr_mask = mask;
 
   int res = make_request(req, perms, inp);
