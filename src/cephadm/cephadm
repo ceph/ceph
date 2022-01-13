@@ -5134,6 +5134,10 @@ def command_bootstrap(ctx):
         except Exception:
             logger.info('\nApplying %s to cluster failed!\n' % ctx.apply_spec)
 
+    # enable autotune for osd_memory_target
+    logger.info('Enabling autotune for osd_memory_target')
+    cli(['config', 'set', 'osd', 'osd_memory_target_autotune', 'true'])
+
     logger.info('You can access the Ceph CLI with:\n\n'
                 '\tsudo %s shell --fsid %s -c %s -k %s\n' % (
                     sys.argv[0],
