@@ -171,7 +171,7 @@ struct scrub_chunk_t {
 
   utime_t started{ceph_clock_now()};
 
-  std::map<hobject_t, data_omap_digests_t> missing_digest;
+  digests_fixes_t missing_digest;
 
   /// Map from object with errors to good peers
   std::map<hobject_t, std::list<pg_shard_t>> authoritative;
