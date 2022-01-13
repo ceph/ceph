@@ -104,6 +104,9 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
 
   int GetNumShardBits() const { return num_shard_bits_; }
 
+  virtual uint32_t get_bin_count() const = 0;
+  virtual void set_bin_count(uint32_t count) = 0;
+
   // PriCache
   virtual int64_t get_cache_bytes(PriorityCache::Priority pri) const {
     return cache_bytes[pri];
@@ -128,6 +131,42 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
   virtual void set_cache_ratio(double ratio) {
     cache_ratio = ratio;
   }
+    virtual uint64_t get_bins(PriorityCache::Priority pri) const {
+    if (pri > PriorityCache::Priority::PRI0 &&
+        pri < PriorityCache::Priority::LAST) {
+      return bins[pri];
+    }
+    return 0;
+  }
+  virtual void set_bins(PriorityCache::Priority pri, uint64_t end_bin) {
+    if (pri <= PriorityCache::Priority::PRI0 ||
+        pri >= PriorityCache::Priority::LAST) {
+      return;
+    }
+    bins[pri] = end_bin;
+    uint64_t max = 0;
+    for (int pri = 1; pri < PriorityCache::Priority::LAST; pri++) {
+      if (bins[pri] > max) {
+        max = bins[pri];
+      }
+    }
+    set_bin_count(max);
+  }
+  virtual void import_bins(const std::vector<uint64_t> &bins_v) {
+    uint64_t max = 0;
+    for (int pri = 1; pri < PriorityCache::Priority::LAST; pri++) {
+      unsigned i = (unsigned) pri - 1;
+      if (i < bins_v.size()) {
+        bins[pri] = bins_v[i];
+        if (bins[pri] > max) {
+          max = bins[pri];
+        }
+      } else {
+        bins[pri] = 0;
+      }
+    }
+    set_bin_count(max);
+  }
   virtual std::string get_cache_name() const = 0;
 
  private:
@@ -141,6 +180,7 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
     return (num_shard_bits_ > 0) ? (hash >> (32 - num_shard_bits_)) : 0;
   }
 
+  uint64_t bins[PriorityCache::Priority::LAST+1] = {0};
   int64_t cache_bytes[PriorityCache::Priority::LAST+1] = {0};
   double cache_ratio = 0;
 
