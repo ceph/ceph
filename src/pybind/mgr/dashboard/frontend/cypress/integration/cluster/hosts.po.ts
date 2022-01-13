@@ -131,7 +131,9 @@ export class HostsPageHelper extends PageHelper {
       this.getTableCell(this.columnIndex.hostname, hostname).click();
       this.clickActionButton('enter-maintenance');
 
-      cy.contains('cd-modal button', 'Continue').click();
+      cy.get('cd-modal').within(() => {
+        cy.contains('button', 'Continue').click();
+      });
 
       this.getTableCell(this.columnIndex.hostname, hostname)
         .parent()
@@ -182,7 +184,7 @@ export class HostsPageHelper extends PageHelper {
 
     this.clickTab('cd-host-details', hostname, 'Daemons');
     cy.get('cd-host-details').within(() => {
-      cy.wait(10000);
+      cy.wait(20000);
       this.expectTableCount('total', 0);
     });
   }
