@@ -1245,6 +1245,12 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: ms_inject_fixed_delay
+  type: float
+  level: dev
+  desc: Fixed delay to inject (seconds)
+  default: 0
+  with_legacy: true
 - name: ms_inject_delay_max
   type: float
   level: dev
