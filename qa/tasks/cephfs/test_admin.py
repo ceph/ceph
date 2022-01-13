@@ -1071,3 +1071,29 @@ class TestAdminCommandIdempotency(CephFSTestCase):
         p = self.fs.rm()
         self.assertIn("does not exist", p.stderr.getvalue())
         self.fs.remove_pools(data_pools)
+
+
+class TestAdminCommandDumpTree(CephFSTestCase):
+    """
+    Tests for administration command subtrees.
+    """
+
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 1
+
+    def test_dump_subtrees(self):
+        """
+        Dump all the subtrees to make sure the MDS daemon won't crash.
+        """
+
+        subtrees = self.fs.mds_asok(['get', 'subtrees'])
+        log.info(f"dumping {len(subtrees)} subtrees:")
+        for subtree in subtrees:
+            log.info(f"  subtree: '{subtree['dir']['path']}'")
+            self.fs.mds_asok(['dump', 'tree', subtree['dir']['path']])
+
+        log.info("dumping 2 special subtrees:")
+        log.info("  subtree: '/'")
+        self.fs.mds_asok(['dump', 'tree', '/'])
+        log.info("  subtree: '~mdsdir'")
+        self.fs.mds_asok(['dump', 'tree', '~mdsdir'])
