@@ -26,7 +26,7 @@ else()
       include)
   find_path(dpdk_common_INCLUDE_DIR rte_common.h
     HINTS
-      ENC DPDK_DIR
+      ENV DPDK_DIR
     PATH_SUFFIXES
       dpdk
       include)
