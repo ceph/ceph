@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "dbstore_mgr.h"
+#include "common/dbstore_log.h"
 
 /* Given a tenant, find and return the DBStore handle.
  * If not found and 'create' set to true, create one
