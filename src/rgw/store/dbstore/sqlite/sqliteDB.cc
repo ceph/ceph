@@ -275,6 +275,7 @@ enum GetObjectData {
   ObjDataInstance,
   ObjDataNS,
   ObjDataBucketName,
+  ObjDataID,
   MultipartPartStr,
   PartNum,
   Offset,
@@ -442,7 +443,7 @@ static int list_object(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt
   SQL_DECODE_BLOB_PARAM(dpp, stmt, ObjAttrs, op.obj.state.attrset, sdb);
   op.obj.head_size = sqlite3_column_int(stmt, HeadSize); 
   op.obj.max_head_size = sqlite3_column_int(stmt, MaxHeadSize); 
-  op.obj.prefix = (const char*)sqlite3_column_text(stmt, Prefix);
+  op.obj.obj_id = (const char*)sqlite3_column_text(stmt, Prefix);
   op.obj.tail_instance = (const char*)sqlite3_column_text(stmt, TailInstance);
   op.obj.head_placement_rule.name = (const char*)sqlite3_column_text(stmt, HeadPlacementRuleName);
   op.obj.head_placement_rule.storage_class = (const char*)sqlite3_column_text(stmt, HeadPlacementRuleStorageClass);
@@ -487,6 +488,7 @@ static int get_objectdata(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_s
   op.bucket.info.bucket.name = (const char*)sqlite3_column_text(stmt, ObjBucketName);
   op.obj.state.obj.key.instance = (const char*)sqlite3_column_text(stmt, ObjInstance);
   op.obj.state.obj.key.ns = (const char*)sqlite3_column_text(stmt, ObjNS);
+  op.obj.obj_id = (const char*)sqlite3_column_text(stmt, ObjDataID);
   op.obj_data.part_num = sqlite3_column_int(stmt, PartNum);
   op.obj_data.offset = sqlite3_column_int(stmt, Offset);
   op.obj_data.size = sqlite3_column_int(stmt, ObjDataSize);
@@ -1816,8 +1818,8 @@ int SQLPutObject::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.max_head_size.c_str(), sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.max_head_size, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.prefix.c_str(), sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.prefix.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.obj_id.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.tail_instance.c_str(), sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.tail_instance.c_str(), sdb);
@@ -2149,8 +2151,8 @@ int SQLUpdateObject::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
     SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.max_head_size.c_str(), sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.max_head_size, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.prefix.c_str(), sdb);
-    SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.prefix.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_id.c_str(), sdb);
+    SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.obj_id.c_str(), sdb);
 
     SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.tail_instance.c_str(), sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.tail_instance.c_str(), sdb);
@@ -2291,7 +2293,6 @@ int SQLPutObjectData::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *
   if (p_params.objectdata_table.empty()) {
     p_params.objectdata_table = getObjectDataTable(bucket_name);
   }
-  params->bucket_table = p_params.bucket_table;
   params->object_table = p_params.object_table;
   params->objectdata_table = p_params.objectdata_table;
   (void)createObjectDataTable(dpp, params);
@@ -2323,6 +2324,9 @@ int SQLPutObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.obj_id.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.part_num.c_str(), sdb);
 
@@ -2475,6 +2479,9 @@ int SQLGetObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance.c_str(), sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
 
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.obj_id.c_str(), sdb);
+
 out:
   return rc;
 }
@@ -2530,6 +2537,10 @@ int SQLDeleteObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance.c_str(), sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
+
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.obj_id.c_str(), sdb);
+
 out:
   return rc;
 }

@@ -29,9 +29,9 @@ namespace gtest {
 
       void SetUp() override {
         cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-            CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1)->get();
+            CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1);
         if (!db_type.compare("SQLite")) {
-          db = new SQLiteDB(tenant, cct);
+          db = new SQLiteDB(tenant, cct.get());
           ASSERT_TRUE(db != nullptr);
           ret = db->Initialize(logfile, loglevel);
           ASSERT_GE(ret, 0);
@@ -51,7 +51,7 @@ namespace gtest {
       int ret;
       string logfile = "rgw_dbstore_tests.log";
       int loglevel = 30;
-      CephContext *cct;
+      boost::intrusive_ptr<CephContext> cct;
   };
 }
 
