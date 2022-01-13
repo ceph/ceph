@@ -5,5 +5,5 @@ overrides:
         client mount timeout: 600
         debug ms: 1
         debug client: 20
-        rados mon op timeout: 15m
-        rados osd op timeout: 15m
+        rados mon op timeout: 900
+        rados osd op timeout: 900
