@@ -459,6 +459,16 @@ class TestFailover(CephFSTestCase):
         self.assertEqual(mds_0['gid'], self.fs.get_rank(rank=0)['gid'])
         self.fs.rank_freeze(False, rank=0)
 
+    def test_connect_bootstrapping(self):
+        self.config_set("mds", "mds_sleep_rank_change", 10000000.0)
+        self.config_set("mds", "mds_connect_bootstrapping", True)
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
+        self.fs.rank_fail(rank=0)
+        # rank 0 will get stuck in up:resolve, see https://tracker.ceph.com/issues/53194
+        self.fs.wait_for_daemons()
+
+
 class TestStandbyReplay(CephFSTestCase):
     CLIENTS_REQUIRED = 0
     MDSS_REQUIRED = 4
