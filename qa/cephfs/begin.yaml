@@ -54,3 +54,7 @@ tasks:
         - libuuid-devel
         - xfsprogs-devel
   - ceph:
+syslog:
+  ignorelist:
+    - WARNING*.*check_session_state
+    - WARNING*.*__ceph_remove_cap
