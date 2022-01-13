@@ -15,7 +15,6 @@
 #define FMT_HEADER_ONLY 1
 #include "fmt/format.h"
 #include <map>
-#include "dbstore_log.h"
 #include "rgw/rgw_sal.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_bucket.h"
@@ -651,7 +650,7 @@ class DBOp {
             params->lc_entry_table.c_str(),
             params->bucket_table.c_str());
 
-      ldout(params->cct, 0) << "Incorrect table type("<<type<<") specified" << dendl;
+      lsubdout(params->cct, rgw, 0) << "rgw dbstore: Incorrect table type("<<type<<") specified" << dendl;
 
       return NULL;
     }
@@ -1395,7 +1394,7 @@ class DB {
     lc_head_table(db_name+".lc_head.table"),
     lc_entry_table(db_name+".lc_entry.table"),
     cct(_cct),
-    dp(_cct, dout_subsys, "rgw DBStore backend: ")
+    dp(_cct, ceph_subsys_rgw, "rgw DBStore backend: ")
   {}
     /*	DB() {}*/
 
@@ -1406,7 +1405,7 @@ class DB {
     lc_head_table(db_name+".lc_head.table"),
     lc_entry_table(db_name+".lc_entry.table"),
     cct(_cct),
-    dp(_cct, dout_subsys, "rgw DBStore backend: ")
+    dp(_cct, ceph_subsys_rgw, "rgw DBStore backend: ")
   {}
     virtual	~DB() {}
 
