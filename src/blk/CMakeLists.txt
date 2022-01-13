@@ -35,7 +35,8 @@ if(HAVE_LIBAIO)
 endif(HAVE_LIBAIO)
 
 if(WITH_SPDK)
-  target_link_libraries(blk PRIVATE ${SPDK_LIBRARIES})
+  target_link_libraries(blk
+    PRIVATE spdk::spdk)
 endif()
 
 if(WITH_ZBD)
