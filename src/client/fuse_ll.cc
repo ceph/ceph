@@ -240,8 +240,8 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   if (r >= 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
-	fe.entry_timeout = cfuse->entry_timeout;
-	fe.attr_timeout = cfuse->attr_timeout;
+    fe.entry_timeout = cfuse->entry_timeout;
+    fe.attr_timeout = cfuse->attr_timeout;
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, get_sys_errno(-r));
