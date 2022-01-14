@@ -442,6 +442,24 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify_ack(
   });
 }
 
+// Defined here because there is a circular dependency between OpsExecuter and PG
+template <class Func>
+auto OpsExecuter::do_const_op(Func&& f) {
+  // TODO: pass backend as read-only
+  return std::forward<Func>(f)(pg->get_backend(), std::as_const(obc->obs));
+}
+
+// Defined here because there is a circular dependency between OpsExecuter and PG
+template <class Func>
+auto OpsExecuter::do_write_op(Func&& f, bool um) {
+  ++num_write;
+  if (!osd_op_params) {
+    osd_op_params.emplace();
+  }
+  user_modify = um;
+  return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
+}
+
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
 {
@@ -586,6 +604,14 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.omap_remove_range(os, osd_op, txn, delta_stats);
     }, true);
+  case CEPH_OSD_OP_OMAPRMKEYS:
+    /** TODO: Implement supports_omap()
+    if (!pg.get_pool().info.supports_omap()) {
+      return crimson::ct_error::operation_not_supported::make();
+    }*/
+    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
+      return backend.omap_remove_key(os, osd_op, txn);
+    }, true);
   case CEPH_OSD_OP_OMAPCLEAR:
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.omap_clear(os, osd_op, txn, *osd_op_params, delta_stats);
@@ -614,6 +640,17 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     throw std::runtime_error(
       fmt::format("op '{}' not supported", ceph_osd_op_name(op.op)));
   }
+}
+
+// Defined here because there is a circular dependency between OpsExecuter and PG
+uint32_t OpsExecuter::get_pool_stripe_width() const {
+  return pg->get_pool().info.get_stripe_width();
+}
+
+// Defined here because there is a circular dependency between OpsExecuter and PG
+version_t OpsExecuter::get_last_user_version() const
+{
+  return pg->get_last_user_version();
 }
 
 static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
