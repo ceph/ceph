@@ -795,49 +795,29 @@ private:
     uint64_t hit = 0;
   };
 
-  /**
-   * effort_t
-   *
-   * Count the number of extents involved in the effort and the total bytes of
-   * them.
-   *
-   * Each effort_t represents the effort of a set of extents involved in the
-   * transaction, classified by read, mutate, retire and allocate behaviors,
-   * see XXX_trans_efforts_t.
-   */
-  struct effort_t {
-    uint64_t extents = 0;
-    uint64_t bytes = 0;
-
-    void increment(uint64_t extent_len) {
-      ++extents;
-      bytes += extent_len;
-    }
-  };
-
   template <typename CounterT>
   using counter_by_extent_t = std::array<CounterT, EXTENT_TYPES_MAX>;
 
   struct invalid_trans_efforts_t {
-    effort_t read;
-    effort_t mutate;
+    io_stat_t read;
+    io_stat_t mutate;
     uint64_t mutate_delta_bytes = 0;
-    effort_t retire;
-    effort_t fresh;
-    effort_t fresh_ool_written;
+    io_stat_t retire;
+    io_stat_t fresh;
+    io_stat_t fresh_ool_written;
     counter_by_extent_t<uint64_t> num_trans_invalidated;
     uint64_t num_ool_records = 0;
     uint64_t ool_record_bytes = 0;
   };
 
   struct commit_trans_efforts_t {
-    counter_by_extent_t<effort_t> read_by_ext;
-    counter_by_extent_t<effort_t> mutate_by_ext;
+    counter_by_extent_t<io_stat_t> read_by_ext;
+    counter_by_extent_t<io_stat_t> mutate_by_ext;
     counter_by_extent_t<uint64_t> delta_bytes_by_ext;
-    counter_by_extent_t<effort_t> retire_by_ext;
-    counter_by_extent_t<effort_t> fresh_invalid_by_ext; // inline but is already invalid (retired)
-    counter_by_extent_t<effort_t> fresh_inline_by_ext;
-    counter_by_extent_t<effort_t> fresh_ool_by_ext;
+    counter_by_extent_t<io_stat_t> retire_by_ext;
+    counter_by_extent_t<io_stat_t> fresh_invalid_by_ext; // inline but is already invalid (retired)
+    counter_by_extent_t<io_stat_t> fresh_inline_by_ext;
+    counter_by_extent_t<io_stat_t> fresh_ool_by_ext;
     uint64_t num_trans = 0; // the number of inline records
     uint64_t num_ool_records = 0;
     uint64_t ool_record_padding_bytes = 0;
@@ -847,7 +827,7 @@ private:
   };
 
   struct success_read_trans_efforts_t {
-    effort_t read;
+    io_stat_t read;
     uint64_t num_trans = 0;
   };
 
