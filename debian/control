@@ -108,8 +108,6 @@ Build-Depends: automake,
                xmlstarlet <pkg.ceph.check>,
                nasm [amd64],
                zlib1g-dev,
-	       libarrow-dev (>= 4.0.0),
-	       libparquet-dev (>= 4.0.0),
 Standards-Version: 4.4.0
 
 Package: ceph
