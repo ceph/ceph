@@ -16,7 +16,7 @@ else
 fi
 
 # Copy Docker file into teuthology
-cp ../../Dockerfile teuthology/.
+cp ./Dockerfile teuthology/.
 
 # docker-compose
 docker-compose up --build
