@@ -351,6 +351,8 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
 
   user_id = cct->_conf->client_mount_uid;
   group_id = cct->_conf->client_mount_gid;
+  entry_timeout = cct->_conf->fuse_entry_timeout;
+  attr_timeout = cct->_conf->fuse_attr_timeout;
   fuse_default_permissions = cct->_conf.get_val<bool>(
     "fuse_default_permissions");
 
@@ -15621,6 +15623,8 @@ const char** Client::get_tracked_conf_keys() const
     "client_oc_max_dirty",
     "client_oc_target_dirty",
     "client_oc_max_dirty_age",
+    "fuse_entry_timeout",
+    "fuse_attr_timeout",
     NULL
   };
   return keys;
@@ -15638,6 +15642,12 @@ void Client::handle_conf_change(const ConfigProxy& conf,
     acl_type = NO_ACL;
     if (cct->_conf->client_acl_type == "posix_acl")
       acl_type = POSIX_ACL;
+  }
+  if (changed.count("fuse_entry_timeout")) {
+    entry_timeout = cct->_conf->fuse_entry_timeout;
+  }
+  if (changed.count("fuse_attr_timeout")) {
+    attr_timeout = cct->_conf->fuse_attr_timeout;
   }
   if (changed.count("client_oc_size")) {
     objectcacher->set_max_size(cct->_conf->client_oc_size);

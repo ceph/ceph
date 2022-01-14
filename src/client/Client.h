@@ -888,6 +888,8 @@ public:
   std::unique_ptr<MDSMap> mdsmap;
 
   bool fuse_default_permissions;
+  // entry_timeout,attr_timeout use for FUSE
+  int entry_timeout, attr_timeout;
 
 protected:
   /* Flags for check_caps() */
@@ -1478,7 +1480,6 @@ private:
 
   int user_id, group_id;
   int acl_type = NO_ACL;
-
   epoch_t cap_epoch_barrier = 0;
 
   // mds sessions

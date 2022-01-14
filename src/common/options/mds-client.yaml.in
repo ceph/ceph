@@ -390,6 +390,28 @@ options:
   default: true
   services:
   - mds_client
+- name: fuse_entry_timeout
+  type: int
+  level: advanced
+  desc: This will tell kernel how long could the dentry be cached in dcache, 
+    once enabled this should be set to a very large value.
+  default: 0
+  services:
+  - mds_client
+  flags:
+  - runtime
+  with_legacy: true
+- name: fuse_attr_timeout
+  type: int
+  level: advanced
+  desc: This will tell kernel how long could the inode attributes be cached in dcache, 
+    once enabled this should be set to a very large value.
+  default: 0
+  services:
+  - mds_client
+  flags:
+  - runtime
+  with_legacy: true
 - name: fuse_max_write
   type: size
   level: advanced

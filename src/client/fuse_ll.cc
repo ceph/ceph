@@ -206,6 +206,12 @@ static void get_fuse_groups(UserPerm& perms, fuse_req_t req)
   }
 }
 
+static void fuse_entry_param_init(struct fuse_entry_param* fe, CephFuse::Handle *cfuse)
+{
+  fe->entry_timeout = cfuse->client->entry_timeout;
+  fe->attr_timeout = cfuse->client->attr_timeout;
+}
+
 
 static CephFuse::Handle *fuse_ll_req_prepare(fuse_req_t req)
 {
@@ -234,10 +240,15 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   }
 
   memset(&fe, 0, sizeof(fe));
+  
   r = cfuse->client->ll_lookup(i1, name, &fe.attr, &i2, perms);
   if (r >= 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
+	
+    if(i2->caps_issued_mask(CEPH_CAP_ANY_SHARED, true)) {
+        fuse_entry_param_init(&fe, cfuse);
+    }
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, get_sys_errno(-r));
@@ -451,6 +462,7 @@ static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
   get_fuse_groups(perms, req);
 
   memset(&fe, 0, sizeof(fe));
+  fuse_entry_param_init(&fe, cfuse);
 
   int r = cfuse->client->ll_mknod(i1, name, mode, new_decode_dev(rdev),
 				  &fe.attr, &i2, perms);
@@ -476,6 +488,8 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   struct fuse_entry_param fe;
 
   memset(&fe, 0, sizeof(fe));
+  fuse_entry_param_init(&fe, cfuse);
+	
   UserPerm perm(ctx->uid, ctx->gid);
   get_fuse_groups(perm, req);
 #ifdef HAVE_SYS_SYNCFS
@@ -560,6 +574,7 @@ static void fuse_ll_symlink(fuse_req_t req, const char *existing,
   get_fuse_groups(perms, req);
 
   memset(&fe, 0, sizeof(fe));
+  fuse_entry_param_init(&fe, cfuse);
 
   int r = cfuse->client->ll_symlink(i1, name, existing, &fe.attr, &i2, perms);
   if (r == 0) {
@@ -606,6 +621,8 @@ static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
   struct fuse_entry_param fe;
 
   memset(&fe, 0, sizeof(fe));
+  fuse_entry_param_init(&fe, cfuse);
+	
   UserPerm perm(ctx->uid, ctx->gid);
   get_fuse_groups(perm, req);
   
