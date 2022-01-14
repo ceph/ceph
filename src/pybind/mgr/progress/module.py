@@ -450,6 +450,13 @@ class Module(MgrModule):
             'enabled',
             default=True,
             type='bool',
+        ),
+        Option(
+            'allow_pg_recovery_event',
+            default=False,
+            type='bool',
+            desc='allow the module to show pg recovery progress',
+            runtime=True
         )
     ]
 
@@ -476,6 +483,7 @@ class Module(MgrModule):
             self.max_completed_events = 0
             self.sleep_interval = 0
             self.enabled = True
+            self.allow_pg_recovery_event = False
 
     def config_notify(self):
         for opt in self.MODULE_OPTIONS:
@@ -718,7 +726,8 @@ class Module(MgrModule):
                 self._dirty = False
 
             if self.enabled:
-                self._process_osdmap()
+                if self.allow_pg_recovery_event:
+                    self._process_osdmap()
                 self._process_pg_summary()
 
             self._shutdown.wait(timeout=self.sleep_interval)
