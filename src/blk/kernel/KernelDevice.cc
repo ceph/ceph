@@ -20,12 +20,18 @@
 #include <fcntl.h>
 #include <sys/file.h>
 
+#include <boost/container/flat_map.hpp>
+#include <boost/lockfree/queue.hpp>
+
 #include "KernelDevice.h"
+#include "include/buffer_raw.h"
 #include "include/intarith.h"
 #include "include/types.h"
 #include "include/compat.h"
 #include "include/stringify.h"
+#include "include/str_map.h"
 #include "common/blkdev.h"
+#include "common/buffer_instrumentation.h"
 #include "common/errno.h"
 #if defined(__FreeBSD__)
 #include "bsm/audit_errno.h"
@@ -1041,6 +1047,165 @@ int KernelDevice::discard(uint64_t offset, uint64_t len)
   return r;
 }
 
+struct ExplicitHugePagePool {
+  using region_queue_t = boost::lockfree::queue<void*>;
+  using instrumented_raw = ceph::buffer_instrumentation::instrumented_raw<
+    BlockDevice::hugepaged_raw_marker_t>;
+
+  struct mmaped_buffer_raw : public instrumented_raw {
+    region_queue_t& region_q; // for recycling
+
+    mmaped_buffer_raw(void* mmaped_region, ExplicitHugePagePool& parent)
+      : instrumented_raw(static_cast<char*>(mmaped_region), parent.buffer_size),
+	region_q(parent.region_q) {
+      // the `mmaped_region` has been passed to `raw` as the buffer's `data`
+    }
+    ~mmaped_buffer_raw() override {
+      // don't delete nor unmmap; recycle the region instead
+      region_q.push(data);
+    }
+    raw* clone_empty() override {
+      // the entire cloning facility is used solely by the dev-only MemDB.
+      // see: https://github.com/ceph/ceph/pull/36282
+      ceph_abort_msg("this should be never called on this path!");
+    }
+  };
+
+  ExplicitHugePagePool(const size_t buffer_size, size_t buffers_in_pool)
+    : buffer_size(buffer_size), region_q(buffers_in_pool) {
+    while (buffers_in_pool--) {
+      void* const mmaped_region = ::mmap(
+        nullptr,
+        buffer_size,
+        PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB,
+        -1,
+        0);
+      if (mmaped_region == MAP_FAILED) {
+        ceph_abort("can't allocate huge buffer;"
+                   " /proc/sys/vm/nr_hugepages misconfigured?");
+      } else {
+        region_q.push(mmaped_region);
+      }
+    }
+  }
+  ~ExplicitHugePagePool() {
+    void* mmaped_region;
+    while (region_q.pop(mmaped_region)) {
+      ::munmap(mmaped_region, buffer_size);
+    }
+  }
+
+  ceph::unique_leakable_ptr<buffer::raw> try_create() {
+    if (void* mmaped_region; region_q.pop(mmaped_region)) {
+      return ceph::unique_leakable_ptr<buffer::raw> {
+	new mmaped_buffer_raw(mmaped_region, *this)
+      };
+    } else {
+      // oops, empty queue.
+      return nullptr;
+    }
+  }
+
+  size_t get_buffer_size() const {
+    return buffer_size;
+  }
+
+private:
+  const size_t buffer_size;
+  region_queue_t region_q;
+};
+
+struct HugePagePoolOfPools {
+  HugePagePoolOfPools(const std::map<size_t, size_t> conf)
+    : pools(conf.size(), [conf] (size_t index, auto emplacer) {
+        ceph_assert(index < conf.size());
+        // it could be replaced with a state-mutating lambda and
+        // `conf::erase()` but performance is not a concern here.
+        const auto [buffer_size, buffers_in_pool] =
+          *std::next(std::begin(conf), index);
+        emplacer.emplace(buffer_size, buffers_in_pool);
+      }) {
+  }
+
+  ceph::unique_leakable_ptr<buffer::raw> try_create(const size_t size) {
+    // thankfully to `conf` being a `std::map` we store the pools
+    // sorted by buffer sizes. this would allow to clamp to log(n)
+    // but I doubt admins want to have dozens of accelerated buffer
+    // size. let's keep this simple for now.
+    if (auto iter = std::find_if(std::begin(pools), std::end(pools),
+                                 [size] (const auto& pool) {
+                                   return size == pool.get_buffer_size();
+                                 });
+        iter != std::end(pools)) {
+      return iter->try_create();
+    }
+    return nullptr;
+  }
+
+  static HugePagePoolOfPools from_desc(const std::string& conf);
+
+private:
+  // let's have some space inside (for 2 MB and 4 MB perhaps?)
+  // NOTE: we need tiny_vector as the boost::lockfree queue inside
+  // pool is not-movable.
+  ceph::containers::tiny_vector<ExplicitHugePagePool, 2> pools;
+};
+
+
+HugePagePoolOfPools HugePagePoolOfPools::from_desc(const std::string& desc) {
+  std::map<size_t, size_t> conf; // buffer_size -> buffers_in_pool
+  std::map<std::string, std::string> exploded_str_conf;
+  get_str_map(desc, &exploded_str_conf);
+  for (const auto& [buffer_size_s, buffers_in_pool_s] : exploded_str_conf) {
+    size_t buffer_size, buffers_in_pool;
+    if (sscanf(buffer_size_s.c_str(), "%zu", &buffer_size) != 1) {
+      ceph_abort("can't parse a key in the configuration");
+    }
+    if (sscanf(buffers_in_pool_s.c_str(), "%zu", &buffers_in_pool) != 1) {
+      ceph_abort("can't parse a value in the configuration");
+    }
+    conf[buffer_size] = buffers_in_pool;
+  }
+  return HugePagePoolOfPools{std::move(conf)};
+}
+
+// create a buffer basing on user-configurable. it's intended to make
+// our buffers THP-able.
+ceph::unique_leakable_ptr<buffer::raw> KernelDevice::create_custom_aligned(
+  const size_t len,
+  IOContext* const ioc) const
+{
+  // just to preserve the logic of create_small_page_aligned().
+  if (len < CEPH_PAGE_SIZE) {
+    return ceph::buffer::create_small_page_aligned(len);
+  } else {
+    static HugePagePoolOfPools hp_pools = HugePagePoolOfPools::from_desc(
+      cct->_conf.get_val<std::string>("bdev_read_preallocated_huge_buffers")
+    );
+    if (auto lucky_raw = hp_pools.try_create(len); lucky_raw) {
+      dout(20) << __func__ << " allocated from huge pool"
+	       << " lucky_raw.data=" << (void*)lucky_raw->get_data()
+	       << " bdev_read_preallocated_huge_buffers="
+	       << cct->_conf.get_val<std::string>("bdev_read_preallocated_huge_buffers")
+	       << dendl;
+      ioc->flags |= IOContext::FLAG_DONT_CACHE;
+      return lucky_raw;
+    } else {
+      // fallthrough due to empty buffer pool. this can happen also
+      // when the configurable was explicitly set to 0.
+      dout(20) << __func__ << " cannot allocate from huge pool"
+               << dendl;
+    }
+  }
+  const size_t custom_alignment = cct->_conf->bdev_read_buffer_alignment;
+  dout(20) << __func__ << " with the custom alignment;"
+           << " len=" << len
+           << " custom_alignment=" << custom_alignment
+           << dendl;
+  return ceph::buffer::create_aligned(len, custom_alignment);
+}
+
 int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc,
 		      bool buffered)
@@ -1054,7 +1219,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 
   auto start1 = mono_clock::now();
 
-  auto p = ceph::buffer::ptr_node::create(ceph::buffer::create_small_page_aligned(len));
+  auto p = ceph::buffer::ptr_node::create(create_custom_aligned(len, ioc));
   int r = ::pread(choose_fd(buffered,  WRITE_LIFE_NOT_SET),
 		  p->c_str(), len, off);
   auto age = cct->_conf->bdev_debug_aio_log_age;
@@ -1106,7 +1271,7 @@ int KernelDevice::aio_read(
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     aio.bl.push_back(
-      ceph::buffer::ptr_node::create(ceph::buffer::create_small_page_aligned(len)));
+      ceph::buffer::ptr_node::create(create_custom_aligned(len, ioc)));
     aio.bl.prepare_iov(&aio.iov);
     aio.preadv(off, len);
     dout(30) << aio << dendl;

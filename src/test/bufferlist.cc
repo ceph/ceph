@@ -29,6 +29,7 @@
 #include "include/utime.h"
 #include "include/coredumpctl.h"
 #include "include/encoding.h"
+#include "common/buffer_instrumentation.h"
 #include "common/environment.h"
 #include "common/Clock.h"
 #include "common/safe_io.h"
@@ -47,11 +48,7 @@ using namespace std;
 
 static char cmd[128];
 
-struct instrumented_bptr : public ceph::buffer::ptr {
-  const ceph::buffer::raw* get_raw() const {
-    return _raw;
-  }
-};
+using ceph::buffer_instrumentation::instrumented_bptr;
 
 TEST(Buffer, constructors) {
   unsigned len = 17;
