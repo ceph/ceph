@@ -212,7 +212,7 @@ void Cache::register_metrics()
           {
             sm::make_counter(
               "invalidated_extents",
-              efforts.read.extents,
+              efforts.read.num,
               sm::description("extents of invalidated transactions"),
               {src_label, read_effort_label}
             ),
@@ -229,7 +229,7 @@ void Cache::register_metrics()
 
       // non READ invalidated efforts
       for (auto& effort_name : invalidated_effort_names) {
-        auto& effort = [&effort_name, &efforts]() -> effort_t& {
+        auto& effort = [&effort_name, &efforts]() -> io_stat_t& {
           if (effort_name == "READ") {
             return efforts.read;
           } else if (effort_name == "MUTATE") {
@@ -248,7 +248,7 @@ void Cache::register_metrics()
           {
             sm::make_counter(
               "invalidated_extents",
-              effort.extents,
+              effort.num,
               sm::description("extents of invalidated transactions"),
               {src_label, effort_label(effort_name)}
             ),
@@ -346,7 +346,7 @@ void Cache::register_metrics()
       );
       for (auto& effort_name : committed_effort_names) {
         auto& effort_by_ext = [&efforts, &effort_name]()
-            -> counter_by_extent_t<effort_t>& {
+            -> counter_by_extent_t<io_stat_t>& {
           if (effort_name == "READ") {
             return efforts.read_by_ext;
           } else if (effort_name == "MUTATE") {
@@ -369,7 +369,7 @@ void Cache::register_metrics()
             {
               sm::make_counter(
                 "committed_extents",
-                effort.extents,
+                effort.num,
                 sm::description("extents of committed transactions"),
                 {src_label, effort_label(effort_name), ext_label}
               ),
@@ -412,7 +412,7 @@ void Cache::register_metrics()
         ),
         sm::make_counter(
           "successful_read_extents",
-          stats.success_read_efforts.read.extents,
+          stats.success_read_efforts.read.num,
           sm::description("extents of successful read transactions")
         ),
         sm::make_counter(
@@ -762,33 +762,35 @@ void Cache::mark_transaction_conflicted(
                              conflicting_extent.get_type());
   ++counter;
 
-  efforts.read.extents += t.read_set.size();
+  io_stat_t read_stat;
   for (auto &i: t.read_set) {
-    efforts.read.bytes += i.ref->get_length();
+    read_stat.increment(i.ref->get_length());
   }
+  efforts.read.increment_stat(read_stat);
 
   if (t.get_src() != Transaction::src_t::READ) {
-    efforts.retire.extents += t.retired_set.size();
+    io_stat_t retire_stat;
     for (auto &i: t.retired_set) {
-      efforts.retire.bytes += i->get_length();
+      retire_stat.increment(i->get_length());
     }
+    efforts.retire.increment_stat(retire_stat);
 
-    auto& fresh_stats = t.get_fresh_block_stats();
-    efforts.fresh.extents += fresh_stats.num;
-    efforts.fresh.bytes += fresh_stats.bytes;
+    auto& fresh_stat = t.get_fresh_block_stats();
+    efforts.fresh.increment_stat(fresh_stat);
 
+    io_stat_t delta_stat;
     for (auto &i: t.mutated_block_list) {
       if (!i->is_valid()) {
         continue;
       }
       DEBUGT("was mutating extent: {}", t, *i);
       efforts.mutate.increment(i->get_length());
-      efforts.mutate_delta_bytes += i->get_delta().length();
+      delta_stat.increment(i->get_delta().length());
     }
+    efforts.mutate_delta_bytes += delta_stat.bytes;
 
     auto& ool_stats = t.get_ool_write_stats();
-    efforts.fresh_ool_written.extents += ool_stats.extents.num;
-    efforts.fresh_ool_written.bytes += ool_stats.extents.bytes;
+    efforts.fresh_ool_written.increment_stat(ool_stats.extents);
     efforts.num_ool_records += ool_stats.num_records;
     efforts.ool_record_bytes +=
       (ool_stats.header_bytes + ool_stats.data_bytes);
@@ -823,16 +825,17 @@ void Cache::on_transaction_destruct(Transaction& t)
       t.conflicted == false &&
       !t.is_weak()) {
     DEBUGT("read is successful", t);
-    ++stats.success_read_efforts.num_trans;
-
-    auto& effort = stats.success_read_efforts.read;
-    effort.extents += t.read_set.size();
+    io_stat_t read_stat;
     for (auto &i: t.read_set) {
-      effort.bytes += i.ref->get_length();
+      read_stat.increment(i.ref->get_length());
     }
+
+    ++stats.success_read_efforts.num_trans;
+    stats.success_read_efforts.read.increment_stat(read_stat);
+
     // read transaction won't have non-read efforts
     assert(t.retired_set.empty());
-    assert(t.get_fresh_block_stats().num == 0);
+    assert(t.get_fresh_block_stats().is_clear());
     assert(t.mutated_block_list.empty());
     assert(t.onode_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
