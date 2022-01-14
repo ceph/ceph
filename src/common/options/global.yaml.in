@@ -3915,6 +3915,31 @@ options:
   level: advanced
   default: 4_K
   with_legacy: true
+- name: bdev_read_buffer_alignment
+  type: size
+  level: advanced
+  default: 4_K
+  with_legacy: true
+- name: bdev_read_preallocated_huge_buffers
+  type: str
+  level: advanced
+  desc: description of pools arrangement for huge page-based read buffers
+  long_desc: Arrangement of preallocated, huge pages-based pools for reading
+    from a KernelDevice. Applied to minimize size of scatter-gather lists
+    sent to NICs. Targets really  big buffers (>= 2 or 4 MBs).
+    Keep in mind the system must be configured accordingly (see /proc/sys/vm/nr_hugepages).
+    Otherwise the OSD wil fail early.
+    Beware BlueStore, by default, stores large chunks across many smaller blobs.
+    Increasing bluestore_max_blob_size changes that, and thus allows the data to
+    be read back into small number of huge page-backed buffers.
+  fmt_desc: List of key=value pairs delimited by comma, semicolon or tab.
+    key specifies the targeted read size and must be expressed in bytes.
+    value specifies the number of preallocated buffers.
+    For instance, to preallocate 64 buffers that will be used to serve
+    2 MB-sized read requests and 128 for 4 MB, someone needs to set
+    "2097152=64,4194304=128".
+  see_also:
+  - bluestore_max_blob_size
 - name: bdev_debug_aio
   type: bool
   level: dev
