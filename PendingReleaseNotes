@@ -47,6 +47,17 @@
 * MDS upgrades no longer require stopping all standby MDS daemons before
   upgrading the sole active MDS for a file system.
 
+* Parquet implementation is about accessing columnar objects(Parquet format) 
+  using s3select queries.
+  The s3select-engine contains a Parquet-reader(apache/arrow) that enables access
+  to specific columns according to query, which saves a lot of IOPS.
+  The s3select-engine is using (call-back) GetObj-RangeScan to access these types 
+  of objects.
+  The Parquet object is identified by its name(*.parquet) and magic-number exists 
+  in objects. thus, upon sending s3select query, there are 2 main flows, one 
+  for CSV the other for Parquet format.
+  RGW chooses the flow according the object name.
+
 * RGW: RGW now supports rate limiting by user and/or by bucket.
   With this feature it is possible to limit user and/or bucket, the total operations and/or
   bytes per minute can be delivered.
