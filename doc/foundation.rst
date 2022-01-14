@@ -52,7 +52,6 @@ General
 * `ISS <http://iss-integration.com/>`_
 * `Linode <https://linode.com/>`_
 * `OSNexus <https://osnexus.com/>`_
-* `QCT <https://www.qct.io/>`_
 * `SinoRail <http://www.sinorail.com/>`_
 * `Vexxhost <https://vexxhost.com>`_
 
