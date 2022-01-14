@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:latest
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-q", "-d", "paddles", "-U", "admin" ]
+      timeout: 5s
+      interval: 10s
+      retries: 2
+    environment:
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=password
+      - APP_DB_USER=admin
+      - APP_DB_PASS=password
+      - APP_DB_NAME=paddles
+    volumes:
+      - ./db:/docker-entrypoint-initdb.d/
+    ports:
+      - 5432:5432
+  paddles:
+    build: ./paddles
+    environment: 
+      PADDLES_SERVER_HOST: 0.0.0.0
+      PADDLES_SQLALCHEMY_URL: postgresql+psycopg2://admin:password@postgres:5432/paddles
+    depends_on:
+        postgres:
+            condition: service_healthy
+    links:
+        - postgres
+    healthcheck:
+        test: ["CMD", "curl", "-f", "http://0.0.0.0:8080"]
+        timeout: 5s
+        interval: 10s
+        retries: 2
+    ports: 
+        - 8080:8080
+  pulpito:
+    image: quay.io/ceph-infra/pulpito
+    environment:
+      PULPITO_PADDLES_ADDRESS: http://paddles:8080
+    depends_on:
+        paddles:
+            condition: service_healthy
+    links:
+        - paddles
+    healthcheck:
+        test: ["CMD", "curl", "-f", "http://0.0.0.0:8081"]
+        timeout: 5s
+        interval: 10s
+        retries: 2
+    ports:
+        - 8081:8081
+  beanstalk:
+        build: ../../beanstalk/alpine
+        depends_on:
+            pulpito:
+                condition: service_healthy
+        ports:
+            - "11300:11300"
+  teuthology:
+    build: ./teuthology
+    depends_on:
+        pulpito:
+            condition: service_healthy
+    links:
+        - paddles
+        - beanstalk
