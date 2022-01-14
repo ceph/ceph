@@ -3,5 +3,5 @@ tasks:
     host.a:
       - ceph fs dump
       - ceph --format=json fs dump | jq -e ".filesystems | length == 1"
-      - ceph --format=json mds versions | jq -e ". | add == 4"
+      - while ! ceph --format=json mds versions | jq -e ". | add == 4"; do sleep 1; done
 - fs.pre_upgrade_save:
