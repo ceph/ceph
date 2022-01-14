@@ -530,6 +530,26 @@ CSV parsing behavior
 |                                 | tag             | "**IGNORE**" value means to skip the first line                       |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+       
 
+Parquet format processing
+-------------------------
+
+    | Parquet implementation is about accessing columnar objects(Parquet format) using s3select queries
+    | The s3select-engine contains a Parquet-reader(apache/arrow) that enables access
+    | to specific columns according to query, which saves a lot of IOPS.
+    | The s3select-engine is using (call-back) GetObj-RangeScan to access these types 
+    | of objects.
+    | The Parquet object is identified by its name(\*.parquet) and magic-number exists 
+    | in objects. thus, upon sending s3select query, there are 2 main flows, one 
+    | for CSV the other for Parquet format.
+    | RGW chooses the flow according the object name.
+    |
+    | upon Parquet processing commencing, the Parquet reader (part of s3select-engine) is taking charge of the flow
+    | it calls (using RGW call back) to GetObject-rangeScan.
+    | the rangeScan results return to send_response_data, and back to caller(parquet reader), back to s3select-engine.
+    | this flow repeats until end-of-query.
+    |
+    | the s3select repo contains testing for parquet flow.
+    | per each query executed on CSV-object the framework is also executing the same query on Parquet-object(that is generated from CSV), the framework validates identical results.
 
 BOTO3
 -----
