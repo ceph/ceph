@@ -3,12 +3,12 @@ if(NOT GPERF)
   message(FATAL_ERROR "Can't find gperf")
 endif()
 
-find_package(Arrow QUIET)
-if(Arrow_FOUND)
+if(WITH_RADOSGW_SELECT_PARQUET)
+  find_package(Arrow QUIET REQUIRED)
   set(ARROW_LIBRARIES "-larrow -lparquet")
   add_definitions(-D_ARROW_EXIST)
   message("-- arrow is installed, radosgw/s3select-op is able to process parquet objects")
-endif()
+endif(WITH_RADOSGW_SELECT_PARQUET)
 
 function(gperf_generate input output)
   add_custom_command(

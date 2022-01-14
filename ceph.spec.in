@@ -24,7 +24,6 @@
 %bcond_with zbd
 %bcond_with cmake_verbose_logging
 %bcond_without ceph_test_package
-%bcond_without arrow_parquet
 %ifarch s390
 %bcond_with tcmalloc
 %else
@@ -233,10 +232,6 @@ BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	nasm
 BuildRequires:	lua-devel
-%if 0%{with arrow_parquet}
-BuildRequires:	arrow-devel >= 4.0.0
-BuildRequires:	parquet-devel
-%endif
 %if 0%{with seastar} || 0%{with jaeger}
 BuildRequires:  yaml-cpp-devel >= 0.6
 %endif
