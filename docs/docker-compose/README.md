@@ -15,12 +15,13 @@ README file. An easy way to do this is to
 ssh into teuthology.front.sepia.com and you will
 find the file in `/etc/teuthology.yaml`. Next,
 copy and paste the file to your local machine
-and edit (lock_server, results_server, results_ui_server) to:
+and edit (lock_server, results_server, results_ui_server, queue_host) to:
 
 ```bash
 lock_server: http://paddles:8080
 results_server: http://paddles:8080
 results_ui_server: http://pulpito:8081/
+queue_host: beanstalk
 ```
 
 Next, add these lines to your `.teuthology.yaml`:
@@ -153,5 +154,5 @@ If the test-node is locked after adding it to paddles you can run this command t
 You can now test out your set up by running the dispatcher:
 
 ```bash
-./virtualenv/bin/teuthology-dispatcher -v --archive-dir ../archive_dir  --log-dir log --machine-type smithi
+./virtualenv/bin/teuthology-dispatcher -v --archive-dir ../archive_dir  --log-dir log --tube smithi
 ```
