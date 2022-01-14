@@ -87,10 +87,11 @@
 
   https://docs.ceph.com/en/latest/rados/operations/placement-groups/
 
-* The ``ceph pg dump`` command now prints two additional columns:
+* The ``ceph pg dump`` command now prints three additional columns:
   `LAST_SCRUB_DURATION` shows the duration (in seconds) of the last completed scrub;
   `SCRUB_SCHEDULING` conveys whether a PG is scheduled to be scrubbed at a specified
-  time, queued for scrubbing, or being scrubbed.
+  time, queued for scrubbing, or being scrubbed;
+  `OBJECTS_SCRUBBED` shows the number of objects scrubbed in a PG after scrub begins.
 
 * A health warning will now be reported if the ``require-osd-release`` flag is not
   set to the appropriate release after a cluster upgrade.
