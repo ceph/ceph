@@ -1,15 +1,12 @@
 #!/bin/bash
+# Clone paddles and teuthology
+
 git clone https://github.com/ceph/paddles.git
 cd paddles
-git fetch origin pull/94/head:wip-amathuria-removing-beanstalkd
-git checkout wip-amathuria-removing-beanstalkd
 cd ../
 git clone https://github.com/ceph/teuthology.git
-cd teuthology
-git fetch origin pull/1650/head:wip-amathuria-replace-beanstalkd-paddles
-git fetch origin pull/94/head:wip-amathuria-removing-beanstalkd
-git checkout wip-amathuria-replace-beanstalkd-paddles
-cd ..
+
+# Check for .teuthology.yaml file and copy it to teuthology
 if [ -f ".teuthology.yaml" ]; 
 then
     cp .teuthology.yaml teuthology/.
@@ -18,6 +15,8 @@ else
     exit 1
 fi
 
-# until the branch we check out above has a Dockerfile of its own
+# Copy Docker file into teuthology
 cp ../../Dockerfile teuthology/.
+
+# docker-compose
 docker-compose up --build

@@ -51,13 +51,6 @@ services:
         retries: 2
     ports:
         - 8081:8081
-  teuthology:
-    build: ./teuthology
-    depends_on:
-        pulpito:
-            condition: service_healthy
-    links:
-        - paddles
   beanstalk:
         build: ../../beanstalk/alpine
         depends_on:
@@ -65,3 +58,11 @@ services:
                 condition: service_healthy
         ports:
             - "11300:11300"
+  teuthology:
+    build: ./teuthology
+    depends_on:
+        pulpito:
+            condition: service_healthy
+    links:
+        - paddles
+        - beanstalk
