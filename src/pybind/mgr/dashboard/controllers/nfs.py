@@ -96,7 +96,7 @@ class NFSGanesha(RESTController):
         status = {'available': True, 'message': None}
         try:
             mgr.remote('nfs', 'cluster_ls')
-        except ImportError as error:
+        except (ImportError, RuntimeError) as error:
             logger.exception(error)
             status['available'] = False
             status['message'] = str(error)  # type: ignore
