@@ -5,7 +5,12 @@ COPY .teuthology.yaml ./root
 WORKDIR /teuthology
 RUN chmod +x /teuthology/bootstrap && \
     mkdir ../archive_dir && \
-    mkdir log
+    mkdir log && \
+    mkdir $HOME/.ssh && \
+    touch $HOME/.ssh/id_ed25519 && \
+    chmod 600 $HOME/.ssh/id_ed25519 && \
+    echo "StrictHostKeyChecking=no" > $HOME/.ssh/config && \
+    echo "UserKnownHostsFile=/dev/null" >> $HOME/.ssh/config
 RUN apt-get update && \
     apt-get install -y \
     git \
@@ -23,7 +28,8 @@ RUN apt-get update && \
     lsb-release && \
     apt-get clean all
 RUN ./bootstrap
-CMD ./virtualenv/bin/teuthology-suite \
+CMD echo "$SSH_PRIVKEY" > $HOME/.ssh/id_ed25519 && \
+    ./virtualenv/bin/teuthology-suite \
     -v --ceph-repo https://github.com/ceph/ceph.git \
     --suite-repo https://github.com/ceph/ceph.git \
     -c master -m testnode --subset 9000/100000 --limit 1 \
