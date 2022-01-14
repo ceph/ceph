@@ -19,6 +19,28 @@ namespace crimson::os::seastore {
 class SeaStore;
 class Transaction;
 
+struct io_stat_t {
+  uint64_t num = 0;
+  uint64_t bytes = 0;
+
+  bool is_clear() const {
+    return (num == 0 && bytes == 0);
+  }
+
+  void increment(uint64_t _bytes) {
+    ++num;
+    bytes += _bytes;
+  }
+
+  void increment_stat(const io_stat_t& stat) {
+    num += stat.num;
+    bytes += stat.bytes;
+  }
+};
+inline std::ostream& operator<<(std::ostream& out, const io_stat_t& stat) {
+  return out << stat.num << "(" << stat.bytes << "B)";
+}
+
 /**
  * Transaction
  *
@@ -100,8 +122,7 @@ public:
       offset += ref->get_length();
       inline_block_list.push_back(ref);
     }
-    ++fresh_block_stats.num;
-    fresh_block_stats.bytes += ref->get_length();
+    fresh_block_stats.increment(ref->get_length());
     SUBTRACET(seastore_tm, "adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
@@ -188,14 +209,6 @@ public:
     std::for_each(inline_block_list.begin(), inline_block_list.end(), f);
   }
 
-  struct io_stat_t {
-    uint64_t num = 0;
-    uint64_t bytes = 0;
-
-    bool is_clear() const {
-      return (num == 0 && bytes == 0);
-    }
-  };
   const io_stat_t& get_fresh_block_stats() const {
     return fresh_block_stats;
   }
