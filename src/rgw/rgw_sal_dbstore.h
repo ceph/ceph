@@ -438,7 +438,7 @@ protected:
       /* XXX: to be removed. Till Dan's patch comes, a placeholder
        * for RGWObjState
        */
-      RGWObjState* state;
+      RGWObjState state;
 
     public:
       struct DBReadOp : public ReadOp {
@@ -475,13 +475,13 @@ protected:
       DBObject(DBStore *_st, const rgw_obj_key& _k)
         : Object(_k),
         store(_st),
-        acls() {
-        }
+        acls() {}
+
       DBObject(DBStore *_st, const rgw_obj_key& _k, Bucket* _b)
         : Object(_k, _b),
         store(_st),
-        acls() {
-        }
+        acls() {}
+
       DBObject(DBObject& _o) = default;
 
       virtual int delete_object(const DoutPrefixProvider* dpp,

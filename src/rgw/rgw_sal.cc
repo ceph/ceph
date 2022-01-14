@@ -92,6 +92,7 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     user->get_info().user_email = "tester@ceph.com";
     RGWAccessKey k1("0555b35654ad1656d804", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==");
     user->get_info().access_keys["0555b35654ad1656d804"] = k1;
+    user->get_info().max_buckets = RGW_DEFAULT_MAX_BUCKETS;
 
     int r = user->store_user(dpp, null_yield, true);
     if (r < 0) {

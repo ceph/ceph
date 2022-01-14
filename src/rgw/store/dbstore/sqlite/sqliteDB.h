@@ -13,7 +13,7 @@
 using namespace std;
 using namespace rgw::store;
 
-class SQLiteDB : public DB, public DBOp{
+class SQLiteDB : public DB, virtual public DBOp {
   private:
     sqlite3_mutex *mutex = NULL;
 
