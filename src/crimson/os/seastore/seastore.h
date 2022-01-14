@@ -139,6 +139,10 @@ public:
     CollectionRef ch,
     ceph::os::Transaction&& txn) final;
 
+  /* Note, flush() machinery must go through the same pipeline
+   * stages and locks as do_transaction. */
+  seastar::future<> flush(CollectionRef ch) final;
+
   seastar::future<OmapIteratorRef> get_omap_iterator(
     CollectionRef ch,
     const ghobject_t& oid) final;
