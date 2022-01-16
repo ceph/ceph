@@ -5650,6 +5650,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_DELETE_MULTI_OBJ:
         case RGW_OP_ADMIN_SET_METADATA:
         case RGW_OP_SYNC_DATALOG_NOTIFY:
+        case RGW_OP_SYNC_DATALOG_NOTIFY2:
         case RGW_OP_SYNC_MDLOG_NOTIFY:
         case RGW_OP_PERIOD_POST:
         case RGW_OP_SET_BUCKET_WEBSITE:
@@ -5673,7 +5674,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
 	case RGW_OP_GET_OBJ://s3select its post-method(payload contain the query) , the request is get-object
           break;
         default:
-          ldpp_dout(s, 10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
+          ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;
           throw -ERR_NOT_IMPLEMENTED;
       }
 
