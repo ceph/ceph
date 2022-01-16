@@ -290,6 +290,7 @@ public:
   const char* name() const override {
     return "datalog_notify2";
   }
+  RGWOpType get_type() override { return RGW_OP_SYNC_DATALOG_NOTIFY2; }
 };
 
 class RGWOp_DATALog_Delete : public RGWRESTOp {
