@@ -183,16 +183,6 @@ static RGWRESTMgr *rest_filter(rgw::sal::Store* store, int dialect, RGWRESTMgr *
  */
 int radosgw_Main(int argc, const char **argv)
 {
-  // dout() messages will be sent to stderr, but FCGX wants messages on stdout
-  // Redirect stderr to stdout.
-  TEMP_FAILURE_RETRY(close(STDERR_FILENO));
-  if (TEMP_FAILURE_RETRY(dup2(STDOUT_FILENO, STDERR_FILENO)) < 0) {
-    int err = errno;
-    cout << "failed to redirect stderr to stdout: " << cpp_strerror(err)
-         << std::endl;
-    return ENOSYS;
-  }
-
   /* alternative default for module */
   map<string,string> defaults = {
     { "debug_rgw", "1/5" },
