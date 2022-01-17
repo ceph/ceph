@@ -153,6 +153,8 @@ void FormatRequest<I>::send() {
 
 template <typename I>
 void FormatRequest<I>::handle_write_header(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r < 0) {
     lderr(m_image_ctx->cct) << "error writing header to image: "
                             << cpp_strerror(r) << dendl;
@@ -165,6 +167,8 @@ void FormatRequest<I>::handle_write_header(int r) {
 
 template <typename I>
 void FormatRequest<I>::finish(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   m_on_finish->complete(r);
   delete this;
 }
