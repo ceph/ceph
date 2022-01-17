@@ -1,11 +1,6 @@
 FROM ubuntu:latest
 ENV DEBIAN_FRONTEND=nonintercative
-COPY . /teuthology
-COPY .teuthology.yaml ./root
-WORKDIR /teuthology
-RUN chmod +x /teuthology/bootstrap && \
-    mkdir ../archive_dir && \
-    mkdir log && \
+RUN \
     mkdir $HOME/.ssh && \
     touch $HOME/.ssh/id_ed25519 && \
     chmod 600 $HOME/.ssh/id_ed25519 && \
@@ -27,7 +22,14 @@ RUN apt-get update && \
     libyaml-dev \
     lsb-release && \
     apt-get clean all
-RUN ./bootstrap
+COPY . /teuthology
+COPY .teuthology.yaml ./root
+WORKDIR /teuthology
+RUN \
+    mkdir ../archive_dir && \
+    mkdir log && \
+    chmod +x /teuthology/bootstrap && \
+    ./bootstrap
 CMD echo "$SSH_PRIVKEY" > $HOME/.ssh/id_ed25519 && \
     ./virtualenv/bin/teuthology-suite \
     -v --ceph-repo https://github.com/ceph/ceph.git \
