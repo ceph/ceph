@@ -100,7 +100,10 @@ def run_bucket_reshard_cmd(bucket_name, num_shards, **kwargs):
     return exec_cmd(cmd, **kwargs)
 
 def test_bucket_reshard(conn, name, **fault):
-    bucket = conn.create_bucket(Bucket=name)
+    # create a bucket with non-default ACLs to verify that reshard preserves them
+    bucket = conn.create_bucket(Bucket=name, ACL='authenticated-read')
+    grants = bucket.Acl().grants
+
     objs = []
     try:
         # create objs
@@ -121,6 +124,8 @@ def test_bucket_reshard(conn, name, **fault):
         # verify that the bucket is writeable by deleting an object
         objs.pop().delete()
 
+        assert grants == bucket.Acl().grants # recheck grants after cancel
+
         # retry reshard without fault injection. if radosgw-admin aborted,
         # we'll have to retry until the reshard lock expires
         while True:
@@ -135,6 +140,8 @@ def test_bucket_reshard(conn, name, **fault):
         # recheck shard count
         final_shard_count = get_bucket_stats(name).num_shards
         assert(final_shard_count == num_shards_expected)
+
+        assert grants == bucket.Acl().grants # recheck grants after commit
     finally:
         # cleanup on resharded bucket must succeed
         bucket.delete_objects(Delete={'Objects':[{'Key':o.key} for o in objs]})
