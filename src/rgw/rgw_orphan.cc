@@ -1321,7 +1321,8 @@ int RGWRadosList::process_bucket(
 }
 
 
-int RGWRadosList::run(const DoutPrefixProvider *dpp)
+int RGWRadosList::run(const DoutPrefixProvider *dpp,
+		      const bool yes_i_really_mean_it)
 {
   int ret;
   void* handle = nullptr;
@@ -1334,16 +1335,35 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  const int max_keys = 1000;
+  constexpr int max_keys = 1000;
   bool truncated = true;
+  bool warned_indexless = false;
 
   do {
     std::list<std::string> buckets;
     ret = store->meta_list_keys_next(dpp, handle, max_keys, buckets, &truncated);
 
     for (std::string& bucket_id : buckets) {
-      ret = run(dpp, bucket_id);
+      ret = run(dpp, bucket_id, true);
       if (ret == -ENOENT) {
+	continue;
+      } else if (ret == -EINVAL) {
+	if (! warned_indexless) {
+	  if (yes_i_really_mean_it) {
+	    std::cerr <<
+	      "WARNING: because there is at least one indexless bucket (" <<
+	      bucket_id <<
+	      ") the results of radoslist are *incomplete*; continuing due to --yes-i-really-mean-it" <<
+	      std::endl;
+	    warned_indexless = true;
+	  } else {
+	    std::cerr << "ERROR: because there is at least one indexless bucket (" <<
+	      bucket_id <<
+	      ") the results of radoslist are *incomplete*; use --yes-i-really-mean-it to bypass error" <<
+	      std::endl;
+	    return ret;
+	  }
+	}
 	continue;
       } else if (ret < 0) {
 	return ret;
@@ -1352,13 +1372,13 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp)
   } while (truncated);
 
   return 0;
-} // RGWRadosList::run()
+} // RGWRadosList::run(DoutPrefixProvider, bool)
 
 
-int RGWRadosList::run(const DoutPrefixProvider *dpp, const std::string& start_bucket_name)
+int RGWRadosList::run(const DoutPrefixProvider *dpp,
+		      const std::string& start_bucket_name,
+		      const bool silent_indexless)
 {
-  RGWObjectCtx obj_ctx(store);
-  std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret;
 
   add_bucket_entire(start_bucket_name);
@@ -1382,6 +1402,12 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp, const std::string& start_bu
       std::cerr << "ERROR: could not get info for bucket " << bucket_name <<
 	" -- " << cpp_strerror(-ret) << std::endl;
       return ret;
+    } else if (bucket->get_info().is_indexless()) {
+      if (! silent_indexless) {
+	std::cerr << "ERROR: unable to run radoslist on indexless bucket " <<
+	  bucket_name << std::endl;
+      }
+      return -EINVAL;
     }
 
     const std::string bucket_id = bucket->get_key().get_key();
@@ -1430,12 +1456,13 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp, const std::string& start_bu
   } // while (! bucket_process_map.empty())
 
   if (include_rgw_obj_name) {
-    goto done;
+    return 0;
   }
 
   // now handle incomplete multipart uploads by going back to the
   // initial bucket
 
+  std::unique_ptr<rgw::sal::Bucket> bucket;
   ret = store->get_bucket(dpp, nullptr, tenant_name, start_bucket_name, &bucket, null_yield);
   if (ret == -ENOENT) {
     // bucket deletion race?
@@ -1453,10 +1480,8 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp, const std::string& start_bu
     return ret;
   }
 
-done:
-
   return 0;
-} // RGWRadosList::run(string)
+} // RGWRadosList::run(DoutPrefixProvider, string, bool)
 
 
 int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
