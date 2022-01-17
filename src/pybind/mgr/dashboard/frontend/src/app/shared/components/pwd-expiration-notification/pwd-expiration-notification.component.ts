@@ -48,7 +48,7 @@ export class PwdExpirationNotificationComponent implements OnInit, OnDestroy {
     return Math.floor((expiration.valueOf() - current.valueOf()) / (1000 * 3600 * 24));
   }
 
-  close() {
+  onDismissed(): void {
     this.authStorageService.isPwdDisplayedSource.next(false);
     this.displayNotification = false;
   }
