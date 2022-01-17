@@ -53,8 +53,8 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
     TestMockFixture::TearDown();
   }
 
-  void expect_get_object_size() {
-    EXPECT_CALL(*mock_image_ctx, get_object_size()).WillOnce(Return(
+  void expect_get_stripe_period() {
+    EXPECT_CALL(*mock_image_ctx, get_stripe_period()).WillOnce(Return(
             OBJECT_SIZE));
   }
 
@@ -120,7 +120,7 @@ TEST_F(TestMockCryptoLuksFormatRequest, LUKS1) {
           mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS1,
           RBD_ENCRYPTION_ALGORITHM_AES128, std::move(passphrase), &crypto,
           on_finish, true);
-  expect_get_object_size();
+  expect_get_stripe_period();
   expect_get_image_size(IMAGE_SIZE);
   expect_image_write();
   mock_format_request->send();
@@ -135,7 +135,7 @@ TEST_F(TestMockCryptoLuksFormatRequest, AES128) {
           mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
           RBD_ENCRYPTION_ALGORITHM_AES128, std::move(passphrase), &crypto,
           on_finish, true);
-  expect_get_object_size();
+  expect_get_stripe_period();
   expect_get_image_size(IMAGE_SIZE);
   expect_image_write();
   mock_format_request->send();
@@ -150,7 +150,7 @@ TEST_F(TestMockCryptoLuksFormatRequest, AES256) {
           mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
           RBD_ENCRYPTION_ALGORITHM_AES256, std::move(passphrase), &crypto,
           on_finish, true);
-  expect_get_object_size();
+  expect_get_stripe_period();
   expect_get_image_size(IMAGE_SIZE);
   expect_image_write();
   mock_format_request->send();
@@ -165,7 +165,7 @@ TEST_F(TestMockCryptoLuksFormatRequest, ImageTooSmall) {
           mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
           RBD_ENCRYPTION_ALGORITHM_AES256, std::move(passphrase), &crypto,
           on_finish, true);
-  expect_get_object_size();
+  expect_get_stripe_period();
   expect_get_image_size(1024*1024);
   mock_format_request->send();
   ASSERT_EQ(-ENOSPC, finished_cond.wait());
@@ -176,7 +176,7 @@ TEST_F(TestMockCryptoLuksFormatRequest, WriteFail) {
           mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
           RBD_ENCRYPTION_ALGORITHM_AES256, std::move(passphrase), &crypto,
           on_finish, true);
-  expect_get_object_size();
+  expect_get_stripe_period();
   expect_get_image_size(IMAGE_SIZE);
   expect_image_write();
   mock_format_request->send();

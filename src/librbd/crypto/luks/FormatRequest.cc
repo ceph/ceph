@@ -94,9 +94,10 @@ void FormatRequest<I>::send() {
   }
 
   // format (create LUKS header)
+  auto stripe_period = m_image_ctx->get_stripe_period();
   r = m_header.format(type, cipher, reinterpret_cast<char*>(key), key_size,
-                      "xts-plain64", sector_size,
-                      m_image_ctx->get_object_size(), m_insecure_fast_mode);
+                      "xts-plain64", sector_size, stripe_period,
+                      m_insecure_fast_mode);
   if (r != 0) {
     finish(r);
     return;
@@ -135,6 +136,13 @@ void FormatRequest<I>::send() {
   if (r < 0) {
     finish(r);
     return;
+  }
+
+  // pad header to stripe period alignment to prevent copyup of parent data
+  // when writing encryption header to the child image
+  auto alignment = bl.length() % stripe_period;
+  if (alignment > 0) {
+    bl.append_zero(stripe_period - alignment);
   }
 
   // write header to offset 0 of the image
