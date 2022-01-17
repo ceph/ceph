@@ -1242,6 +1242,9 @@ def process_role(ctx, config, timeout, role, role_config):
     # gather information about this remote
     (role_remote,) = ctx.cluster.only(role).remotes.keys()
     system_type = role_remote.os.name
+    if role_remote.is_container:
+        log.info(f"Remote f{role_remote.shortname} is a container; skipping kernel installation")
+        return
     if role_config.get('rpm') or role_config.get('deb'):
         # We only care about path - deb: vs rpm: is meaningless,
         # rpm: just happens to be parsed first.  Nothing is stopping
