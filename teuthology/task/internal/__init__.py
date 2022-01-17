@@ -444,9 +444,10 @@ def coredump(ctx, config):
     Stash a coredump of this system if an error occurs.
     """
     log.info('Enabling coredump saving...')
+    cluster = ctx.cluster.filter(lambda r: not r.is_container)
     archive_dir = misc.get_archive_dir(ctx)
     run.wait(
-        ctx.cluster.run(
+        cluster.run(
             args=[
                 'install', '-d', '-m0755', '--',
                 '{adir}/coredump'.format(adir=archive_dir),
@@ -465,8 +466,9 @@ def coredump(ctx, config):
     try:
         yield
     finally:
+        cluster = ctx.cluster.filter(lambda r: not r.is_container)
         run.wait(
-            ctx.cluster.run(
+            cluster.run(
                 args=[
                     'sudo', 'sysctl', '-w', 'kernel.core_pattern=core',
                     run.Raw('&&'),
@@ -487,7 +489,7 @@ def coredump(ctx, config):
 
         # set status = 'fail' if the dir is still there = coredumps were
         # seen
-        for rem in ctx.cluster.remotes.keys():
+        for rem in cluster.remotes.keys():
             try:
                 rem.sh("test -e " + archive_dir + "/coredump")
             except run.CommandFailedError:
