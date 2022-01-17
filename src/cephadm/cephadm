@@ -3781,14 +3781,20 @@ class CephadmAgent():
         # Create the required config files in the daemons dir, with restricted permissions
         for filename in config:
             if filename in self.required_files:
-                with open(os.path.join(self.daemon_dir, filename), 'w') as f:
+                with open(os.open(os.path.join(self.daemon_dir, filename), os.O_CREAT | os.O_WRONLY, 0o600), 'w') as f:
                     f.write(config[filename])
 
-        with open(os.path.join(self.daemon_dir, 'unit.run'), 'w') as f:
+        with open(os.open(os.path.join(self.daemon_dir, 'unit.run'), os.O_CREAT | os.O_WRONLY, 0o600), 'w') as f:
             f.write(self.unit_run())
 
+        meta: Dict[str, Any] = {}
+        if 'meta_json' in self.ctx and self.ctx.meta_json:
+            meta = json.loads(self.ctx.meta_json) or {}
+        with open(os.open(os.path.join(self.daemon_dir, 'unit.meta'), os.O_CREAT | os.O_WRONLY, 0o600), 'w') as f:
+            f.write(json.dumps(meta, indent=4) + '\n')
+
         unit_file_path = os.path.join(self.ctx.unit_dir, self.unit_name())
-        with open(unit_file_path + '.new', 'w') as f:
+        with open(os.open(unit_file_path + '.new', os.O_CREAT | os.O_WRONLY, 0o600), 'w') as f:
             f.write(self.unit_file())
             os.rename(unit_file_path + '.new', unit_file_path)
 
