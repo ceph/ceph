@@ -367,6 +367,14 @@ int MotrUser::create_user_info_idx()
   return store->create_motr_idx_by_name(user_info_iname);
 }
 
+int MotrUser::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
+{
+  for (auto& it : new_attrs)
+    attrs[it.first] = it.second;
+
+  return store_user(dpp, y, false);
+}
+
 int MotrUser::store_user(const DoutPrefixProvider* dpp,
                          optional_yield y, bool exclusive, RGWUserInfo* old_info)
 {
@@ -468,14 +476,14 @@ int MotrBucket::put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::re
 
   // Insert bucket instance using bucket's marker (string).
   int rc = store->do_idx_op_by_name(RGW_MOTR_BUCKET_INST_IDX_NAME,
-                                  M0_IC_PUT, info.bucket.name, bl);
+                                  M0_IC_PUT, info.bucket.name, bl, !exclusive);
   if (rc == 0)
     store->get_bucket_inst_cache()->put(dpp, info.bucket.name, bl);
 
   return rc;
 }
 
-int MotrBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y)
+int MotrBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y, bool get_stats)
 {
   // Get bucket instance using bucket's name (string). or bucket id?
   bufferlist bl;
@@ -627,13 +635,10 @@ int MotrBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_qu
 
 int MotrBucket::merge_and_store_attrs(const DoutPrefixProvider *dpp, Attrs& new_attrs, optional_yield y)
 {
-  int ret = Bucket::merge_and_store_attrs(dpp, new_attrs, y);
+  for (auto& it : new_attrs)
+    attrs[it.first] = it.second;
 
-  /* XXX: handle has_instance_obj like in set_bucket_instance_attrs() */
-
-  // TODO: update bucket entry with the new attrs.
-
-  return ret;
+  return put_info(dpp, y, ceph::real_time());
 }
 
 int MotrBucket::try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime)
@@ -2933,6 +2938,13 @@ int MotrStore::register_to_service_map(const DoutPrefixProvider *dpp, const stri
     const map<string, string>& meta)
 {
   return 0;
+}
+
+void MotrStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit,
+                              RGWRateLimitInfo& user_ratelimit,
+                              RGWRateLimitInfo& anon_ratelimit)
+{
+  return;
 }
 
 void MotrStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
