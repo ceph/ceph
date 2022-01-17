@@ -65,7 +65,7 @@ int Header::init() {
   std::string path =
           "/proc/" + std::to_string(getpid()) + "/fd/" + std::to_string(m_fd);
 
-  if (m_cct->_conf->subsys.should_gather<dout_subsys, 20>()) {
+  if (m_cct->_conf->subsys.should_gather<dout_subsys, 30>()) {
     crypt_set_debug_level(CRYPT_DEBUG_ALL);
   }
 

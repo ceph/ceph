@@ -52,6 +52,8 @@ void ShutDownCryptoRequest<I>::shut_down_object_dispatch() {
 
 template <typename I>
 void ShutDownCryptoRequest<I>::handle_shut_down_object_dispatch(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r < 0) {
     lderr(m_image_ctx->cct) << "failed to shut down object dispatch: "
                             << cpp_strerror(r) << dendl;
@@ -79,6 +81,8 @@ void ShutDownCryptoRequest<I>::shut_down_image_dispatch() {
 
 template <typename I>
 void ShutDownCryptoRequest<I>::handle_shut_down_image_dispatch(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r < 0) {
     lderr(m_image_ctx->cct) << "failed to shut down image dispatch: "
                             << cpp_strerror(r) << dendl;
@@ -88,6 +92,8 @@ void ShutDownCryptoRequest<I>::handle_shut_down_image_dispatch(int r) {
 
 template <typename I>
 void ShutDownCryptoRequest<I>::finish(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r == 0) {
     std::unique_lock image_locker{m_image_ctx->image_lock};
     m_image_ctx->encryption_format.reset();

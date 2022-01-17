@@ -63,6 +63,9 @@ void LoadRequest<I>::load() {
 
 template <typename I>
 void LoadRequest<I>::handle_load(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << ". image name: "
+                              << m_current_image_ctx->name << dendl;
+
   if (r < 0) {
     lderr(m_image_ctx->cct) << "failed to load encryption. image name: "
                             << m_current_image_ctx->name << dendl;
@@ -87,6 +90,8 @@ void LoadRequest<I>::handle_load(int r) {
 
 template <typename I>
 void LoadRequest<I>::finish(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r == 0) {
     auto ictx = m_image_ctx;
     for (auto& format : m_formats) {

@@ -54,6 +54,8 @@ void FormatRequest<I>::send() {
 
 template <typename I>
 void FormatRequest<I>::handle_shutdown_crypto(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r != 0) {
     lderr(m_image_ctx->cct) << "unable to unload existing crypto: "
                             << cpp_strerror(r) << dendl;
@@ -73,6 +75,8 @@ void FormatRequest<I>::format() {
 
 template <typename I>
 void FormatRequest<I>::handle_format(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r != 0) {
     lderr(m_image_ctx->cct) << "unable to format image: " << cpp_strerror(r)
                             << dendl;
@@ -97,6 +101,8 @@ void FormatRequest<I>::flush() {
 
 template <typename I>
 void FormatRequest<I>::handle_flush(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r != 0) {
     lderr(m_image_ctx->cct) << "unable to flush image: " << cpp_strerror(r)
                             << dendl;
@@ -107,6 +113,8 @@ void FormatRequest<I>::handle_flush(int r) {
 
 template <typename I>
 void FormatRequest<I>::finish(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r == 0) {
     util::set_crypto(m_image_ctx, std::move(m_format));
   }
