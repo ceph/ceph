@@ -33,7 +33,7 @@
                 [routerLink]="useRouterLink(action)"
                 [preserveFragment]="action.preserveFragment ? '' : null"
                 [disabled]="disableSelectionAction(action)">
-          <i [ngClass]="[action.icon]"></i>
+          <i [ngClass]="[action.icon, 'action-icon']"></i>
           <span>{{ action.name }}</span>
         </button>
       </ng-container>

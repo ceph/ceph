@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import _ from 'lodash';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { CephModule } from '~/app/ceph/ceph.module';
@@ -26,10 +27,16 @@ describe('ServiceDaemonListComponent', () => {
       container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
       daemon_id: '3',
       daemon_type: 'osd',
+      daemon_name: 'osd.3',
       version: '15.1.0-1174-g16a11f7',
       status: 1,
       status_desc: 'running',
-      last_refresh: '2020-02-25T04:33:26.465699'
+      last_refresh: '2020-02-25T04:33:26.465699',
+      events: [
+        { created: '2020-02-24T04:33:26.465699' },
+        { created: '2020-02-25T04:33:26.465699' },
+        { created: '2020-02-26T04:33:26.465699' }
+      ]
     },
     {
       hostname: 'osd0',
@@ -38,10 +45,12 @@ describe('ServiceDaemonListComponent', () => {
       container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
       daemon_id: '4',
       daemon_type: 'osd',
+      daemon_name: 'osd.4',
       version: '15.1.0-1174-g16a11f7',
       status: 1,
       status_desc: 'running',
-      last_refresh: '2020-02-25T04:33:26.465822'
+      last_refresh: '2020-02-25T04:33:26.465822',
+      events: []
     },
     {
       hostname: 'osd0',
@@ -50,10 +59,12 @@ describe('ServiceDaemonListComponent', () => {
       container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
       daemon_id: '5',
       daemon_type: 'osd',
+      daemon_name: 'osd.5',
       version: '15.1.0-1174-g16a11f7',
       status: 1,
       status_desc: 'running',
-      last_refresh: '2020-02-25T04:33:26.465886'
+      last_refresh: '2020-02-25T04:33:26.465886',
+      events: []
     },
     {
       hostname: 'mon0',
@@ -61,11 +72,13 @@ describe('ServiceDaemonListComponent', () => {
       container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
       container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
       daemon_id: 'a',
+      daemon_name: 'mon.a',
       daemon_type: 'mon',
       version: '15.1.0-1174-g16a11f7',
       status: 1,
       status_desc: 'running',
-      last_refresh: '2020-02-25T04:33:26.465886'
+      last_refresh: '2020-02-25T04:33:26.465886',
+      events: []
     }
   ];
 
@@ -105,7 +118,14 @@ describe('ServiceDaemonListComponent', () => {
   };
 
   configureTestBed({
-    imports: [HttpClientTestingModule, CephModule, CoreModule, NgxPipeFunctionModule, SharedModule]
+    imports: [
+      HttpClientTestingModule,
+      CephModule,
+      CoreModule,
+      NgxPipeFunctionModule,
+      SharedModule,
+      ToastrModule.forRoot()
+    ]
   });
 
   beforeEach(() => {
@@ -146,5 +166,80 @@ describe('ServiceDaemonListComponent', () => {
 
   it('should not display doc panel if orchestrator is available', () => {
     expect(component.showDocPanel).toBeFalsy();
+  });
+
+  it('should call daemon action', () => {
+    const daemon = daemons[0];
+    component.selection.selected = [daemon];
+    component['daemonService'].action = jest.fn(() => of());
+    for (const action of ['start', 'stop', 'restart', 'redeploy']) {
+      component.daemonAction(action);
+      expect(component['daemonService'].action).toHaveBeenCalledWith(daemon.daemon_name, action);
+    }
+  });
+
+  it('should disable daemon actions', () => {
+    const daemon = {
+      daemon_type: 'osd',
+      status_desc: 'running'
+    };
+
+    const states = {
+      start: true,
+      stop: false,
+      restart: false,
+      redeploy: false
+    };
+    const expectBool = (toExpect: boolean, arg: boolean) => {
+      if (toExpect === true) {
+        expect(arg).toBeTruthy();
+      } else {
+        expect(arg).toBeFalsy();
+      }
+    };
+
+    component.selection.selected = [daemon];
+    for (const action of ['start', 'stop', 'restart', 'redeploy']) {
+      expectBool(states[action], component.actionDisabled(action));
+    }
+
+    daemon.status_desc = 'stopped';
+    states.start = false;
+    states.stop = true;
+    component.selection.selected = [daemon];
+    for (const action of ['start', 'stop', 'restart', 'redeploy']) {
+      expectBool(states[action], component.actionDisabled(action));
+    }
+  });
+
+  it('should disable daemon actions in mgr and mon daemon', () => {
+    const daemon = {
+      daemon_type: 'mgr',
+      status_desc: 'running'
+    };
+    for (const action of ['start', 'stop', 'restart', 'redeploy']) {
+      expect(component.actionDisabled(action)).toBeTruthy();
+    }
+    daemon.daemon_type = 'mon';
+    for (const action of ['start', 'stop', 'restart', 'redeploy']) {
+      expect(component.actionDisabled(action)).toBeTruthy();
+    }
+  });
+
+  it('should disable daemon actions if no selection', () => {
+    component.selection.selected = [];
+    for (const action of ['start', 'stop', 'restart', 'redeploy']) {
+      expect(component.actionDisabled(action)).toBeTruthy();
+    }
+  });
+
+  it('should sort daemons events', () => {
+    component.sortDaemonEvents();
+    const daemon = daemons[0];
+    for (let i = 1; i < daemon.events.length; i++) {
+      const t1 = new Date(daemon.events[i - 1].created).getTime();
+      const t2 = new Date(daemon.events[i].created).getTime();
+      expect(t1 >= t2).toBeTruthy();
+    }
   });
 });

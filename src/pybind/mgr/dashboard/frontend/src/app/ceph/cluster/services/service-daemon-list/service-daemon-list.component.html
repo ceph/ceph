@@ -23,9 +23,18 @@
           <cd-table *ngIf="hasOrchestrator"
                     #daemonsTable
                     [data]="daemons"
+                    selectionType="single"
                     [columns]="columns"
                     columnMode="flex"
-                    (fetchData)="getDaemons($event)">
+                    identifier="daemon_id"
+                    (fetchData)="getDaemons($event)"
+                    (updateSelection)="updateSelection($event)">
+            <cd-table-actions id="service-daemon-list-actions"
+                              class="table-actions"
+                              [selection]="selection"
+                              [permission]="permissions.hosts"
+                              [tableActions]="tableActions">
+            </cd-table-actions>
           </cd-table>
         </ng-template>
       </li>
