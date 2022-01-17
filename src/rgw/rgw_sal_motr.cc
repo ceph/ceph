@@ -3428,10 +3428,10 @@ void *newMotrStore(CephContext *cct)
     const auto& ha_ep    = g_conf().get_val<std::string>("motr_ha_endpoint");
     const auto& proc_fid = g_conf().get_val<std::string>("motr_my_fid");
     const auto& profile  = g_conf().get_val<std::string>("motr_profile_fid");
-    ldout(cct, 0) << "INFO: my motr endpoint:  " << proc_ep << dendl;
-    ldout(cct, 0) << "INFO: ha agent endpoint: " << ha_ep << dendl;
-    ldout(cct, 0) << "INFO: my motr fid:       " << proc_fid << dendl;
-    ldout(cct, 0) << "INFO: motr profile fid:  " << profile << dendl;
+    ldout(cct, 0) << "INFO: motr my endpoint: " << proc_ep << dendl;
+    ldout(cct, 0) << "INFO: motr ha endpoint: " << ha_ep << dendl;
+    ldout(cct, 0) << "INFO: motr my fid:      " << proc_fid << dendl;
+    ldout(cct, 0) << "INFO: motr profile fid: " << profile << dendl;
     store->conf.mc_local_addr  = proc_ep.c_str();
     store->conf.mc_process_fid = proc_fid.c_str();
     store->conf.mc_ha_addr     = ha_ep.c_str();
