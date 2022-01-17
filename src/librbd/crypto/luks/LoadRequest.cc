@@ -169,6 +169,7 @@ void LoadRequest<I>::read_volume_key() {
           m_image_ctx->cct, reinterpret_cast<unsigned char*>(volume_key),
           volume_key_size, m_header.get_sector_size(),
           m_header.get_data_offset(), m_result_crypto);
+  ceph_memzero_s(volume_key, 64, 64);
   finish(r);
 }
 
