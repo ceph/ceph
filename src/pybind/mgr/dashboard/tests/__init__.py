@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=too-many-arguments
 
+import contextlib
 import json
 import logging
 import threading
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
+from unittest import mock
 from unittest.mock import Mock
 
 import cherrypy
 from cherrypy._cptools import HandlerWrapperTool
 from cherrypy.test import helper
 from mgr_module import HandleCommandResult
+from orchestrator import HostSpec, InventoryHost
 from pyfakefs import fake_filesystem
 
 from .. import mgr
@@ -337,3 +340,28 @@ class Waiter(threading.Thread):
                     running = False
                     self.res_task = task
                     self.ev.set()
+
+
+@contextlib.contextmanager
+def patch_orch(available: bool, missing_features: Optional[List[str]] = None,
+               hosts: Optional[List[HostSpec]] = None,
+               inventory: Optional[List[dict]] = None):
+    with mock.patch('dashboard.controllers.orchestrator.OrchClient.instance') as instance:
+        fake_client = mock.Mock()
+        fake_client.available.return_value = available
+        fake_client.get_missing_features.return_value = missing_features
+
+        if hosts is not None:
+            fake_client.hosts.list.return_value = hosts
+
+        if inventory is not None:
+            def _list_inventory(hosts=None, refresh=False):  # pylint: disable=unused-argument
+                inv_hosts = []
+                for inv_host in inventory:
+                    if hosts is None or inv_host['name'] in hosts:
+                        inv_hosts.append(InventoryHost.from_json(inv_host))
+                return inv_hosts
+            fake_client.inventory.list.side_effect = _list_inventory
+
+        instance.return_value = fake_client
+        yield fake_client
