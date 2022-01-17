@@ -19,9 +19,9 @@
 #include "rgw_sync_info.h"
 
 class RGWOp_SIP_GetInfo : public RGWRESTOp {
-  std::optional<string> provider;
-  std::optional<string> data_type;
-  std::optional<string> stage_type;
+  std::optional<std::string> provider;
+  std::optional<std::string> data_type;
+  std::optional<std::string> stage_type;
   SIProviderRef sip;
 public:
   RGWOp_SIP_GetInfo(std::optional<std::string> _provider,
@@ -46,13 +46,13 @@ public:
 
 class RGWOp_SIP_GetStageStatus : public RGWRESTOp {
 
-  string provider;
+  std::string provider;
   rgw_sip_pos start_pos;
   rgw_sip_pos cur_pos;
   bool disabled{false};
 
 public:
-  RGWOp_SIP_GetStageStatus(string&& _provider) : provider(std::move(_provider)) {}
+  RGWOp_SIP_GetStageStatus(std::string&& _provider) : provider(std::move(_provider)) {}
   ~RGWOp_SIP_GetStageStatus() override {}
 
   int check_caps(const RGWUserCaps& caps) override {
@@ -70,12 +70,12 @@ public:
 
 class RGWOp_SIP_GetMarkerInfo : public RGWRESTOp {
 
-  string provider;
+  std::string provider;
 
   RGWSI_SIP_Marker::stage_shard_info sinfo;
 
 public:
-  RGWOp_SIP_GetMarkerInfo(string&& _provider) : provider(std::move(_provider)) {}
+  RGWOp_SIP_GetMarkerInfo(std::string&& _provider) : provider(std::move(_provider)) {}
   ~RGWOp_SIP_GetMarkerInfo() override {}
 
   int check_caps(const RGWUserCaps& caps) override {
@@ -93,10 +93,10 @@ public:
 
 class RGWOp_SIP_SetMarkerInfo : public RGWRESTOp {
 
-  string provider;
+  std::string provider;
 
 public:
-  RGWOp_SIP_SetMarkerInfo(string&& _provider) : provider(std::move(_provider)) {}
+  RGWOp_SIP_SetMarkerInfo(std::string&& _provider) : provider(std::move(_provider)) {}
   ~RGWOp_SIP_SetMarkerInfo() override {}
 
   int check_caps(const RGWUserCaps& caps) override {
@@ -115,10 +115,10 @@ public:
 
 class RGWOp_SIP_RemoveMarkerInfo : public RGWRESTOp {
 
-  string provider;
+  std::string provider;
 
 public:
-  RGWOp_SIP_RemoveMarkerInfo(string&& _provider) : provider(std::move(_provider)) {}
+  RGWOp_SIP_RemoveMarkerInfo(std::string&& _provider) : provider(std::move(_provider)) {}
   ~RGWOp_SIP_RemoveMarkerInfo() override {}
 
   int check_caps(const RGWUserCaps& caps) override {
@@ -157,17 +157,17 @@ public:
 class RGWOp_SIP_Fetch : public RGWRESTOp {
   static constexpr int default_max = 1000;
 
-  string provider;
-  string instance;
-  string stage_id;
-  string marker;
+  std::string provider;
+  std::string instance;
+  std::string stage_id;
+  std::string marker;
   int max;
 
   SIProviderRef sip;
   SIProvider::TypeHandler *type_handler;
   SIProvider::fetch_result result;
 public:
-  RGWOp_SIP_Fetch(string&& _provider) : provider(std::move(_provider)) {}
+  RGWOp_SIP_Fetch(std::string&& _provider) : provider(std::move(_provider)) {}
   ~RGWOp_SIP_Fetch() override {}
 
   int check_caps(const RGWUserCaps& caps) override {
@@ -184,11 +184,11 @@ public:
 };
 
 class RGWOp_SIP_Trim : public RGWRESTOp {
-  string provider;
-  string instance;
-  string marker;
+  std::string provider;
+  std::string instance;
+  std::string marker;
 public:
-  RGWOp_SIP_Trim(string&& _provider) : provider(std::move(_provider)) {}
+  RGWOp_SIP_Trim(std::string&& _provider) : provider(std::move(_provider)) {}
   ~RGWOp_SIP_Trim() override {}
 
   int check_caps(const RGWUserCaps& caps) override {

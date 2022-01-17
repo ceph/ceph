@@ -10,6 +10,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 RGWRemoteCtl::RGWRemoteCtl(RGWSI_Zone *_zone_svc,
                            RGWUserCtl *_user_ctl) : cct(_zone_svc->ctx())
 {

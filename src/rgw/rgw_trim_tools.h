@@ -36,7 +36,7 @@ public:
 class RGWTrimTools {
 public:
   static RGWTrimSIPMgr *get_trim_sip_mgr(rgw::sal::RadosStore *store,
-                                         const string& sip_data_type,
+                                         const std::string& sip_data_type,
                                          SIProvider::StageType sip_stage_type,
                                          std::optional<std::string> sip_instance);
 };

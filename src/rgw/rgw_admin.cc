@@ -3412,17 +3412,20 @@ static int try_to_resolve_local_entities(string& realm_id, string& realm_name,
   return 0;
 }
 
-static bool empty_opt(std::optional<string>& os)
+template <class T>
+static bool empty_opt(std::optional<T>& os)
 {
   return (!os || os->empty());
 }
 
-static string safe_opt(std::optional<string>& os)
+template <class T>
+static T safe_opt(std::optional<T>& os)
 {
-  return os.value_or(string());
+  return os.value_or(T());
 }
 
-void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_var, const string& conf_name)
+template <class T>
+void init_realm_param(CephContext *cct, string& var, std::optional<T>& opt_var, const string& conf_name)
 {
   var = cct->_conf.get_val<string>(conf_name);
   if (!var.empty()) {
@@ -3703,7 +3706,7 @@ int main(int argc, const char **argv)
   std::string realm_name, realm_id, realm_new_name;
   std::optional<string> opt_realm_name, opt_realm_id;
   std::string zone_name, zone_id, zone_new_name;
-  std::optional<string> opt_zone_name, opt_zone_id;
+  std::optional<string> opt_zone_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   std::optional<string> opt_zonegroup_name, opt_zonegroup_id;
   std::string api_name;
@@ -3861,7 +3864,6 @@ int main(int argc, const char **argv)
   int allow_compilation = false;
 
   std::optional<rgw_zone_id> opt_zone_id;
-  std::optional<string> opt_zone_name;
   std::optional<string> opt_group_id;
   std::optional<string> opt_status;
   std::optional<string> opt_flow_type;

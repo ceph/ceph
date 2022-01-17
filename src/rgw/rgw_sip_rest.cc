@@ -5,6 +5,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 
 SIProvider_REST::SIProvider_REST(const DoutPrefixProvider *_dpp,
                                  RGWCoroutinesManager *_cr_mgr,

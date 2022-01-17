@@ -135,7 +135,7 @@ public:
       ReceiveCB() = default;
       virtual ~ReceiveCB() = default;
       virtual int handle_data(bufferlist& bl, bool *pause = nullptr) = 0;
-      virtual int handle_headers(const map<string, string>& headers) {
+      virtual int handle_headers(const std::map<std::string, std::string>& headers) {
         return 0;
       }
       virtual void set_extra_data_len(uint64_t len) {

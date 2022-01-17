@@ -13,6 +13,8 @@
 #undef dout_prefix
 #define dout_prefix (*_dout << "trim: ")
 
+using namespace std;
+
 class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
 {
   friend class InitCR;

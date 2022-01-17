@@ -10,6 +10,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 void siprovider_data_info::dump(Formatter *f) const
 {
   encode_json("key", key, f);

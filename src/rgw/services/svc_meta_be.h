@@ -132,8 +132,8 @@ public:
   };
 
   struct KeyInfo {
-    string marker;
-    string key;
+    std::string marker;
+    std::string key;
   };
 
   RGWSI_MetaBackend(CephContext *cct) : RGWServiceInstance(cct) {}
@@ -171,7 +171,7 @@ public:
                         bool *truncated)  = 0;
   virtual int list_next(const DoutPrefixProvider *dpp,
                         RGWSI_MetaBackend::Context *ctx,
-                        int max, list<KeyInfo> *keys,
+                        int max, std::list<KeyInfo> *keys,
                         bool *truncated)  = 0;
   virtual int list_get_marker(RGWSI_MetaBackend::Context *ctx,
                               std::string *marker) = 0;

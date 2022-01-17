@@ -6,6 +6,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 string SIProvider::stage_type_to_str(SIProvider::StageType st)
 {
   switch  (st) {

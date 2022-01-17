@@ -18,10 +18,10 @@ class RGWSI_SIP_Marker : public RGWServiceInstance
 {
 public:
 
-  using stage_id_t = string;
+  using stage_id_t = std::string;
 
   struct target_marker_info {
-    string pos;
+    std::string pos;
     ceph::real_time mtime;
 
     void encode(bufferlist& bl) const {
@@ -42,7 +42,7 @@ public:
   };
 
   struct stage_shard_info {
-    map<string, target_marker_info> targets;
+    std::map<std::string, target_marker_info> targets;
     std::optional<std::string> min_targets_pos;
     std::optional<std::string> min_source_pos;
 
@@ -93,7 +93,7 @@ public:
                            modify_result *result) = 0;
 
     virtual int remove_target(const DoutPrefixProvider *dpp,
-                              const string& target_id,
+                              const std::string& target_id,
                               const stage_id_t& sid,
                               int shard_id,
                               modify_result *result) = 0;

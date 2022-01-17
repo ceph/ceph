@@ -7,6 +7,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static string stage_shard_info_oid_prefix = "sip.target-markers";
 
 

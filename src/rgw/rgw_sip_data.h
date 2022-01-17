@@ -12,13 +12,13 @@ namespace ceph {
 class RGWMetadataManager;
 
 struct siprovider_data_info : public SIProvider::EntryInfoBase {
-  string key;
+  std::string key;
   int shard_id{-1}; /* -1: not a specific shard, entry refers to all the shards */
   int num_shards{0};
   std::optional<ceph::real_time> timestamp;
 
   siprovider_data_info() {}
-  siprovider_data_info(const string& _key,
+  siprovider_data_info(const std::string& _key,
                        int _shard_id,
                        int _num_shards,
                        std::optional<ceph::real_time> _ts) : key(_key),
@@ -26,7 +26,7 @@ struct siprovider_data_info : public SIProvider::EntryInfoBase {
                                                              num_shards(_num_shards),
                                                              timestamp(_ts) {}
 
-  string get_data_type() const override {
+  std::string get_data_type() const override {
     return "data";
   }
 

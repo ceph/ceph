@@ -27,6 +27,8 @@
 #undef dout_prefix
 #define dout_prefix (*_dout << "data trim: ")
 
+using namespace std;
+
 namespace {
 
 class DatalogTrimImplCR : public RGWSimpleCoroutine {

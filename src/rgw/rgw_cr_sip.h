@@ -150,7 +150,7 @@ public:
                                    RGWSI_SIP_Marker::stage_shard_info *info);
   RGWCoroutine *set_min_source_pos_cr(const DoutPrefixProvider *dpp,
                                       const SIProvider::stage_id_t& sid, int shard_id,
-                                      const string& pos);
+                                      const std::string& pos);
 };
 
 class RGWRESTConn;
@@ -165,7 +165,7 @@ class SIProviderCRMgr_REST : public SIProviderCRMgr
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
 
-  string path_prefix = "/admin/sip";
+  std::string path_prefix = "/admin/sip";
 public:
   SIProviderCRMgr_REST(CephContext *_cct,
                          RGWRESTConn *_conn,
@@ -173,13 +173,13 @@ public:
                                                           conn(_conn),
                                                           http_manager(_http_manager) {}
 
-  SIProviderCRMgrInstance_REST *alloc_instance(const string& remote_provider_name,
+  SIProviderCRMgrInstance_REST *alloc_instance(const std::string& remote_provider_name,
                                                SIProvider::TypeHandlerProvider *type_provider,
-                                               std::optional<string> instance);
-  SIProviderCRMgrInstance_REST *alloc_instance(const string& data_type,
+                                               std::optional<std::string> instance);
+  SIProviderCRMgrInstance_REST *alloc_instance(const std::string& data_type,
                                                SIProvider::StageType stage_type,
                                                SIProvider::TypeHandlerProvider *type_provider,
-                                               std::optional<string> instance);
+                                               std::optional<std::string> instance);
 
   RGWCoroutine *list_cr(std::vector<std::string> *providers) override;
 };
@@ -195,40 +195,40 @@ class SIProviderCRMgrInstance_REST : public SIProviderCRMgr::Instance
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
 
-  string path_prefix;
+  std::string path_prefix;
 
-  std::optional<string> remote_provider_name;
-  std::optional<string> data_type;
+  std::optional<std::string> remote_provider_name;
+  std::optional<std::string> data_type;
   std::optional<SIProvider::StageType> stage_type;
-  std::optional<string> instance;
+  std::optional<std::string> instance;
 
   SIProvider::TypeHandlerProvider *type_provider;
 
   SIProviderCRMgrInstance_REST(CephContext *_cct,
                                SIProviderCRMgr_REST *_mgr,
-                               const string& _remote_provider_name,
+                               const std::string& _remote_provider_name,
                                SIProvider::TypeHandlerProvider *_type_provider,
-                               std::optional<string> _instance) : SIProviderCRMgr::Instance(_cct),
+                               std::optional<std::string> _instance) : SIProviderCRMgr::Instance(_cct),
                                                           mgr(_mgr),
                                                           conn(_mgr->conn),
                                                           http_manager(_mgr->http_manager),
                                                           path_prefix(_mgr->path_prefix),
                                                           remote_provider_name(_remote_provider_name),
-                                                          instance(_instance.value_or(string())),
+                                                          instance(_instance.value_or(std::string())),
                                                           type_provider(_type_provider) {}
   SIProviderCRMgrInstance_REST(CephContext *_cct,
                                SIProviderCRMgr_REST *_mgr,
-                               const string& _data_type,
+                               const std::string& _data_type,
                                SIProvider::StageType _stage_type,
                                SIProvider::TypeHandlerProvider *_type_provider,
-                               std::optional<string> _instance) : SIProviderCRMgr::Instance(_cct),
+                               std::optional<std::string> _instance) : SIProviderCRMgr::Instance(_cct),
                                                           mgr(_mgr),
                                                           conn(_mgr->conn),
                                                           http_manager(_mgr->http_manager),
                                                           path_prefix(_mgr->path_prefix),
                                                           data_type(_data_type),
                                                           stage_type(_stage_type),
-                                                          instance(_instance.value_or(string())),
+                                                          instance(_instance.value_or(std::string())),
                                                           type_provider(_type_provider) {}
 
 public:

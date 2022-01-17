@@ -1548,8 +1548,8 @@ struct rgw_obj_key {
     return buf;
   }
 
-  string to_escaped_str() const;
-  static rgw_obj_key from_escaped_str(const string& s);
+  std::string to_escaped_str() const;
+  static rgw_obj_key from_escaped_str(const std::string& s);
 };
 WRITE_CLASS_ENCODER(rgw_obj_key)
 
@@ -2354,10 +2354,10 @@ static inline void rgw_escape_str(const std::string& s, char esc_char,
   *dest = dest_buf;
 }
 
-static inline string rgw_escape_str(const string& s, char esc_char,
+static inline std::string rgw_escape_str(const std::string& s, char esc_char,
 				  char special_char)
 {
-  string result;
+  std::string result;
   rgw_escape_str(s, esc_char, special_char, &result);
   return result;
 }

@@ -36,14 +36,14 @@ private:
   } ctl;
 
   std::map<rgw_zone_id, Conns> conns_map;
-  map<rgw_zone_id, RGWRESTConn *> zone_meta_notify_to_map;
-  map<rgw_zone_id, RGWRESTConn *> zone_data_notify_to_map;
+  std::map<rgw_zone_id, RGWRESTConn *> zone_meta_notify_to_map;
+  std::map<rgw_zone_id, RGWRESTConn *> zone_data_notify_to_map;
 
   bool get_access_key(const DoutPrefixProvider *dpp,
-                      const string& dest_id,
+                      const std::string& dest_id,
                       std::optional<rgw_user> uid,
-                      std::optional<string> access_key,
-                      std::optional<string> secret,
+                      std::optional<std::string> access_key,
+                      std::optional<std::string> secret,
                       RGWAccessKey *result,
                       optional_yield y) const;
 
@@ -56,30 +56,30 @@ public:
 
   void init(const DoutPrefixProvider *dpp);
 
-  map<rgw_zone_id, RGWRESTConn *>& get_zone_meta_notify_to_map() {
+  std::map<rgw_zone_id, RGWRESTConn *>& get_zone_meta_notify_to_map() {
     return zone_meta_notify_to_map;
   }
 
-  map<rgw_zone_id, RGWRESTConn *>& get_zone_data_notify_to_map() {
+  std::map<rgw_zone_id, RGWRESTConn *>& get_zone_data_notify_to_map() {
     return zone_data_notify_to_map;
   }
 
   std::optional<Conns> zone_conns(const rgw_zone_id& zone_id);
-  std::optional<Conns> zone_conns(const string& name);
+  std::optional<Conns> zone_conns(const std::string& name);
 
   RGWRESTConn *create_conn(const DoutPrefixProvider *dpp,
-                           const string& zone_name,
+                           const std::string& zone_name,
                            const rgw_zone_id& zone_id,
-                           const std::list<string>& def_endpoints,
+                           const std::list<std::string>& def_endpoints,
                            const RGWDataProvider::RESTConfig& conf,
-                           std::optional<string> api_name);
+                           std::optional<std::string> api_name);
 
   RGWRESTConn *create_conn(const DoutPrefixProvider *dpp,
-                           const string& remote_id,
-                           const list<string>& endpoint,
+                           const std::string& remote_id,
+                           const std::list<std::string>& endpoint,
                            const RGWAccessKey& key,
-                           std::optional<string> api_name);
+                           std::optional<std::string> api_name);
 
-  bool get_redirect_zone_endpoint(string *endpoint);
+  bool get_redirect_zone_endpoint(std::string *endpoint);
 };
 

@@ -29,7 +29,7 @@ static std::string SIP_BUCKET_OP_CANCEL        = "cancel";
 
 
 struct siprovider_bucket_entry_info : public SIProvider::EntryInfoBase {
-  string get_data_type() const override {
+  std::string get_data_type() const override {
     return "bucket";
   }
 
@@ -81,7 +81,7 @@ struct siprovider_bucket_entry_info : public SIProvider::EntryInfoBase {
     void decode_json(JSONObj *obj);
 
     static const std::string& to_sip_op(RGWModifyOp rgw_op);
-    static RGWModifyOp from_sip_op(const string& op, std::optional<uint64_t> versioned_epoch);
+    static RGWModifyOp from_sip_op(const std::string& op, std::optional<uint64_t> versioned_epoch);
   } info;
 
   void encode(bufferlist& bl) const override {

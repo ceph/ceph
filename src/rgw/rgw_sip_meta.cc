@@ -12,6 +12,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 void siprovider_meta_info::dump(Formatter *f) const
 {
   encode_json("section", section, f);

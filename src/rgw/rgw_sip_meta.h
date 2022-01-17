@@ -14,10 +14,10 @@ struct siprovider_meta_info : public SIProvider::EntryInfoBase {
   std::string id;
 
   siprovider_meta_info() {}
-  siprovider_meta_info(const string& _section, const string& _id) : section(_section),
+  siprovider_meta_info(const std::string& _section, const std::string& _id) : section(_section),
                                                                     id(_id) {}
 
-  string get_data_type() const override {
+  std::string get_data_type() const override {
     return "meta";
   }
 
@@ -56,7 +56,7 @@ class SIProvider_MetaFull : public SIProvider_SingleStage
   int get_all_sections(const DoutPrefixProvider *dpp);
 
   int next_section(const DoutPrefixProvider *dpp,
-                   const std::string& section, string *next);
+                   const std::string& section, std::string *next);
 
 protected:
   int do_fetch(const DoutPrefixProvider *dpp,
@@ -119,7 +119,7 @@ class RGWMetadataLog;
 class SIProvider_MetaInc : public SIProvider_SingleStage
 {
   RGWSI_MDLog *mdlog;
-  string period_id;
+  std::string period_id;
 
   RGWMetadataLog *meta_log{nullptr};
 
@@ -138,7 +138,7 @@ protected:
 public:
   SIProvider_MetaInc(CephContext *_cct,
                      RGWSI_MDLog *_mdlog,
-                     const string& _period_id);
+                     const std::string& _period_id);
 
   int init(const DoutPrefixProvider *dpp);
 };

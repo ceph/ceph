@@ -572,8 +572,8 @@ struct RGWDataProvider {
   struct RESTConfig {
     std::optional<std::list<std::string> > endpoints; /* optional endpoint */
     std::optional<rgw_user> uid; /* access uid to use for connection if not default (will try to read key off backend) */
-    std::optional<string> access_key; /* access key to use (should not be used with uid) */
-    std::optional<string> secret; /* secret to use, if not specified will try to use secret off backend */
+    std::optional<std::string> access_key; /* access key to use (should not be used with uid) */
+    std::optional<std::string> secret; /* secret to use, if not specified will try to use secret off backend */
 
     bool empty() const {
       return !(endpoints || uid || access_key || secret);
@@ -631,7 +631,6 @@ struct RGWDataProvider {
   std::string id;
   std::string name;
   std::list<std::string> endpoints;
-  list<std::string> endpoints;
 
   /* extra */
   std::optional<RESTConfig> data_access_conf;
@@ -1013,7 +1012,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   rgw_zone_id master_zone;
   std::map<rgw_zone_id, RGWZone> zones;
 
-  map<rgw_zone_id, RGWForeignZone> foreign_zones;
+  std::map<rgw_zone_id, RGWForeignZone> foreign_zones;
 
   std::map<rgw_zone_id, std::string> combined_zones; /* id -> name of rgw zones, foreign zones */
 
@@ -1132,15 +1131,15 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   const std::string& get_predefined_name(CephContext *cct) const override;
 
   int modify_foreign_zone(const DoutPrefixProvider *dpp,
-                          string zone_name,
+                          std::string zone_name,
                           rgw_zone_id zone_id,
-                          const list<std::string>& endpoints,
+                          const std::list<std::string>& endpoints,
                           const RGWDataProvider::RESTConfig& data_access_config,
                           const RGWDataProvider::SIPConfig& sip_config,
                           bool add);
 
   int remove_foreign_zone(const DoutPrefixProvider *dpp,
-                          string zone_name,
+                          std::string zone_name,
                           rgw_zone_id zone_id);
 
   void dump(Formatter *f) const;

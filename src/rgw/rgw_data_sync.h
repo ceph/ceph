@@ -644,10 +644,10 @@ class RGWRemoteBucketManager {
 
   struct {
     RGWDataSyncCtx sc;
-    vector<_handlers> handlers;
+    std::vector<_handlers> handlers;
   } _ctxs;
 
-  vector<RGWBucketSyncCtx> bscs;
+  std::vector<RGWBucketSyncCtx> bscs;
 
   rgw_bucket_shard_sync_info init_status;
 

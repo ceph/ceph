@@ -486,7 +486,7 @@ int RGWDataChangesLog::start(const DoutPrefixProvider *dpp, const RGWZone* _zone
 }
 
 int RGWDataChangesLog::calc_shard(const rgw_bucket_shard& bs, int _num_shards) {
-  const string& name = bs.bucket.name;
+  const std::string& name = bs.bucket.name;
   int shard_shift = (bs.shard_id > 0 ? bs.shard_id : 0);
   uint32_t r = (ceph_str_hash_linux(name.c_str(), name.size()) +
                 shard_shift) % _num_shards;

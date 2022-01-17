@@ -25,7 +25,7 @@ namespace ceph {
 class JSONObj;
 
 struct rgw_sip_pos {
-  string marker;
+  std::string marker;
   ceph::real_time timestamp;
 
   void dump(Formatter *f) const;
@@ -41,7 +41,7 @@ public:
   };
 
   static std::string stage_type_to_str(SIProvider::StageType st);
-  static StageType stage_type_from_str(const string& s);
+  static StageType stage_type_from_str(const std::string& s);
 
   using stage_id_t = RGWSI_SIP_Marker::stage_id_t;
 
@@ -76,7 +76,7 @@ public:
   struct EntryInfoBase {
     virtual ~EntryInfoBase() {}
 
-    virtual string get_data_type() const = 0;
+    virtual std::string get_data_type() const = 0;
 
     virtual void encode(bufferlist& bl) const = 0;
     virtual void decode(bufferlist::const_iterator& bl) = 0;
@@ -95,7 +95,7 @@ public:
   public:
     virtual ~TypeHandler() {}
 
-    virtual string get_data_type() const = 0;
+    virtual std::string get_data_type() const = 0;
 
     virtual int handle_entry(const SIProvider::stage_id_t& sid,
                              SIProvider::Entry& entry,
@@ -165,7 +165,7 @@ public:
                    int shard_id,
                    const std::string& marker) = 0;
 
-  string get_data_type() {
+  std::string get_data_type() {
     auto th = get_type_handler();
     return th->get_data_type();
   }
@@ -219,7 +219,7 @@ public:
                          StageType type,
                          int num_shards,
                          bool disabled) : SIProviderCommon(_cct, name, instance),
-                                          stage_info({stage_id.value_or(RGW_SIP_DEFAULT_SID), nullopt, type, num_shards, disabled}),
+                                          stage_info({stage_id.value_or(RGW_SIP_DEFAULT_SID), std::nullopt, type, num_shards, disabled}),
                                           type_provider(_type_provider) {}
 
   SIProvider::TypeHandlerProvider *get_type_provider() override {
@@ -370,7 +370,7 @@ class SITypeHandlerProvider_Default : public SIProvider::TypeHandlerProvider {
       return 0;
     }
 
-    string get_data_type() const {
+    std::string get_data_type() const {
       T t;
       return t.get_data_type();
     }
@@ -412,7 +412,7 @@ class RGWSIPManager
 {
   std::map<std::string, RGWSIPGeneratorRef> sip_gens;
 
-  using TypeInfo = std::pair<string, SIProvider::StageType>;
+  using TypeInfo = std::pair<std::string, SIProvider::StageType>;
 
   std::map<TypeInfo, std::string> sip_type_index;
 
@@ -420,7 +420,7 @@ public:
   RGWSIPManager() {}
 
   void register_sip(const std::string& id,
-                    const string& data_type,
+                    const std::string& data_type,
                     const std::vector<SIProvider::StageType>& stage_types,
                     RGWSIPGeneratorRef gen) {
     sip_gens[id] = gen;

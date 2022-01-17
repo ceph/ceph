@@ -12,6 +12,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 void siprovider_bucket_entry_info::Info::dump(Formatter *f) const
 {
   encode_json("object", object, f);

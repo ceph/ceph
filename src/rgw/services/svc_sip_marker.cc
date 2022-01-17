@@ -54,7 +54,7 @@ void RGWSI_SIP_Marker::parse_target_id(const std::string& target_id,
                                        std::string *bucket_id)
 {
   auto pos = target_id.find(':');
-  if (pos == string::npos) {
+  if (pos == std::string::npos) {
     if (zid) {
       *zid = target_id;
     }
