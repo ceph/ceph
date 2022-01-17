@@ -6893,7 +6893,9 @@ int main(int argc, const char **argv)
     }
 
     if (bucket_name.empty()) {
-      ret = lister.run(dpp());
+      // yes_i_really_mean_it means continue with listing even if
+      // there are indexless buckets
+      ret = lister.run(dpp(), yes_i_really_mean_it);
     } else {
       ret = lister.run(dpp(), bucket_name);
     }
