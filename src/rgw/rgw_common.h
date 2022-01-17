@@ -349,6 +349,7 @@ class RGWHTTPArgs {
   int parse(const DoutPrefixProvider *dpp);
   void append(const std::string& name, const std::string& val);
   /** Get the value for a specific argument parameter */
+  const std::string& get(const std::string& name, bool *exists = NULL) const;
   boost::optional<const std::string&> get_optional(const std::string& name) const;
   std::optional<std::string> get_std_optional(const std::string& name) const;
   int get_bool(const std::string& name, bool *val, bool *exists) const;
