@@ -32,6 +32,8 @@ function munge_ceph_spec_in {
     shift
     local with_jaeger=$1
     shift
+    local without_arrow_parquet=$1
+    shift
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
@@ -46,6 +48,9 @@ function munge_ceph_spec_in {
     fi
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
+    fi
+    if $without_arrow_parquet; then
+        sed -i -e 's/%bcond_without arrow_parquet/%bcond_with arrow_parquet/g' $OUTFILE
     fi
 }
 
@@ -304,6 +309,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
 else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     [ $WITH_JAEGER ] && with_jaeger=true || with_jaeger=false
+    [ $WITHOUT_ARROW_PARQUET ] && without_arrow_parquet=true || without_arrow_parquet=false
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     source /etc/os-release
@@ -356,12 +362,28 @@ else
 	    build_profiles+=",pkg.ceph.jaeger"
 	fi
 
+	if [ "$(arch)" == "x86_64" ]; then
+		ARCH="amd64"
+	elif [ "$(arch)" == "aarch64" ]; then
+		ARCH="arm64"
+	fi
+
+	if [ -z ${ARCH+x} ]; then
+		echo "WARNING: $(arch) is not yet a supported architecture.  Can't install arrow."
+	else
+		wget -qO - https://dist.apache.org/repos/dist/dev/arrow/KEYS | $SUDO apt-key add -
+		echo "deb [arch=$ARCH] https://apache.jfrog.io/artifactory/arrow/ubuntu $(lsb_release -sc) main" | $SUDO tee /etc/apt/sources.list.d/arrow.list
+		$SUDO apt update
+	fi
+
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
 	      --build-profiles "${build_profiles#,}" \
 	      --install --remove \
 	      --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
+	$SUDO rm -f /etc/apt/sources.list.d/arrow.list
+
         ;;
     centos|fedora|rhel|ol|virtuozzo)
         builddepcmd="dnf -y builddep --allowerasing"
@@ -390,7 +412,11 @@ else
                 fi
                 ;;
         esac
-        munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $with_jaeger $DIR/ceph.spec
+	# NOTE: arrow_parquet is not supported in these distributions, whenever this is added
+	# we can delete without_arrow_parquet
+	without_arrow_parquet=true
+
+        munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $with_jaeger $without_arrow_parquet $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
         $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
