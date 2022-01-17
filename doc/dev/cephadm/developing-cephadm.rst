@@ -53,15 +53,16 @@ conf and keyring in your build dir, so that the ``bin/ceph ...`` CLI works
 There are a few advantages here:
 
 - The cluster is a "normal" cephadm cluster that looks and behaves
-  just like a user's cluster would.  In contract, vstart and teuthology
-  clusters tend to be special in subtle (and not-so-subtle) ways.
+  just like a user's cluster would.  In contrast, vstart and teuthology
+  clusters tend to be special in subtle (and not-so-subtle) ways (e.g.
+  having the ``lockdep`` turned on).
 
 To start a test cluster::
 
   sudo ../src/cstart.sh
 
-The last line of this will be a line you can cut+paste to update the
-container image.  For instance::
+The last line of the output will be a line you can cut+paste to update
+the container image.  For instance::
 
   sudo ../src/script/cpatch -t quay.io/ceph-ci/ceph:8f509f4e
 
