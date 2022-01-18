@@ -2539,7 +2539,12 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     shard_status.resize(full_status.shards_done_with_gen.size());
   } else if (r == -ENOENT) {
     // no full status, but there may be per-shard status from before upgrade
-    const auto& log = source_bucket->get_info().layout.logs.front();
+    const auto& logs = source_bucket->get_info().layout.logs;
+    if (logs.empty()) {
+      out << indented{width} << "init: bucket sync has not started\n";
+      return 0;
+    }
+    const auto& log = logs.front();
     if (log.gen > 0) {
       // this isn't the backward-compatible case, so we just haven't started yet
       out << indented{width} << "init: bucket sync has not started\n";
@@ -2550,7 +2555,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
       return -EINVAL;
     }
     // use shard count from our log gen=0
-    shard_status.resize(log.layout.in_index.layout.num_shards);
+    shard_status.resize(rgw::num_shards(log.layout.in_index));
   } else {
     lderr(store->ctx()) << "failed to read bucket full sync status: " << cpp_strerror(r) << dendl;
     return r;

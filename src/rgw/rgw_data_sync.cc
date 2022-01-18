@@ -3144,12 +3144,12 @@ public:
 	if (check_compat) {
 	  // use shard count from our log gen=0
 	  // try to convert existing per-shard incremental status for backward compatibility
-	  if (source_info.layout.logs.front().gen > 0) {
+	  if (source_info.layout.logs.empty() ||
+	      source_info.layout.logs.front().gen > 0) {
 	    ldpp_dout(dpp, 20) << "no generation zero when checking compatibility" << dendl;
 	    no_zero = true;
-	  }
-	  if (auto& log = source_info.layout.logs.front();
-	      log.layout.type != rgw::BucketLogType::InIndex) {
+	  } else if (auto& log = source_info.layout.logs.front();
+                     log.layout.type != rgw::BucketLogType::InIndex) {
 	    ldpp_dout(dpp, 20) << "unrecognized log layout type when checking compatibility " << log.layout.type << dendl;
 	    no_zero = true;
 	  }

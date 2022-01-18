@@ -472,30 +472,34 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
   bool new_sync_enabled = info.datasync_flag_enabled();
   bool old_sync_enabled = orig_info.datasync_flag_enabled();
 
-  if (old_sync_enabled != new_sync_enabled) {
-    int shards_num = rgw::current_num_shards(info.layout);
-    int shard_id = info.layout.current_index.layout.normal.num_shards? 0 : -1;
-    const auto& log_layout = info.layout.logs.back();
+  if (old_sync_enabled == new_sync_enabled) {
+    return 0; // datasync flag didn't change
+  }
+  if (info.layout.logs.empty()) {
+    return 0; // no bilog
+  }
+  const auto& bilog = info.layout.logs.back();
+  if (bilog.layout.type != rgw::BucketLogType::InIndex) {
+    return -ENOTSUP;
+  }
+  const int shards_num = rgw::num_shards(bilog.layout.in_index);
 
-    int ret;
-    if (!new_sync_enabled) {
-      ret = svc.bilog->log_stop(dpp, info, log_layout, -1);
-    } else {
-      ret = svc.bilog->log_start(dpp, info, log_layout, -1);
-    }
+  int ret;
+  if (!new_sync_enabled) {
+    ret = svc.bilog->log_stop(dpp, info, bilog, -1);
+  } else {
+    ret = svc.bilog->log_start(dpp, info, bilog, -1);
+  }
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed writing bilog (bucket=" << info.bucket << "); ret=" << ret << dendl;
+    return ret;
+  }
+
+  for (int i = 0; i < shards_num; ++i) {
+    ret = svc.datalog_rados->add_entry(dpp, info, bilog, i);
     if (ret < 0) {
-      ldpp_dout(dpp, -1) << "ERROR: failed writing bilog (bucket=" << info.bucket << "); ret=" << ret << dendl;
-      return ret;
-    }
-
-    for (int i = 0; i < shards_num; ++i, ++shard_id) {
-      ret = svc.datalog_rados->add_entry(dpp, info, info.layout.logs.back(),
-					 shard_id);
-      if (ret < 0) {
-        ldpp_dout(dpp, -1) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << shard_id << ")" << dendl;
-        return ret;
-      }
-    }
+      ldpp_dout(dpp, -1) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << i << ")" << dendl;
+    } // datalog error is not fatal
   }
 
   return 0;
