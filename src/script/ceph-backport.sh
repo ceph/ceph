@@ -1084,6 +1084,7 @@ function try_known_milestones {
         nautilus) mn="12" ;;
         octopus) mn="13" ;;
         pacific) mn="14" ;;
+        quincy) mn="15" ;;
     esac
     echo "$mn"
 }
