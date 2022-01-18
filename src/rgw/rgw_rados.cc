@@ -9132,14 +9132,11 @@ int RGWRados::remove_objs_from_index(const DoutPrefixProvider *dpp,
     " entry_key_list.size()=" << entry_key_list.size() << dendl_bitx;
   ldout_bitx(bitx, dpp, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
 
-  const rgw::bucket_index_layout_generation& latest_layout = bucket_info.layout.current_index;
-  if (latest_layout.layout.type != rgw::BucketIndexType::Normal ||
-      latest_layout.layout.normal.hash_type != rgw::BucketHashType::Mod) {
-    ldout_bitx(bitx, dpp, 0) << "ERROR: " << __func__ << " index for bucket=" <<
-      bucket_info.bucket << " is not a normal modulo index" << dendl_bitx;
+  const auto& current_index = bucket_info.get_current_index();
+  if (is_layout_indexless(current_index)) {
     return -EINVAL;
   }
-  const uint32_t num_shards = latest_layout.layout.normal.num_shards;
+  const uint32_t num_shards = current_index.layout.normal.num_shards;
 
   RGWSI_RADOS::Pool index_pool;
   std::map<int, std::string> index_oids;

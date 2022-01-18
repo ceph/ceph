@@ -467,9 +467,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   if (ret < 0)
     return ret;
 
-  const auto& latest_log = info.layout.logs.back();
-  const auto& index = log_to_index_layout(latest_log);
-
+  const auto& index = info.get_current_index();
   ret = read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
   if (ret < 0)
     return ret;
