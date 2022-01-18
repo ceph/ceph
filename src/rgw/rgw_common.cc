@@ -918,9 +918,9 @@ RGWHTTPArgs::get_optional(const std::string& name) const
   }
 }
 
-int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists)
+int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists) const
 {
-  map<string, string>::iterator iter;
+  map<string, string>::const_iterator iter;
   iter = val_map.find(name);
   bool e = (iter != val_map.end());
   if (exists)
@@ -941,13 +941,13 @@ int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists)
   return 0;
 }
 
-int RGWHTTPArgs::get_bool(const char *name, bool *val, bool *exists)
+int RGWHTTPArgs::get_bool(const char *name, bool *val, bool *exists) const
 {
   string s(name);
   return get_bool(s, val, exists);
 }
 
-void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
+void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val) const
 {
   bool exists = false;
   if ((get_bool(name, val, &exists) < 0) ||
@@ -956,7 +956,7 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
   }
 }
 
-int RGWHTTPArgs::get_int(const char *name, int *val, int def_val)
+int RGWHTTPArgs::get_int(const char *name, int *val, int def_val) const
 {
   bool exists = false;
   string val_str;
@@ -2015,7 +2015,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "roles",
                                     "user-policy",
                                     "amz-cache",
-                                    "oidc-provider"};
+                                    "oidc-provider",
+				                            "ratelimit"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {
@@ -2626,6 +2627,24 @@ static struct rgw_flags_desc op_type_flags[] = {
 void op_type_to_str(uint32_t mask, char *buf, int len)
 {
   return mask_to_str(op_type_flags, mask, buf, len);
+}
+
+void RGWRateLimitInfo::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("max_read_ops", max_read_ops, obj);
+  JSONDecoder::decode_json("max_write_ops", max_write_ops, obj);
+  JSONDecoder::decode_json("max_read_bytes", max_read_ops, obj);
+  JSONDecoder::decode_json("max_write_bytes", max_write_ops, obj);
+  JSONDecoder::decode_json("enabled", enabled, obj);
+}
+
+void RGWRateLimitInfo::dump(Formatter *f) const
+{
+  f->dump_int("max_read_ops", max_read_ops);
+  f->dump_int("max_write_ops", max_write_ops);
+  f->dump_int("max_read_bytes", max_read_bytes);
+  f->dump_int("max_write_bytes", max_write_bytes);
+  f->dump_bool("enabled", enabled);
 }
 
 void RGWUserInfo::dump(Formatter *f) const

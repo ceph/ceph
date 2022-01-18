@@ -1,5 +1,8 @@
 >=17.0.0
 
+* Filestore has been deprecated in Quincy, considering that BlueStore has been
+  the default objectstore for quite some time.
+
 * Critical bug in OMAP format upgrade is fixed. This could cause data corruption
   (improperly formatted OMAP keys) after pre-Pacific cluster upgrade if
   bluestore-quick-fix-on-mount parameter is set to true or ceph-bluestore-tool's
@@ -44,10 +47,20 @@
 * MDS upgrades no longer require stopping all standby MDS daemons before
   upgrading the sole active MDS for a file system.
 
+* RGW: RGW now supports rate limiting by user and/or by bucket.
+  With this feature it is possible to limit user and/or bucket, the total operations and/or
+  bytes per minute can be delivered.
+  This feature is allowing the admin to limit only READ operations and/or WRITE operations.
+  The rate limiting configuration could be applied on all users and all bucket by using 
+  global configuration.
+
 * RGW: `radosgw-admin realm delete` is now renamed to `radosgw-admin realm rm`. This
   is consistent with the help message.
 
-* OSD: Ceph now uses mclock_scheduler as its default osd_op_queue to provide QoS.
+* OSD: Ceph now uses mclock_scheduler for bluestore OSDs as its default osd_op_queue
+  to provide QoS. The 'mclock_scheduler' is not supported for filestore OSDs.
+  Therefore, the default 'osd_op_queue' is set to 'wpq' for filestore OSDs
+  and is enforced even if the user attempts to change it.
 
 * CephFS: Failure to replay the journal by a standby-replay daemon will now
   cause the rank to be marked damaged.
@@ -80,10 +93,11 @@
 
   https://docs.ceph.com/en/latest/rados/operations/placement-groups/
 
-* The ``ceph pg dump`` command now prints two additional columns:
+* The ``ceph pg dump`` command now prints three additional columns:
   `LAST_SCRUB_DURATION` shows the duration (in seconds) of the last completed scrub;
   `SCRUB_SCHEDULING` conveys whether a PG is scheduled to be scrubbed at a specified
-  time, queued for scrubbing, or being scrubbed.
+  time, queued for scrubbing, or being scrubbed;
+  `OBJECTS_SCRUBBED` shows the number of objects scrubbed in a PG after scrub begins.
 
 * A health warning will now be reported if the ``require-osd-release`` flag is not
   set to the appropriate release after a cluster upgrade.
@@ -97,6 +111,20 @@
   by default. For more details, see:
 
   https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+* Cephadm: ``osd_memory_target_autotune`` will be enabled by default which will set
+  ``mgr/cephadm/autotune_memory_target_ratio`` to ``0.7`` of total RAM. This will be
+  unsuitable for hyperconverged infrastructures. For hyperconverged Ceph, please refer
+  to the documentation or set ``mgr/cephadm/autotune_memory_target_ratio`` to ``0.2``.
+
+* telemetry: Improved the opt-in flow so that users can keep sharing the same
+  data, even when new data collections are available. A new 'perf' channel
+  that collects various performance metrics is now avaiable to opt-in to with:
+  `ceph telemetry on`
+  `ceph telemetry enable channel perf`
+  See a sample report with `ceph telemetry preview`
+  For more details, see:
+
+  https://docs.ceph.com/en/latest/mgr/telemetry/
 
 >=16.0.0
 --------

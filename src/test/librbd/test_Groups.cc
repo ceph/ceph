@@ -99,8 +99,9 @@ TEST_F(TestGroup, add_image)
 
   rbd_group_info_t group_info;
   ASSERT_EQ(0, rbd_get_group(image, &group_info, sizeof(group_info)));
-  ASSERT_EQ(0,strcmp("", group_info.name));
+  ASSERT_EQ(0, strcmp("", group_info.name));
   ASSERT_EQ(RBD_GROUP_INVALID_POOL, group_info.pool);
+  rbd_group_info_cleanup(&group_info, sizeof(group_info));
 
   ASSERT_EQ(0, rbd_group_image_add(ioctx, group_name, ioctx,
                                    m_image_name.c_str()));
@@ -109,6 +110,7 @@ TEST_F(TestGroup, add_image)
   ASSERT_EQ(0, rbd_get_group(image, &group_info, sizeof(group_info)));
   ASSERT_EQ(0, strcmp(group_name, group_info.name));
   ASSERT_EQ(rados_ioctx_get_id(ioctx), group_info.pool);
+  rbd_group_info_cleanup(&group_info, sizeof(group_info));
 
   ASSERT_EQ(0, rbd_get_features(image, &features));
   ASSERT_TRUE((features & RBD_FEATURE_OPERATIONS) ==

@@ -12,7 +12,6 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TelemetryNotificationService } from '~/app/shared/services/telemetry-notification.service';
 
@@ -106,9 +105,53 @@ export class TelemetryComponent extends CdForm implements OnInit {
     return JSON.stringify(report, this.replacer, 2);
   }
 
+  private formatReport() {
+    let copy = {};
+    copy = JSON.parse(JSON.stringify(this.report));
+    const perf_keys = [
+      'perf_counters',
+      'stats_per_pool',
+      'stats_per_pg',
+      'io_rate',
+      'osd_perf_histograms',
+      'mempool',
+      'heap_stats',
+      'rocksdb_stats'
+    ];
+    for (let i = 0; i < perf_keys.length; i++) {
+      const key = perf_keys[i];
+      if (key in copy['report']) {
+        delete copy['report'][key];
+      }
+    }
+    return JSON.stringify(copy, null, 2);
+  }
+
+  formatReportTest(report: object) {
+    let copy = {};
+    copy = JSON.parse(JSON.stringify(report));
+    const perf_keys = [
+      'perf_counters',
+      'stats_per_pool',
+      'stats_per_pg',
+      'io_rate',
+      'osd_perf_histograms',
+      'mempool',
+      'heap_stats',
+      'rocksdb_stats'
+    ];
+    for (let i = 0; i < perf_keys.length; i++) {
+      const key = perf_keys[i];
+      if (key in copy) {
+        delete copy[key];
+      }
+    }
+    return JSON.stringify(copy, null, 2);
+  }
+
   private createPreviewForm() {
     const controls = {
-      report: JSON.stringify(this.report, this.replacer, 2),
+      report: this.formatReport(),
       reportId: this.reportId,
       licenseAgrmt: [this.licenseAgrmt, Validators.requiredTrue]
     };
@@ -119,14 +162,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
     const result = [];
     switch (option.type) {
       case 'int':
-        result.push(CdValidators.number());
         result.push(Validators.required);
-        if (_.isNumber(option.min)) {
-          result.push(Validators.min(option.min));
-        }
-        if (_.isNumber(option.max)) {
-          result.push(Validators.max(option.max));
-        }
         break;
       case 'str':
         if (_.isNumber(option.min)) {

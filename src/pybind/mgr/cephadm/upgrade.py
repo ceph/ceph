@@ -22,16 +22,29 @@ CEPH_MDSMAP_ALLOW_STANDBY_REPLAY = (1 << 5)
 
 
 def normalize_image_digest(digest: str, default_registry: str) -> str:
-    # normal case:
-    #   ceph/ceph -> docker.io/ceph/ceph
-    # edge cases that shouldn't ever come up:
-    #   ubuntu -> docker.io/ubuntu    (ubuntu alias for library/ubuntu)
-    # no change:
-    #   quay.ceph.io/ceph/ceph -> ceph
-    #   docker.io/ubuntu -> no change
-    bits = digest.split('/')
-    if '.' not in bits[0] or len(bits) < 3:
-        digest = 'docker.io/' + digest
+    """
+    Normal case:
+    >>> normalize_image_digest('ceph/ceph', 'docker.io')
+    'docker.io/ceph/ceph'
+
+    No change:
+    >>> normalize_image_digest('quay.ceph.io/ceph/ceph', 'docker.io')
+    'quay.ceph.io/ceph/ceph'
+
+    >>> normalize_image_digest('docker.io/ubuntu', 'docker.io')
+    'docker.io/ubuntu'
+
+    >>> normalize_image_digest('localhost/ceph', 'docker.io')
+    'localhost/ceph'
+    """
+    known_shortnames = [
+        'ceph/ceph',
+        'ceph/daemon',
+        'ceph/daemon-base',
+    ]
+    for image in known_shortnames:
+        if digest.startswith(image):
+            return f'{default_registry}/{digest}'
     return digest
 
 

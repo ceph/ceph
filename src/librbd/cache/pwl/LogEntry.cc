@@ -15,10 +15,10 @@ namespace cache {
 namespace pwl {
 
 std::ostream& GenericLogEntry::format(std::ostream &os) const {
-  os << "ram_entry=[" << ram_entry << "], "
-     << "cache_entry=" << (void*)cache_entry << ", "
-     << "log_entry_index=" << log_entry_index << ", "
-     << "completed=" << completed;
+  os << "ram_entry=[" << ram_entry
+     << "], cache_entry=" << (void*)cache_entry
+     << ", log_entry_index=" << log_entry_index
+     << ", completed=" << completed;
   return os;
 }
 
@@ -30,13 +30,12 @@ std::ostream &operator<<(std::ostream &os,
 std::ostream& SyncPointLogEntry::format(std::ostream &os) const {
   os << "(Sync Point) ";
   GenericLogEntry::format(os);
-  os << ", "
-     << "writes=" << writes << ", "
-     << "bytes=" << bytes << ", "
-     << "writes_completed=" << writes_completed << ", "
-     << "writes_flushed=" << writes_flushed << ", "
-     << "prior_sync_point_flushed=" << prior_sync_point_flushed << ", "
-     << "next_sync_point_entry=" << next_sync_point_entry;
+  os << ", writes=" << writes
+     << ", bytes=" << bytes
+     << ", writes_completed=" << writes_completed
+     << ", writes_flushed=" << writes_flushed
+     << ", prior_sync_point_flushed=" << prior_sync_point_flushed
+     << ", next_sync_point_entry=" << next_sync_point_entry;
   return os;
 }
 
@@ -54,15 +53,13 @@ bool GenericWriteLogEntry::can_writeback() const {
 
 std::ostream& GenericWriteLogEntry::format(std::ostream &os) const {
   GenericLogEntry::format(os);
-  os << ", "
-     << "sync_point_entry=[";
+  os << ", sync_point_entry=[";
   if (sync_point_entry) {
     os << *sync_point_entry;
   } else {
     os << "nullptr";
   }
-  os << "], "
-     << "referring_map_entries=" << referring_map_entries;
+  os << "], referring_map_entries=" << referring_map_entries;
   return os;
 }
 
@@ -91,10 +88,9 @@ void WriteLogEntry::init(bool has_data,
 std::ostream& WriteLogEntry::format(std::ostream &os) const {
   os << "(Write) ";
   GenericWriteLogEntry::format(os);
-  os << ", "
-     << "cache_buffer=" << (void*)cache_buffer << ", ";
-  os << "cache_bp=" << cache_bp << ", ";
-  os << "bl_refs=" << bl_refs;
+  os << ", cache_buffer=" << (void*)cache_buffer;
+  os << ", cache_bp=" << cache_bp;
+  os << ", bl_refs=" << bl_refs;
   return os;
 }
 

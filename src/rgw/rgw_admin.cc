@@ -164,10 +164,18 @@ void usage()
   cout << "  quota set                  set quota params\n";
   cout << "  quota enable               enable quota\n";
   cout << "  quota disable              disable quota\n";
+  cout << "  ratelimit get              get ratelimit params\n";
+  cout << "  ratelimit set              set ratelimit params\n";
+  cout << "  ratelimit enable           enable ratelimit\n";
+  cout << "  ratelimit disable          disable ratelimit\n";
   cout << "  global quota get           view global quota params\n";
   cout << "  global quota set           set global quota params\n";
   cout << "  global quota enable        enable a global quota\n";
   cout << "  global quota disable       disable a global quota\n";
+  cout << "  global ratelimit get       view global ratelimit params\n";
+  cout << "  global ratelimit set       set global ratelimit params\n";
+  cout << "  global ratelimit enable    enable a ratelimit quota\n";
+  cout << "  global ratelimit disable   disable a ratelimit quota\n";
   cout << "  realm create               create a new realm\n";
   cout << "  realm rm                   remove a realm\n";
   cout << "  realm get                  show realm info\n";
@@ -416,6 +424,13 @@ void usage()
   cout << "   --max-objects             specify max objects (negative value to disable)\n";
   cout << "   --max-size                specify max size (in B/K/M/G/T, negative value to disable)\n";
   cout << "   --quota-scope             scope of quota (bucket, user)\n";
+  cout << "\nRate limiting options:\n";
+  cout << "   --max-read-ops            specify max requests per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited\n";
+  cout << "   --max-read-bytes          specify max bytes per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited\n";
+  cout << "   --max-write-ops           specify max requests per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited\n";
+  cout << "   --max-write-bytes         specify max bytes per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited\n";
+  cout << "   --ratelimit-scope         scope of rate limiting: bucket, user, anonymous\n";
+  cout << "                             anonymous can be configured only with global rate limit\n";
   cout << "\nOrphans search options:\n";
   cout << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
   cout << "   --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)\n";
@@ -660,6 +675,10 @@ enum class OPT {
   ORPHANS_FIND,
   ORPHANS_FINISH,
   ORPHANS_LIST_JOBS,
+  RATELIMIT_GET,
+  RATELIMIT_SET,
+  RATELIMIT_ENABLE,
+  RATELIMIT_DISABLE,
   ZONEGROUP_ADD,
   ZONEGROUP_CREATE,
   ZONEGROUP_DEFAULT,
@@ -750,6 +769,10 @@ enum class OPT {
   GLOBAL_QUOTA_SET,
   GLOBAL_QUOTA_ENABLE,
   GLOBAL_QUOTA_DISABLE,
+  GLOBAL_RATELIMIT_GET,
+  GLOBAL_RATELIMIT_SET,
+  GLOBAL_RATELIMIT_ENABLE,
+  GLOBAL_RATELIMIT_DISABLE,
   SYNC_INFO,
   SYNC_STATUS,
   ROLE_CREATE,
@@ -859,6 +882,10 @@ static SimpleCmd::Commands all_cmds = {
   { "quota set", OPT::QUOTA_SET },
   { "quota enable", OPT::QUOTA_ENABLE },
   { "quota disable", OPT::QUOTA_DISABLE },
+  { "ratelimit get", OPT::RATELIMIT_GET },
+  { "ratelimit set", OPT::RATELIMIT_SET },
+  { "ratelimit enable", OPT::RATELIMIT_ENABLE },
+  { "ratelimit disable", OPT::RATELIMIT_DISABLE },
   { "gc list", OPT::GC_LIST },
   { "gc process", OPT::GC_PROCESS },
   { "lc list", OPT::LC_LIST },
@@ -965,6 +992,10 @@ static SimpleCmd::Commands all_cmds = {
   { "global quota set", OPT::GLOBAL_QUOTA_SET },
   { "global quota enable", OPT::GLOBAL_QUOTA_ENABLE },
   { "global quota disable", OPT::GLOBAL_QUOTA_DISABLE },
+  { "global ratelimit get", OPT::GLOBAL_RATELIMIT_GET },
+  { "global ratelimit set", OPT::GLOBAL_RATELIMIT_SET },
+  { "global ratelimit enable", OPT::GLOBAL_RATELIMIT_ENABLE },
+  { "global ratelimit disable", OPT::GLOBAL_RATELIMIT_DISABLE },
   { "sync info", OPT::SYNC_INFO },
   { "sync status", OPT::SYNC_STATUS },
   { "role create", OPT::ROLE_CREATE },
@@ -1261,6 +1292,56 @@ static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
   return true;
 }
 
+bool set_ratelimit_info(RGWRateLimitInfo& ratelimit, OPT opt_cmd, int64_t max_read_ops, int64_t max_write_ops,
+                    int64_t max_read_bytes, int64_t max_write_bytes,
+                    bool have_max_read_ops, bool have_max_write_ops,
+                    bool have_max_read_bytes, bool have_max_write_bytes)
+{
+  bool ratelimit_configured = true;
+  switch (opt_cmd) {
+    case OPT::RATELIMIT_ENABLE:
+    case OPT::GLOBAL_RATELIMIT_ENABLE:
+      ratelimit.enabled = true;
+      break;
+
+    case OPT::RATELIMIT_SET:
+    case OPT::GLOBAL_RATELIMIT_SET:
+      ratelimit_configured = false;
+      if (have_max_read_ops) {
+        if (max_read_ops >= 0) {
+          ratelimit.max_read_ops = max_read_ops;
+          ratelimit_configured = true;
+        }
+      }
+      if (have_max_write_ops) {
+        if (max_write_ops >= 0) {
+          ratelimit.max_write_ops = max_write_ops;
+          ratelimit_configured = true;
+        }
+      }
+      if (have_max_read_bytes) {
+        if (max_read_bytes >= 0) {
+          ratelimit.max_read_bytes = max_read_bytes;
+          ratelimit_configured = true;
+        }
+      }
+      if (have_max_write_bytes) {
+        if (max_write_bytes >= 0) {
+          ratelimit.max_write_bytes = max_write_bytes;
+          ratelimit_configured = true;
+        }
+      }
+      break;
+    case OPT::RATELIMIT_DISABLE:
+    case OPT::GLOBAL_RATELIMIT_DISABLE:
+      ratelimit.enabled = false;
+      break;
+    default:
+      break;
+  }
+  return ratelimit_configured;
+}
+
 void set_quota_info(RGWQuotaInfo& quota, OPT opt_cmd, int64_t max_size, int64_t max_objects,
                     bool have_max_size, bool have_max_objects)
 {
@@ -1319,6 +1400,141 @@ int set_bucket_quota(rgw::sal::Store* store, OPT opt_cmd,
   return 0;
 }
 
+int set_bucket_ratelimit(rgw::sal::Store* store, OPT opt_cmd,
+                     const string& tenant_name, const string& bucket_name,
+                     int64_t max_read_ops, int64_t max_write_ops,
+                     int64_t max_read_bytes, int64_t max_write_bytes,
+                     bool have_max_read_ops, bool have_max_write_ops,
+                     bool have_max_read_bytes, bool have_max_write_bytes)
+{
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int r = store->get_bucket(dpp(), nullptr, tenant_name, bucket_name, &bucket, null_yield);
+  if (r < 0) {
+    cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  RGWRateLimitInfo ratelimit_info;
+  auto iter = bucket->get_attrs().find(RGW_ATTR_RATELIMIT);
+  if(iter != bucket->get_attrs().end()) {
+    try {
+      bufferlist& bl = iter->second;
+      auto biter = bl.cbegin();
+      decode(ratelimit_info, biter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp(), 0) << "ERROR: failed to decode rate limit" << dendl;
+      return -EIO;
+    }
+  }
+  bool ratelimit_configured = set_ratelimit_info(ratelimit_info, opt_cmd, max_read_ops, max_write_ops,
+                         max_read_bytes, max_write_bytes,
+                         have_max_read_ops, have_max_write_ops,
+                         have_max_read_bytes, have_max_write_bytes);
+  if (!ratelimit_configured) {
+    ldpp_dout(dpp(), 0) << "ERROR: no rate limit values have been specified" << dendl;
+    return -EINVAL;
+  }
+  bufferlist bl;
+  ratelimit_info.encode(bl);
+  rgw::sal::Attrs attr;
+  attr[RGW_ATTR_RATELIMIT] = bl;
+  r = bucket->merge_and_store_attrs(dpp(), attr, null_yield);
+  if (r < 0) {
+    cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  return 0;
+}
+
+int set_user_ratelimit(OPT opt_cmd, std::unique_ptr<rgw::sal::User>& user,
+                     int64_t max_read_ops, int64_t max_write_ops,
+                     int64_t max_read_bytes, int64_t max_write_bytes,
+                     bool have_max_read_ops, bool have_max_write_ops,
+                     bool have_max_read_bytes, bool have_max_write_bytes)
+{
+  RGWRateLimitInfo ratelimit_info;
+  user->load_user(dpp(), null_yield);
+  auto iter = user->get_attrs().find(RGW_ATTR_RATELIMIT);
+  if(iter != user->get_attrs().end()) {
+    try {
+      bufferlist& bl = iter->second;
+      auto biter = bl.cbegin();
+      decode(ratelimit_info, biter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp(), 0) << "ERROR: failed to decode rate limit" << dendl;
+      return -EIO;
+    }
+  }
+  bool ratelimit_configured = set_ratelimit_info(ratelimit_info, opt_cmd, max_read_ops, max_write_ops,
+                         max_read_bytes, max_write_bytes,
+                         have_max_read_ops, have_max_write_ops,
+                         have_max_read_bytes, have_max_write_bytes);
+  if (!ratelimit_configured) {
+    ldpp_dout(dpp(), 0) << "ERROR: no rate limit values have been specified" << dendl;
+    return -EINVAL;
+  }
+  bufferlist bl;
+  ratelimit_info.encode(bl);
+  rgw::sal::Attrs attr;
+  attr[RGW_ATTR_RATELIMIT] = bl;
+  int r = user->merge_and_store_attrs(dpp(), attr, null_yield);
+  if (r < 0) {
+    cerr << "ERROR: failed writing user instance info: " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  return 0;
+}
+
+int show_user_ratelimit(std::unique_ptr<rgw::sal::User>& user, Formatter *formatter)
+{
+  RGWRateLimitInfo ratelimit_info;
+  user->load_user(dpp(), null_yield);
+  auto iter = user->get_attrs().find(RGW_ATTR_RATELIMIT);
+  if(iter != user->get_attrs().end()) {
+    try {
+      bufferlist& bl = iter->second;
+      auto biter = bl.cbegin();
+      decode(ratelimit_info, biter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp(), 0) << "ERROR: failed to decode rate limit" << dendl;
+      return -EIO;
+    }
+  }
+  formatter->open_object_section("user_ratelimit");
+  encode_json("user_ratelimit", ratelimit_info, formatter);
+  formatter->close_section();
+  formatter->flush(cout);
+  cout << std::endl;
+  return 0;
+}
+
+int show_bucket_ratelimit(rgw::sal::Store* store, const string& tenant_name,
+                          const string& bucket_name, Formatter *formatter)
+{
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int r = store->get_bucket(dpp(), nullptr, tenant_name, bucket_name, &bucket, null_yield);
+  if (r < 0) {
+    cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  RGWRateLimitInfo ratelimit_info;
+  auto iter = bucket->get_attrs().find(RGW_ATTR_RATELIMIT);
+  if (iter != bucket->get_attrs().end()) {
+    try {
+      bufferlist& bl = iter->second;
+      auto biter = bl.cbegin();
+      decode(ratelimit_info, biter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp(), 0) << "ERROR: failed to decode rate limit" << dendl;
+      return -EIO;
+    }
+  }
+  formatter->open_object_section("bucket_ratelimit");
+  encode_json("bucket_ratelimit", ratelimit_info, formatter);
+  formatter->close_section();
+  formatter->flush(cout);
+  cout << std::endl;
+  return 0;
+}
 int set_user_bucket_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
                           bool have_max_size, bool have_max_objects)
 {
@@ -3255,6 +3471,7 @@ int main(int argc, const char **argv)
   string op_id;
   string op_mask_str;
   string quota_scope;
+  string ratelimit_scope;
   string object_version;
   string placement_id;
   std::optional<string> opt_storage_class;
@@ -3264,8 +3481,16 @@ int main(int argc, const char **argv)
 
   int64_t max_objects = -1;
   int64_t max_size = -1;
+  int64_t max_read_ops = 0;
+  int64_t max_write_ops = 0;
+  int64_t max_read_bytes = 0;
+  int64_t max_write_bytes = 0;
   bool have_max_objects = false;
   bool have_max_size = false;
+  bool have_max_write_ops = false;
+  bool have_max_read_ops = false;
+  bool have_max_write_bytes = false;
+  bool have_max_read_bytes = false;
   int include_all = false;
   int allow_unordered = false;
 
@@ -3388,7 +3613,7 @@ int main(int argc, const char **argv)
         cerr << "no value for uid" << std::endl;
         exit(1);
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--new-uid", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--new-uid", (char*)NULL)) {
       new_user_id.from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
       tenant = val;
@@ -3487,6 +3712,34 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       have_max_objects = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-read-ops", (char*)NULL)) {
+      max_read_ops = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max read requests: " << err << std::endl;
+        return EINVAL;
+      }
+      have_max_read_ops = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-write-ops", (char*)NULL)) {
+      max_write_ops = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max write requests: " << err << std::endl;
+        return EINVAL;
+      }
+      have_max_write_ops = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-read-bytes", (char*)NULL)) {
+      max_read_bytes = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max read bytes: " << err << std::endl;
+        return EINVAL;
+      }
+      have_max_read_bytes = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-write-bytes", (char*)NULL)) {
+      max_write_bytes = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max write bytes: " << err << std::endl;
+        return EINVAL;
+      }
+      have_max_write_bytes = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
       date = val;
       if (end_date.empty())
@@ -3592,7 +3845,7 @@ int main(int argc, const char **argv)
      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infile", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--infile", (char*)NULL)) {
       infile = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--metadata-key", (char*)NULL)) {
       metadata_key = val;
@@ -3604,6 +3857,8 @@ int main(int argc, const char **argv)
       end_marker = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--quota-scope", (char*)NULL)) {
       quota_scope = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--ratelimit-scope", (char*)NULL)) {
+      ratelimit_scope = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--index-type", (char*)NULL)) {
       string index_type_str = val;
       bi_index_type = get_bi_index_type(index_type_str);
@@ -3902,6 +4157,8 @@ int main(int argc, const char **argv)
 			 OPT::PERIOD_GET_CURRENT, OPT::PERIOD_LIST,
 			 OPT::GLOBAL_QUOTA_GET, OPT::GLOBAL_QUOTA_SET,
 			 OPT::GLOBAL_QUOTA_ENABLE, OPT::GLOBAL_QUOTA_DISABLE,
+       OPT::GLOBAL_RATELIMIT_GET, OPT::GLOBAL_RATELIMIT_SET,
+			 OPT::GLOBAL_RATELIMIT_ENABLE, OPT::GLOBAL_RATELIMIT_DISABLE,
 			 OPT::REALM_DELETE, OPT::REALM_GET, OPT::REALM_LIST,
 			 OPT::REALM_LIST_PERIODS,
 			 OPT::REALM_GET_DEFAULT,
@@ -3958,6 +4215,7 @@ int main(int argc, const char **argv)
 			 OPT::PERIOD_GET_CURRENT,
 			 OPT::PERIOD_LIST,
 			 OPT::GLOBAL_QUOTA_GET,
+       OPT::GLOBAL_RATELIMIT_GET,
 			 OPT::SYNC_INFO,
 			 OPT::SYNC_STATUS,
 			 OPT::ROLE_GET,
@@ -4249,6 +4507,100 @@ int main(int argc, const char **argv)
         }
 
         encode_json("period", period, formatter.get());
+        formatter->flush(cout);
+      }
+      break;
+    case OPT::GLOBAL_RATELIMIT_GET:
+    case OPT::GLOBAL_RATELIMIT_SET:
+    case OPT::GLOBAL_RATELIMIT_ENABLE:
+    case OPT::GLOBAL_RATELIMIT_DISABLE:
+      {
+        if (realm_id.empty()) {
+          RGWRealm realm(g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj);
+          if (!realm_name.empty()) {
+            // look up realm_id for the given realm_name
+            int ret = realm.read_id(dpp(), realm_name, realm_id, null_yield);
+            if (ret < 0) {
+              cerr << "ERROR: failed to read realm for " << realm_name
+                  << ": " << cpp_strerror(-ret) << std::endl;
+              return -ret;
+            }
+          } else {
+            // use default realm_id when none is given
+            int ret = realm.read_default_id(dpp(), realm_id, null_yield);
+            if (ret < 0 && ret != -ENOENT) { // on ENOENT, use empty realm_id
+              cerr << "ERROR: failed to read default realm: "
+                  << cpp_strerror(-ret) << std::endl;
+              return -ret;
+            }
+          }
+        }
+
+        RGWPeriodConfig period_config;
+        int ret = period_config.read(dpp(), static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, realm_id, null_yield);
+        if (ret < 0 && ret != -ENOENT) {
+          cerr << "ERROR: failed to read period config: "
+              << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+        bool ratelimit_configured = true;
+        formatter->open_object_section("period_config");
+        if (ratelimit_scope == "bucket") {
+          ratelimit_configured = set_ratelimit_info(period_config.bucket_ratelimit, opt_cmd,
+                         max_read_ops, max_write_ops,
+                         max_read_bytes, max_write_bytes,
+                         have_max_read_ops, have_max_write_ops,
+                         have_max_read_bytes, have_max_write_bytes);
+          encode_json("bucket_ratelimit", period_config.bucket_ratelimit, formatter.get());
+        } else if (ratelimit_scope == "user") {
+          ratelimit_configured = set_ratelimit_info(period_config.user_ratelimit, opt_cmd,
+                         max_read_ops, max_write_ops,
+                         max_read_bytes, max_write_bytes,
+                         have_max_read_ops, have_max_write_ops,
+                         have_max_read_bytes, have_max_write_bytes);
+          encode_json("user_ratelimit", period_config.user_ratelimit, formatter.get());
+        } else if (ratelimit_scope == "anonymous") {
+          ratelimit_configured = set_ratelimit_info(period_config.anon_ratelimit, opt_cmd,
+                         max_read_ops, max_write_ops,
+                         max_read_bytes, max_write_bytes,
+                         have_max_read_ops, have_max_write_ops,
+                         have_max_read_bytes, have_max_write_bytes);
+          encode_json("anonymous_ratelimit", period_config.anon_ratelimit, formatter.get());
+        } else if (ratelimit_scope.empty() && opt_cmd == OPT::GLOBAL_RATELIMIT_GET) {
+          // if no scope is given for GET, print both
+          encode_json("bucket_ratelimit", period_config.bucket_ratelimit, formatter.get());
+          encode_json("user_ratelimit", period_config.user_ratelimit, formatter.get());
+          encode_json("anonymous_ratelimit", period_config.anon_ratelimit, formatter.get());
+        } else {
+          cerr << "ERROR: invalid rate limit scope specification. Please specify "
+              "either --ratelimit-scope=bucket, or --ratelimit-scope=user or --ratelimit-scope=anonymous" << std::endl;
+          return EINVAL;
+        }
+        if (!ratelimit_configured) {
+          cerr << "ERROR: no rate limit values have been specified" << std::endl;
+          return EINVAL;
+        }
+
+        formatter->close_section();
+
+        if (opt_cmd != OPT::GLOBAL_RATELIMIT_GET) {
+          // write the modified period config
+          ret = period_config.write(dpp(), static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, realm_id, null_yield);
+          if (ret < 0) {
+            cerr << "ERROR: failed to write period config: "
+                << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+          if (!realm_id.empty()) {
+            cout << "Global ratelimit changes saved. Use 'period update' to apply "
+                "them to the staging period, and 'period commit' to commit the "
+                "new period." << std::endl;
+          } else {
+            cout << "Global ratelimit changes saved. They will take effect as "
+                "the gateways are restarted." << std::endl;
+          }
+        }
+
         formatter->flush(cout);
       }
       break;
@@ -9132,6 +9484,57 @@ next:
         return EINVAL;
       }
     }
+  }
+
+  bool ratelimit_op_set = (opt_cmd == OPT::RATELIMIT_SET || opt_cmd == OPT::RATELIMIT_ENABLE || opt_cmd == OPT::RATELIMIT_DISABLE);
+  bool ratelimit_op_get = opt_cmd == OPT::RATELIMIT_GET;
+  if (ratelimit_op_set) {
+    if (bucket_name.empty() && rgw::sal::User::empty(user)) {
+      cerr << "ERROR: bucket name or uid is required for ratelimit operation" << std::endl;
+      return EINVAL;
+    }
+
+    if (!bucket_name.empty()) {
+      if (!ratelimit_scope.empty() && ratelimit_scope != "bucket") {
+        cerr << "ERROR: invalid ratelimit scope specification. (bucket scope is not bucket but bucket has been specified)" << std::endl;
+        return EINVAL;
+      }
+      return set_bucket_ratelimit(store, opt_cmd, tenant, bucket_name,
+                           max_read_ops, max_write_ops,
+                           max_read_bytes, max_write_bytes,
+                           have_max_read_ops, have_max_write_ops,
+                           have_max_read_bytes, have_max_write_bytes);
+    } else if (!rgw::sal::User::empty(user)) {
+      } if (ratelimit_scope == "user") {
+        return set_user_ratelimit(opt_cmd, user, max_read_ops, max_write_ops,
+                         max_read_bytes, max_write_bytes,
+                         have_max_read_ops, have_max_write_ops,
+                         have_max_read_bytes, have_max_write_bytes);
+      } else {
+        cerr << "ERROR: invalid ratelimit scope specification. Please specify either --ratelimit-scope=bucket, or --ratelimit-scope=user" << std::endl;
+        return EINVAL;
+      }
+  }
+
+  if (ratelimit_op_get) {
+    if (bucket_name.empty() && rgw::sal::User::empty(user)) {
+      cerr << "ERROR: bucket name or uid is required for ratelimit operation" << std::endl;
+      return EINVAL;
+    }
+
+    if (!bucket_name.empty()) {
+      if (!ratelimit_scope.empty() && ratelimit_scope != "bucket") {
+        cerr << "ERROR: invalid ratelimit scope specification. (bucket scope is not bucket but bucket has been specified)" << std::endl;
+        return EINVAL;
+      }
+      return show_bucket_ratelimit(store, tenant, bucket_name, formatter.get());
+    } else if (!rgw::sal::User::empty(user)) {
+      } if (ratelimit_scope == "user") {
+        return show_user_ratelimit(user, formatter.get());
+      } else {
+        cerr << "ERROR: invalid ratelimit scope specification. Please specify either --ratelimit-scope=bucket, or --ratelimit-scope=user" << std::endl;
+        return EINVAL;
+      }
   }
 
   if (opt_cmd == OPT::MFA_CREATE) {

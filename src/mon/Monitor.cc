@@ -421,6 +421,11 @@ int Monitor::do_admin_command(
     cmd_getval(cmdmap, "devid", want_devid);
 
     string devname = store->get_devname();
+    if (devname.empty()) {
+      err << "could not determine device name for " << store->get_path();
+      r = -ENOENT;
+      goto abort;
+    }
     set<string> devnames;
     get_raw_devices(devname, &devnames);
     json_spirit::mObject json_map;
@@ -930,6 +935,9 @@ int Monitor::init()
   mgr_messenger->add_dispatcher_tail(&mgr_client);
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
   mgrmon()->prime_mgr_client();
+
+  // generate list of filestore OSDs
+  osdmon()->get_filestore_osd_list();
 
   state = STATE_PROBING;
   bootstrap();

@@ -40,7 +40,11 @@
 
 #define SQL_BIND_TEXT(dpp, stmt, index, str, sdb)			\
   do {								\
-    rc = sqlite3_bind_text(stmt, index, str, -1, SQLITE_TRANSIENT); 	\
+    if (strcmp(str, "null") == 0) {          \
+      rc = sqlite3_bind_text(stmt, index, "", -1, SQLITE_TRANSIENT); 	\
+    } else {                                                       \
+      rc = sqlite3_bind_text(stmt, index, str, -1, SQLITE_TRANSIENT); 	\
+    }                                   \
     \
     if (rc != SQLITE_OK) {					      	\
       ldpp_dout(dpp, 0)<<"sqlite bind text failed for index("     	\
@@ -114,6 +118,7 @@
 
 #define SQL_EXECUTE(dpp, params, stmt, cbk, args...) \
   do{						\
+    const std::lock_guard<std::mutex> lk(((DBOp*)(this))->mtx); \
     if (!stmt) {				\
       ret = Prepare(dpp, params);		\
     }					\
@@ -2665,10 +2670,10 @@ int SQLGetLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
   } else {
     pstmt = &stmt;
   }
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.index.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.lc_entry.index.c_str(), sdb);
   SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.index.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.lc_entry.bucket_name.c_str(), sdb);
   SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
 
 out:

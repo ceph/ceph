@@ -382,6 +382,10 @@ int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
     return r;
   }
 
+  result->count = 0; 
+  result->size = 0; 
+  result->size_rounded = 0; 
+
   auto hiter = headers.begin();
   for (; hiter != headers.end(); ++hiter) {
     RGWObjCategory category = RGWObjCategory::Main;

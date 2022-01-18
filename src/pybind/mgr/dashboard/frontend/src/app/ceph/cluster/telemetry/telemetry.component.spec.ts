@@ -268,6 +268,41 @@ describe('TelemetryComponent', () => {
       });
     });
 
+    it('should remove perf channel fields from a report', () => {
+      expect(
+        JSON.parse(
+          component.formatReportTest({
+            perf_counters: {},
+            stats_per_pool: {},
+            stats_per_pg: {},
+            io_rate: {},
+            osd_perf_histograms: {},
+            mempool: {},
+            heap_stats: {},
+            rocksdb_stats: {}
+          })
+        )
+      ).toStrictEqual({});
+
+      expect(
+        JSON.parse(
+          component.formatReportTest({
+            perf_counters: {},
+            stats_per_pool: {},
+            stats_per_pg: {},
+            io_rate: {},
+            osd_perf_histograms: {},
+            mempool: {},
+            heap_stats: {},
+            rocksdb_stats: {},
+            other: {}
+          })
+        )
+      ).toStrictEqual({
+        other: {}
+      });
+    });
+
     it('should submit', () => {
       component.onSubmit();
       const req = httpTesting.expectOne('api/telemetry');

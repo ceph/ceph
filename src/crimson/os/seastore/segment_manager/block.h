@@ -73,10 +73,12 @@ public:
   }
 
   write_ertr::future<> write_out(
+    device_id_t device_id,
     seastar::file &device,
     uint64_t offset);
 
   read_ertr::future<> read_in(
+    device_id_t device_id,
     seastar::file &device,
     uint64_t offset);
 };
@@ -140,7 +142,8 @@ public:
   }
 
   device_id_t get_device_id() const final {
-    return superblock.device_id;
+    assert(device_id <= DEVICE_ID_MAX_VALID);
+    return device_id;
   }
   secondary_device_set_t& get_secondary_devices() final {
     return superblock.secondary_devices;
@@ -154,7 +157,7 @@ public:
   device_spec_t get_device_spec() const final {
     return {superblock.magic,
 	    superblock.dtype,
-	    superblock.device_id};
+	    get_device_id()};
   }
 
   magic_t get_magic() const final {
@@ -203,7 +206,13 @@ private:
   block_sm_superblock_t superblock;
   seastar::file device;
 
-  device_id_t device_id = 0;
+  void set_device_id(device_id_t id) {
+    assert(id <= DEVICE_ID_MAX_VALID);
+    assert(device_id == DEVICE_ID_NULL ||
+           device_id == id);
+    device_id = id;
+  }
+  device_id_t device_id = DEVICE_ID_NULL;
 
   size_t get_offset(paddr_t addr) {
     auto& seg_addr = addr.as_seg_paddr();

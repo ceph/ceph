@@ -1430,9 +1430,106 @@ public:
     uint32_t max_deviation, ///< max deviation from target (value >= 1)
     int max_iterations,  ///< max iterations to run
     const std::set<int64_t>& pools,        ///< [optional] restrict to pool
-    Incremental *pending_inc
+    Incremental *pending_inc,
+    std::random_device::result_type *p_seed = nullptr  ///< [optional] for regression tests
     );
 
+private: // Bunch of internal functions used only by calc_pg_upmaps (result of code refactoring)
+  float build_pool_pgs_info (
+    CephContext *cct,
+    const std::set<int64_t>& pools,        ///< [optional] restrict to pool
+    const OSDMap& tmp_osd_map,
+    int& total_pgs,
+    std::map<int, std::set<pg_t>>& pgs_by_osd,
+    std::map<int,float>& osd_weight
+  );  // return total weight of all OSDs
+
+  float calc_deviations (
+    CephContext *cct,
+    const std::map<int,std::set<pg_t>>& pgs_by_osd,
+    const std::map<int,float>& osd_weight,
+    float pgs_per_weight,
+    std::map<int,float>& osd_deviation,
+    std::multimap<float,int>& deviation_osd,
+    float& stddev
+  );  // return current max deviation
+
+  void fill_overfull_underfull (
+    CephContext *cct,
+    const std::multimap<float,int>& deviation_osd,
+    int max_deviation,
+    std::set<int>& overfull,
+    std::set<int>& more_overfull,
+    std::vector<int>& underfull,
+    std::vector<int>& more_underfull
+  );
+
+  int pack_upmap_results(
+    CephContext *cct,
+    const std::set<pg_t>& to_unmap,
+    const std::map<pg_t, mempool::osdmap::vector<std::pair<int, int>>>& to_upmap,
+    OSDMap& tmp_osd_map,
+    OSDMap::Incremental *pending_inc
+  );
+  
+  std::default_random_engine get_random_engine(
+    CephContext *cct,
+    std::random_device::result_type *p_seed
+  );
+
+  bool try_drop_remap_overfull(
+    CephContext *cct,
+    const std::vector<pg_t>& pgs,
+    const OSDMap& tmp_osd_map,
+    int osd,
+    std::map<int,std::set<pg_t>>& temp_pgs_by_osd,
+    std::set<pg_t>& to_unmap,
+    std::map<pg_t, mempool::osdmap::vector<std::pair<int32_t,int32_t>>>& to_upmap
+  );
+
+typedef std::vector<std::pair<pg_t, mempool::osdmap::vector<std::pair<int, int>>>>
+  candidates_t;
+
+bool try_drop_remap_underfull(
+    CephContext *cct,
+    const candidates_t& candidates,
+    int osd,
+    std::map<int,std::set<pg_t>>& temp_pgs_by_osd,
+    std::set<pg_t>& to_unmap,
+    std::map<pg_t, mempool::osdmap::vector<std::pair<int32_t,int32_t>>>& to_upmap
+  );
+
+  void add_remap_pair(
+    CephContext *cct,
+    int orig,
+    int out, 
+    pg_t pg,
+    size_t pg_pool_size,
+    int osd,
+    std::set<int>& existing,
+    std::map<int,std::set<pg_t>>& temp_pgs_by_osd,
+    mempool::osdmap::vector<std::pair<int32_t,int32_t>> new_upmap_items,
+    std::map<pg_t, mempool::osdmap::vector<std::pair<int32_t,int32_t>>>& to_upmap
+  );
+
+  int find_best_remap (
+    CephContext *cct,
+    const std::vector<int>& orig,
+    const std::vector<int>& out,
+    const std::set<int>& existing,
+    const std::map<int,float> osd_deviation
+  );
+
+  candidates_t build_candidates(
+    CephContext *cct,
+    const OSDMap& tmp_osd_map,
+    const std::set<pg_t> to_skip,
+    const std::set<int64_t>& only_pools,
+    bool aggressive,
+    std::random_device::result_type *p_seed
+  );
+
+public:
   int get_osds_by_bucket_name(const std::string &name, std::set<int> *osds) const;
 
   bool have_pg_upmaps(pg_t pg) const {

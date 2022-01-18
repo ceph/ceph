@@ -114,6 +114,7 @@ protected:
       virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
 
       /* Placeholders */
+      virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) override;
       virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) override;
       virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info = nullptr) override;
       virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override;
@@ -185,7 +186,7 @@ protected:
 					DoutPrefixProvider *dpp) override;
       virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
       virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
-      virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y) override;
+      virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y, bool get_stats = false) override;
       virtual int read_stats(const DoutPrefixProvider *dpp, int shard_id,
           std::string *bucket_ver, std::string *master_ver,
           std::map<RGWObjCategory, RGWStorageStats>& stats,
@@ -437,7 +438,7 @@ protected:
       /* XXX: to be removed. Till Dan's patch comes, a placeholder
        * for RGWObjState
        */
-      RGWObjState* state;
+      RGWObjState state;
 
     public:
       struct DBReadOp : public ReadOp {
@@ -474,13 +475,13 @@ protected:
       DBObject(DBStore *_st, const rgw_obj_key& _k)
         : Object(_k),
         store(_st),
-        acls() {
-        }
+        acls() {}
+
       DBObject(DBStore *_st, const rgw_obj_key& _k, Bucket* _b)
         : Object(_k, _b),
         store(_st),
-        acls() {
-        }
+        acls() {}
+
       DBObject(DBObject& _o) = default;
 
       virtual int delete_object(const DoutPrefixProvider* dpp,
@@ -731,6 +732,7 @@ public:
       virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;
       virtual int register_to_service_map(const DoutPrefixProvider *dpp, const string& daemon_type,
           const map<string, string>& meta) override;
+      virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) override;
       virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) override;
       virtual int set_buckets_enabled(const DoutPrefixProvider *dpp, vector<rgw_bucket>& buckets, bool enabled) override;
       virtual uint64_t get_new_req_id() override { return 0; }

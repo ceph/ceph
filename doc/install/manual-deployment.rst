@@ -249,6 +249,13 @@ The procedure is as follows:
 
 	sudo systemctl start ceph-mon@mon-node1
 
+#. Ensure to open firewall ports for ceph-mon.
+
+   Open the ports with firewalld::
+   
+        sudo firewall-cmd --zone=public --add-service=ceph-mon
+	sudo firewall-cmd --zone=public --add-service=ceph-mon --permanent
+
 #. Verify that the monitor is running. ::
 
 	sudo ceph -s

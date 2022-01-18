@@ -37,7 +37,6 @@ struct DiffContext {
   bool include_parent;
   uint64_t from_snap_id;
   uint64_t end_snap_id;
-  interval_set<uint64_t> parent_diff;
   OrderedThrottle throttle;
 
   template <typename I>
@@ -65,14 +64,18 @@ public:
     Context* ctx = m_diff_context.throttle.start_op(this);
     auto aio_comp = io::AioCompletion::create_and_start(
       ctx, util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_GENERIC);
+    int list_snaps_flags = 0;
+    if (!m_diff_context.include_parent || m_diff_context.from_snap_id != 0) {
+      list_snaps_flags |= io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT;
+    }
+    if (m_diff_context.whole_object) {
+      list_snaps_flags |= io::LIST_SNAPS_FLAG_WHOLE_OBJECT;
+    }
     auto req = io::ImageDispatchSpec::create_list_snaps(
       m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
       aio_comp, {{m_image_offset, m_image_length}},
       {m_diff_context.from_snap_id, m_diff_context.end_snap_id},
-      (m_diff_context.include_parent ?
-        0 : io::LIST_SNAPS_FLAG_DISABLE_LIST_FROM_PARENT) |
-      (m_diff_context.whole_object ? io::LIST_SNAPS_FLAG_WHOLE_OBJECT : 0),
-      &m_snapshot_delta, {});
+      list_snaps_flags, &m_snapshot_delta, {});
     req->send();
   }
 
@@ -145,6 +148,15 @@ private:
     }
   }
 };
+
+int simple_diff_cb(uint64_t off, size_t len, int exists, void *arg) {
+  // it's possible for a discard to create a hole in the parent image -- ignore
+  if (exists) {
+    interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
+    diff->insert(off, len);
+  }
+  return 0;
+}
 
 } // anonymous namespace
 
@@ -233,6 +245,7 @@ int DiffIterate<I>::execute() {
   int r;
   bool fast_diff_enabled = false;
   BitVector<2> object_diff_state;
+  interval_set<uint64_t> parent_diff;
   if (m_whole_object) {
     C_SaferCond ctx;
     auto req = object_map::DiffRequest<I>::create(&m_image_ctx, from_snap_id,
@@ -246,6 +259,22 @@ int DiffIterate<I>::execute() {
     } else {
       ldout(cct, 5) << "fast diff enabled" << dendl;
       fast_diff_enabled = true;
+
+      // check parent overlap only if we are comparing to the beginning of time
+      if (m_include_parent && from_snap_id == 0) {
+        std::shared_lock image_locker{m_image_ctx.image_lock};
+        uint64_t overlap = 0;
+        m_image_ctx.get_parent_overlap(m_image_ctx.snap_id, &overlap);
+        if (m_image_ctx.parent && overlap > 0) {
+          ldout(cct, 10) << " first getting parent diff" << dendl;
+          DiffIterate diff_parent(*m_image_ctx.parent, {}, nullptr, 0, overlap,
+                                  true, true, &simple_diff_cb, &parent_diff);
+          r = diff_parent.execute();
+          if (r < 0) {
+            return r;
+          }
+        }
+      }
     }
   }
 
@@ -253,8 +282,7 @@ int DiffIterate<I>::execute() {
                 << end_snap_id << " size from " << from_size
                 << " to " << end_size << dendl;
   DiffContext diff_context(m_image_ctx, m_callback, m_callback_arg,
-                           m_whole_object,
-                           m_include_parent && from_snap_id == 0, from_snap_id,
+                           m_whole_object, m_include_parent, from_snap_id,
                            end_snap_id);
 
   uint64_t period = m_image_ctx.get_stripe_period();
@@ -279,13 +307,13 @@ int DiffIterate<I>::execute() {
         const uint64_t object_no = extents.front().objectno;
         uint8_t diff_state = object_diff_state[object_no];
         if (diff_state == object_map::DIFF_STATE_HOLE &&
-            from_snap_id == 0 && !diff_context.parent_diff.empty()) {
+            from_snap_id == 0 && !parent_diff.empty()) {
           // no data in child object -- report parent diff instead
           for (auto& oe : extents) {
             for (auto& be : oe.buffer_extents) {
               interval_set<uint64_t> o;
               o.insert(off + be.first, be.second);
-              o.intersection_of(diff_context.parent_diff);
+              o.intersection_of(parent_diff);
               ldout(cct, 20) << " reporting parent overlap " << o << dendl;
               for (auto e = o.begin(); e != o.end(); ++e) {
                 r = m_callback(e.get_start(), e.get_len(), true,
@@ -300,9 +328,12 @@ int DiffIterate<I>::execute() {
                    diff_state == object_map::DIFF_STATE_DATA_UPDATED) {
           bool updated = (diff_state == object_map::DIFF_STATE_DATA_UPDATED);
           for (auto& oe : extents) {
-            r = m_callback(off + oe.offset, oe.length, updated, m_callback_arg);
-            if (r < 0) {
-              return r;
+            for (auto& be : oe.buffer_extents) {
+              r = m_callback(off + be.first, be.second, updated,
+                             m_callback_arg);
+              if (r < 0) {
+                return r;
+              }
             }
           }
         }

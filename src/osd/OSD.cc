@@ -3897,7 +3897,7 @@ void OSD::final_init()
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump_op_pq_state",
 				     asok_hook,
-				     "dump op priority queue state");
+				     "dump op queue state");
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump_blocklist",
 				     asok_hook,
@@ -9957,7 +9957,8 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
   // osd capacity with the value obtained from running the
   // osd bench test. This is later used to setup mclock.
   if ((cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler") &&
-      (cct->_conf.get_val<bool>("osd_mclock_skip_benchmark") == false)) {
+      (cct->_conf.get_val<bool>("osd_mclock_skip_benchmark") == false) &&
+      (!unsupported_objstore_for_qos())) {
     std::string max_capacity_iops_config;
     bool force_run_benchmark =
       cct->_conf.get_val<bool>("osd_mclock_force_run_benchmark_on_init");
@@ -10041,7 +10042,8 @@ bool OSD::maybe_override_options_for_qos()
 {
   // If the scheduler enabled is mclock, override the recovery, backfill
   // and sleep options so that mclock can meet the QoS goals.
-  if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler") {
+  if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler" &&
+      !unsupported_objstore_for_qos()) {
     dout(1) << __func__
             << ": Changing recovery/backfill/sleep settings for QoS" << dendl;
 
@@ -10109,6 +10111,14 @@ int OSD::mon_cmd_set_config(const std::string &key, const std::string &val)
   }
 
   return 0;
+}
+
+bool OSD::unsupported_objstore_for_qos()
+{
+  static const std::vector<std::string> unsupported_objstores = { "filestore" };
+  return std::find(unsupported_objstores.begin(),
+                   unsupported_objstores.end(),
+                   store->get_type()) != unsupported_objstores.end();
 }
 
 void OSD::update_log_config()
@@ -10608,6 +10618,13 @@ void OSDShard::update_scheduler_config()
   scheduler->update_configuration();
 }
 
+std::string OSDShard::get_scheduler_type()
+{
+  std::ostringstream scheduler_type;
+  scheduler_type << *scheduler;
+  return scheduler_type.str();
+}
+
 OSDShard::OSDShard(
   int id,
   CephContext *cct,
@@ -10622,7 +10639,8 @@ OSDShard::OSDShard(
     shard_lock_name(shard_name + "::shard_lock"),
     shard_lock{make_mutex(shard_lock_name)},
     scheduler(ceph::osd::scheduler::make_scheduler(
-      cct, osd->num_shards, osd->store->is_rotational())),
+      cct, osd->num_shards, osd->store->is_rotational(),
+      osd->store->get_type())),
     context_queue(sdata_wait_lock, sdata_cond)
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;
@@ -10996,10 +11014,13 @@ void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
   uint32_t shard_index =
     item.get_ordering_token().hash_to_shard(osd->shards.size());
 
-  dout(20) << __func__ << " " << item << dendl;
-
   OSDShard* sdata = osd->shards[shard_index];
   assert (NULL != sdata);
+  if (sdata->get_scheduler_type() == "mClockScheduler") {
+    item.maybe_set_is_qos_item();
+  }
+
+  dout(20) << __func__ << " " << item << dendl;
 
   bool empty = true;
   {

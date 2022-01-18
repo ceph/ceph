@@ -199,7 +199,13 @@ namespace rgw::sal {
 
     return ret;
   }
-
+  int DBUser::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
+  {
+    for(auto& it : new_attrs) {
+  	  attrs[it.first] = it.second;
+    }
+    return store_user(dpp, y, false);
+  }
   int DBUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info)
   {
     int ret = 0;
@@ -228,6 +234,32 @@ namespace rgw::sal {
 
     /* XXX: handle delete_children */
 
+    if (!delete_children) {
+      /* Check if there are any objects */
+      rgw::sal::Bucket::ListParams params;
+      params.list_versions = true;
+      params.allow_unordered = true;
+
+      rgw::sal::Bucket::ListResults results;
+
+      results.objs.clear();
+
+      ret = list(dpp, params, 2, results, null_yield);
+
+      if (ret < 0) {
+        ldpp_dout(dpp, 20) << __func__ << ": Bucket list objects returned " <<
+        ret << dendl;
+        return ret;
+      }
+
+      if (!results.objs.empty()) {
+        ret = -ENOTEMPTY;
+        ldpp_dout(dpp, -1) << __func__ << ": Bucket Not Empty.. returning " <<
+        ret << dendl;
+        return ret;
+      }
+    }
+
     ret = store->getDB()->remove_bucket(dpp, info);
 
     return ret;
@@ -240,7 +272,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y)
+  int DBBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y, bool get_stats)
   {
     int ret = 0;
 
@@ -322,7 +354,9 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    Bucket::merge_and_store_attrs(dpp, new_attrs, y);
+    for(auto& it : new_attrs) {
+	    attrs[it.first] = it.second;
+    }
 
     /* XXX: handle has_instance_obj like in set_bucket_instance_attrs() */
 
@@ -531,9 +565,7 @@ namespace rgw::sal {
 
   int DBObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, RGWObjState **state, optional_yield y, bool follow_olh)
   {
-    if (!*state) {
-      *state = new RGWObjState();
-    }
+    *state = &(this->state);
     DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
     return op_target.get_obj_state(dpp, get_bucket()->get_info(), get_obj(), follow_olh, state);
   }
@@ -1751,6 +1783,11 @@ namespace rgw::sal {
       const map<string, string>& meta)
   {
     return 0;
+  }
+
+  void DBStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit)
+  {
+    return;
   }
 
   void DBStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)

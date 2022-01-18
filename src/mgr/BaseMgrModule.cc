@@ -375,7 +375,7 @@ ceph_state_get(BaseMgrModule *self, PyObject *args)
     return NULL;
   }
 
-  return self->py_modules->get_python(what);
+  return self->py_modules->cacheable_get_python(what);
 }
 
 
@@ -669,6 +669,13 @@ get_perf_schema(BaseMgrModule *self, PyObject *args)
 
   return self->py_modules->get_perf_schema_python(type_str, svc_id);
 }
+
+static PyObject*
+ceph_get_rocksdb_version(BaseMgrModule *self)
+{
+  return self->py_modules->get_rocksdb_version();
+}
+
 
 static PyObject *
 ceph_get_osdmap(BaseMgrModule *self, PyObject *args)
@@ -1446,6 +1453,9 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get_perf_schema", (PyCFunction)get_perf_schema, METH_VARARGS,
     "Get the performance counter schema"},
 
+  {"_ceph_get_rocksdb_version", (PyCFunction)ceph_get_rocksdb_version, METH_NOARGS,
+    "Get the current RocksDB version number"},
+
   {"_ceph_log", (PyCFunction)ceph_log, METH_VARARGS,
    "Emit a (local) log message"},
 
@@ -1592,4 +1602,3 @@ PyTypeObject BaseMgrModuleType = {
   0,                         /* tp_alloc */
   BaseMgrModule_new,     /* tp_new */
 };
-

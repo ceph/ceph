@@ -2378,7 +2378,7 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
 
   RGWOp* newop = &get_errpage_op;
   RGWRequest req(0);
-  return rgw_process_authenticated(handler, newop, &req, s, y, true);
+  return rgw_process_authenticated(handler, newop, &req, s, y, store, true);
 }
 
 int RGWSwiftWebsiteHandler::error_handler(const int err_no,
@@ -2557,6 +2557,9 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
     return false;
   } else if (subdir_name.back() == '/') {
     subdir_name.pop_back();
+    if (subdir_name.empty()) {
+      return false;
+    }
   }
 
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(std::move(subdir_name)));

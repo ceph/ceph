@@ -34,6 +34,7 @@
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_service.h"
+#include "rgw_lc.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone.h"
 #include "services/svc_tier_rados.h"
@@ -283,6 +284,14 @@ int RadosUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   return store->ctl()->user->get_attrs_by_uid(dpp, get_id(), &attrs, y, &objv_tracker);
 }
 
+int RadosUser::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
+{
+  for(auto& it : new_attrs) {
+	  attrs[it.first] = it.second;
+  }
+  return store_user(dpp, y, false);
+}
+
 int RadosUser::read_stats(const DoutPrefixProvider *dpp,
                              optional_yield y, RGWStorageStats* stats,
 			     ceph::real_time* last_stats_sync,
@@ -390,7 +399,11 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
     return ret;
   }
 
-  ret = store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y);
+  // remove lifecycle config, if any (XXX note could be made generic)
+  (void) store->getRados()->get_lc()->remove_bucket_config(
+    this, get_attrs());
+
+  ret = store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y, nullptr);
   if (ret < 0) {
      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -567,7 +580,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   return ret;
 }
 
-int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
+int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bool get_stats)
 {
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   int ret;
@@ -594,7 +607,9 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 
   bucket_version = ep_ot.read_version;
 
-  ret = store->ctl()->bucket->read_bucket_stats(info.bucket, &ent, y, dpp);
+  if (get_stats) {
+    ret = store->ctl()->bucket->read_bucket_stats(info.bucket, &ent, y, dpp);
+  }
 
   return ret;
 }
@@ -614,7 +629,7 @@ int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp, int shard_id, R
 
 int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y);
+  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, &ent);
 }
 
 int RadosBucket::update_container_stats(const DoutPrefixProvider* dpp)
@@ -722,7 +737,9 @@ int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_q
 
 int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
 {
-  Bucket::merge_and_store_attrs(dpp, new_attrs, y);
+  for(auto& it : new_attrs) {
+	  attrs[it.first] = it.second;
+  }
   return store->ctl()->bucket->set_bucket_instance_attrs(get_info(),
 				new_attrs, &get_info().objv_tracker, y, dpp);
 }
@@ -1205,6 +1222,13 @@ void RadosStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
 {
     bucket_quota = svc()->quota->get_bucket_quota();
     user_quota = svc()->quota->get_user_quota();
+}
+
+void RadosStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit)
+{
+  bucket_ratelimit = svc()->zone->get_current_period().get_config().bucket_ratelimit;
+  user_ratelimit = svc()->zone->get_current_period().get_config().user_ratelimit;
+  anon_ratelimit = svc()->zone->get_current_period().get_config().anon_ratelimit;
 }
 
 int RadosStore::set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled)

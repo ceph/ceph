@@ -1061,6 +1061,7 @@ struct OSDShard {
   void register_and_wake_split_child(PG *pg);
   void unprime_split_children(spg_t parent, unsigned old_pg_num);
   void update_scheduler_config();
+  std::string get_scheduler_type();
 
   OSDShard(
     int id,
@@ -2062,6 +2063,7 @@ private:
                          double *elapsed,
                          std::ostream& ss);
   int mon_cmd_set_config(const std::string &key, const std::string &val);
+  bool unsupported_objstore_for_qos();
 
   void scrub_purged_snaps();
   void probe_smart(const std::string& devid, std::ostream& ss);

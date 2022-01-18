@@ -4217,16 +4217,29 @@ def command_inspect_image(ctx):
 
 
 def normalize_image_digest(digest: str) -> str:
-    # normal case:
-    #   ceph/ceph -> docker.io/ceph/ceph
-    # edge cases that shouldn't ever come up:
-    #   ubuntu -> docker.io/ubuntu    (ubuntu alias for library/ubuntu)
-    # no change:
-    #   quay.ceph.io/ceph/ceph -> ceph
-    #   docker.io/ubuntu -> no change
-    bits = digest.split('/')
-    if '.' not in bits[0] and len(bits) < 3:
-        digest = DEFAULT_REGISTRY + '/' + digest
+    """
+    Normal case:
+    >>> normalize_image_digest('ceph/ceph', 'docker.io')
+    'docker.io/ceph/ceph'
+
+    No change:
+    >>> normalize_image_digest('quay.ceph.io/ceph/ceph', 'docker.io')
+    'quay.ceph.io/ceph/ceph'
+
+    >>> normalize_image_digest('docker.io/ubuntu', 'docker.io')
+    'docker.io/ubuntu'
+
+    >>> normalize_image_digest('localhost/ceph', 'docker.io')
+    'localhost/ceph'
+    """
+    known_shortnames = [
+        'ceph/ceph',
+        'ceph/daemon',
+        'ceph/daemon-base',
+    ]
+    for image in known_shortnames:
+        if digest.startswith(image):
+            return f'{DEFAULT_REGISTRY}/{digest}'
     return digest
 
 
@@ -5120,6 +5133,10 @@ def command_bootstrap(ctx):
             logger.info(out)
         except Exception:
             logger.info('\nApplying %s to cluster failed!\n' % ctx.apply_spec)
+
+    # enable autotune for osd_memory_target
+    logger.info('Enabling autotune for osd_memory_target')
+    cli(['config', 'set', 'osd', 'osd_memory_target_autotune', 'true'])
 
     logger.info('You can access the Ceph CLI with:\n\n'
                 '\tsudo %s shell --fsid %s -c %s -k %s\n' % (
@@ -8483,11 +8500,11 @@ def cephadm_init_ctx(args: List[str]) -> CephadmContext:
     return ctx
 
 
-def cephadm_init(args: List[str]) -> CephadmContext:
+def cephadm_init_logging(ctx: CephadmContext, args: List[str]) -> None:
+    """Configure the logging for cephadm as well as updating the system
+    to have the expected log dir and logrotate configuration.
+    """
     global logger
-    ctx = cephadm_init_ctx(args)
-
-    # Logger configuration
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
     dictConfig(logging_config)
@@ -8510,24 +8527,26 @@ def cephadm_init(args: List[str]) -> CephadmContext:
             if handler.name == 'console':
                 handler.setLevel(logging.DEBUG)
     logger.debug('%s\ncephadm %s' % ('-' * 80, args))
-    return ctx
 
 
-def main() -> None:
-
-    # root?
+def cephadm_require_root() -> None:
+    """Exit if the process is not running as root."""
     if os.geteuid() != 0:
         sys.stderr.write('ERROR: cephadm should be run as root\n')
         sys.exit(1)
 
+
+def main() -> None:
     av: List[str] = []
     av = sys.argv[1:]
 
-    ctx = cephadm_init(av)
+    ctx = cephadm_init_ctx(av)
     if not ctx.has_function():
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
 
+    cephadm_require_root()
+    cephadm_init_logging(ctx, av)
     try:
         # podman or docker?
         ctx.container_engine = find_container_engine(ctx)

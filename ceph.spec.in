@@ -17,8 +17,8 @@
 #################################################################################
 # conditional build section
 #
-# please read http://rpm.org/user_doc/conditional_builds.html for explanation of
-# bcond syntax!
+# please read this for explanation of bcond syntax:
+# https://rpm-software-management.github.io/rpm/manual/conditionalbuilds.html
 #################################################################################
 %bcond_with make_check
 %bcond_with zbd
@@ -1265,7 +1265,7 @@ cmake .. \
     -DCMAKE_INSTALL_MANDIR:PATH=%{_mandir} \
     -DCMAKE_INSTALL_DOCDIR:PATH=%{_docdir}/ceph \
     -DCMAKE_INSTALL_INCLUDEDIR:PATH=%{_includedir} \
-    -DCMAKE_INSTALL_SYSTEMD_SERVICEDIR:PATH=%{_unitdir} \
+    -DSYSTEMD_SYSTEM_UNIT_DIR:PATH=%{_unitdir} \
     -DWITH_MANPAGE:BOOL=ON \
     -DWITH_PYTHON3:STRING=%{python3_version} \
     -DWITH_MGR_DASHBOARD_FRONTEND:BOOL=OFF \

@@ -2838,6 +2838,7 @@ void RGWStatBucket::execute(optional_yield y)
   if (op_ret) {
     return;
   }
+  op_ret = bucket->update_container_stats(s);
 }
 
 int RGWListBucket::verify_permission(optional_yield y)
@@ -5450,6 +5451,10 @@ void RGWCopyObj::execute(optional_yield y)
     obj_size = astate->size;
   
     if (!s->system_request) { // no quota enforcement for system requests
+      if (astate->accounted_size > static_cast<size_t>(s->cct->_conf->rgw_max_put_size)) {
+        op_ret = -ERR_TOO_LARGE;
+        return;
+      }
       // enforce quota against the destination bucket owner
       op_ret = dest_bucket->check_quota(this, user_quota, bucket_quota,
 				      astate->accounted_size, y);

@@ -282,6 +282,31 @@ public:
       });
   }
 
+  static void add_objects_scrubbed_count(
+    int64_t count, pg_stat_t &stats) {
+    stats.objects_scrubbed += count;
+  }
+
+  void add_objects_scrubbed_count(int64_t count) {
+    recovery_state.update_stats(
+      [=](auto &history, auto &stats) {
+	add_objects_scrubbed_count(count, stats);
+	return true;
+      });
+  }
+
+  static void reset_objects_scrubbed(pg_stat_t &stats) {
+    stats.objects_scrubbed = 0;
+  }
+
+  void reset_objects_scrubbed() {
+    recovery_state.update_stats(
+      [=](auto &history, auto &stats) {
+  reset_objects_scrubbed(stats);
+  return true;
+      });
+  }
+
   bool is_deleting() const {
     return recovery_state.is_deleting();
   }

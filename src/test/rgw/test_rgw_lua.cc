@@ -115,7 +115,9 @@ public:
   virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override {
     return 0;
   }
-
+  virtual int merge_and_store_attrs(const DoutPrefixProvider *dpp, rgw::sal::Attrs& attrs, optional_yield y) override {
+    return 0;
+  }
   virtual ~TestUser() = default;
 };
 

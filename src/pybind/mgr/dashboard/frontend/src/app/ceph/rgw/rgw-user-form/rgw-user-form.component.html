@@ -550,7 +550,8 @@
               <input id="user_quota_max_objects"
                      class="form-control"
                      type="number"
-                     formControlName="user_quota_max_objects">
+                     formControlName="user_quota_max_objects"
+                     min="0">
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('user_quota_max_objects', frm, 'required')"
                     i18n>This field is required.</span>
@@ -643,7 +644,8 @@
               <input id="bucket_quota_max_objects"
                      class="form-control"
                      type="number"
-                     formControlName="bucket_quota_max_objects">
+                     formControlName="bucket_quota_max_objects"
+                     min="0">
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('bucket_quota_max_objects', frm, 'required')"
                     i18n>This field is required.</span>

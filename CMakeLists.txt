@@ -196,12 +196,6 @@ if(WITH_ZFS)
   set(HAVE_LIBZFS ${ZFS_FOUND})
 endif()
 
-option(WITH_ZNS "enable zns support" OFF)
-if (WITH_ZNS)
-  # TODO: add detection, need kernel header >= 5.5
-  set(HAVE_ZNS ON)
-endif()
-
 option(WITH_BLUESTORE "Bluestore OSD backend" ON)
 if(WITH_BLUESTORE)
   if(LINUX)
@@ -401,6 +395,7 @@ option(WITH_RADOSGW_KAFKA_ENDPOINT "Rados Gateway's pubsub support for Kafka pus
 option(WITH_RADOSGW_LUA_PACKAGES "Rados Gateway's support for dynamically adding lua packagess" ON)
 option(WITH_RADOSGW_DBSTORE "DBStore backend for Rados Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for Rados Gateway" OFF)
+option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" OFF)
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)

@@ -14,7 +14,11 @@ from rbd import RBD
 from collections import namedtuple
 import yaml
 
-from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List
+from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable
+
+LabelValues = Tuple[str, ...]
+Number = Union[int, float]
+MetricValue = Dict[LabelValues, Number]
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
 # see https://github.com/prometheus/prometheus/wiki/Default-port-allocations
@@ -302,18 +306,17 @@ class HealthHistory:
 
 
 class Metric(object):
-    def __init__(self, mtype: str, name: str, desc: str, labels: Optional[Tuple[str, ...]] = None) -> None:
+    def __init__(self, mtype: str, name: str, desc: str, labels: Optional[LabelValues] = None) -> None:
         self.mtype = mtype
         self.name = name
         self.desc = desc
-        self.labelnames = labels    # tuple if present
-        self.value: Dict[Tuple[str, ...], Union[float, int]
-                         ] = {}             # indexed by label values
+        self.labelnames = labels  # tuple if present
+        self.value: Dict[LabelValues, Number] = {}
 
     def clear(self) -> None:
         self.value = {}
 
-    def set(self, value: Union[float, int], labelvalues: Optional[Tuple[str, ...]] = None) -> None:
+    def set(self, value: Number, labelvalues: Optional[LabelValues] = None) -> None:
         # labelvalues must be a tuple
         labelvalues = labelvalues or ('',)
         self.value[labelvalues] = value
@@ -369,12 +372,104 @@ class Metric(object):
             )
         return expfmt
 
+    def group_by(
+        self,
+        keys: List[str],
+        joins: Dict[str, Callable[[List[str]], str]],
+        name: Optional[str] = None,
+    ) -> "Metric":
+        """
+        Groups data by label names.
+
+        Label names not passed are being removed from the resulting metric but
+        by providing a join function, labels of metrics can be grouped.
+
+        The purpose of this method is to provide a version of a metric that can
+        be used in matching where otherwise multiple results would be returned.
+
+        As grouping is possible in Prometheus, the only additional value of this
+        method is the possibility to join labels when grouping. For that reason,
+        passing joins is required. Please use PromQL expressions in all other
+        cases.
+
+        >>> m = Metric('type', 'name', '', labels=('label1', 'id'))
+        >>> m.value = {
+        ...     ('foo', 'x'): 1,
+        ...     ('foo', 'y'): 1,
+        ... }
+        >>> m.group_by(['label1'], {'id': lambda ids: ','.join(ids)}).value
+        {('foo', 'x,y'): 1}
+
+        The functionality of group by could roughly be compared with Prometheus'
+
+            group (ceph_disk_occupation) by (device, instance)
+
+        with the exception that not all labels which aren't used as a condition
+        to group a metric are discarded, but their values can are joined and the
+        label is thereby preserved.
+
+        This function takes the value of the first entry of a found group to be
+        used for the resulting value of the grouping operation.
+
+        >>> m = Metric('type', 'name', '', labels=('label1', 'id'))
+        >>> m.value = {
+        ...     ('foo', 'x'): 555,
+        ...     ('foo', 'y'): 10,
+        ... }
+        >>> m.group_by(['label1'], {'id': lambda ids: ','.join(ids)}).value
+        {('foo', 'x,y'): 555}
+        """
+        assert self.labelnames, "cannot match keys without label names"
+        for key in keys:
+            assert key in self.labelnames, "unknown key: {}".format(key)
+        assert joins, "joins must not be empty"
+        assert all(callable(c) for c in joins.values()), "joins must be callable"
+
+        # group
+        grouped: Dict[LabelValues, List[Tuple[Dict[str, str], Number]]] = defaultdict(list)
+        for label_values, metric_value in self.value.items():
+            labels = dict(zip(self.labelnames, label_values))
+            if not all(k in labels for k in keys):
+                continue
+            group_key = tuple(labels[k] for k in keys)
+            grouped[group_key].append((labels, metric_value))
+
+        # as there is nothing specified on how to join labels that are not equal
+        # and Prometheus `group` aggregation functions similarly, we simply drop
+        # those labels.
+        labelnames = tuple(
+            label for label in self.labelnames if label in keys or label in joins
+        )
+        superfluous_labelnames = [
+            label for label in self.labelnames if label not in labelnames
+        ]
+
+        # iterate and convert groups with more than one member into a single
+        # entry
+        values: MetricValue = {}
+        for group in grouped.values():
+            labels, metric_value = group[0]
+
+            for label in superfluous_labelnames:
+                del labels[label]
+
+            if len(group) > 1:
+                for key, fn in joins.items():
+                    labels[key] = fn(list(labels[key] for labels, _ in group))
+
+            values[tuple(labels.values())] = metric_value
+
+        new_metric = Metric(self.mtype, name if name else self.name, self.desc, labelnames)
+        new_metric.value = values
+
+        return new_metric
+
 
 class MetricCounter(Metric):
     def __init__(self,
                  name: str,
                  desc: str,
-                 labels: Optional[Tuple[str, ...]] = None) -> None:
+                 labels: Optional[LabelValues] = None) -> None:
         super(MetricCounter, self).__init__('counter', name, desc, labels)
         self.value = defaultdict(lambda: 0)
 
@@ -382,14 +477,14 @@ class MetricCounter(Metric):
         pass  # Skip calls to clear as we want to keep the counters here.
 
     def set(self,
-            value: Union[float, int],
-            labelvalues: Optional[Tuple[str, ...]] = None) -> None:
+            value: Number,
+            labelvalues: Optional[LabelValues] = None) -> None:
         msg = 'This method must not be used for instances of MetricCounter class'
         raise NotImplementedError(msg)
 
     def add(self,
-            value: Union[float, int],
-            labelvalues: Optional[Tuple[str, ...]] = None) -> None:
+            value: Number,
+            labelvalues: Optional[LabelValues] = None) -> None:
         # labelvalues must be a tuple
         labelvalues = labelvalues or ('',)
         self.value[labelvalues] += value
@@ -607,6 +702,14 @@ class Module(MgrModule):
             'disk_occupation',
             'Associate Ceph daemon with disk used',
             DISK_OCCUPATION
+        )
+
+        metrics['disk_occupation_human'] = Metric(
+            'untyped',
+            'disk_occupation_human',
+            'Associate Ceph daemon with disk used for displaying to humans,'
+            ' not for joining tables (vector matching)',
+            DISK_OCCUPATION,  # label names are automatically decimated on grouping
         )
 
         metrics['pool_metadata'] = Metric(
@@ -1045,6 +1148,17 @@ class Module(MgrModule):
                 self.log.info("Missing dev node metadata for osd {0}, skipping "
                               "occupation record for this osd".format(id_))
 
+        if 'disk_occupation' in self.metrics:
+            try:
+                self.metrics['disk_occupation_human'] = \
+                    self.metrics['disk_occupation'].group_by(
+                        ['device', 'instance'],
+                        {'ceph_daemon': lambda daemons: ', '.join(daemons)},
+                        name='disk_occupation_human',
+                )
+            except Exception as e:
+                self.log.error(e)
+
         ec_profiles = osd_map.get('erasure_code_profiles', {})
 
         def _get_pool_info(pool: Dict[str, Any]) -> Tuple[str, str]:
@@ -1098,7 +1212,7 @@ class Module(MgrModule):
                     continue
                 mirror_metadata['ceph_daemon'] = '{}.{}'.format(service_type,
                                                                 service_id)
-                rbd_mirror_metadata = cast(Tuple[str, ...],
+                rbd_mirror_metadata = cast(LabelValues,
                                            (mirror_metadata.get(k, '')
                                             for k in RBD_MIRROR_METADATA))
                 self.metrics['rbd_mirror_metadata'].set(
@@ -1379,7 +1493,7 @@ class Module(MgrModule):
                         metrics.mtype,
                         new_path,
                         metrics.desc,
-                        cast(Tuple[str, ...], metrics.labelnames) + ('source_zone',)
+                        cast(LabelValues, metrics.labelnames) + ('source_zone',)
                     )
                 for label_values, value in metrics.value.items():
                     new_metrics[new_path].set(value, label_values + (match.group(1),))

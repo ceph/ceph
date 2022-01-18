@@ -32,6 +32,7 @@
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_sts.h"
+#include "rgw_rest_ratelimit.h"
 #include "rgw_swift_auth.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
@@ -518,6 +519,7 @@ int radosgw_Main(int argc, const char **argv)
     admin_resource->register_resource("log", new RGWRESTMgr_Log);
     admin_resource->register_resource("config", new RGWRESTMgr_Config);
     admin_resource->register_resource("realm", new RGWRESTMgr_Realm);
+    admin_resource->register_resource("ratelimit", new RGWRESTMgr_Ratelimit);
     rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
   }
 
@@ -542,6 +544,9 @@ int radosgw_Main(int argc, const char **argv)
   rgw::dmclock::SchedulerCtx sched_ctx{cct.get()};
 
   OpsLogManifold *olog = new OpsLogManifold();
+  ActiveRateLimiter ratelimiting{cct.get()};
+  ratelimiting.start();
+
   if (!g_conf()->rgw_ops_log_socket_path.empty()) {
     OpsLogSocket* olog_socket = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
     olog_socket->init(g_conf()->rgw_ops_log_socket_path);
@@ -609,7 +614,7 @@ int radosgw_Main(int argc, const char **argv)
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
 
-      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix, auth_registry };
+      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix, auth_registry, &ratelimiting };
 
       fe = new RGWLoadGenFrontend(env, config);
     }
@@ -618,7 +623,7 @@ int radosgw_Main(int argc, const char **argv)
       config->get_val("port", 80, &port);
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
-      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry };
+      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry, &ratelimiting };
       fe = new RGWAsioFrontend(env, config, sched_ctx);
     }
 

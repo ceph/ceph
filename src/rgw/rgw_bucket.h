@@ -247,6 +247,7 @@ struct RGWBucketAdminOpState {
   std::unique_ptr<rgw::sal::Bucket>  bucket;
 
   RGWQuotaInfo quota;
+  RGWRateLimitInfo ratelimit_info;
 
   void set_fetch_stats(bool value) { stat_buckets = value; }
   void set_check_objects(bool value) { check_objects = value; }
@@ -273,6 +274,9 @@ struct RGWBucketAdminOpState {
   }
   void set_quota(RGWQuotaInfo& value) {
     quota = value;
+  }
+  void set_bucket_ratelimit(RGWRateLimitInfo& value) {
+    ratelimit_info = value;
   }
 
 
@@ -701,7 +705,7 @@ public:
   int sync_user_stats(const DoutPrefixProvider *dpp, 
                       const rgw_user& user_id, const RGWBucketInfo& bucket_info,
 		      optional_yield y,
-                      RGWBucketEnt* pent = nullptr);
+                      RGWBucketEnt* pent);
 
   /* bucket sync */
   int get_sync_policy_handler(std::optional<rgw_zone_id> zone,
