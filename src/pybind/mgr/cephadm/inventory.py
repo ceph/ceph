@@ -12,6 +12,7 @@ from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
 from .utils import resolve_ip
 from .migrations import queue_migrate_nfs_spec
@@ -1025,6 +1026,15 @@ class HostCache():
             # of those two categories.
             return False
         return True
+
+    def agent_config_successfully_delivered(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
+        # agent successfully received new config. Update config/deps
+        assert daemon_spec.service_name == 'agent'
+        self.update_daemon_config_deps(
+            daemon_spec.host, daemon_spec.name(), daemon_spec.deps, datetime_now())
+        self.agent_timestamp[daemon_spec.host] = datetime_now()
+        self.agent_counter[daemon_spec.host] = 1
+        self.save_host(daemon_spec.host)
 
     def add_daemon(self, host, dd):
         # type: (str, orchestrator.DaemonDescription) -> None
