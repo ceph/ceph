@@ -10,6 +10,7 @@ IMAGE3=image3
 IMAGES="${IMAGE1} ${IMAGE2} ${IMAGE3}"
 
 cleanup() {
+    kill_nbd_server
     cleanup_tempdir
     remove_images
 }
@@ -68,6 +69,10 @@ remove_images() {
     do
         remove_image ${image}
     done
+}
+
+kill_nbd_server() {
+    pkill -9 qemu-nbd || true
 }
 
 show_diff()
@@ -395,6 +400,42 @@ EOF
     remove_image "${dest_image}"
 }
 
+test_import_nbd_stream() {
+    local base_image=$1
+    local dest_image=$2
+
+    qemu-nbd -f qcow2 --read-only --shared 10 --persistent --fork \
+        ${TEMPDIR}/${base_image}.qcow2
+
+    cat > ${TEMPDIR}/spec.json <<EOF
+{
+  "type": "raw",
+  "stream": {
+    "type": "nbd",
+    "server": "localhost",
+    "port": "10809"
+  }
+}
+EOF
+    cat ${TEMPDIR}/spec.json
+
+    cat ${TEMPDIR}/spec.json | rbd migration prepare --import-only \
+        --source-spec-path - ${dest_image}
+    compare_images ${base_image} ${dest_image}
+    rbd migration abort ${dest_image}
+
+    rbd migration prepare --import-only \
+        --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+    compare_images ${base_image} ${dest_image}
+    rbd migration execute ${dest_image}
+    compare_images ${base_image} ${dest_image}
+    rbd migration commit ${dest_image}
+    compare_images ${base_image} ${dest_image}
+    remove_image "${dest_image}"
+
+    kill_nbd_server
+}
+
 # make sure rbd pool is EMPTY.. this is a test script!!
 rbd ls 2>&1 | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this script on an empty test cluster only." && exit 1
 
@@ -406,7 +447,10 @@ export_base_image ${IMAGE1}
 
 test_import_native_format ${IMAGE1} ${IMAGE2}
 test_import_qcow_format ${IMAGE1} ${IMAGE2}
+
 test_import_qcow2_format ${IMAGE2} ${IMAGE3}
+test_import_nbd_stream ${IMAGE2} ${IMAGE3}
+
 test_import_raw_format ${IMAGE1} ${IMAGE2}
 
 echo OK

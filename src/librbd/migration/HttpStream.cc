@@ -77,6 +77,18 @@ void HttpStream<I>::read(io::Extents&& byte_extents, bufferlist* data,
   m_http_client->read(std::move(byte_extents), data, on_finish);
 }
 
+template <typename I>
+void HttpStream<I>::list_sparse_extents(io::Extents&& byte_extents,
+                                        io::SparseExtents* sparse_extents,
+                                        Context* on_finish) {
+  // no sparseness information -- list the full range as DATA
+  for (auto [byte_offset, byte_length] : byte_extents) {
+    sparse_extents->insert(byte_offset, byte_length,
+                           {io::SPARSE_EXTENT_STATE_DATA, byte_length});
+  }
+  on_finish->complete(0);
+}
+
 } // namespace migration
 } // namespace librbd
 

@@ -226,6 +226,18 @@ void FileStream<I>::read(io::Extents&& byte_extents, bufferlist* data,
 
 #endif // BOOST_ASIO_HAS_POSIX_STREAM_DESCRIPTOR
 
+template <typename I>
+void FileStream<I>::list_sparse_extents(io::Extents&& byte_extents,
+                                        io::SparseExtents* sparse_extents,
+                                        Context* on_finish) {
+  // TODO: list sparse extents based on SEEK_HOLE/SEEK_DATA
+  for (auto [byte_offset, byte_length] : byte_extents) {
+    sparse_extents->insert(byte_offset, byte_length,
+                           {io::SPARSE_EXTENT_STATE_DATA, byte_length});
+  }
+  on_finish->complete(0);
+}
+
 } // namespace migration
 } // namespace librbd
 
