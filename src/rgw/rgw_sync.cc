@@ -1297,14 +1297,14 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
         break;
       }
 
-      if (tries < NUM_TRANSIENT_ERROR_RETRIES - 1) {
-        ldpp_dout(dpp, 20) << *this << ": failed to fetch remote metadata: " << section << ":" << key << ", will retry" << dendl;
-        continue;
-      }
-
       if (sync_status < 0) {
-        tn->log(10, SSTR("failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status));
-        log_error() << "failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
+        if (tries < NUM_TRANSIENT_ERROR_RETRIES - 1) {
+          ldpp_dout(dpp, 20) << *this << ": failed to fetch remote metadata: " << section << ":" << key << ", will retry" << dendl;
+          continue;
+        }
+
+        tn->log(10, SSTR("failed to read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status));
+        log_error() << "failed to read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
         yield call(sync_env->error_logger->log_error_cr(dpp, sync_env->conn->get_remote_id(), section, key, -sync_status,
                                                         string("failed to read remote metadata entry: ") + cpp_strerror(-sync_status)));
         return set_cr_error(sync_status);
@@ -1317,12 +1317,12 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
     for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
       if (sync_status != -ENOENT) {
         tn->log(10, SSTR("storing local metadata entry"));
-          yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
+        yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
       } else {
         tn->log(10, SSTR("removing local metadata entry"));
-          yield call(new RGWMetaRemoveEntryCR(sync_env, raw_key));
+        yield call(new RGWMetaRemoveEntryCR(sync_env, raw_key));
       }
-      if (tries < NUM_TRANSIENT_ERROR_RETRIES - 1) {
+      if ((retcode < 0) && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
         ldpp_dout(dpp, 20) << *this << ": failed to store metadata: " << section << ":" << key << ", got retcode=" << retcode << dendl;
         continue;
       }
