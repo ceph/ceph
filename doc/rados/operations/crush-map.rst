@@ -128,6 +128,8 @@ Since the Luminous release, devices may also have a *device class* assigned (e.g
 ``hdd`` or ``ssd`` or ``nvme``), allowing them to be conveniently targeted by
 CRUSH rules.  This is especially useful when mixing device types within hosts.
 
+.. _crush_map_default_types:
+
 Types and Buckets
 -----------------
 

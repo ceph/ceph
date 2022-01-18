@@ -169,7 +169,7 @@ Maintenance Mode
 Place a host in and out of maintenance mode (stops all Ceph daemons on host)::
 
     ceph orch host maintenance enter <hostname> [--force]
-    ceph orch host maintenace exit <hostname>
+    ceph orch host maintenance exit <hostname>
 
 Where the force flag when entering maintenance allows the user to bypass warnings (but not alerts)
 
@@ -223,6 +223,8 @@ create a new CRUSH host located in the specified hierachy.
   The ``location`` attribute will be only affect the initial CRUSH location. Subsequent
   changes of the ``location`` property will be ignored. Also, removing a host will no remove
   any CRUSH buckets.
+
+See also :ref:`crush_map_default_types`.
 
 SSH Configuration
 =================
