@@ -800,6 +800,31 @@ class CephFSMount(object):
 
         return rproc
 
+    def open_dir_background(self, basename):
+        """
+        Create and hold a capability to a directory.
+        """
+        assert(self.is_mounted())
+
+        path = os.path.join(self.hostfs_mntpt, basename)
+
+        pyscript = dedent("""
+            import time
+            import os
+
+            os.mkdir("{path}")
+            fd = os.open("{path}", os.O_RDONLY)
+            while True:
+                time.sleep(1)
+            """).format(path=path)
+
+        rproc = self._run_python(pyscript)
+        self.background_procs.append(rproc)
+
+        self.wait_for_visible(basename)
+
+        return rproc
+
     def wait_for_dir_empty(self, dirname, timeout=30):
         dirpath = os.path.join(self.hostfs_mntpt, dirname)
         with safe_while(sleep=5, tries=(timeout//5)) as proceed:

@@ -601,7 +601,6 @@ class TestStrays(CephFSTestCase):
         """
         :param to_id: MDS id to move it to
         :param path: Filesystem path (string) to move
-        :param watch_ino: Inode number to look for at destination to confirm move
         :return: None
         """
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", str(rank), path])
@@ -698,6 +697,46 @@ ln dir_1/original dir_2/linkto
 
         # See that the stray counter on rank 0 has incremented
         self.assertEqual(self.get_mdc_stat("strays_created", rank_0_id), 1)
+
+    def test_migrate_unlinked_dir(self):
+        """
+        Reproduce https://tracker.ceph.com/issues/53597
+        """
+        rank_0_id, rank_1_id = self._setup_two_ranks()
+
+        self.mount_a.run_shell_payload("""
+mkdir pin
+touch pin/placeholder
+""")
+
+        self._force_migrate("pin")
+
+        # Hold the dir open so it cannot be purged
+        p = self.mount_a.open_dir_background("pin/to-be-unlinked")
+
+        # Unlink the dentry
+        self.mount_a.run_shell(["rmdir", "pin/to-be-unlinked"])
+
+        # Wait to see the stray count increment
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("num_strays", mds_id=rank_1_id),
+            expect_val=1, timeout=60, reject_fn=lambda x: x > 1)
+        # but not purged
+        self.assertEqual(self.get_mdc_stat("strays_created", mds_id=rank_1_id), 1)
+        self.assertEqual(self.get_mdc_stat("strays_enqueued", mds_id=rank_1_id), 0)
+
+        # Test loading unlinked dir into cache
+        self.fs.mds_asok(['flush', 'journal'], rank_1_id)
+        self.fs.mds_asok(['cache', 'drop'], rank_1_id)
+
+        # Shut down rank 1
+        self.fs.set_max_mds(1)
+        self.fs.wait_for_daemons(timeout=120)
+        # Now the stray should be migrated to rank 0
+        # self.assertEqual(self.get_mdc_stat("strays_created", mds_id=rank_0_id), 1)
+        # https://github.com/ceph/ceph/pull/44335#issuecomment-1125940158
+
+        self.mount_a.kill_background(p)
 
     def assert_backtrace(self, ino, expected_path):
         """
