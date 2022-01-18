@@ -640,6 +640,10 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       return set_cr_error(-ENOENT);
     }
 
+    if (pbucket_info->layout.logs.empty()) {
+      return set_cr_done(); // no bilogs to trim
+    }
+
     // query peers for sync status
     set_status("fetching sync status from relevant peers");
     yield {

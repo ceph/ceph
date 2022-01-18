@@ -484,7 +484,8 @@ static int commit_reshard(rgw::sal::RadosStore* store,
 {
   auto& layout = bucket_info.layout;
   auto prev = layout; // make a copy for cleanup
-  const auto next_log_gen = layout.logs.back().gen + 1;
+  const auto next_log_gen = layout.logs.empty() ? 1 :
+      layout.logs.back().gen + 1;
 
   bool remove_index = true;
 
@@ -536,15 +537,20 @@ static int commit_reshard(rgw::sal::RadosStore* store,
     return ret;
   }
 
-  if (store->svc()->zone->need_to_log_data()) {
+  if (store->svc()->zone->need_to_log_data() && !prev.logs.empty() &&
+      prev.current_index.layout.type == rgw::BucketIndexType::Normal) {
+    // write a datalog entry for each shard of the previous index. triggering
+    // sync on the old shards will force them to detect the end-of-log for that
+    // generation, and eventually transition to the next
+    // TODO: use a log layout to support types other than BucketLogType::InIndex
     for (uint32_t shard_id = 0; shard_id < prev.current_index.layout.normal.num_shards; ++shard_id) {
       ret = store->svc()->datalog_rados->add_entry(dpp, bucket_info, prev.logs.back(), shard_id);
       if (ret < 0) {
         ldpp_dout(dpp, 1) << "WARNING: failed writing data log (bucket_info.bucket="
         << bucket_info.bucket << ", shard_id=" << shard_id << "of generation="
         << prev.logs.back().gen << ")" << dendl;
-        }
-      }
+      } // datalog error is not fatal
+    }
   }
 
   // on success, delete index shard objects from the old layout (ignore errors)
