@@ -331,6 +331,15 @@ class TestGetDevices(object):
         result = disk.get_devices(_sys_block_path=block_path)
         assert result[sda_path]['rotational'] == '1'
 
+    def test_is_ceph_rbd(self, tmpfile, tmpdir, patched_get_block_devs_lsblk):
+        rbd_path = '/dev/rbd0'
+        patched_get_block_devs_lsblk.return_value = [[rbd_path, rbd_path, 'disk']]
+        block_path = self.setup_path(tmpdir)
+        block_rbd_path = os.path.join(block_path, 'rbd0')
+        os.makedirs(block_rbd_path)
+        result = disk.get_devices(_sys_block_path=block_path)
+        assert rbd_path not in result
+
 
 class TestSizeCalculations(object):
 
