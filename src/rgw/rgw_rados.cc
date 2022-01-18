@@ -9130,6 +9130,10 @@ int RGWRados::remove_objs_from_index(const DoutPrefixProvider *dpp, RGWBucketInf
 
   RGWSI_RADOS::Pool index_pool;
   string dir_oid;
+  const auto& current_index = bucket_info.get_current_index();
+  if (is_layout_indexless(current_index)) {
+    return 0;
+  }
 
   uint8_t suggest_flag = (svc.zone->get_zone().log_data ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
 
