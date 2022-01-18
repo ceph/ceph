@@ -20,7 +20,7 @@ export class DaemonsPageHelper extends PageHelper {
 
     // check details table is visible
     // check at least one field is present
-    this.getTableCell(0).should('visible').should('contain.text', 'ceph_version');
+    this.getTableCell(0).should('be.visible').should('contain.text', 'ceph_version');
     // check performance counters table is not currently visible
     this.getTableCell(1).should('not.be.visible');
 

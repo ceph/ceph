@@ -100,6 +100,7 @@ cd $DASH_DIR/frontend
 case "$DEVICE" in
     docker)
         failed=0
+        CYPRESS_VERSION=$(cat package.json | grep '"cypress"' | grep -o "[0-9]\.[0-9]\.[0-9]")
         docker run \
             -v $(pwd):/e2e \
             -w /e2e \
@@ -108,7 +109,7 @@ case "$DEVICE" in
             --env CYPRESS_LOGIN_PWD \
             --name=e2e \
             --network=host \
-            cypress/included:4.4.0 || failed=1
+            cypress/included:${CYPRESS_VERSION} || failed=1
         stop $failed
         ;;
     *)
