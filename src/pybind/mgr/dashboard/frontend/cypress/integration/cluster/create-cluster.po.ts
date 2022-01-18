@@ -24,20 +24,6 @@ export class CreateClusterWizardHelper extends PageHelper {
     notification.open();
     notification.getNotifications().should('contain', 'Cluster expansion skipped by user');
   }
-
-  createOSD(deviceType: 'hdd' | 'ssd') {
-    // Click Primary devices Add button
-    cy.get('cd-osd-devices-selection-groups[name="Primary"]').as('primaryGroups');
-    cy.get('@primaryGroups').find('button').click();
-
-    // Select all devices with `deviceType`
-    cy.get('cd-osd-devices-selection-modal').within(() => {
-      cy.get('.modal-footer .tc_submitButton').as('addButton').should('be.disabled');
-      this.filterTable('Type', deviceType);
-      this.getTableCount('total').should('be.gte', 1);
-      cy.get('@addButton').click();
-    });
-  }
 }
 
 export class CreateClusterHostPageHelper extends HostsPageHelper {

@@ -7,8 +7,8 @@ describe('Create cluster create services page', () => {
   const createCluster = new CreateClusterWizardHelper();
   const createClusterServicePage = new CreateClusterServicePageHelper();
 
-  const createService = (serviceType: string, serviceName: string, count?: string) => {
-    cy.get('.btn.btn-accent').first().click({ force: true });
+  const createService = (serviceType: string, serviceName: string, count = '1') => {
+    cy.get('button[data-testid=table-action-button]').click();
     createClusterServicePage.addService(serviceType, false, count);
     createClusterServicePage.checkExist(serviceName, true);
   };
@@ -28,14 +28,9 @@ describe('Create cluster create services page', () => {
   describe('when Orchestrator is available', () => {
     const serviceName = 'rgw.foo';
 
-    it('should create an rgw service', () => {
+    it('should create an rgw and mds service', () => {
       createService('rgw', serviceName, '2');
-    });
-
-    it('should delete the service and add it back', () => {
-      createClusterServicePage.deleteService(serviceName);
-
-      createService('rgw', serviceName, '2');
+      createService('mds', 'mds.test');
     });
 
     it('should edit a service', () => {
@@ -44,8 +39,8 @@ describe('Create cluster create services page', () => {
       createClusterServicePage.expectPlacementCount(serviceName, daemonCount);
     });
 
-    it('should create an ingress service', () => {
-      createService('ingress', 'ingress.rgw.foo', '2');
+    it('should delete the mds service', () => {
+      createClusterServicePage.deleteService('mds.test');
     });
   });
 });
