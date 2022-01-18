@@ -788,3 +788,15 @@ class TestIngressService:
                 }
 
                 assert haproxy_generated_conf[0] == haproxy_expected_conf
+
+
+class TestCephFsMirror:
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec('cephfs-mirror')):
+                cephadm_module.assert_issued_mon_command({
+                    'prefix': 'mgr module enable',
+                    'module': 'mirroring'
+                })
