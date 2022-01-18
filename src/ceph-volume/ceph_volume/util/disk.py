@@ -373,6 +373,13 @@ def is_partition(dev):
     return False
 
 
+def is_ceph_rbd(dev):
+    """
+    Boolean to determine if a given device is a ceph RBD device, like /dev/rbd0
+    """
+    return dev.startswith(('/dev/rbd'))
+
+
 class BaseFloatUnit(float):
     """
     Base class to support float representations of size values. Suffix is
@@ -839,6 +846,10 @@ def get_devices(_sys_block_path='/sys/block', device=''):
             continue
         sysdir = os.path.join(_sys_block_path, devname)
         metadata = {}
+
+        # If the device is ceph rbd it gets excluded
+        if is_ceph_rbd(diskname):
+            continue
 
         # If the mapper device is a logical volume it gets excluded
         if is_mapper_device(diskname):
