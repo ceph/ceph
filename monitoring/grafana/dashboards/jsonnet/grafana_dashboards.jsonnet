@@ -1287,7 +1287,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
         'OSD Objectstore Types'
       )
       .addTarget(addTargetSchema('count(ceph_bluefs_wal_total_bytes)', 1, 'time_series', 'bluestore'))
-      .addTarget(addTargetSchema('count(ceph_osd_metadata) - count(ceph_bluefs_wal_total_bytes)', 1, 'time_series', 'filestore')) + {gridPos: {x: 4, y: 8, w: 4, h: 8}},
+      .addTarget(addTargetSchema('absent(ceph_bluefs_wal_total_bytes)*count(ceph_osd_metadata)', 1, 'time_series', 'filestore')) + {gridPos: {x: 4, y: 8, w: 4, h: 8}},
       OsdOverviewPieChartPanel(
         {},
         'The pie chart shows the various OSD sizes used within the cluster',
