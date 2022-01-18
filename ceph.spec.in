@@ -286,6 +286,7 @@ BuildRequires:	gperftools-devel >= 2.4
 BuildRequires:	libaio-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	cryptsetup-devel
+BuildRequires:	libnbd-devel
 BuildRequires:	libcurl-devel
 BuildRequires:	libcap-devel
 BuildRequires:	libcap-ng-devel
