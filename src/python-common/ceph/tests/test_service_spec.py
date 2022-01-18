@@ -510,3 +510,60 @@ spec:
     assert spec.virtual_ip == "192.168.20.1/24"
     assert spec.frontend_port == 8080
     assert spec.monitor_port == 8081
+
+
+@pytest.mark.parametrize("y, error_match", [
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count_per_host: "twelve"
+""", "count-per-host must be a numeric value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count_per_host: "2"
+""", "count-per-host must be an integer value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count_per_host: 7.36
+""", "count-per-host must be an integer value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count: "fifteen"
+""", "num/count must be a numeric value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count: "4"
+""", "num/count must be an integer value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count: 7.36
+""", "num/count must be an integer value",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count: 0
+""", "num/count must be >= 1",),
+    ("""
+service_type: rgw
+service_id: foo
+placement:
+  count_per_host: 0
+""", "count-per-host must be >= 1",),
+    ])
+def test_service_spec_validation_error(y, error_match):
+    data = yaml.safe_load(y)
+    with pytest.raises(SpecValidationError) as err:
+        specObj = ServiceSpec.from_json(data)
+    assert err.match(error_match)
