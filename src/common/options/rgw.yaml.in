@@ -2801,9 +2801,13 @@ options:
   type: int
   level: advanced
   desc: data changes notification interval to followers
+  long_desc: In multisite, radosgw will occasionally broadcast new entries in its
+    data changes log to peer zones, so they can prioritize sync of some
+    of the most recent changes. Can be disabled with 0.
   default: 200
   services:
   - rgw
+  with_legacy: true
 - name: rgw_torrent_origin
   type: str
   level: advanced
@@ -2822,7 +2826,7 @@ options:
   type: bool
   level: basic
   desc: Enable dynamic resharding
-  long_desc: If true, RGW will dynamicall increase the number of shards in buckets
+  long_desc: If true, RGW will dynamically increase the number of shards in buckets
     that have a high number of objects per shard.
   default: true
   services:
