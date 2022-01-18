@@ -321,6 +321,19 @@ TransactionManager::submit_transaction_direct(
   });
 }
 
+seastar::future<> TransactionManager::flush(OrderingHandle &handle)
+{
+  return handle.enter(write_pipeline.reserve_projected_usage
+  ).then([this, &handle] {
+    return handle.enter(write_pipeline.ool_writes);
+  }).then([this, &handle] {
+    return handle.enter(write_pipeline.prepare);
+  }).then([this, &handle] {
+    handle.maybe_release_collection_lock();
+    return journal->flush(handle);
+  });
+}
+
 TransactionManager::get_next_dirty_extents_ret
 TransactionManager::get_next_dirty_extents(
   Transaction &t,

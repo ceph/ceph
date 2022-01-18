@@ -925,6 +925,20 @@ seastar::future<> SeaStore::do_transaction(
     });
 }
 
+
+seastar::future<> SeaStore::flush(CollectionRef ch)
+{
+  return seastar::do_with(
+    get_dummy_ordering_handle(),
+    [this, ch](auto &handle) {
+      return handle.take_collection_lock(
+	static_cast<SeastoreCollection&>(*ch).ordering_lock
+      ).then([this, &handle] {
+	return transaction_manager->flush(handle);
+      });
+    });
+}
+
 SeaStore::tm_ret SeaStore::_do_transaction_step(
   internal_context_t &ctx,
   CollectionRef &col,

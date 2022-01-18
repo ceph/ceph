@@ -646,6 +646,14 @@ Journal::RecordSubmitter::submit(
   return do_submit(std::move(record), handle);
 }
 
+seastar::future<> Journal::RecordSubmitter::flush(OrderingHandle &handle)
+{
+  return handle.enter(write_pipeline->device_submission
+  ).then([this, &handle] {
+    return handle.enter(write_pipeline->finalize);
+  });
+}
+
 void Journal::RecordSubmitter::update_state()
 {
   if (num_outstanding_io == 0) {

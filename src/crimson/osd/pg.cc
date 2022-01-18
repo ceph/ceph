@@ -131,19 +131,19 @@ PG::~PG() {}
 
 bool PG::try_flush_or_schedule_async() {
   logger().debug("PG::try_flush_or_schedule_async: do_transaction...");
-  (void)shard_services.get_store().do_transaction(
-    coll_ref,
-    ObjectStore::Transaction()).then(
-      [this, epoch=get_osdmap_epoch()]() {
-	return shard_services.start_operation<LocalPeeringEvent>(
-	  this,
-	  shard_services,
-	  pg_whoami,
-	  pgid,
-	  epoch,
-	  epoch,
-	  PeeringState::IntervalFlush());
-      });
+  (void)shard_services.get_store().flush(
+    coll_ref
+  ).then(
+    [this, epoch=get_osdmap_epoch()]() {
+      return shard_services.start_operation<LocalPeeringEvent>(
+	this,
+	shard_services,
+	pg_whoami,
+	pgid,
+	epoch,
+	epoch,
+	PeeringState::IntervalFlush());
+    });
   return false;
 }
 
