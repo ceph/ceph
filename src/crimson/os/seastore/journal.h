@@ -94,6 +94,17 @@ public:
   }
 
   /**
+   * flush
+   *
+   * Wait for all outstanding IOs on handle to commit.
+   * Note, flush() machinery must go through the same pipeline
+   * stages and locks as submit_record.
+   */
+  seastar::future<> flush(OrderingHandle &handle) {
+    return record_submitter.flush(handle);
+  }
+
+  /**
    * Read deltas and pass to delta_handler
    *
    * record_block_start (argument to delta_handler) is the start of the
@@ -387,6 +398,7 @@ private:
 
     using submit_ret = Journal::submit_record_ret;
     submit_ret submit(record_t&&, OrderingHandle&);
+    seastar::future<> flush(OrderingHandle &handle);
 
   private:
     void update_state();

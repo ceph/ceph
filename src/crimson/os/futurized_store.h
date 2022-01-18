@@ -10,6 +10,7 @@
 
 #include <seastar/core/future.hh>
 
+#include "os/Transaction.h"
 #include "crimson/osd/exceptions.h"
 #include "include/buffer_fwd.h"
 #include "include/uuid.h"
@@ -134,6 +135,18 @@ public:
 
   virtual seastar::future<> do_transaction(CollectionRef ch,
 					   ceph::os::Transaction&& txn) = 0;
+  /**
+   * flush
+   *
+   * Flushes outstanding transactions on ch, returned future resolves
+   * after any previously submitted transactions on ch have committed.
+   *
+   * @param ch [in] collection on which to flush
+   */
+  virtual seastar::future<> flush(CollectionRef ch) {
+    return do_transaction(ch, ceph::os::Transaction{});
+  }
+
   // error injection
   virtual seastar::future<> inject_data_error(const ghobject_t& o) {
     return seastar::now();
