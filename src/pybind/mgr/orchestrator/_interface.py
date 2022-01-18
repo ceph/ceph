@@ -31,7 +31,7 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    IscsiServiceSpec, IngressSpec
+    IscsiServiceSpec, IngressSpec, SNMPGatewaySpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -466,6 +466,7 @@ class Orchestrator(object):
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
+            'snmp-gateway': self.apply_snmp_gateway,
             'host': self.add_host,
             'cephadm-exporter': self.apply_cephadm_exporter,
         }
@@ -649,6 +650,10 @@ class Orchestrator(object):
         """Update an existing AlertManager daemon(s)"""
         raise NotImplementedError()
 
+    def apply_snmp_gateway(self, spec: SNMPGatewaySpec) -> OrchResult[str]:
+        """Update an existing snmp gateway service"""
+        raise NotImplementedError()
+
     def apply_cephadm_exporter(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update an existing cephadm exporter daemon"""
         raise NotImplementedError()
@@ -721,6 +726,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
         'cephadm-exporter': 'cephadm-exporter',
+        'snmp-gateway': 'snmp-gateway',
     }
     return mapping[dtype]
 
@@ -744,6 +750,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'crash': ['crash'],
         'container': ['container'],
         'cephadm-exporter': ['cephadm-exporter'],
+        'snmp-gateway': ['snmp-gateway'],
     }
     return mapping[stype]
 

@@ -8,7 +8,6 @@ import pytest
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
     IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec
-
 from orchestrator import DaemonDescription, OrchestratorError
 
 
