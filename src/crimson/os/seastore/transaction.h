@@ -45,6 +45,11 @@ inline std::ostream& operator<<(std::ostream& out, const io_stat_t& stat) {
  * Transaction
  *
  * Representation of in-progress mutation. Used exclusively through Cache methods.
+ *
+ * Transaction log levels:
+ * seastore_t
+ * - DEBUG: transaction create, conflict, commit events
+ * - TRACE: DEBUG details
  */
 class Transaction {
 public:
