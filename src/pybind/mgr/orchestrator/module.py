@@ -10,7 +10,7 @@ from prettytable import PrettyTable
 
 from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, \
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spec_allow_invalid_from_json, \
     SNMPGatewaySpec
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.utils import datetime_now
@@ -584,11 +584,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         if len(services) == 0:
             return HandleCommandResult(stdout="No services reported")
         elif format != Format.plain:
-            if export:
-                data = [s.spec for s in services if s.deleted is None]
-                return HandleCommandResult(stdout=to_format(data, format, many=True, cls=ServiceSpec))
-            else:
-                return HandleCommandResult(stdout=to_format(services, format, many=True, cls=ServiceDescription))
+            with service_spec_allow_invalid_from_json():
+                if export:
+                    data = [s.spec for s in services if s.deleted is None]
+                    return HandleCommandResult(stdout=to_format(data, format, many=True, cls=ServiceSpec))
+                else:
+                    return HandleCommandResult(stdout=to_format(services, format, many=True, cls=ServiceDescription))
         else:
             now = datetime_now()
             table = PrettyTable(
