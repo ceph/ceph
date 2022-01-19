@@ -237,6 +237,98 @@ Single host
 
 To configure a Ceph cluster to run on a single host, use the ``--single-host-defaults`` flag when bootstrapping.
 
+
+
+Hybrid single-host deployment
+-------------------------------------------
+
+This approach elaborates a combination of manual and automated, Ceph cluster deployment on a 
+single-host environment through the ``Cephadm`` tool. 
+
+
+Requirements:
+
+- Python 3
+- Systemd
+- Podman or Docker for running containers
+
+
+Assumptions:
+
+- ``Ceph`` package is installed 
+- ``Cephadm`` is installed 
+
+
+
+Bootstrap:
+
+
+Bootstrap a new cluster with the following instruction. 
+It automatically configures all required keyrings and services. 
+
+.. prompt:: bash #
+
+    cephadm bootstrap --mon-ip $(hostname -I | awk '{print $1}') --mgr-id $(hostname -s) --mon-id $(hostname -s) --allow-fqdn-hostname |& tee ~/cephadm.log 
+
+
+Updating crush rule manually
+
+
+Updating crush rule from host to osd and injecting into Ceph 
+helps single cluster deployment. 
+
+
+#. Get crush rule file: 
+
+   .. prompt:: bash #
+
+      ceph osd getcrushmap -o crush_map_compressed 
+
+#. Make the output file of current instruction readable: 
+
+   .. prompt:: bash #
+
+      crushtool -d crush_map_compressed -o crush_map_decompressed 
+
+#. Open the file with any text reader tool and update the rule from:
+
+   ``step chooseleaf firstn 0 type host`` to ``step chooseleaf firstn 0 type osd``
+
+#. Inject the new rule into the system: 
+
+   .. prompt:: bash #
+
+      crushtool -c crush_map_decompressed -o new_crush_map_compressed 
+
+#. Set the current rule as the default rule: 
+
+   .. prompt:: bash #
+
+      ceph osd setcrushmap -i new_crush_map_compressed 
+
+#. Check the accuracy of the rule update: 
+
+   .. prompt:: bash #
+
+      ceph osd crush rule dump 
+
+#. Allocate all available hard drives to the cluster: 
+
+   .. prompt:: bash #
+
+      ceph orch apply osd --all-available-devices 
+
+#. It would take seconds to minutes depending to the number of added devices and other metrics.
+
+#. Check the status of cluster: 
+
+   .. prompt:: bash #
+
+      ceph -s 
+
+
+
+
 Deployment in an isolated environment
 -------------------------------------
 
