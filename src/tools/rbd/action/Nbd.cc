@@ -292,8 +292,6 @@ int execute_unmap_deprecated(const po::variables_map &vm,
   return execute_unmap(vm, ceph_global_args);
 }
 
-Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
-
 Shell::Action action_show_deprecated(
   {"nbd", "list"}, {"nbd", "ls"}, "List the nbd devices already used.", "",
   &get_list_arguments_deprecated, &execute_list_deprecated, false);
