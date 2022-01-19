@@ -1744,8 +1744,9 @@ TEST(BufferList, rebuild_aligned_size_and_memory) {
     bl.append(ptr, 0, 0);
     EXPECT_EQ(bl.get_num_buffers(), 2);
     EXPECT_EQ(bl.back().length(), 0);
-    /* rebuild_aligned() calls rebuild_aligned_size_and_memory() */
-    bl.rebuild_aligned(4096);
+    /* rebuild_aligned() calls rebuild_aligned_size_and_memory().
+     * we assume the rebuild always happens. */
+    EXPECT_TRUE(bl.rebuild_aligned(4096));
     EXPECT_EQ(bl.get_num_buffers(), 1);
   }
 }
