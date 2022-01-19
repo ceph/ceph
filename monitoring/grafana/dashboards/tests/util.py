@@ -40,6 +40,7 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
     """
     if 'panels' not in dashboard_data:
         return
+    error = 0
     for panel in dashboard_data['panels']:
         if (
                 'title' in panel
@@ -50,15 +51,21 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
             for target in panel['targets']:
                 title = panel['title']
                 legend_format = target['legendFormat'] if 'legendFormat' in target else ""
-                query_id = title + '-' + legend_format
+                query_id = f'{title}-{legend_format}'
                 if query_id in data['queries']:
                     # NOTE: If two or more panels have the same name and legend it
                     # might suggest a refactoring is needed or add something else
                     # to identify each query.
-                    cprint((f'WARNING: Query in panel "{title}" with legend "{legend_format}"'
-                                       ' already exists'), 'yellow')
+                    conflict_file = Path(data['queries'][query_id]['path']).name
+                    file = Path(path).name
+                    cprint((f'ERROR: Query in panel "{title}" with legend "{legend_format}"'
+                                       f' already exists. Conflict "{conflict_file}" '
+                                       f'with: "{file}"'), 'red')
+                    error = 1
                 data['queries'][query_id] = {'query': target['expr'], 'path': path}
                 data['stats'][path]['total'] += 1
+    if error:
+        raise ValueError('Missing legend_format in queries, please add a proper value.')
 
 
 def add_dashboard_variables(data: Dict[str, Any], dashboard_data: Dict[str, Any]) -> None:
@@ -85,7 +92,12 @@ def replace_grafana_expr_variables(expr: str, variable: str, value: Any) -> str:
     >>> replace_grafana_expr_variables('metric{name~="no_dollar|$other|$osd"}', \
         'no_dollar', 'replacement')
     'metric{name~="no_dollar|$other|$osd"}'
+
+    It shouldn't replace the next char after the variable (positive lookahead test).
+    >>> replace_grafana_expr_variables('metric{name~="$osd"}', \
+        'osd', 'replacement')
+    'metric{name~="replacement"}'
     """
     regex = fr'\${variable}(?=\W)'
-    new_expr = re.sub(regex, fr'{str(value)}', expr)
+    new_expr = re.sub(regex, fr'{value}', expr)
     return new_expr

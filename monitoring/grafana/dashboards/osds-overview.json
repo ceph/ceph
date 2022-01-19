@@ -477,18 +477,11 @@
                "refId": "A"
             },
             {
-               "expr": "count(ceph_osd_metadata) - count(ceph_bluefs_wal_total_bytes)",
-               "format": "time_series",
-               "intervalFactor": 1,
-               "legendFormat": "filestore",
-               "refId": "B"
-            },
-            {
                "expr": "absent(ceph_bluefs_wal_total_bytes)*count(ceph_osd_metadata)",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "filestore",
-               "refId": "C"
+               "refId": "B"
             }
          ],
          "title": "OSD Objectstore Types",
