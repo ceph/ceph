@@ -292,7 +292,14 @@ int replay_free_dump_and_apply(char* fname,
     offset = strtol(offset_str.c_str(), &p, 16);
     length = strtol(length_str.c_str(), &p, 16);
 
-    alloc->init_add_free(offset, length);
+    // intentionally skip/trim entries that are above the capacity,
+    // just to be able to "shrink" allocator by editing that field
+    if (offset < capacity) {
+      if (offset + length > capacity) {
+        length = offset + length - capacity;
+      }
+      alloc->init_add_free(offset, length);
+    }
 
     ++it;
   }
