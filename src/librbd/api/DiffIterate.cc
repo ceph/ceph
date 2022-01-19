@@ -150,8 +150,12 @@ private:
       // provide the full object extents to the callback
       for (vector<ObjectExtent>::iterator q = m_object_extents.begin();
            q != m_object_extents.end(); ++q) {
-        diffs->push_back(boost::make_tuple(m_offset + q->offset, q->length,
-                                           end_exists));
+        for (vector<pair<uint64_t,uint64_t> >::iterator r =
+               q->buffer_extents.begin();
+             r != q->buffer_extents.end(); ++r) {
+          diffs->push_back(boost::make_tuple(m_offset + r->first, r->second,
+                                             end_exists));
+        }
       }
       return;
     }
