@@ -9,6 +9,7 @@
 #include "os/bluestore/BlueStore.h"
 #include "os/bluestore/simple_bitmap.h"
 #include "os/bluestore/AvlAllocator.h"
+#include "os/bluestore/simple_bitmap.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/global_context.h"
@@ -2214,6 +2215,311 @@ TEST(shared_blob_2hash_tracker_t, basic_test)
   ASSERT_TRUE(t1.test_all_zero_range(5, 0x4500, 0x3b00));
   ASSERT_TRUE(!t1.test_all_zero_range(5, 0, 0x9000));
 }
+
+struct BITMAP
+{
+#if 1
+#define EXTENT extent_t
+  SimpleBitmap B;
+  BITMAP(uint64_t num_bits)
+    : B(g_ceph_context, num_bits) {
+  }
+  void set(uint64_t offset, uint64_t length) {
+    B.set(offset, length);
+  }
+  void search() {
+    //    B.start_itration_for_clr_extents();
+  }
+  EXTENT next(const EXTENT& e) {
+    return B.get_next_clr_extent(e.offset);
+  }
+  bool is_last(const EXTENT& e) {
+    return e.length == 0;
+  }
+#else
+#define EXTENT simple_bitmap_t::range_t
+  simple_bitmap_t B;
+  BITMAP(uint64_t num_bits)
+    : B(g_ceph_context, num_bits) {
+  }
+  void set(uint64_t offset, uint64_t length) {
+    B.set(offset, length);
+  }
+  void search() {
+  }
+  EXTENT next(const EXTENT& e) {
+    return B.next_unset(e);
+  }
+  bool is_last(const EXTENT& e) {
+    return !e;
+  }
+#endif
+};
+
+
+TEST(SimpleBitmap, one)
+{
+  BITMAP W(1000);
+  W.set(100,1);
+  W.search();
+  EXTENT e;
+  e = W.next(e);
+  ASSERT_EQ(e, (EXTENT{0, 100}));
+  e = W.next(e);
+  ASSERT_EQ(e, (EXTENT{101, 899}));
+  e = W.next(e);
+  ASSERT_TRUE(W.is_last(e));
+  
+  #if 0
+  SimpleBitmap B(g_ceph_context, "", 1000);
+
+  B.set(100,1);
+  B.start_itration_for_clr_extents();
+  extent_t p;
+  p = B.get_next_clr_extent();
+  ASSERT_EQ(p, (extent_t{0, 100}));
+  p = B.get_next_clr_extent();
+  ASSERT_EQ(p, (extent_t{101, 899}));
+  
+  simple_bitmap_t bb(g_ceph_context, 1000);
+
+  bb.set(100,1);
+  
+  simple_bitmap_t::range_t pp;
+  pp = bb.next_unset(pp);
+  ASSERT_EQ(pp, (simple_bitmap_t::range_t{0, 100}));
+  pp = bb.next_unset(pp);
+  ASSERT_EQ(pp, (simple_bitmap_t::range_t{101, 899}));
+
+  #endif
+}
+
+TEST(SimpleBitmap, full)
+{
+  BITMAP W(1111);
+  for (size_t i = 0; i < 1111; i++) {
+    W.set(i,1);
+  }
+  W.search();
+  EXTENT e;
+  e = W.next(e);
+  ASSERT_TRUE(W.is_last(e));
+}
+
+TEST(SimpleBitmap, empty)
+{
+  BITMAP W(1234);
+  W.search();
+  EXTENT e;
+  e = W.next(e);
+  ASSERT_EQ(e, (EXTENT{0, 1234}));
+}
+
+TEST(SimpleBitmap, coprime)
+{
+  size_t capacity = 2 * 5 * 11 * 17 * 23;
+  size_t step = 7 * 13 * 19;
+  ASSERT_LE(step, capacity);
+  BITMAP W(capacity);
+
+  size_t pos = 0;
+  for (size_t i = 0; i < capacity - 1 ; i++) {
+    W.set(pos,1);
+    pos += step;
+    if (pos >= capacity) {
+      pos -= capacity;
+    }
+  }
+  W.search();
+  EXTENT e;
+  e = W.next(e);
+  ASSERT_EQ(e, (EXTENT{capacity - step, 1}));
+  e = W.next(e);
+  ASSERT_TRUE(W.is_last(e));
+}
+
+#if 0
+TEST(SimpleBitmap, almost_cantor_set)
+{
+  size_t capacity = 1 << 20;
+  BITMAP X(capacity);
+  BITMAP Y(capacity);
+  X.set(0, capacity / 2);
+  for (size_t i = 0; i < 19; i++) {
+    X.search();
+    EXTENT e;
+    while (e = X.next(e), !X.is_last(e)) {
+      Y.set(e.offset - e.length, e.length / 2);
+      Y.set(e.offset, e.length / 2);
+    }
+    swap(X.B, Y.B);
+    BITMAP Z(capacity); //ersatz for clearing bits
+    swap(Y.B, Z.B);
+  }
+  X.search();
+  EXTENT e;
+  e = X.next(e);
+  for (size_t i = 1; i < capacity; i += 2) {
+    ASSERT_TRUE(!X.is_last(e));
+    ASSERT_EQ(e, (EXTENT{i, 1}));
+    e = X.next(e);
+  }
+  ASSERT_TRUE(X.is_last(e));
+}
+#endif
+
+TEST(SimpleBitmap, erastotenes)
+{
+  auto is_prime =
+    [](uint64_t n) -> bool {
+      uint32_t s = sqrt(n);
+      for (uint32_t i = 2; i <= s; i++) {
+	if (n / i * i == n) return false;
+      }
+      return true;
+    };
+  size_t capacity = 100000;
+  BITMAP N(capacity);
+  N.set(0, 2); //eliminate 0 and 1
+  while (true) {
+    N.search();
+    EXTENT e;
+    e = N.next(e);
+    if (N.is_last(e)) {
+      break;
+    }
+    uint64_t n = e.offset;
+    ASSERT_TRUE(is_prime(n));
+    //std::cout << n << std::endl;
+    for (size_t i = n; i < capacity; i+=n) {
+      N.set(i, 1);
+    }
+  }
+}
+
+TEST(SimpleBitmap, n_by_k)
+{
+  size_t cells = 101 * 107;
+  size_t val_size = 48;
+  size_t cell_size = 512;
+  ceph_assert(2 * 5 * val_size + 1 < cell_size);
+  size_t capacity = cells * cell_size;
+
+  size_t val_base = 1;
+  size_t val_increment = 27 * 29 * 31;
+  
+  BITMAP N(capacity);
+
+  size_t i = 0;
+  size_t i_step = 13 * 19 * 23 * 31;
+  ceph_assert(i_step < val_size * cells);
+  do {
+    uint64_t cell = i % cells;
+    uint64_t index = i / cells;
+    uint64_t cell_base = cell * cell_size;
+    uint32_t base_width = (cell % 5) + 1;
+    uint64_t val = cell * val_increment + val_base;
+    uint32_t val_log2 = 64 - __builtin_clzll(val);
+    ASSERT_LE(val_log2, val_size);
+    uint32_t bitpos = index % val_log2;
+    uint64_t other_bits = val & ((1LL << bitpos) - 1);
+    uint64_t other_sum = bitpos + __builtin_popcountll(other_bits);
+    uint64_t pos_in_cell = other_sum * base_width;
+    uint32_t width = base_width;
+    if (val & (1LL << bitpos)) {
+      width = base_width * 2;
+    }
+
+    ASSERT_LT(pos_in_cell + width, cell_size);
+    N.set(cell_base + pos_in_cell, width);
+
+    i = i + i_step;
+    if (i >= val_size * cells) {
+      i -= val_size * cells;
+    }
+  } while (i != 0);
+  N.search();
+  EXTENT e;
+  for (size_t i = 0; i < cells; i++) {
+    uint64_t val = i * val_increment + val_base;
+    e = N.next(e);
+    ASSERT_FALSE(N.is_last(e));
+    uint32_t base_width = (i % 5) + 1;
+    uint32_t sum = 64 - __builtin_clzll(val) + __builtin_popcountll(val);
+    ASSERT_EQ(e.offset, i * cell_size + sum * base_width);
+    ASSERT_EQ(e.length, cell_size - sum * base_width);
+  }
+  e = N.next(e);
+  ASSERT_TRUE(N.is_last(e));
+}
+
+TEST(SimpleBitmap, combs)
+{
+  size_t capacity = 100000;
+  for (size_t gap_size = 1; gap_size < 17; gap_size += 2) {
+    for (size_t pin_size = 1; pin_size < 31; pin_size += 3) {
+      BITMAP N(capacity);
+      size_t pos = 0;
+      while (pos < capacity) {
+	if (pos + pin_size < capacity) {
+	  N.set(pos, pin_size);
+	} else {
+	  N.set(pos, capacity - pos);
+	}
+	pos += pin_size + gap_size;
+      }
+      N.search();
+      EXTENT e;
+      pos = 0;
+      while (e = N.next(e), !N.is_last(e)) {
+	ASSERT_EQ(e.offset, pos + pin_size);
+	if (pos + pin_size + gap_size < capacity) {
+	  ASSERT_EQ(e.length, gap_size);
+	} else {
+	  ASSERT_EQ(e.length, capacity - pos - pin_size);
+	}
+	pos += pin_size + gap_size;
+      }
+      ASSERT_TRUE(N.is_last(e));
+      ASSERT_GE(pos + pin_size, capacity);
+    }
+  }
+}
+
+TEST(SimpleBitmap, split_noise)
+{
+  size_t capacity = 1000000;
+  BITMAP N(capacity);
+
+
+  for(size_t i = 4; i < capacity; i*=2) {
+    N.set(i, 1);
+  }
+  
+  bool have_big_areas = true;
+  while (have_big_areas) {
+    have_big_areas = false;
+    N.search();
+    EXTENT e;
+    while (e = N.next(e), !N.is_last(e)) {
+      ASSERT_GT(e.length, 0);
+      if (e.length >= 3) {
+	N.set(e.offset + e.length / 2, 1);
+	have_big_areas = true;
+      }
+    }
+  }
+
+  N.search();
+  EXTENT e;
+  size_t last_free = -1;
+  while (e = N.next(e), !N.is_last(e)) {
+    ASSERT_LE(e.length, 2);
+    ASSERT_EQ(e.offset, last_free + 1);
+    last_free = e.offset + e.length;
+  }
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,

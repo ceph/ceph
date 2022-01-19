@@ -24,6 +24,9 @@
 struct extent_t {
   uint64_t offset;
   uint64_t length;
+  bool operator==(const extent_t& other) const {
+    return offset == other.offset && length == other.length;
+  }
 };
 
 class SimpleBitmap {
