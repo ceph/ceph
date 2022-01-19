@@ -30,6 +30,8 @@ Cache::Cache(
     lru(crimson::common::get_conf<Option::size_t>(
 	  "seastore_cache_lru_size"))
 {
+  LOG_PREFIX(Cache::Cache);
+  INFO("created, lru_size={}", lru.get_capacity());
   register_metrics();
 }
 
@@ -37,7 +39,7 @@ Cache::~Cache()
 {
   LOG_PREFIX(Cache::~Cache);
   for (auto &i: extents) {
-    ERROR("extent {} still alive", i);
+    ERROR("extent is still alive -- {}", i);
   }
   ceph_assert(extents.empty());
 }
@@ -45,17 +47,19 @@ Cache::~Cache()
 Cache::retire_extent_ret Cache::retire_extent_addr(
   Transaction &t, paddr_t addr, extent_len_t length)
 {
+  LOG_PREFIX(Cache::retire_extent_addr);
+  TRACET("retire {}~{}", t, addr, length);
+
   assert(addr.is_real() && !addr.is_block_relative());
 
-  LOG_PREFIX(Cache::retire_extent);
   CachedExtentRef ext;
   auto result = t.get_extent(addr, &ext);
   if (result == Transaction::get_extent_ret::PRESENT) {
-    DEBUGT("found {} in t", t, addr);
+    DEBUGT("retire {}~{} on t -- {}", t, addr, length, *ext);
     t.add_to_retired_set(CachedExtentRef(&*ext));
     return retire_extent_iertr::now();
   } else if (result == Transaction::get_extent_ret::RETIRED) {
-    ERRORT("{} is already retired", t, addr);
+    ERRORT("retire {}~{} failed, already retired -- {}", t, addr, length, *ext);
     ceph_abort();
   }
 
@@ -66,6 +70,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   // retiring is not included by the cache hit metrics
   ext = query_cache(addr, nullptr);
   if (ext) {
+    DEBUGT("retire {}~{} in cache -- {}", t, addr, length, *ext);
     if (ext->get_type() != extent_types_t::RETIRED_PLACEHOLDER) {
       t.add_to_read_set(ext);
       return trans_intr::make_interruptible(
@@ -77,6 +82,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     }
     // the retired-placeholder exists
   } else {
+    DEBUGT("retire {}~{} as placeholder", t, addr, length);
     // add a new placeholder to Cache
     ext = CachedExtent::make_cached_extent_ref<
       RetiredExtentPlaceholder>(length);
@@ -103,6 +109,9 @@ void Cache::dump_contents()
 
 void Cache::register_metrics()
 {
+  LOG_PREFIX(Cache::register_metrics);
+  DEBUG("");
+
   stats = {};
 
   namespace sm = seastar::metrics;
@@ -614,6 +623,7 @@ void Cache::register_metrics()
 void Cache::add_extent(CachedExtentRef ref)
 {
   LOG_PREFIX(Cache::add_extent);
+  TRACE("extent -- {}", *ref);
   assert(ref->is_valid());
   extents.insert(*ref);
   if (ref->is_dirty()) {
@@ -621,12 +631,10 @@ void Cache::add_extent(CachedExtentRef ref)
   } else {
     touch_extent(*ref);
   }
-  DEBUG("extent {}", *ref);
 }
 
 void Cache::mark_dirty(CachedExtentRef ref)
 {
-  LOG_PREFIX(Cache::mark_dirty);
   if (ref->is_dirty()) {
     assert(ref->primary_ref_list_hook.is_linked());
     return;
@@ -635,8 +643,6 @@ void Cache::mark_dirty(CachedExtentRef ref)
   lru.remove_from_lru(*ref);
   add_to_dirty(ref);
   ref->state = CachedExtent::extent_state_t::DIRTY;
-
-  DEBUG("extent: {}", *ref);
 }
 
 void Cache::add_to_dirty(CachedExtentRef ref)
@@ -663,7 +669,7 @@ void Cache::remove_from_dirty(CachedExtentRef ref)
 void Cache::remove_extent(CachedExtentRef ref)
 {
   LOG_PREFIX(Cache::remove_extent);
-  DEBUG("extent {}", *ref);
+  TRACE("extent -- {}", *ref);
   assert(ref->is_valid());
   if (ref->is_dirty()) {
     remove_from_dirty(ref);
@@ -677,8 +683,6 @@ void Cache::commit_retire_extent(
     Transaction& t,
     CachedExtentRef ref)
 {
-  LOG_PREFIX(Cache::commit_retire_extent);
-  DEBUGT("extent {}", t, *ref);
   remove_extent(ref);
 
   ref->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
@@ -690,8 +694,6 @@ void Cache::commit_replace_extent(
     CachedExtentRef next,
     CachedExtentRef prev)
 {
-  LOG_PREFIX(Cache::commit_replace_extent);
-  DEBUGT("prev {}, next {}", t, *prev, *next);
   assert(next->get_paddr() == prev->get_paddr());
   assert(next->version == prev->version + 1);
   extents.replace(*next, *prev);
@@ -777,7 +779,6 @@ void Cache::mark_transaction_conflicted(
       if (!i->is_valid()) {
         continue;
       }
-      DEBUGT("was mutating extent: {}", t, *i);
       efforts.mutate.increment(i->get_length());
       delta_stat.increment(i->get_delta().length());
     }
@@ -857,6 +858,9 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
   bool delay 		///< [in] whether to delay paddr alloc
 )
 {
+  LOG_PREFIX(Cache::alloc_new_extent_by_type);
+  SUBDEBUGT(seastore_cache, "allocate {} {}B, delay={}",
+            t, type, length, delay);
   switch (type) {
   case extent_types_t::ROOT:
     ceph_assert(0 == "ROOT is never directly alloc'd");
@@ -1008,7 +1012,7 @@ record_t Cache::prepare_record(Transaction &t)
   // invalidate now invalid blocks
   io_stat_t retire_stat;
   for (auto &i: t.retired_set) {
-    DEBUGT("retiring {}", t, *i);
+    DEBUGT("retired extent -- {}", t, *i);
     get_by_ext(efforts.retire_by_ext,
                i->get_type()).increment(i->get_length());
     retire_stat.increment(i->get_length());
@@ -1027,12 +1031,12 @@ record_t Cache::prepare_record(Transaction &t)
   io_stat_t fresh_invalid_stat;
   for (auto &i: t.inline_block_list) {
     if (!i->is_valid()) {
-      DEBUGT("fresh inline block (invalid) {}", t, *i);
+      DEBUGT("invalid fresh inline extent -- {}", t, *i);
       fresh_invalid_stat.increment(i->get_length());
       get_by_ext(efforts.fresh_invalid_by_ext,
                  i->get_type()).increment(i->get_length());
     } else {
-      DEBUGT("fresh inline block {}", t, *i);
+      DEBUGT("fresh inline extent -- {}", t, *i);
     }
     fresh_stat.increment(i->get_length());
     get_by_ext(efforts.fresh_inline_by_ext,
@@ -1069,7 +1073,7 @@ record_t Cache::prepare_record(Transaction &t)
 
   for (auto &i: t.ool_block_list) {
     ceph_assert(i->is_valid());
-    DEBUGT("fresh ool block {}", t, *i);
+    DEBUGT("fresh ool extent -- {}", t, *i);
     get_by_ext(efforts.fresh_ool_by_ext,
                i->get_type()).increment(i->get_length());
   }
@@ -1155,7 +1159,6 @@ void Cache::complete_commit(
 
     if (i->is_valid()) {
       i->state = CachedExtent::extent_state_t::CLEAN;
-      DEBUGT("fresh {}", t, *i);
       add_extent(i);
       if (cleaner) {
 	cleaner->mark_space_used(
@@ -1170,7 +1173,6 @@ void Cache::complete_commit(
     if (!i->is_valid()) {
       continue;
     }
-    DEBUGT("mutated {}", t, *i);
     assert(i->prior_instance);
     i->on_delta_write(final_block_start);
     i->prior_instance = CachedExtentRef();
@@ -1197,12 +1199,14 @@ void Cache::complete_commit(
 
   last_commit = seq;
   for (auto &i: t.retired_set) {
-    DEBUGT("retiring {}", t, *i);
     i->dirty_from_or_retired_at = last_commit;
   }
 }
 
-void Cache::init() {
+void Cache::init()
+{
+  LOG_PREFIX(Cache::init);
+  INFO("init root");
   if (root) {
     // initial creation will do mkfs followed by mount each of which calls init
     remove_extent(root);
@@ -1215,6 +1219,8 @@ void Cache::init() {
 
 Cache::mkfs_iertr::future<> Cache::mkfs(Transaction &t)
 {
+  LOG_PREFIX(Cache::mkfs);
+  INFOT("create root", t);
   return get_root(t).si_then([this, &t](auto croot) {
     duplicate_for_write(t, croot);
     return mkfs_iertr::now();
@@ -1228,6 +1234,15 @@ Cache::mkfs_iertr::future<> Cache::mkfs(Transaction &t)
 
 Cache::close_ertr::future<> Cache::close()
 {
+  LOG_PREFIX(Cache::close);
+  INFO("close with {}({}B) dirty from {}, {}({}B) lru, totally {}({}B) indexed extents",
+       dirty.size(),
+       stats.dirty_bytes,
+       get_oldest_dirty_from().value_or(journal_seq_t{}),
+       lru.get_current_contents_extents(),
+       lru.get_current_contents_bytes(),
+       extents.size(),
+       extents.get_bytes());
   root.reset();
   for (auto i = dirty.begin(); i != dirty.end(); ) {
     auto ptr = &*i;
@@ -1248,7 +1263,7 @@ Cache::replay_delta(
 {
   LOG_PREFIX(Cache::replay_delta);
   if (delta.type == extent_types_t::ROOT) {
-    DEBUG("found root delta");
+    DEBUG("replay root delta {} at {} {}", delta, journal_seq, record_base);
     remove_extent(root);
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
     root->dirty_from_or_retired_at = journal_seq;
@@ -1290,14 +1305,14 @@ Cache::replay_delta(
     );
     return extent_fut.safe_then([=, &delta](auto extent) {
       if (!extent) {
+	DEBUG("replay extent is not present, so delta is obsolete {} at {} {}",
+	      delta, journal_seq, record_base);
 	assert(delta.pversion > 0);
-	DEBUG(
-	  "replaying {}, extent not present so delta is obsolete",
-	  delta);
 	return;
       }
 
-      DEBUG("replaying {} on {}", *extent, delta);
+      DEBUG("replay extent delta {} at {} {} -- {} ...",
+            delta, journal_seq, record_base, *extent);
 
       assert(extent->version == delta.pversion);
 
@@ -1320,6 +1335,13 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
   size_t max_bytes)
 {
   LOG_PREFIX(Cache::get_next_dirty_extents);
+  if (dirty.empty()) {
+    DEBUGT("max_bytes={}B, seq={}, dirty is empty",
+           t, max_bytes, seq);
+  } else {
+    DEBUGT("max_bytes={}B, seq={}, dirty_from={}",
+           t, max_bytes, seq, dirty.begin()->get_dirty_from());
+  }
   std::vector<CachedExtentRef> cand;
   size_t bytes_so_far = 0;
   for (auto i = dirty.begin();
@@ -1330,9 +1352,10 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
                 dirty_from != JOURNAL_SEQ_MAX &&
                 dirty_from != NO_DELTAS);
     if (dirty_from < seq) {
-      DEBUGT("next {}", t, *i);
+      TRACET("next extent -- {}", t, *i);
       if (!cand.empty() && cand.back()->get_dirty_from() > dirty_from) {
-	ERRORT("last {}, next {}", t, *cand.back(), *i);
+	ERRORT("dirty extents are not ordered by dirty_from -- last={}, next={}",
+               t, *cand.back(), *i);
         ceph_abort();
       }
       bytes_so_far += i->get_length();
@@ -1348,8 +1371,7 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
       return trans_intr::do_for_each(
 	cand,
 	[FNAME, this, &t, &ret](auto &ext) {
-	  DEBUG("waiting on {}", *ext);
-
+	  TRACET("waiting on extent -- {}", t, *ext);
 	  return trans_intr::make_interruptible(
 	    ext->wait_io()
 	  ).then_interruptible([FNAME, this, ext, &t, &ret] {
@@ -1362,7 +1384,7 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	    CachedExtentRef on_transaction;
 	    auto result = t.get_extent(ext->get_paddr(), &on_transaction);
 	    if (result == Transaction::get_extent_ret::ABSENT) {
-	      DEBUGT("{} absent on t", t, *ext);
+	      DEBUGT("extent is absent on t -- {}", t, *ext);
 	      t.add_to_read_set(ext);
 	      if (ext->get_type() == extent_types_t::ROOT) {
 		if (t.root) {
@@ -1375,11 +1397,11 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	      }
 	      ret.push_back(ext);
 	    } else if (result == Transaction::get_extent_ret::PRESENT) {
-	      DEBUGT("{} present on t as {}", t, *ext, *on_transaction);
+	      DEBUGT("extent is present on t -- {}, on t {}", t, *ext, *on_transaction);
 	      ret.push_back(on_transaction);
 	    } else {
 	      assert(result == Transaction::get_extent_ret::RETIRED);
-	      DEBUGT("{} retired on t", t, *ext);
+	      DEBUGT("extent is retired on t -- {}", t, *ext);
 	    }
 	  });
 	}).then_interruptible([&ret] {
@@ -1392,16 +1414,16 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
 {
   LOG_PREFIX(Cache::get_root);
   if (t.root) {
-    DEBUGT("root already on transaction {}", t, *t.root);
+    TRACET("root already on t -- {}", t, *t.root);
     return get_root_iertr::make_ready_future<RootBlockRef>(
       t.root);
   } else {
     auto ret = root;
-    DEBUGT("waiting root {}", t, *ret);
+    DEBUGT("root not on t -- {}", t, *ret);
     return ret->wait_io().then([this, FNAME, ret, &t] {
-      DEBUGT("got root read {}", t, *ret);
+      TRACET("root wait io done -- {}", t, *ret);
       if (!ret->is_valid()) {
-	DEBUGT("root became invalid: {}", t, *ret);
+	DEBUGT("root is invalid -- {}", t, *ret);
 	++(get_by_src(stats.trans_conflicts_by_unknown, t.get_src()));
 	mark_transaction_conflicted(t, *ret);
 	return get_root_iertr::make_ready_future<RootBlockRef>();

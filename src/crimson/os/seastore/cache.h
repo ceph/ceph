@@ -88,6 +88,9 @@ namespace crimson::os::seastore {
  * Cache logs
  *
  * levels:
+ * - INFO: major initiation, closing operations
+ * - DEBUG: major extent related operations, INFO details
+ * - TRACE: DEBUG details
  * - seastore_t logs
  */
 class Cache {
@@ -134,6 +137,8 @@ public:
 
   /// Declare ref retired in t
   void retire_extent(Transaction &t, CachedExtentRef ref) {
+    LOG_PREFIX(Cache::retire_extent);
+    SUBDEBUGT(seastore_cache, "retire extent -- {}", t, *ref);
     t.add_to_retired_set(ref);
   }
 
@@ -158,6 +163,8 @@ public:
    * returns t.root and assume it is already present/read in t
    */
   RootBlockRef get_root_fast(Transaction &t) {
+    LOG_PREFIX(Cache::get_root_fast);
+    SUBTRACET(seastore_cache, "root already on t -- {}", t, *t.root);
     assert(t.root);
     return t.root;
   }
@@ -180,8 +187,11 @@ public:
     const src_ext_t* p_metric_key, ///< [in] cache query metric key
     Func &&extent_init_func        ///< [in] init func for extent
   ) {
+    LOG_PREFIX(Cache::get_extent);
     auto cached = query_cache(offset, p_metric_key);
     if (!cached) {
+      SUBDEBUG(seastore_cache,
+          "{} {}~{} is absent, reading ...", T::TYPE, offset, length);
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
       ret->set_paddr(offset);
@@ -194,6 +204,9 @@ public:
 
     // extent PRESENT in cache
     if (cached->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
+      SUBDEBUG(seastore_cache,
+          "{} {}~{} is absent(placeholder), reading ...",
+          T::TYPE, offset, length);
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
       ret->set_paddr(offset);
@@ -211,6 +224,9 @@ public:
       return read_extent<T>(
 	std::move(ret));
     } else {
+      SUBTRACE(seastore_cache,
+          "{} {}~{} is present in cache -- {}",
+          T::TYPE, offset, length, *cached);
       auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
       return ret->wait_io(
       ).then([ret=std::move(ret)]() mutable
@@ -248,11 +264,14 @@ public:
     CachedExtentRef ret;
     LOG_PREFIX(Cache::get_extent_if_cached);
     auto result = t.get_extent(offset, &ret);
-    if (result != Transaction::get_extent_ret::ABSENT) {
-      // including get_extent_ret::RETIRED
-      SUBDEBUGT(seastore_cache,
-	"Found extent at offset {} on transaction: {}",
-	t, offset, *ret);
+    if (result == Transaction::get_extent_ret::RETIRED) {
+      SUBDEBUGT(seastore_cache, "{} {} is retired on t -- {}",
+          t, type, offset, *ret);
+      return get_extent_if_cached_iertr::make_ready_future<
+        CachedExtentRef>(ret);
+    } else if (result == Transaction::get_extent_ret::PRESENT) {
+      SUBTRACET(seastore_cache, "{} {} is present on t -- {}",
+          t, type, offset, *ret);
       return get_extent_if_cached_iertr::make_ready_future<
         CachedExtentRef>(ret);
     }
@@ -263,17 +282,15 @@ public:
     if (!ret ||
         // retired_placeholder is not really cached yet
         ret->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
-      SUBDEBUGT(seastore_cache,
-	"No extent at offset {}, retired_placeholder: {}",
-	t, offset, !!ret);
+      SUBDEBUGT(seastore_cache, "{} {} is absent{}",
+                t, type, offset, !!ret ? "(placeholder)" : "");
       return get_extent_if_cached_iertr::make_ready_future<
         CachedExtentRef>();
     }
 
     // present in cache and is not a retired_placeholder
-    SUBDEBUGT(seastore_cache,
-      "Found extent at offset {} in cache: {}",
-      t, offset, *ret);
+    SUBDEBUGT(seastore_cache, "{} {} is present in cache -- {}",
+              t, type, offset, *ret);
     t.add_to_read_set(ret);
     touch_extent(*ret);
     return ret->wait_io().then([ret] {
@@ -303,29 +320,33 @@ public:
     LOG_PREFIX(Cache::get_extent);
     auto result = t.get_extent(offset, &ret);
     if (result != Transaction::get_extent_ret::ABSENT) {
+      SUBTRACET(seastore_cache, "{} {}~{} is {} on t -- {}",
+          t,
+          T::TYPE,
+          offset,
+          length,
+          result == Transaction::get_extent_ret::PRESENT ? "present" : "retired",
+          *ret);
       assert(result != Transaction::get_extent_ret::RETIRED);
-      SUBDEBUGT(seastore_cache,
-	"Found extent at offset {} on transaction: {}",
-	t, offset, *ret);
       return seastar::make_ready_future<TCachedExtentRef<T>>(
 	ret->cast<T>());
     } else {
+      SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
+                t, T::TYPE, offset, length);
       auto metric_key = std::make_pair(t.get_src(), T::TYPE);
       return trans_intr::make_interruptible(
 	get_extent<T>(
 	  offset, length, &metric_key,
 	  std::forward<Func>(extent_init_func))
-      ).si_then([this, FNAME, offset, &t](auto ref) {
+      ).si_then([this, FNAME, offset, length, &t](auto ref) {
 	(void)this; // silence incorrect clang warning about capture
 	if (!ref->is_valid()) {
-	  SUBDEBUGT(seastore_cache, "got invalid extent: {}", t, ref);
+	  SUBDEBUGT(seastore_cache, "{} {}~{} is invalid -- {}",
+	            t, T::TYPE, offset, length, *ref);
 	  ++(get_by_src(stats.trans_conflicts_by_unknown, t.get_src()));
 	  mark_transaction_conflicted(t, *ref);
 	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
 	} else {
-	  SUBDEBUGT(seastore_cache,
-	    "Read extent at offset {} in cache: {}",
-	    t, offset, *ref);
 	  touch_extent(*ref);
 	  t.add_to_read_set(ref);
 	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
@@ -387,14 +408,22 @@ private:
     paddr_t offset,
     laddr_t laddr,
     seastore_off_t length,
-    extent_init_func_t &&extent_init_func) {
+    extent_init_func_t &&extent_init_func
+  ) {
+    LOG_PREFIX(Cache::get_extent_by_type);
     CachedExtentRef ret;
     auto status = t.get_extent(offset, &ret);
     if (status == Transaction::get_extent_ret::RETIRED) {
+      SUBDEBUGT(seastore_cache, "{} {}~{} {} is retired on t -- {}",
+                t, type, offset, length, laddr, *ret);
       return seastar::make_ready_future<CachedExtentRef>();
     } else if (status == Transaction::get_extent_ret::PRESENT) {
+      SUBTRACET(seastore_cache, "{} {}~{} {} is present on t -- {}",
+                t, type, offset, length, laddr, *ret);
       return seastar::make_ready_future<CachedExtentRef>(ret);
     } else {
+      SUBTRACET(seastore_cache, "{} {}~{} {} is absent on t, query cache ...",
+                t, type, offset, length, laddr);
       auto src = t.get_src();
       return trans_intr::make_interruptible(
 	_get_extent_by_type(
@@ -402,8 +431,8 @@ private:
 	  std::move(extent_init_func))
       ).si_then([=, &t](CachedExtentRef ret) {
         if (!ret->is_valid()) {
-          LOG_PREFIX(Cache::get_extent_by_type);
-          SUBDEBUGT(seastore_cache, "got invalid extent: {}", t, ret);
+          SUBDEBUGT(seastore_cache, "{} {}~{} {} is invalid -- {}",
+                    t, type, offset, length, laddr, *ret);
           ++(get_by_src(stats.trans_conflicts_by_unknown, t.get_src()));
           mark_transaction_conflicted(t, *ret.get());
           return get_extent_ertr::make_ready_future<CachedExtentRef>();
@@ -464,6 +493,9 @@ public:
     seastore_off_t length, ///< [in] length
     bool delayed = false  ///< [in] whether the paddr allocation of extent is delayed
   ) {
+    LOG_PREFIX(Cache::alloc_new_extent);
+    SUBDEBUGT(seastore_cache, "allocate {} {}B, delay={}",
+              t, T::TYPE, length, delayed);
     auto ret = CachedExtent::make_cached_extent_ref<T>(
       alloc_cache_buf(length));
     t.add_fresh_extent(ret, delayed);
@@ -473,14 +505,21 @@ public:
 
   void mark_delayed_extent_inline(
     Transaction& t,
-    LogicalCachedExtentRef& ref) {
+    LogicalCachedExtentRef& ref
+  ) {
+    LOG_PREFIX(Cache::mark_delayed_extent_inline);
+    SUBDEBUGT(seastore_cache, "-- {}", t, *ref);
     t.mark_delayed_extent_inline(ref);
   }
 
   void mark_delayed_extent_ool(
     Transaction& t,
     LogicalCachedExtentRef& ref,
-    paddr_t final_addr) {
+    paddr_t final_addr
+  ) {
+    LOG_PREFIX(Cache::mark_delayed_extent_ool);
+    SUBDEBUGT(seastore_cache, "final_addr={} -- {}",
+              t, final_addr, *ref);
     t.mark_delayed_extent_ool(ref, final_addr);
   }
 
@@ -588,6 +627,15 @@ public:
     Transaction &t,
     F &&f)
   {
+    LOG_PREFIX(Cache::init_cached_extents);
+    SUBINFOT(seastore_cache,
+        "start with {}({}B) extents, {} dirty, from {}",
+        t,
+        extents.size(),
+        extents.get_bytes(),
+        dirty.size(),
+        get_oldest_dirty_from().value_or(journal_seq_t{}));
+
     // journal replay should has been finished at this point,
     // Cache::root should have been inserted to the dirty list
     assert(root->is_dirty());
@@ -598,16 +646,20 @@ public:
     return seastar::do_with(
       std::forward<F>(f),
       std::move(_dirty),
-      [this, &t](auto &f, auto &refs) mutable
+      [this, FNAME, &t](auto &f, auto &refs) mutable
     {
       return trans_intr::do_for_each(
         refs,
-        [this, &t, &f](auto &e)
+        [this, FNAME, &t, &f](auto &e)
       {
+        SUBTRACET(seastore_cache, "inspecting extent ... -- {}", t, *e);
         return f(t, e
-        ).si_then([this, &t, e](bool is_alive) {
+        ).si_then([this, FNAME, &t, e](bool is_alive) {
           if (!is_alive) {
+            SUBDEBUGT(seastore_cache, "extent is not alive, remove -- {}", t, *e);
             remove_extent(e);
+          } else {
+            SUBDEBUGT(seastore_cache, "extent is alive -- {}", t, *e);
           }
         });
       });
@@ -616,7 +668,15 @@ public:
       crimson::ct_error::assert_all{
         "Invalid error in Cache::init_cached_extents"
       }
-    );
+    ).si_then([this, FNAME, &t] {
+      SUBINFOT(seastore_cache,
+          "finish with {}({}B) extents, {} dirty, from {}",
+          t,
+          extents.size(),
+          extents.get_bytes(),
+          dirty.size(),
+          get_oldest_dirty_from().value_or(journal_seq_t{}));
+    });
   }
 
   /**
@@ -741,6 +801,10 @@ private:
 
   public:
     LRU(size_t capacity) : capacity(capacity) {}
+
+    size_t get_capacity() const {
+      return capacity;
+    }
 
     size_t get_current_contents_bytes() const {
       return contents;
@@ -974,12 +1038,14 @@ private:
       extent->get_bptr()
     ).safe_then(
       [extent=std::move(extent)]() mutable {
+        LOG_PREFIX(Cache::read_extent);
         extent->state = CachedExtent::extent_state_t::CLEAN;
         /* TODO: crc should be checked against LBA manager */
         extent->last_committed_crc = extent->get_crc32c();
 
         extent->on_clean_read();
         extent->complete_io();
+        SUBDEBUG(seastore_cache, "read extent done -- {}", *extent);
         return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
           std::move(extent));
       },
