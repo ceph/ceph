@@ -648,9 +648,13 @@ Journal::RecordSubmitter::submit(
 
 seastar::future<> Journal::RecordSubmitter::flush(OrderingHandle &handle)
 {
+  LOG_PREFIX(RecordSubmitter::flush);
+  DEBUG("H{} flush", (void*)&handle);
   return handle.enter(write_pipeline->device_submission
   ).then([this, &handle] {
     return handle.enter(write_pipeline->finalize);
+  }).then([FNAME, &handle] {
+    DEBUG("H{} flush done", (void*)&handle);
   });
 }
 
