@@ -59,10 +59,10 @@ def find_executable_on_host(locations=[], executable='', binary_check='/bin/ls')
     stdout = as_string(process.stdout.read())
     if stdout:
         executable_on_host = stdout.split('\n')[0]
-        mlogger.info('Executable {} found on the host, will use {}'.format(executable, executable_on_host))
+        logger.info('Executable {} found on the host, will use {}'.format(executable, executable_on_host))
         return executable_on_host
     else:
-        mlogger.warning('Executable {} not found on the host, will return {} as-is'.format(executable, executable))
+        logger.warning('Executable {} not found on the host, will return {} as-is'.format(executable, executable))
         return executable
 
 def which(executable, run_on_host=False):
