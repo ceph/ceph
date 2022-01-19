@@ -83,6 +83,12 @@ namespace crimson::os::seastore {
  *   CachedExtent::delta_written(paddr_t) with the address of the start
  *   of the record
  * - Complete all promises with the final record start paddr_t
+ *
+ *
+ * Cache logs
+ *
+ * levels:
+ * - seastore_t logs
  */
 class Cache {
 public:
@@ -111,8 +117,8 @@ public:
         return on_transaction_destruct(t);
       }
     );
-    SUBDEBUGT(seastore_cache, "created name={}, source={}, is_weak={}",
-              *ret, name, src, is_weak);
+    SUBDEBUGT(seastore_t, "created name={}, source={}, is_weak={}",
+             *ret, name, src, is_weak);
     return ret;
   }
 
@@ -120,10 +126,10 @@ public:
   void reset_transaction_preserve_handle(Transaction &t) {
     LOG_PREFIX(Cache::reset_transaction_preserve_handle);
     if (t.did_reset()) {
+      SUBTRACET(seastore_t, "reset", t);
       ++(get_by_src(stats.trans_created_by_src, t.get_src()));
     }
     t.reset_preserve_handle(last_commit);
-    SUBDEBUGT(seastore_cache, "reset", t);
   }
 
   /// Declare ref retired in t
