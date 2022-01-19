@@ -32,12 +32,8 @@ bool QatAccel::init(const std::string &alg) {
   if (rc != QZ_OK)
     return false;
   params.direction = QZ_DIR_BOTH;
-  if (alg == "snappy")
-    params.comp_algorithm = QZ_SNAPPY;
-  else if (alg == "zlib")
+  if (alg == "zlib")
     params.comp_algorithm = QZ_DEFLATE;
-  else if (alg == "lz4")
-    params.comp_algorithm = QZ_LZ4;
   else
     return false;
 
