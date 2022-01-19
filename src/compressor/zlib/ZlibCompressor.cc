@@ -246,10 +246,6 @@ int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_
 
 int ZlibCompressor::decompress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> compressor_message)
 {
-#ifdef HAVE_QATZIP
-  if (qat_enabled)
-    return qat_accel.decompress(in, out, compressor_message);
-#endif
   auto i = std::cbegin(in);
   return decompress(i, in.length(), out, compressor_message);
 }

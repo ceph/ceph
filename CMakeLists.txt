@@ -279,7 +279,7 @@ endif()
 option(WITH_QATZIP "Enable QATZIP" OFF)
 if(WITH_QATZIP)
   find_package(qatzip REQUIRED)
-  set(HAVE_QATZIP ${QATZIP_FOUND})
+  set(HAVE_QATZIP ${qatzip_FOUND})
 endif(WITH_QATZIP)
 
 # needs mds and? XXX
