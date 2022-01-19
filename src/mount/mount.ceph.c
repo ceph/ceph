@@ -18,6 +18,7 @@
 #endif
 
 bool verboseflag = false;
+bool fakeflag = false;
 bool skip_mtab_flag = false;
 bool v2_addrs = false;
 bool no_fallback = false;
@@ -645,6 +646,8 @@ static int parse_arguments(int argc, char *const *const argv,
 			skip_mtab_flag = true;
 		else if (!strcmp("-v", argv[i]))
 			verboseflag = true;
+		else if (!strcmp("-f", argv[i]))
+			fakeflag = true;
 		else if (!strcmp("-o", argv[i])) {
 			++i;
 			if (i >= argc) {
@@ -679,6 +682,7 @@ static void usage(const char *prog_name)
 	printf("\t-h: Print this help\n");
 	printf("\t-n: Do not update /etc/mtab\n");
 	printf("\t-v: Verbose\n");
+	printf("\t-f: Fake mount, do not actually mount\n");
 	printf("\tceph-options: refer to mount.ceph(8)\n");
 	printf("\n");
 }
@@ -696,6 +700,15 @@ static void ceph_mount_info_free(struct ceph_mount_info *cmi)
 	free(cmi->cmi_path);
 	free(cmi->cmi_mons);
 	free(cmi->cmi_conf);
+}
+
+static int call_mount_system_call(const char *rsrc, const char *node, struct ceph_mount_info *cmi)
+{
+	int r = 0;
+	if (!fakeflag) {
+		r = mount(rsrc, node, "ceph", cmi->cmi_flags, cmi->cmi_opts);
+	}
+	return r;
 }
 
 static int mount_new_device_format(const char *node, struct ceph_mount_info *cmi)
@@ -724,7 +737,7 @@ static int mount_new_device_format(const char *node, struct ceph_mount_info *cmi
 	if (cmi->cmi_opts)
 		mount_ceph_debug("mount.ceph: options \"%s\" will pass to kernel\n",
 				 cmi->cmi_opts);
-	r = mount(rsrc, node, "ceph", cmi->cmi_flags, cmi->cmi_opts);
+	r = call_mount_system_call(rsrc, node, cmi);
 	if (r)
 		r = -errno;
 	free(rsrc);
@@ -764,7 +777,7 @@ static int mount_old_device_format(const char *node, struct ceph_mount_info *cmi
 		mount_ceph_debug("mount.ceph: options \"%s\" will pass to kernel\n",
 				 cmi->cmi_opts);
 
-	r = mount(rsrc, node, "ceph", cmi->cmi_flags, cmi->cmi_opts);
+	r = call_mount_system_call(rsrc, node, cmi);
 	free(mon_addr);
 	free(rsrc);
 
