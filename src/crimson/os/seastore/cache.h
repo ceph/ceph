@@ -336,13 +336,6 @@ public:
     return get_extent<T>(t, offset, length, [](T &){});
   }
 
-
-  /**
-   * get_extent_by_type
-   *
-   * Based on type, instantiate the correct concrete type
-   * and read in the extent at location offset~length.
-   */
 private:
   // This is a workaround std::move_only_function not being available,
   // not really worth generalizing at this time.
@@ -419,6 +412,12 @@ private:
   }
 
 public:
+  /**
+   * get_extent_by_type
+   *
+   * Based on type, instantiate the correct concrete type
+   * and read in the extent at location offset~length.
+   */
   template <typename Func>
   get_extent_by_type_ret get_extent_by_type(
     Transaction &t,         ///< [in] transaction
@@ -464,10 +463,6 @@ public:
     t.add_fresh_extent(ret, delayed);
     ret->state = CachedExtent::extent_state_t::INITIAL_WRITE_PENDING;
     return ret;
-  }
-
-  void clear_lru() {
-    lru.clear();
   }
 
   void mark_delayed_extent_inline(
@@ -590,13 +585,13 @@ public:
     // journal replay should has been finished at this point,
     // Cache::root should have been inserted to the dirty list
     assert(root->is_dirty());
-    std::vector<CachedExtentRef> dirty;
+    std::vector<CachedExtentRef> _dirty;
     for (auto &e : extents) {
-      dirty.push_back(CachedExtentRef(&e));
+      _dirty.push_back(CachedExtentRef(&e));
     }
     return seastar::do_with(
       std::forward<F>(f),
-      std::move(dirty),
+      std::move(_dirty),
       [this, &t](auto &f, auto &refs) mutable
     {
       return trans_intr::do_for_each(
