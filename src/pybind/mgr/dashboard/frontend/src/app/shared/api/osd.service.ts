@@ -2,10 +2,12 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
+import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { CdDevice } from '../models/devices';
 import { InventoryDeviceType } from '../models/inventory-device-type.model';
+import { OsdSettings } from '../models/osd-settings';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
 
@@ -74,6 +76,12 @@ export class OsdService {
 
   getList() {
     return this.http.get(`${this.path}`);
+  }
+
+  getOsdSettings(): Observable<OsdSettings> {
+    return this.http.get<OsdSettings>(`${this.path}/settings`, {
+      headers: { Accept: 'application/vnd.ceph.api.v0.1+json' }
+    });
   }
 
   getDetails(id: number) {
