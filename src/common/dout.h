@@ -99,11 +99,12 @@ namespace ceph::dout {
 template<typename T>
 struct dynamic_marker_t {
   T value;
-  operator T() const { return value; }
+  // constexpr ctor isn't needed as it's an aggregate type
+  constexpr operator T() const { return value; }
 };
 
 template<typename T>
-dynamic_marker_t<T> need_dynamic(T&& t) {
+constexpr dynamic_marker_t<T> need_dynamic(T&& t) {
   return dynamic_marker_t<T>{ std::forward<T>(t) };
 }
 
