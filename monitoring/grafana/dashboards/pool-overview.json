@@ -1052,84 +1052,84 @@
                "expr": "(ceph_pool_compress_under_bytes / ceph_pool_compress_bytes_used > 0) and on(pool_id) (((ceph_pool_compress_under_bytes > 0) / ceph_pool_stored_raw) * 100 > 0.5)",
                "format": "table",
                "intervalFactor": 1,
-               "legendFormat": "",
+               "legendFormat": "A",
                "refId": "A"
             },
             {
                "expr": "ceph_pool_max_avail * on(pool_id) group_left(name) ceph_pool_metadata",
                "format": "table",
                "intervalFactor": 1,
-               "legendFormat": "",
+               "legendFormat": "B",
                "refId": "B"
             },
             {
                "expr": "((ceph_pool_compress_under_bytes > 0) / ceph_pool_stored_raw) * 100",
                "format": "table",
                "intervalFactor": 1,
-               "legendFormat": "",
+               "legendFormat": "C",
                "refId": "C"
             },
             {
                "expr": "(ceph_pool_percent_used * on(pool_id) group_left(name) ceph_pool_metadata)",
                "format": "table",
                "intervalFactor": 1,
-               "legendFormat": "",
+               "legendFormat": "D",
                "refId": "D"
             },
             {
                "expr": "(ceph_pool_compress_under_bytes - ceph_pool_compress_bytes_used > 0)",
                "format": "table",
                "intervalFactor": 1,
-               "legendFormat": "",
+               "legendFormat": "E",
                "refId": "E"
             },
             {
                "expr": "delta(ceph_pool_stored[5d])",
                "format": "table",
                "intervalFactor": 1,
-               "legendFormat": "",
+               "legendFormat": "F",
                "refId": "F"
             },
             {
                "expr": "rate(ceph_pool_rd[30s]) + rate(ceph_pool_wr[30s])",
                "format": "table",
                "intervalFactor": 1,
-               "legendFormat": "",
+               "legendFormat": "G",
                "refId": "G"
             },
             {
                "expr": "rate(ceph_pool_rd_bytes[30s]) + rate(ceph_pool_wr_bytes[30s])",
                "format": "table",
                "intervalFactor": 1,
-               "legendFormat": "",
+               "legendFormat": "H",
                "refId": "H"
             },
             {
                "expr": "ceph_pool_metadata",
                "format": "table",
                "intervalFactor": 1,
-               "legendFormat": "",
+               "legendFormat": "I",
                "refId": "I"
             },
             {
                "expr": "ceph_pool_stored * on(pool_id) group_left ceph_pool_metadata",
                "format": "table",
                "intervalFactor": 1,
-               "legendFormat": "",
+               "legendFormat": "J",
                "refId": "J"
             },
             {
                "expr": "ceph_pool_metadata{compression_mode!=\"none\"}",
                "format": "table",
                "intervalFactor": 1,
-               "legendFormat": "",
+               "legendFormat": "K",
                "refId": "K"
             },
             {
                "expr": "",
                "format": "",
                "intervalFactor": "",
-               "legendFormat": "",
+               "legendFormat": "L",
                "refId": "L"
             }
          ],
