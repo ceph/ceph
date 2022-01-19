@@ -616,7 +616,6 @@ void Cache::add_extent(CachedExtentRef ref)
   LOG_PREFIX(Cache::add_extent);
   assert(ref->is_valid());
   extents.insert(*ref);
-
   if (ref->is_dirty()) {
     add_to_dirty(ref);
   } else {
@@ -680,18 +679,10 @@ void Cache::commit_retire_extent(
 {
   LOG_PREFIX(Cache::commit_retire_extent);
   DEBUGT("extent {}", t, *ref);
-  assert(ref->is_valid());
+  remove_extent(ref);
 
-  // TODO: why does this duplicate remove_extent?
-  if (ref->is_dirty()) {
-    remove_from_dirty(ref);
-  } else {
-    lru.remove_from_lru(*ref);
-  }
   ref->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
-
   invalidate_extent(t, *ref);
-  extents.erase(*ref);
 }
 
 void Cache::commit_replace_extent(
@@ -851,7 +842,7 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
 {
   switch (type) {
   case extent_types_t::ROOT:
-    assert(0 == "ROOT is never directly alloc'd");
+    ceph_assert(0 == "ROOT is never directly alloc'd");
     return CachedExtentRef();
   case extent_types_t::LADDR_INTERNAL:
     return alloc_new_extent<lba_manager::btree::LBAInternalNode>(t, length, delay);
@@ -929,10 +920,9 @@ record_t Cache::prepare_record(Transaction &t)
   }
   DEBUGT("read_set validated", t);
   t.read_set.clear();
+  t.write_set.clear();
 
   record_t record;
-
-  t.write_set.clear();
 
   // Add new copy of mutated blocks, set_io_wait to block until written
   record.deltas.reserve(t.mutated_block_list.size());
@@ -954,6 +944,7 @@ record_t Cache::prepare_record(Transaction &t)
     assert(i->get_version() > 0);
     auto final_crc = i->get_crc32c();
     if (i->get_type() == extent_types_t::ROOT) {
+      assert(t.root == i);
       root = t.root;
       DEBUGT("writing out root delta for {}", t, *t.root);
       record.push_back(
@@ -1022,7 +1013,7 @@ record_t Cache::prepare_record(Transaction &t)
     i->prepare_write();
     bl.append(i->get_bptr());
     if (i->get_type() == extent_types_t::ROOT) {
-      assert(0 == "ROOT never gets written as a fresh block");
+      ceph_assert(0 == "ROOT never gets written as a fresh block");
     }
 
     assert(bl.length() == i->get_length());
@@ -1208,7 +1199,7 @@ Cache::close_ertr::future<> Cache::close()
     intrusive_ptr_release(ptr);
   }
   assert(stats.dirty_bytes == 0);
-  clear_lru();
+  lru.clear();
   return close_ertr::now();
 }
 
@@ -1297,16 +1288,18 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
   for (auto i = dirty.begin();
        i != dirty.end() && bytes_so_far < max_bytes;
        ++i) {
-    if (i->get_dirty_from() != journal_seq_t() && i->get_dirty_from() < seq) {
+    auto dirty_from = i->get_dirty_from();
+    ceph_assert(dirty_from != journal_seq_t() &&
+                dirty_from != JOURNAL_SEQ_MAX &&
+                dirty_from != NO_DELTAS);
+    if (dirty_from < seq) {
       DEBUGT("next {}", t, *i);
-      if (!(cand.empty() ||
-	    cand.back()->get_dirty_from() <= i->get_dirty_from())) {
+      if (!cand.empty() && cand.back()->get_dirty_from() > dirty_from) {
 	ERRORT("last {}, next {}", t, *cand.back(), *i);
+        ceph_abort();
       }
-      assert(cand.empty() || cand.back()->get_dirty_from() <= i->get_dirty_from());
       bytes_so_far += i->get_length();
       cand.push_back(&*i);
-
     } else {
       break;
     }
@@ -1337,7 +1330,7 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	      if (ext->get_type() == extent_types_t::ROOT) {
 		if (t.root) {
 		  assert(&*t.root == &*ext);
-		  assert(0 == "t.root would have to already be in the read set");
+		  ceph_assert(0 == "t.root would have to already be in the read set");
 		} else {
 		  assert(&*ext == &*root);
 		  t.root = root;
@@ -1403,7 +1396,7 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::_get_extent_by_type(
 
     switch (type) {
     case extent_types_t::ROOT:
-      assert(0 == "ROOT is never directly read");
+      ceph_assert(0 == "ROOT is never directly read");
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
     case extent_types_t::LADDR_INTERNAL:
       return get_extent<lba_manager::btree::LBAInternalNode>(
