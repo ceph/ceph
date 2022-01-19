@@ -677,9 +677,48 @@ class MetaPeerTrimPollCR : public MetaTrimPollCR {
   {}
 };
 
+namespace {
+bool sanity_check_endpoints(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store) {
+  bool retval = true;
+  auto current = store->svc()->mdlog->get_period_history()->get_current();
+  const auto& period = current.get_period();
+  for (const auto& [_, zonegroup] : period.get_map().zonegroups) {
+    if (zonegroup.endpoints.empty()) {
+      ldpp_dout(dpp, -1)
+	<< __PRETTY_FUNCTION__ << ":" << __LINE__
+	<< " WARNING: Cluster is is misconfigured! "
+	<< " Zonegroup " << zonegroup.get_name()
+	<< " (" << zonegroup.get_id() << ") in Realm "
+	<< period.get_realm_name() << " ( " << period.get_realm() << ") "
+	<< " has no endpoints!" << dendl;
+    }
+    for (const auto& [_, zone] : zonegroup.zones) {
+      if (zone.endpoints.empty()) {
+	ldpp_dout(dpp, -1)
+	  << __PRETTY_FUNCTION__ << ":" << __LINE__
+	  << " ERROR: Cluster is is misconfigured! "
+	  << " Zone " << zone.name << " (" << zone.id << ") in Zonegroup "
+	  << zonegroup.get_name() << " ( " << zonegroup.get_id()
+	  << ") in Realm " << period.get_realm_name()
+	  << " ( " << period.get_realm() << ") "
+	  << " has no endpoints! Trimming is impossible." << dendl;
+	retval = false;
+      }
+    }
+  }
+  return retval;
+}
+}
+
 RGWCoroutine* create_meta_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http,
                                       int num_shards, utime_t interval)
 {
+  if (!sanity_check_endpoints(dpp, store)) {
+    ldpp_dout(dpp, -1)
+      << __PRETTY_FUNCTION__ << ":" << __LINE__
+      << " ERROR: Cluster is is misconfigured! Refusing to trim." << dendl;
+      return nullptr;
+  }
   if (store->svc()->zone->is_meta_master()) {
     return new MetaMasterTrimPollCR(dpp, store, http, num_shards, interval);
   }
@@ -705,6 +744,12 @@ RGWCoroutine* create_admin_meta_log_trim_cr(const DoutPrefixProvider *dpp, rgw::
                                             RGWHTTPManager *http,
                                             int num_shards)
 {
+  if (!sanity_check_endpoints(dpp, store)) {
+    ldpp_dout(dpp, -1)
+      << __PRETTY_FUNCTION__ << ":" << __LINE__
+      << " ERROR: Cluster is is misconfigured! Refusing to trim." << dendl;
+      return nullptr;
+  }
   if (store->svc()->zone->is_meta_master()) {
     return new MetaMasterAdminTrimCR(dpp, store, http, num_shards);
   }
