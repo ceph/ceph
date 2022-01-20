@@ -53,11 +53,22 @@ class TestVolumesHelper(CephFSTestCase):
             time.sleep(1)
         self.assertTrue(check < timo)
 
+    def _get_clone_status(self, clone, clone_group=None):
+        args = ["clone", "status", self.volname, clone]
+        if clone_group:
+            args.append(clone_group)
+        args = tuple(args)
+        result = json.loads(self._fs_cmd(*args))
+        return result
+
     def _wait_for_clone_to_complete(self, clone, clone_group=None, timo=120):
         self.__check_clone_state("complete", clone, clone_group, timo)
 
     def _wait_for_clone_to_fail(self, clone, clone_group=None, timo=120):
         self.__check_clone_state("failed", clone, clone_group, timo)
+
+    def _wait_for_clone_to_be_in_progress(self, clone, clone_group=None, timo=120):
+        self.__check_clone_state("in-progress", clone, clone_group, timo)
 
     def _check_clone_canceled(self, clone, clone_group=None):
         self.__check_clone_state("canceled", clone, clone_group, timo=1)
@@ -3899,6 +3910,97 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
         self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_clone_progress_status_in_progress(self):
+        """
+        ensure clone progress status is shown in in-progress state and validate
+        """
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone1 = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=200)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 3)
+
+        # schedule a clone1
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
+
+        # check clone1 to be in-progress
+        self._wait_for_clone_to_be_in_progress(clone1)
+
+        # check clone1 progress status
+        clone1_result = self._get_clone_status(clone1)
+        self.assertLessEqual(int(clone1_result["status"]["progress"]["size"]), int(clone1_result["status"]["source"]["size"]))
+        self.assertLessEqual(int(float(clone1_result["status"]["progress"]["percentage"])), 100)
+
+        # wait for clone1 to complete
+        self._wait_for_clone_to_complete(clone1)
+
+        # verify clone
+        self._verify_clone(subvolume, snapshot, clone1)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone1)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_clone_progress_status_pending(self):
+        """
+        ensure clone progress status is shown in in pending state and validate
+        """
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone1 = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=200)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 3)
+
+        # schedule a clone1
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
+
+        # check clone1 status
+        clone1_result = self._get_clone_status(clone1)
+        self.assertEqual(clone1_result["status"]["state"], "pending")
+        self.assertEqual(clone1_result["status"]["progress"]["size"], "0")
+        self.assertEqual(clone1_result["status"]["progress"]["percentage"], "0.00" )
+
+        # cancel on-going clone1
+        self._fs_cmd("clone", "cancel", self.volname, clone1)
+
+        # clone removal should succeed after cancel, remove clone1
+        self._fs_cmd("subvolume", "rm", self.volname, clone1, "--force")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
