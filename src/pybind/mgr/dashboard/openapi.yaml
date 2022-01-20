@@ -10517,7 +10517,7 @@ tags:
   name: RbdSnapshot
 - description: RBD Trash Management API
   name: RbdTrash
-- description: Feedback
+- description: Feedback API
   name: Report
 - description: RGW Management API
   name: Rgw
