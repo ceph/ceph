@@ -152,6 +152,13 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             # attributes of subvolume's content though, are synced during the cloning process.
             attrs = source_subvolume.get_attrs(source_subvolume.snapshot_data_path(snapname))
 
+            # The source of the clone may have exceeded its quota limit as
+            # CephFS quotas are imprecise. Cloning such a source may fail if
+            # the quota on the destination is set before starting the clone
+            # copy. So always set the quota on destination after cloning is
+            # successful.
+            attrs["quota"] = None
+
             # override snapshot pool setting, if one is provided for the clone
             if pool is not None:
                 attrs["data_pool"] = pool
