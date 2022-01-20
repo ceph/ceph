@@ -856,6 +856,12 @@ if(WITH_KVS)
 endif(WITH_KVS)
 
 if(WITH_RADOSGW)
+  if(WITH_RADOSGW_SELECT_PARQUET AND NOT WITH_SYSTEM_ARROW)
+    find_package(thrift 0.13 REQUIRED) # a dependency of arrow
+    include(BuildArrow)
+    build_arrow()
+  endif()
+
   add_subdirectory(libkmip)
   add_subdirectory(rgw)
 endif(WITH_RADOSGW)
