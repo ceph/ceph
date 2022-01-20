@@ -477,6 +477,10 @@ void mirror_image_status_get_summary_start(
 int mirror_image_status_get_summary_finish(
     bufferlist::const_iterator *iter,
     std::map<cls::rbd::MirrorImageStatusState, int> *states);
+int mirror_image_status_remove(librados::IoCtx *ioctx,
+                               const std::string &global_image_id);
+void mirror_image_status_remove(librados::ObjectWriteOperation *op,
+                                const std::string &global_image_id);
 int mirror_image_status_remove_down(librados::IoCtx *ioctx);
 void mirror_image_status_remove_down(librados::ObjectWriteOperation *op);
 

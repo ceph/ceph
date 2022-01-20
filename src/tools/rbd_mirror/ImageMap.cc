@@ -416,7 +416,7 @@ void ImageMap<I>::update_images_removed(
       to_remove.emplace_back(global_image_id, info.instance_id);
     }
 
-    if (image_mapped && image_removed) {
+    if (image_removed) {
       // local and peer images have been deleted
       if (m_policy->remove_image(global_image_id)) {
         schedule_action(global_image_id);
