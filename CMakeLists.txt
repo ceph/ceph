@@ -399,7 +399,7 @@ option(WITH_RADOSGW_KAFKA_ENDPOINT "Rados Gateway's pubsub support for Kafka pus
 option(WITH_RADOSGW_LUA_PACKAGES "Rados Gateway's support for dynamically adding lua packagess" ON)
 option(WITH_RADOSGW_DBSTORE "DBStore backend for Rados Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for Rados Gateway" OFF)
-option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" OFF)
+option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
