@@ -196,7 +196,6 @@ BlueFS::BlueFS(CephContext* cct)
   discard_cb[BDEV_DB] = db_discard_cb;
   discard_cb[BDEV_SLOW] = slow_discard_cb;
   asok_hook = SocketHook::create(this);
-
 }
 
 BlueFS::~BlueFS()
@@ -955,7 +954,9 @@ void BlueFS::umount(bool avoid_compact)
   dout(1) << __func__ << dendl;
 
   sync_metadata(avoid_compact);
-
+  if (cct->_conf->bluefs_check_volume_selector_on_umount) {
+    _check_vselector_LNF();
+  }
   _close_writer(log.writer);
   log.writer = NULL;
   log.t.clear();
@@ -3082,6 +3083,7 @@ int BlueFS::_signal_dirty_to_log_D(FileWriter *h)
 
 void BlueFS::flush_range(FileWriter *h, uint64_t offset, uint64_t length)/*_WF*/
 {
+  _maybe_check_vselector_LNF();
   std::unique_lock hl(h->lock);
   _flush_range_F(h, offset, length);
 }
@@ -3386,17 +3388,18 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
   }
   ceph_assert(h->file->fnode.size >= offset);
   _flush_bdev(h);
+
+  std::lock_guard ll(log.lock);
   vselector->sub_usage(h->file->vselector_hint, h->file->fnode.size);
   h->file->fnode.size = offset;
   vselector->add_usage(h->file->vselector_hint, h->file->fnode.size);
-
-  std::lock_guard ll(log.lock);
   log.t.op_file_update_inc(h->file->fnode);
   return 0;
 }
 
 int BlueFS::fsync(FileWriter *h)/*_WF_WD_WLD_WLNF_WNF*/
 {
+  _maybe_check_vselector_LNF();
   std::unique_lock hl(h->lock);
   uint64_t old_dirty_seq = 0;
   {
@@ -3422,6 +3425,7 @@ int BlueFS::fsync(FileWriter *h)/*_WF_WD_WLD_WLNF_WNF*/
     _flush_and_sync_log_LD(old_dirty_seq);
   }
   _maybe_compact_log_LNF_NF_LD_D();
+
   return 0;
 }
 
@@ -3650,6 +3654,7 @@ int BlueFS::open_for_write(
   FileWriter **h,
   bool overwrite)/*_N_LD*/
 {
+  _maybe_check_vselector_LNF();
   FileRef file;
   bool create = false;
   bool truncate = false;
@@ -3804,6 +3809,7 @@ int BlueFS::open_for_read(
   FileReader **h,
   bool random)/*_N*/
 {
+  _maybe_check_vselector_LNF();
   std::lock_guard nl(nodes.lock);
   dout(10) << __func__ << " " << dirname << "/" << filename
 	   << (random ? " (random)":" (sequential)") << dendl;
@@ -4258,6 +4264,35 @@ int BlueFS::_do_replay_recovery_read(FileReader *log_reader,
     }
   }
   return 0;
+}
+
+void BlueFS::_check_vselector_LNF() {
+  BlueFSVolumeSelector* vs = vselector->clone_empty();
+  if (!vs) {
+    return;
+  }
+  std::lock_guard ll(log.lock);
+  std::lock_guard nl(nodes.lock);
+  // Checking vselector is under log, nodes and file(s) locks,
+  // so any modification of vselector must be under at least one of those locks.
+  for (auto& f : nodes.file_map) {
+    f.second->lock.lock();
+    vs->add_usage(f.second->vselector_hint, f.second->fnode);
+  }
+  bool res = vselector->compare(vs);
+  if (!res) {
+    dout(0) << "Current:";
+    vselector->dump(*_dout);
+    *_dout << dendl;
+    dout(0) << "Expected:";
+    vs->dump(*_dout);
+    *_dout << dendl;
+  }
+  ceph_assert(res);
+  for (auto& f : nodes.file_map) {
+    f.second->lock.unlock();
+  }
+  delete vs;
 }
 
 size_t BlueFS::probe_alloc_avail(int dev, uint64_t alloc_size)
