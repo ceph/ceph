@@ -649,6 +649,12 @@ ceph_release_t cls_get_min_compatible_client(cls_method_context_t hctx)
   return ctx->pg->get_osdmap()->get_require_min_compat_client();
 }
 
+const ConfigProxy& cls_get_config(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  return ctx->pg->get_cct()->_conf;
+}
+
 int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
   if (!ctx->new_obs.exists || (ctx->new_obs.oi.is_whiteout() &&
