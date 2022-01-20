@@ -1178,11 +1178,17 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Store* store,
 	if (ret < 0)
 	  continue;
 
+        const auto& layout_logs = bucket->get_info().layout.logs;
+        if (layout_logs.empty()) {
+          cerr << "error, layout log list is empty; bucket=" << bucket->get_name() <<
+            std::endl;
+	  continue;
+        }
+
 	/* need stats for num_entries */
 	string bucket_ver, master_ver;
 	std::map<RGWObjCategory, RGWStorageStats> stats;
-	const auto& latest_log = bucket->get_info().layout.logs.back();
-	const auto& index = log_to_index_layout(latest_log);
+	const auto& index = log_to_index_layout(layout_logs.back());
 	ret = bucket->get_bucket_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
 
 	if (ret < 0)

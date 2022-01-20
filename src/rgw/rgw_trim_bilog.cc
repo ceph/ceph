@@ -482,9 +482,15 @@ private:
   unsigned retries = 0;
 
   int take_min_generation() {
+    auto& logs = pbucket_info->layout.logs;
+    if (logs.empty()) {
+      ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			<< "ERROR: No log layout" << dendl;
+      return -ENOENT;
+    }
     // Initialize the min_generation to the bucket's current
     // generation, used in case we have no peers.
-    auto min_generation = pbucket_info->layout.logs.back().gen;
+    auto min_generation = logs.back().gen;
 
     // Determine the minimum generation
     if (auto m = std::min_element(peer_status.begin(),
@@ -496,7 +502,6 @@ private:
       min_generation = m->generation;
     }
 
-    auto& logs = pbucket_info->layout.logs;
     auto log = std::find_if(logs.begin(), logs.end(),
 			    rgw::matches_gen(min_generation));
     if (log == logs.end()) {
@@ -523,8 +528,14 @@ private:
     if (clean_info)
       return 0;
 
+    auto& logs = pbucket_info->layout.logs;
+    if (logs.empty()) {
+      ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			<< "ERROR: No log layout" << dendl;
+      return -ENOENT;
+    }
 
-    if (pbucket_info->layout.logs.front().gen < totrim.gen) {
+    if (logs.front().gen < totrim.gen) {
       clean_info = {*pbucket_info, {}};
       auto log = clean_info->first.layout.logs.cbegin();
       if (log->layout.type == rgw::BucketLogType::InIndex) {
