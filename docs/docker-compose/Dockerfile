@@ -30,12 +30,5 @@ RUN \
     mkdir log && \
     chmod +x /teuthology/bootstrap && \
     ./bootstrap
-CMD echo "$SSH_PRIVKEY" > $HOME/.ssh/id_ed25519 && \
-    ./virtualenv/bin/teuthology-suite \
-    -v --ceph-repo https://github.com/ceph/ceph.git \
-    --suite-repo https://github.com/ceph/ceph.git \
-    -c master -m testnode --subset 9000/100000 --limit 1 \
-    --suite dummy \
-    --suite-branch master -p 75 --force-priority -n 100 && \
-    ./virtualenv/bin/teuthology-dispatcher --log-dir ./log --tube testnode ; \
-    tail -f /dev/null
+COPY teuthology.sh /
+ENTRYPOINT /teuthology.sh
