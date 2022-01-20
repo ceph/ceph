@@ -188,6 +188,33 @@ class TestCommandListNetworks:
                 },
             }
         ),
+        (
+            dedent("""
+            ::1 dev lo proto kernel metric 256 pref medium
+            fe80::/64 dev ceph-brx proto kernel metric 256 pref medium
+            fe80::/64 dev brx.0 proto kernel metric 256 pref medium
+            default via fe80::327c:5e00:6487:71e0 dev enp3s0f1 proto ra metric 1024 expires 1790sec hoplimit 64 pref medium            """),
+            dedent("""
+            1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN qlen 1000
+                inet6 ::1/128 scope host
+                   valid_lft forever preferred_lft forever
+            5: enp3s0f1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP qlen 1000
+                inet6 fe80::ec4:7aff:fe8f:cb83/64 scope link noprefixroute
+                   valid_lft forever preferred_lft forever
+            6: ceph-brx: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP qlen 1000
+                inet6 fe80::d8a1:69ff:fede:8f58/64 scope link
+                   valid_lft forever preferred_lft forever
+            7: brx.0@eno1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP qlen 1000
+                inet6 fe80::a4cb:54ff:fecc:f2a2/64 scope link
+                   valid_lft forever preferred_lft forever
+            """),
+            {
+                'fe80::/64': {
+                    'brx.0': {'fe80::a4cb:54ff:fecc:f2a2'},
+                    'ceph-brx': {'fe80::d8a1:69ff:fede:8f58'}
+                }
+            }
+        ),
     ])
     def test_parse_ipv6_route(self, test_routes, test_ips, expected):
         assert cd._parse_ipv6_route(test_routes, test_ips) == expected
