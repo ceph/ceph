@@ -20,7 +20,8 @@ namespace tracing {
 
 class Tracer {
  private:
-  const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer;
+  const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::NoopTracer> noop_tracer;
+  const static jspan noop_span;
   opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer;
 
  public:
@@ -52,7 +53,6 @@ void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl);
 #else  // !HAVE_JAEGER
 
 #include <string_view>
-
 
 
 class Value {

@@ -10,8 +10,8 @@
 
 namespace tracing {
 
-const opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> Tracer::noop_tracer = opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("no-op", OPENTELEMETRY_SDK_VERSION);
-
+const opentelemetry::nostd::shared_ptr<opentelemetry::trace::NoopTracer> Tracer::noop_tracer = opentelemetry::nostd::shared_ptr<opentelemetry::trace::NoopTracer>(new opentelemetry::trace::NoopTracer);
+const jspan Tracer::noop_span = opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span>(new opentelemetry::v1::trace::NoopSpan(Tracer::noop_tracer->shared_from_this()));
 using bufferlist = ceph::buffer::list;
 
 Tracer::Tracer(opentelemetry::nostd::string_view service_name) {
@@ -39,7 +39,7 @@ jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name) {
   if (is_enabled()) {
     return tracer->StartSpan(trace_name);
   }
-  return noop_tracer->StartSpan(trace_name);
+  return noop_span;
 }
 
 jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan& parent_span) {
@@ -47,7 +47,7 @@ jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan&
     const auto parent_ctx = parent_span->GetContext();
     return add_span(span_name, parent_ctx);
   }
-  return noop_tracer->StartSpan(span_name);
+  return noop_span;
 }
 
 jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx) {
@@ -56,7 +56,7 @@ jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_
     span_opts.parent = parent_ctx;
     return tracer->StartSpan(span_name, span_opts);
   }
-  return noop_tracer->StartSpan(span_name);
+  return noop_span;
 }
 
 bool Tracer::is_enabled() const {
