@@ -4355,6 +4355,21 @@ std::vector<Option> get_global_options() {
 			  "If this happens, we re-read data. If there is difference, we print error to log.")
     .add_see_also("bluestore_retry_disk_reads"),
 
+    Option("bluefs_check_volume_selector_on_umount", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Check validity of volume selector on umount")
+    .set_long_description("Checks if volume selector did not diverge from the state it should be in. "
+                          "Reference is constructed from bluefs inode table. Asserts on inconsistency."),
+    Option("bluefs_check_volume_selector_often", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_flag(Option::FLAG_STARTUP)
+    .set_description("Periodically check validity of volume selector")
+    .set_long_description("Periodically checks if current volume selector does not diverge from the valid state. "
+                          "Reference is constructed from bluefs inode table. Asserts on inconsistency. "
+                          " This is debug feature.")
+    .add_see_also("bluefs_check_volume_selector_on_umount"),
+
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_flag(Option::FLAG_CREATE)

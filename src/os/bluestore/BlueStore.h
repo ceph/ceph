@@ -3912,6 +3912,8 @@ public:
     BlueFSVolumeSelector::paths& res) const override;
 
   void dump(std::ostream& sout) override;
+  BlueFSVolumeSelector* clone_empty() const override;
+  bool compare(BlueFSVolumeSelector* other) override;
 };
 
 #endif
