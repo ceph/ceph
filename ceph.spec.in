@@ -260,10 +260,12 @@ BuildRequires:	socat
 %if 0%{with zbd}
 BuildRequires:  libzbd-devel
 %endif
+BuildRequires:  thrift-devel >= 0.13.0
+BuildRequires:  re2-devel
+BuildRequires:  utf8proc-devel >= 2.2.0
 %if 0%{with jaeger}
 BuildRequires:  bison
 BuildRequires:  flex
-BuildRequires:  thrift-devel >= 0.13.0
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  json-devel
 %endif
