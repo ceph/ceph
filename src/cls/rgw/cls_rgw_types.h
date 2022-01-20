@@ -17,9 +17,10 @@
 
 #define CEPH_RGW_REMOVE 'r'
 #define CEPH_RGW_UPDATE 'u'
-#define CEPH_RGW_TAG_TIMEOUT 120
 #define CEPH_RGW_DIR_SUGGEST_LOG_OP  0x80
 #define CEPH_RGW_DIR_SUGGEST_OP_MASK 0x7f
+
+constexpr uint64_t CEPH_RGW_DEFAULT_TAG_TIMEOUT = 120; // in seconds
 
 class JSONObj;
 
