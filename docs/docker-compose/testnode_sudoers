@@ -1,0 +1,4 @@
+%sudo ALL=(ALL) NOPASSWD: ALL
+# For ansible pipelining
+Defaults !requiretty
+Defaults visiblepw
