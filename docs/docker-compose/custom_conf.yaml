@@ -1,0 +1,8 @@
+overrides:
+  ansible.cephlab:
+    skip_tags: "timezone,nagios,monitoring-scripts,ssh,hostname,pubkeys,zap,sudoers,kerberos,selinux,lvm,ntp-client,resolvconf,packages,cpan,nfs"
+    vars:
+      containerized_node: true
+      ansible_user: root
+      cm_user: root
+      start_rpcbind: false
