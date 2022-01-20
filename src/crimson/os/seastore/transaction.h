@@ -352,8 +352,8 @@ private:
 
   RootBlockRef root;        ///< ref to root if read or written by transaction
 
-  segment_off_t offset = 0; ///< relative offset of next block
-  segment_off_t delayed_temp_offset = 0;
+  seastore_off_t offset = 0; ///< relative offset of next block
+  seastore_off_t delayed_temp_offset = 0;
 
   /**
    * read_set

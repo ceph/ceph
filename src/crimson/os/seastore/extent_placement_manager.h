@@ -61,14 +61,14 @@ public:
     assert(extents.size() == record.extents.size());
     assert(!record.deltas.size());
     auto record_group = record_group_t(std::move(record), block_size);
-    segment_off_t extent_offset = base + record_group.size.get_mdlength();
+    seastore_off_t extent_offset = base + record_group.size.get_mdlength();
     for (auto& extent : extents) {
       extent.set_ool_paddr(
         paddr_t::make_seg_paddr(segment, extent_offset));
       extent_offset += extent.get_bptr().length();
     }
     assert(extent_offset ==
-           (segment_off_t)(base + record_group.size.get_encoded_length()));
+           (seastore_off_t)(base + record_group.size.get_encoded_length()));
     return encode_records(record_group, journal_seq_t(), nonce);
   }
   void add_extent(LogicalCachedExtentRef& extent) {
@@ -83,10 +83,10 @@ public:
   std::vector<OolExtent>& get_extents() {
     return extents;
   }
-  void set_base(segment_off_t b) {
+  void set_base(seastore_off_t b) {
     base = b;
   }
-  segment_off_t get_base() const {
+  seastore_off_t get_base() const {
     return base;
   }
   void clear() {
@@ -102,7 +102,7 @@ private:
   std::vector<OolExtent> extents;
   record_t record;
   size_t block_size;
-  segment_off_t base = MAX_SEG_OFF;
+  seastore_off_t base = MAX_SEG_OFF;
 };
 
 /**
@@ -209,7 +209,7 @@ class SegmentedAllocator : public ExtentAllocator {
     finish_record_ret finish_write(
       Transaction& t,
       ool_record_t& record);
-    bool _needs_roll(segment_off_t length) const;
+    bool _needs_roll(seastore_off_t length) const;
 
     write_iertr::future<> _write(
       Transaction& t,
@@ -231,7 +231,7 @@ class SegmentedAllocator : public ExtentAllocator {
     SegmentManager& segment_manager;
     open_segment_wrapper_ref current_segment;
     std::list<open_segment_wrapper_ref> open_segments;
-    segment_off_t allocated_to = 0;
+    seastore_off_t allocated_to = 0;
     LBAManager& lba_manager;
     Journal& journal;
     crimson::condition_variable segment_rotation_guard;
@@ -301,7 +301,7 @@ public:
   CachedExtentRef alloc_new_extent_by_type(
     Transaction& t,
     extent_types_t type,
-    segment_off_t length,
+    seastore_off_t length,
     placement_hint_t hint) {
     // only logical extents should fall in this path
     assert(is_logical_type(type));
@@ -322,7 +322,7 @@ public:
     std::enable_if_t<std::is_base_of_v<LogicalCachedExtent, T>, int> = 0>
   TCachedExtentRef<T> alloc_new_extent(
     Transaction& t,
-    segment_off_t length,
+    seastore_off_t length,
     placement_hint_t hint) {
     // only logical extents should fall in this path
     static_assert(is_logical_type(T::TYPE));

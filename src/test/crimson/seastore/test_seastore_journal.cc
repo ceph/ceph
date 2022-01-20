@@ -74,7 +74,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   std::default_random_engine generator;
 
-  segment_off_t block_size;
+  seastore_off_t block_size;
 
   ExtentReaderRef scanner;
 

@@ -400,7 +400,7 @@ public:
     extent_types_t type,
     paddr_t addr,
     laddr_t laddr,
-    segment_off_t len) final;
+    seastore_off_t len) final;
 
   using release_segment_ret =
     SegmentCleaner::ExtentCallbackInterface::release_segment_ret;
