@@ -341,6 +341,14 @@ A clone can be in one of the following states:
 #. `complete`    : Clone operation has successfully finished
 #. `failed`      : Clone operation has failed
 
+The progress of the on going clone is as shown below:
+
+#. `size`                : Size of the clone
+#. `percentage`          : Percentage progress of the clone
+
+The progress shown is not accurate. The 'size' depends on recursive stat
+which gets updated at intervals. The same applies for 'percentage'.
+
 Sample output from an `in-progress` clone operation::
 
   $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
@@ -352,6 +360,31 @@ Sample output from an `in-progress` clone operation::
         "volume": "cephfs",
         "subvolume": "subvol1",
         "snapshot": "snap1"
+        "size": "104857600"
+      },
+      "progress": {
+        "size": 8388608,
+        "percentage": "8.00",
+      }
+    }
+  }
+
+Sample output from an `pending` clone operation::
+
+  $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
+  $ ceph fs clone status cephfs clone1
+  {
+    "status": {
+      "state": "pending",
+      "source": {
+        "volume": "cephfs",
+        "subvolume": "subvol1",
+        "snapshot": "snap1"
+        "size": "104857600"
+      },
+      "progress": {
+        "size": "0",
+        "percentage": "0.00",
       }
     }
   }
