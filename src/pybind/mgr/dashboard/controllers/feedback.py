@@ -8,7 +8,7 @@ from ._version import APIVersion
 
 
 @APIRouter('/feedback', Scope.CONFIG_OPT)
-@APIDoc("Feedback", "Report")
+@APIDoc("Feedback API", "Report")
 class FeedbackController(RESTController):
 
     @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
@@ -52,7 +52,7 @@ class FeedbackController(RESTController):
 
 
 @APIRouter('/feedback/api_key', Scope.CONFIG_OPT)
-@APIDoc("Feedback API", "Report")
+@APIDoc(group="Report")
 class FeedbackApiController(RESTController):
 
     @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
