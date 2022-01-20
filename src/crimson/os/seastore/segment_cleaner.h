@@ -28,8 +28,8 @@ class segment_info_set_t {
     segment_manager_info_t(
       device_id_t device_id,
       device_segment_id_t num_segments,
-      segment_off_t segment_size,
-      segment_off_t block_size,
+      seastore_off_t segment_size,
+      seastore_off_t block_size,
       size_t empty_segments,
       size_t size)
       : device_id(device_id),
@@ -43,12 +43,12 @@ class segment_info_set_t {
 
     device_id_t device_id = 0;
     device_segment_id_t num_segments = 0;
-    segment_off_t segment_size = 0;
-    segment_off_t block_size = 0;
+    seastore_off_t segment_size = 0;
+    seastore_off_t block_size = 0;
     size_t empty_segments = 0;
     size_t size = 0;
     size_t avail_bytes = 0;
-    std::map<segment_id_t, segment_off_t> open_segment_avails;
+    std::map<segment_id_t, seastore_off_t> open_segment_avails;
   };
 
   struct segment_info_t {
@@ -301,12 +301,12 @@ class SpaceTrackerI {
 public:
   virtual int64_t allocate(
     segment_id_t segment,
-    segment_off_t offset,
+    seastore_off_t offset,
     extent_len_t len) = 0;
 
   virtual int64_t release(
     segment_id_t segment,
-    segment_off_t offset,
+    seastore_off_t offset,
     extent_len_t len) = 0;
 
   virtual int64_t get_usage(
@@ -352,14 +352,14 @@ public:
 
   int64_t allocate(
     segment_id_t segment,
-    segment_off_t offset,
+    seastore_off_t offset,
     extent_len_t len) final {
     return update_usage(segment, len);
   }
 
   int64_t release(
     segment_id_t segment,
-    segment_off_t offset,
+    seastore_off_t offset,
     extent_len_t len) final {
     return update_usage(segment, -(int64_t)len);
   }
@@ -400,13 +400,13 @@ class SpaceTrackerDetailed : public SpaceTrackerI {
 
     int64_t allocate(
       device_segment_id_t segment,
-      segment_off_t offset,
+      seastore_off_t offset,
       extent_len_t len,
       const extent_len_t block_size);
 
     int64_t release(
       device_segment_id_t segment,
-      segment_off_t offset,
+      seastore_off_t offset,
       extent_len_t len,
       const extent_len_t block_size);
 
@@ -451,7 +451,7 @@ public:
 
   int64_t allocate(
     segment_id_t segment,
-    segment_off_t offset,
+    seastore_off_t offset,
     extent_len_t len) final {
     return segment_usage[segment].allocate(
       segment.device_segment_id(),
@@ -462,7 +462,7 @@ public:
 
   int64_t release(
     segment_id_t segment,
-    segment_off_t offset,
+    seastore_off_t offset,
     extent_len_t len) final {
     return segment_usage[segment].release(
       segment.device_segment_id(),
@@ -605,7 +605,7 @@ public:
       extent_types_t type,
       paddr_t addr,
       laddr_t laddr,
-      segment_off_t len) = 0;
+      seastore_off_t len) = 0;
 
     /**
      * release_segment

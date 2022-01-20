@@ -391,7 +391,7 @@ public:
     op_context_t c,
     paddr_t addr,
     laddr_t laddr,
-    segment_off_t len);
+    seastore_off_t len);
 
   /// get_internal_if_live: get internal node at laddr/addr if still live
   using get_internal_if_live_iertr = base_iertr;
@@ -400,7 +400,7 @@ public:
     op_context_t c,
     paddr_t addr,
     laddr_t laddr,
-    segment_off_t len);
+    seastore_off_t len);
 
   /**
    * rewrite_lba_extent

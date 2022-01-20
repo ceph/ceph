@@ -424,7 +424,7 @@ Journal::JournalSegmentManager::write(ceph::bufferlist to_write)
   written_to += write_length;
   auto write_result = write_result_t{
     write_start_seq,
-    static_cast<segment_off_t>(write_length)
+    static_cast<seastore_off_t>(write_length)
   };
   return current_journal_segment->write(
     write_start_offset, to_write

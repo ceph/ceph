@@ -253,7 +253,7 @@ ExtentReader::read_validate_record_metadata(
 
     auto rest_start = paddr_t::make_seg_paddr(
         seg_addr.get_segment_id(),
-        seg_addr.get_segment_off() + (segment_off_t)block_size
+        seg_addr.get_segment_off() + (seastore_off_t)block_size
     );
     auto rest_len = header.mdlength - block_size;
     TRACE("reading record group header rest {}~{}", rest_start, rest_len);
@@ -315,7 +315,7 @@ ExtentReader::consume_next_records(
         cursor.seq.segment_seq,
         next.offset
       },
-      static_cast<segment_off_t>(total_length)
+      static_cast<seastore_off_t>(total_length)
     }
   };
   DEBUG("processing {} at {}, budget_used={}",

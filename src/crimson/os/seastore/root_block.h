@@ -33,7 +33,7 @@ namespace crimson::os::seastore {
  * mutation which changes the journal trim bound.
  */
 struct RootBlock : CachedExtent {
-  constexpr static segment_off_t SIZE = 4<<10;
+  constexpr static seastore_off_t SIZE = 4<<10;
   using Ref = TCachedExtentRef<RootBlock>;
 
   root_t root;

@@ -343,7 +343,7 @@ LBABtree::get_internal_if_live(
   op_context_t c,
   paddr_t addr,
   laddr_t laddr,
-  segment_off_t len)
+  seastore_off_t len)
 {
   LOG_PREFIX(BtreeLBAManager::get_leaf_if_live);
   return lower_bound(
@@ -379,7 +379,7 @@ LBABtree::get_leaf_if_live(
   op_context_t c,
   paddr_t addr,
   laddr_t laddr,
-  segment_off_t len)
+  seastore_off_t len)
 {
   LOG_PREFIX(BtreeLBAManager::get_leaf_if_live);
   return lower_bound(
