@@ -33,6 +33,7 @@ class TestAnsibleTask(TestTask):
         self.ctx.cluster.add(Remote('user@remote2'), ['role2'])
         self.ctx.config = dict()
         self.ctx.summary = dict()
+        self.ctx.archive = '../'
         self.task_config = dict(playbook=[])
         self.start_patchers()
 
