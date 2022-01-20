@@ -253,7 +253,7 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
     if 'config' in job_config:
         inner_config = job_config.pop('config')
         if not isinstance(inner_config, dict):
-            log.warn("run_job: job_config['config'] isn't a dict, it's a %s",
+            log.warning("run_job: job_config['config'] isn't a dict, it's a %s",
                      str(type(inner_config)))
         else:
             job_config.update(inner_config)

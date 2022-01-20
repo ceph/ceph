@@ -165,7 +165,7 @@ class Downburst(object):
         if proc.returncode != 0:
             not_found_msg = "no domain with matching name '%s'" % self.shortname
             if not_found_msg in err:
-                log.warn("Ignoring error during destroy: %s", err)
+                log.warning("Ignoring error during destroy: %s", err)
                 return True
             log.error("Error destroying %s: %s", self.name, err)
             return False
@@ -307,7 +307,7 @@ def get_distro_from_downburst():
     executable_cmd = downburst_executable()
     environment_dict = downburst_environment()
     if not executable_cmd:
-        log.warn("Downburst not found!")
+        log.warning("Downburst not found!")
         log.info('Using default values for supported os_type/os_version')
         return default_table
     try:

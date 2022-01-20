@@ -778,7 +778,7 @@ def pull_directory_tarball(remote, remotedir, localfile):
 
 
 def get_wwn_id_map(remote, devs):
-    log.warn("Entering get_wwn_id_map, a deprecated function that will be removed")
+    log.warning("Entering get_wwn_id_map, a deprecated function that will be removed")
     return dict((d, d) for d in devs)
 
 
@@ -797,7 +797,7 @@ def get_scratch_devices(remote):
     for dev in devs:
         if 'vda' in dev:
             devs.remove(dev)
-            log.warn("Removing root device: %s from device list" % dev)
+            log.warning("Removing root device: %s from device list" % dev)
 
     log.debug('devs={d}'.format(d=devs))
 
@@ -1109,7 +1109,7 @@ def ssh_keyscan(hostnames, _raise=True):
         missing = set(hostnames) - set(keys_dict.keys())
         msg = "Unable to scan these host keys: %s" % ' '.join(missing)
         if not _raise:
-            log.warn(msg)
+            log.warning(msg)
         else:
             raise RuntimeError(msg)
     return keys_dict

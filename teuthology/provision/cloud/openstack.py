@@ -132,7 +132,7 @@ class OpenStackProvider(Provider):
                 else:
                     self._networks = list()
             except AttributeError:
-                log.warn("Unable to list networks for %s", self.driver)
+                log.warning("Unable to list networks for %s", self.driver)
                 self._networks = list()
         return self._networks
 
@@ -150,7 +150,7 @@ class OpenStackProvider(Provider):
                     self.driver.ex_list_security_groups
                 )
             except AttributeError:
-                log.warn("Unable to list security groups for %s", self.driver)
+                log.warning("Unable to list security groups for %s", self.driver)
                 self._security_groups = list()
         return self._security_groups
 
@@ -426,7 +426,7 @@ class OpenStackProvisioner(base.Provisioner):
         msg = "Unknown error locating %s"
         if not matches:
             msg = "No nodes found with name '%s'" % self.name
-            log.warn(msg)
+            log.warning(msg)
             return
         elif len(matches) > 1:
             msg = "More than one node found with name '%s'"
@@ -444,9 +444,9 @@ class OpenStackProvisioner(base.Provisioner):
         self._destroy_volumes()
         nodes = self._find_nodes()
         if not nodes:
-            log.warn("Didn't find any nodes named '%s' to destroy!", self.name)
+            log.warning("Didn't find any nodes named '%s' to destroy!", self.name)
             return True
         if len(nodes) > 1:
-            log.warn("Found multiple nodes named '%s' to destroy!", self.name)
+            log.warning("Found multiple nodes named '%s' to destroy!", self.name)
         log.info("Destroying nodes: %s", nodes)
         return all([node.destroy() for node in nodes])

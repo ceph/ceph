@@ -209,7 +209,7 @@ def unlock_one(ctx, name, user, description=None):
                     return response.ok
             # Work around https://github.com/kennethreitz/requests/issues/2364
             except requests.ConnectionError as e:
-                log.warn("Saw %s while unlocking; retrying...", str(e))
+                log.warning("Saw %s while unlocking; retrying...", str(e))
     try:
         reason = response.json().get('message')
     except ValueError:
@@ -436,5 +436,5 @@ def block_and_lock_machines(ctx, total_requested, machine_type, reimage=True):
             "{total} machines locked ({new} new); need {more} more".format(
                 total=len(all_locked), new=len(newly_locked), more=requested)
         )
-        log.warn('Could not lock enough machines, waiting...')
+        log.warning('Could not lock enough machines, waiting...')
         time.sleep(10)

@@ -29,7 +29,7 @@ def enabled(warn=False):
     params = ['endpoint', 'api_token', 'user_token', 'machine_types']
     unset = [param for param in params if not fog_conf.get(param)]
     if unset and warn:
-        log.warn(
+        log.warning(
             "FOG disabled; set the following config options to enable: %s",
             ' '.join(unset),
         )

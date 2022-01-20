@@ -156,7 +156,7 @@ class SystemDState(DaemonState):
 
         :param extra_args: Extra keyword arguments to be added.
         """
-        self.log.warn(
+        self.log.warning(
                 "restart_with_args() is not supported with systemd; performing"
                 "normal restart")
         self.restart()
@@ -180,7 +180,7 @@ class SystemDState(DaemonState):
 
         :param sig: signal to send
         """
-        self.log.warn("systemd may restart daemons automatically")
+        self.log.warning("systemd may restart daemons automatically")
         pid = self.pid
         self.log.info("Sending signal %s to process %s", sig, pid)
         sig = '-' + str(sig)
@@ -191,7 +191,7 @@ class SystemDState(DaemonState):
         Start this daemon instance.
         """
         if self.running():
-            self.log.warn('Restarting a running daemon')
+            self.log.warning('Restarting a running daemon')
             self.restart()
             return
         self.remote.run(args=[run.Raw(self.start_cmd)])

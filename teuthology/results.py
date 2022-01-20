@@ -53,7 +53,7 @@ def results(archive_dir, name, email, timeout, dry_run):
     reporter = ResultsReporter()
     while timeout > 0:
         if time.time() - starttime > timeout:
-            log.warn('test(s) did not finish before timeout of %d seconds',
+            log.warning('test(s) did not finish before timeout of %d seconds',
                      timeout)
             break
         jobs = reporter.get_jobs(name, fields=['job_id', 'status'])

@@ -661,7 +661,7 @@ def enable_disable_kdb(ctx, config):
                         'sudo', 'tee', '/sys/module/kgdboc/parameters/kgdboc'
                         ])
             except run.CommandFailedError:
-                log.warn('Kernel does not support kdb')
+                log.warning('Kernel does not support kdb')
         else:
             log.info('Disabling kdb on {role}...'.format(role=role))
             # Add true pipe so command doesn't fail on kernel without kdb support.
@@ -675,7 +675,7 @@ def enable_disable_kdb(ctx, config):
                         'true',
                         ])
             except run.CommandFailedError:
-                log.warn('Kernel does not support kdb')
+                log.warning('Kernel does not support kdb')
 
 
 def wait_for_reboot(ctx, need_install, timeout, config, distro=False):

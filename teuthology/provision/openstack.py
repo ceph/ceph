@@ -77,7 +77,7 @@ class ProvisionOpenStack(OpenStack):
             if 'No volume with a name or ID' not in e.output:
                 raise e
         if volume_id:
-            log.warn("Volume {} already exists with ID {}; using it"
+            log.warning("Volume {} already exists with ID {}; using it"
                      .format(volume_name, volume_id))
         volume_id = self._openstack(
             "volume create %s" % config['openstack'].get('volume-create','')
@@ -106,7 +106,7 @@ class ProvisionOpenStack(OpenStack):
                         log.debug("volume %s not in '%s' status yet"
                                   % (volume_id, status))
                 except subprocess.CalledProcessError:
-                        log.warn("volume " + volume_id +
+                        log.warning("volume " + volume_id +
                                  " not information available yet")
 
     def _attach_volume(self, volume_id, name):
