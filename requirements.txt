@@ -234,8 +234,10 @@ pycparser==2.20
     # via cffi
 pyjwt==2.1.0
     # via teuthology
-pynacl==1.4.0
-    # via paramiko
+pynacl==1.5.0
+    # via
+    #   teuthology
+    #   paramiko
 pyopenssl==20.0.1
     # via
     #   teuthology
@@ -304,7 +306,6 @@ six==1.16.0
     #   keystoneauth1
     #   munch
     #   oslo.i18n
-    #   pynacl
     #   pyopenssl
     #   pytest
     #   python-dateutil
