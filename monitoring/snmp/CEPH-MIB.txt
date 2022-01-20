@@ -1,0 +1,337 @@
+CEPH-MIB DEFINITIONS ::= BEGIN
+
+IMPORTS
+    MODULE-IDENTITY, NOTIFICATION-TYPE, enterprises
+        FROM SNMPv2-SMI
+    MODULE-COMPLIANCE, NOTIFICATION-GROUP
+        FROM SNMPv2-CONF
+;
+
+-- Linting information:
+--
+-- # smilint -l 6 -i notification-not-reversible ./CEPH-MIB.txt
+--
+-- ignore: notification-not-reversible since our SNMP gateway doesn't use SNMPv1
+--
+
+ceph MODULE-IDENTITY
+    LAST-UPDATED
+        "202111010000Z" -- Nov 01, 2021
+    ORGANIZATION
+        "The Ceph Project
+         https://ceph.io"
+    CONTACT-INFO
+        "Email: <dev@ceph.io>
+
+        Send comments to: <dev@ceph.io>"
+    DESCRIPTION
+        "The MIB module for Ceph. In it's current form it only
+        supports Notifications, since Ceph itself doesn't provide
+        any SNMP agent functionality.
+
+        Notifications are provided through a Prometheus/Alertmanager
+        webhook passing alerts to an external gateway service that is
+        responsible for formatting, forwarding and authenticating to
+        the SNMP receiver.
+        "
+    REVISION
+        "202111010000Z" --Nov 01, 2021
+    DESCRIPTION
+        "Latest version including the following updates;
+
+        - MIB restructure to align with linting
+        - names shortened and simplified (less verbose)
+        - Simplified structure due to switch to https://github.com/maxwo/snmp_notifier
+          - objects removed
+          - notifications updated
+        - Added module compliance
+        - Updated to latest prometheus alert rule definitions
+        "
+    ::= { enterprises 50495 }
+
+cephCluster       OBJECT IDENTIFIER ::= { ceph 1 }
+cephConformance   OBJECT IDENTIFIER ::= { ceph 2 }
+
+-- cephMetadata is a placeholder for possible future expansion via an agent
+-- where we could provide an overview of the clusters configuration
+cephMetadata      OBJECT IDENTIFIER ::= { cephCluster 1 }
+cephNotifications OBJECT IDENTIFIER ::= { cephCluster 2 }
+
+prometheus OBJECT IDENTIFIER ::= { cephNotifications 1 }
+
+--
+-- Notifications: first we define the notification 'branches' for the
+-- different categories of notifications / alerts
+promGeneric       OBJECT IDENTIFIER ::= { prometheus 1 }
+promHealthStatus  OBJECT IDENTIFIER ::= { prometheus 2 }
+promMon           OBJECT IDENTIFIER ::= { prometheus 3 }
+promOsd           OBJECT IDENTIFIER ::= { prometheus 4 }
+promMds           OBJECT IDENTIFIER ::= { prometheus 5 }
+promMgr           OBJECT IDENTIFIER ::= { prometheus 6 }
+promPGs           OBJECT IDENTIFIER ::= { prometheus 7 }
+promNode          OBJECT IDENTIFIER ::= { prometheus 8 }
+promPool          OBJECT IDENTIFIER ::= { prometheus 9 }
+promRados         OBJECT IDENTIFIER ::= { prometheus 10 }
+promCephadm       OBJECT IDENTIFIER ::= { prometheus 11 }
+promPrometheus    OBJECT IDENTIFIER ::= { prometheus 12 }
+
+promGenericNotification NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Generic alert issued when the Prometheus rule doesn't provide an OID."
+::= { promGeneric 1 }
+
+promGenericDaemonCrash NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "One or more daemons have crashed recently, and are yet to be archived"
+::= { promGeneric 2 }
+
+promHealthStatusError NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Ceph in health_error state for too long."
+::= { promHealthStatus 1 }
+
+promHealthStatusWarning NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Ceph in health_warn for too long."
+::= { promHealthStatus 2 }
+
+promMonLowQuorum NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Monitor count in quorum is low."
+::= { promMon 1 }
+
+promMonDiskSpaceCritical NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Monitor diskspace is critically low."
+::= { promMon 2 }
+
+promOsdDownHigh NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "A high number of OSDs are down."
+::= { promOsd 1 }
+
+promOsdDown NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "One or more Osds down."
+::= { promOsd 2 }
+
+promOsdNearFull NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "An OSD is dangerously full."
+::= { promOsd 3 }
+
+promOsdFlapping NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "An OSD was marked down at back up at least once a minute for 5 minutes."
+::= { promOsd 4 }
+
+promOsdHighPgDeviation NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "An OSD deviates by more then 30% from average PG count."
+::= { promOsd 5 }
+
+promOsdFull NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "An OSD has reached its full threshold."
+::= { promOsd 6 }
+
+promOsdHighPredictedFailures NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Normal self healing unable to cope with the number of devices predicted to fail."
+::= { promOsd 7 }
+
+promOsdHostDown NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Ceph OSD host is down."
+::= { promOsd 8 }
+
+promMdsDamaged NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Cephfs filesystem is damaged."
+::= { promMds 1 }
+
+promMdsReadOnly NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Cephfs filesystem marked as READ-ONLY"
+::= { promMds 2 }
+
+promMdsOffline NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Cephfs filesystem is unavailable/offline."
+::= { promMds 3 }
+
+promMdsDegraded NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Cephfs filesystem is in a degraded state."
+::= { promMds 4 }
+
+promMdsNoStandby NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Cephfs MDS daemon failure, no standby available"
+::= { promMds 5 }
+
+promMgrModuleCrash NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Ceph mgr module has crashed recently"
+::= { promMgr 1 }
+
+promMgrPrometheusInactive NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Ceph mgr prometheus module not responding"
+::= { promMgr 2 }
+
+promPGsInactive NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "One or more PGs are inactive for more than 5 minutes."
+::= { promPGs 1 }
+
+promPGsUnclean NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "One or more PGs are not clean for more than 15 minutes."
+::= { promPGs 2 }
+
+promPGsUnavailable NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "One or more PGs is unavailable, blocking I/O to those objects."
+::= { promPGs 3 }
+
+promPGsDamaged NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "One or more PGs is damaged."
+::= { promPGs 4 }
+
+promPGsRecoveryFull NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "PG recovery is impaired due to full OSDs."
+::= { promPGs 5 }
+
+promPGsBackfillFull NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "PG backfill is impaired due to full OSDs."
+::= { promPGs 6 }
+
+promNodeRootVolumeFull NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Root volume (OSD and MON store) is dangerously full (< 5% free)."
+::= { promNode 1 }
+
+promNodeNetworkPacketDrops NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "A node experiences packet drop > 1 packet/s on an interface."
+::= { promNode 2 }
+
+promNodeNetworkPacketErrors NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "A node experiences packet errors > 1 packet/s on an interface."
+::= { promNode 3 }
+
+promNodeStorageFilling NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "A mountpoint will be full in less then 5 days assuming the average fillup rate of the past 48 hours."
+::= { promNode 4 }
+
+promPoolFull NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "A pool is at 90% capacity or over."
+::= { promPool 1 }
+
+promPoolFilling NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "A pool will be full in less then 5 days assuming the average fillup rate of the past 48 hours."
+::= { promPool 2 }
+
+promRadosUnfound NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "A RADOS object can not be found, even though all OSDs are online."
+::= { promRados 1 }
+
+promCephadmDaemonDown NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Cephadm has determined that a daemon is down."
+::= { promCephadm 1 }
+
+promCephadmUpgradeFailure NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Cephadm attempted to upgrade the cluster and encountered a problem."
+::= { promCephadm 2 }
+
+promPrometheusJobMissing NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "The prometheus scrape job is not defined."
+::= { promPrometheus 1 }
+-- ---------------------------------------------------------- --
+-- IEEE 802.1D MIB - Conformance Information
+-- ---------------------------------------------------------- --
+
+cephAlertGroups   OBJECT IDENTIFIER ::= { cephConformance 1 }
+cephCompliances   OBJECT IDENTIFIER ::= { cephConformance 2 }
+
+-- ---------------------------------------------------------- --
+-- units of conformance
+-- ---------------------------------------------------------- --
+
+-- ---------------------------------------------------------- --
+-- The Trap Notification Group
+-- ---------------------------------------------------------- --
+
+cephNotificationGroup NOTIFICATION-GROUP
+    NOTIFICATIONS {
+        promGenericNotification,
+        promGenericDaemonCrash,
+        promHealthStatusError,
+        promHealthStatusWarning,
+        promMonLowQuorum,
+        promMonDiskSpaceCritical,
+        promOsdDownHigh,
+        promOsdDown,
+        promOsdNearFull,
+        promOsdFlapping,
+        promOsdHighPgDeviation,
+        promOsdFull,
+        promOsdHighPredictedFailures,
+        promOsdHostDown,
+        promMdsDamaged,
+        promMdsReadOnly,
+        promMdsOffline,
+        promMdsDegraded,
+        promMdsNoStandby,
+        promMgrModuleCrash,
+        promMgrPrometheusInactive,
+        promPGsInactive,
+        promPGsUnclean,
+        promPGsUnavailable,
+        promPGsDamaged,
+        promPGsRecoveryFull,
+        promPGsBackfillFull,
+        promNodeRootVolumeFull,
+        promNodeNetworkPacketDrops,
+        promNodeNetworkPacketErrors,
+        promNodeStorageFilling,
+        promPoolFull,
+        promPoolFilling,
+        promRadosUnfound,
+        promCephadmDaemonDown,
+        promCephadmUpgradeFailure,
+        promPrometheusJobMissing
+    }
+    STATUS current
+    DESCRIPTION
+        "A collection of notifications triggered by the Prometheus
+        rules to convey Ceph cluster state"
+    ::= { cephAlertGroups 2 }
+
+-- ---------------------------------------------------------- --
+-- compliance statements
+-- ---------------------------------------------------------- --
+
+cephCompliance MODULE-COMPLIANCE
+    STATUS current
+    DESCRIPTION
+        "The Compliance statement for the Ceph MIB"
+    MODULE
+        MANDATORY-GROUPS {
+            cephNotificationGroup
+        }
+    ::= { cephCompliances 1 }
+
+END
