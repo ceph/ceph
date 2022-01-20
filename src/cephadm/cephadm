@@ -6967,6 +6967,18 @@ class YumDnf(Packager):
             if self.version and self.version.split('.')[0] >= '16':
                 raise Error('Ceph does not support 16.y.z or later for this version of this linux distro and therefore cannot add a repo for it')
 
+        if self.stable or self.version:
+            # we know that yum & dnf require there to be a
+            # $base_url/$arch/repodata/repomd.xml so we can test if this URL
+            # is gettable in order to validate the inputs
+            test_url = self.repo_baseurl() + '/noarch/repodata/repomd.xml'
+            try:
+                urlopen(test_url)
+            except HTTPError as err:
+                logger.error('unable to fetch repo metadata: %r', err)
+                raise Error('failed to fetch repository metadata. please check'
+                            ' the provided parameters are correct and try again')
+
     def add_repo(self) -> None:
         if self.stable or self.version:
             content = ''
