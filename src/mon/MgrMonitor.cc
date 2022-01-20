@@ -106,7 +106,6 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "progress",
       "balancer",
       "devicehealth",
-      "feedback",
       "orchestrator",
       "rbd_support",
       "volumes",
@@ -462,7 +461,7 @@ public:
     mm(a), op(c) {}
   void finish(int r) override {
     if (r >= 0) {
-      // Success 
+      // Success
     } else if (r == -ECANCELED) {
       mm->mon.no_reply(op);
     } else {
