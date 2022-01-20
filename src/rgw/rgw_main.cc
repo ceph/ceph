@@ -674,11 +674,15 @@ int radosgw_Main(int argc, const char **argv)
   }
 #endif
 
+  tracing::rgw::tracer.init("rgw");
+
   wait_shutdown();
 
   derr << "shutting down" << dendl;
 
   reloader.reset(); // stop the realm reloader
+
+  tracing::rgw::tracer.shutdown();
 
   for (list<RGWFrontend *>::iterator liter = fes.begin(); liter != fes.end();
        ++liter) {
