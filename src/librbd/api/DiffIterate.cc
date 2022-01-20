@@ -150,8 +150,12 @@ private:
       // provide the full object extents to the callback
       for (vector<ObjectExtent>::iterator q = m_object_extents.begin();
            q != m_object_extents.end(); ++q) {
-        diffs->push_back(boost::make_tuple(m_offset + q->offset, q->length,
-                                           end_exists));
+        for (vector<pair<uint64_t,uint64_t> >::iterator r =
+               q->buffer_extents.begin();
+             r != q->buffer_extents.end(); ++r) {
+          diffs->push_back(boost::make_tuple(m_offset + r->first, r->second,
+                                             end_exists));
+        }
       }
       return;
     }
@@ -399,9 +403,12 @@ int DiffIterate<I>::execute() {
           bool updated = (diff_state == object_map::DIFF_STATE_DATA_UPDATED);
           for (std::vector<ObjectExtent>::iterator q = p->second.begin();
                q != p->second.end(); ++q) {
-            r = m_callback(off + q->offset, q->length, updated, m_callback_arg);
-            if (r < 0) {
-              return r;
+            for (auto& be : q->buffer_extents) {
+              r = m_callback(off + be.first, be.second, updated,
+                             m_callback_arg);
+              if (r < 0) {
+                return r;
+              }
             }
           }
         }
