@@ -504,10 +504,6 @@ void ReplicatedBackend::submit_transaction(
   ceph_assert(insert_res.second);
   InProgressOp &op = *insert_res.first->second;
 
-  jspan span;
-  if (orig_op) {
-    span = tracing::osd::tracer.add_span("ReplicatedBackend::submit_transaction", orig_op->osd_parent_span);
-  }
 
   op.waiting_for_commit.insert(
     parent->get_acting_recovery_backfill_shards().begin(),
@@ -1062,10 +1058,6 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 	   << " " << m->logbl.length()
 	   << dendl;
 
-  jspan span;
-  if (op) {
-    span = tracing::osd::tracer.add_span(__func__, op->osd_parent_span);
-  }
 
   // sanity checks
   ceph_assert(m->map_epoch >= get_info().history.same_interval_since);
