@@ -6,9 +6,12 @@ import os
 
 class TestPoolPerm(CephFSTestCase):
     def test_pool_perm(self):
-        self.mount_a.run_shell(["touch", "test_file"])
+        self.mount_a.run_shell(["touch", "test_pool_perm_file"])
 
-        file_path = os.path.join(self.mount_a.mountpoint, "test_file")
+        # write 1MB data to the file before testing r perm
+        self.mount_a.write_n_mb("test_pool_perm_file", 1)
+
+        file_path = os.path.join(self.mount_a.mountpoint, "test_pool_perm_file")
 
         remote_script = dedent("""
             import os
@@ -25,6 +28,8 @@ class TestPoolPerm(CephFSTestCase):
                     raise
             else:
                 raise RuntimeError("client does not check permission of data pool")
+            fininaly:
+                os.close(fd)
             """)
 
         client_name = "client.{0}".format(self.mount_a.client_id)
