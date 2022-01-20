@@ -13,6 +13,7 @@
 #include "common/Clock.h"
 #include "common/strtol.h"
 #include "common/escape.h"
+#include "common/config_proxy.h"
 
 #include "include/compat.h"
 #include <boost/lexical_cast.hpp>
@@ -2157,6 +2158,8 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 {
   CLS_LOG(1, "entered %s", __func__);
 
+  const ConfigProxy& conf = cls_get_config(hctx);
+
   bufferlist header_bl;
   rgw_bucket_dir_header header;
   bool header_changed = false;
@@ -2167,9 +2170,18 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
     return rc;
   }
 
+  const uint64_t config_op_expiration =
+    conf->rgw_pending_bucket_index_op_expiration;
+
+  // priority order -- 1) bucket header, 2) global config, 3) DEFAULT;
+  // a value of zero indicates go down the list
   timespan tag_timeout(
     std::chrono::seconds(
-      header.tag_timeout ? header.tag_timeout : CEPH_RGW_TAG_TIMEOUT));
+      header.tag_timeout ?
+      header.tag_timeout :
+      (config_op_expiration ?
+       config_op_expiration :
+       CEPH_RGW_DEFAULT_TAG_TIMEOUT)));
 
   auto in_iter = in->cbegin();
 
@@ -2289,8 +2301,9 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
   if (header_changed) {
     return write_bucket_header(hctx, &header);
   }
+
   return 0;
-}
+} // rgw_dir_suggest_changes
 
 static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {

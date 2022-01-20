@@ -55,7 +55,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-#define BUCKET_TAG_TIMEOUT 30
+// seconds for timeout during RGWBucket::check_object_index
+constexpr uint64_t BUCKET_TAG_QUICK_TIMEOUT = 30;
 
 using namespace std;
 
@@ -601,7 +602,8 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
     return -EINVAL;
   }
 
-  bucket->set_tag_timeout(dpp, BUCKET_TAG_TIMEOUT);
+  // use a quicker/shorter tag timeout during this process
+  bucket->set_tag_timeout(dpp, BUCKET_TAG_QUICK_TIMEOUT);
 
   rgw::sal::Bucket::ListResults results;
   results.is_truncated = true;
@@ -627,6 +629,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
 
   formatter->close_section();
 
+  // restore normal tag timeout for bucket
   bucket->set_tag_timeout(dpp, 0);
 
   return 0;
