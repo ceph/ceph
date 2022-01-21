@@ -3317,3 +3317,12 @@ options:
   - rgw
   - osd
   with_legacy: true
+- name: rgw_bucket_index_transaction_instrumentation
+  type: bool
+  level: dev
+  default: false
+  desc: Turns on extra instrumentation surrounding bucket index transactions.
+  services:
+  - rgw
+  - osd
+  with_legacy: true
