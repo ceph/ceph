@@ -52,6 +52,7 @@ the CLT itself.
 
 Current CLT members are:
 
+ * Adam King <adking@redhat.com>
  * Casey Bodley <cbodley@redhat.com>
  * Dan van der Ster <daniel.vanderster@cern.ch>
  * David Galloway <dgallowa@redhat.com>
@@ -73,7 +74,6 @@ Current CLT members are:
  * Patrick Donnelly <pdonnell@redhat.com>
  * Sage Weil <sage@redhat.com>
  * Sam Just <sjust@redhat.com>
- * Sebastian Wagner <sewagner@redhat.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
  * Yehuda Sadeh <yehuda@redhat.com>
  * Yuri Weinstein <yweinste@redhat.com>
