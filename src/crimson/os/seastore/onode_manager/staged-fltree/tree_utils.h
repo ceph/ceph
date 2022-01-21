@@ -196,13 +196,14 @@ class KVPool {
 
   static KVPool create_range(
       const std::pair<index_t, index_t>& range_i,
-      const std::vector<size_t>& value_sizes) {
+      const std::vector<size_t>& value_sizes,
+      const uint64_t block_size) {
     kv_vector_t kvs;
     std::random_device rd;
     for (index_t i = range_i.first; i < range_i.second; ++i) {
       auto value_size = value_sizes[rd() % value_sizes.size()];
       kvs.emplace_back(
-          kv_t{make_oid(i), ValueItem::create(value_size, i)}
+          kv_t{make_oid(i), ValueItem::create(value_size, i, block_size)}
       );
     }
     return KVPool(std::move(kvs));
