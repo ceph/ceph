@@ -331,7 +331,6 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessJournal) {
 }
 
 TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessSnapshot) {
-  ::journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
 
   InSequence seq;
@@ -434,8 +433,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessNotRegistered) {
             mock_journal_state_builder.remote_client_state);
 }
 
-TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorImageIdError) {
-  ::journal::MockJournaler mock_remote_journaler;
+TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, GetMirrorImageIdError) {
   MockThreads mock_threads(m_threads);
 
   InSequence seq;
@@ -461,7 +459,6 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorImageIdError) {
 }
 
 TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, GetMirrorInfoError) {
-  ::journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
 
   InSequence seq;
