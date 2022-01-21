@@ -20,11 +20,7 @@ describe('Create cluster create osds page', () => {
 
   describe('when Orchestrator is available', () => {
     it('should create OSDs', () => {
-      const hostnames = [
-        'ceph-node-00.cephlab.com',
-        'ceph-node-02.cephlab.com',
-        'ceph-node-03.cephlab.com'
-      ];
+      const hostnames = ['ceph-node-00', 'ceph-node-02', 'ceph-node-03'];
       for (const hostname of hostnames) {
         osds.create('hdd', hostname, true);
 
