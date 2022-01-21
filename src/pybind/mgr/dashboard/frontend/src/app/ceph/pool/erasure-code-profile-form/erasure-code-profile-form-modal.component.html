@@ -73,7 +73,8 @@
                    class="form-control"
                    ng-model="$ctrl.erasureCodeProfile.k"
                    placeholder="Data chunks..."
-                   formControlName="k">
+                   formControlName="k"
+                   min="2">
             <span class="invalid-feedback"
                   *ngIf="form.showError('k', frm, 'required')"
                   i18n>This field is required!</span>
@@ -109,7 +110,8 @@
                    name="m"
                    class="form-control"
                    placeholder="Coding chunks..."
-                   formControlName="m">
+                   formControlName="m"
+                   min="1">
             <span class="invalid-feedback"
                   *ngIf="form.showError('m', frm, 'required')"
                   i18n>This field is required!</span>
@@ -137,7 +139,8 @@
                    name="c"
                    class="form-control"
                    placeholder="Coding chunks..."
-                   formControlName="c">
+                   formControlName="c"
+                   min="1">
             <span class="invalid-feedback"
                   *ngIf="form.showError('c', frm, 'min')"
                   i18n>Must be equal to or greater than 1.</span>
@@ -212,7 +215,8 @@
                    name="l"
                    class="form-control"
                    placeholder="Coding chunks..."
-                   formControlName="l">
+                   formControlName="l"
+                   min="1">
             <span class="invalid-feedback"
                   *ngIf="form.showError('l', frm, 'required')"
                   i18n>This field is required!</span>
@@ -333,7 +337,8 @@
                    name="packetSize"
                    class="form-control"
                    placeholder="Packetsize..."
-                   formControlName="packetSize">
+                   formControlName="packetSize"
+                   min="1">
             <span class="invalid-feedback"
                   *ngIf="form.showError('packetSize', frm, 'min')"
                   i18n>Must be equal to or greater than 1.</span>
