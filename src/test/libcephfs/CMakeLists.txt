@@ -10,6 +10,7 @@ if(${WITH_CEPHFS})
     main.cc
     deleg.cc
     monconfig.cc
+    vxattr.cc
   )
   target_link_libraries(ceph_test_libcephfs
     ceph-common
