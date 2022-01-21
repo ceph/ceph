@@ -37,7 +37,6 @@ public:
   void close(Context* on_finish) override;
 
   bool is_disconnected() const override;
-  bool is_linked() const override;
 
   cls::rbd::MirrorImageMode get_mirror_image_mode() const override;
 
@@ -75,6 +74,7 @@ public:
   SyncPointHandler<ImageCtxT>* sync_point_handler = nullptr;
 
 private:
+  bool is_linked_impl() const override;
 
   void shut_down_remote_journaler(Context* on_finish);
   void handle_shut_down_remote_journaler(int r, Context* on_finish);
