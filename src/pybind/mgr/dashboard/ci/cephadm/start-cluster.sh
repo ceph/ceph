@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -ex
+set -eEx
 
 cleanup() {
     set +x
@@ -18,7 +18,7 @@ on_error() {
         printf "\n\nERROR $1 thrown on line $2\n\n"
         printf "\n\nCollecting info...\n\n"
         printf "\n\nDisplaying MGR logs:\n\n"
-        kcli ssh -u root -- ceph-node-00 'cephadm logs -n $(cephadm ls | grep -Eo "mgr\.ceph[0-9a-z.-]+" | head -n 1)'
+        kcli ssh -u root -- ceph-node-00 'cephadm logs -n \$(cephadm ls | grep -Eo "mgr\.ceph[0-9a-z.-]+" | head -n 1) -- --no-tail --no-pager'
         for vm_id in 0 1 2
         do
             local vm="ceph-node-0${vm_id}"
@@ -26,7 +26,7 @@ on_error() {
             kcli ssh -u root -- ${vm} 'journalctl --no-tail --no-pager -t cloud-init' || true
             printf "\n\nEnd of journalctl from VM ${vm}\n\n"
             printf "\n\nDisplaying container logs:\n\n"
-            kcli ssh -u root -- ${vm} 'podman logs --names --since 30s $(podman ps -aq)' || true
+            kcli ssh -u root -- ${vm} 'podman logs --names --since 30s \$(podman ps -aq)' || true
         done
         printf "\n\nTEST FAILED.\n\n"
     fi
@@ -80,7 +80,7 @@ while [[ -z $(kcli ssh -u root -- ceph-node-00 'journalctl --no-tail --no-pager 
     kcli list vm
     if [[ ${CLUSTER_DEBUG} != 0 ]]; then
         kcli ssh -u root -- ceph-node-00 'podman ps -a'
-        kcli ssh -u root -- ceph-node-00 'podman logs --names --since 30s $(podman ps -aq)'
+        kcli ssh -u root -- ceph-node-00 'podman logs --names --since 30s \$(podman ps -aq)'
     fi
     kcli ssh -u root -- ceph-node-00 'journalctl -n 100 --no-pager -t cloud-init'
 done
