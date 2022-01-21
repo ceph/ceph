@@ -44,7 +44,7 @@ public:
   virtual bool is_disconnected() const = 0;
 
   bool is_local_primary() const;
-  virtual bool is_linked() const;
+  bool is_linked() const;
 
   virtual cls::rbd::MirrorImageMode get_mirror_image_mode() const = 0;
 
@@ -100,6 +100,8 @@ protected:
   void close_local_image(Context* on_finish);
 
 private:
+  virtual bool is_linked_impl() const = 0;
+
   void handle_close_local_image(int r, Context* on_finish);
   void handle_close_remote_image(int r, Context* on_finish);
 };

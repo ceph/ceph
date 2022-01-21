@@ -58,10 +58,9 @@ bool StateBuilder<I>::is_disconnected() const {
 }
 
 template <typename I>
-bool StateBuilder<I>::is_linked() const {
+bool StateBuilder<I>::is_linked_impl() const {
   ceph_assert(!this->remote_mirror_uuid.empty());
-  return (image_replayer::StateBuilder<I>::is_linked() &&
-          local_primary_mirror_uuid == this->remote_mirror_uuid);
+  return (local_primary_mirror_uuid == this->remote_mirror_uuid);
 }
 
 template <typename I>
