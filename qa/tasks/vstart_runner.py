@@ -741,13 +741,14 @@ class LocalKernelMount(KernelMount):
         if self.using_namespace:
             super(type(self), self).cleanup_netns()
 
-    def _run_python(self, pyscript, py_version='python'):
+    def _run_python(self, pyscript, py_version='python', sudo=False):
         """
         Override this to remove the daemon-helper prefix that is used otherwise
         to make the process killable.
         """
         return self.client_remote.run(args=[py_version, '-c', pyscript],
-                                      wait=False, stdout=StringIO())
+                                      wait=False, stdout=StringIO(),
+                                      omit_sudo=(not sudo))
 
 class LocalFuseMount(FuseMount):
     def __init__(self, ctx, test_dir, client_id, client_keyring_path=None,
@@ -937,13 +938,14 @@ class LocalFuseMount(FuseMount):
         if self.using_namespace:
             super(type(self), self).cleanup_netns()
 
-    def _run_python(self, pyscript, py_version='python'):
+    def _run_python(self, pyscript, py_version='python', sudo=False):
         """
         Override this to remove the daemon-helper prefix that is used otherwise
         to make the process killable.
         """
         return self.client_remote.run(args=[py_version, '-c', pyscript],
-                                      wait=False, stdout=StringIO())
+                                      wait=False, stdout=StringIO(),
+                                      omit_sudo=(not sudo))
 
 # XXX: this class has nothing to do with the Ceph daemon (ceph-mgr) of
 # the same name.
