@@ -42,6 +42,10 @@ public:
 
   image_sync::SyncPointHandler* create_sync_point_handler() override;
 
+  bool replay_requires_remote_image() const override {
+    return false;
+  }
+
   BaseRequest* create_local_image_request(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
