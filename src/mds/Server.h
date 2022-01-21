@@ -96,6 +96,7 @@ public:
     TRIM = (1<<2),
     ENFORCE_LIVENESS = (1<<3),
   };
+
   explicit Server(MDSRank *m, MetricsHandler *metrics_handler);
   ~Server() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
@@ -214,6 +215,10 @@ public:
 
   int parse_quota_vxattr(std::string name, std::string value, quota_info_t *quota);
   void create_quota_realm(CInode *in);
+  int parse_layout_vxattr_json(std::string name, std::string value,
+			       const OSDMap& osdmap, file_layout_t *layout);
+  int parse_layout_vxattr_string(std::string name, std::string value, const OSDMap& osdmap,
+				 file_layout_t *layout);
   int parse_layout_vxattr(std::string name, std::string value, const OSDMap& osdmap,
 			  file_layout_t *layout, bool validate=true);
   int check_layout_vxattr(MDRequestRef& mdr,
