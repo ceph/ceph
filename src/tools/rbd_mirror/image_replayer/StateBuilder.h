@@ -51,9 +51,7 @@ public:
   virtual image_sync::SyncPointHandler* create_sync_point_handler() = 0;
   void destroy_sync_point_handler();
 
-  virtual bool replay_requires_remote_image() const {
-    return false;
-  }
+  virtual bool replay_requires_remote_image() const = 0;
 
   void close_remote_image(Context* on_finish);
 
