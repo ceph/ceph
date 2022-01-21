@@ -56,10 +56,9 @@ bool StateBuilder<I>::is_disconnected() const {
 }
 
 template <typename I>
-bool StateBuilder<I>::is_linked() const {
+bool StateBuilder<I>::is_linked_impl() const {
   // the remote has to have us registered as a peer
-  return (image_replayer::StateBuilder<I>::is_linked() &&
-          !remote_mirror_peer_uuid.empty());
+  return !remote_mirror_peer_uuid.empty();
 }
 
 template <typename I>
