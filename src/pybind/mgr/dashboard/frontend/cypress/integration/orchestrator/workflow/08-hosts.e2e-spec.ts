@@ -5,12 +5,7 @@ describe('Host Page', () => {
   const hosts = new HostsPageHelper();
   const services = new ServicesPageHelper();
 
-  const hostnames = [
-    'ceph-node-00.cephlab.com',
-    'ceph-node-01.cephlab.com',
-    'ceph-node-02.cephlab.com',
-    'ceph-node-03.cephlab.com'
-  ];
+  const hostnames = ['ceph-node-00', 'ceph-node-01', 'ceph-node-02', 'ceph-node-03'];
 
   beforeEach(() => {
     cy.login();
