@@ -52,8 +52,6 @@
 
 #include "common/Clock.h"
 
-using namespace librados;
-
 #include <string>
 #include <iostream>
 #include <vector>
@@ -101,6 +99,8 @@ using namespace librados;
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+using namespace librados;
 
 static string shadow_ns = "shadow";
 static string default_bucket_index_pool_suffix = "rgw.buckets.index";
