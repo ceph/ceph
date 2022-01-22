@@ -19,10 +19,19 @@ if [[ -s "${SCRIPT}" ]]; then
     chmod +x "${SCRIPT}"
 fi
 
+TEST_DEV="/dev/vdb"
+if [[ ! -b "${TEST_DEV}" ]]; then
+    TEST_DEV="/dev/sdb"
+fi
+SCRATCH_DEV="/dev/vdc"
+if [[ ! -b "${SCRATCH_DEV}" ]]; then
+    SCRATCH_DEV="/dev/sdc"
+fi
+
 # tests excluded fail in the current testing vm regardless of whether
 # rbd is used
 
-./"${SCRIPT}" -c 1 -f xfs -t /dev/vdb -s /dev/vdc \
+./"${SCRIPT}" -c 1 -f xfs -t "${TEST_DEV}" -s "${SCRATCH_DEV}" \
     1-7 9-17 19-26 28-49 51-61 63 66-67 69-79 83 85-105 108-110 112-135 \
     137-170 174-191 193-204 206-217 220-227 230-231 233 235-241 243-249 \
     251-262 264-278 281-286 288-289
