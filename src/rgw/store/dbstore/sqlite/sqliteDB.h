@@ -10,7 +10,6 @@
 #include <sqlite3.h>
 #include "rgw/store/dbstore/common/dbstore.h"
 
-using namespace std;
 using namespace rgw::store;
 
 class SQLiteDB : public DB, virtual public DBOp {
@@ -20,15 +19,15 @@ class SQLiteDB : public DB, virtual public DBOp {
   protected:
     CephContext *cct;
 
-  public:	
+  public:
     sqlite3_stmt *stmt = NULL;
     DBOpPrepareParams PrepareParams;
 
-    SQLiteDB(sqlite3 *dbi, string db_name, CephContext *_cct) : DB(db_name, _cct), cct(_cct) {
+    SQLiteDB(sqlite3 *dbi, std::string db_name, CephContext *_cct) : DB(db_name, _cct), cct(_cct) {
       db = (void*)dbi;
       InitPrepareParams(get_def_dpp(), PrepareParams);
     }
-    SQLiteDB(string db_name, CephContext *_cct) : DB(db_name, _cct), cct(_cct) {
+    SQLiteDB(std::string db_name, CephContext *_cct) : DB(db_name, _cct), cct(_cct) {
       InitPrepareParams(get_def_dpp(), PrepareParams);
     }
     ~SQLiteDB() {}
@@ -48,7 +47,7 @@ class SQLiteDB : public DB, virtual public DBOp {
     int Reset(const DoutPrefixProvider *dpp, sqlite3_stmt *stmt);
     /* default value matches with sqliteDB style */
 
-    int createTables(const DoutPrefixProvider *dpp);
+    int createTables(const DoutPrefixProvider *dpp) override;
     int createBucketTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createUserTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
@@ -79,7 +78,7 @@ class SQLObjectOp : public ObjectOp {
     SQLObjectOp(sqlite3 **sdbi, CephContext *_cct) : sdb(sdbi), cct(_cct) {};
     ~SQLObjectOp() {}
 
-    int InitializeObjectOps(string db_name, const DoutPrefixProvider *dpp);
+    int InitializeObjectOps(std::string db_name, const DoutPrefixProvider *dpp);
     int FreeObjectOps(const DoutPrefixProvider *dpp);
 };
 
@@ -89,7 +88,7 @@ class SQLInsertUser : public SQLiteDB, public InsertUserOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLInsertUser(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLInsertUser(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLInsertUser() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -105,7 +104,7 @@ class SQLRemoveUser : public SQLiteDB, public RemoveUserOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLRemoveUser(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLRemoveUser(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLRemoveUser() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -124,7 +123,7 @@ class SQLGetUser : public SQLiteDB, public GetUserOp {
     sqlite3_stmt *userid_stmt = NULL; // Prepared statement to query by user_id
 
   public:
-    SQLGetUser(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLGetUser(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLGetUser() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -146,7 +145,7 @@ class SQLInsertBucket : public SQLiteDB, public InsertBucketOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLInsertBucket(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLInsertBucket(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLInsertBucket() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -164,7 +163,7 @@ class SQLUpdateBucket : public SQLiteDB, public UpdateBucketOp {
     sqlite3_stmt *owner_stmt = NULL; // Prepared statement
 
   public:
-    SQLUpdateBucket(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLUpdateBucket(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLUpdateBucket() {
       if (info_stmt)
         sqlite3_finalize(info_stmt);
@@ -184,7 +183,7 @@ class SQLRemoveBucket : public SQLiteDB, public RemoveBucketOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLRemoveBucket(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLRemoveBucket(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLRemoveBucket() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -200,7 +199,7 @@ class SQLGetBucket : public SQLiteDB, public GetBucketOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLGetBucket(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLGetBucket(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLGetBucket() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -216,7 +215,7 @@ class SQLListUserBuckets : public SQLiteDB, public ListUserBucketsOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLListUserBuckets(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLListUserBuckets(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLListUserBuckets() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -232,8 +231,8 @@ class SQLPutObject : public SQLiteDB, public PutObjectOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLPutObject(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
-    SQLPutObject(sqlite3 **sdbi, string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
+    SQLPutObject(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLPutObject(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
 
     ~SQLPutObject() {
       if (stmt)
@@ -250,8 +249,8 @@ class SQLDeleteObject : public SQLiteDB, public DeleteObjectOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLDeleteObject(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
-    SQLDeleteObject(sqlite3 **sdbi, string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
+    SQLDeleteObject(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLDeleteObject(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
 
     ~SQLDeleteObject() {
       if (stmt)
@@ -268,8 +267,8 @@ class SQLGetObject : public SQLiteDB, public GetObjectOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLGetObject(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
-    SQLGetObject(sqlite3 **sdbi, string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
+    SQLGetObject(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLGetObject(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
 
     ~SQLGetObject() {
       if (stmt)
@@ -289,8 +288,8 @@ class SQLUpdateObject : public SQLiteDB, public UpdateObjectOp {
     sqlite3_stmt *mp_stmt = NULL; // Prepared statement
 
   public:
-    SQLUpdateObject(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
-    SQLUpdateObject(sqlite3 **sdbi, string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
+    SQLUpdateObject(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLUpdateObject(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
 
     ~SQLUpdateObject() {
       if (omap_stmt)
@@ -312,8 +311,8 @@ class SQLListBucketObjects : public SQLiteDB, public ListBucketObjectsOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLListBucketObjects(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
-    SQLListBucketObjects(sqlite3 **sdbi, string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
+    SQLListBucketObjects(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLListBucketObjects(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
 
     ~SQLListBucketObjects() {
       if (stmt)
@@ -330,8 +329,8 @@ class SQLPutObjectData : public SQLiteDB, public PutObjectDataOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLPutObjectData(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
-    SQLPutObjectData(sqlite3 **sdbi, string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
+    SQLPutObjectData(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLPutObjectData(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
 
     ~SQLPutObjectData() {
       if (stmt)
@@ -348,8 +347,8 @@ class SQLUpdateObjectData : public SQLiteDB, public UpdateObjectDataOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLUpdateObjectData(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
-    SQLUpdateObjectData(sqlite3 **sdbi, string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
+    SQLUpdateObjectData(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLUpdateObjectData(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
 
     ~SQLUpdateObjectData() {
       if (stmt)
@@ -366,8 +365,8 @@ class SQLGetObjectData : public SQLiteDB, public GetObjectDataOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLGetObjectData(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
-    SQLGetObjectData(sqlite3 **sdbi, string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
+    SQLGetObjectData(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLGetObjectData(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
 
     ~SQLGetObjectData() {
       if (stmt)
@@ -384,8 +383,8 @@ class SQLDeleteObjectData : public SQLiteDB, public DeleteObjectDataOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLDeleteObjectData(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
-    SQLDeleteObjectData(sqlite3 **sdbi, string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
+    SQLDeleteObjectData(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLDeleteObjectData(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
 
     ~SQLDeleteObjectData() {
       if (stmt)
@@ -402,7 +401,7 @@ class SQLInsertLCEntry : public SQLiteDB, public InsertLCEntryOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLInsertLCEntry(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLInsertLCEntry(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLInsertLCEntry() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -418,7 +417,7 @@ class SQLRemoveLCEntry : public SQLiteDB, public RemoveLCEntryOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLRemoveLCEntry(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLRemoveLCEntry(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLRemoveLCEntry() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -435,7 +434,7 @@ class SQLGetLCEntry : public SQLiteDB, public GetLCEntryOp {
     sqlite3_stmt *next_stmt = NULL; // Prepared statement
 
   public:
-    SQLGetLCEntry(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLGetLCEntry(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLGetLCEntry() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -453,7 +452,7 @@ class SQLListLCEntries : public SQLiteDB, public ListLCEntriesOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLListLCEntries(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLListLCEntries(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLListLCEntries() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -469,7 +468,7 @@ class SQLInsertLCHead : public SQLiteDB, public InsertLCHeadOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLInsertLCHead(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLInsertLCHead(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLInsertLCHead() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -485,7 +484,7 @@ class SQLRemoveLCHead : public SQLiteDB, public RemoveLCHeadOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLRemoveLCHead(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLRemoveLCHead(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLRemoveLCHead() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -501,7 +500,7 @@ class SQLGetLCHead : public SQLiteDB, public GetLCHeadOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLGetLCHead(void **db, string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLGetLCHead(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLGetLCHead() {
       if (stmt)
         sqlite3_finalize(stmt);

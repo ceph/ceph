@@ -4,6 +4,8 @@
 #include "dbstore_mgr.h"
 #include "common/dbstore_log.h"
 
+using namespace std;
+
 /* Given a tenant, find and return the DBStore handle.
  * If not found and 'create' set to true, create one
  * and return

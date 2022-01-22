@@ -28,6 +28,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 namespace rgw::sal {
 
   int DBUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,

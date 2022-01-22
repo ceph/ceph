@@ -56,14 +56,14 @@ class ActivePyModules
   Objecter &objecter;
   Client   &client;
   Finisher &finisher;
-  TTLCache<string, PyObject*> ttl_cache;
+  TTLCache<std::string, PyObject*> ttl_cache;
 public:
   Finisher cmd_finisher;
 private:
   DaemonServer &server;
   PyModuleRegistry &py_module_registry;
 
-  map<std::string,ProgressEvent> progress_events;
+  std::map<std::string,ProgressEvent> progress_events;
 
   mutable ceph::mutex lock = ceph::make_mutex("ActivePyModules::lock");
 
