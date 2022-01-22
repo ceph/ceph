@@ -110,7 +110,7 @@ protected:
       virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
           bool* is_truncated, RGWUsageIter& usage_iter,
-          map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
+          std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
       virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
 
       /* Placeholders */
@@ -205,7 +205,7 @@ protected:
       virtual int try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime) override;
       virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
           bool *is_truncated, RGWUsageIter& usage_iter,
-          map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
+          std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
       virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
       virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) override;
       virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
@@ -219,12 +219,12 @@ protected:
 				const std::string& oid, std::optional<std::string> upload_id,
 				ACLOwner owner={}, ceph::real_time mtime=ceph::real_clock::now()) override;
       virtual int list_multiparts(const DoutPrefixProvider *dpp,
-				const string& prefix,
-				string& marker,
-				const string& delim,
+				const std::string& prefix,
+				std::string& marker,
+				const std::string& delim,
 				const int& max_uploads,
-				vector<std::unique_ptr<MultipartUpload>>& uploads,
-				map<string, bool> *common_prefixes,
+				std::vector<std::unique_ptr<MultipartUpload>>& uploads,
+				std::map<std::string, bool> *common_prefixes,
 				bool *is_truncated) override;
       virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 				   CephContext* cct) override;
@@ -620,13 +620,13 @@ protected:
 	const rgw_placement_rule *ptail_placement_rule;
 	uint64_t olh_epoch;
     std::unique_ptr<rgw::sal::Object> head_obj;
-    string upload_id;
-    string oid; /* object->name() + "." + "upload_id" + "." + part_num */
+    std::string upload_id;
+    std::string oid; /* object->name() + "." + "upload_id" + "." + part_num */
     std::unique_ptr<rgw::sal::Object> meta_obj;
     DB::Object op_target;
     DB::Object::Write parent_op;
     int part_num;
-    string part_num_str;
+    std::string part_num_str;
     uint64_t total_data_size = 0; /* for total data being uploaded */
     bufferlist head_data;
     bufferlist tail_part_data;
@@ -671,7 +671,7 @@ public:
        * multiple db handles (for eg., one for each tenant),
        * use dbsm->getDB(tenant) */
       DB *db;
-      string luarocks_path;
+      std::string luarocks_path;
       DBZone zone;
       RGWSyncModuleInstanceRef sync_module;
       RGWLC* lc;
@@ -728,13 +728,13 @@ public:
     
       virtual RGWLC* get_rgwlc(void) override;
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
-      virtual int log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;
+      virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;
       virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;
-      virtual int register_to_service_map(const DoutPrefixProvider *dpp, const string& daemon_type,
-          const map<string, string>& meta) override;
+      virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
+          const std::map<std::string, std::string>& meta) override;
       virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) override;
       virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) override;
-      virtual int set_buckets_enabled(const DoutPrefixProvider *dpp, vector<rgw_bucket>& buckets, bool enabled) override;
+    virtual int set_buckets_enabled(const DoutPrefixProvider *dpp, std::vector<rgw_bucket>& buckets, bool enabled) override;
       virtual uint64_t get_new_req_id() override { return 0; }
       virtual int get_sync_policy_handler(const DoutPrefixProvider *dpp,
           std::optional<rgw_zone_id> zone,
@@ -742,20 +742,20 @@ public:
           RGWBucketSyncPolicyHandlerRef *phandler,
           optional_yield y) override;
       virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) override;
-      virtual void wakeup_meta_sync_shards(set<int>& shard_ids) override { return; }
-      virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, map<int, set<string> >& shard_ids) override { return; }
+      virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) override { return; }
+      virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, std::map<int, std::set<std::string>>& shard_ids) override { return; }
       virtual int clear_usage(const DoutPrefixProvider *dpp) override { return 0; }
       virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
           uint32_t max_entries, bool *is_truncated,
           RGWUsageIter& usage_iter,
-          map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
+          std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
       virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
       virtual int get_config_key_val(std::string name, bufferlist* bl) override;
       virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override;
-      virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<std::string>& keys, bool* truncated) override;
+      virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) override;
       virtual void meta_list_keys_complete(void* handle) override;
       virtual std::string meta_get_marker(void *handle) override;
-      virtual int meta_remove(const DoutPrefixProvider *dpp, string& metadata_key, optional_yield y) override;
+      virtual int meta_remove(const DoutPrefixProvider *dpp, std::string& metadata_key, optional_yield y) override;
 
       virtual const RGWSyncModuleInstanceRef& get_sync_module() { return sync_module; }
       virtual std::string get_host_id() { return ""; }
@@ -772,11 +772,11 @@ public:
           optional_yield y,
           const std::string& path_prefix,
           const std::string& tenant,
-          vector<std::unique_ptr<RGWRole>>& roles) override;
+          std::vector<std::unique_ptr<RGWRole>>& roles) override;
       virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() override;
       virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
           const std::string& tenant,
-          vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
+          std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
       virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
@@ -814,7 +814,7 @@ public:
       void setDB(DB * st) { db = st; }
       DB *getDB(void) { return db; }
 
-      DB *getDB(string tenant) { return dbsm->getDB(tenant, false); }
+      DB *getDB(std::string tenant) { return dbsm->getDB(tenant, false); }
   };
 
 } } // namespace rgw::sal

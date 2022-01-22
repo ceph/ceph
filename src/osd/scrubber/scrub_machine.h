@@ -20,8 +20,6 @@
 #include "scrub_machine_lstnr.h"
 #include "osd/scrubber_common.h"
 
-using namespace std::string_literals;
-
 class PG;  // holding a pointer to that one - just for testing
 class PgScrubber;
 namespace Scrub {

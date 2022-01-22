@@ -24,8 +24,6 @@
 #include "rgw/rgw_obj_manifest.h"
 #include "rgw/rgw_multi.h"
 
-using namespace std;
-
 namespace rgw { namespace store {
 
 class DB;
@@ -44,9 +42,9 @@ struct DBOpBucketInfo {
   obj_version bucket_version;
   ceph::real_time mtime;
   // used for list query
-  string min_marker;
-  string max_marker;
-  list<RGWBucketEnt> list_entries;
+  std::string min_marker;
+  std::string max_marker;
+  std::list<RGWBucketEnt> list_entries;
 };
 
 struct DBOpObjectInfo {
@@ -67,15 +65,15 @@ struct DBOpObjectInfo {
   uint64_t versioned_epoch;
 
   /* from state.manifest (RGWObjManifest) */
-  map<uint64_t, RGWObjManifestPart> objs;
+  std::map<uint64_t, RGWObjManifestPart> objs;
   uint64_t head_size{0};
   rgw_placement_rule head_placement_rule;
   uint64_t max_head_size{0};
-  string prefix;
+  std::string prefix;
   rgw_bucket_placement tail_placement; /* might be different than the original bucket,
                                           as object might have been copied across pools */
-  map<uint64_t, RGWObjManifestRule> rules;
-  string tail_instance; /* tail object's instance */
+  std::map<uint64_t, RGWObjManifestRule> rules;
+  std::string tail_instance; /* tail object's instance */
 
 
   /* Obj's omap <key,value> store */
@@ -86,9 +84,9 @@ struct DBOpObjectInfo {
   std::list<RGWUploadPartInfo> mp_parts;
 
   bufferlist head_data;
-  string min_marker;
-  string max_marker;
-  list<rgw_bucket_dir_entry> list_entries;
+  std::string min_marker;
+  std::string max_marker;
+  std::list<rgw_bucket_dir_entry> list_entries;
   /* Below used to update mp_parts obj name
    * from meta object to src object on completion */
   rgw_obj_key new_obj_key;
@@ -97,34 +95,34 @@ struct DBOpObjectInfo {
 struct DBOpObjectDataInfo {
   RGWObjState state;
   uint64_t part_num;
-  string multipart_part_str;
+  std::string multipart_part_str;
   uint64_t offset;
   uint64_t size;
   bufferlist data{};
 };
 
 struct DBOpLCHeadInfo {
-  string index;
+  std::string index;
   rgw::sal::Lifecycle::LCHead head;
 };
 
 struct DBOpLCEntryInfo {
-  string index;
+  std::string index;
   rgw::sal::Lifecycle::LCEntry entry;
   // used for list query
-  string min_marker;
-  list<rgw::sal::Lifecycle::LCEntry> list_entries;
+  std::string min_marker;
+  std::list<rgw::sal::Lifecycle::LCEntry> list_entries;
 };
 
 struct DBOpInfo {
-  string name; // Op name
+  std::string name; // Op name
   /* Support only single access_key for now. So store
    * it separately as primary access_key_id & secret to
    * be able to query easily.
    *
    * XXX: Swift keys and subuser not supported for now */
   DBOpUserInfo user;
-  string query_str;
+  std::string query_str;
   DBOpBucketInfo bucket;
   DBOpObjectInfo obj;
   DBOpObjectDataInfo obj_data;
@@ -137,19 +135,19 @@ struct DBOpParams {
   CephContext *cct;
 
   /* Tables */
-  string user_table;
-  string bucket_table;
-  string object_table;
+  std::string user_table;
+  std::string bucket_table;
+  std::string object_table;
 
   /* Ops*/
   DBOpInfo op;
 
   /* Below are subject to change */
-  string objectdata_table;
-  string quota_table;
-  string lc_head_table;
-  string lc_entry_table;
-  string obj;
+  std::string objectdata_table;
+  std::string quota_table;
+  std::string lc_head_table;
+  std::string lc_entry_table;
+  std::string obj;
 };
 
 /* Used for prepared schemas.
@@ -163,11 +161,11 @@ struct DBOpParams {
  * to get the right index of each param.
  */
 struct DBOpUserPrepareInfo {
-  string user_id = ":user_id";
-  string tenant = ":tenant";
-  string ns = ":ns";
-  string display_name = ":display_name";
-  string user_email = ":user_email";
+  std::string user_id = ":user_id";
+  std::string tenant = ":tenant";
+  std::string ns = ":ns";
+  std::string display_name = ":display_name";
+  std::string user_email = ":user_email";
   /* Support only single access_key for now. So store
    * it separately as primary access_key_id & secret to
    * be able to query easily.
@@ -175,169 +173,169 @@ struct DBOpUserPrepareInfo {
    * In future, when need to support & query from multiple
    * access keys, better to maintain them in a separate table.
    */
-  string access_keys_id = ":access_keys_id";
-  string access_keys_secret = ":access_keys_secret";
-  string access_keys = ":access_keys";
-  string swift_keys = ":swift_keys";
-  string subusers = ":subusers";
-  string suspended = ":suspended";
-  string max_buckets = ":max_buckets";
-  string op_mask = ":op_mask";
-  string user_caps = ":user_caps";
-  string admin = ":admin";
-  string system = ":system";
-  string placement_name = ":placement_name";
-  string placement_storage_class = ":placement_storage_class";
-  string placement_tags = ":placement_tags";
-  string bucket_quota = ":bucket_quota";
-  string temp_url_keys = ":temp_url_keys";
-  string user_quota = ":user_quota";
-  string type = ":type";
-  string mfa_ids = ":mfa_ids";
-  string assumed_role_arn = ":assumed_role_arn";
-  string user_attrs = ":user_attrs";
-  string user_ver = ":user_vers";
-  string user_ver_tag = ":user_ver_tag";
+  std::string access_keys_id = ":access_keys_id";
+  std::string access_keys_secret = ":access_keys_secret";
+  std::string access_keys = ":access_keys";
+  std::string swift_keys = ":swift_keys";
+  std::string subusers = ":subusers";
+  std::string suspended = ":suspended";
+  std::string max_buckets = ":max_buckets";
+  std::string op_mask = ":op_mask";
+  std::string user_caps = ":user_caps";
+  std::string admin = ":admin";
+  std::string system = ":system";
+  std::string placement_name = ":placement_name";
+  std::string placement_storage_class = ":placement_storage_class";
+  std::string placement_tags = ":placement_tags";
+  std::string bucket_quota = ":bucket_quota";
+  std::string temp_url_keys = ":temp_url_keys";
+  std::string user_quota = ":user_quota";
+  std::string type = ":type";
+  std::string mfa_ids = ":mfa_ids";
+  std::string assumed_role_arn = ":assumed_role_arn";
+  std::string user_attrs = ":user_attrs";
+  std::string user_ver = ":user_vers";
+  std::string user_ver_tag = ":user_ver_tag";
 };
 
 struct DBOpBucketPrepareInfo {
-  string bucket_name = ":bucket_name";
-  string tenant = ":tenant";
-  string marker = ":marker";
-  string bucket_id = ":bucket_id";
-  string size = ":size";
-  string size_rounded = ":size_rounded";
-  string creation_time = ":creation_time";
-  string count = ":count";
-  string placement_name = ":placement_name";
-  string placement_storage_class = ":placement_storage_class";
+  std::string bucket_name = ":bucket_name";
+  std::string tenant = ":tenant";
+  std::string marker = ":marker";
+  std::string bucket_id = ":bucket_id";
+  std::string size = ":size";
+  std::string size_rounded = ":size_rounded";
+  std::string creation_time = ":creation_time";
+  std::string count = ":count";
+  std::string placement_name = ":placement_name";
+  std::string placement_storage_class = ":placement_storage_class";
   /* ownerid - maps to DBOpUserPrepareInfo */
-  string flags = ":flags";
-  string zonegroup = ":zonegroup";
-  string has_instance_obj = ":has_instance_obj";
-  string quota = ":quota";
-  string requester_pays = ":requester_pays";
-  string has_website = ":has_website";
-  string website_conf = ":website_conf";
-  string swift_versioning = ":swift_versioning";
-  string swift_ver_location = ":swift_ver_location";
-  string mdsearch_config = ":mdsearch_config";
-  string new_bucket_instance_id = ":new_bucket_instance_id";
-  string obj_lock = ":obj_lock";
-  string sync_policy_info_groups = ":sync_policy_info_groups";
-  string bucket_attrs = ":bucket_attrs";
-  string bucket_ver = ":bucket_vers";
-  string bucket_ver_tag = ":bucket_ver_tag";
-  string mtime = ":mtime";
-  string min_marker = ":min_marker";
-  string max_marker = ":max_marker";
+  std::string flags = ":flags";
+  std::string zonegroup = ":zonegroup";
+  std::string has_instance_obj = ":has_instance_obj";
+  std::string quota = ":quota";
+  std::string requester_pays = ":requester_pays";
+  std::string has_website = ":has_website";
+  std::string website_conf = ":website_conf";
+  std::string swift_versioning = ":swift_versioning";
+  std::string swift_ver_location = ":swift_ver_location";
+  std::string mdsearch_config = ":mdsearch_config";
+  std::string new_bucket_instance_id = ":new_bucket_instance_id";
+  std::string obj_lock = ":obj_lock";
+  std::string sync_policy_info_groups = ":sync_policy_info_groups";
+  std::string bucket_attrs = ":bucket_attrs";
+  std::string bucket_ver = ":bucket_vers";
+  std::string bucket_ver_tag = ":bucket_ver_tag";
+  std::string mtime = ":mtime";
+  std::string min_marker = ":min_marker";
+  std::string max_marker = ":max_marker";
 };
 
 struct DBOpObjectPrepareInfo {
-  string obj_name = ":obj_name";
-  string obj_instance = ":obj_instance";
-  string obj_ns  = ":obj_ns";
-  string acls = ":acls";
-  string index_ver = ":index_ver";
-  string tag = ":tag";
-  string flags = ":flags";
-  string versioned_epoch = ":versioned_epoch";
-  string obj_category = ":obj_category";
-  string etag = ":etag";
-  string owner = ":owner";
-  string owner_display_name = ":owner_display_name";
-  string storage_class = ":storage_class";
-  string appendable = ":appendable";
-  string content_type = ":content_type";
-  string index_hash_source = ":index_hash_source";
-  string obj_size = ":obj_size";
-  string accounted_size = ":accounted_size";
-  string mtime = ":mtime";
-  string epoch = ":epoch";
-  string obj_tag = ":obj_tag";
-  string tail_tag = ":tail_tag";
-  string write_tag = ":write_tag";
-  string fake_tag = ":fake_tag";
-  string shadow_obj = ":shadow_obj";
-  string has_data = ":has_data";
-  string is_olh = ":is_ols";
-  string olh_tag = ":olh_tag";
-  string pg_ver = ":pg_ver";
-  string zone_short_id = ":zone_short_id";
-  string obj_version = ":obj_version";
-  string obj_version_tag = ":obj_version_tag";
-  string obj_attrs = ":obj_attrs";
-  string head_size = ":head_size";
-  string max_head_size = ":max_head_size";
-  string prefix = ":prefix";
-  string tail_instance = ":tail_instance";
-  string head_placement_rule_name = ":head_placement_rule_name";
-  string head_placement_storage_class  = ":head_placement_storage_class";
-  string tail_placement_rule_name = ":tail_placement_rule_name";
-  string tail_placement_storage_class  = ":tail_placement_storage_class";
-  string manifest_part_objs = ":manifest_part_objs";
-  string manifest_part_rules = ":manifest_part_rules";
-  string omap = ":omap";
-  string is_multipart = ":is_multipart";
-  string mp_parts = ":mp_parts";
-  string head_data = ":head_data";
-  string min_marker = ":min_marker";
-  string max_marker = ":max_marker";
+  std::string obj_name = ":obj_name";
+  std::string obj_instance = ":obj_instance";
+  std::string obj_ns  = ":obj_ns";
+  std::string acls = ":acls";
+  std::string index_ver = ":index_ver";
+  std::string tag = ":tag";
+  std::string flags = ":flags";
+  std::string versioned_epoch = ":versioned_epoch";
+  std::string obj_category = ":obj_category";
+  std::string etag = ":etag";
+  std::string owner = ":owner";
+  std::string owner_display_name = ":owner_display_name";
+  std::string storage_class = ":storage_class";
+  std::string appendable = ":appendable";
+  std::string content_type = ":content_type";
+  std::string index_hash_source = ":index_hash_source";
+  std::string obj_size = ":obj_size";
+  std::string accounted_size = ":accounted_size";
+  std::string mtime = ":mtime";
+  std::string epoch = ":epoch";
+  std::string obj_tag = ":obj_tag";
+  std::string tail_tag = ":tail_tag";
+  std::string write_tag = ":write_tag";
+  std::string fake_tag = ":fake_tag";
+  std::string shadow_obj = ":shadow_obj";
+  std::string has_data = ":has_data";
+  std::string is_olh = ":is_ols";
+  std::string olh_tag = ":olh_tag";
+  std::string pg_ver = ":pg_ver";
+  std::string zone_short_id = ":zone_short_id";
+  std::string obj_version = ":obj_version";
+  std::string obj_version_tag = ":obj_version_tag";
+  std::string obj_attrs = ":obj_attrs";
+  std::string head_size = ":head_size";
+  std::string max_head_size = ":max_head_size";
+  std::string prefix = ":prefix";
+  std::string tail_instance = ":tail_instance";
+  std::string head_placement_rule_name = ":head_placement_rule_name";
+  std::string head_placement_storage_class  = ":head_placement_storage_class";
+  std::string tail_placement_rule_name = ":tail_placement_rule_name";
+  std::string tail_placement_storage_class  = ":tail_placement_storage_class";
+  std::string manifest_part_objs = ":manifest_part_objs";
+  std::string manifest_part_rules = ":manifest_part_rules";
+  std::string omap = ":omap";
+  std::string is_multipart = ":is_multipart";
+  std::string mp_parts = ":mp_parts";
+  std::string head_data = ":head_data";
+  std::string min_marker = ":min_marker";
+  std::string max_marker = ":max_marker";
   /* Below used to update mp_parts obj name
    * from meta object to src object on completion */
-  string new_obj_name = ":new_obj_name";
-  string new_obj_instance = ":new_obj_instance";
-  string new_obj_ns  = ":new_obj_ns";
+  std::string new_obj_name = ":new_obj_name";
+  std::string new_obj_instance = ":new_obj_instance";
+  std::string new_obj_ns  = ":new_obj_ns";
 };
 
 struct DBOpObjectDataPrepareInfo {
-  string part_num = ":part_num";
-  string offset = ":offset";
-  string data = ":data";
-  string size = ":size";
-  string multipart_part_str = ":multipart_part_str";
+  std::string part_num = ":part_num";
+  std::string offset = ":offset";
+  std::string data = ":data";
+  std::string size = ":size";
+  std::string multipart_part_str = ":multipart_part_str";
 };
 
 struct DBOpLCEntryPrepareInfo {
-  string index = ":index";
-  string bucket_name = ":bucket_name";
-  string start_time = ":start_time";
-  string status = ":status";
-  string min_marker = ":min_marker";
+  std::string index = ":index";
+  std::string bucket_name = ":bucket_name";
+  std::string start_time = ":start_time";
+  std::string status = ":status";
+  std::string min_marker = ":min_marker";
 };
 
 struct DBOpLCHeadPrepareInfo {
-  string index = ":index";
-  string start_date = ":start_date";
-  string marker = ":marker";
+  std::string index = ":index";
+  std::string start_date = ":start_date";
+  std::string marker = ":marker";
 };
 
 struct DBOpPrepareInfo {
   DBOpUserPrepareInfo user;
-  string query_str = ":query_str";
+  std::string query_str = ":query_str";
   DBOpBucketPrepareInfo bucket;
   DBOpObjectPrepareInfo obj;
   DBOpObjectDataPrepareInfo obj_data;
   DBOpLCHeadPrepareInfo lc_head;
   DBOpLCEntryPrepareInfo lc_entry;
-  string list_max_count = ":list_max_count";
+  std::string list_max_count = ":list_max_count";
 };
 
 struct DBOpPrepareParams {
   /* Tables */
-  string user_table;
-  string bucket_table;
-  string object_table;
+  std::string user_table;
+  std::string bucket_table;
+  std::string object_table;
 
   /* Ops */
   DBOpPrepareInfo op;
 
 
   /* below subject to change */
-  string objectdata_table;
-  string quota_table;
-  string lc_head_table;
-  string lc_entry_table;
+  std::string objectdata_table;
+  std::string quota_table;
+  std::string lc_head_table;
+  std::string lc_entry_table;
 };
 
 struct DBOps {
@@ -374,13 +372,13 @@ class ObjectOp {
     class GetObjectDataOp *GetObjectData;
     class DeleteObjectDataOp *DeleteObjectData;
 
-    virtual int InitializeObjectOps(string db_name, const DoutPrefixProvider *dpp) { return 0; }
+    virtual int InitializeObjectOps(std::string db_name, const DoutPrefixProvider *dpp) { return 0; }
     virtual int FreeObjectOps(const DoutPrefixProvider *dpp) { return 0; }
 };
 
 class DBOp {
   private:
-    const string CreateUserTableQ =
+    const std::string CreateUserTableQ =
       /* Corresponds to rgw::sal::User
        *
        * For now only UserID is made Primary key.
@@ -426,7 +424,7 @@ class DBOp {
       UserVersionTag TEXT,      \
       PRIMARY KEY (UserID) \n);";
 
-    const string CreateBucketTableQ =
+    const std::string CreateBucketTableQ =
       /* Corresponds to rgw::sal::Bucket
        *
        *  For now only BucketName is made Primary key.
@@ -481,7 +479,7 @@ class DBOp {
       FOREIGN KEY (OwnerID) \
       REFERENCES '{}' (UserID) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
-    const string CreateObjectTableQ =
+    const std::string CreateObjectTableQ =
       /* Corresponds to rgw::sal::Object
        *
        *  For now only BucketName, ObjName is made Primary key.
@@ -548,11 +546,11 @@ class DBOp {
       ObjAttrs    BLOB,   \
       HeadSize    INTEGER,    \
       MaxHeadSize    INTEGER,    \
-      Prefix      String, \
-      TailInstance    String, \
-      HeadPlacementRuleName   String, \
+      Prefix      std::string, \
+      TailInstance    std::string, \
+      HeadPlacementRuleName   std::string, \
       HeadPlacementRuleStorageClass String, \
-      TailPlacementRuleName   String, \
+      TailPlacementRuleName   std::string, \
       TailPlacementStorageClass String, \
       ManifestPartObjs    BLOB,   \
       ManifestPartRules   BLOB,   \
@@ -564,7 +562,7 @@ class DBOp {
       FOREIGN KEY (BucketName) \
       REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
-    const string CreateObjectDataTableQ =
+    const std::string CreateObjectDataTableQ =
       /* Extra field 'MultipartPartStr' added which signifies multipart
        * <uploadid + partnum>. For regular object, it is '0.0'
        *
@@ -588,7 +586,7 @@ class DBOp {
       FOREIGN KEY (BucketName, ObjName, ObjInstance) \
       REFERENCES '{}' (BucketName, ObjName, ObjInstance) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
-    const string CreateQuotaTableQ =
+    const std::string CreateQuotaTableQ =
       "CREATE TABLE IF NOT EXISTS '{}' ( \
       QuotaID INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE , \
       MaxSizeSoftThreshold INTEGER ,	\
@@ -598,7 +596,7 @@ class DBOp {
       Enabled Boolean ,		\
       CheckOnRaw Boolean \n);";
 
-    const string CreateLCEntryTableQ =
+    const std::string CreateLCEntryTableQ =
       "CREATE TABLE IF NOT EXISTS '{}' ( \
       LCIndex  TEXT NOT NULL , \
       BucketName TEXT NOT NULL , \
@@ -608,22 +606,22 @@ class DBOp {
       FOREIGN KEY (BucketName) \
       REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
-    const string CreateLCHeadTableQ =
+    const std::string CreateLCHeadTableQ =
       "CREATE TABLE IF NOT EXISTS '{}' ( \
       LCIndex  TEXT NOT NULL , \
       Marker TEXT , \
       StartDate  INTEGER , \
       PRIMARY KEY (LCIndex) \n);";
 
-    const string DropQ = "DROP TABLE IF EXISTS '{}'";
-    const string ListAllQ = "SELECT  * from '{}'";
+    const std::string DropQ = "DROP TABLE IF EXISTS '{}'";
+    const std::string ListAllQ = "SELECT  * from '{}'";
 
   public:
     DBOp() {}
     virtual ~DBOp() {}
     std::mutex mtx; // to protect prepared stmt
 
-    string CreateTableSchema(string type, DBOpParams *params) {
+    std::string CreateTableSchema(std::string type, DBOpParams *params) {
       if (!type.compare("User"))
         return fmt::format(CreateUserTableQ.c_str(),
             params->user_table.c_str());
@@ -655,10 +653,10 @@ class DBOp {
       return NULL;
     }
 
-    string DeleteTableSchema(string table) {
+    std::string DeleteTableSchema(std::string table) {
       return fmt::format(DropQ.c_str(), table.c_str());
     }
-    string ListTableSchema(string table) {
+    std::string ListTableSchema(std::string table) {
       return fmt::format(ListAllQ.c_str(), table.c_str());
     }
 
@@ -680,7 +678,7 @@ class InsertUserOp : virtual public DBOp {
      * For now using INSERT or REPLACE. If required of updating existing
      * record, will use another query.
      */
-    const string Query = "INSERT OR REPLACE INTO '{}'	\
+    const std::string Query = "INSERT OR REPLACE INTO '{}'	\
                           (UserID, Tenant, NS, DisplayName, UserEmail, \
                            AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
                            SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
@@ -693,7 +691,7 @@ class InsertUserOp : virtual public DBOp {
   public:
     virtual ~InsertUserOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(), params.user_table.c_str(),
           params.op.user.user_id.c_str(), params.op.user.tenant, params.op.user.ns,
           params.op.user.display_name, params.op.user.user_email,
@@ -714,13 +712,13 @@ class InsertUserOp : virtual public DBOp {
 
 class RemoveUserOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "DELETE from '{}' where UserID = {}";
 
   public:
     virtual ~RemoveUserOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(), params.user_table.c_str(),
           params.op.user.user_id.c_str());
     }
@@ -730,7 +728,7 @@ class GetUserOp: virtual public DBOp {
   private:
     /* If below query columns are updated, make sure to update the indexes
      * in list_user() cbk in sqliteDB.cc */
-    const string Query = "SELECT \
+    const std::string Query = "SELECT \
                           UserID, Tenant, NS, DisplayName, UserEmail, \
                           AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
@@ -738,7 +736,7 @@ class GetUserOp: virtual public DBOp {
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
                           UserAttrs, UserVersion, UserVersionTag from '{}' where UserID = {}";
 
-    const string QueryByEmail = "SELECT \
+    const std::string QueryByEmail = "SELECT \
                                  UserID, Tenant, NS, DisplayName, UserEmail, \
                                  AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
                                  SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
@@ -746,7 +744,7 @@ class GetUserOp: virtual public DBOp {
                                  BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
                                  UserAttrs, UserVersion, UserVersionTag from '{}' where UserEmail = {}";
 
-    const string QueryByAccessKeys = "SELECT \
+    const std::string QueryByAccessKeys = "SELECT \
                                       UserID, Tenant, NS, DisplayName, UserEmail, \
                                       AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
                                       SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
@@ -754,7 +752,7 @@ class GetUserOp: virtual public DBOp {
                                       BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
                                       UserAttrs, UserVersion, UserVersionTag from '{}' where AccessKeysID = {}";
 
-    const string QueryByUserID = "SELECT \
+    const std::string QueryByUserID = "SELECT \
                                   UserID, Tenant, NS, DisplayName, UserEmail, \
                                   AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
                                   SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
@@ -766,7 +764,7 @@ class GetUserOp: virtual public DBOp {
   public:
     virtual ~GetUserOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "email") {
         return fmt::format(QueryByEmail.c_str(), params.user_table.c_str(),
             params.op.user.user_email.c_str());
@@ -789,7 +787,7 @@ class GetUserOp: virtual public DBOp {
 
 class InsertBucketOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "INSERT OR REPLACE INTO '{}' \
       (BucketName, Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
        Count, PlacementName, PlacementStorageClass, OwnerID, Flags, Zonegroup, \
@@ -804,7 +802,7 @@ class InsertBucketOp: virtual public DBOp {
   public:
     virtual ~InsertBucketOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(), params.bucket_table.c_str(),
           params.op.bucket.bucket_name, params.op.bucket.tenant,
           params.op.bucket.marker, params.op.bucket.bucket_id,
@@ -826,7 +824,7 @@ class InsertBucketOp: virtual public DBOp {
 class UpdateBucketOp: virtual public DBOp {
   private:
     // Updates Info, Mtime, Version
-    const string InfoQuery =
+    const std::string InfoQuery =
       "UPDATE '{}' SET Tenant = {}, Marker = {}, BucketID = {}, CreationTime = {}, \
       Count = {}, PlacementName = {}, PlacementStorageClass = {}, OwnerID = {}, Flags = {}, \
       Zonegroup = {}, HasInstanceObj = {}, Quota = {}, RequesterPays = {}, HasWebsite = {}, \
@@ -834,17 +832,17 @@ class UpdateBucketOp: virtual public DBOp {
       NewBucketInstanceID = {}, ObjectLock = {}, SyncPolicyInfoGroups = {}, \
       BucketVersion = {}, Mtime = {} WHERE BucketName = {}";
     // Updates Attrs, OwnerID, Mtime, Version
-    const string AttrsQuery =
+    const std::string AttrsQuery =
       "UPDATE '{}' SET OwnerID = {}, BucketAttrs = {}, Mtime = {}, BucketVersion = {} \
       WHERE BucketName = {}";
     // Updates OwnerID, CreationTime, Mtime, Version
-    const string OwnerQuery =
+    const std::string OwnerQuery =
       "UPDATE '{}' SET OwnerID = {}, CreationTime = {}, Mtime = {}, BucketVersion = {} WHERE BucketName = {}";
 
   public:
     virtual ~UpdateBucketOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "info") {
         return fmt::format(InfoQuery.c_str(), params.bucket_table.c_str(),
             params.op.bucket.tenant, params.op.bucket.marker, params.op.bucket.bucket_id,
@@ -878,13 +876,13 @@ class UpdateBucketOp: virtual public DBOp {
 
 class RemoveBucketOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "DELETE from '{}' where BucketName = {}";
 
   public:
     virtual ~RemoveBucketOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(), params.bucket_table.c_str(),
           params.op.bucket.bucket_name.c_str());
     }
@@ -892,7 +890,7 @@ class RemoveBucketOp: virtual public DBOp {
 
 class GetBucketOp: virtual public DBOp {
   private:
-    const string Query = "SELECT  \
+    const std::string Query = "SELECT  \
                           BucketName, BucketTable.Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
                           Count, BucketTable.PlacementName, BucketTable.PlacementStorageClass, OwnerID, Flags, Zonegroup, \
                           HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf, \
@@ -904,7 +902,7 @@ class GetBucketOp: virtual public DBOp {
   public:
     virtual ~GetBucketOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       //return fmt::format(Query.c_str(), params.op.bucket.bucket_name.c_str(),
       //          params.bucket_table.c_str(), params.user_table.c_str());
       return fmt::format(Query.c_str(),
@@ -917,7 +915,7 @@ class ListUserBucketsOp: virtual public DBOp {
   private:
     // once we have stats also stored, may have to update this query to join
     // these two tables.
-    const string Query = "SELECT  \
+    const std::string Query = "SELECT  \
                           BucketName, Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
                           Count, PlacementName, PlacementStorageClass, OwnerID, Flags, Zonegroup, \
                           HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf, \
@@ -929,7 +927,7 @@ class ListUserBucketsOp: virtual public DBOp {
   public:
     virtual ~ListUserBucketsOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(), params.bucket_table.c_str(),
           params.op.user.user_id.c_str(), params.op.bucket.min_marker.c_str(),
           params.op.list_max_count.c_str());
@@ -938,7 +936,7 @@ class ListUserBucketsOp: virtual public DBOp {
 
 class PutObjectOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "INSERT OR REPLACE INTO '{}' \
       (ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag, \
        Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
@@ -956,7 +954,7 @@ class PutObjectOp: virtual public DBOp {
   public:
     virtual ~PutObjectOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(),
           params.object_table.c_str(), params.op.obj.obj_name,
           params.op.obj.obj_instance, params.op.obj.obj_ns,
@@ -987,13 +985,13 @@ class PutObjectOp: virtual public DBOp {
 
 class DeleteObjectOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "DELETE from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {}";
 
   public:
     virtual ~DeleteObjectOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(), params.object_table.c_str(),
           params.op.bucket.bucket_name.c_str(),
           params.op.obj.obj_name.c_str(),
@@ -1003,7 +1001,7 @@ class DeleteObjectOp: virtual public DBOp {
 
 class GetObjectOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "SELECT  \
       ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag, \
       Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
@@ -1019,7 +1017,7 @@ class GetObjectOp: virtual public DBOp {
   public:
     virtual ~GetObjectOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(),
           params.object_table.c_str(),
           params.op.bucket.bucket_name.c_str(),
@@ -1032,7 +1030,7 @@ class ListBucketObjectsOp: virtual public DBOp {
   private:
     // once we have stats also stored, may have to update this query to join
     // these two tables.
-    const string Query =
+    const std::string Query =
       "SELECT  \
       ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag, \
       Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
@@ -1047,7 +1045,7 @@ class ListBucketObjectsOp: virtual public DBOp {
   public:
     virtual ~ListBucketObjectsOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       /* XXX: Include prefix, delim */
       return fmt::format(Query.c_str(),
           params.object_table.c_str(),
@@ -1060,16 +1058,16 @@ class ListBucketObjectsOp: virtual public DBOp {
 class UpdateObjectOp: virtual public DBOp {
   private:
     // Updates Omap
-    const string OmapQuery =
+    const std::string OmapQuery =
       "UPDATE '{}' SET Omap = {}, Mtime = {} \
       where BucketName = {} and ObjName = {} and ObjInstance = {}";
-    const string AttrsQuery =
+    const std::string AttrsQuery =
       "UPDATE '{}' SET ObjAttrs = {}, Mtime = {}  \
       where BucketName = {} and ObjName = {} and ObjInstance = {}";
-    const string MPQuery =
+    const std::string MPQuery =
       "UPDATE '{}' SET MPPartsList = {}, Mtime = {}  \
       where BucketName = {} and ObjName = {} and ObjInstance = {}";
-    const string MetaQuery =
+    const std::string MetaQuery =
       "UPDATE '{}' SET \
        ObjNS = {}, ACLs = {}, IndexVer = {}, Tag = {}, Flags = {}, VersionedEpoch = {}, \
        ObjCategory = {}, Etag = {}, Owner = {}, OwnerDisplayName = {}, \
@@ -1088,7 +1086,7 @@ class UpdateObjectOp: virtual public DBOp {
   public:
     virtual ~UpdateObjectOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "omap") {
         return fmt::format(OmapQuery.c_str(),
             params.object_table.c_str(), params.op.obj.omap.c_str(),
@@ -1147,7 +1145,7 @@ class UpdateObjectOp: virtual public DBOp {
 
 class PutObjectDataOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "INSERT OR REPLACE INTO '{}' \
       (ObjName, ObjInstance, ObjNS, BucketName, MultipartPartStr, PartNum, Offset, Size, Data) \
       VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {})";
@@ -1155,7 +1153,7 @@ class PutObjectDataOp: virtual public DBOp {
   public:
     virtual ~PutObjectDataOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(),
           params.objectdata_table.c_str(),
           params.op.obj.obj_name, params.op.obj.obj_instance,
@@ -1171,7 +1169,7 @@ class PutObjectDataOp: virtual public DBOp {
 
 class UpdateObjectDataOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "UPDATE '{}' \
       SET ObjName = {}, ObjInstance = {}, ObjNS = {} \
       WHERE ObjName = {} and ObjInstance = {} and ObjNS = {} and \
@@ -1180,7 +1178,7 @@ class UpdateObjectDataOp: virtual public DBOp {
   public:
     virtual ~UpdateObjectDataOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(),
           params.objectdata_table.c_str(),
           params.op.obj.new_obj_name, params.op.obj.new_obj_instance,
@@ -1192,7 +1190,7 @@ class UpdateObjectDataOp: virtual public DBOp {
 };
 class GetObjectDataOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "SELECT  \
       ObjName, ObjInstance, ObjNS, BucketName, MultipartPartStr, PartNum, Offset, Size, Data \
       from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {} ORDER BY MultipartPartStr, PartNum";
@@ -1200,7 +1198,7 @@ class GetObjectDataOp: virtual public DBOp {
   public:
     virtual ~GetObjectDataOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(),
           params.objectdata_table.c_str(),
           params.op.bucket.bucket_name.c_str(),
@@ -1211,13 +1209,13 @@ class GetObjectDataOp: virtual public DBOp {
 
 class DeleteObjectDataOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "DELETE from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {}";
 
   public:
     virtual ~DeleteObjectDataOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(),
           params.objectdata_table.c_str(),
           params.op.bucket.bucket_name.c_str(),
@@ -1228,7 +1226,7 @@ class DeleteObjectDataOp: virtual public DBOp {
 
 class InsertLCEntryOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "INSERT OR REPLACE INTO '{}' \
       (LCIndex, BucketName, StartTime, Status) \
       VALUES ({}, {}, {}, {})";
@@ -1236,7 +1234,7 @@ class InsertLCEntryOp: virtual public DBOp {
   public:
     virtual ~InsertLCEntryOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(), params.lc_entry_table.c_str(),
           params.op.lc_entry.index, params.op.lc_entry.bucket_name,
           params.op.lc_entry.start_time, params.op.lc_entry.status);
@@ -1245,13 +1243,13 @@ class InsertLCEntryOp: virtual public DBOp {
 
 class RemoveLCEntryOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "DELETE from '{}' where LCIndex = {} and BucketName = {}";
 
   public:
     virtual ~RemoveLCEntryOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(), params.lc_entry_table.c_str(),
           params.op.lc_entry.index, params.op.lc_entry.bucket_name);
     }
@@ -1259,17 +1257,17 @@ class RemoveLCEntryOp: virtual public DBOp {
 
 class GetLCEntryOp: virtual public DBOp {
   private:
-    const string Query = "SELECT  \
+    const std::string Query = "SELECT  \
                           LCIndex, BucketName, StartTime, Status \
                           from '{}' where LCIndex = {} and BucketName = {}";
-    const string NextQuery = "SELECT  \
+    const std::string NextQuery = "SELECT  \
                           LCIndex, BucketName, StartTime, Status \
                           from '{}' where LCIndex = {} and BucketName > {} ORDER BY BucketName ASC";
 
   public:
     virtual ~GetLCEntryOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "get_next_entry") {
         return fmt::format(NextQuery.c_str(), params.lc_entry_table.c_str(),
             params.op.lc_entry.index, params.op.lc_entry.bucket_name);
@@ -1282,14 +1280,14 @@ class GetLCEntryOp: virtual public DBOp {
 
 class ListLCEntriesOp: virtual public DBOp {
   private:
-    const string Query = "SELECT  \
+    const std::string Query = "SELECT  \
                           LCIndex, BucketName, StartTime, Status \
                           FROM '{}' WHERE LCIndex = {} AND BucketName > {} ORDER BY BucketName ASC LIMIT {}";
 
   public:
     virtual ~ListLCEntriesOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(), params.lc_entry_table.c_str(),
           params.op.lc_entry.index.c_str(), params.op.lc_entry.min_marker.c_str(),
           params.op.list_max_count.c_str());
@@ -1298,7 +1296,7 @@ class ListLCEntriesOp: virtual public DBOp {
 
 class InsertLCHeadOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "INSERT OR REPLACE INTO '{}' \
       (LCIndex, Marker, StartDate) \
       VALUES ({}, {}, {})";
@@ -1306,7 +1304,7 @@ class InsertLCHeadOp: virtual public DBOp {
   public:
     virtual ~InsertLCHeadOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(), params.lc_head_table.c_str(),
           params.op.lc_head.index, params.op.lc_head.marker,
           params.op.lc_head.start_date);
@@ -1315,13 +1313,13 @@ class InsertLCHeadOp: virtual public DBOp {
 
 class RemoveLCHeadOp: virtual public DBOp {
   private:
-    const string Query =
+    const std::string Query =
       "DELETE from '{}' where LCIndex = {}";
 
   public:
     virtual ~RemoveLCHeadOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(), params.lc_head_table.c_str(),
           params.op.lc_head.index);
     }
@@ -1329,14 +1327,14 @@ class RemoveLCHeadOp: virtual public DBOp {
 
 class GetLCHeadOp: virtual public DBOp {
   private:
-    const string Query = "SELECT  \
+    const std::string Query = "SELECT  \
                           LCIndex, Marker, StartDate \
                           from '{}' where LCIndex = {}";
 
   public:
     virtual ~GetLCHeadOp() {}
 
-    string Schema(DBOpPrepareParams &params) {
+    std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(), params.lc_head_table.c_str(),
           params.op.lc_head.index);
     }
@@ -1365,14 +1363,14 @@ WRITE_CLASS_ENCODER(DBOLHInfo)
 
 class DB {
   private:
-    const string db_name;
+    const std::string db_name;
     rgw::sal::Store* store;
-    const string user_table;
-    const string bucket_table;
-    const string quota_table;
-    const string lc_head_table;
-    const string lc_entry_table;
-    static map<string, class ObjectOp*> objectmap;
+    const std::string user_table;
+    const std::string bucket_table;
+    const std::string quota_table;
+    const std::string lc_head_table;
+    const std::string lc_entry_table;
+    static std::map<std::string, class ObjectOp*> objectmap;
 
   protected:
     void *db;
@@ -1386,8 +1384,8 @@ class DB {
     // objects if any.
     std::mutex mtx;
 
-  public:	
-    DB(string db_name, CephContext *_cct) : db_name(db_name),
+  public:
+    DB(std::string db_name, CephContext *_cct) : db_name(db_name),
     user_table(db_name+".user.table"),
     bucket_table(db_name+".bucket.table"),
     quota_table(db_name+".quota.table"),
@@ -1409,19 +1407,19 @@ class DB {
   {}
     virtual	~DB() {}
 
-    const string getDBname() { return db_name; }
-    const string getDBfile() { return db_name + ".db"; }
-    const string getUserTable() { return user_table; }
-    const string getBucketTable() { return bucket_table; }
-    const string getQuotaTable() { return quota_table; }
-    const string getLCHeadTable() { return lc_head_table; }
-    const string getLCEntryTable() { return lc_entry_table; }
-    const string getObjectTable(string bucket) {
+    const std::string getDBname() { return db_name; }
+    const std::string getDBfile() { return db_name + ".db"; }
+    const std::string getUserTable() { return user_table; }
+    const std::string getBucketTable() { return bucket_table; }
+    const std::string getQuotaTable() { return quota_table; }
+    const std::string getLCHeadTable() { return lc_head_table; }
+    const std::string getLCEntryTable() { return lc_entry_table; }
+    const std::string getObjectTable(std::string bucket) {
       return db_name+"."+bucket+".object.table"; }
-    const string getObjectDataTable(string bucket) {
+    const std::string getObjectDataTable(std::string bucket) {
       return db_name+"."+bucket+".objectdata.table"; }
 
-    map<string, class ObjectOp*> getObjectMap();
+    std::map<std::string, class ObjectOp*> getObjectMap();
 
     struct DBOps dbops; // DB operations, make it private?
 
@@ -1436,18 +1434,18 @@ class DB {
     CephContext *ctx() { return cct; }
     const DoutPrefixProvider *get_def_dpp() { return &dp; }
 
-    int Initialize(string logfile, int loglevel);
+    int Initialize(std::string logfile, int loglevel);
     int Destroy(const DoutPrefixProvider *dpp);
     int LockInit(const DoutPrefixProvider *dpp);
     int LockDestroy(const DoutPrefixProvider *dpp);
     int Lock(const DoutPrefixProvider *dpp);
     int Unlock(const DoutPrefixProvider *dpp);
 
-    int InitializeParams(const DoutPrefixProvider *dpp, string Op, DBOpParams *params);
-    int ProcessOp(const DoutPrefixProvider *dpp, string Op, DBOpParams *params);
-    DBOp* getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *params);
-    int objectmapInsert(const DoutPrefixProvider *dpp, string bucket, class ObjectOp* ptr);
-    int objectmapDelete(const DoutPrefixProvider *dpp, string bucket);
+    int InitializeParams(const DoutPrefixProvider *dpp, std::string Op, DBOpParams *params);
+    int ProcessOp(const DoutPrefixProvider *dpp, std::string Op, DBOpParams *params);
+    DBOp* getDBOp(const DoutPrefixProvider *dpp, std::string Op, struct DBOpParams *params);
+    int objectmapInsert(const DoutPrefixProvider *dpp, std::string bucket, class ObjectOp* ptr);
+    int objectmapDelete(const DoutPrefixProvider *dpp, std::string bucket);
 
     virtual uint64_t get_blob_limit() { return 0; };
     virtual void *openDB(const DoutPrefixProvider *dpp) { return NULL; }
@@ -1464,10 +1462,10 @@ class DB {
 
     int get_user(const DoutPrefixProvider *dpp,
         const std::string& query_str, const std::string& query_str_val,
-        RGWUserInfo& uinfo, map<string, bufferlist> *pattrs,
+        RGWUserInfo& uinfo, std::map<std::string, bufferlist> *pattrs,
         RGWObjVersionTracker *pobjv_tracker);
     int store_user(const DoutPrefixProvider *dpp,
-        RGWUserInfo& uinfo, bool exclusive, map<string, bufferlist> *pattrs,
+        RGWUserInfo& uinfo, bool exclusive, std::map<std::string, bufferlist> *pattrs,
         RGWObjVersionTracker *pobjv_tracker, RGWUserInfo* pold_info);
     int remove_user(const DoutPrefixProvider *dpp,
         RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv_tracker);
@@ -1477,11 +1475,11 @@ class DB {
         obj_version* pbucket_version);
     int create_bucket(const DoutPrefixProvider *dpp,
         const RGWUserInfo& owner, rgw_bucket& bucket,
-        const string& zonegroup_id,
+        const std::string& zonegroup_id,
         const rgw_placement_rule& placement_rule,
-        const string& swift_ver_location,
+        const std::string& swift_ver_location,
         const RGWQuotaInfo * pquota_info,
-        map<std::string, bufferlist>& attrs,
+        std::map<std::string, bufferlist>& attrs,
         RGWBucketInfo& info,
         obj_version *pobjv,
         obj_version *pep_objv,
@@ -1495,15 +1493,15 @@ class DB {
 
     int remove_bucket(const DoutPrefixProvider *dpp, const RGWBucketInfo info);
     int list_buckets(const DoutPrefixProvider *dpp, const rgw_user& user,
-        const string& marker,
-        const string& end_marker,
+        const std::string& marker,
+        const std::string& end_marker,
         uint64_t max,
         bool need_stats,
         RGWUserBuckets *buckets,
         bool *is_truncated);
     int update_bucket(const DoutPrefixProvider *dpp, const std::string& query_str,
         RGWBucketInfo& info, bool exclusive,
-        const rgw_user* powner_id, map<std::string, bufferlist>* pattrs,
+        const rgw_user* powner_id, std::map<std::string, bufferlist>* pattrs,
         ceph::real_time* pmtime, RGWObjVersionTracker* pobjv);
 
     uint64_t get_max_head_size() { return ObjHeadSize; }
@@ -1512,17 +1510,17 @@ class DB {
 
     // db raw obj string is of format -
     // "<bucketname>_<objname>_<objinstance>_<multipart-part-str>_<partnum>"
-    const string raw_obj_oid = "{0}_{1}_{2}_{3}_{4}";
+    const std::string raw_obj_oid = "{0}_{1}_{2}_{3}_{4}";
 
-    inline string to_oid(const string& bucket, const string& obj_name, const string& obj_instance,
-        string mp_str, uint64_t partnum) {
-      string s = fmt::format(raw_obj_oid.c_str(), bucket, obj_name, obj_instance, mp_str, partnum);
+    inline std::string to_oid(const std::string& bucket, const std::string& obj_name, const std::string& obj_instance,
+        std::string mp_str, uint64_t partnum) {
+      std::string s = fmt::format(raw_obj_oid.c_str(), bucket, obj_name, obj_instance, mp_str, partnum);
       return s;
     }
-    inline int from_oid(const string& oid, string& bucket, string& obj_name,
-        string& obj_instance,
-        string& mp_str, uint64_t& partnum) {
-      vector<std::string> result;
+    inline int from_oid(const std::string& oid, std::string& bucket, std::string& obj_name,
+        std::string& obj_instance,
+        std::string& mp_str, uint64_t& partnum) {
+      std::vector<std::string> result;
       boost::split(result, oid, boost::is_any_of("_"));
       bucket = result[0];
       obj_name = result[1];
@@ -1536,22 +1534,22 @@ class DB {
     struct raw_obj {
       DB* db;
 
-      string bucket_name;
-      string obj_name;
-      string obj_instance;
-      string obj_ns;
-      string multipart_part_str;
+      std::string bucket_name;
+      std::string obj_name;
+      std::string obj_instance;
+      std::string obj_ns;
+      std::string multipart_part_str;
       uint64_t part_num;
 
-      string obj_table;
-      string obj_data_table;
+      std::string obj_table;
+      std::string obj_data_table;
 
       raw_obj(DB* _db) {
         db = _db;
       }
 
-      raw_obj(DB* _db, string& _bname, string& _obj_name, string& _obj_instance,
-          string& _obj_ns, string _mp_part_str, int _part_num) {
+      raw_obj(DB* _db, std::string& _bname, std::string& _obj_name, std::string& _obj_instance,
+          std::string& _obj_ns, std::string _mp_part_str, int _part_num) {
         db = _db;
         bucket_name = _bname;
         obj_name = _obj_name;
@@ -1564,7 +1562,7 @@ class DB {
         obj_data_table = bucket_name+".objectdata.table";
       }
 
-      raw_obj(DB* _db, string& oid) {
+      raw_obj(DB* _db, std::string& oid) {
         int r;
 
         db = _db;
@@ -1609,11 +1607,11 @@ class DB {
       public:
 
         struct Params {
-          string prefix;
-          string delim;
+          std::string prefix;
+          std::string delim;
           rgw_obj_key marker;
           rgw_obj_key end_marker;
-          string ns;
+          std::string ns;
           bool enforce_ns;
           RGWAccessListFilter* access_list_filter;
           RGWBucketListNameFilter force_check_filter;
@@ -1633,8 +1631,8 @@ class DB {
         /* XXX: Handle ordered and unordered separately.
          * For now returning only ordered entries */
         int list_objects(const DoutPrefixProvider *dpp, int64_t max,
-		           vector<rgw_bucket_dir_entry> *result,
-		           map<string, bool> *common_prefixes, bool *is_truncated);
+			   std::vector<rgw_bucket_dir_entry> *result,
+			   std::map<std::string, bool> *common_prefixes, bool *is_truncated);
         rgw_obj_key& get_next_marker() {
           return next_marker;
         }
@@ -1678,7 +1676,7 @@ class DB {
           const char *if_match;
           const char *if_nomatch;
 
-          ConditionParams() : 
+          ConditionParams() :
             mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false), mod_zone_id(0), mod_pg_ver(0),
             if_match(NULL), if_nomatch(NULL) {}
         } conds;
@@ -1686,7 +1684,7 @@ class DB {
         struct Params {
           ceph::real_time *lastmod;
           uint64_t *obj_size;
-          map<string, bufferlist> *attrs;
+	  std::map<std::string, bufferlist> *attrs;
           rgw_obj *target_obj;
 
           Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
@@ -1705,15 +1703,15 @@ class DB {
       struct Write {
         DB::Object *target;
         RGWObjState obj_state;
-        string mp_part_str = "0.0"; // multipart num
+        std::string mp_part_str = "0.0"; // multipart num
 
         struct MetaParams {
           ceph::real_time *mtime;
-          map<std::string, bufferlist>* rmattrs;
+	  std::map<std::string, bufferlist>* rmattrs;
           const bufferlist *data;
           RGWObjManifest *manifest;
-          const string *ptag;
-          list<rgw_obj_index_key> *remove_objs;
+          const std::string *ptag;
+          std::list<rgw_obj_index_key> *remove_objs;
           ceph::real_time set_mtime;
           rgw_user owner;
           RGWObjCategory category;
@@ -1723,7 +1721,7 @@ class DB {
           std::optional<uint64_t> olh_epoch;
           ceph::real_time delete_at;
           bool canceled;
-          const string *user_data;
+          const std::string *user_data;
           rgw_zone_set *zones_trace;
           bool modify_tail;
           bool completeMultipart;
@@ -1737,16 +1735,16 @@ class DB {
 
         explicit Write(DB::Object *_target) : target(_target) {}
 
-        void set_mp_part_str(string _mp_part_str) { mp_part_str = _mp_part_str;}
+        void set_mp_part_str(std::string _mp_part_str) { mp_part_str = _mp_part_str;}
         int prepare(const DoutPrefixProvider* dpp);
         int write_data(const DoutPrefixProvider* dpp,
                                bufferlist& data, uint64_t ofs);
         int _do_write_meta(const DoutPrefixProvider *dpp,
             uint64_t size, uint64_t accounted_size,
-            map<string, bufferlist>& attrs,
+	    std::map<std::string, bufferlist>& attrs,
             bool assume_noent, bool modify_tail);
         int write_meta(const DoutPrefixProvider *dpp, uint64_t size,
-            uint64_t accounted_size, map<string, bufferlist>& attrs);
+	    uint64_t accounted_size, std::map<std::string, bufferlist>& attrs);
         /* Below are used to update mp data rows object name
          * from meta to src object name on multipart upload
          * completion
@@ -1762,9 +1760,9 @@ class DB {
           int versioning_status;
           ACLOwner obj_owner; /* needed for creation of deletion marker */
           uint64_t olh_epoch;
-          string marker_version_id;
+          std::string marker_version_id;
           uint32_t bilog_flags;
-          list<rgw_obj_index_key> *remove_objs;
+          std::list<rgw_obj_index_key> *remove_objs;
           ceph::real_time expiration_time;
           ceph::real_time unmod_since;
           ceph::real_time mtime; /* for setting delete marker mtime */
@@ -1778,7 +1776,7 @@ class DB {
 
         struct DeleteResult {
           bool delete_marker;
-          string version_id;
+          std::string version_id;
 
           DeleteResult() : delete_marker(false) {}
         } result;
@@ -1806,8 +1804,8 @@ class DB {
       RGWBucketInfo& get_bucket_info() { return bucket_info; }
 
       int InitializeParamsfromObject(const DoutPrefixProvider *dpp, DBOpParams* params);
-      int set_attrs(const DoutPrefixProvider *dpp, map<string, bufferlist>& setattrs,
-          map<string, bufferlist>* rmattrs);
+      int set_attrs(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& setattrs,
+          std::map<std::string, bufferlist>* rmattrs);
       int obj_omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val, bool must_exist);
       int obj_omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
           const std::set<std::string>& keys,

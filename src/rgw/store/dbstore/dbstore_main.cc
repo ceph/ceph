@@ -8,6 +8,7 @@
 #include <dbstore.h>
 #include <dbstore_log.h>
 
+using namespace std;
 using namespace rgw::store;
 using DB = rgw::store::DB;
 
