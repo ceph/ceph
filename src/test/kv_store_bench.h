@@ -25,9 +25,6 @@
 #include <cfloat>
 #include <iostream>
 
-using namespace std;
-using ceph::bufferlist;
-
 /**
  * stores pairings from op type to time taken for that op (for latency), and to
  * time that op completed to the nearest second (for throughput).
@@ -69,7 +66,7 @@ struct timed_args {
   StopWatch sw;
   //kv_bench_data data;
   KvStoreBench * kvsb;
-  bufferlist val;
+  ceph::buffer::list val;
   int err;
   char op;
 
@@ -86,7 +83,7 @@ struct timed_args {
   {}
 };
 
-typedef pair<string, bufferlist> (KvStoreBench::*next_gen_t)(bool new_elem);
+typedef std::pair<std::string, ceph::buffer::list> (KvStoreBench::*next_gen_t)(bool new_elem);
 
 class KvStoreBench {
 
@@ -107,13 +104,13 @@ protected:
   int cache_size; //number of index entries to store in cache
   double cache_refresh; //cache_size / cache_refresh entries are read each time
 			//the index is read
-  string client_name;
+  std::string client_name;
   bool verbose;//if true, display debug output
 
   //internal
-  map<int, char> probs;//map of numbers from 1 to 100 to chars representing
+  std::map<int, char> probs;//map of numbers from 1 to 100 to chars representing
 			//operation types - used to generate random operations
-  set<string> key_set;//set of keys already in the data set
+  std::set<std::string> key_set;//set of keys already in the data set
   KeyValueStructure * kvs;
   kv_bench_data data;//stores throughput and latency from completed tests
   ceph::mutex data_lock = ceph::make_mutex("data lock");
@@ -123,8 +120,8 @@ protected:
     ceph::make_mutex("KvStoreBench::ops_in_flight_lock");
   //these are used for cleanup and setup purposes - they are NOT passed to kvs!
   librados::Rados rados;
-  string rados_id;
-  string pool_name;
+  std::string rados_id;
+  std::string pool_name;
   bool io_ctx_ready;
   librados::IoCtx io_ctx;
 
@@ -153,7 +150,7 @@ public:
   /**
    * Returns a string of random characters of length len
    */
-  string random_string(int len);
+  std::string random_string(int len);
 
   /**
    * Inserts entries random keys and values asynchronously.
@@ -164,20 +161,20 @@ public:
    * calls test_random_insertions, then does ops randomly chosen operations
    * asynchronously, with max_ops_in_flight operations at a time.
    */
-  int test_teuthology_aio(next_gen_t distr, const map<int, char> &probs);
+  int test_teuthology_aio(next_gen_t distr, const std::map<int, char> &probs);
 
   /**
    * calls test_random_insertions, then does ops randomly chosen operations
    * synchronously.
    */
-  int test_teuthology_sync(next_gen_t distr, const map<int, char> &probs);
+  int test_teuthology_sync(next_gen_t distr, const std::map<int, char> &probs);
 
   /**
    * returns a key-value pair. If new_elem is true, the key is randomly
    * generated. If it is false, the key is selected from the keys currently in
    * the key set.
    */
-  pair<string, bufferlist> rand_distr(bool new_elem);
+  std::pair<std::string, ceph::buffer::list> rand_distr(bool new_elem);
 
   /**
    * Called when aio operations complete. Updates data.
