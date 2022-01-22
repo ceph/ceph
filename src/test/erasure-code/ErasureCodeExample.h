@@ -35,15 +35,13 @@
 
 #define MINIMUM_TO_RECOVER 2u
 
-using namespace std;
-
 class ErasureCodeExample final : public ErasureCode {
 public:
   ~ErasureCodeExample() override {}
 
   int create_rule(const std::string &name,
 			     CrushWrapper &crush,
-			     ostream *ss) const override {
+		             std::ostream *ss) const override {
     return crush.add_simple_rule(name, "default", "host", "",
 				 "indep", pg_pool_t::TYPE_ERASURE, ss);
   }
@@ -70,7 +68,7 @@ public:
 	      c2c[CODING_CHUNK] > c2c[SECOND_DATA_CHUNK])
 	c2c.erase(CODING_CHUNK);
     }
-    set <int> available_chunks;
+    std::set <int> available_chunks;
     for (std::map<int, int>::const_iterator i = c2c.begin();
 	 i != c2c.end();
 	 ++i)
@@ -116,7 +114,7 @@ public:
     // to chunk boundaries
     //
     const bufferptr &ptr = out.front();
-    for (set<int>::iterator j = want_to_encode.begin();
+    for (auto j = want_to_encode.begin();
          j != want_to_encode.end();
          ++j) {
       bufferlist tmp;
@@ -136,7 +134,7 @@ public:
 
   int _decode(const std::set<int> &want_to_read,
 	      const std::map<int, bufferlist> &chunks,
-	      std::map<int, bufferlist> *decoded) {
+	      std::map<int, bufferlist> *decoded) override {
     //
     // All chunks have the same size
     //
