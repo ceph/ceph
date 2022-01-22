@@ -24,6 +24,7 @@ seastar::logger& logger()
 }
 }  // namespace
 
+using namespace std::literals;
 using std::string_view;
 using std::unique_ptr;
 using crimson::osd::OSD;

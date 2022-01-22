@@ -22,8 +22,6 @@
 #include "include/buffer.h"
 #include "crimson/net/Fwd.h"
 
-using namespace std::literals;
-
 class MCommand;
 
 namespace crimson::admin {
