@@ -4,27 +4,26 @@
 #pragma once
 
 #include <map>
-#include <errno.h>
-#include <stdlib.h>
+#include <cerrno>
+#include <cstdlib>
 #include <string>
-#include <stdio.h>
+#include <cstdio>
 #include <iostream>
+#include <vector>
+
 #include "common/ceph_context.h"
 #include "common/dbstore.h"
 #include "sqlite/sqliteDB.h"
 
-using namespace std;
 using namespace rgw::store;
 using DB = rgw::store::DB;
 
 /* XXX: Should be a dbstore config option */
-const static string default_tenant = "default_ns";
-
-using namespace std;
+const static std::string default_tenant = "default_ns";
 
 class DBStoreManager {
 private:
-  map<string, DB*> DBStoreHandles;
+  std::map<std::string, DB*> DBStoreHandles;
   DB *default_db = NULL;
   CephContext *cct;
 
@@ -33,9 +32,9 @@ public:
     cct = _cct;
 	default_db = createDB(default_tenant);
   };
-  DBStoreManager(string logfile, int loglevel): DBStoreHandles() {
+  DBStoreManager(std::string logfile, int loglevel): DBStoreHandles() {
     /* No ceph context. Create one with log args provided */
-    vector<const char*> args;
+    std::vector<const char*> args;
     cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                       CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1)->get();
     cct->_log->set_log_file(logfile);
@@ -50,9 +49,9 @@ public:
    * being deleted while using it.
    */
   DB* getDB () { return default_db; };
-  DB* getDB (string tenant, bool create);
-  DB* createDB (string tenant);
-  void deleteDB (string tenant);
+  DB* getDB (std::string tenant, bool create);
+  DB* createDB (std::string tenant);
+  void deleteDB (std::string tenant);
   void deleteDB (DB* db);
   void destroyAllHandles();
 };
