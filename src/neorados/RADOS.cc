@@ -37,6 +37,8 @@
 #include "neorados/RADOSImpl.h"
 #include "include/neorados/RADOS.hpp"
 
+using namespace std::literals;
+
 namespace bc = boost::container;
 namespace bs = boost::system;
 namespace ca = ceph::async;
