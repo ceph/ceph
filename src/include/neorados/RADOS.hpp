@@ -60,8 +60,6 @@
 #include "common/ceph_time.h"
 
 namespace neorados {
-using namespace std::literals;
-
 class Object;
 class IOContext;
 }
@@ -186,7 +184,7 @@ private:
   std::aligned_storage_t<impl_size> impl;
 };
 
-inline constexpr std::string_view all_nspaces("\001"sv);
+inline constexpr std::string_view all_nspaces("\001");
 
 enum class cmpxattr_op : std::uint8_t {
   eq  = 1,
