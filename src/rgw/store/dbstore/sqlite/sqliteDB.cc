@@ -3,6 +3,8 @@
 
 #include "sqliteDB.h"
 
+using namespace std;
+
 #define SQL_PREPARE(dpp, params, sdb, stmt, ret, Op) 	\
   do {							\
     string schema;			   		\
