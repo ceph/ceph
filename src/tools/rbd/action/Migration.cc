@@ -406,6 +406,8 @@ int execute_commit(const po::variables_map &vm,
   return 0;
 }
 
+Shell::SwitchArguments switched_arguments({"import-only"});
+
 Shell::Action action_prepare(
   {"migration", "prepare"}, {}, "Prepare image migration.",
   at::get_long_features_help(), &get_prepare_arguments, &execute_prepare);

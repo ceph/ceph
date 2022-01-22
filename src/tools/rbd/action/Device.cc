@@ -247,7 +247,9 @@ int execute_detach(const po::variables_map &vm,
   return (*get_device_operations(vm)->execute_detach)(vm, ceph_global_init_args);
 }
 
-Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
+Shell::SwitchArguments switched_arguments({"exclusive", "force", "quiesce",
+                                           "read-only", "show-cookie"});
+
 Shell::Action action_list(
   {"device", "list"}, {"showmapped"}, "List mapped rbd images.", "",
   &get_list_arguments, &execute_list);

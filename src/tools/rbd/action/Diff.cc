@@ -132,7 +132,6 @@ int execute(const po::variables_map &vm,
   return 0;
 }
 
-Shell::SwitchArguments switched_arguments({at::WHOLE_OBJECT});
 Shell::Action action(
   {"diff"}, {},
   "Print extents that differ since a previous snap, or image creation.", "",

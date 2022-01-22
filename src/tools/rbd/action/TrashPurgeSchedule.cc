@@ -332,6 +332,8 @@ int execute_status(const po::variables_map &vm,
   return 0;
 }
 
+Shell::SwitchArguments switched_arguments({"recursive", "R"});
+
 Shell::Action add_action(
   {"trash", "purge", "schedule", "add"}, {}, "Add trash purge schedule.", "",
   &get_arguments_add, &execute_add);
