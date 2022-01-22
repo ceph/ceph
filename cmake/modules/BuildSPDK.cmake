@@ -68,12 +68,14 @@ macro(build_spdk)
     add_dependencies(${spdk_lib} spdk-ext)
   endforeach()
 
-  set_target_properties(spdk::env_dpdk PROPERTIES
-    INTERFACE_LINK_LIBRARIES "dpdk::dpdk;rt")
-  set_target_properties(spdk::lvol PROPERTIES
-    INTERFACE_LINK_LIBRARIES spdk::util)
-  set_target_properties(spdk::util PROPERTIES
-    INTERFACE_LINK_LIBRARIES ${UUID_LIBRARIES})
   set(SPDK_INCLUDE_DIR "${source_dir}/include")
+  add_library(spdk::spdk INTERFACE IMPORTED)
+  add_dependencies(spdk::spdk
+    ${SPDK_LIBRARIES})
+  # workaround for https://review.spdk.io/gerrit/c/spdk/spdk/+/6798
+  set_target_properties(spdk::spdk PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES ${SPDK_INCLUDE_DIR}
+    INTERFACE_LINK_LIBRARIES
+    "-Wl,--whole-archive $<JOIN:${spdk_libs}, > -Wl,--no-whole-archive;dpdk::dpdk;rt;${UUID_LIBRARIES}")
   unset(source_dir)
 endmacro()
