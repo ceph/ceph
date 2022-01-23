@@ -20,7 +20,7 @@ namespace tracing {
 
 class Tracer {
  private:
-  const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::NoopTracer> noop_tracer;
+  const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer;
   const static jspan noop_span;
   opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer;
 

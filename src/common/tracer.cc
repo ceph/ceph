@@ -10,8 +10,9 @@
 
 namespace tracing {
 
-const opentelemetry::nostd::shared_ptr<opentelemetry::trace::NoopTracer> Tracer::noop_tracer = opentelemetry::nostd::shared_ptr<opentelemetry::trace::NoopTracer>(new opentelemetry::trace::NoopTracer);
-const jspan Tracer::noop_span = opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span>(new opentelemetry::v1::trace::NoopSpan(Tracer::noop_tracer->shared_from_this()));
+const opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> Tracer::noop_tracer = opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("no-op", OPENTELEMETRY_SDK_VERSION);
+const jspan Tracer::noop_span = noop_tracer->StartSpan("noop");
+
 using bufferlist = ceph::buffer::list;
 
 Tracer::Tracer(opentelemetry::nostd::string_view service_name) {
