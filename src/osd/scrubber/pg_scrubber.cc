@@ -2163,6 +2163,7 @@ void PgScrubber::cleanup_on_finish()
   requeue_waiting();
 
   reset_internal_state();
+  m_pg->publish_stats_to_osd();
   m_flags = scrub_flags_t{};
 
   // type-specific state clear
@@ -2201,6 +2202,7 @@ void PgScrubber::clear_pgscrub_state()
 
   // type-specific state clear
   _scrub_clear_state();
+  m_pg->publish_stats_to_osd();
 }
 
 void PgScrubber::replica_handling_done()
