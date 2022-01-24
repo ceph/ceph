@@ -774,7 +774,11 @@ class LocalFuseMount(LocalCephFSMount, FuseMount):
 # XXX: this class has nothing to do with the Ceph daemon (ceph-mgr) of
 # the same name.
 class LocalCephManager(CephManager):
-    def __init__(self):
+    def __init__(self, ctx=None):
+        self.ctx = ctx
+        if self.ctx:
+            self.cluster = self.ctx.config['cluster']
+
         # Deliberately skip parent init, only inheriting from it to get
         # util methods like osd_dump that sit on top of raw_cluster_cmd
         self.controller = LocalRemote()
@@ -830,7 +834,7 @@ class LocalCephCluster(CephCluster):
     def __init__(self, ctx):
         # Deliberately skip calling CephCluster constructor
         self._ctx = ctx
-        self.mon_manager = LocalCephManager()
+        self.mon_manager = LocalCephManager(ctx=self._ctx)
         self._conf = defaultdict(dict)
 
     @property
@@ -950,7 +954,7 @@ class LocalFilesystem(LocalMDSCluster, Filesystem):
         self.fs_config = fs_config
         self.ec_profile = fs_config.get('ec_profile')
 
-        self.mon_manager = LocalCephManager()
+        self.mon_manager = LocalCephManager(ctx=self._ctx)
 
         self.client_remote = LocalRemote()
 
@@ -1004,7 +1008,7 @@ class LocalContext(object):
         self.daemons = DaemonGroup()
         if not hasattr(self, 'managers'):
             self.managers = {}
-        self.managers[self.config['cluster']] = LocalCephManager()
+        self.managers[self.config['cluster']] = LocalCephManager(ctx=self)
 
         # Shove some LocalDaemons into the ctx.daemons DaemonGroup instance so that any
         # tests that want to look these up via ctx can do so.
