@@ -43,8 +43,9 @@ bool StateBuilder<I>::is_local_primary() const  {
 
 template <typename I>
 bool StateBuilder<I>::is_linked() const {
-  return (local_promotion_state ==
-            librbd::mirror::PROMOTION_STATE_NON_PRIMARY);
+  return ((local_promotion_state ==
+             librbd::mirror::PROMOTION_STATE_NON_PRIMARY) &&
+          is_linked_impl());
 }
 
 template <typename I>
