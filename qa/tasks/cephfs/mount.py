@@ -711,7 +711,9 @@ class CephFSMount(object):
         if sudo:
             args.insert(0, 'sudo')
 
-        return self.client_remote.run(args=args, cwd=cwd, timeout=timeout, stdout=stdout, stderr=stderr, **kwargs)
+        return self.client_remote.run(args=args, cwd=cwd, timeout=timeout,
+                                      stdout=stdout, stderr=stderr,
+                                      omit_sudo=False, **kwargs)
 
     def run_shell_payload(self, payload, **kwargs):
         return self.run_shell(["bash", "-c", Raw(f"'{payload}'")], **kwargs)
