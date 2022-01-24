@@ -513,6 +513,20 @@ try_decode_deltas(
   return record_deltas;
 }
 
+std::ostream& operator<<(std::ostream& out, placement_hint_t h)
+{
+  switch (h) {
+  case placement_hint_t::HOT:
+    return out << "HOT";
+  case placement_hint_t::COLD:
+    return out << "COLD";
+  case placement_hint_t::REWRITE:
+    return out << "REWRITE";
+  default:
+    return out << "INVALID_PLACEMENT_HINT_TYPE!";
+  }
+}
+
 bool can_delay_allocation(device_type_t type) {
   // Some types of device may not support delayed allocation, for example PMEM.
   return type <= device_type_t::RANDOM_BLOCK;
