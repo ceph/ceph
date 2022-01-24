@@ -150,7 +150,7 @@ def stale_kernel_mount(remote):
 def reboot(ctx, remotes):
     for remote in remotes:
         if stale_kernel_mount(remote):
-            log.warn('Stale kernel mount on %s!', remote.name)
+            log.warning('Stale kernel mount on %s!', remote.name)
             log.info('force/no-sync rebooting %s', remote.name)
             # -n is ignored in systemd versions through v229, which means this
             # only works on trusty -- on 7.3 (v219) and xenial (v229) reboot -n

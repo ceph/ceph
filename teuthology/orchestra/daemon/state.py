@@ -118,7 +118,7 @@ class DaemonState(object):
         Start this daemon instance.
         """
         if self.running():
-            self.log.warn('Restarting a running daemon')
+            self.log.warning('Restarting a running daemon')
         self.restart()
 
     def stop(self, timeout=300):

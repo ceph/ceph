@@ -127,7 +127,7 @@ def main(args):
     if conf.rerun:
         rerun_filters = get_rerun_filters(conf.rerun, conf.rerun_statuses)
         if len(rerun_filters['descriptions']) == 0:
-            log.warn(
+            log.warning(
                 "No jobs matched the status filters: %s",
                 conf.rerun_statuses,
             )

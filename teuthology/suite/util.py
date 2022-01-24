@@ -293,7 +293,7 @@ def get_arch(machine_type):
     """
     result = teuthology.lock.query.list_locks(machine_type=machine_type, count=1)
     if not result:
-        log.warn("No machines found with machine_type %s!", machine_type)
+        log.warning("No machines found with machine_type %s!", machine_type)
     else:
         return result[0]['arch']
 

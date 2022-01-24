@@ -163,7 +163,7 @@ class GraphiteGrapher(PCPGrapher):
             )
             resp = requests.get(url, timeout=GRAPHITE_DOWNLOAD_TIMEOUT)
             if not resp.ok:
-                log.warn(
+                log.warning(
                     "Graph download failed with error %s %s: %s",
                     resp.status_code,
                     resp.reason,

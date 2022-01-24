@@ -669,6 +669,6 @@ Note: If you still want to go ahead, use --job-threshold 0'''
                  (len(configs) - count),
                  len(configs))
         if missing_count:
-            log.warn('Scheduled %d/%d jobs that are missing packages!',
+            log.warning('Scheduled %d/%d jobs that are missing packages!',
                      missing_count, count)
         return count

@@ -282,7 +282,7 @@ def upgrade_remote_to_config(ctx, config):
             # take any remote in the dict
             remote = next(iter(remotes_dict))
             if remote in remotes:
-                log.warn('remote %s came up twice (role %s)', remote, role)
+                log.warning('remote %s came up twice (role %s)', remote, role)
                 continue
             remotes[remote] = config.get(role)
 

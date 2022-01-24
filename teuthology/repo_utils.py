@@ -431,7 +431,7 @@ def bootstrap_teuthology(dest_path):
         log.info("Bootstrap exited with status %s", returncode)
         if returncode != 0:
             for line in out.split():
-                log.warn(line.strip())
+                log.warning(line.strip())
             venv_path = os.path.join(dest_path, 'virtualenv')
             log.info("Removing %s", venv_path)
             shutil.rmtree(venv_path, ignore_errors=True)

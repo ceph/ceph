@@ -26,7 +26,7 @@ def enabled(warn=False):
     params = ['endpoint', 'machine_types']
     unset = [_ for _ in params if not conf.get(_)]
     if unset and warn:
-        log.warn(
+        log.warning(
             "Pelagos is disabled; set the following config options to enable: %s",
             ' '.join(unset),
         )
