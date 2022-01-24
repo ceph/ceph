@@ -9,6 +9,12 @@
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/journal.h"
 
+/*
+ * TransactionManager logs
+ *
+ * levels:
+ * - seastore_t logs
+ */
 SET_SUBSYS(seastore_tm);
 
 namespace crimson::os::seastore {
@@ -239,17 +245,18 @@ TransactionManager::submit_transaction(
   Transaction &t)
 {
   LOG_PREFIX(TransactionManager::submit_transaction);
+  SUBTRACET(seastore_t, "start", t);
   return trans_intr::make_interruptible(
     t.get_handle().enter(write_pipeline.reserve_projected_usage)
   ).then_interruptible([this, FNAME, &t] {
     size_t projected_usage = t.get_allocation_size();
-    DEBUGT("waiting for projected_usage: {}", t, projected_usage);
+    SUBTRACET(seastore_t, "waiting for projected_usage: {}", t, projected_usage);
     return trans_intr::make_interruptible(
       segment_cleaner->reserve_projected_usage(projected_usage)
     ).then_interruptible([this, &t] {
       return submit_transaction_direct(t);
     }).finally([this, FNAME, projected_usage, &t] {
-      DEBUGT("releasing projected_usage: {}", t, projected_usage);
+      SUBTRACET(seastore_t, "releasing projected_usage: {}", t, projected_usage);
       segment_cleaner->release_projected_usage(projected_usage);
     });
   });
@@ -260,18 +267,18 @@ TransactionManager::submit_transaction_direct(
   Transaction &tref)
 {
   LOG_PREFIX(TransactionManager::submit_transaction_direct);
-  DEBUGT("about to alloc delayed extents", tref);
-
+  SUBTRACET(seastore_t, "start", tref);
   return trans_intr::make_interruptible(
     tref.get_handle().enter(write_pipeline.ool_writes)
-  ).then_interruptible([this, &tref] {
+  ).then_interruptible([this, FNAME, &tref] {
+    SUBTRACET(seastore_t, "process delayed and out-of-line extents", tref);
     return epm->delayed_alloc_or_ool_write(tref
     ).handle_error_interruptible(
       crimson::ct_error::input_output_error::pass_further(),
       crimson::ct_error::assert_all("invalid error")
     );
   }).si_then([this, FNAME, &tref] {
-    DEBUGT("about to prepare", tref);
+    SUBTRACET(seastore_t, "about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
   }).si_then([this, FNAME, &tref]() mutable
 	      -> submit_transaction_iertr::future<> {
@@ -279,17 +286,12 @@ TransactionManager::submit_transaction_direct(
 
     tref.get_handle().maybe_release_collection_lock();
 
-    DEBUGT("about to submit to journal", tref);
-
+    SUBTRACET(seastore_t, "about to submit to journal", tref);
     return journal->submit_record(std::move(record), tref.get_handle()
     ).safe_then([this, FNAME, &tref](auto submit_result) mutable {
+      SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
       auto start_seq = submit_result.write_result.start_seq;
       auto end_seq = submit_result.write_result.get_end_seq();
-      DEBUGT("journal commit to record_block_base={}, start_seq={}, end_seq={}",
-             tref,
-             submit_result.record_block_base,
-             start_seq,
-             end_seq);
       segment_cleaner->set_journal_head(end_seq);
       cache->complete_commit(
           tref,
@@ -301,6 +303,7 @@ TransactionManager::submit_transaction_direct(
 	cache->get_oldest_dirty_from().value_or(start_seq));
       auto to_release = tref.get_segment_to_release();
       if (to_release != NULL_SEG_ID) {
+        SUBDEBUGT(seastore_t, "releasing segment {}", tref, to_release);
 	return segment_manager.release(to_release
 	).safe_then([this, to_release] {
 	  segment_cleaner->mark_segment_released(to_release);
@@ -308,7 +311,8 @@ TransactionManager::submit_transaction_direct(
       } else {
 	return SegmentManager::release_ertr::now();
       }
-    }).safe_then([&tref] {
+    }).safe_then([FNAME, &tref] {
+      SUBTRACET(seastore_t, "completed", tref);
       return tref.get_handle().complete();
     }).handle_error(
       submit_transaction_iertr::pass_further{},

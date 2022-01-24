@@ -88,6 +88,7 @@ SUBSYS(seastore_onode, 0, 5)
 SUBSYS(seastore_odata, 0, 5)
 SUBSYS(seastore_omap, 0, 5)
 SUBSYS(seastore_tm, 0, 5)    // logs below seastore tm
+SUBSYS(seastore_t, 0, 5)
 SUBSYS(seastore_cleaner, 0, 5)
 SUBSYS(seastore_lba, 0, 5)
 SUBSYS(seastore_cache, 0, 5)
