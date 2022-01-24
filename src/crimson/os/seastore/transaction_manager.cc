@@ -37,7 +37,6 @@ TransactionManager::TransactionManager(
 {
   segment_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
-  register_metrics();
 }
 
 TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
@@ -189,8 +188,6 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
 	t,
 	*ref);
       cache->retire_extent(t, ref);
-      stats.extents_retired_total++;
-      stats.extents_retired_bytes += ref->get_length();
     }
     return ret.refcount;
   });
@@ -207,9 +204,7 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
       DEBUGT("offset {} refcount 0", t, offset);
       return cache->retire_extent_addr(
 	t, result.addr, result.length
-      ).si_then([result, this] {
-	stats.extents_retired_total++;
-	stats.extents_retired_bytes += result.length;
+      ).si_then([] {
 	return ref_ret(
 	  interruptible::ready_future_marker{},
 	  0);
@@ -490,24 +485,5 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 }
 
 TransactionManager::~TransactionManager() {}
-
-void TransactionManager::register_metrics()
-{
-  namespace sm = seastar::metrics;
-  metrics.add_group("tm", {
-    sm::make_counter("extents_retired_total", stats.extents_retired_total,
-		     sm::description("total number of retired extents in TransactionManager")),
-    sm::make_counter("extents_retired_bytes", stats.extents_retired_bytes,
-		     sm::description("total size of retired extents in TransactionManager")),
-    sm::make_counter("extents_mutated_total", stats.extents_mutated_total,
-		     sm::description("total number of mutated extents in TransactionManager")),
-    sm::make_counter("extents_mutated_bytes", stats.extents_mutated_bytes,
-		     sm::description("total size of mutated extents in TransactionManager")),
-    sm::make_counter("extents_allocated_total", stats.extents_allocated_total,
-		     sm::description("total number of allocated extents in TransactionManager")),
-    sm::make_counter("extents_allocated_bytes", stats.extents_allocated_bytes,
-		     sm::description("total size of allocated extents in TransactionManager")),
-  });
-}
 
 }

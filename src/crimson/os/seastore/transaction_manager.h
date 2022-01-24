@@ -228,8 +228,6 @@ public:
     auto ret = cache->duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
-    stats.extents_mutated_total++;
-    stats.extents_mutated_bytes += ret->get_length();
     if (!ret->has_pin()) {
       SUBDEBUGT(seastore_tm,
 	"duplicating {} for write: {}",
@@ -308,11 +306,9 @@ public:
       laddr_hint,
       len,
       ext->get_paddr()
-    ).si_then([ext=std::move(ext), len, laddr_hint, &t, this](auto &&ref) mutable {
+    ).si_then([ext=std::move(ext), laddr_hint, &t](auto &&ref) mutable {
       LOG_PREFIX(TransactionManager::alloc_extent);
       ext->set_pin(std::move(ref));
-      stats.extents_allocated_total++;
-      stats.extents_allocated_bytes += len;
       SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
       return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
@@ -547,17 +543,6 @@ private:
   ExtentReader& scanner;
 
   WritePipeline write_pipeline;
-
-  struct {
-    uint64_t extents_retired_total = 0;
-    uint64_t extents_retired_bytes = 0;
-    uint64_t extents_mutated_total = 0;
-    uint64_t extents_mutated_bytes = 0;
-    uint64_t extents_allocated_total = 0;
-    uint64_t extents_allocated_bytes = 0;
-  } stats;
-  seastar::metrics::metric_group metrics;
-  void register_metrics();
 
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
