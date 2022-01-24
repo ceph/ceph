@@ -16,6 +16,8 @@ require {
 	type targetd_etc_rw_t;
 	type amqp_port_t;
 	type soundd_port_t;
+	type container_t;
+	type cert_t;
 	class sock_file unlink;
 	class tcp_socket name_connect_t;
 	class lnk_file { create getattr read unlink };
@@ -161,3 +163,10 @@ fsadm_manage_pid(ceph_t)
 
 #============= setfiles_t ==============
 allow setfiles_t ceph_var_lib_t:file write;
+
+#============= container_t ==============
+allow container_t cert_t:file read;
+allow container_t cert_t:file open;
+allow container_t cert_t:file getattr;
+allow container_t cert_t:dir read;
+allow container_t cert_t:dir search;
