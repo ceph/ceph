@@ -63,7 +63,7 @@ from .configchecks import CephadmConfigChecks
 try:
     import asyncssh
 except ImportError as e:
-    asyncssh = None
+    asyncssh = None  # type: ignore
     asyncssh_import_error = str(e)
 
 logger = logging.getLogger(__name__)
