@@ -673,7 +673,7 @@ void Cache::remove_extent(CachedExtentRef ref)
   assert(ref->is_valid());
   if (ref->is_dirty()) {
     remove_from_dirty(ref);
-  } else {
+  } else if (!ref->is_placeholder()) {
     lru.remove_from_lru(*ref);
   }
   extents.erase(*ref);
