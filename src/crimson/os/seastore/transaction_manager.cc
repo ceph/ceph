@@ -350,8 +350,8 @@ TransactionManager::rewrite_logical_extent(
   LOG_PREFIX(TransactionManager::rewrite_logical_extent);
   if (extent->has_been_invalidated()) {
     ERRORT("{} has been invalidated", t, *extent);
+    ceph_abort();
   }
-  assert(!extent->has_been_invalidated());
   DEBUGT("rewriting {}", t, *extent);
 
   auto lextent = extent->cast<LogicalCachedExtent>();
@@ -448,8 +448,8 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 		pin->get_length(),
 		laddr,
 		len);
+	      ceph_abort();
 	    }
-	    ceph_assert(pin->get_length() == (extent_len_t)len);
 	    return cache->get_extent_by_type(
 	      t,
 	      type,
