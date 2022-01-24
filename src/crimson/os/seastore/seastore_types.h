@@ -696,6 +696,8 @@ enum class placement_hint_t {
   NUM_HINTS  // Constant for number of hints
 };
 
+std::ostream& operator<<(std::ostream& out, placement_hint_t h);
+
 enum class device_type_t {
   NONE = 0,
   SEGMENTED, // i.e. Hard_Disk, SATA_SSD, NAND_NVME
