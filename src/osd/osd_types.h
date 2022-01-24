@@ -564,6 +564,8 @@ struct spg_t {
 
   static const uint8_t calc_name_buf_size = pg_t::calc_name_buf_size + 4; // 36 + len('s') + len("255");
   char *calc_name(char *buf, const char *suffix_backwords) const;
+  // and a (limited) version that uses an internal buffer:
+  std::string calc_name_sring() const;
  
   bool parse(const char *s);
   bool parse(const std::string& s) {
@@ -6600,13 +6602,6 @@ void create_pg_collection(
 
 void init_pg_ondisk(
   ceph::os::Transaction& t, spg_t pgid, const pg_pool_t *pool);
-
-// omap specific stats
-struct omap_stat_t {
- int large_omap_objects;
- int64_t omap_bytes;
- int64_t omap_keys;
-};
 
 // filter for pg listings
 class PGLSFilter {
