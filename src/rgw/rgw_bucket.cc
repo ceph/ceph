@@ -1044,23 +1044,13 @@ static int bucket_stats(rgw::sal::Store* store,
     return ret;
   }
 
-  if (bucket->get_info().layout.current_index.layout.type ==
-      rgw::BucketIndexType::Indexless) {
+  if (bucket->get_info().is_indexless()) {
     cerr << "error, indexless buckets do not maintain stats; bucket=" <<
       bucket->get_name() << std::endl;
     return -EINVAL;
   }
 
-  if (bucket->get_info().layout.logs.empty()) {
-    // this check may be redundant with the previous check of
-    // layout.type; calling back() on an empty vector produces
-    // undefined behavior
-    cerr << "error, layout log list is empty; bucket=" << bucket->get_name() <<
-      std::endl;
-    return -EINVAL;
-  }
-  const auto& latest_log = bucket->get_info().layout.logs.back();
-  const auto& index = log_to_index_layout(latest_log);
+  const auto& index = bucket->get_info().get_current_index();
   std::string bucket_ver, master_ver;
   std::string max_marker;
   ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
