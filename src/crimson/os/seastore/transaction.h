@@ -19,10 +19,38 @@ namespace crimson::os::seastore {
 class SeaStore;
 class Transaction;
 
+struct io_stat_t {
+  uint64_t num = 0;
+  uint64_t bytes = 0;
+
+  bool is_clear() const {
+    return (num == 0 && bytes == 0);
+  }
+
+  void increment(uint64_t _bytes) {
+    ++num;
+    bytes += _bytes;
+  }
+
+  void increment_stat(const io_stat_t& stat) {
+    num += stat.num;
+    bytes += stat.bytes;
+  }
+};
+inline std::ostream& operator<<(std::ostream& out, const io_stat_t& stat) {
+  return out << stat.num << "(" << stat.bytes << "B)";
+}
+
 /**
  * Transaction
  *
  * Representation of in-progress mutation. Used exclusively through Cache methods.
+ *
+ * Transaction log levels:
+ * seastore_t
+ * - DEBUG: transaction create, conflict, commit events
+ * - TRACE: DEBUG details
+ * - seastore_cache logs
  */
 class Transaction {
 public:
@@ -41,7 +69,8 @@ public:
 	iter != write_set.end()) {
       if (out)
 	*out = CachedExtentRef(&*iter);
-      SUBTRACET(seastore_tm, "Found offset {} in write_set: {}", *this, addr, *iter);
+      SUBTRACET(seastore_cache, "{} is present in write_set -- {}",
+                *this, addr, *iter);
       return get_extent_ret::PRESENT;
     } else if (
       auto iter = read_set.find(addr);
@@ -51,7 +80,8 @@ public:
       assert(iter->ref->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
       if (out)
 	*out = iter->ref;
-      SUBTRACET(seastore_tm, "Found offset {} in read_set: {}", *this, addr, *(iter->ref));
+      SUBTRACET(seastore_cache, "{} is present in read_set -- {}",
+                *this, addr, *(iter->ref));
       return get_extent_ret::PRESENT;
     } else {
       return get_extent_ret::ABSENT;
@@ -88,7 +118,6 @@ public:
   void add_fresh_extent(
     CachedExtentRef ref,
     bool delayed = false) {
-    LOG_PREFIX(Transaction::add_fresh_extent);
     ceph_assert(!is_weak());
     if (delayed) {
       assert(ref->is_logical());
@@ -100,41 +129,31 @@ public:
       offset += ref->get_length();
       inline_block_list.push_back(ref);
     }
-    ++fresh_block_stats.num;
-    fresh_block_stats.bytes += ref->get_length();
-    SUBTRACET(seastore_tm, "adding {} to write_set", *this, *ref);
+    fresh_block_stats.increment(ref->get_length());
     write_set.insert(*ref);
   }
 
   void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
-    LOG_PREFIX(Transaction::mark_delayed_extent_inline);
-    SUBTRACET(seastore_tm, "removing {} from write_set", *this, *ref);
     write_set.erase(*ref);
     ref->set_paddr(make_record_relative_paddr(offset));
     offset += ref->get_length();
     inline_block_list.push_back(ref);
-    SUBTRACET(seastore_tm, "adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
   void mark_delayed_extent_ool(LogicalCachedExtentRef& ref, paddr_t final_addr) {
-    LOG_PREFIX(Transaction::mark_delayed_extent_ool);
-    SUBTRACET(seastore_tm, "removing {} from write_set", *this, *ref);
     write_set.erase(*ref);
     ref->set_paddr(final_addr);
     assert(!ref->get_paddr().is_null());
     assert(!ref->is_inline());
     ool_block_list.push_back(ref);
-    SUBTRACET(seastore_tm, "adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
   void add_mutated_extent(CachedExtentRef ref) {
-    LOG_PREFIX(Transaction::add_mutated_extent);
     ceph_assert(!is_weak());
     assert(read_set.count(ref->prior_instance->get_paddr()));
     mutated_block_list.push_back(ref);
-    SUBTRACET(seastore_tm, "adding {} to write_set", *this, *ref);
     write_set.insert(*ref);
   }
 
@@ -188,14 +207,6 @@ public:
     std::for_each(inline_block_list.begin(), inline_block_list.end(), f);
   }
 
-  struct io_stat_t {
-    uint64_t num = 0;
-    uint64_t bytes = 0;
-
-    bool is_clear() const {
-      return (num == 0 && bytes == 0);
-    }
-  };
   const io_stat_t& get_fresh_block_stats() const {
     return fresh_block_stats;
   }
