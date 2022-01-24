@@ -189,7 +189,7 @@ void RGWHTTPSimpleRequest::get_out_headers(map<string, string> *pheaders)
   out_headers.clear();
 }
 
-static int sign_request_v2(const DoutPrefixProvider *dpp, RGWAccessKey& key,
+static int sign_request_v2(const DoutPrefixProvider *dpp, const RGWAccessKey& key,
                         const string& region, const string& service,
                         RGWEnv& env, req_info& info,
                         const bufferlist *opt_content)
@@ -230,7 +230,7 @@ static int sign_request_v2(const DoutPrefixProvider *dpp, RGWAccessKey& key,
   return 0;
 }
 
-static int sign_request_v4(const DoutPrefixProvider *dpp, RGWAccessKey& key,
+static int sign_request_v4(const DoutPrefixProvider *dpp, const RGWAccessKey& key,
                            const string& region, const string& service,
                            RGWEnv& env, req_info& info,
                            const bufferlist *opt_content)
@@ -248,7 +248,12 @@ static int sign_request_v4(const DoutPrefixProvider *dpp, RGWAccessKey& key,
     }
   }
 
-  auto sigv4_data = rgw::auth::s3::AWSSignerV4::prepare(dpp, key.id, region, service, info, opt_content, true);
+  rgw::auth::s3::AWSSignerV4::prepare_result_t sigv4_data;
+  if (service == "s3") {
+    sigv4_data = rgw::auth::s3::AWSSignerV4::prepare(dpp, key.id, region, service, info, opt_content, true);
+  } else {
+    sigv4_data = rgw::auth::s3::AWSSignerV4::prepare(dpp, key.id, region, service, info, opt_content, false);
+  }
   auto sigv4_headers = sigv4_data.signature_factory(dpp, key.key, sigv4_data);
 
   for (auto& entry : sigv4_headers) {
@@ -259,7 +264,7 @@ static int sign_request_v4(const DoutPrefixProvider *dpp, RGWAccessKey& key,
   return 0;
 }
 
-static int sign_request(const DoutPrefixProvider *dpp, RGWAccessKey& key,
+static int sign_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key,
                         const string& region, const string& service,
                         RGWEnv& env, req_info& info,
                         const bufferlist *opt_content)
@@ -289,7 +294,7 @@ static bool identify_scope(const DoutPrefixProvider *dpp,
                            CephContext *cct,
                            const string& host,
                            string *region,
-                           string *service)
+                           string& service)
 {
   if (!boost::algorithm::ends_with(host, "amazonaws.com")) {
     ldpp_dout(dpp, 20) << "NOTICE: cannot identify region for connection to: " << host << dendl;
@@ -300,14 +305,18 @@ static bool identify_scope(const DoutPrefixProvider *dpp,
 
   get_str_vec(host, ".", vec);
 
-  *service = "s3"; /* default */
+  string ser = service;
+  if (service.empty()) {
+    service = "s3"; /* default */
+  }
 
   for (auto iter = vec.begin(); iter != vec.end(); ++iter) {
     auto& s = *iter;
     if (s == "s3" ||
-        s == "execute-api") {
+        s == "execute-api" ||
+        s == "iam") {
       if (s == "execute-api") {
-        *service = s;
+        service = s;
       }
       ++iter;
       if (iter == vec.end()) {
@@ -335,22 +344,26 @@ static void scope_from_api_name(const DoutPrefixProvider *dpp,
                                 const string& host,
                                 std::optional<string> api_name,
                                 string *region,
-                                string *service)
+                                string& service)
 {
-  if (api_name) {
+  if (api_name && service.empty()) {
     *region = *api_name;
-    *service = "s3";
+    service = "s3";
     return;
   }
 
   if (!identify_scope(dpp, cct, host, region, service)) {
-    *region = cct->_conf->rgw_zonegroup;
-    *service = "s3";
+    if (service == "iam") {
+      *region = cct->_conf->rgw_zonegroup;
+    } else {
+      *region = cct->_conf->rgw_zonegroup;
+      service = "s3";
+    }
     return;
   }
 }
 
-int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
+int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service)
 {
 
   string date_str;
@@ -381,19 +394,26 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, RGWAcce
   }
 
   string region;
-  string service;
+  string s;
+  if (!service.empty()) {
+    s = service;
+  }
 
-  scope_from_api_name(dpp, cct, host, api_name, &region, &service);
+  scope_from_api_name(dpp, cct, host, api_name, &region, s);
 
   const char *maybe_payload_hash = info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
-  if (maybe_payload_hash) {
+  if (maybe_payload_hash && s != "iam") {
     new_env.set("HTTP_X_AMZ_CONTENT_SHA256", maybe_payload_hash);
   }
 
-  int ret = sign_request(dpp, key, region, service, new_env, new_info, nullptr);
+  int ret = sign_request(dpp, key, region, s, new_env, new_info, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to sign request" << dendl;
     return ret;
+  }
+
+  if (s == "iam") {
+    info.args.remove("PayloadHash");
   }
 
   for (const auto& kv: new_env.get_map()) {
@@ -559,7 +579,7 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
                                       const string& resource, const param_vec_t& params,
                                       std::optional<string> api_name)
 {
-  scope_from_api_name(this, cct, host, api_name, &region, &service);
+  scope_from_api_name(this, cct, host, api_name, &region, service);
 
   string params_str;
   map<string, string>& args = new_info->args.get_params();
