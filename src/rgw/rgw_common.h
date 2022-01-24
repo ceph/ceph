@@ -1116,6 +1116,16 @@ struct RGWBucketInfo {
 
   bool empty_sync_policy() const;
 
+  bool is_indexless() const {
+    return rgw::is_layout_indexless(layout.current_index);
+  }
+  const rgw::bucket_index_layout_generation& get_current_index() const {
+    return layout.current_index;
+  }
+  rgw::bucket_index_layout_generation& get_current_index() {
+    return layout.current_index;
+  }
+
   RGWBucketInfo();
   ~RGWBucketInfo();
 };
