@@ -378,6 +378,30 @@ class NodeExporterService(CephadmService):
         return HandleCommandResult(0, out, '')
 
 
+class LokiService(CephadmService):
+    TYPE = 'loki'
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        assert self.TYPE == daemon_spec.daemon_type
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        return daemon_spec
+
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
+        deps: List[str] = []
+        hostnames: List[str] = []
+        for dd in self.mgr.cache.get_daemons_by_service('mgr'):
+            addr = self.mgr.inventory.get_addr(dd.hostname)
+            hostnames.append(addr)
+
+        yml = self.mgr.template.render('services/loki.yml.j2')
+        return {
+            "files": {
+                "loki.yml": yml
+            }
+        }, sorted(deps)
+
+
 class SNMPGatewayService(CephadmService):
     TYPE = 'snmp-gateway'
 
