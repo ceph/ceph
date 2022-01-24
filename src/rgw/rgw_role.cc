@@ -39,7 +39,12 @@ const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 void RGWRoleInfo::dump(Formatter *f) const
 {
   encode_json("RoleId", id , f);
-  std::string role_name = tenant + '$' + name;
+  std::string role_name;
+  if (tenant.empty()) {
+    role_name = name;
+  } else {
+    role_name = tenant + '$' + name;
+  }
   encode_json("RoleName", role_name , f);
   encode_json("Path", path, f);
   encode_json("Arn", arn, f);
@@ -361,7 +366,7 @@ public:
     auto* store = mdo->get_store();
     info.mtime = mtime;
     std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(info);
-    int ret = role->create(dpp, true, y);
+    int ret = role->create(dpp, true, info.id, y);
     return ret < 0 ? ret : STATUS_APPLIED;
   }
 };

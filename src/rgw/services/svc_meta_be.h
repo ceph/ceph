@@ -145,7 +145,8 @@ public:
                         RGWSI_MetaBackend::GetParams& params,
                         RGWObjVersionTracker *objv_tracker,
                         optional_yield y,
-                        const DoutPrefixProvider *dpp) = 0;
+                        const DoutPrefixProvider *dpp,
+                        bool get_raw_attrs=false) = 0;
   virtual int put_entry(const DoutPrefixProvider *dpp, 
                         RGWSI_MetaBackend::Context *ctx,
                         const std::string& key,
@@ -184,7 +185,8 @@ public:
                   GetParams &params,
                   RGWObjVersionTracker *objv_tracker,
                   optional_yield y,
-                  const DoutPrefixProvider *dpp);
+                  const DoutPrefixProvider *dpp,
+                  bool get_raw_attrs=false);
 
   virtual int put(Context *ctx,
                   const std::string& key,

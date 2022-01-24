@@ -6577,7 +6577,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name, tenant, path, assume_role_doc);
-      ret = role->create(dpp(), true, null_yield);
+      ret = role->create(dpp(), true, "", null_yield);
       if (ret < 0) {
         return -ret;
       }

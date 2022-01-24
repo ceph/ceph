@@ -109,6 +109,24 @@ int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_user& uid, req
   return req.forward_request(dpp, key, info, max_response, inbl, outbl, y);
 }
 
+int RGWRESTConn::forward_iam_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
+{
+  string url;
+  int ret = get_url(url);
+  if (ret < 0)
+    return ret;
+  param_vec_t params;
+  if (objv) {
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "ver", buf));
+  }
+  std::string service = "iam";
+  RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params, api_name);
+  return req.forward_request(dpp, key, info, max_response, inbl, outbl, y, service);
+}
+
 int RGWRESTConn::put_obj_send_init(rgw::sal::Object* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req)
 {
   string url;

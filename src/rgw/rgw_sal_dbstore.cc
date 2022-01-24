@@ -1732,6 +1732,14 @@ namespace rgw::sal {
     return 0;
   }
 
+  int DBStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
+					     bufferlist& in_data,
+					     RGWXMLDecoder::XMLParser* parser, req_info& info,
+					     optional_yield y)
+  {
+      return 0;
+  }
+
   std::string DBStore::zone_unique_id(uint64_t unique_num)
   {
     return "";
