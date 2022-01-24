@@ -18,6 +18,7 @@
 #include <system_error>
 #include <unistd.h>
 #include <sstream>
+#include <boost/algorithm/string.hpp>
 
 #include "common/Clock.h"
 #include "common/errno.h"
@@ -1126,6 +1127,45 @@ int RadosStore::forward_request_to_master(const DoutPrefixProvider *dpp, User* u
   if (jp && !jp->parse(response.c_str(), response.length())) {
     ldpp_dout(dpp, 0) << "failed parsing response from master zonegroup" << dendl;
     return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RadosStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
+					     bufferlist& in_data,
+					     RGWXMLDecoder::XMLParser* parser, req_info& info,
+					     optional_yield y)
+{
+  if (is_meta_master()) {
+    /* We're master, don't forward */
+    return 0;
+  }
+
+  if (!svc()->zone->get_master_conn()) {
+    ldpp_dout(dpp, 0) << "rest connection is invalid" << dendl;
+    return -EINVAL;
+  }
+  ldpp_dout(dpp, 0) << "sending request to master zonegroup" << dendl;
+  bufferlist response;
+#define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
+  int ret = svc()->zone->get_master_conn()->forward_iam_request(dpp, key, info,
+                                                    objv, MAX_REST_RESPONSE,
+						                                        &in_data, &response, y);
+  if (ret < 0)
+    return ret;
+
+  ldpp_dout(dpp, 20) << "response: " << response.c_str() << dendl;
+
+  std::string r = response.c_str();
+  std::string str_to_search = "&quot;";
+  std::string str_to_replace = "\"";
+  boost::replace_all(r, str_to_search, str_to_replace);
+  ldpp_dout(dpp, 20) << "r: " << r.c_str() << dendl;
+
+  if (parser && !parser->parse(r.c_str(), r.length(), 1)) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to parse response from master zonegroup" << dendl;
+    return -EIO;
   }
 
   return 0;
@@ -3080,13 +3120,19 @@ int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optiona
   if (!this->info.tags.empty()) {
     bufferlist bl_tags;
     encode(this->info.tags, bl_tags);
-    info.attrs.emplace("tagging", bl_tags);
-  }
+    map<string, bufferlist> attrs;
+    attrs.emplace("tagging", bl_tags);
 
-  RGWSI_MBSObj_PutParams params(bl, &info.attrs, info.mtime, exclusive);
-  std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
-  ctx->init(store->svc()->role->get_be_handler());
-  return store->svc()->role->svc.meta_be->put(ctx.get(), oid, params, &info.objv_tracker, y, dpp);
+    RGWSI_MBSObj_PutParams params(bl, &attrs, info.mtime, exclusive);
+    std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
+    ctx->init(store->svc()->role->get_be_handler());
+    return store->svc()->role->svc.meta_be->put(ctx.get(), oid, params, &info.objv_tracker, y, dpp);
+  } else {
+    RGWSI_MBSObj_PutParams params(bl, nullptr, info.mtime, exclusive);
+    std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
+    ctx->init(store->svc()->role->get_be_handler());
+    return store->svc()->role->svc.meta_be->put(ctx.get(), oid, params, &info.objv_tracker, y, dpp);
+  }
 }
 
 int RadosRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
@@ -3177,7 +3223,7 @@ int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
   RGWSI_MBSObj_GetParams params(&bl, &info.attrs, &info.mtime);
   std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
   ctx->init(store->svc()->role->get_be_handler());
-  int ret = store->svc()->role->svc.meta_be->get(ctx.get(), oid, params, &info.objv_tracker, y, dpp);
+  int ret = store->svc()->role->svc.meta_be->get(ctx.get(), oid, params, &info.objv_tracker, y, dpp, true);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role info from Role pool: " << info.id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -3208,12 +3254,16 @@ int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
   return 0;
 }
 
-int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, const std::string& role_id, optional_yield y)
 {
   int ret;
 
   if (! validate_input(dpp)) {
     return -EINVAL;
+  }
+
+  if (!role_id.empty()) {
+    info.id = role_id;
   }
 
   /* check to see the name is not used */
