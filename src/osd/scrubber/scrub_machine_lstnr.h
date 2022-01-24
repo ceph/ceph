@@ -20,6 +20,10 @@ struct preemption_t {
 
   virtual ~preemption_t() = default;
 
+  preemption_t() = default;
+  preemption_t(const preemption_t&) = delete;
+  preemption_t(preemption_t&&) = delete;
+
   [[nodiscard]] virtual bool is_preemptable() const = 0;
 
   [[nodiscard]] virtual bool was_preempted() const = 0;

@@ -2113,7 +2113,7 @@ PgScrubber::preemption_data_t::preemption_data_t(PG* pg) : m_pg{pg}
 
 void PgScrubber::preemption_data_t::reset()
 {
-  std::lock_guard<std::mutex> lk{m_preemption_lock};
+  std::lock_guard<ceph::mutex> lk{m_preemption_lock};
 
   m_preemptable = false;
   m_preempted = false;
