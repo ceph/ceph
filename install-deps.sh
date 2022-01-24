@@ -234,6 +234,19 @@ function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
 }
 
+function usage_exit() {
+    printf "usage: [ENV VAR]... $0 [option]... \nex: WITH_JAEGER=1 $0 --crimson\n"
+    printf "options:\n"
+    printf "  --crimson: install pkgs specific to crimson-osd. Alias for WITH_SEASTAR\n"
+    printf "environment variables:\n"
+    printf "  FOR_MAKE_CHECK\n"
+    printf "  WITH_SEASTAR: alias for --crimson\n"
+    printf "  WITH_JAEGER\n"
+    printf "  WITH_ZBD\n"
+    printf "  WITH_PMEM\n"
+    exit
+}
+
 for_make_check=false
 if tty -s; then
     # interactive
@@ -302,6 +315,18 @@ if [ x$(uname)x = xFreeBSDx ]; then
 
     exit
 else
+    while [ $# -ge 1 ]; do
+    case $1 in
+        --crimson)
+            ceph_osd=crimson-osd
+            nodaemon=1
+            msgr=2
+            ;;
+        *)
+            usage_exit
+    esac
+    shift
+    done
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     [ $WITH_JAEGER ] && with_jaeger=true || with_jaeger=false
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
