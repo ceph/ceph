@@ -49,6 +49,9 @@ DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:master'
 DEFAULT_IMAGE_IS_MASTER = True
 DEFAULT_IMAGE_RELEASE = 'quincy'
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.18.1'
+DEFAULT_CADVISOR_IMAGE = 'gcr.io/cadvisor/cadvisor:v0.39.3'
+DEFAULT_LOKI_IMAGE = 'docker.io/r/grafana/loki:2.4.0'
+DEFAULT_PROMTAIL_IMAGE = 'docker.io/r/grafana/promtail:2.4.0'
 DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v0.18.1'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.20.0'
 DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:6.7.4'
@@ -426,6 +429,8 @@ class Monitoring(object):
         'node-exporter': [9100],
         'grafana': [3000],
         'alertmanager': [9093, 9094],
+        'cAdvisor': [8080],
+        'loki': [3100]
     }
 
     components = {
@@ -439,6 +444,33 @@ class Monitoring(object):
             ],
             'config-json-files': [
                 'prometheus.yml',
+            ],
+        },
+        'cAdvisor': {
+            'image': DEFAULT_CADVISOR_IMAGE,
+            'cpus': '2',
+            'memory': '1GB'
+        },
+        'loki': {
+            'image': DEFAULT_LOKI_IMAGE,
+            'cpus': '1',
+            'memory': '1GB',
+            'args': [
+                '--config.file=/etc/loki/loki.yml',
+            ],
+            'config-json-files': [
+                'loki.yml',
+            ],
+        },
+        'promtail': {
+            'image': DEFAULT_PROMTAIL_IMAGE,
+            'cpus': '1',
+            'memory': '1GB',
+            'args': [
+                '--config.file=/etc/promtail/promtail.yml',
+            ],
+            'config-json-files': [
+                'promtail.yml',
             ],
         },
         'node-exporter': {
@@ -2418,6 +2450,16 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             config_dir = 'etc/alertmanager'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'data'), uid, gid, 0o755)
+        elif daemon_type == 'promtail':
+            data_dir_root = get_data_dir(fsid, ctx.data_dir,
+                                         daemon_type, daemon_id)
+            config_dir = 'etc/promtail'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+        elif daemon_type == 'loki':
+            data_dir_root = get_data_dir(fsid, ctx.data_dir,
+                                         daemon_type, daemon_id)
+            config_dir = 'etc/loki'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
 
         # populate the config directory for the component from the config-json
         if 'files' in config_json:
@@ -2606,6 +2648,15 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         if daemon_type == 'prometheus':
             mounts[os.path.join(data_dir, 'etc/prometheus')] = '/etc/prometheus:Z'
             mounts[os.path.join(data_dir, 'data')] = '/prometheus:Z'
+        elif daemon_type == 'cAdvisor':
+            mounts['/sys'] = '/sys:ro'
+            mounts['/'] = '/rootfs:ro'
+            mounts['/var/run'] = '/var/run:rw'
+            mounts['/var/lib/docker'] = '/var/lib/docker:ro'
+        elif daemon_type == 'loki':
+            mounts[os.path.join(data_dir, 'etc/loki')] = '/etc/loki:Z'
+        elif daemon_type == 'promtail':
+            mounts[os.path.join(data_dir, 'etc/promtail')] = '/etc/promtail:Z'
         elif daemon_type == 'node-exporter':
             mounts['/proc'] = '/host/proc:ro'
             mounts['/sys'] = '/host/sys:ro'
