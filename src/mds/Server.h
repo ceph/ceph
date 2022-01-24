@@ -80,6 +80,7 @@ enum {
   l_mdss_req_unlink_latency,
   l_mdss_cap_revoke_eviction,
   l_mdss_cap_acquisition_throttle,
+  l_mdss_req_getvxattr_latency,
   l_mdss_last,
 };
 
@@ -221,6 +222,7 @@ public:
                           file_layout_t *layout);
   void handle_set_vxattr(MDRequestRef& mdr, CInode *cur);
   void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur);
+  void handle_client_getvxattr(MDRequestRef& mdr);
   void handle_client_setxattr(MDRequestRef& mdr);
   void handle_client_removexattr(MDRequestRef& mdr);
 
@@ -419,6 +421,33 @@ private:
            xattr_name == "ceph.dir.pin" ||
            xattr_name == "ceph.dir.pin.random" ||
            xattr_name == "ceph.dir.pin.distributed";
+  }
+
+  static bool is_ceph_dir_vxattr(std::string_view xattr_name) {
+    return (xattr_name == "ceph.dir.layout" ||
+	    xattr_name == "ceph.dir.layout.json" ||
+	    xattr_name == "ceph.dir.layout.object_size" ||
+	    xattr_name == "ceph.dir.layout.stripe_unit" ||
+	    xattr_name == "ceph.dir.layout.stripe_count" ||
+	    xattr_name == "ceph.dir.layout.pool" ||
+	    xattr_name == "ceph.dir.layout.pool_name" ||
+	    xattr_name == "ceph.dir.layout.pool_id" ||
+	    xattr_name == "ceph.dir.layout.pool_namespace" ||
+	    xattr_name == "ceph.dir.pin" ||
+	    xattr_name == "ceph.dir.pin.random" ||
+	    xattr_name == "ceph.dir.pin.distributed");
+  }
+
+  static bool is_ceph_file_vxattr(std::string_view xattr_name) {
+    return (xattr_name == "ceph.file.layout" ||
+	    xattr_name == "ceph.file.layout.json" ||
+	    xattr_name == "ceph.file.layout.object_size" ||
+	    xattr_name == "ceph.file.layout.stripe_unit" ||
+	    xattr_name == "ceph.file.layout.stripe_count" ||
+	    xattr_name == "ceph.file.layout.pool" ||
+	    xattr_name == "ceph.file.layout.pool_name" ||
+	    xattr_name == "ceph.file.layout.pool_id" ||
+	    xattr_name == "ceph.file.layout.pool_namespace");
   }
 
   static bool is_allowed_ceph_xattr(std::string_view xattr_name) {
