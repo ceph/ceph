@@ -7,6 +7,7 @@
 
 #include "common/hobject_fmt.h"
 #include "osd/osd_types.h"
+#include "include/types_fmt.h"
 
 template <>
 struct fmt::formatter<osd_reqid_t> {
@@ -102,5 +103,32 @@ struct fmt::formatter<object_info_t> {
       fmt::format_to(ctx.out(), " {}", oi.manifest);
     }
     return fmt::format_to(ctx.out(), ")");
+  }
+};
+
+template <>
+struct fmt::formatter<pg_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const pg_t& pg, FormatContext& ctx)
+  {
+    return fmt::format_to(ctx.out(), "{}.{}", pg.pool(), pg.m_seed);
+  }
+};
+
+
+template <>
+struct fmt::formatter<spg_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const spg_t& spg, FormatContext& ctx)
+  {
+    if (shard_id_t::NO_SHARD == spg.shard.id) {
+      return fmt::format_to(ctx.out(), "{}", spg.pgid);
+    } else {
+      return fmt::format_to(ctx.out(), "{}s{}>", spg.pgid, spg.shard.id);
+    }
   }
 };

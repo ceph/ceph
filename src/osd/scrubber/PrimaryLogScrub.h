@@ -5,10 +5,6 @@
 // the './' includes are marked this way to affect clang-format
 #include "./pg_scrubber.h"
 
-#include <iostream>
-#include <sstream>
-#include <vector>
-
 #include "debug.h"
 
 #include "common/errno.h"
@@ -39,31 +35,15 @@ class PrimaryLogScrub : public PgScrubber {
   void stats_of_handled_objects(const object_stat_sum_t& delta_stats,
 				const hobject_t& soid) final;
 
+  // the interface used by the scrubber-backend:
+
+  void add_to_stats(const object_stat_sum_t& stat) final;
+
+  void submit_digest_fixes(const digests_fixes_t& fixes) final;
+
  private:
   // we know our PG is actually a PrimaryLogPG. Let's alias the pointer to that object:
   PrimaryLogPG* const m_pl_pg;
-
-  /**
-   * Validate consistency of the object info and snap sets.
-   */
-  void scrub_snapshot_metadata(ScrubMap& map, const missing_map_t& missing_digest) final;
-
-  void log_missing(int missing,
-		   const std::optional<hobject_t>& head,
-		   LogChannelRef clog,
-		   const spg_t& pgid,
-		   const char* func,
-		   bool allow_incomplete_clones);
-
-  int process_clones_to(const std::optional<hobject_t>& head,
-			const std::optional<SnapSet>& snapset,
-			LogChannelRef clog,
-			const spg_t& pgid,
-			bool allow_incomplete_clones,
-			std::optional<snapid_t> target,
-			std::vector<snapid_t>::reverse_iterator* curclone,
-			inconsistent_snapset_wrapper& snap_error);
-
 
   // handle our part in stats collection
   object_stat_collection_t m_scrub_cstat;

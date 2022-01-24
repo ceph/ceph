@@ -758,6 +758,13 @@ char *spg_t::calc_name(char *buf, const char *suffix_backwords) const
   return pgid.calc_name(buf, "");
 }
 
+std::string spg_t::calc_name_sring() const
+{
+  char buf[spg_t::calc_name_buf_size];
+  buf[spg_t::calc_name_buf_size - 1] = '\0';
+  return string{calc_name(buf + spg_t::calc_name_buf_size - 1, "")};
+}
+
 ostream& operator<<(ostream& out, const spg_t &pg)
 {
   char buf[spg_t::calc_name_buf_size];

@@ -8,6 +8,7 @@
 #include <fmt/format.h>
 
 #include "common/hobject.h"
+#include "include/object_fmt.h"
 #include "include/types_fmt.h"
 #include "msg/msg_fmt.h"
 

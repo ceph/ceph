@@ -485,7 +485,7 @@ ScrubQueue::scrub_schedule_t ScrubQueue::adjust_target_time(
 
   if (times.is_must == ScrubQueue::must_scrub_t::not_mandatory) {
 
-    // if not explicitly requested, postpone the scrub with a random delay
+    // unless explicitly requested, postpone the scrub with a random delay
     double scrub_min_interval = times.min_interval > 0
 				  ? times.min_interval
 				  : cct->_conf->osd_scrub_min_interval;
