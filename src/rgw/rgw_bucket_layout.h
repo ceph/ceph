@@ -202,5 +202,8 @@ inline uint32_t num_shards(const bucket_index_layout_generation& index) {
 inline uint32_t current_num_shards(const BucketLayout& layout) {
   return num_shards(layout.current_index);
 }
+inline bool is_layout_indexless(const bucket_index_layout_generation& layout) {
+  return layout.layout.type == BucketIndexType::Indexless;
+}
 
 } // namespace rgw
