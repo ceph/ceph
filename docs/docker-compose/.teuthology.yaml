@@ -3,7 +3,7 @@ queue_port: 11300
 lock_server: http://paddles:8080
 results_server: http://paddles:8080
 results_ui_server: http://pulpito:8081/
-teuthology_path: ./
-archive_base: ../archive_dir
+teuthology_path: /teuthology
+archive_base: /archive_dir
 reserve_machines: 0
 lab_domain: ''
