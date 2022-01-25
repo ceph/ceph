@@ -4,6 +4,8 @@ RUN dnf -y update && \
         openssh-server \
         hostname \
         curl \
+        python3-pip \
+        python3-libselinux \
         redhat-lsb-core && \
     dnf clean all
 COPY testnode.sh /
