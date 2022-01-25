@@ -738,6 +738,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             sd.rank = int(d['rank']) if d.get('rank') is not None else None
             sd.rank_generation = int(d['rank_generation']) if d.get(
                 'rank_generation') is not None else None
+            sd.extra_container_args = d.get('extra_container_args')
             if 'state' in d:
                 sd.status_desc = d['state']
                 sd.status = {
