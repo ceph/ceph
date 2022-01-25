@@ -230,7 +230,7 @@ bool OpTracker::dump_historic_slow_ops(Formatter *f, set<string> filters)
   return true;
 }
 
-bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<string> filters)
+bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<string> filters, bool count_only)
 {
   if (!tracking_enabled)
     return false;
@@ -238,7 +238,11 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
   std::shared_lock l{lock};
   f->open_object_section("ops_in_flight"); // overall dump
   uint64_t total_ops_in_flight = 0;
-  f->open_array_section("ops"); // list of TrackedOps
+
+  if (!count_only) {
+    f->open_array_section("ops"); // list of TrackedOps
+  }
+
   utime_t now = ceph_clock_now();
   for (uint32_t i = 0; i < num_optracker_shards; i++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[i];
@@ -249,13 +253,21 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
         break;
       if (!op.filter_out(filters))
         continue;
-      f->open_object_section("op");
-      op.dump(now, f);
-      f->close_section(); // this TrackedOp
+      
+      if (!count_only) {
+        f->open_object_section("op");
+        op.dump(now, f);
+        f->close_section(); // this TrackedOp
+      }
+
       total_ops_in_flight++;
     }
   }
-  f->close_section(); // list of TrackedOps
+
+  if (!count_only) {
+    f->close_section(); // list of TrackedOps
+  }
+
   if (print_only_blocked) {
     f->dump_float("complaint_time", complaint_time);
     f->dump_int("num_blocked_ops", total_ops_in_flight);

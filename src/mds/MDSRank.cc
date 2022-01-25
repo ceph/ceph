@@ -2601,6 +2601,10 @@ void MDSRankDispatcher::handle_asok_command(
     if (!op_tracker.dump_ops_in_flight(f, true)) {
       *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
     }
+  } else if (command == "dump_blocked_ops_count") {
+    if (!op_tracker.dump_ops_in_flight(f, true, {""}, true)) {
+      *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
+    }
   } else if (command == "dump_historic_ops") {
     if (!op_tracker.dump_historic_ops(f)) {
       *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
