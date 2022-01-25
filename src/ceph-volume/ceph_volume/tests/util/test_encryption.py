@@ -1,5 +1,31 @@
 from ceph_volume.util import encryption
+import base64
 
+class TestGetKeySize(object):
+    def test_get_size_from_conf_default(self, conf_ceph_stub):
+        conf_ceph_stub('''
+        [global]
+        fsid=asdf
+        ''')
+        assert encryption.get_key_size_from_conf() == '512'
+
+    def test_get_size_from_conf_custom(self, conf_ceph_stub):
+        conf_ceph_stub('''
+        [global]
+        fsid=asdf
+        [osd]
+        osd_dmcrypt_key_size=256
+        ''')
+        assert encryption.get_key_size_from_conf() == '256'
+
+    def test_get_size_from_conf_custom_invalid(self, conf_ceph_stub):
+        conf_ceph_stub('''
+        [global]
+        fsid=asdf
+        [osd]
+        osd_dmcrypt_key_size=1024
+        ''')
+        assert encryption.get_key_size_from_conf() == '512'
 
 class TestStatus(object):
 
@@ -37,17 +63,6 @@ class TestDmcryptClose(object):
 
 class TestDmcryptKey(object):
 
-    def test_dmcrypt_with_default_size(self, conf_ceph_stub):
-        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+    def test_dmcrypt(self):
         result = encryption.create_dmcrypt_key()
-        assert len(result) == 172
-
-    def test_dmcrypt_with_custom_size(self, conf_ceph_stub):
-        conf_ceph_stub('''
-        [global]
-        fsid=asdf
-        [osd]
-        osd_dmcrypt_size=8
-        ''')
-        result = encryption.create_dmcrypt_key()
-        assert len(result) == 172
+        assert len(base64.b64decode(result)) == 128
