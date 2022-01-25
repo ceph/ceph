@@ -39,7 +39,8 @@ const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 void RGWRoleInfo::dump(Formatter *f) const
 {
   encode_json("RoleId", id , f);
-  encode_json("RoleName", name , f);
+  std::string role_name = tenant + '$' + name;
+  encode_json("RoleName", role_name , f);
   encode_json("Path", path, f);
   encode_json("Arn", arn, f);
   encode_json("CreateDate", creation_date, f);
@@ -68,6 +69,10 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("CreateDate", creation_date, obj);
   JSONDecoder::decode_json("MaxSessionDuration", max_session_duration, obj);
   JSONDecoder::decode_json("AssumeRolePolicyDocument", trust_policy, obj);
+  if (auto pos = name.find('$'); pos != std::string::npos) {
+    tenant = name.substr(0, pos);
+    name = name.substr(pos+1);
+  }
 }
 
 RGWRole::RGWRole(std::string name,
