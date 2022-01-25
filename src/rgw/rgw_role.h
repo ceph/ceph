@@ -152,7 +152,7 @@ class RGWRoleMetadataObject: public RGWMetadataObject {
   Store* store;
 public:
   RGWRoleMetadataObject() = default;
-  RGWRoleMetadataObject(RGWRoleInfo info,
+  RGWRoleMetadataObject(RGWRoleInfo& info,
 			const obj_version& v,
 			real_time m,
       Store* store) : RGWMetadataObject(v,m), info(info), store(store) {}
