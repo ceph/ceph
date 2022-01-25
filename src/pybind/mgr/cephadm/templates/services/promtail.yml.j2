@@ -5,14 +5,16 @@ server:
 positions:
   filename: /tmp/positions.yaml
 
-client:
-  url: http:localhost:3100/loki/api/v1/push
+clients:
+  - url: http://{{ client_hostname }}:3100/loki/api/v1/push
 
 scrape_configs:
-- job_name: docker
-  pipeline_stages:
-    - docker: {}
+- job_name: system
   static_configs:
-    - labels:
-        job: docker
-        __path__: /var/lib/docker/containers//-json.log
+  - targets:
+{% for url in hostnames %}
+    - {{ url }}
+{% endfor %}
+    labels:
+      job: Cluster Logs
+      __path__: /var/log/ceph/**/*.log
