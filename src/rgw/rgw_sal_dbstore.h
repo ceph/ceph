@@ -21,8 +21,10 @@
 #include "rgw_lc.h"
 #include "rgw_multi.h"
 
+#ifdef WITH_RADOSGW_DBSTORE
 #include "store/dbstore/common/dbstore.h"
 #include "store/dbstore/dbstore_mgr.h"
+#endif
 
 namespace rgw { namespace sal {
 

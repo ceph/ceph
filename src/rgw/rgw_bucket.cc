@@ -333,7 +333,13 @@ int RGWBucket::init(rgw::sal::Store* _store, RGWBucketAdminOpState& op_state,
 
   op_state.set_bucket(bucket->clone());
 
-  if (!rgw::sal::User::empty(user.get())) {
+  bool empty;
+  if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+
+  if (!empty /*!rgw::sal::User::empty(user.get())*/) {
     r = user->load_user(dpp, y);
     if (r < 0) {
       set_err_msg(err_msg, "failed to fetch user info");

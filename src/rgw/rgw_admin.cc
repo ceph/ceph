@@ -69,6 +69,8 @@ extern "C" {
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+
+
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
 
@@ -4293,7 +4295,16 @@ int main(int argc, const char **argv)
     if (tenant.empty()) {
       tenant = user->get_tenant();
     } else {
-      if (rgw::sal::User::empty(user) && opt_cmd != OPT::ROLE_CREATE
+      
+      bool empty;
+      if(!user.get())
+        empty = true;
+      else
+        empty = user.get()->info_empty();  
+      
+      
+      
+      if (empty /*rgw::sal::User::empty(user)*/ && opt_cmd != OPT::ROLE_CREATE
                           && opt_cmd != OPT::ROLE_DELETE
                           && opt_cmd != OPT::ROLE_GET
                           && opt_cmd != OPT::ROLE_MODIFY
@@ -6092,7 +6103,13 @@ int main(int argc, const char **argv)
       return EINVAL;
   }
 
-  if (!rgw::sal::User::empty(user)) {
+  bool empty;
+  if(!user.get())
+      empty = true;
+  else
+      empty = user.get()->info_empty();
+
+  if (!empty/*!rgw::sal::User::empty(user)*/) {
     user_op.set_user_id(user->get_id());
     bucket_op.set_user_id(user->get_id());
   }
@@ -6103,7 +6120,12 @@ int main(int argc, const char **argv)
   if (!user_email.empty())
     user_op.set_user_email(user_email);
 
-  if (!rgw::sal::User::empty(user)) {
+  if(!user.get())
+      empty = true;
+  else
+      empty = user.get()->info_empty();
+
+  if (!empty /*!rgw::sal::User::empty(user)*/) {
     user_op.set_new_user_id(new_user_id);
   }
 
@@ -6188,7 +6210,14 @@ int main(int argc, const char **argv)
   // RGWUser to use for user operations
   RGWUser ruser;
   int ret = 0;
-  if (!(rgw::sal::User::empty(user) && access_key.empty()) || !subuser.empty()) {
+
+  //cout << user.get() << dendl;
+
+  if(!user.get())
+      empty = true;
+  else
+      empty = user.get()->info_empty();
+  if (!(empty /*rgw::sal::User::empty(user)*/ && access_key.empty()) || !subuser.empty()) {
     ret = ruser.init(dpp(), store, user_op, null_yield);
     if (ret < 0) {
       cerr << "user.init failed: " << cpp_strerror(-ret) << std::endl;
@@ -6211,7 +6240,11 @@ int main(int argc, const char **argv)
 
   switch (opt_cmd) {
   case OPT::USER_INFO:
-    if (rgw::sal::User::empty(user) && access_key.empty()) {
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+    if (empty /*rgw::sal::User::empty(user)*/ && access_key.empty()) {
       cerr << "ERROR: --uid or --access-key required" << std::endl;
       return EINVAL;
     }
@@ -6651,7 +6684,13 @@ int main(int argc, const char **argv)
 
     bool truncated;
 
-    if (!rgw::sal::User::empty(user)) {
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+
+
+    if (!empty /*!rgw::sal::User::empty(user)*/) {
       user_ids.push_back(user->get_id().id);
       ret =
 	RGWBucketAdminOp::limit_check(store, bucket_op, user_ids, stream_flusher,
@@ -6690,7 +6729,13 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT::BUCKETS_LIST) {
     if (bucket_name.empty()) {
-      if (!rgw::sal::User::empty(user)) {
+
+      if(!user.get())
+        empty = true;
+      else
+        empty = user.get()->info_empty();
+
+      if (!empty /*!rgw::sal::User::empty(user)*/) {
         if (!user_op.has_existing_user()) {
           cerr << "ERROR: could not find user: " << user << std::endl;
           return -ENOENT;
@@ -7048,7 +7093,13 @@ next:
   }
 
   if (opt_cmd == OPT::USAGE_TRIM) {
-    if (rgw::sal::User::empty(user) && bucket_name.empty() &&
+
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+    
+    if (empty /*rgw::sal::User::empty(user)*/ && bucket_name.empty() &&
 	start_date.empty() && end_date.empty() && !yes_i_really_mean_it) {
       cerr << "usage trim without user/date/bucket specified will remove *all* users data" << std::endl;
       cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
@@ -8085,7 +8136,13 @@ next:
   }
 
   if (opt_cmd == OPT::USER_STATS) {
-    if (rgw::sal::User::empty(user)) {
+
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+
+    if (empty /*rgw::sal::User::empty(user)*/) {
       cerr << "ERROR: uid not specified" << std::endl;
       return EINVAL;
     }
@@ -9192,7 +9249,12 @@ next:
       }
     }
 
-    if (!rgw::sal::User::empty(user)) {
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+
+    if (!empty /*!rgw::sal::User::empty(user)*/) {
       pipe->params.user = user->get_id();
     } else if (pipe->params.user.empty()) {
       auto owner = sync_policy_ctx.get_owner();
@@ -9517,7 +9579,13 @@ next:
   bool quota_op = (opt_cmd == OPT::QUOTA_SET || opt_cmd == OPT::QUOTA_ENABLE || opt_cmd == OPT::QUOTA_DISABLE);
 
   if (quota_op) {
-    if (bucket_name.empty() && rgw::sal::User::empty(user)) {
+
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+
+    if (bucket_name.empty() && empty /*rgw::sal::User::empty(user)*/) {
       cerr << "ERROR: bucket name or uid is required for quota operation" << std::endl;
       return EINVAL;
     }
@@ -9529,7 +9597,7 @@ next:
       }
       set_bucket_quota(store, opt_cmd, tenant, bucket_name,
                        max_size, max_objects, have_max_size, have_max_objects);
-    } else if (!rgw::sal::User::empty(user)) {
+    } else if (!empty /*!rgw::sal::User::empty(user)*/) {
       if (quota_scope == "bucket") {
         return set_user_bucket_quota(opt_cmd, ruser, user_op, max_size, max_objects, have_max_size, have_max_objects);
       } else if (quota_scope == "user") {
@@ -9544,7 +9612,13 @@ next:
   bool ratelimit_op_set = (opt_cmd == OPT::RATELIMIT_SET || opt_cmd == OPT::RATELIMIT_ENABLE || opt_cmd == OPT::RATELIMIT_DISABLE);
   bool ratelimit_op_get = opt_cmd == OPT::RATELIMIT_GET;
   if (ratelimit_op_set) {
-    if (bucket_name.empty() && rgw::sal::User::empty(user)) {
+
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+
+    if (bucket_name.empty() && empty /*rgw::sal::User::empty(user)*/) {
       cerr << "ERROR: bucket name or uid is required for ratelimit operation" << std::endl;
       return EINVAL;
     }
@@ -9559,7 +9633,7 @@ next:
                            max_read_bytes, max_write_bytes,
                            have_max_read_ops, have_max_write_ops,
                            have_max_read_bytes, have_max_write_bytes);
-    } else if (!rgw::sal::User::empty(user)) {
+    } else if (!empty /*!rgw::sal::User::empty(user)*/) {
       } if (ratelimit_scope == "user") {
         return set_user_ratelimit(opt_cmd, user, max_read_ops, max_write_ops,
                          max_read_bytes, max_write_bytes,
@@ -9572,7 +9646,11 @@ next:
   }
 
   if (ratelimit_op_get) {
-    if (bucket_name.empty() && rgw::sal::User::empty(user)) {
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+    if (bucket_name.empty() && empty /*rgw::sal::User::empty(user)*/) {
       cerr << "ERROR: bucket name or uid is required for ratelimit operation" << std::endl;
       return EINVAL;
     }
@@ -9583,7 +9661,7 @@ next:
         return EINVAL;
       }
       return show_bucket_ratelimit(store, tenant, bucket_name, formatter.get());
-    } else if (!rgw::sal::User::empty(user)) {
+    } else if (!empty /*!rgw::sal::User::empty(user)*/) {
       } if (ratelimit_scope == "user") {
         return show_user_ratelimit(user, formatter.get());
       } else {
@@ -9595,7 +9673,12 @@ next:
   if (opt_cmd == OPT::MFA_CREATE) {
     rados::cls::otp::otp_info_t config;
 
-    if (rgw::sal::User::empty(user)) {
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+
+    if (empty /*rgw::sal::User::empty(user)*/) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
     }
@@ -9660,7 +9743,13 @@ next:
   }
 
  if (opt_cmd == OPT::MFA_REMOVE) {
-    if (rgw::sal::User::empty(user)) {
+    
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+
+    if (empty /*rgw::sal::User::empty(user)*/) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
     }
@@ -9696,7 +9785,12 @@ next:
   }
 
  if (opt_cmd == OPT::MFA_GET) {
-    if (rgw::sal::User::empty(user)) {
+   if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+
+    if (empty /*rgw::sal::User::empty(user)*/) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
     }
@@ -9723,7 +9817,13 @@ next:
   }
 
  if (opt_cmd == OPT::MFA_LIST) {
-    if (rgw::sal::User::empty(user)) {
+
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+
+    if (empty /*rgw::sal::User::empty(user)*/) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
     }
@@ -9741,7 +9841,13 @@ next:
   }
 
  if (opt_cmd == OPT::MFA_CHECK) {
-    if (rgw::sal::User::empty(user)) {
+
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+
+    if (empty /*rgw::sal::User::empty(user)*/) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
     }
@@ -9767,7 +9873,13 @@ next:
   }
 
  if (opt_cmd == OPT::MFA_RESYNC) {
-    if (rgw::sal::User::empty(user)) {
+
+    if(!user.get())
+      empty = true;
+    else
+      empty = user.get()->info_empty();
+
+    if (empty /*rgw::sal::User::empty(user)*/) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
     }

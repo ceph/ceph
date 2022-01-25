@@ -19,6 +19,9 @@
 #include "rgw_notify_event_type.h"
 #include "common/tracer.h"
 
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_rgw
+
 class RGWGetDataCB;
 class RGWAccessListFilter;
 class RGWLC;
@@ -43,7 +46,7 @@ namespace rgw {
   namespace IAM { struct Policy; }
 }
 
-class RGWGetDataCB {
+class RGWGetDataCB {\
 public:
   virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) = 0;
   RGWGetDataCB() {}
@@ -476,6 +479,13 @@ class User {
     User(User& _o) = default;
     virtual ~User() = default;
 
+
+    /*returns whether info is empty, as part of making Bucket fully abstract -Daniel P*/
+    virtual bool info_empty()
+    {
+      return info.user_id.id.empty();
+    }
+
     /** Clone a copy of this user.  Used when modification is necessary of the copy */
     virtual std::unique_ptr<User> clone() = 0;
     /** List the buckets owned by a user */
@@ -504,23 +514,23 @@ class User {
     /** Get the display name for this User */
     virtual std::string& get_display_name() { return info.display_name; }
     /** Get the tenant name for this User */
-    const std::string& get_tenant() { return info.user_id.tenant; }
+    virtual const std::string& get_tenant() { return info.user_id.tenant; }
     /** Set the tenant name for this User */
-    void set_tenant(std::string& _t) { info.user_id.tenant = _t; }
+    virtual void set_tenant(std::string& _t) { info.user_id.tenant = _t; }
     /** Get the namespace for this User */
-    const std::string& get_ns() { return info.user_id.ns; }
+    virtual const std::string& get_ns() { return info.user_id.ns; }
     /** Set the namespace for this User */
-    void set_ns(std::string& _ns) { info.user_id.ns = _ns; }
+    virtual void set_ns(std::string& _ns) { info.user_id.ns = _ns; }
     /** Clear the namespace for this User */
-    void clear_ns() { info.user_id.ns.clear(); }
+    virtual void clear_ns() { info.user_id.ns.clear(); }
     /** Get the full ID for this User */
-    const rgw_user& get_id() const { return info.user_id; }
-    /** Get the type of this User */
-    uint32_t get_type() const { return info.type; }
+    virtual const rgw_user& get_id() const 
+    { return info.user_id; }    /** Get the type of this User */
+    virtual uint32_t get_type() const { return info.type; }
     /** Get the maximum number of buckets allowed for this User */
-    int32_t get_max_buckets() const { return info.max_buckets; }
+    virtual int32_t get_max_buckets() const { return info.max_buckets; }
     /** Get the capabilities for this User */
-    const RGWUserCaps& get_caps() const { return info.caps; }
+    virtual const RGWUserCaps& get_caps() const { return info.caps; }
     /** Get the version tracker for this User */
     virtual RGWObjVersionTracker& get_version_tracker() { return objv_tracker; }
     /** Get the cached attributes for this User */
@@ -561,7 +571,7 @@ class User {
     virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) = 0;
 
     /* dang temporary; will be removed when User is complete */
-    RGWUserInfo& get_info() { return info; }
+    virtual RGWUserInfo& get_info() { return info; }
 
     friend inline std::ostream& operator<<(std::ostream& out, const User& u) {
       out << u.info.user_id;
@@ -692,7 +702,7 @@ class Bucket {
     virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl, optional_yield y) = 0;
 
     // XXXX hack
-    void set_owner(rgw::sal::User* _owner) {
+    virtual void set_owner(rgw::sal::User* _owner) { //changed for TracerDriver -Daniel P
       owner = _owner;
     }
 
@@ -751,38 +761,40 @@ class Bucket {
     virtual int purge_instance(const DoutPrefixProvider* dpp) = 0;
 
     /** Check if this instantiation is empty */
-    bool empty() const { return info.bucket.name.empty(); }
+    virtual bool empty() const { return info.bucket.name.empty(); } //changed for TracerDriver -Daniel P
     /** Get the cached name of this bucket */
-    const std::string& get_name() const { return info.bucket.name; }
+    virtual const std::string& get_name() const { return info.bucket.name; } //changed for TracerDriver -Daniel P
     /** Get the cached tenant of this bucket */
-    const std::string& get_tenant() const { return info.bucket.tenant; }
+    virtual const std::string& get_tenant() const { return info.bucket.tenant; } //changed for TracerDriver -Daniel P
     /** Get the cached marker of this bucket */
-    const std::string& get_marker() const { return info.bucket.marker; }
+    virtual const std::string& get_marker() const { return info.bucket.marker; } //changed for TracerDriver -Daniel P
     /** Get the cached ID of this bucket */
-    const std::string& get_bucket_id() const { return info.bucket.bucket_id; }
+    virtual const std::string& get_bucket_id() const { return info.bucket.bucket_id; } //changed for TracerDriver -Daniel P
     /** Get the cached size of this bucket */
-    size_t get_size() const { return ent.size; }
+    virtual size_t get_size() const { return ent.size; } //changed for TracerDriver -Daniel P
     /** Get the cached rounded size of this bucket */
-    size_t get_size_rounded() const { return ent.size_rounded; }
+    virtual size_t get_size_rounded() const { return ent.size_rounded; } //changed for TracerDriver -Daniel P
     /** Get the cached object count of this bucket */
-    uint64_t get_count() const { return ent.count; }
+    virtual uint64_t get_count() const { return ent.count; } //changed for TracerDriver -Daniel P
     /** Get the cached placement rule of this bucket */
-    rgw_placement_rule& get_placement_rule() { return info.placement_rule; }
+    virtual rgw_placement_rule& get_placement_rule() { return info.placement_rule; } //temporary - Daniel P
     /** Get the cached creation time of this bucket */
-    ceph::real_time& get_creation_time() { return info.creation_time; }
+    virtual ceph::real_time& get_creation_time() { return info.creation_time; } //changed for TracerDriver -Daniel P
     /** Get the cached modification time of this bucket */
-    ceph::real_time& get_modification_time() { return mtime; }
+    virtual ceph::real_time& get_modification_time() { return mtime; } //changed for TracerDriver -Daniel P
     /** Get the cached version of this bucket */
-    obj_version& get_version() { return bucket_version; }
+    virtual obj_version& get_version() { return bucket_version; } //changed for TracerDriver -Daniel P
     /** Set the cached version of this bucket */
-    void set_version(obj_version &ver) { bucket_version = ver; }
+    virtual void set_version(obj_version &ver) { bucket_version = ver; } //changed for TracerDriver -Daniel P
     /** Check if this bucket is versioned */
-    bool versioned() { return info.versioned(); }
+    virtual bool versioned() { return info.versioned(); } //changed for TracerDriver -Daniel P
     /** Check if this bucket has versioning enabled */
-    bool versioning_enabled() { return info.versioning_enabled(); }
+    virtual bool versioning_enabled() { return info.versioning_enabled(); } //changed for TracerDriver -Daniel P
 
     /** Check if a Bucket pointer is empty */
-    static bool empty(Bucket* b) { return (!b || b->empty()); }
+    static bool empty(Bucket* b) { return (!b || b->empty()); } //Unused for Tracer Driver -Daniel P
+
+    virtual bool is_empty() { return this->empty(); }
     /** Clone a copy of this bucket.  Used when modification is necessary of the copy */
     virtual std::unique_ptr<Bucket> clone() = 0;
 
@@ -805,9 +817,9 @@ class Bucket {
 				 CephContext* cct) = 0;
 
     /* dang - This is temporary, until the API is completed */
-    rgw_bucket& get_key() { return info.bucket; }
-    RGWBucketInfo& get_info() { return info; }
-
+    virtual rgw_bucket& get_key() { return info.bucket; } //changed for TracerDriver -Daniel P
+    virtual RGWBucketInfo& get_info() { return info; } //changed for TracerDriver -Daniel P
+    
     friend inline std::ostream& operator<<(std::ostream& out, const Bucket& b) {
       out << b.info.bucket;
       return out;
@@ -839,7 +851,7 @@ class Bucket {
 
     friend class BucketList;
   protected:
-    virtual void set_ent(RGWBucketEnt& _ent) { ent = _ent; info.bucket = ent.bucket; info.placement_rule = ent.placement_rule; }
+    virtual void set_ent(RGWBucketEnt _ent) { ent = _ent; info.bucket = ent.bucket; info.placement_rule = ent.placement_rule; }
 };
 
 /**

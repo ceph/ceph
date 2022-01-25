@@ -107,7 +107,12 @@ bool rate_limit(rgw::sal::Store* store, req_state* s) {
   s->user->get_id().to_str(userfind);
   userfind = "u" + userfind;
   s->ratelimit_user_name = userfind;
-  std::string bucketfind = !rgw::sal::Bucket::empty(s->bucket.get()) ? "b" + s->bucket->get_marker() : "";
+  bool empty;
+  if(!s->bucket.get())
+    empty = true;
+  else
+    empty = s->bucket.get()->is_empty();
+  std::string bucketfind = !empty /*!rgw::sal::Bucket::empty(s->bucket.get())*/ ? "b" + s->bucket->get_marker() : "";
   s->ratelimit_bucket_marker = bucketfind;
   const char *method = s->info.method;
 
@@ -131,8 +136,11 @@ bool rate_limit(rgw::sal::Store* store, req_state* s) {
   }
   bool limit_bucket = false;
   bool limit_user = s->ratelimit_data->should_rate_limit(method, s->ratelimit_user_name, s->time, user_ratelimit);
-
-  if(!rgw::sal::Bucket::empty(s->bucket.get()))
+  if(!s->bucket.get())
+    empty = true;
+  else
+    empty = s->bucket.get()->is_empty();  
+  if(!empty /*!rgw::sal::Bucket::empty(s->bucket.get())*/)
   {
     iter = s->bucket->get_attrs().find(RGW_ATTR_RATELIMIT);
     if(iter != s->bucket->get_attrs().end()) {
@@ -441,7 +449,13 @@ done:
   }
   int op_ret = 0;
 
-  if (user && !rgw::sal::User::empty(s->user.get())) {
+  bool empty;
+  if(!s->user.get())
+      empty = true;
+    else
+      empty = s->user.get()->info_empty();
+
+  if (user && !empty /*!rgw::sal::User::empty(s->user.get())*/) {
     *user = s->user->get_id().to_str();
   }
 

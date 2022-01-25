@@ -764,13 +764,18 @@ int dump_body(struct req_state* const s,
               const size_t len)
 {
   bool healthchk = false;
+  bool empty;
   // we dont want to limit health checks
   if(s->op_type == RGW_OP_GET_HEALTH_CHECK)
     healthchk = true;
   if(len > 0 && !healthchk) {
     const char *method = s->info.method;
     s->ratelimit_data->decrease_bytes(method, s->ratelimit_user_name, len, &s->user_ratelimit);
-    if(!rgw::sal::Bucket::empty(s->bucket.get()))
+    if(!s->bucket.get())
+      empty = true;
+    else
+      empty = s->bucket.get()->is_empty();
+    if(!empty /*!rgw::sal::Bucket::empty(s->bucket.get())*/)
       s->ratelimit_data->decrease_bytes(method, s->ratelimit_bucket_marker, len, &s->bucket_ratelimit);
   }
   try {

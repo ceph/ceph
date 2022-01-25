@@ -2372,7 +2372,12 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
   /* This is okay.  It's an error, so nothing will run after this, and it can be
    * called by abort_early(), which can be called before s->object or s->bucket
    * are set up. */
-  if (!rgw::sal::Bucket::empty(s->bucket.get())) {
+  bool empty;
+  if(!s->bucket.get())
+    empty = true;
+  else
+    empty = s->bucket.get()->is_empty();
+  if (!empty /*!rgw::sal::Bucket::empty(s->bucket.get())*/) {
     s->object = s->bucket->get_object(rgw_obj_key(std::to_string(http_ret) + error_doc));
   } else {
     s->object = store->get_object(rgw_obj_key(std::to_string(http_ret) + error_doc));

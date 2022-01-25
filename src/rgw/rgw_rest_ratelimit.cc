@@ -67,7 +67,14 @@ void RGWOp_Ratelimit_Info::execute(optional_yield y)
     rgw_user user(uid_str);
     std::unique_ptr<rgw::sal::User> user_sal;
     user_sal = store->get_user(user);
-    if (!rgw::sal::User::empty(user_sal)) {
+
+    bool empty;
+    if(!user_sal.get())
+      empty = true;
+    else
+      empty = user_sal.get()->info_empty();
+
+    if (!empty /*!rgw::sal::User::empty(user_sal)*/) {
       op_ret = user_sal->load_user(this, y);
       if (op_ret) {
         ldpp_dout(this, 0) << "Cannot load user info" << dendl;
@@ -236,7 +243,14 @@ void RGWOp_Ratelimit_Set::execute(optional_yield y)
     rgw_user user(uid_str);
     std::unique_ptr<rgw::sal::User> user_sal;
     user_sal = store->get_user(user);
-    if (!rgw::sal::User::empty(user_sal)) {
+
+    bool empty;
+    if(!user_sal.get())
+      empty = true;
+    else
+      empty = user_sal.get()->info_empty();
+
+    if (!empty /*!rgw::sal::User::empty(user_sal)*/) {
       op_ret = user_sal->load_user(this, y);
       if (op_ret) {
         ldpp_dout(this, 0) << "Cannot load user info" << dendl;

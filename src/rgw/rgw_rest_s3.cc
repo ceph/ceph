@@ -5275,7 +5275,12 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
   ldpp_dout(s, 10) << "RGWHandler_REST_S3Website::error_handler err_no=" << err_no << " http_ret=" << http_error_code << dendl;
 
   RGWBWRoutingRule rrule;
-  bool have_bucket = !rgw::sal::Bucket::empty(s->bucket.get());
+  bool empty;
+  if(!s->bucket.get())
+    empty = true;
+  else
+    empty = s->bucket.get()->is_empty();
+  bool have_bucket = !empty /*!rgw::sal::Bucket::empty(s->bucket.get())*/;
   bool should_redirect = false;
   if (have_bucket) {
     should_redirect =

@@ -629,6 +629,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     ret = -EACCES;
   }
 
+  ldpp_dout(dpp, 20) << "s->redirect_zone_endpoint: " << s->redirect_zone_endpoint << dendl;
+
   bool success = store->get_zone()->get_redirect_endpoint(&s->redirect_zone_endpoint);
   if (success) {
     ldpp_dout(dpp, 20) << "redirect_zone_endpoint=" << s->redirect_zone_endpoint << dendl;
@@ -1341,8 +1343,15 @@ int RGWOp::init_quota()
     return 0;
   }
 
-  /* Need a bucket to get quota */
-  if (rgw::sal::Bucket::empty(s->bucket.get())) {
+  /* only interested in object related ops */
+  bool empty;
+  if(!s->bucket.get())
+    empty = true;
+  else
+    empty = s->bucket.get()->is_empty();
+
+  if (empty /*rgw::sal::Bucket::empty(s->bucket.get())*/
+      || rgw::sal::Object::empty(s->object.get())) {
     return 0;
   }
 
