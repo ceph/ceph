@@ -284,7 +284,6 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
   context_t ctx, object_data_t &object_data, extent_len_t size)
 {
   ceph_assert(!object_data.is_null());
-  assert_aligned(size);
   ceph_assert(size <= object_data.get_reserved_data_len());
   return seastar::do_with(
     lba_pin_list_t(),
@@ -322,7 +321,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 	  return read_pin(
 	    ctx,
 	    pin.duplicate()
-	  ).si_then([size, pin_offset, &pin, &object_data, &to_write](
+	  ).si_then([ctx, size, pin_offset, &pin, &object_data, &to_write](
 		     auto extent) {
 	    bufferlist bl;
 	    bl.append(
@@ -331,12 +330,15 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 		0,
 		size - pin_offset
 	      ));
+	    bl.append_zero(p2roundup(size, ctx.tm.get_block_size()) - size);
 	    to_write.emplace_back(
 	      pin.get_laddr(),
 	      bl);
 	    to_write.emplace_back(
-	      object_data.get_reserved_data_base() + size,
-	      object_data.get_reserved_data_len() - size);
+	      object_data.get_reserved_data_base() +
+                p2roundup(size, ctx.tm.get_block_size()),
+	      object_data.get_reserved_data_len() -
+                p2roundup(size, ctx.tm.get_block_size()));
 	    return clear_iertr::now();
 	  });
 	}
@@ -553,7 +555,6 @@ ObjectDataHandler::truncate_ret ObjectDataHandler::truncate(
   context_t ctx,
   objaddr_t offset)
 {
-  offset = p2roundup(offset, ctx.tm.get_block_size());
   return with_object_data(
     ctx,
     [this, ctx, offset](auto &object_data) {
@@ -569,7 +570,7 @@ ObjectDataHandler::truncate_ret ObjectDataHandler::truncate(
 	return prepare_data_reservation(
 	  ctx,
 	  object_data,
-	  offset);
+	  p2roundup(offset, ctx.tm.get_block_size()));
       } else {
 	return truncate_iertr::now();
       }
