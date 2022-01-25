@@ -28,6 +28,9 @@
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
+#ifdef WITH_RADOSGW_TRACER
+#include "rgw_sal_tracer.h" //get an ifdef here later
+#endif
 
 #ifdef WITH_RADOSGW_MOTR
 #include "rgw_sal_motr.h"
@@ -43,6 +46,9 @@ extern rgw::sal::Store* newDBStore(CephContext *cct);
 #endif
 #ifdef WITH_RADOSGW_MOTR
 extern rgw::sal::Store* newMotrStore(CephContext *cct);
+#endif
+#ifdef WITH_RADOSGW_TRACER
+extern rgw::sal::Store* newTracer(const DoutPrefixProvider *dpp, rgw::sal::Store* inputStore);
 #endif
 }
 
@@ -79,12 +85,17 @@ RGWObjState::RGWObjState(const RGWObjState& rhs) : obj (rhs.obj) {
   objv_tracker = rhs.objv_tracker;
   pg_ver = rhs.pg_ver;
   compressed = rhs.compressed;
+
 }
 
 rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache, bool use_gc)
-{
+{  
+
+  rgw::sal::Store* store = nullptr;
+
+  ldpp_dout(dpp, 0) << "Initializing storage: " << svc << dendl;
   if (svc.compare("rados") == 0) {
-    rgw::sal::Store* store = newStore();
+    store = newStore();
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(store)->getRados();
 
     if ((*rados).set_use_cache(use_cache)
@@ -107,9 +118,9 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
       delete store;
       return nullptr;
     }
-    return store;
   }
   else if (svc.compare("d3n") == 0) {
+    delete store;
     rgw::sal::RadosStore *store = new rgw::sal::RadosStore();
     RGWRados* rados = new D3nRGWDataCache<RGWRados>;
     store->setRados(rados);
@@ -134,7 +145,6 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
       delete store;
       return nullptr;
     }
-    return store;
   }
 
 #ifdef WITH_RADOSGW_DBSTORE
@@ -189,11 +199,15 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
       ldpp_dout(dpp, 20) << "User email = " << suser->get_info().user_email << dendl;
     }
 
-    return store;
   }
 #endif
+        #ifdef WITH_RADOSGW_TRACER
+        rgw::sal::Store* trace = newTracer(dpp, store); //forcing tracer to activate for testing - Daniel P
+        ldpp_dout(dpp, 0) << "Post TracerDriver Setup" << dendl;
+        return trace;
+        #endif
 
-  return nullptr;
+  return store;
 }
 
 rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc)

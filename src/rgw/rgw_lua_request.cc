@@ -206,8 +206,14 @@ struct BucketMetaTable : public EmptyMetaTable {
     const auto bucket = s->bucket.get();
 
     const char* index = luaL_checkstring(L, 2);
+    
+  bool empty;
+  if(!s->bucket.get())
+    empty = true;
+  else
+    empty = s->bucket.get()->is_empty();
 
-    if (rgw::sal::Bucket::empty(bucket)) {
+  if (empty) {
       if (strcasecmp(index, "Name") == 0) {
         pushstring(L, s->init_state.url_bucket);
       } else {

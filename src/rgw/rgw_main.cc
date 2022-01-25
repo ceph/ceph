@@ -58,12 +58,17 @@
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
+#ifdef WITH_RADOSGW_TRACER
+#include "rgw_sal_tracer.h" //insert #ifdef statement for later -Daniel P
+#endif
 
 #include "services/svc_zone.h"
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
+
+
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -364,7 +369,7 @@ int radosgw_Main(int argc, const char **argv)
   // Get the store backend
   const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
 #ifdef WITH_RADOSGW_DBSTORE
-  if (config_store == "dbstore") {
+  if (config_store == "dbstore") { 
     rgw_store = "dbstore";
   }
 #endif
@@ -673,15 +678,38 @@ int radosgw_Main(int argc, const char **argv)
   std::unique_ptr<RGWRealmWatcher> realm_watcher;
   if (store->get_name() == "rados") {
     // add a watcher to respond to realm configuration changes
+
     pusher = std::make_unique<RGWPeriodPusher>(&dp, store, null_yield);
     pauser = std::make_unique<RGWFrontendPauser>(fes, implicit_tenant_context, pusher.get());
     reloader = std::make_unique<RGWRealmReloader>(store, service_map_meta, pauser.get());
 
-    realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,
-				  static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_realm());
+    dout(1) << "pre daemon setup ~682" << dendl;
+    int with_tracer = -1;
+    #ifdef WITH_RADOSGW_TRACER
+      dout(1) << "pre daemon setup ~685" << dendl;
+      rgw::sal::Store* rados_store = static_cast<rgw::sal::TracerDriver*>(store)->get_real_store();
+      realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,
+				    static_cast<rgw::sal::RadosStore*>(rados_store)->svc()->zone->get_realm());
+      with_tracer = 0;      
+      dout(1) << "pre daemon setup ~690" << dendl;
+    #endif
+    if (with_tracer < -1)
+    {
+      dout(1) << "pre daemon setup ~694" << dendl;
+      realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,
+				    static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_realm());
+            dout(1) << "pre daemon setup ~697" << dendl;
+    }
+
+    dout(1) << "pre daemon setup ~700" << dendl;
     realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
+    dout(1) << "pre daemon setup ~702" << dendl;
     realm_watcher->add_watcher(RGWRealmNotify::ZonesNeedPeriod, *pusher.get());
+    dout(1) << "pre daemon setup ~704" << dendl;
   }
+
+  dout(1) << "post daemon setup ~707" << dendl;
+
 
 #if defined(HAVE_SYS_PRCTL_H)
   if (prctl(PR_SET_DUMPABLE, 1) == -1) {

@@ -208,8 +208,13 @@ static void log_usage(struct req_state *s, const string& op_name)
 
   if (!bucket_name.empty()) {
   bucket_name = s->bucket_name;
+  bool empty;
     user = s->bucket_owner.get_id();
-    if (!rgw::sal::Bucket::empty(s->bucket.get()) &&
+        if(!s->bucket.get())
+      empty = true;
+    else
+      empty = s->bucket.get()->is_empty();
+    if (!empty /*!rgw::sal::Bucket::empty(s->bucket.get())*/ &&
 	s->bucket->get_info().requester_pays) {
       payer = s->user->get_id();
     }
@@ -527,8 +532,13 @@ int rgw_log_op(RGWREST* const rest, struct req_state *s, const string& op_name, 
   if (s->bucket_name.empty()) {
     /* this case is needed for, e.g., list_buckets */
   } else {
+    bool empty;
+    if(!s->bucket.get())
+      empty = true;
+    else
+      empty = s->bucket.get()->is_empty();
     if (s->err.ret == -ERR_NO_SUCH_BUCKET ||
-	rgw::sal::Bucket::empty(s->bucket.get())) {
+	empty /*rgw::sal::Bucket::empty(s->bucket.get())*/) {
       if (!s->cct->_conf->rgw_log_nonexistent_bucket) {
 	ldout(s->cct, 5) << "bucket " << s->bucket_name << " doesn't exist, not logging" << dendl;
 	return 0;

@@ -32,6 +32,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+#define dout_context g_ceph_context
+
 using namespace std;
 
 extern void op_type_to_str(uint32_t mask, char *buf, int len);
@@ -1429,6 +1431,7 @@ RGWUser::RGWUser() : caps(this), keys(this), subusers(this)
 int RGWUser::init(const DoutPrefixProvider *dpp, rgw::sal::Store* storage,
 		  RGWUserAdminOpState& op_state, optional_yield y)
 {
+  ldpp_dout(dpp, 0) << op_state.get_user_id() << dendl;
   init_default();
   int ret = init_storage(storage);
   if (ret < 0)
@@ -1473,6 +1476,9 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   bool found = false;
   std::string swift_user;
   user_id = op_state.get_user_id();
+
+  ldpp_dout(dpp, 0) << user_id << dendl;
+
   std::string user_email = op_state.get_user_email();
   std::string access_key = op_state.get_access_key();
   std::string subuser = op_state.get_subuser();
@@ -1482,11 +1488,9 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
     swift_user = op_state.get_access_key();
     access_key.clear();
   }
-
   std::unique_ptr<rgw::sal::User> user;
 
   clear_populated();
-
   if (user_id.empty() && !subuser.empty()) {
     size_t pos = subuser.find(':');
     if (pos != string::npos) {
@@ -1494,7 +1498,6 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
       op_state.set_user_id(user_id);
     }
   }
-
   if (!user_id.empty() && (user_id.compare(RGW_USER_ANON_ID) != 0)) {
     user = store->get_user(user_id);
     found = (user->load_user(dpp, y) >= 0);
@@ -1514,9 +1517,9 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
     found = (store->get_user_by_access_key(dpp, access_key, y, &user) >= 0);
     op_state.found_by_key = found;
   }
-  
   op_state.set_existing_user(found);
   if (found) {
+    dout(0) << "set_existing_user" << dendl;
     op_state.set_user_info(user->get_info());
     op_state.set_populated();
     op_state.objv = user->get_version_tracker();
@@ -1525,16 +1528,16 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
     old_info = user->get_info();
     set_populated();
   }
-
   if (user_id.empty()) {
     user_id = user->get_id();
   }
   op_state.set_initialized();
-
   // this may have been called by a helper object
   int ret = init_members(op_state);
   if (ret < 0)
-    return ret;
+  {
+    return ret;    
+  }
 
   return 0;
 }
@@ -1542,19 +1545,16 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
 int RGWUser::init_members(RGWUserAdminOpState& op_state)
 {
   int ret = 0;
-
   ret = keys.init(op_state);
   if (ret < 0)
     return ret;
-
   ret = subusers.init(op_state);
   if (ret < 0)
     return ret;
-
   ret = caps.init(op_state);
   if (ret < 0)
     return ret;
-
+    
   return 0;
 }
 
