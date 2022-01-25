@@ -9,5 +9,5 @@ overrides:
         mds op complaint time: 180
         mds verify scatter: true
         osd op complaint time: 180
-        rados mon op timeout: 15m
-        rados osd op timeout: 15m
+        rados mon op timeout: 900
+        rados osd op timeout: 900
