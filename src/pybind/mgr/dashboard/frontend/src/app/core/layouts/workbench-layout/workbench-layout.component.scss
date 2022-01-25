@@ -8,6 +8,7 @@
 
 .container-fluid {
   overflow: auto;
+  position: absolute;
 }
 
 ::ng-deep #toast-container {

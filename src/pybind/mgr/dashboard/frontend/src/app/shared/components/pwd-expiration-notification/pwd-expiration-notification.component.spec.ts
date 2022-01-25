@@ -11,6 +11,7 @@ import { AlertModule } from 'ngx-bootstrap/alert';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 
 import { SettingsService } from '../../api/settings.service';
+import { AlertPanelComponent } from '../../components/alert-panel/alert-panel.component';
 import { AuthStorageService } from '../../services/auth-storage.service';
 import { PwdExpirationNotificationComponent } from './pwd-expiration-notification.component';
 
@@ -31,7 +32,7 @@ describe('PwdExpirationNotificationComponent', () => {
   };
 
   configureTestBed({
-    declarations: [PwdExpirationNotificationComponent, FakeComponent],
+    declarations: [PwdExpirationNotificationComponent, FakeComponent, AlertPanelComponent],
     imports: [
       AlertModule.forRoot(),
       HttpClientTestingModule,

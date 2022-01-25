@@ -1,7 +1,9 @@
 @import 'defaults';
 
-::ng-deep cd-telemetry-notification .no-margin-bottom {
-  margin-bottom: 0;
+.no-margin-bottom {
+  ::ng-deep .alert {
+    margin-bottom: 0;
+  }
 }
 
 .activate-button {

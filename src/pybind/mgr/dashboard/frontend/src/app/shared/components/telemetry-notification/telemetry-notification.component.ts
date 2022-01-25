@@ -16,6 +16,7 @@ import { TelemetryNotificationService } from '../../services/telemetry-notificat
 })
 export class TelemetryNotificationComponent implements OnInit, OnDestroy {
   displayNotification = false;
+  notificationSeverity = 'warning';
 
   constructor(
     private mgrModuleService: MgrModuleService,
@@ -50,7 +51,7 @@ export class TelemetryNotificationComponent implements OnInit, OnDestroy {
     return localStorage.getItem('telemetry_notification_hidden') === 'true';
   }
 
-  close() {
+  onDismissed(): void {
     this.telemetryNotificationService.setVisibility(false);
     localStorage.setItem('telemetry_notification_hidden', 'true');
     this.notificationService.show(
