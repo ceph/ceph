@@ -8108,6 +8108,10 @@ def _get_parser():
         'ceph-volume', help='run ceph-volume inside a container')
     parser_ceph_volume.set_defaults(func=command_ceph_volume)
     parser_ceph_volume.add_argument(
+        '--shared_ceph_folder',
+        metavar='CEPH_SOURCE_FOLDER',
+        help='Development mode. Several folders in containers are volumes mapped to different sub-folders in the ceph source folder')
+    parser_ceph_volume.add_argument(
         '--fsid',
         help='cluster FSID')
     parser_ceph_volume.add_argument(
