@@ -402,6 +402,34 @@ class LokiService(CephadmService):
         }, sorted(deps)
 
 
+class PromtailService(CephadmService):
+    TYPE = 'promtail'
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        assert self.TYPE == daemon_spec.daemon_type
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        return daemon_spec
+
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
+        deps: List[str] = []
+        hostnames: List[str] = []
+        for dd in self.mgr.cache.get_daemons_by_service('mgr'):
+            addr = self.mgr.inventory.get_addr(dd.hostname)
+            hostnames.append(addr)
+        context = {
+            'hostnames': hostnames,
+            'client_hostname': hostnames[0],
+        }
+
+        yml = self.mgr.template.render('services/promtail.yml.j2', context)
+        return {
+            "files": {
+                "promtail.yml": yml
+            }
+        }, sorted(deps)
+
+
 class SNMPGatewayService(CephadmService):
     TYPE = 'snmp-gateway'
 

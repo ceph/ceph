@@ -467,6 +467,7 @@ class Orchestrator(object):
             'osd': lambda dg: self.apply_drivegroups([dg]),  # type: ignore
             'prometheus': self.apply_prometheus,
             'loki': self.apply_loki,
+            'promtail': self.apply_promtail,
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
@@ -644,6 +645,10 @@ class Orchestrator(object):
     def apply_loki(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a Loki daemon(s)"""
         raise NotImplementedError()
+    
+    def apply_promtail(self, spec: ServiceSpec) -> OrchResult[str]:
+        """Update existing a Promtail daemon(s)"""
+        raise NotImplementedError()
 
     def apply_crash(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a crash daemon(s)"""
@@ -726,6 +731,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'prometheus': 'prometheus',
         'node-exporter': 'node-exporter',
         'loki': 'loki',
+        'promtail': 'promtail',
         'crash': 'crash',
         'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
@@ -751,6 +757,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'alertmanager': ['alertmanager'],
         'prometheus': ['prometheus'],
         'loki': ['loki'],
+        'promtail': ['promtail'],
         'node-exporter': ['node-exporter'],
         'crash': ['crash'],
         'container': ['container'],

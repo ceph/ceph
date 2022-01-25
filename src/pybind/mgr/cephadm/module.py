@@ -52,7 +52,7 @@ from .services.iscsi import IscsiService
 from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
-    NodeExporterService, SNMPGatewayService, LokiService
+    NodeExporterService, SNMPGatewayService, LokiService, PromtailService
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
     ClientKeyringStore, ClientKeyringSpec
@@ -203,6 +203,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'container_image_loki',
             default=DEFAULT_LOKI_IMAGE,
             desc='Loki container image',
+        ),
+        Option(
+            'container_image_promtail',
+            default=DEFAULT_PROMTAIL_IMAGE,
+            desc='Promtail container image',
         ),
         Option(
             'container_image_haproxy',
@@ -513,7 +518,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         _service_clses: Sequence[Type[CephadmService]] = [
             OSDService, NFSService, MonService, MgrService, MdsService,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
-            PrometheusService, NodeExporterService, LokiService, CrashService, IscsiService,
+            PrometheusService, NodeExporterService, LokiService, PromtailService, CrashService, IscsiService,
             IngressService, CustomContainerService, CephfsMirrorService,
             CephadmAgent, SNMPGatewayService
         ]
@@ -665,7 +670,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         suffix = daemon_type not in [
             'mon', 'crash',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
-            'container', 'agent', 'snmp-gateway', 'loki'
+            'container', 'agent', 'snmp-gateway', 'loki', 'promtail'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -1303,6 +1308,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             image = self.container_image_node_exporter
         elif daemon_type == 'loki':
             image = self.container_image_loki
+        elif daemon_type == 'promtail':
+            image = self.container_image_promtail
         elif daemon_type == 'haproxy':
             image = self.container_image_haproxy
         elif daemon_type == 'keepalived':
@@ -2456,6 +2463,7 @@ Then run the following:
                 'prometheus': PlacementSpec(count=1),
                 'node-exporter': PlacementSpec(host_pattern='*'),
                 'loki': PlacementSpec(count=1),
+                'promtail': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
@@ -2553,6 +2561,10 @@ Then run the following:
 
     @handle_orch_error
     def apply_loki(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_promtail(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

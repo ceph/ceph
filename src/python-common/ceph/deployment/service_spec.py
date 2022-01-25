@@ -437,7 +437,7 @@ class ServiceSpec(object):
     This structure is supposed to be enough information to
     start the services.
     """
-    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi loki mds mgr mon nfs ' \
+    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi loki promtail mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw agent ' \
                           'container ingress cephfs-mirror snmp-gateway'.split()
     REQUIRES_SERVICE_ID = 'iscsi mds nfs rgw container ingress '.split()
@@ -461,6 +461,7 @@ class ServiceSpec(object):
             'node-exporter': MonitoringSpec,
             'prometheus': MonitoringSpec,
             'loki': MonitoringSpec,
+            'promtail': MonitoringSpec,
             'snmp-gateway': SNMPGatewaySpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
@@ -1055,7 +1056,8 @@ class MonitoringSpec(ServiceSpec):
                  preview_only: bool = False,
                  port: Optional[int] = None,
                  ):
-        assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager', 'loki']
+        assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager',
+                                'loki', 'promtail']
 
         super(MonitoringSpec, self).__init__(
             service_type, service_id,
@@ -1077,7 +1079,8 @@ class MonitoringSpec(ServiceSpec):
                     'node-exporter': 9100,
                     'alertmanager': 9093,
                     'grafana': 3000,
-                    'loki': 3100}[self.service_type]
+                    'loki': 3100,
+                    'promtail': 9080}[self.service_type]
 
 
 yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)
