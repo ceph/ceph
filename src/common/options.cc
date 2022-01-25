@@ -8888,7 +8888,13 @@ std::vector<Option> get_mds_options() {
      .set_default(2)
      .set_flag(Option::FLAG_RUNTIME)
      .set_description("interval in seconds for metrics data update.")
-     .set_long_description("interval in seconds after which active MDSs send client metrics data to rank 0.")
+     .set_long_description("interval in seconds after which active MDSs send client metrics data to rank 0."),
+
+    Option("mds_dir_max_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+     .set_default(0)
+     .set_flag(Option::FLAG_RUNTIME)
+     .set_description("maximum number of entries per directory before new creat/links fail")
+     .set_long_description("The maximum number of entries before any new entries are rejected with ENOSPC.")
   });
 }
 
