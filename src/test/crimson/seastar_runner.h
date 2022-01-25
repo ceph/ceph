@@ -70,7 +70,7 @@ struct SeastarRunner {
       on_end.reset(new seastar::readable_eventfd);
       return seastar::now().then([this] {
 	begin_signaled = true;
-	auto r = ::eventfd_write(begin_fd.get(), APP_RUNNING);
+	[[maybe_unused]] auto r = ::eventfd_write(begin_fd.get(), APP_RUNNING);
 	assert(r == 0);
 	return seastar::now();
       }).then([this] {
