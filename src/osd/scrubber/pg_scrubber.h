@@ -846,12 +846,15 @@ private:
 
     [[nodiscard]] bool is_preemptable() const final { return m_preemptable; }
 
+    preemption_data_t(const preemption_data_t&) = delete;
+    preemption_data_t(preemption_data_t&&) = delete;
+
     bool do_preempt() final
     {
       if (m_preempted || !m_preemptable)
 	return false;
 
-      std::lock_guard<std::mutex> lk{m_preemption_lock};
+      std::lock_guard<ceph::mutex> lk{m_preemption_lock};
       if (!m_preemptable)
 	return false;
 
@@ -865,7 +868,7 @@ private:
 
     void enable_preemption()
     {
-      std::lock_guard<std::mutex> lk{m_preemption_lock};
+      std::lock_guard<ceph::mutex> lk{m_preemption_lock};
       if (are_preemptions_left() && !m_preempted) {
 	m_preemptable = true;
       }
@@ -881,7 +884,7 @@ private:
 
     bool disable_and_test() final
     {
-      std::lock_guard<std::mutex> lk{m_preemption_lock};
+      std::lock_guard<ceph::mutex> lk{m_preemption_lock};
       m_preemptable = false;
       return m_preempted;
     }
@@ -894,7 +897,7 @@ private:
 
     void adjust_parameters() final
     {
-      std::lock_guard<std::mutex> lk{m_preemption_lock};
+      std::lock_guard<ceph::mutex> lk{m_preemption_lock};
 
       if (m_preempted) {
 	m_preempted = false;
@@ -906,7 +909,7 @@ private:
 
    private:
     PG* m_pg;
-    mutable ceph::mutex m_preemption_lock;
+    mutable ceph::mutex m_preemption_lock = ceph::make_mutex("preemption_lock");
     bool m_preemptable{false};
     bool m_preempted{false};
     int m_left;
