@@ -96,7 +96,7 @@ Existing OSDs
 -------------
 For existing OSDs that have been deployed with ``ceph-disk``, they need to be
 scanned and activated :ref:`using the simple sub-command <ceph-volume-simple>`.
-If a different tooling was used then the only way to port them over to the new
+If a different tool was used then the only way to port them over to the new
 mechanism is to prepare them again (losing data). See
 :ref:`ceph-volume-lvm-existing-osds` for details on how to proceed.
 
