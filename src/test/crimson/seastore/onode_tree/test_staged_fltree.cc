@@ -1191,7 +1191,7 @@ class DummyChildPool {
       EXPECT_EQ(pool_clone.p_dummy->size(), 3);
 
       // erase and merge
-      auto pivot_key = node_to_split->get_pivot_key();
+      [[maybe_unused]] auto pivot_key = node_to_split->get_pivot_key();
       logger().info("\n\nERASE-MERGE {}:", node_to_split->get_name());
       assert(pivot_key.compare_to(key_hobj_t(key)) == MatchKindCMP::EQ);
       with_trans_intr(pool_clone.get_context().t, [&] (auto &t) {

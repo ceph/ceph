@@ -14,6 +14,11 @@ seastar::logger& journal_logger() {
 
 namespace crimson::os::seastore {
 
+bool is_aligned(uint64_t offset, uint64_t alignment)
+{
+  return (offset % alignment) == 0;
+}
+
 std::ostream& operator<<(std::ostream& out, const seastore_meta_t& meta)
 {
   return out << meta.seastore_id;
