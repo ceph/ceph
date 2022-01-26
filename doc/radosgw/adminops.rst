@@ -463,7 +463,7 @@ A tenant name may also specified as a part of ``uid``, by following the syntax
 
 :Description: Specify whether the user should be suspended.
 :Type: Boolean
-:Example: False [False]
+:Example: True [False]
 :Required: No
 
 .. versionadded:: Jewel
