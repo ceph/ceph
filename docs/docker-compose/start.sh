@@ -14,6 +14,10 @@ fi
 # Copy Docker file into teuthology
 cp ./Dockerfile teuthology/.
 
+cp ./teuthology.sh teuthology/
+
+cp ./custom_conf.yaml teuthology/
+
 # Generate an SSH keypair to use
 SSH_PRIVKEY_PATH=$(mktemp -u /tmp/teuthology-ssh-key-XXXXXX)
 ssh-keygen -t ed25519 -N '' -f $SSH_PRIVKEY_PATH
