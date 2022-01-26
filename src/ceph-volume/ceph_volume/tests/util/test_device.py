@@ -130,21 +130,21 @@ class TestDevice(object):
         disk = device.Device("/dev/sda1")
         assert disk.is_partition
 
-    def test_is_not_acceptable_device(self, device_info):
-        data = {"/dev/dm-0": {"foo": "bar"}}
+    def test_mpath_device_is_device(self, device_info):
+        data = {"/dev/foo": {"foo": "bar"}}
         lsblk = {"TYPE": "mpath"}
         device_info(devices=data, lsblk=lsblk)
-        disk = device.Device("/dev/dm-0")
-        assert not disk.is_device
+        disk = device.Device("/dev/foo")
+        assert disk.is_device is True
 
-    def test_is_not_lvm_memeber(self, device_info):
+    def test_is_not_lvm_member(self, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
         lsblk = {"TYPE": "part", "PKNAME": "sda"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda1")
         assert not disk.is_lvm_member
 
-    def test_is_lvm_memeber(self, device_info):
+    def test_is_lvm_member(self, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
         lsblk = {"TYPE": "part", "PKNAME": "sda"}
         device_info(devices=data, lsblk=lsblk)
