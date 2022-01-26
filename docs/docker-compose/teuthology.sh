@@ -11,11 +11,16 @@ teuthology-suite -v \
     -m testnode \
     --limit 1 \
     -n 100 \
-    --suite dummy \
+    --suite teuthology:no-ceph \
+    --filter-out "libcephfs,kclient,stream,centos,rhel" \
+    -d ubuntu -D 20.04 \
     --suite-branch master \
     --subset 9000/100000 \
     -p 75 \
+    --seed 349 \
     --force-priority \
     /teuthology/custom_conf.yaml
-teuthology-dispatcher --log-dir /teuthology/log --tube testnode
+teuthology-dispatcher -v \
+    --log-dir /teuthology/log \
+    --tube testnode
 tail -f /dev/null
