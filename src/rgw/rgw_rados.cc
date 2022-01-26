@@ -1311,8 +1311,10 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp)
       sync_log_trimmer->start();
     }
   }
-  data_notifier = new RGWDataNotifier(this);
-  data_notifier->start();
+  if (cct->_conf->rgw_data_notify_interval_msec) {
+    data_notifier = new RGWDataNotifier(this);
+    data_notifier->start();
+  }
 
   binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
   binfo_cache->init(svc.cache);

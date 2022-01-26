@@ -225,6 +225,9 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
   op_ret = store->get_bucket(s, s->user.get(), string(), bucket_name, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "get_bucket returned ret=" << op_ret << dendl;
+    if (op_ret == -ENOENT) {
+      op_ret = -ERR_NO_SUCH_BUCKET;
+    }
     return;
   }
 
@@ -405,4 +408,3 @@ RGWOp *RGWHandler_Bucket::op_delete()
 
   return new RGWOp_Bucket_Remove;
 }
-

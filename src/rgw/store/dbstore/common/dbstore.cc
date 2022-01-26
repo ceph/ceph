@@ -24,7 +24,7 @@ int DB::Initialize(string logfile, int loglevel)
   }
 
   if (loglevel > 0) {
-    cct->_conf->subsys.set_log_level(dout_subsys, loglevel);
+    cct->_conf->subsys.set_log_level(ceph_subsys_rgw, loglevel);
   }
   if (!logfile.empty()) {
     cct->_log->set_log_file(logfile);

@@ -40,7 +40,7 @@ public:
                       CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1)->get();
     cct->_log->set_log_file(logfile);
     cct->_log->reopen_log_file();
-    cct->_conf->subsys.set_log_level(dout_subsys, loglevel);
+    cct->_conf->subsys.set_log_level(ceph_subsys_rgw, loglevel);
   };
   ~DBStoreManager() { destroyAllHandles(); };
 
