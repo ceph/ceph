@@ -44,7 +44,9 @@ public:
       auto result_it = result.insert({query, {}}).first;
       if (is_limited(limits)) {
         for (auto& limit : limits) {
-          result_it->second.insert(*limit.second);
+          if (limit.second) {
+            result_it->second.insert(*limit.second);
+          }
         }
       }
     }
