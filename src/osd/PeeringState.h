@@ -2075,6 +2075,7 @@ public:
   void clear_prior_readable_until_ub() {
     prior_readable_until_ub = ceph::signedspan::zero();
     prior_readable_down_osds.clear();
+    info.history.prior_readable_until_ub = ceph::signedspan::zero();
   }
 
   void renew_lease(ceph::signedspan now) {
