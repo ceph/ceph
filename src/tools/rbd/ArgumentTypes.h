@@ -84,7 +84,9 @@ static const std::string NO_ERROR("no-error");
 static const std::string LIMIT("limit");
 
 static const std::set<std::string> SWITCH_ARGUMENTS = {
-  WHOLE_OBJECT, NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERROR};
+  WHOLE_OBJECT, IMAGE_SHARED, IMAGE_THICK_PROVISION, IMAGE_FLATTEN,
+  NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERROR
+};
 
 struct ImageSize {};
 struct ImageOrder {};
