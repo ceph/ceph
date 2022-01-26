@@ -371,6 +371,7 @@ class ObjectOp {
     class UpdateObjectDataOp *UpdateObjectData;
     class GetObjectDataOp *GetObjectData;
     class DeleteObjectDataOp *DeleteObjectData;
+    class DeleteStaleObjectDataOp *DeleteStaleObjectData;
 
     virtual int InitializeObjectOps(std::string db_name, const DoutPrefixProvider *dpp) { return 0; }
     virtual int FreeObjectOps(const DoutPrefixProvider *dpp) { return 0; }
@@ -426,8 +427,11 @@ class DBOp {
 
     const std::string CreateBucketTableQ =
       /* Corresponds to rgw::sal::Bucket
+       *  
+       *  For now only BucketName is made Primary key. Since buckets should
+       *  be unique across users in rgw, OwnerID is not made part of primary key.
+       *  However it is still referenced as foreign key
        *
-       *  For now only BucketName is made Primary key.
        *  If multiple tenants are stored in single .db handle, should
        *  make both (BucketName, Tenant) as Primary Key. Also should
        *  reference (UserID, Tenant) as Foreign key.
@@ -582,6 +586,7 @@ class DBOp {
       PartNum  INTEGER NOT NULL, \
       Offset   INTEGER, \
       Size 	 INTEGER, \
+      Mtime  BLOB,       \
       Data     BLOB,             \
       PRIMARY KEY (ObjName, BucketName, ObjInstance, ObjID, MultipartPartStr, PartNum), \
       FOREIGN KEY (BucketName) \
@@ -925,13 +930,31 @@ class ListUserBucketsOp: virtual public DBOp {
                           SyncPolicyInfoGroups, BucketAttrs, BucketVersion, BucketVersionTag, Mtime \
                           FROM '{}' WHERE OwnerID = {} AND BucketName > {} ORDER BY BucketName ASC LIMIT {}";
 
+    /* BucketNames are unique across users. Hence userid/OwnerID is not used as
+     * marker or for ordering here in the below query 
+     */
+    const std::string AllQuery = "SELECT  \
+                          BucketName, Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
+                          Count, PlacementName, PlacementStorageClass, OwnerID, Flags, Zonegroup, \
+                          HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf, \
+                          SwiftVersioning, SwiftVerLocation, \
+                          MdsearchConfig, NewBucketInstanceID, ObjectLock, \
+                          SyncPolicyInfoGroups, BucketAttrs, BucketVersion, BucketVersionTag, Mtime \
+                          FROM '{}' WHERE BucketName > {} ORDER BY BucketName ASC LIMIT {}";
+
   public:
     virtual ~ListUserBucketsOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(), params.bucket_table.c_str(),
+      if (params.op.query_str == "all") {
+        return fmt::format(AllQuery.c_str(), params.bucket_table.c_str(),
+          params.op.bucket.min_marker.c_str(),
+          params.op.list_max_count.c_str());
+      } else {
+        return fmt::format(Query.c_str(), params.bucket_table.c_str(),
           params.op.user.user_id.c_str(), params.op.bucket.min_marker.c_str(),
           params.op.list_max_count.c_str());
+      }
     }
 };
 
@@ -1148,8 +1171,8 @@ class PutObjectDataOp: virtual public DBOp {
   private:
     const std::string Query =
       "INSERT OR REPLACE INTO '{}' \
-      (ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, Offset, Size, Data) \
-      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
+      (ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, Offset, Size, Mtime, Data) \
+      VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
 
   public:
     virtual ~PutObjectDataOp() {}
@@ -1165,6 +1188,7 @@ class PutObjectDataOp: virtual public DBOp {
           params.op.obj_data.part_num,
           params.op.obj_data.offset.c_str(),
           params.op.obj_data.size,
+          params.op.obj.mtime,
           params.op.obj_data.data.c_str());
     }
 };
@@ -1195,7 +1219,7 @@ class GetObjectDataOp: virtual public DBOp {
   private:
     const std::string Query =
       "SELECT  \
-      ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, Offset, Size, Data \
+      ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, Offset, Size, Mtime, Data \
       from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {} and ObjID = {} ORDER BY MultipartPartStr, PartNum";
 
   public:
@@ -1226,6 +1250,23 @@ class DeleteObjectDataOp: virtual public DBOp {
           params.op.obj.obj_name.c_str(),
           params.op.obj.obj_instance.c_str(),
           params.op.obj.obj_id.c_str());
+    }
+};
+
+class DeleteStaleObjectDataOp: virtual public DBOp {
+  private:
+    const std::string Query =
+      "DELETE from '{}' WHERE (ObjName, ObjInstance, ObjID) NOT IN (SELECT s.ObjName, s.ObjInstance, s.ObjID from '{}' as s INNER JOIN '{}' USING (ObjName, BucketName, ObjInstance, ObjID)) and Mtime > {}";
+
+  public:
+    virtual ~DeleteStaleObjectDataOp() {}
+
+    std::string Schema(DBOpPrepareParams &params) {
+      return fmt::format(Query.c_str(),
+          params.objectdata_table.c_str(),
+          params.objectdata_table.c_str(),
+          params.object_table.c_str(),
+          params.op.obj.mtime);
     }
 };
 
@@ -1497,7 +1538,8 @@ class DB {
     int next_bucket_id() { return ++max_bucket_id; };
 
     int remove_bucket(const DoutPrefixProvider *dpp, const RGWBucketInfo info);
-    int list_buckets(const DoutPrefixProvider *dpp, const rgw_user& user,
+    int list_buckets(const DoutPrefixProvider *dpp, const std::string& query_str,
+        rgw_user& user,
         const std::string& marker,
         const std::string& end_marker,
         uint64_t max,
@@ -1590,6 +1632,31 @@ class DB {
       int read(const DoutPrefixProvider *dpp, int64_t ofs, uint64_t end, bufferlist& bl);
       int write(const DoutPrefixProvider *dpp, int64_t ofs, int64_t write_ofs, uint64_t len, bufferlist& bl);
     };
+
+    class GC : public Thread {
+      const DoutPrefixProvider *dpp;
+      DB *db;
+      /* Default time interval for GC 
+       * XXX: Make below options configurable
+       *
+       * gc_interval: The time between successive gc thread runs
+       * gc_obj_min_wait: Min. time to wait before deleting any data post its creation.
+       *                    
+       */
+      uint32_t gc_interval = 24*60*60*10; //msec ; default: 24*60*60*10
+      uint32_t gc_obj_min_wait = 600; //600sec default
+      std::string bucket_marker;
+      std::string user_marker;
+
+    public:
+      GC(const DoutPrefixProvider *_dpp, DB* _db) :
+            dpp(_dpp), db(_db) {}
+
+      void *entry() override;
+ 
+      friend class DB;
+    };
+    std::unique_ptr<DB::GC> gc_worker;
 
     class Bucket {
       friend class DB;
@@ -1849,6 +1916,10 @@ class DB {
     int rm_entry(const std::string& oid, const rgw::sal::Lifecycle::LCEntry& entry);
     int get_head(const std::string& oid, rgw::sal::Lifecycle::LCHead& head);
     int put_head(const std::string& oid, const rgw::sal::Lifecycle::LCHead& head);
+    int delete_stale_objs(const DoutPrefixProvider *dpp, const std::string& bucket,
+                          uint32_t min_wait);
+    int createGC(const DoutPrefixProvider *_dpp);
+    int stopGC();
 };
 
 struct db_get_obj_data {
