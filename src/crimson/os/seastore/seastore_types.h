@@ -38,6 +38,8 @@ struct seastore_meta_t {
   }
 };
 
+bool is_aligned(uint64_t offset, uint64_t alignment);
+
 std::ostream& operator<<(std::ostream& out, const seastore_meta_t& meta);
 
 // identifies a specific physical device within seastore

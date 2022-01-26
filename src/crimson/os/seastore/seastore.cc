@@ -517,7 +517,8 @@ SeaStore::get_attr_errorator::future<ceph::bufferlist> SeaStore::get_attr(
       }
       return _omap_get_value(
         t,
-        layout.xattr_root.get(onode.get_metadata_hint()),
+        layout.xattr_root.get(
+          onode.get_metadata_hint(segment_manager->get_block_size())),
         name);
     }
   ).handle_error(crimson::ct_error::input_output_error::handle([FNAME] {
@@ -616,7 +617,7 @@ SeaStore::omap_get_values(
     op_type_t::OMAP_GET_VALUES,
     [this, keys](auto &t, auto &onode) {
       omap_root_t omap_root = onode.get_layout().omap_root.get(
-	onode.get_metadata_hint());
+	onode.get_metadata_hint(segment_manager->get_block_size()));
       return _omap_get_values(
 	t,
 	std::move(omap_root),
@@ -694,7 +695,8 @@ SeaStore::_omap_list_ret SeaStore::_omap_list(
   const std::optional<std::string>& start,
   OMapManager::omap_list_config_t config) const
 {
-  auto root = omap_root.get(onode.get_metadata_hint());
+  auto root = omap_root.get(
+    onode.get_metadata_hint(segment_manager->get_block_size()));
   if (root.is_null()) {
     return seastar::make_ready_future<_omap_list_bare_ret>(
       true, omap_values_t{}
@@ -1109,13 +1111,13 @@ SeaStore::_omap_set_kvs(
 {
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
-    omap_root.get(onode->get_metadata_hint()),
+    omap_root.get(onode->get_metadata_hint(segment_manager->get_block_size())),
     [&, keys=std::move(kvs)](auto &omap_manager, auto &root) {
       tm_iertr::future<> maybe_create_root =
         !root.is_null() ?
         tm_iertr::now() :
         omap_manager.initialize_omap(
-          t, onode->get_metadata_hint()
+          t, onode->get_metadata_hint(segment_manager->get_block_size())
         ).si_then([&root](auto new_root) {
           root = new_root;
         });
@@ -1166,13 +1168,15 @@ SeaStore::tm_ret SeaStore::_omap_rmkeys(
 {
   LOG_PREFIX(SeaStore::_omap_rmkeys);
   DEBUGT("{} {} keys", *ctx.transaction, *onode, keys.size());
-  auto omap_root = onode->get_layout().omap_root.get(onode->get_metadata_hint());
+  auto omap_root = onode->get_layout().omap_root.get(
+    onode->get_metadata_hint(segment_manager->get_block_size()));
   if (omap_root.is_null()) {
     return seastar::now();
   } else {
     return seastar::do_with(
       BtreeOMapManager(*transaction_manager),
-      onode->get_layout().omap_root.get(onode->get_metadata_hint()),
+      onode->get_layout().omap_root.get(
+        onode->get_metadata_hint(segment_manager->get_block_size())),
       std::move(keys),
       [&ctx, &onode](
 	auto &omap_manager,
