@@ -72,12 +72,14 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile-testnode
+    deploy:
+      replicas: 3
     depends_on:
         paddles:
             condition: service_healthy
     links:
       - paddles
     ports:
-      - "22:22"
+      - "22"
     environment:
       SSH_PUBKEY:
