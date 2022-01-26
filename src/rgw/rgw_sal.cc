@@ -22,6 +22,7 @@
 #include "common/errno.h"
 
 #include "rgw_sal.h"
+#include "rgw_lc.h"
 #include "rgw_bucket.h"
 #include "rgw_multi.h"
 
@@ -132,6 +133,10 @@ int RGWRadosBucket::remove_bucket(bool delete_children, optional_yield y)
   if (ret < 0) {
     return ret;
   }
+
+  // remove lifecycle config, if any (XXX note could be made generic)
+  (void) store->getRados()->get_lc()->remove_bucket_config(
+          get_info(), get_attrs());
 
   ret = store->ctl()->bucket->sync_user_stats(info.owner, info);
   if ( ret < 0) {
