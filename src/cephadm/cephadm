@@ -3332,6 +3332,7 @@ def install_base_units(ctx, fsid):
         call_throws(ctx, ['systemctl', 'start', 'ceph-%s.target' % fsid])
 
     # logrotate for the cluster
+    uid, gid = extract_uid_gid(ctx)
     with open(ctx.logrotate_dir + '/ceph-%s' % fsid, 'w') as f:
         """
         This is a bit sloppy in that the killall/pkill will touch all ceph daemons
@@ -3348,13 +3349,13 @@ def install_base_units(ctx, fsid):
     compress
     sharedscripts
     postrotate
-        killall -q -1 ceph-mon ceph-mgr ceph-mds ceph-osd ceph-fuse radosgw rbd-mirror cephfs-mirror || pkill -1 -x 'ceph-mon|ceph-mgr|ceph-mds|ceph-osd|ceph-fuse|radosgw|rbd-mirror|cephfs-mirror' || true
+        chown %d:%d /var/log/ceph/%s/*.log; killall -q -1 ceph-mon ceph-mgr ceph-mds ceph-osd ceph-fuse radosgw rbd-mirror cephfs-mirror || pkill -1 -x 'ceph-mon|ceph-mgr|ceph-mds|ceph-osd|ceph-fuse|radosgw|rbd-mirror|cephfs-mirror' || true
     endscript
     missingok
     notifempty
     su root root
 }
-""" % fsid)
+""" % (fsid, uid, gid, fsid))
 
 
 def get_unit_file(ctx, fsid):
