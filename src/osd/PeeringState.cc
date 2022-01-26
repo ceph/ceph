@@ -2442,6 +2442,9 @@ void PeeringState::activate(
 
       bool needs_past_intervals = pi.dne();
 
+      // Save num_bytes for backfill reservation request, can't be negative
+      peer_bytes[peer] = std::max<int64_t>(0, pi.stats.stats.sum.num_bytes);
+
       if (pi.last_update == info.last_update) {
         // empty log
 	if (!pi.last_backfill.is_max())
@@ -2492,8 +2495,6 @@ void PeeringState::activate(
 	pi.last_interval_started = info.last_interval_started;
 	pi.history = info.history;
 	pi.hit_set = info.hit_set;
-        // Save num_bytes for reservation request, can't be negative
-        peer_bytes[peer] = std::max<int64_t>(0, pi.stats.stats.sum.num_bytes);
         pi.stats.stats.clear();
         pi.stats.stats.sum.num_bytes = peer_bytes[peer];
 

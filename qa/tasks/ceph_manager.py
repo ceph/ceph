@@ -1235,7 +1235,7 @@ class ObjectStoreTool:
             if self.osd == "primary":
                 self.osd = self.manager.get_object_primary(self.pool,
                                                            self.object_name)
-        assert self.osd
+        assert self.osd is not None
         if self.object_name:
             self.pgid = self.manager.get_object_pg_with_shard(self.pool,
                                                               self.object_name,
@@ -2132,6 +2132,24 @@ class CephManager:
             return j['pg_map']['pg_stats']
         except KeyError:
             return j['pg_stats']
+
+    def get_osd_df(self, osdid):
+        """
+        Get the osd df stats
+        """
+        out = self.raw_cluster_cmd('osd', 'df', 'name', 'osd.{}'.format(osdid),
+                                   '--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        return j['nodes'][0]
+
+    def get_pool_df(self, name):
+        """
+        Get the pool df stats
+        """
+        out = self.raw_cluster_cmd('df', 'detail', '--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        return next((p['stats'] for p in j['pools'] if p['name'] == name),
+                    None)
 
     def get_pgids_to_force(self, backfill):
         """
