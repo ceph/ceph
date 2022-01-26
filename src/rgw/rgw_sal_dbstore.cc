@@ -41,7 +41,7 @@ namespace rgw::sal {
     int ret;
 
     buckets.clear();
-    ret = store->getDB()->list_buckets(dpp, info.user_id, marker, end_marker, max,
+    ret = store->getDB()->list_buckets(dpp, "", info.user_id, marker, end_marker, max,
         need_stats, &ulist, &is_truncated);
     if (ret < 0)
       return ret;
@@ -1899,6 +1899,11 @@ namespace rgw::sal {
     if (use_lc_thread) {
       ret = db->createLCTables(dpp);
       lc->start_processor();
+    }
+
+    ret = db->createGC(dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) <<"GC thread creation failed: ret = " << ret << dendl;
     }
 
     return ret;

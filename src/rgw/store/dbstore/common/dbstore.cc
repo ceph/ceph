@@ -54,10 +54,28 @@ int DB::Initialize(string logfile, int loglevel)
   return ret;
 }
 
+int DB::createGC(const DoutPrefixProvider *dpp) {
+  int ret = 0;
+  /* create gc thread */
+
+  gc_worker = std::make_unique<DB::GC>(dpp, this);
+  gc_worker->create("db_gc");
+
+  return ret;
+}
+
+int DB::stopGC() {
+  if (gc_worker)
+    gc_worker->join();
+  return 0;
+}
+
 int DB::Destroy(const DoutPrefixProvider *dpp)
 {
   if (!db)
     return 0;
+
+  stopGC();
 
   closeDB(dpp);
 
@@ -140,6 +158,8 @@ DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *p
     return Ob->GetObjectData;
   if (!Op.compare("DeleteObjectData"))
     return Ob->DeleteObjectData;
+  if (!Op.compare("DeleteStaleObjectData"))
+    return Ob->DeleteStaleObjectData;
 
   return NULL;
 }
@@ -158,7 +178,7 @@ int DB::objectmapInsert(const DoutPrefixProvider *dpp, string bucket, class Obje
     // return error ?
     //
     // return success for now & delete the newly allocated ptr
-    ldpp_dout(dpp, 20)<<"Objectmap entry already exists for bucket("\
+    ldpp_dout(dpp, 30)<<"Objectmap entry already exists for bucket("\
       <<bucket<<"). Not inserted " << dendl;
     delete ptr;
     return 0;
@@ -558,7 +578,8 @@ out:
   return ret;
 }
 
-int DB::list_buckets(const DoutPrefixProvider *dpp, const rgw_user& user,
+int DB::list_buckets(const DoutPrefixProvider *dpp, const std::string& query_str,
+    rgw_user& user,
     const string& marker,
     const string& end_marker,
     uint64_t max,
@@ -575,6 +596,7 @@ int DB::list_buckets(const DoutPrefixProvider *dpp, const rgw_user& user,
   params.op.bucket.min_marker = marker;
   params.op.bucket.max_marker = end_marker;
   params.op.list_max_count = max;
+  params.op.query_str = query_str;
 
   ret = ProcessOp(dpp, "ListUserBuckets", &params);
 
@@ -597,6 +619,12 @@ int DB::list_buckets(const DoutPrefixProvider *dpp, const rgw_user& user,
     }
     buckets->add(std::move(entry));
   }
+
+  if (query_str == "all") {
+    // userID/OwnerID may have changed. Update it.
+    user.id = params.op.bucket.info.owner.id;
+  }
+
 out:
   return ret;
 }
@@ -1114,6 +1142,7 @@ int DB::raw_obj::write(const DoutPrefixProvider *dpp, int64_t ofs, int64_t write
   unsigned write_len = std::min((uint64_t)bl.length() - write_ofs, len);
   bl.begin(write_ofs).copy(write_len, params.op.obj_data.data);
   params.op.obj_data.size = params.op.obj_data.data.length();
+  params.op.obj.state.mtime = real_clock::now();
 
   ret = db->ProcessOp(dpp, "PutObjectData", &params);
 
@@ -1544,9 +1573,8 @@ int DB::Object::Write::prepare(const DoutPrefixProvider* dpp)
     gen_rand_alphanumeric(store->ctx(), buf, sizeof(buf) - 1);
     target->obj_id = target->obj.key.name + "." + buf;
   }
-  
-  ret = 0;
 
+  ret = 0;
   return ret;
 }
 
@@ -1710,6 +1738,7 @@ int DB::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
 
   /* XXX: handle multipart */
   params.op.query_str = "meta";
+  params.op.obj.obj_id = target->obj_id;
   ret = store->ProcessOp(dpp, "PutObject", &params);
 
   if (ret) {
@@ -1966,6 +1995,80 @@ int DB::put_head(const std::string& oid, const rgw::sal::Lifecycle::LCHead& head
 
 out:
   return ret;
+}
+
+int DB::delete_stale_objs(const DoutPrefixProvider *dpp, const std::string& bucket,
+                          uint32_t min_wait) {
+  DBOpParams params = {};
+  int ret = -1;
+
+  params.op.bucket.info.bucket.name = bucket;
+  /* Verify if bucket exists.
+   * XXX: This is needed for now to create objectmap of bucket
+   * in SQLGetBucket
+   */
+  InitializeParams(dpp, "GetBucket", &params);
+  ret = ProcessOp(dpp, "GetBucket", &params);
+  if (ret) {
+    ldpp_dout(dpp, 0) << "In GetBucket failed err:(" <<ret<<")" << dendl;
+  }
+
+  ldpp_dout(dpp, 30) << " Deleting stale_objs of bucket( " << bucket <<")" << dendl;
+  /* XXX: handle reads racing with delete here. Simple approach is maybe
+   * to use locks or sqlite transactions.
+   */
+  InitializeParams(dpp, "DeleteStaleObjectData", &params);
+  params.op.obj.state.mtime = (real_clock::now() + make_timespan(min_wait));
+  ret = ProcessOp(dpp, "DeleteStaleObjectData", &params);
+  if (ret) {
+    ldpp_dout(dpp, 0) << "In DeleteStaleObjectData failed err:(" <<ret<<")" << dendl;
+  }
+
+  return ret;
+}
+
+void *DB::GC::entry() {
+  do {
+    ldpp_dout(dpp, 2) << " DB GC started " << dendl;
+    int max = 100;
+    RGWUserBuckets buckets;
+    bool is_truncated = false;
+
+    do {
+      std::string& marker = bucket_marker;
+      rgw_user user;
+      user.id = user_marker;
+      buckets.clear();
+
+      int r = db->list_buckets(dpp, "all", user, marker, string(),
+                       max, false, &buckets, &is_truncated);
+ 
+      if (r < 0) { //do nothing? retry later ?
+        break;
+      }
+
+      for (const auto& ent : buckets.get_buckets()) {
+        const std::string &bname = ent.first;
+
+        r = db->delete_stale_objs(dpp, bname, gc_obj_min_wait);
+
+        if (r < 0) { //do nothing? skip to next entry?
+         ldpp_dout(dpp, 2) << " delete_stale_objs failed for bucket( " << bname <<")" << dendl;
+        }
+        bucket_marker = bname;
+        user_marker = user.id;
+
+        /* XXX: If using locks, unlock here and reacquire in the next iteration */
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+    } while(is_truncated);
+
+    bucket_marker.clear();
+    std::this_thread::sleep_for(std::chrono::milliseconds(gc_interval));
+
+  } while(1);
+
+  return nullptr;
 }
 
 } } // namespace rgw::store
