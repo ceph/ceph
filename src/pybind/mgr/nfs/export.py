@@ -127,13 +127,15 @@ class NFSRados:
             except ObjectNotFound:
                 return None
 
-    def update_obj(self, conf_block: str, obj: str, config_obj: str) -> None:
+    def update_obj(self, conf_block: str, obj: str, config_obj: str,
+                   should_notify: Optional[bool] = True) -> None:
         with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             ioctx.write_full(obj, conf_block.encode('utf-8'))
             log.debug("write configuration into rados object %s/%s/%s",
                       self.pool, self.namespace, obj)
-            _check_rados_notify(ioctx, config_obj)
+            if should_notify:
+                _check_rados_notify(ioctx, config_obj)
             log.debug("Update export %s in %s", obj, config_obj)
 
     def remove_obj(self, obj: str, config_obj: str) -> None:
@@ -350,11 +352,15 @@ class ExportMgr:
             log.exception("Export ID: %s not found", ex_id)
         return None
 
-    def _update_export(self, cluster_id: str, export: Export) -> None:
+    def _update_export(self, cluster_id: str, export: Export,
+                       need_nfs_service_restart: bool) -> None:
         self.exports[cluster_id].append(export)
         self._rados(cluster_id).update_obj(
             GaneshaConfParser.write_block(export.to_export_block()),
-            export_obj_name(export.export_id), conf_obj_name(export.cluster_id))
+            export_obj_name(export.export_id), conf_obj_name(export.cluster_id),
+            should_notify=not need_nfs_service_restart)
+        if need_nfs_service_restart:
+            restart_nfs_service(self.mgr, export.cluster_id)
 
     @export_cluster_checker
     def create_export(self, addr: Optional[List[str]] = None, **kwargs: Any) -> Tuple[int, str, str]:
@@ -798,11 +804,8 @@ class ExportMgr:
                 raise NFSInvalidOperation('secret_access_key change is not allowed')
 
         self.exports[cluster_id].remove(old_export)
-        self._update_export(cluster_id, new_export)
 
-        # TODO: detect whether the RGW export update is such that a reload is sufficient
-        if need_nfs_service_restart:
-            restart_nfs_service(self.mgr, new_export.cluster_id)
+        self._update_export(cluster_id, new_export, need_nfs_service_restart)
 
         return 0, f"Updated export {new_export.pseudo}", ""
 
