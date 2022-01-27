@@ -11,7 +11,14 @@ from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
 from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL
 from .exception import NFSException, NFSInvalidOperation, FSNotFound, \
     ClusterNotFound
-from .utils import available_clusters, check_fs, restart_nfs_service
+from .utils import (
+    EXPORT_PREFIX,
+    USER_CONF_PREFIX,
+    export_obj_name,
+    conf_obj_name,
+    available_clusters,
+    check_fs,
+    restart_nfs_service)
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -118,7 +125,7 @@ class NFSRados:
         with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             for obj in ioctx.list_objects():
-                if obj.key.startswith("userconf-nfs"):
+                if obj.key.startswith(USER_CONF_PREFIX):
                     return True
         return False
 
@@ -244,7 +251,7 @@ class ExportMgr:
         with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
             ioctx.set_namespace(rados_namespace)
             for obj in ioctx.list_objects():
-                if obj.key.startswith("export-"):
+                if obj.key.startswith(EXPORT_PREFIX):
                     size, _ = obj.stat()
                     raw_config = obj.read(size)
                     raw_config = raw_config.decode("utf-8")
@@ -258,8 +265,8 @@ class ExportMgr:
         self.exports[cluster_id].append(export)
         self._rados(cluster_id).write_obj(
             GaneshaConfParser.write_block(export.to_export_block()),
-            f'export-{export.export_id}',
-            f'conf-nfs.{export.cluster_id}'
+            export_obj_name(export.export_id),
+            conf_obj_name(export.cluster_id)
         )
 
     def _delete_export(
@@ -278,7 +285,7 @@ class ExportMgr:
             if export:
                 if pseudo_path:
                     self._rados(cluster_id).remove_obj(
-                        f'export-{export.export_id}', f'conf-nfs.{cluster_id}')
+                        export_obj_name(export.export_id), conf_obj_name(cluster_id))
                 self.exports[cluster_id].remove(export)
                 self._delete_export_user(export)
                 if not self.exports[cluster_id]:
@@ -295,7 +302,7 @@ class ExportMgr:
                 ioctx.set_namespace(cluster_id)
                 export = Export.from_export_block(
                     GaneshaConfParser(
-                        ioctx.read(f"export-{ex_id}").decode("utf-8")
+                        ioctx.read(export_obj_name(ex_id)).decode("utf-8")
                     ).parse()[0],
                     cluster_id
                 )
@@ -308,7 +315,7 @@ class ExportMgr:
         self.exports[cluster_id].append(export)
         self._rados(cluster_id).update_obj(
             GaneshaConfParser.write_block(export.to_export_block()),
-            f'export-{export.export_id}', f'conf-nfs.{export.cluster_id}')
+            export_obj_name(export.export_id), conf_obj_name(export.cluster_id))
 
     def format_path(self, path: str) -> str:
         if path:
