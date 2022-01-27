@@ -163,7 +163,6 @@ struct open_segment_wrapper_t : public boost::intrusive_ref_counter<
 using open_segment_wrapper_ref =
   boost::intrusive_ptr<open_segment_wrapper_t>;
 
-class LBAManager;
 class SegmentProvider;
 
 /**
@@ -185,11 +184,9 @@ class SegmentedAllocator : public ExtentAllocator {
     Writer(
       SegmentProvider& sp,
       SegmentManager& sm,
-      LBAManager& lba_manager,
       Journal& journal)
       : segment_provider(sp),
         segment_manager(sm),
-        lba_manager(lba_manager),
         journal(journal)
     {}
     Writer(Writer &&) = default;
@@ -205,13 +202,6 @@ class SegmentedAllocator : public ExtentAllocator {
       });
     }
   private:
-    using finish_record_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
-    using finish_record_iertr = trans_iertr<finish_record_ertr>;
-    using finish_record_ret = finish_record_iertr::future<>;
-    finish_record_ret finish_write(
-      Transaction& t,
-      ool_record_t& record);
     bool _needs_roll(seastore_off_t length) const;
 
     write_iertr::future<> _write(
@@ -235,7 +225,6 @@ class SegmentedAllocator : public ExtentAllocator {
     open_segment_wrapper_ref current_segment;
     std::list<open_segment_wrapper_ref> open_segments;
     seastore_off_t allocated_to = 0;
-    LBAManager& lba_manager;
     Journal& journal;
     crimson::condition_variable segment_rotation_guard;
     seastar::gate writer_guard;
@@ -245,7 +234,6 @@ public:
   SegmentedAllocator(
     SegmentProvider& sp,
     SegmentManager& sm,
-    LBAManager& lba_manager,
     Journal& journal);
 
   Writer &get_writer(placement_hint_t hint) {
@@ -281,15 +269,12 @@ private:
   SegmentProvider& segment_provider;
   SegmentManager& segment_manager;
   std::vector<Writer> writers;
-  LBAManager& lba_manager;
   Journal& journal;
 };
 
 class ExtentPlacementManager {
 public:
-  ExtentPlacementManager(
-    LBAManager& lba_manager
-  ) : lba_manager(lba_manager) {}
+  ExtentPlacementManager() = default;
 
   struct alloc_result_t {
     paddr_t paddr;
@@ -332,34 +317,25 @@ public:
   /**
    * delayed_alloc_or_ool_write
    *
-   * Performs any outstanding ool writes and updates pending lba updates
-   * accordingly
+   * Performs delayed allocation and do writes for out-of-line extents.
    */
   using alloc_paddr_iertr = ExtentOolWriter::write_iertr;
   alloc_paddr_iertr::future<> delayed_alloc_or_ool_write(
-    Transaction& t) {
+    Transaction& t,
+    const std::list<LogicalCachedExtentRef>& delayed_extents) {
     LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
-    SUBDEBUGT(seastore_tm, "start", t);
+    SUBDEBUGT(seastore_tm, "start with {} delayed extents",
+              t, delayed_extents.size());
     return seastar::do_with(
         std::map<ExtentAllocator*, std::list<LogicalCachedExtentRef>>(),
-        [this, &t](auto& alloc_map) {
-      LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
-      auto& alloc_list = t.get_delayed_alloc_list();
-      uint64_t num_ool_extents = 0;
-      for (auto& extent : alloc_list) {
-        // extents may be invalidated
-        if (!extent->is_valid()) {
-          t.increment_delayed_invalid_extents();
-          continue;
-        }
+        [this, &t, &delayed_extents](auto& alloc_map) {
+      for (auto& extent : delayed_extents) {
         // For now, just do ool allocation for any delayed extent
         auto& allocator_ptr = get_allocator(
           get_allocator_type(extent->hint), extent->hint
         );
         alloc_map[allocator_ptr.get()].emplace_back(extent);
-        num_ool_extents++;
       }
-      SUBDEBUGT(seastore_tm, "{} ool extents", t, num_ool_extents);
       return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
         auto allocator = p.first;
         auto& extents = p.second;
@@ -388,7 +364,6 @@ private:
     return devices[std::rand() % devices.size()];
   }
 
-  LBAManager& lba_manager;
   std::map<device_type_t, std::vector<ExtentAllocatorRef>> allocators;
 };
 using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;

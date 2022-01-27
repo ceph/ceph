@@ -175,6 +175,19 @@ public:
     laddr_t laddr,
     paddr_t prev_addr,
     paddr_t paddr) = 0;
+
+  /**
+   * update_mappings
+   *
+   * update lba mappings for delayed allocated extents
+   */
+  using update_mappings_iertr = update_mapping_iertr;
+  using update_mappings_ret = update_mapping_ret;
+  update_mappings_ret update_mappings(
+    Transaction& t,
+    const std::list<LogicalCachedExtentRef>& extents,
+    const std::vector<paddr_t>& original_paddrs);
+
   /**
    * get_physical_extent_if_live
    *

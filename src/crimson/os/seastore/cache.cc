@@ -25,8 +25,10 @@ SET_SUBSYS(seastore_cache);
 namespace crimson::os::seastore {
 
 Cache::Cache(
-  ExtentReader &reader)
+  ExtentReader &reader,
+  ExtentPlacementManager &epm)
   : reader(reader),
+    epm(epm),
     lru(crimson::common::get_conf<Option::size_t>(
 	  "seastore_cache_lru_size"))
 {

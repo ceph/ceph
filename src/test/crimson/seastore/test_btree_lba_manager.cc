@@ -30,6 +30,7 @@ struct btree_test_base :
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   ExtentReaderRef scanner;
   JournalRef journal;
+  ExtentPlacementManagerRef epm;
   CacheRef cache;
 
   size_t block_size;
@@ -74,7 +75,8 @@ struct btree_test_base :
     segment_manager = segment_manager::create_test_ephemeral();
     scanner.reset(new ExtentReader());
     journal.reset(new Journal(*segment_manager, *scanner));
-    cache.reset(new Cache(*scanner));
+    epm.reset(new ExtentPlacementManager());
+    cache.reset(new Cache(*scanner, *epm));
 
     block_size = segment_manager->get_block_size();
     next = segment_id_t{segment_manager->get_device_id(), 0};
@@ -117,6 +119,7 @@ struct btree_test_base :
       segment_manager.reset();
       scanner.reset();
       journal.reset();
+      epm.reset();
       cache.reset();
     }).handle_error(
       crimson::ct_error::all_same_way([] {

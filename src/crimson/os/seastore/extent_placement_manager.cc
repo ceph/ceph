@@ -3,7 +3,6 @@
 
 #include "crimson/os/seastore/extent_placement_manager.h"
 
-#include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 
 namespace {
@@ -19,11 +18,9 @@ namespace crimson::os::seastore {
 SegmentedAllocator::SegmentedAllocator(
   SegmentProvider& sp,
   SegmentManager& sm,
-  LBAManager& lba_manager,
   Journal& journal)
   : segment_provider(sp),
     segment_manager(sm),
-    lba_manager(lba_manager),
     journal(journal)
 {
   std::generate_n(
@@ -34,37 +31,8 @@ SegmentedAllocator::SegmentedAllocator(
       return Writer{
 	segment_provider,
 	segment_manager,
-	lba_manager,
 	journal};
       });
-}
-
-SegmentedAllocator::Writer::finish_record_ret
-SegmentedAllocator::Writer::finish_write(
-  Transaction& t,
-  ool_record_t& record) {
-  return trans_intr::do_for_each(record.get_extents(),
-    [this, &t](auto& ool_extent) {
-    LOG_PREFIX(SegmentedAllocator::Writer::finish_write);
-    auto& lextent = ool_extent.get_lextent();
-    DEBUGT("extent: {}, ool_paddr: {}",
-      t,
-      *lextent,
-      ool_extent.get_ool_paddr());
-    return lba_manager.update_mapping(
-      t,
-      lextent->get_laddr(),
-      lextent->get_paddr(),
-      ool_extent.get_ool_paddr()
-    ).si_then([&ool_extent, &t, &lextent, this, FNAME] {
-      lextent->hint = {};
-      TRACET("mark extent as ool at {} -- {}", t, ool_extent.get_ool_paddr(), *lextent);
-      t.mark_delayed_extent_ool(lextent, ool_extent.get_ool_paddr());
-      return finish_record_iertr::now();
-    });
-  }).si_then([&record] {
-    record.clear();
-  });
 }
 
 SegmentedAllocator::Writer::write_iertr::future<>
@@ -104,10 +72,9 @@ SegmentedAllocator::Writer::_write(
 
   return trans_intr::make_interruptible(
     current_segment->segment->write(record.get_base(), bl).safe_then(
-      [this, pr=std::move(pr), &t,
-      it=(--current_segment->inflight_writes.end()),
-      cs=current_segment]() mutable {
-        LOG_PREFIX(SegmentedAllocator::Writer::_write);
+      [this, FNAME, pr=std::move(pr), &t,
+       it=(--current_segment->inflight_writes.end()),
+       cs=current_segment]() mutable {
         if (cs->outdated) {
           DEBUGT("segment rolled", t);
           pr.set_value();
@@ -117,8 +84,15 @@ SegmentedAllocator::Writer::_write(
         }
         return seastar::now();
     })
-  ).si_then([this, &record, &t]() mutable {
-    return finish_write(t, record);
+  ).si_then([FNAME, &record, &t] {
+    for (auto& ool_extent : record.get_extents()) {
+      auto& lextent = ool_extent.get_lextent();
+      auto paddr = ool_extent.get_ool_paddr();
+      TRACET("ool extent written at {} -- {}", t, *lextent, paddr);
+      lextent->hint = {};
+      t.mark_delayed_extent_ool(lextent, paddr);
+    }
+    record.clear();
   });
 }
 

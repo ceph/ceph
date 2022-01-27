@@ -100,12 +100,8 @@ public:
     crimson::ct_error::input_output_error>;
   using base_iertr = trans_iertr<base_ertr>;
 
-  Cache(ExtentReader &reader);
+  Cache(ExtentReader &reader, ExtentPlacementManager &epm);
   ~Cache();
-
-  void set_epm(ExtentPlacementManager& epm) {
-    p_epm = &epm;
-  }
 
   /// Creates empty transaction by source
   TransactionRef create_transaction(
@@ -501,7 +497,7 @@ public:
     LOG_PREFIX(Cache::alloc_new_extent);
     SUBTRACET(seastore_cache, "allocate {} {}B, hint={}",
               t, T::TYPE, length, hint);
-    auto result = p_epm->alloc_new_extent(t, T::TYPE, length, hint);
+    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint);
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
     ret->set_paddr(result.paddr);
     t.add_fresh_extent(ret);
@@ -740,7 +736,7 @@ public:
 
 private:
   ExtentReader &reader;	   	   ///< ref to extent reader
-  ExtentPlacementManager* p_epm = nullptr;
+  ExtentPlacementManager& epm;
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents;             ///< set of live extents
 
