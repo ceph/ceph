@@ -312,7 +312,6 @@ public:
                   can_delay_allocation(dtype));
     CachedExtentRef extent = cache.alloc_new_extent_by_type(
         t, type, length, delay);
-    extent->backend_type = dtype;
     extent->hint = hint;
     return extent;
   }
@@ -333,7 +332,6 @@ public:
                   can_delay_allocation(dtype));
     TCachedExtentRef<T> extent = cache.alloc_new_extent<T>(
         t, length, delay);
-    extent->backend_type = dtype;
     extent->hint = hint;
     return extent;
   }
@@ -363,7 +361,7 @@ public:
         }
         // For now, just do ool allocation for any delayed extent
         auto& allocator_ptr = get_allocator(
-          extent->backend_type, extent->hint
+          get_allocator_type(extent->hint), extent->hint
         );
         alloc_map[allocator_ptr.get()].emplace_back(extent);
         num_ool_extents++;

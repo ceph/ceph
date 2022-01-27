@@ -1017,13 +1017,17 @@ record_t Cache::prepare_record(Transaction &t)
                i->get_type()).increment(i->get_length());
     retire_stat.increment(i->get_length());
     commit_retire_extent(t, i);
-    if (i->backend_type == device_type_t::RANDOM_BLOCK) {
+    // FIXME: whether the extent belongs to RBM should be available through its
+    // device-id from its paddr after RBM is properly integrated.
+    /*
+    if (i belongs to RBM) {
       paddr_t paddr = i->get_paddr();
       rbm_alloc_delta_t delta;
       delta.op = rbm_alloc_delta_t::op_types_t::CLEAR;
       delta.alloc_blk_ranges.push_back(std::make_pair(paddr, i->get_length()));
       t.add_rbm_alloc_info_blocks(delta);
     }
+    */
   }
 
   record.extents.reserve(t.inline_block_list.size());

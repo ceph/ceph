@@ -58,7 +58,6 @@ SegmentedAllocator::Writer::finish_write(
       lextent->get_paddr(),
       ool_extent.get_ool_paddr()
     ).si_then([&ool_extent, &t, &lextent, this, FNAME] {
-      lextent->backend_type = device_type_t::NONE;
       lextent->hint = {};
       TRACET("mark extent as ool at {} -- {}", t, ool_extent.get_ool_paddr(), *lextent);
       t.mark_delayed_extent_ool(lextent, ool_extent.get_ool_paddr());
