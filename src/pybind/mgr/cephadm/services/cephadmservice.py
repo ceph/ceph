@@ -1037,7 +1037,7 @@ class CephadmAgent(CephService):
 
         keyring = self.get_keyring_with_caps(self.get_auth_entity(daemon_id, host=host), [])
         daemon_spec.keyring = keyring
-        self.mgr.cache.agent_keys[host] = keyring
+        self.mgr.agent_cache.agent_keys[host] = keyring
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
