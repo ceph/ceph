@@ -438,6 +438,54 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
       });
     });
 
+    describe('should test service snmp-gateway', () => {
+      beforeEach(() => {
+        formHelper.setValue('service_type', 'snmp-gateway');
+        formHelper.setValue('snmp_destination', '192.168.20.1:8443');
+      });
+
+      it('should test snmp-gateway service with V2c', () => {
+        formHelper.setValue('snmp_version', 'V2c');
+        formHelper.setValue('snmp_community', 'public');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'snmp-gateway',
+          placement: {},
+          unmanaged: false,
+          snmp_version: 'V2c',
+          snmp_destination: '192.168.20.1:8443',
+          credentials: {
+            snmp_community: 'public'
+          }
+        });
+      });
+      it('should test snmp-gateway service with V3', () => {
+        formHelper.setValue('snmp_version', 'V3');
+        formHelper.setValue('engine_id', '800C53F00000');
+        formHelper.setValue('auth_protocol', 'SHA');
+        formHelper.setValue('privacy_protocol', 'DES');
+        formHelper.setValue('snmp_v3_auth_username', 'testuser');
+        formHelper.setValue('snmp_v3_auth_password', 'testpass');
+        formHelper.setValue('snmp_v3_priv_password', 'testencrypt');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'snmp-gateway',
+          placement: {},
+          unmanaged: false,
+          snmp_version: 'V3',
+          snmp_destination: '192.168.20.1:8443',
+          engine_id: '800C53F00000',
+          auth_protocol: 'SHA',
+          privacy_protocol: 'DES',
+          credentials: {
+            snmp_v3_auth_username: 'testuser',
+            snmp_v3_auth_password: 'testpass',
+            snmp_v3_priv_password: 'testencrypt'
+          }
+        });
+      });
+    });
+
     describe('check edit fields', () => {
       beforeEach(() => {
         component.editing = true;

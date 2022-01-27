@@ -422,6 +422,191 @@
             </div>
           </div>
         </ng-container>
+
+        <!-- SNMP-Gateway -->
+        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'snmp-gateway'">
+          <!-- snmp-version -->
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="snmp_version"
+                   i18n>Version</label>
+            <div class="cd-col-form-input">
+              <select id="snmp_version"
+                      name="snmp_version"
+                      class="form-control custom-select"
+                      formControlName="snmp_version"
+                      (change)="clearValidations()">
+                <option i18n
+                        [ngValue]="null">-- Select SNMP version --</option>
+                <option *ngFor="let snmpVersion of ['V2c', 'V3']"
+                        [value]="snmpVersion">{{ snmpVersion }}</option>
+              </select>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('snmp_version', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <!-- Destination -->
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   [ngClass]="{'required': ['snmp-gateway'].includes(serviceForm.controls.service_type.value)}"
+                   for="snmp_destination">
+              <span i18n>Destination</span>
+              <cd-helper>
+                <span i18n>Must be of the format hostname:port.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="snmp_destination"
+                     class="form-control"
+                     type="text"
+                     formControlName="snmp_destination">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('snmp_destination', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <!-- Engine id for snmp V3 -->
+          <div class="form-group row"
+               *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
+            <label class="cd-col-form-label required"
+                   [ngClass]="{'required': ['snmp-gateway'].includes(serviceForm.controls.service_type.value)}"
+                   for="engine_id">
+              <span i18n>Engine Id</span>
+              <cd-helper>
+                <span i18n>Unique identifier for the device (in hex).</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="engine_id"
+                     class="form-control"
+                     type="text"
+                     formControlName="engine_id">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('engine_id', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <!-- Auth protocol for snmp V3 -->
+          <div class="form-group row"
+               *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
+            <label class="cd-col-form-label required"
+                   for="auth_protocol"
+                   i18n>Auth Protocol</label>
+            <div class="cd-col-form-input">
+              <select id="auth_protocol"
+                      name="auth_protocol"
+                      class="form-control custom-select"
+                      formControlName="auth_protocol">
+                <option i18n
+                        [ngValue]="null">-- Select auth protocol --</option>
+                <option *ngFor="let authProtocol of ['SHA', 'MD5']"
+                        [value]="authProtocol">
+                  {{ authProtocol }}
+                </option>
+              </select>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('auth_protocol', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <!-- Privacy protocol for snmp V3 -->
+          <div class="form-group row"
+               *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
+            <label class="cd-col-form-label"
+                   for="privacy_protocol"
+                   i18n>Privacy Protocol</label>
+            <div class="cd-col-form-input">
+              <select id="privacy_protocol"
+                      name="privacy_protocol"
+                      class="form-control custom-select"
+                      formControlName="privacy_protocol">
+                <option i18n
+                        [ngValue]="null">-- Select privacy protocol --</option>
+                <option *ngFor="let privacyProtocol of ['DES', 'AES']"
+                        [value]="privacyProtocol">
+                  {{ privacyProtocol }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <!-- Credentials -->
+          <fieldset>
+            <legend i18n>Credentials</legend>
+            <!-- snmp v2c snmp_community -->
+            <div class="form-group row"
+                 *ngIf="serviceForm.controls.snmp_version.value === 'V2c'">
+              <label class="cd-col-form-label required"
+                     [ngClass]="{'required': ['snmp-gateway'].includes(serviceForm.controls.service_type.value)}"
+                     for="snmp_community">
+                <span i18n>SNMP Community</span>
+              </label>
+              <div class="cd-col-form-input">
+                <input id="snmp_community"
+                       class="form-control"
+                       type="text"
+                       formControlName="snmp_community">
+                <span class="invalid-feedback"
+                      *ngIf="serviceForm.showError('snmp_community', frm, 'required')"
+                      i18n>This field is required.</span>
+              </div>
+            </div>
+            <!-- snmp v3 auth username -->
+            <div class="form-group row"
+                 *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
+              <label class="cd-col-form-label required"
+                     [ngClass]="{'required': ['snmp-gateway'].includes(serviceForm.controls.service_type.value)}"
+                     for="snmp_v3_auth_username">
+                <span i18n>Username</span>
+              </label>
+              <div class="cd-col-form-input">
+                <input id="snmp_v3_auth_username"
+                       class="form-control"
+                       type="text"
+                       formControlName="snmp_v3_auth_username">
+                <span class="invalid-feedback"
+                      *ngIf="serviceForm.showError('snmp_v3_auth_username', frm, 'required')"
+                      i18n>This field is required.</span>
+              </div>
+            </div>
+            <!-- snmp v3 auth password -->
+            <div class="form-group row"
+                 *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
+              <label class="cd-col-form-label required"
+                     [ngClass]="{'required': ['snmp-gateway'].includes(serviceForm.controls.service_type.value)}"
+                     for="snmp_v3_auth_password">
+                <span i18n>Password</span>
+              </label>
+              <div class="cd-col-form-input">
+                <input id="snmp_v3_auth_password"
+                       class="form-control"
+                       type="password"
+                       formControlName="snmp_v3_auth_password">
+                <span class="invalid-feedback"
+                      *ngIf="serviceForm.showError('snmp_v3_auth_password', frm, 'required')"
+                      i18n>This field is required.</span>
+              </div>
+            </div>
+            <!-- snmp v3 priv password -->
+            <div class="form-group row"
+                 *ngIf="serviceForm.controls.snmp_version.value === 'V3' && serviceForm.controls.privacy_protocol.value !== null && serviceForm.controls.privacy_protocol.value !== undefined">
+              <label class="cd-col-form-label required"
+                     [ngClass]="{'required': ['snmp-gateway'].includes(serviceForm.controls.service_type.value)}"
+                     for="snmp_v3_priv_password">
+                <span i18n>Encryption</span>
+              </label>
+              <div class="cd-col-form-input">
+                <input id="snmp_v3_priv_password"
+                       class="form-control"
+                       type="password"
+                       formControlName="snmp_v3_priv_password">
+                <span class="invalid-feedback"
+                      *ngIf="serviceForm.showError('snmp_v3_priv_password', frm, 'required')"
+                      i18n>This field is required.</span>
+              </div>
+            </div>
+          </fieldset>
+        </ng-container>
         <!-- RGW, Ingress & iSCSI -->
         <ng-container *ngIf="!serviceForm.controls.unmanaged.value && ['rgw', 'iscsi', 'ingress'].includes(serviceForm.controls.service_type.value)">
           <!-- ssl -->
