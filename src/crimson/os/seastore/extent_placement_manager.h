@@ -6,10 +6,11 @@
 #include "seastar/core/gate.hh"
 
 #include "crimson/common/condition_variable.h"
-#include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
-#include "crimson/os/seastore/lba_manager.h"
+#include "crimson/os/seastore/journal.h"
+#include "crimson/os/seastore/logging.h"
+#include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
 
@@ -162,6 +163,9 @@ struct open_segment_wrapper_t : public boost::intrusive_ref_counter<
 using open_segment_wrapper_ref =
   boost::intrusive_ptr<open_segment_wrapper_t>;
 
+class LBAManager;
+class SegmentProvider;
+
 /**
  * SegmentedAllocator
  *
@@ -182,13 +186,11 @@ class SegmentedAllocator : public ExtentAllocator {
       SegmentProvider& sp,
       SegmentManager& sm,
       LBAManager& lba_manager,
-      Journal& journal,
-      Cache& cache)
+      Journal& journal)
       : segment_provider(sp),
         segment_manager(sm),
         lba_manager(lba_manager),
-        journal(journal),
-        cache(cache)
+        journal(journal)
     {}
     Writer(Writer &&) = default;
 
@@ -203,8 +205,9 @@ class SegmentedAllocator : public ExtentAllocator {
       });
     }
   private:
-    using update_lba_mapping_iertr = LBAManager::update_le_mapping_iertr;
-    using finish_record_iertr = update_lba_mapping_iertr;
+    using finish_record_ertr = crimson::errorator<
+      crimson::ct_error::input_output_error>;
+    using finish_record_iertr = trans_iertr<finish_record_ertr>;
     using finish_record_ret = finish_record_iertr::future<>;
     finish_record_ret finish_write(
       Transaction& t,
@@ -237,15 +240,13 @@ class SegmentedAllocator : public ExtentAllocator {
     crimson::condition_variable segment_rotation_guard;
     seastar::gate writer_guard;
     bool rolling_segment = false;
-    Cache& cache;
   };
 public:
   SegmentedAllocator(
     SegmentProvider& sp,
     SegmentManager& sm,
     LBAManager& lba_manager,
-    Journal& journal,
-    Cache& cache);
+    Journal& journal);
 
   Writer &get_writer(placement_hint_t hint) {
     return writers[std::rand() % writers.size()];
@@ -282,58 +283,50 @@ private:
   std::vector<Writer> writers;
   LBAManager& lba_manager;
   Journal& journal;
-  Cache& cache;
 };
 
 class ExtentPlacementManager {
 public:
   ExtentPlacementManager(
-    Cache& cache,
     LBAManager& lba_manager
-  ) : cache(cache), lba_manager(lba_manager) {}
+  ) : lba_manager(lba_manager) {}
 
-  /**
-   * alloc_new_extent_by_type
-   *
-   * Create a new extent, CachedExtent::poffset may not be set
-   * if a delayed allocation is needed.
-   */
-  CachedExtentRef alloc_new_extent_by_type(
+  struct alloc_result_t {
+    paddr_t paddr;
+    bufferptr bp;
+  };
+  alloc_result_t alloc_new_extent(
     Transaction& t,
     extent_types_t type,
     seastore_off_t length,
-    placement_hint_t hint) {
-    // only logical extents should fall in this path
-    assert(is_logical_type(type));
+    placement_hint_t hint
+  ) {
     assert(hint < placement_hint_t::NUM_HINTS);
-    auto dtype = get_allocator_type(hint);
-    // FIXME: set delay for COLD extent when the record overhead is low
-    bool delay = (hint > placement_hint_t::COLD &&
-                  can_delay_allocation(dtype));
-    CachedExtentRef extent = cache.alloc_new_extent_by_type(
-        t, type, length, delay);
-    extent->hint = hint;
-    return extent;
-  }
 
-  template<
-    typename T,
-    std::enable_if_t<std::is_base_of_v<LogicalCachedExtent, T>, int> = 0>
-  TCachedExtentRef<T> alloc_new_extent(
-    Transaction& t,
-    seastore_off_t length,
-    placement_hint_t hint) {
-    // only logical extents should fall in this path
-    static_assert(is_logical_type(T::TYPE));
-    assert(hint < placement_hint_t::NUM_HINTS);
-    auto dtype = get_allocator_type(hint);
+    // XXX: bp might be extended to point to differnt memory (e.g. PMem)
+    // according to the allocator.
+    auto bp = ceph::bufferptr(
+      buffer::create_page_aligned(length));
+    bp.zero();
+
+    if (!is_logical_type(type)) {
+      // TODO: implement out-of-line strategy for physical extent.
+      return {make_record_relative_paddr(0),
+              std::move(bp)};
+    }
+
     // FIXME: set delay for COLD extent when the record overhead is low
+    // NOTE: delay means to delay the decision about whether to write the
+    // extent as inline or out-of-line extents.
     bool delay = (hint > placement_hint_t::COLD &&
-                  can_delay_allocation(dtype));
-    TCachedExtentRef<T> extent = cache.alloc_new_extent<T>(
-        t, length, delay);
-    extent->hint = hint;
-    return extent;
+                  can_delay_allocation(get_allocator_type(hint)));
+    if (delay) {
+      return {make_delayed_temp_paddr(0),
+              std::move(bp)};
+    } else {
+      return {make_record_relative_paddr(0),
+              std::move(bp)};
+    }
   }
 
   /**
@@ -395,7 +388,6 @@ private:
     return devices[std::rand() % devices.size()];
   }
 
-  Cache& cache;
   LBAManager& lba_manager;
   std::map<device_type_t, std::vector<ExtentAllocatorRef>> allocators;
 };

@@ -304,7 +304,7 @@ public:
     LOG_PREFIX(TransactionManager::alloc_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
-    auto ext = epm->alloc_new_extent<T>(
+    auto ext = cache->alloc_new_extent<T>(
       t,
       len,
       placement_hint);
@@ -551,8 +551,7 @@ public:
 	*segment_cleaner,
 	*sm,
 	*lba_manager,
-	*journal,
-	*cache));
+	*journal));
   }
 
   ~TransactionManager();

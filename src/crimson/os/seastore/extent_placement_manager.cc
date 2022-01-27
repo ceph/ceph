@@ -1,8 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab expandtab
 
-#include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/extent_placement_manager.h"
+
+#include "crimson/os/seastore/lba_manager.h"
+#include "crimson/os/seastore/segment_cleaner.h"
 
 namespace {
   seastar::logger& logger() {
@@ -18,13 +20,11 @@ SegmentedAllocator::SegmentedAllocator(
   SegmentProvider& sp,
   SegmentManager& sm,
   LBAManager& lba_manager,
-  Journal& journal,
-  Cache& cache)
+  Journal& journal)
   : segment_provider(sp),
     segment_manager(sm),
     lba_manager(lba_manager),
-    journal(journal),
-    cache(cache)
+    journal(journal)
 {
   std::generate_n(
     std::back_inserter(writers),
@@ -35,8 +35,7 @@ SegmentedAllocator::SegmentedAllocator(
 	segment_provider,
 	segment_manager,
 	lba_manager,
-	journal,
-        cache};
+	journal};
       });
 }
 
