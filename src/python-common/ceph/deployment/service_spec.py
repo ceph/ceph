@@ -525,6 +525,21 @@ class ServiceSpec(object):
         #: :ref:`cephadm-rgw-networks` and :ref:`cephadm-mgr-networks`.
         self.networks: List[str] = networks or []
 
+        #: Ceph config options that will be applied to this specific service. For example:
+        #: .. code-block:: yaml
+        #:
+        #:     service_type: rgw
+        #:     service_id: ext-website
+        #:     placement:
+        #:       label: rgw
+        #:     spec:
+        #:       rgw_frontend_port: 8200
+        #:     config:
+        #:       rgw_dns_name: ceph-s3-ext.example.com
+        #:       rgw_dns_s3website_name: ceph-s3-website-ext.example.com
+        #:       rgw_enable_apis: s3website
+        #:       rgw_enable_static_website: true
+        #:       rgw_resolve_cname: true
         self.config: Optional[Dict[str, str]] = None
         if config:
             self.config = {k.replace(' ', '_'): v for k, v in config.items()}

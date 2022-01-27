@@ -100,6 +100,8 @@ deployment of services.  Here is an example of a service specification in YAML:
     unmanaged: false
     networks:
     - 192.169.142.0/24
+    config:
+      some_name: value
     spec:
       # Additional service specific attributes.
 
