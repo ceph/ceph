@@ -98,6 +98,20 @@ struct ImageDispatchSpec<I>::TokenRequestedVisitor
     return true;
   }
 
+  uint64_t operator()(const Discard&) const {
+    if (spec->m_image_ctx.cct->_conf.template get_val<bool>("rbd_discard_with_qos")) {
+      if (flag & RBD_QOS_READ_MASK) {
+        *tokens = 0;
+        return false;
+      }
+      *tokens = (flag & RBD_QOS_BPS_MASK) ? spec->extents_length() : 1;
+      return true;
+    }
+
+    *tokens = 0;
+    return true;
+  }
+
   template <typename T>
   uint64_t operator()(const T&) const {
     if (flag & RBD_QOS_READ_MASK) {

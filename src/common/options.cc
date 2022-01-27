@@ -7524,6 +7524,10 @@ static std::vector<Option> get_rbd_options() {
     .set_min(1)
     .set_description("minimum schedule tick (in milliseconds) for QoS"),
 
+    Option("rbd_discard_with_qos", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("discard and writesame don't use qos"),
+
     Option("rbd_discard_on_zeroed_write_same", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("discard data on zeroed write same instead of writing zero"),
