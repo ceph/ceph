@@ -121,7 +121,7 @@ public:
     ceph_assert(!is_weak());
     if (delayed) {
       assert(ref->is_logical());
-      ref->set_paddr(delayed_temp_paddr(delayed_temp_offset));
+      ref->set_paddr(make_delayed_temp_paddr(delayed_temp_offset));
       delayed_temp_offset += ref->get_length();
       delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
     } else {
