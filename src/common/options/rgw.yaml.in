@@ -3241,13 +3241,53 @@ options:
   type: str
   level: advanced
   desc: experimental Option to set backend store type
-  long_desc: defaults to rados. Other valid values are dbstore(experimental).
+  long_desc: defaults to rados. Other valid values are dbstore and motr (both experimental).
   default: rados
   services:
   - rgw
   enum_values:
   - rados
   - dbstore
+  - motr
+- name: motr_profile_fid
+  type: str
+  level: advanced
+  desc: experimental Option to set Motr profile fid
+  long_desc: example value 0x7000000000000001:0x4f
+  default: 0x7000000000000001:0x0
+  services:
+  - rgw
+- name: motr_my_fid
+  type: str
+  level: advanced
+  desc: experimental Option to set my Motr fid
+  long_desc: example value 0x7200000000000001:0x29
+  default: 0x7200000000000001:0x0
+  services:
+  - rgw
+- name: motr_my_endpoint
+  type: str
+  level: advanced
+  desc: experimental Option to set my Motr endpoint address
+  long_desc: example value 192.168.180.182@tcp:12345:4:1
+  default: 192.168.180.182@tcp:12345:4:1
+  services:
+  - rgw
+- name: motr_ha_endpoint
+  type: str
+  level: advanced
+  desc: experimental Option to set Motr HA agent endpoint address
+  long_desc: example value 192.168.180.182@tcp:12345:1:1
+  default: 192.168.180.182@tcp:12345:1:1
+  services:
+  - rgw
+- name: motr_tracing_enabled
+  type: bool
+  level: advanced
+  desc: Set to true when Motr client debugging is needed
+  default: false
+  services:
+  - rgw
 - name: rgw_luarocks_location
   type: str
   level: advanced
