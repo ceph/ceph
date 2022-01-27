@@ -1299,7 +1299,7 @@ bool OSDService::prepare_to_stop()
 
   OSDMapRef osdmap = get_osdmap();
   if (osdmap && osdmap->is_up(whoami)) {
-    dout(0) << __func__ << " telling mon we are shutting down" << dendl;
+    dout(0) << __func__ << " telling mon we are shutting down and dead " << dendl;
     set_state(PREPARING_TO_STOP);
     monc->send_mon_message(
       new MOSDMarkMeDown(
@@ -1307,12 +1307,14 @@ bool OSDService::prepare_to_stop()
 	whoami,
 	osdmap->get_addrs(whoami),
 	osdmap->get_epoch(),
-	true  // request ack
+	true,  // request ack
+	true   // mark as down and dead
 	));
     const auto timeout = ceph::make_timespan(cct->_conf->osd_mon_shutdown_timeout);
     is_stopping_cond.wait_for(l, timeout,
       [this] { return get_state() == STOPPING; });
   }
+
   dout(0) << __func__ << " starting shutdown" << dendl;
   set_state(STOPPING);
   return true;
