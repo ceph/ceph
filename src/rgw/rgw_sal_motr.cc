@@ -2120,7 +2120,7 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   // Insert an entry into bucket index.
   string bucket_index_iname = "motr.rgw.bucket.index." + obj.get_bucket()->get_name();
   rc = store->do_idx_op_by_name(bucket_index_iname,
-                                M0_IC_PUT, obj.get_key().to_str(), bl, false);
+                                M0_IC_PUT, obj.get_key().to_str(), bl);
   if (rc == 0)
     store->get_obj_meta_cache()->put(dpp, obj.get_key().to_str(), bl);
 
@@ -2280,6 +2280,8 @@ int MotrMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
   string obj_part_iname = "motr.rgw.object." + bucket->get_name() + "." + oid + ".parts";
   ldpp_dout(dpp, 20) << "MotrMultipartUpload::init(): object part index=" << obj_part_iname << dendl;
   rc = store->create_motr_idx_by_name(obj_part_iname);
+  if (rc == -EEXIST)
+    rc = 0;
   if (rc < 0)
     // TODO: clean the bucket index entry
     ldpp_dout(dpp, 0) << "Failed to create object multipart index  " << obj_part_iname << dendl;
@@ -2552,7 +2554,7 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): target_obj name=" << target_obj->get_name()
                                   << " target_obj oid=" << target_obj->get_oid() << dendl;
   rc = store->do_idx_op_by_name(bucket_index_iname, M0_IC_PUT,
-                                target_obj->get_name(), update_bl, false);
+                                target_obj->get_name(), update_bl);
   if (rc < 0)
     return rc;
 
