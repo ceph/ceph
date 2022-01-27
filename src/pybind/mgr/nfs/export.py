@@ -4,7 +4,7 @@ import logging
 from typing import List, Any, Dict, Tuple, Optional, TYPE_CHECKING, TypeVar, Callable, cast
 from os.path import normpath
 
-from rados import TimedOut, ObjectNotFound
+from rados import TimedOut, ObjectNotFound, Rados
 
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
 
@@ -46,8 +46,8 @@ def exception_handler(
 
 
 class NFSRados:
-    def __init__(self, mgr: 'Module', namespace: str) -> None:
-        self.mgr = mgr
+    def __init__(self, rados: 'Rados', namespace: str) -> None:
+        self.rados = rados
         self.pool = POOL_NAME
         self.namespace = namespace
 
@@ -58,7 +58,7 @@ class NFSRados:
         return RawBlock('%url', values={'value': self._make_rados_url(obj_name)})
 
     def write_obj(self, conf_block: str, obj: str, config_obj: str = '') -> None:
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+        with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             ioctx.write_full(obj, conf_block.encode('utf-8'))
             if not config_obj:
@@ -74,7 +74,7 @@ class NFSRados:
             log.debug("Added %s url to %s", obj, config_obj)
 
     def read_obj(self, obj: str) -> Optional[str]:
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+        with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             try:
                 return ioctx.read(obj, 1048576).decode()
@@ -82,7 +82,7 @@ class NFSRados:
                 return None
 
     def update_obj(self, conf_block: str, obj: str, config_obj: str) -> None:
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+        with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             ioctx.write_full(obj, conf_block.encode('utf-8'))
             log.debug("write configuration into rados object %s/%s/%s",
@@ -91,7 +91,7 @@ class NFSRados:
             log.debug("Update export %s in %s", obj, config_obj)
 
     def remove_obj(self, obj: str, config_obj: str) -> None:
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+        with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             export_urls = ioctx.read(config_obj)
             url = '%url "{}"\n\n'.format(self._make_rados_url(obj))
@@ -102,13 +102,13 @@ class NFSRados:
             log.debug("Object deleted: %s", url)
 
     def remove_all_obj(self) -> None:
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+        with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             for obj in ioctx.list_objects():
                 obj.remove()
 
     def check_user_config(self) -> bool:
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
+        with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             for obj in ioctx.list_objects():
                 if obj.key.startswith("userconf-nfs"):
@@ -256,7 +256,7 @@ class ExportMgr:
 
     def _save_export(self, cluster_id: str, export: Export) -> None:
         self.exports[cluster_id].append(export)
-        NFSRados(self.mgr, cluster_id).write_obj(
+        self._rados(cluster_id).write_obj(
             GaneshaConfParser.write_block(export.to_export_block()),
             f'export-{export.export_id}',
             f'conf-nfs.{export.cluster_id}'
@@ -277,7 +277,7 @@ class ExportMgr:
 
             if export:
                 if pseudo_path:
-                    NFSRados(self.mgr, cluster_id).remove_obj(
+                    self._rados(cluster_id).remove_obj(
                         f'export-{export.export_id}', f'conf-nfs.{cluster_id}')
                 self.exports[cluster_id].remove(export)
                 self._delete_export_user(export)
@@ -306,7 +306,7 @@ class ExportMgr:
 
     def _update_export(self, cluster_id: str, export: Export) -> None:
         self.exports[cluster_id].append(export)
-        NFSRados(self.mgr, cluster_id).update_obj(
+        self._rados(cluster_id).update_obj(
             GaneshaConfParser.write_block(export.to_export_block()),
             f'export-{export.export_id}', f'conf-nfs.{export.cluster_id}')
 
@@ -748,3 +748,7 @@ class ExportMgr:
         restart_nfs_service(self.mgr, new_export.cluster_id)
 
         return 0, f"Updated export {new_export.pseudo}", ""
+
+    def _rados(self, cluster_id: str) -> NFSRados:
+        """Return a new NFSRados object for the given cluster id."""
+        return NFSRados(self.mgr.rados, cluster_id)
