@@ -402,6 +402,30 @@ YAML can also be used to specify limits on hosts:
         - host2
         - host3
 
+.. _cephadm_co_location:
+
+Co-location of daemons
+----------------------
+
+Cephadm supports the deployment of multiple daemons on the same host:
+
+.. code-block:: yaml
+
+    service_type: rgw
+    placement:
+      label: rgw
+      count-per-host: 2
+
+The main reason for deploying multiple daemons per host is an additional
+performance benefit for running multiple RGW and MDS daemons on the same host.
+
+See also: 
+
+* :ref:`cephadm_mgr_co_location`.
+* :ref:`cephadm-rgw-designated_gateways`.
+
+This feature was introduced in Pacific.
+
 Algorithm description
 ---------------------
 
