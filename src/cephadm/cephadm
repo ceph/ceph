@@ -6698,6 +6698,10 @@ class Packager(object):
         self.branch = branch
         self.commit = commit
 
+    def validate(self) -> None:
+        """Validate parameters before writing any state to disk."""
+        pass
+
     def add_repo(self) -> None:
         raise NotImplementedError
 
@@ -6975,7 +6979,7 @@ class YumDnf(Packager):
             return '%s/rpm-%s/%s' % (self.ctx.repo_url, self.stable,
                                      self.distro_code)
 
-    def add_repo(self) -> None:
+    def validate(self) -> None:
         if self.distro_code.startswith('fc'):
             raise Error('Ceph team does not build Fedora specific packages and therefore cannot add repos for this distro')
         if self.distro_code == 'el7':
@@ -6983,6 +6987,20 @@ class YumDnf(Packager):
                 raise Error('Ceph does not support pacific or later for this version of this linux distro and therefore cannot add a repo for it')
             if self.version and self.version.split('.')[0] >= '16':
                 raise Error('Ceph does not support 16.y.z or later for this version of this linux distro and therefore cannot add a repo for it')
+
+        if self.stable or self.version:
+            # we know that yum & dnf require there to be a
+            # $base_url/$arch/repodata/repomd.xml so we can test if this URL
+            # is gettable in order to validate the inputs
+            test_url = self.repo_baseurl() + '/noarch/repodata/repomd.xml'
+            try:
+                urlopen(test_url)
+            except HTTPError as err:
+                logger.error('unable to fetch repo metadata: %r', err)
+                raise Error('failed to fetch repository metadata. please check'
+                            ' the provided parameters are correct and try again')
+
+    def add_repo(self) -> None:
         if self.stable or self.version:
             content = ''
             for n, t in {
@@ -7159,6 +7177,7 @@ def command_add_repo(ctx: CephadmContext) -> None:
                           version=ctx.version,
                           branch=ctx.dev,
                           commit=ctx.dev_commit)
+    pkg.validate()
     pkg.add_repo()
     logger.info('Completed adding repo.')
 
