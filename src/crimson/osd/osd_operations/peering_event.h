@@ -71,7 +71,6 @@ protected:
   complete_rctx(Ref<PG>);
 
   virtual seastar::future<> complete_rctx_no_pg() { return seastar::now();}
-  virtual seastar::future<Ref<PG>> get_pg() = 0;
 
 public:
   template <typename... Args>
@@ -96,18 +95,17 @@ public:
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
-  seastar::future<> start();
+  seastar::future<> with_pg(
+    ShardServices &shard_services, Ref<PG> pg);
 };
 
 class RemotePeeringEvent : public PeeringEvent<RemotePeeringEvent> {
 protected:
-  OSD &osd;
   crimson::net::ConnectionRef conn;
 
   void on_pg_absent() final;
   PeeringEvent::interruptible_future<> complete_rctx(Ref<PG> pg) override;
   seastar::future<> complete_rctx_no_pg() override;
-  seastar::future<Ref<PG>> get_pg() final;
 
 public:
   class OSDPipeline {
@@ -119,9 +117,8 @@ public:
   };
 
   template <typename... Args>
-  RemotePeeringEvent(OSD &osd, crimson::net::ConnectionRef conn, Args&&... args) :
+  RemotePeeringEvent(crimson::net::ConnectionRef conn, Args&&... args) :
     PeeringEvent(std::forward<Args>(args)...),
-    osd(osd),
     conn(conn)
   {}
 
@@ -152,15 +149,19 @@ public:
 #endif
     CompletionEvent
   > tracking_events;
-private:
-  ConnectionPipeline &cp();
-  OSDPipeline &op();
+
+  static constexpr bool can_create() { return true; }
+  auto get_create_info() { return std::move(evt.create_info); }
+  spg_t get_pgid() const {
+    return pgid;
+  }
+  ConnectionPipeline &get_connection_pipeline();
+  PipelineHandle &get_handle() { return handle; }
+  epoch_t get_epoch() const { return evt.get_epoch_sent(); }
 };
 
 class LocalPeeringEvent final : public PeeringEvent<LocalPeeringEvent> {
 protected:
-  seastar::future<Ref<PG>> get_pg() final;
-
   Ref<PG> pg;
 
 public:
@@ -170,6 +171,7 @@ public:
     pg(pg)
   {}
 
+  seastar::future<> start();
   virtual ~LocalPeeringEvent();
 
   std::tuple<
