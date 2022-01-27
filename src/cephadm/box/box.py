@@ -14,8 +14,18 @@ from util import (Config, Target, ensure_inside_container,
 CEPH_IMAGE = 'quay.ceph.io/ceph-ci/ceph:master'
 BOX_IMAGE = 'cephadm-box:latest'
 
+# NOTE: this image tar is a trickeroo so cephadm won't pull the image everytime
+# we deploy a cluster. Keep in mind that you'll be responsible of pulling the
+# image yourself with `box cluster setup`
+CEPH_IMAGE_TAR = 'docker/ceph/image/quay.ceph.image.tar'
+
+def remove_ceph_image_tar():
+    if os.path.exists(CEPH_IMAGE_TAR):
+        os.remove(CEPH_IMAGE_TAR)
+
 def cleanup_box() -> None:
     osd.cleanup()
+    remove_ceph_image_tar()
 
 def image_exists(image_name: str):
     # extract_tag
@@ -39,10 +49,10 @@ def get_ceph_image():
     run_shell_command(f'docker build -t {CEPH_IMAGE} docker/ceph')
     if not os.path.exists('docker/ceph/image'):
         os.mkdir('docker/ceph/image')
-    image_tar = 'docker/ceph/image/quay.ceph.image.tar'
-    if not os.path.exists(image_tar):
-        os.remove(image_tar)
-    run_shell_command(f'docker save {CEPH_IMAGE} -o {image_tar}')
+
+    remove_ceph_image_tar()
+
+    run_shell_command(f'docker save {CEPH_IMAGE} -o {CEPH_IMAGE_TAR}')
     print('Ceph image added')
 
 def get_box_image():
@@ -91,10 +101,6 @@ class Cluster(Target):
         run_shell_command('echo "export CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:master" >> ~/.bashrc')
 
         extra_args = []
-
-        shared_ceph_folder = os.environ.get('SHARED_CEPH_FOLDER')
-        if shared_ceph_folder:
-            extra_args.extend(['--shared_ceph_folder', shared_ceph_folder])
 
         extra_args.append('--skip-pull')
 
