@@ -45,6 +45,13 @@ def exception_handler(
     return getattr(exception_obj, 'errno', -1), "", str(exception_obj)
 
 
+def _check_rados_notify(ioctx: Any, obj: str) -> None:
+    try:
+        ioctx.notify(obj)
+    except TimedOut:
+        log.exception("Ganesha timed out")
+
+
 class NFSRados:
     def __init__(self, rados: 'Rados', namespace: str) -> None:
         self.rados = rados
@@ -70,7 +77,7 @@ class NFSRados:
             # Add created obj url to common config obj
             ioctx.append(config_obj, GaneshaConfParser.write_block(
                          self._create_url_block(obj)).encode('utf-8'))
-            ExportMgr._check_rados_notify(ioctx, config_obj)
+            _check_rados_notify(ioctx, config_obj)
             log.debug("Added %s url to %s", obj, config_obj)
 
     def read_obj(self, obj: str) -> Optional[str]:
@@ -87,7 +94,7 @@ class NFSRados:
             ioctx.write_full(obj, conf_block.encode('utf-8'))
             log.debug("write configuration into rados object %s/%s/%s",
                       self.pool, self.namespace, obj)
-            ExportMgr._check_rados_notify(ioctx, config_obj)
+            _check_rados_notify(ioctx, config_obj)
             log.debug("Update export %s in %s", obj, config_obj)
 
     def remove_obj(self, obj: str, config_obj: str) -> None:
@@ -98,7 +105,7 @@ class NFSRados:
             export_urls = export_urls.replace(url.encode('utf-8'), b'')
             ioctx.remove_object(obj)
             ioctx.write_full(config_obj, export_urls)
-            ExportMgr._check_rados_notify(ioctx, config_obj)
+            _check_rados_notify(ioctx, config_obj)
             log.debug("Object deleted: %s", url)
 
     def remove_all_obj(self) -> None:
@@ -125,13 +132,6 @@ class ExportMgr:
         self.mgr = mgr
         self.rados_pool = POOL_NAME
         self._exports: Optional[Dict[str, List[Export]]] = export_ls
-
-    @staticmethod
-    def _check_rados_notify(ioctx: Any, obj: str) -> None:
-        try:
-            ioctx.notify(obj)
-        except TimedOut:
-            log.exception("Ganesha timed out")
 
     @property
     def exports(self) -> Dict[str, List[Export]]:
