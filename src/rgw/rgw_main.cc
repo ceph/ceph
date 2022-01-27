@@ -360,6 +360,12 @@ int radosgw_Main(int argc, const char **argv)
   }
 #endif
 
+#ifdef WITH_RADOSGW_MOTR
+  if (config_store == "motr") {
+    rgw_store = "motr";
+  }
+#endif
+
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
 				 rgw_store,
