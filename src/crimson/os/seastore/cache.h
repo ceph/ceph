@@ -9,15 +9,16 @@
 
 #include "include/buffer.h"
 
-#include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/transaction.h"
-#include "crimson/os/seastore/segment_manager.h"
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/cached_extent.h"
-#include "crimson/os/seastore/root_block.h"
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/extent_placement_manager.h"
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/random_block_manager.h"
+#include "crimson/os/seastore/root_block.h"
+#include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
 
@@ -101,6 +102,10 @@ public:
 
   Cache(ExtentReader &reader);
   ~Cache();
+
+  void set_epm(ExtentPlacementManager& epm) {
+    p_epm = &epm;
+  }
 
   /// Creates empty transaction by source
   TransactionRef create_transaction(
@@ -489,17 +494,20 @@ public:
    */
   template <typename T>
   TCachedExtentRef<T> alloc_new_extent(
-    Transaction &t,       ///< [in, out] current transaction
-    seastore_off_t length, ///< [in] length
-    bool delayed = false  ///< [in] whether the paddr allocation of extent is delayed
+    Transaction &t,         ///< [in, out] current transaction
+    seastore_off_t length,  ///< [in] length
+    placement_hint_t hint = placement_hint_t::HOT
   ) {
     LOG_PREFIX(Cache::alloc_new_extent);
-    SUBDEBUGT(seastore_cache, "allocate {} {}B, delay={}",
-              t, T::TYPE, length, delayed);
-    auto ret = CachedExtent::make_cached_extent_ref<T>(
-      alloc_cache_buf(length));
-    t.add_fresh_extent(ret, delayed);
+    SUBTRACET(seastore_cache, "allocate {} {}B, hint={}",
+              t, T::TYPE, length, hint);
+    auto result = p_epm->alloc_new_extent(t, T::TYPE, length, hint);
+    auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
+    ret->set_paddr(result.paddr);
+    t.add_fresh_extent(ret);
     ret->state = CachedExtent::extent_state_t::INITIAL_WRITE_PENDING;
+    SUBDEBUGT(seastore_cache, "allocated {} {}B extent at {}, hint={} -- {}",
+              t, T::TYPE, length, result.paddr, hint, *ret);
     return ret;
   }
 
@@ -512,7 +520,7 @@ public:
     Transaction &t,       ///< [in, out] current transaction
     extent_types_t type,  ///< [in] type tag
     seastore_off_t length, ///< [in] length
-    bool delayed = false  ///< [in] whether delay addr allocation
+    placement_hint_t hint = placement_hint_t::HOT
     );
 
   /**
@@ -732,6 +740,7 @@ public:
 
 private:
   ExtentReader &reader;	   	   ///< ref to extent reader
+  ExtentPlacementManager* p_epm = nullptr;
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents;             ///< set of live extents
 

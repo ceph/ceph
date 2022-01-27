@@ -116,15 +116,16 @@ public:
   }
 
   void add_fresh_extent(
-    CachedExtentRef ref,
-    bool delayed = false) {
+    CachedExtentRef ref) {
     ceph_assert(!is_weak());
-    if (delayed) {
+    if (ref->get_paddr().is_delayed()) {
+      assert(ref->get_paddr() == make_delayed_temp_paddr(0));
       assert(ref->is_logical());
       ref->set_paddr(make_delayed_temp_paddr(delayed_temp_offset));
       delayed_temp_offset += ref->get_length();
       delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
     } else {
+      assert(ref->get_paddr() == make_record_relative_paddr(0));
       ref->set_paddr(make_record_relative_paddr(offset));
       offset += ref->get_length();
       inline_block_list.push_back(ref);

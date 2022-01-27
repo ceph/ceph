@@ -381,7 +381,7 @@ TransactionManager::rewrite_logical_extent(
 
   auto lextent = extent->cast<LogicalCachedExtent>();
   cache->retire_extent(t, extent);
-  auto nlextent = epm->alloc_new_extent_by_type(
+  auto nlextent = cache->alloc_new_extent_by_type(
     t,
     lextent->get_type(),
     lextent->get_length(),
