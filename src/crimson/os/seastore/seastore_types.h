@@ -482,6 +482,9 @@ public:
 
   paddr_t operator-(paddr_t rhs) const;
 
+  bool is_delayed() const {
+    return get_device_id() == DEVICE_ID_DELAYED;
+  }
   bool is_block_relative() const {
     return get_device_id() == DEVICE_ID_BLOCK_RELATIVE;
   }
@@ -667,7 +670,7 @@ constexpr paddr_t make_block_relative_paddr(seastore_off_t off) {
 constexpr paddr_t make_fake_paddr(seastore_off_t off) {
   return paddr_t::make_seg_paddr(FAKE_SEG_ID, off);
 }
-constexpr paddr_t delayed_temp_paddr(seastore_off_t off) {
+constexpr paddr_t make_delayed_temp_paddr(seastore_off_t off) {
   return paddr_t::make_seg_paddr(
     segment_id_t{DEVICE_ID_DELAYED, 0},
     off);
