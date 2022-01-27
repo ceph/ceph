@@ -91,11 +91,11 @@ class NFSCluster:
 
     def create_empty_rados_obj(self, cluster_id: str) -> None:
         common_conf = self._get_common_conf_obj_name(cluster_id)
-        NFSRados(self.mgr, cluster_id).write_obj('', self._get_common_conf_obj_name(cluster_id))
+        self._rados(cluster_id).write_obj('', self._get_common_conf_obj_name(cluster_id))
         log.info("Created empty object:%s", common_conf)
 
     def delete_config_obj(self, cluster_id: str) -> None:
-        NFSRados(self.mgr, cluster_id).remove_all_obj()
+        self._rados(cluster_id).remove_all_obj()
         log.info("Deleted %s object and all objects in %s",
                  self._get_common_conf_obj_name(cluster_id), cluster_id)
 
@@ -215,7 +215,7 @@ class NFSCluster:
     def get_nfs_cluster_config(self, cluster_id: str) -> Tuple[int, str, str]:
         try:
             if cluster_id in available_clusters(self.mgr):
-                rados_obj = NFSRados(self.mgr, cluster_id)
+                rados_obj = self._rados(cluster_id)
                 conf = rados_obj.read_obj(self._get_user_conf_obj_name(cluster_id))
                 return 0, conf or "", ""
             raise ClusterNotFound()
@@ -225,7 +225,7 @@ class NFSCluster:
     def set_nfs_cluster_config(self, cluster_id: str, nfs_config: str) -> Tuple[int, str, str]:
         try:
             if cluster_id in available_clusters(self.mgr):
-                rados_obj = NFSRados(self.mgr, cluster_id)
+                rados_obj = self._rados(cluster_id)
                 if rados_obj.check_user_config():
                     return 0, "", "NFS-Ganesha User Config already exists"
                 rados_obj.write_obj(nfs_config, self._get_user_conf_obj_name(cluster_id),
@@ -243,7 +243,7 @@ class NFSCluster:
     def reset_nfs_cluster_config(self, cluster_id: str) -> Tuple[int, str, str]:
         try:
             if cluster_id in available_clusters(self.mgr):
-                rados_obj = NFSRados(self.mgr, cluster_id)
+                rados_obj = self._rados(cluster_id)
                 if not rados_obj.check_user_config():
                     return 0, "", "NFS-Ganesha User Config does not exist"
                 rados_obj.remove_obj(self._get_user_conf_obj_name(cluster_id),
@@ -256,3 +256,7 @@ class NFSCluster:
                 "(Manual Restart of NFS PODS required)", ""
         except Exception as e:
             return exception_handler(e, f"Resetting NFS-Ganesha Config failed for {cluster_id}")
+
+    def _rados(self, cluster_id: str) -> NFSRados:
+        """Return a new NFSRados object for the given cluster id."""
+        return NFSRados(self.mgr.rados, cluster_id)
