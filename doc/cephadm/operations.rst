@@ -524,18 +524,18 @@ Purging a cluster
 
 .. danger:: THIS OPERATION WILL DESTROY ALL DATA STORED IN THIS CLUSTER
 
-In order to destroy a cluster and delete all data stored in this cluster, pause 
-cephadm to avoid deploying new daemons.
+In order to destroy a cluster and delete all data stored in this cluster, disable
+cephadm to stop all orchestration operations (so we avoid deploying new daemons).
 
 .. prompt:: bash #
 
-  ceph orch pause
+  ceph mgr module disable cephadm
 
 Then verify the FSID of the cluster:
 
 .. prompt:: bash #
 
-  ceph fsid 
+  ceph fsid
 
 Purge ceph daemons from all hosts in the cluster
 
