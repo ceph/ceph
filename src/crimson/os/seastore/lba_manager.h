@@ -164,13 +164,13 @@ public:
     CachedExtentRef extent) = 0;
 
   /**
-   * delayed_update_mapping
+   * update_mapping
    *
-   * update lba mapping for delayed allocated extents
+   * update lba mapping for a delayed allocated extent
    */
-  using update_le_mapping_iertr = base_iertr;
-  using update_le_mapping_ret = base_iertr::future<>;
-  virtual update_le_mapping_ret update_mapping(
+  using update_mapping_iertr = base_iertr;
+  using update_mapping_ret = base_iertr::future<>;
+  virtual update_mapping_ret update_mapping(
     Transaction& t,
     laddr_t laddr,
     paddr_t prev_addr,

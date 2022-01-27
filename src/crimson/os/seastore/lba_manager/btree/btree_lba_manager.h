@@ -102,7 +102,7 @@ public:
     Transaction &t,
     CachedExtentRef extent) final;
 
-  update_le_mapping_ret update_mapping(
+  update_mapping_ret update_mapping(
     Transaction& t,
     laddr_t laddr,
     paddr_t prev_addr,
@@ -217,16 +217,16 @@ private:
     int delta);
 
   /**
-   * update_mapping
+   * _update_mapping
    *
    * Updates mapping, removes if f returns nullopt
    */
-  using update_mapping_iertr = ref_iertr;
-  using update_mapping_ret = ref_iertr::future<lba_map_val_t>;
+  using _update_mapping_iertr = ref_iertr;
+  using _update_mapping_ret = ref_iertr::future<lba_map_val_t>;
   using update_func_t = std::function<
     lba_map_val_t(const lba_map_val_t &v)
     >;
-  update_mapping_ret update_mapping(
+  _update_mapping_ret _update_mapping(
     Transaction &t,
     laddr_t addr,
     update_func_t &&f);

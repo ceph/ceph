@@ -386,7 +386,7 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
   }
 }
 
-BtreeLBAManager::update_le_mapping_ret
+BtreeLBAManager::update_mapping_ret
 BtreeLBAManager::update_mapping(
   Transaction& t,
   laddr_t laddr,
@@ -395,7 +395,7 @@ BtreeLBAManager::update_mapping(
 {
   LOG_PREFIX(BtreeLBAManager::update_mapping);
   TRACET("laddr={}, paddr {} => {}", t, laddr, prev_addr, addr);
-  return update_mapping(
+  return _update_mapping(
     t,
     laddr,
     [prev_addr, addr](
@@ -410,10 +410,10 @@ BtreeLBAManager::update_mapping(
       DEBUGT("laddr={}, paddr {} => {} done -- {}",
              t, laddr, prev_addr, addr, result);
     },
-    update_le_mapping_iertr::pass_further{},
+    update_mapping_iertr::pass_further{},
     /* ENOENT in particular should be impossible */
     crimson::ct_error::assert_all{
-      "Invalid error in BtreeLBAManager::rewrite_extent after update_mapping"
+      "Invalid error in BtreeLBAManager::update_mapping"
     }
   );
 }
@@ -482,7 +482,7 @@ BtreeLBAManager::update_refcount_ret BtreeLBAManager::update_refcount(
 {
   LOG_PREFIX(BtreeLBAManager::update_refcount);
   TRACET("laddr={}, delta={}", t, addr, delta);
-  return update_mapping(
+  return _update_mapping(
     t,
     addr,
     [delta](const lba_map_val_t &in) {
@@ -501,7 +501,7 @@ BtreeLBAManager::update_refcount_ret BtreeLBAManager::update_refcount(
   });
 }
 
-BtreeLBAManager::update_mapping_ret BtreeLBAManager::update_mapping(
+BtreeLBAManager::_update_mapping_ret BtreeLBAManager::_update_mapping(
   Transaction &t,
   laddr_t addr,
   update_func_t &&f)
@@ -513,9 +513,9 @@ BtreeLBAManager::update_mapping_ret BtreeLBAManager::update_mapping(
       return btree.lower_bound(
 	c, addr
       ).si_then([&btree, f=std::move(f), c, addr](auto iter)
-		-> update_mapping_ret {
+		-> _update_mapping_ret {
 	if (iter.is_end() || iter.get_key() != addr) {
-	  LOG_PREFIX(BtreeLBAManager::update_mapping);
+	  LOG_PREFIX(BtreeLBAManager::_update_mapping);
 	  DEBUGT("laddr={} doesn't exist", c.trans, addr);
 	  return crimson::ct_error::enoent::make();
 	}
