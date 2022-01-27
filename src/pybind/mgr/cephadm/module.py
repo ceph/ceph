@@ -199,7 +199,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Prometheus container image',
         ),
         Option(
-            'container_image_cAdvisor',
+            'container_image_cadvisor',
             default=DEFAULT_CADVISOR_IMAGE,
             desc='Cadvisor container image',
         ),
@@ -416,6 +416,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_grafana = ''
             self.container_image_alertmanager = ''
             self.container_image_node_exporter = ''
+            self.container_image_cadvisor = ''
             self.container_image_haproxy = ''
             self.container_image_keepalived = ''
             self.container_image_snmp_gateway = ''
@@ -663,7 +664,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         suffix = daemon_type not in [
             'mon', 'crash',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
-            'container', 'agent', 'snmp-gateway', 'cAdvisor'
+            'container', 'agent', 'snmp-gateway', 'cadvisor'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -1299,7 +1300,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             image = self.container_image_alertmanager
         elif daemon_type == 'node-exporter':
             image = self.container_image_node_exporter
-        elif daemon_type == 'cAdvisor':
+        elif daemon_type == 'cadvisor':
             image = self.container_image_cadvisor
         elif daemon_type == 'haproxy':
             image = self.container_image_haproxy
@@ -2453,7 +2454,7 @@ Then run the following:
                 'alertmanager': PlacementSpec(count=1),
                 'prometheus': PlacementSpec(count=1),
                 'node-exporter': PlacementSpec(host_pattern='*'),
-                'cAdvisor': PlacementSpec(host_pattern='*'),
+                'cadvisor': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),

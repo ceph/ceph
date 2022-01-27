@@ -466,7 +466,7 @@ class Orchestrator(object):
             'node-exporter': self.apply_node_exporter,
             'osd': lambda dg: self.apply_drivegroups([dg]),  # type: ignore
             'prometheus': self.apply_prometheus,
-            'cAdvisor': self.apply_cadvisor,
+            'cadvisor': self.apply_cadvisor,
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
@@ -724,7 +724,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'grafana': 'grafana',
         'alertmanager': 'alertmanager',
         'prometheus': 'prometheus',
-        'cAdvisor': 'cAdvisor', 
+        'cadvisor': 'cadvisor', 
         'node-exporter': 'node-exporter',
         'crash': 'crash',
         'crashcollector': 'crash',  # Specific Rook Daemon
@@ -751,7 +751,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'alertmanager': ['alertmanager'],
         'prometheus': ['prometheus'],
         'node-exporter': ['node-exporter'],
-        'cAdvisor': ['cAdvisor'], 
+        'cadvisor': ['cadvisor'], 
         'crash': ['crash'],
         'container': ['container'],
         'agent': ['agent'],

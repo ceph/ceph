@@ -379,7 +379,7 @@ class NodeExporterService(CephadmService):
 
 
 class CadvisorService(CephadmService):
-    TYPE = 'cAdvisor'
+    TYPE = 'cadvisor'
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
