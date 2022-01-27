@@ -503,26 +503,6 @@ public:
     return ret;
   }
 
-  void mark_delayed_extent_inline(
-    Transaction& t,
-    LogicalCachedExtentRef& ref
-  ) {
-    LOG_PREFIX(Cache::mark_delayed_extent_inline);
-    SUBDEBUGT(seastore_cache, "-- {}", t, *ref);
-    t.mark_delayed_extent_inline(ref);
-  }
-
-  void mark_delayed_extent_ool(
-    Transaction& t,
-    LogicalCachedExtentRef& ref,
-    paddr_t final_addr
-  ) {
-    LOG_PREFIX(Cache::mark_delayed_extent_ool);
-    SUBDEBUGT(seastore_cache, "final_addr={} -- {}",
-              t, final_addr, *ref);
-    t.mark_delayed_extent_ool(ref, final_addr);
-  }
-
   /**
    * alloc_new_extent
    *
