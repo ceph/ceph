@@ -1188,6 +1188,53 @@ def test_bucket_sync_disable_enable():
 
     zonegroup_data_checkpoint(zonegroup_conns)
 
+@attr('resharded_bucket_sync_disable')
+def test_resharded_bucket_sync_disable_enable():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    # disabling bucket sync
+    for bucket_name in buckets:
+        disable_bucket_sync(realm.meta_master_zone(), bucket_name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    objnames = [ 'obj1', 'obj2', 'obj3', 'obj4' ]
+    content = 'asdasd'
+
+    # writing objects in the bucket
+    for zone, bucket in zone_bucket:
+        for objname in objnames:
+            k = new_key(zone, bucket.name, objname)
+            k.set_contents_from_string(content)
+
+    # Resharding the bucket
+    for z in zonegroup_conns.rw_zones:
+        for bucket_name in buckets:
+            z.zone.cluster.admin(['bucket', 'reshard',
+                '--bucket', bucket_name,
+                '--num-shards', '3',
+                '--yes-i-really-mean-it'])
+
+    objnames_2 = [ 'obj5', 'obj6', 'obj7', 'obj8' ]
+
+    # writing objects in the bucket
+    for zone, bucket in zone_bucket:
+        for objname in objnames_2:
+            k = new_key(zone, bucket.name, objname)
+            k.set_contents_from_string(content)
+
+    # enabling bucket sync
+    for bucket_name in buckets:
+        enable_bucket_sync(realm.meta_master_zone(), bucket_name)
+
+    # bucket checkpoint
+    for bucket_name in buckets:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
+
+    zonegroup_data_checkpoint(zonegroup_conns)
+
 def test_multipart_object_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
