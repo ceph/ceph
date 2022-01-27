@@ -550,7 +550,6 @@ public:
       std::make_unique<SegmentedAllocator>(
 	*segment_cleaner,
 	*sm,
-	*lba_manager,
 	*journal));
   }
 

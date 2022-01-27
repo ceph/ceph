@@ -285,12 +285,29 @@ TransactionManager::submit_transaction_direct(
   return trans_intr::make_interruptible(
     tref.get_handle().enter(write_pipeline.ool_writes)
   ).then_interruptible([this, FNAME, &tref] {
-    SUBTRACET(seastore_t, "process delayed and out-of-line extents", tref);
-    return epm->delayed_alloc_or_ool_write(tref
-    ).handle_error_interruptible(
-      crimson::ct_error::input_output_error::pass_further(),
-      crimson::ct_error::assert_all("invalid error")
-    );
+    auto delayed_extents = tref.get_delayed_alloc_list();
+    auto num_extents = delayed_extents.size();
+    SUBTRACET(seastore_t, "process {} delayed extents", tref, num_extents);
+    std::vector<paddr_t> delayed_paddrs;
+    delayed_paddrs.reserve(num_extents);
+    for (auto& ext : delayed_extents) {
+      assert(ext->get_paddr().is_delayed());
+      delayed_paddrs.push_back(ext->get_paddr());
+    }
+    return seastar::do_with(
+      std::move(delayed_extents),
+      std::move(delayed_paddrs),
+      [this, FNAME, &tref](auto& delayed_extents, auto& delayed_paddrs)
+    {
+      return epm->delayed_alloc_or_ool_write(tref, delayed_extents
+      ).si_then([this, FNAME, &tref, &delayed_extents, &delayed_paddrs] {
+        SUBTRACET(seastore_t, "update delayed extent mappings", tref);
+        return lba_manager->update_mappings(tref, delayed_extents, delayed_paddrs);
+      }).handle_error_interruptible(
+        crimson::ct_error::input_output_error::pass_further(),
+        crimson::ct_error::assert_all("invalid error")
+      );
+    });
   }).si_then([this, FNAME, &tref] {
     SUBTRACET(seastore_t, "about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
