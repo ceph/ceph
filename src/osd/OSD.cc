@@ -5051,8 +5051,8 @@ bool OSD::maybe_wait_for_max_pg(const OSDMapRef& osdmap,
     bool is_primary = osdmap->get_pg_acting_role(pgid, whoami) == 0;
     pending_creates_from_osd.emplace(pgid, is_primary);
   }
-  dout(1) << __func__ << " withhold creation of pg " << pgid
-	  << ": " << num_pgs << " >= "<< max_pgs_per_osd << dendl;
+  clog->warn() << "withhold creation of pg " << pgid
+               << ": " << num_pgs << " >= " << max_pgs_per_osd;
   return true;
 }
 
