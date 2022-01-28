@@ -739,6 +739,15 @@ options:
   default: 32
   flags:
   - startup
+- name: osd_aggregated_slow_ops_logging
+  type: bool
+  level: advanced
+  desc: Allow OSD daemon to send an aggregated slow ops to the cluster log
+  fmt_desc: If set to ``true``, the OSD daemon will send slow ops information in 
+    an aggregated format to the cluster log else sends every slow op to the
+    cluster log.
+  default: true
+  with_legacy: true
 - name: osd_op_num_threads_per_shard
   type: int
   level: advanced
