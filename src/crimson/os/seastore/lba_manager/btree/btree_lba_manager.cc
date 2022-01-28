@@ -7,7 +7,6 @@
 #include "include/buffer.h"
 #include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree.h"
 #include "crimson/os/seastore/logging.h"
 
 SET_SUBSYS(seastore_lba);
@@ -26,7 +25,16 @@ BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
   LOG_PREFIX(BtreeLBAManager::mkfs);
   INFOT("start", t);
   return cache.get_root(t).si_then([this, &t](auto croot) {
-    croot->get_root().lba_root = LBABtree::mkfs(get_context(t));
+    auto c = get_context(t);
+    auto root_leaf = c.cache.alloc_new_extent<LBALeafNode>(
+      c.trans,
+      LBA_BLOCK_SIZE);
+    root_leaf->set_size(0);
+    fixed_kv_node_meta_t<laddr_t> meta{0, L_ADDR_MAX, 1};
+    root_leaf->set_meta(meta);
+    root_leaf->pin.set_range(meta);
+    t.get_lba_tree_stats().depth = 1u;
+    croot->get_root().lba_root = lba_root_t{root_leaf->get_paddr(), 1u};
     return mkfs_iertr::now();
   }).handle_error_interruptible(
     mkfs_iertr::pass_further{},
@@ -208,13 +216,13 @@ static bool is_lba_node(const CachedExtent &e)
   return is_lba_node(e.get_type());
 }
 
-btree_range_pin_t &BtreeLBAManager::get_pin(CachedExtent &e)
+btree_range_pin_t<laddr_t> &BtreeLBAManager::get_pin(CachedExtent &e)
 {
   if (is_lba_node(e)) {
     return e.cast<LBANode>()->pin;
   } else if (e.is_logical()) {
     return static_cast<BtreeLBAPin &>(
-      e.cast<LogicalCachedExtent>()->get_pin()).pin;
+      e.cast<LogicalCachedExtent>()->get_pin()).get_range_pin();
   } else {
     ceph_abort_msg("impossible");
   }
@@ -284,17 +292,77 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
 {
   LOG_PREFIX(BtreeLBAManager::init_cached_extent);
   TRACET("{}", t, *e);
-  return seastar::do_with(bool(), [this, e, FNAME, &t](bool& ret) {
+  return seastar::do_with(bool(), [this, e, &t](bool &ret) {
     auto c = get_context(t);
-    return with_btree(c, [c, e, &ret](auto &btree) {
-      return btree.init_cached_extent(c, e
-      ).si_then([&ret](bool is_alive) {
-        ret = is_alive;
-      });
-    }).si_then([&ret, e, FNAME, c] {
-      DEBUGT("is_alive={} -- {}", c.trans, ret, *e);
-      return ret;
-    });
+    return with_btree(c, [c, e, &ret](auto &btree)
+      -> base_iertr::future<> {
+      LOG_PREFIX(BtreeLBAManager::init_cached_extent);
+      DEBUGT("extent {}", c.trans, *e);
+      if (e->is_logical()) {
+	auto logn = e->cast<LogicalCachedExtent>();
+	return btree.lower_bound(
+	  c,
+	  logn->get_laddr()
+	).si_then([e, c, logn, &ret](auto iter) {
+	  LOG_PREFIX(BtreeLBAManager::init_cached_extent);
+	  if (!iter.is_end() &&
+	      iter.get_key() == logn->get_laddr() &&
+	      iter.get_val().paddr == logn->get_paddr()) {
+	    logn->set_pin(iter.get_pin());
+	    ceph_assert(iter.get_val().len == e->get_length());
+	    if (c.pins) {
+	      c.pins->add_pin(
+		static_cast<BtreeLBAPin&>(logn->get_pin()).get_range_pin());
+	    }
+	    DEBUGT("logical extent {} live", c.trans, *logn);
+	    ret = true;
+	  } else {
+	    DEBUGT("logical extent {} not live", c.trans, *logn);
+	    ret = false;
+	  }
+	});
+      } else if (e->get_type() == extent_types_t::LADDR_INTERNAL) {
+	auto eint = e->cast<LBAInternalNode>();
+	return btree.lower_bound(
+	  c, eint->get_node_meta().begin
+	).si_then([&ret, e, c, eint](auto iter) {
+	  LOG_PREFIX(BtreeLBAManager::init_cached_extent);
+	  // Note, this check is valid even if iter.is_end()
+	  depth_t cand_depth = eint->get_node_meta().depth;
+	  if (cand_depth <= iter.get_depth() &&
+	      &*iter.get_internal(cand_depth).node == &*eint) {
+	    DEBUGT("extent {} is live", c.trans, *eint);
+	    ret = true;
+	  } else {
+	    DEBUGT("extent {} is not live", c.trans, *eint);
+	    ret = false;
+	  }
+	});
+      } else if (e->get_type() == extent_types_t::LADDR_LEAF) {
+	auto eleaf = e->cast<LBALeafNode>();
+	return btree.lower_bound(
+	  c, eleaf->get_node_meta().begin
+	).si_then([&ret, c, e, eleaf](auto iter) {
+	  LOG_PREFIX(BtreeLBAManager::init_cached_extent);
+	  // Note, this check is valid even if iter.is_end()
+	  if (iter.get_leaf_node() == &*eleaf) {
+	    DEBUGT("extent {} is live", c.trans, *eleaf);
+	    ret = true;
+	  } else {
+	    DEBUGT("extent {} is not live", c.trans, *eleaf);
+	    ret = false;
+	  }
+	});
+      } else {
+	DEBUGT(
+	  "found other extent {} type {}",
+	  c.trans,
+	  *e,
+	  e->get_type());
+	ret = true;
+      }
+      return seastar::now();
+    }).si_then([&ret] { return ret; });
   });
 }
 
@@ -378,7 +446,60 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
     return with_btree(
       c,
       [c, extent](auto &btree) mutable {
-	return btree.rewrite_lba_extent(c, extent);
+	LOG_PREFIX(LBABtree::rewrite_lba_extent);
+	assert(extent->get_type() == extent_types_t::LADDR_INTERNAL ||
+	       extent->get_type() == extent_types_t::LADDR_LEAF);
+
+	auto do_rewrite = [&](auto &lba_extent) {
+	  auto nlba_extent = c.cache.alloc_new_extent<
+	    std::remove_reference_t<decltype(lba_extent)>
+	    >(
+	    c.trans,
+	    lba_extent.get_length());
+	  lba_extent.get_bptr().copy_out(
+	    0,
+	    lba_extent.get_length(),
+	    nlba_extent->get_bptr().c_str());
+	  nlba_extent->pin.set_range(nlba_extent->get_node_meta());
+
+	  /* This is a bit underhanded.  Any relative addrs here must necessarily
+	   * be record relative as we are rewriting a dirty extent.  Thus, we
+	   * are using resolve_relative_addrs with a (likely negative) block
+	   * relative offset to correct them to block-relative offsets adjusted
+	   * for our new transaction location.
+	   *
+	   * Upon commit, these now block relative addresses will be interpretted
+	   * against the real final address.
+	   */
+	  nlba_extent->resolve_relative_addrs(
+	    make_record_relative_paddr(0) - nlba_extent->get_paddr());
+
+	  DEBUGT(
+	    "rewriting {} into {}",
+	    c.trans,
+	    lba_extent,
+	    *nlba_extent);
+
+	  return btree.update_internal_mapping(
+	    c,
+	    nlba_extent->get_node_meta().depth,
+	    nlba_extent->get_node_meta().begin,
+	    extent->get_paddr(),
+	    nlba_extent->get_paddr()
+	  ).si_then([c, extent] {
+	    c.cache.retire_extent(c.trans, extent);
+	  });
+	};
+
+	CachedExtentRef nlba_extent;
+	if (extent->get_type() == extent_types_t::LADDR_INTERNAL) {
+	  auto lint = extent->cast<LBAInternalNode>();
+	  return do_rewrite(*lint);
+	} else {
+	  assert(extent->get_type() == extent_types_t::LADDR_LEAF);
+	  auto lleaf = extent->cast<LBALeafNode>();
+	  return do_rewrite(*lleaf);
+	}
       });
   } else {
     DEBUGT("skip non lba extent -- {}", t, *extent);

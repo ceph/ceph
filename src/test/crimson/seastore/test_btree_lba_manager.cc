@@ -130,7 +130,7 @@ struct lba_btree_test : btree_test_base {
   std::map<laddr_t, lba_map_val_t> check;
 
   auto get_op_context(Transaction &t) {
-    return op_context_t{*cache, t};
+    return op_context_t<laddr_t>{*cache, t};
   }
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
@@ -140,7 +140,17 @@ struct lba_btree_test : btree_test_base {
       auto mut_croot = cache->duplicate_for_write(
 	t, croot
       )->cast<RootBlock>();
-      mut_croot->root.lba_root = LBABtree::mkfs(get_op_context(t));
+      auto c = get_op_context(t);
+      auto root_leaf = c.cache.alloc_new_extent<LBALeafNode>(
+	c.trans,
+	LBA_BLOCK_SIZE);
+      root_leaf->set_size(0);
+      fixed_kv_node_meta_t<laddr_t> meta{0, L_ADDR_MAX, 1};
+      root_leaf->set_meta(meta);
+      root_leaf->pin.set_range(meta);
+      t.get_lba_tree_stats().depth = 1u;
+      mut_croot->get_root().lba_root = lba_root_t{root_leaf->get_paddr(), 1u};
+      return LBAManager::mkfs_iertr::now();
     });
   }
 
