@@ -147,7 +147,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 	  [this, &segments](auto segment_id) {
 	  return scanner->read_segment_header(segment_id_t{0, segment_id})
 	  .safe_then([&segments, segment_id](auto header) {
-	    if (!header.out_of_line) {
+	    if (header.get_type() == segment_type_t::JOURNAL) {
 	      segments.emplace_back(
 		std::make_pair(
 		  segment_id_t{0, segment_id},

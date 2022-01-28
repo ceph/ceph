@@ -200,7 +200,7 @@ SegmentedAllocator::Writer::init_segment(Segment& segment) {
   auto header =segment_header_t{
     OOL_SEG_SEQ,
     segment.get_segment_id(),
-    NO_DELTAS, 0, true};
+    NO_DELTAS, 0};
   logger().debug("SegmentedAllocator::Writer::init_segment: initting {}, {}",
     segment.get_segment_id(),
     header);

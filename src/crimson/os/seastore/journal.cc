@@ -94,7 +94,7 @@ Journal::prep_replay_segments(
   {
     if (seg.first != seg.second.physical_segment_id ||
         seg.first.device_id() != journal_segment_manager.get_device_id() ||
-        seg.second.out_of_line == true) {
+        seg.second.get_type() != segment_type_t::JOURNAL) {
       ERROR("illegal journal segment for replay -- {}", seg.second);
       ceph_abort();
     }
@@ -206,9 +206,10 @@ Journal::replay_segment(
             if (delta.paddr != P_ADDR_NULL) {
               auto& seg_addr = delta.paddr.as_seg_paddr();
               auto delta_paddr_segment_seq = segment_provider->get_seq(seg_addr.get_segment_id());
+              auto delta_paddr_segment_type = segment_seq_to_type(delta_paddr_segment_seq);
               auto locator_segment_seq = locator.write_result.start_seq.segment_seq;
-              if (delta_paddr_segment_seq == NULL_SEG_SEQ ||
-                  (delta_paddr_segment_seq <= MAX_VALID_SEG_SEQ &&
+              if (delta_paddr_segment_type == segment_type_t::NULL_SEG ||
+                  (delta_paddr_segment_type == segment_type_t::JOURNAL &&
                    delta_paddr_segment_seq > locator_segment_seq)) {
                 return replay_ertr::now();
               }
@@ -460,9 +461,9 @@ Journal::JournalSegmentManager::initialize_segment(Segment& segment)
     seq,
     segment.get_segment_id(),
     new_tail,
-    current_segment_nonce,
-    false};
+    current_segment_nonce};
   INFO("writing {} ...", header);
+  ceph_assert(header.get_type() == segment_type_t::JOURNAL);
   encode(header, bl);
 
   bufferptr bp(

@@ -57,16 +57,17 @@ class segment_info_set_t {
     // Will be non-null for any segments in the current journal
     segment_seq_t journal_segment_seq = NULL_SEG_SEQ;
 
-    bool out_of_line = false;
+    segment_type_t get_type() const {
+      return segment_seq_to_type(journal_segment_seq);
+    }
 
     void set_open();
     void set_empty();
     void set_closed();
 
     bool is_in_journal(journal_seq_t tail_committed) const {
-      return !out_of_line &&
-	journal_segment_seq != NULL_SEG_SEQ &&
-	tail_committed.segment_seq <= journal_segment_seq;
+      return get_type() == segment_type_t::JOURNAL &&
+             tail_committed.segment_seq <= journal_segment_seq;
     }
 
     bool is_empty() const {
@@ -1257,16 +1258,16 @@ private:
 
   void init_mark_segment_closed(
     segment_id_t segment,
-    segment_seq_t seq,
-    bool out_of_line) {
+    segment_seq_t seq) {
     crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
       "SegmentCleaner::init_mark_segment_closed: segment {}, seq {}",
       segment,
-      seq);
+      segment_seq_printer_t{seq});
     mark_closed(segment);
     segments[segment].journal_segment_seq = seq;
-    segments[segment].out_of_line = out_of_line;
-    if (!segments[segment].out_of_line) {
+    auto s_type = segments[segment].get_type();
+    assert(s_type != segment_type_t::NULL_SEG);
+    if (s_type == segment_type_t::JOURNAL) {
       assert(journal_device_id == segment.device_id());
       segments.new_journal_segment();
     }
@@ -1322,7 +1323,9 @@ private:
 	should_block_on_gc(),
 	get_projected_available_ratio(),
 	get_projected_reclaim_ratio());
-    if (!segment_info.out_of_line) {
+    auto s_type = segment_info.get_type();
+    ceph_assert(s_type != segment_type_t::NULL_SEG);
+    if (s_type == segment_type_t::JOURNAL) {
       segments.journal_segment_emptied();
     }
     maybe_wake_gc_blocked_io();
