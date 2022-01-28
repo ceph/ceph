@@ -22,6 +22,15 @@ function(build_arrow)
   list(APPEND arrow_INTERFACE_LINK_LIBRARIES thrift)
   # need utf8proc and re2?
 
+  if (NOT WITH_SYSTEM_UTF8PROC)
+    # forward utf8proc_ROOT from build_utf8proc()
+    list(APPEND arrow_CMAKE_ARGS -Dutf8proc_ROOT=${utf8proc_ROOT})
+    # non-system utf8proc is bundled as a static library
+    list(APPEND arrow_CMAKE_ARGS -DARROW_UTF8PROC_USE_SHARED=OFF)
+    # make sure utf8proc submodule builds first, so arrow can find its byproducts
+    list(APPEND arrow_DEPENDS utf8proc::utf8proc)
+  endif()
+
   # optional dependencies
   list(APPEND arrow_CMAKE_ARGS -DARROW_WITH_BROTLI=${HAVE_BROTLI})
   if (HAVE_BROTLI) # optional, off by default
