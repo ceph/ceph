@@ -8656,20 +8656,6 @@ void RGWPutBucketEncryption::execute(optional_yield y)
     return;
   }
 
-  if(bucket_encryption_conf.kms_master_key_id().compare("") != 0) {
-    ldpp_dout(this, 5) << "encryption not supported with sse-kms" << dendl;
-    op_ret = -ERR_NOT_IMPLEMENTED;
-    s->err.message = "SSE-KMS support is not provided";
-    return;
-  }
-
-  if(bucket_encryption_conf.sse_algorithm().compare("AES256") != 0) {
-    ldpp_dout(this, 5) << "only aes256 algorithm is supported for encryption" << dendl;
-    op_ret = -ERR_NOT_IMPLEMENTED;
-    s->err.message = "Encryption is supported only with AES256 algorithm";
-    return;
-  }
-
   op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
