@@ -69,3 +69,6 @@
 [submodule "src/arrow"]
 	path = src/arrow
 	url = https://github.com/apache/arrow.git
+[submodule "src/utf8proc"]
+	path = src/utf8proc
+	url = https://github.com/JuliaStrings/utf8proc
