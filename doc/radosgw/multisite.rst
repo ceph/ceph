@@ -921,6 +921,10 @@ because not all of the settings end up in a Ceph configuration file. You
 can list zone groups, get a zone group configuration, and set a zone
 group configuration.
 
+.. note:: For S3 clients, zone group maps to AWS regions, the value ``us-east`` works
+          as default value. If any other value need to used as AWS region then user need
+          to create equivalent zone group.
+
 Create a Zone Group
 ~~~~~~~~~~~~~~~~~~~
 
