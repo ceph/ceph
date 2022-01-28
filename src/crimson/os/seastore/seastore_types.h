@@ -197,6 +197,22 @@ static constexpr segment_seq_t NULL_SEG_SEQ = MAX_SEG_SEQ;
 static constexpr segment_seq_t OOL_SEG_SEQ = MAX_SEG_SEQ - 1;
 static constexpr segment_seq_t MAX_VALID_SEG_SEQ = MAX_SEG_SEQ - 2;
 
+enum class segment_type_t {
+  JOURNAL = 0,
+  OOL,
+  NULL_SEG,
+};
+
+std::ostream& operator<<(std::ostream& out, segment_type_t t);
+
+segment_type_t segment_seq_to_type(segment_seq_t seq);
+
+struct segment_seq_printer_t {
+  segment_seq_t seq;
+};
+
+std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq);
+
 // Offset of delta within a record
 using record_delta_idx_t = uint32_t;
 constexpr record_delta_idx_t NULL_DELTA_IDX =
@@ -728,6 +744,10 @@ struct journal_seq_t {
     return {segment_seq, offset.add_offset(o)};
   }
 
+  segment_type_t get_type() const {
+    return segment_seq_to_type(segment_seq);
+  }
+
   DENC(journal_seq_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.segment_seq, p);
@@ -1244,7 +1264,10 @@ struct segment_header_t {
 
   journal_seq_t journal_tail;
   segment_nonce_t segment_nonce;
-  bool out_of_line;
+
+  segment_type_t get_type() const {
+    return segment_seq_to_type(journal_segment_seq);
+  }
 
   DENC(segment_header_t, v, p) {
     DENC_START(1, 1, p);
@@ -1252,7 +1275,6 @@ struct segment_header_t {
     denc(v.physical_segment_id, p);
     denc(v.journal_tail, p);
     denc(v.segment_nonce, p);
-    denc(v.out_of_line, p);
     DENC_FINISH(p);
   }
 };

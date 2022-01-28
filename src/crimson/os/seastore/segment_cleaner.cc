@@ -436,24 +436,22 @@ SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
 	return scanner->read_segment_header(
 	  segment_id
 	).safe_then([&segment_set, segment_id, this](auto header) {
-	  if (header.out_of_line) {
-	    logger().debug(
-	      "ExtentReader::init_segments: out-of-line segment {}",
-	      segment_id);
-	    init_mark_segment_closed(
-	      segment_id,
-	      header.journal_segment_seq,
-	      true);
-	  } else {
-	    logger().debug(
-	      "ExtentReader::init_segments: journal segment {}",
-	      segment_id);
-	    segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
-	    init_mark_segment_closed(
-	      segment_id,
-	      header.journal_segment_seq,
-	      false);
+	  logger().debug(
+	    "ExtentReader::init_segments: segment_id={} -- {}",
+	    segment_id, header);
+	  auto s_type = header.get_type();
+	  if (s_type == segment_type_t::NULL_SEG) {
+	    logger().error(
+	      "ExtentReader::init_segments: got null segment, segment_id={} -- {}",
+	      segment_id, header);
+	    ceph_abort();
 	  }
+	  if (s_type == segment_type_t::JOURNAL) {
+	    segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
+	  }
+	  init_mark_segment_closed(
+	    segment_id,
+	    header.journal_segment_seq);
 	}).handle_error(
 	  crimson::ct_error::enoent::handle([](auto) {
 	    return init_segments_ertr::now();
