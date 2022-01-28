@@ -484,6 +484,12 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           }
         });
       });
+      it('should submit invalid snmp destination', () => {
+        formHelper.setValue('snmp_version', 'V2c');
+        formHelper.setValue('snmp_destination', '192.168.20.1');
+        formHelper.setValue('snmp_community', 'public');
+        formHelper.expectError('snmp_destination', 'snmpDestinationPattern');
+      });
     });
 
     describe('check edit fields', () => {
