@@ -191,10 +191,11 @@ std::ostream &offset_to_stream(std::ostream &, const seastore_off_t &t);
 /* Monotonically increasing segment seq, uniquely identifies
  * the incarnation of a segment */
 using segment_seq_t = uint32_t;
-static constexpr segment_seq_t NULL_SEG_SEQ =
-  std::numeric_limits<segment_seq_t>::max();
 static constexpr segment_seq_t MAX_SEG_SEQ =
   std::numeric_limits<segment_seq_t>::max();
+static constexpr segment_seq_t NULL_SEG_SEQ = MAX_SEG_SEQ;
+static constexpr segment_seq_t OOL_SEG_SEQ = MAX_SEG_SEQ - 1;
+static constexpr segment_seq_t MAX_VALID_SEG_SEQ = MAX_SEG_SEQ - 2;
 
 // Offset of delta within a record
 using record_delta_idx_t = uint32_t;

@@ -202,18 +202,18 @@ Journal::replay_segment(
              * sequence number > the current journal segment seq. We can
              * safetly skip these deltas because the extent must already
              * have been rewritten.
-             *
-             * Note, this comparison exploits the fact that
-             * SEGMENT_SEQ_NULL is a large number.
              */
-            auto& seg_addr = delta.paddr.as_seg_paddr();
-            if (delta.paddr != P_ADDR_NULL &&
-                (segment_provider->get_seq(seg_addr.get_segment_id()) >
-                 locator.write_result.start_seq.segment_seq)) {
-              return replay_ertr::now();
-            } else {
-              return handler(locator, delta);
+            if (delta.paddr != P_ADDR_NULL) {
+              auto& seg_addr = delta.paddr.as_seg_paddr();
+              auto delta_paddr_segment_seq = segment_provider->get_seq(seg_addr.get_segment_id());
+              auto locator_segment_seq = locator.write_result.start_seq.segment_seq;
+              if (delta_paddr_segment_seq == NULL_SEG_SEQ ||
+                  (delta_paddr_segment_seq <= MAX_VALID_SEG_SEQ &&
+                   delta_paddr_segment_seq > locator_segment_seq)) {
+                return replay_ertr::now();
+              }
             }
+            return handler(locator, delta);
           });
         });
       });

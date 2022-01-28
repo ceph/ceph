@@ -17,11 +17,9 @@ namespace crimson::os::seastore {
 
 SegmentedAllocator::SegmentedAllocator(
   SegmentProvider& sp,
-  SegmentManager& sm,
-  Journal& journal)
+  SegmentManager& sm)
   : segment_provider(sp),
-    segment_manager(sm),
-    journal(journal)
+    segment_manager(sm)
 {
   std::generate_n(
     std::back_inserter(writers),
@@ -30,8 +28,7 @@ SegmentedAllocator::SegmentedAllocator(
     [&] {
       return Writer{
 	segment_provider,
-	segment_manager,
-	journal};
+	segment_manager};
       });
 }
 
@@ -201,7 +198,7 @@ SegmentedAllocator::Writer::init_segment(Segment& segment) {
       segment_manager.get_block_size()));
   bp.zero();
   auto header =segment_header_t{
-    journal.get_segment_seq(),
+    OOL_SEG_SEQ,
     segment.get_segment_id(),
     NO_DELTAS, 0, true};
   logger().debug("SegmentedAllocator::Writer::init_segment: initting {}, {}",

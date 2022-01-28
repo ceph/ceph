@@ -7,7 +7,6 @@
 
 #include "crimson/common/condition_variable.h"
 #include "crimson/os/seastore/cached_extent.h"
-#include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
@@ -183,11 +182,9 @@ class SegmentedAllocator : public ExtentAllocator {
   public:
     Writer(
       SegmentProvider& sp,
-      SegmentManager& sm,
-      Journal& journal)
+      SegmentManager& sm)
       : segment_provider(sp),
-        segment_manager(sm),
-        journal(journal)
+        segment_manager(sm)
     {}
     Writer(Writer &&) = default;
 
@@ -225,7 +222,6 @@ class SegmentedAllocator : public ExtentAllocator {
     open_segment_wrapper_ref current_segment;
     std::list<open_segment_wrapper_ref> open_segments;
     seastore_off_t allocated_to = 0;
-    Journal& journal;
     crimson::condition_variable segment_rotation_guard;
     seastar::gate writer_guard;
     bool rolling_segment = false;
@@ -233,8 +229,7 @@ class SegmentedAllocator : public ExtentAllocator {
 public:
   SegmentedAllocator(
     SegmentProvider& sp,
-    SegmentManager& sm,
-    Journal& journal);
+    SegmentManager& sm);
 
   Writer &get_writer(placement_hint_t hint) {
     return writers[std::rand() % writers.size()];
@@ -269,7 +264,6 @@ private:
   SegmentProvider& segment_provider;
   SegmentManager& segment_manager;
   std::vector<Writer> writers;
-  Journal& journal;
 };
 
 class ExtentPlacementManager {

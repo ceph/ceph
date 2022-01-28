@@ -149,8 +149,7 @@ void TMDriver::init()
     device_type_t::SEGMENTED,
     std::make_unique<SegmentedAllocator>(
       *segment_cleaner,
-      *segment_manager,
-      *journal));
+      *segment_manager));
 
   journal->set_segment_provider(&*segment_cleaner);
 
