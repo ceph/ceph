@@ -9,7 +9,6 @@
 #include "include/buffer.h"
 #include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree.h"
 #include "crimson/os/seastore/logging.h"
 
 SET_SUBSYS(seastore_lba);
@@ -19,6 +18,15 @@ SET_SUBSYS(seastore_lba);
  * - DEBUG: modification operations
  * - TRACE: read operations, DEBUG details
  */
+
+namespace crimson::os::seastore {
+
+template<>
+Transaction::tree_stats_t& get_tree_stats<
+  crimson::os::seastore::lba_manager::btree::LBABtree>(Transaction &t) {
+  return t.get_lba_tree_stats();
+}
+}
 
 namespace crimson::os::seastore::lba_manager::btree {
 
@@ -210,13 +218,13 @@ static bool is_lba_node(const CachedExtent &e)
   return is_lba_node(e.get_type());
 }
 
-btree_range_pin_t &BtreeLBAManager::get_pin(CachedExtent &e)
+btree_range_pin_t<laddr_t> &BtreeLBAManager::get_pin(CachedExtent &e)
 {
   if (is_lba_node(e)) {
     return e.cast<LBANode>()->pin;
   } else if (e.is_logical()) {
     return static_cast<BtreeLBAPin &>(
-      e.cast<LogicalCachedExtent>()->get_pin()).pin;
+      e.cast<LogicalCachedExtent>()->get_pin()).get_range_pin();
   } else {
     ceph_abort_msg("impossible");
   }
@@ -280,23 +288,57 @@ void BtreeLBAManager::complete_transaction(
   }
 }
 
+BtreeLBAManager::base_iertr::future<> _init_cached_extent(
+  op_context_t<laddr_t> c,
+  const CachedExtentRef &e,
+  LBABtree &btree,
+  bool &ret)
+{
+  if (e->is_logical()) {
+    auto logn = e->cast<LogicalCachedExtent>();
+    return btree.lower_bound(
+      c,
+      logn->get_laddr()
+    ).si_then([e, c, logn, &ret](auto iter) {
+      LOG_PREFIX(BtreeLBAManager::init_cached_extent);
+      if (!iter.is_end() &&
+	  iter.get_key() == logn->get_laddr() &&
+	  iter.get_val().paddr == logn->get_paddr()) {
+	logn->set_pin(iter.get_pin());
+	ceph_assert(iter.get_val().len == e->get_length());
+	if (c.pins) {
+	  c.pins->add_pin(
+	    static_cast<BtreeLBAPin&>(logn->get_pin()).get_range_pin());
+	}
+	DEBUGT("logical extent {} live", c.trans, *logn);
+	ret = true;
+      } else {
+	DEBUGT("logical extent {} not live", c.trans, *logn);
+	ret = false;
+      }
+    });
+  } else {
+    return btree.init_cached_extent(c, e
+    ).si_then([&ret](bool is_alive) {
+      ret = is_alive;
+    });
+  }
+}
+
 BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
   Transaction &t,
   CachedExtentRef e)
 {
   LOG_PREFIX(BtreeLBAManager::init_cached_extent);
   TRACET("{}", t, *e);
-  return seastar::do_with(bool(), [this, e, FNAME, &t](bool& ret) {
+  return seastar::do_with(bool(), [this, e, &t](bool &ret) {
     auto c = get_context(t);
-    return with_btree(c, [c, e, &ret](auto &btree) {
-      return btree.init_cached_extent(c, e
-      ).si_then([&ret](bool is_alive) {
-        ret = is_alive;
-      });
-    }).si_then([&ret, e, FNAME, c] {
-      DEBUGT("is_alive={} -- {}", c.trans, ret, *e);
-      return ret;
-    });
+    return with_btree(c, [c, e, &ret](auto &btree)
+      -> base_iertr::future<> {
+      LOG_PREFIX(BtreeLBAManager::init_cached_extent);
+      DEBUGT("extent {}", c.trans, *e);
+      return _init_cached_extent(c, e, btree, ret);
+    }).si_then([&ret] { return ret; });
   });
 }
 
@@ -380,7 +422,7 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
     return with_btree(
       c,
       [c, extent](auto &btree) mutable {
-	return btree.rewrite_lba_extent(c, extent);
+	return btree.rewrite_extent(c, extent);
       });
   } else {
     DEBUGT("skip non lba extent -- {}", t, *extent);
