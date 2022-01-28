@@ -28,6 +28,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 })
 export class ServiceFormComponent extends CdForm implements OnInit {
   readonly RGW_SVC_ID_PATTERN = /^([^.]+)(\.([^.]+)\.([^.]+))?$/;
+  readonly SNMP_DESTINATION_PATTERN = /^[^\:]+:[0-9]/;
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
 
@@ -217,12 +218,20 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       snmp_version: [null, [Validators.required]],
       snmp_destination: [
         null,
-        [
-          CdValidators.requiredIf({
-            service_type: 'snmp-gateway',
-            unmanaged: false
-          })
-        ]
+        {
+          validators: [
+            CdValidators.requiredIf({
+              service_type: 'snmp-gateway',
+              unmanaged: false
+            }),
+            CdValidators.custom('snmpDestinationPattern', (value: string) => {
+              if (_.isEmpty(value)) {
+                return false;
+              }
+              return !this.SNMP_DESTINATION_PATTERN.test(value);
+            })
+          ]
+        }
       ],
       engine_id: [
         null,
