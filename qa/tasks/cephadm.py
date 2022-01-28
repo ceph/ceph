@@ -813,6 +813,16 @@ def ceph_osds(ctx, config):
                 if int(j.get('num_up_osds', 0)) == num_osds:
                     break;
 
+        if not hasattr(ctx, 'managers'):
+            ctx.managers = {}
+        ctx.managers[cluster_name] = CephManager(
+            ctx.ceph[cluster_name].bootstrap_remote,
+            ctx=ctx,
+            logger=log.getChild('ceph_manager.' + cluster_name),
+            cluster=cluster_name,
+            cephadm=True,
+        )
+
         yield
     finally:
         pass
@@ -1573,16 +1583,6 @@ def task(ctx, config):
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: create_rbd_pool(ctx=ctx, config=config),
     ):
-        if not hasattr(ctx, 'managers'):
-            ctx.managers = {}
-        ctx.managers[cluster_name] = CephManager(
-            ctx.ceph[cluster_name].bootstrap_remote,
-            ctx=ctx,
-            logger=log.getChild('ceph_manager.' + cluster_name),
-            cluster=cluster_name,
-            cephadm=True,
-        )
-
         try:
             if config.get('wait-for-healthy', True):
                 healthy(ctx=ctx, config=config)
