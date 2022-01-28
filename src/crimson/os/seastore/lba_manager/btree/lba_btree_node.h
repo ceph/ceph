@@ -16,18 +16,13 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
-#include "crimson/os/seastore/lba_manager/btree/btree_range_pin.h"
+
+#include "crimson/os/seastore/btree/btree_range_pin.h"
+#include "crimson/os/seastore/btree/fixed_kv_btree.h"
 
 namespace crimson::os::seastore::lba_manager::btree {
 
 using base_iertr = LBAManager::base_iertr;
-
-struct op_context_t {
-  Cache &cache;
-  Transaction &trans;
-  btree_pin_set_t *pins = nullptr;
-};
 
 /**
  * lba_map_val_t
@@ -57,15 +52,12 @@ WRITE_EQ_OPERATORS_4(
 
 std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
 
-class BtreeLBAPin;
-using BtreeLBAPinRef = std::unique_ptr<BtreeLBAPin>;
-
 constexpr size_t LBA_BLOCK_SIZE = 4096;
 
 /**
  * lba_node_meta_le_t
  *
- * On disk layout for lba_node_meta_t
+ * On disk layout for fixed_kv_node_meta_t
  */
 struct lba_node_meta_le_t {
   laddr_le_t begin = laddr_le_t(0);
@@ -74,13 +66,13 @@ struct lba_node_meta_le_t {
 
   lba_node_meta_le_t() = default;
   lba_node_meta_le_t(const lba_node_meta_le_t &) = default;
-  explicit lba_node_meta_le_t(const lba_node_meta_t &val)
+  explicit lba_node_meta_le_t(const fixed_kv_node_meta_t<laddr_t> &val)
     : begin(ceph_le64(val.begin)),
       end(ceph_le64(val.end)),
       depth(init_depth_le(val.depth)) {}
 
-  operator lba_node_meta_t() const {
-    return lba_node_meta_t{ begin, end, depth };
+  operator fixed_kv_node_meta_t<laddr_t>() const {
+    return fixed_kv_node_meta_t<laddr_t>{ begin, end, depth };
   }
 };
 
@@ -92,13 +84,13 @@ struct lba_node_meta_le_t {
 struct LBANode : CachedExtent {
   using LBANodeRef = TCachedExtentRef<LBANode>;
 
-  btree_range_pin_t pin;
+  btree_range_pin_t<laddr_t> pin;
 
   LBANode(ceph::bufferptr &&ptr) : CachedExtent(std::move(ptr)), pin(this) {}
   LBANode(const LBANode &rhs)
     : CachedExtent(rhs), pin(rhs.pin, this) {}
 
-  virtual lba_node_meta_t get_node_meta() const = 0;
+  virtual fixed_kv_node_meta_t<laddr_t> get_node_meta() const = 0;
 
   virtual ~LBANode() = default;
 
@@ -145,7 +137,7 @@ struct LBAInternalNode
   : LBANode,
     common::FixedKVNodeLayout<
       INTERNAL_NODE_CAPACITY,
-      lba_node_meta_t, lba_node_meta_le_t,
+      fixed_kv_node_meta_t<laddr_t>, lba_node_meta_le_t,
       laddr_t, laddr_le_t,
       paddr_t, paddr_le_t> {
   using Ref = TCachedExtentRef<LBAInternalNode>;
@@ -157,7 +149,7 @@ struct LBAInternalNode
 
   static constexpr extent_types_t TYPE = extent_types_t::LADDR_INTERNAL;
 
-  lba_node_meta_t get_node_meta() const { return get_meta(); }
+  fixed_kv_node_meta_t<laddr_t> get_node_meta() const { return get_meta(); }
 
   CachedExtentRef duplicate_for_write() final {
     assert(delta_buffer.empty());
@@ -207,7 +199,7 @@ struct LBAInternalNode
   }
 
   std::tuple<Ref, Ref, laddr_t>
-  make_split_children(op_context_t c) {
+  make_split_children(op_context_t<laddr_t> c) {
     auto left = c.cache.alloc_new_extent<LBAInternalNode>(
       c.trans, LBA_BLOCK_SIZE);
     auto right = c.cache.alloc_new_extent<LBAInternalNode>(
@@ -222,7 +214,7 @@ struct LBAInternalNode
   }
 
   Ref make_full_merge(
-    op_context_t c,
+    op_context_t<laddr_t> c,
     Ref &right) {
     auto replacement = c.cache.alloc_new_extent<LBAInternalNode>(
       c.trans, LBA_BLOCK_SIZE);
@@ -233,7 +225,7 @@ struct LBAInternalNode
 
   std::tuple<Ref, Ref, laddr_t>
   make_balanced(
-    op_context_t c,
+    op_context_t<laddr_t> c,
     Ref &_right,
     bool prefer_left) {
     ceph_assert(_right->get_type() == get_type());
@@ -383,7 +375,7 @@ struct LBALeafNode
   : LBANode,
     common::FixedKVNodeLayout<
       LEAF_NODE_CAPACITY,
-      lba_node_meta_t, lba_node_meta_le_t,
+      fixed_kv_node_meta_t<laddr_t>, lba_node_meta_le_t,
       laddr_t, laddr_le_t,
       lba_map_val_t, lba_map_val_le_t> {
   using Ref = TCachedExtentRef<LBALeafNode>;
@@ -395,7 +387,7 @@ struct LBALeafNode
 
   static constexpr extent_types_t TYPE = extent_types_t::LADDR_LEAF;
 
-  lba_node_meta_t get_node_meta() const { return get_meta(); }
+  fixed_kv_node_meta_t<laddr_t> get_node_meta() const { return get_meta(); }
 
   CachedExtentRef duplicate_for_write() final {
     assert(delta_buffer.empty());
@@ -438,7 +430,7 @@ struct LBALeafNode
 
 
   std::tuple<Ref, Ref, laddr_t>
-  make_split_children(op_context_t c) {
+  make_split_children(op_context_t<laddr_t> c) {
     auto left = c.cache.alloc_new_extent<LBALeafNode>(
       c.trans, LBA_BLOCK_SIZE);
     auto right = c.cache.alloc_new_extent<LBALeafNode>(
@@ -453,7 +445,7 @@ struct LBALeafNode
   }
 
   Ref make_full_merge(
-    op_context_t c,
+    op_context_t<laddr_t> c,
     Ref &right) {
     auto replacement = c.cache.alloc_new_extent<LBALeafNode>(
       c.trans, LBA_BLOCK_SIZE);
@@ -464,7 +456,7 @@ struct LBALeafNode
 
   std::tuple<Ref, Ref, laddr_t>
   make_balanced(
-    op_context_t c,
+    op_context_t<laddr_t> c,
     Ref &_right,
     bool prefer_left) {
     ceph_assert(_right->get_type() == get_type());

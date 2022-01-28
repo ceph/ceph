@@ -141,7 +141,7 @@ struct lba_btree_test : btree_test_base {
   std::map<laddr_t, lba_map_val_t> check;
 
   auto get_op_context(Transaction &t) {
-    return op_context_t{*cache, t};
+    return op_context_t<laddr_t>{*cache, t};
   }
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
@@ -376,11 +376,11 @@ struct btree_lba_manager_test : btree_test_base {
       }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
     EXPECT_EQ(len, ret->get_length());
-    auto [b, e] = get_overlap(t, ret->get_laddr(), len);
+    auto [b, e] = get_overlap(t, ret->get_key(), len);
     EXPECT_EQ(b, e);
     t.mappings.emplace(
       std::make_pair(
-	ret->get_laddr(),
+	ret->get_key(),
 	test_extent_t{
 	  ret->get_paddr(),
 	  ret->get_length(),
@@ -474,7 +474,7 @@ struct btree_lba_manager_test : btree_test_base {
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
       EXPECT_EQ(i.second.addr, ret->get_paddr());
-      EXPECT_EQ(laddr, ret->get_laddr());
+      EXPECT_EQ(laddr, ret->get_key());
       EXPECT_EQ(len, ret->get_length());
 
       auto ret_pin = with_trans_intr(
@@ -484,7 +484,7 @@ struct btree_lba_manager_test : btree_test_base {
 	    t, laddr);
 	}).unsafe_get0();
       EXPECT_EQ(i.second.addr, ret_pin->get_paddr());
-      EXPECT_EQ(laddr, ret_pin->get_laddr());
+      EXPECT_EQ(laddr, ret_pin->get_key());
       EXPECT_EQ(len, ret_pin->get_length());
     }
     with_trans_intr(
@@ -554,8 +554,8 @@ TEST_F(btree_lba_manager_test, force_split_merge)
 	  check_mappings(t);
 	  check_mappings();
 	}
-	incref_mapping(t, ret->get_laddr());
-	decref_mapping(t, ret->get_laddr());
+	incref_mapping(t, ret->get_key());
+	decref_mapping(t, ret->get_key());
       }
       logger().debug("submitting transaction");
       submit_test_transaction(std::move(t));

@@ -1081,22 +1081,22 @@ public:
 };
 
 /**
- * lba_root_t 
+ * phy_tree_root_t
  */
-class __attribute__((packed)) lba_root_t {
+class __attribute__((packed)) phy_tree_root_t {
   paddr_le_t root_addr;
   depth_le_t depth = init_extent_len_le(0);
   
 public:
-  lba_root_t() = default;
+  phy_tree_root_t() = default;
   
-  lba_root_t(paddr_t addr, depth_t depth)
+  phy_tree_root_t(paddr_t addr, depth_t depth)
     : root_addr(addr), depth(init_depth_le(depth)) {}
 
-  lba_root_t(const lba_root_t &o) = default;
-  lba_root_t(lba_root_t &&o) = default;
-  lba_root_t &operator=(const lba_root_t &o) = default;
-  lba_root_t &operator=(lba_root_t &&o) = default;
+  phy_tree_root_t(const phy_tree_root_t &o) = default;
+  phy_tree_root_t(phy_tree_root_t &&o) = default;
+  phy_tree_root_t &operator=(const phy_tree_root_t &o) = default;
+  phy_tree_root_t &operator=(phy_tree_root_t &&o) = default;
   
   paddr_t get_location() const {
     return root_addr;
@@ -1188,6 +1188,7 @@ public:
   }
 };
 
+using lba_root_t = phy_tree_root_t;
 
 /**
  * root_t

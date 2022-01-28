@@ -81,7 +81,7 @@ std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
 
 std::ostream &operator<<(std::ostream &out, const LBAPin &rhs)
 {
-  return out << "LBAPin(" << rhs.get_laddr() << "~" << rhs.get_length()
+  return out << "LBAPin(" << rhs.get_key() << "~" << rhs.get_length()
 	     << "->" << rhs.get_paddr();
 }
 
