@@ -247,7 +247,10 @@ class Activate(object):
                 )
             else:
                 terminal.info('Activating OSD ID %s FSID %s' % (osd_id, osd_fsid))
-                self.activate(args, osd_id=osd_id, osd_fsid=osd_fsid)
+                try:
+                    self.activate(args, osd_id=osd_id, osd_fsid=osd_fsid)
+                except Exception as e:
+                    terminal.error(f'Failed to activate: {e}')
 
     @decorators.needs_root
     def activate(self, args, osd_id=None, osd_fsid=None):
