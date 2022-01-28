@@ -632,7 +632,7 @@ CREATE TABLE DeviceHealthMetrics (
                     % (dev['devid'],
                        ','.join(device_locations),
                        ','.join(dev.get('daemons', ['none'])),
-                       dev['life_expectancy_max'],
+                       dev['life_expectancy_min'],
                        dev.get('life_expectancy_max', 'unknown')))
 
         # OSD might be marked 'out' (which means it has no
