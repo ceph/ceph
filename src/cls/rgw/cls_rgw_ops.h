@@ -1124,6 +1124,8 @@ struct cls_rgw_lc_get_entry_ret {
     }
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_rgw_lc_get_entry_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_entry_ret)
 
