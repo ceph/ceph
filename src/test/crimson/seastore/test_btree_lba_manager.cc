@@ -43,7 +43,7 @@ struct btree_test_base :
 
   void update_segment_avail_bytes(paddr_t offset) final {}
 
-  get_segment_ret get_segment(device_id_t id) final {
+  get_segment_ret get_segment(device_id_t id, segment_seq_t seq) final {
     auto ret = next;
     next = segment_id_t{
       next.device_id(),

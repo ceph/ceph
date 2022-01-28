@@ -385,7 +385,8 @@ Journal::JournalSegmentManager::roll()
     current_journal_segment->close() :
     Segment::close_ertr::now()
   ).safe_then([this] {
-    return segment_provider->get_segment(get_device_id());
+    return segment_provider->get_segment(
+        get_device_id(), next_journal_segment_seq);
   }).safe_then([this](auto segment) {
     return segment_manager.open(segment);
   }).safe_then([this](auto sref) {
@@ -395,9 +396,6 @@ Journal::JournalSegmentManager::roll()
     if (old_segment_id != NULL_SEG_ID) {
       segment_provider->close_segment(old_segment_id);
     }
-    segment_provider->set_journal_segment(
-      current_journal_segment->get_segment_id(),
-      get_segment_seq());
   }).handle_error(
     roll_ertr::pass_further{},
     crimson::ct_error::assert_all{
