@@ -26,20 +26,19 @@ describe('Create cluster create services page', () => {
   });
 
   describe('when Orchestrator is available', () => {
-    const serviceName = 'rgw.foo';
+    const serviceName = 'mds.test';
 
-    it('should create an rgw and mds service', () => {
-      createService('rgw', serviceName, '2');
-      createService('mds', 'mds.test');
+    it('should create an mds service', () => {
+      createService('mds', serviceName, '1');
     });
 
     it('should edit a service', () => {
-      const daemonCount = '4';
+      const daemonCount = '2';
       createClusterServicePage.editService(serviceName, daemonCount);
       createClusterServicePage.expectPlacementCount(serviceName, daemonCount);
     });
 
-    it('should delete the mds service', () => {
+    it('should delete mds service', () => {
       createClusterServicePage.deleteService('mds.test');
     });
   });

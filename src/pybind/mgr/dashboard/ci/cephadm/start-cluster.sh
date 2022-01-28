@@ -7,6 +7,7 @@ cleanup() {
     if [[ -n "$JENKINS_HOME" ]]; then
         printf "\n\nStarting cleanup...\n\n"
         kcli delete plan -y ceph || true
+        kcli delete network ceph-dashboard -y
         docker container prune -f
         printf "\n\nCleanup completed.\n\n"
     fi
