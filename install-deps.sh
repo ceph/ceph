@@ -366,7 +366,8 @@ else
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
 
         # for rgw motr backend build checks
-        $for_make_check || $with_rgw_motr && {
+        if ! dpkg -l cortx-motr-dev &> /dev/null &&
+            { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; }; then
             deb_arch=$(dpkg --print-architecture)
             motr_pkg="cortx-motr_2.0.0.git3252d623_$deb_arch.deb"
             motr_dev_pkg="cortx-motr-dev_2.0.0.git3252d623_$deb_arch.deb"
@@ -382,7 +383,7 @@ else
             fi
             $SUDO apt-get install -y /var/cache/apt/archives/{$motr_pkg,$motr_dev_pkg}
             $SUDO apt-get install -y libisal-dev
-        }
+        fi
         ;;
     rocky|centos|fedora|rhel|ol|virtuozzo)
         builddepcmd="dnf -y builddep --allowerasing"
@@ -419,12 +420,13 @@ else
         IGNORE_YUM_BUILDEP_ERRORS="ValueError: SELinux policy is not managed or store cannot be accessed."
         sed "/$IGNORE_YUM_BUILDEP_ERRORS/d" $DIR/yum-builddep.out | grep -qi "error:" && exit 1
         # for rgw motr backend build checks
-        $for_make_check || $with_rgw_motr && {
+        if ! rpm --quiet -q cortx-motr-devel &&
+              { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; }; then
             $SUDO dnf install -y \
                   "$motr_pkgs_url/isa-l-2.30.0-1.el7.${ARCH}.rpm" \
                   "$motr_pkgs_url/cortx-motr-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm" \
                   "$motr_pkgs_url/cortx-motr-devel-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm"
-        }
+        fi
         ;;
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
