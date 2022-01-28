@@ -464,6 +464,9 @@
               <span class="invalid-feedback"
                     *ngIf="serviceForm.showError('snmp_destination', frm, 'required')"
                     i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('snmp_destination', frm, 'snmpDestinationPattern')"
+                    i18n>The value does not match the pattern: <strong>hostname:port</strong></span>
             </div>
           </div>
           <!-- Engine id for snmp V3 -->
