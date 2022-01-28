@@ -169,12 +169,12 @@ class Module(MgrModule):
 
     @CLIWriteCommand('rbd task add trash remove')
     @with_latest_osdmap
-    def task_add_trash_remove(self, image_spec: str) -> Tuple[int, str, str]:
+    def task_add_trash_remove(self, image_id_spec: str) -> Tuple[int, str, str]:
         """
         Remove an image from the trash asynchronously in the background
         """
         with self.task.lock:
-            return self.task.queue_trash_remove(image_spec)
+            return self.task.queue_trash_remove(image_id_spec)
 
     @CLIWriteCommand('rbd task add migration execute')
     @with_latest_osdmap
