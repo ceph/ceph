@@ -1189,17 +1189,8 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         return -EINVAL;
       }
     } else {
-      /* x-amz-server-side-encryption not present or empty */
-      std::string_view key_id =
-	crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
-      if (!key_id.empty()) {
-        ldpp_dout(s, 5) << "ERROR: SSE-KMS encryption request is missing the header "
-                         << "x-amz-server-side-encryption"
-                         << dendl;
-        s->err.message = "Server Side Encryption with KMS managed key requires "
-                         "HTTP header x-amz-server-side-encryption : aws:kms";
-        return -EINVAL;
-      }
+  /*no encryption*/
+      return 0;
     }
 
     /* from here on we are only handling SSE-S3 (req_sse=="AES256") */
@@ -1289,9 +1280,10 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
       return 0;
     }
+    s->err.message = "Request specifies Server Side Encryption "
+                     "but server configuration does not support this.";
+    return -EINVAL;
   }
-  /*no encryption*/
-  return 0;
 }
 
 
