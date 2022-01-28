@@ -367,7 +367,7 @@ else
 
         # for rgw motr backend build checks
         if ! dpkg -l cortx-motr-dev &> /dev/null &&
-            { $for_make_check || $with_rgw_motr; }; then
+            { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; }; then
             deb_arch=$(dpkg --print-architecture)
             motr_pkg="cortx-motr_2.0.0.git3252d623_$deb_arch.deb"
             motr_dev_pkg="cortx-motr-dev_2.0.0.git3252d623_$deb_arch.deb"
@@ -421,7 +421,7 @@ else
         sed "/$IGNORE_YUM_BUILDEP_ERRORS/d" $DIR/yum-builddep.out | grep -qi "error:" && exit 1
         # for rgw motr backend build checks
         if ! rpm --quiet -q cortx-motr-devel &&
-              { $for_make_check || $with_rgw_motr; }; then
+              { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; }; then
             $SUDO dnf install -y \
                   "$motr_pkgs_url/isa-l-2.30.0-1.el7.${ARCH}.rpm" \
                   "$motr_pkgs_url/cortx-motr-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm" \
