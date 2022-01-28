@@ -856,8 +856,17 @@ if(WITH_KVS)
 endif(WITH_KVS)
 
 if(WITH_RADOSGW)
-  if(WITH_RADOSGW_SELECT_PARQUET AND NOT WITH_SYSTEM_ARROW)
-    find_package(thrift 0.13 REQUIRED) # a dependency of arrow
+  if(WITH_RADOSGW_SELECT_PARQUET)
+    # find arrow's dependencies
+    if (WITH_SYSTEM_UTF8PROC)
+      find_package(utf8proc 2.2.0 REQUIRED)
+    else()
+      include(BuildUtf8proc)
+      build_utf8proc()
+    endif()
+    find_package(thrift 0.13 REQUIRED)
+
+    # TODO: WITH_SYSTEM_ARROW
     include(BuildArrow)
     build_arrow()
   endif()

@@ -262,7 +262,6 @@ BuildRequires:  libzbd-devel
 %endif
 BuildRequires:  thrift-devel >= 0.13.0
 BuildRequires:  re2-devel
-BuildRequires:  utf8proc-devel >= 2.2.0
 %if 0%{with jaeger}
 BuildRequires:  bison
 BuildRequires:  flex
@@ -1337,6 +1336,7 @@ cmake .. \
 %if 0%{?rhel}
     -DWITH_FMT_HEADER_ONLY:BOOL=ON \
 %endif
+    -DWITH_SYSTEM_UTF8PROC:BOOL=OFF \
     -DWITH_GRAFANA:BOOL=ON
 
 %if %{with cmake_verbose_logging}
