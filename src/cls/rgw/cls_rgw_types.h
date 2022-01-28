@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <list>
 #include <boost/container/flat_map.hpp>
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
@@ -1291,6 +1292,8 @@ struct cls_rgw_lc_entry {
     decode(status, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  void generate_test_instances(std::list<cls_rgw_lc_entry*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_entry);
 
