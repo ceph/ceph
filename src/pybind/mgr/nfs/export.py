@@ -38,7 +38,7 @@ def export_cluster_checker(func: FuncT) -> FuncT:
         This method checks if cluster exists
         """
         if kwargs['cluster_id'] not in available_clusters(export.mgr):
-            return -errno.ENOENT, "", "Cluster does not exists"
+            return -errno.ENOENT, "", "Cluster does not exist"
         return func(export, *args, **kwargs)
     return cast(FuncT, cluster_check)
 
