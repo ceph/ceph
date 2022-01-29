@@ -1,4 +1,4 @@
-import { ApiDocsPageHelper } from 'cypress/integration/ui/api-docs.po';
+import { ApiDocsPageHelper } from '../ui/api-docs.po';
 
 describe('Api Docs Page', () => {
   const apiDocs = new ApiDocsPageHelper();

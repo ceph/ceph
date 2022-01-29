@@ -1,7 +1,7 @@
-import { HostsPageHelper } from 'cypress/integration/cluster/hosts.po';
-import { ServicesPageHelper } from 'cypress/integration/cluster/services.po';
-import { PageHelper } from 'cypress/integration/page-helper.po';
-import { NotificationSidebarPageHelper } from 'cypress/integration/ui/notification.po';
+import { PageHelper } from '../page-helper.po';
+import { NotificationSidebarPageHelper } from '../ui/notification.po';
+import { HostsPageHelper } from './hosts.po';
+import { ServicesPageHelper } from './services.po';
 
 const pages = {
   index: { url: '#/expand-cluster', id: 'cd-create-cluster' }

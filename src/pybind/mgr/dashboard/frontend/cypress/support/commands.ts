@@ -6,10 +6,15 @@ declare global {
     }
   }
 }
-
-import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
-import { Permissions } from '~/app/shared/models/permissions';
-
+// Disabling tslint rule since cypress-cucumber has
+// issues with absolute import paths.
+// This can be removed when
+// https://github.com/cypress-io/cypress-browserify-preprocessor/issues/53
+// is fixed.
+/* tslint:disable*/
+import { CdHelperClass } from '../../src/app/shared/classes/cd-helper.class';
+import { Permissions } from '../../src/app/shared/models/permissions';
+/* tslint:enable*/
 let auth: any;
 
 const fillAuth = () => {

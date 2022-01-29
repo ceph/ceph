@@ -49,6 +49,7 @@ export class HostsPageHelper extends PageHelper {
       }
       if (exist) {
         cy.get('#hostname').should('have.class', 'ng-invalid');
+        cy.get('cd-back-button').click();
       }
     });
 

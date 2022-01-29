@@ -1,4 +1,6 @@
-import { ServicesPageHelper } from 'cypress/integration/cluster/services.po';
+/* tslint:disable*/
+import { ServicesPageHelper } from '../../cluster/services.po';
+/* tslint:enable*/
 
 describe('Services page', () => {
   const services = new ServicesPageHelper();

@@ -1,4 +1,6 @@
-import { OSDsPageHelper } from 'cypress/integration/cluster/osds.po';
+/* tslint:disable*/
+import { OSDsPageHelper } from '../../cluster/osds.po';
+/* tslint:enable*/
 
 describe('OSDs page', () => {
   const osds = new OSDsPageHelper();

@@ -1,0 +1,33 @@
+{
+  "no-files-without-scenarios" : "on",
+  "no-unnamed-features": "on",
+  "no-unnamed-scenarios": "on",
+  "no-dupe-scenario-names": ["on", "in-feature"],
+  "no-dupe-feature-names": "on",
+  "no-partially-commented-tag-lines": "on",
+  "indentation": ["on", {
+      "Feature": 0,
+      "Background": 4,
+      "Scenario": 4,
+      "Step": 8,
+      "Examples": 8,
+      "example": 12
+      }],
+  "no-trailing-spaces": "on",
+  "new-line-at-eof": ["on", "yes"],
+  "no-multiple-empty-lines": "on",
+  "no-empty-file": "on",
+  "no-scenario-outlines-without-examples": "on",
+  "name-length": "off",
+  "no-restricted-tags": ["on", {"tags": ["@watch", "@wip"]}],
+  "use-and": "off",
+  "no-duplicate-tags": "on",
+  "no-superfluous-tags": "on",
+  "no-homogenous-tags": "on",
+  "one-space-between-tags": "on",
+  "no-unused-variables": "on",
+  "no-background-only-scenario": "off",
+  "no-empty-background": "on",
+  "no-examples-in-scenarios": "on",
+  "scenario-size": ["on", { "steps-length": {"Background": 3, "Scenario": 15}}]
+}
