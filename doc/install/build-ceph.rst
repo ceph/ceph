@@ -29,6 +29,8 @@ and tools::
 .. note:: Some distributions that support Google's memory profiler tool may use
    a different package name (e.g., ``libgoogle-perftools4``).
 
+.. _build-ceph:
+
 Build Ceph
 ==========
 
