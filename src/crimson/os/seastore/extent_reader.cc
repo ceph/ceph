@@ -114,6 +114,7 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
   auto& segment_manager =
     *segment_managers[cursor.get_segment_id().device_id()];
   if (cursor.get_segment_offset() == 0) {
+    INFO("start to scan segment {}", cursor.get_segment_id());
     cursor.increment_seq(segment_manager.get_block_size());
   }
   DEBUG("starting at {}, budget={}", cursor, budget);

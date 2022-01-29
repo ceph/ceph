@@ -191,12 +191,13 @@ public:
     LOG_PREFIX(Cache::get_extent);
     auto cached = query_cache(offset, p_metric_key);
     if (!cached) {
-      SUBDEBUG(seastore_cache,
-          "{} {}~{} is absent, reading ...", T::TYPE, offset, length);
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
       ret->set_paddr(offset);
       ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
+      SUBDEBUG(seastore_cache,
+          "{} {}~{} is absent, add extent and reading ... -- {}",
+          T::TYPE, offset, length, *ret);
       add_extent(ret);
       extent_init_func(*ret);
       return read_extent<T>(
@@ -205,13 +206,13 @@ public:
 
     // extent PRESENT in cache
     if (cached->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
-      SUBDEBUG(seastore_cache,
-          "{} {}~{} is absent(placeholder), reading ...",
-          T::TYPE, offset, length);
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
       ret->set_paddr(offset);
       ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
+      SUBDEBUG(seastore_cache,
+          "{} {}~{} is absent(placeholder), reading ... -- {}",
+          T::TYPE, offset, length, *ret);
       extents.replace(*ret, *cached);
 
       // replace placeholder in transactions
@@ -640,7 +641,7 @@ public:
         return f(t, e
         ).si_then([this, FNAME, &t, e](bool is_alive) {
           if (!is_alive) {
-            SUBDEBUGT(seastore_cache, "extent is not alive, remove -- {}", t, *e);
+            SUBDEBUGT(seastore_cache, "extent is not alive, remove extent -- {}", t, *e);
             remove_extent(e);
           } else {
             SUBDEBUGT(seastore_cache, "extent is alive -- {}", t, *e);
