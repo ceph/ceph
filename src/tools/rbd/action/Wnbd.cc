@@ -224,8 +224,6 @@ int execute_detach(const po::variables_map &vm,
   return -EOPNOTSUPP;
 }
 
-Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
-
 } // namespace wnbd
 } // namespace action
 } // namespace rbd
