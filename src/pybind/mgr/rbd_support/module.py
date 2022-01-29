@@ -108,7 +108,7 @@ class Module(MgrModule):
     @CLIReadCommand('rbd mirror snapshot schedule list')
     @with_latest_osdmap
     def mirror_snapshot_schedule_list(self,
-                                      level_spec: str) -> Tuple[int, str, str]:
+                                      level_spec: str = '') -> Tuple[int, str, str]:
         """
         List rbd mirror snapshot schedule
         """
@@ -118,7 +118,7 @@ class Module(MgrModule):
     @CLIReadCommand('rbd mirror snapshot schedule status')
     @with_latest_osdmap
     def mirror_snapshot_schedule_status(self,
-                                        level_spec: str) -> Tuple[int, str, str]:
+                                        level_spec: str = '') -> Tuple[int, str, str]:
         """
         Show rbd mirror snapshot schedule status
         """
@@ -248,7 +248,7 @@ class Module(MgrModule):
     @CLIReadCommand('rbd trash purge schedule list')
     @with_latest_osdmap
     def trash_purge_schedule_list(self,
-                                  level_spec: str) -> Tuple[int, str, str]:
+                                  level_spec: str = '') -> Tuple[int, str, str]:
         """
         List rbd trash purge schedule
         """
@@ -258,7 +258,7 @@ class Module(MgrModule):
     @CLIReadCommand('rbd trash purge schedule status')
     @with_latest_osdmap
     def trash_purge_schedule_status(self,
-                                    level_spec: str) -> Tuple[int, str, str]:
+                                    level_spec: str = '') -> Tuple[int, str, str]:
         """
         Show rbd trash purge schedule status
         """
