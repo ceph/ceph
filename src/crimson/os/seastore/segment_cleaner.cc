@@ -283,6 +283,7 @@ SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
     limit,
     config.journal_rewrite_per_cycle
   ).si_then([=, &t](auto dirty_list) {
+    DEBUGT("rewrite {} dirty extents", t, dirty_list.size());
     return seastar::do_with(
       std::move(dirty_list),
       [FNAME, this, &t](auto &dirty_list) {

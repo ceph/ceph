@@ -194,6 +194,7 @@ Journal::replay_segment(
             record_deltas.deltas,
             [locator,
              this,
+             FNAME,
              &handler](delta_info_t& delta)
           {
             /* The journal may validly contain deltas for extents in
@@ -211,6 +212,11 @@ Journal::replay_segment(
               if (delta_paddr_segment_type == segment_type_t::NULL_SEG ||
                   (delta_paddr_segment_type == segment_type_t::JOURNAL &&
                    delta_paddr_segment_seq > locator_segment_seq)) {
+                SUBDEBUG(seastore_cache,
+                         "delta is obsolete, delta_paddr_segment_seq={}, locator_segment_seq={} -- {}",
+                         segment_seq_printer_t{delta_paddr_segment_seq},
+                         segment_seq_printer_t{locator_segment_seq},
+                         delta);
                 return replay_ertr::now();
               }
             }
