@@ -5,7 +5,7 @@ High level status display commands
 
 from collections import defaultdict
 from prettytable import PrettyTable
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 import errno
 import fnmatch
 import mgr_util
@@ -279,10 +279,14 @@ class Module(MgrModule):
             return HandleCommandResult(stdout=output)
 
     @CLIReadCommand("osd status")
-    def handle_osd_status(self, bucket: Optional[str] = None) -> Tuple[int, str, str]:
+    def handle_osd_status(self, bucket: Optional[str] = None, format: str = 'plain') -> Tuple[int, str, str]:
         """
         Show the status of OSDs within a bucket, or all
         """
+        json_output: Dict[str, List[Any]] = \
+            dict(OSDs=[])
+        output_format = format
+
         osd_table = PrettyTable(['ID', 'HOST', 'USED', 'AVAIL', 'WR OPS',
                                  'WR DATA', 'RD OPS', 'RD DATA', 'STATE'],
                                 border=False)
@@ -349,5 +353,22 @@ class Module(MgrModule):
                                mgr_util.format_bytes(rd_byte_rate, 5),
                                ','.join(osd['state']),
                                ])
+            if output_format in ('json', 'json-pretty'):
+                json_output['OSDs'].append({
+                                        'id': osd_id,
+                                        'host name': hostname,
+                                        'kb used' : kb_used,
+                                        'kb available':kb_avail,
+                                        'write ops rate': wr_ops_rate,
+                                        'write byte rate': wr_byte_rate,
+                                        'read ops rate': rd_ops_rate,
+                                        'read byte rate': rd_byte_rate,
+                                        'state': osd['state']
+                                      })
 
-        return 0, osd_table.get_string(), ""
+        if output_format == "json":
+            return 0, json.dumps(json_output, sort_keys=True) , ""
+        elif output_format == "json-pretty":
+            return 0, json.dumps(json_output, sort_keys=True,indent=4,separators=(',', ': ')) , ""
+        else:
+            return 0, osd_table.get_string(), ""
