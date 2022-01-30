@@ -1,0 +1,18 @@
+roles:
+- - host.a
+  - osd.0
+  - osd.1
+  - osd.2
+  - mon.a
+  - mon.b
+  - mon.c
+  - mon.d
+  - mon.e
+  - mgr.a
+  - client.0
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.a:
+      - ceph orch apply mon 3
