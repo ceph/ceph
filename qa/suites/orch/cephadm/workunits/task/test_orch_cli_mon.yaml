@@ -4,15 +4,24 @@ roles:
   - osd.1
   - osd.2
   - mon.a
-  - mon.b
   - mon.c
   - mon.d
-  - mon.e
   - mgr.a
   - client.0
+- - host.b
+  - osd.3
+  - osd.4
+  - mon.b
+  - mon.e
+  - mgr.b
+  - mgr.c
+  - client.1
 tasks:
 - install:
 - cephadm:
 - cephadm.shell:
     host.a:
-      - ceph orch apply mon 3
+      - ceph orch apply mds a
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.test_cli_mon
