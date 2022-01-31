@@ -352,6 +352,8 @@ class ScrubBackend {
 
   const omap_stat_t& this_scrub_omapstats() const { return m_omap_stats; }
 
+  int authoritative_peers_count() const { return m_auth_peers.size(); };
+
   std::ostream& logger_prefix(std::ostream* _dout, const ScrubBackend* t);
 
  private:

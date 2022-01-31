@@ -268,8 +268,8 @@ void ScrubBackend::omap_checks()
 
 /*
  * update_authoritative() updates:
- #
- *  - m_scrubber.m_authoritative: adds obj-> list of pairs < scrub-map, shard>
+ *
+ *  - m_auth_peers: adds obj-> list of pairs < scrub-map, shard>
  *
  *  - m_cleaned_meta_map: replaces [obj] entry with:
  *     the relevant object in the scrub-map of the "selected" (back-most) peer
@@ -284,20 +284,18 @@ void ScrubBackend::update_authoritative()
 
   compare_smaps();  // note: might cluster-log errors
 
-  /// \todo try replacing with algorithm-based code
-
-  // update the scrubber object's m_authoritative with the list of good
+  // update the session-wide m_auth_peers with the list of good
   // peers for each object (i.e. the ones that are in this_chunks's auth list)
   for (auto& [obj, peers] : this_chunk->authoritative) {
 
-    list<pair<ScrubMap::object, pg_shard_t>> good_peers;
+    auth_peers_t good_peers;
 
     for (auto& peer : peers) {
       good_peers.emplace_back(this_chunk->received_maps[peer].objects[obj],
                               peer);
     }
 
-    m_scrubber.m_authoritative.emplace(obj, good_peers);
+    m_auth_peers.emplace(obj, std::move(good_peers));
   }
 
   for (const auto& [obj, peers] : this_chunk->authoritative) {
@@ -360,13 +358,11 @@ int ScrubBackend::scrub_process_inconsistent()
                           __func__,
                           m_mode_desc,
                           m_repair,
-                          m_scrubber.m_authoritative.size())
+                          m_auth_peers.size())
            << dendl;
 
+  ceph_assert(!m_auth_peers.empty());
   // authoritative only store objects which are missing or inconsistent.
-  if (m_scrubber.m_authoritative.empty()) {
-    return 0;
-  }
 
   // some tests expect an error message that does not contain the __func__ and
   // PG:
@@ -847,7 +843,8 @@ std::optional<std::string> ScrubBackend::compare_obj_in_maps(const hobject_t& ho
       ++m_scrubber.m_shallow_errors;
     }
 
-    m_scrubber.m_store->add_object_error(ho.pool, object_error);
+    //m_scrubber.m_store->add_object_error(ho.pool, object_error);
+    this_chunk->m_inconsistent_objs.push_back(std::move(object_error));
     return fmt::format("{} soid {} : failed to pick suitable object info\n",
                        m_scrubber.m_pg_id.pgid,
                        ho);
@@ -1586,7 +1583,7 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map)
       }
       ++m_scrubber.m_shallow_errors;
       soid_error.set_headless();
-      m_scrubber.m_store->add_snap_error(pool.id, soid_error);
+      this_chunk->m_inconsistent_objs.push_back(std::move(soid_error));
       ++soid_error_count;
       if (head && soid.get_head() == head->get_head())
         head_error.set_clone(soid.snap);
@@ -1604,8 +1601,10 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map)
       }
 
       // Save previous head error information
-      if (head && (head_error.errors || soid_error_count))
-        m_scrubber.m_store->add_snap_error(pool.id, head_error);
+      if (head && (head_error.errors || soid_error_count)) {
+        this_chunk->m_inconsistent_objs.push_back(std::move(head_error));
+      }
+
       // Set this as a new head object
       head = soid;
       missing = 0;
