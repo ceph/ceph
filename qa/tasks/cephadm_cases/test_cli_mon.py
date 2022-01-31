@@ -18,18 +18,28 @@ class TestCephadmCLI(MgrTestCase):
     def setUp(self):
         super(TestCephadmCLI, self).setUp()
     
-    def _create_and_write_pool(self):
+    def _create_and_write_pool(self, pool_name):
         "Simulate some writes"
-        self.mgr_cluster.mon_manager.create_pool("test_pool")
+        self.mgr_cluster.mon_manager.create_pool(pool_name)
         args = [
-            "rados", "-p", "test_pool", "bench", "30", "write", "-t", "16"]
+            "rados", "-p", pool_name, "bench", "30", "write", "-t", "16"]
         self.mgr_cluster.admin_remote.run(args=args, wait=True)
 
     def test_apply_mon(self):
         self._orch_cmd('apply', 'mon', '3')
         self.wait_for_health_clear(90)
         time.sleep(30)
-        self._create_and_write_pool()
+        self._create_and_write_pool('test_pool1')
+        time.sleep(10)
+        retstr = self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'crash', 'ls',
+        )
+        log.warning("test_apply_mon: crash ls returns %s" % retstr)
+        self.assertEqual(0, len(retstr))
+        self._orch_cmd('apply', 'mon', '5')
+        self.wait_for_health_clear(90)
+        time.sleep(30)
+        self._create_and_write_pool('test_pool2')
         time.sleep(10)
         retstr = self.mgr_cluster.mon_manager.raw_cluster_cmd(
             'crash', 'ls',
