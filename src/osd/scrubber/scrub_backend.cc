@@ -98,6 +98,11 @@ ScrubBackend::ScrubBackend(PgScrubber& scrubber,
               : (m_depth == scrub_level_t::deep ? "deep-scrub"sv : "scrub"sv));
 }
 
+uint64_t ScrubBackend::logical_to_ondisk_size(uint64_t logical_size) const
+{
+  return m_pgbe.be_get_ondisk_size(logical_size);
+}
+
 void ScrubBackend::update_repair_status(bool should_repair)
 {
   dout(15) << __func__
@@ -771,12 +776,12 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
   // This is automatically corrected in repair_oinfo_oid()
   ceph_assert(oi.soid == obj);
 
-  if (test_error_cond(smap_obj.size != m_pgbe.be_get_ondisk_size(oi.size),
+  if (test_error_cond(smap_obj.size != logical_to_ondisk_size(oi.size),
                       shard_info,
                       &shard_info_wrapper::set_obj_size_info_mismatch)) {
 
     errstream << sep(err) << "candidate size " << smap_obj.size << " info size "
-              << m_pgbe.be_get_ondisk_size(oi.size) << " mismatch";
+              << logical_to_ondisk_size(oi.size) << " mismatch";
   }
 
   std::optional<uint32_t> digest;
@@ -1325,7 +1330,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
   // sizes:
 
-  uint64_t oi_size = m_pgbe.be_get_ondisk_size(auth_oi.size);
+  uint64_t oi_size = logical_to_ondisk_size(auth_oi.size);
   if (oi_size != candidate.size) {
     format_to(out,
               "{}size {} != size {} from auth oi {}",
@@ -1494,12 +1499,12 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map)
     }
 
     if (oi) {
-      if (m_pgbe.be_get_ondisk_size(oi->size) != p->second.size) {
-        clog->error() << m_mode_desc << " " << info.pgid << " " << soid
+      if (logical_to_ondisk_size(oi->size) != p->second.size) {
+        clog->error() << m_mode_desc << " " << m_pg_id << " " << soid
                       << " : on disk size (" << p->second.size
                       << ") does not match object info size (" << oi->size
                       << ") adjusted for ondisk to ("
-                      << m_pgbe.be_get_ondisk_size(oi->size) << ")";
+                      << logical_to_ondisk_size(oi->size) << ")";
         soid_error.set_size_mismatch();
         this_chunk->m_error_counts.shallow_errors++;
       }
