@@ -438,7 +438,7 @@ class ServiceSpec(object):
     start the services.
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
-                          'node-exporter osd prometheus rbd-mirror rgw agent ' \
+                          'node-exporter cAdvisor osd prometheus rbd-mirror rgw agent ' \
                           'container ingress cephfs-mirror snmp-gateway'.split()
     REQUIRES_SERVICE_ID = 'iscsi mds nfs rgw container ingress '.split()
     MANAGED_CONFIG_OPTIONS = [
@@ -459,6 +459,7 @@ class ServiceSpec(object):
             'container': CustomContainerSpec,
             'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
+            'cAdvisor': MonitoringSpec,
             'prometheus': MonitoringSpec,
             'snmp-gateway': SNMPGatewaySpec,
         }.get(service_type, cls)
@@ -1054,7 +1055,7 @@ class MonitoringSpec(ServiceSpec):
                  preview_only: bool = False,
                  port: Optional[int] = None,
                  ):
-        assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager']
+        assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager', 'cAdvisor']
 
         super(MonitoringSpec, self).__init__(
             service_type, service_id,
@@ -1075,7 +1076,8 @@ class MonitoringSpec(ServiceSpec):
             return {'prometheus': 9095,
                     'node-exporter': 9100,
                     'alertmanager': 9093,
-                    'grafana': 3000}[self.service_type]
+                    'grafana': 3000,
+                    'cAdvisor': 8080}[self.service_type]
 
 
 yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)

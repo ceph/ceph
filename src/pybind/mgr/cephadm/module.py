@@ -52,7 +52,7 @@ from .services.iscsi import IscsiService
 from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
-    NodeExporterService, SNMPGatewayService
+    NodeExporterService, SNMPGatewayService, CadvisorService
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
     ClientKeyringStore, ClientKeyringSpec
@@ -95,6 +95,7 @@ DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.18.1'
 DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v0.18.1'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.20.0'
 DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:6.7.4'
+DEFAULT_CADVISOR_IMAGE = 'gcr.io/cadvisor/cadvisor'
 DEFAULT_HAPROXY_IMAGE = 'docker.io/library/haproxy:2.3'
 DEFAULT_KEEPALIVED_IMAGE = 'docker.io/arcts/keepalived'
 DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
@@ -196,6 +197,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'container_image_node_exporter',
             default=DEFAULT_NODE_EXPORTER_IMAGE,
             desc='Prometheus container image',
+        ),
+        Option(
+            'container_image_cAdvisor',
+            default=DEFAULT_CADVISOR_IMAGE,
+            desc='Cadvisor container image',
         ),
         Option(
             'container_image_haproxy',
@@ -507,7 +513,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
             PrometheusService, NodeExporterService, CrashService, IscsiService,
             IngressService, CustomContainerService, CephfsMirrorService,
-            CephadmAgent, SNMPGatewayService
+            CephadmAgent, SNMPGatewayService, CadvisorService
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -657,7 +663,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         suffix = daemon_type not in [
             'mon', 'crash',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
-            'container', 'agent', 'snmp-gateway'
+            'container', 'agent', 'snmp-gateway', 'cAdvisor'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -1293,6 +1299,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             image = self.container_image_alertmanager
         elif daemon_type == 'node-exporter':
             image = self.container_image_node_exporter
+        elif daemon_type == 'cAdvisor':
+            image = self.container_image_cadvisor
         elif daemon_type == 'haproxy':
             image = self.container_image_haproxy
         elif daemon_type == 'keepalived':
@@ -2445,6 +2453,7 @@ Then run the following:
                 'alertmanager': PlacementSpec(count=1),
                 'prometheus': PlacementSpec(count=1),
                 'node-exporter': PlacementSpec(host_pattern='*'),
+                'cAdvisor': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
@@ -2542,6 +2551,10 @@ Then run the following:
 
     @handle_orch_error
     def apply_node_exporter(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_cadvisor(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

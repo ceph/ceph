@@ -378,6 +378,19 @@ class NodeExporterService(CephadmService):
         return HandleCommandResult(0, out, '')
 
 
+class CadvisorService(CephadmService):
+    TYPE = 'cAdvisor'
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        assert self.TYPE == daemon_spec.daemon_type
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        return daemon_spec
+
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
+        return {}, []
+
+
 class SNMPGatewayService(CephadmService):
     TYPE = 'snmp-gateway'
 

@@ -52,6 +52,7 @@ DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.18.1'
 DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v0.18.1'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.20.0'
 DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:6.7.4'
+DEFAULT_CADVISOR_IMAGE = 'gcr.io/cadvisor/cadvisor'
 DEFAULT_HAPROXY_IMAGE = 'docker.io/library/haproxy:2.3'
 DEFAULT_KEEPALIVED_IMAGE = 'docker.io/arcts/keepalived'
 DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
@@ -426,6 +427,7 @@ class Monitoring(object):
         'node-exporter': [9100],
         'grafana': [3000],
         'alertmanager': [9093, 9094],
+        'cAdvisor': [8080]
     }
 
     components = {
@@ -475,6 +477,11 @@ class Monitoring(object):
                 'peers',
             ],
         },
+        'cAdvisor': {
+            'image': DEFAULT_CADVISOR_IMAGE,
+            'cpus': '1',
+            'memory': '1GB'
+        },
     }  # type: ignore
 
     @staticmethod
@@ -483,7 +490,7 @@ class Monitoring(object):
         """
         :param: daemon_type Either "prometheus", "alertmanager" or "node-exporter"
         """
-        assert daemon_type in ('prometheus', 'alertmanager', 'node-exporter')
+        assert daemon_type in ('prometheus', 'alertmanager', 'node-exporter', 'cAdvisor')
         cmd = daemon_type.replace('-', '_')
         code = -1
         err = ''
@@ -2333,7 +2340,7 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
         metadata = Monitoring.components[daemon_type]
         r += metadata.get('args', list())
         # set ip and port to bind to for nodeexporter,alertmanager,prometheus
-        if daemon_type != 'grafana':
+        if daemon_type != 'grafana' and daemon_type != 'cAdvisor':
             ip = ''
             port = Monitoring.port_map[daemon_type][0]
             if 'meta_json' in ctx and ctx.meta_json:
@@ -2609,6 +2616,11 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         elif daemon_type == 'node-exporter':
             mounts['/proc'] = '/host/proc:ro'
             mounts['/sys'] = '/host/sys:ro'
+            mounts['/'] = '/rootfs:ro'
+        elif daemon_type == 'cAdvisor':
+            mounts['/var/run'] = '/var/run:rw'
+            mounts['/var/lib/docker/'] = '/var/lib/docker:ro'
+            mounts['/sys'] = '/sys:ro'
             mounts['/'] = '/rootfs:ro'
         elif daemon_type == 'grafana':
             mounts[os.path.join(data_dir, 'etc/grafana/grafana.ini')] = '/etc/grafana/grafana.ini:Z'
@@ -4699,7 +4711,7 @@ def prepare_ssh(
         cli(['orch', 'apply', 'crash'])
 
     if not ctx.skip_monitoring_stack:
-        for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
+        for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager', 'cAdvisor']:
             logger.info('Deploying %s service with default placement...' % t)
             cli(['orch', 'apply', t])
 
@@ -5219,6 +5231,8 @@ def extract_uid_gid_monitoring(ctx, daemon_type):
         uid, gid = extract_uid_gid(ctx, file_path='/etc/prometheus')
     elif daemon_type == 'node-exporter':
         uid, gid = 65534, 65534
+    elif daemon_type == 'node-exporter':
+        uid, gid = 7007, 7007
     elif daemon_type == 'grafana':
         uid, gid = extract_uid_gid(ctx, file_path='/var/lib/grafana')
     elif daemon_type == 'alertmanager':
@@ -5866,7 +5880,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                         seen_versions[image_id] = version
                                 elif daemon_type in ['prometheus',
                                                      'alertmanager',
-                                                     'node-exporter']:
+                                                     'node-exporter',
+                                                     'cAdvisor']:
                                     version = Monitoring.get_version(ctx, container_id, daemon_type)
                                     seen_versions[image_id] = version
                                 elif daemon_type == 'haproxy':
@@ -6015,7 +6030,7 @@ def command_adopt(ctx):
         command_adopt_prometheus(ctx, daemon_id, fsid)
     elif daemon_type == 'grafana':
         command_adopt_grafana(ctx, daemon_id, fsid)
-    elif daemon_type == 'node-exporter':
+    elif daemon_type == 'node-exporter' or daemon_type == 'cAdvisor':
         raise Error('adoption of node-exporter not implemented')
     elif daemon_type == 'alertmanager':
         command_adopt_alertmanager(ctx, daemon_id, fsid)
@@ -8326,7 +8341,7 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--skip-monitoring-stack',
         action='store_true',
-        help='Do not automatically provision monitoring stack (prometheus, grafana, alertmanager, node-exporter)')
+        help='Do not automatically provision monitoring stack (prometheus, grafana, alertmanager, node-exporter, cAdvisor)')
     parser_bootstrap.add_argument(
         '--apply-spec',
         help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')
