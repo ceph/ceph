@@ -136,6 +136,18 @@ int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+static string key_type_to_str(int key_type) {
+  switch (key_type) {
+    case KEY_TYPE_SWIFT:
+      return "swift";
+      break;
+
+    default:
+      return "s3";
+      break;
+  }
+}
+
 static bool char_is_unreserved_url(char c)
 {
   if (isalnum(c))
@@ -855,7 +867,8 @@ int RGWAccessKeyPool::execute_remove(const DoutPrefixProvider *dpp,
   map<std::string, RGWAccessKey> *keys_map;
 
   if (!op_state.has_existing_key()) {
-    set_err_msg(err_msg, "unable to find access key");
+    set_err_msg(err_msg, "unable to find access key,  with key type: " +
+                             key_type_to_str(key_type));
     return -ERR_INVALID_ACCESS_KEY;
   }
 
