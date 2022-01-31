@@ -3829,7 +3829,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     rs = "";
     r = 0;
   } else if (prefix == "mon ok-to-stop") {
-    vector<string> ids;
+    vector<string> ids, invalid_ids;
     if (!cmd_getval(cmdmap, "ids", ids)) {
       r = -EINVAL;
       goto out;
@@ -3841,8 +3841,16 @@ void Monitor::handle_command(MonOpRequestRef op)
     for (auto& n : ids) {
       if (monmap->contains(n)) {
 	wouldbe.erase(n);
+      } else {
+        invalid_ids.push_back(n);
       }
     }
+    if (!invalid_ids.empty()) {
+      r = 0;
+      rs = "invalid mon(s) specified: " + stringify(invalid_ids);
+      goto out;
+    }
+
     if (wouldbe.size() < monmap->min_quorum_size()) {
       r = -EBUSY;
       rs = "not enough monitors would be available (" + stringify(wouldbe) +
