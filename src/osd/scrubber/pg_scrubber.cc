@@ -25,7 +25,6 @@
 
 using std::list;
 using std::pair;
-using std::set;
 using std::stringstream;
 using std::vector;
 using namespace Scrub;
@@ -1039,13 +1038,16 @@ int PgScrubber::build_replica_map_chunk()
     case 0: {
       // finished!
 
-      m_be->replica_clean_meta(replica_scrubmap, m_end.is_max(), m_start);
+      auto required_fixes = m_be->replica_clean_meta(
+        replica_scrubmap, m_end.is_max(), m_start, *this);
+      // actuate snap-mapper changes:
+      apply_snap_mapper_fixes(required_fixes);
 
       // the local map has been created. Send it to the primary.
       // Note: once the message reaches the Primary, it may ask us for another
-      // chunk - and we better be done with the current scrub. Thus - the preparation of
-      // the reply message is separate, and we clear the scrub state before actually
-      // sending it.
+      // chunk - and we better be done with the current scrub. Thus - the
+      // preparation of the reply message is separate, and we clear the scrub
+      // state before actually sending it.
 
       auto reply = prep_replica_map_msg(PreemptionNoted::no_preemption);
       replica_handling_done();
@@ -1129,10 +1131,107 @@ void PgScrubber::run_callbacks()
   }
 }
 
+void PgScrubber::persist_scrub_results(inconsistent_objs_t&& all_errors)
+{
+  dout(10) << __func__ << " " << all_errors.size() << " errors" << dendl;
+
+  for (auto& e : all_errors) {
+    std::visit([this](auto& e) { m_store->add_error(m_pg->pool.id, e); }, e);
+  }
+
+  ObjectStore::Transaction t;
+  m_store->flush(&t);
+  m_osds->store->queue_transaction(m_pg->ch, std::move(t), nullptr);
+}
+
+void PgScrubber::apply_snap_mapper_fixes(
+  const std::vector<snap_mapper_fix_t>& fix_list)
+{
+  dout(15) << __func__ << " " << fix_list.size() << " fixes" << dendl;
+
+  if (fix_list.empty()) {
+    return;
+  }
+
+  ObjectStore::Transaction t;
+  OSDriver::OSTransaction t_drv(m_pg->osdriver.get_transaction(&t));
+
+  for (auto& [fix_op, hoid, snaps, bogus_snaps] : fix_list) {
+
+    if (fix_op == snap_mapper_op_t::update) {
+
+      // must remove the existing snap-set before inserting the correct one
+      if (auto r = m_pg->snap_mapper.remove_oid(hoid, &t_drv); r < 0) {
+
+        derr << __func__ << ": remove_oid returned " << cpp_strerror(r)
+             << dendl;
+        ceph_abort();
+      }
+
+      m_osds->clog->error() << fmt::format(
+        "osd.{} found snap mapper error on pg {} oid {} snaps in mapper: {}, "
+        "oi: "
+        "{} ...repaired",
+        m_pg_whoami, m_pg_id, hoid, bogus_snaps, snaps);
+
+    } else {
+
+      m_osds->clog->error() << fmt::format(
+        "osd.{} found snap mapper error on pg {} oid {} snaps missing in "
+        "mapper, should be: {} ...repaired",
+        m_pg_whoami, m_pg_id, hoid, snaps);
+    }
+
+    // now - insert the correct snap-set
+
+    m_pg->snap_mapper.add_oid(hoid, snaps, &t_drv);
+  }
+
+  // wait for repair to apply to avoid confusing other bits of the system.
+  {
+    dout(15) << __func__ << " wait on repair!" << dendl;
+
+    ceph::condition_variable my_cond;
+    ceph::mutex my_lock = ceph::make_mutex("PG::_scan_snaps my_lock");
+    int e = 0;
+    bool done{false};
+
+    t.register_on_applied_sync(new C_SafeCond(my_lock, my_cond, &done, &e));
+
+    if (e = m_pg->osd->store->queue_transaction(m_pg->ch, std::move(t));
+        e != 0) {
+      derr << __func__ << ": queue_transaction got " << cpp_strerror(e)
+           << dendl;
+    } else {
+      std::unique_lock l{my_lock};
+      my_cond.wait(l, [&done] { return done; });
+      ceph_assert(m_pg->osd->store);  // RRR why?
+    }
+    dout(15) << __func__ << " wait on repair - done" << dendl;
+  }
+}
+
 void PgScrubber::maps_compare_n_cleanup()
 {
   m_pg->add_objects_scrubbed_count(m_be->get_primary_scrubmap().objects.size());
-  m_be->scrub_compare_maps(m_end.is_max());
+
+  auto required_fixes = m_be->scrub_compare_maps(m_end.is_max(), *this);
+  if (!required_fixes.inconsistent_objs.empty()) {
+    if (state_test(PG_STATE_REPAIR)) {
+      dout(10) << __func__ << ": discarding scrub results (repairing)" << dendl;
+    } else {
+      // perform the ordered scrub-store I/O:
+      persist_scrub_results(std::move(required_fixes.inconsistent_objs));
+    }
+  }
+
+  // actuate snap-mapper changes:
+  apply_snap_mapper_fixes(required_fixes.snap_fix_list);
+
+  auto chunk_err_counts = m_be->get_error_counts();
+  m_shallow_errors += chunk_err_counts.shallow_errors;
+  m_deep_errors += chunk_err_counts.deep_errors;
+
   m_start = m_end;
   run_callbacks();
   requeue_waiting();
