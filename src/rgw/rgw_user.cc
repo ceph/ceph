@@ -358,7 +358,7 @@ int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
   const rgw_user& uid = op_state.get_user_id();
   if (uid.compare(RGW_USER_ANON_ID) == 0) {
     keys_allowed = false;
-    return -EACCES;
+    return -EINVAL;
   }
 
   swift_keys = op_state.get_swift_keys();
