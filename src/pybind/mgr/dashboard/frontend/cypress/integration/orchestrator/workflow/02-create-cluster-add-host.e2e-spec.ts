@@ -6,12 +6,7 @@ import {
 describe('Create cluster add host page', () => {
   const createCluster = new CreateClusterWizardHelper();
   const createClusterHostPage = new CreateClusterHostPageHelper();
-  const hostnames = [
-    'ceph-node-00.cephlab.com',
-    'ceph-node-01.cephlab.com',
-    'ceph-node-02.cephlab.com',
-    'ceph-node-[01-03].cephlab.com'
-  ];
+  const hostnames = ['ceph-node-00', 'ceph-node-01', 'ceph-node-02', 'ceph-node-[01-03]'];
   const addHost = (hostname: string, exist?: boolean, pattern?: boolean, labels: string[] = []) => {
     cy.get('button[data-testid=table-action-button]').click();
     createClusterHostPage.add(hostname, exist, false, labels);
