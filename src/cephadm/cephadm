@@ -453,7 +453,7 @@ class Monitoring(object):
                 '--config.file=/etc/loki/loki.yml',
             ],
             'config-json-files': [
-                'loki.yml',
+                'loki.yml'
             ],
         },
         'promtail': {
