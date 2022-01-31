@@ -44,11 +44,11 @@ export class NavigationPageHelper extends PageHelper {
   ];
 
   getVerticalMenu() {
-    return cy.get('ul.cd-navbar-primary');
+    return cy.get('nav[id=sidebar]');
   }
 
   getMenuToggler() {
-    return cy.get('cd-navigation > div.cd-navbar-top button.btn.btn-link');
+    return cy.get('[aria-label="toggle sidebar visibility"]');
   }
 
   checkNavigations(navs: any) {

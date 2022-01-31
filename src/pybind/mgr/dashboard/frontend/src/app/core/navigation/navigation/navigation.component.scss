@@ -1,5 +1,16 @@
 @use './src/styles/vendor/variables' as vv;
 
+/* --------------------------------------------------
+   MAIN NAVBAR STYLE
+--------------------------------------------------- */
+
+.cd-navbar-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  height: 100%;
+}
+
 /* ---------------------------------------------------
     NAVBAR STYLE
 --------------------------------------------------- */
@@ -146,16 +157,17 @@ $sidebar-width: 200px;
 
 .wrapper {
   display: flex;
+  height: 100%;
   width: 100%;
 
   #sidebar {
     background: vv.$secondary;
     bottom: 0;
     color: vv.$white;
+    height: auto;
     left: 0;
     overflow-y: auto;
-    position: fixed;
-    top: vv.$navbar-height;
+    position: relative;
     transition: all 0.3s;
     width: $sidebar-width;
     z-index: 999;
@@ -240,37 +252,12 @@ $sidebar-width: 200px;
 
 #content {
   bottom: 0;
-  position: absolute;
+  position: relative;
   right: 0;
-  top: vv.$navbar-height;
   transition: all 0.3s;
   width: calc(100% - #{$sidebar-width});
 
   &.active {
     width: 100vw;
-  }
-}
-
-/* ---------------------------------------------------
-    topNotification settings
---------------------------------------------------- */
-
-@for $i from 1 through 2 {
-  :host.top-notification-#{$i} {
-    .cd-navbar-top .cd-navbar-brand {
-      top: vv.$top-notification-height * $i;
-    }
-
-    #sidebar {
-      top: vv.$navbar-height + vv.$top-notification-height * $i;
-    }
-
-    #content {
-      top: vv.$navbar-height + vv.$top-notification-height * $i;
-    }
-
-    cd-notifications-sidebar {
-      top: vv.$navbar-height + vv.$top-notification-height * $i + 10px;
-    }
   }
 }

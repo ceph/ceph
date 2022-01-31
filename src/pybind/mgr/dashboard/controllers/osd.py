@@ -18,6 +18,7 @@ from ..tools import str_to_bool
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
     EndpointDoc, ReadPermission, RESTController, Task, UpdatePermission, \
     allow_empty_body
+from ._version import APIVersion
 from .orchestrator import raise_if_no_orchestrator
 
 logger = logging.getLogger('controllers.osd')
@@ -92,6 +93,15 @@ class Osd(RESTController):
                 osd['stats'][stat.split('.')[1]] = mgr.get_latest('osd', osd_spec, stat)
             osd['operational_status'] = self._get_operational_status(osd_id, removing_osd_ids)
         return list(osds.values())
+
+    @RESTController.Collection('GET', version=APIVersion.EXPERIMENTAL)
+    @ReadPermission
+    def settings(self):
+        result = CephService.send_command('mon', 'osd dump')
+        return {
+            'nearfull_ratio': result['nearfull_ratio'],
+            'full_ratio': result['full_ratio']
+        }
 
     def _get_operational_status(self, osd_id: int, removing_osd_ids: Optional[List[int]]):
         if removing_osd_ids is None:

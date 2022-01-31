@@ -12,6 +12,7 @@ parameters:
  disks:
  - 15
  - 5
+ - 5
 
 {% for number in range(0, nodes) %}
 {{ prefix }}-node-0{{ number }}:
