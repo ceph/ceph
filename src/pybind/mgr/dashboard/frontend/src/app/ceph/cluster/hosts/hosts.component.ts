@@ -27,6 +27,7 @@ import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permissions } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { EmptyPipe } from '~/app/shared/pipes/empty.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -109,6 +110,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   constructor(
     private authStorageService: AuthStorageService,
     private dimlessBinary: DimlessBinaryPipe,
+    private emptyPipe: EmptyPipe,
     private hostService: HostService,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
@@ -464,8 +466,10 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   transformHostsData() {
     if (this.checkHostsFactsAvailable()) {
       _.forEach(this.hosts, (hostKey) => {
-        hostKey['memory_total_bytes'] = hostKey['memory_total_kb'] * 1024;
-        hostKey['raw_capacity'] = hostKey['hdd_capacity_bytes'] + hostKey['flash_capacity_bytes'];
+        hostKey['memory_total_bytes'] = this.emptyPipe.transform(hostKey['memory_total_kb'] * 1024);
+        hostKey['raw_capacity'] = this.emptyPipe.transform(
+          hostKey['hdd_capacity_bytes'] + hostKey['flash_capacity_bytes']
+        );
       });
     } else {
       // mark host facts columns unavailable
