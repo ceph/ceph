@@ -1066,6 +1066,10 @@ void FSMap::insert(const MDSMap::mds_info_t &new_info)
     // or older) MDS.
     info.compat = MDSMap::get_compat_set_v16_2_4();
   }
+  /* TODO remove after R is released
+   * Insert INLINE; see comment in MDSMap::decode.
+   */
+  info.compat.incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
   standby_epochs[new_info.global_id] = epoch;
 }
 
