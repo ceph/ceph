@@ -6416,7 +6416,7 @@ def _zap_osds(ctx: CephadmContext) -> None:
 
     for i in ls:
         matches = [lv.get('cluster_fsid') == ctx.fsid for lv in i.get('lvs', [])]
-        if any(matches) and all(matches):
+        if all(matches):
             _zap(ctx, i.get('path'))
         elif any(matches):
             lv_names = [lv['name'] for lv in i.get('lvs', [])]
