@@ -271,7 +271,7 @@ class TestMonitoring:
                     'deploy',
                     [
                         '--name', 'alertmanager.test',
-                        '--meta-json', '{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null}',
+                        '--meta-json', '{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
                         '--config-json', '-', '--tcp-ports', '9093 9094'
                     ],
                     stdin=json.dumps({"files": {"alertmanager.yml": y}, "peers": []}),
@@ -315,7 +315,7 @@ class TestMonitoring:
                     [
                         '--name', 'prometheus.test',
                         '--meta-json',
-                        '{"service_name": "prometheus", "ports": [9095], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null}',
+                        '{"service_name": "prometheus", "ports": [9095], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
                         '--config-json', '-',
                         '--tcp-ports', '9095'
                     ],
@@ -385,7 +385,7 @@ class TestMonitoring:
                     [
                         '--name', 'grafana.test',
                         '--meta-json',
-                        '{"service_name": "grafana", "ports": [3000], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null}',
+                        '{"service_name": "grafana", "ports": [3000], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
                         '--config-json', '-', '--tcp-ports', '3000'],
                     stdin=json.dumps({"files": files}),
                     image='')
@@ -457,7 +457,7 @@ spec:
                     _run_cephadm.assert_called_with(
                         'test', 'alertmanager.test', 'deploy', [
                             '--name', 'alertmanager.test',
-                            '--meta-json', '{"service_name": "alertmanager", "ports": [4200, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null}',
+                            '--meta-json', '{"service_name": "alertmanager", "ports": [4200, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
                             '--config-json', '-',
                             '--tcp-ports', '4200 9094',
                             '--reconfig'
@@ -528,7 +528,7 @@ class TestSNMPGateway:
                     [
                         '--name', 'snmp-gateway.test',
                         '--meta-json',
-                        '{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null}',
+                        '{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
                         '--config-json', '-',
                         '--tcp-ports', '9464'
                     ],
@@ -563,7 +563,7 @@ class TestSNMPGateway:
                     [
                         '--name', 'snmp-gateway.test',
                         '--meta-json',
-                        '{"service_name": "snmp-gateway", "ports": [9465], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null}',
+                        '{"service_name": "snmp-gateway", "ports": [9465], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
                         '--config-json', '-',
                         '--tcp-ports', '9465'
                     ],
@@ -602,7 +602,7 @@ class TestSNMPGateway:
                     [
                         '--name', 'snmp-gateway.test',
                         '--meta-json',
-                        '{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null}',
+                        '{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
                         '--config-json', '-',
                         '--tcp-ports', '9464'
                     ],
@@ -646,7 +646,7 @@ class TestSNMPGateway:
                     [
                         '--name', 'snmp-gateway.test',
                         '--meta-json',
-                        '{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null}',
+                        '{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
                         '--config-json', '-',
                         '--tcp-ports', '9464'
                     ],
@@ -772,8 +772,21 @@ class TestIngressService:
                                 'option forwardfor\n    '
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
-                                'server ' + haproxy_generated_conf[1][0] + ' 1::4:80 check weight 100\n'
+                                'server '
+                                + haproxy_generated_conf[1][0] + ' 1::4:80 check weight 100\n'
                         }
                 }
 
                 assert haproxy_generated_conf[0] == haproxy_expected_conf
+
+
+class TestCephFsMirror:
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec('cephfs-mirror')):
+                cephadm_module.assert_issued_mon_command({
+                    'prefix': 'mgr module enable',
+                    'module': 'mirroring'
+                })

@@ -3720,8 +3720,10 @@ class MgrListener(Thread):
             config = data['config']
             for filename in config:
                 if filename in self.agent.required_files:
-                    with open(os.path.join(self.agent.daemon_dir, filename), 'w') as f:
+                    file_path = os.path.join(self.agent.daemon_dir, filename)
+                    with open(os.open(file_path + '.new', os.O_CREAT | os.O_WRONLY, 0o600), 'w') as f:
                         f.write(config[filename])
+                        os.rename(file_path + '.new', file_path)
             self.agent.pull_conf_settings()
             self.agent.wakeup()
 
@@ -3781,14 +3783,26 @@ class CephadmAgent():
         # Create the required config files in the daemons dir, with restricted permissions
         for filename in config:
             if filename in self.required_files:
-                with open(os.path.join(self.daemon_dir, filename), 'w') as f:
+                file_path = os.path.join(self.daemon_dir, filename)
+                with open(os.open(file_path + '.new', os.O_CREAT | os.O_WRONLY, 0o600), 'w') as f:
                     f.write(config[filename])
+                    os.rename(file_path + '.new', file_path)
 
-        with open(os.path.join(self.daemon_dir, 'unit.run'), 'w') as f:
+        unit_run_path = os.path.join(self.daemon_dir, 'unit.run')
+        with open(os.open(unit_run_path + '.new', os.O_CREAT | os.O_WRONLY, 0o600), 'w') as f:
             f.write(self.unit_run())
+            os.rename(unit_run_path + '.new', unit_run_path)
+
+        meta: Dict[str, Any] = {}
+        meta_file_path = os.path.join(self.daemon_dir, 'unit.meta')
+        if 'meta_json' in self.ctx and self.ctx.meta_json:
+            meta = json.loads(self.ctx.meta_json) or {}
+        with open(os.open(meta_file_path + '.new', os.O_CREAT | os.O_WRONLY, 0o600), 'w') as f:
+            f.write(json.dumps(meta, indent=4) + '\n')
+            os.rename(meta_file_path + '.new', meta_file_path)
 
         unit_file_path = os.path.join(self.ctx.unit_dir, self.unit_name())
-        with open(unit_file_path + '.new', 'w') as f:
+        with open(os.open(unit_file_path + '.new', os.O_CREAT | os.O_WRONLY, 0o600), 'w') as f:
             f.write(self.unit_file())
             os.rename(unit_file_path + '.new', unit_file_path)
 
@@ -5214,6 +5228,19 @@ def extract_uid_gid_monitoring(ctx, daemon_type):
     return uid, gid
 
 
+def get_container_with_extra_args(ctx: CephadmContext,
+                                  fsid: str, daemon_type: str, daemon_id: Union[int, str],
+                                  privileged: bool = False,
+                                  ptrace: bool = False,
+                                  container_args: Optional[List[str]] = None) -> 'CephContainer':
+    # wrapper for get_container that additionally adds extra_container_args if present
+    # used for deploying daemons with additional podman/docker container arguments
+    c = get_container(ctx, fsid, daemon_type, daemon_id, privileged, ptrace, container_args)
+    if 'extra_container_args' in ctx and ctx.extra_container_args:
+        c.container_args.extend(ctx.extra_container_args)
+    return c
+
+
 @default_image
 def command_deploy(ctx):
     # type: (CephadmContext) -> None
@@ -5252,8 +5279,8 @@ def command_deploy(ctx):
         uid, gid = extract_uid_gid(ctx)
         make_var_run(ctx, ctx.fsid, uid, gid)
 
-        c = get_container(ctx, ctx.fsid, daemon_type, daemon_id,
-                          ptrace=ctx.allow_ptrace)
+        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id,
+                                          ptrace=ctx.allow_ptrace)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       osd_fsid=ctx.osd_fsid,
@@ -5277,7 +5304,7 @@ def command_deploy(ctx):
                             'contain arg for {}'.format(daemon_type.capitalize(), ', '.join(required_args)))
 
         uid, gid = extract_uid_gid_monitoring(ctx, daemon_type)
-        c = get_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       reconfig=ctx.reconfig,
                       ports=daemon_ports)
@@ -5289,7 +5316,7 @@ def command_deploy(ctx):
         config, keyring = get_config_and_keyring(ctx)
         # TODO: extract ganesha uid/gid (997, 994) ?
         uid, gid = extract_uid_gid(ctx)
-        c = get_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       reconfig=ctx.reconfig,
@@ -5298,7 +5325,7 @@ def command_deploy(ctx):
     elif daemon_type == CephIscsi.daemon_type:
         config, keyring = get_config_and_keyring(ctx)
         uid, gid = extract_uid_gid(ctx)
-        c = get_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       reconfig=ctx.reconfig,
@@ -5307,7 +5334,7 @@ def command_deploy(ctx):
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.init(ctx, ctx.fsid, daemon_id)
         uid, gid = haproxy.extract_uid_gid_haproxy()
-        c = get_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       reconfig=ctx.reconfig,
                       ports=daemon_ports)
@@ -5315,7 +5342,7 @@ def command_deploy(ctx):
     elif daemon_type == Keepalived.daemon_type:
         keepalived = Keepalived.init(ctx, ctx.fsid, daemon_id)
         uid, gid = keepalived.extract_uid_gid_keepalived()
-        c = get_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       reconfig=ctx.reconfig,
                       ports=daemon_ports)
@@ -5324,9 +5351,9 @@ def command_deploy(ctx):
         cc = CustomContainer.init(ctx, ctx.fsid, daemon_id)
         if not ctx.reconfig and not redeploy:
             daemon_ports.extend(cc.ports)
-        c = get_container(ctx, ctx.fsid, daemon_type, daemon_id,
-                          privileged=cc.privileged,
-                          ptrace=ctx.allow_ptrace)
+        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id,
+                                          privileged=cc.privileged,
+                                          ptrace=ctx.allow_ptrace)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c,
                       uid=cc.uid, gid=cc.gid, config=None,
                       keyring=None, reconfig=ctx.reconfig,
@@ -5341,7 +5368,7 @@ def command_deploy(ctx):
 
     elif daemon_type == SNMPGateway.daemon_type:
         sc = SNMPGateway.init(ctx, ctx.fsid, daemon_id)
-        c = get_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c,
                       sc.uid, sc.gid,
                       ports=daemon_ports)
@@ -5656,7 +5683,7 @@ def _parse_ipv6_route(routes: str, ips: str) -> Dict[str, Dict[str, Set[str]]]:
         # find the network it belongs to
         net = [n for n in r.keys()
                if ipaddress.ip_address(ip) in ipaddress.ip_network(n)]
-        if net:
+        if net and iface in r[net[0]]:
             assert(iface)
             r[net[0]][iface].add(ip)
 
@@ -6671,6 +6698,10 @@ class Packager(object):
         self.branch = branch
         self.commit = commit
 
+    def validate(self) -> None:
+        """Validate parameters before writing any state to disk."""
+        pass
+
     def add_repo(self) -> None:
         raise NotImplementedError
 
@@ -6948,7 +6979,7 @@ class YumDnf(Packager):
             return '%s/rpm-%s/%s' % (self.ctx.repo_url, self.stable,
                                      self.distro_code)
 
-    def add_repo(self) -> None:
+    def validate(self) -> None:
         if self.distro_code.startswith('fc'):
             raise Error('Ceph team does not build Fedora specific packages and therefore cannot add repos for this distro')
         if self.distro_code == 'el7':
@@ -6956,6 +6987,20 @@ class YumDnf(Packager):
                 raise Error('Ceph does not support pacific or later for this version of this linux distro and therefore cannot add a repo for it')
             if self.version and self.version.split('.')[0] >= '16':
                 raise Error('Ceph does not support 16.y.z or later for this version of this linux distro and therefore cannot add a repo for it')
+
+        if self.stable or self.version:
+            # we know that yum & dnf require there to be a
+            # $base_url/$arch/repodata/repomd.xml so we can test if this URL
+            # is gettable in order to validate the inputs
+            test_url = self.repo_baseurl() + '/noarch/repodata/repomd.xml'
+            try:
+                urlopen(test_url)
+            except HTTPError as err:
+                logger.error('unable to fetch repo metadata: %r', err)
+                raise Error('failed to fetch repository metadata. please check'
+                            ' the provided parameters are correct and try again')
+
+    def add_repo(self) -> None:
         if self.stable or self.version:
             content = ''
             for n, t in {
@@ -7132,6 +7177,7 @@ def command_add_repo(ctx: CephadmContext) -> None:
                           version=ctx.version,
                           branch=ctx.dev,
                           commit=ctx.dev_commit)
+    pkg.validate()
     pkg.add_repo()
     logger.info('Completed adding repo.')
 
@@ -8089,6 +8135,10 @@ def _get_parser():
         'ceph-volume', help='run ceph-volume inside a container')
     parser_ceph_volume.set_defaults(func=command_ceph_volume)
     parser_ceph_volume.add_argument(
+        '--shared_ceph_folder',
+        metavar='CEPH_SOURCE_FOLDER',
+        help='Development mode. Several folders in containers are volumes mapped to different sub-folders in the ceph source folder')
+    parser_ceph_volume.add_argument(
         '--fsid',
         help='cluster FSID')
     parser_ceph_volume.add_argument(
@@ -8372,6 +8422,12 @@ def _get_parser():
     parser_deploy.add_argument(
         '--meta-json',
         help='JSON dict of additional metadata'
+    )
+    parser_deploy.add_argument(
+        '--extra-container-args',
+        action='append',
+        default=[],
+        help='Additional container arguments to apply to deamon'
     )
 
     parser_check_host = subparsers.add_parser(
