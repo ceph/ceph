@@ -24,4 +24,30 @@ describe('Services page', () => {
 
     services.deleteService('mds.test');
   });
+
+  it('should create and delete snmp-gateway service with version V2c', () => {
+    services.navigateTo('create');
+    services.addService('snmp-gateway', false, '1', 'V2c');
+    services.checkExist('snmp-gateway', true);
+
+    services.clickServiceTab('snmp-gateway', 'Details');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus('snmp-gateway');
+    });
+
+    services.deleteService('snmp-gateway');
+  });
+
+  it('should create and delete snmp-gateway service with version V3', () => {
+    services.navigateTo('create');
+    services.addService('snmp-gateway', false, '1', 'V3');
+    services.checkExist('snmp-gateway', true);
+
+    services.clickServiceTab('snmp-gateway', 'Details');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus('snmp-gateway');
+    });
+
+    services.deleteService('snmp-gateway');
+  });
 });
