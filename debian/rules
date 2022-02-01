@@ -16,12 +16,8 @@ ifeq (,$(findstring WITH_SEASTAR,$(CEPH_EXTRA_CMAKE_ARGS)))
 else
   export CEPH_OSD_BASENAME = crimson-osd
 endif
-ifeq ($(filter pkg.ceph.jaeger,$(DEB_BUILD_PROFILES)),)
-  extraopts += -DWITH_JAEGER=OFF
-else
-  extraopts += -DWITH_JAEGER=ON
-endif
 
+extraopts += -DWITH_JAEGER=ON
 extraopts += -DWITH_OCF=ON -DWITH_LTTNG=ON
 extraopts += -DWITH_MGR_DASHBOARD_FRONTEND=OFF
 extraopts += -DWITH_PYTHON3=3
