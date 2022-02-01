@@ -1328,53 +1328,30 @@ def test_bucket_reshard_index_log_trim():
          zonegroup_bucket_checkpoint(zonegroup_conns, name)
          return bucket
 
-     # create a 'cold' bucket
-     cold_bucket = make_test_bucket()
+     # create a 'test' bucket
+     test_bucket = make_test_bucket()
+
+     # bilog showing objects before reshard
+     zone.zone.cluster.admin(['bilog', 'list',
+         '--bucket', test_bucket.name,
+         '--gen=0'])
 
      # Resharding the bucket
      zone.zone.cluster.admin(['bucket', 'reshard',
-         '--bucket', cold_bucket.name,
+         '--bucket', test_bucket.name,
          '--num-shards', '3',
          '--yes-i-really-mean-it'])
 
-     # trim with max-buckets=0 to clear counters for cold bucket. this should
-     # prevent it from being considered 'active' by the next autotrim
-     bilog_autotrim(zone.zone, [
-         '--rgw-sync-log-trim-max-buckets', '0',
-     ])
- 
-     # create an 'active' bucket
-     active_bucket = make_test_bucket()
+     # bilog showing objects after reshard
+     zone.zone.cluster.admin(['bilog', 'list',
+         '--bucket', test_bucket.name,
+         '--gen=1'])
 
-     # Resharding the bucket                                                                                                                                                                                                           
-     zone.zone.cluster.admin(['bucket', 'reshard',
-         '--bucket', active_bucket.name,
-         '--num-shards', '3',
-         '--yes-i-really-mean-it'])
-
-     # trim with max-buckets=1 min-cold-buckets=0 to trim active bucket only
-     bilog_autotrim(zone.zone, [
-         '--rgw-sync-log-trim-max-buckets', '1',
-         '--rgw-sync-log-trim-min-cold-buckets', '0',
-     ])
+     bilog_autotrim(zone.zone)
  
-     # verify active bucket has empty bilog
-     active_bilog = bilog_list(zone.zone, active_bucket.name)
-     assert(len(active_bilog) == 0)
- 
-     # verify cold bucket has nonempty bilog
-     cold_bilog = bilog_list(zone.zone, cold_bucket.name)
-     assert(len(cold_bilog) > 0)
- 
-     # trim with min-cold-buckets=999 to trim all buckets
-     bilog_autotrim(zone.zone, [
-         '--rgw-sync-log-trim-max-buckets', '999',
-         '--rgw-sync-log-trim-min-cold-buckets', '999',
-     ])
-                                                                                                                                                                                                           
-     # verify cold bucket has empty bilog
-     cold_bilog = bilog_list(zone.zone, cold_bucket.name)
-     assert(len(cold_bilog) == 0)
+     # verify the bucket has empty bilog
+     test_bilog = bilog_list(zone.zone, test_bucket.name)
+     assert(len(test_bilog) == 0)
 
 @attr('bucket_reshard')
 def test_bucket_reshard_incremental():
