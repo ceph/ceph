@@ -215,7 +215,15 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         ]
       ],
       // snmp-gateway
-      snmp_version: [null, [Validators.required]],
+      snmp_version: [
+        null,
+        [
+          CdValidators.requiredIf({
+            service_type: 'snmp-gateway',
+            unmanaged: false
+          })
+        ]
+      ],
       snmp_destination: [
         null,
         {
@@ -251,7 +259,15 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           })
         ]
       ],
-      privacy_protocol: [null],
+      privacy_protocol: [
+        null,
+        [
+          CdValidators.requiredIf({
+            service_type: 'snmp-gateway',
+            unmanaged: false
+          })
+        ]
+      ],
       snmp_community: [
         null,
         [

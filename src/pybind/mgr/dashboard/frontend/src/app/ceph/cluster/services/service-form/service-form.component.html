@@ -449,7 +449,6 @@
           <!-- Destination -->
           <div class="form-group row">
             <label class="cd-col-form-label required"
-                   [ngClass]="{'required': ['snmp-gateway'].includes(serviceForm.controls.service_type.value)}"
                    for="snmp_destination">
               <span i18n>Destination</span>
               <cd-helper>
@@ -473,7 +472,6 @@
           <div class="form-group row"
                *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
             <label class="cd-col-form-label required"
-                   [ngClass]="{'required': ['snmp-gateway'].includes(serviceForm.controls.service_type.value)}"
                    for="engine_id">
               <span i18n>Engine Id</span>
               <cd-helper>
@@ -540,7 +538,6 @@
             <div class="form-group row"
                  *ngIf="serviceForm.controls.snmp_version.value === 'V2c'">
               <label class="cd-col-form-label required"
-                     [ngClass]="{'required': ['snmp-gateway'].includes(serviceForm.controls.service_type.value)}"
                      for="snmp_community">
                 <span i18n>SNMP Community</span>
               </label>
@@ -558,7 +555,6 @@
             <div class="form-group row"
                  *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
               <label class="cd-col-form-label required"
-                     [ngClass]="{'required': ['snmp-gateway'].includes(serviceForm.controls.service_type.value)}"
                      for="snmp_v3_auth_username">
                 <span i18n>Username</span>
               </label>
@@ -576,7 +572,6 @@
             <div class="form-group row"
                  *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
               <label class="cd-col-form-label required"
-                     [ngClass]="{'required': ['snmp-gateway'].includes(serviceForm.controls.service_type.value)}"
                      for="snmp_v3_auth_password">
                 <span i18n>Password</span>
               </label>
@@ -594,7 +589,6 @@
             <div class="form-group row"
                  *ngIf="serviceForm.controls.snmp_version.value === 'V3' && serviceForm.controls.privacy_protocol.value !== null && serviceForm.controls.privacy_protocol.value !== undefined">
               <label class="cd-col-form-label required"
-                     [ngClass]="{'required': ['snmp-gateway'].includes(serviceForm.controls.service_type.value)}"
                      for="snmp_v3_priv_password">
                 <span i18n>Encryption</span>
               </label>
