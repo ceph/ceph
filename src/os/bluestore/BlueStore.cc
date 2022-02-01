@@ -8447,7 +8447,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     	    dout(20) << __func__ << " undecodable Shared Blob, key:'"
 	             << pretty_binary_string(it->key())
 	    	     << "', removing" << dendl;
-            repairer.remove_key(db, PREFIX_DEFERRED, it->key());
+            repairer.remove_key(db, PREFIX_SHARED_BLOB, it->key());
           }
           continue;
         }	
