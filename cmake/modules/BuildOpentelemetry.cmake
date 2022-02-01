@@ -23,11 +23,6 @@ function(build_opentelemetry)
       ${opentelemetry_BINARY_DIR}/ext/src/http/client/curl/libhttp_client_curl.a
       ${CURL_LIBRARIES}
   )
-  set(opentelemetry_include_dir ${opentelemetry_SOURCE_DIR}/api/include/
-                                ${opentelemetry_SOURCE_DIR}/exporters/jaeger/include/
-                                ${opentelemetry_SOURCE_DIR}/ext/include/
-                                ${opentelemetry_SOURCE_DIR}/sdk/include/)
-  include_directories(SYSTEM ${opentelemetry_include_dir})
   # TODO: add target based propogation
   set(opentelemetry_deps opentelemetry_trace opentelemetry_resources opentelemetry_common
                          opentelemetry_exporter_jaeger_trace http_client_curl
@@ -84,4 +79,5 @@ function(build_opentelemetry)
     opentelemetry::libopentelemetry
     PROPERTIES
       INTERFACE_LINK_LIBRARIES "${opentelemetry_deps}")
+  target_include_directories(opentelemetry::libopentelemetry PUBLIC ${opentelemetry_include_dir})
 endfunction()

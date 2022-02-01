@@ -135,7 +135,13 @@ set(crimson_common_deps
   json_spirit)
 
 if(WITH_JAEGER)
-  include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
+  set(opentelemetry_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/opentelemetry-cpp")
+  set(opentelemetry_include_dir ${opentelemetry_SOURCE_DIR}/api/include/
+                              ${opentelemetry_SOURCE_DIR}/exporters/jaeger/include/
+                              ${opentelemetry_SOURCE_DIR}/ext/include/
+                              ${opentelemetry_SOURCE_DIR}/sdk/include/)
+  include_directories(SYSTEM ${opentelemetry_include_dir})
+  include_directories(SYSTEM ${opentelemetry_include_dir})
   list(APPEND crimson_common_deps ${jaeger_base})
 endif()
 
