@@ -1129,6 +1129,9 @@ test_trash_purge_schedule() {
     rbd pool init rbd2
     rbd namespace create rbd2/ns1
 
+    test "$(ceph rbd trash purge schedule list)" = "{}"
+    ceph rbd trash purge schedule status | fgrep '"scheduled": []'
+
     expect_fail rbd trash purge schedule ls
     test "$(rbd trash purge schedule ls -R --format json)" = "[]"
 
@@ -1228,6 +1231,9 @@ test_mirror_snapshot_schedule() {
     rbd mirror pool enable rbd2 image
     rbd mirror pool enable rbd2/ns1 image
     rbd mirror pool peer add rbd2 cluster1
+
+    test "$(ceph rbd mirror snapshot schedule list)" = "{}"
+    ceph rbd mirror snapshot schedule status | fgrep '"scheduled_images": []'
 
     expect_fail rbd mirror snapshot schedule ls
     test "$(rbd mirror snapshot schedule ls -R --format json)" = "[]"
