@@ -6843,8 +6843,9 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   // new_bucket_id and returns 0, otherwise it returns a negative
   // error code
   auto fetch_new_bucket_info =
-    [this, &bucket_info, &bucket_attrs, dpp](const std::string& log_tag) -> int {
-      int ret = try_refresh_bucket_info(bucket_info, nullptr, dpp, &bucket_attrs);
+    [this, bs, &bucket_info, &bucket_attrs, &y, dpp](const std::string& log_tag) -> int {
+      int ret = get_bucket_info(&svc, bs->bucket.tenant, bs->bucket.name,
+                                bucket_info, nullptr, y, dpp, &bucket_attrs);
       if (ret < 0) {
 	ldpp_dout(dpp, 0) << __func__ <<
 	  " ERROR: failed to refresh bucket info after reshard at " <<
