@@ -683,6 +683,26 @@ class TestSubvolumeGroups(TestVolumesHelper):
             if collections.Counter(subvolgroupnames) != collections.Counter(subvolumegroups):
                 raise RuntimeError("Error creating or listing subvolume groups")
 
+    def test_subvolume_group_ls_filter(self):
+        # tests the 'fs subvolumegroup ls' command filters '_deleting' directory
+
+        subvolumegroups = []
+
+        #create subvolumegroup
+        subvolumegroups = self._generate_random_group_name(3)
+        for groupname in subvolumegroups:
+            self._fs_cmd("subvolumegroup", "create", self.volname, groupname)
+
+        # create subvolume and remove. This creates '_deleting' directory.
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        subvolumegroupls = json.loads(self._fs_cmd('subvolumegroup', 'ls', self.volname))
+        subvolgroupnames = [subvolumegroup['name'] for subvolumegroup in subvolumegroupls]
+        if "_deleting" in subvolgroupnames:
+            self.fail("Listing subvolume groups listed '_deleting' directory")
+
     def test_subvolume_group_ls_for_nonexistent_volume(self):
         # tests the 'fs subvolumegroup ls' command when /volume doesn't exist
         # prerequisite: we expect that the test volume is created and a subvolumegroup is NOT created
