@@ -1338,6 +1338,8 @@ private:
 		const UserPerm& perms);
   int _getxattr(InodeRef &in, const char *name, void *value, size_t len,
 		const UserPerm& perms);
+  int _getvxattr(Inode *in, const UserPerm& perms, const char *attr_name,
+                 ssize_t size, void *value, mds_rank_t rank);
   int _listxattr(Inode *in, char *names, size_t len, const UserPerm& perms);
   int _do_setxattr(Inode *in, const char *name, const void *value, size_t len,
 		   int flags, const UserPerm& perms);
