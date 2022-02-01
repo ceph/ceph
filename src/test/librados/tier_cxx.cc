@@ -179,7 +179,8 @@ void is_intended_refcount_state(librados::IoCtx& src_ioctx,
     }
     dst_refcount = refs.count();
   }
-  for (int tries = 0; tries < 10; ++tries) {
+  int tries = 0;
+  for (; tries < 30; ++tries) {
     r = cls_cas_references_chunk(src_ioctx, src_oid, dst_oid);
     if (r == -ENOENT || r == -ENOLINK) {
       src_refcount = 0;
@@ -191,6 +192,7 @@ void is_intended_refcount_state(librados::IoCtx& src_ioctx,
     }
     break;
   }
+  ASSERT_TRUE(tries < 30);
   ASSERT_TRUE(src_refcount >= 0);
   ASSERT_TRUE(src_refcount == expected_refcount);
   ASSERT_TRUE(src_refcount <= dst_refcount);
