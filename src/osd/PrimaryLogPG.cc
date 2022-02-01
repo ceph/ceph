@@ -3339,7 +3339,7 @@ void PrimaryLogPG::cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids)
   }
 }
 
-int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_oid) 
+int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_oid, OpRequestRef op) 
 {
   int cnt = 0;
   // head
@@ -3365,6 +3365,9 @@ int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_o
     ObjectContextRef clone_obc = get_object_context(clone_oid, false);
     if (!clone_obc) {
       break;
+    }
+    if (recover_adjacent_clones(obc, op)) {
+      return -EAGAIN;
     }
     get_adjacent_clones(clone_obc, obc_l, obc_g);
     clone_obc->obs.oi.manifest.calc_refs_to_inc_on_set(
@@ -3396,6 +3399,7 @@ bool PrimaryLogPG::recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op
   if (!obc->obs.oi.manifest.is_chunked() && !has_manifest_op) {
     return false;
   }
+  ceph_assert(op);
 
   const SnapSet& snapset = obc->ssc->snapset;
   auto s = std::find(snapset.clones.begin(), snapset.clones.end(), obc->obs.oi.soid.snap);
