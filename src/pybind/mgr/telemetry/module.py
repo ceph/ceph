@@ -427,7 +427,7 @@ class Module(MgrModule):
                                   'spans_in_use',
                                   'thread_heaps_in_use',
                                   'tcmalloc_page_size']
-                    if len(values) != 12:
+                    if len(values) != len(categories):
                         self.log.debug('Received unexpected output from osd.{}; number of values should match the number of expected categories:\n' \
                                 'values: len={} {} ~ categories: len={} {} ~ outs: {}'.format(osd_id, len(values), values, len(categories), categories, outs))
                         continue
