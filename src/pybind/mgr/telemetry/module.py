@@ -65,6 +65,7 @@ class Collection(str, enum.Enum):
     ident_base = 'ident_base'
     perf_perf = 'perf_perf'
     basic_mds_metadata = 'basic_mds_metadata'
+    basic_pool_usage = 'basic_pool_usage'
 
 MODULE_COLLECTION : List[Dict] = [
     {
@@ -100,6 +101,12 @@ MODULE_COLLECTION : List[Dict] = [
     {
         "name": Collection.basic_mds_metadata,
         "description": "MDS metadata",
+        "channel": "basic",
+        "nag": False
+    },
+    {
+        "name": Collection.basic_pool_usage,
+        "description": "Pool application and data usage metrics",
         "channel": "basic",
         "nag": False
     }
@@ -892,8 +899,7 @@ class Module(MgrModule):
                         if k in ['k', 'm', 'plugin', 'technique',
                                  'crush-failure-domain', 'l']
                     }
-                cast(List[Dict[str, Any]], report['pools']).append(
-                    {
+                pool_data = {
                         'pool': pool['pool'],
                         'pg_num': pool['pg_num'],
                         'pgp_num': pool['pg_placement_num'],
@@ -906,7 +912,15 @@ class Module(MgrModule):
                         'erasure_code_profile': ec_profile,
                         'cache_mode': pool['cache_mode'],
                     }
-                )
+
+                # basic_pool_usage collection (1/2)
+                if self.is_enabled_collection(Collection.basic_pool_usage):
+                    pool_data['application'] = []
+                    for application in pool['application_metadata']:
+                        # Only include default applications
+                        if application in ['cephfs', 'mgr', 'rbd', 'rgw']:
+                            pool_data['application'].append(application)
+                cast(List[Dict[str, Any]], report['pools']).append(pool_data)
                 if 'rbd' in pool['application_metadata']:
                     rbd_num_pools += 1
                     ioctx = self.rados.open_ioctx(pool['pool_name'])
