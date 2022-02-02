@@ -1066,6 +1066,12 @@ class Module(MgrModule):
                 'total_bytes': df['stats']['total_bytes'],
                 'total_avail_bytes': df['stats']['total_avail_bytes']
             }
+            # basic_pool_usage collection (2/2)
+            if self.is_enabled_collection(Collection.basic_pool_usage):
+                report['usage']['stats_by_class'] = {} # type: ignore
+                for device_class in df['stats_by_class']:
+                    if device_class in ['hdd', 'ssd', 'nvme']:
+                        report['usage']['stats_by_class'][device_class] = df['stats_by_class'][device_class] # type: ignore
 
             services: DefaultDict[str, int] = defaultdict(int)
             for key, value in service_map['services'].items():
