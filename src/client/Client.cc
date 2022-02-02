@@ -4399,9 +4399,10 @@ void Client::remove_session_caps(MetaSession *s, int err)
   sync_cond.notify_all();
 }
 
-int Client::_do_remount(bool retry_on_error)
+std::pair<int, bool> Client::_do_remount(bool retry_on_error)
 {
   uint64_t max_retries = cct->_conf.get_val<uint64_t>("mds_max_retries_on_remount_failure");
+  bool abort_on_failure = false;
 
   errno = 0;
   int r = remount_cb(callback_handle);
@@ -4425,10 +4426,10 @@ int Client::_do_remount(bool retry_on_error)
       !(retry_on_error && (++retries_on_invalidate < max_retries));
     if (should_abort && !is_unmounting()) {
       lderr(cct) << "failed to remount for kernel dentry trimming; quitting!" << dendl;
-      ceph_abort();
+      abort_on_failure = true;
     }
   }
-  return r;
+  return std::make_pair(r, abort_on_failure);
 }
 
 class C_Client_Remount : public Context  {
@@ -11357,20 +11358,19 @@ int Client::ll_register_callbacks2(struct ceph_client_callback_args *args)
   return 0;
 }
 
-int Client::test_dentry_handling(bool can_invalidate)
+std::pair<int, bool> Client::test_dentry_handling(bool can_invalidate)
 {
-  int r = 0;
+  std::pair <int, bool> r(0, false);
 
   RWRef_t iref_reader(initialize_state, CLIENT_INITIALIZED);
   if (!iref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
+    return std::make_pair(-CEPHFS_ENOTCONN, false);
 
   can_invalidate_dentries = can_invalidate;
 
   if (can_invalidate_dentries) {
     ceph_assert(dentry_invalidate_cb);
     ldout(cct, 1) << "using dentry_invalidate_cb" << dendl;
-    r = 0;
   } else {
     ceph_assert(remount_cb);
     ldout(cct, 1) << "using remount_cb" << dendl;
