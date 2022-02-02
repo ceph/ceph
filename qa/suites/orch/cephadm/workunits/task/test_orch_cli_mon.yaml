@@ -4,18 +4,36 @@ roles:
   - osd.1
   - osd.2
   - mon.a
-  - mon.c
-  - mon.d
   - mgr.a
   - client.0
 - - host.b
   - osd.3
   - osd.4
+  - osd.5
   - mon.b
-  - mon.e
   - mgr.b
-  - mgr.c
   - client.1
+- - host.c
+  - osd.6
+  - osd.7
+  - osd.8
+  - mon.c
+  - mgr.c
+  - client.2
+- - host.d
+  - osd.9
+  - osd.10
+  - osd.11
+  - mon.d
+  - mgr.d
+  - client.3
+- - host.e
+  - osd.12
+  - osd.13
+  - osd.14
+  - mon.e
+  - mgr.e
+  - client.4
 tasks:
 - install:
 - cephadm:

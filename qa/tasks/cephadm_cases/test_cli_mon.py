@@ -26,21 +26,29 @@ class TestCephadmCLI(MgrTestCase):
         self.mgr_cluster.admin_remote.run(args=args, wait=True)
 
     def test_apply_mon(self):
+        retstr = self._cmd('quorum_status') 
+        log.warning("test_apply_mon: monstatus returns %s" % json.dumps(retstr, indent=2))
         self._orch_cmd('apply', 'mon', '3')
         self.wait_for_health_clear(90)
         time.sleep(30)
         self._create_and_write_pool('test_pool1')
         time.sleep(10)
+        retstr = self._cmd('quorum_status') 
+        log.warning("test_apply_mon: monstatus returns %s" % json.dumps(retstr, indent=2))
         retstr = self.mgr_cluster.mon_manager.raw_cluster_cmd(
             'crash', 'ls',
         )
         log.warning("test_apply_mon: crash ls returns %s" % retstr)
         self.assertEqual(0, len(retstr))
+        retstr = self._cmd('quorum_status') 
+        log.warning("test_apply_mon: monstatus returns %s" % json.dumps(retstr, indent=2))
         self._orch_cmd('apply', 'mon', '5')
         self.wait_for_health_clear(90)
         time.sleep(30)
         self._create_and_write_pool('test_pool2')
         time.sleep(10)
+        retstr = self._cmd('quorum_status') 
+        log.warning("test_apply_mon: monstatus returns %s" % json.dumps(retstr, indent=2))
         retstr = self.mgr_cluster.mon_manager.raw_cluster_cmd(
             'crash', 'ls',
         )
