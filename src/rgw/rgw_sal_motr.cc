@@ -2023,8 +2023,13 @@ static const unsigned MAX_ACC_SIZE = 32 * 1024 * 1024;
 // and then launch the write operations.
 int MotrAtomicWriter::process(bufferlist&& data, uint64_t offset)
 {
-  if (data.length() == 0)
-    return 0;
+  if (data.length() == 0) { // last call, flush data
+    int rc = 0;
+    if (acc_data.length() != 0)
+      rc = this->write();
+    this->cleanup();
+    return rc;
+  }
 
   if (acc_data.length() == 0)
     acc_off = offset;
@@ -2047,13 +2052,12 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 {
   int rc = 0;
 
-  if (acc_data.length() != 0)
+  if (acc_data.length() != 0) { // check again, just in case
     rc = this->write();
-
-  this->cleanup();
-
-  if (rc != 0)
-    return rc;
+    this->cleanup();
+    if (rc != 0)
+      return rc;
+  }
 
   bufferlist bl;
   rgw_bucket_dir_entry ent;
@@ -2113,7 +2117,7 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     // TODO: update the current version (unset the flag) and insert the new current
     // version can be launched in one motr op. This requires change at do_idx_op()
     // and do_idx_op_by_name().
-    int rc = obj.update_version_entries(dpp);
+    rc = obj.update_version_entries(dpp);
     if (rc < 0)
       return rc;
   }
