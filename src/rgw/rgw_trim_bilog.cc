@@ -729,7 +729,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 	yield call(new RGWPutBucketInstanceInfoCR(
 		     store->svc()->rados->get_async_processor(),
 		     store, clean_info->first, false, {},
-		     nullptr, dpp));
+		     no_change_attrs(), dpp));
 
 	// Raced, try again.
 	if (retcode == -ECANCELED) {

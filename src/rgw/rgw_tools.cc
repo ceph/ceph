@@ -101,6 +101,11 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+map<string, bufferlist>* no_change_attrs() {
+  static map<string, bufferlist> no_change;
+  return &no_change;
+}
+
 int rgw_put_system_obj(const DoutPrefixProvider *dpp, 
                        RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
@@ -113,12 +118,22 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp,
   rgw_raw_obj obj(pool, oid);
 
   auto sysobj = obj_ctx.get_obj(obj);
-  int ret = sysobj.wop()
-                  .set_objv_tracker(objv_tracker)
-                  .set_exclusive(exclusive)
-                  .set_mtime(set_mtime)
-                  .set_attrs(*pattrs)
-                  .write(dpp, data, y);
+  int ret;
+
+  if (pattrs != no_change_attrs()) {
+    ret = sysobj.wop()
+      .set_objv_tracker(objv_tracker)
+      .set_exclusive(exclusive)
+      .set_mtime(set_mtime)
+      .set_attrs(*pattrs)
+      .write(dpp, data, y);
+  } else {
+    ret = sysobj.wop()
+      .set_objv_tracker(objv_tracker)
+      .set_exclusive(exclusive)
+      .set_mtime(set_mtime)
+      .write_data(dpp, data, y);
+  }
 
   return ret;
 }
