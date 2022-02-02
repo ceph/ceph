@@ -1,7 +1,7 @@
 tasks:
 - s3tests:
     client.0:
-      force-branch: ceph-master
+      force-branch: ceph-quincy
       barbican:
         kms_key: my-key-1
         kms_key2: my-key-2

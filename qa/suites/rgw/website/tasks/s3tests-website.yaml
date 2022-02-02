@@ -12,6 +12,6 @@ tasks:
       dns-s3website-name: s3-website.
 - s3tests:
     client.0:
-      force-branch: ceph-master
+      force-branch: ceph-quincy
       rgw_server: client.0
       rgw_website_server: client.1
