@@ -796,7 +796,7 @@
             "multi": false,
             "name": "rgw_hosts",
             "options": [ ],
-            "query": "label_values(ceph_rgw_qlen, ceph_daemon)",
+            "query": "label_values(ceph_rgw_metadata, ceph_daemon)",
             "refresh": 1,
             "regex": "rgw.(.*)",
             "sort": 1,
