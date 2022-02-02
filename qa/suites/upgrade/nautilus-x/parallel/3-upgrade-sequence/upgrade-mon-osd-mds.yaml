@@ -43,11 +43,13 @@ upgrade-sequence:
        duration: 60
    - ceph.restart:
        daemons: [osd.8, osd.9, osd.10, osd.11]
-       wait-for-healthy: true
+       wait-for-healthy: false
+       wait-for-osds-up: true
    - sleep:
        duration: 60
    - ceph.restart:
        daemons: [rgw.*]
-       wait-for-healthy: true
+       wait-for-healthy: false
+       wait-for-osds-up: true
    - sleep:
        duration: 60
