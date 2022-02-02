@@ -70,7 +70,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
        addTemplateSchema('mds_hosts', '$datasource', 'label_values(ceph_mds_inodes, ceph_daemon)', 1, true, 1, null, 'mds.(.*)')
     )
     .addTemplate(
-       addTemplateSchema('rgw_hosts', '$datasource', 'label_values(ceph_rgw_qlen, ceph_daemon)', 1, true, 1, null, 'rgw.(.*)')
+       addTemplateSchema('rgw_hosts', '$datasource', 'label_values(ceph_rgw_metadata, ceph_daemon)', 1, true, 1, null, 'rgw.(.*)')
     )
     .addPanels([
       HostsOverviewSingleStatPanel(
@@ -450,7 +450,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
        type='panel', id='graph', name='Graph', version='5.0.0'
     )
     .addTemplate(
-       addTemplateSchema('rgw_servers', '$datasource', 'label_values(ceph_rgw_req, ceph_daemon)', 1, true, 1, '', '')
+       addTemplateSchema('rgw_servers', '$datasource', 'label_values(ceph_rgw_metadata, ceph_daemon)', 1, true, 1, '', '')
     )
     .addTemplate(
        addTemplateSchema('code', '$datasource', 'label_values(haproxy_server_http_responses_total{instance=~"$ingress_service"}, code)', 1, true, 1, 'HTTP Code', '')
@@ -468,14 +468,14 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
         '',
         's',
         'short',
-        'rate(ceph_rgw_get_initial_lat_sum[30s]) / rate(ceph_rgw_get_initial_lat_count[30s])',
+        'rate(ceph_rgw_get_initial_lat_sum[30s]) / rate(ceph_rgw_get_initial_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata',
         'GET AVG',
         0, 1, 8, 7
         )
         .addTargets(
         [
         addTargetSchema(
-        'rate(ceph_rgw_put_initial_lat_sum[30s]) / rate(ceph_rgw_put_initial_lat_count[30s])',
+        'rate(ceph_rgw_put_initial_lat_sum[30s]) / rate(ceph_rgw_put_initial_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata',
         1,
         'time_series',
         'PUT AVG'
@@ -485,7 +485,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
         '',
         'none',
         'short',
-        'sum by(rgw_host) (label_replace(rate(ceph_rgw_req[30s]), "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"))',
+        'sum by (rgw_host) (label_replace(rate(ceph_rgw_req[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata, "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"))',
         '{{rgw_host}}',
         8, 1, 7, 7
         ),
@@ -494,7 +494,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
         'Latencies are shown stacked, without a yaxis to provide a visual indication of GET latency imbalance across RGW hosts',
         's',
         'short',
-        'label_replace(rate(ceph_rgw_get_initial_lat_sum[30s]),"rgw_host","$1","ceph_daemon","rgw.(.*)") / \nlabel_replace(rate(ceph_rgw_get_initial_lat_count[30s]),"rgw_host","$1","ceph_daemon","rgw.(.*)")',
+        'label_replace(\n    rate(ceph_rgw_get_initial_lat_sum[30s]) /\n    rate(ceph_rgw_get_initial_lat_count[30s]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n"rgw_host", "$1", "ceph_daemon", "rgw.(.*)")',
         '{{rgw_host}}',
         15, 1, 6, 7
         ),
@@ -520,7 +520,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
         'Total bytes transferred in/out through get/put operations, by radosgw instance',
         'bytes',
         'short',
-        'sum by(rgw_host) (\n  (label_replace(rate(ceph_rgw_get_b[30s]), "rgw_host","$1","ceph_daemon","rgw.(.*)")) + \n  (label_replace(rate(ceph_rgw_put_b[30s]), "rgw_host","$1","ceph_daemon","rgw.(.*)"))\n)',
+        'label_replace(sum by (instance_id) (\n    rate(ceph_rgw_get_b[30s]) + \n    rate(ceph_rgw_put_b[30s])\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata, "rgw_host", "$1", "ceph_daemon", "rgw.(.*)")',
         '{{rgw_host}}',
         8, 8, 7, 6
         ),
@@ -529,7 +529,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
         'Latencies are shown stacked, without a yaxis to provide a visual indication of PUT latency imbalance across RGW hosts',
         's',
         'short',
-        'label_replace(rate(ceph_rgw_put_initial_lat_sum[30s]),"rgw_host","$1","ceph_daemon","rgw.(.*)") / \nlabel_replace(rate(ceph_rgw_put_initial_lat_count[30s]),"rgw_host","$1","ceph_daemon","rgw.(.*)")',
+        'label_replace(\n    rate(ceph_rgw_put_initial_lat_sum[30s]) /\n    rate(ceph_rgw_put_initial_lat_count[30s]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n"rgw_host", "$1", "ceph_daemon", "rgw.(.*)")',
         '{{rgw_host}}',
         15, 8, 6, 6
         ),
@@ -659,7 +659,7 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
        g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
     )
     .addTemplate(
-       addTemplateSchema('rgw_servers', '$datasource', 'label_values(ceph_rgw_req, ceph_daemon)', 1, true, 1, '', '')
+       addTemplateSchema('rgw_servers', '$datasource', 'label_values(ceph_rgw_metadata, ceph_daemon)', 1, true, 1, '', '')
     )
     .addPanels([
       addRowSchema(false, true, 'RGW Host Detail : $rgw_servers') + {gridPos: {x: 0, y: 0, w: 24, h: 1}},
@@ -669,8 +669,8 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
         '',
         's',
         'short',
-        'sum by (ceph_daemon) (rate(ceph_rgw_get_initial_lat_sum{ceph_daemon=~"($rgw_servers)"}[30s]) / rate(ceph_rgw_get_initial_lat_count{ceph_daemon=~"($rgw_servers)"}[30s]))',
-        'sum by (ceph_daemon)(rate(ceph_rgw_put_initial_lat_sum{ceph_daemon=~"($rgw_servers)"}[30s]) / rate(ceph_rgw_put_initial_lat_count{ceph_daemon=~"($rgw_servers)"}[30s]))',
+        'sum by (instance_id) (rate(ceph_rgw_get_initial_lat_sum[30s]) / rate(ceph_rgw_get_initial_lat_count[30s])) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
+        'sum by (instance_id) (rate(ceph_rgw_put_initial_lat_sum[30s]) / rate(ceph_rgw_put_initial_lat_count[30s])) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
         'GET {{ceph_daemon}}',
         'PUT {{ceph_daemon}}',
         0, 1, 6, 8
@@ -681,8 +681,8 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
         '',
         'bytes',
         'short',
-        'rate(ceph_rgw_get_b{ceph_daemon=~"$rgw_servers"}[30s])',
-        'rate(ceph_rgw_put_b{ceph_daemon=~"$rgw_servers"}[30s])',
+        'rate(ceph_rgw_get_b[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
+        'rate(ceph_rgw_put_b[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
         'GETs {{ceph_daemon}}',
         'PUTs {{ceph_daemon}}',
         6, 1, 7, 8
@@ -693,8 +693,8 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
         '',
         'short',
         'short',
-        'rate(ceph_rgw_failed_req{ceph_daemon=~"$rgw_servers"}[30s])',
-        'rate(ceph_rgw_get{ceph_daemon=~"$rgw_servers"}[30s])',
+        'rate(ceph_rgw_failed_req[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
+        'rate(ceph_rgw_get[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
         'Requests Failed {{ceph_daemon}}',
         'GETs {{ceph_daemon}}',
         13, 1, 7, 8
@@ -702,13 +702,13 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
       .addTargets(
         [
         addTargetSchema(
-        'rate(ceph_rgw_put{ceph_daemon=~"$rgw_servers"}[30s])',
+        'rate(ceph_rgw_put[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
         1,
         'time_series',
         'PUTs {{ceph_daemon}}'
         ),
         addTargetSchema(
-        'rate(ceph_rgw_req{ceph_daemon=~"$rgw_servers"}[30s]) -\n  (rate(ceph_rgw_get{ceph_daemon=~"$rgw_servers"}[30s]) +\n   rate(ceph_rgw_put{ceph_daemon=~"$rgw_servers"}[30s]))',
+        '(\n    rate(ceph_rgw_req[30s]) -\n    (rate(ceph_rgw_get[30s]) + rate(ceph_rgw_put[30s]))\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
         1,
         'time_series',
         'Other {{ceph_daemon}}'
@@ -722,10 +722,10 @@ local addStyle(alias, colorMode, colors, dateFormat, decimals, mappingType, patt
         'Workload Breakdown',
         'current'
       )
-      .addTarget(addTargetSchema('rate(ceph_rgw_failed_req{ceph_daemon=~"$rgw_servers"}[30s])', 1, 'time_series', 'Failures {{ceph_daemon}}'))
-      .addTarget(addTargetSchema('rate(ceph_rgw_get{ceph_daemon=~"$rgw_servers"}[30s])', 1, 'time_series', 'GETs {{ceph_daemon}}'))
-      .addTarget(addTargetSchema('rate(ceph_rgw_put{ceph_daemon=~"$rgw_servers"}[30s])', 1, 'time_series', 'PUTs {{ceph_daemon}}'))
-      .addTarget(addTargetSchema('rate(ceph_rgw_req{ceph_daemon=~"$rgw_servers"}[30s]) -\n  (rate(ceph_rgw_get{ceph_daemon=~"$rgw_servers"}[30s]) +\n   rate(ceph_rgw_put{ceph_daemon=~"$rgw_servers"}[30s]))', 1, 'time_series', 'Other (DELETE,LIST) {{ceph_daemon}}')) + {gridPos: {x: 20, y: 1, w: 4, h: 8}}
+      .addTarget(addTargetSchema('rate(ceph_rgw_failed_req[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}', 1, 'time_series', 'Failures {{ceph_daemon}}'))
+      .addTarget(addTargetSchema('rate(ceph_rgw_get[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}', 1, 'time_series', 'GETs {{ceph_daemon}}'))
+      .addTarget(addTargetSchema('rate(ceph_rgw_put[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}', 1, 'time_series', 'PUTs {{ceph_daemon}}'))
+      .addTarget(addTargetSchema('(\n    rate(ceph_rgw_req[30s]) -\n    (rate(ceph_rgw_get[30s]) + rate(ceph_rgw_put[30s]))\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}', 1, 'time_series', 'Other (DELETE,LIST) {{ceph_daemon}}')) + {gridPos: {x: 20, y: 1, w: 4, h: 8}}
     ])
 }
 {

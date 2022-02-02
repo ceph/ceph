@@ -80,7 +80,8 @@ void ActivePyModules::dump_server(const std::string &hostname,
   std::string ceph_version;
 
   for (const auto &[key, state] : dmc) {
-    without_gil([&ceph_version, state=state] {
+    std::string id;
+    without_gil([&ceph_version, &id, state=state] {
       std::lock_guard l(state->lock);
       // TODO: pick the highest version, and make sure that
       // somewhere else (during health reporting?) we are
@@ -89,10 +90,16 @@ void ActivePyModules::dump_server(const std::string &hostname,
       if (ver_iter != state->metadata.end()) {
         ceph_version = state->metadata.at("ceph_version");
       }
+      if (state->metadata.find("id") != state->metadata.end()) {
+        id = state->metadata.at("id");
+      }
     });
     f->open_object_section("service");
     f->dump_string("type", key.type);
     f->dump_string("id", key.name);
+    if (!id.empty()) {
+      f->dump_string("name", id);
+    }
     f->close_section();
   }
   f->close_section();
