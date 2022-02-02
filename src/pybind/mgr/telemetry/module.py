@@ -598,19 +598,15 @@ class Module(MgrModule):
 
         # collect application metadata from osd_map
         osd_map = self.get('osd_map')
-        app_dict = {}
-        for pool in osd_map['pools']:
-            app_dict[pool['pool']] = pool['application_metadata']
+        application_metadata = {pool['pool']: pool['application_metadata'] for pool in osd_map['pools']}
 
         # add application to each pool from pg_dump
         for pool in result:
-            poolid = pool['poolid']
-            # Check that the pool has an application. If it does not,
-            # the application dict will be empty.
-            if app_dict[poolid]:
-                pool['application'] = list(app_dict[poolid].keys())[0]
-            else:
-                pool['application'] = ""
+            pool['application'] = []
+            # Only include default applications
+            for application in application_metadata[pool['poolid']]:
+                if application in ['cephfs', 'mgr', 'rbd', 'rgw']:
+                    pool['application'].append(application)
 
         return result
 
