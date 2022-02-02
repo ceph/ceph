@@ -449,6 +449,34 @@ A single test from the rbd/thrash suite can be run by adding the
       --suite rbd/thrash \
       --filter 'rbd/thrash/{clusters/fixed-2.yaml clusters/openstack.yaml workloads/rbd_api_tests_copy_on_read.yaml}'
 
+Position Independent Linking
+----------------------------
+
+Under the ``qa/suites`` directory are ``.qa`` symbolic links in every
+directory. Each link is recursive by always linking to ``../.qa/``. The final
+terminating link is in the ``qa/`` directory itself as ``qa/.qa -> .``. This
+layout of symbolic links allows a suite to be easily copied or moved without
+breaking a number of symbolic links. For example::
+
+    qa/suites/fs/upgrade/nofs/centos_latest.yaml -> .qa/distros/supported/centos_latest.yaml
+
+If we copy the ``nofs`` suite somewhere else, add a parent directory above
+``nofs``, or move the ``centos_latest.yaml`` fragment into a sub-directory, the
+link will not break. Compare to::
+
+    qa/suites/fs/upgrade/nofs/centos_latest.yaml -> ../../../../distros/supported/centos_latest.yaml
+
+If the link is moved, it is very likely it will break because the number of
+parent directories to reach the ``distros`` directory may change.
+
+When adding new directories or suites, it is recommended to also remember
+adding ``.qa`` symbolic links. A trivial find command may do this for you:
+
+.. prompt:: bash $
+
+   find qa/suites/ -type d -execdir ln -sfT ../.qa/ {}/.qa \;
+
+
 Filtering tests by their description
 ------------------------------------
 
