@@ -1369,7 +1369,11 @@ public:
   /** prepare to start processing object data */
   virtual int prepare(optional_yield y) = 0;
 
-  /** Process a buffer.  Called multiple times to write different buffers. */
+  /**
+   * Process a buffer. Called multiple times to write different buffers.
+   * data.length() == 0 indicates the last call and may be used to flush
+   * the data buffers.
+   */
   virtual int process(bufferlist&& data, uint64_t offset) = 0;
 
   /** complete the operation and make its result visible to clients */
