@@ -40,6 +40,7 @@ overrides:
     conf:
       global:
         mon_warn_on_pool_no_app: false
+        mon_mds_skip_sanity: true
       mon:
         mon debug unsafe allow tier with nonempty snaps: true
       osd:
