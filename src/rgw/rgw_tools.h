@@ -257,4 +257,11 @@ using RGWDataAccessRef = std::shared_ptr<RGWDataAccess>;
 /// calls and error handling.
 void rgw_complete_aio_completion(librados::AioCompletion* c, int r);
 
+/// This returns a static, non-NULL pointer, recognized only by
+/// rgw_put_system_obj(). When supplied instead of the attributes, the
+/// attributes will be unmodified.
+///
+// (Currently providing nullptr will wipe all attributes.)
+
+std::map<std::string, ceph::buffer::list>* no_change_attrs();
 #endif
