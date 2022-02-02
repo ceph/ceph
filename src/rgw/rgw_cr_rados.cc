@@ -552,15 +552,20 @@ RGWRadosBILogTrimCR::RGWRadosBILogTrimCR(rgw::sal::RGWRadosStore *store,
                                          int shard_id,
                                          const std::string& start_marker,
                                          const std::string& end_marker)
-  : RGWSimpleCoroutine(store->ctx()), bs(store->getRados()),
+  : RGWSimpleCoroutine(store->ctx()), bucket_info(bucket_info),
+    shard_id(shard_id), bs(store->getRados()),
     start_marker(BucketIndexShardsManager::get_shard_marker(start_marker)),
     end_marker(BucketIndexShardsManager::get_shard_marker(end_marker))
 {
-  bs.init(bucket_info, shard_id);
 }
 
 int RGWRadosBILogTrimCR::send_request()
 {
+  int r = bs.init(bucket_info, shard_id);
+  if (r < 0) {
+    return r;
+  }
+
   bufferlist in;
   cls_rgw_bi_log_trim_op call;
   call.start_marker = std::move(start_marker);
