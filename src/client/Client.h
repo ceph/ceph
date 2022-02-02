@@ -654,7 +654,7 @@ public:
   int ll_osdaddr(int osd, char* buf, size_t size);
 
   void ll_register_callbacks(struct ceph_client_callback_args *args);
-  int test_dentry_handling(bool can_invalidate);
+  std::pair<int, bool> test_dentry_handling(bool can_invalidate);
 
   const char** get_tracked_conf_keys() const override;
   void handle_conf_change(const ConfigProxy& conf,
@@ -1291,7 +1291,7 @@ private:
   int _release_fh(Fh *fh);
   void _put_fh(Fh *fh);
 
-  int _do_remount(bool retry_on_error);
+  std::pair<int, bool> _do_remount(bool retry_on_error);
 
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
   int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
