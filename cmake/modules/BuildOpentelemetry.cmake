@@ -27,7 +27,6 @@ function(build_opentelemetry)
                                 ${opentelemetry_SOURCE_DIR}/exporters/jaeger/include/
                                 ${opentelemetry_SOURCE_DIR}/ext/include/
                                 ${opentelemetry_SOURCE_DIR}/sdk/include/)
-  include_directories(SYSTEM ${opentelemetry_include_dir})
   # TODO: add target based propogation
   set(opentelemetry_deps opentelemetry_trace opentelemetry_resources opentelemetry_common
                          opentelemetry_exporter_jaeger_trace http_client_curl
@@ -76,12 +75,12 @@ function(build_opentelemetry)
 
   # will do all linking and path setting fake include path for
   # interface_include_directories since this happens at build time
-  file(MAKE_DIRECTORY
-       "${opentelemetry_BINARY_DIR}/opentelemetry-cpp/exporters/jaeger/include")
+  file(MAKE_DIRECTORY ${opentelemetry_include_dir})
   add_library(opentelemetry::libopentelemetry INTERFACE IMPORTED)
   add_dependencies(opentelemetry::libopentelemetry opentelemetry-cpp)
   set_target_properties(
     opentelemetry::libopentelemetry
     PROPERTIES
-      INTERFACE_LINK_LIBRARIES "${opentelemetry_deps}")
+      INTERFACE_LINK_LIBRARIES "${opentelemetry_deps}"
+      INTERFACE_INCLUDE_DIRECTORIES "${opentelemetry_include_dir}")
 endfunction()
