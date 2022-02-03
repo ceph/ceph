@@ -490,7 +490,7 @@ SegmentManager::read_ertr::future<> ZNSSegmentManager::read(
 }
 
 Segment::close_ertr::future<> ZNSSegmentManager::segment_close(
-  segment_id_t id, segment_off_t write_pointer)
+  segment_id_t id, seastore_off_t write_pointer)
 {
   return seastar::do_with(
     blk_zone_range{},
@@ -558,7 +558,7 @@ magic_t ZNSSegmentManager::get_magic() const
   return metadata.magic;
 };
 
-segment_off_t ZNSSegment::get_write_capacity() const
+seastore_off_t ZNSSegment::get_write_capacity() const
 {
   return manager.get_segment_size();
 }
@@ -577,7 +577,7 @@ Segment::close_ertr::future<> ZNSSegment::close()
 }
 
 Segment::write_ertr::future<> ZNSSegment::write(
-  segment_off_t offset, ceph::bufferlist bl)
+  seastore_off_t offset, ceph::bufferlist bl)
 {
   if (offset < write_pointer || offset % manager.metadata.block_size != 0) {
     logger().error(
