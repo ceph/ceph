@@ -629,7 +629,7 @@ class MotrAtomicWriter : public Writer {
   const std::string& unique_tag;
   MotrObject obj;
   uint64_t total_data_size; // for total data being uploaded
-  bufferlist acc_bl;  // accumulated data
+  bufferlist acc_data;  // accumulated data
   uint64_t   acc_off; // accumulated data offset
 
   struct m0_bufvec buf;
