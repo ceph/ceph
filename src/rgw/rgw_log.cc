@@ -13,6 +13,7 @@
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
 #include "rgw_zone.h"
+#include "rgw_sal_rados.h"
 
 #include "services/svc_zone.h"
 
@@ -469,7 +470,7 @@ int OpsLogSocket::log_json(struct req_state* s, bufferlist& bl)
   return 0;
 }
 
-OpsLogRados::OpsLogRados(RGWRados* store): store(store)
+OpsLogRados::OpsLogRados(rgw::sal::RGWRadosStore* const& store) : store(store)
 {
 }
 
@@ -488,16 +489,18 @@ int OpsLogRados::log(struct req_state* s, struct rgw_log_entry& entry)
   else
     localtime_r(&t, &bdt);
 
+  RGWRados* rados = store->getRados();
+
   string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
                                       entry.bucket_id, entry.bucket);
-  rgw_raw_obj obj(store->svc.zone->get_zone_params().log_pool, oid);
-  int ret = store->append_async(s, obj, bl.length(), bl);
+  rgw_raw_obj obj(rados->svc.zone->get_zone_params().log_pool, oid);
+  int ret = rados->append_async(s, obj, bl.length(), bl);
   if (ret == -ENOENT) {
-      ret = store->create_pool(s, store->svc.zone->get_zone_params().log_pool);
+      ret = rados->create_pool(s, rados->svc.zone->get_zone_params().log_pool);
       if (ret < 0)
           goto done;
       // retry
-      ret = store->append_async(s, obj, bl.length(), bl);
+      ret = rados->append_async(s, obj, bl.length(), bl);
   }
 done:
   if (ret < 0) {
