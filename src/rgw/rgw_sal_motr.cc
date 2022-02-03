@@ -834,6 +834,8 @@ int MotrBucket::abort_multiparts(const DoutPrefixProvider *dpp, CephContext *cct
 
 void MotrStore::finalize(void)
 {
+  // close connection with motr
+  m0_client_fini(this->instance, true);
 }
 
 const RGWZoneGroup& MotrZone::get_zonegroup()
