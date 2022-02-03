@@ -397,6 +397,7 @@ class NodeExporterService(CephadmService):
 
 class LokiService(CephadmService):
     TYPE = 'loki'
+    DEFAULT_SERVICE_PORT = 3100
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -421,6 +422,7 @@ class LokiService(CephadmService):
 
 class PromtailService(CephadmService):
     TYPE = 'promtail'
+    DEFAULT_SERVICE_PORT = 9080
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
