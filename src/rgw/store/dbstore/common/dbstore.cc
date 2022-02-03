@@ -229,6 +229,7 @@ int DB::InitializeParams(const DoutPrefixProvider *dpp, string Op, DBOpParams *p
   //reset params here
   params->user_table = user_table;
   params->bucket_table = bucket_table;
+  params->quota_table = quota_table;
   params->lc_entry_table = lc_entry_table;
   params->lc_head_table = lc_head_table;
 
@@ -772,8 +773,6 @@ int DB::raw_obj::InitializeParamsfromRawObj(const DoutPrefixProvider *dpp,
   if (!params)
     return -1;
 
-  params->object_table = obj_table;
-  params->objectdata_table = obj_data_table;
   params->op.bucket.info.bucket.name = bucket_name;
   params->op.obj.state.obj.key.name = obj_name;
   params->op.obj.state.obj.key.instance = obj_instance;
@@ -800,8 +799,6 @@ int DB::Object::InitializeParamsfromObject(const DoutPrefixProvider *dpp,
   if (!params)
     return -1;
 
-  params->object_table = store->getObjectTable(bucket);
-  params->objectdata_table = store->getObjectDataTable(bucket);
   params->op.bucket.info.bucket.name = bucket;
   params->op.obj.state.obj = obj;
   params->op.obj.obj_id = obj_id;
@@ -1736,7 +1733,6 @@ int DB::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     *meta.mtime = meta.set_mtime;
   }
 
-  /* XXX: handle multipart */
   params.op.query_str = "meta";
   params.op.obj.obj_id = target->obj_id;
   ret = store->ProcessOp(dpp, "PutObject", &params);
@@ -1768,27 +1764,6 @@ int DB::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t size, 
   return r;
 }
 
-int DB::Object::Write::update_mp_parts(const DoutPrefixProvider *dpp, rgw_obj_key new_obj_key)
-{
-  int ret = 0;
-  DBOpParams params = {};
-  DB *store = target->get_store();
-
-  store->InitializeParams(dpp, "UpdateObjectData", &params);
-  target->InitializeParamsfromObject(dpp, &params);
-
-  params.op.obj.new_obj_key = new_obj_key;
-
-  ret = store->ProcessOp(dpp, "UpdateObjectData", &params);
-
-  if (ret) {
-    ldpp_dout(dpp, 0)<<"In UpdateObjectData failed err:(" <<ret<<")" << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
 int DB::Object::Delete::delete_obj(const DoutPrefixProvider *dpp) {
   int ret = 0;
   DB *store = target->get_store();
@@ -1811,15 +1786,31 @@ int DB::Object::Delete::delete_obj(const DoutPrefixProvider *dpp) {
   store->InitializeParams(dpp, "DeleteObject", &del_params);
   target->InitializeParamsfromObject(dpp, &del_params);
 
-  /* As it is cascade delete, it will delete the objectdata table entries also */
   ret = store->ProcessOp(dpp, "DeleteObject", &del_params);
   if (ret) {
     ldpp_dout(dpp, 0) << "In DeleteObject failed err:(" <<ret<<")" << dendl;
-    goto out;
+    return ret;
   }
 
-out:
-  return ret;
+  /* Now that tail objects are associated with objectID, they are not deleted
+   * as part of this DeleteObj operation. Such tail objects (with no head object
+   * in *.object.table are cleaned up later by GC thread.
+   *
+   * To avoid races between writes/reads & GC delete, mtime is maintained for each
+   * tail object. This mtime is updated when tail object is written and also when
+   * its corresponding head object is deleted (like here in this case).
+   */
+  DBOpParams update_params = del_params;
+  update_params.op.obj.obj_id = astate->shadow_obj; // objectID is copied here in get_state()
+  update_params.op.obj.state.mtime = real_clock::now();
+  ret = store->ProcessOp(dpp, "UpdateObjectData", &update_params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0) << "Updating tail objects mtime failed err:(" <<ret<<")" << dendl;
+    return ret;
+  }
+
+  return 0;
 }
 
 int DB::get_entry(const std::string& oid, const std::string& marker,
@@ -2013,12 +2004,12 @@ int DB::delete_stale_objs(const DoutPrefixProvider *dpp, const std::string& buck
     ldpp_dout(dpp, 0) << "In GetBucket failed err:(" <<ret<<")" << dendl;
   }
 
-  ldpp_dout(dpp, 30) << " Deleting stale_objs of bucket( " << bucket <<")" << dendl;
+  ldpp_dout(dpp, 20) << " Deleting stale_objs of bucket( " << bucket <<")" << dendl;
   /* XXX: handle reads racing with delete here. Simple approach is maybe
    * to use locks or sqlite transactions.
    */
   InitializeParams(dpp, "DeleteStaleObjectData", &params);
-  params.op.obj.state.mtime = (real_clock::now() + make_timespan(min_wait));
+  params.op.obj.state.mtime = (real_clock::now() - make_timespan(min_wait));
   ret = ProcessOp(dpp, "DeleteStaleObjectData", &params);
   if (ret) {
     ldpp_dout(dpp, 0) << "In DeleteStaleObjectData failed err:(" <<ret<<")" << dendl;
@@ -2039,6 +2030,7 @@ void *DB::GC::entry() {
       rgw_user user;
       user.id = user_marker;
       buckets.clear();
+      is_truncated = false;
 
       int r = db->list_buckets(dpp, "all", user, marker, string(),
                        max, false, &buckets, &is_truncated);
@@ -2059,12 +2051,12 @@ void *DB::GC::entry() {
         user_marker = user.id;
 
         /* XXX: If using locks, unlock here and reacquire in the next iteration */
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
     } while(is_truncated);
 
     bucket_marker.clear();
-    std::this_thread::sleep_for(std::chrono::milliseconds(gc_interval));
+    std::this_thread::sleep_for(std::chrono::milliseconds(gc_interval*10));
 
   } while(1);
 

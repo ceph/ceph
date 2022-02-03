@@ -98,6 +98,7 @@ namespace {
         GlobalParams.op.obj.state.obj.bucket = GlobalParams.op.bucket.info.bucket;
         GlobalParams.op.obj.state.obj.key.name = object1;
         GlobalParams.op.obj.state.obj.key.instance = "inst1";
+        GlobalParams.op.obj.obj_id = "obj_id1";
         GlobalParams.op.obj_data.part_num = 0;
 
         /* As of now InitializeParams doesnt do anything
@@ -1006,6 +1007,7 @@ TEST_F(DBStoreTest, PutObjectData) {
   encode("HELLO WORLD", b1);
   params.op.obj_data.data = b1;
   params.op.obj_data.size = 12;
+  params.op.obj.state.mtime = real_clock::now();
   ret = db->ProcessOp(dpp, "PutObjectData", &params);
   ASSERT_EQ(ret, 0);
 }
@@ -1014,8 +1016,7 @@ TEST_F(DBStoreTest, UpdateObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  params.op.obj.new_obj_key.name = "object3";
-  params.op.obj.new_obj_key.instance = "inst3";
+  params.op.obj.state.mtime = bucket_mtime;
   ret = db->ProcessOp(dpp, "UpdateObjectData", &params);
   ASSERT_EQ(ret, 0);
 }
@@ -1024,15 +1025,16 @@ TEST_F(DBStoreTest, GetObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  params.op.obj.state.obj.key.instance = "inst3";
-  params.op.obj.state.obj.key.name = "object3";
+  params.op.obj.state.obj.key.instance = "inst1";
+  params.op.obj.state.obj.key.name = "object1";
   ret = db->ProcessOp(dpp, "GetObjectData", &params);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(params.op.obj_data.part_num, 1);
   ASSERT_EQ(params.op.obj_data.offset, 10);
   ASSERT_EQ(params.op.obj_data.multipart_part_str, "2");
-  ASSERT_EQ(params.op.obj.state.obj.key.instance, "inst3");
-  ASSERT_EQ(params.op.obj.state.obj.key.name, "object3");
+  ASSERT_EQ(params.op.obj.state.obj.key.instance, "inst1");
+  ASSERT_EQ(params.op.obj.state.obj.key.name, "object1");
+  ASSERT_EQ(params.op.obj.state.mtime, bucket_mtime);
   string data;
   decode(data, params.op.obj_data.data);
   ASSERT_EQ(data, "HELLO WORLD");
