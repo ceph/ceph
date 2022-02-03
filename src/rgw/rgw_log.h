@@ -199,9 +199,11 @@ public:
 };
 
 class OpsLogRados : public OpsLogSink {
-  rgw::sal::Store* store;
+  // main()'s Store pointer as a reference, possibly modified by RGWRealmReloader
+  rgw::sal::Store* const& store;
+
 public:
-  OpsLogRados(rgw::sal::Store* store);
+  OpsLogRados(rgw::sal::Store* const& store);
   int log(struct req_state* s, struct rgw_log_entry& entry) override;
 };
 
