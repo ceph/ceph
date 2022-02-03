@@ -132,6 +132,7 @@ class SELinux(Task):
             'tcontext=system_u:object_r:container_runtime_exec_t:s0',
             'comm="ksmtuned"',
             'comm="sssd"',
+            'comm="sss_cache"',
         ]
         se_whitelist = self.config.get('whitelist', [])
         if se_whitelist:
