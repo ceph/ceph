@@ -87,9 +87,7 @@ struct DBOpObjectInfo {
   std::string min_marker;
   std::string max_marker;
   std::list<rgw_bucket_dir_entry> list_entries;
-  /* Below used to update mp_parts obj name
-   * from meta object to src object on completion */
-  rgw_obj_key new_obj_key;
+  /* XXX: Maybe use std::vector instead of std::list */
 };
 
 struct DBOpObjectDataInfo {
@@ -142,8 +140,8 @@ struct DBOpParams {
   /* Ops*/
   DBOpInfo op;
 
-  /* Below are subject to change */
   std::string objectdata_table;
+  std::string object_view;
   std::string quota_table;
   std::string lc_head_table;
   std::string lc_entry_table;
@@ -331,8 +329,8 @@ struct DBOpPrepareParams {
   DBOpPrepareInfo op;
 
 
-  /* below subject to change */
   std::string objectdata_table;
+  std::string object_view;
   std::string quota_table;
   std::string lc_head_table;
   std::string lc_entry_table;
@@ -550,7 +548,7 @@ class DBOp {
       ObjAttrs    BLOB,   \
       HeadSize    INTEGER,    \
       MaxHeadSize    INTEGER,    \
-      ObjID      TEXT, \
+      ObjID      TEXT NOT NULL, \
       TailInstance  TEXT, \
       HeadPlacementRuleName   TEXT, \
       HeadPlacementRuleStorageClass TEXT, \
@@ -581,7 +579,7 @@ class DBOp {
       ObjInstance TEXT, \
       ObjNS TEXT, \
       BucketName TEXT NOT NULL , \
-      ObjID      String, \
+      ObjID      TEXT NOT NULL , \
       MultipartPartStr TEXT, \
       PartNum  INTEGER NOT NULL, \
       Offset   INTEGER, \
@@ -591,6 +589,22 @@ class DBOp {
       PRIMARY KEY (ObjName, BucketName, ObjInstance, ObjID, MultipartPartStr, PartNum), \
       FOREIGN KEY (BucketName) \
       REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
+
+    const std::string CreateObjectViewQ =
+      /* This query creats temporary view with entries from ObjectData table which have
+       * corresponding head object (i.e, with same ObjName, ObjInstance, ObjNS, ObjID)
+       * in the Object table.
+       *
+       * GC thread can use this view to delete stale entries from the ObjectData table which
+       * do not exist in this view.
+       *
+       * XXX: This view is throwing ForeignKey mismatch error, mostly may be because all the keys
+       * of objectdata table are not referenced here. So this view is not used atm.
+       */
+      "CREATE TEMP VIEW IF NOT EXISTS '{}' AS \
+      SELECT s.ObjName, s.ObjInstance, s.ObjID from '{}' as s INNER JOIN '{}' USING \
+      (ObjName, BucketName, ObjInstance, ObjID);";
+
 
     const std::string CreateQuotaTableQ =
       "CREATE TABLE IF NOT EXISTS '{}' ( \
@@ -643,6 +657,11 @@ class DBOp {
         return fmt::format(CreateObjectDataTableQ.c_str(),
             params->objectdata_table.c_str(),
             params->bucket_table.c_str());
+      if (!type.compare("ObjectView"))
+        return fmt::format(CreateObjectTableQ.c_str(),
+            params->object_view.c_str(),
+            params->objectdata_table.c_str(),
+            params->object_table.c_str());
       if (!type.compare("Quota"))
         return fmt::format(CreateQuotaTableQ.c_str(),
             params->quota_table.c_str());
@@ -1198,9 +1217,8 @@ class UpdateObjectDataOp: virtual public DBOp {
   private:
     const std::string Query =
       "UPDATE '{}' \
-      SET ObjName = {}, ObjInstance = {}, ObjNS = {} \
-      WHERE ObjName = {} and ObjInstance = {} and ObjNS = {} and \
-      BucketName = {}";
+      SET Mtime = {} WHERE ObjName = {} and ObjInstance = {} and \
+      BucketName = {} and ObjID = {}";
 
   public:
     virtual ~UpdateObjectDataOp() {}
@@ -1208,11 +1226,10 @@ class UpdateObjectDataOp: virtual public DBOp {
     std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query.c_str(),
           params.objectdata_table.c_str(),
-          params.op.obj.new_obj_name, params.op.obj.new_obj_instance,
-          params.op.obj.new_obj_ns,
+          params.op.obj.mtime,
           params.op.obj.obj_name, params.op.obj.obj_instance,
-          params.op.obj.obj_ns,
-          params.op.bucket.bucket_name.c_str());
+          params.op.bucket.bucket_name.c_str(),
+          params.op.obj.obj_id);
     }
 };
 class GetObjectDataOp: virtual public DBOp {
@@ -1256,7 +1273,7 @@ class DeleteObjectDataOp: virtual public DBOp {
 class DeleteStaleObjectDataOp: virtual public DBOp {
   private:
     const std::string Query =
-      "DELETE from '{}' WHERE (ObjName, ObjInstance, ObjID) NOT IN (SELECT s.ObjName, s.ObjInstance, s.ObjID from '{}' as s INNER JOIN '{}' USING (ObjName, BucketName, ObjInstance, ObjID)) and Mtime > {}";
+      "DELETE from '{}' WHERE (ObjName, ObjInstance, ObjID) NOT IN (SELECT s.ObjName, s.ObjInstance, s.ObjID from '{}' as s INNER JOIN '{}' USING (ObjName, BucketName, ObjInstance, ObjID)) and Mtime < {}";
 
   public:
     virtual ~DeleteStaleObjectDataOp() {}
@@ -1432,22 +1449,22 @@ class DB {
 
   public:
     DB(std::string db_name, CephContext *_cct) : db_name(db_name),
-    user_table(db_name+".user.table"),
-    bucket_table(db_name+".bucket.table"),
-    quota_table(db_name+".quota.table"),
-    lc_head_table(db_name+".lc_head.table"),
-    lc_entry_table(db_name+".lc_entry.table"),
+    user_table(db_name+"_user_table"),
+    bucket_table(db_name+"_bucket_table"),
+    quota_table(db_name+"_quota_table"),
+    lc_head_table(db_name+"_lc_head_table"),
+    lc_entry_table(db_name+"_lc_entry_table"),
     cct(_cct),
     dp(_cct, ceph_subsys_rgw, "rgw DBStore backend: ")
   {}
     /*	DB() {}*/
 
     DB(CephContext *_cct) : db_name("default_db"),
-    user_table(db_name+".user.table"),
-    bucket_table(db_name+".bucket.table"),
-    quota_table(db_name+".quota.table"),
-    lc_head_table(db_name+".lc_head.table"),
-    lc_entry_table(db_name+".lc_entry.table"),
+    user_table(db_name+"_user_table"),
+    bucket_table(db_name+"_bucket_table"),
+    quota_table(db_name+"_quota_table"),
+    lc_head_table(db_name+"_lc_head_table"),
+    lc_entry_table(db_name+"_lc_entry_table"),
     cct(_cct),
     dp(_cct, ceph_subsys_rgw, "rgw DBStore backend: ")
   {}
@@ -1461,9 +1478,11 @@ class DB {
     const std::string getLCHeadTable() { return lc_head_table; }
     const std::string getLCEntryTable() { return lc_entry_table; }
     const std::string getObjectTable(std::string bucket) {
-      return db_name+"."+bucket+".object.table"; }
+      return db_name+"_"+bucket+"_object_table"; }
     const std::string getObjectDataTable(std::string bucket) {
-      return db_name+"."+bucket+".objectdata.table"; }
+      return db_name+"_"+bucket+"_objectdata_table"; }
+    const std::string getObjectView(std::string bucket) {
+      return db_name+"_"+bucket+"_object_view"; }
 
     std::map<std::string, class ObjectOp*> getObjectMap();
 
@@ -1499,7 +1518,9 @@ class DB {
     virtual int createTables(const DoutPrefixProvider *dpp) { return 0; }
     virtual int InitializeDBOps(const DoutPrefixProvider *dpp) { return 0; }
     virtual int FreeDBOps(const DoutPrefixProvider *dpp) { return 0; }
-    virtual int InitPrepareParams(const DoutPrefixProvider *dpp, DBOpPrepareParams &params) = 0;
+    virtual int InitPrepareParams(const DoutPrefixProvider *dpp,
+                                  DBOpPrepareParams &p_params,
+                                  DBOpParams* params) = 0;
     virtual int createLCTables(const DoutPrefixProvider *dpp) = 0;
 
     virtual int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) = 0;
@@ -1643,8 +1664,8 @@ class DB {
        * gc_obj_min_wait: Min. time to wait before deleting any data post its creation.
        *                    
        */
-      uint32_t gc_interval = 24*60*60*10; //msec ; default: 24*60*60*10
-      uint32_t gc_obj_min_wait = 600; //600sec default
+      uint32_t gc_interval = 24*60*60; //sec ; default: 24*60*60
+      uint32_t gc_obj_min_wait = 60*60; //60*60sec default
       std::string bucket_marker;
       std::string user_marker;
 
@@ -1823,11 +1844,6 @@ class DB {
             bool assume_noent, bool modify_tail);
         int write_meta(const DoutPrefixProvider *dpp, uint64_t size,
 	    uint64_t accounted_size, std::map<std::string, bufferlist>& attrs);
-        /* Below are used to update mp data rows object name
-         * from meta to src object name on multipart upload
-         * completion
-         */
-        int update_mp_parts(const DoutPrefixProvider *dpp, rgw_obj_key new_obj_key);
       };
 
       struct Delete {

@@ -56,6 +56,9 @@ using namespace std;
       rc = -1;					\
       goto out;					\
     }							\
+    ldpp_dout(dpp, 20)<<"Bind parameter text for index("  \
+    <<index<<") in stmt("<<stmt<<") is "  \
+    <<str<< dendl;			     \
   }while(0);
 
 #define SQL_BIND_INT(dpp, stmt, index, num, sdb)			\
@@ -70,6 +73,9 @@ using namespace std;
       rc = -1;					\
       goto out;					\
     }							\
+    ldpp_dout(dpp, 20)<<"Bind parameter int for index("  \
+    <<index<<") in stmt("<<stmt<<") is "  \
+    <<num<< dendl;			     \
   }while(0);
 
 #define SQL_BIND_BLOB(dpp, stmt, index, blob, size, sdb)		\
@@ -146,10 +152,66 @@ using namespace std;
     }					\
   }while(0);
 
+int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
+                                DBOpPrepareParams &p_params,
+                                DBOpParams* params)
+{
+  std::string bucket;
+
+  if (!params)
+    return -1;
+
+  if (params->user_table.empty()) {
+    params->user_table = getUserTable();
+  }
+  if (params->user_table.empty()) {
+    params->user_table = getUserTable();
+  }
+  if (params->bucket_table.empty()) {
+    params->bucket_table = getBucketTable();
+  }
+  if (params->quota_table.empty()) {
+    params->quota_table = getQuotaTable();
+  }
+  if (params->lc_entry_table.empty()) {
+    params->lc_entry_table = getLCEntryTable();
+  }
+  if (params->lc_head_table.empty()) {
+    params->lc_head_table = getLCHeadTable();
+  }
+
+  p_params.user_table = params->user_table;
+  p_params.bucket_table = params->bucket_table;
+  p_params.quota_table = params->quota_table;
+  p_params.lc_entry_table = params->lc_entry_table;
+  p_params.lc_head_table = params->lc_head_table;
+
+  p_params.op.query_str = params->op.query_str;
+
+  bucket = params->op.bucket.info.bucket.name;
+
+  if (!bucket.empty()) {
+    if (params->object_table.empty()) {
+      params->object_table = getObjectTable(bucket);
+    }
+    if (params->objectdata_table.empty()) {
+      params->objectdata_table = getObjectDataTable(bucket);
+    }
+    if (params->object_view.empty()) {
+      params->object_view = getObjectView(bucket);
+    }
+    p_params.object_table = params->object_table;
+    p_params.objectdata_table = params->objectdata_table;
+    p_params.object_view = params->object_view;
+  }
+
+  return 0;
+}
+
 static int list_callback(void *None, int argc, char **argv, char **aname)
 {
   int i;
-  for(i=0; i<argc; i++) {
+  for(i=0; i < argc; i++) {
     string arg = argv[i] ? argv[i] : "NULL";
     cout<<aname[i]<<" = "<<arg<<"\n";
   }
@@ -256,7 +318,7 @@ enum GetObject {
   ObjAttrs,
   HeadSize,
   MaxHeadSize,
-  Prefix,
+  ObjID,
   TailInstance,
   HeadPlacementRuleName,
   HeadPlacementRuleStorageClass,
@@ -444,7 +506,7 @@ static int list_object(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt
   SQL_DECODE_BLOB_PARAM(dpp, stmt, ObjAttrs, op.obj.state.attrset, sdb);
   op.obj.head_size = sqlite3_column_int(stmt, HeadSize); 
   op.obj.max_head_size = sqlite3_column_int(stmt, MaxHeadSize); 
-  op.obj.obj_id = (const char*)sqlite3_column_text(stmt, Prefix);
+  op.obj.obj_id = (const char*)sqlite3_column_text(stmt, ObjID);
   op.obj.tail_instance = (const char*)sqlite3_column_text(stmt, TailInstance);
   op.obj.head_placement_rule.name = (const char*)sqlite3_column_text(stmt, HeadPlacementRuleName);
   op.obj.head_placement_rule.storage_class = (const char*)sqlite3_column_text(stmt, HeadPlacementRuleStorageClass);
@@ -754,6 +816,22 @@ int SQLiteDB::createObjectTable(const DoutPrefixProvider *dpp, DBOpParams *param
   return ret;
 }
 
+int SQLiteDB::createObjectView(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("ObjectView", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateObjectView failed " << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateObjectView suceeded " << dendl;
+
+  return ret;
+}
+
 int SQLiteDB::createQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params)
 {
   int ret = -1;
@@ -1023,7 +1101,7 @@ int SQLInsertUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *par
     goto out;
   }
 
-  p_params.user_table = params->user_table;
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertUser");
 out:
@@ -1153,7 +1231,7 @@ int SQLRemoveUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *par
     goto out;
   }
 
-  p_params.user_table = params->user_table;
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveUser");
 out:
@@ -1192,8 +1270,7 @@ int SQLGetUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params
     goto out;
   }
 
-  p_params.user_table = params->user_table;
-  p_params.op.query_str = params->op.query_str;
+  InitPrepareParams(dpp, p_params, params);
 
   if (params->op.query_str == "email") { 
     SQL_PREPARE(dpp, p_params, sdb, email_stmt, ret, "PrepareGetUser");
@@ -1274,7 +1351,7 @@ int SQLInsertBucket::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *p
     goto out;
   }
 
-  p_params.bucket_table = params->bucket_table;
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertBucket");
 
@@ -1382,12 +1459,20 @@ int SQLInsertBucket::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *p
   int ret = -1;
   class SQLObjectOp *ObPtr = NULL;
   string bucket_name = params->op.bucket.info.bucket.name;
+  struct DBOpPrepareParams p_params = PrepareParams;
 
   ObPtr = new SQLObjectOp(sdb, ctx());
 
   objectmapInsert(dpp, bucket_name, ObPtr);
 
   SQL_EXECUTE(dpp, params, stmt, NULL);
+
+  /* Once Bucket is inserted created corresponding object(&data) tables
+   */
+  InitPrepareParams(dpp, p_params, params);
+
+  (void)createObjectTable(dpp, params);
+  (void)createObjectDataTable(dpp, params);
 out:
   return ret;
 }
@@ -1402,8 +1487,7 @@ int SQLUpdateBucket::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *p
     goto out;
   }
 
-  p_params.op.query_str = params->op.query_str;
-  p_params.bucket_table = params->bucket_table;
+  InitPrepareParams(dpp, p_params, params);
 
   if (params->op.query_str == "attrs") { 
     SQL_PREPARE(dpp, p_params, sdb, attrs_stmt, ret, "PrepareUpdateBucket");
@@ -1557,7 +1641,7 @@ int SQLRemoveBucket::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *p
     goto out;
   }
 
-  p_params.bucket_table = params->bucket_table;
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveBucket");
 
@@ -1600,8 +1684,7 @@ int SQLGetBucket::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *para
     goto out;
   }
 
-  p_params.bucket_table = params->bucket_table;
-  p_params.user_table = params->user_table;
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetBucket");
 
@@ -1649,9 +1732,8 @@ int SQLListUserBuckets::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams
     goto out;
   }
 
-  p_params.bucket_table = params->bucket_table;
+  InitPrepareParams(dpp, p_params, params);
 
-  p_params.op.query_str = params->op.query_str;
   if (params->op.query_str == "all") { 
     SQL_PREPARE(dpp, p_params, sdb, all_stmt, ret, "PrepareListUserBuckets");
   }else {
@@ -1707,20 +1789,13 @@ int SQLPutObject::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *para
 {
   int ret = -1;
   struct DBOpPrepareParams p_params = PrepareParams;
-  struct DBOpParams copy = *params;
-  string bucket_name = params->op.bucket.info.bucket.name;
 
   if (!*sdb) {
     ldpp_dout(dpp, 0)<<"In SQLPutObject - no db" << dendl;
     goto out;
   }
 
-  if (p_params.object_table.empty()) {
-    p_params.object_table = getObjectTable(bucket_name);
-  }
-  params->object_table = p_params.object_table;
-  (void)createObjectTable(dpp, params);
-
+  InitPrepareParams(dpp, p_params, params);
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PreparePutObject");
 
 out:
@@ -1895,20 +1970,13 @@ int SQLDeleteObject::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *p
 {
   int ret = -1;
   struct DBOpPrepareParams p_params = PrepareParams;
-  struct DBOpParams copy = *params;
-  string bucket_name = params->op.bucket.info.bucket.name;
 
   if (!*sdb) {
     ldpp_dout(dpp, 0)<<"In SQLDeleteObject - no db" << dendl;
     goto out;
   }
 
-  if (p_params.object_table.empty()) {
-    p_params.object_table = getObjectTable(bucket_name);
-  }
-  params->object_table = p_params.object_table;
-  (void)createObjectTable(dpp, params);
-
+  InitPrepareParams(dpp, p_params, params);
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareDeleteObject");
 
 out:
@@ -1946,20 +2014,13 @@ int SQLGetObject::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *para
 {
   int ret = -1;
   struct DBOpPrepareParams p_params = PrepareParams;
-  struct DBOpParams copy = *params;
-  string bucket_name = params->op.bucket.info.bucket.name;
 
   if (!*sdb) {
     ldpp_dout(dpp, 0)<<"In SQLGetObject - no db" << dendl;
     goto out;
   }
 
-  if (p_params.object_table.empty()) {
-    p_params.object_table = getObjectTable(bucket_name);
-  }
-  params->object_table = p_params.object_table;
-  (void)createObjectTable(dpp, params);
-
+  InitPrepareParams(dpp, p_params, params);
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetObject");
 
 out:
@@ -2006,12 +2067,7 @@ int SQLUpdateObject::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *p
     goto out;
   }
 
-  if (p_params.object_table.empty()) {
-    bucket_name = params->op.bucket.info.bucket.name;
-    p_params.object_table = getObjectTable(bucket_name);
-  }
-
-  p_params.op.query_str = params->op.query_str;
+  InitPrepareParams(dpp, p_params, params);
 
   if (params->op.query_str == "omap") {
     SQL_PREPARE(dpp, p_params, sdb, omap_stmt, ret, "PrepareUpdateObject");
@@ -2243,26 +2299,13 @@ int SQLListBucketObjects::Prepare(const DoutPrefixProvider *dpp, struct DBOpPara
 {
   int ret = -1;
   struct DBOpPrepareParams p_params = PrepareParams;
-  struct DBOpParams copy = *params;
-  string bucket_name;
 
   if (!*sdb) {
     ldpp_dout(dpp, 0)<<"In SQLListBucketObjects - no db" << dendl;
     goto out;
   }
 
-  if (p_params.object_table.empty()) {
-    bucket_name = params->op.bucket.info.bucket.name;
-    p_params.object_table = getObjectTable(bucket_name);
-  }
-
-  /* XXX: instead of creating..maybe keep object count in bucket info
-   * and return if there is no object table created.
-   */
-  params->object_table = p_params.object_table;
-  (void)createObjectTable(dpp, params);
-
-  p_params.op.query_str = params->op.query_str;
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListBucketObjects");
 
@@ -2302,23 +2345,13 @@ int SQLPutObjectData::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *
 {
   int ret = -1;
   struct DBOpPrepareParams p_params = PrepareParams;
-  struct DBOpParams copy = *params;
-  string bucket_name = params->op.bucket.info.bucket.name;
 
   if (!*sdb) {
     ldpp_dout(dpp, 0)<<"In SQLPutObjectData - no db" << dendl;
     goto out;
   }
 
-  if (p_params.object_table.empty()) {
-    p_params.object_table = getObjectTable(bucket_name);
-  }
-  if (p_params.objectdata_table.empty()) {
-    p_params.objectdata_table = getObjectDataTable(bucket_name);
-  }
-  params->object_table = p_params.object_table;
-  params->objectdata_table = p_params.objectdata_table;
-  (void)createObjectDataTable(dpp, params);
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PreparePutObjectData");
 
@@ -2390,25 +2423,13 @@ int SQLUpdateObjectData::Prepare(const DoutPrefixProvider *dpp, struct DBOpParam
 {
   int ret = -1;
   struct DBOpPrepareParams p_params = PrepareParams;
-  struct DBOpParams copy = *params;
-  string bucket_name = params->op.bucket.info.bucket.name;
 
   if (!*sdb) {
     ldpp_dout(dpp, 0)<<"In SQLUpdateObjectData - no db" << dendl;
     goto out;
   }
 
-  if (p_params.object_table.empty()) {
-    p_params.object_table = getObjectTable(bucket_name);
-  }
-  if (p_params.objectdata_table.empty()) {
-    p_params.objectdata_table = getObjectDataTable(bucket_name);
-  }
-  params->bucket_table = p_params.bucket_table;
-  params->object_table = p_params.object_table;
-  params->objectdata_table = p_params.objectdata_table;
-  (void)createObjectDataTable(dpp, params);
-
+  InitPrepareParams(dpp, p_params, params);
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareUpdateObjectData");
 
 out:
@@ -2422,32 +2443,19 @@ int SQLUpdateObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *
   struct DBOpPrepareParams p_params = PrepareParams;
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name.c_str(), sdb);
-
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance.c_str(), sdb);
-
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_ns.c_str(), sdb);
-
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.ns.c_str(), sdb);
-
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
-
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.new_obj_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.obj_id.c_str(), sdb);
 
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.new_obj_key.name.c_str(), sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.new_obj_instance.c_str(), sdb);
-
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.new_obj_key.instance.c_str(), sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.new_obj_ns.c_str(), sdb);
-
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.new_obj_key.ns.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.mtime.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.state.mtime, sdb);
 
 out:
   return rc;
@@ -2466,24 +2474,13 @@ int SQLGetObjectData::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *
 {
   int ret = -1;
   struct DBOpPrepareParams p_params = PrepareParams;
-  struct DBOpParams copy = *params;
-  string bucket_name = params->op.bucket.info.bucket.name;
 
   if (!*sdb) {
     ldpp_dout(dpp, 0)<<"In SQLGetObjectData - no db" << dendl;
     goto out;
   }
 
-  if (p_params.object_table.empty()) {
-    p_params.object_table = getObjectTable(bucket_name);
-  }
-  if (p_params.objectdata_table.empty()) {
-    p_params.objectdata_table = getObjectDataTable(bucket_name);
-  }
-  params->object_table = p_params.object_table;
-  params->objectdata_table = p_params.objectdata_table;
-  (void)createObjectDataTable(dpp, params);
-
+  InitPrepareParams(dpp, p_params, params);
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetObjectData");
 
 out:
@@ -2525,24 +2522,13 @@ int SQLDeleteObjectData::Prepare(const DoutPrefixProvider *dpp, struct DBOpParam
 {
   int ret = -1;
   struct DBOpPrepareParams p_params = PrepareParams;
-  struct DBOpParams copy = *params;
-  string bucket_name = params->op.bucket.info.bucket.name;
 
   if (!*sdb) {
     ldpp_dout(dpp, 0)<<"In SQLDeleteObjectData - no db" << dendl;
     goto out;
   }
 
-  if (p_params.object_table.empty()) {
-    p_params.object_table = getObjectTable(bucket_name);
-  }
-  if (p_params.objectdata_table.empty()) {
-    p_params.objectdata_table = getObjectDataTable(bucket_name);
-  }
-  params->object_table = p_params.object_table;
-  params->objectdata_table = p_params.objectdata_table;
-  (void)createObjectDataTable(dpp, params);
-
+  InitPrepareParams(dpp, p_params, params);
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareDeleteObjectData");
 
 out:
@@ -2584,24 +2570,13 @@ int SQLDeleteStaleObjectData::Prepare(const DoutPrefixProvider *dpp, struct DBOp
 {
   int ret = -1;
   struct DBOpPrepareParams p_params = PrepareParams;
-  struct DBOpParams copy = *params;
-  string bucket_name = params->op.bucket.info.bucket.name;
 
   if (!*sdb) {
     ldpp_dout(dpp, 0)<<"In SQLDeleteStaleObjectData - no db" << dendl;
     goto out;
   }
 
-  if (p_params.object_table.empty()) {
-    p_params.object_table = getObjectTable(bucket_name);
-  }
-  if (p_params.objectdata_table.empty()) {
-    p_params.objectdata_table = getObjectDataTable(bucket_name);
-  }
-  params->object_table = p_params.object_table;
-  params->objectdata_table = p_params.objectdata_table;
-  (void)createObjectDataTable(dpp, params);
-
+  InitPrepareParams(dpp, p_params, params);
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareDeleteStaleObjectData");
 
 out:
@@ -2640,7 +2615,7 @@ int SQLInsertLCEntry::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *
     goto out;
   }
 
-  p_params.lc_entry_table = params->lc_entry_table;
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertLCEntry");
 
@@ -2689,7 +2664,7 @@ int SQLRemoveLCEntry::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *
     goto out;
   }
 
-  p_params.lc_entry_table = params->lc_entry_table;
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveLCEntry");
 
@@ -2733,8 +2708,7 @@ int SQLGetLCEntry::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *par
     goto out;
   }
 
-  p_params.lc_entry_table = params->lc_entry_table;
-  p_params.op.query_str = params->op.query_str;
+  InitPrepareParams(dpp, p_params, params);
 
   if (params->op.query_str == "get_next_entry") {
     pstmt = &next_stmt;
@@ -2795,7 +2769,7 @@ int SQLListLCEntries::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *
     goto out;
   }
 
-  p_params.lc_entry_table = params->lc_entry_table;
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareListLCEntries");
 
@@ -2841,7 +2815,7 @@ int SQLInsertLCHead::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *p
     goto out;
   }
 
-  p_params.lc_head_table = params->lc_head_table;
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertLCHead");
 
@@ -2887,7 +2861,7 @@ int SQLRemoveLCHead::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *p
     goto out;
   }
 
-  p_params.lc_head_table = params->lc_head_table;
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareRemoveLCHead");
 
@@ -2927,7 +2901,7 @@ int SQLGetLCHead::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *para
     goto out;
   }
 
-  p_params.lc_head_table = params->lc_head_table;
+  InitPrepareParams(dpp, p_params, params);
 
   SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareGetLCHead");
 
