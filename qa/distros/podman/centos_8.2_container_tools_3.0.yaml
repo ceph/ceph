@@ -1,5 +1,4 @@
 os_type: centos
-os_version: "8.2"
 overrides:
   selinux:
     whitelist:
