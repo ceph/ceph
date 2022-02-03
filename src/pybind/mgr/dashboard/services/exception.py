@@ -4,6 +4,7 @@ import json
 import logging
 from contextlib import contextmanager
 
+import cephfs
 import cherrypy
 import rados
 import rbd
@@ -53,6 +54,14 @@ def dashboard_exception_handler(handler, *args, **kwargs):
     except Exception as error:
         logger.exception('Internal Server Error')
         raise error
+
+
+@contextmanager
+def handle_cephfs_error():
+    try:
+        yield
+    except cephfs.OSError as e:
+        raise DashboardException(e, component='cephfs') from e
 
 
 @contextmanager
