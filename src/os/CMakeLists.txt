@@ -92,8 +92,8 @@ if(WITH_LTTNG)
 endif()
 
 if(WITH_JAEGER)
-  add_dependencies(os ${jaeger_base})
-  target_link_libraries(os ${jaeger_base})
+  add_dependencies(os jaeger_base)
+  target_link_libraries(os jaeger_base)
 endif()
 
 target_link_libraries(os kv)

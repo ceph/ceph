@@ -253,8 +253,8 @@ if(WITH_LTTNG)
 endif()
 
 if(WITH_JAEGER)
-  add_dependencies(rgw_common ${jaeger_base})
-  target_link_libraries(rgw_common PUBLIC ${jaeger_base})
+  add_dependencies(rgw_common jaeger_base)
+  target_link_libraries(rgw_common PUBLIC jaeger_base)
 endif()
 
 if(WITH_RADOSGW_DBSTORE)

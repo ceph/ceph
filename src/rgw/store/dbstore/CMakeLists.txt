@@ -21,7 +21,7 @@ target_include_directories(dbstore_lib PUBLIC "${CMAKE_SOURCE_DIR}/src/fmt/inclu
 target_include_directories(dbstore_lib PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
 set(link_targets spawn)
 if(WITH_JAEGER)
-  list(APPEND link_targets ${jaeger_base})
+  list(APPEND link_targets jaeger_base)
 endif()
 target_link_libraries(dbstore_lib PUBLIC ${link_targets})
 
