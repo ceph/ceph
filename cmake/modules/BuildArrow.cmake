@@ -11,12 +11,9 @@ function(build_arrow)
   list(APPEND arrow_CMAKE_ARGS -DARROW_BUILD_SHARED=OFF)
   list(APPEND arrow_CMAKE_ARGS -DARROW_BUILD_STATIC=ON)
 
-  if(ALLOCATOR STREQUAL "jemalloc")
-    list(APPEND arrow_CMAKE_ARGS -DARROW_JEMALLOC=ON)
-    list(APPEND arrow_INTERFACE_LINK_LIBRARIES JeMalloc::JeMalloc)
-  else()
-    list(APPEND arrow_CMAKE_ARGS -DARROW_JEMALLOC=OFF)
-  endif()
+  # arrow only supports its own bundled version of jemalloc, so can't
+  # share the version ceph is using
+  list(APPEND arrow_CMAKE_ARGS -DARROW_JEMALLOC=OFF)
 
   if (NOT WITH_SYSTEM_UTF8PROC)
     # forward utf8proc_ROOT from build_utf8proc()
