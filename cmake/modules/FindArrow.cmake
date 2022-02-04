@@ -32,6 +32,9 @@
 #  ARROW_VERSION_MINOR, minor version of found Arrow
 #  ARROW_VERSION_PATCH, patch version of found Arrow
 
+# cbodley copied this from the arrow submodule at v6.0.1
+# cbodley added the import target Arrow::Arrow to match build_arrow()
+
 if(DEFINED ARROW_FOUND)
   return()
 endif()
@@ -463,4 +466,12 @@ if(Arrow_FOUND AND NOT Arrow_FIND_QUIETLY)
   message(STATUS "Found the Arrow core shared library: ${ARROW_SHARED_LIB}")
   message(STATUS "Found the Arrow core import library: ${ARROW_IMPORT_LIB}")
   message(STATUS "Found the Arrow core static library: ${ARROW_STATIC_LIB}")
+endif()
+
+if(Arrow_FOUND AND NOT TARGET Arrow::Arrow)
+  add_library(Arrow::Arrow SHARED IMPORTED)
+  set_target_properties(Arrow::Arrow PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${ARROW_INCLUDE_DIR}"
+    IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
+    IMPORTED_LOCATION "${ARROW_SHARED_LIB}")
 endif()
