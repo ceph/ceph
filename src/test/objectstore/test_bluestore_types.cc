@@ -7,6 +7,7 @@
 #include "include/stringify.h"
 #include "common/ceph_time.h"
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/simple_bitmap.h"
 #include "os/bluestore/AvlAllocator.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -47,6 +48,7 @@ TEST(bluestore, sizeof) {
   P(bufferptr);
   P(range_seg_t);
   P(sb_info_t);
+  P(SimpleBitmap);
   cout << "map<uint64_t,uint64_t>\t" << sizeof(map<uint64_t,uint64_t>) << std::endl;
   cout << "map<char,char>\t" << sizeof(map<char,char>) << std::endl;
 }
@@ -1806,6 +1808,344 @@ TEST(bluestore_blob_t, wrong_map_bl_in_51682)
         ++expected_pos;
       });
     ASSERT_EQ(expected_pos, num_expected_entries);
+  }
+}
+
+//---------------------------------------------------------------------------------
+static int verify_extent(const extent_t & ext, const extent_t *ext_arr, uint64_t ext_arr_size, uint64_t idx)
+{
+  const extent_t & ext_ref = ext_arr[idx];
+  if (ext.offset == ext_ref.offset && ext.length == ext_ref.length) {
+    return 0;
+  } else {
+    std::cerr << "mismatch was found at index " << idx << std::endl;
+    if (ext.length == 0) {
+      std::cerr << "Null extent was returned at idx = " << idx << std::endl;
+    }
+    unsigned start = std::max(((int32_t)(idx)-3), 0);
+    unsigned end   = std::min(idx+3, ext_arr_size);
+    for (unsigned j = start; j < end; j++) {
+      const extent_t & ext_ref = ext_arr[j];
+      std::cerr << j << ") ref_ext = [" << ext_ref.offset << ", " << ext_ref.length << "]" << std::endl;
+    }
+    std::cerr << idx << ") ext     = [" << ext.offset     << ", " << ext.length     << "]" << std::endl;
+    return -1;
+  }
+}
+
+//---------------------------------------------------------------------------------
+static int test_extents(uint64_t index, extent_t *ext_arr, uint64_t ext_arr_size, SimpleBitmap& sbmap, bool set)
+{
+  const uint64_t  MAX_JUMP_BIG   = 1523;
+  const uint64_t  MAX_JUMP_SMALL =   19;
+  const uint64_t  MAX_LEN_BIG    =  523;
+  const uint64_t  MAX_LEN_SMALL  =   23;
+
+  uint64_t n      = sbmap.get_size();
+  uint64_t offset = 0;
+  unsigned length, jump, i;
+  for (i = 0; i < ext_arr_size; i++) {
+    if (i & 3) {
+      jump = std::rand() % MAX_JUMP_BIG;
+    } else {
+      jump = std::rand() % MAX_JUMP_SMALL;
+    }
+    offset += jump;
+    if (i & 1) {
+      length = std::rand() % MAX_LEN_BIG;
+    } else {
+      length = std::rand() % MAX_LEN_SMALL;
+    }
+    // make sure no zero length will be used
+    length++;
+    if (offset + length >= n) {
+      break;
+    }
+
+    bool success;
+    if (set) {
+      success = sbmap.set(offset, length);
+    } else {
+      success = sbmap.clr(offset, length);
+    }
+    if (!success) {
+      std::cerr << "Failed sbmap." << (set ? "set(" : "clr(") << offset << ", " << length << ")"<< std::endl;
+      return -1;
+    }
+
+    // if this is not the first entry and no jump -> merge extents
+    if ( (i==0) || (jump > 0) ) {
+      ext_arr[i] = {offset, length};
+    } else {
+      // merge 2 extents
+      i --;
+      ext_arr[i].length += length;
+    }
+    offset += length;
+  }
+  unsigned arr_size = std::min((uint64_t)i, ext_arr_size);
+  std::cout << std::hex << std::right;
+  std::cout << "[" << index << "] " << (set ? "Set::" : "Clr::") << " extents count = 0x" << arr_size;
+  std::cout << std::dec << std::endl;
+
+  offset = 0;
+  extent_t ext;
+  for(unsigned i = 0; i < arr_size; i++) {
+    if (set) {
+      ext = sbmap.get_next_set_extent(offset);
+    } else {
+      ext = sbmap.get_next_clr_extent(offset);
+    }
+
+    if (verify_extent(ext, ext_arr, ext_arr_size, i) != 0) {
+      return -1;
+    }
+    offset = ext.offset + ext.length;
+  }
+
+  if (set) {
+    ext = sbmap.get_next_set_extent(offset);
+  } else {
+    ext = sbmap.get_next_clr_extent(offset);
+  }
+  if (ext.length == 0) {
+    return 0;
+  } else {
+    std::cerr << "sbmap.get_next_" << (set ? "set" : "clr") << "_extent(" << offset << ") return length = " << ext.length << std::endl;
+    return -1;
+  }
+}
+
+//---------------------------------------------------------------------------------
+TEST(SimpleBitmap, basic)
+{
+  const uint64_t MAX_EXTENTS_COUNT = 7131177;
+  std::unique_ptr<extent_t[]> ext_arr = std::make_unique<extent_t[]>(MAX_EXTENTS_COUNT);
+  ASSERT_TRUE(ext_arr != nullptr);
+  const uint64_t BIT_COUNT = 4ULL << 30; // 4Gb = 512MB
+  SimpleBitmap sbmap(g_ceph_context, BIT_COUNT);
+
+  // use current time as seed for random generator
+  std::srand(std::time(nullptr));
+  for (unsigned i = 0; i < 3; i++ ) {
+    memset(ext_arr.get(), 0, sizeof(extent_t)*MAX_EXTENTS_COUNT);
+    sbmap.clear_all();
+    ASSERT_TRUE(test_extents(i, ext_arr.get(), MAX_EXTENTS_COUNT, sbmap, true) == 0);
+
+    memset(ext_arr.get(), 0, sizeof(extent_t)*MAX_EXTENTS_COUNT);
+    sbmap.set_all();
+    ASSERT_TRUE(test_extents(i, ext_arr.get(), MAX_EXTENTS_COUNT, sbmap, false) == 0);
+  }
+}
+
+//---------------------------------------------------------------------------------
+static int test_intersections(unsigned test_idx, SimpleBitmap &sbmap, uint8_t map[], uint64_t map_size)
+{
+  const uint64_t  MAX_LEN_BIG    =  523;
+  const uint64_t  MAX_LEN_SMALL  =   23;
+
+  bool     success;
+  uint64_t set_op_count = 0, clr_op_count = 0;
+  unsigned length, i;
+  for (i = 0; i < map_size / (MAX_LEN_BIG*2); i++) {
+    uint64_t offset = (std::rand() % (map_size - 1));
+    if (i & 1) {
+      length = std::rand() % MAX_LEN_BIG;
+    } else {
+      length = std::rand() % MAX_LEN_SMALL;
+    }
+    // make sure no zero length will be used
+    length++;
+    if (offset + length >= map_size) {
+      continue;
+    }
+    // 2:1 set/clr
+    bool set = (std::rand() % 3);
+    if (set) {
+      success = sbmap.set(offset, length);
+      memset(map+offset, 0xFF, length);
+      set_op_count++;
+    } else {
+      success = sbmap.clr(offset, length);
+      memset(map+offset, 0x0, length);
+      clr_op_count++;
+    }
+    if (!success) {
+      std::cerr << "Failed sbmap." << (set ? "set(" : "clr(") << offset << ", " << length << ")"<< std::endl;
+      return -1;
+    }
+  }
+
+  uint64_t set_bit_count = 0;
+  uint64_t clr_bit_count = 0;
+  for(uint64_t idx = 0; idx < map_size; idx++) {
+    if (map[idx]) {
+      set_bit_count++;
+      success = sbmap.bit_is_set(idx);
+    } else {
+      clr_bit_count++;
+      success = sbmap.bit_is_clr(idx);
+    }
+    if (!success) {
+      std::cerr << "expected: sbmap.bit_is_" << (map[idx] ? "set(" : "clr(") << idx << ")"<< std::endl;
+      return -1;
+    }
+
+  }
+  std::cout << std::hex << std::right << __func__ ;
+  std::cout << " [" << test_idx << "] set_bit_count = 0x" << std::setfill('0') << std::setw(8) << set_bit_count
+	    << ", clr_bit_count = 0x" << std::setfill('0') << std::setw(8) << clr_bit_count
+	    << ", sum = 0x" << set_bit_count + clr_bit_count  << std::endl;
+  std::cout << std::dec;
+  uint64_t offset = 0;
+  for(uint64_t i = 0; i < (set_op_count + clr_op_count); i++) {
+    extent_t ext = sbmap.get_next_set_extent(offset);
+    //std::cout << "set_ext:: " << i << ") [" << ext.offset     << ", " << ext.length     << "]" << std::endl;
+    for (uint64_t idx = ext.offset; idx < ext.offset + ext.length; idx++) {
+      if (map[idx] != 0xFF) {
+	std::cerr << "map[" << idx << "] is clear, but extent [" << ext.offset     << ", " << ext.length     << "] is set"  << std::endl;
+	return -1;
+      }
+    }
+    offset = ext.offset + ext.length;
+  }
+
+  offset = 0;
+  for(uint64_t i = 0; i < (set_op_count + clr_op_count); i++) {
+    extent_t ext = sbmap.get_next_clr_extent(offset);
+    //std::cout << "clr_ext:: " << i << ") [" << ext.offset     << ", " << ext.length     << "]" << std::endl;
+    for (uint64_t idx = ext.offset; idx < ext.offset + ext.length; idx++) {
+      if (map[idx] ) {
+	std::cerr << "map[" << idx << "] is set, but extent [" << ext.offset     << ", " << ext.length     << "] is free"  << std::endl;
+	return -1;
+      }
+    }
+    offset = ext.offset + ext.length;
+  }
+
+  return 0;
+}
+
+//---------------------------------------------------------------------------------
+TEST(SimpleBitmap, intersection)
+{
+  const uint64_t MAP_SIZE = 1ULL << 30;  // 1G
+  SimpleBitmap sbmap(g_ceph_context, MAP_SIZE);
+
+  // use current time as seed for random generator
+  std::srand(std::time(nullptr));
+
+  std::unique_ptr<uint8_t[]> map = std::make_unique<uint8_t[]> (MAP_SIZE);
+  ASSERT_TRUE(map != nullptr);
+
+  for (unsigned i = 0; i < 1; i++ ) {
+    sbmap.clear_all();
+    memset(map.get(), 0, MAP_SIZE);
+    ASSERT_TRUE(test_intersections(i, sbmap, map.get(), MAP_SIZE) == 0);
+
+    sbmap.set_all();
+    memset(map.get(), 0xFF, MAP_SIZE);
+    ASSERT_TRUE(test_intersections(i, sbmap, map.get(), MAP_SIZE) == 0);
+  }
+}
+
+
+//---------------------------------------------------------------------------------
+static int test_extents_boundaries(uint64_t index, extent_t *ext_arr, uint64_t ext_arr_size, SimpleBitmap& sbmap, bool set)
+{
+  uint64_t n      = sbmap.get_size();
+  uint64_t offset = 0, k = 0;
+  for(unsigned i = 0; i < 64; i++) {
+    offset += i;
+    if (offset >= n) {
+      break;
+    }
+
+    for(unsigned length = 1; length <= 128; length++) {
+      if (offset + length >= n) {
+	break;
+      }
+
+      if (k >= ext_arr_size) {
+	break;
+      }
+      bool success;
+      if (set) {
+	success = sbmap.set(offset, length);
+      } else {
+	success = sbmap.clr(offset, length);
+      }
+      if (!success) {
+	std::cerr << "Failed sbmap." << (set ? "set(" : "clr(") << offset << ", " << length << ")"<< std::endl;
+	return -1;
+      }
+      ext_arr[k++] = {offset, length};
+      if (length < 64) {
+	offset += 64;
+      } else {
+	offset += 128;
+      }
+    }
+    if (k >= ext_arr_size) {
+      break;
+    }
+  }
+
+  unsigned arr_size = std::min((uint64_t)k, ext_arr_size);
+  std::cout << std::hex << std::right << __func__ ;
+  std::cout << " [" << index << "] " << (set ? "Set::" : "Clr::") << " extents count = 0x" << arr_size;
+  std::cout << std::dec << std::endl;
+
+  offset = 0;
+  extent_t ext;
+  for(unsigned i = 0; i < arr_size; i++) {
+    if (set) {
+      ext = sbmap.get_next_set_extent(offset);
+    } else {
+      ext = sbmap.get_next_clr_extent(offset);
+    }
+
+    if (verify_extent(ext, ext_arr, ext_arr_size, i) != 0) {
+      return -1;
+    }
+    offset = ext.offset + ext.length;
+  }
+
+  if (set) {
+    ext = sbmap.get_next_set_extent(offset);
+  } else {
+    ext = sbmap.get_next_clr_extent(offset);
+  }
+  if (ext.length == 0) {
+    return 0;
+  } else {
+    std::cerr << "sbmap.get_next_" << (set ? "set" : "clr") << "_extent(" << offset << ") return length = " << ext.length << std::endl;
+    return -1;
+  }
+
+}
+
+//---------------------------------------------------------------------------------
+TEST(SimpleBitmap, boundaries)
+{
+  const uint64_t MAX_EXTENTS_COUNT = 64 << 10;
+  std::unique_ptr<extent_t[]> ext_arr = std::make_unique<extent_t[]>(MAX_EXTENTS_COUNT);
+  ASSERT_TRUE(ext_arr != nullptr);
+
+  // use current time as seed for random generator
+  std::srand(std::time(nullptr));
+
+  uint64_t bit_count = 32 << 20; // 32Mb = 4MB
+  unsigned count = 0;
+  for (unsigned i = 0; i < 64; i++) {
+    SimpleBitmap sbmap(g_ceph_context, bit_count+i);
+    memset(ext_arr.get(), 0, sizeof(extent_t)*MAX_EXTENTS_COUNT);
+    sbmap.clear_all();
+    ASSERT_TRUE(test_extents_boundaries(count, ext_arr.get(), MAX_EXTENTS_COUNT, sbmap, true) == 0);
+
+    memset(ext_arr.get(), 0, sizeof(extent_t)*MAX_EXTENTS_COUNT);
+    sbmap.set_all();
+    ASSERT_TRUE(test_extents_boundaries(count++, ext_arr.get(), MAX_EXTENTS_COUNT, sbmap, false) == 0);
   }
 }
 

@@ -59,6 +59,7 @@
 class Allocator;
 class FreelistManager;
 class BlueStoreRepairer;
+class SimpleBitmap;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 
@@ -2222,9 +2223,9 @@ private:
   size_t block_size_order = 0; ///< bits to shift to get block size
   uint64_t optimal_io_size = 0;///< best performance io size for block device
 
-  uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
-  ///< bits for min_alloc_size
-  uint8_t min_alloc_size_order = 0;
+  uint64_t min_alloc_size;     ///< minimum allocation unit (power of 2)
+  uint8_t  min_alloc_size_order = 0;///< bits to shift to get min_alloc_size
+  uint64_t min_alloc_size_mask;///< mask for fast checking of allocation alignment
   static_assert(std::numeric_limits<uint8_t>::max() >
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
@@ -3651,8 +3652,7 @@ public:
     const BlueStore::FSCK_ObjectCtx& ctx);
 #ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
   int  push_allocation_to_rocksdb();
-  int  read_allocation_from_drive_for_bluestore_tool(bool test_store_and_restore);
-  int  read_allocation_from_drive_for_fsck() { return read_allocation_from_drive_for_bluestore_tool(false); }
+  int  read_allocation_from_drive_for_bluestore_tool();
 #endif
 private:
 #define MAX_BLOBS_IN_ONODE 128
@@ -3730,8 +3730,10 @@ private:
   int  __restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
   int  restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
   int  read_allocation_from_drive_on_startup();
-  int  reconstruct_allocations(Allocator* allocator, read_alloc_stats_t &stats);
-  int  read_allocation_from_onodes(Allocator* allocator, read_alloc_stats_t& stats);
+  int  reconstruct_allocations(SimpleBitmap *smbmp, read_alloc_stats_t &stats);
+  int  read_allocation_from_onodes(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
+  void read_allocation_from_single_onode(SimpleBitmap *smbmp, BlueStore::OnodeRef& onode_ref, read_alloc_stats_t&  stats);
+  void set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offset, uint64_t length);
   int  commit_to_null_manager();
   int  commit_to_real_manager();
   int  db_cleanup(int ret);
@@ -3740,7 +3742,7 @@ private:
   Allocator* clone_allocator_without_bluefs(Allocator *src_allocator);
   Allocator* initialize_allocator_from_freelist(FreelistManager *real_fm);
   void copy_allocator_content_to_fm(Allocator *allocator, FreelistManager *real_fm);
-  void read_allocation_from_single_onode(Allocator* allocator, BlueStore::OnodeRef& onode_ref, read_alloc_stats_t&  stats);
+
 
   void _fsck_check_object_omap(FSCKDepth depth,
     OnodeRef& o,
