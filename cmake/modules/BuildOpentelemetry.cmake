@@ -6,14 +6,14 @@ function(target_create _target _lib)
 endfunction()
 
 function(build_opentelemetry)
-  set(opentelemetry_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/opentelemetry-cpp")
+  set(opentelemetry_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/opentelemetry-cpp")
   set(opentelemetry_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/opentelemetry-cpp")
   set(opentelemetry_cpp_targets opentelemetry_trace opentelemetry_exporter_jaeger_trace)
   set(opentelemetry_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON
                                -DWITH_JAEGER=ON
                                -DBUILD_TESTING=OFF
                                -DWITH_EXAMPLES=OFF
-                               -DBoost_INCLUDE_DIR=${CMAKE_BINARY_DIR}/boost/include)
+			       -DBoost_INCLUDE_DIR=${CMAKE_BINARY_DIR}/boost/include)
 
   set(opentelemetry_libs
       ${opentelemetry_BINARY_DIR}/sdk/src/trace/libopentelemetry_trace.a

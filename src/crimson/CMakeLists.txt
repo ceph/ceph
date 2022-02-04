@@ -134,9 +134,9 @@ set(crimson_common_deps
   Boost::random
   json_spirit)
 
+set(crimson_common_public_deps crimson::cflags)
 if(WITH_JAEGER)
-  include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
-  list(APPEND crimson_common_deps ${jaeger_base})
+  list(APPEND crimson_common_public_deps jaeger_base)
 endif()
 
 if(NOT WITH_SYSTEM_BOOST)
@@ -145,7 +145,7 @@ endif()
 
 target_link_libraries(crimson-common
   PUBLIC
-    crimson::cflags
+    ${crimson_common_public_deps}
   PRIVATE
     crc32
     ${crimson_common_deps}
