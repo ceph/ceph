@@ -802,6 +802,22 @@ class TestMonitoring(object):
             with open(file) as f:
                 assert f.read() == content
 
+        # assert uid/gid after redeploy
+        new_uid = uid+1
+        new_gid = gid+1
+        cd.create_daemon_dirs(ctx,
+                              fsid,
+                              daemon_type,
+                              daemon_id,
+                              new_uid,
+                              new_gid,
+                              config=None,
+                              keyring=None)
+        for file,content in expected.items():
+            file = os.path.join(prefix, file)
+            assert os.stat(file).st_uid == new_uid
+            assert os.stat(file).st_gid == new_gid
+
 
 class TestBootstrap(object):
 
