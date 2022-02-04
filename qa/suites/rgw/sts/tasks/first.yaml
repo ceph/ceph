@@ -6,7 +6,7 @@ tasks:
 - s3tests:
     client.0:
       sts_tests: True
-      force-branch: ceph-master
+      force-branch: ceph-quincy
       rgw_server: client.0
       extra_attrs: ['webidentity_test']
 overrides:

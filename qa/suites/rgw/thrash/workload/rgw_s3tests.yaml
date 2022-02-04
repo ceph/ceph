@@ -1,7 +1,7 @@
 tasks:
 - s3tests:
     client.0:
-      force-branch: ceph-master
+      force-branch: ceph-quincy
       rgw_server: client.0
 overrides:
   ceph:
