@@ -492,17 +492,18 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 table = PrettyTable(
                     ['HOST', 'PATH', 'TYPE', 'TRANSPORT', 'RPM', 'DEVICE ID', 'SIZE',
                      'HEALTH', 'IDENT', 'FAULT',
-                     'AVAILABLE', 'REJECT REASONS'],
+                     'AVAILABLE', 'REFRESHED', 'REJECT REASONS'],
                     border=False)
             else:
                 table = PrettyTable(
                     ['HOST', 'PATH', 'TYPE', 'DEVICE ID', 'SIZE',
-                     'AVAILABLE', 'REJECT REASONS'],
+                     'AVAILABLE', 'REFRESHED', 'REJECT REASONS'],
                     border=False)
             table.align = 'l'
             table._align['SIZE'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
+            now = datetime_now()
             for host_ in sorted(inv_hosts, key=lambda h: h.name):  # type: InventoryHost
                 for d in sorted(host_.devices.devices, key=lambda d: d.path):  # type: Device
 
@@ -526,6 +527,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                                 display_map[led_ident],
                                 display_map[led_fail],
                                 display_map[d.available],
+                                nice_delta(now, d.created, ' ago'),
                                 ', '.join(d.rejected_reasons)
                             )
                         )
@@ -538,6 +540,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                                 d.device_id,
                                 format_dimless(d.sys_api.get('size', 0), 5),
                                 display_map[d.available],
+                                nice_delta(now, d.created, ' ago'),
                                 ', '.join(d.rejected_reasons)
                             )
                         )
