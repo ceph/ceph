@@ -28,7 +28,6 @@ typedef std::map<std::string_view, std::pair<std::string, config_source_t>> Pare
 static std::set<std::string_view> EXCLUDE_OPTIONS {
     "rbd_auto_exclusive_lock_until_manual_request",
     "rbd_default_format",
-    "rbd_default_map_options",
     "rbd_default_pool",
     "rbd_discard_on_zeroed_write_same",
     "rbd_op_thread_timeout",
