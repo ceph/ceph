@@ -44,6 +44,7 @@ TYPE(rgw_bucket_olh_log_entry)
 TYPE(rgw_usage_log_entry)
 
 #include "cls/rgw/cls_rgw_ops.h"
+TYPE(cls_rgw_lc_get_entry_ret)
 TYPE(rgw_cls_obj_prepare_op)
 TYPE(rgw_cls_obj_complete_op)
 TYPE(rgw_cls_list_op)
