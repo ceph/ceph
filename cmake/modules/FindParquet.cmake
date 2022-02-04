@@ -31,6 +31,9 @@
 #  PARQUET_SO_VERSION, shared object version of found Parquet such as "100"
 #  PARQUET_STATIC_LIB, path to libparquet.a
 
+# cbodley copied this from the arrow submodule at v6.0.1
+# cbodley added the import target Arrow::Parquet to match build_arrow()
+
 if(DEFINED PARQUET_FOUND)
   return()
 endif()
@@ -123,4 +126,12 @@ if(Parquet_FOUND AND NOT Parquet_FIND_QUIETLY)
   message(STATUS "Found the Parquet shared library: ${PARQUET_SHARED_LIB}")
   message(STATUS "Found the Parquet import library: ${PARQUET_IMPORT_LIB}")
   message(STATUS "Found the Parquet static library: ${PARQUET_STATIC_LIB}")
+endif()
+
+if(Parquet_FOUND AND NOT TARGET Arrow::Parquet)
+  add_library(Arrow::Parquet SHARED IMPORTED)
+  set_target_properties(Arrow::Parquet PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${PARQUET_INCLUDE_DIR}"
+    IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
+    IMPORTED_LOCATION "${PARQUET_SHARED_LIB}")
 endif()
