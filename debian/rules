@@ -73,7 +73,7 @@ override_dh_auto_install:
 
 	install -m 755 src/cephadm/cephadm $(DESTDIR)/usr/sbin/cephadm
 
-	install -m 644 -D monitoring/prometheus/alerts/ceph_default_alerts.yml $(DESTDIR)/etc/prometheus/ceph/ceph_default_alerts.yml
+	install -m 644 -D monitoring/ceph-mixin/prometheus_alerts.yaml $(DESTDIR)/etc/prometheus/ceph/ceph_default_alerts.yml
 
 # doc/changelog is a directory, which confuses dh_installchangelogs
 override_dh_installchangelogs:

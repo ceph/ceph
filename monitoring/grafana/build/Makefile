@@ -2,7 +2,7 @@
 GRAFANA_VERSION ?= 6.7.4-1
 PIECHART_VERSION ?= "1.6.1"
 STATUS_PANEL_VERSION ?= "1.0.9"
-DASHBOARD_DIR := "../dashboards"
+DASHBOARD_DIR := "../../ceph-mixin/dashboards_out"
 DASHBOARD_PROVISIONING := "ceph-dashboard.yml"
 IMAGE := "docker.io/centos:8"
 PKGMGR := "dnf"

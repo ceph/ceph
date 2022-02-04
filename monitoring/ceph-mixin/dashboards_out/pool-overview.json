@@ -1,0 +1,1487 @@
+{
+   "__inputs": [ ],
+   "__requires": [ ],
+   "annotations": {
+      "list": [
+         {
+            "builtIn": 1,
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "showIn": 0,
+            "tags": [ ],
+            "type": "dashboard"
+         }
+      ]
+   },
+   "description": "",
+   "editable": false,
+   "gnetId": null,
+   "graphTooltip": 0,
+   "hideControls": false,
+   "id": null,
+   "links": [ ],
+   "panels": [
+      {
+         "cacheTimeout": null,
+         "colorBackground": false,
+         "colorValue": false,
+         "colors": [
+            "#299c46",
+            "rgba(237, 129, 40, 0.89)",
+            "#d44a3a"
+         ],
+         "datasource": "$datasource",
+         "format": "none",
+         "gauge": {
+            "maxValue": 100,
+            "minValue": 0,
+            "show": false,
+            "thresholdLabels": false,
+            "thresholdMarkers": true
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 0,
+            "y": 0
+         },
+         "id": 2,
+         "interval": null,
+         "links": [ ],
+         "mappingType": 1,
+         "mappingTypes": [
+            {
+               "name": "value to text",
+               "value": 1
+            },
+            {
+               "name": "range to text",
+               "value": 2
+            }
+         ],
+         "maxDataPoints": 100,
+         "nullPointMode": "connected",
+         "nullText": null,
+         "postfix": "",
+         "postfixFontSize": "50%",
+         "prefix": "",
+         "prefixFontSize": "50%",
+         "rangeMaps": [
+            {
+               "from": "null",
+               "text": "N/A",
+               "to": "null"
+            }
+         ],
+         "sparkline": {
+            "fillColor": "rgba(31, 118, 189, 0.18)",
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "show": false
+         },
+         "tableColumn": "",
+         "targets": [
+            {
+               "expr": "count(ceph_pool_metadata)",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "thresholds": "",
+         "title": "Pools",
+         "type": "singlestat",
+         "valueFontSize": "80%",
+         "valueMaps": [
+            {
+               "op": "=",
+               "text": "N/A",
+               "value": "null"
+            }
+         ],
+         "valueName": "avg"
+      },
+      {
+         "cacheTimeout": null,
+         "colorBackground": false,
+         "colorValue": false,
+         "colors": [
+            "#299c46",
+            "rgba(237, 129, 40, 0.89)",
+            "#d44a3a"
+         ],
+         "datasource": "$datasource",
+         "description": "Count of the pools that have compression enabled",
+         "format": "none",
+         "gauge": {
+            "maxValue": 100,
+            "minValue": 0,
+            "show": false,
+            "thresholdLabels": false,
+            "thresholdMarkers": true
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 3,
+            "y": 0
+         },
+         "id": 3,
+         "interval": null,
+         "links": [ ],
+         "mappingType": 1,
+         "mappingTypes": [
+            {
+               "name": "value to text",
+               "value": 1
+            },
+            {
+               "name": "range to text",
+               "value": 2
+            }
+         ],
+         "maxDataPoints": 100,
+         "nullPointMode": "connected",
+         "nullText": null,
+         "postfix": "",
+         "postfixFontSize": "50%",
+         "prefix": "",
+         "prefixFontSize": "50%",
+         "rangeMaps": [
+            {
+               "from": "null",
+               "text": "N/A",
+               "to": "null"
+            }
+         ],
+         "sparkline": {
+            "fillColor": "rgba(31, 118, 189, 0.18)",
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "show": false
+         },
+         "tableColumn": "",
+         "targets": [
+            {
+               "expr": "count(ceph_pool_metadata{compression_mode!=\"none\"})",
+               "format": "",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "thresholds": "",
+         "title": "Pools with Compression",
+         "type": "singlestat",
+         "valueFontSize": "80%",
+         "valueMaps": [
+            {
+               "op": "=",
+               "text": "N/A",
+               "value": "null"
+            }
+         ],
+         "valueName": "current"
+      },
+      {
+         "cacheTimeout": null,
+         "colorBackground": false,
+         "colorValue": false,
+         "colors": [
+            "#299c46",
+            "rgba(237, 129, 40, 0.89)",
+            "#d44a3a"
+         ],
+         "datasource": "$datasource",
+         "description": "Total raw capacity available to the cluster",
+         "format": "bytes",
+         "gauge": {
+            "maxValue": 100,
+            "minValue": 0,
+            "show": false,
+            "thresholdLabels": false,
+            "thresholdMarkers": true
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 6,
+            "y": 0
+         },
+         "id": 4,
+         "interval": null,
+         "links": [ ],
+         "mappingType": 1,
+         "mappingTypes": [
+            {
+               "name": "value to text",
+               "value": 1
+            },
+            {
+               "name": "range to text",
+               "value": 2
+            }
+         ],
+         "maxDataPoints": 100,
+         "nullPointMode": "connected",
+         "nullText": null,
+         "postfix": "",
+         "postfixFontSize": "50%",
+         "prefix": "",
+         "prefixFontSize": "50%",
+         "rangeMaps": [
+            {
+               "from": "null",
+               "text": "N/A",
+               "to": "null"
+            }
+         ],
+         "sparkline": {
+            "fillColor": "rgba(31, 118, 189, 0.18)",
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "show": false
+         },
+         "tableColumn": "",
+         "targets": [
+            {
+               "expr": "sum(ceph_osd_stat_bytes)",
+               "format": "",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "thresholds": "",
+         "title": "Total Raw Capacity",
+         "type": "singlestat",
+         "valueFontSize": "80%",
+         "valueMaps": [
+            {
+               "op": "=",
+               "text": "N/A",
+               "value": "null"
+            }
+         ],
+         "valueName": "current"
+      },
+      {
+         "cacheTimeout": null,
+         "colorBackground": false,
+         "colorValue": false,
+         "colors": [
+            "#299c46",
+            "rgba(237, 129, 40, 0.89)",
+            "#d44a3a"
+         ],
+         "datasource": "$datasource",
+         "description": "Total raw capacity consumed by user data and associated overheads (metadata + redundancy)",
+         "format": "bytes",
+         "gauge": {
+            "maxValue": 100,
+            "minValue": 0,
+            "show": false,
+            "thresholdLabels": false,
+            "thresholdMarkers": true
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 9,
+            "y": 0
+         },
+         "id": 5,
+         "interval": null,
+         "links": [ ],
+         "mappingType": 1,
+         "mappingTypes": [
+            {
+               "name": "value to text",
+               "value": 1
+            },
+            {
+               "name": "range to text",
+               "value": 2
+            }
+         ],
+         "maxDataPoints": 100,
+         "nullPointMode": "connected",
+         "nullText": null,
+         "postfix": "",
+         "postfixFontSize": "50%",
+         "prefix": "",
+         "prefixFontSize": "50%",
+         "rangeMaps": [
+            {
+               "from": "null",
+               "text": "N/A",
+               "to": "null"
+            }
+         ],
+         "sparkline": {
+            "fillColor": "rgba(31, 118, 189, 0.18)",
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "show": false
+         },
+         "tableColumn": "",
+         "targets": [
+            {
+               "expr": "sum(ceph_pool_bytes_used)",
+               "format": "",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "thresholds": "",
+         "title": "Raw Capacity Consumed",
+         "type": "singlestat",
+         "valueFontSize": "80%",
+         "valueMaps": [
+            {
+               "op": "=",
+               "text": "N/A",
+               "value": "null"
+            }
+         ],
+         "valueName": "current"
+      },
+      {
+         "cacheTimeout": null,
+         "colorBackground": false,
+         "colorValue": false,
+         "colors": [
+            "#299c46",
+            "rgba(237, 129, 40, 0.89)",
+            "#d44a3a"
+         ],
+         "datasource": "$datasource",
+         "description": "Total of client data stored in the cluster",
+         "format": "bytes",
+         "gauge": {
+            "maxValue": 100,
+            "minValue": 0,
+            "show": false,
+            "thresholdLabels": false,
+            "thresholdMarkers": true
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 12,
+            "y": 0
+         },
+         "id": 6,
+         "interval": null,
+         "links": [ ],
+         "mappingType": 1,
+         "mappingTypes": [
+            {
+               "name": "value to text",
+               "value": 1
+            },
+            {
+               "name": "range to text",
+               "value": 2
+            }
+         ],
+         "maxDataPoints": 100,
+         "nullPointMode": "connected",
+         "nullText": null,
+         "postfix": "",
+         "postfixFontSize": "50%",
+         "prefix": "",
+         "prefixFontSize": "50%",
+         "rangeMaps": [
+            {
+               "from": "null",
+               "text": "N/A",
+               "to": "null"
+            }
+         ],
+         "sparkline": {
+            "fillColor": "rgba(31, 118, 189, 0.18)",
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "show": false
+         },
+         "tableColumn": "",
+         "targets": [
+            {
+               "expr": "sum(ceph_pool_stored)",
+               "format": "",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "thresholds": "",
+         "title": "Logical Stored ",
+         "type": "singlestat",
+         "valueFontSize": "80%",
+         "valueMaps": [
+            {
+               "op": "=",
+               "text": "N/A",
+               "value": "null"
+            }
+         ],
+         "valueName": "current"
+      },
+      {
+         "cacheTimeout": null,
+         "colorBackground": false,
+         "colorValue": false,
+         "colors": [
+            "#299c46",
+            "rgba(237, 129, 40, 0.89)",
+            "#d44a3a"
+         ],
+         "datasource": "$datasource",
+         "description": "A compression saving is determined as the data eligible to be compressed minus the capacity used to store the data after compression",
+         "format": "bytes",
+         "gauge": {
+            "maxValue": 100,
+            "minValue": 0,
+            "show": false,
+            "thresholdLabels": false,
+            "thresholdMarkers": true
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 15,
+            "y": 0
+         },
+         "id": 7,
+         "interval": null,
+         "links": [ ],
+         "mappingType": 1,
+         "mappingTypes": [
+            {
+               "name": "value to text",
+               "value": 1
+            },
+            {
+               "name": "range to text",
+               "value": 2
+            }
+         ],
+         "maxDataPoints": 100,
+         "nullPointMode": "connected",
+         "nullText": null,
+         "postfix": "",
+         "postfixFontSize": "50%",
+         "prefix": "",
+         "prefixFontSize": "50%",
+         "rangeMaps": [
+            {
+               "from": "null",
+               "text": "N/A",
+               "to": "null"
+            }
+         ],
+         "sparkline": {
+            "fillColor": "rgba(31, 118, 189, 0.18)",
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "show": false
+         },
+         "tableColumn": "",
+         "targets": [
+            {
+               "expr": "sum(ceph_pool_compress_under_bytes - ceph_pool_compress_bytes_used)",
+               "format": "",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "thresholds": "",
+         "title": "Compression Savings",
+         "type": "singlestat",
+         "valueFontSize": "80%",
+         "valueMaps": [
+            {
+               "op": "=",
+               "text": "N/A",
+               "value": "null"
+            }
+         ],
+         "valueName": "current"
+      },
+      {
+         "cacheTimeout": null,
+         "colorBackground": false,
+         "colorValue": false,
+         "colors": [
+            "#299c46",
+            "rgba(237, 129, 40, 0.89)",
+            "#d44a3a"
+         ],
+         "datasource": "$datasource",
+         "description": "Indicates how suitable the data is within the pools that are/have been enabled for compression - averaged across all pools holding compressed data\n",
+         "format": "percent",
+         "gauge": {
+            "maxValue": 100,
+            "minValue": 0,
+            "show": false,
+            "thresholdLabels": false,
+            "thresholdMarkers": true
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 18,
+            "y": 0
+         },
+         "id": 8,
+         "interval": null,
+         "links": [ ],
+         "mappingType": 1,
+         "mappingTypes": [
+            {
+               "name": "value to text",
+               "value": 1
+            },
+            {
+               "name": "range to text",
+               "value": 2
+            }
+         ],
+         "maxDataPoints": 100,
+         "nullPointMode": "connected",
+         "nullText": null,
+         "postfix": "",
+         "postfixFontSize": "50%",
+         "prefix": "",
+         "prefixFontSize": "50%",
+         "rangeMaps": [
+            {
+               "from": "null",
+               "text": "N/A",
+               "to": "null"
+            }
+         ],
+         "sparkline": {
+            "fillColor": "rgba(31, 118, 189, 0.18)",
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "show": false
+         },
+         "tableColumn": "",
+         "targets": [
+            {
+               "expr": "(sum(ceph_pool_compress_under_bytes > 0) / sum(ceph_pool_stored_raw and ceph_pool_compress_under_bytes > 0)) * 100",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "thresholds": "",
+         "title": "Compression Eligibility",
+         "type": "singlestat",
+         "valueFontSize": "80%",
+         "valueMaps": [
+            {
+               "op": "=",
+               "text": "N/A",
+               "value": "null"
+            }
+         ],
+         "valueName": "current"
+      },
+      {
+         "cacheTimeout": null,
+         "colorBackground": false,
+         "colorValue": false,
+         "colors": [
+            "#299c46",
+            "rgba(237, 129, 40, 0.89)",
+            "#d44a3a"
+         ],
+         "datasource": "$datasource",
+         "description": "This factor describes the average ratio of data eligible to be compressed divided by the data actually stored. It does not account for data written that was ineligible for compression (too small, or compression yield too low)",
+         "format": "none",
+         "gauge": {
+            "maxValue": 100,
+            "minValue": 0,
+            "show": false,
+            "thresholdLabels": false,
+            "thresholdMarkers": true
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 21,
+            "y": 0
+         },
+         "id": 9,
+         "interval": null,
+         "links": [ ],
+         "mappingType": 1,
+         "mappingTypes": [
+            {
+               "name": "value to text",
+               "value": 1
+            },
+            {
+               "name": "range to text",
+               "value": 2
+            }
+         ],
+         "maxDataPoints": 100,
+         "nullPointMode": "connected",
+         "nullText": null,
+         "postfix": "",
+         "postfixFontSize": "50%",
+         "prefix": "",
+         "prefixFontSize": "50%",
+         "rangeMaps": [
+            {
+               "from": "null",
+               "text": "N/A",
+               "to": "null"
+            }
+         ],
+         "sparkline": {
+            "fillColor": "rgba(31, 118, 189, 0.18)",
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "show": false
+         },
+         "tableColumn": "",
+         "targets": [
+            {
+               "expr": "sum(ceph_pool_compress_under_bytes > 0) / sum(ceph_pool_compress_bytes_used > 0)",
+               "format": "",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "thresholds": "",
+         "title": "Compression Factor",
+         "type": "singlestat",
+         "valueFontSize": "80%",
+         "valueMaps": [
+            {
+               "op": "=",
+               "text": "N/A",
+               "value": "null"
+            }
+         ],
+         "valueName": "current"
+      },
+      {
+         "columns": [ ],
+         "datasource": "$datasource",
+         "description": "",
+         "gridPos": {
+            "h": 6,
+            "w": 24,
+            "x": 0,
+            "y": 3
+         },
+         "id": 10,
+         "links": [ ],
+         "sort": {
+            "col": 5,
+            "desc": true
+         },
+         "styles": [
+            {
+               "alias": "",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Time",
+               "thresholds": [ ],
+               "type": "hidden",
+               "unit": "short",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "instance",
+               "thresholds": [ ],
+               "type": "hidden",
+               "unit": "short",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "job",
+               "thresholds": [ ],
+               "type": "hidden",
+               "unit": "short",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "Pool Name",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "name",
+               "thresholds": [ ],
+               "type": "string",
+               "unit": "short",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "Pool ID",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "pool_id",
+               "thresholds": [ ],
+               "type": "hidden",
+               "unit": "none",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "Compression Factor",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Value #A",
+               "thresholds": [ ],
+               "type": "number",
+               "unit": "none",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "% Used",
+               "colorMode": "value",
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Value #D",
+               "thresholds": [
+                  "70",
+                  "85"
+               ],
+               "type": "number",
+               "unit": "percentunit",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "Usable Free",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Value #B",
+               "thresholds": [ ],
+               "type": "number",
+               "unit": "bytes",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "Compression Eligibility",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Value #C",
+               "thresholds": [ ],
+               "type": "number",
+               "unit": "percent",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "Compression Savings",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Value #E",
+               "thresholds": [ ],
+               "type": "number",
+               "unit": "bytes",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "Growth (5d)",
+               "colorMode": "value",
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Value #F",
+               "thresholds": [
+                  "0",
+                  "0"
+               ],
+               "type": "number",
+               "unit": "bytes",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "IOPS",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Value #G",
+               "thresholds": [ ],
+               "type": "number",
+               "unit": "none",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "Bandwidth",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Value #H",
+               "thresholds": [ ],
+               "type": "number",
+               "unit": "Bps",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "__name__",
+               "thresholds": [ ],
+               "type": "hidden",
+               "unit": "short",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "type",
+               "thresholds": [ ],
+               "type": "hidden",
+               "unit": "short",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "compression_mode",
+               "thresholds": [ ],
+               "type": "hidden",
+               "unit": "short",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "Type",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "description",
+               "thresholds": [ ],
+               "type": "string",
+               "unit": "short",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "Stored",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Value #J",
+               "thresholds": [ ],
+               "type": "number",
+               "unit": "bytes",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Value #I",
+               "thresholds": [ ],
+               "type": "hidden",
+               "unit": "short",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "Compression",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Value #K",
+               "thresholds": [ ],
+               "type": "string",
+               "unit": "short",
+               "valueMaps": [
+                  {
+                     "text": "ON",
+                     "value": "1"
+                  }
+               ]
+            }
+         ],
+         "targets": [
+            {
+               "expr": "(ceph_pool_compress_under_bytes / ceph_pool_compress_bytes_used > 0) and on(pool_id) (((ceph_pool_compress_under_bytes > 0) / ceph_pool_stored_raw) * 100 > 0.5)",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "A",
+               "refId": "A"
+            },
+            {
+               "expr": "ceph_pool_max_avail * on(pool_id) group_left(name) ceph_pool_metadata",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "B",
+               "refId": "B"
+            },
+            {
+               "expr": "((ceph_pool_compress_under_bytes > 0) / ceph_pool_stored_raw) * 100",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "C",
+               "refId": "C"
+            },
+            {
+               "expr": "(ceph_pool_percent_used * on(pool_id) group_left(name) ceph_pool_metadata)",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "D",
+               "refId": "D"
+            },
+            {
+               "expr": "(ceph_pool_compress_under_bytes - ceph_pool_compress_bytes_used > 0)",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "E",
+               "refId": "E"
+            },
+            {
+               "expr": "delta(ceph_pool_stored[5d])",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "F",
+               "refId": "F"
+            },
+            {
+               "expr": "rate(ceph_pool_rd[30s]) + rate(ceph_pool_wr[30s])",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "G",
+               "refId": "G"
+            },
+            {
+               "expr": "rate(ceph_pool_rd_bytes[30s]) + rate(ceph_pool_wr_bytes[30s])",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "H",
+               "refId": "H"
+            },
+            {
+               "expr": "ceph_pool_metadata",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "I",
+               "refId": "I"
+            },
+            {
+               "expr": "ceph_pool_stored * on(pool_id) group_left ceph_pool_metadata",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "J",
+               "refId": "J"
+            },
+            {
+               "expr": "ceph_pool_metadata{compression_mode!=\"none\"}",
+               "format": "table",
+               "intervalFactor": 1,
+               "legendFormat": "K",
+               "refId": "K"
+            },
+            {
+               "expr": "",
+               "format": "",
+               "intervalFactor": "",
+               "legendFormat": "L",
+               "refId": "L"
+            }
+         ],
+         "timeFrom": null,
+         "timeShift": null,
+         "title": "Pool Overview",
+         "transform": "table",
+         "type": "table"
+      },
+      {
+         "aliasColors": { },
+         "bars": false,
+         "dashLength": 10,
+         "dashes": false,
+         "datasource": "$datasource",
+         "description": "This chart shows the sum of read and write IOPS from all clients by pool",
+         "fill": 1,
+         "fillGradient": 0,
+         "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 9
+         },
+         "id": 11,
+         "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "total": false,
+            "values": false
+         },
+         "lines": true,
+         "linewidth": 1,
+         "links": [ ],
+         "nullPointMode": "null as zero",
+         "percentage": false,
+         "pointradius": 5,
+         "points": false,
+         "renderer": "flot",
+         "repeat": null,
+         "seriesOverrides": [ ],
+         "spaceLength": 10,
+         "stack": false,
+         "steppedLine": false,
+         "targets": [
+            {
+               "expr": "topk($topk,round((rate(ceph_pool_rd[30s]) + rate(ceph_pool_wr[30s])),1) * on(pool_id) group_left(instance,name) ceph_pool_metadata) ",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "{{name}} ",
+               "refId": "A"
+            },
+            {
+               "expr": "topk($topk,rate(ceph_pool_wr[30s]) + on(pool_id) group_left(instance,name) ceph_pool_metadata) ",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "{{name}} - write",
+               "refId": "B"
+            }
+         ],
+         "thresholds": [ ],
+         "timeFrom": null,
+         "timeShift": null,
+         "title": "Top $topk Client IOPS by Pool",
+         "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+         },
+         "type": "graph",
+         "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": [ ]
+         },
+         "yaxes": [
+            {
+               "format": "short",
+               "label": "IOPS",
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            },
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            }
+         ]
+      },
+      {
+         "aliasColors": { },
+         "bars": false,
+         "dashLength": 10,
+         "dashes": false,
+         "datasource": "$datasource",
+         "description": "The chart shows the sum of read and write bytes from all clients, by pool",
+         "fill": 1,
+         "fillGradient": 0,
+         "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 9
+         },
+         "id": 12,
+         "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "total": false,
+            "values": false
+         },
+         "lines": true,
+         "linewidth": 1,
+         "links": [ ],
+         "nullPointMode": "null as zero",
+         "percentage": false,
+         "pointradius": 5,
+         "points": false,
+         "renderer": "flot",
+         "repeat": null,
+         "seriesOverrides": [ ],
+         "spaceLength": 10,
+         "stack": false,
+         "steppedLine": false,
+         "targets": [
+            {
+               "expr": "topk($topk,(rate(ceph_pool_rd_bytes[30s]) + rate(ceph_pool_wr_bytes[30s])) * on(pool_id) group_left(instance,name) ceph_pool_metadata)",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "{{name}}",
+               "refId": "A"
+            }
+         ],
+         "thresholds": [ ],
+         "timeFrom": null,
+         "timeShift": null,
+         "title": "Top $topk Client Bandwidth by Pool",
+         "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+         },
+         "type": "graph",
+         "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": [ ]
+         },
+         "yaxes": [
+            {
+               "format": "Bps",
+               "label": "Throughput",
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            },
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            }
+         ]
+      },
+      {
+         "aliasColors": { },
+         "bars": false,
+         "dashLength": 10,
+         "dashes": false,
+         "datasource": "$datasource",
+         "description": "Historical view of capacity usage, to help identify growth and trends in pool consumption",
+         "fill": 1,
+         "fillGradient": 0,
+         "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 17
+         },
+         "id": 13,
+         "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "total": false,
+            "values": false
+         },
+         "lines": true,
+         "linewidth": 1,
+         "links": [ ],
+         "nullPointMode": "null as zero",
+         "percentage": false,
+         "pointradius": 5,
+         "points": false,
+         "renderer": "flot",
+         "repeat": null,
+         "seriesOverrides": [ ],
+         "spaceLength": 10,
+         "stack": false,
+         "steppedLine": false,
+         "targets": [
+            {
+               "expr": "ceph_pool_bytes_used * on(pool_id) group_right ceph_pool_metadata",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "{{name}}",
+               "refId": "A"
+            }
+         ],
+         "thresholds": [ ],
+         "timeFrom": null,
+         "timeShift": null,
+         "title": "Pool Capacity Usage (RAW)",
+         "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+         },
+         "type": "graph",
+         "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": [ ]
+         },
+         "yaxes": [
+            {
+               "format": "bytes",
+               "label": "Capacity Used",
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            },
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            }
+         ]
+      }
+   ],
+   "refresh": "15s",
+   "rows": [ ],
+   "schemaVersion": 22,
+   "style": "dark",
+   "tags": [ ],
+   "templating": {
+      "list": [
+         {
+            "current": {
+               "text": "Dashboard1",
+               "value": "Dashboard1"
+            },
+            "hide": 0,
+            "label": "Data Source",
+            "name": "datasource",
+            "options": [ ],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "type": "datasource"
+         },
+         {
+            "allValue": null,
+            "current": {
+               "text": "15",
+               "value": "15"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "label": "TopK",
+            "multi": false,
+            "name": "topk",
+            "options": [
+               {
+                  "text": "15",
+                  "value": "15"
+               }
+            ],
+            "query": "15",
+            "refresh": 0,
+            "type": "custom"
+         }
+      ]
+   },
+   "time": {
+      "from": "now-1h",
+      "to": "now"
+   },
+   "timepicker": {
+      "refresh_intervals": [
+         "5s",
+         "10s",
+         "15s",
+         "30s",
+         "1m",
+         "5m",
+         "15m",
+         "30m",
+         "1h",
+         "2h",
+         "1d"
+      ],
+      "time_options": [
+         "5m",
+         "15m",
+         "1h",
+         "6h",
+         "12h",
+         "24h",
+         "2d",
+         "7d",
+         "30d"
+      ]
+   },
+   "timezone": "",
+   "title": "Ceph Pools Overview",
+   "uid": "z99hzWtmk",
+   "version": 0
+}
