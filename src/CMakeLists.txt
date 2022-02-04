@@ -859,7 +859,6 @@ if(WITH_RADOSGW)
   if(WITH_RADOSGW_SELECT_PARQUET)
     if(WITH_SYSTEM_ARROW)
       find_package(Arrow REQUIRED)
-      set(Parquet_DIR "/usr/lib/x86_64-linux-gnu/cmake/arrow")
       find_package(Parquet REQUIRED)
       add_library(Arrow::Arrow SHARED IMPORTED)
       set_target_properties(Arrow::Arrow PROPERTIES
