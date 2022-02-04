@@ -133,7 +133,6 @@ function(build_arrow)
     LOG_BUILD 0
     LOG_INSTALL 0
     SOURCE_DIR "${arrow_SOURCE_DIR}"
-    CMAKE_COMMAND ${NO_DESTDIR_COMMAND} ${CMAKE_COMMAND}
     CMAKE_ARGS ${arrow_CMAKE_ARGS}
     BINARY_DIR "${arrow_BINARY_DIR}"
     BUILD_COMMAND ${NO_DESTDIR_COMMAND} ${make_cmd}
