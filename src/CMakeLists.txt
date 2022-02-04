@@ -858,19 +858,8 @@ endif(WITH_KVS)
 if(WITH_RADOSGW)
   if(WITH_RADOSGW_SELECT_PARQUET)
     if(WITH_SYSTEM_ARROW)
-      find_package(Arrow REQUIRED)
-      find_package(Parquet REQUIRED)
-      add_library(Arrow::Arrow SHARED IMPORTED)
-      set_target_properties(Arrow::Arrow PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${ARROW_INCLUDE_DIR}"
-        IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
-        IMPORTED_LOCATION "${ARROW_SHARED_LIB}")
-
-      add_library(Arrow::Parquet SHARED IMPORTED)
-      set_target_properties(Arrow::Parquet PROPERTIES
-        INTERFACE_LINK_LIBRARIES Arrow::Arrow
-        IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
-	IMPORTED_LOCATION "${PARQUET_SHARED_LIB}")
+      find_package(Arrow 4 REQUIRED QUIET)
+      find_package(Parquet 4 REQUIRED QUIET)
     else()
       # find arrow's dependencies
       if (WITH_SYSTEM_UTF8PROC)
