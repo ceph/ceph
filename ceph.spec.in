@@ -1247,6 +1247,9 @@ export LDFLAGS="$RPM_LD_FLAGS"
 %if 0%{with seastar}
 # seastar uses longjmp() to implement coroutine. and this annoys longjmp_chk()
 export CXXFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
+# remove from CFLAGS too because it causes the arrow submodule to fail with:
+#   warning _FORTIFY_SOURCE requires compiling with optimization (-O)
+export CFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
 %endif
 
 env | sort
