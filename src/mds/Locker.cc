@@ -3193,7 +3193,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
      *   - mds trim its cache
      *   - mds receives cap messages from client
      */
-    dout(7) << "handle_client_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
+    dout_once(7) << "handle_client_caps tid " << m->get_client_tid() << " on unknown ino " << m->get_ino() << ", dropping" << dendl;
     return;
   }
 
@@ -3212,9 +3212,9 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
   Capability *cap = 0;
   cap = head_in->get_client_cap(client);
   if (!cap) {
-    dout(7) << "handle_client_caps no cap for client." << client << " on " << *head_in << dendl;
+    dout_once(7) << "handle_client_caps tid " << m->get_client_tid() << " no cap for client." << client << " on " << *head_in << dendl;
     return;
-  }  
+  }
   ceph_assert(cap);
 
   // freezing|frozen?
@@ -3224,7 +3224,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
     return;
   }
   if (ceph_seq_cmp(m->get_mseq(), cap->get_mseq()) < 0) {
-    dout(7) << "handle_client_caps mseq " << m->get_mseq() << " < " << cap->get_mseq()
+    dout_once(7) << "handle_client_caps tid " << m->get_client_tid() << " mseq " << m->get_mseq() << " < " << cap->get_mseq()
 	    << ", dropping" << dendl;
     return;
   }
@@ -3292,7 +3292,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
   }
 
   if (cap->get_cap_id() != m->get_cap_id()) {
-    dout(7) << " ignoring client capid " << m->get_cap_id() << " != my " << cap->get_cap_id() << dendl;
+    dout_once(7) << "handle_client_caps tid " << m->get_client_tid() << " ignoring client capid " << m->get_cap_id() << " != my " << cap->get_cap_id() << dendl;
   } else {
     CInode *in = head_in;
     if (follows > 0) {
