@@ -3261,6 +3261,22 @@ options:
   default: 0x7200000000000001:0x0
   services:
   - rgw
+- name: admin_motr_fid
+  type: str
+  level: advanced
+  desc: Admin Tool Motr FID for admin-level access.
+  long_desc: example value 0x7200000000000001:0x2c
+  default: 0x7200000000000001:0x0
+  services:
+  - rgw
+- name: admin_motr_endpoint
+  type: str
+  level: advanced
+  desc:  experimental Option to set Admin Motr endpoint address
+  long_desc: example value 192.168.180.182@tcp:12345:4:1
+  default: 192.168.180.182@tcp:12345:4:1
+  services:
+  - rgw
 - name: motr_my_endpoint
   type: str
   level: advanced
