@@ -94,6 +94,8 @@
 # distros that do _not_ ship cmd2/colorama
 %bcond_with cephfs_shell
 %endif
+%bcond_with system_arrow
+%bcond_with system_utf8proc
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8
 %global weak_deps 1
 %endif
@@ -276,6 +278,13 @@ BuildRequires:  libevent-devel
 %if 0%{with system_pmdk}
 BuildRequires:  libpmem-devel
 BuildRequires:  libpmemobj-devel
+%endif
+%if 0%{with system_arrow}
+BuildRequires:  arrow-devel
+BuildRequires:  parquet-devel
+%endif
+%if 0%{with system_utf8proc}
+BuildRequires:  utf8proc-devel
 %endif
 %if 0%{with seastar}
 BuildRequires:  c-ares-devel
@@ -1339,7 +1348,12 @@ cmake .. \
 %if 0%{?rhel}
     -DWITH_FMT_HEADER_ONLY:BOOL=ON \
 %endif
+%if 0%{with system_arrow}
+    -DWITH_SYSTEM_ARROW:BOOL=ON \
+%endif
+%if 0%{without system_utf8proc}
     -DWITH_SYSTEM_UTF8PROC:BOOL=OFF \
+%endif
     -DWITH_GRAFANA:BOOL=ON
 
 %if %{with cmake_verbose_logging}
