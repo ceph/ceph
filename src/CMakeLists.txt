@@ -857,18 +857,34 @@ endif(WITH_KVS)
 
 if(WITH_RADOSGW)
   if(WITH_RADOSGW_SELECT_PARQUET)
-    # find arrow's dependencies
-    if (WITH_SYSTEM_UTF8PROC)
-      find_package(utf8proc 2.2.0 REQUIRED)
-    else()
-      include(BuildUtf8proc)
-      build_utf8proc()
-    endif()
-    find_package(thrift 0.13 REQUIRED)
+    if(WITH_SYSTEM_ARROW)
+      find_package(Arrow REQUIRED)
+      set(Parquet_DIR "/usr/lib/x86_64-linux-gnu/cmake/arrow")
+      find_package(Parquet REQUIRED)
+      add_library(Arrow::Arrow SHARED IMPORTED)
+      set_target_properties(Arrow::Arrow PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${ARROW_INCLUDE_DIR}"
+        IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
+        IMPORTED_LOCATION "${ARROW_SHARED_LIB}")
 
-    # TODO: WITH_SYSTEM_ARROW
-    include(BuildArrow)
-    build_arrow()
+      add_library(Arrow::Parquet SHARED IMPORTED)
+      set_target_properties(Arrow::Parquet PROPERTIES
+        INTERFACE_LINK_LIBRARIES Arrow::Arrow
+        IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
+	IMPORTED_LOCATION "${PARQUET_SHARED_LIB}")
+    else()
+      # find arrow's dependencies
+      if (WITH_SYSTEM_UTF8PROC)
+        find_package(utf8proc 2.2.0 REQUIRED)
+      else()
+        include(BuildUtf8proc)
+        build_utf8proc()
+      endif()
+      find_package(thrift 0.13 REQUIRED)
+
+      include(BuildArrow)
+      build_arrow()
+    endif()
   endif()
 
   add_subdirectory(libkmip)
