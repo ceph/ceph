@@ -83,3 +83,4 @@ services:
       - "22"
     environment:
       SSH_PUBKEY:
+    platform: linux/amd64
