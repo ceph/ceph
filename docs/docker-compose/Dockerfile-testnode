@@ -8,7 +8,8 @@ RUN apt update && \
         curl \
         python3-pip && \
     apt clean all
-COPY testnode.sh /
+COPY testnode_start.sh /
+COPY testnode_stop.sh /
 COPY testnode_sudoers /etc/sudoers.d/teuthology
 RUN \
     ssh-keygen -t dsa -f /etc/ssh/ssh_host_dsa_key -N '' && \
@@ -20,4 +21,4 @@ RUN \
     chmod 700 /home/ubuntu/.ssh && \
     chown -R ubuntu /home/ubuntu
 EXPOSE 22
-ENTRYPOINT /testnode.sh
+ENTRYPOINT /testnode_start.sh
