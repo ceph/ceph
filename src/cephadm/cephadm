@@ -2100,6 +2100,13 @@ def move_files(ctx, src, dst, uid=None, gid=None):
             os.chown(dst_file, uid, gid)
 
 
+def recursive_chown(path: str, uid: int, gid: int) -> None:
+    for dirpath, dirnames, filenames in os.walk(path):
+        os.chown(dirpath, uid, gid)
+        for filename in filenames:
+            os.chown(os.path.join(dirpath, filename), uid, gid)
+
+
 # copied from distutils
 def find_executable(executable: str, path: Optional[str] = None) -> Optional[str]:
     """Tries to find 'executable' in the directories listed in 'path'.
@@ -2382,6 +2389,8 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'alerting'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+            recursive_chown(os.path.join(data_dir_root, 'etc'), uid, gid)
+            recursive_chown(os.path.join(data_dir_root, 'data'), uid, gid)
         elif daemon_type == 'grafana':
             data_dir_root = get_data_dir(fsid, ctx.data_dir,
                                          daemon_type, daemon_id)
