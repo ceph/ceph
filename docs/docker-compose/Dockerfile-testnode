@@ -1,23 +1,20 @@
-FROM fedora:35
-RUN dnf -y update && \
-    dnf -y install \
+FROM ubuntu:latest
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update && \
+    apt -y install \
+        sudo \
         openssh-server \
         hostname \
         curl \
-        python3-pip \
-        python3-libselinux \
-        redhat-lsb-core && \
-    dnf clean all
+        python3-pip && \
+    apt clean all
 COPY testnode.sh /
 COPY testnode_sudoers /etc/sudoers.d/teuthology
 RUN \
     ssh-keygen -t dsa -f /etc/ssh/ssh_host_dsa_key -N '' && \
-    ssh-keygen -t ecdsa -f /etc/ssh/ssh_host_ecdsa_key -N '' && \
-    ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key && \
     sed -i 's/#PermitRootLogin yes/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     mkdir -p /root/.ssh && \
     chmod 700 /root/.ssh && \
-    groupadd sudo && \
     useradd -g sudo ubuntu && \
     mkdir -p /home/ubuntu/.ssh && \
     chmod 700 /home/ubuntu/.ssh && \
