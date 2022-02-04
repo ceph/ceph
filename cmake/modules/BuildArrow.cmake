@@ -18,10 +18,6 @@ function(build_arrow)
     list(APPEND arrow_CMAKE_ARGS -DARROW_JEMALLOC=OFF)
   endif()
 
-  # required dependencies
-  list(APPEND arrow_INTERFACE_LINK_LIBRARIES thrift)
-  # need utf8proc and re2?
-
   if (NOT WITH_SYSTEM_UTF8PROC)
     # forward utf8proc_ROOT from build_utf8proc()
     list(APPEND arrow_CMAKE_ARGS -Dutf8proc_ROOT=${utf8proc_ROOT})
@@ -31,7 +27,6 @@ function(build_arrow)
     list(APPEND arrow_DEPENDS utf8proc::utf8proc)
   endif()
 
-  # optional dependencies
   list(APPEND arrow_CMAKE_ARGS -DARROW_WITH_BROTLI=${HAVE_BROTLI})
   if (HAVE_BROTLI) # optional, off by default
     list(APPEND arrow_INTERFACE_LINK_LIBRARIES ${brotli_libs})
@@ -88,8 +83,6 @@ function(build_arrow)
   else()
     list(APPEND arrow_CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release)
   endif()
-  list(APPEND arrow_CMAKE_ARGS -DCMAKE_VERBOSE_MAKEFILE=ON) # XXX debugging
-  list(APPEND arrow_CMAKE_ARGS -DARROW_VERBOSE_THIRDPARTY_BUILD=ON) # XXX debugging
 
   # we use an external project and copy the sources to bin directory to ensure
   # that object files are built outside of the source tree.
@@ -129,9 +122,6 @@ function(build_arrow)
   set(NO_DESTDIR_COMMAND ${CMAKE_COMMAND} -E env --unset=DESTDIR)
 
   ExternalProject_Add(arrow_ext
-    LOG_CONFIGURE 0
-    LOG_BUILD 0
-    LOG_INSTALL 0
     SOURCE_DIR "${arrow_SOURCE_DIR}"
     CMAKE_ARGS ${arrow_CMAKE_ARGS}
     BINARY_DIR "${arrow_BINARY_DIR}"
