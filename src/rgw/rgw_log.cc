@@ -472,7 +472,7 @@ int OpsLogSocket::log_json(struct req_state* s, bufferlist& bl)
   return 0;
 }
 
-OpsLogRados::OpsLogRados(rgw::sal::Store* store): store(store)
+OpsLogRados::OpsLogRados(rgw::sal::Store* const& store): store(store)
 {
 }
 
