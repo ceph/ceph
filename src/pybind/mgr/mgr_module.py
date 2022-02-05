@@ -1044,6 +1044,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             'format': 'json',
             'srcpool': srcpool,
             'destpool': destpool,
+            'yes_i_really_mean_it': True
         }
         self.check_mon_command(c)
 
@@ -1057,6 +1058,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             'pg_num': 1,
             'pg_num_min': 1,
             'pg_num_max': 32,
+            'yes_i_really_mean_it': True
         }
         self.check_mon_command(c)
 
