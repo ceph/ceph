@@ -220,7 +220,7 @@ bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
 
     if (header_time) {
       struct tm t;
-      if (!parse_rfc2616(req_date, &t)) {
+      if (!parse_rfc2616(req_date, &t) && !parse_iso8601(req_date, &t, nullptr, false)) {
         ldpp_dout(dpp, 0) << "NOTICE: failed to parse date for auth header" << dendl;
         return false;
       }
