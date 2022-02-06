@@ -3265,6 +3265,13 @@ options:
     slow shutdown is primarilyy useful for doing memory leak checking with valgrind.
   default: true
   with_legacy: true
+- name: osd_fast_shutdown_timeout
+  type: int
+  level: advanced
+  desc: timeout in seconds for osd fast-shutdown (0 is unlimited)
+  default: 15
+  with_legacy: true
+  min: 0
 - name: osd_fast_shutdown_notify_mon
   type: bool
   level: advanced
@@ -4936,6 +4943,12 @@ options:
     This setting is used only when OSD is doing ``--mkfs``.
     Next runs of OSD retrieve sharding from disk.
   default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P
+- name: bluestore_qfsck_on_mount
+  type: bool
+  level: dev
+  desc: Run quick-fsck at mount comparing allocation-file to RocksDB allocation state
+  default: true
+  with_legacy: true
 - name: bluestore_fsck_on_mount
   type: bool
   level: dev
