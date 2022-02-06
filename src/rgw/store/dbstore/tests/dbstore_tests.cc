@@ -10,6 +10,7 @@
 
 using namespace std;
 using DB = rgw::store::DB;
+using LCN = rgw::sal::Lifecycle;
 
 vector<const char*> args;
 
@@ -1064,11 +1065,13 @@ TEST_F(DBStoreTest, LCEntry) {
   std::string index2 = "lcindex2";
   typedef enum {lc_uninitial = 1, lc_complete} status;
   std::string ents[] = {"bucket1", "bucket2", "bucket3", "bucket4"};
+  uint32_t noflag = LCN::LCEntry::FLAG_NONE;
+
   rgw::sal::Lifecycle::LCEntry entry;
-  rgw::sal::Lifecycle::LCEntry entry1 = {ents[0], lc_time, lc_uninitial};
-  rgw::sal::Lifecycle::LCEntry entry2 = {ents[1], lc_time, lc_uninitial};
-  rgw::sal::Lifecycle::LCEntry entry3 = {ents[2], lc_time, lc_uninitial};
-  rgw::sal::Lifecycle::LCEntry entry4 = {ents[3], lc_time, lc_uninitial};
+  rgw::sal::Lifecycle::LCEntry entry1 = {ents[0], lc_time, lc_uninitial, noflag};
+  rgw::sal::Lifecycle::LCEntry entry2 = {ents[1], lc_time, lc_uninitial, noflag};
+  rgw::sal::Lifecycle::LCEntry entry3 = {ents[2], lc_time, lc_uninitial, noflag};
+  rgw::sal::Lifecycle::LCEntry entry4 = {ents[3], lc_time, lc_uninitial, noflag};
 
   vector<rgw::sal::Lifecycle::LCEntry> lc_entries;
 

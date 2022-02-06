@@ -20,6 +20,7 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_tag.h"
 #include "rgw_sal.h"
+#include "rgw_inventory.h"
 
 #include <atomic>
 #include <tuple>
@@ -535,10 +536,19 @@ public:
   void start_processor();
   void stop_processor();
   int set_bucket_config(rgw::sal::Bucket* bucket,
-                        const rgw::sal::Attrs& bucket_attrs,
-                        RGWLifecycleConfiguration *config);
+                        RGWLifecycleConfiguration* lifecycle = nullptr,
+			rgw::inv::InventoryConfigurations* inventory = nullptr,
+			optional_yield y = null_yield);
+
+  static constexpr uint32_t RBC_FLAG_NONE =       0x0000;
+  static constexpr uint32_t RBC_FLAG_LIFECYCLE =  0x0001;
+  static constexpr uint32_t RBC_FLAG_INVENTORY =  0x0002;
+  static constexpr uint32_t RBC_FLAG_BOTH =       0x0003;
+
   int remove_bucket_config(rgw::sal::Bucket* bucket,
-                           const rgw::sal::Attrs& bucket_attrs);
+                           const rgw::sal::Attrs& bucket_attrs,
+			   uint32_t flags,
+			   optional_yield y = null_yield);
 
   CephContext *get_cct() const override { return cct; }
   rgw::sal::Lifecycle* get_lc() const { return sal_lc.get(); }

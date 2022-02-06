@@ -26,6 +26,7 @@
 #include "rgw_rados.h"
 #include "rgw_zone.h"
 #include "rgw_op.h"
+#include "rgw_retry.h"
 #include "rgw_rest.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
@@ -923,38 +924,6 @@ void rgw_bucket_object_pre_exec(struct req_state *s)
 
   dump_bucket_from_state(s);
 }
-
-// So! Now and then when we try to update bucket information, the
-// bucket has changed during the course of the operation. (Or we have
-// a cache consistency problem that Watch/Notify isn't ruling out
-// completely.)
-//
-// When this happens, we need to update the bucket info and try
-// again. We have, however, to try the right *part* again.  We can't
-// simply re-send, since that will obliterate the previous update.
-//
-// Thus, callers of this function should include everything that
-// merges information to be changed into the bucket information as
-// well as the call to set it.
-//
-// The called function must return an integer, negative on error. In
-// general, they should just return op_ret.
-namespace {
-template<typename F> /* XXX was getting an error binding the lambda to
-		      * const, also reference F--how big an issue is
-		      * taking F by value? */
-int retry_raced_bucket_write(const DoutPrefixProvider *dpp, rgw::sal::Bucket* b,  F f /* XXX fu2? */) {
-  auto r = f();
-  for (auto i = 0u; i < 15u && r == -ECANCELED; ++i) {
-    r = b->try_refresh_info(dpp, nullptr);
-    if (r >= 0) {
-      r = f();
-    }
-  }
-  return r;
-}
-}
-
 
 int RGWGetObj::verify_permission(optional_yield y)
 {
@@ -5862,7 +5831,7 @@ void RGWPutLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->get_rgwlc()->set_bucket_config(s->bucket.get(), s->bucket_attrs, &new_config);
+  op_ret = store->get_rgwlc()->set_bucket_config(s->bucket.get(), &new_config, nullptr /* inventory */, y);
   if (op_ret < 0) {
     return;
   }
@@ -5878,7 +5847,8 @@ void RGWDeleteLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->get_rgwlc()->remove_bucket_config(s->bucket.get(), s->bucket_attrs);
+  op_ret = store->get_rgwlc()->remove_bucket_config(
+    s->bucket.get(), s->bucket_attrs, RGWLC::RBC_FLAG_LIFECYCLE, y);
   if (op_ret < 0) {
     return;
   }
@@ -8452,8 +8422,6 @@ void RGWGetObjLegalHold::execute(optional_yield y)
   return;
 }
 
-/* inventory */
-
 void RGWPutBucketInventory::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
@@ -8518,14 +8486,14 @@ void RGWPutBucketInventory::execute(optional_yield y)
     }
   }
 
-  buffer::list inv_bl;
-  inventory_attr.emplace(std::move(std::string(inventory_config.id)), std::move(inventory_config));
-  inventory_attr.encode(inv_bl);
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y, attrs, inv_bl] () mutable {
-    attrs[RGW_ATTR_INVENTORY] = inv_bl;
-    return s->bucket->merge_and_store_attrs(this, attrs, y);
-  });
-
+  /* unified writeback via RGWLC */
+  inventory_attr.emplace(
+    std::move(std::string(inventory_config.id)), std::move(inventory_config));
+  op_ret = store->get_rgwlc()->set_bucket_config(
+    s->bucket.get(), nullptr /* lifecycle */, &inventory_attr, y);
+  if (op_ret < 0) {
+    return;
+  }
   return;
 }
 
@@ -8638,18 +8606,15 @@ void RGWDeleteBucketInventory::execute(optional_yield y)
     }
   }
 
+  /* unified writeback via RGWLC */
   inventory_attr.id_mapping.erase(id);
-
-  buffer::list inv_bl;
-  inventory_attr.encode(inv_bl);
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y, attrs, inv_bl] () mutable {
-    attrs[RGW_ATTR_INVENTORY] = inv_bl;
-    return s->bucket->merge_and_store_attrs(this, attrs, y);
-  });
-
+  op_ret = store->get_rgwlc()->set_bucket_config(
+    s->bucket.get(), nullptr /* lifecycle */, &inventory_attr, y);
+  if (op_ret < 0) {
+    return;
+  }
   return;
 }
-// end inventory
 
 void RGWGetClusterStat::execute(optional_yield y)
 {

@@ -265,11 +265,9 @@ int RGWBucketLifecycleConfigCR::Request::_send_request(const DoutPrefixProvider 
     return -EIO;
   }
 
-  int ret = lc->set_bucket_config(params.bucket,
-                                  params.bucket_attrs,
-                                  &params.config);
+  int ret = lc->set_bucket_config(params.bucket, &params.config);
   if (ret < 0) {
-    lderr(cct) << "ERROR: failed to set lifecycle on bucke: " << cpp_strerror(-ret) << dendl;
+    lderr(cct) << "ERROR: failed to set lifecycle on bucket: " << cpp_strerror(-ret) << dendl;
     return -ret;
   }
 

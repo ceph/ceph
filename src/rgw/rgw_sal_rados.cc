@@ -401,7 +401,7 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
 
   // remove lifecycle config, if any (XXX note could be made generic)
   (void) store->getRados()->get_lc()->remove_bucket_config(
-    this, get_attrs());
+    this, get_attrs(), RGWLC::RBC_FLAG_LIFECYCLE);
 
   ret = store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y, nullptr);
   if (ret < 0) {
@@ -2537,7 +2537,8 @@ int RadosLifecycle::list_entries(const std::string& oid, const std::string& mark
     return ret;
 
   for (auto& entry : cls_entries) {
-    entries.push_back(LCEntry(entry.bucket, entry.start_time, entry.status));
+    entries.push_back(
+      LCEntry(entry.bucket, entry.start_time, entry.status, entry.flags));
   }
 
   return ret;

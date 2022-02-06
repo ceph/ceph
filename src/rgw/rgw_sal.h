@@ -1294,12 +1294,18 @@ public:
   /** Single entry in a lifecycle run.  Multiple entries can exist processing different
    * buckets. */
   struct LCEntry {
+
+    static constexpr uint32_t FLAG_NONE =         0x0000;
+    static constexpr uint32_t FLAG_INVENTORY =    0x0001; // have inv. policy
+
     std::string bucket;
     uint64_t start_time{0};
     uint32_t status{0};
+    uint32_t flags{FLAG_NONE};
 
     LCEntry() = default;
-    LCEntry(std::string& _bucket, uint64_t _time, uint32_t _status) : bucket(_bucket), start_time(_time), status(_status) {}
+    LCEntry(std::string& b, uint64_t t, uint32_t s, uint32_t f)
+      : bucket(b), start_time(t), status(s), flags(f) {}
   };
 
   Lifecycle() = default;

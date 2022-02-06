@@ -1292,10 +1292,13 @@ struct cls_rgw_lc_entry {
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(bucket, bl);
     decode(start_time, bl);
     decode(status, bl);
+    if (struct_v > 1) {
+      decode(flags, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
