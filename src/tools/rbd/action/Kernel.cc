@@ -208,6 +208,8 @@ static int parse_map_options(const std::string &options_string,
       if (put_map_option_value("ms_mode", value_char, map_option_ms_mode_cb,
                                map_options))
         return -EINVAL;
+    } else if (!strcmp(this_char, "rxbounce")) {
+      put_map_option("rxbounce", this_char, map_options);
     } else if (!strcmp(this_char, "udev") || !strcmp(this_char, "noudev")) {
       put_map_option("udev", this_char, map_options);
     } else {
