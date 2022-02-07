@@ -484,6 +484,22 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::readv(
   interval_set<uint64_t>& m,
   uint32_t op_flags)
 {
+  return seastar::do_with(
+    ceph::bufferlist{},
+    [=, &oid, &m](auto &ret) {
+    return crimson::do_for_each(
+      m,
+      [=, &oid, &ret](auto &p) {
+      return read(
+	ch, oid, p.first, p.second, op_flags
+	).safe_then([&ret](auto bl) {
+        ret.claim_append(bl);
+      });
+    }).safe_then([&ret] {
+      return read_errorator::make_ready_future<ceph::bufferlist>
+        (std::move(ret));
+    });
+  });
   return read_errorator::make_ready_future<ceph::bufferlist>();
 }
 
@@ -853,13 +869,53 @@ seastar::future<FuturizedStore::OmapIteratorRef> SeaStore::get_omap_iterator(
   });
 }
 
+SeaStore::_fiemap_ret SeaStore::_fiemap(
+  Transaction &t,
+  Onode &onode,
+  uint64_t off,
+  uint64_t len) const
+{
+  return seastar::do_with(
+    ObjectDataHandler(max_object_size),
+    [=, &t, &onode] (auto &objhandler) {
+    return objhandler.fiemap(
+      ObjectDataHandler::context_t{
+        *transaction_manager,
+        t,
+        onode,
+      },
+      off,
+      len);
+  });
+}
 seastar::future<std::map<uint64_t, uint64_t>> SeaStore::fiemap(
   CollectionRef ch,
   const ghobject_t& oid,
   uint64_t off,
   uint64_t len)
 {
-  return seastar::make_ready_future<std::map<uint64_t, uint64_t>>();
+  LOG_PREFIX(SeaStore::fiemap);
+  DEBUG("oid: {}, off: {}, len: {} ", oid, off, len);
+  return repeat_with_onode<std::map<uint64_t, uint64_t>>(
+    ch,
+    oid,
+    Transaction::src_t::READ,
+    "fiemap_read",
+    op_type_t::READ,
+    [=](auto &t, auto &onode) -> _fiemap_ret {
+    size_t size = onode.get_layout().size;
+    if (off >= size) {
+      INFOT("fiemap offset is over onode size!", t);
+      return seastar::make_ready_future<std::map<uint64_t, uint64_t>>();
+    }
+    size_t adjust_len = (len == 0) ?
+      size - off:
+      std::min(size - off, len);
+    return _fiemap(t, onode, off, adjust_len);
+  }).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::fiemap"
+  });
 }
 
 void SeaStore::on_error(ceph::os::Transaction &t) {
