@@ -74,6 +74,14 @@ public:
     objaddr_t offset,
     extent_len_t len);
 
+  /// sparse read data, get range interval in [offset, offset + len)
+  using fiemap_iertr = base_iertr;
+  using fiemap_ret = fiemap_iertr::future<std::map<uint64_t, uint64_t>>;
+  fiemap_ret fiemap(
+    context_t ctx,
+    objaddr_t offset,
+    extent_len_t len);
+
   /// Clears data past offset
   using truncate_iertr = base_iertr;
   using truncate_ret = truncate_iertr::future<>;

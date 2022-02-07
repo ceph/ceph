@@ -551,6 +551,60 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
     });
 }
 
+ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
+  context_t ctx,
+  objaddr_t obj_offset,
+  extent_len_t len)
+{
+  return seastar::do_with(
+    std::map<uint64_t, uint64_t>(),
+    [ctx, obj_offset, len](auto &ret) {
+    return with_object_data(
+      ctx,
+      [ctx, obj_offset, len, &ret](const auto &object_data) {
+      LOG_PREFIX(ObjectDataHandler::fiemap);
+      DEBUGT(
+	"{}~{}, reservation {}~{}",
+        ctx.t,
+        obj_offset,
+        len,
+        object_data.get_reserved_data_base(),
+        object_data.get_reserved_data_len());
+      /* Assumption: callers ensure that onode size is <= reserved
+       * size and that len is adjusted here prior to call */
+      ceph_assert(!object_data.is_null());
+      ceph_assert((obj_offset + len) <= object_data.get_reserved_data_len());
+      ceph_assert(len > 0);
+      laddr_t loffset =
+        object_data.get_reserved_data_base() + obj_offset;
+      return ctx.tm.get_pins(
+        ctx.t,
+        loffset,
+        len
+      ).si_then([loffset, len, &object_data, &ret](auto &&pins) {
+	ceph_assert(pins.size() >= 1);
+        ceph_assert((*pins.begin())->get_laddr() <= loffset);
+	for (auto &&i: pins) {
+	  if (!(i->get_paddr().is_zero())) {
+	    auto ret_left = std::max(i->get_laddr(), loffset);
+	    auto ret_right = std::min(
+	      i->get_laddr() + i->get_length(),
+	      loffset + len);
+	    assert(ret_right > ret_left);
+	    ret.emplace(
+	      std::make_pair(
+		ret_left - object_data.get_reserved_data_base(),
+		ret_right - ret_left
+	      ));
+	  }
+	}
+      });
+    }).si_then([&ret] {
+      return std::move(ret);
+    });
+  });
+}
+
 ObjectDataHandler::truncate_ret ObjectDataHandler::truncate(
   context_t ctx,
   objaddr_t offset)
