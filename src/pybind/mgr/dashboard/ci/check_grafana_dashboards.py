@@ -10,7 +10,7 @@ Usage:
 
 e.g.
     cd /ceph/src/pybind/mgr/dashboard
-    python ci/<script> frontend/src/app /ceph/monitoring/grafana/dashboards
+    python ci/<script> frontend/src/app /ceph/monitoring/ceph-mixin/dashboards_out
 """
 import argparse
 import codecs
