@@ -2,7 +2,7 @@
 A set of Grafana dashboards and Prometheus alerts for Ceph.
 
 All the Grafana dashboards are already generated in the `dashboards_out`
-directory and alerts in the `prometheus_alerts.yaml` file.
+directory and alerts in the `prometheus_alerts.yml` file.
 
 You can use the Grafana dashboards and alerts with Jsonnet like any other
 prometheus mixin. You can find more ressources about mixins in general on
@@ -26,7 +26,7 @@ plugin](http://docs.ceph.com/en/latest/mgr/prometheus/) and the
 
 
 ### Prometheus alerts
-In `prometheus_alerts.yaml` you'll find a set of Prometheus
+In `prometheus_alerts.yml` you'll find a set of Prometheus
 alert rules that should provide a decent set of default alerts for a
 Ceph cluster. Just put this file in a place according to your Prometheus
 configuration (wherever the `rules` configuration stanza points).

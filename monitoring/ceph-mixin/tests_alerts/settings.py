@@ -1,6 +1,6 @@
 import os
 
-ALERTS_FILE = '../prometheus_alerts.yaml'
+ALERTS_FILE = '../prometheus_alerts.yml'
 UNIT_TESTS_FILE = 'test_alerts.yml'
 MIB_FILE = '../../snmp/CEPH-MIB.txt'
 

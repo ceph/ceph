@@ -534,14 +534,14 @@ on appropriate hosts, proceed with the following steps.
     Dashboards can be added to Grafana by importing dashboard JSON files.
     Use the following command to download the JSON files::
 
-      wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/<Dashboard-name>.json
+      wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/ceph-mixin/dashboards_out/<Dashboard-name>.json
 
     You can find various dashboard JSON files `here <https://github.com/ceph/ceph/tree/
-    master/monitoring/grafana/dashboards>`_ .
+    master/monitoring/ceph-mixin/dashboards_out>`_ .
 
     For Example, for ceph-cluster overview you can use::
 
-      wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/ceph-cluster.json
+      wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/ceph-mixin/dashboards_out/ceph-cluster.json
 
     You may also author your own dashboards.
 
