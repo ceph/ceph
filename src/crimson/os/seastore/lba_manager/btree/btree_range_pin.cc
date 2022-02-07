@@ -29,7 +29,7 @@ btree_range_pin_t::~btree_range_pin_t()
   ceph_assert(!pins == !is_linked());
   ceph_assert(!ref);
   if (pins) {
-    DEBUG("removing {}", *this);
+    TRACE("removing {}", *this);
     pins->remove_pin(*this, true);
   }
   extent = nullptr;
@@ -43,7 +43,7 @@ void btree_pin_set_t::replace_pin(btree_range_pin_t &to, btree_range_pin_t &from
 void btree_pin_set_t::remove_pin(btree_range_pin_t &pin, bool do_check_parent)
 {
   LOG_PREFIX(btree_pin_set_t::remove_pin);
-  DEBUG("{}", pin);
+  TRACE("{}", pin);
   ceph_assert(pin.is_linked());
   ceph_assert(pin.pins);
   ceph_assert(!pin.ref);
@@ -124,14 +124,14 @@ void btree_pin_set_t::add_pin(btree_range_pin_t &pin)
     auto *parent = maybe_get_parent(pin.range);
     ceph_assert(parent);
     if (!parent->has_ref()) {
-      DEBUG("acquiring parent {}", static_cast<void*>(parent));
+      TRACE("acquiring parent {}", static_cast<void*>(parent));
       parent->acquire_ref();
     } else {
-      DEBUG("parent has ref {}", static_cast<void*>(parent));
+      TRACE("parent has ref {}", static_cast<void*>(parent));
     }
   }
   if (maybe_get_first_child(pin.range) != nullptr) {
-    DEBUG("acquiring self {}", pin);
+    TRACE("acquiring self {}", pin);
     pin.acquire_ref();
   }
 }
@@ -147,7 +147,7 @@ void btree_pin_set_t::check_parent(btree_range_pin_t &pin)
   LOG_PREFIX(btree_pin_set_t::check_parent);
   auto parent = maybe_get_parent(pin.range);
   if (parent) {
-    DEBUG("releasing parent {}", *parent);
+    TRACE("releasing parent {}", *parent);
     release_if_no_children(*parent);
   }
 }

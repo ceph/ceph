@@ -17,6 +17,16 @@ SET_SUBSYS(seastore_lba);
 
 namespace crimson::os::seastore::lba_manager::btree {
 
+std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
+{
+  return out << "lba_map_val_t("
+             << v.paddr
+             << "~" << v.len
+             << ", refcount=" << v.refcount
+             << ", checksum=" << v.checksum
+             << ")";
+}
+
 std::ostream &LBAInternalNode::print_detail(std::ostream &out) const
 {
   return out << ", size=" << get_size()
@@ -29,7 +39,7 @@ void LBAInternalNode::resolve_relative_addrs(paddr_t base)
   for (auto i: *this) {
     if (i->get_val().is_relative()) {
       auto updated = base.add_relative(i->get_val());
-      DEBUG("{} -> {}", i->get_val(), updated);
+      TRACE("{} -> {}", i->get_val(), updated);
       i->set_val(updated);
     }
   }
@@ -48,7 +58,7 @@ void LBALeafNode::resolve_relative_addrs(paddr_t base)
     if (i->get_val().paddr.is_relative()) {
       auto val = i->get_val();
       val.paddr = base.add_relative(val.paddr);
-      DEBUG("{} -> {}", i->get_val().paddr, val.paddr);
+      TRACE("{} -> {}", i->get_val().paddr, val.paddr);
       i->set_val(val);
     }
   }
