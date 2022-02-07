@@ -31,7 +31,7 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    IscsiServiceSpec, IngressSpec, SNMPGatewaySpec
+    IscsiServiceSpec, IngressSpec, SNMPGatewaySpec, MDSSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -609,7 +609,7 @@ class Orchestrator(object):
         """Update mgr cluster"""
         raise NotImplementedError()
 
-    def apply_mds(self, spec: ServiceSpec) -> OrchResult[str]:
+    def apply_mds(self, spec: MDSSpec) -> OrchResult[str]:
         """Update MDS cluster"""
         raise NotImplementedError()
 
