@@ -22,6 +22,8 @@
 
 #define dout(v) ldout((dout_context), (v))
 
+#define dout_once(v) ldout_once((dout_context), (v))
+
 #define pdout(v, p) lpdout((dout_context), (v), (p))
 
 #define dlog_p(sub, v) ldlog_p1((dout_context), (sub), (v))

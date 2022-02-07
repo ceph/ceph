@@ -175,6 +175,18 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #define ldout(cct, v)  dout_impl(cct, dout_subsys, v) dout_prefix
 #define lderr(cct) dout_impl(cct, ceph_subsys_, -1) dout_prefix
 
+// like ldout, but first occurrence will also be logged to cluster log
+#define ldout_once(cct, v)						\
+  do {									\
+    static bool logged = false;						\
+									\
+    if (!logged) {							\
+      clog << sub;							\
+      logged = true;							\
+    }									\
+    ldout(cct, v)							\
+  } while (0)
+
 #define ldpp_subdout(dpp, sub, v) 						\
   if (decltype(auto) pdpp = (dpp); pdpp) /* workaround -Wnonnull-compare for 'this' */ \
     dout_impl(pdpp->get_cct(), ceph_subsys_##sub, v) \
