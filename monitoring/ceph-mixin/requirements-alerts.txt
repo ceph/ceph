@@ -1,2 +1,2 @@
-pyyaml
+pyyaml==6.0
 bs4
