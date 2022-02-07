@@ -3,7 +3,7 @@
 
 #include "crimson/os/seastore/lba_manager/btree/lba_btree.h"
 
-SET_SUBSYS(seastore_lba);
+SET_SUBSYS(seastore_lba_details);
 
 namespace crimson::os::seastore::lba_manager::btree {
 
