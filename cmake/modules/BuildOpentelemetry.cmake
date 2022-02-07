@@ -12,8 +12,7 @@ function(build_opentelemetry)
   set(opentelemetry_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON
                                -DWITH_JAEGER=ON
                                -DBUILD_TESTING=OFF
-                               -DWITH_EXAMPLES=OFF
-			       -DBoost_INCLUDE_DIR=${CMAKE_BINARY_DIR}/boost/include)
+                               -DWITH_EXAMPLES=OFF)
 
   set(opentelemetry_libs
       ${opentelemetry_BINARY_DIR}/sdk/src/trace/libopentelemetry_trace.a
@@ -40,8 +39,11 @@ function(build_opentelemetry)
                  ${opentelemetry_cpp_targets})
   endif()
 
-  if(NOT WITH_SYSTEM_BOOST)
+  if(WITH_SYSTEM_BOOST)
+    list(APPEND opentelemetry_CMAKE_ARGS -DBOOST_ROOT=/opt/ceph)
+  else()
     list(APPEND dependencies Boost)
+    list(APPEND opentelemetry_CMAKE_ARGS -DBoost_INCLUDE_DIR=${CMAKE_BINARY_DIR}/boost/include)
   endif()
 
   include(ExternalProject)
