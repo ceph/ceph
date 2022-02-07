@@ -149,6 +149,64 @@ If the test-node is locked after adding it to paddles you can run this command t
 ./virtualenv/bin/teuthology-lock --unlock --owner initial@setup smithi022
 ```
 
+# Creating Ansible inventory
+
+In order for ansible to successfully perform certain tasks, in our teuthology container, we need
+to create and add the following line to
+`/etc/ansible/hosts/group_vars/smithi.yaml`:
+
+```bash
+volume_groups:
+  vg_nvme:
+    pvs: "/dev/nvme0n1"
+
+logical_volumes:
+  lv_1:
+    vg: vg_nvme
+    size: "89.4G"
+    scratch_dev: true
+  lv_2:
+    vg: vg_nvme
+    size: "89.4G"
+    scratch_dev: true
+  lv_3:
+    vg: vg_nvme
+    size: "89.4G"
+    scratch_dev: true
+  lv_4:
+    vg: vg_nvme
+    size: "89.4G"
+    scratch_dev: true
+  lv_5:
+    vg: vg_nvme
+    size: "14.9G"
+
+# Mounts /var/lib/ceph here
+var_lib_partition: "/dev/vg_nvme/lv_5"
+```
+Next, we need to create host machine configurations.
+For this step, I recommend you to ssh into teuthology.front.sepia.com
+and copy some of the contents in `/etc/ansible/hosts/sepia` to
+your running teuthology container (exact same directory).
+You only need these parts: `[smithi]`, `[testnodes:children]`, `[sepia:children]`
+(example is using smithi machines this subjects to change if you are using different machines).
+Tip: If you have trouble with this, just copy/paste the whole thing from teuthology.front.sepia.com!
+
+```bash
+[smithi]
+smithi001.front.sepia.ceph.com mac=xx:xx:xx:xx:xx:xx ip=xxx.xx.xx.x  ipmi=xxx.xx.xx.x  bmc=xx:xx:xx:xx:xx:xx
+.
+.
+.
+smithi205.front.sepia.ceph.com mac=xx:xx:xx:xx:xx:xx ip=xxx.xx.xx.x  ipmi=xxx.xx.xx.x  bmc=xx:xx:xx:xx:xx:xx
+
+[testnodes:children]
+smithi
+
+[sepia:children]
+smithi
+```
+
 # Run teuthology-dispatcher
 
 You can now test out your set up by running the dispatcher:
