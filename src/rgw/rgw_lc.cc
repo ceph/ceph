@@ -1468,11 +1468,11 @@ public:
 
     if (ret < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: failed to transfer object(" << oc.o.key << ") to the cloud endpoint(" << endpoint << ") ret=" << ret << dendl;
-      return ret;
 
       if (!tier_ctx.target_bucket_created) {
         cloud_targets.erase(it.first);
       }
+      return ret;
     }
 
     if (delete_object) {
