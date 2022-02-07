@@ -176,48 +176,7 @@ void global_pre_init(
   g_conf().complain_about_parse_error(g_ceph_context);
 }
 
-boost::intrusive_ptr<CephContext>
-global_init(const std::map<std::string,std::string> *defaults,
-	    std::vector < const char* >& args,
-	    uint32_t module_type, code_environment_t code_env,
-	    int flags, bool run_pre_init)
-{
-  // Ensure we're not calling the global init functions multiple times.
-  static bool first_run = true;
-  if (run_pre_init) {
-    // We will run pre_init from here (default).
-    ceph_assert(!g_ceph_context && first_run);
-    global_pre_init(defaults, args, module_type, code_env, flags);
-  } else {
-    // Caller should have invoked pre_init manually.
-    ceph_assert(g_ceph_context && first_run);
-  }
-  first_run = false;
-
-  // Verify flags have not changed if global_pre_init() has been called
-  // manually. If they have, update them.
-  if (g_ceph_context->get_init_flags() != flags) {
-    g_ceph_context->set_init_flags(flags);
-    if (flags & (CINIT_FLAG_NO_DEFAULT_CONFIG_FILE|
-		 CINIT_FLAG_NO_MON_CONFIG)) {
-      g_conf()->no_mon_config = true;
-    }
-  }
-
-  #ifndef _WIN32
-  // signal stuff
-  int siglist[] = { SIGPIPE, 0 };
-  block_signals(siglist, NULL);
-  #endif
-
-  if (g_conf()->fatal_signal_handlers) {
-    install_standard_sighandlers();
-  }
-  ceph::register_assert_context(g_ceph_context);
-
-  if (g_conf()->log_flush_on_exit)
-    g_ceph_context->_log->set_flush_on_exit();
-
+static std::ostringstream maybe_drop_privileges(const int flags) {
   // drop privileges?
   std::ostringstream priv_ss;
 
@@ -332,7 +291,52 @@ global_init(const std::map<std::string,std::string> *defaults,
     }
   }
   #endif /* _WIN32 */
+  return priv_ss;
+}
 
+boost::intrusive_ptr<CephContext>
+global_init(const std::map<std::string,std::string> *defaults,
+	    std::vector < const char* >& args,
+	    uint32_t module_type, code_environment_t code_env,
+	    int flags, bool run_pre_init)
+{
+  // Ensure we're not calling the global init functions multiple times.
+  static bool first_run = true;
+  if (run_pre_init) {
+    // We will run pre_init from here (default).
+    ceph_assert(!g_ceph_context && first_run);
+    global_pre_init(defaults, args, module_type, code_env, flags);
+  } else {
+    // Caller should have invoked pre_init manually.
+    ceph_assert(g_ceph_context && first_run);
+  }
+  first_run = false;
+
+  // Verify flags have not changed if global_pre_init() has been called
+  // manually. If they have, update them.
+  if (g_ceph_context->get_init_flags() != flags) {
+    g_ceph_context->set_init_flags(flags);
+    if (flags & (CINIT_FLAG_NO_DEFAULT_CONFIG_FILE|
+		 CINIT_FLAG_NO_MON_CONFIG)) {
+      g_conf()->no_mon_config = true;
+    }
+  }
+
+  #ifndef _WIN32
+  // signal stuff
+  int siglist[] = { SIGPIPE, 0 };
+  block_signals(siglist, NULL);
+  #endif
+
+  if (g_conf()->fatal_signal_handlers) {
+    install_standard_sighandlers();
+  }
+  ceph::register_assert_context(g_ceph_context);
+
+  if (g_conf()->log_flush_on_exit)
+    g_ceph_context->_log->set_flush_on_exit();
+
+  std::ostringstream priv_ss = maybe_drop_privileges(flags);
 #if defined(HAVE_SYS_PRCTL_H)
   if (prctl(PR_SET_DUMPABLE, 1) == -1) {
     cerr << "warning: unable to set dumpable flag: " << cpp_strerror(errno) << std::endl;
