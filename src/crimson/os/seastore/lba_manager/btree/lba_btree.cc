@@ -1,9 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "crimson/common/log.h"
-#include "crimson/os/seastore/logging.h"
-
 #include "crimson/os/seastore/lba_manager/btree/lba_btree.h"
 
 SET_SUBSYS(seastore_lba);
@@ -342,7 +339,7 @@ LBABtree::get_internal_if_live(
   laddr_t laddr,
   seastore_off_t len)
 {
-  LOG_PREFIX(BtreeLBAManager::get_leaf_if_live);
+  LOG_PREFIX(LBABtree::get_internal_if_live);
   return lower_bound(
     c, laddr
   ).si_then([FNAME, c, addr, laddr, len](auto iter) {
@@ -378,7 +375,7 @@ LBABtree::get_leaf_if_live(
   laddr_t laddr,
   seastore_off_t len)
 {
-  LOG_PREFIX(BtreeLBAManager::get_leaf_if_live);
+  LOG_PREFIX(LBABtree::get_leaf_if_live);
   return lower_bound(
     c, laddr
   ).si_then([FNAME, c, addr, laddr, len](auto iter) {
@@ -637,8 +634,7 @@ LBABtree::handle_split_ret LBABtree::handle_split(
 
   /* pos may be either node_position_t<LBALeafNode> or
    * node_position_t<LBAInternalNode> */
-  auto split_level = [&](auto &parent_pos, auto &pos) {
-    LOG_PREFIX(LBATree::handle_split);
+  auto split_level = [&, FNAME](auto &parent_pos, auto &pos) {
     auto [left, right, pivot] = pos.node->make_split_children(c);
 
     auto parent_node = parent_pos.node;
@@ -777,9 +773,8 @@ LBABtree::handle_merge_ret merge_level(
     donor_iter.get_val().maybe_relative_to(parent_pos.node->get_paddr()),
     begin,
     end
-  ).si_then([c, iter, donor_iter, donor_is_left, &parent_pos, &pos](
+  ).si_then([FNAME, c, iter, donor_iter, donor_is_left, &parent_pos, &pos](
 	      typename NodeType::Ref donor) {
-    LOG_PREFIX(LBABtree::merge_level);
     auto [l, r] = donor_is_left ?
       std::make_pair(donor, pos.node) : std::make_pair(pos.node, donor);
 
@@ -804,7 +799,6 @@ LBABtree::handle_merge_ret merge_level(
       c.cache.retire_extent(c.trans, l);
       c.cache.retire_extent(c.trans, r);
     } else {
-      LOG_PREFIX(LBABtree::merge_level);
       auto [replacement_l, replacement_r, pivot] =
 	l->make_balanced(
 	  c,

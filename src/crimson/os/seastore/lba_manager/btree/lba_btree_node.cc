@@ -11,12 +11,9 @@
 #include "include/byteorder.h"
 
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/logging.h"
 
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore_lba);
-  }
-}
+SET_SUBSYS(seastore_lba);
 
 namespace crimson::os::seastore::lba_manager::btree {
 
@@ -28,13 +25,11 @@ std::ostream &LBAInternalNode::print_detail(std::ostream &out) const
 
 void LBAInternalNode::resolve_relative_addrs(paddr_t base)
 {
+  LOG_PREFIX(LBAInternalNode::resolve_relative_addrs);
   for (auto i: *this) {
     if (i->get_val().is_relative()) {
       auto updated = base.add_relative(i->get_val());
-      logger().debug(
-	"LBAInternalNode::resolve_relative_addrs {} -> {}",
-	i->get_val(),
-	updated);
+      DEBUG("{} -> {}", i->get_val(), updated);
       i->set_val(updated);
     }
   }
@@ -48,14 +43,12 @@ std::ostream &LBALeafNode::print_detail(std::ostream &out) const
 
 void LBALeafNode::resolve_relative_addrs(paddr_t base)
 {
+  LOG_PREFIX(LBALeafNode::resolve_relative_addrs);
   for (auto i: *this) {
     if (i->get_val().paddr.is_relative()) {
       auto val = i->get_val();
       val.paddr = base.add_relative(val.paddr);
-      logger().debug(
-	"LBALeafNode::resolve_relative_addrs {} -> {}",
-	i->get_val().paddr,
-	val.paddr);
+      DEBUG("{} -> {}", i->get_val().paddr, val.paddr);
       i->set_val(val);
     }
   }

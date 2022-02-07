@@ -8,9 +8,8 @@
 #include <memory>
 #include <string.h>
 
-#include "crimson/common/log.h"
-
 #include "crimson/os/seastore/lba_manager.h"
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 
