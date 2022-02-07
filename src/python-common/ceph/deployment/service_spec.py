@@ -459,6 +459,7 @@ class ServiceSpec(object):
             'rgw': RGWSpec,
             'nfs': NFSServiceSpec,
             'osd': DriveGroupSpec,
+            'mds': MDSSpec,
             'iscsi': IscsiServiceSpec,
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
@@ -686,7 +687,7 @@ class ServiceSpec(object):
                         f'Service of type \'{self.service_type}\' should not contain a service id')
 
         if self.service_id:
-            if not re.match('^[a-zA-Z0-9_.-]+$', self.service_id):
+            if not re.match('^[a-zA-Z0-9_.-]+$', str(self.service_id)):
                 raise SpecValidationError('Service id contains invalid characters, '
                                           'only [a-zA-Z0-9_.-] allowed')
 
@@ -1305,3 +1306,27 @@ class SNMPGatewaySpec(ServiceSpec):
 
 
 yaml.add_representer(SNMPGatewaySpec, ServiceSpec.yaml_representer)
+
+
+class MDSSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'mds',
+                 service_id: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 ):
+        assert service_type == 'mds'
+        super(MDSSpec, self).__init__('mds', service_id=service_id,
+                                      placement=placement,
+                                      unmanaged=unmanaged,
+                                      preview_only=preview_only)
+
+    def validate(self) -> None:
+        super(MDSSpec, self).validate()
+
+        if str(self.service_id)[0].isdigit():
+            raise SpecValidationError('MDS service id cannot start with a numeric digit')
+
+
+yaml.add_representer(MDSSpec, ServiceSpec.yaml_representer)
