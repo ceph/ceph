@@ -27,11 +27,6 @@ public:
 
   using mapped_space_visitor_t = LBAManager::scan_mapped_space_func_t;
 
-  struct lba_tree_inner_stats_t {
-    uint64_t num_alloc_extents = 0;
-    uint64_t num_alloc_extents_iter_nexts = 0;
-  } static lba_tree_inner_stats;
-
   class iterator {
   public:
     iterator(const iterator &rhs) noexcept :
@@ -268,30 +263,26 @@ public:
   static base_iertr::future<> iterate_repeat(
     op_context_t c,
     iterator_fut &&iter_fut,
-    bool need_count,
     F &&f,
     mapped_space_visitor_t *visitor=nullptr) {
     return std::move(
       iter_fut
-    ).si_then([c, need_count, visitor, f=std::forward<F>(f)](auto iter) {
+    ).si_then([c, visitor, f=std::forward<F>(f)](auto iter) {
       return seastar::do_with(
 	iter,
 	std::move(f),
-	[c, need_count, visitor](auto &pos, auto &f) {
+	[c, visitor](auto &pos, auto &f) {
 	  return trans_intr::repeat(
-	    [c, need_count, visitor, &f, &pos] {
+	    [c, visitor, &f, &pos] {
 	      return f(
 		pos
-	      ).si_then([c, need_count, visitor, &pos](auto done) {
+	      ).si_then([c, visitor, &pos](auto done) {
 		if (done == seastar::stop_iteration::yes) {
 		  return iterate_repeat_ret_inner(
 		    interruptible::ready_future_marker{},
 		    seastar::stop_iteration::yes);
 		} else {
 		  ceph_assert(!pos.is_end());
-		  if (need_count) {
-		    ++LBABtree::lba_tree_inner_stats.num_alloc_extents_iter_nexts;
-		  }
 		  return pos.next(
 		    c, visitor
 		  ).si_then([&pos](auto next) {
