@@ -17,7 +17,7 @@ class TestPoolPerm(CephFSTestCase):
             import os
             import errno
 
-            fd = os.open("{path}", os.O_RDWR)
+            fd = os.open("{path}", os.O_RDWR | os.O_DIRECT)
             try:
                 if {check_read}:
                     ret = os.read(fd, 1024)
