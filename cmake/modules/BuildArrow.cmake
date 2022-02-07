@@ -15,6 +15,9 @@ function(build_arrow)
   # share the version ceph is using
   list(APPEND arrow_CMAKE_ARGS -DARROW_JEMALLOC=OFF)
 
+  # transitive dependencies
+  list(APPEND arrow_INTERFACE_LINK_LIBRARIES thrift)
+
   if (NOT WITH_SYSTEM_UTF8PROC)
     # forward utf8proc_ROOT from build_utf8proc()
     list(APPEND arrow_CMAKE_ARGS -Dutf8proc_ROOT=${utf8proc_ROOT})
