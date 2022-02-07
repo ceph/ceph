@@ -22,8 +22,8 @@ namespace gtest {
       db_type("SQLite"), ret(-1) {}
 
       Environment(string tenantname, string db_typename): 
-        tenant("tenantname"), db(nullptr),
-        db_type("db_typename"), ret(-1) {}
+        tenant(tenantname), db(nullptr),
+        db_type(db_typename), ret(-1) {}
 
       virtual ~Environment() {}
 
