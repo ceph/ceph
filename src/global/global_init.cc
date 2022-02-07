@@ -136,14 +136,14 @@ void global_pre_init(
 				    &cerr, flags);
   if (ret == -EDOM) {
     cct->_log->flush();
-    cerr << "global_init: error parsing config file." << std::endl;
+    cerr << "global_pre_init: error parsing config file." << std::endl;
     _exit(1);
   }
   else if (ret == -ENOENT) {
     if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
       if (conf_file_list.length()) {
 	cct->_log->flush();
-	cerr << "global_init: unable to open config file from search list "
+	cerr << "global_pre_init: unable to open config file from search list "
 	     << conf_file_list << std::endl;
         _exit(1);
       } else {
@@ -154,7 +154,7 @@ void global_pre_init(
   }
   else if (ret) {
     cct->_log->flush();
-    cerr << "global_init: error reading config file. "
+    cerr << "global_pre_init: error reading config file. "
          << conf.get_parse_error() << std::endl;
     _exit(1);
   }
