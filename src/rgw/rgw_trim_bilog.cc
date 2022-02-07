@@ -472,12 +472,12 @@ private:
   std::vector<StatusShards> peer_status; //< sync status for each peer
   std::vector<std::string> min_markers; //< min marker per shard
 
-  /// The layout of the generation to trim
-  rgw::bucket_index_layout_generation totrim;
+  /// The log generation to trim
+  rgw::bucket_log_layout_generation totrim;
 
   /// Generation to be cleaned/New bucket info (if any)
   std::optional<std::pair<RGWBucketInfo,
-			  rgw::bucket_index_layout_generation>> clean_info;
+			  rgw::bucket_log_layout_generation>> clean_info;
   /// Maximum number of times to attempt to put bucket info
   unsigned retries = 0;
 
@@ -506,15 +506,7 @@ private:
       return -ENOENT;
     }
 
-    if (log->layout.type == rgw::BucketLogType::InIndex) {
-      totrim = log->layout.in_index;
-    } else {
-      ldpp_dout(dpp, 0) << "Unable to convert log of unknown type "
-			<< log->layout.type
-			<< " to rgw::bucket_index_layout_generation " << dendl;
-      return -EINVAL;
-    }
-
+    totrim = *log;
     return 0;
   }
 
@@ -527,15 +519,15 @@ private:
     if (pbucket_info->layout.logs.front().gen < totrim.gen) {
       clean_info = {*pbucket_info, {}};
       auto log = clean_info->first.layout.logs.cbegin();
-      if (log->layout.type == rgw::BucketLogType::InIndex) {
-	clean_info->second = log->layout.in_index;
-      } else {
-	ldpp_dout(dpp, 0) << "Unable to convert log of unknown type "
-			  << log->layout.type
-			  << " to rgw::bucket_index_layout_generation " << dendl;
-	return -EINVAL;
-      }
+      clean_info->second = *log;
 
+      if (clean_info->first.layout.logs.size() == 1) {
+	ldpp_dout(dpp, -1)
+	  << "Critical error! Attempt to remove only log generation! "
+	  << "log.gen=" << log->gen << ", totrim.gen=" << totrim.gen
+	  << dendl;
+	return -EIO;
+      }
       clean_info->first.layout.logs.erase(log);
     }
     return 0;
@@ -718,8 +710,15 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
     }
 
     if (clean_info) {
+      if (clean_info->second.layout.type != rgw::BucketLogType::InIndex) {
+	ldpp_dout(dpp, 0) << "Unable to convert log of unknown type "
+			  << clean_info->second.layout.type
+			  << " to rgw::bucket_index_layout_generation " << dendl;
+	return set_cr_error(-EINVAL);
+      }
+
       yield call(new BucketCleanIndexCollectCR(dpp, store, clean_info->first,
-					       clean_info->second));
+					       clean_info->second.layout.in_index));
       if (retcode < 0) {
 	ldpp_dout(dpp, 0) << "failed to remove previous generation: "
 			  << cpp_strerror(retcode) << dendl;
@@ -761,6 +760,12 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 	clean_info = std::nullopt;
       }
     } else {
+      if (totrim.layout.type != rgw::BucketLogType::InIndex) {
+	ldpp_dout(dpp, 0) << "Unable to convert log of unknown type "
+			  << totrim.layout.type
+			  << " to rgw::bucket_index_layout_generation " << dendl;
+	return set_cr_error(-EINVAL);
+      }
       // To avoid hammering the OSD too hard, either trim old
       // generations OR trim the current one.
 
@@ -768,7 +773,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 
       // initialize each shard with the maximum marker, which is only used when
       // there are no peers syncing from us
-      min_markers.assign(std::max(1u, rgw::num_shards(totrim)),
+      min_markers.assign(std::max(1u, rgw::num_shards(totrim.layout.in_index)),
 			 RGWSyncLogTrimCR::max_marker);
 
 
@@ -783,7 +788,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       ldpp_dout(dpp, 10) << "trimming bilogs for bucket=" << pbucket_info->bucket
 			 << " markers=" << min_markers << ", shards=" << min_markers.size() << dendl;
       set_status("trimming bilog shards");
-      yield call(new BucketTrimShardCollectCR(dpp, store, *pbucket_info, totrim,
+      yield call(new BucketTrimShardCollectCR(dpp, store, *pbucket_info, totrim.layout.in_index,
 					      min_markers));
       // ENODATA just means there were no keys to trim
       if (retcode == -ENODATA) {
