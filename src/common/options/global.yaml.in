@@ -4103,6 +4103,28 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluefs_check_volume_selector_on_umount
+  type: bool
+  level: dev
+  desc: Check validity of volume selector on umount
+  long_desc: Checks if volume selector did not diverge from the state it should be in.
+    Reference is constructed from bluefs inode table. Asserts on inconsistency.
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluefs_check_volume_selector_often
+  type: bool
+  level: dev
+  desc: Periodically check validity of volume selector
+  long_desc: Periodically checks if current volume selector does not diverge from the valid state.
+    Reference is constructed from bluefs inode table. Asserts on inconsistency. This is debug feature.
+  default: false
+  see_also:
+  - bluefs_check_volume_selector_on_umount
+  flags:
+  - startup
+  with_legacy: true
 - name: bluestore_bluefs
   type: bool
   level: dev
