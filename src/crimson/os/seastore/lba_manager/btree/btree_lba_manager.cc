@@ -4,20 +4,11 @@
 #include <sys/mman.h>
 #include <string.h>
 
-#include "crimson/common/log.h"
-#include "crimson/os/seastore/logging.h"
-
 #include "include/buffer.h"
 #include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree.h"
-
-
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore_lba);
-  }
-}
+#include "crimson/os/seastore/logging.h"
 
 SET_SUBSYS(seastore_lba);
 
@@ -146,8 +137,7 @@ BtreeLBAManager::alloc_extent(
       return LBABtree::iterate_repeat(
 	c,
 	btree.upper_bound_right(c, hint),
-	[this, &state, len, &t, hint](auto &pos) {
-	  LOG_PREFIX(BtreeLBAManager::alloc_extent);
+	[this, &state, len, &t, hint, FNAME](auto &pos) {
 	  ++stats.num_alloc_extents_iter_nexts;
 	  if (!pos.is_end()) {
 	    DEBUGT("iterate_repeat: pos: {}~{}, state: {}~{}, hint: {}",
@@ -219,6 +209,7 @@ static depth_t get_depth(const CachedExtent &e)
 void BtreeLBAManager::complete_transaction(
   Transaction &t)
 {
+  LOG_PREFIX(BtreeLBAManager::complete_transaction);
   std::vector<CachedExtentRef> to_clear;
   to_clear.reserve(t.get_retired_set().size());
   for (auto &e: t.get_retired_set()) {
@@ -232,7 +223,7 @@ void BtreeLBAManager::complete_transaction(
 
   for (auto &e: to_clear) {
     auto &pin = get_pin(*e);
-    logger().debug("{}: retiring {}, {}", __func__, *e, pin);
+    DEBUGT("retiring {}, {}", t, *e, pin);
     pin_set.retire(pin);
   }
 
@@ -249,13 +240,13 @@ void BtreeLBAManager::complete_transaction(
     [](auto &l, auto &r) -> bool { return get_depth(*l) > get_depth(*r); });
 
   for (auto &e : to_link) {
-    logger().debug("{}: linking {}", __func__, *e);
+    DEBUGT("linking {}", t, *e);
     pin_set.add_pin(get_pin(*e));
   }
 
   for (auto &e: to_clear) {
     auto &pin = get_pin(*e);
-    logger().debug("{}: checking {}, {}", __func__, *e, pin);
+    DEBUGT("checking {}, {}", t, *e, pin);
     pin_set.check_parent(pin);
   }
 }
@@ -353,10 +344,7 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
   assert(!extent->has_been_invalidated());
   assert(!extent->is_logical());
 
-  logger().debug(
-    "{}: rewriting {}", 
-    __func__,
-    *extent);
+  DEBUGT("rewriting {}", t, *extent);
 
   if (is_lba_node(*extent)) {
     auto c = get_context(t);
@@ -516,7 +504,8 @@ BtreeLBAManager::update_mapping_ret BtreeLBAManager::update_mapping(
 BtreeLBAManager::~BtreeLBAManager()
 {
   pin_set.scan([](auto &i) {
-    logger().error("Found {} {} has_ref={}", i, i.get_extent(), i.has_ref());
+    LOG_PREFIX(BtreeLBAManager::~BtreeLBAManager);
+    ERROR("Found {} {} has_ref={}", i, i.get_extent(), i.has_ref());
   });
 }
 
