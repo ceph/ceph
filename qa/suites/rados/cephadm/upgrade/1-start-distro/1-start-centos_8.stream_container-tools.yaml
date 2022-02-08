@@ -6,7 +6,7 @@ tasks:
     # avoid --cap-add=PTRACE + --privileged for older cephadm versions
     allow_ptrace: false
 os_type: centos
-os_version: "8.2"
+os_version: "8.stream"
 overrides:
   selinux:
     whitelist:
