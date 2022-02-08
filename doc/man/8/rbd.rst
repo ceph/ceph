@@ -904,6 +904,15 @@ Per mapping (block device) `rbd device map` options:
   mode (since 5.11).  If the daemon denies 'secure' mode in favor of 'crc'
   mode, agree to 'crc' mode.
 
+* rxbounce - Use a bounce buffer when receiving data (since 5.17).  The default
+  behaviour is to read directly into the destination buffer.  A bounce buffer
+  is needed if the destination buffer isn't guaranteed to be stable (i.e. remain
+  unchanged while it is being read to).  In particular this is the case for
+  Windows where a system-wide "dummy" (throwaway) page may be mapped into the
+  destination buffer in order to generate a single large I/O.  Otherwise,
+  "libceph: ... bad crc/signature" or "libceph: ... integrity error, bad crc"
+  errors and associated performance degradation are expected.
+
 * udev - Wait for udev device manager to finish executing all matching
   "add" rules and release the device before exiting (default).  This option
   is not passed to the kernel.
