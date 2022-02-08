@@ -187,6 +187,12 @@ public:
     });
   }
 
+  void early_expand_meta(std::string &val, std::ostream *oss) {
+    do_change([&, this](ConfigValues& values) {
+      get_config().early_expand_meta(values, val, oss);
+    }).get();
+  }
+
   seastar::future<> parse_config_files(const std::string& conf_files);
 
   using ShardedConfig = seastar::sharded<ConfigProxy>;

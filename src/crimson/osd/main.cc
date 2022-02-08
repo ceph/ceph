@@ -28,6 +28,8 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
 #include "global/pidfile.h"
+#include "global/privileges_drop.h"
+
 #include "osd.h"
 
 using namespace std::literals;
@@ -252,6 +254,7 @@ int main(int argc, const char* argv[])
           local_conf().parse_config_files(conf_file_list).get();
           local_conf().parse_env().get();
           local_conf().parse_argv(config_proxy_args).get();
+          maybe_drop_privileges(0);
           auto log_file_stream = maybe_set_logger();
           auto reset_logger = seastar::defer([] {
             logger().set_ostream(std::cerr);

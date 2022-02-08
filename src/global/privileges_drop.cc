@@ -106,8 +106,10 @@ std::ostringstream maybe_drop_privileges(const int flags) {
 		<< st.st_uid << ":" << st.st_gid << ". ";
       }
     }
+#ifndef WITH_SEASTAR
     g_ceph_context->set_uid_gid(uid, gid);
     g_ceph_context->set_uid_gid_strings(uid_string, gid_string);
+#endif
     if ((flags & CINIT_FLAG_DEFER_DROP_PRIVILEGES) == 0) {
       if (setgid(gid) != 0) {
 	cerr << "unable to setgid " << gid << ": " << cpp_strerror(errno)
