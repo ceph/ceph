@@ -29,9 +29,9 @@ namespace gtest {
 
       void SetUp() override {
         cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-            CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1)->get();
+            CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1);
         if (!db_type.compare("SQLite")) {
-          db = new SQLiteDB(tenant, cct);
+          db = new SQLiteDB(tenant, cct.get());
           ASSERT_TRUE(db != nullptr);
           ret = db->Initialize(logfile, loglevel);
           ASSERT_GE(ret, 0);
@@ -51,7 +51,7 @@ namespace gtest {
       int ret;
       string logfile = "rgw_dbstore_tests.log";
       int loglevel = 30;
-      CephContext *cct;
+      boost::intrusive_ptr<CephContext> cct;
   };
 }
 
@@ -98,6 +98,7 @@ namespace {
         GlobalParams.op.obj.state.obj.bucket = GlobalParams.op.bucket.info.bucket;
         GlobalParams.op.obj.state.obj.key.name = object1;
         GlobalParams.op.obj.state.obj.key.instance = "inst1";
+        GlobalParams.op.obj.obj_id = "obj_id1";
         GlobalParams.op.obj_data.part_num = 0;
 
         /* As of now InitializeParams doesnt do anything
@@ -390,19 +391,6 @@ TEST_F(DBStoreTest, UpdateBucketAttrs) {
   ASSERT_EQ(objv.read_version.ver, 2);
 }
 
-TEST_F(DBStoreTest, BucketChown) {
-  int ret = -1;
-  RGWBucketInfo info;
-  rgw_user user;
-  user.id = "user_id2";
-
-  info.bucket.name = "bucket1";
-
-  ret = db->update_bucket(dpp, "owner", info, false, &user, nullptr, &bucket_mtime, nullptr);
-  ASSERT_EQ(ret, 0);
-  ASSERT_EQ(info.objv_tracker.read_version.ver, 3);
-}
-
 TEST_F(DBStoreTest, UpdateBucketInfo) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
@@ -418,13 +406,14 @@ TEST_F(DBStoreTest, UpdateBucketInfo) {
   info.bucket.marker = "marker2";
   ret = db->update_bucket(dpp, "info", info, false, nullptr, nullptr, &bucket_mtime, nullptr);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(info.objv_tracker.read_version.ver, 4);
+  ASSERT_EQ(info.objv_tracker.read_version.ver, 3);
 }
 
 TEST_F(DBStoreTest, GetBucket) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
+  params.op.bucket.info.bucket.name = "bucket1";
   ret = db->ProcessOp(dpp, "GetBucket", &params);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(params.op.bucket.info.bucket.name, "bucket1");
@@ -434,10 +423,10 @@ TEST_F(DBStoreTest, GetBucket) {
   ASSERT_EQ(params.op.bucket.ent.bucket.name, "bucket1");
   ASSERT_EQ(params.op.bucket.ent.bucket.tenant, "tenant");
   ASSERT_EQ(params.op.bucket.info.has_instance_obj, false);
-  ASSERT_EQ(params.op.bucket.info.objv_tracker.read_version.ver, 4);
+  ASSERT_EQ(params.op.bucket.info.objv_tracker.read_version.ver, 3);
   ASSERT_EQ(params.op.bucket.info.objv_tracker.read_version.tag, "read_tag");
   ASSERT_EQ(params.op.bucket.mtime, bucket_mtime);
-  ASSERT_EQ(params.op.bucket.info.owner.id, "user_id2");
+  ASSERT_EQ(params.op.bucket.info.owner.id, "user_id1");
   bufferlist k, k2;
   string acl;
   map<std::string, bufferlist>::iterator it2 = params.op.bucket.bucket_attrs.begin();
@@ -448,35 +437,6 @@ TEST_F(DBStoreTest, GetBucket) {
   k2 = it2->second;
   decode(acl, k2);
   ASSERT_EQ(acl, "attrs2");
-}
-
-TEST_F(DBStoreTest, RemoveBucketAPI) {
-  int ret = -1;
-  RGWBucketInfo info;
-
-  info.bucket.name = "bucket1";
-
-  ret = db->remove_bucket(dpp, info);
-  ASSERT_EQ(ret, 0);
-}
-
-TEST_F(DBStoreTest, RemoveUserAPI) {
-  int ret = -1;
-  RGWUserInfo uinfo;
-  RGWObjVersionTracker objv;
-
-  uinfo.user_id.tenant = "tenant";
-  uinfo.user_id.id = "user_id2";
-
-  /* invalid version number...should fail */
-  objv.read_version.ver = 4;
-  ret = db->remove_user(dpp, uinfo, &objv);
-  ASSERT_EQ(ret, -125);
-
-  /* invalid version number...should fail */
-  objv.read_version.ver = 2;
-  ret = db->remove_user(dpp, uinfo, &objv);
-  ASSERT_EQ(ret, 0);
 }
 
 TEST_F(DBStoreTest, CreateBucket) {
@@ -564,7 +524,8 @@ TEST_F(DBStoreTest, ListUserBuckets) {
   marker1 = "";
   do {
     is_truncated = false;
-    ret = db->list_buckets(dpp, owner, marker1, "", max, need_stats, &ulist, &is_truncated);
+    ret = db->list_buckets(dpp, "", owner, marker1, "", max, need_stats, &ulist,
+          &is_truncated);
     ASSERT_EQ(ret, 0);
 
     cout << "marker1 :" << marker1 << "\n";
@@ -586,11 +547,90 @@ TEST_F(DBStoreTest, ListUserBuckets) {
   } while(is_truncated);
 }
 
+TEST_F(DBStoreTest, BucketChown) {
+  int ret = -1;
+  RGWBucketInfo info;
+  rgw_user user;
+  user.id = "user_id2";
+
+  info.bucket.name = "bucket5";
+
+  ret = db->update_bucket(dpp, "owner", info, false, &user, nullptr, &bucket_mtime, nullptr);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(info.objv_tracker.read_version.ver, 3);
+}
+
 TEST_F(DBStoreTest, ListAllBuckets) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
   ret = db->ListAllBuckets(dpp, &params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, ListAllBuckets2) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  rgw_user owner;
+  int max = 2;
+  bool need_stats = true;
+  bool is_truncated = false;
+  RGWUserBuckets ulist;
+
+  marker1 = "";
+  do {
+    is_truncated = false;
+    ret = db->list_buckets(dpp, "all", owner, marker1, "", max, need_stats, &ulist,
+          &is_truncated);
+    ASSERT_EQ(ret, 0);
+
+    cout << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ \n";
+    cout << "ownerID : " << owner.id << "\n";
+    cout << "marker1 :" << marker1 << "\n";
+
+    cout << "is_truncated :" << is_truncated << "\n";
+
+    for (const auto& ent: ulist.get_buckets()) {
+      RGWBucketEnt e = ent.second;
+      cout << "###################### \n";
+      cout << "ent.bucket.id : " << e.bucket.name << "\n";
+      cout << "ent.bucket.marker : " << e.bucket.marker << "\n";
+      cout << "ent.bucket.bucket_id : " << e.bucket.bucket_id << "\n";
+      cout << "ent.size : " << e.size << "\n";
+      cout << "ent.rule.name : " << e.placement_rule.name << "\n";
+
+      marker1 = e.bucket.name;
+    }
+    ulist.clear();
+  } while(is_truncated);
+}
+
+TEST_F(DBStoreTest, RemoveBucketAPI) {
+  int ret = -1;
+  RGWBucketInfo info;
+
+  info.bucket.name = "bucket5";
+
+  ret = db->remove_bucket(dpp, info);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, RemoveUserAPI) {
+  int ret = -1;
+  RGWUserInfo uinfo;
+  RGWObjVersionTracker objv;
+
+  uinfo.user_id.tenant = "tenant";
+  uinfo.user_id.id = "user_id2";
+
+  /* invalid version number...should fail */
+  objv.read_version.ver = 4;
+  ret = db->remove_user(dpp, uinfo, &objv);
+  ASSERT_EQ(ret, -125);
+
+  /* invalid version number...should fail */
+  objv.read_version.ver = 2;
+  ret = db->remove_user(dpp, uinfo, &objv);
   ASSERT_EQ(ret, 0);
 }
 
@@ -967,6 +1007,7 @@ TEST_F(DBStoreTest, PutObjectData) {
   encode("HELLO WORLD", b1);
   params.op.obj_data.data = b1;
   params.op.obj_data.size = 12;
+  params.op.obj.state.mtime = real_clock::now();
   ret = db->ProcessOp(dpp, "PutObjectData", &params);
   ASSERT_EQ(ret, 0);
 }
@@ -975,8 +1016,7 @@ TEST_F(DBStoreTest, UpdateObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  params.op.obj.new_obj_key.name = "object3";
-  params.op.obj.new_obj_key.instance = "inst3";
+  params.op.obj.state.mtime = bucket_mtime;
   ret = db->ProcessOp(dpp, "UpdateObjectData", &params);
   ASSERT_EQ(ret, 0);
 }
@@ -985,15 +1025,16 @@ TEST_F(DBStoreTest, GetObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  params.op.obj.state.obj.key.instance = "inst3";
-  params.op.obj.state.obj.key.name = "object3";
+  params.op.obj.state.obj.key.instance = "inst1";
+  params.op.obj.state.obj.key.name = "object1";
   ret = db->ProcessOp(dpp, "GetObjectData", &params);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(params.op.obj_data.part_num, 1);
   ASSERT_EQ(params.op.obj_data.offset, 10);
   ASSERT_EQ(params.op.obj_data.multipart_part_str, "2");
-  ASSERT_EQ(params.op.obj.state.obj.key.instance, "inst3");
-  ASSERT_EQ(params.op.obj.state.obj.key.name, "object3");
+  ASSERT_EQ(params.op.obj.state.obj.key.instance, "inst1");
+  ASSERT_EQ(params.op.obj.state.obj.key.name, "object1");
+  ASSERT_EQ(params.op.obj.state.mtime, bucket_mtime);
   string data;
   decode(data, params.op.obj_data.data);
   ASSERT_EQ(data, "HELLO WORLD");

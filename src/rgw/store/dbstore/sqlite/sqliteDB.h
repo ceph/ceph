@@ -25,10 +25,8 @@ class SQLiteDB : public DB, virtual public DBOp {
 
     SQLiteDB(sqlite3 *dbi, std::string db_name, CephContext *_cct) : DB(db_name, _cct), cct(_cct) {
       db = (void*)dbi;
-      InitPrepareParams(get_def_dpp(), PrepareParams);
     }
     SQLiteDB(std::string db_name, CephContext *_cct) : DB(db_name, _cct), cct(_cct) {
-      InitPrepareParams(get_def_dpp(), PrepareParams);
     }
     ~SQLiteDB() {}
 
@@ -38,7 +36,8 @@ class SQLiteDB : public DB, virtual public DBOp {
     int InitializeDBOps(const DoutPrefixProvider *dpp) override;
     int FreeDBOps(const DoutPrefixProvider *dpp) override;
 
-    int InitPrepareParams(const DoutPrefixProvider *dpp, DBOpPrepareParams &params) override { return 0; }
+    int InitPrepareParams(const DoutPrefixProvider *dpp, DBOpPrepareParams &p_params,
+                          DBOpParams* params) override;
 
     int exec(const DoutPrefixProvider *dpp, const char *schema,
         int (*callback)(void*,int,char**,char**));
@@ -52,7 +51,11 @@ class SQLiteDB : public DB, virtual public DBOp {
     int createUserTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createObjectView(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    void populate_object_params(const DoutPrefixProvider *dpp,
+                                struct DBOpPrepareParams& p_params,
+                                struct DBOpParams* params, bool data);
 
     int createLCTables(const DoutPrefixProvider *dpp) override;
 
@@ -213,12 +216,15 @@ class SQLListUserBuckets : public SQLiteDB, public ListUserBucketsOp {
   private:
     sqlite3 **sdb = NULL;
     sqlite3_stmt *stmt = NULL; // Prepared statement
+    sqlite3_stmt *all_stmt = NULL; // Prepared statement
 
   public:
     SQLListUserBuckets(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
     ~SQLListUserBuckets() {
       if (stmt)
         sqlite3_finalize(stmt);
+      if (all_stmt)
+        sqlite3_finalize(all_stmt);
     }
     int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
     int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
@@ -387,6 +393,24 @@ class SQLDeleteObjectData : public SQLiteDB, public DeleteObjectDataOp {
     SQLDeleteObjectData(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
 
     ~SQLDeleteObjectData() {
+      if (stmt)
+        sqlite3_finalize(stmt);
+    }
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
+};
+
+class SQLDeleteStaleObjectData : public SQLiteDB, public DeleteStaleObjectDataOp {
+  private:
+    sqlite3 **sdb = NULL;
+    sqlite3_stmt *stmt = NULL; // Prepared statement
+
+  public:
+    SQLDeleteStaleObjectData(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
+    SQLDeleteStaleObjectData(sqlite3 **sdbi, std::string db_name, CephContext *cct) : SQLiteDB(*sdbi, db_name, cct), sdb(sdbi) {}
+
+    ~SQLDeleteStaleObjectData() {
       if (stmt)
         sqlite3_finalize(stmt);
     }
