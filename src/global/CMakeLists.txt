@@ -1,6 +1,7 @@
 set(libglobal_srcs
   global_init.cc
-  pidfile.cc)
+  pidfile.cc
+  privileges_drop.cc)
 if (WIN32)
   list(APPEND libglobal_srcs signal_handler_win32.cc)
 else()
