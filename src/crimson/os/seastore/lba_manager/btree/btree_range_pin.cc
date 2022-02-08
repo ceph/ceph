@@ -1,15 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "crimson/common/log.h"
-
 #include "crimson/os/seastore/lba_manager/btree/btree_range_pin.h"
+#include "crimson/os/seastore/logging.h"
 
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore_lba);
-  }
-}
+SET_SUBSYS(seastore_lba);
 
 namespace crimson::os::seastore::lba_manager::btree {
 
@@ -30,10 +25,11 @@ void btree_range_pin_t::take_pin(btree_range_pin_t &other)
 
 btree_range_pin_t::~btree_range_pin_t()
 {
+  LOG_PREFIX(btree_range_pin_t::~btree_range_pin_t);
   ceph_assert(!pins == !is_linked());
   ceph_assert(!ref);
   if (pins) {
-    logger().debug("{}: removing {}", __func__, *this);
+    TRACE("removing {}", *this);
     pins->remove_pin(*this, true);
   }
   extent = nullptr;
@@ -46,7 +42,8 @@ void btree_pin_set_t::replace_pin(btree_range_pin_t &to, btree_range_pin_t &from
 
 void btree_pin_set_t::remove_pin(btree_range_pin_t &pin, bool do_check_parent)
 {
-  logger().debug("{}: {}", __func__, pin);
+  LOG_PREFIX(btree_pin_set_t::remove_pin);
+  TRACE("{}", pin);
   ceph_assert(pin.is_linked());
   ceph_assert(pin.pins);
   ceph_assert(!pin.ref);
@@ -107,15 +104,14 @@ void btree_pin_set_t::release_if_no_children(btree_range_pin_t &pin)
 
 void btree_pin_set_t::add_pin(btree_range_pin_t &pin)
 {
+  LOG_PREFIX(btree_pin_set_t::add_pin);
   ceph_assert(!pin.is_linked());
   ceph_assert(!pin.pins);
   ceph_assert(!pin.ref);
 
   auto [prev, inserted] = pins.insert(pin);
   if (!inserted) {
-    logger().error(
-      "{}: unable to add {} ({}), found {} ({})",
-      __func__,
+    ERROR("unable to add {} ({}), found {} ({})",
       pin,
       *(pin.extent),
       *prev,
@@ -128,16 +124,14 @@ void btree_pin_set_t::add_pin(btree_range_pin_t &pin)
     auto *parent = maybe_get_parent(pin.range);
     ceph_assert(parent);
     if (!parent->has_ref()) {
-      logger().debug("{}: acquiring parent {}", __func__,
-		     static_cast<void*>(parent));
+      TRACE("acquiring parent {}", static_cast<void*>(parent));
       parent->acquire_ref();
     } else {
-      logger().debug("{}: parent has ref {}", __func__,
-		     static_cast<void*>(parent));
+      TRACE("parent has ref {}", static_cast<void*>(parent));
     }
   }
   if (maybe_get_first_child(pin.range) != nullptr) {
-    logger().debug("{}: acquiring self {}", __func__, pin);
+    TRACE("acquiring self {}", pin);
     pin.acquire_ref();
   }
 }
@@ -150,9 +144,10 @@ void btree_pin_set_t::retire(btree_range_pin_t &pin)
 
 void btree_pin_set_t::check_parent(btree_range_pin_t &pin)
 {
+  LOG_PREFIX(btree_pin_set_t::check_parent);
   auto parent = maybe_get_parent(pin.range);
   if (parent) {
-    logger().debug("{}: releasing parent {}", __func__, *parent);
+    TRACE("releasing parent {}", *parent);
     release_if_no_children(*parent);
   }
 }
