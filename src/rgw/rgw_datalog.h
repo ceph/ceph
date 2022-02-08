@@ -198,6 +198,38 @@ public:
   int trim_generations(const DoutPrefixProvider *dpp, std::optional<uint64_t>& through);
 };
 
+struct BucketGen {
+  rgw_bucket_shard shard;
+  uint64_t gen;
+
+  BucketGen(const rgw_bucket_shard& shard, uint64_t gen)
+    : shard(shard), gen(gen) {}
+
+  BucketGen(rgw_bucket_shard&& shard, uint64_t gen)
+    : shard(std::move(shard)), gen(gen) {}
+
+  BucketGen(const BucketGen&) = default;
+  BucketGen(BucketGen&&) = default;
+  BucketGen& operator =(const BucketGen&) = default;
+  BucketGen& operator =(BucketGen&&) = default;
+
+  ~BucketGen() = default;
+};
+
+inline bool operator ==(const BucketGen& l, const BucketGen& r) {
+  return (l.shard == r.shard) && (l.gen == r.gen);
+}
+
+inline bool operator <(const BucketGen& l, const BucketGen& r) {
+  if (l.shard < r.shard) {
+    return true;
+  } else if (l.shard == r.shard) {
+    return l.gen < r.gen;
+  } else {
+    return false;
+  }
+}
+
 class RGWDataChangesLog {
   friend DataLogBackends;
   CephContext *cct;
@@ -234,14 +266,16 @@ class RGWDataChangesLog {
 
   using ChangeStatusPtr = std::shared_ptr<ChangeStatus>;
 
-  lru_map<rgw_bucket_shard, ChangeStatusPtr> changes;
+  lru_map<BucketGen, ChangeStatusPtr> changes;
 
-  bc::flat_set<std::pair<rgw_bucket_shard, uint64_t>> cur_cycle;
+  bc::flat_set<BucketGen> cur_cycle;
 
-  void _get_change(const rgw_bucket_shard& bs, ChangeStatusPtr& status);
+  ChangeStatusPtr _get_change(const rgw_bucket_shard& bs, uint64_t gen);
   void register_renew(const rgw_bucket_shard& bs,
 		      const rgw::bucket_log_layout_generation& gen);
-  void update_renewed(const rgw_bucket_shard& bs, ceph::real_time expiration);
+  void update_renewed(const rgw_bucket_shard& bs,
+		      uint64_t gen,
+		      ceph::real_time expiration);
 
   ceph::mutex renew_lock = ceph::make_mutex("ChangesRenewThread::lock");
   ceph::condition_variable renew_cond;
