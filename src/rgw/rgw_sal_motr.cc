@@ -895,7 +895,7 @@ bool MotrZone::get_redirect_endpoint(std::string* endpoint)
 
 bool MotrZone::has_zonegroup_api(const std::string& api) const
 {
-  return false;
+  return (zonegroup->api_name == api);
 }
 
 const std::string& MotrZone::get_current_period_id()
