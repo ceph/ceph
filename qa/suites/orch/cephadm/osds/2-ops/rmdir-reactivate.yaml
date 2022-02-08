@@ -5,7 +5,7 @@ tasks:
         set -e
         set -x
         ceph orch ps
-        HOST=$(hostname -s)
+        HOST=$(uname -n)
         OSD=$(ceph orch ps $HOST | grep osd | head -n 1 | awk '{print $1}')
         echo "host $HOST, osd $OSD"
         ceph orch daemon stop $OSD
