@@ -152,11 +152,19 @@ void normalize_level_spec_args(std::map<std::string, std::string> *args) {
   }
 }
 
-void add_schedule_options(po::options_description *positional) {
+void add_schedule_options(po::options_description *positional,
+                          bool mandatory) {
+  if (mandatory) {
+    positional->add_options()
+      ("interval", "schedule interval");
+  } else {
+    positional->add_options()
+      ("interval", po::value<std::string>()->default_value(""),
+       "schedule interval");
+  }
   positional->add_options()
-    ("interval", "schedule interval");
-  positional->add_options()
-    ("start-time", "schedule start time");
+    ("start-time", po::value<std::string>()->default_value(""),
+     "schedule start time");
 }
 
 int get_schedule_args(const po::variables_map &vm, bool mandatory,
