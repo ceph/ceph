@@ -5549,6 +5549,27 @@ void Client::_schedule_invalidate_dentry_callback(Dentry *dn, bool del)
     async_dentry_invalidator.queue(new C_Client_DentryInvalidate(this, dn, del));
 }
 
+void Client::_try_to_invalid_and_unlink_dentries(Inode *in, bool invalid, bool _unlink)
+{
+  if (in->get_nref() == 1) {
+    return;
+  }
+
+  auto q = in->dentries.begin();
+  while (q != in->dentries.end()) {
+    Dentry *dn = *q;
+    ++q;
+    if(in->ll_ref > 0 && invalid) {
+      // FIXME: we play lots of unlink/link tricks when handling MDS replies,
+      //        so in->dentries doesn't always reflect the state of kernel's dcache.
+      _schedule_invalidate_dentry_callback(dn, true);
+    }
+    if (_unlink) {
+      unlink(dn, true, true);
+    }
+  }
+}
+
 void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
 {
   int ref = in->get_nref();
@@ -5581,19 +5602,7 @@ void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
     --ref;
   }
 
-  if (ref > 1) {
-    auto q = in->dentries.begin();
-    while (q != in->dentries.end()) {
-      Dentry *dn = *q;
-      ++q;
-      if( in->ll_ref > 0 && sched_inval) {
-        // FIXME: we play lots of unlink/link tricks when handling MDS replies,
-        //        so in->dentries doesn't always reflect the state of kernel's dcache.
-        _schedule_invalidate_dentry_callback(dn, true);
-      }
-      unlink(dn, true, true);
-    }
-  }
+  _try_to_invalid_and_unlink_dentries(in, sched_inval, true);
 }
 
 void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m)
@@ -5602,6 +5611,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   int used = get_caps_used(in);
   int wanted = in->caps_wanted();
   int flags = 0;
+  bool invalid_cache = false;
 
   const unsigned new_caps = m->get_caps();
   const bool was_stale = session->cap_gen > cap->gen;
@@ -5723,6 +5733,9 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
       check = true;
       flags = CHECK_CAPS_NODELAY;
     }
+
+    if (revoked & CEPH_STAT_CAP_INODE_ALL)
+      invalid_cache = true;
   } else if (cap->issued == new_caps) {
     ldout(cct, 10) << "  caps unchanged at " << ccap_string(cap->issued) << dendl;
   } else {
@@ -5753,6 +5766,8 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   // may drop inode's last ref
   if (deleted_inode)
     _try_to_trim_inode(in, true);
+  else if (invalid_cache)
+    _try_to_invalid_and_unlink_dentries(in, true);
 }
 
 int Client::inode_permission(Inode *in, const UserPerm& perms, unsigned want)

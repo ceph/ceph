@@ -752,6 +752,7 @@ public:
   void finish_cap_snap(Inode *in, CapSnap &capsnap, int used);
 
   void _schedule_invalidate_dentry_callback(Dentry *dn, bool del);
+  void _try_to_invalid_and_unlink_dentries(Inode *in, bool invalid, bool _unlink=false);
   void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, std::string& name);
   void _try_to_trim_inode(Inode *in, bool sched_inval);
 
