@@ -1665,7 +1665,7 @@
   rbd help mirror image enable
   usage: rbd mirror image enable [--pool <pool>] [--namespace <namespace>] 
                                  [--image <image>] 
-                                 <image-spec> <mode> 
+                                 <image-spec> [<mode>] 
   
   Enable RBD mirroring for an image.
   
@@ -1943,7 +1943,7 @@
                                         [--pool <pool>] 
                                         [--namespace <namespace>] 
                                         [--image <image>] 
-                                        <interval> <start-time> 
+                                        <interval> [<start-time>] 
   
   Add mirror snapshot schedule.
   
@@ -1978,7 +1978,7 @@
                                         [--pool <pool>] 
                                         [--namespace <namespace>] 
                                         [--image <image>] 
-                                        <interval> <start-time> 
+                                        [<interval>] [<start-time>] 
   
   Remove mirror snapshot schedule.
   
@@ -2514,7 +2514,7 @@
   
   rbd help trash purge schedule add
   usage: rbd trash purge schedule add [--pool <pool>] [--namespace <namespace>] 
-                                      <interval> <start-time> 
+                                      <interval> [<start-time>] 
   
   Add trash purge schedule.
   
@@ -2543,7 +2543,7 @@
   rbd help trash purge schedule remove
   usage: rbd trash purge schedule remove
                                         [--pool <pool>] [--namespace <namespace>] 
-                                        <interval> <start-time> 
+                                        [<interval>] [<start-time>] 
   
   Remove trash purge schedule.
   
