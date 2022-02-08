@@ -66,6 +66,7 @@ class Collection(str, enum.Enum):
     perf_perf = 'perf_perf'
     basic_mds_metadata = 'basic_mds_metadata'
     basic_pool_usage = 'basic_pool_usage'
+    basic_usage_by_class = 'basic_usage_by_class'
 
 MODULE_COLLECTION : List[Dict] = [
     {
@@ -107,6 +108,12 @@ MODULE_COLLECTION : List[Dict] = [
     {
         "name": Collection.basic_pool_usage,
         "description": "Default pool application and usage statistics",
+        "channel": "basic",
+        "nag": False
+    },
+    {
+        "name": Collection.basic_usage_by_class,
+        "description": "Default device class usage statistics",
         "channel": "basic",
         "nag": False
     }
@@ -1062,8 +1069,8 @@ class Module(MgrModule):
                 'total_bytes': df['stats']['total_bytes'],
                 'total_avail_bytes': df['stats']['total_avail_bytes']
             }
-            # basic_pool_usage collection (2/2)
-            if self.is_enabled_collection(Collection.basic_pool_usage):
+            # basic_usage_by_class collection
+            if self.is_enabled_collection(Collection.basic_usage_by_class):
                 report['usage']['stats_by_class'] = {} # type: ignore
                 for device_class in df['stats_by_class']:
                     if device_class in ['hdd', 'ssd', 'nvme']:
