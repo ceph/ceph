@@ -465,8 +465,123 @@ int MotrBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_childre
 {
   int ret;
 
+  ldpp_dout(dpp, 20) << "remove_bucket Entry=" << info.bucket.name << dendl;
+
+  // Refresh info
   ret = load_bucket(dpp, y);
-  // TODO: implement bucket removal
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_bucket load_bucket failed rc=" << ret << dendl;
+    return ret;
+  }
+
+  ListParams params;
+  params.list_versions = true;
+  params.allow_unordered = true;
+
+  ListResults results;
+
+  // 1. Check if Bucket has objects.
+  // If bucket contains objects and delete_children is true, delete all objects.
+  // Else throw error that bucket is not empty.
+  do {
+    results.objs.clear();
+
+    // Check if bucket has objects.
+    ret = list(dpp, params, 1000, results, y);
+    if (ret < 0) {
+      return ret;
+    }
+
+    // If result contains entries, bucket is not empty.
+    if (!results.objs.empty() && !delete_children) {
+      ldpp_dout(dpp, 0) << "ERROR: could not remove non-empty bucket " << info.bucket.name << dendl;
+      return -ENOTEMPTY;
+    }
+
+    for (const auto& obj : results.objs) {
+      rgw_obj_key key(obj.key);
+      /* xxx dang */
+      ret = rgw_remove_object(dpp, store, this, key);
+      if (ret < 0 && ret != -ENOENT) {
+        ldpp_dout(dpp, 0) << "ERROR: remove_bucket rgw_remove_object failed rc=" << ret << dendl;
+	      return ret;
+      }
+    }
+  } while(results.is_truncated);
+
+  // 2. Abort Mp uploads on the bucket.
+  ret = abort_multiparts(dpp, store->ctx());
+  if (ret < 0) {
+    return ret;
+  }
+
+  // 3. Remove mp index??
+  string bucket_multipart_iname = "motr.rgw.bucket." + info.bucket.name + ".multiparts";
+  ret = store->delete_motr_idx_by_name(bucket_multipart_iname);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_bucket failed to remove multipart index rc=" << ret << dendl;
+    return ret;
+  }
+
+  // 4. Sync user stats.
+  ret = this->sync_user_stats(dpp, y);
+  if (ret < 0) {
+     ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
+  }
+
+  // 5. Remove the bucket from user info index. (unlink user)
+  ret = this->unlink_user(dpp, owner, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_bucket unlink_user failed rc=" << ret << dendl;
+    return ret;
+  }
+
+  // 6. Remove bucket index.
+  string bucket_index_iname = "motr.rgw.bucket.index." + info.bucket.name;
+  ret = store->delete_motr_idx_by_name(bucket_index_iname);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_bucket unlink_user failed rc=" << ret << dendl;
+    return ret;
+  }
+
+  // 7. Remove bucket instance info.
+  bufferlist bl;
+  ret = store->get_bucket_inst_cache()->remove(dpp, info.bucket.name);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_bucket failed to remove bucket instance from cache rc="
+      << ret << dendl;
+    return ret;
+  }
+
+  ret = store->do_idx_op_by_name(RGW_MOTR_BUCKET_INST_IDX_NAME,
+                                  M0_IC_DEL, info.bucket.name, bl);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_bucket failed to remove bucket instance rc=" 
+      << ret << dendl;
+    return ret;
+  }
+
+  // TODO :
+  // 8. Remove Notifications
+  // if bucket has notification definitions associated with it
+  // they should be removed (note that any pending notifications on the bucket are still going to be sent)
+
+  // 9. Forward request to master.
+  if (forward_to_master) {
+    bufferlist in_data;
+    ret = store->forward_request_to_master(dpp, owner, &bucket_version, in_data, nullptr, *req_info, y);
+    if (ret < 0) {
+      if (ret == -ENOENT) {
+        /* adjust error, we want to return with NoSuchBucket and not
+        * NoSuchKey */
+        ret = -ERR_NO_SUCH_BUCKET;
+      }
+      ldpp_dout(dpp, 0) << "ERROR: Forward to master failed. ret=" << ret << dendl;
+      return ret;
+    }
+  }
+
+  ldpp_dout(dpp, 20) << "remove_bucket Exit=" << info.bucket.name << dendl;
 
   return ret;
 }
@@ -3304,6 +3419,8 @@ int MotrStore::delete_motr_idx_by_name(string iname)
   struct m0_uint128 idx_id;
   struct m0_op *op = nullptr;
 
+  ldout(cctx, 20) << "delete_motr_idx_by_name=" << iname << dendl;
+
   index_name_to_motr_fid(iname, &idx_id);
   m0_idx_init(&idx, &container.co_realm, &idx_id);
   m0_entity_open(&idx.in_entity, &op);
@@ -3312,6 +3429,9 @@ int MotrStore::delete_motr_idx_by_name(string iname)
     goto out;
 
   m0_op_launch(&op, 1);
+
+  ldout(cctx, 70) << "waiting for op completion" << dendl;
+
   rc = m0_op_wait(op, M0_BITS(M0_OS_FAILED, M0_OS_STABLE), M0_TIME_NEVER) ?:
        m0_rc(op);
   m0_op_fini(op);
@@ -3321,6 +3441,8 @@ int MotrStore::delete_motr_idx_by_name(string iname)
     rc = 0;
   else if (rc < 0)
     ldout(cctx, 0) << "ERROR: index create failed: " << rc << dendl;
+
+  ldout(cctx, 20) << "delete_motr_idx_by_name rc=" << rc << dendl;
 
 out:
   m0_idx_fini(&idx);
