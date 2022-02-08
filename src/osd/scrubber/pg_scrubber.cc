@@ -1630,7 +1630,7 @@ void PgScrubber::scrub_finish()
         static_cast<int>(m_pg->cct->_conf->osd_scrub_auto_repair_num_errors)) {
 
     dout(10) << __func__ << " undoing the repair" << dendl;
-    state_clear(PG_STATE_REPAIR); // not expected to be set, anyway
+    state_clear(PG_STATE_REPAIR);  // not expected to be set, anyway
     m_is_repair = false;
     update_op_mode_text();
   }
