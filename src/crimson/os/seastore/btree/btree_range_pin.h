@@ -60,6 +60,34 @@ inline std::ostream &operator<<(
 	     << ", depth=" << rhs.depth
 	     << ")";
 }
+
+/**
+ * fixed_kv_node_meta_le_t
+ *
+ * On disk layout for fixed_kv_node_meta_t
+ */
+template <typename bound_le_t>
+struct fixed_kv_node_meta_le_t {
+  bound_le_t begin = bound_le_t(0);
+  bound_le_t end = bound_le_t(0);
+  depth_le_t depth = init_depth_le(0);
+
+  fixed_kv_node_meta_le_t() = default;
+  fixed_kv_node_meta_le_t(
+    const fixed_kv_node_meta_le_t<bound_le_t> &) = default;
+  explicit fixed_kv_node_meta_le_t(
+    const fixed_kv_node_meta_t<typename bound_le_t::orig_type> &val)
+    : begin(ceph_le64(val.begin)),
+      end(ceph_le64(val.end)),
+      depth(init_depth_le(val.depth)) {}
+
+  operator fixed_kv_node_meta_t<typename bound_le_t::orig_type>() const {
+    return fixed_kv_node_meta_t<typename bound_le_t::orig_type>{
+	    begin, end, depth };
+  }
+};
+
+
 /**
  * btree_range_pin_t
  *
