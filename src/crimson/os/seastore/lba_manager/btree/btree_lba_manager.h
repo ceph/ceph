@@ -128,6 +128,11 @@ private:
 
   btree_pin_set_t pin_set;
 
+  struct {
+    uint64_t num_alloc_extents = 0;
+    uint64_t num_alloc_extents_iter_nexts = 0;
+  } stats;
+
   op_context_t get_context(Transaction &t) {
     return op_context_t{cache, t, &pin_set};
   }
