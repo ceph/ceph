@@ -106,7 +106,7 @@ MODULE_COLLECTION : List[Dict] = [
     },
     {
         "name": Collection.basic_pool_usage,
-        "description": "Pool application and data usage metrics",
+        "description": "Default pool application and usage statistics",
         "channel": "basic",
         "nag": False
     }
@@ -910,7 +910,7 @@ class Module(MgrModule):
                         'cache_mode': pool['cache_mode'],
                     }
 
-                # basic_pool_usage collection (1/2)
+                # basic_pool_usage collection
                 if self.is_enabled_collection(Collection.basic_pool_usage):
                     pool_data['application'] = []
                     for application in pool['application_metadata']:
