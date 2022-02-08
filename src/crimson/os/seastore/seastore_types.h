@@ -712,6 +712,8 @@ struct __attribute((packed)) paddr_le_t {
   ceph_le64 dev_addr =
     ceph_le64(P_ADDR_NULL.dev_addr);
 
+  using orig_type = paddr_t;
+
   paddr_le_t() = default;
   paddr_le_t(const paddr_t &addr) : dev_addr(ceph_le64(addr.dev_addr)) {}
 
@@ -799,6 +801,8 @@ constexpr laddr_t L_ADDR_LBAT = L_ADDR_MAX - 2;
 
 struct __attribute((packed)) laddr_le_t {
   ceph_le64 laddr = ceph_le64(L_ADDR_NULL);
+
+  using orig_type = laddr_t;
 
   laddr_le_t() = default;
   laddr_le_t(const laddr_le_t &) = default;
