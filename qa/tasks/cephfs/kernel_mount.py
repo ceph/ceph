@@ -10,12 +10,11 @@ from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
 from teuthology.contextutil import MaxWhileTries
 
-from tasks.cephfs.mount import CephFSMount
+from tasks.cephfs.mount import CephFSMount, UMOUNT_TIMEOUT
 
 log = logging.getLogger(__name__)
 
 
-UMOUNT_TIMEOUT = 300
 # internal metadata directory
 DEBUGFS_META_DIR = 'meta'
 
@@ -70,7 +69,7 @@ class KernelMount(CephFSMount):
         mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
 
         try:
-            self.client_remote.run(args=mount_cmd, timeout=(30*60),
+            self.client_remote.run(args=mount_cmd, timeout=300,
                                    stdout=mountcmd_stdout,
                                    stderr=mountcmd_stderr, omit_sudo=False)
         except CommandFailedError as e:
@@ -136,13 +135,13 @@ class KernelMount(CephFSMount):
             cmd=['sudo', 'umount', self.hostfs_mntpt]
             if force:
                 cmd.append('-f')
-            self.client_remote.run(args=cmd, timeout=(15*60), omit_sudo=False)
+            self.client_remote.run(args=cmd, timeout=UMOUNT_TIMEOUT, omit_sudo=False)
         except Exception as e:
             log.debug('Killing processes on client.{id}...'.format(id=self.client_id))
             self.client_remote.run(
                 args=['sudo', run.Raw('PATH=/usr/sbin:$PATH'), 'lsof',
                       run.Raw(';'), 'ps', 'auxf'],
-                timeout=(15*60), omit_sudo=False)
+                timeout=UMOUNT_TIMEOUT, omit_sudo=False)
             raise e
 
         if self.dynamic_debug:
@@ -155,7 +154,8 @@ class KernelMount(CephFSMount):
         self.mounted = False
         self.cleanup()
 
-    def umount_wait(self, force=False, require_clean=False, timeout=900):
+    def umount_wait(self, force=False, require_clean=False,
+                    timeout=UMOUNT_TIMEOUT):
         """
         Unlike the fuse client, the kernel client's umount is immediate
         """
@@ -172,8 +172,8 @@ class KernelMount(CephFSMount):
             # force delete the netns and umount
             log.debug('Force/lazy unmounting on client.{id}...'.format(id=self.client_id))
             self.client_remote.run(args=['sudo', 'umount', '-f', '-l',
-                                         self.mountpoint],
-                                   timeout=(15*60), omit_sudo=False)
+                                         self.mountpoint], timeout=timeout,
+                                   omit_sudo=False)
 
             self.mounted = False
             self.cleanup()
