@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <wait.h>
 #include <cap-ng.h>
+#include <getopt.h>
 
 #include "common/module.h"
 #include "common/secret.h"
@@ -18,6 +19,7 @@
 #endif
 
 bool verboseflag = false;
+bool fakeflag = false;
 bool skip_mtab_flag = false;
 bool v2_addrs = false;
 bool no_fallback = false;
@@ -626,7 +628,15 @@ out:
 static int parse_arguments(int argc, char *const *const argv,
 		const char **src, const char **node, const char **opts)
 {
-	int i;
+	int opt = 0;
+	static struct option long_options[] = {
+		{ "help",    no_argument,        0,  'h' },
+		{ "no-mtab", no_argument,        0,  'n' },
+		{ "verbose", no_argument,        0,  'v' },
+		{ "fake",    no_argument,        0,  'f' },
+		{ "options", required_argument,  0,  'o' },
+		{ 0,         0,                  0,  0   }
+	};
 
 	if (argc < 2) {
 		// There were no arguments. Just show the usage.
@@ -645,23 +655,25 @@ static int parse_arguments(int argc, char *const *const argv,
 
 	// Parse the remaining options
 	*opts = EMPTY_STRING;
-	for (i = 3; i < argc; ++i) {
-		if (!strcmp("-h", argv[i]))
-			return 1;
-		else if (!strcmp("-n", argv[i]))
-			skip_mtab_flag = true;
-		else if (!strcmp("-v", argv[i]))
-			verboseflag = true;
-		else if (!strcmp("-o", argv[i])) {
-			++i;
-			if (i >= argc) {
-				fprintf(stderr, "Option -o requires an argument.\n\n");
+	while ((opt = getopt_long(argc, argv, "hnvfo:",
+					long_options, NULL)) != -1) {
+		switch (opt) {
+			case 'h' : // -h or --help
+				return 1;
+			case 'n' : // -n or --no-mtab
+				skip_mtab_flag = true;
+				break;
+			case 'v' : // -v or --verbose
+				verboseflag = true;
+				break;
+			case 'f' : // -f or --fake
+				fakeflag = true;
+				break;
+			case 'o' : // -o or --options
+				*opts = optarg;
+				break;
+			default:
 				return -EINVAL;
-			}
-			*opts = argv[i];
-                } else {
-			fprintf(stderr, "Can't understand option: '%s'\n\n", argv[i]);
-			return -EINVAL;
 		}
 	}
 	return 0;
@@ -683,10 +695,11 @@ static void usage(const char *prog_name)
 	printf("usage: %s [src] [mount-point] [-n] [-v] [-o ceph-options]\n",
 		prog_name);
 	printf("options:\n");
-	printf("\t-h: Print this help\n");
-	printf("\t-n: Do not update /etc/mtab\n");
-	printf("\t-v: Verbose\n");
-	printf("\tceph-options: refer to mount.ceph(8)\n");
+	printf("\t-h, --help\tPrint this help\n");
+	printf("\t-n, --no-mtab\tDo not update /etc/mtab\n");
+	printf("\t-v, --verbose\tVerbose\n");
+	printf("\t-f, --fake\tFake mount, do not actually mount\n");
+	printf("ceph-options: refer to mount.ceph(8)\n");
 	printf("\n");
 }
 
@@ -703,6 +716,15 @@ static void ceph_mount_info_free(struct ceph_mount_info *cmi)
 	free(cmi->cmi_path);
 	free(cmi->cmi_mons);
 	free(cmi->cmi_conf);
+}
+
+static int call_mount_system_call(const char *rsrc, const char *node, struct ceph_mount_info *cmi)
+{
+	int r = 0;
+	if (!fakeflag) {
+		r = mount(rsrc, node, "ceph", cmi->cmi_flags, cmi->cmi_opts);
+	}
+	return r;
 }
 
 static int mount_new_device_format(const char *node, struct ceph_mount_info *cmi)
@@ -731,7 +753,7 @@ static int mount_new_device_format(const char *node, struct ceph_mount_info *cmi
 	if (cmi->cmi_opts)
 		mount_ceph_debug("mount.ceph: options \"%s\" will pass to kernel\n",
 				 cmi->cmi_opts);
-	r = mount(rsrc, node, "ceph", cmi->cmi_flags, cmi->cmi_opts);
+	r = call_mount_system_call(rsrc, node, cmi);
 	if (r)
 		r = -errno;
 	free(rsrc);
@@ -771,7 +793,7 @@ static int mount_old_device_format(const char *node, struct ceph_mount_info *cmi
 		mount_ceph_debug("mount.ceph: options \"%s\" will pass to kernel\n",
 				 cmi->cmi_opts);
 
-	r = mount(rsrc, node, "ceph", cmi->cmi_flags, cmi->cmi_opts);
+	r = call_mount_system_call(rsrc, node, cmi);
 	free(mon_addr);
 	free(rsrc);
 
