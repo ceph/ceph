@@ -29,6 +29,7 @@
 #include "include/compat.h"
 #include "include/str_list.h"
 #include "mon/MonClient.h"
+#include "perfglue/heap_profiler.h"
 
 #ifndef _WIN32
 #include <pwd.h>
@@ -408,6 +409,7 @@ global_init(const std::map<std::string,std::string> *defaults,
       g_ceph_context->get_set_uid(),
       g_ceph_context->get_set_gid());
   }
+  ceph_heap_track_thread_cache("tcmalloc_thread_cache_bytes");
 
   // Now we're ready to complain about config file parse errors
   g_conf().complain_about_parse_error(g_ceph_context);

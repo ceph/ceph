@@ -12,8 +12,8 @@ add_dependencies(libglobal_objs legacy-option-headers)
 
 add_library(global-static STATIC
   $<TARGET_OBJECTS:libglobal_objs>)
-target_link_libraries(global-static common)
+target_link_libraries(global-static heap_profiler common)
 
 add_library(global STATIC
   $<TARGET_OBJECTS:libglobal_objs>)
-target_link_libraries(global ceph-common ${EXTRALIBS})
+target_link_libraries(global heap_profiler ceph-common ${EXTRALIBS})
