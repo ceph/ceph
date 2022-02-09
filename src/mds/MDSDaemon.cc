@@ -1037,6 +1037,9 @@ void MDSDaemon::ms_handle_remote_reset(Connection *con)
       dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
       con->mark_down();
       con->set_priv(nullptr);
+    } else if (session->is_open()) {
+      dout(3) << "ms_handle_remote_reset kill session " << session->info.inst << dendl;
+      mds_rank->server->kill_session(session, nullptr);
     }
   }
 }
