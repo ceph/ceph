@@ -322,6 +322,11 @@ void BootstrapRequest<I>::handle_prepare_replay(int r) {
     return;
   } else if (*m_do_resync) {
     dout(10) << "local image resync requested" << dendl;
+    if ((*m_state_builder)->remote_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY) {
+      m_ret_val = -EPERM;
+      derr << "remote image is non primary, cannot resync without a known primary" << dendl;
+      *m_do_resync = 0;
+    }
     close_remote_image();
     return;
   } else if ((*m_state_builder)->is_disconnected()) {

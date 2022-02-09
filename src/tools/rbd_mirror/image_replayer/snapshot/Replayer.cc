@@ -356,6 +356,11 @@ void Replayer<I>::handle_load_local_image_meta(int r) {
   }
 
   if (r >= 0 && m_state_builder->local_image_meta->resync_requested) {
+    if (m_state_builder->remote_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY) {
+      derr << "remote image is non primary, cannot resync without a known primary"  << dendl;
+      handle_replay_complete(-EPERM, "remote image is non primary, cannot resync without a known primary");
+      return;
+    }
     m_resync_requested = true;
 
     dout(10) << "local image resync requested" << dendl;

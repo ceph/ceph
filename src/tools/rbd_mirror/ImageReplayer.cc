@@ -398,6 +398,9 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
   } else if (r == -ERESTART) {
     on_start_fail(r, "image in transient state, try again");
     return;
+  } else if (r == -EPERM) {
+    on_start_fail(0, "resync invalid, remote image is non-primary");
+    return;
   } else if (r < 0) {
     on_start_fail(r, "error bootstrapping replay");
     return;
