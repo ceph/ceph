@@ -1,4 +1,5 @@
 from ceph_volume.util import encryption
+from mock.mock import patch
 import base64
 
 class TestGetKeySize(object):
@@ -66,3 +67,72 @@ class TestDmcryptKey(object):
     def test_dmcrypt(self):
         result = encryption.create_dmcrypt_key()
         assert len(base64.b64decode(result)) == 128
+
+class TestLuksFormat(object):
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_luks_format_command_with_default_size(self, m_call, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        expected = [
+            'cryptsetup',
+            '--batch-mode',
+            '--key-size',
+            '512',
+            '--key-file',
+            '-',
+            'luksFormat',
+            '/dev/foo'
+        ]
+        encryption.luks_format('abcd', '/dev/foo')
+        assert m_call.call_args[0][0] == expected
+
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_luks_format_command_with_custom_size(self, m_call, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd\n[osd]\nosd_dmcrypt_key_size=256')
+        expected = [
+            'cryptsetup',
+            '--batch-mode',
+            '--key-size',
+            '256',
+            '--key-file',
+            '-',
+            'luksFormat',
+            '/dev/foo'
+        ]
+        encryption.luks_format('abcd', '/dev/foo')
+        assert m_call.call_args[0][0] == expected
+
+
+class TestLuksOpen(object):
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_luks_open_command_with_default_size(self, m_call, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        expected = [
+            'cryptsetup',
+            '--key-size',
+            '512',
+            '--key-file',
+            '-',
+            '--allow-discards',
+            'luksOpen',
+            '/dev/foo',
+            '/dev/bar'
+        ]
+        encryption.luks_open('abcd', '/dev/foo', '/dev/bar')
+        assert m_call.call_args[0][0] == expected
+
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_luks_open_command_with_custom_size(self, m_call, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd\n[osd]\nosd_dmcrypt_key_size=256')
+        expected = [
+            'cryptsetup',
+            '--key-size',
+            '256',
+            '--key-file',
+            '-',
+            '--allow-discards',
+            'luksOpen',
+            '/dev/foo',
+            '/dev/bar'
+        ]
+        encryption.luks_open('abcd', '/dev/foo', '/dev/bar')
+        assert m_call.call_args[0][0] == expected
