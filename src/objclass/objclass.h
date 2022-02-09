@@ -15,6 +15,7 @@
 
 struct obj_list_watch_response_t;
 class PGLSFilter;
+class object_info_t;
 
 extern "C" {
 #endif
@@ -143,6 +144,7 @@ extern uint64_t cls_get_client_features(cls_method_context_t hctx);
 extern ceph_release_t cls_get_required_osd_release(cls_method_context_t hctx);
 extern ceph_release_t cls_get_min_compatible_client(cls_method_context_t hctx);
 extern const ConfigProxy& cls_get_config(cls_method_context_t hctx);
+extern const object_info_t& cls_get_object_info(cls_method_context_t hctx);
 
 /* helpers */
 extern void cls_cxx_subop_version(cls_method_context_t hctx, std::string *s);

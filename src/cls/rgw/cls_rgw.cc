@@ -14,6 +14,7 @@
 #include "common/strtol.h"
 #include "common/escape.h"
 #include "common/config_proxy.h"
+#include "osd/osd_types.h"
 
 #include "include/compat.h"
 #include <boost/lexical_cast.hpp>
@@ -857,13 +858,15 @@ static int read_key_entry(cls_method_context_t hctx, const cls_rgw_obj_key& key,
 
 int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(10, "entered %s", __func__);
-
   const ConfigProxy& conf = cls_get_config(hctx);
+  const object_info_t& oi = cls_get_object_info(hctx);
 
   // bucket index transaction instrumentation
   const bool bitx_inst =
     conf->rgw_bucket_index_transaction_instrumentation;
+
+  CLS_LOG_BITX(bitx_inst, 1, "ENTERING %s for object oid=%s key=%s",
+	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
   // decode request
   rgw_cls_obj_prepare_op op;
@@ -882,7 +885,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   }
 
   CLS_LOG_BITX(bitx_inst, 1,
-	       "%s: request: op=%d name=%s instance=%s tag=%s", __func__,
+	       "INFO: %s: request: op=%d name=%s instance=%s tag=%s", __func__,
 	       op.op, op.key.name.c_str(), op.key.instance.c_str(), op.tag.c_str());
 
   // get on-disk state
@@ -913,11 +916,17 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   info.timestamp = real_clock::now();
   info.state = CLS_RGW_STATE_PENDING_MODIFY;
   info.op = op.op;
+  CLS_LOG_BITX(bitx_inst, 20,
+	       "INFO: %s: inserting tag %s op %c into pending map for entry %s",
+	       __func__, op.tag, info.op, entry.key.to_string().c_str());
   entry.pending_map.insert(pair<string, rgw_bucket_pending_info>(op.tag, info));
 
   // write out new key to disk
   bufferlist info_bl;
   encode(entry, info_bl);
+  CLS_LOG_BITX(bitx_inst, 20,
+	       "INFO: %s: setting map entry at key=%s",
+	       __func__, idx.c_str());
   rc = cls_cxx_map_set_val(hctx, idx, &info_bl);
   if (rc < 0) {
     CLS_LOG_BITX(bitx_inst, 1,
@@ -926,6 +935,8 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return rc;
   }
 
+
+  CLS_LOG_BITX(bitx_inst, 1, "EXITING %s, returning 0", __func__);
   return 0;
 }
 
@@ -1061,13 +1072,15 @@ static int complete_remove_obj(cls_method_context_t hctx,
 
 int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(10, "entered %s", __func__);
-
   const ConfigProxy& conf = cls_get_config(hctx);
+  const object_info_t& oi = cls_get_object_info(hctx);
 
   // bucket index transaction instrumentation
   const bool bitx_inst =
     conf->rgw_bucket_index_transaction_instrumentation;
+
+  CLS_LOG_BITX(bitx_inst, 1, "ENTERING %s for object oid=%s key=%s",
+	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
   // decode request
   rgw_cls_obj_complete_op op;
@@ -1080,7 +1093,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   CLS_LOG_BITX(bitx_inst, 1,
-	       "%s: request: op=%d name=%s instance=%s ver=%lu:%llu tag=%s",
+	       "INFO: %s: request: op=%d name=%s instance=%s ver=%lu:%llu tag=%s",
 	       __func__,
 	       op.op, op.key.name.c_str(), op.key.instance.c_str(),
 	       (unsigned long)op.ver.pool, (unsigned long long)op.ver.epoch,
@@ -1124,14 +1137,17 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		   __func__, op.tag.c_str());
       return -EINVAL;
     }
+    CLS_LOG_BITX(bitx_inst, 1,
+		 "INFO: %s: removing tag %s from pending map",
+		   __func__, op.tag.c_str());
     entry.pending_map.erase(pinter);
   }
 
   if (op.tag.size() && op.op == CLS_RGW_OP_CANCEL) {
-    CLS_LOG_BITX(bitx_inst, 1, "%s: cancel requested", __func__);
+    CLS_LOG_BITX(bitx_inst, 20, "INFO: %s: op is cancel", __func__);
   } else if (op.ver.pool == entry.ver.pool &&
              op.ver.epoch && op.ver.epoch <= entry.ver.epoch) {
-    CLS_LOG_BITX(bitx_inst, 1,
+    CLS_LOG_BITX(bitx_inst, 20,
 		 "%s: skipping request, old epoch", __func__);
     op.op = CLS_RGW_OP_CANCEL;
   }
@@ -1146,6 +1162,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     log_op = false; // don't log cancelation
     if (op.tag.size()) {
       // we removed this tag from pending_map so need to write the changes
+      CLS_LOG_BITX(bitx_inst, 20,
+		   "INFO: %s: setting map entry at key=%s",
+		   __func__, idx.c_str());
       bufferlist new_key_bl;
       encode(entry, new_key_bl);
       rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
@@ -1161,11 +1180,20 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     // unaccount deleted entry
     unaccount_entry(header, entry);
 
+    CLS_LOG_BITX(bitx_inst, 20,
+		 "INFO: %s: delete op, key=%s",
+		 __func__, idx.c_str());
     entry.meta = op.meta;
     if (!ondisk) {
       // no entry to erase
+      CLS_LOG_BITX(bitx_inst, 20,
+		   "INFO: %s: key=%s not on disk, no action",
+		   __func__, idx.c_str());
       log_op = false;
     } else if (!entry.pending_map.size()) {
+	CLS_LOG_BITX(bitx_inst, 20,
+		     "INFO: %s: removing map entry with key=%s",
+		     __func__, idx.c_str());
       rc = cls_cxx_map_remove_key(hctx, idx);
       if (rc < 0) {
 	  CLS_LOG_BITX(bitx_inst, 1,
@@ -1177,6 +1205,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       entry.exists = false;
       bufferlist new_key_bl;
       encode(entry, new_key_bl);
+      CLS_LOG_BITX(bitx_inst, 20,
+		   "INFO: %s: setting map entry at key=%s",
+		   __func__, idx.c_str());
       rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
       if (rc < 0) {
 	CLS_LOG_BITX(bitx_inst, 1,
@@ -1187,6 +1218,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     }
   } // CLS_RGW_OP_DEL
   else if (op.op == CLS_RGW_OP_ADD) {
+    CLS_LOG_BITX(bitx_inst, 20,
+		 "INFO: %s: add op, key=%s",
+		 __func__, idx.c_str());
     // unaccount overwritten entry
     unaccount_entry(header, entry);
 
@@ -1203,6 +1237,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     stats.actual_size += meta.size;
     bufferlist new_key_bl;
     encode(entry, new_key_bl);
+    CLS_LOG_BITX(bitx_inst, 20,
+		 "INFO: %s: setting map entry at key=%s",
+		 __func__, idx.c_str());
     rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
     if (rc < 0) {
       CLS_LOG_BITX(bitx_inst, 1,
@@ -1218,9 +1255,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 			     header.max_marker, op.bilog_flags, NULL, NULL,
 			     &op.zones_trace);
     if (rc < 0) {
-    CLS_LOG_BITX(bitx_inst, 0,
-		 "%s: log_index_operation failed with rc=%d",
-		 __func__, rc);
+      CLS_LOG_BITX(bitx_inst, 0,
+		   "%s: log_index_operation failed with rc=%d",
+		   __func__, rc);
       return rc;
     }
   }
@@ -1228,17 +1265,22 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   CLS_LOG(20, "rgw_bucket_complete_op(): remove_objs.size()=%d",
           (int)op.remove_objs.size());
   for (const auto& remove_key : op.remove_objs) {
+    CLS_LOG_BITX(bitx_inst, 20,
+		 "INFO: %s: completing object remove key=%s",
+		 __func__, remove_key.to_string().c_str());
     rc = complete_remove_obj(hctx, header, remove_key, default_log_op);
     if (rc < 0) {
       CLS_LOG_BITX(bitx_inst, 1,
-		   "%s: cls_cxx_map_remove_key, failed to remove entry, "
-		   "name=%s instance=%s read_index_entry ret=%d",
+		   "WARNING: %s: complete_remove_obj, failed to remove entry, "
+		   "name=%s instance=%s read_index_entry ret=%d, continuing",
 		   __func__, remove_key.name.c_str(),
 		   remove_key.instance.c_str(), rc);
       continue; // part cleanup errors are not fatal
     }
-  }
+  } // remove loop
 
+  CLS_LOG_BITX(bitx_inst, 0,
+	       "INFO: %s: writing bucket header", __func__);
   rc = write_bucket_header(hctx, &header);
   if (rc < 0) {
     CLS_LOG_BITX(bitx_inst, 0,
@@ -1246,8 +1288,10 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		 __func__, rc);
   }
 
+  CLS_LOG_BITX(bitx_inst, 20,
+	       "EXITING %s: returning %d", __func__, rc);
   return rc;
-}
+} // rgw_bucket_complete_op
 
 template <class T>
 static int write_entry(cls_method_context_t hctx, T& entry, const string& key)
@@ -2225,13 +2269,15 @@ static int rgw_bucket_clear_olh(cls_method_context_t hctx, bufferlist *in, buffe
 int rgw_dir_suggest_changes(cls_method_context_t hctx,
 			    bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(1, "entered %s", __func__);
-
   const ConfigProxy& conf = cls_get_config(hctx);
+  const object_info_t& oi = cls_get_object_info(hctx);
 
   // bucket index transaction instrumentation
   const bool bitx_inst =
     conf->rgw_bucket_index_transaction_instrumentation;
+
+  CLS_LOG_BITX(bitx_inst, 1, "ENTERING %s for object oid=%s key=%s",
+	       __func__, oi.soid.oid.name.c_str(), oi.soid.get_key().c_str());
 
   bufferlist header_bl;
   rgw_bucket_dir_header header;
@@ -2255,6 +2301,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
       (config_op_expiration ?
        config_op_expiration :
        CEPH_RGW_DEFAULT_TAG_TIMEOUT)));
+  CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: tag_timeout=%ld", __func__, tag_timeout.count());
 
   auto in_iter = in->cbegin();
 
@@ -2272,20 +2319,31 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
     }
 
     bufferlist cur_disk_bl;
+    // check if the log op flag is set and strip it from the op
+    bool log_op = (op & CEPH_RGW_DIR_SUGGEST_LOG_OP) != 0;
+    op &= CEPH_RGW_DIR_SUGGEST_OP_MASK;
+
     string cur_change_key;
     encode_obj_index_key(cur_change.key, &cur_change_key);
+
+    CLS_LOG_BITX(bitx_inst, 10,
+		 "INFO: %s: op=%c, cur_change_key=%s, cur_change.exists=%d",
+		 __func__, op, escape_str(cur_change_key).c_str(), cur_change.exists);
+    CLS_LOG_BITX(bitx_inst, 20,
+		 "INFO: %s: setting map entry at key=%s",
+		 __func__, escape_str(cur_change_key).c_str());
     int ret = cls_cxx_map_get_val(hctx, cur_change_key, &cur_disk_bl);
     if (ret < 0 && ret != -ENOENT) {
       CLS_LOG_BITX(bitx_inst, 20,
 		   "ERROR: %s: accessing map, key=%s error=%d", __func__,
-		   cur_change_key.c_str(), ret);
+		   escape_str(cur_change_key).c_str(), ret);
       return -EINVAL;
     }
 
     if (ret == -ENOENT) {
       CLS_LOG_BITX(bitx_inst, 20,
 		   "WARNING: %s: accessing map, key not found key=%s, continuing",
-		   __func__, cur_change_key.c_str());
+		   __func__, escape_str(cur_change_key).c_str());
       continue;
     }
 
@@ -2318,9 +2376,10 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
       } // while
     } // if
 
-    CLS_LOG_BITX(bitx_inst, 20, "cur_disk.pending_map.empty()=%d op=%d cur_disk.exists=%d "
+    CLS_LOG_BITX(bitx_inst, 20,
+		 "INFO: %s: cur_disk.pending_map.empty()=%d op=%c cur_disk.exists=%d "
 		 "cur_disk.index_ver=%d cur_change.exists=%d cur_change.index_ver=%d",
-		 cur_disk.pending_map.empty(), (int)op, cur_disk.exists,
+		 __func__, cur_disk.pending_map.empty(), op, cur_disk.exists,
 		 (int)cur_disk.index_ver, cur_change.exists,
 		 (int)cur_change.index_ver);
 
@@ -2332,9 +2391,10 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
     }
 
     if (cur_disk.pending_map.empty()) {
+      CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: cur_disk.pending_map is empty", __func__);
       if (cur_disk.exists) {
         rgw_bucket_category_stats& old_stats = header.stats[cur_disk.meta.category];
-	CLS_LOG_BITX(bitx_inst, 10, "total_entries: %" PRId64 " -> %" PRId64 "\n", old_stats.num_entries, old_stats.num_entries - 1);
+	CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: stats.num_entries: %ld -> %ld", __func__, old_stats.num_entries, old_stats.num_entries - 1);
         old_stats.num_entries--;
         old_stats.total_size -= cur_disk.meta.accounted_size;
         old_stats.total_size_rounded -= cls_rgw_get_rounded_size(cur_disk.meta.accounted_size);
@@ -2342,17 +2402,22 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
         header_changed = true;
       }
       rgw_bucket_category_stats& stats = header.stats[cur_change.meta.category];
-      bool log_op = (op & CEPH_RGW_DIR_SUGGEST_LOG_OP) != 0;
-      op &= CEPH_RGW_DIR_SUGGEST_OP_MASK;
+
       switch(op) {
       case CEPH_RGW_REMOVE:
 	CLS_LOG_BITX(bitx_inst, 10,
-		     "CEPH_RGW_REMOVE name=%s instance=%s",
-		     cur_change.key.name.c_str(), cur_change.key.instance.c_str());
+		     "INFO: %s: CEPH_RGW_REMOVE name=%s instance=%s encoded=%s",
+		     __func__, cur_change.key.name.c_str(),
+		     cur_change.key.instance.c_str(),
+		     escape_str(cur_change_key).c_str());
+
+	CLS_LOG_BITX(bitx_inst, 20,
+		     "INFO: %s: removing map entry with key=%s",
+		     __func__, escape_str(cur_change_key).c_str());
 	ret = cls_cxx_map_remove_key(hctx, cur_change_key);
 	if (ret < 0) {
 	  CLS_LOG_BITX(bitx_inst, 0, "ERROR: %s: unable to remove key, key=%s, error=%d",
-		       __func__, cur_change_key.c_str(), ret);
+		       __func__, escape_str(cur_change_key).c_str(), ret);
 	  return ret;
 	}
         if (log_op && cur_disk.exists && !header.syncstopped) {
@@ -2367,8 +2432,9 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
         break;
       case CEPH_RGW_UPDATE:
 	CLS_LOG_BITX(bitx_inst, 10,
-		     "CEPH_RGW_UPDATE name=%s instance=%s total_entries: %" PRId64 " -> %" PRId64 "\n",
-		     cur_change.key.name.c_str(), cur_change.key.instance.c_str(), stats.num_entries, stats.num_entries + 1);
+		     "INFO: %s: CEPH_RGW_UPDATE name=%s instance=%s stats.num_entries: %ld -> %ld",
+		     __func__, cur_change.key.name.c_str(), cur_change.key.instance.c_str(),
+		     stats.num_entries, stats.num_entries + 1);
 
         stats.num_entries++;
         stats.total_size += cur_change.meta.accounted_size;
@@ -2378,10 +2444,14 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
         cur_change.index_ver = header.ver;
         bufferlist cur_state_bl;
         encode(cur_change, cur_state_bl);
+
+	CLS_LOG_BITX(bitx_inst, 20,
+		     "INFO: %s: setting map entry at key=%s",
+		     __func__, cur_change.key.name.c_str());
         ret = cls_cxx_map_set_val(hctx, cur_change_key, &cur_state_bl);
         if (ret < 0) {
 	  CLS_LOG_BITX(bitx_inst, 0, "ERROR: %s: unable to set value for key, key=%s, error=%d",
-		       __func__, cur_change_key.c_str(), ret);
+		       __func__, escape_str(cur_change_key).c_str(), ret);
 	  return ret;
 	}
         if (log_op && !header.syncstopped) {
@@ -2398,15 +2468,19 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
   } // while (!in_iter.end())
 
   if (header_changed) {
+    CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: header changed, writing", __func__);
     int ret = write_bucket_header(hctx, &header);
     if (ret < 0) {
       CLS_LOG_BITX(bitx_inst, 0,
 		   "ERROR: %s: failed to write bucket header ret=%d",
 		   __func__, ret);
+    } else {
+      CLS_LOG_BITX(bitx_inst, 1, "EXITING %s, returning %d", __func__, ret);
     }
     return ret;
   }
 
+  CLS_LOG_BITX(bitx_inst, 1, "EXITING %s, returning 0", __func__);
   return 0;
 } // rgw_dir_suggest_changes
 
