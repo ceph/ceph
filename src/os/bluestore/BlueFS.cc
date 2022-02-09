@@ -2495,8 +2495,8 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
 
   log.writer = _create_writer(log_file);
   log.writer->append(bl);
-  r = _flush_special(log.writer);
-  ceph_assert(r == 0);
+  uint64_t new_data = _flush_special(log.writer);
+  vselector->add_usage(log_file->vselector_hint, new_data);
 #ifdef HAVE_LIBAIO
   if (!cct->_conf->bluefs_sync_write) {
     list<aio_t> completed_ios;
@@ -2648,8 +2648,7 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
 
   new_log_writer->append(bl);
   // 3. flush
-  r = _flush_special(new_log_writer);
-  ceph_assert(r == 0);
+  _flush_special(new_log_writer);
 
   // 4. wait
   _flush_bdev(new_log_writer);
@@ -2863,8 +2862,8 @@ void BlueFS::_flush_and_sync_log_core(int64_t runway)
   log.t.clear();
   log.t.seq = log.seq_live;
 
-  int r = _flush_special(log.writer);
-  ceph_assert(r == 0);
+  uint64_t new_data = _flush_special(log.writer);
+  vselector->add_usage(log.writer->file->vselector_hint, new_data);
 }
 
 // Clears dirty.files up to (including) seq_stable.
@@ -3341,18 +3340,19 @@ int BlueFS::_flush_F(FileWriter *h, bool force, bool *flushed)
 // we do not need to dirty the log file (or it's compacting
 // replacement) when the file size changes because replay is
 // smart enough to discover it on its own.
-int BlueFS::_flush_special(FileWriter *h)
+uint64_t BlueFS::_flush_special(FileWriter *h)
 {
   ceph_assert(h->file->fnode.ino <= 1);
   uint64_t length = h->get_buffer_length();
   uint64_t offset = h->pos;
+  uint64_t new_data = 0;
   ceph_assert(length + offset <= h->file->fnode.get_allocated());
   if (h->file->fnode.size < offset + length) {
-    vselector->sub_usage(h->file->vselector_hint, h->file->fnode.size);
+    new_data = offset + length - h->file->fnode.size;
     h->file->fnode.size = offset + length;
-    vselector->add_usage(h->file->vselector_hint, h->file->fnode.size);
   }
-  return _flush_data(h, offset, length, false);
+  _flush_data(h, offset, length, false);
+  return new_data;
 }
 
 int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
