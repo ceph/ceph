@@ -243,6 +243,13 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   now disabled by default. The new file system flag `balance_automate`
   can be used to toggle it on or off. It can be enabled or disabled via
   `ceph fs set <fs_name> balance_automate <bool>`.
+* The ``PENDING_CREATING_PGS`` health check will log an additional warning
+  "(PG creation pending, temporarily increase 'osd_max_pg_per_osd_hard_ratio')"
+  if the number of PGs on an OSD is greater than or equal to
+  ``(osd_max_pg_per_osd_hard_ratio * mon_max_pg_per_osd)``.
+  It is recommended to add OSDs to the cluster to resolve this condition.
+  Increase `osd_max_pg_per_osd_hard_ratio` to mitigate this warning temporarily.
+
 * RGW's default backend for `rgw_enable_ops_log` changed from RADOS to file.
   The default value of `rgw_ops_log_rados` is now false, and `rgw_ops_log_file_path`
   defaults to "/var/log/ceph/ops-log-$cluster-$name.log".

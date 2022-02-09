@@ -7893,12 +7893,23 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
   {
     std::lock_guard l(pending_creates_lock);
     auto n_primaries = pending_creates_from_mon;
+    auto n_stuck_creating_pgs = 0;
+    const auto max_pgs_per_osd =
+             (cct->_conf.get_val<uint64_t>("mon_max_pg_per_osd") *
+              cct->_conf.get_val<double>("osd_max_pg_per_osd_hard_ratio"));
     for (const auto& create : pending_creates_from_osd) {
       if (create.second) {
 	n_primaries++;
       }
+      n_stuck_creating_pgs++;
     }
-    metrics.emplace_back(daemon_metric::PENDING_CREATING_PGS, n_primaries);
+    if (n_primaries) {
+      if (num_pgs >= max_pgs_per_osd ) {
+        metrics.emplace_back(daemon_metric::PENDING_CREATING_PGS, n_primaries, 1);
+      } else {
+        metrics.emplace_back(daemon_metric::PENDING_CREATING_PGS, n_primaries, 0);
+      }
+    }
   }
   return metrics;
 }

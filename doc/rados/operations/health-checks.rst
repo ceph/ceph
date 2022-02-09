@@ -1353,6 +1353,26 @@ To see the location of a specific OSD, run the following command:
 
    ceph osd find osd.<id>
 
+PENDING_CREATING_PGS
+____________________
+
+One or more OSD have PGs pending creation for reasons that includes a flawed
+CRUSH map or rules and dead OSD. The additional text
+"(PG creation pending, temporarily increase 'osd_max_pg_per_osd_hard_ratio')"
+in the pending PG creation health message indicates that one or more OSDs have
+blocked PG creation due to overdose protection. This means that the number of PGs on
+an OSD is greater than or equal to `mon_max_pg_per_osd * osd_max_pg_per_osd_hard_ratio`.
+
+When PG creation is pending due to overdose protection, it is highly recommended
+to add OSDs to the cluster. This will resolve the problem by spreading PGs across more OSDs,
+with each OSD holding fewer PGs, so long as the new capacity is added appropriately across
+CRUSH failure domains. A temporary solution is to increase osd_max_pg_per_osd_hard_ratio to
+a value that will satisfy the condition of num_pgs < (osd_max_pg_per_osd_hard_ratio * mon_max_pg_per_osd).
+The num_pgs count for a given OSD can be queried via the daemon's admin socket with the
+following command, executed from the daemon's host::
+
+  ceph daemon osd.<id> status
+
 PG_NOT_SCRUBBED
 _______________
 
