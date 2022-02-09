@@ -2404,6 +2404,7 @@ void RGWZoneGroup::dump(Formatter *f) const
   encode_json("default_placement", default_placement, f);
   encode_json("realm_id", realm_id, f);
   encode_json("sync_policy", sync_policy, f);
+  encode_json("enabled_features", enabled_features, f);
 }
 
 static void decode_zones(map<rgw_zone_id, RGWZone>& zones, JSONObj *o)
@@ -2448,6 +2449,7 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   default_placement.from_str(pr);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
   JSONDecoder::decode_json("sync_policy", sync_policy, obj);
+  JSONDecoder::decode_json("enabled_features", enabled_features, obj);
 }
 
 void rgw_meta_sync_info::generate_test_instances(list<rgw_meta_sync_info*>& o)
@@ -2700,6 +2702,7 @@ void RGWZone::dump(Formatter *f) const
   encode_json("sync_from_all", sync_from_all, f);
   encode_json("sync_from", sync_from, f);
   encode_json("redirect_zone", redirect_zone, f);
+  encode_json("supported_features", supported_features, f);
 }
 
 void RGWZone::decode_json(JSONObj *obj)
@@ -2718,6 +2721,7 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("sync_from_all", sync_from_all, true, obj);
   JSONDecoder::decode_json("sync_from", sync_from, obj);
   JSONDecoder::decode_json("redirect_zone", redirect_zone, obj);
+  JSONDecoder::decode_json("supported_features", supported_features, obj);
 }
 
 void RGWTierACLMapping::dump(Formatter *f) const
