@@ -9,33 +9,35 @@
 #
 # To enable this hook, rename this file to "prepare-commit-msg".
 
-# This hook includes three examples. The first one removes the
-# "# Please enter the commit message..." help message.
-#
-# The second includes the output of "git diff --name-status -r"
-# into the message, just before the "git status" output.  It is
-# commented because it doesn't cope with --amend or with squashed
-# commits.
-#
-# The third example adds a Signed-off-by line to the message, that can
-# still be edited.  This is rarely a good idea.
-
 COMMIT_MSG_FILE=$1
 COMMIT_SOURCE=$2
 SHA1=$3
 
+
+# Removes the "# Please enter the commit message..." help message.
 # /usr/bin/perl -i.bak -ne 'print unless(m/^. Please enter the commit message/..m/^#$/)' "$COMMIT_MSG_FILE"
 
 if [[ -z "$COMMIT_SOURCE" ]]
 then
-  echo "# Please enter the commit message for your changes. " > "$COMMIT_MSG_FILE"
+  COMMIT_MSG_HEADERS="# Possible commit messages: "
   for FILE in $(git diff --cached --name-only -r)
   do
     # According to files changed the commit message would start "<project_name>: <commit_message>"
     # src/<project>/file.txt - "<project>:"
     # file.txt               - "file.txt:"
     # <project>/file.txt     - "<project>:" 
-    echo "# $FILE: <commit_message>" | sed -E 's|src/+||g' | sed -r 's/(.*)(\/[a-z0-9.-]+)/\1 /' >> "$COMMIT_MSG_FILE"  
+    COMMIT_MSG_HEADERS+="\n$(echo "# $FILE: <commit_message>" | sed -E 's|src/+||g' | sed -r 's/(.*)(\/[a-z0-9.-]+)/\1 /')" 
   done
+  sed -i "1s;^;$COMMIT_MSG_HEADERS\n;" $COMMIT_MSG_FILE
 fi
 
+
+# Adds a Signed-off-by line to the message, that can still be edited (This is rarely a good idea).
+SOB=$(git var GIT_COMMITTER_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+printf "\n$SOB" >> "$COMMIT_MSG_FILE"
+
+# Adds a newline at the start of the message
+# if test -z "$COMMIT_SOURCE"
+# then
+#   /usr/bin/perl -i.bak -pe 'print "\n" if !$first_line++' "$COMMIT_MSG_FILE"
+# fi
