@@ -3677,6 +3677,7 @@ int RGWRados::rewrite_obj(rgw::sal::Object* obj, const DoutPrefixProvider *dpp, 
 
   attrset.erase(RGW_ATTR_ID_TAG);
   attrset.erase(RGW_ATTR_TAIL_TAG);
+  attrset.erase(RGW_ATTR_STORAGE_CLASS);
 
   return store->getRados()->copy_obj_data(rctx, obj->get_bucket(),
 					  obj->get_bucket()->get_info().placement_rule,
