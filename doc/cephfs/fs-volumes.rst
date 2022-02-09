@@ -79,6 +79,24 @@ List volumes using::
 
     $ ceph fs volume ls
 
+Rename a volume using::
+
+    $ ceph fs volume rename <vol_name> <new_vol_name> [--yes-i-really-mean-it]
+
+Renaming a volume can be an expensive operation. It does the following:
+
+- renames the orchestrator managed MDS service to match the <new_vol_name>.
+  This involves launching a MDS service with <new_vol_name> and bringing down
+  the MDS service with <vol_name>.
+- renames the file system matching <vol_name> to <new_vol_name>
+- changes the application tags on the data and metadata pools of the file system
+  to <new_vol_name>
+- renames the  metadata and data pools of the file system.
+
+The CephX IDs authorized to <vol_name> need to be reauthorized to <new_vol_name>. Any
+on-going operations of the clients using these IDs may be disrupted. Mirroring is
+expected to be disabled on the volume.
+
 FS Subvolume groups
 -------------------
 
