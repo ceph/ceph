@@ -5152,6 +5152,9 @@ def command_bootstrap(ctx):
     logger.info('Enabling autotune for osd_memory_target')
     cli(['config', 'set', 'osd', 'osd_memory_target_autotune', 'true'])
 
+    # Notify the Dashboard to show the 'Expand cluster' page on first log in.
+    cli(['config-key', 'set', 'mgr/dashboard/cluster/status', 'INSTALLED'])
+
     logger.info('You can access the Ceph CLI with:\n\n'
                 '\tsudo %s shell --fsid %s -c %s -k %s\n' % (
                     sys.argv[0],
