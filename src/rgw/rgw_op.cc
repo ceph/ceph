@@ -1166,7 +1166,15 @@ void RGWDeleteObjTags::execute()
   map <string, bufferlist> rmattr;
   bufferlist bl;
   rmattr[RGW_ATTR_TAGS] = bl;
-  op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, obj, attrs, &rmattr);
+
+  RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+  RGWRados::Object::Read read_op(&op_target);
+  int r = read_op.prepare();
+  if (r < 0) {
+    return;
+  }
+  store->set_atomic(s->obj_ctx, read_op.state.obj);
+  op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, read_op.state.obj, attrs, &rmattr);
 }
 
 int RGWOp::do_aws4_auth_completion()
