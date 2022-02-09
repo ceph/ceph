@@ -1,12 +1,9 @@
-const fs = require('fs')
-var branch = new String();
+const fs = require('fs');
 
 // Read the contents of the ceph_release file to retrieve
 // the branch
-fs.readFile('../../../../ceph_release', (_, data) => {
-    branch = data.toString().split('\n')[1];
-});
-
+const cephRelease = fs.readFileSync('../../../../ceph_release', 'utf8').split('\n');
+const branch = cephRelease[2] === 'dev' ? 'master' : cephRelease[1];
 module.exports = {
   appName: 'Ceph Dashboard',
   apiKey: process.env.APPLITOOLS_API_KEY,
