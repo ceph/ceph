@@ -9,6 +9,13 @@ from .disk import lsblk, device_family, get_part_entry_type
 
 logger = logging.getLogger(__name__)
 
+def get_key_size():
+    key_size = conf.ceph.get_safe(
+        'osd',
+        'osd_dmcrypt_key_size',
+        default='1024',
+    )
+    return key_size
 
 def create_dmcrypt_key():
     """
@@ -16,14 +23,11 @@ def create_dmcrypt_key():
     """
     # get the customizable dmcrypt key size (in bits) from ceph.conf fallback
     # to the default of 1024
-    dmcrypt_key_size = conf.ceph.get_safe(
-        'osd',
-        'osd_dmcrypt_key_size',
-        default=1024,
-    )
+    dmcrypt_key_size = get_key_size()
+    logger.debug('key size %s' % dmcrypt_key_size)
     # The size of the key is defined in bits, so we must transform that
     # value to bytes (dividing by 8) because we read in bytes, not bits
-    random_string = os.urandom(int(dmcrypt_key_size / 8))
+    random_string = os.urandom(int(int(dmcrypt_key_size) / 8))
     key = base64.b64encode(random_string).decode('utf-8')
     return key
 
@@ -35,9 +39,12 @@ def luks_format(key, device):
     :param key: dmcrypt secret key, will be used for decrypting
     :param device: Absolute path to device
     """
+    logger.debug('about to format device %s' % device)
     command = [
         'cryptsetup',
         '--batch-mode', # do not prompt
+        '--key-size', # specify the size of the key
+        get_key_size(),
         '--key-file', # misnomer, should be key
         '-',          # because we indicate stdin for the key here
         'luksFormat',
@@ -83,6 +90,8 @@ def luks_open(key, device, mapping):
     """
     command = [
         'cryptsetup',
+        '--key-size', # specify the size of the key
+        get_key_size(),
         '--key-file',
         '-',
         '--allow-discards',  # allow discards (aka TRIM) requests for device
