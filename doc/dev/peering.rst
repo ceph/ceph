@@ -60,7 +60,8 @@ Concepts
    accepting write operations, and *recovery* can proceed
    in the background.
 
-*PG info* basic metadata about the PG's creation epoch, the version
+*PG info*
+   basic metadata about the PG's creation epoch, the version
    for the most recent write to the PG, *last epoch started*, *last
    epoch clean*, and the beginning of the *current interval*.  Any
    inter-OSD communication about PGs includes the *PG info*, such that
@@ -253,7 +254,17 @@ The high level process is for the current PG primary to:
      old object (all of whose copies disappeared before they could be
      replicated on members of the current *acting set*).
 
-State Model
------------
+Generate a State Model
+----------------------
+
+Use the `gen_state_diagram.py <https://github.com/ceph/ceph/blob/master/doc/scripts/gen_state_diagram.py>`_ script to generate a copy of the latest peering state model::
+
+        $ git clone https://github.com/ceph/ceph.git
+        $ cd ceph
+        $ cat src/osd/PeeringState.h src/osd/PeeringState.cc | doc/scripts/gen_state_diagram.py > doc/dev/peering_graph.generated.dot
+        $ sed -i 's/7,7/1080,1080/' doc/dev/peering_graph.generated.dot
+        $ dot -Tsvg doc/dev/peering_graph.generated.dot > doc/dev/peering_graph.generated.svg
+
+Sample state model:
 
 .. graphviz:: peering_graph.generated.dot
