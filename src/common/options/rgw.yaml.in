@@ -1157,15 +1157,6 @@ options:
   - rgw
   min: 0.01
   max: 100000
-- name: rgw_rados_pool_pg_num_min
-  type: uint
-  level: advanced
-  desc: pg_num_min value for RGW metadata (omap-heavy) pools
-  default: 8
-  services:
-  - rgw
-  min: 1
-  max: 1_K
 - name: rgw_rados_pool_recovery_priority
   type: uint
   level: advanced
