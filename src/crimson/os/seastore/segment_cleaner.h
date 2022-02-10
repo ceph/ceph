@@ -285,11 +285,6 @@ public:
   virtual journal_seq_t get_journal_tail_target() const = 0;
   virtual void update_journal_tail_committed(journal_seq_t tail_committed) = 0;
 
-  virtual void init_mark_segment_closed(
-    segment_id_t segment,
-    segment_seq_t seq,
-    bool out_of_line) {}
-
   virtual segment_seq_t get_seq(segment_id_t id) { return 0; }
 
   virtual void update_segment_avail_bytes(paddr_t offset) = 0;
@@ -760,24 +755,6 @@ public:
 
   void update_segment_avail_bytes(paddr_t offset) final {
     segments.update_segment_avail_bytes(offset);
-  }
-
-  void init_mark_segment_closed(
-    segment_id_t segment,
-    segment_seq_t seq,
-    bool out_of_line) final
-  {
-    crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
-      "SegmentCleaner::init_mark_segment_closed: segment {}, seq {}",
-      segment,
-      seq);
-    mark_closed(segment);
-    segments[segment].journal_segment_seq = seq;
-    segments[segment].out_of_line = out_of_line;
-    if (!segments[segment].out_of_line) {
-      assert(journal_device_id == segment.device_id());
-      segments.new_journal_segment();
-    }
   }
 
   segment_seq_t get_seq(segment_id_t id) final {
@@ -1278,6 +1255,22 @@ private:
     return gc_should_reclaim_space() || gc_should_trim_journal();
   }
 
+  void init_mark_segment_closed(
+    segment_id_t segment,
+    segment_seq_t seq,
+    bool out_of_line) {
+    crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
+      "SegmentCleaner::init_mark_segment_closed: segment {}, seq {}",
+      segment,
+      seq);
+    mark_closed(segment);
+    segments[segment].journal_segment_seq = seq;
+    segments[segment].out_of_line = out_of_line;
+    if (!segments[segment].out_of_line) {
+      assert(journal_device_id == segment.device_id());
+      segments.new_journal_segment();
+    }
+  }
 
   void mark_closed(segment_id_t segment) {
     assert(segment.device_id() ==

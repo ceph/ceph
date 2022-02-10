@@ -98,10 +98,6 @@ Journal::prep_replay_segments(
       ERROR("illegal journal segment for replay -- {}", seg.second);
       ceph_abort();
     }
-    segment_provider->init_mark_segment_closed(
-      seg.first,
-      seg.second.journal_segment_seq,
-      false);
   });
 
   auto journal_tail = segments.rbegin()->second.journal_tail;
