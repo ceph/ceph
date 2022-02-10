@@ -810,34 +810,6 @@ public:
     assert(ret >= 0);
   }
 
-  journal_seq_t get_next_gc_target() const {
-    segment_id_t id = NULL_SEG_ID;
-    segment_seq_t seq = NULL_SEG_SEQ;
-    int64_t least_live_bytes = std::numeric_limits<int64_t>::max();
-    for (auto it = segments.begin();
-	 it != segments.end();
-	 ++it) {
-      auto _id = it->first;
-      const auto& segment_info = it->second;
-      if (segment_info.is_closed() &&
-	  !segment_info.is_in_journal(journal_tail_committed) &&
-	  space_tracker->get_usage(_id) < least_live_bytes) {
-	id = _id;
-	seq = segment_info.journal_segment_seq;
-	least_live_bytes = space_tracker->get_usage(id);
-      }
-    }
-    if (id != NULL_SEG_ID) {
-      crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
-	"SegmentCleaner::get_next_gc_target: segment {} seq {}",
-	id,
-	seq);
-      return journal_seq_t{seq, paddr_t::make_seg_paddr(id, 0)};
-    } else {
-      return journal_seq_t();
-    }
-  }
-
   SpaceTrackerIRef get_empty_space_tracker() const {
     return space_tracker->make_empty();
   }
@@ -885,6 +857,34 @@ public:
 private:
 
   // journal status helpers
+
+  journal_seq_t get_next_gc_target() const {
+    segment_id_t id = NULL_SEG_ID;
+    segment_seq_t seq = NULL_SEG_SEQ;
+    int64_t least_live_bytes = std::numeric_limits<int64_t>::max();
+    for (auto it = segments.begin();
+	 it != segments.end();
+	 ++it) {
+      auto _id = it->first;
+      const auto& segment_info = it->second;
+      if (segment_info.is_closed() &&
+	  !segment_info.is_in_journal(journal_tail_committed) &&
+	  space_tracker->get_usage(_id) < least_live_bytes) {
+	id = _id;
+	seq = segment_info.journal_segment_seq;
+	least_live_bytes = space_tracker->get_usage(id);
+      }
+    }
+    if (id != NULL_SEG_ID) {
+      crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
+	"SegmentCleaner::get_next_gc_target: segment {} seq {}",
+	id,
+	seq);
+      return journal_seq_t{seq, paddr_t::make_seg_paddr(id, 0)};
+    } else {
+      return journal_seq_t();
+    }
+  }
 
   /**
    * rewrite_dirty
