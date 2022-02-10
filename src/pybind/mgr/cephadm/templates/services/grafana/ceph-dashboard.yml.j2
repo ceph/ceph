@@ -4,10 +4,9 @@ deleteDatasources:
   - name: 'Dashboard{{ loop.index }}'
     orgId: 1
 {% endfor %}
-{% for loki_host in loki_hosts %}
-  - name: 'Loki{{ loop.index }}'
+
+  - name: 'Loki'
     orgId: 1
-{% endfor %}
 
 datasources:
 {% for host in hosts %}
@@ -25,7 +24,7 @@ datasources:
     type: 'loki'
     access: 'proxy'
     orgId: 1
-    url: '{{ loki_hosts[0] }}'
+    url: '{{ loki_host }}'
     basicAuth: false
     isDefault: true
     editable: false

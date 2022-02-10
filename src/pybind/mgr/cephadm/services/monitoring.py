@@ -36,13 +36,13 @@ class GrafanaService(CephadmService):
             prom_services.append(build_url(scheme='http', host=addr, port=port))
 
             deps.append(dd.name())
-            
+
         loki_services = []  # type: List[str]
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
             addr = self.mgr.inventory.get_addr(dd.hostname)
-            loki_services.append(build_url(scheme='http', host=addr, port=3100))    
+            loki_services.append(build_url(scheme='http', host=addr, port=3100))
         grafana_data_sources = self.mgr.template.render(
-            'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services, 'loki_hosts': loki_services})
+            'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services, 'loki_host': loki_services[0]})
 
         cert = self.mgr.get_store('grafana_crt')
         pkey = self.mgr.get_store('grafana_key')
