@@ -860,10 +860,15 @@ enum class extent_types_t : uint8_t {
   // Test Block Types
   TEST_BLOCK = 10,
   TEST_BLOCK_PHYSICAL = 11,
+  BACKREF_INTERNAL = 12,
+  BACKREF_LEAF = 13,
   // None and the number of valid extent_types_t
-  NONE = 12,
+  NONE = 14,
 };
+using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
+
+constexpr size_t BACKREF_NODE_SIZE = 4096;
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
@@ -882,6 +887,12 @@ constexpr bool is_lba_node(extent_types_t type)
 {
   return type == extent_types_t::LADDR_INTERNAL ||
     type == extent_types_t::LADDR_LEAF;
+}
+
+constexpr bool is_backref_node(extent_types_t type)
+{
+  return type == extent_types_t::BACKREF_INTERNAL ||
+    type == extent_types_t::BACKREF_LEAF;
 }
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);

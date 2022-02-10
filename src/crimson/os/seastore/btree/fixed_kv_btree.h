@@ -793,7 +793,9 @@ public:
     CachedExtentRef e) {
     LOG_PREFIX(FixedKVBtree::rewrite_extent);
     assert(e->get_type() == extent_types_t::LADDR_INTERNAL ||
-           e->get_type() == extent_types_t::LADDR_LEAF);
+           e->get_type() == extent_types_t::LADDR_LEAF ||
+           e->get_type() == extent_types_t::BACKREF_INTERNAL ||
+           e->get_type() == extent_types_t::BACKREF_LEAF);
     
     auto do_rewrite = [&](auto &fixed_kv_extent) {
       auto n_fixed_kv_extent = c.cache.template alloc_new_extent<

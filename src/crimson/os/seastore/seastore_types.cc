@@ -162,6 +162,10 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
     return out << "TEST_BLOCK";
   case extent_types_t::TEST_BLOCK_PHYSICAL:
     return out << "TEST_BLOCK_PHYSICAL";
+  case extent_types_t::BACKREF_INTERNAL:
+    return out << "BACKREF_INTERNAL";
+  case extent_types_t::BACKREF_LEAF:
+    return out << "BACKREF_LEAF";
   case extent_types_t::NONE:
     return out << "NONE";
   default:
