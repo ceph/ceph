@@ -329,7 +329,14 @@ static int init_target_layout(rgw::sal::RadosStore* store,
                               uint32_t new_num_shards,
                               const DoutPrefixProvider* dpp)
 {
-  uint64_t gen = bucket_info.layout.current_index.gen + 1;
+  auto prev = bucket_info.layout; // make a copy for cleanup
+  const auto current = prev.current_index;
+
+  // initialize a new normal target index layout generation
+  rgw::bucket_index_layout_generation target;
+  target.layout.type = rgw::BucketIndexType::Normal;
+  target.layout.normal.num_shards = new_num_shards;
+  target.gen = current.gen + 1;
 
   if (bucket_info.reshard_status == cls_rgw_reshard_status::IN_PROGRESS) {
     // backward-compatible cleanup of old reshards, where the target was in a
@@ -345,42 +352,73 @@ static int init_target_layout(rgw::sal::RadosStore* store,
     bucket_info.reshard_status = cls_rgw_reshard_status::NOT_RESHARDING;
   }
 
-  auto& target = bucket_info.layout.target_index;
-  if (target) {
+  if (bucket_info.layout.target_index) {
     // a previous reshard failed or stalled, and its reshard lock dropped
     ldpp_dout(dpp, 10) << __func__ << " removing existing target index "
         "objects from a previous reshard attempt" << dendl;
     // delete its existing shard objects (ignore errors)
-    store->svc()->bi->clean_index(dpp, bucket_info, *target);
+    store->svc()->bi->clean_index(dpp, bucket_info, *bucket_info.layout.target_index);
     // don't reuse this same generation in the new target layout, in case
     // something is still trying to operate on its shard objects
-    gen = target->gen + 1;
+    target.gen = bucket_info.layout.target_index->gen + 1;
   }
 
-  // initialize a new normal target index layout generation
-  target.emplace();
-  target->layout.type = rgw::BucketIndexType::Normal;
-  target->layout.normal.num_shards = new_num_shards;
-  target->gen = gen;
-  // update resharding state
-  bucket_info.layout.resharding = rgw::BucketReshardState::InProgress;
-
-  int ret = init_target_index(store, bucket_info, *target, dpp);
+  // create the index shard objects
+  int ret = init_target_index(store, bucket_info, target, dpp);
   if (ret < 0) {
     return ret;
   }
 
-  if (ret = fault.check("set_target_layout");
-      ret == 0) { // no fault injected, write the bucket instance metadata
-    ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
-                                                      real_time(), &bucket_attrs, dpp);
-  }
+  // retry in case of racing writes to the bucket instance metadata
+  static constexpr auto max_retries = 10;
+  int tries = 0;
+  do {
+    // update resharding state
+    bucket_info.layout.target_index = target;
+    bucket_info.layout.resharding = rgw::BucketReshardState::InProgress;
+
+    if (ret = fault.check("set_target_layout");
+        ret == 0) { // no fault injected, write the bucket instance metadata
+      ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
+                                                        real_time(), &bucket_attrs, dpp);
+    } else if (ret == -ECANCELED) {
+      fault.clear(); // clear the fault so a retry can succeed
+    }
+
+    if (ret == -ECANCELED) {
+      // racing write detected, read the latest bucket info and try again
+      auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+      int ret2 = store->getRados()->get_bucket_instance_info(
+          obj_ctx, bucket_info.bucket, bucket_info,
+          nullptr, &bucket_attrs, null_yield, dpp);
+      if (ret2 < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to read "
+            "bucket info: " << cpp_strerror(ret2) << dendl;
+        ret = ret2;
+        break;
+      }
+
+      // check that we're still in the reshard state we started in
+      if (bucket_info.layout.resharding != rgw::BucketReshardState::None ||
+          bucket_info.layout.current_index != current) {
+        ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " raced with "
+            "another reshard" << dendl;
+        break;
+      }
+
+      prev = bucket_info.layout; // update the copy
+    }
+    ++tries;
+  } while (ret == -ECANCELED && tries < max_retries);
 
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to write "
         "target index layout to bucket info: " << cpp_strerror(ret) << dendl;
+
+    bucket_info.layout = std::move(prev);  // restore in-memory layout
+
     // delete the target shard objects (ignore errors)
-    store->svc()->bi->clean_index(dpp, bucket_info, *target);
+    store->svc()->bi->clean_index(dpp, bucket_info, target);
     return ret;
   }
   return 0;
