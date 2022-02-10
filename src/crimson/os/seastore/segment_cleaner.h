@@ -676,8 +676,6 @@ private:
   /// populated if there is an IO blocked on hard limits
   std::optional<seastar::promise<>> blocked_io_wake;
 
-  std::vector<device_id_t> effective_devices;
-
 public:
   SegmentCleaner(
     config_t config,
@@ -693,11 +691,6 @@ public:
     journal_tail_committed = journal_seq_t{};
     journal_head = journal_seq_t{};
     journal_device_id = pdevice_id;
-
-    for (auto& sm : sms) {
-      if (sm)
-	effective_devices.push_back(sm->get_device_id());
-    }
 
     space_tracker.reset(
       detailed ?
@@ -767,10 +760,6 @@ public:
 
   void update_segment_avail_bytes(paddr_t offset) final {
     segments.update_segment_avail_bytes(offset);
-  }
-
-  journal_seq_t get_journal_head() const {
-    return journal_head;
   }
 
   void init_mark_segment_closed(
