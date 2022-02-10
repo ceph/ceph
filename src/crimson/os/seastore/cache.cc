@@ -1507,6 +1507,18 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::_get_extent_by_type(
     case extent_types_t::ROOT:
       ceph_assert(0 == "ROOT is never directly read");
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
+    case extent_types_t::BACKREF_INTERNAL:
+      return get_extent<backref::BackrefInternalNode>(
+	offset, length, p_metric_key, std::move(extent_init_func)
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::BACKREF_LEAF:
+      return get_extent<backref::BackrefLeafNode>(
+	offset, length, p_metric_key, std::move(extent_init_func)
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
     case extent_types_t::LADDR_INTERNAL:
       return get_extent<lba_manager::btree::LBAInternalNode>(
 	offset, length, p_metric_key, std::move(extent_init_func)
