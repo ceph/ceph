@@ -129,6 +129,8 @@
   `ceph telemetry on`
   `ceph telemetry enable channel perf`
   See a sample report with `ceph telemetry preview`
+  Please note that generating a telemetry report with 'perf' channel data might
+  take a few moments in big clusters.
   For more details, see:
 
   https://docs.ceph.com/en/latest/mgr/telemetry/
