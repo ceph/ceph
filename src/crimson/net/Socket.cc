@@ -3,6 +3,7 @@
 
 #include "Socket.h"
 
+#include <seastar/core/sleep.hh>
 #include <seastar/core/when_all.hh>
 
 #include "crimson/common/log.h"
