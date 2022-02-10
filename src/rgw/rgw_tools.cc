@@ -80,17 +80,6 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
 	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_autoscale_bias on "
 		 << pool.name << dendl;
       }
-      // set pg_num_min
-      int min = g_conf().get_val<uint64_t>("rgw_rados_pool_pg_num_min");
-      r = rados->mon_command(
-	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
-	pool.name + "\", \"var\": \"pg_num_min\", \"val\": \"" +
-	stringify(min) + "\"}",
-	inbl, NULL, NULL);
-      if (r < 0) {
-	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_num_min on "
-		 << pool.name << dendl;
-      }
       // set recovery_priority
       int p = g_conf().get_val<uint64_t>("rgw_rados_pool_recovery_priority");
       r = rados->mon_command(
