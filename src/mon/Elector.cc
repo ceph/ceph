@@ -451,7 +451,9 @@ void Elector::handle_nak(MonOpRequestRef op)
 
 void Elector::begin_peer_ping(int peer)
 {
+  dout(5) << __func__ << peer << dendl;
   if (live_pinging.count(peer)) {
+    dout(20) << __func__ << peer << " already exists in live_pinging "<< dendl;
     return;
   }
 
@@ -460,11 +462,13 @@ void Elector::begin_peer_ping(int peer)
     return;
   }
 
-  dout(5) << __func__ << " against " << peer << dendl;
+  // dout(5) << __func__ << " against " << peer << dendl;
 
   peer_tracker.report_live_connection(peer, 0); // init this peer as existing
   live_pinging.insert(peer);
+  dout(5) << "living_pinging insert " << peer << dendl;
   dead_pinging.erase(peer);
+  dout(5) << "dead_pinging erase " << peer << dendl;
   peer_acked_ping[peer] = ceph_clock_now();
   send_peer_ping(peer);
   mon->timer.add_event_after(ping_timeout / PING_DIVISOR,
@@ -483,6 +487,7 @@ void Elector::send_peer_ping(int peer, const utime_t *n)
   } else {
     now = ceph_clock_now();
   }
+  dout(10) << __func__ << " ranks.size() " << mon->monmap->ranks.size() << dendl;
   MMonPing *ping = new MMonPing(MMonPing::PING, now, peer_tracker.get_encoded_bl());
   mon->messenger->send_to_mon(ping, mon->monmap->get_addrs(peer));
   peer_sent_ping[peer] = now;
@@ -491,17 +496,38 @@ void Elector::send_peer_ping(int peer, const utime_t *n)
 void Elector::ping_check(int peer)
 {
   dout(20) << __func__ << " to peer " << peer << dendl;
+  dout(20) << __func__ << " live_pinging " << dendl;
+  for (auto it = live_pinging.begin(); it != live_pinging.end(); ++it){
+    dout(20) << " " << *it << dendl;
+  }
+  dout(20) << __func__ << " dead_pinging " << dendl;
+  for (auto it = dead_pinging.begin(); it != dead_pinging.end(); ++it){
+    dout(20) << " " << *it << dendl;
+  }
+
   if (!live_pinging.count(peer) &&
       !dead_pinging.count(peer)) {
     dout(20) << __func__ << peer << " is no longer marked for pinging" << dendl;
     return;
   }
   utime_t now = ceph_clock_now();
+  dout(20) << __func__ << " now " << now << dendl;
+  dout(20) << __func__ << " ping_timeout " << ping_timeout << dendl;
   utime_t& acked_ping = peer_acked_ping[peer];
+  dout(20) << __func__ << " acked_ping " << acked_ping << dendl;
   utime_t& newest_ping = peer_sent_ping[peer];
+  dout(20) << __func__ << " newest_ping " << newest_ping << dendl;
   if (!acked_ping.is_zero() && acked_ping < now - ping_timeout) {
+    dout(20) << " acked_ping < now - ping_timeout " << dendl;
     peer_tracker.report_dead_connection(peer, now - acked_ping);
     acked_ping = now;
+    begin_dead_ping(peer);
+    return;
+  }
+  // sanity check to prevent assertion failure
+  int cur_rank_size = mon->monmap->ranks.size();
+  if (peer >= cur_rank_size) {
+    dout(20) << " peer >= cur_rank_size " << dendl;
     begin_dead_ping(peer);
     return;
   }
@@ -518,11 +544,14 @@ void Elector::ping_check(int peer)
 
 void Elector::begin_dead_ping(int peer)
 {
+  dout(20) << __func__ << " to peer " << peer << dendl;
   if (dead_pinging.count(peer)) {
+    dout(20) << peer << " already exists in dead_pinging "<< dendl;
     return;
   }
-  
+  dout(5) << "live_pinging erase " << peer << dendl; 
   live_pinging.erase(peer);
+  dout(5) << "dead_pinging insert " << peer << dendl;
   dead_pinging.insert(peer);
   mon->timer.add_event_after(ping_timeout,
 			     new C_MonContext{mon, [this, peer](int) {
@@ -703,13 +732,17 @@ void Elector::notify_clear_peer_state()
 
 void Elector::notify_rank_changed(int new_rank)
 {
+  dout(10) << __func__ << " new_rank: " << new_rank << dendl;
   peer_tracker.notify_rank_changed(new_rank);
+  dout(10) << "live_pinging erase " << new_rank << dendl;
   live_pinging.erase(new_rank);
+  dout(10) << "dead_pinging erase " << new_rank << dendl;
   dead_pinging.erase(new_rank);
 }
 
 void Elector::notify_rank_removed(int rank_removed)
 {
+  dout(10) << __func__ << ": " << rank_removed << dendl;
   peer_tracker.notify_rank_removed(rank_removed);
   /* we have to clean up the pinging state, which is annoying
      because it's not indexed anywhere (and adding indexing
@@ -726,6 +759,16 @@ void Elector::notify_rank_removed(int rank_removed)
      * check if the next rank is in the same pinging set, and delete
      * ourselves if not.
    */
+  dout(10) << __func__ << " ranks.size() " << mon->monmap->ranks.size() << dendl; 
+  dout(10) << __func__  << " paxos_size " << paxos_size() << dendl;
+  dout(20) << __func__ << " live_pinging " << dendl;
+  for (auto it = live_pinging.begin(); it != live_pinging.end(); ++it){
+    dout(20) << " " << *it << dendl;
+  }
+  dout(20) << __func__ << " dead_pinging " << dendl;
+  for (auto it = dead_pinging.begin(); it != dead_pinging.end(); ++it){
+    dout(20) << " " << *it << dendl;
+  }
   for (unsigned i = rank_removed + 1; i <= paxos_size() ; ++i) {
     if (live_pinging.count(i)) {
       dead_pinging.erase(i-1);
