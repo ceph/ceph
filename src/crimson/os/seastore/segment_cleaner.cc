@@ -449,8 +449,11 @@ SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
 	      "ExtentReader::init_segments: journal segment {}",
 	      segment_id);
 	    segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
+	    init_mark_segment_closed(
+	      segment_id,
+	      header.journal_segment_seq,
+	      false);
 	  }
-	  return seastar::now();
 	}).handle_error(
 	  crimson::ct_error::enoent::handle([](auto) {
 	    return init_segments_ertr::now();
