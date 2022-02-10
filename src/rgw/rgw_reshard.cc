@@ -714,7 +714,7 @@ int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp, list<cls_rgw_buc
 
 
 int RGWBucketReshard::execute(int num_shards,
-                              const ReshardFaultInjector& fault,
+                              ReshardFaultInjector& fault,
                               int max_op_entries,
                               const DoutPrefixProvider *dpp,
                               bool verbose, ostream *out,
