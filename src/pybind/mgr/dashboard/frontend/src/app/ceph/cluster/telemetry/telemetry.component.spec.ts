@@ -120,16 +120,6 @@ describe('TelemetryComponent', () => {
       });
     });
 
-    it('should update the Telemetry configuration', () => {
-      component.updateConfig();
-      const req = httpTesting.expectOne('api/mgr/module/telemetry');
-      expect(req.request.method).toBe('PUT');
-      expect(req.request.body).toEqual({
-        config: {}
-      });
-      req.flush({});
-    });
-
     it('should disable the Telemetry module', () => {
       const message = 'Module disabled message.';
       const followUpFunc = function () {
@@ -303,16 +293,24 @@ describe('TelemetryComponent', () => {
       });
     });
 
-    it('should submit', () => {
+    it('should submit ', () => {
       component.onSubmit();
-      const req = httpTesting.expectOne('api/telemetry');
-      expect(req.request.method).toBe('PUT');
-      expect(req.request.body).toEqual({
+      const req1 = httpTesting.expectOne('api/telemetry');
+      expect(req1.request.method).toBe('PUT');
+      expect(req1.request.body).toEqual({
         enable: true,
         license_name: 'sharing-1-0'
       });
-      req.flush({});
-      expect(router.navigate).toHaveBeenCalledWith(['']);
+      req1.flush({});
+      const req2 = httpTesting.expectOne({
+        url: 'api/mgr/module/telemetry',
+        method: 'PUT'
+      });
+      expect(req2.request.body).toEqual({
+        config: {}
+      });
+      req2.flush({});
+      expect(router.url).toBe('/');
     });
   });
 });

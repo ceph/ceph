@@ -25,6 +25,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
   licenseAgrmt = false;
   moduleEnabled: boolean;
   options: Object = {};
+  updatedConfig: Object = {};
   previewForm: CdFormGroup;
   requiredFields = [
     'channel_basic',
@@ -176,6 +177,23 @@ export class TelemetryComponent extends CdForm implements OnInit {
     return result;
   }
 
+  private updateChannelsInReport(updatedConfig: Object = {}) {
+    const channels: string[] = this.report['report']['channels'];
+    const availableChannels: string[] = this.report['report']['channels_available'];
+    const updatedChannels = [];
+    for (const channel of availableChannels) {
+      const key = `channel_${channel}`;
+      // channel unchanged or toggled on
+      if (
+        (!updatedConfig.hasOwnProperty(key) && channels.includes(channel)) ||
+        updatedConfig[key]
+      ) {
+        updatedChannels.push(channel);
+      }
+    }
+    this.report['report']['channels'] = updatedChannels;
+  }
+
   private getReport() {
     this.loadingStart();
 
@@ -183,6 +201,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
       (resp: object) => {
         this.report = resp;
         this.reportId = resp['report']['report_id'];
+        this.updateChannelsInReport(this.updatedConfig);
         this.createPreviewForm();
         this.loadingReady();
         this.step++;
@@ -198,30 +217,19 @@ export class TelemetryComponent extends CdForm implements OnInit {
   }
 
   updateConfig() {
-    const config = {};
-    _.forEach(Object.values(this.options), (option) => {
+    this.updatedConfig = {};
+    for (const option of Object.values(this.options)) {
       const control = this.configForm.get(option.name);
+      if (!control.valid) {
+        this.configForm.setErrors({ cdSubmitButton: true });
+        return;
+      }
       // Append the option only if the value has been modified.
       if (control.dirty && control.valid) {
-        config[option.name] = control.value;
+        this.updatedConfig[option.name] = control.value;
       }
-    });
-    this.mgrModuleService.updateConfig('telemetry', config).subscribe(
-      () => {
-        this.disableModule(
-          $localize`Your settings have been applied successfully. \
- Due to privacy/legal reasons the Telemetry module is now disabled until you \
- complete the next step and accept the license.`,
-          () => {
-            this.getReport();
-          }
-        );
-      },
-      () => {
-        // Reset the 'Submit' button.
-        this.configForm.setErrors({ cdSubmitButton: true });
-      }
-    );
+    }
+    this.getReport();
   }
 
   disableModule(message: string = null, followUpFunc: Function = null) {
@@ -251,13 +259,33 @@ export class TelemetryComponent extends CdForm implements OnInit {
   }
 
   onSubmit() {
-    this.telemetryService.enable().subscribe(() => {
-      this.telemetryNotificationService.setVisibility(false);
-      this.notificationService.show(
-        NotificationType.success,
-        $localize`The Telemetry module has been configured and activated successfully.`
-      );
-      this.router.navigate(['']);
-    });
+    const observables = [
+      this.telemetryService.enable(),
+      this.mgrModuleService.updateConfig('telemetry', this.updatedConfig)
+    ];
+
+    observableForkJoin(observables).subscribe(
+      () => {
+        this.telemetryNotificationService.setVisibility(false);
+        this.notificationService.show(
+          NotificationType.success,
+          $localize`The Telemetry module has been configured and activated successfully.`
+        );
+      },
+      () => {
+        this.telemetryNotificationService.setVisibility(false);
+        this.notificationService.show(
+          NotificationType.error,
+          $localize`An Error occurred while updating the Telemetry module configuration.\
+             Please Try again`
+        );
+        // Reset the 'Update' button.
+        this.previewForm.setErrors({ cdSubmitButton: true });
+      },
+      () => {
+        this.updatedConfig = {};
+        this.router.navigate(['']);
+      }
+    );
   }
 }
