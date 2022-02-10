@@ -432,33 +432,69 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
                                 ReshardFaultInjector& fault,
                                 const DoutPrefixProvider* dpp)
 {
-  auto& layout = bucket_info.layout;
-  auto prev = layout; // make a copy for cleanup
+  auto prev = bucket_info.layout; // make a copy for cleanup
 
   // remove target index shard objects
-  int ret = store->svc()->bi->clean_index(dpp, bucket_info, *layout.target_index);
+  int ret = store->svc()->bi->clean_index(dpp, bucket_info, *prev.target_index);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to remove "
         "target index with: " << cpp_strerror(ret) << dendl;
     ret = 0; // non-fatal error
   }
 
-  // clear target_index and resharding state
-  layout.target_index = std::nullopt;
-  layout.resharding = rgw::BucketReshardState::None;
+  // retry in case of racing writes to the bucket instance metadata
+  static constexpr auto max_retries = 10;
+  int tries = 0;
+  do {
+    // clear target_index and resharding state
+    bucket_info.layout.target_index = std::nullopt;
+    bucket_info.layout.resharding = rgw::BucketReshardState::None;
 
-  if (ret = fault.check("revert_target_layout");
-      ret == 0) { // no fault injected, revert the bucket instance metadata
-    ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
-                                                      real_time(),
-						      &bucket_attrs, dpp);
-  }
+    if (ret = fault.check("revert_target_layout");
+        ret == 0) { // no fault injected, revert the bucket instance metadata
+      ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
+                                                        real_time(),
+                                                        &bucket_attrs, dpp);
+    } else if (ret == -ECANCELED) {
+      fault.clear(); // clear the fault so a retry can succeed
+    }
+
+    if (ret == -ECANCELED) {
+      // racing write detected, read the latest bucket info and try again
+      auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+      int ret2 = store->getRados()->get_bucket_instance_info(
+          obj_ctx, bucket_info.bucket, bucket_info,
+          nullptr, &bucket_attrs, null_yield, dpp);
+      if (ret2 < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to read "
+            "bucket info: " << cpp_strerror(ret2) << dendl;
+        ret = ret2;
+        break;
+      }
+
+      // check that we're still in the reshard state we started in
+      if (bucket_info.layout.resharding == rgw::BucketReshardState::None) {
+        ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " raced with "
+            "reshard cancel" << dendl;
+        return -ECANCELED;
+      }
+      if (bucket_info.layout.current_index != prev.current_index ||
+          bucket_info.layout.target_index != prev.target_index) {
+        ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " raced with "
+            "another reshard" << dendl;
+        return -ECANCELED;
+      }
+
+      prev = bucket_info.layout; // update the copy
+    }
+    ++tries;
+  } while (ret == -ECANCELED && tries < max_retries);
 
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to clear "
         "target index layout in bucket info: " << cpp_strerror(ret) << dendl;
 
-    bucket_info.layout = std::move(prev); // restore in-memory layout
+    bucket_info.layout = std::move(prev);  // restore in-memory layout
     return ret;
   }
   return 0;
@@ -498,7 +534,6 @@ static int cancel_reshard(rgw::sal::RadosStore* store,
                           ReshardFaultInjector& fault,
                           const DoutPrefixProvider *dpp)
 {
-  static constexpr auto max_retries = 10;
   // unblock writes to the current index shard objects
   int ret = set_resharding_status(dpp, store, bucket_info,
                                   cls_rgw_reshard_status::NOT_RESHARDING);
@@ -509,15 +544,7 @@ static int cancel_reshard(rgw::sal::RadosStore* store,
   }
 
   if (bucket_info.layout.target_index) {
-    auto tries = 0;
-    do {
-      ret = revert_target_layout(store, bucket_info, bucket_attrs, fault, dpp);
-      ++tries;
-      ldpp_dout(dpp, 1) << "WARNING: " << __func__
-			<< " revert_target_layout got -ECANCELED. Retrying."
-			<< dendl;
-    } while (ret == -ECANCELED && tries < max_retries);
-    return ret;
+    return revert_target_layout(store, bucket_info, bucket_attrs, fault, dpp);
   }
   // there is nothing to revert
   return 0;
