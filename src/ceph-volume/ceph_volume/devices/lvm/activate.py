@@ -153,6 +153,8 @@ def activate_bluestore(osd_lvs, no_systemd=False):
     osd_id = osd_block_lv.tags['ceph.osd_id']
     conf.cluster = osd_block_lv.tags['ceph.cluster_name']
     osd_fsid = osd_block_lv.tags['ceph.osd_fsid']
+    configuration.load_ceph_conf_path(osd_block_lv.tags['ceph.cluster_name'])
+    configuration.load()
 
     # mount on tmpfs the osd directory
     osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
